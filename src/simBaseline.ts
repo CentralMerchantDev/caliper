@@ -31,13 +31,38 @@ function clamp(v) {
   return Math.max(0, Math.min(100, v));
 }
 
+// CITY.md: the world becomes a neighbourhood, not a single room -- but only
+// initialWorld() grows. chooseAction/applyAction/tick below are byte-for-byte
+// the same functions that produced every value in simRegression.ts's suite;
+// they only ever read sim.needs, world.tick and world.money, so the new
+// fields here (buildings, outdoorObjects, each sim's home) ride along on
+// every tick via the existing Object.assign spreads without those functions
+// ever needing to know they exist. Two dwellings, each with the same six
+// stations the room always had, a shop and a workshop (structures only --
+// no new action exists for them to drive, so none is claimed), and a
+// handful of objects in the open ground between them.
 function initialWorld() {
   return {
     tick: 0,
     rngState: 1,
     money: 100,
     sims: [
-      { id: "sim1", needs: { hunger: 100, energy: 100, fun: 100, social: 100, hygiene: 100 }, lastAction: null },
+      { id: "sim1", home: "dwelling-1", needs: { hunger: 100, energy: 100, fun: 100, social: 100, hygiene: 100 }, lastAction: null },
+      { id: "sim2", home: "dwelling-2", needs: { hunger: 100, energy: 100, fun: 100, social: 100, hygiene: 100 }, lastAction: null },
+    ],
+    buildings: [
+      { id: "dwelling-1", type: "dwelling", label: "House 1", plot: { x: 0, y: 0 }, stations: ["bed", "fridge", "shower", "desk", "rug", "table"] },
+      { id: "dwelling-2", type: "dwelling", label: "House 2", plot: { x: 2, y: 0 }, stations: ["bed", "fridge", "shower", "desk", "rug", "table"] },
+      { id: "shop", type: "shop", label: "Shop", plot: { x: 0, y: 2 }, stations: [] },
+      { id: "workshop", type: "workshop", label: "Workshop", plot: { x: 2, y: 2 }, stations: [] },
+    ],
+    outdoorObjects: [
+      { id: "bench-1", type: "bench", plot: { x: 1, y: 0.3 } },
+      { id: "tree-1", type: "tree", plot: { x: 1, y: 0.7 } },
+      { id: "tree-2", type: "tree", plot: { x: 1.6, y: 1.3 } },
+      { id: "lamp-1", type: "lampPost", plot: { x: 0.6, y: 1.3 } },
+      { id: "lamp-2", type: "lampPost", plot: { x: 1.4, y: 0.6 } },
+      { id: "planter-1", type: "planter", plot: { x: 1, y: 1.6 } },
     ],
   };
 }

@@ -46,6 +46,14 @@ test("structureSummary is deterministic and mentions every NOT_YET_PRESENT item 
   for (const item of NOT_YET_PRESENT) assert.ok(a.includes(item), `summary is missing: ${item}`);
 });
 
-test("structureSummary names a second room as absent -- the grounding stage's central example", () => {
-  assert.match(structureSummary(), /no second location/);
+// CITY.md item 1: the single-room-only limit is gone -- a second location
+// (in fact several) is now the whole point of the world, so grounding must
+// no longer report one as absent. This is the direct update to the test
+// that used to assert the opposite; the fact changed, so the test that
+// checks the fact must change with it -- this is not the sim's regression
+// suite, which stays untouched.
+test("structureSummary reports a real neighbourhood, not a single room", () => {
+  const summary = structureSummary();
+  assert.match(summary, /neighbourhood/);
+  assert.doesNotMatch(summary, /no second location/);
 });
