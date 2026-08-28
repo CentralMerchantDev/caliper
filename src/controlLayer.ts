@@ -90,14 +90,6 @@ function dayKey(): string {
 function monthKey(): string {
   return new Date().toISOString().slice(0, 7);
 }
-/** A stable weekly bucket -- floor(days since epoch / 7), not calendar ISO
- * week numbering, which has enough edge cases (year boundaries, which day
- * a week starts on) that getting it right blind isn't worth it for "which
- * 7-day bucket is this spend in". Deterministic and monotonic is all this
- * needs to be. */
-function weekKey(): string {
-  return `w${Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))}`;
-}
 
 // ---------- 7. Input guard (free-form only) ----------
 
@@ -145,53 +137,58 @@ export async function recordPipelineRateLimitHit(kv: KVNamespace, ip: string): P
   await kv.put(key, String(count + 1), { expirationTtl: 60 * 60 * 24 * 2 });
 }
 
-// ---------- 4 & 5. Global daily + monthly spend cap, across both vendors ----------
+// ---------- 4 & 5. Global daily + weekly + monthly spend cap, across both vendors ----------
+//
+// Backed by the SpendCounterDO (src/spendCounterDO.ts), not KV. KV's
+// eventual consistency meant the old check-then-later-record shape had a
+// real race: two concurrent calls could both read the same "under the cap"
+// total and both proceed, landing the real total over the cap. A cap that
+// can be raced is not a cap (FINISH.md section 5). One global DO instance
+// serializes every reserve() against every other, closing the race
+// structurally instead of adding more checking around it.
 
-export async function assertUnderPipelineSpendCap(kv: KVNamespace, worstCaseCostUsd: number): Promise<void> {
-  const dailyRaw = await kv.get(`pipeline/spend/daily/${dayKey()}`);
-  const daily = dailyRaw ? parseFloat(dailyRaw) : 0;
-  if (daily + worstCaseCostUsd > CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD) {
-    throw new PipelineLimitError(
-      "daily-cap",
-      `Today's pipeline budget ($${CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD.toFixed(2)}, across both model providers) is ` +
-        `used up ($${daily.toFixed(4)} spent so far). It resets at midnight UTC -- recorded runs below are free and unlimited.`,
-    );
-  }
-  const weeklyRaw = await kv.get(`pipeline/spend/weekly/${weekKey()}`);
-  const weekly = weeklyRaw ? parseFloat(weeklyRaw) : 0;
-  if (weekly + worstCaseCostUsd > CONTROL_LIMITS.PIPELINE_WEEKLY_CAP_USD) {
-    throw new PipelineLimitError(
-      "weekly-cap",
-      `This week's pipeline budget ($${CONTROL_LIMITS.PIPELINE_WEEKLY_CAP_USD.toFixed(2)}) is used up. ` +
-        `Recorded runs below are free and unlimited.`,
-    );
-  }
-  const monthlyRaw = await kv.get(`pipeline/spend/monthly/${monthKey()}`);
-  const monthly = monthlyRaw ? parseFloat(monthlyRaw) : 0;
-  if (monthly + worstCaseCostUsd > CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD) {
-    throw new PipelineLimitError(
-      "monthly-cap",
-      `This month's pipeline budget ($${CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD.toFixed(2)}) is used up. ` +
-        `Recorded runs below are free and unlimited.`,
-    );
+function spendCaps(): { dailyCapUsd: number; weeklyCapUsd: number; monthlyCapUsd: number } {
+  return { dailyCapUsd: CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD, weeklyCapUsd: CONTROL_LIMITS.PIPELINE_WEEKLY_CAP_USD, monthlyCapUsd: CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD };
+}
+
+function spendCounterStub(ns: DurableObjectNamespace): DurableObjectStub {
+  return ns.get(ns.idFromName("global"));
+}
+
+/** Atomically checks AND commits the worst-case estimate against all three
+ * caps in one call to the DO -- the estimate is provisionally "spent" the
+ * moment this returns ok, before the real model call even starts, so a
+ * second concurrent call sees the reservation and can't also squeeze
+ * through. Call reconcilePipelineSpend after the real cost is known to
+ * true the reservation down (almost always) to the actual cost. */
+export async function assertUnderPipelineSpendCap(ns: DurableObjectNamespace, worstCaseCostUsd: number): Promise<void> {
+  const stub = spendCounterStub(ns);
+  const res = await stub.fetch("https://spend-counter/reserve", {
+    method: "POST",
+    body: JSON.stringify({ estimateUsd: worstCaseCostUsd, caps: spendCaps() }),
+  });
+  const result = (await res.json()) as { ok: true } | { ok: false; kind: "daily-cap" | "weekly-cap" | "monthly-cap"; message: string };
+  if (!result.ok) {
+    throw new PipelineLimitError(result.kind, `${result.message} Recorded runs below are free and unlimited.`);
   }
 }
 
-export async function recordPipelineSpend(kv: KVNamespace, actualCostUsd: number): Promise<void> {
-  const dKey = `pipeline/spend/daily/${dayKey()}`;
-  const dRaw = await kv.get(dKey);
-  const daily = (dRaw ? parseFloat(dRaw) : 0) + actualCostUsd;
-  await kv.put(dKey, daily.toString(), { expirationTtl: 60 * 60 * 24 * 2 });
+/** Reconciles a prior reservation down (or up) to the real cost. Must be
+ * called with the SAME estimate that was passed to assertUnderPipelineSpendCap
+ * for this call, so the adjustment is exactly (actual - reserved), never a
+ * guess at what was previously committed. */
+export async function reconcilePipelineSpend(ns: DurableObjectNamespace, reservedUsd: number, actualCostUsd: number): Promise<void> {
+  const stub = spendCounterStub(ns);
+  await stub.fetch("https://spend-counter/reconcile", {
+    method: "POST",
+    body: JSON.stringify({ reservedUsd, actualUsd: actualCostUsd }),
+  });
+}
 
-  const wKey = `pipeline/spend/weekly/${weekKey()}`;
-  const wRaw = await kv.get(wKey);
-  const weekly = (wRaw ? parseFloat(wRaw) : 0) + actualCostUsd;
-  await kv.put(wKey, weekly.toString(), { expirationTtl: 60 * 60 * 24 * 10 });
-
-  const mKey = `pipeline/spend/monthly/${monthKey()}`;
-  const mRaw = await kv.get(mKey);
-  const monthly = (mRaw ? parseFloat(mRaw) : 0) + actualCostUsd;
-  await kv.put(mKey, monthly.toString(), { expirationTtl: 60 * 60 * 24 * 45 });
+export async function getPipelineSpendStatus(ns: DurableObjectNamespace): Promise<{ dailySpentUsd: number; weeklySpentUsd: number; monthlySpentUsd: number }> {
+  const stub = spendCounterStub(ns);
+  const res = await stub.fetch("https://spend-counter/status");
+  return (await res.json()) as { dailySpentUsd: number; weeklySpentUsd: number; monthlySpentUsd: number };
 }
 
 export interface PipelineBudgetStatus {
@@ -210,13 +207,8 @@ export interface PipelineBudgetStatus {
 }
 
 /** Shown on the page always, not only when a limit is hit -- REBUILD-CONTROLS.md is explicit that the controls must be visible, not just enforced. */
-export async function getPipelineBudgetStatus(kv: KVNamespace): Promise<PipelineBudgetStatus> {
-  const dailyRaw = await kv.get(`pipeline/spend/daily/${dayKey()}`);
-  const daily = dailyRaw ? parseFloat(dailyRaw) : 0;
-  const weeklyRaw = await kv.get(`pipeline/spend/weekly/${weekKey()}`);
-  const weekly = weeklyRaw ? parseFloat(weeklyRaw) : 0;
-  const monthlyRaw = await kv.get(`pipeline/spend/monthly/${monthKey()}`);
-  const monthly = monthlyRaw ? parseFloat(monthlyRaw) : 0;
+export async function getPipelineBudgetStatus(ns: DurableObjectNamespace): Promise<PipelineBudgetStatus> {
+  const { dailySpentUsd: daily, weeklySpentUsd: weekly, monthlySpentUsd: monthly } = await getPipelineSpendStatus(ns);
   return {
     dailySpentUsd: daily,
     dailyCapUsd: CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD,

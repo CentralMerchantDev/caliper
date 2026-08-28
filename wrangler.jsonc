@@ -22,6 +22,27 @@
       "id": "f787686ed1944cbf88804507ba5635a7"
     }
   ],
+  // FINISH.md section 5: "the spend counter must be atomic ... a cap that
+  // can be raced is not a cap." One global instance (src/index.ts always
+  // calls idFromName("global")) so every concurrent request checks and
+  // commits against the same serialized counter -- KV's eventual
+  // consistency made a genuine race possible; a Durable Object's one-
+  // request-at-a-time-per-instance guarantee closes it structurally, not
+  // by adding more checking.
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SPEND_COUNTER",
+        "class_name": "SpendCounterDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-spend-counter",
+      "new_sqlite_classes": ["SpendCounterDO"]
+    }
+  ],
   "vars": {
     // Hard spend cap in USD across all generation calls, enforced in code
     // (see src/spendCap.ts), not just documented here. Sized to comfortably
@@ -48,6 +69,7 @@
       "/spend",
       "/pipeline-budget",
       "/sim-selftest",
+      "/spend-counter-selftest",
       "/change-instructions",
       "/change-run",
       "/change-resume",

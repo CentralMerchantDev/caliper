@@ -10,7 +10,7 @@ import {
   CONTROL_LIMITS,
   assertUnderRunCeiling,
   assertUnderPipelineSpendCap,
-  recordPipelineSpend,
+  reconcilePipelineSpend,
   assertCircuitClosed,
   recordProviderSuccess,
   recordProviderFailure,
@@ -124,34 +124,42 @@ interface CallBudget {
   spent: number;
 }
 
-async function callAnthropic<T>(kv: KVNamespace, budget: CallBudget, estimateUsd: number, fn: () => Promise<T & { costUsd: number }>): Promise<T & { costUsd: number }> {
-  await assertCircuitClosed(kv, "anthropic" as Provider);
+// reserve-before, reconcile-after (src/spendCounterDO.ts): the worst-case
+// estimate is atomically committed to the DO-backed counter before fn()
+// ever runs, closing the KV race a check-then-later-record shape had. On
+// success the reservation is trued down to the real cost; on failure it's
+// released back to 0 -- a failed call spent nothing, so nothing should
+// stay reserved against it.
+async function callAnthropic<T>(env: ChangeEnv, budget: CallBudget, estimateUsd: number, fn: () => Promise<T & { costUsd: number }>): Promise<T & { costUsd: number }> {
+  await assertCircuitClosed(env.SPEND_KV, "anthropic" as Provider);
   assertUnderRunCeiling(budget.spent, estimateUsd);
-  await assertUnderPipelineSpendCap(kv, estimateUsd);
+  await assertUnderPipelineSpendCap(env.SPEND_COUNTER, estimateUsd);
   try {
     const result = await fn();
-    await recordProviderSuccess(kv, "anthropic");
-    await recordPipelineSpend(kv, result.costUsd);
+    await recordProviderSuccess(env.SPEND_KV, "anthropic");
+    await reconcilePipelineSpend(env.SPEND_COUNTER, estimateUsd, result.costUsd);
     budget.spent += result.costUsd;
     return result;
   } catch (e) {
-    await recordProviderFailure(kv, "anthropic");
+    await recordProviderFailure(env.SPEND_KV, "anthropic");
+    await reconcilePipelineSpend(env.SPEND_COUNTER, estimateUsd, 0);
     throw e;
   }
 }
 
-async function callOpenAI<T>(kv: KVNamespace, budget: CallBudget, estimateUsd: number, fn: () => Promise<T & { costUsd: number }>): Promise<T & { costUsd: number }> {
-  await assertCircuitClosed(kv, "openai" as Provider);
+async function callOpenAI<T>(env: ChangeEnv, budget: CallBudget, estimateUsd: number, fn: () => Promise<T & { costUsd: number }>): Promise<T & { costUsd: number }> {
+  await assertCircuitClosed(env.SPEND_KV, "openai" as Provider);
   assertUnderRunCeiling(budget.spent, estimateUsd);
-  await assertUnderPipelineSpendCap(kv, estimateUsd);
+  await assertUnderPipelineSpendCap(env.SPEND_COUNTER, estimateUsd);
   try {
     const result = await fn();
-    await recordProviderSuccess(kv, "openai");
-    await recordPipelineSpend(kv, result.costUsd);
+    await recordProviderSuccess(env.SPEND_KV, "openai");
+    await reconcilePipelineSpend(env.SPEND_COUNTER, estimateUsd, result.costUsd);
     budget.spent += result.costUsd;
     return result;
   } catch (e) {
-    await recordProviderFailure(kv, "openai");
+    await recordProviderFailure(env.SPEND_KV, "openai");
+    await reconcilePipelineSpend(env.SPEND_COUNTER, estimateUsd, 0);
     throw e;
   }
 }
@@ -237,6 +245,7 @@ export async function checkAnswer(kv: KVNamespace, key: string): Promise<string 
 export interface ChangeEnv {
   LOADER: import("./sandbox").LoaderBinding;
   SPEND_KV: KVNamespace;
+  SPEND_COUNTER: DurableObjectNamespace;
   ANTHROPIC_API_KEY: string;
   OPENAI_API_KEY: string;
 }
@@ -308,7 +317,7 @@ async function runRetrospectiveAndRecord(
   stageCosts: { stage: string; costUsd: number }[],
   runSummary: string,
 ): Promise<{ lesson: string | null; recurrenceCount: number | null }> {
-  const retro = await callAnthropic(env.SPEND_KV, budget, WORST_CASE.retrospective, () => runRetrospective(env.ANTHROPIC_API_KEY, runSummary, RETROSPECTIVE_MAX_TOKENS, RETROSPECTIVE_MODEL));
+  const retro = await callAnthropic(env, budget, WORST_CASE.retrospective, () => runRetrospective(env.ANTHROPIC_API_KEY, runSummary, RETROSPECTIVE_MAX_TOKENS, RETROSPECTIVE_MODEL));
   stageCosts.push({ stage: "retrospective", costUsd: retro.costUsd });
   let recurrenceCount: number | null = null;
   if (retro.lesson) {
@@ -338,7 +347,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   if (!existing) {
     // ---- Stage 1: Plan, fresh ----
     onEvent({ type: "planning" });
-    const planResult = await callAnthropic(env.SPEND_KV, budget, WORST_CASE.plan, () =>
+    const planResult = await callAnthropic(env, budget, WORST_CASE.plan, () =>
       generatePlan(env.ANTHROPIC_API_KEY, currentSourceAtStart, regressionSummaryText(), changeRequest, null, PLAN_MAX_TOKENS, priorLessons),
     );
     stageCosts.push({ stage: "plan", costUsd: planResult.costUsd });
@@ -365,7 +374,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     }
     onEvent({ type: "answered", answer });
     onEvent({ type: "planning" });
-    const planResult = await callAnthropic(env.SPEND_KV, budget, WORST_CASE.plan, () =>
+    const planResult = await callAnthropic(env, budget, WORST_CASE.plan, () =>
       generatePlan(env.ANTHROPIC_API_KEY, currentSourceAtStart, regressionSummaryText(), changeRequest, answer, PLAN_MAX_TOKENS, priorLessons),
     );
     stageCosts.push({ stage: "plan (re-plan after question)", costUsd: planResult.costUsd });
@@ -439,7 +448,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     findings = existing.findings;
   } else {
     onEvent({ type: "implementing" });
-    const impl = await callAnthropic(env.SPEND_KV, budget, WORST_CASE.implement, () =>
+    const impl = await callAnthropic(env, budget, WORST_CASE.implement, () =>
       implementChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan, changeRequest, IMPLEMENT_MODEL, CONTROL_LIMITS.TOKEN_CAPS.implement, priorLessons),
     );
     stageCosts.push({ stage: "implement", costUsd: impl.costUsd });
@@ -496,7 +505,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     }
 
     onEvent({ type: "reviewing" });
-    const review = await callOpenAI(env.SPEND_KV, budget, WORST_CASE.review, () =>
+    const review = await callOpenAI(env, budget, WORST_CASE.review, () =>
       reviewArtifact(
         env.OPENAI_API_KEY,
         REVIEW_MODEL,
@@ -547,7 +556,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         ...verifyRegression.filter((r) => r.pass).map((r) => describePassing("regression", r)),
         ...verifyCriteria.filter((r) => r.pass).map((r) => describePassing("criterion", r)),
       ];
-      const fix = await callAnthropic(env.SPEND_KV, budget, WORST_CASE.fix, () =>
+      const fix = await callAnthropic(env, budget, WORST_CASE.fix, () =>
         fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan, finalCode, material, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
       );
       stageCosts.push({ stage: "fix", costUsd: fix.costUsd });

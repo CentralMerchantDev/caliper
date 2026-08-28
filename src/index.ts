@@ -18,10 +18,12 @@ import {
   releaseActiveRun,
   PipelineLimitError,
 } from "./controlLayer";
+export { SpendCounterDO } from "./spendCounterDOClass";
 
 export interface Env {
   LOADER: LoaderBinding;
   SPEND_KV: KVNamespace;
+  SPEND_COUNTER: DurableObjectNamespace;
   SPEND_CAP_USD: string;
   ANTHROPIC_API_KEY: string;
   OPENAI_API_KEY: string;
@@ -504,7 +506,7 @@ export default {
     }
 
     if (url.pathname === "/pipeline-budget") {
-      return json(await getPipelineBudgetStatus(env.SPEND_KV));
+      return json(await getPipelineBudgetStatus(env.SPEND_COUNTER));
     }
 
     if (url.pathname === "/change-run") {
@@ -563,6 +565,34 @@ export default {
 
     if (url.pathname === "/change-instructions") {
       return json({ instructions: await loadInstructions(env.SPEND_KV) });
+    }
+
+    if (url.pathname === "/spend-counter-selftest") {
+      // Free, real concurrency proof for the atomic spend counter (FINISH.md
+      // section 5) -- fires N reserve() calls concurrently (Promise.all,
+      // not sequential awaits) against a throwaway-named DO instance
+      // (never "global", so this can never touch real spend tracking) and
+      // checks that every single one was individually accounted for with
+      // no lost update. A KV-backed check-then-record version of this same
+      // test would show lost updates under real concurrency; a Durable
+      // Object's one-request-at-a-time-per-instance guarantee (Cloudflare's
+      // platform behavior, not code this file writes) is what prevents it.
+      const n = Math.min(50, parseInt(url.searchParams.get("n") ?? "20", 10));
+      const perCallUsd = 0.001;
+      const testId = `selftest-${crypto.randomUUID()}`;
+      const stub = env.SPEND_COUNTER.get(env.SPEND_COUNTER.idFromName(testId));
+      const caps = { dailyCapUsd: 1000, weeklyCapUsd: 1000, monthlyCapUsd: 1000 }; // effectively unbounded -- this test is about lost updates, not cap enforcement
+      const results = await Promise.all(
+        Array.from({ length: n }, () =>
+          stub.fetch("https://spend-counter/reserve", { method: "POST", body: JSON.stringify({ estimateUsd: perCallUsd, caps }) }).then((r) => r.json() as Promise<{ ok: boolean }>),
+        ),
+      );
+      const statusRes = await stub.fetch("https://spend-counter/status");
+      const status = (await statusRes.json()) as { dailySpentUsd: number };
+      const succeeded = results.filter((r) => r.ok).length;
+      const expectedTotal = succeeded * perCallUsd;
+      const noLostUpdates = Math.abs(status.dailySpentUsd - expectedTotal) < 1e-9;
+      return json({ n, succeeded, expectedTotalUsd: expectedTotal, actualTotalUsd: status.dailySpentUsd, noLostUpdates, verdict: noLostUpdates ? "PASS -- every concurrent reservation was accounted for" : "FAIL -- a concurrent reservation was lost" });
     }
 
     if (url.pathname === "/sim-selftest") {
