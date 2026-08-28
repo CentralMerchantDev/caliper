@@ -133,6 +133,8 @@ pre{background:var(--paper);border:1px solid var(--line2);border-radius:9px;padd
 /* Gate: a real decision moment, not a toast */
 .gate-box{background:var(--accentSoft);border:1px solid var(--accent);border-radius:11px;padding:18px 20px;margin-top:10px}
 .gate-box h5{margin:0 0 10px;font-size:16px;font-weight:650}
+.waiting-banner{background:var(--card);border:1px solid var(--accent);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:14.5px;line-height:1.5;color:var(--ink)}
+.waiting-banner .wb-lead{font-weight:700;color:var(--accent)}
 .gate-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
 .gate-reply{margin-top:14px;padding-top:14px;border-top:1px solid rgba(176,86,12,.25)}
 .gate-reply textarea{width:100%;padding:10px 12px;border:1px solid var(--line-strong);border-radius:8px;font-size:14.5px;min-height:52px;font-family:inherit;background:var(--paper);color:var(--ink)}
@@ -205,8 +207,8 @@ footer a{color:var(--ink2)}
   <div class="orient-box">
     <p><strong>The goal</strong>Help build this world. Add something to it that fits.</p>
     <p><strong>What's here</strong>One room. Six things in it: a bed, a fridge, a shower, a desk, a rug, a table. The person living there moves between them through a day.</p>
-    <p><strong>What tends to work</strong>A new object in the room. A new way to use what's already there. Something the person can do or interact with.</p>
-    <p><strong>What tends not to</strong>A second room, art or sound the world can't render, or a system that doesn't exist yet. The world checks first and says why, rather than failing silently.</p>
+    <p><strong>Try one of these</strong>A lamp near the desk that turns on at night. A plant by the rug. A clock on the wall. New objects in the room tend to work well.</p>
+    <p><strong>What tends not to</strong>A second room, art or sound the world can't render, or a system that doesn't exist yet. The world checks first and says why, rather than failing silently -- but it's a more interesting first request if it doesn't have to.</p>
   </div>
   <div class="workspace">
     <div class="panel world-panel">
@@ -679,8 +681,12 @@ form.addEventListener('submit', (ev) => {
 
     es.addEventListener('question', ev => {
       const d = JSON.parse(ev.data)
-      const b = stageBlock(log, 's-question', 'A specific question', 'gate')
-      b.innerHTML += `<div class="gate-box"><p style="margin:0 0 10px">${esc(d.question)}</p>
+      const b = stageBlock(log, 's-question', 'Waiting on you — a specific question', 'gate')
+      b.innerHTML += `<div class="gate-box">
+        <p class="waiting-banner"><span class="wb-lead">Paused, waiting for you.</span> This run has
+          stopped, not stalled -- it needs an answer before it can plan anything. Nothing is being spent
+          while it waits. One choice: answer the question below.</p>
+        <p style="margin:0 0 10px">${esc(d.question)}</p>
         <div class="gate-reply"><textarea id="answer-input" placeholder="Answer in your own words…"></textarea>
         <button class="btn" id="answer-submit" type="button">Answer</button></div></div>`
       $('#answer-submit').addEventListener('click', () => {
@@ -697,8 +703,12 @@ form.addEventListener('submit', (ev) => {
     es.addEventListener('plan-gate', ev => {
       const d = JSON.parse(ev.data)
       const p = d.plan, g = d.grounding
-      const b = stageBlock(log, 's-gate', 'Gate 1 — your decision, before any code exists', 'gate')
+      const b = stageBlock(log, 's-gate', 'Gate 1 — waiting for your decision, before any code exists', 'gate')
       b.innerHTML += `<div class="gate-box">
+        <p class="waiting-banner"><span class="wb-lead">Paused, waiting for you.</span> This run is
+          stopped at Gate 1, not processing -- nothing is being spent while it waits. Three choices:
+          <strong>approve</strong> to start building this, <strong>reject</strong> to stop here, or
+          <strong>reply</strong> below to redirect what it builds.</p>
         <h5>What it proposes to build</h5>
         <p style="margin:0 0 10px">${esc(p.willBuild)}</p>
         <h5>What it will not touch</h5>
@@ -801,8 +811,13 @@ form.addEventListener('submit', (ev) => {
 
     es.addEventListener('review-gate', ev => {
       const d = JSON.parse(ev.data)
-      const b = stageBlock(log, 's-review-gate', 'Gate 2 — the reviewer found something', 'gate')
-      b.innerHTML += `<div class="gate-box"><h5>${d.materialFindings.length} material finding(s)</h5>` +
+      const b = stageBlock(log, 's-review-gate', 'Gate 2 — waiting on you, the reviewer found something', 'gate')
+      b.innerHTML += `<div class="gate-box">
+        <p class="waiting-banner"><span class="wb-lead">Paused, waiting for you.</span> This run is
+          stopped at Gate 2, not processing -- nothing is being spent while it waits. Two choices:
+          <strong>approve a fix round</strong> to address what the reviewer found, or
+          <strong>reject</strong> to ship as-is.</p>
+        <h5>${d.materialFindings.length} material finding(s)</h5>` +
         renderFindings(d.materialFindings, d.nitFindings) +
         `<p class="personal-note" style="margin:10px 0">Material versus nit is my call here, not the model's.
         A reviewer that flags everything is as useless as one that flags nothing -- deciding what actually
