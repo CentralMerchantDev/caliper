@@ -438,7 +438,7 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matc
 const renderer = new WorldRenderer(canvas, { reducedMotion })
 let world = null
 let playing = true
-const TICK_MS = 1600
+const TICK_MS = 1050 // a full 24-tick day in ~25s -- watching for a minute or two shows the light genuinely change
 
 async function bootWorld() {
   try {

@@ -43,7 +43,12 @@ function clamp(v) {
 // handful of objects in the open ground between them.
 function initialWorld() {
   return {
-    tick: 0,
+    // Starts at 09:00, not midnight -- a visitor's first frame is daylight,
+    // the renderer's best light. Night is still there, it's just something
+    // you reach by watching, not the first thing you see. Purely a starting
+    // VALUE for this pure-data function; chooseAction/applyAction/tick below
+    // don't care what tick they're handed and are untouched.
+    tick: 9,
     rngState: 1,
     money: 100,
     sims: [
