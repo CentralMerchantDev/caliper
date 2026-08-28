@@ -8,6 +8,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js"
+  }
+}
+</script>
 <style>
 :root{
   --paper:#FAF6EE; --card:#FEFCF6; --ink:#2A201A; --ink2:#5C4B39; --muted:#6E5E49;
@@ -66,7 +73,7 @@ label.mono{font-family:var(--mono);font-size:11px;color:var(--muted);text-transf
 </div>
 
 <script type="module">
-import { WorldRenderer } from "./world-render.js";
+import { WorldRenderer } from "./world-render-3d.js";
 import { initialWorld, tick } from "./sim-baseline.generated.js";
 
 const canvas = document.getElementById("world");
