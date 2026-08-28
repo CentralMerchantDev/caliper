@@ -53,6 +53,16 @@ export const BUILDING_TYPES = ["dwelling", "shop", "workshop"] as const;
 // decorative world data the renderer draws and grounding can point to.
 export const OUTDOOR_OBJECT_TYPES = ["bench", "tree", "lampPost", "planter"] as const;
 
+// FINAL.md item 4: named surfaces, real addressable data -- not a value
+// only the renderer used to hardcode. Mark asked to change the grass and
+// grounding refused it, reasoning (correctly, at the time) that ground
+// colour was "a renderer concern, not a structural/code concern in the
+// world model" -- there was nothing in world state describing it. These
+// five keys are exactly what world.surfaces (src/simBaseline.ts's
+// initialWorld()) actually returns, each a { material, color } pair the
+// renderer reads directly instead of its own hardcoded palette.
+export const SURFACE_TYPES = ["ground", "path", "floor", "roofShop", "roofWorkshop"] as const;
+
 export const WORLD_FIELDS: Record<string, string> = {
   tick: "number -- world clock; hour is tick % 24, day is floor(tick / 24) + 1",
   rngState: "number -- reserved for future use, currently unused by any logic",
@@ -60,6 +70,7 @@ export const WORLD_FIELDS: Record<string, string> = {
   sims: "array of { id: string, home: string (a building id), needs: { hunger, energy, hygiene, fun, social }, lastAction }",
   buildings: "array of { id, type: dwelling|shop|workshop, label, plot: {x,y}, stations: string[] } -- a dwelling's stations are always the same six STATIONS keys; shop/workshop have none yet",
   outdoorObjects: "array of { id, type: bench|tree|lampPost|planter, plot: {x,y} } -- objects sitting in the open ground, not inside any building",
+  surfaces: `object keyed by surface name (${SURFACE_TYPES.join(", ")}), each { material: string, color: string (hex) } -- read directly by the renderer, changeable like any other world field`,
 };
 
 // What tick() actually does, per BUILD-WORLD.md's phrasing ("what tick
@@ -103,6 +114,7 @@ export function structureSummary(): string {
       .join("; ")}.`,
     `Actions a sim can take: ${ACTIONS.join(", ")}.`,
     `Stations the renderer draws inside a dwelling, one per action: ${STATIONS.map((s) => `${s.label} (${s.action})`).join(", ")}. Every dwelling has the same set; shop and workshop buildings exist but have none.`,
+    `Named surfaces, each a real { material, color } pair in world state the renderer reads directly: ${SURFACE_TYPES.join(", ")}. Changing a surface's material or colour is real, addressable data work, not a renderer-only concern.`,
     `Every tick calls: ${TICK_TOUCHES.join(", ")}, once per sim, in sim order.`,
     `Not yet present -- a request assuming any of these needs grounding to fail on, not a guess:\n` +
       NOT_YET_PRESENT.map((n) => `  - ${n}`).join("\n"),

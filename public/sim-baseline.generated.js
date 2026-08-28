@@ -61,6 +61,22 @@ function initialWorld() {
       { id: "lamp-2", type: "lampPost", plot: { x: 1.4, y: 0.6 } },
       { id: "planter-1", type: "planter", plot: { x: 1, y: 1.6 } },
     ],
+    // FINAL.md item 4: named surfaces as real, addressable data. Mark asked
+    // to change the grass and the world had no concept of a ground surface
+    // at all -- a plainly reasonable request had nowhere to land. Each
+    // surface here is a material label plus a colour the RENDERER reads
+    // from this data (world-render-3d.js's PALETTE no longer hardcodes
+    // these, described in worldStructure.ts so grounding can see them
+    // too) -- not a value only the renderer used to know about. A request
+    // to change one is now existence/structural work the pipeline can
+    // actually verify, the same as any other field here.
+    surfaces: {
+      ground: { material: "grass", color: "#6f6656" },
+      path: { material: "gravel", color: "#bfb49c" },
+      floor: { material: "wood", color: "#a79c85" },
+      roofShop: { material: "shingle", color: "#9a5a3c" },
+      roofWorkshop: { material: "shingle", color: "#5c6b5a" },
+    },
   };
 }
 

@@ -67,6 +67,17 @@ const PALETTE = {
   leaf: 0x4f6b47,
 };
 
+// FINAL.md item 4: surfaces are real, addressable world data now
+// (world.surfaces, src/simBaseline.ts's initialWorld()) -- this reads
+// straight from it instead of the PALETTE constants above owning the only
+// copy. Falls back to the PALETTE default only for a world state that
+// predates this field (an in-flight run resumed across a deploy), never
+// silently on a genuinely present-but-different value.
+function surfaceColor(surfaces, key, fallback) {
+  const c = surfaces && surfaces[key] && surfaces[key].color;
+  return c || fallback;
+}
+
 function stationFor(action) {
   for (const key in STATIONS) if (STATIONS[key].action === action) return STATIONS[key];
   return STATIONS.center;
@@ -257,6 +268,7 @@ class Renderer3D {
     if (this._neighbourhoodBuilt) return;
     const buildings = world.buildings || [];
     const outdoorObjects = world.outdoorObjects || [];
+    this._surfaces = world.surfaces || {};
     if (buildings.length === 0) return; // nothing to build yet
 
     const xs = buildings.map((b) => b.plot.x), ys = buildings.map((b) => b.plot.y);
@@ -307,7 +319,7 @@ class Renderer3D {
     const groundD = Math.max(...zs) * 2 + 5;
     const ground = new THREE.Mesh(
       new RoundedBoxGeometry(groundW, 0.25, groundD, 3, 0.15),
-      stdMat({ color: PALETTE.ground, roughness: 0.95, metalness: 0.0 }),
+      stdMat({ color: surfaceColor(this._surfaces, "ground", PALETTE.ground), roughness: 0.95, metalness: 0.0 }),
     );
     ground.position.y = -0.2;
     ground.receiveShadow = true;
@@ -318,7 +330,7 @@ class Renderer3D {
     // building's side of the grid -- not routed building-to-building
     // individually (that's real pathfinding for a later run), just an
     // honest "there is open, walkable ground here" cue.
-    const pathMat = stdMat({ color: PALETTE.path, roughness: 0.9 });
+    const pathMat = stdMat({ color: surfaceColor(this._surfaces, "path", PALETTE.path), roughness: 0.9 });
     const pathNS = new THREE.Mesh(new THREE.PlaneGeometry(2.4, groundD - 1), pathMat);
     pathNS.rotation.x = -Math.PI / 2;
     pathNS.position.y = -0.06;
@@ -334,7 +346,7 @@ class Renderer3D {
   _buildDwelling(group, building) {
     const floor = new THREE.Mesh(
       new RoundedBoxGeometry(BUILDING_W, 0.3, BUILDING_D, 3, 0.12),
-      stdMat({ color: PALETTE.floor, roughness: 0.86, metalness: 0.02 }),
+      stdMat({ color: surfaceColor(this._surfaces, "floor", PALETTE.floor), roughness: 0.86, metalness: 0.02 }),
     );
     floor.position.y = -0.15;
     floor.receiveShadow = true;
@@ -376,7 +388,10 @@ class Renderer3D {
    * plot even though neither has anything happening inside yet. */
   _buildSimpleBuilding(group, building) {
     const w = BUILDING_W * 0.55, d = BUILDING_D * 0.7, h = 1.7;
-    const roofColor = building.type === "workshop" ? PALETTE.roofWorkshop : PALETTE.roofShop;
+    const roofColor =
+      building.type === "workshop"
+        ? surfaceColor(this._surfaces, "roofWorkshop", PALETTE.roofWorkshop)
+        : surfaceColor(this._surfaces, "roofShop", PALETTE.roofShop);
     const shell = new THREE.Mesh(
       new RoundedBoxGeometry(w, h, d, 2, 0.08),
       stdMat({ color: PALETTE.wall, roughness: 0.88 }),
