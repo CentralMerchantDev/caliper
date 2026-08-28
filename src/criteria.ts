@@ -92,8 +92,14 @@ export const CRITERION_SCHEMA = {
     fn: { type: ["string", "null"], description: "Function name to call. Required for existence/structural/non-regression, null for render." },
     argsJson: { type: ["string", "null"], description: "JSON-encoded array of arguments. Required for existence/structural/non-regression, null for render." },
     field: { type: ["string", "null"], description: "Dot-path field to check. Optional for existence, required for structural, null otherwise." },
-    check: { type: ["string", "null"], enum: ["typeCheck", "minCount", null], description: "structural only." },
-    expectedType: { type: ["string", "null"], enum: ["string", "number", "boolean", "array", "object", null], description: 'structural only, when check is "typeCheck".' },
+    check: {
+      anyOf: [{ type: "string", enum: ["typeCheck", "minCount"] }, { type: "null" }],
+      description: "structural only.",
+    },
+    expectedType: {
+      anyOf: [{ type: "string", enum: ["string", "number", "boolean", "array", "object"] }, { type: "null" }],
+      description: 'structural only, when check is "typeCheck".',
+    },
     minCount: { type: ["number", "null"], description: 'structural only, when check is "minCount".' },
     repeat: { type: ["number", "null"], description: "non-regression only -- call fn this many times, chaining each result into the next call." },
     stationOrEntityKey: { type: ["string", "null"], description: "render only -- must name a real station/entity key." },
