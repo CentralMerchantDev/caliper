@@ -52,6 +52,9 @@ header nav a:hover{background:var(--accentSoft);color:var(--ink)}
 .hero .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700}
 .hero h1{font-family:var(--serif);font-size:clamp(26px,4vw,38px);line-height:1.18;letter-spacing:-.015em;font-weight:600;margin:14px 0 6px}
 .hero .sub{font-size:17px;color:var(--ink2);margin:0}
+.who-line{font-size:14px;color:var(--muted);margin:16px 0 0}
+.who-line a{color:var(--ink2);text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:2px}
+.who-line a:hover{color:var(--accent)}
 
 h2{font-family:var(--serif);font-size:28px;font-weight:600;letter-spacing:-.01em;margin:52px 0 14px}
 h2 .n{font-family:var(--mono);font-size:13px;color:var(--muted);letter-spacing:.06em;font-weight:600;display:block;margin-bottom:6px;text-transform:uppercase}
@@ -64,6 +67,8 @@ strong{font-weight:650}
 .callout{font-size:19px;font-weight:550;line-height:1.5;padding:18px 22px;background:var(--accentSoft);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;margin:22px 0}
 .callout p{margin:0}
 .note{color:var(--ink2);font-size:16px;border-left:3px solid var(--line-strong);padding:2px 0 2px 16px;margin:16px 0}
+.personal-note{font-size:15px;font-style:italic;color:var(--ink2);border-left:2px solid var(--accent);padding:4px 0 4px 14px;margin:16px 0}
+.personal-note::before{content:"Mark: ";font-style:normal;font-weight:700;color:var(--accent)}
 
 table{width:100%;border-collapse:collapse;margin:18px 0;font-size:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh)}
 caption{text-align:left;font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;caption-side:top}
@@ -173,8 +178,8 @@ footer a{color:var(--ink2)}
       <a href="#app">The world</a>
       <a href="#controls">Controls</a>
       <a href="#finding">The evidence</a>
-      <a href="#methodology">Methodology</a>
       <a href="#sandbox">The sandbox</a>
+      <a href="#methodology">Methodology</a>
     </nav>
   </div>
 </header>
@@ -188,6 +193,10 @@ footer a{color:var(--ink2)}
       by running them, held for your approval before anything is built, implemented, verified in a real
       sandbox, reviewed by a second model from a different vendor, and shipped -- or refused, with the
       specific reason on screen. Nothing on this page is a mockup of that process. It is that process.</p>
+    <p class="who-line">Eighteen years designing buildings, the last two building the AI systems that check
+      them. <a href="https://datum.markfrasertoronto.workers.dev/resume.pdf">Résumé</a> ·
+      <a href="https://portfolio.markfrasertoronto.workers.dev">Portfolio</a> ·
+      <a href="https://datum.markfrasertoronto.workers.dev">DATUM</a></p>
   </section>
 </div>
 
@@ -236,6 +245,9 @@ footer a{color:var(--ink2)}
   <p class="note">A public demo running real model calls per visitor is not affordable at unlimited
     scale -- that's a real product constraint the daily/weekly/monthly checkpoints encode, not just a
     UX choice.</p>
+  <p class="personal-note">Real budgets teach you where the actual failure modes are. I've shipped
+    circuit breakers, spend ceilings and per-IP limits before this project, at DATUM and at SQ.FT.,
+    for the same reason each time: hoping a system won't get abused isn't a plan.</p>
 
   <h2><span class="n">Model routing</span>Each stage runs on the model suited to that stage</h2>
   <p>Treating every call the same -- the most capable model available, every time -- is its own kind of
@@ -348,38 +360,6 @@ footer a{color:var(--ink2)}
     test encodes a preference rather than a correctness property, the verifier is asserting that
     preference, not catching a defect.</p>
 
-  <h2 id="methodology">Methodology</h2>
-  <h3>What was run (the cost experiment)</h3>
-  <p>32 tasks total across three tiers: 18 in a core set (string/date parsing, interval and graph
-    work, numeric edge cases, stateful reducers, tolerant parsing of malformed input), 7 in a
-    harder tier (classic dynamic-programming and graph problems), and 7 in a novel tier
-    (fabricated business-rule specs invented for this experiment). Every hidden test's expected
-    value was checked against an independently written reference implementation before any model
-    ever saw a task. Three tiers spanning a real price range, light through frontier. Three
-    repetitions per (task, tier) cell.</p>
-  <h3>How the world's criteria work now</h3>
-  <p>A criterion can no longer assert a computed value a model worked out by hand -- that class of
-    claim produced every historical refusal this project tracked. Four kinds remain: existence (a
-    function or field exists and is callable), structural (a field has the right type or count),
-    non-regression (a call's result is compared against the <strong>baseline's own output for the
-    same call</strong>, computed by actually running it -- never supplied by the model), and
-    render (a station or entity type draws without throwing). The hand-authored regression suite
-    is separate and runs unconditionally on every attempt, unaffected by anything the model
-    proposes.</p>
-  <h3>Where a skeptical reader should push</h3>
-  <ul>
-    <li><strong>Sample size on convergence rate is small on the core set specifically</strong> and
-      has wide error bars there. It doesn't apply to the final-pass-rate numbers, which rest on
-      the full 54 or 21 cycles per model and are the load-bearing ones.</li>
-    <li><strong>Single vendor for the 32-task experiment.</strong> The world's own review stage is
-      genuinely cross-vendor (OpenAI reviewing Claude); the cost experiment itself is
-      Anthropic-only.</li>
-    <li><strong>"Not recallable" is not the same claim as "hard."</strong> See "The limit" above.</li>
-    <li><strong>No statistical trial sweep across many change requests yet.</strong> This build
-      proves the pipeline works end to end and the controls hold under real forcing; it does not
-      yet establish a "reviewed, nothing found" base rate across many kinds of request.</li>
-  </ul>
-
   <h2 id="sandbox"><span class="n">Isolation</span>How the sandbox works</h2>
   <p>Every generated function runs inside a Cloudflare <strong>Dynamic Worker</strong> -- a fresh
     V8 isolate spun up per program, with no bindings (<span class="mono">env: {}</span>) and no
@@ -398,6 +378,42 @@ footer a{color:var(--ink2)}
   </ul>
   <p>In every case the calling code gets an ordinary, catchable error -- never a hung request,
     never a silent nothing.</p>
+
+  <h2 id="methodology">Methodology</h2>
+  <h3>What was run (the cost experiment)</h3>
+  <p>32 tasks total across three tiers: 18 in a core set (string/date parsing, interval and graph
+    work, numeric edge cases, stateful reducers, tolerant parsing of malformed input), 7 in a
+    harder tier (classic dynamic-programming and graph problems), and 7 in a novel tier
+    (fabricated business-rule specs invented for this experiment). Every hidden test's expected
+    value was checked against an independently written reference implementation before any model
+    ever saw a task. Three tiers spanning a real price range, light through frontier. Three
+    repetitions per (task, tier) cell.</p>
+  <h3>How the world's criteria work now</h3>
+  <p>A criterion can no longer assert a computed value a model worked out by hand -- that class of
+    claim produced every historical refusal this project tracked. Four kinds remain: existence (a
+    function or field exists and is callable), structural (a field has the right type or count),
+    non-regression (a call's result is compared against the <strong>baseline's own output for the
+    same call</strong>, computed by actually running it -- never supplied by the model), and
+    render (a station or entity type draws without throwing). The hand-authored regression suite
+    is separate and runs unconditionally on every attempt, unaffected by anything the model
+    proposes.</p>
+  <p class="personal-note">I don't take a model's word for its own work. At DATUM, every AI answer is
+    scored against a reference computed independently of the model under test. Here, the rule is the
+    same: a non-regression check is only ever compared against the baseline actually running, never a
+    number a model computed by hand. Different project, same rule.</p>
+  <h3>Where a skeptical reader should push</h3>
+  <ul>
+    <li><strong>Sample size on convergence rate is small on the core set specifically</strong> and
+      has wide error bars there. It doesn't apply to the final-pass-rate numbers, which rest on
+      the full 54 or 21 cycles per model and are the load-bearing ones.</li>
+    <li><strong>Single vendor for the 32-task experiment.</strong> The world's own review stage is
+      genuinely cross-vendor (OpenAI reviewing Claude); the cost experiment itself is
+      Anthropic-only.</li>
+    <li><strong>"Not recallable" is not the same claim as "hard."</strong> See "The limit" above.</li>
+    <li><strong>No statistical trial sweep across many change requests yet.</strong> This build
+      proves the pipeline works end to end and the controls hold under real forcing; it does not
+      yet establish a "reviewed, nothing found" base rate across many kinds of request.</li>
+  </ul>
 
 </div>
 
@@ -691,6 +707,9 @@ form.addEventListener('submit', (ev) => {
         <ul style="margin:0 0 10px">${p.criteria.map(c => `<li>${esc(c.description)} <span class="mono" style="color:var(--muted)">[${esc(c.kind)}]</span></li>`).join('')}</ul>` : '<p style="margin:0 0 10px;color:var(--muted)">No new criteria proposed.</p>'}
         ${g && !g.premisesHold ? `<h5>What it can't do, and why</h5>
         <p style="margin:0 0 10px">${esc(g.reasoning)}</p>` : ''}
+        <p class="personal-note" style="margin:10px 0">Two gates in this pipeline, not one -- I write my own
+          systems the same way. A human decides before anything is built, and again before anything ships.
+          Nothing changes what a visitor sees without someone signing off on it first.</p>
         <div class="cost-line">Spent so far this run: ${money(d.costEstimateUsd)} · headroom left against the per-run ceiling: ${money(d.budgetRemainingUsd)}</div>
         <div class="gate-actions">
           <button class="btn" id="gate-approve">Approve</button>
@@ -785,6 +804,9 @@ form.addEventListener('submit', (ev) => {
       const b = stageBlock(log, 's-review-gate', 'Gate 2 — the reviewer found something', 'gate')
       b.innerHTML += `<div class="gate-box"><h5>${d.materialFindings.length} material finding(s)</h5>` +
         renderFindings(d.materialFindings, d.nitFindings) +
+        `<p class="personal-note" style="margin:10px 0">Material versus nit is my call here, not the model's.
+        A reviewer that flags everything is as useless as one that flags nothing -- deciding what actually
+        matters is the judgment I don't hand off.</p>` +
         `<div class="gate-actions"><button class="btn" id="rgate-approve">Approve a fix round</button><button class="btn btn-outline" id="rgate-reject">Reject, ship as-is</button></div></div>`
       $('#rgate-approve').addEventListener('click', () => { $('#rgate-approve').disabled = true; $('#rgate-reject').disabled = true; fetch(`/change-review-decision?runId=${encodeURIComponent(runId)}&approve=true`).then(() => resume()) })
       $('#rgate-reject').addEventListener('click', () => { $('#rgate-approve').disabled = true; $('#rgate-reject').disabled = true; fetch(`/change-review-decision?runId=${encodeURIComponent(runId)}&approve=false`).then(() => resume()) })
@@ -819,7 +841,11 @@ form.addEventListener('submit', (ev) => {
       const d = JSON.parse(ev.data)
       const b = stageBlock(log, 's-refused-' + Date.now(), 'Refused to ship')
       b.classList.add('error'); b.classList.remove('active')
-      b.innerHTML += `<p style="margin:0">${esc(d.reason)}</p>`
+      b.innerHTML += `<p style="margin:0">${esc(d.reason)}</p>` +
+        `<p class="personal-note" style="margin:10px 0 0">I wanted a system that could actually tell me no.
+        That's harder to build than one that always finds a way to say yes -- it means grounding has to run
+        before planning, a refusal has to cite the specific thing that's false, and nothing ships just
+        because it technically compiled.</p>`
     })
 
     es.addEventListener('retrospective', ev => {
