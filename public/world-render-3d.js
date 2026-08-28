@@ -609,6 +609,17 @@ class Renderer3D {
     this._bloom.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    // _fitCamera's camDist/camH are tuned once against the scene radius,
+    // not the container shape. Vertical FOV is fixed, so horizontal FOV
+    // shrinks with the aspect ratio -- on a narrow mobile container (near
+    // square, or taller than wide) that shrunk horizontal FOV crops the
+    // neighbourhood's sides that a wider desktop container had room for.
+    // Dollying the camera out (same angle, further back) for aspects
+    // narrower than the ratio the framing already fits restores the full
+    // plot to view without ever tightening the shot on wide screens.
+    const REFERENCE_ASPECT = 1.35;
+    const aspect = w / h;
+    this._cameraFit = aspect < REFERENCE_ASPECT ? REFERENCE_ASPECT / aspect : 1;
   }
 
   destroy() {
@@ -694,7 +705,8 @@ class Renderer3D {
 
     // -- composed camera: fixed 3/4 shot of the whole plot, small user-driven orbit only --
     const az = this._orbit.base + this._orbit.delta;
-    const camDist = this._camDist || 14, camH = this._camH || 8;
+    const fit = this._cameraFit || 1;
+    const camDist = (this._camDist || 14) * fit, camH = (this._camH || 8) * fit;
     this.camera.position.set(Math.sin(az) * camDist, camH, Math.cos(az) * camDist);
     this.camera.lookAt(this._lookAt);
 
