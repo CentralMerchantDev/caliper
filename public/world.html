@@ -45,6 +45,10 @@ label.mono{font-family:var(--mono);font-size:11px;color:var(--muted);text-transf
 .log-line b{color:var(--ink)}
 .log-line:first-child{padding-top:0}
 @media(max-width:760px){.layout{grid-template-columns:1fr}}
+.view-toggle{display:flex;gap:0;margin-bottom:10px;width:fit-content;border:1px solid var(--line-strong);border-radius:7px;overflow:hidden}
+.view-toggle button{margin:0;padding:6px 14px;border:none;border-right:1px solid var(--line-strong);border-radius:0}
+.view-toggle button:last-child{border-right:none}
+#world-2d{width:100%;height:460px;display:block;border-radius:10px}
 </style>
 </head>
 <body>
@@ -53,7 +57,12 @@ label.mono{font-family:var(--mono);font-size:11px;color:var(--muted);text-transf
   <p class="sub">Running the real, unmodified simulation logic from <span style="font-family:var(--mono)">src/simBaseline.ts</span> -- not a mockup. Mechanically exported, never hand-copied (<span style="font-family:var(--mono)">scripts/export-sim-for-browser.mjs</span>).</p>
   <div class="layout">
     <div class="stage-card">
+      <div class="view-toggle" role="group" aria-label="View">
+        <button id="view-3d" type="button" aria-pressed="true">3D</button>
+        <button id="view-plan" type="button" aria-pressed="false">Plan</button>
+      </div>
       <canvas id="world" width="1400" height="900"></canvas>
+      <canvas id="world-2d" width="1400" height="900" style="display:none"></canvas>
       <div class="controls">
         <button id="playPause" aria-pressed="true">⏸ Pause</button>
         <div class="speed-group" role="group" aria-label="Playback speed">
@@ -74,15 +83,42 @@ label.mono{font-family:var(--mono);font-size:11px;color:var(--muted);text-transf
 
 <script type="module">
 import { WorldRenderer } from "./world-render-3d.js";
+import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
 import { initialWorld, tick } from "./sim-baseline.generated.js";
 
+// FINAL.md item 7: same toggle pattern as index.html -- both renderers
+// stay alive and fed every tick; only the visible one is drawn each
+// frame. See index.html's own comment for the full reasoning.
 const canvas = document.getElementById("world");
+const canvas2d = document.getElementById("world-2d");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const renderer = new WorldRenderer(canvas, { reducedMotion });
+const renderer2d = new WorldRenderer2D(canvas2d, { reducedMotion });
+let currentView = localStorage.getItem("caliper-view") === "plan" ? "plan" : "3d";
+let lastT = 1;
+
+function applyViewToggle() {
+  const is3d = currentView === "3d";
+  canvas.style.display = is3d ? "block" : "none";
+  canvas2d.style.display = is3d ? "none" : "block";
+  document.getElementById("view-3d").setAttribute("aria-pressed", String(is3d));
+  document.getElementById("view-plan").setAttribute("aria-pressed", String(!is3d));
+  (is3d ? renderer : renderer2d).draw(lastT);
+}
+function setView(view) {
+  currentView = view;
+  localStorage.setItem("caliper-view", view);
+  applyViewToggle();
+}
+document.getElementById("view-3d").addEventListener("click", () => setView("3d"));
+document.getElementById("view-plan").addEventListener("click", () => setView("plan"));
+applyViewToggle();
 
 let world = initialWorld();
 renderer.pushTick(world);
 renderer.pushTick(world);
+renderer2d.pushTick(world);
+renderer2d.pushTick(world);
 
 const logEl = document.getElementById("log");
 const MAX_LOG = 60;
@@ -117,10 +153,12 @@ let start = performance.now();
 function frame(now) {
   const tickMs = BASE_TICK_MS / speed;
   const t = Math.min(1, (now - start) / tickMs);
-  renderer.draw(t);
+  lastT = t;
+  (currentView === "3d" ? renderer : renderer2d).draw(t);
   if (playing && t >= 1) {
     world = tick(world);
     renderer.pushTick(world);
+    renderer2d.pushTick(world);
     logEvent(world);
     start = now;
   }

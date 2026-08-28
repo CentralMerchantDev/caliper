@@ -87,12 +87,19 @@ td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabu
 @media(max-width:900px){.workspace{grid-template-columns:1fr}}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:18px}
 .world-panel{padding:14px}
-#world-canvas{width:100%;height:420px;display:block;border-radius:10px}
+#world-canvas,#world-canvas-2d{width:100%;height:420px;display:block;border-radius:10px}
 .world-caption{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
 .world-goal-line{margin:8px 2px 0;font-size:13px;color:var(--ink2)}
 .world-controls{display:flex;gap:6px}
 .world-controls button{font-family:var(--mono);font-size:11px;padding:5px 9px;border-radius:7px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);cursor:pointer}
 .world-controls button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+/* FINAL.md item 7: a toggle between the 3D and plan views of the one
+   world -- same button visual language as .world-controls, placed above
+   the canvas since it picks which canvas is even visible. */
+.view-toggle{display:flex;gap:0;margin-bottom:10px;width:fit-content;border:1px solid var(--line-strong);border-radius:7px;overflow:hidden}
+.view-toggle button{font-family:var(--mono);font-size:11px;padding:6px 14px;border:none;border-right:1px solid var(--line-strong);background:var(--paper);color:var(--ink);cursor:pointer}
+.view-toggle button:last-child{border-right:none}
+.view-toggle button[aria-pressed="true"]{background:var(--ink);color:#fff}
 
 .budget-bar{display:flex;flex-wrap:wrap;gap:6px 16px;font-family:var(--mono);font-size:11.5px;color:var(--muted);padding:10px 14px;background:var(--paper);border:1px solid var(--line2);border-radius:9px;margin-bottom:14px}
 .budget-bar b{color:var(--ink);font-weight:700}
@@ -246,7 +253,12 @@ body{padding-bottom:var(--bar-h,64px)}
   <p class="world-goal-line">The limits are real, not invented: no art or sound the world can't render, and no new system -- weather, an economy -- built and verified in one run. Everything else is worth trying.</p>
   <div class="workspace">
     <div class="panel world-panel">
+      <div class="view-toggle" role="group" aria-label="View">
+        <button id="view-3d" type="button" aria-pressed="true">3D</button>
+        <button id="view-plan" type="button" aria-pressed="false">Plan</button>
+      </div>
       <canvas id="world-canvas" width="1400" height="900" role="img" aria-label="A living 3D view of the simulated neighbourhood"></canvas>
+      <canvas id="world-canvas-2d" width="1400" height="900" role="img" aria-label="An architectural plan view of the simulated neighbourhood" style="display:none"></canvas>
       <div class="world-caption">
         <span id="world-status">loading the current world…</span>
         <div class="world-controls">
@@ -470,26 +482,56 @@ body{padding-bottom:var(--bar-h,64px)}
 
 <script type="module">
 import { WorldRenderer } from "./world-render-3d.js";
+import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
 
 const $ = s => document.querySelector(s)
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))
 const money = n => '$' + Number(n).toFixed(4)
 
 // ---------- the world, live ----------
+// FINAL.md item 7: a toggle between the 3D and plan views of the ONE
+// world, not two worlds -- both renderers are kept alive and fed every
+// tick (pushTick is cheap: it just stores the world reference), but only
+// the currently-visible one is actually drawn each frame, so toggling is
+// instant and never re-simulates or re-fetches anything. The toggle
+// choice persists in localStorage across reloads, not just within a run,
+// so a visitor who picked Plan is never thrown back to 3D.
 
-const canvas = $('#world-canvas')
+const canvas3d = $('#world-canvas')
+const canvas2d = $('#world-canvas-2d')
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-const renderer = new WorldRenderer(canvas, { reducedMotion })
+const renderer3d = new WorldRenderer(canvas3d, { reducedMotion })
+const renderer2d = new WorldRenderer2D(canvas2d, { reducedMotion })
 let world = null
 let playing = true
-const TICK_MS = 6250 // FINAL.md item 6: a full 24-tick day in 150s (2.5min) -- was 25s (far too fast, "goes from night to day in seconds"), before that far too slow. The middle: slow enough nothing strobes, fast enough a visitor watching a minute sees the light genuinely move. Sun/sky/lamps now interpolate smoothly across each tick (world-render-3d.js draw()), not just sim positions, so a tick this long never reads as a step.
+let currentView = localStorage.getItem('caliper-view') === 'plan' ? 'plan' : '3d'
+let lastT = 1
+const TICK_MS = 6250 // FINAL.md item 6: a full 24-tick day in 150s (2.5min) -- was 25s (far too fast, "goes from night to day in seconds"), before that far too slow. The middle: slow enough nothing strobes, fast enough a visitor watching a minute sees the light genuinely move. Sun/sky/lamps now interpolate smoothly across each tick (both renderers' draw()), not just sim positions, so a tick this long never reads as a step.
+
+function applyViewToggle() {
+  const is3d = currentView === '3d'
+  canvas3d.style.display = is3d ? 'block' : 'none'
+  canvas2d.style.display = is3d ? 'none' : 'block'
+  $('#view-3d').setAttribute('aria-pressed', String(is3d))
+  $('#view-plan').setAttribute('aria-pressed', String(!is3d))
+  ;(is3d ? renderer3d : renderer2d).draw(lastT) // redraw immediately -- no blank frame while waiting for the next tick
+}
+function setView(view) {
+  currentView = view
+  localStorage.setItem('caliper-view', view)
+  applyViewToggle()
+}
+$('#view-3d').addEventListener('click', () => setView('3d'))
+$('#view-plan').addEventListener('click', () => setView('plan'))
+applyViewToggle()
 
 async function bootWorld() {
   try {
     const mod = await import(`./world-source?t=${Date.now()}`)
     const w0 = mod.initialWorld()
     world = w0
-    renderer.pushTick(w0); renderer.pushTick(w0)
+    renderer3d.pushTick(w0); renderer3d.pushTick(w0)
+    renderer2d.pushTick(w0); renderer2d.pushTick(w0)
     $('#world-status').textContent = 'the current shared world -- day 1, tick 0'
     tickLoop(mod.tick)
   } catch (e) {
@@ -500,14 +542,16 @@ function tickLoop(tickFn) {
   let start = performance.now()
   function frame(now) {
     const t = Math.min(1, (now - start) / TICK_MS)
-    renderer.draw(t)
+    lastT = t
+    ;(currentView === '3d' ? renderer3d : renderer2d).draw(t)
     if (world) {
       const hour = world.tick % 24
       $('#world-status').textContent = `day ${Math.floor(world.tick/24)+1} · ${String(hour).padStart(2,'0')}:00`
     }
     if (playing && t >= 1) {
       world = tickFn(world)
-      renderer.pushTick(world)
+      renderer3d.pushTick(world)
+      renderer2d.pushTick(world)
       start = now
     }
     requestAnimationFrame(frame)

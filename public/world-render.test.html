@@ -13,9 +13,10 @@
 </head>
 <body>
 <h3>world-render.js visual check — not part of the app, a standalone harness</h3>
-<p>Scripted world sequence exercising: room + all six stations, two sims walking between
-   stations with interpolation, need bars, critical-need ring, and the sun/shadow sweep
-   across a full 24-hour clock. <span id="hourLabel"></span></p>
+<p>Runs the real, unmodified simulation source (fetched from <code>/world-source</code>, the same
+   endpoint the app itself uses) through this file's 2D plan renderer -- the real neighbourhood
+   (two dwellings, a shop, a workshop, paths, outdoor objects, surfaces), not a hand-built single
+   room. <span id="hourLabel"></span></p>
 <div class="row">
   <canvas id="c" width="640" height="420"></canvas>
 </div>
@@ -31,30 +32,11 @@ import { WorldRenderer } from "./world-render.js";
 const canvas = document.getElementById("c");
 const renderer = new WorldRenderer(canvas);
 
-function makeWorld(tick, sim0Action, sim1Action, needs0, needs1) {
-  return {
-    tick, money: 100 + tick,
-    sims: [
-      { id: "sim1", needs: needs0, lastAction: sim0Action },
-      { id: "sim2", needs: needs1, lastAction: sim1Action },
-    ],
-  };
-}
+const mod = await import(`./world-source?t=${Date.now()}`);
+let world = mod.initialWorld();
 
-const actions = ["idle", "eat", "sleep", "shower", "play", "call", "work"];
-let tick = 6; // start at 6am so the sweep is visible immediately
-let ai = 0;
-function nextWorld() {
-  ai = (ai + 1) % actions.length;
-  const a0 = actions[ai];
-  const a1 = actions[(ai + 3) % actions.length];
-  const needs0 = { hunger: 20 + (tick * 7) % 80, energy: 60, hygiene: 70, fun: 50, social: 40 };
-  const needs1 = { hunger: 80, energy: 30 + (tick * 11) % 60, hygiene: 90, fun: 60, social: 50 };
-  return makeWorld(tick, a0, a1, needs0, needs1);
-}
-
-renderer.pushTick(nextWorld());
-renderer.pushTick(nextWorld());
+renderer.pushTick(world);
+renderer.pushTick(world);
 
 let playing = true;
 let start = performance.now();
@@ -65,8 +47,8 @@ function frame(now) {
   renderer.draw(t);
   document.getElementById("hourLabel").textContent = "hour: " + (renderer.nextWorld.tick % 24);
   if (playing && t >= 1) {
-    tick++;
-    renderer.pushTick(nextWorld());
+    world = mod.tick(world);
+    renderer.pushTick(world);
     start = now;
   }
   requestAnimationFrame(frame);
@@ -78,8 +60,8 @@ document.getElementById("playPause").addEventListener("click", (e) => {
   e.target.textContent = playing ? "pause" : "play";
 });
 document.getElementById("jumpHour").addEventListener("click", () => {
-  tick += 3;
-  renderer.pushTick(nextWorld());
+  for (let i = 0; i < 3; i++) world = mod.tick(world);
+  renderer.pushTick(world);
   start = performance.now() - TICK_MS; // land immediately, no interpolation glide for a manual jump
 });
 document.getElementById("reduced").addEventListener("change", (e) => {
