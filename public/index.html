@@ -506,6 +506,58 @@ function renderDiff(before, after) {
 
 // ---------- shared rendering helpers ----------
 
+// REFRAME.md item 1: a slow stage and a broken one look identical unless
+// the page says otherwise. Rotating status text proves something is
+// genuinely happening; the elapsed-time escalation says so explicitly once
+// a stage runs long enough that a visitor would reasonably start to wonder.
+// Each stage's own set is placed where it makes sense (still pontificating,
+// for the model reading its own review; still weighing it up, for deciding
+// what a finding is worth fixing).
+const STATUS_LINES = {
+  grounding: ['checking this against the real code', 'still tracing what exists', 'reading the structure before promising anything'],
+  planning: ['still noodling', 'weighing what this would actually take', 'sketching what would need to change'],
+  implementing: ['writing the change', 'still turning it over', 'getting the mechanism right'],
+  verifying: ['running it for real', 'checking nothing broke', 'still grinding through the checks'],
+  reviewing: ['still pontificating', 'a second opinion, forming', 'reading it with fresh eyes'],
+  fixing: ['addressing what the reviewer found', 'still weighing it up', 'reworking the specific finding'],
+}
+// Backstops the real server-side timeout on each model call (STAGE_CALL_TIMEOUT_MS,
+// src/claude.ts) with honest client-side expectation-setting -- a stage that runs
+// long gets a plain note about it rather than leaving a visitor to guess whether
+// anything is still happening.
+function startStatusRotation(el, stageKey) {
+  const lines = STATUS_LINES[stageKey] || ['still working']
+  const textEl = document.createElement('span')
+  textEl.className = 'status-text'
+  const p = document.createElement('p')
+  p.style.cssText = 'margin:0;color:var(--muted)'
+  const spin = document.createElement('span')
+  spin.className = 'spin'
+  spin.style.cssText = 'border-color:var(--line-strong);border-top-color:var(--accent)'
+  p.appendChild(spin)
+  p.appendChild(document.createTextNode(' '))
+  textEl.textContent = lines[0]
+  p.appendChild(textEl)
+  el.appendChild(p)
+  const start = performance.now()
+  let i = 0
+  const noteEl = document.createElement('p')
+  noteEl.style.cssText = 'margin:6px 0 0;color:var(--muted);font-size:13px'
+  el.appendChild(noteEl)
+  const timer = setInterval(() => {
+    if (!el.isConnected) { clearInterval(timer); return }
+    i = (i + 1) % lines.length
+    textEl.textContent = lines[i]
+    const elapsedSec = (performance.now() - start) / 1000
+    if (elapsedSec > 45) {
+      noteEl.textContent = `Still going after ${Math.round(elapsedSec)}s -- longer than this stage normally takes. If it doesn't resolve shortly, the run has a server-side timeout and will report a clear error rather than hang indefinitely.`
+    } else if (elapsedSec > 18) {
+      noteEl.textContent = `${Math.round(elapsedSec)}s in -- still working, not stuck.`
+    }
+  }, 3500)
+  return () => clearInterval(timer)
+}
+
 function stageBlock(log, id, title, extraClass) {
   const div = document.createElement('div')
   div.className = 'stage active' + (extraClass ? ' ' + extraClass : '')
@@ -559,14 +611,16 @@ form.addEventListener('submit', (ev) => {
   function connect(url) {
     const es = new EventSource(url)
     let groundBlock = null, planBlock = null, implBlock = null, verifyBlock = null, reviewBlock = null, fixBlock = null
+    let stopStatus = () => {}
 
     es.addEventListener('runId', ev => { runId = JSON.parse(ev.data).runId })
 
     es.addEventListener('grounding', () => {
       groundBlock = stageBlock(log, 's-ground-' + Date.now(), 'Grounding — checking this against the real current code')
-      groundBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> claude-haiku-4-5…</p>`
+      stopStatus = startStatusRotation(groundBlock, 'grounding')
     })
     es.addEventListener('grounded', ev => {
+      stopStatus()
       const d = JSON.parse(ev.data)
       if (groundBlock) {
         const r = d.result
@@ -581,9 +635,10 @@ form.addEventListener('submit', (ev) => {
 
     es.addEventListener('planning', () => {
       planBlock = stageBlock(log, 's-plan-' + Date.now(), 'Plan')
-      planBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> claude-sonnet-5…</p>`
+      stopStatus = startStatusRotation(planBlock, 'planning')
     })
     es.addEventListener('planned', ev => {
+      stopStatus()
       const d = JSON.parse(ev.data)
       if (planBlock) {
         const p = d.plan
@@ -661,9 +716,10 @@ form.addEventListener('submit', (ev) => {
 
     es.addEventListener('implementing', () => {
       implBlock = stageBlock(log, 's-implement', 'Implement')
-      implBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> claude-haiku-4-5…</p>`
+      stopStatus = startStatusRotation(implBlock, 'implementing')
     })
     es.addEventListener('implemented', ev => {
+      stopStatus()
       const d = JSON.parse(ev.data)
       implCode = d.code
       if (implBlock) {
@@ -675,9 +731,10 @@ form.addEventListener('submit', (ev) => {
 
     es.addEventListener('verifying', () => {
       verifyBlock = stageBlock(log, 's-verify-' + Date.now(), 'Verify — in the real sandbox')
-      verifyBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> running…</p>`
+      stopStatus = startStatusRotation(verifyBlock, 'verifying')
     })
     function renderVerified(d, block, label) {
+      stopStatus()
       if (!block) return
       const total = d.regressionTotal + d.criteriaTotal
       const passed = d.regressionPassed + d.criteriaPassed
@@ -695,14 +752,15 @@ form.addEventListener('submit', (ev) => {
 
     es.addEventListener('reviewing', () => {
       reviewBlock = stageBlock(log, 's-review', 'Cross-model review')
-      reviewBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> gpt-5.3-codex (OpenAI)…</p>`
+      stopStatus = startStatusRotation(reviewBlock, 'reviewing')
     })
     es.addEventListener('reviewed', ev => {
+      stopStatus()
       const d = JSON.parse(ev.data)
       if (reviewBlock) {
         const material = d.findings.filter(f => f.severity === 'MATERIAL').map(f => f.text)
         const nits = d.findings.filter(f => f.severity === 'NIT').map(f => f.text)
-        reviewBlock.innerHTML = `<h4>Reviewed by ${esc(d.model)}</h4>` +
+        reviewBlock.innerHTML = `<h4>Reviewed by a different model, from a different vendor</h4>` +
           `<details><summary style="cursor:pointer;color:var(--muted);font-size:13px">Full review text</summary><pre>${esc(d.reviewText)}</pre></details>` +
           `<div style="margin-top:8px">${renderFindings(material, nits)}</div>` +
           `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
@@ -728,9 +786,10 @@ form.addEventListener('submit', (ev) => {
 
     es.addEventListener('fixing', () => {
       fixBlock = stageBlock(log, 's-fix', 'Fix')
-      fixBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> claude-sonnet-5, against the reviewer's findings…</p>`
+      stopStatus = startStatusRotation(fixBlock, 'fixing')
     })
     es.addEventListener('fixed', ev => {
+      stopStatus()
       const d = JSON.parse(ev.data)
       if (fixBlock) {
         fixBlock.innerHTML = `<h4>Fixed</h4>` + (implCode ? renderDiff(implCode, d.code) : `<pre>${esc(d.code)}</pre>`) +
@@ -773,14 +832,16 @@ form.addEventListener('submit', (ev) => {
         `<div class="summary-line">${(d.totalWallTimeMs / 1000).toFixed(1)}s total wall time</div>`
     })
 
-    es.addEventListener('halted', () => { es.close() })
+    es.addEventListener('halted', () => { stopStatus(); es.close() })
     es.addEventListener('done', () => {
+      stopStatus()
       es.close()
       runBtn.disabled = false
       runBtn.innerHTML = '▸ Ground it, then plan it'
       loadBudget()
     })
     es.addEventListener('error', ev => {
+      stopStatus()
       let message = 'Connection to the pipeline stream was lost.'
       try { message = JSON.parse(ev.data).message } catch (_) {}
       const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')

@@ -30,6 +30,14 @@ export async function createWithTruncationGuard(
 export const DEFAULT_MODEL = "claude-sonnet-5";
 const MAX_TOKENS = 1024;
 
+// REFRAME.md item 1: every stage here is short and cheap by design (a few
+// hundred to a few thousand tokens -- see CONTROL_LIMITS.TOKEN_CAPS). The
+// SDK's own default timeout is 10 minutes, which is indistinguishable from
+// "broken" to a visitor watching an SSE stream go quiet. Bounded well above
+// any real call's observed wall time, so a call that's actually just slow
+// still succeeds -- this only cuts off a call that's genuinely stuck.
+export const STAGE_CALL_TIMEOUT_MS = 45_000;
+
 // Three models spanning a real capability/price range: the cheapest credible
 // option, a mid-tier default, and a frontier model. See docs/BUILD.md for why
 // these three.
@@ -133,7 +141,7 @@ export async function generateFunctionBody(
   task: Task,
   model: string = DEFAULT_MODEL,
 ): Promise<GenerationResult> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   return callForCode(client, kv, capUsd, model, [{ role: "user", content: promptFor(task) }]);
 }
 
@@ -151,7 +159,7 @@ export async function repairFunctionBody(
   failures: TestResult[],
   model: string = DEFAULT_MODEL,
 ): Promise<GenerationResult> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
 
   const failureText = failures
     .map((f) => {
@@ -254,7 +262,7 @@ export async function generateArtifact(
   maxTokens: number,
   correctionHint?: string,
 ): Promise<GenerationResult> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const content = correctionHint ? `${promptFor(task)}\n\n${correctionHint}` : promptFor(task);
   return callForArtifact(client, model, maxTokens, [{ role: "user", content }]);
 }
@@ -271,7 +279,7 @@ export async function repairArtifact(
   model: string,
   maxTokens: number,
 ): Promise<GenerationResult> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const findingsText = materialFindings.map((f) => `- ${f}`).join("\n");
   const messages: Anthropic.MessageParam[] = [
     { role: "user", content: promptFor(task) },
@@ -389,7 +397,7 @@ export async function generatePlan(
   priorLessons: string = "",
   groundingNote: string | null = null,
 ): Promise<{ plan: ChangePlan; model: string; inputTokens: number; outputTokens: number; costUsd: number; wallTimeMs: number }> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const start = Date.now();
   const userContent =
     (priorLessons ? `Lessons recorded from previous runs -- apply any that are relevant here:\n${priorLessons}\n\n` : "") +
@@ -495,7 +503,7 @@ export async function implementChange(
   maxTokens: number,
   priorLessons: string = "",
 ): Promise<GenerationResult> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const criteriaText = plan.criteria.map((c) => `- ${describeCriterion(c)}`).join("\n");
   const baseContent =
     (priorLessons ? `Lessons recorded from previous runs -- apply any that are relevant here:\n${priorLessons}\n\n` : "") +
@@ -533,7 +541,7 @@ export async function fixChange(
   stillPassing: string[] = [],
   priorLessons: string = "",
 ): Promise<GenerationResult> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const findingsText = materialFindings.map((f) => `- ${f}`).join("\n");
   // validate-before-consume, applied to the fix stage itself: the reviewer's
   // MATERIAL findings and the regression/criteria failures are two
@@ -588,7 +596,7 @@ export async function fixChange(
 }
 
 export async function generateBrief(apiKey: string, freeformPrompt: string, maxTokens: number): Promise<TextGenerationResult> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const start = Date.now();
   const response = await createWithTruncationGuard(client, "generateBrief", {
     model: DEFAULT_MODEL,
@@ -652,7 +660,7 @@ export interface RetrospectiveResult {
 }
 
 export async function runRetrospective(apiKey: string, runSummary: string, maxTokens = 300, model: string = DEFAULT_MODEL): Promise<RetrospectiveResult> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const start = Date.now();
   const response = await createWithTruncationGuard(client, "runRetrospective", {
     model,

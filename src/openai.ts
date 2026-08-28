@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { TruncatedResponseError } from "./controlLayer";
+import { STAGE_CALL_TIMEOUT_MS } from "./claude";
 
 // Cross-model review (REBUILD.md / REBUILD-CONTROLS.md): a production
 // build's real process is "one model authors, a different model reviews".
@@ -119,7 +120,7 @@ export async function reviewArtifact(
   maxTokens: number,
   priorLessons: string = "",
 ): Promise<ReviewResult> {
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const start = Date.now();
   const userContent =
     (priorLessons ? `Lessons recorded from previous runs -- apply any that are relevant here:\n${priorLessons}\n\n` : "") +
