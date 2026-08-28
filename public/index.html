@@ -459,7 +459,7 @@ function tickLoop(tickFn) {
     renderer.draw(t)
     if (world) {
       const hour = world.tick % 24
-      $('#world-status').textContent = `day ${Math.floor(world.tick/24)+1} · ${String(hour).padStart(2,'0')}:00 · $${world.money}`
+      $('#world-status').textContent = `day ${Math.floor(world.tick/24)+1} · ${String(hour).padStart(2,'0')}:00`
     }
     if (playing && t >= 1) {
       world = tickFn(world)
