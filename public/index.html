@@ -482,7 +482,7 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matc
 const renderer = new WorldRenderer(canvas, { reducedMotion })
 let world = null
 let playing = true
-const TICK_MS = 1050 // a full 24-tick day in ~25s -- watching for a minute or two shows the light genuinely change
+const TICK_MS = 6250 // FINAL.md item 6: a full 24-tick day in 150s (2.5min) -- was 25s (far too fast, "goes from night to day in seconds"), before that far too slow. The middle: slow enough nothing strobes, fast enough a visitor watching a minute sees the light genuinely move. Sun/sky/lamps now interpolate smoothly across each tick (world-render-3d.js draw()), not just sim positions, so a tick this long never reads as a step.
 
 async function bootWorld() {
   try {

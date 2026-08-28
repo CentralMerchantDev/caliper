@@ -114,18 +114,29 @@ function standLocalXZ(s) {
   return { x: (s.x + off.x - 0.5) * BUILDING_W, z: (s.y + off.y - 0.5) * BUILDING_D };
 }
 
-// Sun elevation/azimuth/colour across the 24h clock.
+// Sun elevation/azimuth/colour across the 24h clock. FINAL.md item 6:
+// "transitions between times of day must be smooth and continuous, never
+// stepped." At the old fast tick rate a hard isDay boolean's snap at
+// exactly hour 6/20 resolved within about a second, unnoticeable -- at the
+// new, much longer tick length it read as a visible pop at every sunrise
+// and sunset. dayAmt replaces that boolean with a continuous 1 (full day)
+// -> 0 (full night) ramp spread across a 2-hour twilight window straddling
+// each threshold; every place that used to branch on isDay now blends by
+// dayAmt instead, so nothing in the draw loop below steps.
 function sunFor(hour) {
-  const isDay = hour >= 6 && hour < 20;
+  const rampHalf = 1; // hours of twilight ramp on each side of dawn (6) and dusk (20)
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
+  const dawnRamp = clamp01((hour - 6 + rampHalf) / (2 * rampHalf));
+  const duskRamp = clamp01((20 - hour + rampHalf) / (2 * rampHalf));
+  const dayAmt = Math.min(dawnRamp, duskRamp);
+  const isDay = dayAmt >= 0.5; // kept for any caller that only ever wanted a simple boolean
   const dayFrac = Math.min(1, Math.max(0, ((hour - 6 + 24) % 24) / 14));
-  const elevation = isDay ? Math.sin(dayFrac * Math.PI) * 1.05 + 0.05 : 0.03;
+  const dayElevation = Math.sin(dayFrac * Math.PI) * 1.05 + 0.05;
+  const elevation = lerp(0.03, dayElevation, dayAmt);
   const azimuth = (((hour - 6 + 24) % 24) / 24) * Math.PI * 2;
-  let warmth;
-  if (!isDay) warmth = 0;
-  else if (hour < 9) warmth = (hour - 6) / 3;
-  else if (hour < 17) warmth = 1;
-  else warmth = Math.max(0, 1 - (hour - 17) / 3);
-  return { isDay, elevation, azimuth, warmth };
+  const dayWarmth = hour < 9 ? (hour - 6) / 3 : hour < 17 ? 1 : 1 - (hour - 17) / 3;
+  const warmth = Math.max(0, dayWarmth) * dayAmt;
+  return { isDay, dayAmt, elevation, azimuth, warmth };
 }
 
 const SUN_COLOR_WARM = new THREE.Color(0xff9d5c);
@@ -662,7 +673,13 @@ class Renderer3D {
     if (!this._neighbourhoodBuilt) return; // no buildings yet -- nothing to draw
     if (this.reducedMotion) t = 1;
     const prev = this.prevWorld || w;
-    const hour = w.tick % 24;
+    // FINAL.md item 6: interpolated, not snapped to the new tick the
+    // instant it lands. sunFor() is continuous in hour (no discrete
+    // lookups), so blending prev.tick -> prev.tick+1 by the same t used
+    // for sim positions makes the sky/lamps move smoothly across the
+    // whole tick instead of jumping once per tick -- the difference that
+    // matters once a tick is several seconds long, not sub-second.
+    const hour = (prev.tick + t) % 24;
     const sun = sunFor(hour);
 
     // -- lighting for this hour --
@@ -672,21 +689,29 @@ class Renderer3D {
     const sz = Math.sin(sun.azimuth) * Math.cos(sun.elevation) * dist;
     this.sun.position.set(sx, sy, sz);
     this.sun.target.position.set(0, 0.5, 0);
-    const nightAmt = sun.isDay ? 0 : 1;
+    // FINAL.md item 6: nightAmt now comes from sunFor()'s continuous
+    // dayAmt, not a hard isDay boolean -- every lerp below that reads
+    // nightAmt (point lights, lamp emissive, exposure, environmentIntensity)
+    // was already written to blend smoothly; the only thing that used to
+    // make it step was this single line snapping between 0 and 1 exactly
+    // at hour 6 and hour 20.
+    const nightAmt = 1 - sun.dayAmt;
     // FINAL.md item 5: "too dark both day and at night" -- the previous
     // pass overcorrected chasing the muddy-night note and pulled the day
     // end down with it. Raised both ends together, day more than night, so
     // day is the strongest frame in the cycle again while night keeps the
     // contrast already achieved (below) instead of flattening it out.
-    this.sun.intensity = sun.isDay ? lerp(0.5, 0.95, Math.min(1, sun.elevation)) : 0.08;
+    const daySunIntensity = lerp(0.5, 0.95, Math.min(1, sun.elevation));
+    this.sun.intensity = lerp(0.08, daySunIntensity, sun.dayAmt);
     const sunColor = sun.warmth >= 1 ? SUN_COLOR_DAY : SUN_COLOR_WARM.clone().lerp(SUN_COLOR_DAY, sun.warmth);
-    this.sun.color.copy(sun.isDay ? sunColor : SUN_COLOR_NIGHT);
+    this.sun.color.copy(SUN_COLOR_NIGHT).lerp(sunColor, sun.dayAmt);
     // Night's ambient floor raised off nearly zero -- "a person should see
     // the whole neighbourhood, with the lamp pools as the warm accents
     // rather than the only light. Not black, not brown." Still well below
     // day, so the point lights below still read as the thing carrying the
     // scene, not the only source of visibility.
-    this.hemi.intensity = sun.isDay ? lerp(0.2, 0.32, Math.min(1, sun.elevation)) : 0.07;
+    const dayHemi = lerp(0.2, 0.32, Math.min(1, sun.elevation));
+    this.hemi.intensity = lerp(0.07, dayHemi, sun.dayAmt);
     // CITY.md item 2/3: "at night the point lights carry the scene and the
     // sun is gone." Street lamps get a stronger night curve than interior
     // lights -- they're the thing meant to read as a warm pool against a
@@ -719,7 +744,8 @@ class Renderer3D {
     // again, not just the lamp-lit patches around each point light.
     this.scene.environmentIntensity = lerp(1.3, 0.18, nightAmt);
 
-    const sky = sun.isDay ? SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth) : SKY_NIGHT;
+    const daySky = SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth);
+    const sky = SKY_NIGHT.clone().lerp(daySky, sun.dayAmt);
     this.scene.background = sky.clone();
 
     // -- composed camera: fixed 3/4 shot of the whole plot, small user-driven orbit only --
