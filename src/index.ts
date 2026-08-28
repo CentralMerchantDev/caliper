@@ -608,6 +608,18 @@ export default {
       return json({ n, succeeded, expectedTotalUsd: expectedTotal, actualTotalUsd: status.dailySpentUsd, noLostUpdates, verdict: noLostUpdates ? "PASS -- every concurrent reservation was accounted for" : "FAIL -- a concurrent reservation was lost" });
     }
 
+    if (url.pathname === "/world-source") {
+      // Chunk 8: "a shared world, add something to it" is only honest if
+      // the visitor actually sees the CURRENT world, including whatever a
+      // prior shipped run changed -- not a static snapshot frozen at build
+      // time. Returns the exact live sim/current-source (or the baseline,
+      // for a fresh deploy that's never shipped anything), as plain JS
+      // text with export statements appended, importable directly by the
+      // browser exactly like public/sim-baseline.generated.js already is.
+      const source = ((await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE).trim();
+      return new Response(`${source}\n\nexport { initialWorld, chooseAction, applyAction, tick };\n`, { headers: { "content-type": "text/javascript", "cache-control": "no-store" } });
+    }
+
     if (url.pathname === "/sim-selftest") {
       const source = (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
       // Worker Loader's loader.get(id, getCode) only calls getCode on a

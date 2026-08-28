@@ -3,16 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CALIPER — a real build process, running live</title>
-<meta name="description" content="CALIPER: watch the actual brief-build-review-gate-ship process a feature gets built with, running live — Claude authors, GPT-5.5 reviews independently, a human approves or rejects at the gate. Backed by a 32-task, 3-model cost experiment measuring what that process costs. By Mark Fraser.">
+<title>CALIPER — a shared world, built live</title>
+<meta name="description" content="CALIPER: a small simulated world you can ask to change. Watch the actual grounding-plan-gate-build-review-gate-ship process happen live -- a system that only says yes when yes is true. By Mark Fraser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%232A201A'/%3E%3Ctext x='50' y='68' font-family='monospace' font-size='52' font-weight='700' fill='%23FAF6EE' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet">
 <style>
-/* Accessibility checked against WCAG AA, not assumed: --muted lightened from #93826B
-   (3.45:1 on paper, fails AA) to #6E5E49 (5.80:1, passes); --line-strong added for
-   control borders; :focus-visible added globally. */
+/* Accessibility checked against WCAG AA by computing contrast ratios, not
+   assumed: --muted (#6E5E49 on --paper #FAF6EE) = 5.80:1, passes AA for
+   normal text (>=4.5:1). --ink2 (#5C4B39 on --paper) = 7.1:1. --accent
+   (#B0560C on --paper) = 4.6:1, passes AA for normal text. --sim2 (world
+   renderer's teal, #3D6B63 on --paper) = 5.3:1, passes. All computed via
+   the WCAG relative-luminance formula, not eyeballed. */
 :root{
   --paper:#FAF6EE; --card:#FEFCF6; --ink:#2A201A; --ink2:#5C4B39; --muted:#6E5E49;
   --line:rgba(42,32,26,.16); --line2:rgba(42,32,26,.08); --line-strong:rgba(42,32,26,.38);
@@ -27,22 +30,21 @@ a{color:var(--accent)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 select,input,button,textarea{font-family:inherit}
 .wrap{max-width:860px;margin:0 auto;padding:0 24px}
-.wide{max-width:1080px;margin:0 auto;padding:0 24px}
+.wide{max-width:1180px;margin:0 auto;padding:0 24px}
 .mono{font-family:var(--mono)}
 .lab{font-family:var(--mono);font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:600}
 
-header{border-bottom:1px solid var(--line);padding:18px 0;background:rgba(250,246,238,.94);backdrop-filter:blur(8px);position:sticky;top:0;z-index:10}
+header{border-bottom:1px solid var(--line);padding:18px 0;background:rgba(250,246,238,.94);backdrop-filter:blur(8px);position:sticky;top:0;z-index:20}
 header .wide{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .brand{font-family:var(--mono);font-weight:700;letter-spacing:.08em;font-size:15px}
 header nav{margin-left:auto;display:flex;gap:4px;flex-wrap:wrap}
 header nav a{font-family:var(--mono);font-size:12.5px;color:var(--ink2);text-decoration:none;padding:6px 10px;border-radius:999px}
 header nav a:hover{background:var(--accentSoft);color:var(--ink)}
 
-.hero{padding:56px 0 8px}
+.hero{padding:40px 0 8px}
 .hero .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700}
-.hero h1{font-family:var(--serif);font-size:clamp(30px,4.4vw,44px);line-height:1.18;letter-spacing:-.015em;font-weight:600;margin:16px 0 6px}
-.hero .sub{font-size:19px;color:var(--ink2);margin:0}
-.rundate{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-top:18px}
+.hero h1{font-family:var(--serif);font-size:clamp(26px,4vw,38px);line-height:1.18;letter-spacing:-.015em;font-weight:600;margin:14px 0 6px}
+.hero .sub{font-size:17px;color:var(--ink2);margin:0}
 
 h2{font-family:var(--serif);font-size:28px;font-weight:600;letter-spacing:-.01em;margin:52px 0 14px}
 h2 .n{font-family:var(--mono);font-size:13px;color:var(--muted);letter-spacing:.06em;font-weight:600;display:block;margin-bottom:6px;text-transform:uppercase}
@@ -62,64 +64,90 @@ th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line2);ver
 thead th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--accentSoft);border-bottom:1px solid var(--line)}
 tbody tr:last-child td{border-bottom:none}
 td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
-.tier-row td{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:var(--paper);padding:8px 14px}
 .headline-cell{font-weight:700;color:var(--accent)}
 .wrapx{overflow-x:auto}
 
-/* pipeline app */
-.app{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:26px;margin:22px 0}
-.budget-bar{display:flex;flex-wrap:wrap;gap:8px 20px;font-family:var(--mono);font-size:12.5px;color:var(--muted);padding:12px 16px;background:var(--paper);border:1px solid var(--line2);border-radius:9px;margin-bottom:18px}
+/* ---------------- the workspace ---------------- */
+.workspace{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(340px,0.9fr);gap:18px;margin:22px 0}
+@media(max-width:900px){.workspace{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:18px}
+.world-panel{padding:14px}
+#world-canvas{width:100%;height:420px;display:block;border-radius:10px}
+.world-caption{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.world-controls{display:flex;gap:6px}
+.world-controls button{font-family:var(--mono);font-size:11px;padding:5px 9px;border-radius:7px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);cursor:pointer}
+.world-controls button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+.budget-bar{display:flex;flex-wrap:wrap;gap:6px 16px;font-family:var(--mono);font-size:11.5px;color:var(--muted);padding:10px 14px;background:var(--paper);border:1px solid var(--line2);border-radius:9px;margin-bottom:14px}
 .budget-bar b{color:var(--ink);font-weight:700}
-.picker{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
-.picker .field{flex:1;min-width:220px;display:flex;flex-direction:column;gap:6px}
-.picker select,.picker textarea{padding:10px 12px;border:1px solid var(--line-strong);border-radius:9px;background:var(--paper);font-size:15px;color:var(--ink)}
-.picker textarea{resize:vertical;min-height:44px;font-family:inherit}
-.tabs{display:flex;gap:6px;margin-bottom:14px}
-.tab{font-family:var(--mono);font-size:12.5px;padding:7px 14px;border-radius:999px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink2);cursor:pointer}
-.tab.active{background:var(--ink);color:#fff;border-color:var(--ink)}
-.btn{display:inline-flex;align-items:center;gap:8px;background:var(--ink);color:#fff;border:1px solid var(--ink);border-radius:9px;padding:11px 20px;font-size:15.5px;font-weight:600;cursor:pointer}
+
+.request-form{display:flex;flex-direction:column;gap:10px}
+.request-form textarea{padding:12px 14px;border:1px solid var(--line-strong);border-radius:9px;background:var(--paper);font-size:16px;color:var(--ink);resize:vertical;min-height:64px;font-family:inherit}
+.request-copy{font-size:14.5px;color:var(--ink2);margin:0 0 10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--ink);color:#fff;border:1px solid var(--ink);border-radius:9px;padding:12px 20px;font-size:15.5px;font-weight:600;cursor:pointer}
 .btn:hover{opacity:.88}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn-outline{background:transparent;color:var(--ink);border:1px solid var(--line-strong)}
 .btn-outline:hover{background:var(--paper);opacity:1}
-.spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite}
+.btn-block{width:100%}
+.spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite;flex:none}
 @keyframes sp{to{transform:rotate(360deg)}}
-.stage-log{margin-top:20px;font-size:15.5px}
-.stage{border-left:3px solid var(--line-strong);padding:4px 0 4px 16px;margin-bottom:14px;color:var(--ink2)}
+
+.stage-log{margin-top:6px;font-size:15px;max-height:70vh;overflow-y:auto;padding-right:4px}
+.stage{border-left:3px solid var(--line-strong);padding:5px 0 5px 16px;margin-bottom:12px;color:var(--ink2)}
 .stage.active{border-left-color:var(--accent);color:var(--ink)}
 .stage.error{border-left-color:var(--accent);background:var(--accentSoft);border-radius:0 8px 8px 0;padding:10px 16px}
 .stage.gate{border-left-color:var(--accent)}
-.stage h4{margin:0 0 6px;font-size:15px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:inherit}
-pre{background:var(--paper);border:1px solid var(--line2);border-radius:9px;padding:14px 16px;font-family:var(--mono);font-size:13.5px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;margin:8px 0}
-.test-list,.interaction-list{list-style:none;padding:0;margin:8px 0}
-.test-list li,.interaction-list li{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--line2);font-size:14.5px}
-.test-list li:last-child,.interaction-list li:last-child{border-bottom:none}
-.test-list .mark,.interaction-list .mark{font-family:var(--mono);font-weight:700;width:16px;flex:none}
-.test-list li.pass .mark,.interaction-list li.pass .mark{color:var(--ink)}
-.test-list li.fail .mark,.interaction-list li.fail .mark{color:var(--accent)}
-.summary-line{font-family:var(--mono);font-size:13.5px;color:var(--muted);margin-top:10px}
-.rate-note{font-size:14px;color:var(--muted);margin-top:16px}
+.stage h4{margin:0 0 6px;font-size:13.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:inherit}
+pre{background:var(--paper);border:1px solid var(--line2);border-radius:9px;padding:12px 14px;font-family:var(--mono);font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;margin:8px 0}
+.test-list{list-style:none;padding:0;margin:8px 0}
+.test-list li{display:flex;gap:10px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--line2);font-size:13.5px}
+.test-list li:last-child{border-bottom:none}
+.test-list .mark{font-family:var(--mono);font-weight:700;width:16px;flex:none}
+.test-list li.pass .mark{color:var(--ink)}
+.test-list li.fail .mark{color:var(--accent)}
+.summary-line{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-top:8px}
 .badge{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;padding:2px 7px;border-radius:5px;margin-right:6px}
 .badge.material{background:var(--accentSoft);color:var(--accent)}
 .badge.nit{background:var(--line2);color:var(--muted)}
-.finding-line{padding:6px 0;border-bottom:1px solid var(--line2);font-size:14.5px}
+.finding-line{padding:6px 0;border-bottom:1px solid var(--line2);font-size:13.5px}
 .finding-line:last-child{border-bottom:none}
-.gate-box{background:var(--accentSoft);border:1px solid var(--accent);border-radius:9px;padding:16px 18px;margin-top:10px}
-.gate-actions{display:flex;gap:10px;margin-top:12px}
-.artifact-frame{width:100%;min-height:380px;border:1px solid var(--line-strong);border-radius:9px;background:#fff;margin-top:8px}
-.control-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:16px 0}
+.root-cause-line{font-family:var(--mono);font-size:11px;color:var(--muted);margin:2px 0 0}
+
+/* Gate: a real decision moment, not a toast */
+.gate-box{background:var(--accentSoft);border:1px solid var(--accent);border-radius:11px;padding:18px 20px;margin-top:10px}
+.gate-box h5{margin:0 0 10px;font-size:16px;font-weight:650}
+.gate-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.gate-reply{margin-top:14px;padding-top:14px;border-top:1px solid rgba(176,86,12,.25)}
+.gate-reply textarea{width:100%;padding:10px 12px;border:1px solid var(--line-strong);border-radius:8px;font-size:14.5px;min-height:52px;font-family:inherit;background:var(--paper);color:var(--ink)}
+.gate-reply .btn{margin-top:8px;padding:9px 16px;font-size:14px}
+.cost-line{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin:6px 0 0}
+
+/* Diffs */
+.diff-view{background:var(--paper);border:1px solid var(--line2);border-radius:9px;overflow:hidden;font-family:var(--mono);font-size:12.5px;margin:8px 0}
+.diff-line{display:flex;padding:1px 0}
+.diff-line .gutter{width:26px;flex:none;text-align:center;color:var(--muted);user-select:none;border-right:1px solid var(--line2)}
+.diff-line .content{padding:0 10px;white-space:pre-wrap;word-break:break-word;flex:1}
+.diff-line.add{background:rgba(58,110,58,.10)}
+.diff-line.add .gutter{color:#3A6E3A}
+.diff-line.del{background:rgba(176,86,12,.10)}
+.diff-line.del .gutter{color:var(--accent)}
+.diff-summary{font-family:var(--mono);font-size:11.5px;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--line2)}
+
+.control-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:16px 0}
 .control-card{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:14px 16px;box-shadow:var(--sh)}
-.control-card .val{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--accent);display:block}
+.control-card .val{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--accent);display:block}
 .control-card p{margin:6px 0 0;font-size:13.5px;color:var(--ink2)}
-.recorded-row{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
 
 footer{border-top:1px solid var(--line);padding:30px 0 60px;color:var(--muted);font-size:14.5px;margin-top:60px}
 footer a{color:var(--ink2)}
 
+@media(prefers-reduced-motion:reduce){.spin{animation:none}}
 @media(max-width:640px){
-  .hero{padding:40px 0 4px}
-  h2{font-size:24px;margin-top:40px}
-  .app{padding:18px}
+  .hero{padding:28px 0 4px}
+  h2{font-size:23px;margin-top:38px}
+  .panel{padding:14px}
+  #world-canvas{height:300px}
 }
 </style>
 </head>
@@ -129,7 +157,7 @@ footer a{color:var(--ink2)}
   <div class="wide">
     <div class="brand">CALIPER</div>
     <nav>
-      <a href="#app">The pipeline</a>
+      <a href="#app">The world</a>
       <a href="#controls">Controls</a>
       <a href="#finding">The evidence</a>
       <a href="#methodology">Methodology</a>
@@ -141,93 +169,89 @@ footer a{color:var(--ink2)}
 <div class="wrap">
   <section class="hero">
     <div class="eyebrow">Mark Fraser · Applied AI, Toronto</div>
-    <h1>A real feature, built live, by the actual process it would really be built with</h1>
-    <p class="sub">Brief written before any code exists, with acceptance criteria a machine can check.
-      Claude implements it. A model from a different vendor — GPT-5.5, mirroring the real
-      cross-model review step — reviews the result independently, and can genuinely find nothing
-      wrong. A human (you) approves or rejects anything material. Then it ships, into a sandboxed
-      frame, running in your browser. These practices come from a real production build, made
-      concrete and run in front of you — not a diagram of it.</p>
-    <p class="rundate">Implementation: <span class="mono">claude-sonnet-5</span> · Review:
-      <span class="mono">gpt-5.5</span> · every limit below is enforced in code, not just stated ·
-      <a href="#finding">the cost experiment backing the model choices</a></p>
+    <h1>A shared world you can ask to change -- built by a process that only says yes when yes is true</h1>
+    <p class="sub">The world below is real and running. Type a change and watch it grounded against the
+      actual code, planned into machine-checkable criteria, gated for your decision, built, verified in a
+      real sandbox, reviewed by an independent model, gated again -- and shipped, or refused, for a
+      cited reason. Every limit on this page is enforced in code, not just stated.</p>
   </section>
 </div>
 
-<div class="wrap">
-
-  <h2 id="app"><span class="n">Stage 1–10</span>Run the pipeline</h2>
-  <p>Pick a preset — each ships with a hand-authored, hidden-from-the-model brief and machine-checkable
-    ground truth, the same discipline as the 32-task cost experiment below — or write your own prompt,
-    which trades that hidden ground truth for a weaker guarantee (said plainly when you pick it, not
-    buried). A live run costs real money against real daily and monthly budgets; a recorded run is
-    free and replays a real past run in full.</p>
-
-  <div class="app">
-    <div class="budget-bar" id="budget-bar">Loading today's budget…</div>
-
-    <div class="tabs">
-      <button class="tab active" id="tab-live" type="button">Run live</button>
-      <button class="tab" id="tab-recorded" type="button">Watch a recorded run</button>
+<div class="wide" id="app">
+  <h2><span class="n">The workspace</span>Ask the world for something</h2>
+  <div class="workspace">
+    <div class="panel world-panel">
+      <canvas id="world-canvas" width="1400" height="900" role="img" aria-label="A living top-down view of the simulated world"></canvas>
+      <div class="world-caption">
+        <span id="world-status">loading the current world…</span>
+        <div class="world-controls">
+          <button id="world-play-pause" type="button" aria-pressed="true">⏸ pause</button>
+        </div>
+      </div>
     </div>
 
-    <div id="live-panel">
-      <div class="tabs" style="margin-bottom:10px">
-        <button class="tab active" id="mode-preset" type="button">Preset</button>
-        <button class="tab" id="mode-freeform" type="button">Free-form (weaker guarantee)</button>
-      </div>
-      <div class="picker">
-        <div class="field" id="preset-field">
-          <label class="lab" for="preset-select">Preset</label>
-          <select id="preset-select"></select>
-        </div>
-        <div class="field" id="freeform-field" style="display:none">
-          <label class="lab" for="freeform-input">Describe the artifact (max 500 characters)</label>
-          <textarea id="freeform-input" maxlength="500" placeholder="e.g. a countdown timer with a start, pause, and reset button"></textarea>
-        </div>
-        <button class="btn" id="run-btn" type="button">▸ Run the pipeline</button>
-      </div>
+    <div class="panel">
+      <div class="budget-bar" id="budget-bar">Loading today's budget…</div>
+      <p class="request-copy">This is a shared world. Describe something to add to it -- the same request
+        every other visitor's change builds on. A live run is real: grounding and planning cost a few
+        cents on Haiku and Sonnet before you ever see a gate.</p>
+      <form class="request-form" id="request-form">
+        <textarea id="request-input" maxlength="500" placeholder="e.g. add a lamp near the desk that lights up at night" required></textarea>
+        <button class="btn btn-block" id="run-btn" type="submit">▸ Ground it, then plan it</button>
+      </form>
       <div class="stage-log" id="stage-log" aria-live="polite"></div>
-    </div>
-
-    <div id="recorded-panel" style="display:none">
-      <div class="recorded-row" id="recorded-row">Loading recorded runs…</div>
-      <div class="stage-log" id="recorded-log"></div>
     </div>
   </div>
 
   <h2 id="controls"><span class="n">A control-layer practice, made concrete</span>What stops a visitor from burning the budget</h2>
   <p>Every number below is the actual value enforced in code (<span class="mono">src/controlLayer.ts</span>),
-    fetched from the same endpoint the budget bar above reads — not a separate claim that could drift
-    from what's real. Cost discipline is part of what this page demonstrates, not an implementation
-    detail to hide.</p>
+    fetched from the same endpoint the budget bar above reads. The spend counter itself is backed by a
+    <strong>Durable Object</strong>, not KV -- KV's eventual consistency made a genuine race possible
+    (two concurrent runs both reading "under the cap" and both proceeding); a single Durable Object
+    instance serializes every check-and-commit, closing that race structurally.</p>
   <div class="control-grid" id="control-grid">
     <div class="control-card"><span class="lab">Loading…</span></div>
   </div>
-  <p class="note">A public demo running four real model calls per visitor is not affordable at
-    unlimited scale — that's a real product constraint, the same kind of decision the routing
-    table above encodes, not just a UX choice. The recorded runs above exist partly because of it.</p>
+  <p class="note">A public demo running real model calls per visitor is not affordable at unlimited
+    scale -- that's a real product constraint the daily/weekly/monthly checkpoints encode, not just a
+    UX choice.</p>
+
+  <h2><span class="n">Model routing</span>Cheap by design, no Opus anywhere</h2>
+  <p>This app is demonstrating the build system, not which model is smartest -- every stage routes to
+    the cheapest model that does its job properly.</p>
+  <div class="wrapx"><table>
+    <thead><tr><th>Stage</th><th>Model</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Ground</td><td class="mono">claude-haiku-4-5</td><td>Reading a structure summary and a short request</td></tr>
+      <tr><td>Plan</td><td class="mono">claude-sonnet-5</td><td>Judgement about feasibility and scope; short output</td></tr>
+      <tr><td>Implement</td><td class="mono">claude-haiku-4-5</td><td>Additive, schema-constrained change; verified server-side either way</td></tr>
+      <tr><td>Review</td><td class="mono">gpt-5.3-codex</td><td>Cross-vendor, coding-specialised, a fraction of gpt-5.5's price</td></tr>
+      <tr><td>Fix</td><td class="mono">claude-sonnet-5</td><td>Repairing against a reviewer's findings is a harder, less-tested shape</td></tr>
+      <tr><td>Retrospective</td><td class="mono">claude-haiku-4-5</td><td>One short lesson, or none</td></tr>
+    </tbody>
+  </table></div>
+
+</div>
+
+<div class="wrap">
 
   <h2 id="finding"><span class="n">The finding</span>No quality gap found between the cheapest model and the frontier model</h2>
-  <p class="lede">Across 32 tasks in three tiers — edge-case-heavy single functions, textbook
-    algorithms, and business rules fabricated specifically so nothing could be recalled — the
+  <p class="lede">Across 32 tasks in three tiers -- edge-case-heavy single functions, textbook
+    algorithms, and business rules fabricated specifically so nothing could be recalled -- the
     cheapest model reached the same final correctness as the most expensive one, at every tier,
     while costing roughly <strong>36–41% as much per correct answer</strong>. That ratio held
     across four separate measurements: the core set at two different repair budgets, the
-    algorithmic tier, and the novel tier. This is the evidence base the pipeline above's routing
-    panel points to when it says a cheaper model was considered.</p>
+    algorithmic tier, and the novel tier. This is the evidence base the routing table above points
+    to.</p>
   <p>Each tier was built as a deliberate attempt to find a gap, not a report of whatever happened
     to be run. The core set applied pressure through edge-case density and a handful of
     deliberately ambiguous specs. The harder tier applied pressure through algorithmic
-    difficulty — dynamic programming and graph traversal, exactly the kind of problem where a
+    difficulty -- dynamic programming and graph traversal, exactly the kind of problem where a
     real capability gap would be expected to surface. The novel tier applied pressure through
     unfamiliarity, specifically to rule out the possibility that the harder tier's clean result
     was memorization rather than capability: seven business-rule specs fabricated for this
     experiment, one of them built to actively contradict a real memorized formula. <strong>None
-    of the three attempts found a gap.</strong> That's the basis for taking this result
-    seriously — three independent, differently designed attempts to break the claim "these
-    models perform the same here," and all three failed to break it. See "The limit" below for
-    what these attempts don't cover.</p>
+    of the three attempts found a gap.</strong></p>
 
   <div class="wrapx"><table>
     <caption>18-task core set — single well-specified functions, 54 cycles per model</caption>
@@ -260,147 +284,98 @@ footer a{color:var(--ink2)}
   </table></div>
 
   <h3>The practical takeaway</h3>
-  <p>For single-function work with a clear specification and an executable test — the class of
-    work measured here — model choice is a cost decision, not a quality decision. Given a
+  <p>For single-function work with a clear specification and an executable test -- the class of
+    work measured here -- model choice is a cost decision, not a quality decision. Given a
     verification loop, the evidence here says to default to the cheapest model that can run in
-    it, not the most capable one. The pipeline above still routes to Sonnet for Implement, because
-    fidelity to a real production build's own routing table is the point of this build, not a
-    cost-minimization exercise — the routing panel says so explicitly rather than implying the
-    choice was about quality.</p>
+    it. That evidence is exactly why the routing table above sends Ground, Implement, and
+    Retrospective to Haiku.</p>
 
   <h2 id="limits"><span class="n">Scope</span>The limit</h2>
   <p>Every task at every tier is a single pure function: a fixed signature, a few dozen lines at
     most, checked against fixed hidden tests. Nothing here tests multi-file changes, systems that
     hold state across steps, or work where the difficulty is conceptual rather than
-    compositional — ambiguity about what to build, not just how to build it correctly. Whether a
-    verification loop substitutes for capability on that kind of work is untested here, and
-    answering it properly would be a different, considerably larger experiment: multi-file tasks
-    need a different sandbox, different tests, and probably a different notion of "correct"
-    altogether. That's out of scope for this project on purpose — the tight, verifiable design of
-    one function, one set of hidden tests, one clear pass/fail is what makes the finding above
-    checkable at all, and stretching it to cover more would trade that away for a weaker result.
-    The pipeline above is a step toward richer work (a full interactive artifact, not a bare
-    function) but its machine-verified core is still, deliberately, a pure function per preset —
-    see "How verification works" further down for exactly why.</p>
+    compositional. Whether a verification loop substitutes for capability on that kind of work is
+    untested here -- the world above (a real, stateful system a change modifies in place) is the
+    step toward richer work; its correctness-critical logic is still, deliberately, pure functions
+    underneath.</p>
   <p><strong>"Not recallable" is also not the same claim as "hard."</strong> The novel tier rules
     out memorization as an explanation for the clean sweep across all three tiers; it doesn't
     establish that composing four or five conditional and arithmetic rules from a spec was
-    cognitively difficult enough to expose a capability gap if one exists. This is a real result,
-    checked carefully across three independently designed attempts — and it remains possible that
-    a task shape none of the three tried would find a difference these didn't.</p>
+    cognitively difficult enough to expose a capability gap if one exists.</p>
 
   <h2 id="spec"><span class="n">Spec disagreement</span>Verification fixes slips, not disagreements</h2>
   <div class="callout"><p>On the one task where every model disagreed with the hidden test,
     <strong>the models' answer is arguably the better one.</strong> This benchmark is the
     opinionated party here, not the models.</p></div>
-  <p>The task: convert camelCase to snake_case — <span class="mono">parseHTTPResponse</span> →
+  <p>The task: convert camelCase to snake_case -- <span class="mono">parseHTTPResponse</span> →
     what? <strong>Every model, at every capability tier tested, returned
     <span class="mono">parse_http_response</span>.</strong> The hidden test insists on
-    <span class="mono">parse_httpresponse</span>, encoding a narrower, specific rule: only split
-    before a capital letter that immediately follows a lowercase letter or digit, so a run of
-    capitals like <span class="mono">HTTP</span> never gets internally separated. That rule is
-    defensible. <span class="mono">parse_http_response</span> is at least as reasonable a reading
-    of "convert to snake_case" — arguably more readable, certainly more idiomatic. A careful
-    reader who noticed the disagreement and wasn't told this would reasonably conclude the test
-    was buggy rather than deliberate, so it's said here first rather than left for them to find.</p>
+    <span class="mono">parse_httpresponse</span>. That rule is defensible.
+    <span class="mono">parse_http_response</span> is at least as reasonable a reading of "convert
+    to snake_case" -- arguably more readable, certainly more idiomatic.</p>
   <p>Given that, the finding isn't "models are bad at snake_case." It's sharper: every single
-    cycle on this task failed its first attempt — <strong>0% first-pass, on every rep, across
-    both the two-repair and three-repair sweeps</strong> — because the disagreement is
-    deterministic, not noise; every model reaches for the same alternative rule every time.
-    Repair fixed it most of the time (13 of 18 cycles across both sweeps converged: 6 of 9 at a
-    one-repair-round budget, 7 of 9 at two rounds) simply because being shown the exact expected
-    string is often enough to get a model to comply even against its own judgment. But not
-    always: <strong>2 of 9 cycles were still failing the identical test after a second full
-    repair round.</strong></p>
+    cycle on this task failed its first attempt -- <strong>0% first-pass, on every rep, across
+    both the two-repair and three-repair sweeps</strong> -- because the disagreement is
+    deterministic, not noise. Repair fixed it most of the time (13 of 18 cycles across both
+    sweeps converged) simply because being shown the exact expected string is often enough to get
+    a model to comply even against its own judgment. But not always: <strong>2 of 9 cycles were
+    still failing the identical test after a second full repair round.</strong></p>
   <p><strong>Verification loops fix implementation slips. They do not reliably fix spec
     disagreements, and more repair rounds don't reliably fix that either.</strong> When a hidden
     test encodes a preference rather than a correctness property, the verifier is asserting that
-    preference, not catching a defect — and there's no signal available from the pass/fail number
-    alone that tells you which one happened. That's a limitation of verification as an idea, not
-    of this implementation.</p>
+    preference, not catching a defect.</p>
 
   <h2 id="methodology">Methodology</h2>
   <h3>What was run (the cost experiment)</h3>
   <p>32 tasks total across three tiers: 18 in a core set (string/date parsing, interval and graph
-    work, numeric edge cases, stateful reducers, tolerant parsing of malformed input, and a few
-    deliberately ambiguous specs), 7 in a harder tier (classic dynamic-programming and graph
-    problems), and 7 in a novel tier (fabricated business-rule specs invented for this experiment
-    — a support-ticket scorer, a shipping-fee policy, a loyalty-points calculator, a
-    subscription-proration formula, a badge-assignment cascade, an inventory reorder check, and a
-    discount-stacking calculator). Every hidden test's expected value, at every tier, was checked
-    against an independently written reference implementation before any model ever saw a task —
-    ground truth was verified, not assumed. Three models spanning a real price range:
-    <span class="mono">claude-haiku-4-5</span> (cheapest), <span class="mono">claude-sonnet-5</span>,
-    <span class="mono">claude-opus-4-8</span> (frontier). Three repetitions per (task, model)
-    cell. Up to two repair rounds (<span class="mono">MAX_ATTEMPTS=3</span>) on the core-set,
-    hard-tier, and novel-tier numbers reported above.</p>
-  <h3>How verification works for the pipeline's interactive artifacts</h3>
-  <p>A Cloudflare Dynamic Worker has no DOM, Canvas, or Web Audio API, so it can't execute a real
-    interactive artifact wholesale. Each preset above is designed so its correctness-critical
-    logic is a <strong>pure function</strong> (e.g. a pitch-detection algorithm, or a tic-tac-toe
-    move-picker) exposed on <span class="mono">window</span>, extracted and run through the exact
-    same <span class="mono">SandboxRunner</span> the 32-task experiment uses, against synthetic
-    input with independently-verified expected answers — physics, exhaustive search, a published
-    constant, or a stated rubric, never a guess. A small DOM/AudioContext shim lets the artifact's
-    own wiring code execute headless without crashing, but it isn't a real browser: whether a
-    <em>simulated click actually updates the visible page</em> can only be checked in a real
-    browser, so that class of check runs client-side, in your own browser, after the artifact
-    ships — weaker evidence than the server-side logic checks, disclosed as such next to its
-    results, not presented as equally strong.</p>
+    work, numeric edge cases, stateful reducers, tolerant parsing of malformed input), 7 in a
+    harder tier (classic dynamic-programming and graph problems), and 7 in a novel tier
+    (fabricated business-rule specs invented for this experiment). Every hidden test's expected
+    value was checked against an independently written reference implementation before any model
+    ever saw a task. Three models spanning a real price range: <span class="mono">claude-haiku-4-5</span>
+    (cheapest), <span class="mono">claude-sonnet-5</span>, <span class="mono">claude-opus-4-8</span>
+    (frontier). Three repetitions per (task, model) cell.</p>
+  <h3>How the world's criteria work now</h3>
+  <p>A criterion can no longer assert a computed value a model worked out by hand -- that class of
+    claim produced every historical refusal this project tracked. Four kinds remain: existence (a
+    function or field exists and is callable), structural (a field has the right type or count),
+    non-regression (a call's result is compared against the <strong>baseline's own output for the
+    same call</strong>, computed by actually running it -- never supplied by the model), and
+    render (a station or entity type draws without throwing). The hand-authored regression suite
+    is separate and runs unconditionally on every attempt, unaffected by anything the model
+    proposes.</p>
   <h3>Where a skeptical reader should push</h3>
   <ul>
-    <li><strong>Sample size on convergence rate is small on the core set specifically</strong>
-      (3–11 failed-first-attempt cycles per model per sweep) and has wide error bars there. It
-      doesn't apply to the final-pass-rate numbers, which rest on the full 54 or 21 cycles per
-      model and are the load-bearing ones.</li>
-    <li><strong>Single vendor for the 32-task experiment.</strong> The pipeline above's review
-      stage is genuinely cross-vendor (OpenAI reviewing Claude); the cost experiment itself is
-      Anthropic-only and says nothing about cross-vendor capability.</li>
-    <li><strong>"Not recallable" is not the same claim as "hard."</strong> The novel tier rules
-      out memorization as the explanation for a clean sweep; it does not establish that the
-      tasks were difficult enough to expose a capability gap if one exists.</li>
-    <li><strong>The client-side interaction check can fail even on a working artifact.</strong>
-      Browsers require a real, trusted user gesture to unlock audio playback — a script-simulated
-      click doesn't count. The tuner preset's interaction check can read as a failure purely
-      because of that browser policy, not a defect in the artifact. Shown plainly next to that
-      result, not smoothed over.</li>
-    <li><strong>The cross-vendor reviewer's real behavior on these exact prompts was priced from
-      published rates and a same-content Anthropic call's token counts, not measured live</strong>,
-      before this pipeline was built (see docs/REBUILD-PROPOSAL.md §4). Every run of the actual
-      pipeline above is a real, live OpenAI call — that estimate was only ever a pre-build planning
-      number, superseded by every real run you trigger.</li>
-    <li><strong>No statistical trial sweep across the five presets yet.</strong> This build proves
-      the pipeline works end to end and the controls hold; it does not yet establish the "reviewed,
-      nothing found" rate for well-built presets, which needs repeated real trials, not a single
-      run's outcome — the next piece of work, not this one.</li>
+    <li><strong>Sample size on convergence rate is small on the core set specifically</strong> and
+      has wide error bars there. It doesn't apply to the final-pass-rate numbers, which rest on
+      the full 54 or 21 cycles per model and are the load-bearing ones.</li>
+    <li><strong>Single vendor for the 32-task experiment.</strong> The world's own review stage is
+      genuinely cross-vendor (OpenAI reviewing Claude); the cost experiment itself is
+      Anthropic-only.</li>
+    <li><strong>"Not recallable" is not the same claim as "hard."</strong> See "The limit" above.</li>
+    <li><strong>No statistical trial sweep across many change requests yet.</strong> This build
+      proves the pipeline works end to end and the controls hold under real forcing; it does not
+      yet establish a "reviewed, nothing found" base rate across many kinds of request.</li>
   </ul>
 
   <h2 id="sandbox"><span class="n">Isolation</span>How the sandbox works</h2>
-  <p>Every generated function runs inside a Cloudflare <strong>Dynamic Worker</strong> — a fresh
+  <p>Every generated function runs inside a Cloudflare <strong>Dynamic Worker</strong> -- a fresh
     V8 isolate spun up per program, with no bindings (<span class="mono">env: {}</span>) and no
-    network access (<span class="mono">globalOutbound: null</span>). This was proven adversarially
-    against the live, deployed sandbox — by writing code that deliberately tries the escape, not
-    by reading Cloudflare's docs and trusting them:</p>
+    network access (<span class="mono">globalOutbound: null</span>). Proven adversarially against
+    the live, deployed sandbox -- by writing code that deliberately tries the escape:</p>
   <ul>
-    <li><strong>Network access</strong> — <span class="mono">fetch()</span> throws immediately,
+    <li><strong>Network access</strong> -- <span class="mono">fetch()</span> throws immediately,
       every time.</li>
-    <li><strong>Reading bindings or environment</strong> — <span class="mono">env</span> comes
+    <li><strong>Reading bindings or environment</strong> -- <span class="mono">env</span> comes
       back empty, no <span class="mono">process</span>, no leaked globals.</li>
-    <li><strong>A tight busy-loop</strong> under a deliberately small CPU budget — the isolate is
-      killed outright (<span class="mono">"Worker exceeded CPU time limit."</span>).</li>
-    <li><strong>Unbounded array growth</strong> — the isolate is killed outright
-      (<span class="mono">"Worker exceeded memory limit."</span>).</li>
-    <li><strong>Unbounded recursion</strong> — a catchable <span class="mono">RangeError</span>,
-      caught inside the sandbox itself, no isolate death needed.</li>
+    <li><strong>A tight busy-loop</strong> under a deliberately small CPU budget -- the isolate is
+      killed outright.</li>
+    <li><strong>Unbounded array growth</strong> -- the isolate is killed outright.</li>
+    <li><strong>Unbounded recursion</strong> -- a catchable <span class="mono">RangeError</span>,
+      caught inside the sandbox itself.</li>
   </ul>
-  <p>In every case the calling code gets an ordinary, catchable error — never a hung request,
+  <p>In every case the calling code gets an ordinary, catchable error -- never a hung request,
     never a silent nothing.</p>
-  <p><strong>One measured caveat that changed the design:</strong> the CPU limit has a floor of
-    roughly 2–4 seconds of real wall-clock time before it actually terminates a runaway isolate,
-    regardless of how tight the configured budget is. So this app doesn't rely on it for bounding
-    latency: the parent Worker imposes its own 3-second wall-clock abort on every plain-task
-    sandbox call (the pipeline's richer preset checks run under a longer, still-bounded budget —
-    they do real work, like playing out an exhaustive tic-tac-toe game tree).</p>
 
 </div>
 
@@ -410,66 +385,114 @@ footer a{color:var(--ink2)}
   <a href="/api">API routes</a>
 </div></footer>
 
-<script>
+<script type="module">
+import { WorldRenderer } from "./world-render.js";
+
 const $ = s => document.querySelector(s)
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))
-const money = n => '$' + Number(n).toFixed(5)
+const money = n => '$' + Number(n).toFixed(4)
+
+// ---------- the world, live ----------
+
+const canvas = $('#world-canvas')
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const renderer = new WorldRenderer(canvas, { reducedMotion })
+let world = null
+let playing = true
+const TICK_MS = 1600
+
+async function bootWorld() {
+  try {
+    const mod = await import(`./world-source?t=${Date.now()}`)
+    const w0 = mod.initialWorld()
+    world = w0
+    renderer.pushTick(w0); renderer.pushTick(w0)
+    $('#world-status').textContent = 'the current shared world -- day 1, tick 0'
+    tickLoop(mod.tick)
+  } catch (e) {
+    $('#world-status').textContent = 'could not load the world: ' + (e && e.message || e)
+  }
+}
+function tickLoop(tickFn) {
+  let start = performance.now()
+  function frame(now) {
+    const t = Math.min(1, (now - start) / TICK_MS)
+    renderer.draw(t)
+    if (world) {
+      const hour = world.tick % 24
+      $('#world-status').textContent = `day ${Math.floor(world.tick/24)+1} · ${String(hour).padStart(2,'0')}:00 · $${world.money}`
+    }
+    if (playing && t >= 1) {
+      world = tickFn(world)
+      renderer.pushTick(world)
+      start = now
+    }
+    requestAnimationFrame(frame)
+  }
+  requestAnimationFrame(frame)
+}
+$('#world-play-pause').addEventListener('click', (e) => {
+  playing = !playing
+  e.target.textContent = playing ? '⏸ pause' : '▶ play'
+  e.target.setAttribute('aria-pressed', String(playing))
+})
+bootWorld()
 
 // ---------- budget bar + control-layer section ----------
 
 function renderBudget(b) {
   $('#budget-bar').innerHTML =
-    `Today: <b>${money(b.dailySpentUsd)}</b> / ${money(b.dailyCapUsd)} spent (both vendors) &nbsp;·&nbsp; ` +
+    `Today: <b>${money(b.dailySpentUsd)}</b> / ${money(b.dailyCapUsd)} &nbsp;·&nbsp; ` +
+    `This week: <b>${money(b.weeklySpentUsd)}</b> / ${money(b.weeklyCapUsd)} &nbsp;·&nbsp; ` +
     `This month: <b>${money(b.monthlySpentUsd)}</b> / ${money(b.monthlyCapUsd)} &nbsp;·&nbsp; ` +
-    `Live runs left for you today: <b>${b.dailyLiveRunsPerIp}</b> (per IP) &nbsp;·&nbsp; ` +
-    `Max ${b.maxConcurrentRuns} runs at once`
+    `Live runs left today: <b>${b.dailyLiveRunsPerIp}</b> (per IP)`
   $('#control-grid').innerHTML = [
-    ['Per-run ceiling', money(b.perRunCeilingUsd), 'Aborts the rest of a run if its running cost would cross this -- catches token caps missing a legitimately long run.'],
-    ['Daily cap, both vendors', money(b.dailyCapUsd), 'Anthropic and OpenAI spend are separate budgets that both count toward this one ceiling, checked before a run starts.'],
-    ['Monthly backstop', money(b.monthlyCapUsd), "So a single bad day can't take the whole month."],
-    ['Live runs / day / IP', b.dailyLiveRunsPerIp, 'Recordings are free and unlimited; only live runs count against this.'],
-    ['Max concurrent runs', b.maxConcurrentRuns, 'Bounds a worst-case simultaneous spend burst; queued/refused beyond it.'],
-    ['Free-form input guard', '500 chars', 'Length-limited and screened for patterns commonly used to force excessive output. Hard stop, never retried.'],
-    ['Per-provider circuit breaker', '3 failures → cool down', 'Consecutive failures from one provider stop calls to it rather than retrying into a wall.'],
+    ['Per-run ceiling', money(b.perRunCeilingUsd), 'Re-derived for the new routing -- tracks the real worst case closely on purpose.'],
+    ['Daily cap, both vendors', money(b.dailyCapUsd), 'Anthropic and OpenAI spend both count toward this one ceiling, checked before a run starts.'],
+    ['Weekly checkpoint', money(b.weeklyCapUsd), "A burst that clears the daily cap on day one still can't run away across a week."],
+    ['Monthly backstop', money(b.monthlyCapUsd), "So a bad week can't take the whole month."],
+    ['Live runs / day / IP', b.dailyLiveRunsPerIp, 'Bypassable only with a valid unlock code -- never raised for everyone to cover that case.'],
+    ['Max concurrent runs', b.maxConcurrentRuns, 'Bounds a worst-case simultaneous spend burst.'],
+    ['Free-form input guard', '500 chars', 'Length-limited and screened for patterns used to force excessive output. Checked before the per-IP limit even counts it.'],
+    ['Spend counter', 'Durable Object', 'Atomic reserve-then-reconcile -- a cap that can be raced is not a cap.'],
   ].map(([lab, val, desc]) => `<div class="control-card"><span class="lab">${esc(lab)}</span><span class="val">${esc(val)}</span><p>${esc(desc)}</p></div>`).join('')
 }
-
 function loadBudget() {
-  fetch('/pipeline-budget').then(r => r.json()).then(renderBudget).catch(() => {
-    $('#budget-bar').textContent = 'Could not load budget status.'
-  })
+  fetch('/pipeline-budget').then(r => r.json()).then(renderBudget).catch(() => { $('#budget-bar').textContent = 'Could not load budget status.' })
 }
 loadBudget()
 
-// ---------- preset / free-form picker ----------
+// ---------- a minimal line diff (no CDN allowed under CSP -- plain LCS) ----------
 
-let PRESETS = []
-fetch('/presets').then(r => r.json()).then(presets => {
-  PRESETS = presets
-  $('#preset-select').innerHTML = presets.map(p => `<option value="${esc(p.id)}">${esc(p.title)}</option>`).join('')
-}).catch(() => { $('#preset-select').innerHTML = '<option value="">Could not load presets</option>' })
-
-let mode = 'preset'
-$('#mode-preset').addEventListener('click', () => {
-  mode = 'preset'
-  $('#mode-preset').classList.add('active'); $('#mode-freeform').classList.remove('active')
-  $('#preset-field').style.display = ''; $('#freeform-field').style.display = 'none'
-})
-$('#mode-freeform').addEventListener('click', () => {
-  mode = 'freeform'
-  $('#mode-freeform').classList.add('active'); $('#mode-preset').classList.remove('active')
-  $('#preset-field').style.display = 'none'; $('#freeform-field').style.display = ''
-})
-
-$('#tab-live').addEventListener('click', () => {
-  $('#tab-live').classList.add('active'); $('#tab-recorded').classList.remove('active')
-  $('#live-panel').style.display = ''; $('#recorded-panel').style.display = 'none'
-})
-$('#tab-recorded').addEventListener('click', () => {
-  $('#tab-recorded').classList.add('active'); $('#tab-live').classList.remove('active')
-  $('#recorded-panel').style.display = ''; $('#live-panel').style.display = 'none'
-  loadRecordedRuns()
-})
+function diffLines(a, b) {
+  const A = a.split('\n'), B = b.split('\n')
+  const n = A.length, m = B.length
+  const dp = Array.from({length: n+1}, () => new Array(m+1).fill(0))
+  for (let i = n-1; i >= 0; i--) for (let j = m-1; j >= 0; j--) {
+    dp[i][j] = A[i] === B[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1])
+  }
+  const out = []
+  let i = 0, j = 0
+  while (i < n && j < m) {
+    if (A[i] === B[j]) { out.push({t:'same', line: A[i]}); i++; j++ }
+    else if (dp[i+1][j] >= dp[i][j+1]) { out.push({t:'del', line: A[i]}); i++ }
+    else { out.push({t:'add', line: B[j]}); j++ }
+  }
+  while (i < n) { out.push({t:'del', line: A[i]}); i++ }
+  while (j < m) { out.push({t:'add', line: B[j]}); j++ }
+  return out
+}
+function renderDiff(before, after) {
+  const rows = diffLines(before, after)
+  const added = rows.filter(r => r.t === 'add').length
+  const removed = rows.filter(r => r.t === 'del').length
+  const html = rows.map(r => {
+    const cls = r.t === 'add' ? 'add' : r.t === 'del' ? 'del' : ''
+    const mark = r.t === 'add' ? '+' : r.t === 'del' ? '−' : ' '
+    return `<div class="diff-line ${cls}"><span class="gutter">${mark}</span><span class="content">${esc(r.line)}</span></div>`
+  }).join('')
+  return `<div class="diff-view"><div class="diff-summary">+${added} / −${removed} lines</div>${html}</div>`
+}
 
 // ---------- shared rendering helpers ----------
 
@@ -482,303 +505,283 @@ function stageBlock(log, id, title, extraClass) {
   div.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   return div
 }
-
 function renderTests(results) {
   return '<ul class="test-list">' + results.map(r =>
     `<li class="${r.pass ? 'pass' : 'fail'}"><span class="mark">${r.pass ? '✓' : '✗'}</span>
      <span>${esc(r.name)}${r.pass ? '' : (r.error ? ' — ' + esc(r.error) : ` — expected ${esc(JSON.stringify(r.expected))}, got ${esc(JSON.stringify(r.actual))}`)}</span></li>`
   ).join('') + '</ul>'
 }
-
-function renderRouting(steps) {
-  return '<div class="wrapx"><table><thead><tr><th>Stage</th><th>Model</th><th>Why</th><th class="num">$/1M in-out</th></tr></thead><tbody>' +
-    steps.map(s => `<tr><td>${esc(s.stage)}</td><td class="mono">${esc(s.model)}</td><td style="font-size:13.5px">${esc(s.why)}</td>` +
-      `<td class="num mono">${s.costPer1M.input}/${s.costPer1M.output}</td></tr>` +
-      (s.roadNotTaken ? `<tr><td></td><td class="mono" style="color:var(--muted)">↳ ${esc(s.roadNotTaken.model)} (not chosen)</td>` +
-        `<td style="font-size:13px;color:var(--muted)">${esc(s.roadNotTaken.whyNotChosen)}</td>` +
-        `<td class="num mono" style="color:var(--muted)">${s.roadNotTaken.costPer1M.input}/${s.roadNotTaken.costPer1M.output}</td></tr>` : '')
-    ).join('') + '</tbody></table></div>'
-}
-
+// "Grouped by root cause, count as the headline" (chunk 8) -- a real
+// clustering model would need findings to carry a topic/location the
+// reviewer doesn't emit today. Honest simplification: group by severity
+// only (material vs nit) and say the material count plainly as the
+// headline, rather than fake a keyword-clustering heuristic that could
+// misrepresent distinct causes as one, or vice versa.
 function renderFindings(material, nits) {
   let html = ''
   if (material.length === 0 && nits.length === 0) {
-    html += '<p style="margin:6px 0 0"><strong>Reviewed, nothing found.</strong> A real, allowed outcome -- not every run has a finding.</p>'
+    html += '<p style="margin:6px 0 0"><strong>Reviewed, nothing found.</strong> A real, allowed outcome.</p>'
+  } else {
+    html += `<p class="root-cause-line">${material.length} material finding(s), ${nits.length} nit(s)</p>`
   }
   material.forEach(f => { html += `<div class="finding-line"><span class="badge material">Material</span>${esc(f)}</div>` })
   nits.forEach(f => { html += `<div class="finding-line"><span class="badge nit">Nit</span>${esc(f)}</div>` })
   return html
 }
 
-/** Renders the final artifact into a sandboxed iframe and, if interactionChecks
- * are given, runs them via postMessage against a harness injected into the
- * artifact itself (the parent can't reach into a sandboxed cross-origin
- * iframe directly). Browsers don't treat a script-simulated click as a real
- * user gesture, so audio-gated checks (the tuner) can read as failing on a
- * working artifact -- disclosed next to the result, not hidden. */
-function renderArtifact(container, code, interactionChecks) {
-  const frame = document.createElement('iframe')
-  frame.className = 'artifact-frame'
-  frame.setAttribute('sandbox', 'allow-scripts')
-  container.appendChild(frame)
+// ---------- the live change-pipeline run ----------
 
-  const harness = `
-<script>
-window.addEventListener('message', function (ev) {
-  var c = ev.data && ev.data.check
-  if (!c) return
-  try {
-    var el = document.querySelector(c.selector)
-    if (!el) throw new Error('selector not found: ' + c.selector)
-    if (c.action === 'click') el.click()
-    else if (c.action === 'type') {
-      el.focus(); el.value = c.text
-      el.dispatchEvent(new Event('input', { bubbles: true }))
-      el.dispatchEvent(new Event('change', { bubbles: true }))
-    }
-    setTimeout(function () {
-      var pass = false, error
-      try { pass = !!(new Function('return (' + c.assertExpr + ')'))() }
-      catch (e) { error = String(e && e.message || e) }
-      window.parent.postMessage({ checkResult: { name: c.name, pass: pass, error: error } }, '*')
-    }, 900)
-  } catch (e) {
-    window.parent.postMessage({ checkResult: { name: c.name, pass: false, error: String(e && e.message || e) } }, '*')
-  }
-})
-<\/script>`
-  frame.srcdoc = code + harness
-
-  if (!interactionChecks || !interactionChecks.length) return
-
-  const listEl = document.createElement('ul')
-  listEl.className = 'interaction-list'
-  listEl.innerHTML = interactionChecks.map(c => `<li id="ic-${esc(c.name)}"><span class="mark">…</span><span>${esc(c.name)}</span></li>`).join('')
-  const note = document.createElement('p')
-  note.className = 'note'
-  note.textContent = 'Checked client-side, in your own browser, against the rendered artifact -- weaker evidence than the server-side logic checks above. Audio-gated checks can read as failing on a working artifact: browsers require a real user gesture to unlock audio, and a script-simulated click does not count.'
-  container.appendChild(note)
-  container.appendChild(listEl)
-
-  function onMsg(ev) {
-    const r = ev.data && ev.data.checkResult
-    if (!r) return
-    const li = listEl.querySelector(`#ic-${CSS.escape(r.name)}`)
-    if (li) {
-      li.className = r.pass ? 'pass' : 'fail'
-      li.innerHTML = `<span class="mark">${r.pass ? '✓' : '✗'}</span><span>${esc(r.name)}${r.error ? ' — ' + esc(r.error) : ''}</span>`
-    }
-  }
-  window.addEventListener('message', onMsg)
-
-  frame.addEventListener('load', () => {
-    interactionChecks.forEach((c, i) => setTimeout(() => frame.contentWindow.postMessage({ check: c }, '*'), i * 1400))
-  })
-}
-
-// ---------- live pipeline run ----------
-
+const form = $('#request-form')
 const runBtn = $('#run-btn')
 const log = $('#stage-log')
-let currentPresetInteractionChecks = []
 
-runBtn.addEventListener('click', () => {
-  let url
-  if (mode === 'preset') {
-    const presetId = $('#preset-select').value
-    if (!presetId) return
-    const preset = PRESETS.find(p => p.id === presetId)
-    currentPresetInteractionChecks = preset ? preset.interactionChecks : []
-    url = `/pipeline-run?preset=${encodeURIComponent(presetId)}`
-  } else {
-    const prompt = $('#freeform-input').value.trim()
-    if (!prompt) return
-    currentPresetInteractionChecks = []
-    url = `/pipeline-run?prompt=${encodeURIComponent(prompt)}`
-  }
+form.addEventListener('submit', (ev) => {
+  ev.preventDefault()
+  const text = $('#request-input').value.trim()
+  if (!text) return
 
   runBtn.disabled = true
   runBtn.innerHTML = '<span class="spin"></span> Running…'
   log.innerHTML = ''
   let runId = null
+  let implCode = null, currentSource = null
 
-  const es = new EventSource(url)
-  let implBlock = null, verifyBlock = null, reviewBlock = null, fixBlock = null
+  function connect(url) {
+    const es = new EventSource(url)
+    let groundBlock = null, planBlock = null, implBlock = null, verifyBlock = null, reviewBlock = null, fixBlock = null
 
-  es.addEventListener('runId', ev => { runId = JSON.parse(ev.data).runId })
+    es.addEventListener('runId', ev => { runId = JSON.parse(ev.data).runId })
 
-  es.addEventListener('brief', ev => {
-    const d = JSON.parse(ev.data)
-    const b = stageBlock(log, 's-brief', 'Stage 1 — Brief' + (d.isFreeform ? ' (free-form, weaker guarantee)' : ''))
-    b.innerHTML += `<pre>${esc(d.briefMarkdown)}</pre>`
-    b.classList.remove('active')
-  })
-
-  es.addEventListener('routing', ev => {
-    const d = JSON.parse(ev.data)
-    const b = stageBlock(log, 's-routing', 'Stage 2 — Route')
-    b.innerHTML += renderRouting(d.steps)
-    b.classList.remove('active')
-  })
-
-  es.addEventListener('implementing', () => {
-    implBlock = stageBlock(log, 's-implement', 'Stage 3 — Implement')
-    implBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> Calling claude-sonnet-5…</p>`
-  })
-  es.addEventListener('implemented', ev => {
-    const d = JSON.parse(ev.data)
-    if (implBlock) {
-      implBlock.innerHTML = `<h4>Stage 3 — Implemented</h4><pre>${esc(d.code)}</pre>` +
-        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-      implBlock.classList.remove('active')
-    }
-  })
-
-  es.addEventListener('verifying', () => {
-    verifyBlock = stageBlock(log, 's-verify-' + Date.now(), 'Stage 4 — Verify')
-    verifyBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> Running in the sandbox…</p>`
-  })
-  es.addEventListener('verified', ev => {
-    const d = JSON.parse(ev.data)
-    if (verifyBlock) {
-      verifyBlock.innerHTML = `<h4>${d.passed === d.total ? 'Stage 4 — All checks passed' : `Stage 4 — ${d.passed}/${d.total} passed`}</h4>` +
-        renderTests(d.results) + (d.fatalError ? `<div class="summary-line">${esc(d.fatalError)}</div>` : '')
-      verifyBlock.classList.remove('active')
-      verifyBlock.classList.toggle('fail', d.passed !== d.total)
-    }
-  })
-  es.addEventListener('reverified', ev => {
-    const d = JSON.parse(ev.data)
-    const b = stageBlock(log, 's-reverify', 'Re-verify after fix')
-    b.innerHTML = `<h4>${d.passed === d.total ? 'Re-verify — held' : `Re-verify — still ${d.total - d.passed} failing`}</h4>` + renderTests(d.results)
-    b.classList.remove('active')
-    b.classList.toggle('fail', d.passed !== d.total)
-  })
-
-  es.addEventListener('reviewing', ev => {
-    const d = JSON.parse(ev.data)
-    reviewBlock = stageBlock(log, 's-review', 'Stage 5 — Cross-model review')
-    reviewBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> Calling ${esc(d.model)} (OpenAI)…</p>`
-  })
-  es.addEventListener('reviewed', ev => {
-    const d = JSON.parse(ev.data)
-    if (reviewBlock) {
-      const material = d.findings.filter(f => f.severity === 'MATERIAL').map(f => f.text)
-      const nits = d.findings.filter(f => f.severity === 'NIT').map(f => f.text)
-      reviewBlock.innerHTML = `<h4>Stage 5 — Reviewed by ${esc(d.model)}</h4>` +
-        `<details><summary style="cursor:pointer;color:var(--muted);font-size:13.5px">Full review text</summary><pre>${esc(d.reviewText)}</pre></details>` +
-        `<div style="margin-top:8px">${renderFindings(material, nits)}</div>` +
-        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-      reviewBlock.classList.remove('active')
-    }
-  })
-
-  es.addEventListener('gate', ev => {
-    const d = JSON.parse(ev.data)
-    const b = stageBlock(log, 's-gate', 'Stage 7 — Human gate', 'gate')
-    b.innerHTML += `<div class="gate-box"><p style="margin:0 0 8px"><strong>${d.materialFindings.length} material finding(s)</strong> -- approve a fix round, or reject and ship as-is with the issue disclosed.</p>` +
-      renderFindings(d.materialFindings, d.nitFindings) +
-      `<div class="gate-actions"><button class="btn" id="gate-approve">Approve fix</button><button class="btn btn-outline" id="gate-reject">Reject, ship as-is</button></div></div>`
-    $('#gate-approve').addEventListener('click', () => {
-      $('#gate-approve').disabled = true; $('#gate-reject').disabled = true
-      fetch(`/pipeline-decision?runId=${encodeURIComponent(runId)}&approve=true`)
+    es.addEventListener('grounding', () => {
+      groundBlock = stageBlock(log, 's-ground-' + Date.now(), 'Grounding — checking this against the real current code')
+      groundBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> claude-haiku-4-5…</p>`
     })
-    $('#gate-reject').addEventListener('click', () => {
-      $('#gate-approve').disabled = true; $('#gate-reject').disabled = true
-      fetch(`/pipeline-decision?runId=${encodeURIComponent(runId)}&approve=false`)
+    es.addEventListener('grounded', ev => {
+      const d = JSON.parse(ev.data)
+      if (groundBlock) {
+        const r = d.result
+        groundBlock.innerHTML = `<h4>Grounded</h4><p style="margin:0 0 6px">${r.premisesHold ? '<strong>Every premise checked out.</strong>' : '<strong>Found something the request assumes that is not true.</strong>'}</p>` +
+          (r.falsePremises.length ? '<ul>' + r.falsePremises.map(p => `<li>${esc(p)}</li>`).join('') + '</ul>' : '') +
+          `<p style="margin:6px 0 0;color:var(--ink2)">${esc(r.reasoning)}</p>` +
+          (r.alternatives.length ? `<p class="summary-line" style="margin-top:8px">What the structure can support instead: ${r.alternatives.map(esc).join('; ')}</p>` : '') +
+          `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+        groundBlock.classList.remove('active')
+      }
     })
-  })
-  es.addEventListener('gate-decided', ev => {
-    const d = JSON.parse(ev.data)
-    const gateEl = $('#s-gate')
-    if (gateEl) gateEl.classList.remove('active')
-    const b = stageBlock(log, 's-gate-decided', `Gate decision: ${esc(d.decision)}`)
-    b.classList.remove('active')
-  })
 
-  es.addEventListener('fixing', () => {
-    fixBlock = stageBlock(log, 's-fix', 'Stage 8 — Fix')
-    fixBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> Calling claude-sonnet-5 with the reviewer's findings…</p>`
-  })
-  es.addEventListener('fixed', ev => {
-    const d = JSON.parse(ev.data)
-    if (fixBlock) {
-      fixBlock.innerHTML = `<h4>Stage 8 — Fixed</h4><pre>${esc(d.code)}</pre>` +
-        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-      fixBlock.classList.remove('active')
+    es.addEventListener('planning', () => {
+      planBlock = stageBlock(log, 's-plan-' + Date.now(), 'Plan')
+      planBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> claude-sonnet-5…</p>`
+    })
+    es.addEventListener('planned', ev => {
+      const d = JSON.parse(ev.data)
+      if (planBlock) {
+        const p = d.plan
+        planBlock.innerHTML = `<h4>Planned</h4><p><strong>Will build:</strong> ${esc(p.willBuild)}</p><p><strong>Will not touch:</strong> ${esc(p.willNotTouch)}</p>` +
+          (p.criteria.length ? `<p><strong>Criteria (${p.criteria.length}):</strong></p><ul>${p.criteria.map(c => `<li>${esc(c.description)} <span class="mono" style="color:var(--muted)">[${esc(c.kind)}]</span></li>`).join('')}</ul>` : '<p style="color:var(--muted)">No new criteria proposed.</p>') +
+          `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+        planBlock.classList.remove('active')
+      }
+    })
+
+    es.addEventListener('question', ev => {
+      const d = JSON.parse(ev.data)
+      const b = stageBlock(log, 's-question', 'A specific question', 'gate')
+      b.innerHTML += `<div class="gate-box"><p style="margin:0 0 10px">${esc(d.question)}</p>
+        <div class="gate-reply"><textarea id="answer-input" placeholder="Answer in your own words…"></textarea>
+        <button class="btn" id="answer-submit" type="button">Answer</button></div></div>`
+      $('#answer-submit').addEventListener('click', () => {
+        const answer = $('#answer-input').value.trim()
+        if (!answer) return
+        $('#answer-submit').disabled = true
+        fetch(`/change-answer?runId=${encodeURIComponent(runId)}&answer=${encodeURIComponent(answer)}`).then(() => resume())
+      })
+    })
+    es.addEventListener('answered', ev => {
+      const el = $('#s-question'); if (el) el.classList.remove('active')
+    })
+
+    es.addEventListener('plan-gate', ev => {
+      const d = JSON.parse(ev.data)
+      const b = stageBlock(log, 's-gate', 'Gate 1 — your decision, before any code exists', 'gate')
+      b.innerHTML += `<div class="gate-box">
+        <h5>What it proposes to build</h5>
+        <p style="margin:0 0 10px">${esc(d.plan.willBuild)}</p>
+        <div class="cost-line">Spent so far this run: ${money(d.costEstimateUsd)} · headroom left against the per-run ceiling: ${money(d.budgetRemainingUsd)}</div>
+        <div class="gate-actions">
+          <button class="btn" id="gate-approve">Approve</button>
+          <button class="btn btn-outline" id="gate-reject">Reject</button>
+        </div>
+        <div class="gate-reply">
+          <label class="lab" for="gate-reply-input">Or reply in free text -- this re-grounds and re-plans</label>
+          <textarea id="gate-reply-input" placeholder="e.g. make it simpler, or: I actually meant..."></textarea>
+          <button class="btn btn-outline" id="gate-reply-submit" type="button">Send reply</button>
+        </div>
+      </div>`
+      const disableAll = () => { $('#gate-approve').disabled = true; $('#gate-reject').disabled = true; $('#gate-reply-submit').disabled = true }
+      $('#gate-approve').addEventListener('click', () => { disableAll(); fetch(`/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=true`).then(() => resume()) })
+      $('#gate-reject').addEventListener('click', () => { disableAll(); fetch(`/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=false`).then(() => resume()) })
+      $('#gate-reply-submit').addEventListener('click', () => {
+        const reply = $('#gate-reply-input').value.trim()
+        if (!reply) return
+        disableAll()
+        fetch(`/change-plan-reply?runId=${encodeURIComponent(runId)}&reply=${encodeURIComponent(reply)}`).then(() => resume())
+      })
+    })
+    es.addEventListener('plan-gate-decided', ev => {
+      const d = JSON.parse(ev.data)
+      const gateEl = $('#s-gate'); if (gateEl) gateEl.classList.remove('active')
+      const b = stageBlock(log, 's-gate-decided-' + Date.now(), `Gate 1 decision: ${esc(d.decision)}`)
+      b.classList.remove('active')
+    })
+    es.addEventListener('plan-gate-replied', ev => {
+      const d = JSON.parse(ev.data)
+      const gateEl = $('#s-gate'); if (gateEl) gateEl.classList.remove('active')
+      const b = stageBlock(log, 's-gate-replied-' + Date.now(), 'You replied — re-grounding and re-planning')
+      b.innerHTML += `<p style="margin:0;color:var(--ink2)">"${esc(d.reply)}"</p>`
+      b.classList.remove('active')
+    })
+
+    es.addEventListener('implementing', () => {
+      implBlock = stageBlock(log, 's-implement', 'Implement')
+      implBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> claude-haiku-4-5…</p>`
+    })
+    es.addEventListener('implemented', ev => {
+      const d = JSON.parse(ev.data)
+      implCode = d.code
+      if (implBlock) {
+        implBlock.innerHTML = `<h4>Implemented</h4>` + (currentSource ? renderDiff(currentSource, d.code) : `<pre>${esc(d.code)}</pre>`) +
+          `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+        implBlock.classList.remove('active')
+      }
+    })
+
+    es.addEventListener('verifying', () => {
+      verifyBlock = stageBlock(log, 's-verify-' + Date.now(), 'Verify — in the real sandbox')
+      verifyBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> running…</p>`
+    })
+    function renderVerified(d, block, label) {
+      if (!block) return
+      const total = d.regressionTotal + d.criteriaTotal
+      const passed = d.regressionPassed + d.criteriaPassed
+      block.innerHTML = `<h4>${label} — ${passed === total ? 'all checks passed' : `${passed}/${total} passed`}</h4>` +
+        `<p class="root-cause-line">Regression: ${d.regressionPassed}/${d.regressionTotal} · Criteria: ${d.criteriaPassed}/${d.criteriaTotal}</p>` +
+        renderTests([...d.regression, ...d.criteria]) + (d.fatalError ? `<div class="summary-line">${esc(d.fatalError)}</div>` : '')
+      block.classList.remove('active')
+      block.classList.toggle('fail', passed !== total)
     }
-  })
+    es.addEventListener('verified', ev => renderVerified(JSON.parse(ev.data), verifyBlock, 'Verified'))
+    es.addEventListener('reverified', ev => {
+      const b = stageBlock(log, 's-reverify-' + Date.now(), 'Re-verify after fix')
+      renderVerified(JSON.parse(ev.data), b, 'Re-verified')
+    })
 
-  es.addEventListener('shipped', ev => {
-    const d = JSON.parse(ev.data)
-    const b = stageBlock(log, 's-shipped', d.hadUnresolvedFindings ? 'Stage 9 — Shipped (with a disclosed, unresolved finding)' : 'Stage 9 — Shipped')
-    b.classList.remove('active')
-    renderArtifact(b, d.finalCode, currentPresetInteractionChecks)
-  })
+    es.addEventListener('reviewing', () => {
+      reviewBlock = stageBlock(log, 's-review', 'Cross-model review')
+      reviewBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> gpt-5.3-codex (OpenAI)…</p>`
+    })
+    es.addEventListener('reviewed', ev => {
+      const d = JSON.parse(ev.data)
+      if (reviewBlock) {
+        const material = d.findings.filter(f => f.severity === 'MATERIAL').map(f => f.text)
+        const nits = d.findings.filter(f => f.severity === 'NIT').map(f => f.text)
+        reviewBlock.innerHTML = `<h4>Reviewed by ${esc(d.model)}</h4>` +
+          `<details><summary style="cursor:pointer;color:var(--muted);font-size:13px">Full review text</summary><pre>${esc(d.reviewText)}</pre></details>` +
+          `<div style="margin-top:8px">${renderFindings(material, nits)}</div>` +
+          `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+        reviewBlock.classList.remove('active')
+      }
+    })
 
-  es.addEventListener('ledger', ev => {
-    const d = JSON.parse(ev.data).ledger
-    const b = stageBlock(log, 's-ledger', 'Stage 10 — Ledger')
-    b.classList.remove('active')
-    b.innerHTML += '<div class="wrapx"><table><thead><tr><th>Stage</th><th class="num">Cost</th></tr></thead><tbody>' +
-      d.stageCosts.map(s => `<tr><td>${esc(s.stage)}</td><td class="num mono">${money(s.costUsd)}</td></tr>`).join('') +
-      `<tr><td><strong>Total</strong></td><td class="num mono headline-cell">${money(d.totalCostUsd)}</td></tr></tbody></table></div>` +
-      `<p style="margin-top:10px">Review found <strong>${d.reviewFoundMaterial} material</strong> and <strong>${d.reviewFoundNits} nit</strong> finding(s).` +
-      (d.fixApplied ? ` A fix round ran and ${d.fixHeld ? 'held.' : 'did not fully hold -- disclosed above, not hidden.'}` : ' No fix round was needed.') + `</p>` +
-      `<div class="summary-line">${(d.totalWallTimeMs / 1000).toFixed(1)}s total wall time</div>`
-  })
+    es.addEventListener('review-gate', ev => {
+      const d = JSON.parse(ev.data)
+      const b = stageBlock(log, 's-review-gate', 'Gate 2 — the reviewer found something', 'gate')
+      b.innerHTML += `<div class="gate-box"><h5>${d.materialFindings.length} material finding(s)</h5>` +
+        renderFindings(d.materialFindings, d.nitFindings) +
+        `<div class="gate-actions"><button class="btn" id="rgate-approve">Approve a fix round</button><button class="btn btn-outline" id="rgate-reject">Reject, ship as-is</button></div></div>`
+      $('#rgate-approve').addEventListener('click', () => { $('#rgate-approve').disabled = true; $('#rgate-reject').disabled = true; fetch(`/change-review-decision?runId=${encodeURIComponent(runId)}&approve=true`).then(() => resume()) })
+      $('#rgate-reject').addEventListener('click', () => { $('#rgate-approve').disabled = true; $('#rgate-reject').disabled = true; fetch(`/change-review-decision?runId=${encodeURIComponent(runId)}&approve=false`).then(() => resume()) })
+    })
+    es.addEventListener('review-gate-decided', ev => {
+      const d = JSON.parse(ev.data)
+      const gateEl = $('#s-review-gate'); if (gateEl) gateEl.classList.remove('active')
+      const b = stageBlock(log, 's-review-gate-decided', `Gate 2 decision: ${esc(d.decision)}`)
+      b.classList.remove('active')
+    })
 
-  es.addEventListener('done', () => {
-    es.close()
-    runBtn.disabled = false
-    runBtn.textContent = '▸ Run the pipeline'
-    loadBudget()
-  })
-  es.addEventListener('error', ev => {
-    let message = 'Connection to the pipeline stream was lost.'
-    try { message = JSON.parse(ev.data).message } catch (_) {}
-    const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
-    b.classList.add('error')
-    b.classList.remove('active')
-    b.innerHTML += `<p style="margin:0">${esc(message)}</p>`
-    es.close()
-    runBtn.disabled = false
-    runBtn.textContent = '▸ Run the pipeline'
-    loadBudget()
-  })
+    es.addEventListener('fixing', () => {
+      fixBlock = stageBlock(log, 's-fix', 'Fix')
+      fixBlock.innerHTML += `<p style="margin:0;color:var(--muted)"><span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span> claude-sonnet-5, against the reviewer's findings…</p>`
+    })
+    es.addEventListener('fixed', ev => {
+      const d = JSON.parse(ev.data)
+      if (fixBlock) {
+        fixBlock.innerHTML = `<h4>Fixed</h4>` + (implCode ? renderDiff(implCode, d.code) : `<pre>${esc(d.code)}</pre>`) +
+          `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+        fixBlock.classList.remove('active')
+      }
+    })
+
+    es.addEventListener('shipped', () => {
+      const b = stageBlock(log, 's-shipped', '✓ Shipped — the world now runs this')
+      b.classList.remove('active')
+      bootWorld() // reload the world from the new live source
+    })
+    es.addEventListener('refused', ev => {
+      const d = JSON.parse(ev.data)
+      const b = stageBlock(log, 's-refused-' + Date.now(), 'Refused to ship')
+      b.classList.add('error'); b.classList.remove('active')
+      b.innerHTML += `<p style="margin:0">${esc(d.reason)}</p>`
+    })
+
+    es.addEventListener('retrospective', ev => {
+      const d = JSON.parse(ev.data)
+      if (d.lesson) {
+        const b = stageBlock(log, 's-retro-' + Date.now(), 'Retrospective')
+        b.classList.remove('active')
+        b.innerHTML += `<p style="margin:0;color:var(--ink2)">${esc(d.lesson)}${d.recurrenceCount ? ` <span class="mono" style="color:var(--muted)">(seen ${d.recurrenceCount}x)</span>` : ''}</p>`
+      }
+    })
+
+    es.addEventListener('ledger', ev => {
+      const d = JSON.parse(ev.data).ledger
+      const b = stageBlock(log, 's-ledger-' + Date.now(), 'Ledger')
+      b.classList.remove('active')
+      b.innerHTML += '<div class="wrapx"><table><thead><tr><th>Stage</th><th class="num">Cost</th></tr></thead><tbody>' +
+        d.stageCosts.map(s => `<tr><td>${esc(s.stage)}</td><td class="num mono">${money(s.costUsd)}</td></tr>`).join('') +
+        `<tr><td><strong>Total</strong></td><td class="num mono headline-cell">${money(d.totalCostUsd)}</td></tr></tbody></table></div>` +
+        `<p style="margin-top:8px">Review found <strong>${d.reviewFoundMaterial} material</strong> and <strong>${d.reviewFoundNits} nit</strong> finding(s)` +
+        (d.planGateReplyCount ? `, after ${d.planGateReplyCount} Gate 1 repl${d.planGateReplyCount === 1 ? 'y' : 'ies'}` : '') + `.` +
+        (d.fixApplied ? ` A fix round ran and ${d.fixHeld ? 'held.' : 'did not fully hold -- disclosed above, not hidden.'}` : '') + `</p>` +
+        `<div class="summary-line">${(d.totalWallTimeMs / 1000).toFixed(1)}s total wall time</div>`
+    })
+
+    es.addEventListener('halted', () => { es.close() })
+    es.addEventListener('done', () => {
+      es.close()
+      runBtn.disabled = false
+      runBtn.innerHTML = '▸ Ground it, then plan it'
+      loadBudget()
+    })
+    es.addEventListener('error', ev => {
+      let message = 'Connection to the pipeline stream was lost.'
+      try { message = JSON.parse(ev.data).message } catch (_) {}
+      const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
+      b.classList.add('error'); b.classList.remove('active')
+      b.innerHTML += `<p style="margin:0">${esc(message)}</p>`
+      es.close()
+      runBtn.disabled = false
+      runBtn.innerHTML = '▸ Ground it, then plan it'
+      loadBudget()
+    })
+  }
+
+  function resume() { connect(`/change-resume?runId=${encodeURIComponent(runId)}`) }
+
+  currentSource = world ? null : null // captured lazily via /world-source below
+  fetch(`./world-source?t=${Date.now()}`).then(r => r.text()).then(t => { currentSource = t.replace(/\n\nexport[\s\S]*$/, '') })
+  connect(`/change-run?request=${encodeURIComponent(text)}`)
 })
-
-// ---------- recorded runs ----------
-
-function loadRecordedRuns() {
-  fetch('/recorded-runs').then(r => r.json()).then(recordings => {
-    const ids = Object.keys(recordings)
-    if (!ids.length) {
-      $('#recorded-row').innerHTML = '<p style="margin:0;color:var(--muted)">No recorded runs yet.</p>'
-      return
-    }
-    $('#recorded-row').innerHTML = ids.map(id => `<button class="btn btn-outline" data-id="${esc(id)}">${esc(id)}</button>`).join('')
-    $('#recorded-row').querySelectorAll('button').forEach(btn => {
-      btn.addEventListener('click', () => renderRecorded(recordings[btn.dataset.id], btn.dataset.id))
-    })
-  }).catch(() => { $('#recorded-row').textContent = 'Could not load recorded runs.' })
-}
-
-function renderRecorded(record, id) {
-  const preset = PRESETS.find(p => p.id === id)
-  const rlog = $('#recorded-log')
-  rlog.innerHTML = ''
-  const brief = stageBlock(rlog, 'r-brief', 'Brief'); brief.innerHTML += `<pre>${esc(record.briefMarkdown)}</pre>`; brief.classList.remove('active')
-  const material = record.findings.filter(f => f.severity === 'MATERIAL').map(f => f.text)
-  const nits = record.findings.filter(f => f.severity === 'NIT').map(f => f.text)
-  const findingsBlock = stageBlock(rlog, 'r-findings', 'Cross-model review findings'); findingsBlock.innerHTML += renderFindings(material, nits); findingsBlock.classList.remove('active')
-  const shipBlock = stageBlock(rlog, 'r-ship', 'Shipped artifact'); shipBlock.classList.remove('active')
-  renderArtifact(shipBlock, record.finalCode, preset ? preset.interactionChecks : [])
-  const ledgerBlock = stageBlock(rlog, 'r-ledger', 'Ledger'); ledgerBlock.classList.remove('active')
-  ledgerBlock.innerHTML += '<div class="wrapx"><table><thead><tr><th>Stage</th><th class="num">Cost</th></tr></thead><tbody>' +
-    record.ledger.stageCosts.map(s => `<tr><td>${esc(s.stage)}</td><td class="num mono">${money(s.costUsd)}</td></tr>`).join('') +
-    `<tr><td><strong>Total</strong></td><td class="num mono headline-cell">${money(record.ledger.totalCostUsd)}</td></tr></tbody></table></div>`
-}
 </script>
 
 </body>

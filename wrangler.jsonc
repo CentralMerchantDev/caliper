@@ -69,6 +69,7 @@
       "/spend",
       "/pipeline-budget",
       "/sim-selftest",
+      "/world-source",
       "/spend-counter-selftest",
       "/change-instructions",
       "/change-run",
