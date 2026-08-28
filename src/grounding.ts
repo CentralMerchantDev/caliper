@@ -15,7 +15,7 @@
 // the split BUILD-WORLD.md asked for: "one model call to run -- that
 // happens in chunk 9, not tonight."
 import Anthropic from "@anthropic-ai/sdk";
-import { createWithTruncationGuard, PRICING } from "./claude";
+import { createWithTruncationGuard, PRICING, STAGE_CALL_TIMEOUT_MS } from "./claude";
 import type { TextGenerationResult } from "./claude";
 import { structureSummary } from "./worldStructure";
 
@@ -166,7 +166,7 @@ export function formatGroundingForPlan(result: GroundingResult): string {
  * anything.
  */
 export async function groundRequest(apiKey: string, changeRequest: string, model: string, maxTokens: number): Promise<TextGenerationResult & { result: GroundingResult }> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const start = Date.now();
   const response = await createWithTruncationGuard(client, "groundRequest", {
     model,
