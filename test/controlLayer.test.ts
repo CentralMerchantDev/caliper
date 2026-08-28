@@ -48,7 +48,7 @@ test("re-derived numbers match FINISH.md section 5 exactly", () => {
   assert.equal(CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD, 2.0);
   assert.equal(CONTROL_LIMITS.PIPELINE_WEEKLY_CAP_USD, 7.0);
   assert.equal(CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD, 20.0);
-  assert.equal(CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP, 2);
+  assert.equal(CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP, 3);
   assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD <= 0.2, "per-run ceiling should track ~$0.15, not the old $0.35");
 });
 
@@ -105,17 +105,19 @@ test("reconcile releasing a failed call's reservation (actual=0) never lets the 
 });
 
 // ---------------------------------------------------------------------
-// Guardrail: the per-IP daily limit, re-derived to 2 (from 3).
+// Guardrail: the per-IP daily limit, re-derived to 3 (UPGRADE.md, up from 2).
 // ---------------------------------------------------------------------
-test("guardrail: a 3rd live run for the same IP on the same day is refused (limit is now 2)", async () => {
+test("guardrail: a 4th live run for the same IP on the same day is refused (limit is now 3)", async () => {
   const kv = mockKv();
+  await recordPipelineRateLimitHit(kv, "1.2.3.4");
   await recordPipelineRateLimitHit(kv, "1.2.3.4");
   await recordPipelineRateLimitHit(kv, "1.2.3.4");
   await assert.rejects(() => assertUnderPipelineRateLimit(kv, "1.2.3.4"), (e: unknown) => e instanceof PipelineLimitError && e.kind === "per-ip-daily");
 });
 
-test("control: a 2nd run for the same IP on the same day is still allowed", async () => {
+test("control: a 3rd run for the same IP on the same day is still allowed", async () => {
   const kv = mockKv();
+  await recordPipelineRateLimitHit(kv, "5.6.7.8");
   await recordPipelineRateLimitHit(kv, "5.6.7.8");
   await assert.doesNotReject(() => assertUnderPipelineRateLimit(kv, "5.6.7.8"));
 });

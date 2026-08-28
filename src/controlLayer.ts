@@ -27,11 +27,15 @@ export const CONTROL_LIMITS = {
    * grounding stage (FINISH.md chunk 7) -- small, since it returns a short
    * structured verdict, not code. */
   TOKEN_CAPS: { brief: 800, ground: 500, implement: 6000, review: 2500, fix: 4000 },
-  /** FINISH.md section 5: 2 live runs/IP/day (down from 3) -- 2 x the
-   * $0.15 worst case =~ $0.30/IP/day, still small next to the global daily
-   * cap below. Bypassable only with a valid `?k=` unlock code (Mark's own
-   * use, e.g. demoing live), never raised for everyone to cover that case. */
-  DAILY_LIVE_RUNS_PER_IP: 2,
+  /** UPGRADE.md section 0: 3 live runs/IP/day (up from 2, permanent, not a
+   * temporary carve-out) -- 3 x the $0.15 worst case =~ $0.45/IP/day, still
+   * small next to the global daily cap below. Can go higher once the
+   * routing change (Haiku grounds/implements/retrospects, Sonnet
+   * plans/fixes, gpt-5.3-codex reviews, no Opus on any path) brings a
+   * typical run under $0.05. Bypassable only with a valid `?k=` unlock code
+   * (Mark's own use, e.g. demoing live), never raised for everyone to cover
+   * that case. */
+  DAILY_LIVE_RUNS_PER_IP: 3,
   /** Global ceiling across BOTH vendors combined -- Anthropic and OpenAI
    * spend are separate budgets that both count toward this one number.
    * FINISH.md section 5: $2.00 daily / $7.00 weekly / $20.00 monthly --
