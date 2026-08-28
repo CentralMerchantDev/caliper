@@ -43,9 +43,15 @@ const BUILDING_D = 6.0;
 const GRID_UNIT_X = 6.0;
 const GRID_UNIT_Z = 4.5;
 
+// CITY.md item 2: "everything currently sits in the top third of the
+// range, which is why it looks washed out." Floor/wall/ground darkened
+// ~24% from the UPGRADE.md values (path only ~16%, so it still reads as
+// lighter than the ground either side of it) -- contrast comes from
+// letting the point lights below create brightness against these,
+// instead of starting everything pre-lit.
 const PALETTE = {
-  floor: 0xdccdaf,
-  wall: 0xd9c9a6,
+  floor: 0xa79c85,
+  wall: 0xa5997e,
   wood: 0x8a5a34,
   woodDark: 0x6a4526,
   metal: 0xcfd2d6,
@@ -54,8 +60,8 @@ const PALETTE = {
   ceramic: 0xf3efe6,
   accent: 0xb0560c, // sim 1
   sim2: 0x3d6b63, // sim 2
-  ground: 0xcabb9c,
-  path: 0xe3d6ba,
+  ground: 0x9a8e77,
+  path: 0xbfb49c,
   roofShop: 0x9a5a3c,
   roofWorkshop: 0x5c6b5a,
   leaf: 0x4f6b47,
@@ -204,10 +210,15 @@ class Renderer3D {
     scene.add(hemi);
     this.hemi = hemi;
 
-    const roomGlow = new THREE.PointLight(0xffb066, 0.25, 9, 2);
-    roomGlow.position.set(0, 2.0, 0);
-    scene.add(roomGlow);
-    this.roomGlow = roomGlow;
+    // CITY.md item 2: real point lights, one per lamp post and one per
+    // dwelling (standing in for light spilling from inside, since the
+    // world doesn't model windows as distinct objects to attach one to).
+    // None cast shadows -- the sun already does, and a handful of
+    // shadow-casting point lights on top of it is real GPU cost this
+    // scene doesn't need for what it buys visually. Populated once the
+    // neighbourhood itself is built (_buildNeighbourhoodIfNeeded), since
+    // building/outdoor-object positions aren't known until then.
+    this._pointLights = [];
 
     this._contactTex = makeContactShadowTexture();
 
@@ -342,6 +353,12 @@ class Renderer3D {
     // A small label plank by the entrance so the building reads as
     // labelled ("House 1"), not just a shape -- matches building.label.
     this._buildSignPost(group, building.label, BUILDING_W / 2 + 0.3, BUILDING_D / 2 - 0.3, PALETTE.wood);
+
+    const interiorLight = new THREE.PointLight(0xffb066, 0.25, BUILDING_W * 0.9, 2);
+    interiorLight.position.set(0, 1.9, 0);
+    interiorLight.userData.baseIntensity = 0.25;
+    group.add(interiorLight);
+    this._pointLights.push(interiorLight);
 
     const stationsToBuild = building.stations && building.stations.length ? building.stations : [];
     for (const key in STATIONS) {
@@ -532,6 +549,12 @@ class Renderer3D {
         lamp.position.y = 1.72;
         set(lamp, false);
         group.userData.lampBulb = lamp;
+        const lampLight = new THREE.PointLight(0xffb066, 0.5, 6, 2);
+        lampLight.position.y = 1.72;
+        lampLight.userData.baseIntensity = 0.5;
+        group.add(lampLight);
+        this._pointLights.push(lampLight);
+        group.userData.lampLight = lampLight;
         break;
       }
       case "planter": {
@@ -626,8 +649,43 @@ class Renderer3D {
     this.sun.intensity = sun.isDay ? lerp(0.4, 0.85, Math.min(1, sun.elevation)) : 0.05;
     const sunColor = sun.warmth >= 1 ? SUN_COLOR_DAY : SUN_COLOR_WARM.clone().lerp(SUN_COLOR_DAY, sun.warmth);
     this.sun.color.copy(sun.isDay ? sunColor : SUN_COLOR_NIGHT);
-    this.hemi.intensity = lerp(0.1, 0.22, sun.isDay ? Math.min(1, sun.elevation) : 0);
-    this.roomGlow.intensity = lerp(0.1, 0.3, nightAmt);
+    // Night's ambient floor sits below even dawn/dusk's -- a lower ceiling
+    // on general fill light is what makes the point lights below read as
+    // the thing actually lighting the scene, instead of everything
+    // staying similarly bright and only the sky changing colour.
+    this.hemi.intensity = sun.isDay ? lerp(0.14, 0.24, Math.min(1, sun.elevation)) : 0.05;
+    // CITY.md item 2: "at night the point lights carry the scene and the
+    // sun is gone" -- each lamp/interior light ramps from a faint daytime
+    // presence (barely contributing against real sunlight) to carrying
+    // real brightness at night, scaled off its own base so lamps (built
+    // brighter) and interior lights stay in proportion to each other.
+    for (const light of this._pointLights) {
+      const base = light.userData.baseIntensity || 0.3;
+      light.intensity = lerp(base * 0.2, base * 1.0, nightAmt);
+    }
+    // Emissive materials on the light sources themselves: a lamp bulb
+    // barely glows in daylight, but reads as a genuinely bright object at
+    // night -- not just a pool of light on the ground beneath it.
+    for (const building of this.neighbourhoodGroup.children) {
+      if (building.userData && building.userData.lampBulb) {
+        building.userData.lampBulb.material.emissiveIntensity = lerp(0.3, 3.2, nightAmt);
+      }
+    }
+    // Exposure tuned per time of day: night dips lower, not higher --
+    // boosting exposure at night brightened the ambient/IBL contribution
+    // right along with the lamps, defeating the point of a darker night.
+    // A slightly darker overall exposure plus genuinely brighter emissive
+    // lamps (below) is what makes them read as the light source, not just
+    // a uniformly-lit scene with a different sky colour.
+    this.renderer.toneMappingExposure = lerp(0.62, 0.48, nightAmt);
+    // The RoomEnvironment IBL contributes a constant ambient floor
+    // regardless of sun position -- without scaling it down too, night
+    // never actually got darker, just the sky changed colour while every
+    // surface stayed lit by the same reflection environment. Scene-level
+    // environmentIntensity multiplies every material's own envMapIntensity
+    // globally, so this one line dims the whole IBL contribution at night
+    // without touching materials individually.
+    this.scene.environmentIntensity = lerp(1.0, 0.22, nightAmt);
 
     const sky = sun.isDay ? SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth) : SKY_NIGHT;
     this.scene.background = sky.clone();
