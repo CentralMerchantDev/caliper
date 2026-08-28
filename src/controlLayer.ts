@@ -9,31 +9,37 @@
 
 export const CONTROL_LIMITS = {
   /** Abort the rest of a run if its running total would exceed this.
-   * Re-derived for CALIPER v2 (BUILD-V2.md step 4/5), not inherited from
-   * v1's REBUILD-CONTROLS.md numbers below -- v2 has stages v1 didn't
-   * (plan, an optional re-plan after a clarifying question, an optional
-   * fix round, a retrospective). Real measured v2 runs, this session:
-   * a plan-only run with no question/no fix ~$0.06; a full run with a
-   * question, one fix round, and a retrospective ~$0.16 (the highest
-   * single real run recorded: $0.163). $0.35 leaves >2x headroom above
-   * that worst case, still well short of the daily cap below. */
-  PER_RUN_CEILING_USD: 0.35,
+   * Re-derived for the world-build routing (FINISH.md section 5): no stage
+   * routes to Opus any more, and Implement/Retrospective/Ground moved to
+   * Haiku. Worst case, summing each stage's own token cap at its own
+   * model's real output rate (not Opus, which the old $0.35 ceiling was
+   * silently priced against): ground $0.0025 + plan $0.04 + implement
+   * $0.03 + review $0.035 + fix $0.04 + retrospective $0.0015 =~ $0.149.
+   * $0.15 tracks the worst case closely on purpose, with almost no slack --
+   * a real run rarely hits every stage's token cap simultaneously (most
+   * responses are well under their cap), so this is tight against the
+   * theoretical ceiling but not against typical real spend. Re-derive
+   * again if a real run is ever clipped by it. */
+  PER_RUN_CEILING_USD: 0.15,
   /** max_tokens per stage, sized from docs/REBUILD-PROPOSAL.md's measured
    * numbers -- the implement stage's first measurement hit a 3000-token cap
-   * mid-artifact; this is deliberately larger. */
-  TOKEN_CAPS: { brief: 800, implement: 6000, review: 2500, fix: 4000 },
-  /** 3 runs x the real ~$0.163 worst-case measured v2 cost =~ $0.49/IP/day --
-   * re-derived from the numbers above, not the v1 comment this replaces
-   * (which cited v1's ~$0.12 worst case). Still small next to the global
-   * daily cap below. */
-  DAILY_LIVE_RUNS_PER_IP: 3,
+   * mid-artifact; this is deliberately larger. `ground` added for the new
+   * grounding stage (FINISH.md chunk 7) -- small, since it returns a short
+   * structured verdict, not code. */
+  TOKEN_CAPS: { brief: 800, ground: 500, implement: 6000, review: 2500, fix: 4000 },
+  /** FINISH.md section 5: 2 live runs/IP/day (down from 3) -- 2 x the
+   * $0.15 worst case =~ $0.30/IP/day, still small next to the global daily
+   * cap below. Bypassable only with a valid `?k=` unlock code (Mark's own
+   * use, e.g. demoing live), never raised for everyone to cover that case. */
+  DAILY_LIVE_RUNS_PER_IP: 2,
   /** Global ceiling across BOTH vendors combined -- Anthropic and OpenAI
-   * spend are separate budgets that both count toward this one number. */
-  PIPELINE_DAILY_CAP_USD: 5.0,
-  /** Backstop so a single bad day can't take the month: 6x the daily cap,
-   * so even maxing the daily cap for a week trips this before a full month
-   * could be exhausted at that rate. */
-  PIPELINE_MONTHLY_CAP_USD: 30.0,
+   * spend are separate budgets that both count toward this one number.
+   * FINISH.md section 5: $2.00 daily / $7.00 weekly / $20.00 monthly --
+   * three checkpoints, not one, so a burst that clears the daily cap on
+   * day one still can't run away across a week or a month. */
+  PIPELINE_DAILY_CAP_USD: 2.0,
+  PIPELINE_WEEKLY_CAP_USD: 7.0,
+  PIPELINE_MONTHLY_CAP_USD: 20.0,
   /** Small and deliberate -- bounds worst-case simultaneous spend burst; a
    * demo doesn't need real concurrency. */
   MAX_CONCURRENT_PIPELINE_RUNS: 3,
@@ -60,6 +66,7 @@ export class PipelineLimitError extends Error {
       | "concurrency"
       | "per-ip-daily"
       | "daily-cap"
+      | "weekly-cap"
       | "monthly-cap"
       | "per-run-ceiling"
       | "input-guard",
@@ -82,6 +89,14 @@ function dayKey(): string {
 }
 function monthKey(): string {
   return new Date().toISOString().slice(0, 7);
+}
+/** A stable weekly bucket -- floor(days since epoch / 7), not calendar ISO
+ * week numbering, which has enough edge cases (year boundaries, which day
+ * a week starts on) that getting it right blind isn't worth it for "which
+ * 7-day bucket is this spend in". Deterministic and monotonic is all this
+ * needs to be. */
+function weekKey(): string {
+  return `w${Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))}`;
 }
 
 // ---------- 7. Input guard (free-form only) ----------
@@ -142,6 +157,15 @@ export async function assertUnderPipelineSpendCap(kv: KVNamespace, worstCaseCost
         `used up ($${daily.toFixed(4)} spent so far). It resets at midnight UTC -- recorded runs below are free and unlimited.`,
     );
   }
+  const weeklyRaw = await kv.get(`pipeline/spend/weekly/${weekKey()}`);
+  const weekly = weeklyRaw ? parseFloat(weeklyRaw) : 0;
+  if (weekly + worstCaseCostUsd > CONTROL_LIMITS.PIPELINE_WEEKLY_CAP_USD) {
+    throw new PipelineLimitError(
+      "weekly-cap",
+      `This week's pipeline budget ($${CONTROL_LIMITS.PIPELINE_WEEKLY_CAP_USD.toFixed(2)}) is used up. ` +
+        `Recorded runs below are free and unlimited.`,
+    );
+  }
   const monthlyRaw = await kv.get(`pipeline/spend/monthly/${monthKey()}`);
   const monthly = monthlyRaw ? parseFloat(monthlyRaw) : 0;
   if (monthly + worstCaseCostUsd > CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD) {
@@ -159,6 +183,11 @@ export async function recordPipelineSpend(kv: KVNamespace, actualCostUsd: number
   const daily = (dRaw ? parseFloat(dRaw) : 0) + actualCostUsd;
   await kv.put(dKey, daily.toString(), { expirationTtl: 60 * 60 * 24 * 2 });
 
+  const wKey = `pipeline/spend/weekly/${weekKey()}`;
+  const wRaw = await kv.get(wKey);
+  const weekly = (wRaw ? parseFloat(wRaw) : 0) + actualCostUsd;
+  await kv.put(wKey, weekly.toString(), { expirationTtl: 60 * 60 * 24 * 10 });
+
   const mKey = `pipeline/spend/monthly/${monthKey()}`;
   const mRaw = await kv.get(mKey);
   const monthly = (mRaw ? parseFloat(mRaw) : 0) + actualCostUsd;
@@ -169,6 +198,9 @@ export interface PipelineBudgetStatus {
   dailySpentUsd: number;
   dailyCapUsd: number;
   dailyRemainingUsd: number;
+  weeklySpentUsd: number;
+  weeklyCapUsd: number;
+  weeklyRemainingUsd: number;
   monthlySpentUsd: number;
   monthlyCapUsd: number;
   monthlyRemainingUsd: number;
@@ -181,12 +213,17 @@ export interface PipelineBudgetStatus {
 export async function getPipelineBudgetStatus(kv: KVNamespace): Promise<PipelineBudgetStatus> {
   const dailyRaw = await kv.get(`pipeline/spend/daily/${dayKey()}`);
   const daily = dailyRaw ? parseFloat(dailyRaw) : 0;
+  const weeklyRaw = await kv.get(`pipeline/spend/weekly/${weekKey()}`);
+  const weekly = weeklyRaw ? parseFloat(weeklyRaw) : 0;
   const monthlyRaw = await kv.get(`pipeline/spend/monthly/${monthKey()}`);
   const monthly = monthlyRaw ? parseFloat(monthlyRaw) : 0;
   return {
     dailySpentUsd: daily,
     dailyCapUsd: CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD,
     dailyRemainingUsd: Math.max(0, CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD - daily),
+    weeklySpentUsd: weekly,
+    weeklyCapUsd: CONTROL_LIMITS.PIPELINE_WEEKLY_CAP_USD,
+    weeklyRemainingUsd: Math.max(0, CONTROL_LIMITS.PIPELINE_WEEKLY_CAP_USD - weekly),
     monthlySpentUsd: monthly,
     monthlyCapUsd: CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD,
     monthlyRemainingUsd: Math.max(0, CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD - monthly),

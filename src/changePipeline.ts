@@ -1,5 +1,5 @@
 import type { SimTestCase, TestResult } from "./types";
-import { generatePlan, implementChange, fixChange, runRetrospective, type ChangePlan, PRICING as ANTHROPIC_PRICING } from "./claude";
+import { generatePlan, implementChange, fixChange, runRetrospective, DEFAULT_MODEL, type ChangePlan, PRICING as ANTHROPIC_PRICING } from "./claude";
 import { reviewArtifact, parseFindings, REVIEW_MODEL, PRICING as OPENAI_PRICING, type ReviewFinding } from "./openai";
 import { runSimTests } from "./simSandbox";
 import { SIM_REGRESSION_SUITE } from "./simRegression";
@@ -36,7 +36,18 @@ import {
 // decides -- picks up from that exact point. Nothing here ever fabricates
 // a decision from silence.
 
-const IMPLEMENT_MODEL = "claude-sonnet-5";
+// Routing table (FINISH.md section 5, applied live): Haiku grounds, Sonnet
+// plans (generatePlan's own DEFAULT_MODEL, unchanged), Haiku implements,
+// Sonnet fixes, Haiku retrospects. Implement moved off Sonnet on purpose --
+// additive, schema-constrained criteria (chunk 6) shrank both the
+// judgement this stage needs to exercise and the output it produces, so
+// the cheap tier fits; Fix stays on Sonnet because repairing against a
+// reviewer's findings is a harder, less-tested shape (see the original
+// v1 routing rationale this carries forward). No Opus anywhere.
+const GROUND_MODEL = "claude-haiku-4-5";
+const IMPLEMENT_MODEL = "claude-haiku-4-5";
+const FIX_MODEL = "claude-sonnet-5";
+const RETROSPECTIVE_MODEL = "claude-haiku-4-5";
 const SIM_VERIFY_CPU_MS = 2000;
 const STATE_TTL_SEC = 60 * 60 * 24 * 7; // a halted run can be resumed for a week
 
@@ -153,12 +164,19 @@ const PLAN_MAX_TOKENS = 4000;
 
 const RETROSPECTIVE_MAX_TOKENS = 300;
 
+// Priced against each stage's OWN routed model, not a blanket Opus
+// worst-case -- FINISH.md section 5: "remove it from the worst-case
+// estimates." This is what actually re-derives the per-run ceiling down
+// to ~$0.15 (see CONTROL_LIMITS.PER_RUN_CEILING_USD's own comment for the
+// arithmetic); pricing every stage at Opus rates is why it used to have to
+// be $0.35.
 const WORST_CASE = {
-  plan: (PLAN_MAX_TOKENS / 1_000_000) * ANTHROPIC_PRICING["claude-opus-4-8"].output,
-  implement: (CONTROL_LIMITS.TOKEN_CAPS.implement / 1_000_000) * ANTHROPIC_PRICING["claude-opus-4-8"].output,
+  ground: (CONTROL_LIMITS.TOKEN_CAPS.ground / 1_000_000) * ANTHROPIC_PRICING[GROUND_MODEL].output,
+  plan: (PLAN_MAX_TOKENS / 1_000_000) * ANTHROPIC_PRICING[DEFAULT_MODEL].output,
+  implement: (CONTROL_LIMITS.TOKEN_CAPS.implement / 1_000_000) * ANTHROPIC_PRICING[IMPLEMENT_MODEL].output,
   review: (CONTROL_LIMITS.TOKEN_CAPS.review / 1_000_000) * OPENAI_PRICING[REVIEW_MODEL].output,
-  fix: (CONTROL_LIMITS.TOKEN_CAPS.fix / 1_000_000) * ANTHROPIC_PRICING["claude-opus-4-8"].output,
-  retrospective: (RETROSPECTIVE_MAX_TOKENS / 1_000_000) * ANTHROPIC_PRICING["claude-opus-4-8"].output,
+  fix: (CONTROL_LIMITS.TOKEN_CAPS.fix / 1_000_000) * ANTHROPIC_PRICING[FIX_MODEL].output,
+  retrospective: (RETROSPECTIVE_MAX_TOKENS / 1_000_000) * ANTHROPIC_PRICING[RETROSPECTIVE_MODEL].output,
 };
 
 function stateKey(runId: string): string {
@@ -290,7 +308,7 @@ async function runRetrospectiveAndRecord(
   stageCosts: { stage: string; costUsd: number }[],
   runSummary: string,
 ): Promise<{ lesson: string | null; recurrenceCount: number | null }> {
-  const retro = await callAnthropic(env.SPEND_KV, budget, WORST_CASE.retrospective, () => runRetrospective(env.ANTHROPIC_API_KEY, runSummary));
+  const retro = await callAnthropic(env.SPEND_KV, budget, WORST_CASE.retrospective, () => runRetrospective(env.ANTHROPIC_API_KEY, runSummary, RETROSPECTIVE_MAX_TOKENS, RETROSPECTIVE_MODEL));
   stageCosts.push({ stage: "retrospective", costUsd: retro.costUsd });
   let recurrenceCount: number | null = null;
   if (retro.lesson) {
@@ -530,7 +548,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         ...verifyCriteria.filter((r) => r.pass).map((r) => describePassing("criterion", r)),
       ];
       const fix = await callAnthropic(env.SPEND_KV, budget, WORST_CASE.fix, () =>
-        fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan, finalCode, material, IMPLEMENT_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
+        fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan, finalCode, material, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
       );
       stageCosts.push({ stage: "fix", costUsd: fix.costUsd });
       finalCode = fix.code;

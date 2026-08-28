@@ -644,11 +644,11 @@ export interface RetrospectiveResult {
   wallTimeMs: number;
 }
 
-export async function runRetrospective(apiKey: string, runSummary: string, maxTokens = 300): Promise<RetrospectiveResult> {
+export async function runRetrospective(apiKey: string, runSummary: string, maxTokens = 300, model: string = DEFAULT_MODEL): Promise<RetrospectiveResult> {
   const client = new Anthropic({ apiKey });
   const start = Date.now();
   const response = await createWithTruncationGuard(client, "runRetrospective", {
-    model: DEFAULT_MODEL,
+    model,
     max_tokens: maxTokens,
     thinking: { type: "disabled" },
     system: RETROSPECTIVE_SYSTEM_PROMPT,
@@ -668,5 +668,5 @@ export async function runRetrospective(apiKey: string, runSummary: string, maxTo
   }
   const inputTokens = response.usage.input_tokens;
   const outputTokens = response.usage.output_tokens;
-  return { lesson, model: DEFAULT_MODEL, inputTokens, outputTokens, costUsd: costUsd(DEFAULT_MODEL, inputTokens, outputTokens), wallTimeMs };
+  return { lesson, model, inputTokens, outputTokens, costUsd: costUsd(model, inputTokens, outputTokens), wallTimeMs };
 }

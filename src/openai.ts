@@ -2,16 +2,18 @@ import OpenAI from "openai";
 import { TruncatedResponseError } from "./controlLayer";
 
 // Cross-model review (REBUILD.md / REBUILD-CONTROLS.md): a production
-// build's real process is "one model authors, a different model reviews" --
-// its persistent agent-instructions file names the reviewer model
-// precisely as GPT-5.5, so that's the default here, for fidelity to the
-// real pipeline rather than picking the cheaper option silently.
-// gpt-5.3-codex is real too (a coding-specialized, cheaper OpenAI model)
-// and is surfaced in the routing panel as the road not taken, per
-// REBUILD-CONTROLS.md -- see docs/REBUILD-PROPOSAL.md §4 for the reasoning
-// and the measured cost difference.
-export const REVIEW_MODEL = "gpt-5.5";
-export const REVIEW_MODEL_ALTERNATIVE = "gpt-5.3-codex";
+// build's real process is "one model authors, a different model reviews".
+// Originally defaulted to gpt-5.5 for fidelity to the real pipeline's own
+// named reviewer model. FINISH.md/BUILD-WORLD.md's world-build changed that
+// call on purpose: this app is demonstrating the BUILD SYSTEM, not which
+// model reviews better, so every stage -- including this one -- routes to
+// the cheapest model that does the job, and gpt-5.3-codex (coding-
+// specialized, ~1/3 the price of gpt-5.5 on input, ~less than half on
+// output) is that model for review. gpt-5.5 stays defined and priced below
+// as the road not taken, still shown in the routing panel with the real
+// cost delta, per REBUILD-CONTROLS.md -- see docs/REBUILD-PROPOSAL.md §4.
+export const REVIEW_MODEL = "gpt-5.3-codex";
+export const REVIEW_MODEL_ALTERNATIVE = "gpt-5.5";
 
 // Published per-1M-token USD pricing, verified against OpenAI's own pricing
 // page rather than trained-in knowledge (this model postdates training data

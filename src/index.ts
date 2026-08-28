@@ -9,7 +9,15 @@ import { SIM_BASELINE_SOURCE } from "./simBaseline";
 import { SIM_REGRESSION_SUITE } from "./simRegression";
 import { runSimTests } from "./simSandbox";
 import { runChangePipeline, loadInstructions, type ChangeEvent } from "./changePipeline";
-import { getPipelineBudgetStatus } from "./controlLayer";
+import {
+  getPipelineBudgetStatus,
+  checkInputGuard,
+  assertUnderPipelineRateLimit,
+  recordPipelineRateLimitHit,
+  tryLeaseActiveRun,
+  releaseActiveRun,
+  PipelineLimitError,
+} from "./controlLayer";
 
 export interface Env {
   LOADER: LoaderBinding;
@@ -18,6 +26,11 @@ export interface Env {
   ANTHROPIC_API_KEY: string;
   OPENAI_API_KEY: string;
   ASSETS: Fetcher;
+  /** Optional. When set, ?k=<UNLOCK_CODE> on /change-run bypasses the
+   * per-IP daily live-run limit -- for Mark's own use (demoing live)
+   * without raising the number every visitor gets. Unset means the bypass
+   * is simply never available, not an open door. */
+  UNLOCK_CODE?: string;
 }
 
 function clientIp(request: Request): string {
@@ -374,8 +387,23 @@ function randomRunId(): string {
 // up to the next point that needs a real human decision (or a terminal
 // shipped/refused outcome). Never holds the connection open waiting --
 // see the "gate never advances on its own" note in changePipeline.ts.
+//
+// The concurrency lease wraps each individual call (fresh start or
+// resume), not a run's whole halted-and-waiting lifetime -- a run can halt
+// for up to a week (STATE_TTL_SEC in changePipeline.ts) waiting on a
+// human, and holding a concurrency slot for that entire wait would let a
+// handful of unanswered gates exhaust MAX_CONCURRENT_PIPELINE_RUNS and
+// lock out every other visitor for days. The limit bounds simultaneous
+// real API spend, which only happens while a call is actively executing.
 async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: string): Promise<Response> {
   const runId = existingRunId ?? randomRunId();
+  try {
+    await tryLeaseActiveRun(env.SPEND_KV, runId);
+  } catch (e) {
+    if (e instanceof PipelineLimitError) return json({ error: e.message }, 429);
+    throw e;
+  }
+
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
@@ -390,6 +418,7 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
     } catch (e) {
       send("error", { message: String((e as Error)?.message ?? e) });
     } finally {
+      await releaseActiveRun(env.SPEND_KV, runId);
       await writer.close();
     }
   })();
@@ -481,6 +510,24 @@ export default {
     if (url.pathname === "/change-run") {
       const request_ = url.searchParams.get("request");
       if (!request_) return json({ error: "pass ?request=<text>" }, 400);
+      // The only path where a visitor controls raw input, so the only one
+      // that gets attacked -- checked first, before it can consume a
+      // per-IP rate-limit slot on a request that should never have counted.
+      const guard = checkInputGuard(request_);
+      if (!guard.ok) return json({ error: `Request rejected: ${guard.reason}` }, 400);
+      // Only a fresh run counts against the per-IP daily limit -- resuming
+      // an already-started run (/change-resume) isn't a second live run.
+      const unlocked = !!env.UNLOCK_CODE && url.searchParams.get("k") === env.UNLOCK_CODE;
+      const ip = clientIp(request);
+      if (!unlocked) {
+        try {
+          await assertUnderPipelineRateLimit(env.SPEND_KV, ip);
+        } catch (e) {
+          if (e instanceof PipelineLimitError) return json({ error: e.message }, 429);
+          throw e;
+        }
+        await recordPipelineRateLimitHit(env.SPEND_KV, ip);
+      }
       return handleChangeRun(env, request_);
     }
 
