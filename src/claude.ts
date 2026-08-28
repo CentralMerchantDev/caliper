@@ -371,6 +371,29 @@ const PLAN_SYSTEM_PROMPT =
   "independently verify, ask ONE specific question about that specific thing -- state the sensible " +
   "default you chose instead of asking, wherever you can reasonably choose one yourself.";
 
+type RawPlan = { understoodIntent: string; willBuild: string; criteria: { description: string; fn: string; argsJson: string; expectedJson: string }[]; willNotTouch: string; question: string | null };
+
+/** The plan schema only requires argsJson/expectedJson to be strings -- it
+ * can't constrain their CONTENT to be valid JSON, so the model sometimes
+ * emits a string that LOOKS like JSON but isn't (unescaped quotes, single
+ * quotes, a trailing comma). Found running real trials: the same change
+ * request crashed the run twice in a row on this exact class of error,
+ * with no retry -- the run just died, no ledger, nothing recorded. Pulled
+ * out so it can be retried with a correction, the same validate-before-
+ * consume shape as every other parse-then-trust step in this file. */
+export function parseCriteria(rawCriteria: RawPlan["criteria"]): ProposedCriterion[] {
+  return rawCriteria.map((c) => {
+    let args: unknown[], expected: unknown;
+    try {
+      args = JSON.parse(c.argsJson);
+      expected = JSON.parse(c.expectedJson);
+    } catch (e) {
+      throw new Error(`criterion "${c.description}": ${String(e)}`);
+    }
+    return { description: c.description, fn: c.fn, args, expected };
+  });
+}
+
 export async function generatePlan(
   apiKey: string,
   currentSource: string,
@@ -390,40 +413,49 @@ export async function generatePlan(
     `Change request: ${changeRequest}` +
     (clarification ? `\n\nThe visitor answered your question: ${clarification}` : "");
 
-  const response = await createWithTruncationGuard(client, "generatePlan", {
-    model: DEFAULT_MODEL,
-    max_tokens: maxTokens,
-    thinking: { type: "disabled" },
-    system: PLAN_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: userContent }],
-    output_config: { format: { type: "json_schema", schema: PLAN_SCHEMA } },
-  });
-  const wallTimeMs = Date.now() - start;
-  if (response.stop_reason === "refusal") throw new Error("Plan request was refused by Claude's safety classifiers");
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") throw new Error(`No text content in plan response (stop_reason: ${response.stop_reason})`);
-
-  let raw: { understoodIntent: string; willBuild: string; criteria: { description: string; fn: string; argsJson: string; expectedJson: string }[]; willNotTouch: string; question: string | null };
-  try {
-    raw = JSON.parse(textBlock.text);
-  } catch (e) {
-    throw new Error(`Failed to parse plan JSON: ${String(e)}`);
-  }
-  const criteria: ProposedCriterion[] = raw.criteria.map((c) => {
-    let args: unknown[], expected: unknown;
+  async function attempt(content: string): Promise<{ response: Anthropic.Message; raw: RawPlan }> {
+    const response = await createWithTruncationGuard(client, "generatePlan", {
+      model: DEFAULT_MODEL,
+      max_tokens: maxTokens,
+      thinking: { type: "disabled" },
+      system: PLAN_SYSTEM_PROMPT,
+      messages: [{ role: "user", content }],
+      output_config: { format: { type: "json_schema", schema: PLAN_SCHEMA } },
+    });
+    if (response.stop_reason === "refusal") throw new Error("Plan request was refused by Claude's safety classifiers");
+    const textBlock = response.content.find((b) => b.type === "text");
+    if (!textBlock || textBlock.type !== "text") throw new Error(`No text content in plan response (stop_reason: ${response.stop_reason})`);
+    let raw: RawPlan;
     try {
-      args = JSON.parse(c.argsJson);
-      expected = JSON.parse(c.expectedJson);
+      raw = JSON.parse(textBlock.text);
     } catch (e) {
-      throw new Error(`Model proposed a criterion with unparseable JSON (${c.description}): ${String(e)}`);
+      throw new Error(`Failed to parse plan JSON: ${String(e)}`);
     }
-    return { description: c.description, fn: c.fn, args, expected };
-  });
+    return { response, raw };
+  }
+
+  let { response, raw } = await attempt(userContent);
+  let criteria: ProposedCriterion[];
+  try {
+    criteria = parseCriteria(raw.criteria);
+  } catch (e) {
+    const correction =
+      `${userContent}\n\nYour previous response included a criterion with invalid JSON in argsJson or ` +
+      `expectedJson (${String(e)}). Every argsJson and expectedJson value must be strictly valid, ` +
+      `double-quoted JSON -- no single quotes, no trailing commas, no unescaped characters. Redo the ` +
+      `plan with valid JSON in every criterion.`;
+    ({ response, raw } = await attempt(correction));
+    try {
+      criteria = parseCriteria(raw.criteria);
+    } catch (e2) {
+      throw new Error(`Model proposed a criterion with unparseable JSON twice in a row -- treated as a failure, not content: ${String(e2)}`);
+    }
+  }
   const plan: ChangePlan = { understoodIntent: raw.understoodIntent, willBuild: raw.willBuild, criteria, willNotTouch: raw.willNotTouch, question: raw.question };
 
   const inputTokens = response.usage.input_tokens;
   const outputTokens = response.usage.output_tokens;
-  return { plan, model: DEFAULT_MODEL, inputTokens, outputTokens, costUsd: costUsd(DEFAULT_MODEL, inputTokens, outputTokens), wallTimeMs };
+  return { plan, model: DEFAULT_MODEL, inputTokens, outputTokens, costUsd: costUsd(DEFAULT_MODEL, inputTokens, outputTokens), wallTimeMs: Date.now() - start };
 }
 
 const CHANGE_SCHEMA = {
