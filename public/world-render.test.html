@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>world-render.js — visual check harness</title>
+<style>
+  body{background:#FAF6EE;font-family:ui-monospace,monospace;padding:20px;color:#2A201A}
+  canvas{width:640px;height:420px;border:1px solid rgba(42,32,26,.38);border-radius:14px;display:block}
+  .row{display:flex;gap:20px;flex-wrap:wrap}
+  button{margin:4px 6px 4px 0;padding:6px 10px;font-family:inherit}
+  #hourLabel{font-weight:700}
+</style>
+</head>
+<body>
+<h3>world-render.js visual check — not part of the app, a standalone harness</h3>
+<p>Scripted world sequence exercising: room + all six stations, two sims walking between
+   stations with interpolation, need bars, critical-need ring, and the sun/shadow sweep
+   across a full 24-hour clock. <span id="hourLabel"></span></p>
+<div class="row">
+  <canvas id="c" width="640" height="420"></canvas>
+</div>
+<div class="row">
+  <button id="playPause">pause</button>
+  <button id="jumpHour">+3 hours (test shadow sweep)</button>
+  <label><input type="checkbox" id="reduced"> simulate prefers-reduced-motion</label>
+</div>
+
+<script type="module">
+import { WorldRenderer } from "./world-render.js";
+
+const canvas = document.getElementById("c");
+const renderer = new WorldRenderer(canvas);
+
+function makeWorld(tick, sim0Action, sim1Action, needs0, needs1) {
+  return {
+    tick, money: 100 + tick,
+    sims: [
+      { id: "sim1", needs: needs0, lastAction: sim0Action },
+      { id: "sim2", needs: needs1, lastAction: sim1Action },
+    ],
+  };
+}
+
+const actions = ["idle", "eat", "sleep", "shower", "play", "call", "work"];
+let tick = 6; // start at 6am so the sweep is visible immediately
+let ai = 0;
+function nextWorld() {
+  ai = (ai + 1) % actions.length;
+  const a0 = actions[ai];
+  const a1 = actions[(ai + 3) % actions.length];
+  const needs0 = { hunger: 20 + (tick * 7) % 80, energy: 60, hygiene: 70, fun: 50, social: 40 };
+  const needs1 = { hunger: 80, energy: 30 + (tick * 11) % 60, hygiene: 90, fun: 60, social: 50 };
+  return makeWorld(tick, a0, a1, needs0, needs1);
+}
+
+renderer.pushTick(nextWorld());
+renderer.pushTick(nextWorld());
+
+let playing = true;
+let start = performance.now();
+const TICK_MS = 1400;
+
+function frame(now) {
+  const t = Math.min(1, (now - start) / TICK_MS);
+  renderer.draw(t);
+  document.getElementById("hourLabel").textContent = "hour: " + (renderer.nextWorld.tick % 24);
+  if (playing && t >= 1) {
+    tick++;
+    renderer.pushTick(nextWorld());
+    start = now;
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+document.getElementById("playPause").addEventListener("click", (e) => {
+  playing = !playing;
+  e.target.textContent = playing ? "pause" : "play";
+});
+document.getElementById("jumpHour").addEventListener("click", () => {
+  tick += 3;
+  renderer.pushTick(nextWorld());
+  start = performance.now() - TICK_MS; // land immediately, no interpolation glide for a manual jump
+});
+document.getElementById("reduced").addEventListener("change", (e) => {
+  renderer.reducedMotion = e.target.checked;
+});
+window.__renderer = renderer; // exposed for the automated visual-check script only
+</script>
+</body>
+</html>
