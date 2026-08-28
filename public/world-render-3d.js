@@ -188,7 +188,7 @@ class Renderer3D {
   _initScene() {
     const renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: "high-performance" });
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.6;
+    renderer.toneMappingExposure = 0.85; // overwritten every draw() call; matches the new day-end value for the first frame before that runs
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.VSMShadowMap;
@@ -673,14 +673,20 @@ class Renderer3D {
     this.sun.position.set(sx, sy, sz);
     this.sun.target.position.set(0, 0.5, 0);
     const nightAmt = sun.isDay ? 0 : 1;
-    this.sun.intensity = sun.isDay ? lerp(0.4, 0.85, Math.min(1, sun.elevation)) : 0.05;
+    // FINAL.md item 5: "too dark both day and at night" -- the previous
+    // pass overcorrected chasing the muddy-night note and pulled the day
+    // end down with it. Raised both ends together, day more than night, so
+    // day is the strongest frame in the cycle again while night keeps the
+    // contrast already achieved (below) instead of flattening it out.
+    this.sun.intensity = sun.isDay ? lerp(0.5, 0.95, Math.min(1, sun.elevation)) : 0.08;
     const sunColor = sun.warmth >= 1 ? SUN_COLOR_DAY : SUN_COLOR_WARM.clone().lerp(SUN_COLOR_DAY, sun.warmth);
     this.sun.color.copy(sun.isDay ? sunColor : SUN_COLOR_NIGHT);
-    // Night's ambient floor pushed down again -- the previous pass still
-    // left night reading as one flat brown value instead of dark with
-    // warm pools. A lower ceiling on general fill light is what makes the
-    // point lights below read as the thing actually lighting the scene.
-    this.hemi.intensity = sun.isDay ? lerp(0.14, 0.24, Math.min(1, sun.elevation)) : 0.02;
+    // Night's ambient floor raised off nearly zero -- "a person should see
+    // the whole neighbourhood, with the lamp pools as the warm accents
+    // rather than the only light. Not black, not brown." Still well below
+    // day, so the point lights below still read as the thing carrying the
+    // scene, not the only source of visibility.
+    this.hemi.intensity = sun.isDay ? lerp(0.2, 0.32, Math.min(1, sun.elevation)) : 0.07;
     // CITY.md item 2/3: "at night the point lights carry the scene and the
     // sun is gone." Street lamps get a stronger night curve than interior
     // lights -- they're the thing meant to read as a warm pool against a
@@ -698,22 +704,20 @@ class Renderer3D {
         building.userData.lampBulb.material.emissiveIntensity = lerp(0.3, 4.5, nightAmt);
       }
     }
-    // Exposure tuned per time of day: night dips lower, not higher --
-    // boosting exposure at night brightened the ambient/IBL contribution
-    // right along with the lamps, defeating the point of a darker night.
-    // A slightly darker overall exposure plus genuinely brighter emissive
-    // lamps (below) is what makes them read as the light source, not just
-    // a uniformly-lit scene with a different sky colour.
-    this.renderer.toneMappingExposure = lerp(0.62, 0.44, nightAmt);
+    // Exposure raised at both ends (FINAL.md item 5) -- day was
+    // underexposed at 0.62, reading dim rather than "clearly daylight,
+    // everything legible" for what should be the strongest frame in the
+    // cycle. Night rises with it, proportionally, so the day/night
+    // difference achieved in the previous pass holds rather than flattens:
+    // night is still the darker end, just no longer near-black.
+    this.renderer.toneMappingExposure = lerp(0.85, 0.58, nightAmt);
     // The RoomEnvironment IBL contributes a constant ambient floor
-    // regardless of sun position -- without scaling it down too, night
-    // never actually got darker, just the sky changed colour while every
-    // surface stayed lit by the same reflection environment. Scene-level
-    // environmentIntensity multiplies every material's own envMapIntensity
-    // globally, so this one line dims the whole IBL contribution at night
-    // without touching materials individually. Dropped further again --
-    // 0.22 still left too much ambient bounce lifting the ground.
-    this.scene.environmentIntensity = lerp(1.0, 0.08, nightAmt);
+    // regardless of sun position. Scene-level environmentIntensity
+    // multiplies every material's own envMapIntensity globally. Day raised
+    // for a warmer, brighter first impression; night raised further off
+    // its near-zero floor so the neighbourhood reads as a whole scene
+    // again, not just the lamp-lit patches around each point light.
+    this.scene.environmentIntensity = lerp(1.3, 0.18, nightAmt);
 
     const sky = sun.isDay ? SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth) : SKY_NIGHT;
     this.scene.background = sky.clone();
