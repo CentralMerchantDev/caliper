@@ -474,6 +474,7 @@ export default {
           "GET /change-plan-reply?runId=<id>&reply=<text>": "the third Gate 1 action -- reply in free text instead of approve/reject; re-grounds and re-plans",
           "GET /change-review-decision?runId=<id>&approve=true|false": "resolve the review gate",
           "GET /change-answer?runId=<id>&answer=<text>": "answer a plan-mode clarifying question",
+          "GET /change-stop?runId=<id>": "halt a run at its next stage boundary -- checked before the next paid call, never mid-call",
           "GET /sim-selftest": "run the regression suite against the current sim source",
           "GET /spend-counter-selftest?n=<count>": "fire n concurrent reservations at an isolated DO instance and confirm none are lost (free, no real spend touched)",
           "GET /change-instructions": "the accumulated lessons file, fed into plan/implement/review/fix prompts on future runs",
@@ -564,6 +565,18 @@ export default {
       const approve = url.searchParams.get("approve") === "true";
       if (!runId) return json({ error: "pass ?runId=<id>&approve=true|false" }, 400);
       await env.SPEND_KV.put(`change/review-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
+      return json({ ok: true });
+    }
+
+    // FINAL.md item 2: "a stop action that actually halts the run" -- writes
+    // the same kind of one-shot KV signal a gate decision does, checked at
+    // every stage boundary inside runChangePipeline (changePipeline.ts).
+    // Works whether the run is actively processing (checked before its next
+    // paid call) or halted at a gate (checked on the next /change-resume).
+    if (url.pathname === "/change-stop") {
+      const runId = url.searchParams.get("runId");
+      if (!runId) return json({ error: "pass ?runId=<id>" }, 400);
+      await env.SPEND_KV.put(`change/stop/${runId}`, "1", { expirationTtl: 600 });
       return json({ ok: true });
     }
 

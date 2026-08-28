@@ -160,6 +160,37 @@ pre{background:var(--paper);border:1px solid var(--line2);border-radius:9px;padd
 footer{border-top:1px solid var(--line);padding:30px 0 60px;color:var(--muted);font-size:14.5px;margin-top:60px}
 footer a{color:var(--ink2)}
 
+/* ---------------- FINAL.md item 2: the persistent action bar ----------------
+   The single place anything is ever asked of the visitor. Fixed to the
+   viewport bottom, always visible, never empty. Its CONTENTS change with the
+   run's state; its POSITION never does. body gets bottom padding equal to
+   the bar's real measured height (set as --bar-h by JS on every render) so
+   it never covers page content, at any viewport width. */
+body{padding-bottom:var(--bar-h,64px)}
+.action-bar{position:fixed;left:0;right:0;bottom:0;z-index:70;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -6px 20px -10px rgba(42,32,26,.22)}
+.action-bar-inner{max-width:1180px;margin:0 auto;padding:12px 24px;display:flex;flex-direction:column;gap:8px}
+.action-bar .bar-kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.action-bar .bar-ask{margin:0;font-size:15.5px;line-height:1.4}
+.action-bar .bar-note{margin:0;font-size:12.5px;color:var(--muted)}
+.bar-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.bar-row textarea,.bar-row input[type="text"]{flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--line-strong);border-radius:8px;background:var(--paper);color:var(--ink);font-size:15px;font-family:inherit;resize:none}
+.bar-row textarea{min-height:38px;max-height:38px}
+.action-bar .btn{padding:9px 16px;font-size:14.5px;white-space:nowrap}
+.bar-stage-label{font-weight:600}
+.bar-cost{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+.bar-reply-row{display:none;gap:8px;align-items:center;flex-wrap:wrap;padding-top:2px}
+.bar-reply-row.open{display:flex}
+/* State-driven look: idle/running/done stay neutral; any state that is
+   actually waiting on the visitor gets the warm accent treatment, so a
+   glance registers "your turn" without reading a word of copy. */
+.action-bar.needs-you{background:var(--accentSoft);border-top-color:var(--accent)}
+.action-bar.needs-you .btn:not(.btn-outline){background:var(--accent);border-color:var(--accent)}
+.action-bar.bar-flash{animation:bar-flash 900ms ease-out 1}
+@keyframes bar-flash{0%{background:var(--accent)}100%{background:var(--accentSoft)}}
+@media(prefers-reduced-motion:reduce){.action-bar.bar-flash{animation:none}}
+.action-bar.bar-done{background:var(--goodSoft)}
+.action-bar.bar-error{background:var(--accentSoft);border-top-color:var(--accent)}
+
 @media(prefers-reduced-motion:reduce){.spin{animation:none}}
 @media(max-width:640px){
   .hero{padding:28px 0 4px}
@@ -168,6 +199,10 @@ footer a{color:var(--ink2)}
   #world-canvas{height:300px}
   table{font-size:13.5px}
   th,td{padding:9px 8px}
+  .action-bar-inner{padding:10px 14px}
+  .action-bar .bar-ask{font-size:14px}
+  .bar-row textarea,.bar-row input[type="text"]{min-width:120px;font-size:14px}
+  .action-bar .btn{padding:8px 12px;font-size:13.5px}
 }
 </style>
 </head>
@@ -224,13 +259,14 @@ footer a{color:var(--ink2)}
     <div class="panel">
       <div class="budget-bar" id="budget-bar">Loading today's budget…</div>
       <p class="request-copy">This world is shared: every visitor's request builds on whatever the last
-        one shipped. Describe something you want added. A live run is a real one -- grounding and
-        planning alone spend a few real cents before you ever see a gate to approve.</p>
-      <form class="request-form" id="request-form">
-        <textarea id="request-input" maxlength="500" placeholder="e.g. add a lamp near the desk that lights up at night" required></textarea>
-        <button class="btn btn-block" id="run-btn" type="submit">▸ Ground it, then plan it</button>
-      </form>
-      <div class="stage-log" id="stage-log" aria-live="polite"></div>
+        one shipped. A live run is a real one -- grounding and planning alone spend a few real cents
+        before you ever see a gate to approve. <strong>Type your request in the bar fixed to the
+        bottom of the page</strong> -- that bar is the one place anything is ever asked of you here:
+        adding a request, stopping a run, or deciding at a gate.</p>
+      <div class="stage-log" id="stage-log" aria-live="polite">
+        <p style="margin:0;color:var(--muted);font-size:14.5px">Nothing running yet -- what happens
+          shows up here as a read-only record while it happens. Act from the bar below.</p>
+      </div>
     </div>
   </div>
 
@@ -423,6 +459,14 @@ footer a{color:var(--ink2)}
   <a href="/matrix-results">raw results</a> · <a href="/tasks">task list</a> ·
   <a href="/api">API routes</a>
 </div></footer>
+
+<!-- FINAL.md item 2: the persistent action bar -- fixed to the viewport
+     bottom, the single place anything is ever asked of the visitor. Its
+     inner content is fully re-rendered by renderBar() below; the element
+     itself never moves and is never removed. -->
+<div class="action-bar" id="action-bar" role="region" aria-label="Pipeline actions -- add, stop, or decide from here">
+  <div class="action-bar-inner" id="action-bar-inner"></div>
+</div>
 
 <script type="module">
 import { WorldRenderer } from "./world-render-3d.js";
@@ -620,341 +664,475 @@ function renderFindings(material, nits) {
   return html
 }
 
-// ---------- the live change-pipeline run ----------
+// ---------- FINAL.md item 2: the persistent action bar ----------
+// One place anything is ever asked of the visitor. barState drives
+// renderBar(); the log above stays a read-only record of what happened --
+// no button or input lives there any more. See FINAL.md: "Two places to
+// approve is the bug that caused this."
 
-const form = $('#request-form')
-const runBtn = $('#run-btn')
 const log = $('#stage-log')
+const bar = $('#action-bar')
+const barInner = $('#action-bar-inner')
+const reducedMotionBar = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-form.addEventListener('submit', (ev) => {
-  ev.preventDefault()
-  const text = $('#request-input').value.trim()
-  if (!text) return
+let barState = { kind: 'idle' }
+let lastRenderedKind = null
 
-  runBtn.disabled = true
-  runBtn.innerHTML = '<span class="spin"></span> Running…'
-  log.innerHTML = ''
-  let runId = null
-  let implCode = null, currentSource = null
-  let reconnectAttempts = 0
-  const MAX_RECONNECT_ATTEMPTS = 5
-  const RECONNECT_DELAYS_MS = [2000, 4000, 8000, 15000, 30000]
+function setBarHeight() {
+  document.body.style.setProperty('--bar-h', bar.getBoundingClientRect().height + 'px')
+}
 
-  function connect(url) {
-    const es = new EventSource(url)
-    let groundBlock = null, planBlock = null, implBlock = null, verifyBlock = null, reviewBlock = null, fixBlock = null
-    let stopStatus = () => {}
+function renderBar() {
+  bar.className = 'action-bar'
+  const needsYou = barState.kind === 'question' || barState.kind === 'plan-gate' || barState.kind === 'review-gate'
+  if (needsYou) bar.classList.add('needs-you')
+  if (barState.kind === 'done') bar.classList.add(barState.ok ? 'bar-done' : 'bar-error')
 
-    es.addEventListener('runId', ev => { runId = JSON.parse(ev.data).runId })
-
-    es.addEventListener('grounding', () => {
-      groundBlock = stageBlock(log, 's-ground-' + Date.now(), 'Grounding — checking this against the real current code')
-      stopStatus = startStatusRotation(groundBlock, 'grounding')
-    })
-    es.addEventListener('grounded', ev => {
-      stopStatus()
-      const d = JSON.parse(ev.data)
-      if (groundBlock) {
-        const r = d.result
-        groundBlock.innerHTML = `<h4>Grounded</h4><p style="margin:0 0 6px">${r.premisesHold ? '<strong>Every premise checked out.</strong>' : '<strong>Found something the request assumes that is not true.</strong>'}</p>` +
-          (r.falsePremises.length ? '<ul>' + r.falsePremises.map(p => `<li>${esc(p)}</li>`).join('') + '</ul>' : '') +
-          `<p style="margin:6px 0 0;color:var(--ink2)">${esc(r.reasoning)}</p>` +
-          (r.alternatives.length ? `<p class="summary-line" style="margin-top:8px">What the structure can support instead: ${r.alternatives.map(esc).join('; ')}</p>` : '') +
-          `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-        groundBlock.classList.remove('active')
-      }
-    })
-
-    es.addEventListener('planning', () => {
-      planBlock = stageBlock(log, 's-plan-' + Date.now(), 'Plan')
-      stopStatus = startStatusRotation(planBlock, 'planning')
-    })
-    es.addEventListener('planned', ev => {
-      stopStatus()
-      const d = JSON.parse(ev.data)
-      if (planBlock) {
-        const p = d.plan
-        planBlock.innerHTML = `<h4>Planned</h4><p><strong>Will build:</strong> ${esc(p.willBuild)}</p><p><strong>Will not touch:</strong> ${esc(p.willNotTouch)}</p>` +
-          (p.criteria.length ? `<p><strong>Criteria (${p.criteria.length}):</strong></p><ul>${p.criteria.map(c => `<li>${esc(c.description)} <span class="mono" style="color:var(--muted)">[${esc(c.kind)}]</span></li>`).join('')}</ul>` : '<p style="color:var(--muted)">No new criteria proposed.</p>') +
-          `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-        planBlock.classList.remove('active')
-      }
-    })
-
-    es.addEventListener('question', ev => {
-      const d = JSON.parse(ev.data)
-      const b = stageBlock(log, 's-question', 'Waiting on you — a specific question', 'gate')
-      b.innerHTML += `<div class="gate-box">
-        <p class="waiting-banner"><span class="wb-lead">Paused, waiting for you.</span> This run has
-          stopped, not stalled -- it needs an answer before it can plan anything. Nothing is being spent
-          while it waits. One choice: answer the question below.</p>
-        <p style="margin:0 0 10px">${esc(d.question)}</p>
-        <div class="gate-reply"><textarea id="answer-input" placeholder="Answer in your own words…"></textarea>
-        <button class="btn" id="answer-submit" type="button">Answer</button></div></div>`
-      $('#answer-submit').addEventListener('click', () => {
-        const answer = $('#answer-input').value.trim()
-        if (!answer) return
-        $('#answer-submit').disabled = true
-        fetch(`/change-answer?runId=${encodeURIComponent(runId)}&answer=${encodeURIComponent(answer)}`).then(() => resume())
-      })
-    })
-    es.addEventListener('answered', ev => {
-      const el = $('#s-question'); if (el) el.classList.remove('active')
-    })
-
-    es.addEventListener('plan-gate', ev => {
-      const d = JSON.parse(ev.data)
-      const p = d.plan, g = d.grounding
-      const b = stageBlock(log, 's-gate', 'Gate 1 — waiting for your decision, before any code exists', 'gate')
-      b.innerHTML += `<div class="gate-box">
-        <p class="waiting-banner"><span class="wb-lead">Paused, waiting for you.</span> This run is
-          stopped at Gate 1, not processing -- nothing is being spent while it waits. Three choices:
-          <strong>approve</strong> to start building this, <strong>reject</strong> to stop here, or
-          <strong>reply</strong> below to redirect what it builds.</p>
-        <h5>What it proposes to build</h5>
-        <p style="margin:0 0 10px">${esc(p.willBuild)}</p>
-        <h5>What it will not touch</h5>
-        <p style="margin:0 0 10px">${esc(p.willNotTouch)}</p>
-        ${p.criteria.length ? `<h5>How it will check that (${p.criteria.length} criteri${p.criteria.length === 1 ? 'on' : 'a'})</h5>
-        <ul style="margin:0 0 10px">${p.criteria.map(c => `<li>${esc(c.description)} <span class="mono" style="color:var(--muted)">[${esc(c.kind)}]</span></li>`).join('')}</ul>` : '<p style="margin:0 0 10px;color:var(--muted)">No new criteria proposed.</p>'}
-        ${g && !g.premisesHold ? `<h5>What it can't do, and why</h5>
-        <p style="margin:0 0 10px">${esc(g.reasoning)}</p>` : ''}
-        <p class="personal-note" style="margin:10px 0">Two gates in this pipeline, not one -- I write my own
-          systems the same way. A human decides before anything is built, and again before anything ships.
-          Nothing changes what a visitor sees without someone signing off on it first.</p>
-        <div class="cost-line">Spent so far this run: ${money(d.costEstimateUsd)} · headroom left against the per-run ceiling: ${money(d.budgetRemainingUsd)}</div>
-        <div class="gate-actions">
-          <button class="btn" id="gate-approve">Approve</button>
-          <button class="btn btn-outline" id="gate-reject">Reject</button>
-        </div>
-        <div class="gate-reply">
-          <label class="lab" for="gate-reply-input">Or reply in free text -- this re-grounds and re-plans</label>
-          <textarea id="gate-reply-input" placeholder="e.g. make it simpler, or: I actually meant..."></textarea>
-          <button class="btn btn-outline" id="gate-reply-submit" type="button">Send reply</button>
-        </div>
+  let html = ''
+  if (barState.kind === 'idle') {
+    html = `
+      <label class="lab" for="bar-request-input">Ask the world for something</label>
+      <div class="bar-row">
+        <textarea id="bar-request-input" maxlength="500" placeholder="e.g. add a lamp near the desk that lights up at night"></textarea>
+        <button class="btn" id="bar-submit" type="button">▸ Ground it, then plan it</button>
       </div>`
-      const disableAll = () => { $('#gate-approve').disabled = true; $('#gate-reject').disabled = true; $('#gate-reply-submit').disabled = true }
-      $('#gate-approve').addEventListener('click', () => { disableAll(); fetch(`/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=true`).then(() => resume()) })
-      $('#gate-reject').addEventListener('click', () => { disableAll(); fetch(`/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=false`).then(() => resume()) })
-      $('#gate-reply-submit').addEventListener('click', () => {
-        const reply = $('#gate-reply-input').value.trim()
-        if (!reply) return
-        disableAll()
-        fetch(`/change-plan-reply?runId=${encodeURIComponent(runId)}&reply=${encodeURIComponent(reply)}`).then(() => resume())
-      })
-    })
-    es.addEventListener('plan-gate-decided', ev => {
-      const d = JSON.parse(ev.data)
-      const gateEl = $('#s-gate'); if (gateEl) gateEl.classList.remove('active')
-      const b = stageBlock(log, 's-gate-decided-' + Date.now(), `Gate 1 decision: ${esc(d.decision)}`)
-      b.classList.remove('active')
-    })
-    es.addEventListener('plan-gate-replied', ev => {
-      const d = JSON.parse(ev.data)
-      const gateEl = $('#s-gate'); if (gateEl) gateEl.classList.remove('active')
-      const b = stageBlock(log, 's-gate-replied-' + Date.now(), 'You replied — re-grounding and re-planning')
-      b.innerHTML += `<p style="margin:0;color:var(--ink2)">"${esc(d.reply)}"</p>`
-      b.classList.remove('active')
-    })
+  } else if (barState.kind === 'running') {
+    html = `
+      <span class="bar-kicker">Running</span>
+      <div class="bar-row">
+        <span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span>
+        <span class="bar-stage-label">${esc(barState.stageLabel)}</span>
+        <span class="bar-cost">${money(barState.costUsd)} so far</span>
+        <button class="btn btn-outline" id="bar-stop" type="button">■ Stop</button>
+      </div>`
+  } else if (barState.kind === 'question') {
+    html = `
+      <span class="bar-kicker">It's asking you something</span>
+      <p class="bar-ask"><strong>${esc(barState.question)}</strong></p>
+      <div class="bar-row">
+        <input type="text" id="bar-answer-input" placeholder="Answer in your own words…">
+        <button class="btn" id="bar-answer-submit" type="button">Answer</button>
+      </div>
+      <p class="bar-note">Nothing is being spent while it waits.</p>`
+  } else if (barState.kind === 'plan-gate') {
+    html = `
+      <span class="bar-kicker">Gate 1 — your decision, before any code exists</span>
+      <p class="bar-ask">Approve to start building this, reject to stop here, or reply to redirect it. The full proposal is in the log above.</p>
+      <div class="bar-row">
+        <button class="btn" id="bar-approve" type="button">Approve</button>
+        <button class="btn btn-outline" id="bar-reject" type="button">Reject</button>
+        <button class="btn btn-outline" id="bar-reply-toggle" type="button">Reply instead…</button>
+      </div>
+      <div class="bar-reply-row" id="bar-reply-row">
+        <input type="text" id="bar-reply-input" placeholder="e.g. make it simpler, or: I actually meant...">
+        <button class="btn btn-outline" id="bar-reply-submit" type="button">Send reply</button>
+      </div>
+      <p class="bar-note">Nothing is being spent while it waits.</p>`
+  } else if (barState.kind === 'review-gate') {
+    html = `
+      <span class="bar-kicker">Gate 2 — your decision, the reviewer found something</span>
+      <p class="bar-ask">${barState.material} material finding(s). Approve a fix round to address them, or reject to ship as-is.</p>
+      <div class="bar-row">
+        <button class="btn" id="bar-rapprove" type="button">Approve a fix round</button>
+        <button class="btn btn-outline" id="bar-rreject" type="button">Reject, ship as-is</button>
+      </div>
+      <p class="bar-note">Nothing is being spent while it waits.</p>`
+  } else if (barState.kind === 'done') {
+    html = `
+      <span class="bar-kicker">${barState.ok ? 'Finished' : 'Stopped'}</span>
+      <p class="bar-ask">${esc(barState.summary)}</p>
+      <div class="bar-row"><button class="btn" id="bar-restart" type="button">▸ Start another request</button></div>`
+  }
+  barInner.innerHTML = html
 
-    es.addEventListener('implementing', () => {
-      implBlock = stageBlock(log, 's-implement', 'Implement')
-      stopStatus = startStatusRotation(implBlock, 'implementing')
+  if (barState.kind === 'idle') {
+    $('#bar-submit').addEventListener('click', startRun)
+    $('#bar-request-input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startRun() } })
+  } else if (barState.kind === 'running') {
+    $('#bar-stop').addEventListener('click', () => {
+      $('#bar-stop').disabled = true
+      $('#bar-stop').textContent = 'Stopping…'
+      fetch(`/change-stop?runId=${encodeURIComponent(currentRunId)}`)
     })
-    es.addEventListener('implemented', ev => {
-      stopStatus()
-      const d = JSON.parse(ev.data)
-      implCode = d.code
-      if (implBlock) {
-        implBlock.innerHTML = `<h4>Implemented</h4>` + (currentSource ? renderDiff(currentSource, d.code) : `<pre>${esc(d.code)}</pre>`) +
-          `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-        implBlock.classList.remove('active')
-      }
+  } else if (barState.kind === 'question') {
+    $('#bar-answer-submit').addEventListener('click', () => {
+      const answer = $('#bar-answer-input').value.trim()
+      if (!answer) return
+      $('#bar-answer-submit').disabled = true
+      fetch(`/change-answer?runId=${encodeURIComponent(currentRunId)}&answer=${encodeURIComponent(answer)}`).then(() => resumeCurrent())
     })
-
-    es.addEventListener('verifying', () => {
-      verifyBlock = stageBlock(log, 's-verify-' + Date.now(), 'Verify — in the real sandbox')
-      stopStatus = startStatusRotation(verifyBlock, 'verifying')
+  } else if (barState.kind === 'plan-gate') {
+    const disableAll = () => { $('#bar-approve').disabled = true; $('#bar-reject').disabled = true; $('#bar-reply-submit') && ($('#bar-reply-submit').disabled = true) }
+    $('#bar-approve').addEventListener('click', () => { disableAll(); fetch(`/change-plan-decision?runId=${encodeURIComponent(currentRunId)}&approve=true`).then(() => resumeCurrent()) })
+    $('#bar-reject').addEventListener('click', () => { disableAll(); fetch(`/change-plan-decision?runId=${encodeURIComponent(currentRunId)}&approve=false`).then(() => resumeCurrent()) })
+    $('#bar-reply-toggle').addEventListener('click', () => { $('#bar-reply-row').classList.toggle('open'); setBarHeight() })
+    $('#bar-reply-submit').addEventListener('click', () => {
+      const reply = $('#bar-reply-input').value.trim()
+      if (!reply) return
+      disableAll()
+      fetch(`/change-plan-reply?runId=${encodeURIComponent(currentRunId)}&reply=${encodeURIComponent(reply)}`).then(() => resumeCurrent())
     })
-    function renderVerified(d, block, label) {
-      stopStatus()
-      if (!block) return
-      const total = d.regressionTotal + d.criteriaTotal
-      const passed = d.regressionPassed + d.criteriaPassed
-      block.innerHTML = `<h4>${label} — ${passed === total ? 'all checks passed' : `${passed}/${total} passed`}</h4>` +
-        `<p class="root-cause-line">Regression: ${d.regressionPassed}/${d.regressionTotal} · Criteria: ${d.criteriaPassed}/${d.criteriaTotal}</p>` +
-        renderTests([...d.regression, ...d.criteria]) + (d.fatalError ? `<div class="summary-line">${esc(d.fatalError)}</div>` : '')
-      block.classList.remove('active')
-      block.classList.toggle('fail', passed !== total)
-    }
-    es.addEventListener('verified', ev => renderVerified(JSON.parse(ev.data), verifyBlock, 'Verified'))
-    es.addEventListener('reverified', ev => {
-      const b = stageBlock(log, 's-reverify-' + Date.now(), 'Re-verify after fix')
-      renderVerified(JSON.parse(ev.data), b, 'Re-verified')
-    })
-
-    es.addEventListener('reviewing', () => {
-      reviewBlock = stageBlock(log, 's-review', 'Cross-model review')
-      stopStatus = startStatusRotation(reviewBlock, 'reviewing')
-    })
-    es.addEventListener('reviewed', ev => {
-      stopStatus()
-      const d = JSON.parse(ev.data)
-      if (reviewBlock) {
-        const material = d.findings.filter(f => f.severity === 'MATERIAL').map(f => f.text)
-        const nits = d.findings.filter(f => f.severity === 'NIT').map(f => f.text)
-        reviewBlock.innerHTML = `<h4>Reviewed by a different model, from a different vendor</h4>` +
-          `<details><summary style="cursor:pointer;color:var(--muted);font-size:13px">Full review text</summary><pre>${esc(d.reviewText)}</pre></details>` +
-          `<div style="margin-top:8px">${renderFindings(material, nits)}</div>` +
-          `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-        reviewBlock.classList.remove('active')
-      }
-    })
-
-    es.addEventListener('review-gate', ev => {
-      const d = JSON.parse(ev.data)
-      const b = stageBlock(log, 's-review-gate', 'Gate 2 — waiting on you, the reviewer found something', 'gate')
-      b.innerHTML += `<div class="gate-box">
-        <p class="waiting-banner"><span class="wb-lead">Paused, waiting for you.</span> This run is
-          stopped at Gate 2, not processing -- nothing is being spent while it waits. Two choices:
-          <strong>approve a fix round</strong> to address what the reviewer found, or
-          <strong>reject</strong> to ship as-is.</p>
-        <h5>${d.materialFindings.length} material finding(s)</h5>` +
-        renderFindings(d.materialFindings, d.nitFindings) +
-        `<p class="personal-note" style="margin:10px 0">Material versus nit is my call here, not the model's.
-        A reviewer that flags everything is as useless as one that flags nothing -- deciding what actually
-        matters is the judgment I don't hand off.</p>` +
-        `<div class="gate-actions"><button class="btn" id="rgate-approve">Approve a fix round</button><button class="btn btn-outline" id="rgate-reject">Reject, ship as-is</button></div></div>`
-      $('#rgate-approve').addEventListener('click', () => { $('#rgate-approve').disabled = true; $('#rgate-reject').disabled = true; fetch(`/change-review-decision?runId=${encodeURIComponent(runId)}&approve=true`).then(() => resume()) })
-      $('#rgate-reject').addEventListener('click', () => { $('#rgate-approve').disabled = true; $('#rgate-reject').disabled = true; fetch(`/change-review-decision?runId=${encodeURIComponent(runId)}&approve=false`).then(() => resume()) })
-    })
-    es.addEventListener('review-gate-decided', ev => {
-      const d = JSON.parse(ev.data)
-      const gateEl = $('#s-review-gate'); if (gateEl) gateEl.classList.remove('active')
-      const b = stageBlock(log, 's-review-gate-decided', `Gate 2 decision: ${esc(d.decision)}`)
-      b.classList.remove('active')
-    })
-
-    es.addEventListener('fixing', () => {
-      fixBlock = stageBlock(log, 's-fix', 'Fix')
-      stopStatus = startStatusRotation(fixBlock, 'fixing')
-    })
-    es.addEventListener('fixed', ev => {
-      stopStatus()
-      const d = JSON.parse(ev.data)
-      if (fixBlock) {
-        fixBlock.innerHTML = `<h4>Fixed</h4>` + (implCode ? renderDiff(implCode, d.code) : `<pre>${esc(d.code)}</pre>`) +
-          `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-        fixBlock.classList.remove('active')
-      }
-    })
-
-    es.addEventListener('shipped', () => {
-      const b = stageBlock(log, 's-shipped', '✓ Shipped — the world now runs this')
-      b.classList.remove('active')
-      bootWorld() // reload the world from the new live source
-    })
-    es.addEventListener('refused', ev => {
-      const d = JSON.parse(ev.data)
-      const b = stageBlock(log, 's-refused-' + Date.now(), 'Refused to ship')
-      b.classList.add('error'); b.classList.remove('active')
-      b.innerHTML += `<p style="margin:0">${esc(d.reason)}</p>` +
-        `<p class="personal-note" style="margin:10px 0 0">I wanted a system that could actually tell me no.
-        That's harder to build than one that always finds a way to say yes -- it means grounding has to run
-        before planning, a refusal has to cite the specific thing that's false, and nothing ships just
-        because it technically compiled.</p>`
-    })
-
-    es.addEventListener('retrospective', ev => {
-      const d = JSON.parse(ev.data)
-      if (d.lesson) {
-        const b = stageBlock(log, 's-retro-' + Date.now(), 'Retrospective')
-        b.classList.remove('active')
-        b.innerHTML += `<p style="margin:0;color:var(--ink2)">${esc(d.lesson)}${d.recurrenceCount ? ` <span class="mono" style="color:var(--muted)">(seen ${d.recurrenceCount}x)</span>` : ''}</p>`
-      }
-    })
-
-    es.addEventListener('ledger', ev => {
-      const d = JSON.parse(ev.data).ledger
-      const b = stageBlock(log, 's-ledger-' + Date.now(), 'Ledger')
-      b.classList.remove('active')
-      b.innerHTML += '<div class="wrapx"><table><thead><tr><th>Stage</th><th class="num">Cost</th></tr></thead><tbody>' +
-        d.stageCosts.map(s => `<tr><td>${esc(s.stage)}</td><td class="num mono">${money(s.costUsd)}</td></tr>`).join('') +
-        `<tr><td><strong>Total</strong></td><td class="num mono headline-cell">${money(d.totalCostUsd)}</td></tr></tbody></table></div>` +
-        `<p style="margin-top:8px">Review found <strong>${d.reviewFoundMaterial} material</strong> and <strong>${d.reviewFoundNits} nit</strong> finding(s)` +
-        (d.planGateReplyCount ? `, after ${d.planGateReplyCount} Gate 1 repl${d.planGateReplyCount === 1 ? 'y' : 'ies'}` : '') + `.` +
-        (d.fixApplied ? ` A fix round ran and ${d.fixHeld ? 'held.' : 'did not fully hold -- disclosed above, not hidden.'}` : '') + `</p>` +
-        `<div class="summary-line">${(d.totalWallTimeMs / 1000).toFixed(1)}s total wall time</div>`
-    })
-
-    es.addEventListener('halted', () => { stopStatus(); es.close() })
-    es.addEventListener('done', () => {
-      stopStatus()
-      es.close()
-      reconnectAttempts = 0 // a clean segment finished -- reset the allowance for the next one
-      runBtn.disabled = false
-      runBtn.innerHTML = '▸ Ground it, then plan it'
-      loadBudget()
-    })
-    // A named `error` SSE event from the server (a real pipeline failure)
-    // arrives as a MessageEvent with parseable JSON in ev.data. A dropped
-    // connection -- network blip, a proxy's own idle timeout, a
-    // backgrounded tab waking up -- fires the SAME 'error' listener but as
-    // a plain Event with no .data at all. Only the first kind is actually
-    // fatal. The run's state is persisted server-side (STATE_TTL_SEC in
-    // changePipeline.ts, up to a week), so the second kind is a display
-    // problem, not a run-ending one -- reconnect and re-attach instead of
-    // abandoning it. CITY.md item 0.
-    es.addEventListener('error', ev => {
-      let serverMessage = null
-      try { serverMessage = JSON.parse(ev.data).message } catch (_) {}
-      es.close()
-      if (serverMessage !== null) {
-        stopStatus()
-        const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
-        b.classList.add('error'); b.classList.remove('active')
-        b.innerHTML += `<p style="margin:0">${esc(serverMessage)}</p>`
-        runBtn.disabled = false
-        runBtn.innerHTML = '▸ Ground it, then plan it'
-        loadBudget()
-        return
-      }
-      if (!runId) {
-        stopStatus()
-        const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
-        b.classList.add('error'); b.classList.remove('active')
-        b.innerHTML += `<p style="margin:0">Connection to the pipeline stream was lost before a run ID was assigned. Try again.</p>`
-        runBtn.disabled = false
-        runBtn.innerHTML = '▸ Ground it, then plan it'
-        loadBudget()
-        return
-      }
-      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-        stopStatus()
-        const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
-        b.classList.add('error'); b.classList.remove('active')
-        b.innerHTML += `<p style="margin:0">The connection kept dropping after ${MAX_RECONNECT_ATTEMPTS} reconnect attempts. Nothing is lost -- this run is still saved.</p>
-          <button class="btn btn-outline" id="manual-reconnect-${runId}" type="button" style="margin-top:8px">Try reconnecting again</button>`
-        $(`#manual-reconnect-${runId}`).addEventListener('click', () => { reconnectAttempts = 0; b.remove(); resume() })
-        runBtn.disabled = false
-        runBtn.innerHTML = '▸ Ground it, then plan it'
-        loadBudget()
-        return
-      }
-      const delay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempts, RECONNECT_DELAYS_MS.length - 1)]
-      reconnectAttempts++
-      const b = stageBlock(log, 's-reconnect-' + Date.now(), 'Reconnecting…')
-      b.innerHTML += `<p style="margin:0;color:var(--muted)">The connection dropped. Nothing was lost -- this run is saved server-side. Reconnecting in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})…</p>`
-      setTimeout(() => { b.remove(); resume() }, delay)
-    })
+  } else if (barState.kind === 'review-gate') {
+    const disableAll = () => { $('#bar-rapprove').disabled = true; $('#bar-rreject').disabled = true }
+    $('#bar-rapprove').addEventListener('click', () => { disableAll(); fetch(`/change-review-decision?runId=${encodeURIComponent(currentRunId)}&approve=true`).then(() => resumeCurrent()) })
+    $('#bar-rreject').addEventListener('click', () => { disableAll(); fetch(`/change-review-decision?runId=${encodeURIComponent(currentRunId)}&approve=false`).then(() => resumeCurrent()) })
+  } else if (barState.kind === 'done') {
+    $('#bar-restart').addEventListener('click', () => { barState = { kind: 'idle' }; renderBar() })
   }
 
-  function resume() { connect(`/change-resume?runId=${encodeURIComponent(runId)}`) }
+  setBarHeight()
 
-  currentSource = world ? null : null // captured lazily via /world-source below
+  // A person who looked away and glanced back must register the change
+  // immediately, not just from different wording -- a colour change plus a
+  // one-shot flash, and focus moved to the first real control, but only on
+  // the actual transition into a state that needs the visitor, never on a
+  // same-state re-render (a cost update while running must not steal focus).
+  if (barState.kind !== lastRenderedKind) {
+    if (needsYou && !reducedMotionBar) {
+      bar.classList.add('bar-flash')
+      bar.addEventListener('animationend', () => bar.classList.remove('bar-flash'), { once: true })
+    }
+    const toFocus = barState.kind === 'question' ? '#bar-answer-input'
+      : barState.kind === 'plan-gate' ? '#bar-approve'
+      : barState.kind === 'review-gate' ? '#bar-rapprove'
+      : null
+    if (toFocus) { const el = $(toFocus); if (el) el.focus() }
+    lastRenderedKind = barState.kind
+  }
+}
+renderBar()
+window.addEventListener('resize', setBarHeight)
+
+// ---------- the live change-pipeline run ----------
+
+let currentRunId = null
+let implCode = null, currentSource = null
+let reconnectAttempts = 0
+let runningCostUsd = 0
+const MAX_RECONNECT_ATTEMPTS = 5
+const RECONNECT_DELAYS_MS = [2000, 4000, 8000, 15000, 30000]
+
+function addCost(usd) {
+  runningCostUsd += usd || 0
+  if (barState.kind === 'running') { barState.costUsd = runningCostUsd; renderBar() }
+}
+function setRunning(stageLabel) {
+  barState = { kind: 'running', stageLabel, costUsd: runningCostUsd }
+  renderBar()
+}
+
+function startRun() {
+  const text = $('#bar-request-input').value.trim()
+  if (!text) return
+  log.innerHTML = ''
+  currentRunId = null
+  implCode = null
+  reconnectAttempts = 0
+  runningCostUsd = 0
+  setRunning('Starting…')
+  currentSource = null
   fetch(`./world-source?t=${Date.now()}`).then(r => r.text()).then(t => { currentSource = t.replace(/\n\nexport[\s\S]*$/, '') })
   connect(`/change-run?request=${encodeURIComponent(text)}`)
-})
+}
+function resumeCurrent() { connect(`/change-resume?runId=${encodeURIComponent(currentRunId)}`) }
+
+function connect(url) {
+  const es = new EventSource(url)
+  let groundBlock = null, planBlock = null, implBlock = null, verifyBlock = null, reviewBlock = null, fixBlock = null
+  let stopStatus = () => {}
+
+  es.addEventListener('runId', ev => { currentRunId = JSON.parse(ev.data).runId })
+
+  es.addEventListener('grounding', () => {
+    setRunning('Grounding — checking this against the real code')
+    groundBlock = stageBlock(log, 's-ground-' + Date.now(), 'Grounding — checking this against the real current code')
+    stopStatus = startStatusRotation(groundBlock, 'grounding')
+  })
+  es.addEventListener('grounded', ev => {
+    stopStatus()
+    const d = JSON.parse(ev.data)
+    addCost(d.costUsd)
+    if (groundBlock) {
+      const r = d.result
+      groundBlock.innerHTML = `<h4>Grounded</h4><p style="margin:0 0 6px">${r.premisesHold ? '<strong>Every premise checked out.</strong>' : '<strong>Found something the request assumes that is not true.</strong>'}</p>` +
+        (r.falsePremises.length ? '<ul>' + r.falsePremises.map(p => `<li>${esc(p)}</li>`).join('') + '</ul>' : '') +
+        `<p style="margin:6px 0 0;color:var(--ink2)">${esc(r.reasoning)}</p>` +
+        (r.alternatives.length ? `<p class="summary-line" style="margin-top:8px">What the structure can support instead: ${r.alternatives.map(esc).join('; ')}</p>` : '') +
+        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+      groundBlock.classList.remove('active')
+    }
+  })
+
+  es.addEventListener('planning', () => {
+    setRunning('Planning')
+    planBlock = stageBlock(log, 's-plan-' + Date.now(), 'Plan')
+    stopStatus = startStatusRotation(planBlock, 'planning')
+  })
+  es.addEventListener('planned', ev => {
+    stopStatus()
+    const d = JSON.parse(ev.data)
+    addCost(d.costUsd)
+    if (planBlock) {
+      const p = d.plan
+      // FINAL.md item 3: structure over prose, in this order -- what it
+      // wants to do, what it will not do, how it will know it worked --
+      // before any technical detail. Reasoning stays available, collapsed.
+      planBlock.innerHTML = `<h4>Planned</h4>` +
+        `<p><strong>What it wants to do:</strong> ${esc(p.willBuild)}</p>` +
+        `<p><strong>What it will not do:</strong> ${esc(p.willNotTouch)}</p>` +
+        (p.criteria.length ? `<p><strong>How it will know it worked (${p.criteria.length}):</strong></p><ul>${p.criteria.map(c => `<li>${esc(c.description)} <span class="mono" style="color:var(--muted)">[${esc(c.kind)}]</span></li>`).join('')}</ul>` : '<p style="color:var(--muted)">No new criteria proposed.</p>') +
+        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+      planBlock.classList.remove('active')
+    }
+  })
+
+  es.addEventListener('question', ev => {
+    const d = JSON.parse(ev.data)
+    const b = stageBlock(log, 's-question', 'A question, before it can plan further')
+    b.classList.remove('active')
+    b.innerHTML += `<p class="bar-ask" style="font-weight:600">${esc(d.question)}</p>
+      <p style="margin:6px 0 0;color:var(--muted);font-size:13px">Answered from the bar below.</p>`
+    barState = { kind: 'question', question: d.question }
+    renderBar()
+  })
+  es.addEventListener('answered', ev => {
+    const d = JSON.parse(ev.data)
+    const b = stageBlock(log, 's-answered-' + Date.now(), 'You answered')
+    b.classList.remove('active')
+    b.innerHTML += `<p style="margin:0;color:var(--ink2)">"${esc(d.answer)}"</p>`
+  })
+
+  es.addEventListener('plan-gate', ev => {
+    const d = JSON.parse(ev.data)
+    const p = d.plan, g = d.grounding
+    const b = stageBlock(log, 's-gate', 'Gate 1 — a proposal, before any code exists')
+    b.classList.remove('active')
+    // FINAL.md item 3: what / won't / how, in that order, before detail.
+    // The reasoning behind a false premise stays available, not first.
+    b.innerHTML += `
+      <p><strong>What it wants to do:</strong> ${esc(p.willBuild)}</p>
+      <p><strong>What it will not do:</strong> ${esc(p.willNotTouch)}</p>
+      ${p.criteria.length ? `<p><strong>How it will know it worked (${p.criteria.length}):</strong></p>
+      <ul>${p.criteria.map(c => `<li>${esc(c.description)} <span class="mono" style="color:var(--muted)">[${esc(c.kind)}]</span></li>`).join('')}</ul>` : '<p style="color:var(--muted)">No new criteria proposed.</p>'}
+      ${g && !g.premisesHold ? `<details style="margin-top:6px"><summary style="cursor:pointer;color:var(--muted);font-size:13px">What it can't do, and why</summary><p style="margin:6px 0 0;color:var(--ink2)">${esc(g.reasoning)}</p></details>` : ''}
+      <div class="cost-line">Spent so far this run: ${money(d.costEstimateUsd)} · headroom left against the per-run ceiling: ${money(d.budgetRemainingUsd)}</div>
+      <p style="margin-top:8px;color:var(--muted);font-size:13px">Decide from the bar below.</p>`
+    barState = { kind: 'plan-gate' }
+    renderBar()
+  })
+  es.addEventListener('plan-gate-decided', ev => {
+    const d = JSON.parse(ev.data)
+    const b = stageBlock(log, 's-gate-decided-' + Date.now(), `Gate 1 decision: ${esc(d.decision)}`)
+    b.classList.remove('active')
+  })
+  es.addEventListener('plan-gate-replied', ev => {
+    const d = JSON.parse(ev.data)
+    const b = stageBlock(log, 's-gate-replied-' + Date.now(), 'You replied — re-grounding and re-planning')
+    b.innerHTML += `<p style="margin:0;color:var(--ink2)">"${esc(d.reply)}"</p>`
+    b.classList.remove('active')
+  })
+
+  es.addEventListener('implementing', () => {
+    setRunning('Implementing')
+    implBlock = stageBlock(log, 's-implement', 'Implement')
+    stopStatus = startStatusRotation(implBlock, 'implementing')
+  })
+  es.addEventListener('implemented', ev => {
+    stopStatus()
+    const d = JSON.parse(ev.data)
+    addCost(d.costUsd)
+    implCode = d.code
+    if (implBlock) {
+      implBlock.innerHTML = `<h4>Implemented</h4>` + (currentSource ? renderDiff(currentSource, d.code) : `<pre>${esc(d.code)}</pre>`) +
+        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+      implBlock.classList.remove('active')
+    }
+  })
+
+  es.addEventListener('verifying', () => {
+    setRunning('Verifying — in the real sandbox')
+    verifyBlock = stageBlock(log, 's-verify-' + Date.now(), 'Verify — in the real sandbox')
+    stopStatus = startStatusRotation(verifyBlock, 'verifying')
+  })
+  function renderVerified(d, block, label) {
+    stopStatus()
+    if (!block) return
+    const total = d.regressionTotal + d.criteriaTotal
+    const passed = d.regressionPassed + d.criteriaPassed
+    block.innerHTML = `<h4>${label} — ${passed === total ? 'all checks passed' : `${passed}/${total} passed`}</h4>` +
+      `<p class="root-cause-line">Regression: ${d.regressionPassed}/${d.regressionTotal} · Criteria: ${d.criteriaPassed}/${d.criteriaTotal}</p>` +
+      renderTests([...d.regression, ...d.criteria]) + (d.fatalError ? `<div class="summary-line">${esc(d.fatalError)}</div>` : '')
+    block.classList.remove('active')
+    block.classList.toggle('fail', passed !== total)
+  }
+  es.addEventListener('verified', ev => renderVerified(JSON.parse(ev.data), verifyBlock, 'Verified'))
+  es.addEventListener('reverified', ev => {
+    const b = stageBlock(log, 's-reverify-' + Date.now(), 'Re-verify after fix')
+    renderVerified(JSON.parse(ev.data), b, 'Re-verified')
+  })
+
+  es.addEventListener('reviewing', () => {
+    setRunning('Reviewing — a different model, a different vendor')
+    reviewBlock = stageBlock(log, 's-review', 'Cross-model review')
+    stopStatus = startStatusRotation(reviewBlock, 'reviewing')
+  })
+  es.addEventListener('reviewed', ev => {
+    stopStatus()
+    const d = JSON.parse(ev.data)
+    addCost(d.costUsd)
+    if (reviewBlock) {
+      const material = d.findings.filter(f => f.severity === 'MATERIAL').map(f => f.text)
+      const nits = d.findings.filter(f => f.severity === 'NIT').map(f => f.text)
+      reviewBlock.innerHTML = `<h4>Reviewed by a different model, from a different vendor</h4>` +
+        `<details><summary style="cursor:pointer;color:var(--muted);font-size:13px">Full review text</summary><pre>${esc(d.reviewText)}</pre></details>` +
+        `<div style="margin-top:8px">${renderFindings(material, nits)}</div>` +
+        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+      reviewBlock.classList.remove('active')
+    }
+  })
+
+  es.addEventListener('review-gate', ev => {
+    const d = JSON.parse(ev.data)
+    const b = stageBlock(log, 's-review-gate', 'Gate 2 — the reviewer found something')
+    b.classList.remove('active')
+    b.innerHTML += `<p><strong>${d.materialFindings.length} material finding(s)</strong></p>` +
+      renderFindings(d.materialFindings, d.nitFindings) +
+      `<p class="personal-note" style="margin:10px 0">Material versus nit is my call here, not the model's.
+      A reviewer that flags everything is as useless as one that flags nothing -- deciding what actually
+      matters is the judgment I don't hand off.</p>` +
+      `<p style="margin-top:4px;color:var(--muted);font-size:13px">Decide from the bar below.</p>`
+    barState = { kind: 'review-gate', material: d.materialFindings.length }
+    renderBar()
+  })
+  es.addEventListener('review-gate-decided', ev => {
+    const d = JSON.parse(ev.data)
+    const b = stageBlock(log, 's-review-gate-decided', `Gate 2 decision: ${esc(d.decision)}`)
+    b.classList.remove('active')
+  })
+
+  es.addEventListener('fixing', () => {
+    setRunning('Fixing')
+    fixBlock = stageBlock(log, 's-fix', 'Fix')
+    stopStatus = startStatusRotation(fixBlock, 'fixing')
+  })
+  es.addEventListener('fixed', ev => {
+    stopStatus()
+    const d = JSON.parse(ev.data)
+    addCost(d.costUsd)
+    if (fixBlock) {
+      fixBlock.innerHTML = `<h4>Fixed</h4>` + (implCode ? renderDiff(implCode, d.code) : `<pre>${esc(d.code)}</pre>`) +
+        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+      fixBlock.classList.remove('active')
+    }
+  })
+
+  es.addEventListener('shipped', () => {
+    const b = stageBlock(log, 's-shipped', '✓ Shipped — the world now runs this')
+    b.classList.remove('active')
+    bootWorld() // reload the world from the new live source
+    barState = { kind: 'done', ok: true, summary: 'Shipped. The world now runs this.' }
+    renderBar()
+  })
+  es.addEventListener('refused', ev => {
+    const d = JSON.parse(ev.data)
+    const b = stageBlock(log, 's-refused-' + Date.now(), 'Refused to ship')
+    b.classList.add('error'); b.classList.remove('active')
+    b.innerHTML += `<p style="margin:0">${esc(d.reason)}</p>` +
+      `<p class="personal-note" style="margin:10px 0 0">I wanted a system that could actually tell me no.
+      That's harder to build than one that always finds a way to say yes -- it means grounding has to run
+      before planning, a refusal has to cite the specific thing that's false, and nothing ships just
+      because it technically compiled.</p>`
+    barState = { kind: 'done', ok: false, summary: 'Refused: ' + d.reason }
+    renderBar()
+  })
+  es.addEventListener('stopped', () => {
+    const b = stageBlock(log, 's-stopped-' + Date.now(), 'Stopped')
+    b.classList.remove('active')
+    b.innerHTML += `<p style="margin:0;color:var(--ink2)">Stopped at your request. Nothing further was spent.</p>`
+    barState = { kind: 'done', ok: false, summary: 'Stopped. Nothing further was spent.' }
+    renderBar()
+  })
+
+  es.addEventListener('retrospective', ev => {
+    const d = JSON.parse(ev.data)
+    addCost(d.costUsd)
+    if (d.lesson) {
+      const b = stageBlock(log, 's-retro-' + Date.now(), 'Retrospective')
+      b.classList.remove('active')
+      b.innerHTML += `<p style="margin:0;color:var(--ink2)">${esc(d.lesson)}${d.recurrenceCount ? ` <span class="mono" style="color:var(--muted)">(seen ${d.recurrenceCount}x)</span>` : ''}</p>`
+    }
+  })
+
+  es.addEventListener('ledger', ev => {
+    const d = JSON.parse(ev.data).ledger
+    const b = stageBlock(log, 's-ledger-' + Date.now(), 'Ledger')
+    b.classList.remove('active')
+    b.innerHTML += '<div class="wrapx"><table><thead><tr><th>Stage</th><th class="num">Cost</th></tr></thead><tbody>' +
+      d.stageCosts.map(s => `<tr><td>${esc(s.stage)}</td><td class="num mono">${money(s.costUsd)}</td></tr>`).join('') +
+      `<tr><td><strong>Total</strong></td><td class="num mono headline-cell">${money(d.totalCostUsd)}</td></tr></tbody></table></div>` +
+      `<p style="margin-top:8px">Review found <strong>${d.reviewFoundMaterial} material</strong> and <strong>${d.reviewFoundNits} nit</strong> finding(s)` +
+      (d.planGateReplyCount ? `, after ${d.planGateReplyCount} Gate 1 repl${d.planGateReplyCount === 1 ? 'y' : 'ies'}` : '') + `.` +
+      (d.fixApplied ? ` A fix round ran and ${d.fixHeld ? 'held.' : 'did not fully hold -- disclosed above, not hidden.'}` : '') + `</p>` +
+      `<div class="summary-line">${(d.totalWallTimeMs / 1000).toFixed(1)}s total wall time</div>`
+  })
+
+  es.addEventListener('halted', () => { stopStatus(); es.close() })
+  es.addEventListener('done', () => {
+    stopStatus()
+    es.close()
+    reconnectAttempts = 0 // a clean segment finished -- reset the allowance for the next one
+    loadBudget()
+  })
+  // A named `error` SSE event from the server (a real pipeline failure)
+  // arrives as a MessageEvent with parseable JSON in ev.data. A dropped
+  // connection -- network blip, a proxy's own idle timeout, a
+  // backgrounded tab waking up -- fires the SAME 'error' listener but as
+  // a plain Event with no .data at all. Only the first kind is actually
+  // fatal. The run's state is persisted server-side (STATE_TTL_SEC in
+  // changePipeline.ts, up to a week), so the second kind is a display
+  // problem, not a run-ending one -- reconnect and re-attach instead of
+  // abandoning it. CITY.md item 0.
+  es.addEventListener('error', ev => {
+    let serverMessage = null
+    try { serverMessage = JSON.parse(ev.data).message } catch (_) {}
+    es.close()
+    if (serverMessage !== null) {
+      stopStatus()
+      const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
+      b.classList.add('error'); b.classList.remove('active')
+      b.innerHTML += `<p style="margin:0">${esc(serverMessage)}</p>`
+      barState = { kind: 'done', ok: false, summary: serverMessage }
+      renderBar()
+      loadBudget()
+      return
+    }
+    if (!currentRunId) {
+      stopStatus()
+      const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
+      b.classList.add('error'); b.classList.remove('active')
+      b.innerHTML += `<p style="margin:0">Connection to the pipeline stream was lost before a run ID was assigned. Try again.</p>`
+      barState = { kind: 'done', ok: false, summary: 'Connection lost before a run ID was assigned. Try again.' }
+      renderBar()
+      loadBudget()
+      return
+    }
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      stopStatus()
+      const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
+      b.classList.add('error'); b.classList.remove('active')
+      b.innerHTML += `<p style="margin:0">The connection kept dropping after ${MAX_RECONNECT_ATTEMPTS} reconnect attempts. Nothing is lost -- this run is still saved.</p>
+        <button class="btn btn-outline" id="manual-reconnect-${currentRunId}" type="button" style="margin-top:8px">Try reconnecting again</button>`
+      $(`#manual-reconnect-${currentRunId}`).addEventListener('click', () => { reconnectAttempts = 0; b.remove(); resumeCurrent() })
+      loadBudget()
+      return
+    }
+    const delay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempts, RECONNECT_DELAYS_MS.length - 1)]
+    reconnectAttempts++
+    const b = stageBlock(log, 's-reconnect-' + Date.now(), 'Reconnecting…')
+    b.innerHTML += `<p style="margin:0;color:var(--muted)">The connection dropped. Nothing was lost -- this run is saved server-side. Reconnecting in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})…</p>`
+    setTimeout(() => { b.remove(); resumeCurrent() }, delay)
+  })
+}
 </script>
 
 </body>

@@ -80,11 +80,12 @@ export type ChangeEvent =
   | { type: "reverified"; regression: TestResult[]; criteria: TestResult[]; regressionPassed: number; regressionTotal: number; criteriaPassed: number; criteriaTotal: number; fatalError?: string }
   | { type: "shipped" }
   | { type: "refused"; reason: string }
+  | { type: "stopped" }
   | { type: "halted"; runId: string; waitingOn: "answer" | "plan-decision" | "review-decision" }
   | { type: "ledger"; ledger: ChangeLedger };
 
 export interface ChangeLedger {
-  outcome: "shipped" | "refused-plan" | "refused-verification" | "halted-awaiting-answer" | "halted-awaiting-plan-decision" | "halted-awaiting-review-decision";
+  outcome: "shipped" | "refused-plan" | "refused-verification" | "stopped" | "halted-awaiting-answer" | "halted-awaiting-plan-decision" | "halted-awaiting-review-decision";
   totalCostUsd: number;
   stageCosts: { stage: string; costUsd: number }[];
   reviewFoundMaterial: number;
@@ -252,6 +253,51 @@ export async function checkAnswer(kv: KVNamespace, key: string): Promise<string 
   }
 }
 
+/**
+ * FINAL.md item 2: "a stop action that actually halts the run" -- not a
+ * client-side UI change while the server keeps spending. Reads and
+ * immediately deletes the same kind of one-shot signal a gate decision
+ * uses (change/stop/${runId}), so a stray leftover signal can never fire
+ * twice. A single model call can't be aborted mid-flight from outside it
+ * (bounded instead by STAGE_CALL_TIMEOUT_MS), so this is checked at every
+ * stage boundary in runChangePipeline below, not inside one -- a stop
+ * click halts the run before its NEXT paid call, never mid-call.
+ */
+export async function checkStopped(kv: KVNamespace, runId: string): Promise<boolean> {
+  const raw = await kv.get(`change/stop/${runId}`);
+  if (!raw) return false;
+  await kv.delete(`change/stop/${runId}`).catch(() => {});
+  return true;
+}
+
+function buildStoppedLedger(
+  stageCosts: { stage: string; costUsd: number }[],
+  budget: CallBudget,
+  questionAsked: boolean,
+  planGateReplyCount: number,
+  runStartedAt: number,
+): ChangeLedger {
+  return {
+    outcome: "stopped",
+    totalCostUsd: budget.spent,
+    stageCosts,
+    reviewFoundMaterial: 0,
+    reviewFoundNits: 0,
+    fixApplied: false,
+    fixHeld: null,
+    planGateDecision: "approve",
+    reviewGateDecision: "not-needed",
+    questionAsked,
+    planGateReplyCount,
+    totalWallTimeMs: Date.now() - runStartedAt,
+    // No retrospective call for a stop -- the visitor just asked spending
+    // to stop; running one more model call to reflect on that would
+    // contradict the request in the same motion as honoring it.
+    retrospectiveLesson: null,
+    lessonRecurrenceCount: null,
+  };
+}
+
 export interface ChangeEnv {
   LOADER: import("./sandbox").LoaderBinding;
   SPEND_KV: KVNamespace;
@@ -395,6 +441,15 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   } else if (existing.stage === "awaiting-answer") {
     const answer = await checkAnswer(env.SPEND_KV, `change/answer/${runId}`);
     if (answer === null) {
+      // Only reached here when no real answer was found -- a real answer
+      // always wins over a stray stop signal, never the other way round.
+      if (await checkStopped(env.SPEND_KV, runId)) {
+        await clearState(env.SPEND_KV, runId);
+        const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+        onEvent({ type: "stopped" });
+        onEvent({ type: "ledger", ledger });
+        return { runId, changeRequest, plan: existing.plan, finalCode: null, findings: [], ledger };
+      }
       onEvent({ type: "halted", runId, waitingOn: "answer" });
       const ledger = haltLedger(existing, "answer");
       onEvent({ type: "ledger", ledger });
@@ -435,6 +490,15 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   }
 
   if (planDecision === null) {
+    // Only reached with no real decision or reply found -- same priority
+    // rule as the question gate above: a real decision always wins.
+    if (await checkStopped(env.SPEND_KV, runId)) {
+      await clearState(env.SPEND_KV, runId);
+      const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+      onEvent({ type: "stopped" });
+      onEvent({ type: "ledger", ledger });
+      return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
+    }
     onEvent({ type: "plan-gate", runId, plan, grounding, costEstimateUsd: budget.spent, budgetRemainingUsd: Math.max(0, CONTROL_LIMITS.PER_RUN_CEILING_USD - budget.spent) });
     const state: ChangeState = { runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, planGateReplyCount, runStartedAt, stage: "awaiting-plan-decision", plan, grounding };
     await saveState(env.SPEND_KV, state);
@@ -468,6 +532,17 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       retrospectiveLesson: lesson,
       lessonRecurrenceCount: recurrenceCount,
     };
+    onEvent({ type: "ledger", ledger });
+    return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
+  }
+
+  // Plan approved -- about to spend on implement/verify/fix/review, all in
+  // this one call. Checked here so a stop clicked right after approving
+  // Gate 1 (before any of that starts) is honored instead of ignored.
+  if (await checkStopped(env.SPEND_KV, runId)) {
+    await clearState(env.SPEND_KV, runId);
+    const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+    onEvent({ type: "stopped" });
     onEvent({ type: "ledger", ledger });
     return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
   }
@@ -539,6 +614,13 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       decideStillFailing(verifyFatalError, verifyRegression, verifyCriteria) &&
       convergenceFixAttempts < CONTROL_LIMITS.MAX_FIX_ATTEMPTS
     ) {
+      if (await checkStopped(env.SPEND_KV, runId)) {
+        await clearState(env.SPEND_KV, runId);
+        const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+        onEvent({ type: "stopped" });
+        onEvent({ type: "ledger", ledger });
+        return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
+      }
       convergenceFixAttempts++;
       onEvent({ type: "fixing" });
       const verificationFailures = [
@@ -650,6 +732,16 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   if (material.length > 0) {
     const decision = await checkDecision(env.SPEND_KV, `change/review-decision/${runId}`);
     if (decision === null) {
+      // Same priority rule as the two gates above: only reached with no
+      // real decision found, so a real decision always wins over a stray
+      // stop signal.
+      if (await checkStopped(env.SPEND_KV, runId)) {
+        await clearState(env.SPEND_KV, runId);
+        const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+        onEvent({ type: "stopped" });
+        onEvent({ type: "ledger", ledger });
+        return { runId, changeRequest, plan, finalCode: null, findings, ledger };
+      }
       onEvent({ type: "review-gate", runId, materialFindings: material, nitFindings: nits });
       const state: ChangeState = {
         runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, planGateReplyCount, runStartedAt,
@@ -663,6 +755,14 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     }
     reviewGateDecision = decision;
     onEvent({ type: "review-gate-decided", decision });
+
+    if (decision === "approve" && (await checkStopped(env.SPEND_KV, runId))) {
+      await clearState(env.SPEND_KV, runId);
+      const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+      onEvent({ type: "stopped" });
+      onEvent({ type: "ledger", ledger });
+      return { runId, changeRequest, plan, finalCode: null, findings, ledger };
+    }
 
     if (decision === "approve") {
       onEvent({ type: "fixing" });

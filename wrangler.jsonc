@@ -73,6 +73,7 @@
       "/spend-counter-selftest",
       "/change-instructions",
       "/change-run",
+      "/change-stop",
       "/change-resume",
       "/change-plan-decision",
       "/change-plan-reply",
