@@ -28,7 +28,7 @@ test("existence: a not-yet-existing function is valid, not malformed -- the whol
 });
 
 test("structural: a type that already holds on baseline is vacuous", () => {
-  const c: StructuralCriterion = { kind: "structural", description: "x", fn: "initialWorld", args: [], field: "sims", check: "type", expectedType: "array", minCount: null };
+  const c: StructuralCriterion = { kind: "structural", description: "x", fn: "initialWorld", args: [], field: "sims", check: "typeCheck", expectedType: "array", minCount: null };
   const v = dryRunCriterion(c, baseline);
   assert.equal(v.verdict, "invalid");
 });

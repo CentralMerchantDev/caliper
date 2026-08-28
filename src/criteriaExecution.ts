@@ -98,7 +98,7 @@ export async function evaluateCriterion(criterion: ProposedCriterion, probeCandi
       const r = await probeCandidate(criterion.fn, criterion.args, null);
       if (r.error) return { name: criterion.description, pass: false, fn: criterion.fn, args: criterion.args, error: r.error, stack: r.stack };
       const { present, value } = getField(r.actual, criterion.field);
-      if (criterion.check === "type") {
+      if (criterion.check === "typeCheck") {
         const pass = present && typeMatches(value, criterion.expectedType!);
         return { name: criterion.description, pass, fn: criterion.fn, args: criterion.args, actual: r.actual, expected: `field "${criterion.field}" has type "${criterion.expectedType}"` };
       }

@@ -16,7 +16,7 @@ test("existence: a well-formed criterion is accepted", () => {
 
 test("structural: a well-formed type check is accepted", () => {
   const r = validateProposedCriterion({
-    kind: "structural", description: "pets is an array", fn: "initialWorld", argsJson: "[]", field: "pets", check: "type", expectedType: "array", minCount: null, repeat: null, stationOrEntityKey: null,
+    kind: "structural", description: "pets is an array", fn: "initialWorld", argsJson: "[]", field: "pets", check: "typeCheck", expectedType: "array", minCount: null, repeat: null, stationOrEntityKey: null,
   });
   assert.equal(r.valid, true);
 });
@@ -61,7 +61,7 @@ test("rejects a criterion smuggling a value via 'expectedJson' (the OLD schema's
 // legitimate field (expectedType, which IS part of the real schema) alone?
 test("guardrail: the smuggled-value check does not false-positive on the real 'expectedType' field", () => {
   const r = validateProposedCriterion({
-    kind: "structural", description: "x", fn: "initialWorld", argsJson: "[]", field: "pets", check: "type", expectedType: "array", minCount: null, repeat: null, stationOrEntityKey: null,
+    kind: "structural", description: "x", fn: "initialWorld", argsJson: "[]", field: "pets", check: "typeCheck", expectedType: "array", minCount: null, repeat: null, stationOrEntityKey: null,
   });
   assert.equal(r.valid, true);
 });
@@ -76,7 +76,7 @@ test("malformed argsJson is rejected with a clear reason, not thrown as an uncau
 
 test("structural without a field is rejected", () => {
   const r = validateProposedCriterion({
-    kind: "structural", description: "x", fn: "tick", argsJson: "[{}]", field: null, check: "type", expectedType: "array", minCount: null, repeat: null, stationOrEntityKey: null,
+    kind: "structural", description: "x", fn: "tick", argsJson: "[{}]", field: null, check: "typeCheck", expectedType: "array", minCount: null, repeat: null, stationOrEntityKey: null,
   });
   assert.equal(r.valid, false);
 });

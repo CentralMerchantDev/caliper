@@ -34,14 +34,14 @@ test("existence: fn not defined on the candidate fails with the real error, not 
 });
 
 test("structural: type check passes when the field has the right type", async () => {
-  const c: StructuralCriterion = { kind: "structural", description: "x", fn: "initialWorld", args: [], field: "pets", check: "type", expectedType: "array", minCount: null };
+  const c: StructuralCriterion = { kind: "structural", description: "x", fn: "initialWorld", args: [], field: "pets", check: "typeCheck", expectedType: "array", minCount: null };
   const probe = mockProbe({ initialWorld: { pets: [1] } });
   const r = await evaluateCriterion(c, probe, probe);
   assert.equal(r.pass, true);
 });
 
 test("structural: type check fails when the field has the wrong type", async () => {
-  const c: StructuralCriterion = { kind: "structural", description: "x", fn: "initialWorld", args: [], field: "pets", check: "type", expectedType: "array", minCount: null };
+  const c: StructuralCriterion = { kind: "structural", description: "x", fn: "initialWorld", args: [], field: "pets", check: "typeCheck", expectedType: "array", minCount: null };
   const probe = mockProbe({ initialWorld: { pets: "not an array" } });
   const r = await evaluateCriterion(c, probe, probe);
   assert.equal(r.pass, false);

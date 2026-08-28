@@ -38,8 +38,8 @@ export interface StructuralCriterion {
   fn: string;
   args: unknown[];
   field: string; // dot-path into the result, e.g. "pets" or "pets.0.hunger"
-  check: "type" | "minCount";
-  expectedType: "string" | "number" | "boolean" | "array" | "object" | null; // required when check === "type"
+  check: "typeCheck" | "minCount";
+  expectedType: "string" | "number" | "boolean" | "array" | "object" | null; // required when check === "typeCheck"
   minCount: number | null; // required when check === "minCount"
 }
 
@@ -92,8 +92,8 @@ export const CRITERION_SCHEMA = {
     fn: { type: ["string", "null"], description: "Function name to call. Required for existence/structural/non-regression, null for render." },
     argsJson: { type: ["string", "null"], description: "JSON-encoded array of arguments. Required for existence/structural/non-regression, null for render." },
     field: { type: ["string", "null"], description: "Dot-path field to check. Optional for existence, required for structural, null otherwise." },
-    check: { type: ["string", "null"], enum: ["type", "minCount", null], description: "structural only." },
-    expectedType: { type: ["string", "null"], enum: ["string", "number", "boolean", "array", "object", null], description: 'structural only, when check is "type".' },
+    check: { type: ["string", "null"], enum: ["typeCheck", "minCount", null], description: "structural only." },
+    expectedType: { type: ["string", "null"], enum: ["string", "number", "boolean", "array", "object", null], description: 'structural only, when check is "typeCheck".' },
     minCount: { type: ["number", "null"], description: 'structural only, when check is "minCount".' },
     repeat: { type: ["number", "null"], description: "non-regression only -- call fn this many times, chaining each result into the next call." },
     stationOrEntityKey: { type: ["string", "null"], description: "render only -- must name a real station/entity key." },
@@ -164,11 +164,11 @@ export function validateProposedCriterion(raw: RawCriterion & Record<string, unk
 
     case "structural": {
       if (typeof raw.field !== "string" || raw.field.length === 0) return { valid: false, reason: `criterion "${raw.description}": structural requires a non-empty field` };
-      if (raw.check !== "type" && raw.check !== "minCount") return { valid: false, reason: `criterion "${raw.description}": structural requires check to be "type" or "minCount"` };
-      if (raw.check === "type") {
+      if (raw.check !== "typeCheck" && raw.check !== "minCount") return { valid: false, reason: `criterion "${raw.description}": structural requires check to be "typeCheck" or "minCount"` };
+      if (raw.check === "typeCheck") {
         const validTypes = ["string", "number", "boolean", "array", "object"];
         if (typeof raw.expectedType !== "string" || !validTypes.includes(raw.expectedType)) {
-          return { valid: false, reason: `criterion "${raw.description}": structural check "type" requires expectedType to be one of ${validTypes.join(", ")}` };
+          return { valid: false, reason: `criterion "${raw.description}": structural check "typeCheck" requires expectedType to be one of ${validTypes.join(", ")}` };
         }
       }
       if (raw.check === "minCount") {
@@ -183,7 +183,7 @@ export function validateProposedCriterion(raw: RawCriterion & Record<string, unk
           args,
           field: raw.field,
           check: raw.check,
-          expectedType: raw.check === "type" ? (raw.expectedType as StructuralCriterion["expectedType"]) : null,
+          expectedType: raw.check === "typeCheck" ? (raw.expectedType as StructuralCriterion["expectedType"]) : null,
           minCount: raw.check === "minCount" ? (raw.minCount as number) : null,
         },
       };
@@ -220,7 +220,7 @@ export function describeCriterion(c: ProposedCriterion): string {
         ? `${c.description}: ${call(c.fn, c.args)} must have a present field "${c.field}"`
         : `${c.description}: ${call(c.fn, c.args)} -- ${c.fn} must exist and be callable`;
     case "structural":
-      return c.check === "type"
+      return c.check === "typeCheck"
         ? `${c.description}: ${call(c.fn, c.args)}.${c.field} must have type "${c.expectedType}"`
         : `${c.description}: ${call(c.fn, c.args)}.${c.field} must have count >= ${c.minCount}`;
     case "non-regression":

@@ -79,7 +79,7 @@ export function dryRunCriterion(criterion: ProposedCriterion, baselineFns: Recor
         return { verdict: "invalid", reason: `malformed: throws when called against baseline (${String((e as Error)?.message ?? e)})` };
       }
       const { present, value } = getField(result, criterion.field);
-      if (criterion.check === "type") {
+      if (criterion.check === "typeCheck") {
         const holds = present && typeMatches(value, criterion.expectedType!);
         return holds
           ? { verdict: "invalid", reason: `field "${criterion.field}" already has type "${criterion.expectedType}" on baseline -- tests nothing` }
