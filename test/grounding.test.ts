@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseGroundingResponse, decideGroundingOutcome, formatGroundingHalt, groundingContextBlock } from "../src/grounding.ts";
+import { parseGroundingResponse, decideGroundingOutcome, formatGroundingHalt, formatGroundingForPlan, groundingContextBlock } from "../src/grounding.ts";
 import { structureSummary } from "../src/worldStructure.ts";
 
 // ---------------------------------------------------------------------
@@ -127,4 +127,23 @@ test("guardrail: premisesHold=false with an empty falsePremises is rejected -- a
 // throw? Control case, so the tests above are trusted as real signal.
 test("control: a genuinely consistent halt response (premisesHold=false, falsePremises non-empty) does NOT throw", () => {
   assert.doesNotThrow(() => parseGroundingResponse(FIXTURE_UNGROUNDED_PET));
+});
+
+// ---------------------------------------------------------------------
+// FINISH.md chunk 7: grounding no longer hard-stops on its own -- its
+// findings feed into the plan prompt regardless of outcome, via
+// formatGroundingForPlan. Both branches need their own test: a pass
+// ("nothing false, here's why") is different text from a halt-shaped
+// result, and the plan stage needs to be able to tell them apart.
+// ---------------------------------------------------------------------
+test("formatGroundingForPlan: when premises hold, states that plainly with the reasoning -- not the halt-report shape", () => {
+  const text = formatGroundingForPlan(parseGroundingResponse(FIXTURE_GROUNDED));
+  assert.match(text, /Every premise checked out true/);
+  assert.doesNotMatch(text, /does not exist/);
+});
+
+test("formatGroundingForPlan: when a premise is false, it's the same report a human would see at the halt -- the plan stage gets the real finding, not a summary of a summary", () => {
+  const text = formatGroundingForPlan(parseGroundingResponse(FIXTURE_UNGROUNDED_PET));
+  assert.equal(text, formatGroundingHalt(parseGroundingResponse(FIXTURE_UNGROUNDED_PET)));
+  assert.match(text, /pet.*does not exist/i);
 });

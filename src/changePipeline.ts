@@ -6,6 +6,7 @@ import { SIM_REGRESSION_SUITE } from "./simRegression";
 import { SIM_BASELINE_SOURCE } from "./simBaseline";
 import type { ProposedCriterion } from "./criteria";
 import { evaluateCriteria, type ProbeRunner } from "./criteriaExecution";
+import { groundRequest, formatGroundingForPlan, type GroundingResult } from "./grounding";
 import {
   CONTROL_LIMITS,
   assertUnderRunCeiling,
@@ -57,12 +58,15 @@ function regressionSummaryText(): string {
 
 export type ChangeEvent =
   | { type: "retrospective"; lesson: string | null; recurrenceCount: number | null; costUsd: number }
+  | { type: "grounding" }
+  | { type: "grounded"; result: GroundingResult; model: string; inputTokens: number; outputTokens: number; costUsd: number; wallTimeMs: number }
   | { type: "planning" }
   | { type: "planned"; plan: ChangePlan; model: string; inputTokens: number; outputTokens: number; costUsd: number; wallTimeMs: number }
   | { type: "question"; runId: string; question: string }
   | { type: "answered"; answer: string }
-  | { type: "plan-gate"; runId: string; plan: ChangePlan }
+  | { type: "plan-gate"; runId: string; plan: ChangePlan; grounding: GroundingResult; costEstimateUsd: number; budgetRemainingUsd: number }
   | { type: "plan-gate-decided"; decision: "approve" | "reject" }
+  | { type: "plan-gate-replied"; reply: string }
   | { type: "implementing" }
   | { type: "implemented"; model: string; inputTokens: number; outputTokens: number; costUsd: number; wallTimeMs: number; code: string }
   | { type: "verifying" }
@@ -90,6 +94,10 @@ export interface ChangeLedger {
   planGateDecision: "approve" | "reject" | "pending";
   reviewGateDecision: "approve" | "reject" | "pending" | "not-needed";
   questionAsked: boolean;
+  /** How many times the visitor replied in free text at Gate 1 instead of
+   * approving/rejecting outright -- each one re-grounds and re-plans
+   * (FINISH.md chunk 7). 0 is the common case. */
+  planGateReplyCount: number;
   totalWallTimeMs: number;
   retrospectiveLesson: string | null;
   lessonRecurrenceCount: number | null;
@@ -111,9 +119,11 @@ interface ChangeState {
   budgetSpent: number;
   stageCosts: { stage: string; costUsd: number }[];
   questionAsked: boolean;
+  planGateReplyCount: number;
   runStartedAt: number;
   stage: "awaiting-answer" | "awaiting-plan-decision" | "awaiting-review-decision";
   plan: ChangePlan;
+  grounding: GroundingResult;
   implCode?: string;
   verifyRegression?: TestResult[];
   verifyCriteria?: TestResult[];
@@ -250,7 +260,7 @@ export interface ChangeEnv {
   OPENAI_API_KEY: string;
 }
 
-function haltLedger(state: Pick<ChangeState, "stageCosts" | "budgetSpent" | "questionAsked" | "runStartedAt">, waitingOn: "answer" | "plan-decision" | "review-decision"): ChangeLedger {
+function haltLedger(state: Pick<ChangeState, "stageCosts" | "budgetSpent" | "questionAsked" | "planGateReplyCount" | "runStartedAt">, waitingOn: "answer" | "plan-decision" | "review-decision"): ChangeLedger {
   return {
     outcome: waitingOn === "answer" ? "halted-awaiting-answer" : waitingOn === "plan-decision" ? "halted-awaiting-plan-decision" : "halted-awaiting-review-decision",
     totalCostUsd: state.budgetSpent,
@@ -259,6 +269,7 @@ function haltLedger(state: Pick<ChangeState, "stageCosts" | "budgetSpent" | "que
     reviewFoundNits: 0,
     fixApplied: false,
     fixHeld: null,
+    planGateReplyCount: state.planGateReplyCount,
     planGateDecision: waitingOn === "answer" || waitingOn === "plan-decision" ? "pending" : "approve",
     reviewGateDecision: waitingOn === "review-decision" ? "pending" : "not-needed",
     questionAsked: state.questionAsked,
@@ -340,24 +351,41 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   const runStartedAt = existing?.runStartedAt ?? Date.now();
   const currentSourceAtStart = existing?.currentSourceAtStart ?? (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
   let questionAsked = existing?.questionAsked ?? false;
+  let planGateReplyCount = existing?.planGateReplyCount ?? 0;
   const priorLessons = (await loadInstructions(env.SPEND_KV)).map((l) => `- ${l}`).join("\n");
 
-  let plan: ChangePlan;
+  // ---- Stage 0+1: Ground, then plan (FINISH.md chunk 7) ----
+  // Grounding no longer hard-stops the run by itself -- it feeds directly
+  // into the plan prompt (so the plan can honestly scope around a false
+  // premise instead of silently trying anyway) and is shown to the visitor
+  // alongside the plan at ONE Gate 1, where a human decides. `label` names
+  // the stage-cost entries so repeated ground+plan rounds (after a
+  // question, or after a Gate 1 reply) are distinguishable in the ledger.
+  async function groundAndPlan(clarification: string | null, label: string): Promise<{ grounding: GroundingResult; plan: ChangePlan }> {
+    onEvent({ type: "grounding" });
+    const groundResult = await callAnthropic(env, budget, WORST_CASE.ground, () => groundRequest(env.ANTHROPIC_API_KEY, changeRequest, GROUND_MODEL, CONTROL_LIMITS.TOKEN_CAPS.ground));
+    stageCosts.push({ stage: `ground${label}`, costUsd: groundResult.costUsd });
+    onEvent({ type: "grounded", result: groundResult.result, model: groundResult.model, inputTokens: groundResult.inputTokens, outputTokens: groundResult.outputTokens, costUsd: groundResult.costUsd, wallTimeMs: groundResult.wallTimeMs });
 
-  if (!existing) {
-    // ---- Stage 1: Plan, fresh ----
     onEvent({ type: "planning" });
     const planResult = await callAnthropic(env, budget, WORST_CASE.plan, () =>
-      generatePlan(env.ANTHROPIC_API_KEY, currentSourceAtStart, regressionSummaryText(), changeRequest, null, PLAN_MAX_TOKENS, priorLessons),
+      generatePlan(env.ANTHROPIC_API_KEY, currentSourceAtStart, regressionSummaryText(), changeRequest, clarification, PLAN_MAX_TOKENS, priorLessons, formatGroundingForPlan(groundResult.result)),
     );
-    stageCosts.push({ stage: "plan", costUsd: planResult.costUsd });
+    stageCosts.push({ stage: `plan${label}`, costUsd: planResult.costUsd });
     onEvent({ type: "planned", plan: planResult.plan, model: planResult.model, inputTokens: planResult.inputTokens, outputTokens: planResult.outputTokens, costUsd: planResult.costUsd, wallTimeMs: planResult.wallTimeMs });
-    plan = planResult.plan;
+    return { grounding: groundResult.result, plan: planResult.plan };
+  }
+
+  let plan: ChangePlan;
+  let grounding: GroundingResult;
+
+  if (!existing) {
+    ({ grounding, plan } = await groundAndPlan(null, ""));
 
     if (plan.question) {
       questionAsked = true;
       onEvent({ type: "question", runId, question: plan.question });
-      const state: ChangeState = { runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, runStartedAt, stage: "awaiting-answer", plan };
+      const state: ChangeState = { runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, planGateReplyCount, runStartedAt, stage: "awaiting-answer", plan, grounding };
       await saveState(env.SPEND_KV, state);
       onEvent({ type: "halted", runId, waitingOn: "answer" });
       const ledger = haltLedger(state, "answer");
@@ -373,33 +401,42 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       return { runId, changeRequest, plan: existing.plan, finalCode: null, findings: [], ledger };
     }
     onEvent({ type: "answered", answer });
-    onEvent({ type: "planning" });
-    const planResult = await callAnthropic(env, budget, WORST_CASE.plan, () =>
-      generatePlan(env.ANTHROPIC_API_KEY, currentSourceAtStart, regressionSummaryText(), changeRequest, answer, PLAN_MAX_TOKENS, priorLessons),
-    );
-    stageCosts.push({ stage: "plan (re-plan after question)", costUsd: planResult.costUsd });
-    onEvent({ type: "planned", plan: planResult.plan, model: planResult.model, inputTokens: planResult.inputTokens, outputTokens: planResult.outputTokens, costUsd: planResult.costUsd, wallTimeMs: planResult.wallTimeMs });
-    plan = planResult.plan;
+    ({ grounding, plan } = await groundAndPlan(answer, " (re-ground + re-plan after question)"));
   } else {
     plan = existing.plan;
+    grounding = existing.grounding;
   }
 
-  // ---- Stage 1.5: Plan gate -- check once, halt if no decision yet ----
-  // Bug found by actually running a resume from "awaiting-review-decision":
-  // this block used to only check the plan-decision key when the resume
-  // state's stage was "awaiting-plan-decision" or "awaiting-answer" (or on
-  // a fresh run) -- any OTHER stage (i.e. already past the plan gate,
-  // waiting on the review gate instead) fell through neither branch,
-  // leaving planDecision null and re-triggering a brand-new plan-gate halt,
-  // silently discarding that the plan had already been approved. The
-  // correct check is the inverse: skip this gate entirely once we know
-  // we're past it, rather than enumerating every stage that hasn't reached
-  // it yet.
+  // ---- Stage 1.5: Gate 1 -- grounding + plan + criteria + cost, shown
+  // together as one conversational moment (FINISH.md chunk 7). Three
+  // outcomes checked each call: a decision (approve/reject), a free-text
+  // reply (re-grounds + re-plans, then re-halts at this SAME gate with the
+  // new plan -- looped, not recursive, so any number of replies works),
+  // or neither (halt). Bug found by actually running a resume from
+  // "awaiting-review-decision": this block used to only check the
+  // plan-decision key when the resume state's stage was
+  // "awaiting-plan-decision" or "awaiting-answer" (or on a fresh run) --
+  // any OTHER stage fell through neither branch, silently discarding that
+  // the plan had already been approved. The correct check is the inverse:
+  // skip this gate entirely once we know we're past it.
   const pastPlanGate = existing?.stage === "awaiting-review-decision";
-  let planDecision: "approve" | "reject" | null = pastPlanGate ? "approve" : await checkDecision(env.SPEND_KV, `change/plan-decision/${runId}`);
+  let planDecision: "approve" | "reject" | null = pastPlanGate ? "approve" : null;
+  if (!pastPlanGate) {
+    while (true) {
+      planDecision = await checkDecision(env.SPEND_KV, `change/plan-decision/${runId}`);
+      if (planDecision !== null) break;
+      const reply = await checkAnswer(env.SPEND_KV, `change/plan-reply/${runId}`);
+      if (reply === null) break; // neither a decision nor a reply -- halt below
+      planGateReplyCount++;
+      onEvent({ type: "plan-gate-replied", reply });
+      ({ grounding, plan } = await groundAndPlan(reply, ` (re-ground + re-plan after Gate 1 reply #${planGateReplyCount})`));
+      // loop back around: check for a decision on THIS new plan, or another reply
+    }
+  }
+
   if (planDecision === null) {
-    onEvent({ type: "plan-gate", runId, plan });
-    const state: ChangeState = { runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, runStartedAt, stage: "awaiting-plan-decision", plan };
+    onEvent({ type: "plan-gate", runId, plan, grounding, costEstimateUsd: budget.spent, budgetRemainingUsd: Math.max(0, CONTROL_LIMITS.PER_RUN_CEILING_USD - budget.spent) });
+    const state: ChangeState = { runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, planGateReplyCount, runStartedAt, stage: "awaiting-plan-decision", plan, grounding };
     await saveState(env.SPEND_KV, state);
     onEvent({ type: "halted", runId, waitingOn: "plan-decision" });
     const ledger = haltLedger(state, "plan-decision");
@@ -426,6 +463,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       planGateDecision: "reject",
       reviewGateDecision: "not-needed",
       questionAsked,
+      planGateReplyCount,
       totalWallTimeMs: Date.now() - runStartedAt,
       retrospectiveLesson: lesson,
       lessonRecurrenceCount: recurrenceCount,
@@ -495,6 +533,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         planGateDecision: "approve",
         reviewGateDecision: "not-needed",
         questionAsked,
+        planGateReplyCount,
         totalWallTimeMs: Date.now() - runStartedAt,
         retrospectiveLesson: lesson,
         lessonRecurrenceCount: recurrenceCount,
@@ -534,8 +573,8 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     if (decision === null) {
       onEvent({ type: "review-gate", runId, materialFindings: material, nitFindings: nits });
       const state: ChangeState = {
-        runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, runStartedAt,
-        stage: "awaiting-review-decision", plan, implCode, verifyRegression, verifyCriteria, findings,
+        runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, planGateReplyCount, runStartedAt,
+        stage: "awaiting-review-decision", plan, grounding, implCode, verifyRegression, verifyCriteria, findings,
       };
       await saveState(env.SPEND_KV, state);
       onEvent({ type: "halted", runId, waitingOn: "review-decision" });
@@ -623,6 +662,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     planGateDecision: "approve",
     reviewGateDecision,
     questionAsked,
+    planGateReplyCount,
     totalWallTimeMs: Date.now() - runStartedAt,
     retrospectiveLesson: lesson,
     lessonRecurrenceCount: recurrenceCount,

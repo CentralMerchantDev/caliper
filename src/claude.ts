@@ -387,6 +387,7 @@ export async function generatePlan(
   clarification: string | null,
   maxTokens: number,
   priorLessons: string = "",
+  groundingNote: string | null = null,
 ): Promise<{ plan: ChangePlan; model: string; inputTokens: number; outputTokens: number; costUsd: number; wallTimeMs: number }> {
   const client = new Anthropic({ apiKey });
   const start = Date.now();
@@ -395,8 +396,14 @@ export async function generatePlan(
     `Current source:\n${currentSource}\n\n` +
     `Existing regression checks that must keep passing unless the request specifically asks to change ` +
     `that behavior:\n${regressionSummary}\n\n` +
+    // Grounding (FINISH.md chunk 7) ran before this call and already
+    // checked the request's premises against the real, code-derived
+    // structure -- these are facts, not a suggestion, and the plan must
+    // not contradict them (e.g. propose adding a second location if
+    // grounding just said none exists).
+    (groundingNote ? `Grounding already checked this request against the real current structure:\n${groundingNote}\n\n` : "") +
     `Change request: ${changeRequest}` +
-    (clarification ? `\n\nThe visitor answered your question: ${clarification}` : "");
+    (clarification ? `\n\nThe visitor added, in their own words -- treat this as redirecting or clarifying the request above, not a separate one: ${clarification}` : "");
 
   async function attempt(content: string): Promise<{ response: Anthropic.Message; raw: RawPlan }> {
     const response = await createWithTruncationGuard(client, "generatePlan", {

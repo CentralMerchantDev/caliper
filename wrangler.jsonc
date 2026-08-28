@@ -74,6 +74,7 @@
       "/change-run",
       "/change-resume",
       "/change-plan-decision",
+      "/change-plan-reply",
       "/change-review-decision",
       "/change-answer"
     ]

@@ -143,6 +143,19 @@ export function formatGroundingHalt(result: GroundingResult): string {
   return `This request assumes something the current world doesn't have:\n${premisesBlock}\n\n${result.reasoning}${altBlock}`;
 }
 
+/** FINISH.md chunk 7: grounding no longer hard-stops the run on its own --
+ * its findings feed INTO planning (so the plan stage can honestly scope
+ * around a false premise instead of silently trying anyway) and are shown
+ * to the visitor alongside the plan at one unified Gate 1, where a human
+ * decides what to do about it. This is the text injected into the plan
+ * prompt -- present whether premises held or not, since "grounding
+ * checked and found nothing false" is itself useful context for the plan
+ * stage, not just a pass-through. */
+export function formatGroundingForPlan(result: GroundingResult): string {
+  if (result.premisesHold) return `Every premise checked out true: ${result.reasoning}`;
+  return formatGroundingHalt(result);
+}
+
 /**
  * The one function in this file that costs money -- not called by anything
  * tonight (BUILD-WORLD.md: "it needs one model call to run -- that happens

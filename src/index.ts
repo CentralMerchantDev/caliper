@@ -454,10 +454,12 @@ export default {
           "GET /pipeline-budget": "today's/this month's change-pipeline spend against the caps",
           "GET /change-run?request=<text>": "CALIPER v2 (BUILD-V2.md): plan -> implement -> verify -> review -> ship, one call per stage-boundary",
           "GET /change-resume?runId=<id>": "continue a halted change run after a real decision/answer has been posted",
-          "GET /change-plan-decision?runId=<id>&approve=true|false": "resolve the plan gate",
+          "GET /change-plan-decision?runId=<id>&approve=true|false": "approve/reject at Gate 1",
+          "GET /change-plan-reply?runId=<id>&reply=<text>": "the third Gate 1 action -- reply in free text instead of approve/reject; re-grounds and re-plans",
           "GET /change-review-decision?runId=<id>&approve=true|false": "resolve the review gate",
           "GET /change-answer?runId=<id>&answer=<text>": "answer a plan-mode clarifying question",
           "GET /sim-selftest": "run the regression suite against the current sim source",
+          "GET /spend-counter-selftest?n=<count>": "fire n concurrent reservations at an isolated DO instance and confirm none are lost (free, no real spend touched)",
           "GET /change-instructions": "the accumulated lessons file, fed into plan/implement/review/fix prompts on future runs",
         },
         availableTasks: TASKS.map((t) => t.id),
@@ -560,6 +562,17 @@ export default {
       const answer = url.searchParams.get("answer");
       if (!runId || answer === null) return json({ error: "pass ?runId=<id>&answer=<text>" }, 400);
       await env.SPEND_KV.put(`change/answer/${runId}`, JSON.stringify({ answer }), { expirationTtl: 600 });
+      return json({ ok: true });
+    }
+
+    // FINISH.md chunk 7: the third Gate 1 action -- reply in free text
+    // instead of approve/reject. checkAnswer (changePipeline.ts) reads this
+    // same {answer} shape; re-used rather than inventing a parallel one.
+    if (url.pathname === "/change-plan-reply") {
+      const runId = url.searchParams.get("runId");
+      const reply = url.searchParams.get("reply");
+      if (!runId || reply === null) return json({ error: "pass ?runId=<id>&reply=<text>" }, 400);
+      await env.SPEND_KV.put(`change/plan-reply/${runId}`, JSON.stringify({ answer: reply }), { expirationTtl: 600 });
       return json({ ok: true });
     }
 
