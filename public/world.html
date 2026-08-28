@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CALIPER — the world</title>
+<meta name="description" content="The living world CALIPER's pipeline modifies -- running the real, unmodified simulation logic, rendered as an architectural plan view.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FAF6EE; --card:#FEFCF6; --ink:#2A201A; --ink2:#5C4B39; --muted:#6E5E49;
+  --line:rgba(42,32,26,.16); --line2:rgba(42,32,26,.08); --line-strong:rgba(42,32,26,.38);
+  --accent:#B0560C; --accentSoft:#F6E4CF;
+  --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --serif:'Source Serif 4',Georgia,serif;
+  --r:14px; --sh:0 1px 2px rgba(42,32,26,.05),0 10px 28px -14px rgba(42,32,26,.14);
+}
+*{box-sizing:border-box} html,body{margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);font-size:16px;line-height:1.5}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1080px;margin:0 auto;padding:24px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--ink2);margin:0 0 18px;font-size:15px}
+.layout{display:grid;grid-template-columns:1fr 300px;gap:18px}
+.stage-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:16px}
+#world{width:100%;height:460px;display:block;border-radius:10px}
+.controls{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+button{font-family:var(--mono);font-size:13px;padding:8px 14px;border-radius:9px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);cursor:pointer}
+button:hover{background:var(--accentSoft)}
+button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.speed-group{display:flex;gap:4px;margin-left:auto}
+label.mono{font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.log-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:14px 16px;max-height:520px;overflow-y:auto}
+.log-card h2{font-size:13px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 10px}
+.log-line{font-size:12.5px;font-family:var(--mono);padding:5px 0;border-bottom:1px solid var(--line2);color:var(--ink2)}
+.log-line b{color:var(--ink)}
+.log-line:first-child{padding-top:0}
+@media(max-width:760px){.layout{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>The world</h1>
+  <p class="sub">Running the real, unmodified simulation logic from <span style="font-family:var(--mono)">src/simBaseline.ts</span> -- not a mockup. Mechanically exported, never hand-copied (<span style="font-family:var(--mono)">scripts/export-sim-for-browser.mjs</span>).</p>
+  <div class="layout">
+    <div class="stage-card">
+      <canvas id="world" width="1400" height="900"></canvas>
+      <div class="controls">
+        <button id="playPause" aria-pressed="true">⏸ Pause</button>
+        <div class="speed-group" role="group" aria-label="Playback speed">
+          <label class="mono" style="align-self:center;margin-right:4px">Speed</label>
+          <button data-speed="0.5">0.5×</button>
+          <button data-speed="1" aria-pressed="true">1×</button>
+          <button data-speed="2">2×</button>
+          <button data-speed="4">4×</button>
+        </div>
+      </div>
+    </div>
+    <div class="log-card">
+      <h2>Event log</h2>
+      <div id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { WorldRenderer } from "./world-render.js";
+import { initialWorld, tick } from "./sim-baseline.generated.js";
+
+const canvas = document.getElementById("world");
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const renderer = new WorldRenderer(canvas, { reducedMotion });
+
+let world = initialWorld();
+renderer.pushTick(world);
+renderer.pushTick(world);
+
+const logEl = document.getElementById("log");
+const MAX_LOG = 60;
+function logEvent(w) {
+  const hour = w.tick % 24;
+  const parts = w.sims.map((s) => `${s.id} ${s.lastAction}`).join(" · ");
+  const div = document.createElement("div");
+  div.className = "log-line";
+  div.innerHTML = `<b>t${w.tick}</b> (${String(hour).padStart(2, "0")}:00) ${parts} · $${w.money}`;
+  logEl.prepend(div);
+  while (logEl.children.length > MAX_LOG) logEl.removeChild(logEl.lastChild);
+}
+logEvent(world);
+
+let playing = true;
+let speed = 1;
+const BASE_TICK_MS = 1400;
+
+document.getElementById("playPause").addEventListener("click", (e) => {
+  playing = !playing;
+  e.target.textContent = playing ? "⏸ Pause" : "▶ Play";
+  e.target.setAttribute("aria-pressed", String(playing));
+});
+document.querySelectorAll(".speed-group button[data-speed]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    speed = parseFloat(btn.dataset.speed);
+    document.querySelectorAll(".speed-group button[data-speed]").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+  });
+});
+
+let start = performance.now();
+function frame(now) {
+  const tickMs = BASE_TICK_MS / speed;
+  const t = Math.min(1, (now - start) / tickMs);
+  renderer.draw(t);
+  if (playing && t >= 1) {
+    world = tick(world);
+    renderer.pushTick(world);
+    logEvent(world);
+    start = now;
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
