@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 
 import { reviewFollowedFormat, resolveReview } from "../src/openai.ts";
 import { createWithTruncationGuard } from "../src/claude.ts";
-import { checkDecision, checkAnswer, decideStillFailing } from "../src/changePipeline.ts";
+import { checkDecision, checkAnswer, decideStillFailing, assertConvergedForReview } from "../src/changePipeline.ts";
 import { TruncatedResponseError } from "../src/controlLayer.ts";
 import type { TestResult } from "../src/types.ts";
 
@@ -204,4 +204,67 @@ test("decideStillFailing: control case -- all regression passing with zero propo
 
 test("decideStillFailing: control case -- everything passing ships", () => {
   assert.equal(decideStillFailing(undefined, [pass], [pass]), false);
+});
+
+// ---------------------------------------------------------------------
+// 6. assertConvergedForReview -- FINAL.md item 1's explicit gate. Real,
+// stored evidence (run 823decc7) showed review reached with 8/9 regression
+// and 2/8 criteria failing; the only prior gate was a fatal-sandbox-error
+// check. This is the literal code now standing at the entry point to
+// "reviewing" -- these cases plant deliberately failing verification and
+// prove review is never reachable past this call, not just that the flag
+// reads correctly.
+// ---------------------------------------------------------------------
+
+test("assertConvergedForReview: throws on a fatal sandbox error", () => {
+  assert.throws(() => assertConvergedForReview("sandbox never loaded the module", [], []));
+});
+
+test("assertConvergedForReview: throws on an empty regression suite even with passing criteria", () => {
+  assert.throws(() => assertConvergedForReview(undefined, [], [pass]));
+});
+
+test("assertConvergedForReview: throws when any regression case is still failing", () => {
+  assert.throws(() => assertConvergedForReview(undefined, [pass, fail], [pass]));
+});
+
+test("assertConvergedForReview: throws when any criterion is still failing -- the exact shape of run 823decc7 (2 of 8 criteria failing, review entered anyway)", () => {
+  assert.throws(() => assertConvergedForReview(undefined, [pass, pass], [pass, fail]));
+});
+
+test("assertConvergedForReview: control case -- does not throw once everything has converged", () => {
+  assert.doesNotThrow(() => assertConvergedForReview(undefined, [pass, pass], [pass, pass]));
+});
+
+test("assertConvergedForReview: control case -- does not throw with zero proposed criteria and full regression pass (empty criteria is legitimate, unlike empty regression)", () => {
+  assert.doesNotThrow(() => assertConvergedForReview(undefined, [pass, pass], []));
+});
+
+// The gate is only worth having if it actually stops the reviewer from
+// being called -- not just that it throws in isolation. This plants the
+// exact real-world failure shape (823decc7: verification still failing)
+// against a fake "call the reviewer" step gated the same way the real
+// pipeline gates it (assert immediately before the call), and proves the
+// reviewer spy's call count stays zero when the assertion throws.
+test("guardrail: a reviewer call gated by assertConvergedForReview is never invoked when verification is still failing", () => {
+  let reviewerCallCount = 0;
+  const fakeCallReviewer = () => {
+    reviewerCallCount++;
+    return { text: "reviewed" };
+  };
+  function maybeEnterReview(fatalError: string | undefined, regression: TestResult[], criteria: TestResult[]) {
+    assertConvergedForReview(fatalError, regression, criteria); // same call site shape as changePipeline.ts, right before onEvent({ type: "reviewing" })
+    return fakeCallReviewer();
+  }
+
+  assert.throws(() => maybeEnterReview(undefined, [pass], [fail]));
+  assert.equal(reviewerCallCount, 0, "the reviewer must not be called when a criterion is still failing");
+
+  assert.throws(() => maybeEnterReview("sandbox never loaded the module", [], []));
+  assert.equal(reviewerCallCount, 0, "the reviewer must not be called after a fatal sandbox error");
+
+  // Control: once verification genuinely converges, the same gated call site DOES reach the reviewer.
+  const result = maybeEnterReview(undefined, [pass, pass], [pass]);
+  assert.equal(reviewerCallCount, 1);
+  assert.equal(result.text, "reviewed");
 });

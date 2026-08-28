@@ -472,11 +472,28 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
   }
 
-  // ---- Stages 2-4: implement, verify, review -- or resume straight to the review gate ----
+  // ---- Stages 2-3: implement, then verify -> fix loop TO CONVERGENCE --
+  // or resume straight to the review gate ----
+  //
+  // FINAL.md item 1: the real process this models runs implement-and-verify
+  // to convergence first, and calls the reviewer once, at the end, on a
+  // diff that already passes its own checks. The previous shape called the
+  // reviewer right after the FIRST verify, gated only on whether the
+  // sandbox loaded at all -- not on whether anything actually passed. Found
+  // independently on run 823decc7: 8/9 regression and 2/8 criteria failing,
+  // reviewed anyway. This loop fixes that: it retries verification failures
+  // (not reviewer findings -- reviewer findings still get their own,
+  // separate, human-gated fix round after review, unchanged below) up to
+  // MAX_FIX_ATTEMPTS times, and NEVER calls the reviewer unless every
+  // regression case and every proposed criterion passes with no fatal
+  // sandbox error. If it can't get there, it refuses and reports exactly
+  // what's still failing -- without spending a cent on a review of code
+  // already known to be broken.
   let implCode: string;
   let verifyRegression: TestResult[];
   let verifyCriteria: TestResult[];
   let verifyFatalError: string | undefined;
+  let convergenceFixAttempts = 0;
   let findings: ReviewFinding[];
 
   if (existing?.stage === "awaiting-review-decision" && existing.implCode && existing.verifyRegression && existing.verifyCriteria && existing.findings) {
@@ -501,8 +518,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // (a fatalError) is not "0 failures" -- it's "verification didn't run".
     // Found the hard way: an HTML-wrapped implementation failed to load as
     // a module, and with no check here that silently read as a clean pass.
-    const fatal = verify1.regression.fatalError ?? verify1.criteria.fatalError;
-    verifyFatalError = fatal;
+    verifyFatalError = verify1.regression.fatalError ?? verify1.criteria.fatalError;
     onEvent({
       type: "verified",
       regression: verifyRegression,
@@ -511,15 +527,71 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       regressionTotal: verifyRegression.length,
       criteriaPassed: verifyCriteria.filter((r) => r.pass).length,
       criteriaTotal: verifyCriteria.length,
-      fatalError: fatal,
+      fatalError: verifyFatalError,
     });
-    if (fatal) {
-      // Refuse immediately -- reviewing code that never actually ran would
-      // spend real money critiquing something already known to be broken.
+
+    // A fatal sandbox error can never be fixed by asking the same model to
+    // patch its own output blind -- there's no code to point the fix at
+    // yet, only a load failure -- so it skips the convergence loop and
+    // refuses immediately, same as before.
+    while (
+      !verifyFatalError &&
+      decideStillFailing(verifyFatalError, verifyRegression, verifyCriteria) &&
+      convergenceFixAttempts < CONTROL_LIMITS.MAX_FIX_ATTEMPTS
+    ) {
+      convergenceFixAttempts++;
+      onEvent({ type: "fixing" });
+      const verificationFailures = [
+        ...verifyRegression.filter((r) => !r.pass).map((r) => describeFailure("regression", r)),
+        ...verifyCriteria.filter((r) => !r.pass).map((r) => describeFailure("criterion", r)),
+      ];
+      const stillPassing = [
+        ...verifyRegression.filter((r) => r.pass).map((r) => describePassing("regression", r)),
+        ...verifyCriteria.filter((r) => r.pass).map((r) => describePassing("criterion", r)),
+      ];
+      const fix = await callAnthropic(env, budget, WORST_CASE.fix, () =>
+        // No reviewer findings exist yet at this point in the run -- this
+        // fix round is repairing verification failures only, so the
+        // materialFindings argument is empty on purpose.
+        fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan, implCode, [], FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
+      );
+      stageCosts.push({ stage: `fix (convergence attempt ${convergenceFixAttempts})`, costUsd: fix.costUsd });
+      implCode = fix.code;
+      onEvent({ type: "fixed", model: fix.model, inputTokens: fix.inputTokens, outputTokens: fix.outputTokens, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, code: implCode });
+
+      onEvent({ type: "verifying" });
+      const reverify = await runVerification(env, implCode, plan.criteria, currentSourceAtStart, `change-${runId}-conv${convergenceFixAttempts}`);
+      verifyRegression = reverify.regression.results;
+      verifyCriteria = reverify.criteria.results;
+      verifyFatalError = reverify.regression.fatalError ?? reverify.criteria.fatalError;
+      onEvent({
+        type: "verified",
+        regression: verifyRegression,
+        criteria: verifyCriteria,
+        regressionPassed: verifyRegression.filter((r) => r.pass).length,
+        regressionTotal: verifyRegression.length,
+        criteriaPassed: verifyCriteria.filter((r) => r.pass).length,
+        criteriaTotal: verifyCriteria.length,
+        fatalError: verifyFatalError,
+      });
+    }
+
+    if (decideStillFailing(verifyFatalError, verifyRegression, verifyCriteria)) {
+      // Refuse without ever calling the reviewer -- reviewing code that's
+      // still failing its own checks would spend real money on an opinion
+      // about work that was never ready, and demonstrate the opposite of
+      // what this page claims.
       await clearState(env.SPEND_KV, runId);
+      const stillFailingList = [
+        ...verifyRegression.filter((r) => !r.pass).map((r) => describeFailure("regression", r)),
+        ...verifyCriteria.filter((r) => !r.pass).map((r) => describeFailure("criterion", r)),
+      ];
+      const convergenceReason = verifyFatalError
+        ? `verification could not run: ${verifyFatalError}`
+        : `could not make every regression and criteria check pass within ${convergenceFixAttempts} fix attempt(s) (limit ${CONTROL_LIMITS.MAX_FIX_ATTEMPTS}) -- still failing: ${stillFailingList.join("; ") || "none listed"}`;
       const { lesson, recurrenceCount } = await runRetrospectiveAndRecord(
         env, budget, stageCosts,
-        `Change request: ${changeRequest}\nPlan: ${plan.willBuild}\nOutcome: the implementation could not even be verified -- the sandbox failed to run it (${fatal}).`,
+        `Change request: ${changeRequest}\nPlan: ${plan.willBuild}\nOutcome: the implementation never converged before review -- ${convergenceReason}.`,
       );
       onEvent({ type: "retrospective", lesson, recurrenceCount, costUsd: stageCosts[stageCosts.length - 1].costUsd });
       const ledger: ChangeLedger = {
@@ -528,8 +600,8 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         stageCosts,
         reviewFoundMaterial: 0,
         reviewFoundNits: 0,
-        fixApplied: false,
-        fixHeld: null,
+        fixApplied: convergenceFixAttempts > 0,
+        fixHeld: false,
         planGateDecision: "approve",
         reviewGateDecision: "not-needed",
         questionAsked,
@@ -538,10 +610,17 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         retrospectiveLesson: lesson,
         lessonRecurrenceCount: recurrenceCount,
       };
-      onEvent({ type: "refused", reason: `verification could not run: ${fatal}` });
+      onEvent({ type: "refused", reason: convergenceReason });
       onEvent({ type: "ledger", ledger });
       return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
     }
+
+    // Explicit gate, asserted in code, not just implied by the loop above:
+    // review is never entered except on verification that has actually
+    // converged. Throwing here (rather than trusting the loop's exit
+    // condition) means a future edit to the loop that breaks its own exit
+    // logic fails loud instead of quietly sending broken code to review.
+    assertConvergedForReview(verifyFatalError, verifyRegression, verifyCriteria);
 
     onEvent({ type: "reviewing" });
     const review = await callOpenAI(env, budget, WORST_CASE.review, () =>
@@ -741,6 +820,26 @@ export function describePassing(prefix: string, r: TestResult): string {
  */
 export function decideStillFailing(fatalError: string | undefined, regression: TestResult[], criteria: TestResult[]): boolean {
   return !!fatalError || regression.length === 0 || regression.some((r) => !r.pass) || criteria.some((r) => !r.pass);
+}
+
+/**
+ * FINAL.md item 1's explicit gate: throws if verification has not
+ * converged, in the exact same terms decideStillFailing already uses --
+ * this function IS "entry to reviewing requires every criterion passing,
+ * the full regression suite passing, and no fatal error", written as code
+ * that fails loud rather than a comment describing an intention. Called
+ * once, immediately before the reviewer is invoked, so review is
+ * structurally unreachable on failing verification even if some future
+ * edit to the fix loop above breaks its own exit condition.
+ */
+export function assertConvergedForReview(fatalError: string | undefined, regression: TestResult[], criteria: TestResult[]): void {
+  if (decideStillFailing(fatalError, regression, criteria)) {
+    throw new Error(
+      "Refusing to enter cross-model review: verification has not converged " +
+        "(a fatal sandbox error, an empty regression suite, or a failing regression/criteria check). " +
+        "This should be unreachable -- entry to review requires convergence, checked just before this call.",
+    );
+  }
 }
 
 /** One probe = one single-check sandbox run against a given source,

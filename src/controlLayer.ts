@@ -9,18 +9,30 @@
 
 export const CONTROL_LIMITS = {
   /** Abort the rest of a run if its running total would exceed this.
-   * Re-derived for the world-build routing (FINISH.md section 5): no stage
-   * routes to Opus any more, and Implement/Retrospective/Ground moved to
-   * Haiku. Worst case, summing each stage's own token cap at its own
-   * model's real output rate (not Opus, which the old $0.35 ceiling was
-   * silently priced against): ground $0.0025 + plan $0.04 + implement
-   * $0.03 + review $0.035 + fix $0.04 + retrospective $0.0015 =~ $0.149.
-   * $0.15 tracks the worst case closely on purpose, with almost no slack --
-   * a real run rarely hits every stage's token cap simultaneously (most
-   * responses are well under their cap), so this is tight against the
-   * theoretical ceiling but not against typical real spend. Re-derive
-   * again if a real run is ever clipped by it. */
-  PER_RUN_CEILING_USD: 0.15,
+   * Re-derived again for FINAL.md item 1: verification now runs a bounded
+   * fix loop to CONVERGENCE before the reviewer is ever called, instead of
+   * one post-review fix attempt as the only fix in the run. Worst case now
+   * stacks two fix rounds, not one -- up to MAX_FIX_ATTEMPTS pre-review
+   * fixes (fixing verification failures) plus the one existing post-review
+   * fix (fixing reviewer findings), both real, both possible in the same
+   * run: ground $0.0025 + plan $0.04 + implement $0.03 + fix*2 (pre-review,
+   * MAX_FIX_ATTEMPTS) $0.08 + review $0.035 + fix $0.04 (post-review) +
+   * retrospective $0.0015 =~ $0.2275. $0.23 tracks that worst case closely
+   * on purpose, same philosophy as before: a real run rarely stacks every
+   * cap at once, so this is tight against the theoretical ceiling, not
+   * against typical spend. Re-derive again if a real run is ever clipped by
+   * it, or if MAX_FIX_ATTEMPTS changes. */
+  PER_RUN_CEILING_USD: 0.23,
+  /** Cross-model review must never see code that's still failing its own
+   * checks (FINAL.md item 1: "the reviewer reads a diff that has already
+   * passed CI"). This bounds the implement -> verify -> fix loop that runs
+   * BEFORE review, on verification failures, not reviewer findings -- a
+   * distinct, later loop still exists after review, gated by a human at
+   * Gate 2, for fixing what the reviewer finds. Small and deliberate, same
+   * reasoning as MAX_CONCURRENT_PIPELINE_RUNS below: real convergence
+   * usually takes 0 or 1 rounds; a demo doesn't need to try indefinitely,
+   * and every extra round is itself a real, billed model call. */
+  MAX_FIX_ATTEMPTS: 2,
   /** max_tokens per stage, sized from docs/REBUILD-PROPOSAL.md's measured
    * numbers -- the implement stage's first measurement hit a 3000-token cap
    * mid-artifact; this is deliberately larger. `ground` added for the new
