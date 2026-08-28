@@ -4,6 +4,8 @@ import { reviewArtifact, parseFindings, REVIEW_MODEL, PRICING as OPENAI_PRICING,
 import { runSimTests } from "./simSandbox";
 import { SIM_REGRESSION_SUITE } from "./simRegression";
 import { SIM_BASELINE_SOURCE } from "./simBaseline";
+import type { ProposedCriterion } from "./criteria";
+import { evaluateCriteria, type ProbeRunner } from "./criteriaExecution";
 import {
   CONTROL_LIMITS,
   assertUnderRunCeiling,
@@ -411,12 +413,6 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   let verifyCriteria: TestResult[];
   let verifyFatalError: string | undefined;
   let findings: ReviewFinding[];
-  // partial: true -- proposed criteria often assert only the part of a
-  // return value that changed (e.g. just "pets", not the whole world);
-  // strict equality against a full return value would false-fail those.
-  // The hand-authored regression suite (SIM_REGRESSION_SUITE) is separate
-  // and stays exact.
-  const criteriaTests: SimTestCase[] = plan.criteria.map((c) => ({ name: c.description, fn: c.fn, args: c.args, expected: c.expected, partial: true }));
 
   if (existing?.stage === "awaiting-review-decision" && existing.implCode && existing.verifyRegression && existing.verifyCriteria && existing.findings) {
     implCode = existing.implCode;
@@ -433,7 +429,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     implCode = impl.code;
 
     onEvent({ type: "verifying" });
-    const verify1 = await runVerification(env, implCode, criteriaTests, `change-${runId}-1`);
+    const verify1 = await runVerification(env, implCode, plan.criteria, currentSourceAtStart, `change-${runId}-1`);
     verifyRegression = verify1.regression.results;
     verifyCriteria = verify1.criteria.results;
     // validate-before-consume: a sandbox that failed to even load the code
@@ -542,7 +538,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       onEvent({ type: "fixed", model: fix.model, inputTokens: fix.inputTokens, outputTokens: fix.outputTokens, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, code: finalCode });
 
       onEvent({ type: "verifying" });
-      const verify2 = await runVerification(env, finalCode, criteriaTests, `change-${runId}-2`);
+      const verify2 = await runVerification(env, finalCode, plan.criteria, currentSourceAtStart, `change-${runId}-2`);
       verifyRegression = verify2.regression.results;
       verifyCriteria = verify2.criteria.results;
       verifyFatalError = verify2.regression.fatalError ?? verify2.criteria.fatalError;
@@ -680,15 +676,45 @@ export function decideStillFailing(fatalError: string | undefined, regression: T
   return !!fatalError || regression.length === 0 || regression.some((r) => !r.pass) || criteria.some((r) => !r.pass);
 }
 
+/** One probe = one single-check sandbox run against a given source,
+ * reporting back only what evaluateCriterion needs (the raw actual/error),
+ * never a pass/fail judgement -- that judgement is criteriaExecution.ts's
+ * job, kept out of the sandbox entirely so it stays plain, unit-testable
+ * TypeScript (see test/criteriaExecution.test.ts, which covers this logic
+ * with zero sandbox calls). Each criterion gets its own isolate id so a
+ * probe for one criterion can never be confused with another's. */
+function makeProbeRunner(env: ChangeEnv, code: string, isolateIdPrefix: string): ProbeRunner {
+  let counter = 0;
+  return async (fn, args, repeat) => {
+    counter++;
+    const probe: SimTestCase = { name: "probe", fn, args, repeat: repeat ?? undefined };
+    const result = await runSimTests(env.LOADER, code, [probe], `${isolateIdPrefix}-probe${counter}`, SIM_VERIFY_CPU_MS);
+    if (result.fatalError) return { error: result.fatalError };
+    const r = result.results[0];
+    if (!r) return { error: "sandbox returned no result for this probe" };
+    if (r.error) return { error: r.error, stack: r.stack };
+    return { actual: r.actual };
+  };
+}
+
 async function runVerification(
   env: ChangeEnv,
   code: string,
-  criteriaTests: SimTestCase[],
+  criteria: ProposedCriterion[],
+  baselineSource: string,
   isolateIdPrefix: string,
-): Promise<{ regression: Awaited<ReturnType<typeof runSimTests>>; criteria: Awaited<ReturnType<typeof runSimTests>> }> {
+): Promise<{ regression: Awaited<ReturnType<typeof runSimTests>>; criteria: { results: TestResult[]; wallTimeMs: number; fatalError?: string } }> {
+  const start = Date.now();
   const regression = await runSimTests(env.LOADER, code, SIM_REGRESSION_SUITE, `${isolateIdPrefix}-regression`, SIM_VERIFY_CPU_MS);
-  const criteria = criteriaTests.length
-    ? await runSimTests(env.LOADER, code, criteriaTests, `${isolateIdPrefix}-criteria`, SIM_VERIFY_CPU_MS)
-    : { results: [], wallTimeMs: 0 };
-  return { regression, criteria };
+  if (criteria.length === 0) return { regression, criteria: { results: [], wallTimeMs: 0 } };
+  try {
+    const probeCandidate = makeProbeRunner(env, code, `${isolateIdPrefix}-criteria-candidate`);
+    const probeBaseline = makeProbeRunner(env, baselineSource, `${isolateIdPrefix}-criteria-baseline`);
+    const results = await evaluateCriteria(criteria, probeCandidate, probeBaseline);
+    return { regression, criteria: { results, wallTimeMs: Date.now() - start } };
+  } catch (e) {
+    // Same discipline as a sandbox fatalError: a criteria pass that never
+    // actually ran is "verification didn't happen", never "0 failures".
+    return { regression, criteria: { results: [], wallTimeMs: Date.now() - start, fatalError: String((e as Error)?.message ?? e) } };
+  }
 }

@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Task, GenerationResult, TestResult } from "./types";
 import { assertUnderCap, recordSpend } from "./spendCap";
+import { CRITERION_SCHEMA, validateProposedCriteria, describeCriterion, type ProposedCriterion } from "./criteria";
+export type { ProposedCriterion } from "./criteria";
 import { TruncatedResponseError } from "./controlLayer";
 
 /**
@@ -308,17 +310,21 @@ const BRIEF_SYSTEM_PROMPT =
 // the preset-generation design above (kept in place for now; superseded,
 // not yet deleted). Plan mode's acceptance criteria are real, structured,
 // machine-checkable test cases the model proposes -- not prose -- so
-// "judged before any code exists" is literal: they run as SimTestCase
-// entries (src/types.ts) the moment they're approved, same mechanism as
-// the hand-authored regression suite.
+// "judged before any code exists" is literal: they run against the
+// implementation the moment they're approved, same mechanism as the
+// hand-authored regression suite.
+//
+// CALIPER world-build (BUILD-WORLD.md, chunk 6): ProposedCriterion moved to
+// src/criteria.ts and its shape changed on purpose -- there is no longer
+// any field that can carry a model-computed value. Root cause, established
+// with evidence across this project's own history: the old shape let a
+// criterion assert "applyAction(...) === {money: 95, hunger: 55}", a
+// number produced by the model doing multi-step arithmetic in its head,
+// with nothing to check its own work. Eleven of sixteen historical
+// refusals traced to exactly that -- a criterion's asserted value
+// contradicting the plan's own stated mechanism. See src/criteria.ts for
+// the four kinds that replaced it.
 // ---------------------------------------------------------------------
-
-export interface ProposedCriterion {
-  description: string;
-  fn: string;
-  args: unknown[];
-  expected: unknown;
-}
 
 export interface ChangePlan {
   understoodIntent: string;
@@ -336,18 +342,15 @@ const PLAN_SCHEMA = {
     criteria: {
       type: "array",
       description:
-        "Real, checkable test cases for the NEW behavior -- each one an actual function call and its expected return value, not a prose description. These will really be executed against your implementation.",
-      items: {
-        type: "object",
-        properties: {
-          description: { type: "string" },
-          fn: { type: "string", description: "Name of the function this calls -- an existing one, or one you will add." },
-          argsJson: { type: "string", description: "JSON-encoded array of arguments to call fn with." },
-          expectedJson: { type: "string", description: "JSON-encoded expected return value." },
-        },
-        required: ["description", "fn", "argsJson", "expectedJson"],
-        additionalProperties: false,
-      },
+        "Real, checkable claims about the NEW behavior -- but never a specific computed value you work out by hand. " +
+        "Each criterion must be existence (a function/field exists and is callable), structural (a field has the " +
+        "right type or count), non-regression (a call's result is compared against the BASELINE's own output for " +
+        "the same call -- the baseline is actually run to get that value, you never supply it), or render (a " +
+        "station/entity type draws without throwing). There is no field anywhere in this schema for you to write " +
+        'a specific expected number or object into -- if you find yourself thinking "the answer should be 55", ' +
+        "that is exactly the kind of claim this format cannot express, on purpose: multi-step arithmetic worked " +
+        "out by hand and asserted as ground truth is how every one of this project's past failures happened.",
+      items: CRITERION_SCHEMA,
     },
     willNotTouch: { type: "string", description: "What stays exactly as it is." },
     question: {
@@ -361,38 +364,20 @@ const PLAN_SCHEMA = {
 };
 
 const PLAN_SYSTEM_PROMPT =
-  "You are planning a change to an existing, working small life-simulation codebase, before writing " +
-  "any code -- mirroring the real practice of a plan written and approved before implementation starts. " +
-  "Read the current source and the change request. Produce a plan: what you understood, what you will " +
-  "concretely build, and a list of REAL checkable test cases for the new behavior -- actual function " +
-  "calls with actual expected return values, computed by you from the rules you're about to implement, " +
-  "not vague prose. State what you will deliberately leave untouched. If, and only if, the request is " +
-  "genuinely ambiguous in a way that would change what you build, or asks for something you cannot " +
+  "You are planning a change to an existing, working small simulated world, before writing any code -- " +
+  "mirroring the real practice of a plan written and approved before implementation starts. Read the " +
+  "current source and the change request. Produce a plan: what you understood, what you will concretely " +
+  "build, and a list of checkable criteria for the new behavior. " +
+  "Every criterion must be existence, structural, non-regression, or render (see the criteria field's own " +
+  "description for what each means) -- never a criterion that names a specific value you computed by hand. " +
+  "That restriction is enforced by the schema itself, not just this instruction: there is no field to put " +
+  "a computed value into. State what you will deliberately leave untouched. If, and only if, the request " +
+  "is genuinely ambiguous in a way that would change what you build, or asks for something you cannot " +
   "independently verify, ask ONE specific question about that specific thing -- state the sensible " +
   "default you chose instead of asking, wherever you can reasonably choose one yourself.";
 
-type RawPlan = { understoodIntent: string; willBuild: string; criteria: { description: string; fn: string; argsJson: string; expectedJson: string }[]; willNotTouch: string; question: string | null };
-
-/** The plan schema only requires argsJson/expectedJson to be strings -- it
- * can't constrain their CONTENT to be valid JSON, so the model sometimes
- * emits a string that LOOKS like JSON but isn't (unescaped quotes, single
- * quotes, a trailing comma). Found running real trials: the same change
- * request crashed the run twice in a row on this exact class of error,
- * with no retry -- the run just died, no ledger, nothing recorded. Pulled
- * out so it can be retried with a correction, the same validate-before-
- * consume shape as every other parse-then-trust step in this file. */
-export function parseCriteria(rawCriteria: RawPlan["criteria"]): ProposedCriterion[] {
-  return rawCriteria.map((c) => {
-    let args: unknown[], expected: unknown;
-    try {
-      args = JSON.parse(c.argsJson);
-      expected = JSON.parse(c.expectedJson);
-    } catch (e) {
-      throw new Error(`criterion "${c.description}": ${String(e)}`);
-    }
-    return { description: c.description, fn: c.fn, args, expected };
-  });
-}
+type RawPlanCriterion = { kind: unknown; description: unknown; fn: unknown; argsJson: unknown; field: unknown; check: unknown; expectedType: unknown; minCount: unknown; repeat: unknown; stationOrEntityKey: unknown };
+type RawPlan = { understoodIntent: string; willBuild: string; criteria: RawPlanCriterion[]; willNotTouch: string; question: string | null };
 
 export async function generatePlan(
   apiKey: string,
@@ -435,23 +420,28 @@ export async function generatePlan(
   }
 
   let { response, raw } = await attempt(userContent);
-  let criteria: ProposedCriterion[];
-  try {
-    criteria = parseCriteria(raw.criteria);
-  } catch (e) {
+  let { accepted, rejected } = validateProposedCriteria(raw.criteria);
+  // Schema-level rejection with a clear reason (BUILD-WORLD.md chunk 6):
+  // a criterion smuggling a computed value, malformed argsJson, or an
+  // otherwise invalid shape is never silently dropped or silently trusted
+  // -- it's named back to the model once, asking it to re-emit only the
+  // rejected ones. If any are still invalid after that, they're dropped
+  // and the plan proceeds with whatever's left -- an empty criteria list
+  // is already a legitimate, supported outcome (decideStillFailing), so a
+  // plan is never hard-failed over criteria quality the way a truncated or
+  // unparseable response is.
+  if (rejected.length > 0) {
     const correction =
-      `${userContent}\n\nYour previous response included a criterion with invalid JSON in argsJson or ` +
-      `expectedJson (${String(e)}). Every argsJson and expectedJson value must be strictly valid, ` +
-      `double-quoted JSON -- no single quotes, no trailing commas, no unescaped characters. Redo the ` +
-      `plan with valid JSON in every criterion.`;
+      `${userContent}\n\nYour previous response proposed ${rejected.length} criterion/criteria that were rejected:\n` +
+      rejected.map((r) => `- ${JSON.stringify(r.raw)}: ${r.reason}`).join("\n") +
+      `\n\nRe-emit the full criteria list, replacing only the rejected ones with valid existence/structural/` +
+      `non-regression/render criteria (or omit them if the underlying claim can't be expressed that way). Keep every criterion that wasn't listed as rejected.`;
     ({ response, raw } = await attempt(correction));
-    try {
-      criteria = parseCriteria(raw.criteria);
-    } catch (e2) {
-      throw new Error(`Model proposed a criterion with unparseable JSON twice in a row -- treated as a failure, not content: ${String(e2)}`);
-    }
+    const retryResult = validateProposedCriteria(raw.criteria);
+    accepted = retryResult.accepted;
+    rejected = retryResult.rejected;
   }
-  const plan: ChangePlan = { understoodIntent: raw.understoodIntent, willBuild: raw.willBuild, criteria, willNotTouch: raw.willNotTouch, question: raw.question };
+  const plan: ChangePlan = { understoodIntent: raw.understoodIntent, willBuild: raw.willBuild, criteria: accepted, willNotTouch: raw.willNotTouch, question: raw.question };
 
   const inputTokens = response.usage.input_tokens;
   const outputTokens = response.usage.output_tokens;
@@ -499,7 +489,7 @@ export async function implementChange(
   priorLessons: string = "",
 ): Promise<GenerationResult> {
   const client = new Anthropic({ apiKey });
-  const criteriaText = plan.criteria.map((c) => `- ${c.description}: ${c.fn}(${c.args.map((a) => JSON.stringify(a)).join(", ")}) === ${JSON.stringify(c.expected)}`).join("\n");
+  const criteriaText = plan.criteria.map((c) => `- ${describeCriterion(c)}`).join("\n");
   const baseContent =
     (priorLessons ? `Lessons recorded from previous runs -- apply any that are relevant here:\n${priorLessons}\n\n` : "") +
     `Current source:\n${currentSource}\n\n` +
