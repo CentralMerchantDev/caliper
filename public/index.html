@@ -75,12 +75,16 @@ td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabu
 .wrapx{overflow-x:auto}
 
 /* ---------------- the workspace ---------------- */
+.orient-box{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:16px 20px;margin:20px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 22px}
+.orient-box p{margin:0;font-size:14.5px;line-height:1.5;color:var(--ink2)}
+.orient-box strong{color:var(--ink);display:block;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
 .workspace{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(340px,0.9fr);gap:18px;margin:22px 0}
 @media(max-width:900px){.workspace{grid-template-columns:1fr}}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:18px}
 .world-panel{padding:14px}
 #world-canvas{width:100%;height:420px;display:block;border-radius:10px}
 .world-caption{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.world-goal-line{margin:8px 2px 0;font-size:13px;color:var(--ink2)}
 .world-controls{display:flex;gap:6px}
 .world-controls button{font-family:var(--mono);font-size:11px;padding:5px 9px;border-radius:7px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);cursor:pointer}
 .world-controls button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -189,6 +193,12 @@ footer a{color:var(--ink2)}
 
 <div class="wide" id="app">
   <h2><span class="n">The workspace</span>Ask the world for something</h2>
+  <div class="orient-box">
+    <p><strong>The goal</strong>Help build this world. Add something to it that fits.</p>
+    <p><strong>What's here</strong>One room. Six things in it: a bed, a fridge, a shower, a desk, a rug, a table. The person living there moves between them through a day.</p>
+    <p><strong>What tends to work</strong>A new object in the room. A new way to use what's already there. Something the person can do or interact with.</p>
+    <p><strong>What tends not to</strong>A second room, art or sound the world can't render, or a system that doesn't exist yet. The world checks first and says why, rather than failing silently.</p>
+  </div>
   <div class="workspace">
     <div class="panel world-panel">
       <canvas id="world-canvas" width="1400" height="900" role="img" aria-label="A living top-down view of the simulated world"></canvas>
@@ -198,13 +208,14 @@ footer a{color:var(--ink2)}
           <button id="world-play-pause" type="button" aria-pressed="true">⏸ pause</button>
         </div>
       </div>
+      <p class="world-goal-line">This is the world you're adding to.</p>
     </div>
 
     <div class="panel">
       <div class="budget-bar" id="budget-bar">Loading today's budget…</div>
       <p class="request-copy">This world is shared: every visitor's request builds on whatever the last
         one shipped. Describe something you want added. A live run is a real one -- grounding and
-        planning alone spend a few cents on Haiku and Sonnet before you ever see a gate to approve.</p>
+        planning alone spend a few real cents before you ever see a gate to approve.</p>
       <form class="request-form" id="request-form">
         <textarea id="request-input" maxlength="500" placeholder="e.g. add a lamp near the desk that lights up at night" required></textarea>
         <button class="btn btn-block" id="run-btn" type="submit">▸ Ground it, then plan it</button>

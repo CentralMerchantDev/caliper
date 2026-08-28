@@ -379,7 +379,10 @@ const PLAN_SYSTEM_PROMPT =
   "Every criterion must be existence, structural, non-regression, or render (see the criteria field's own " +
   "description for what each means) -- never a criterion that names a specific value you computed by hand. " +
   "That restriction is enforced by the schema itself, not just this instruction: there is no field to put " +
-  "a computed value into. State what you will deliberately leave untouched. If, and only if, the request " +
+  "a computed value into. State what you will deliberately leave untouched. Describe willBuild in terms " +
+  "of what it adds, what it touches, and what it might break -- not in economic terms just because the " +
+  "world happens to track money as one of its fields. Only frame something economically if the request " +
+  "itself is actually about money or wages. If, and only if, the request " +
   "is genuinely ambiguous in a way that would change what you build, or asks for something you cannot " +
   "independently verify, ask ONE specific question about that specific thing -- state the sensible " +
   "default you chose instead of asking, wherever you can reasonably choose one yourself.";
