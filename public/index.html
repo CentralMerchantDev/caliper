@@ -155,6 +155,8 @@ footer a{color:var(--ink2)}
   h2{font-size:23px;margin-top:38px}
   .panel{padding:14px}
   #world-canvas{height:300px}
+  table{font-size:13.5px}
+  th,td{padding:9px 8px}
 }
 </style>
 </head>
@@ -611,10 +613,17 @@ form.addEventListener('submit', (ev) => {
 
     es.addEventListener('plan-gate', ev => {
       const d = JSON.parse(ev.data)
+      const p = d.plan, g = d.grounding
       const b = stageBlock(log, 's-gate', 'Gate 1 — your decision, before any code exists', 'gate')
       b.innerHTML += `<div class="gate-box">
         <h5>What it proposes to build</h5>
-        <p style="margin:0 0 10px">${esc(d.plan.willBuild)}</p>
+        <p style="margin:0 0 10px">${esc(p.willBuild)}</p>
+        <h5>What it will not touch</h5>
+        <p style="margin:0 0 10px">${esc(p.willNotTouch)}</p>
+        ${p.criteria.length ? `<h5>How it will check that (${p.criteria.length} criteri${p.criteria.length === 1 ? 'on' : 'a'})</h5>
+        <ul style="margin:0 0 10px">${p.criteria.map(c => `<li>${esc(c.description)} <span class="mono" style="color:var(--muted)">[${esc(c.kind)}]</span></li>`).join('')}</ul>` : '<p style="margin:0 0 10px;color:var(--muted)">No new criteria proposed.</p>'}
+        ${g && !g.premisesHold ? `<h5>What it can't do, and why</h5>
+        <p style="margin:0 0 10px">${esc(g.reasoning)}</p>` : ''}
         <div class="cost-line">Spent so far this run: ${money(d.costEstimateUsd)} · headroom left against the per-run ceiling: ${money(d.budgetRemainingUsd)}</div>
         <div class="gate-actions">
           <button class="btn" id="gate-approve">Approve</button>
