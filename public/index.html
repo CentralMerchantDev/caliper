@@ -637,6 +637,9 @@ form.addEventListener('submit', (ev) => {
   log.innerHTML = ''
   let runId = null
   let implCode = null, currentSource = null
+  let reconnectAttempts = 0
+  const MAX_RECONNECT_ATTEMPTS = 5
+  const RECONNECT_DELAYS_MS = [2000, 4000, 8000, 15000, 30000]
 
   function connect(url) {
     const es = new EventSource(url)
@@ -889,21 +892,61 @@ form.addEventListener('submit', (ev) => {
     es.addEventListener('done', () => {
       stopStatus()
       es.close()
+      reconnectAttempts = 0 // a clean segment finished -- reset the allowance for the next one
       runBtn.disabled = false
       runBtn.innerHTML = '▸ Ground it, then plan it'
       loadBudget()
     })
+    // A named `error` SSE event from the server (a real pipeline failure)
+    // arrives as a MessageEvent with parseable JSON in ev.data. A dropped
+    // connection -- network blip, a proxy's own idle timeout, a
+    // backgrounded tab waking up -- fires the SAME 'error' listener but as
+    // a plain Event with no .data at all. Only the first kind is actually
+    // fatal. The run's state is persisted server-side (STATE_TTL_SEC in
+    // changePipeline.ts, up to a week), so the second kind is a display
+    // problem, not a run-ending one -- reconnect and re-attach instead of
+    // abandoning it. CITY.md item 0.
     es.addEventListener('error', ev => {
-      stopStatus()
-      let message = 'Connection to the pipeline stream was lost.'
-      try { message = JSON.parse(ev.data).message } catch (_) {}
-      const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
-      b.classList.add('error'); b.classList.remove('active')
-      b.innerHTML += `<p style="margin:0">${esc(message)}</p>`
+      let serverMessage = null
+      try { serverMessage = JSON.parse(ev.data).message } catch (_) {}
       es.close()
-      runBtn.disabled = false
-      runBtn.innerHTML = '▸ Ground it, then plan it'
-      loadBudget()
+      if (serverMessage !== null) {
+        stopStatus()
+        const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
+        b.classList.add('error'); b.classList.remove('active')
+        b.innerHTML += `<p style="margin:0">${esc(serverMessage)}</p>`
+        runBtn.disabled = false
+        runBtn.innerHTML = '▸ Ground it, then plan it'
+        loadBudget()
+        return
+      }
+      if (!runId) {
+        stopStatus()
+        const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
+        b.classList.add('error'); b.classList.remove('active')
+        b.innerHTML += `<p style="margin:0">Connection to the pipeline stream was lost before a run ID was assigned. Try again.</p>`
+        runBtn.disabled = false
+        runBtn.innerHTML = '▸ Ground it, then plan it'
+        loadBudget()
+        return
+      }
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        stopStatus()
+        const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
+        b.classList.add('error'); b.classList.remove('active')
+        b.innerHTML += `<p style="margin:0">The connection kept dropping after ${MAX_RECONNECT_ATTEMPTS} reconnect attempts. Nothing is lost -- this run is still saved.</p>
+          <button class="btn btn-outline" id="manual-reconnect-${runId}" type="button" style="margin-top:8px">Try reconnecting again</button>`
+        $(`#manual-reconnect-${runId}`).addEventListener('click', () => { reconnectAttempts = 0; b.remove(); resume() })
+        runBtn.disabled = false
+        runBtn.innerHTML = '▸ Ground it, then plan it'
+        loadBudget()
+        return
+      }
+      const delay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempts, RECONNECT_DELAYS_MS.length - 1)]
+      reconnectAttempts++
+      const b = stageBlock(log, 's-reconnect-' + Date.now(), 'Reconnecting…')
+      b.innerHTML += `<p style="margin:0;color:var(--muted)">The connection dropped. Nothing was lost -- this run is saved server-side. Reconnecting in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})…</p>`
+      setTimeout(() => { b.remove(); resume() }, delay)
     })
   }
 

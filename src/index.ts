@@ -409,7 +409,22 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
-  const send = (event: string, data: unknown) => writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+  const send = (event: string, data: unknown) => writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)).catch(() => {});
+
+  // CITY.md item 0: this stream is only ever open while a stage is actively
+  // running (grounding/planning/implementing/verifying/reviewing/fixing,
+  // each bounded by STAGE_CALL_TIMEOUT_MS) -- it always closes cleanly with
+  // a `done` event the moment a run halts at a gate, it never blocks open
+  // waiting on a human decision (confirmed by reading and by an empirical
+  // idle-connection test: a raw 3-minute idle stream over this same path
+  // did not drop on its own). A heartbeat during that active window is
+  // still cheap, standard SSE practice and protects against networks with
+  // shorter idle timeouts than tested here -- a `:`-prefixed comment line,
+  // which EventSource never surfaces as an event, so it can't collide with
+  // real pipeline events.
+  const heartbeatTimer = setInterval(() => {
+    writer.write(encoder.encode(`: keep-alive\n\n`)).catch(() => {});
+  }, 15_000);
 
   (async () => {
     try {
@@ -420,8 +435,9 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
     } catch (e) {
       send("error", { message: String((e as Error)?.message ?? e) });
     } finally {
+      clearInterval(heartbeatTimer);
       await releaseActiveRun(env.SPEND_KV, runId);
-      await writer.close();
+      await writer.close().catch(() => {});
     }
   })();
 
