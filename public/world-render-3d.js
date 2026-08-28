@@ -1,10 +1,10 @@
-// CALIPER world renderer, v2 (UPGRADE.md): a stylised 3D scene instead of the
-// architectural plan view. Same design language (warm paper, ink, the
-// accent) and the same public contract as the 2D renderer it replaces --
+// CALIPER world renderer, v3 (CITY.md item 1): a neighbourhood of buildings
+// on a grid instead of a single room. Same design language (warm paper,
+// ink, the accent) and the same public contract as before --
 // constructor(canvas, {reducedMotion}), pushTick(world), draw(t), destroy(),
 // plus the .nextWorld/.reducedMotion instance fields the visual-check
-// harness (world-render.test.html) pokes directly -- so callers (index.html,
-// world.html) needed zero changes beyond the import path.
+// harness pokes directly -- so callers needed zero changes beyond what
+// they already have.
 //
 // Vendored, not CDN-loaded: this is a real deployed demo, not a sandboxed
 // snippet, and a live show-and-tell shouldn't depend on a third-party CDN
@@ -12,13 +12,17 @@
 // ./vendor/three/, resolved through the import map in index.html/world.html.
 //
 // Sim logic is untouched -- this file only ever reads world JSON
-// (tick/money/sims[].needs/lastAction), the same shape src/simBaseline.ts's
-// tick() returns. STATIONS (positions + which action maps to which
-// furniture) is imported from the 2D renderer so the two files can never
-// silently disagree about the room layout, and the 2D renderer itself
-// becomes this file's WebGL-unavailable fallback -- "a good static image
-// of the scene" is, concretely, the fully-working 2D plan view, not a
-// bespoke screenshot.
+// (tick/money/sims[].needs/lastAction/home, buildings[], outdoorObjects[]),
+// the same shape src/simBaseline.ts's tick() returns. What to draw comes
+// from the real world.buildings/outdoorObjects arrays read at runtime, not
+// a hand-written layout -- a change that adds a fifth building or a new
+// outdoor object type draws here without this file needing to know about
+// it in advance (new outdoor object TYPES still need a case in
+// _buildOutdoorObject, same as a new station type would; the COUNT and
+// PLOT LAYOUT of buildings/objects never does). STATIONS (which action
+// maps to which piece of dwelling furniture) is imported from the 2D
+// renderer so the two files can never silently disagree, and the 2D
+// renderer itself becomes this file's WebGL-unavailable fallback.
 import * as THREE from "three";
 import { RoomEnvironment } from "./vendor/three/addons/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "./vendor/three/addons/geometries/RoundedBoxGeometry.js";
@@ -30,8 +34,14 @@ import { VignetteShader } from "./vendor/three/addons/shaders/VignetteShader.js"
 import { OutputPass } from "./vendor/three/addons/postprocessing/OutputPass.js";
 import { STATIONS, WorldRenderer as WorldRenderer2D } from "./world-render.js";
 
-const ROOM_W = 11; // x extent, world units
-const ROOM_D = 7.5; // z extent
+// A dwelling's own interior footprint -- close to the old single room's
+// 11x7.5, shrunk slightly so two of them plus a path fit on one grid axis.
+const BUILDING_W = 8.5;
+const BUILDING_D = 6.0;
+// Half-spacing between plot steps (plots are 0/2 today; the formula below
+// is generic over whatever plot values the real world data contains).
+const GRID_UNIT_X = 6.0;
+const GRID_UNIT_Z = 4.5;
 
 const PALETTE = {
   floor: 0xdccdaf,
@@ -40,10 +50,15 @@ const PALETTE = {
   woodDark: 0x6a4526,
   metal: 0xcfd2d6,
   fabricBed: 0xd8c9a8,
-  fabricRug: 0xb0560c,
+  fabricRug: 0xc97a3d, // deliberately NOT PALETTE.accent -- sim1 uses that exact colour, and a same-colour sim standing on its own rug read as camouflaged, invisible
   ceramic: 0xf3efe6,
   accent: 0xb0560c, // sim 1
   sim2: 0x3d6b63, // sim 2
+  ground: 0xcabb9c,
+  path: 0xe3d6ba,
+  roofShop: 0x9a5a3c,
+  roofWorkshop: 0x5c6b5a,
+  leaf: 0x4f6b47,
 };
 
 function stationFor(action) {
@@ -51,15 +66,23 @@ function stationFor(action) {
   return STATIONS.center;
 }
 
-// World-relative 0..1 layout -> 3D room coordinates (x, z), y is up.
-function toWorldXZ(s) {
-  return { x: (s.x - 0.5) * ROOM_W, z: (s.y - 0.5) * ROOM_D };
+// A grid plot {x,y} (whatever units the real world data uses) -> world (x,z).
+// Recentres the whole neighbourhood around the origin regardless of the
+// actual plot values, so the layout stays centred even if a future world
+// adds a building at a plot this file has never seen.
+function plotToWorldXZ(plot, centerX, centerZ) {
+  return { x: (plot.x - centerX) * GRID_UNIT_X, z: (plot.y - centerZ) * GRID_UNIT_Z };
+}
+
+// A station's 0..1 layout -> local (x,z) within its own building's footprint.
+function stationLocalXZ(s) {
+  return { x: (s.x - 0.5) * BUILDING_W, z: (s.y - 0.5) * BUILDING_D };
 }
 
 // A sim's stand position is offset from its station's centre, toward the
-// room's middle -- standing exactly AT a station's centre (fine in the old
-// top-down 2D view) puts a character behind tall furniture like the fridge
-// or shower stall in this 3D one, hiding it from the camera entirely.
+// building's middle -- standing exactly AT a station's centre (fine in the
+// old top-down 2D view) puts a character behind tall furniture like the
+// fridge or shower stall in this 3D one, hiding it from the camera entirely.
 const STAND_OFFSET = {
   sleep: { x: 0.07, y: 0.1 },
   eat: { x: -0.09, y: 0.09 },
@@ -69,20 +92,17 @@ const STAND_OFFSET = {
   call: { x: 0.07, y: 0 },
   idle: { x: 0, y: 0 },
 };
-function standWorldXZ(s) {
+function standLocalXZ(s) {
   const off = STAND_OFFSET[s.action] || STAND_OFFSET.idle;
-  return { x: (s.x + off.x - 0.5) * ROOM_W, z: (s.y + off.y - 0.5) * ROOM_D };
+  return { x: (s.x + off.x - 0.5) * BUILDING_W, z: (s.y + off.y - 0.5) * BUILDING_D };
 }
 
-// Sun elevation/azimuth/colour across the 24h clock -- same shape as the 2D
-// renderer's sunFor(), re-derived here for 3D (elevation as radians above
-// the horizon rather than a 0..1 altitude used for a 2D shadow length).
+// Sun elevation/azimuth/colour across the 24h clock.
 function sunFor(hour) {
   const isDay = hour >= 6 && hour < 20;
   const dayFrac = Math.min(1, Math.max(0, ((hour - 6 + 24) % 24) / 14));
   const elevation = isDay ? Math.sin(dayFrac * Math.PI) * 1.05 + 0.05 : 0.03;
   const azimuth = (((hour - 6 + 24) % 24) / 24) * Math.PI * 2;
-  // 0 = warm ember (dawn/dusk), 1 = neutral daylight.
   let warmth;
   if (!isDay) warmth = 0;
   else if (hour < 9) warmth = (hour - 6) / 3;
@@ -103,16 +123,13 @@ function lerp(a, b, t) {
 }
 
 // Every material goes through here so the room environment's IBL
-// contribution (otherwise very strong -- RoomEnvironment is built to look
-// right at envMapIntensity 1, which reads blown-out layered on top of the
-// direct sun/hemi/room lights below) stays tame by default everywhere.
+// contribution stays tame by default everywhere.
 function stdMat(opts) {
   return new THREE.MeshStandardMaterial({ envMapIntensity: 0.15, ...opts });
 }
 
 /** A soft radial-gradient disc, reused (scaled per-instance) as a cheap
- * stand-in for ambient occlusion at every object-floor contact point --
- * "cheap, enormous payoff" per UPGRADE.md, without a full SSAO pass. */
+ * stand-in for ambient occlusion at every object-ground contact point. */
 function makeContactShadowTexture() {
   const size = 128;
   const c = document.createElement("canvas");
@@ -137,10 +154,12 @@ class Renderer3D {
     this.prevWorld = null;
     this.nextWorld = null;
     this._simMeshes = [];
+    this._buildingGroupsById = {};
+    this._buildingsById = {};
+    this._neighbourhoodBuilt = false;
     this._disposed = false;
 
     this._initScene();
-    this._buildRoom();
     this._orbit = { base: 0.62, delta: 0, dragging: false, startX: 0, startDelta: 0 };
     this._bindOrbitControls();
 
@@ -166,19 +185,15 @@ class Renderer3D {
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
 
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 60);
+    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 90);
     this.camera = camera;
-    this._lookAt = new THREE.Vector3(0, 1.1, 0);
+    this._lookAt = new THREE.Vector3(0, 0.9, 0);
 
     const sun = new THREE.DirectionalLight(0xffffff, 1.4);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -ROOM_W * 0.65;
-    sun.shadow.camera.right = ROOM_W * 0.65;
-    sun.shadow.camera.top = ROOM_D * 0.65;
-    sun.shadow.camera.bottom = -ROOM_D * 0.65;
     sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 30;
+    sun.shadow.camera.far = 46;
     sun.shadow.bias = -0.0018;
     sun.shadow.normalBias = 0.02;
     scene.add(sun);
@@ -189,8 +204,6 @@ class Renderer3D {
     scene.add(hemi);
     this.hemi = hemi;
 
-    // A small, always-on warm interior glow so night reads as a cosy room,
-    // not a blackout -- the palette rule carried over from the 2D renderer.
     const roomGlow = new THREE.PointLight(0xffb066, 0.25, 9, 2);
     roomGlow.position.set(0, 2.0, 0);
     scene.add(roomGlow);
@@ -209,6 +222,9 @@ class Renderer3D {
     composer.addPass(vignette);
     composer.addPass(new OutputPass());
     this.composer = composer;
+
+    this.neighbourhoodGroup = new THREE.Group();
+    scene.add(this.neighbourhoodGroup);
   }
 
   _contactShadow(w, d, parent, y = 0.006) {
@@ -221,49 +237,172 @@ class Renderer3D {
     return mesh;
   }
 
-  _buildRoom() {
-    const g = new THREE.Group();
-    this.scene.add(g);
-    this.roomGroup = g;
+  /** Reads world.buildings/outdoorObjects the first time real world data
+   * arrives and builds the whole neighbourhood from it. Only ever runs
+   * once per world shape -- buildings/outdoor objects are static for a
+   * given source (a shipped change that adds one would reload the page
+   * via bootWorld(), which constructs a fresh renderer anyway). */
+  _buildNeighbourhoodIfNeeded(world) {
+    if (this._neighbourhoodBuilt) return;
+    const buildings = world.buildings || [];
+    const outdoorObjects = world.outdoorObjects || [];
+    if (buildings.length === 0) return; // nothing to build yet
 
+    const xs = buildings.map((b) => b.plot.x), ys = buildings.map((b) => b.plot.y);
+    const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const centerZ = (Math.min(...ys) + Math.max(...ys)) / 2;
+    this._plotCenter = { x: centerX, z: centerZ };
+
+    this._buildGround(buildings, outdoorObjects, centerX, centerZ);
+
+    for (const b of buildings) {
+      const pos = plotToWorldXZ(b.plot, centerX, centerZ);
+      const group = new THREE.Group();
+      group.position.set(pos.x, 0, pos.z);
+      this.neighbourhoodGroup.add(group);
+      this._buildingGroupsById[b.id] = group;
+      this._buildingsById[b.id] = b;
+      if (b.type === "dwelling") this._buildDwelling(group, b);
+      else this._buildSimpleBuilding(group, b);
+    }
+
+    for (const o of outdoorObjects) {
+      const pos = plotToWorldXZ(o.plot, centerX, centerZ);
+      this._buildOutdoorObject(o, pos);
+    }
+
+    this._neighbourhoodBuilt = true;
+    this._fitCamera(buildings, centerX, centerZ);
+  }
+
+  _fitCamera(buildings, centerX, centerZ) {
+    const xs = buildings.map((b) => Math.abs((b.plot.x - centerX) * GRID_UNIT_X) + BUILDING_W / 2);
+    const zs = buildings.map((b) => Math.abs((b.plot.y - centerZ) * GRID_UNIT_Z) + BUILDING_D / 2);
+    const halfW = Math.max(...xs, BUILDING_W / 2);
+    const halfD = Math.max(...zs, BUILDING_D / 2);
+    const radius = Math.sqrt(halfW * halfW + halfD * halfD);
+    this._camDist = radius * 1.7 + 6;
+    this._camH = radius * 0.95 + 3;
+    this.sun.shadow.camera.left = -(halfW + 3);
+    this.sun.shadow.camera.right = halfW + 3;
+    this.sun.shadow.camera.top = halfD + 3;
+    this.sun.shadow.camera.bottom = -(halfD + 3);
+  }
+
+  _buildGround(buildings, outdoorObjects, centerX, centerZ) {
+    const xs = buildings.map((b) => Math.abs((b.plot.x - centerX) * GRID_UNIT_X) + BUILDING_W / 2);
+    const zs = buildings.map((b) => Math.abs((b.plot.y - centerZ) * GRID_UNIT_Z) + BUILDING_D / 2);
+    const groundW = Math.max(...xs) * 2 + 5;
+    const groundD = Math.max(...zs) * 2 + 5;
+    const ground = new THREE.Mesh(
+      new RoundedBoxGeometry(groundW, 0.25, groundD, 3, 0.15),
+      stdMat({ color: PALETTE.ground, roughness: 0.95, metalness: 0.0 }),
+    );
+    ground.position.y = -0.2;
+    ground.receiveShadow = true;
+    this.neighbourhoodGroup.add(ground);
+    this._groundExtent = { w: groundW, d: groundD };
+
+    // Simple cross-shaped path through the central plaza, connecting every
+    // building's side of the grid -- not routed building-to-building
+    // individually (that's real pathfinding for a later run), just an
+    // honest "there is open, walkable ground here" cue.
+    const pathMat = stdMat({ color: PALETTE.path, roughness: 0.9 });
+    const pathNS = new THREE.Mesh(new THREE.PlaneGeometry(2.4, groundD - 1), pathMat);
+    pathNS.rotation.x = -Math.PI / 2;
+    pathNS.position.y = -0.06;
+    pathNS.receiveShadow = true;
+    this.neighbourhoodGroup.add(pathNS);
+    const pathEW = new THREE.Mesh(new THREE.PlaneGeometry(groundW - 1, 2.4), pathMat);
+    pathEW.rotation.x = -Math.PI / 2;
+    pathEW.position.y = -0.06;
+    pathEW.receiveShadow = true;
+    this.neighbourhoodGroup.add(pathEW);
+  }
+
+  _buildDwelling(group, building) {
     const floor = new THREE.Mesh(
-      new RoundedBoxGeometry(ROOM_W, 0.3, ROOM_D, 3, 0.12),
+      new RoundedBoxGeometry(BUILDING_W, 0.3, BUILDING_D, 3, 0.12),
       stdMat({ color: PALETTE.floor, roughness: 0.86, metalness: 0.02 }),
     );
     floor.position.y = -0.15;
     floor.receiveShadow = true;
-    g.add(floor);
+    group.add(floor);
 
     const wallMat = stdMat({ color: PALETTE.wall, roughness: 0.92, metalness: 0.0 });
-    const backWall = new THREE.Mesh(new RoundedBoxGeometry(ROOM_W, 2.3, 0.14, 2, 0.05), wallMat);
-    backWall.position.set(0, 1.0, -ROOM_D / 2);
+    const backWall = new THREE.Mesh(new RoundedBoxGeometry(BUILDING_W, 2.3, 0.14, 2, 0.05), wallMat);
+    backWall.position.set(0, 1.0, -BUILDING_D / 2);
     backWall.receiveShadow = true;
-    g.add(backWall);
-    const leftWall = new THREE.Mesh(new RoundedBoxGeometry(0.14, 2.3, ROOM_D, 2, 0.05), wallMat);
-    leftWall.position.set(-ROOM_W / 2, 1.0, 0);
+    group.add(backWall);
+    const leftWall = new THREE.Mesh(new RoundedBoxGeometry(0.14, 2.3, BUILDING_D, 2, 0.05), wallMat);
+    leftWall.position.set(-BUILDING_W / 2, 1.0, 0);
     leftWall.receiveShadow = true;
-    g.add(leftWall);
+    group.add(leftWall);
 
+    // A small label plank by the entrance so the building reads as
+    // labelled ("House 1"), not just a shape -- matches building.label.
+    this._buildSignPost(group, building.label, BUILDING_W / 2 + 0.3, BUILDING_D / 2 - 0.3, PALETTE.wood);
+
+    const stationsToBuild = building.stations && building.stations.length ? building.stations : [];
     for (const key in STATIONS) {
       const s = STATIONS[key];
       if (s.label === null) continue;
-      this._buildStation(s);
+      if (!stationsToBuild.includes(key)) continue;
+      this._buildStation(group, s);
     }
   }
 
-  _buildStation(s) {
-    const { x, z } = toWorldXZ(s);
-    const group = new THREE.Group();
-    group.position.set(x, 0, z);
-    this.roomGroup.add(group);
+  /** shop/workshop: a real, drawn structure with no interior stations --
+   * honest about that rather than padded out with fake furniture. Smaller
+   * enclosed volume with a distinguishing roof colour per type, plus a
+   * sign post, so the two read as different buildings from across the
+   * plot even though neither has anything happening inside yet. */
+  _buildSimpleBuilding(group, building) {
+    const w = BUILDING_W * 0.55, d = BUILDING_D * 0.7, h = 1.7;
+    const roofColor = building.type === "workshop" ? PALETTE.roofWorkshop : PALETTE.roofShop;
+    const shell = new THREE.Mesh(
+      new RoundedBoxGeometry(w, h, d, 2, 0.08),
+      stdMat({ color: PALETTE.wall, roughness: 0.88 }),
+    );
+    shell.position.y = h / 2;
+    shell.castShadow = true;
+    shell.receiveShadow = true;
+    group.add(shell);
+    const roof = new THREE.Mesh(
+      new RoundedBoxGeometry(w + 0.35, 0.22, d + 0.35, 2, 0.06),
+      stdMat({ color: roofColor, roughness: 0.7 }),
+    );
+    roof.position.y = h + 0.11;
+    roof.castShadow = true;
+    group.add(roof);
+    this._contactShadow(w + 0.8, d + 0.8, group, 0.006);
+    this._buildSignPost(group, building.label, w / 2 + 0.4, d / 2 + 0.5, roofColor);
+  }
+
+  _buildSignPost(group, label, x, z, plankColor) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.9, 8), stdMat({ color: PALETTE.woodDark, roughness: 0.7 }));
+    post.position.set(x, 0.45, z);
+    post.castShadow = true;
+    group.add(post);
+    const plank = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.22, 0.04, 1, 0.03), stdMat({ color: plankColor, roughness: 0.6 }));
+    plank.position.set(x, 0.78, z);
+    plank.castShadow = true;
+    group.add(plank);
+  }
+
+  _buildStation(group, s) {
+    const local = stationLocalXZ(s);
+    const stGroup = new THREE.Group();
+    stGroup.position.set(local.x, 0, local.z);
+    group.add(stGroup);
 
     const shadowSize = { sleep: 2.4, eat: 1.1, shower: 1.6, work: 2.0, play: 2.4, call: 1.4 }[s.action] || 1.2;
-    this._contactShadow(shadowSize, shadowSize * 0.75, group);
+    this._contactShadow(shadowSize, shadowSize * 0.75, stGroup);
 
     const set = (mesh, cast = true) => {
       mesh.castShadow = cast;
       mesh.receiveShadow = true;
-      group.add(mesh);
+      stGroup.add(mesh);
       return mesh;
     };
 
@@ -344,6 +483,71 @@ class Renderer3D {
     }
   }
 
+  _buildOutdoorObject(o, pos) {
+    const group = new THREE.Group();
+    group.position.set(pos.x, 0, pos.z);
+    this.neighbourhoodGroup.add(group);
+    const set = (mesh, cast = true) => {
+      mesh.castShadow = cast;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+      return mesh;
+    };
+    switch (o.type) {
+      case "bench": {
+        this._contactShadow(1.2, 0.6, group);
+        const seat = new THREE.Mesh(new RoundedBoxGeometry(1.0, 0.06, 0.34, 1, 0.02), stdMat({ color: PALETTE.wood, roughness: 0.65 }));
+        seat.position.y = 0.42;
+        set(seat);
+        const back = new THREE.Mesh(new RoundedBoxGeometry(1.0, 0.32, 0.05, 1, 0.02), stdMat({ color: PALETTE.wood, roughness: 0.65 }));
+        back.position.set(0, 0.6, -0.15);
+        set(back);
+        for (const lx of [-0.42, 0.42]) {
+          const leg = new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.42, 0.3, 1, 0.02), stdMat({ color: PALETTE.woodDark, roughness: 0.7 }));
+          leg.position.set(lx, 0.21, 0);
+          set(leg);
+        }
+        break;
+      }
+      case "tree": {
+        this._contactShadow(1.8, 1.8, group);
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 1.1, 8), stdMat({ color: PALETTE.woodDark, roughness: 0.85 }));
+        trunk.position.y = 0.55;
+        set(trunk);
+        const canopy = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 1), stdMat({ color: PALETTE.leaf, roughness: 0.85 }));
+        canopy.position.y = 1.35;
+        canopy.scale.set(1, 0.85, 1);
+        set(canopy);
+        break;
+      }
+      case "lampPost": {
+        this._contactShadow(0.7, 0.7, group);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.7, 8), stdMat({ color: 0x3a3a3a, roughness: 0.5, metalness: 0.4 }));
+        pole.position.y = 0.85;
+        set(pole);
+        const lamp = new THREE.Mesh(
+          new THREE.SphereGeometry(0.11, 12, 10),
+          stdMat({ color: 0xffe9bf, roughness: 0.4, emissive: 0xffb066, emissiveIntensity: 0.6 }),
+        );
+        lamp.position.y = 1.72;
+        set(lamp, false);
+        group.userData.lampBulb = lamp;
+        break;
+      }
+      case "planter": {
+        this._contactShadow(0.6, 0.6, group);
+        const box = new THREE.Mesh(new RoundedBoxGeometry(0.5, 0.32, 0.5, 1, 0.04), stdMat({ color: PALETTE.woodDark, roughness: 0.75 }));
+        box.position.y = 0.16;
+        set(box);
+        const tuft = new THREE.Mesh(new THREE.IcosahedronGeometry(0.24, 0)); tuft.material = stdMat({ color: PALETTE.leaf, roughness: 0.9 });
+        tuft.position.y = 0.44;
+        tuft.scale.set(1, 0.7, 1);
+        set(tuft);
+        break;
+      }
+    }
+  }
+
   _bindOrbitControls() {
     const canvas = this.canvas;
     const onDown = (e) => {
@@ -404,13 +608,15 @@ class Renderer3D {
     if (this._disposed) return;
     const w = this.nextWorld;
     if (!w) return;
+    this._buildNeighbourhoodIfNeeded(w);
+    if (!this._neighbourhoodBuilt) return; // no buildings yet -- nothing to draw
     if (this.reducedMotion) t = 1;
     const prev = this.prevWorld || w;
     const hour = w.tick % 24;
     const sun = sunFor(hour);
 
     // -- lighting for this hour --
-    const dist = 14;
+    const dist = Math.max(20, (this._camDist || 14) * 1.4);
     const sx = Math.cos(sun.azimuth) * Math.cos(sun.elevation) * dist;
     const sy = Math.max(0.6, Math.sin(sun.elevation) * dist);
     const sz = Math.sin(sun.azimuth) * Math.cos(sun.elevation) * dist;
@@ -426,22 +632,25 @@ class Renderer3D {
     const sky = sun.isDay ? SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth) : SKY_NIGHT;
     this.scene.background = sky.clone();
 
-    // -- composed camera: fixed 3/4 shot, small user-driven orbit only --
+    // -- composed camera: fixed 3/4 shot of the whole plot, small user-driven orbit only --
     const az = this._orbit.base + this._orbit.delta;
-    const camDist = 9.6, camH = 6.6;
+    const camDist = this._camDist || 14, camH = this._camH || 8;
     this.camera.position.set(Math.sin(az) * camDist, camH, Math.cos(az) * camDist);
     this.camera.lookAt(this._lookAt);
 
-    // -- sims: interpolate between stations, small walk bob mid-transition --
+    // -- sims: interpolate between stations within their own home building --
     const sims = w.sims || [];
     sims.forEach((sim, i) => {
+      const home = this._buildingsById[sim.home];
+      if (!home) return; // sim has no known home building yet -- nothing to place
+      const buildingPos = plotToWorldXZ(home.plot, this._plotCenter.x, this._plotCenter.z);
       const prevSim = (prev.sims || [])[i] || sim;
-      const from = standWorldXZ(this._stationForSim(prevSim));
-      const to = standWorldXZ(this._stationForSim(sim));
+      const fromLocal = standLocalXZ(this._stationForSim(prevSim));
+      const toLocal = standLocalXZ(this._stationForSim(sim));
       let mesh = this._simMeshes[i];
       if (!mesh) mesh = this._simMeshes[i] = this._buildSim(i);
-      mesh.position.x = lerp(from.x, to.x, t);
-      mesh.position.z = lerp(from.z, to.z, t);
+      mesh.position.x = buildingPos.x + lerp(fromLocal.x, toLocal.x, t);
+      mesh.position.z = buildingPos.z + lerp(fromLocal.z, toLocal.z, t);
       const bob = this.reducedMotion ? 0 : Math.sin(t * Math.PI) * 0.05;
       mesh.position.y = bob;
       const criticalNeed = sim.needs && Object.entries(sim.needs).find(([, v]) => v < 30);
@@ -456,20 +665,28 @@ class Renderer3D {
   }
 
   _buildSim(index) {
+    // Sized up ~1.8x from the single-room version, verified empirically:
+    // placed an oversized bright-red marker at a sim's exact computed
+    // world position and confirmed the position math was already correct
+    // (it showed up exactly at the desk, right where "work" should put
+    // it) -- the capsule itself was just too small to read once the camera
+    // pulled back roughly 2.9x further to frame the whole neighbourhood
+    // instead of one room. Legibility of "there is a person here" wins
+    // over strict human-scale proportion at this zoomed-out a shot.
     const color = index === 0 ? PALETTE.accent : PALETTE.sim2;
     const group = new THREE.Group();
     const mat = stdMat({ color, roughness: 0.55, metalness: 0.05 });
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.28, 4, 10), mat);
-    body.position.y = 0.32;
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.29, 0.5, 4, 10), mat);
+    body.position.y = 0.58;
     body.castShadow = true;
     group.add(body);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 16, 12), mat);
-    head.position.y = 0.64;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 16, 12), mat);
+    head.position.y = 1.15;
     head.castShadow = true;
     group.add(head);
-    this._contactShadow(0.8, 0.8, group, 0.008);
+    this._contactShadow(1.4, 1.4, group, 0.008);
     const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.32, 0.4, 32),
+      new THREE.RingGeometry(0.58, 0.72, 32),
       new THREE.MeshBasicMaterial({ color: PALETTE.accent, transparent: true, opacity: 0.85, side: THREE.DoubleSide }),
     );
     ring.rotation.x = -Math.PI / 2;
@@ -477,7 +694,7 @@ class Renderer3D {
     ring.visible = false;
     group.add(ring);
     group.userData.ring = ring;
-    this.roomGroup.add(group);
+    this.neighbourhoodGroup.add(group);
     return group;
   }
 }
