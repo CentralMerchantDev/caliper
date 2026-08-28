@@ -60,7 +60,7 @@ const PALETTE = {
   ceramic: 0xf3efe6,
   accent: 0xb0560c, // sim 1
   sim2: 0x3d6b63, // sim 2
-  ground: 0x9a8e77,
+  ground: 0x6f6656, // deepened again -- night was reading as one flat brown value, not dark with warm pools
   path: 0xbfb49c,
   roofShop: 0x9a5a3c,
   roofWorkshop: 0x5c6b5a,
@@ -549,9 +549,10 @@ class Renderer3D {
         lamp.position.y = 1.72;
         set(lamp, false);
         group.userData.lampBulb = lamp;
-        const lampLight = new THREE.PointLight(0xffb066, 0.5, 6, 2);
+        const lampLight = new THREE.PointLight(0xffb066, 0.7, 5.5, 2.2);
         lampLight.position.y = 1.72;
-        lampLight.userData.baseIntensity = 0.5;
+        lampLight.userData.baseIntensity = 0.7;
+        lampLight.userData.isStreetLamp = true; // gets a stronger night curve than interior lights, below
         group.add(lampLight);
         this._pointLights.push(lampLight);
         group.userData.lampLight = lampLight;
@@ -649,26 +650,26 @@ class Renderer3D {
     this.sun.intensity = sun.isDay ? lerp(0.4, 0.85, Math.min(1, sun.elevation)) : 0.05;
     const sunColor = sun.warmth >= 1 ? SUN_COLOR_DAY : SUN_COLOR_WARM.clone().lerp(SUN_COLOR_DAY, sun.warmth);
     this.sun.color.copy(sun.isDay ? sunColor : SUN_COLOR_NIGHT);
-    // Night's ambient floor sits below even dawn/dusk's -- a lower ceiling
-    // on general fill light is what makes the point lights below read as
-    // the thing actually lighting the scene, instead of everything
-    // staying similarly bright and only the sky changing colour.
-    this.hemi.intensity = sun.isDay ? lerp(0.14, 0.24, Math.min(1, sun.elevation)) : 0.05;
-    // CITY.md item 2: "at night the point lights carry the scene and the
-    // sun is gone" -- each lamp/interior light ramps from a faint daytime
-    // presence (barely contributing against real sunlight) to carrying
-    // real brightness at night, scaled off its own base so lamps (built
-    // brighter) and interior lights stay in proportion to each other.
+    // Night's ambient floor pushed down again -- the previous pass still
+    // left night reading as one flat brown value instead of dark with
+    // warm pools. A lower ceiling on general fill light is what makes the
+    // point lights below read as the thing actually lighting the scene.
+    this.hemi.intensity = sun.isDay ? lerp(0.14, 0.24, Math.min(1, sun.elevation)) : 0.02;
+    // CITY.md item 2/3: "at night the point lights carry the scene and the
+    // sun is gone." Street lamps get a stronger night curve than interior
+    // lights -- they're the thing meant to read as a warm pool against a
+    // dark ground, not just a faint indoor glow.
     for (const light of this._pointLights) {
       const base = light.userData.baseIntensity || 0.3;
-      light.intensity = lerp(base * 0.2, base * 1.0, nightAmt);
+      const nightMult = light.userData.isStreetLamp ? 2.6 : 1.3;
+      light.intensity = lerp(base * 0.2, base * nightMult, nightAmt);
     }
     // Emissive materials on the light sources themselves: a lamp bulb
     // barely glows in daylight, but reads as a genuinely bright object at
     // night -- not just a pool of light on the ground beneath it.
     for (const building of this.neighbourhoodGroup.children) {
       if (building.userData && building.userData.lampBulb) {
-        building.userData.lampBulb.material.emissiveIntensity = lerp(0.3, 3.2, nightAmt);
+        building.userData.lampBulb.material.emissiveIntensity = lerp(0.3, 4.5, nightAmt);
       }
     }
     // Exposure tuned per time of day: night dips lower, not higher --
@@ -677,15 +678,16 @@ class Renderer3D {
     // A slightly darker overall exposure plus genuinely brighter emissive
     // lamps (below) is what makes them read as the light source, not just
     // a uniformly-lit scene with a different sky colour.
-    this.renderer.toneMappingExposure = lerp(0.62, 0.48, nightAmt);
+    this.renderer.toneMappingExposure = lerp(0.62, 0.44, nightAmt);
     // The RoomEnvironment IBL contributes a constant ambient floor
     // regardless of sun position -- without scaling it down too, night
     // never actually got darker, just the sky changed colour while every
     // surface stayed lit by the same reflection environment. Scene-level
     // environmentIntensity multiplies every material's own envMapIntensity
     // globally, so this one line dims the whole IBL contribution at night
-    // without touching materials individually.
-    this.scene.environmentIntensity = lerp(1.0, 0.22, nightAmt);
+    // without touching materials individually. Dropped further again --
+    // 0.22 still left too much ambient bounce lifting the ground.
+    this.scene.environmentIntensity = lerp(1.0, 0.08, nightAmt);
 
     const sky = sun.isDay ? SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth) : SKY_NIGHT;
     this.scene.background = sky.clone();
