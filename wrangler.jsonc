@@ -78,6 +78,7 @@
       "/change-plan-decision",
       "/change-plan-reply",
       "/change-review-decision",
+      "/change-error-decision",
       "/change-answer"
     ]
   }
