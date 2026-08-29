@@ -54,31 +54,39 @@ test("reviewFollowedFormat: control case -- all 4 phrases present passes", () =>
 // exists to catch review failures.
 // ---------------------------------------------------------------------
 
-function fakeCompletion(opts: { finishReason?: string; content?: string | null }): any {
+// SHIP.md item 2: reviewArtifact moved from the Chat Completions API to
+// the Responses API after a real review call against the real OpenAI API
+// returned a real 404 -- gpt-5.3-codex isn't served on
+// v1/chat/completions at all. This mock shape follows that move:
+// output_text/incomplete_details/usage.input_tokens+output_tokens, not
+// choices[0].message.content/finish_reason/usage.prompt_tokens.
+function fakeResponse(opts: { incomplete?: boolean; content?: string | null }): any {
   return {
-    choices: [{ finish_reason: opts.finishReason ?? "stop", message: { content: opts.content ?? null } }],
-    usage: { prompt_tokens: 10, completion_tokens: 10 },
+    status: opts.incomplete ? "incomplete" : "completed",
+    incomplete_details: opts.incomplete ? { reason: "max_output_tokens" } : null,
+    output_text: opts.content ?? "",
+    usage: { input_tokens: 10, output_tokens: 10 },
   };
 }
 
 test("resolveReview: truncated twice in a row fails (never returns partial content)", async () => {
-  const attempt = async () => fakeCompletion({ finishReason: "length", content: "partial review tex" });
+  const attempt = async () => fakeResponse({ incomplete: true, content: "partial review tex" });
   await assert.rejects(() => resolveReview(attempt, 100, "content"), TruncatedResponseError);
 });
 
 test("resolveReview: empty content fails, even with a normal finish_reason", async () => {
-  const attempt = async () => fakeCompletion({ finishReason: "stop", content: "" });
+  const attempt = async () => fakeResponse({ content: "" });
   await assert.rejects(() => resolveReview(attempt, 100, "content"), /empty content/);
 });
 
 test("resolveReview: malformed format (missing the 4 named modes) twice in a row fails", async () => {
-  const attempt = async () => fakeCompletion({ finishReason: "stop", content: "Looks fine, ship it." });
+  const attempt = async () => fakeResponse({ content: "Looks fine, ship it." });
   await assert.rejects(() => resolveReview(attempt, 100, "content"), /required structure/);
 });
 
 test("resolveReview: control case -- a well-formed review on the first try succeeds", async () => {
   const validText = "Kitchen Sink: no. Wrong Abstraction: no. Optimistic Path: no. Runaway Refactor: no.\nNo other findings.";
-  const attempt = async () => fakeCompletion({ finishReason: "stop", content: validText });
+  const attempt = async () => fakeResponse({ content: validText });
   const { text } = await resolveReview(attempt, 100, "content");
   assert.equal(text, validText);
 });
@@ -88,7 +96,7 @@ test("resolveReview: control case -- recovers on the second attempt after a form
   const validText = "Kitchen Sink: no. Wrong Abstraction: no. Optimistic Path: no. Runaway Refactor: no.\nNo other findings.";
   const attempt = async () => {
     calls++;
-    return calls === 1 ? fakeCompletion({ finishReason: "stop", content: "Looks fine." }) : fakeCompletion({ finishReason: "stop", content: validText });
+    return calls === 1 ? fakeResponse({ content: "Looks fine." }) : fakeResponse({ content: validText });
   };
   const { text } = await resolveReview(attempt, 100, "content");
   assert.equal(text, validText);

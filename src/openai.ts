@@ -62,22 +62,28 @@ For each of the 4 modes, answer explicitly yes or no with a one-line reason -- "
  * content.
  */
 export async function resolveReview(
-  attempt: (attemptTokens: number, content: string) => Promise<OpenAI.Chat.Completions.ChatCompletion>,
+  attempt: (attemptTokens: number, content: string) => Promise<OpenAI.Responses.Response>,
   maxTokens: number,
   userContent: string,
-): Promise<{ response: OpenAI.Chat.Completions.ChatCompletion; text: string }> {
+): Promise<{ response: OpenAI.Responses.Response; text: string }> {
   let response = await attempt(maxTokens, userContent);
-  // validate-before-consume (a production control-layer practice): finish_reason "length"
-  // means the response was cut off -- a real defect (an earlier version
-  // here only checked for *empty* content, which missed a genuinely
-  // truncated-but-nonempty review reading as if it were complete).
-  if (response.choices[0]?.finish_reason === "length") {
+  // validate-before-consume (a production control-layer practice):
+  // incomplete_details.reason === "max_output_tokens" means the response
+  // was cut off -- a real defect (an earlier version here only checked for
+  // *empty* content, which missed a genuinely truncated-but-nonempty
+  // review reading as if it were complete). SHIP.md item 2: found by
+  // actually driving one real review call -- gpt-5.3-codex is only served
+  // through the Responses API, not Chat Completions (a 404 from the real
+  // API, not a guess), so this whole function moved off `choices[0]` onto
+  // the Responses API's own shape (output_text, incomplete_details, a
+  // differently-named usage field).
+  if (response.incomplete_details?.reason === "max_output_tokens") {
     const retryTokens = Math.min(maxTokens * 2, 8000);
     response = await attempt(retryTokens, userContent);
-    if (response.choices[0]?.finish_reason === "length") throw new TruncatedResponseError("reviewArtifact", retryTokens);
+    if (response.incomplete_details?.reason === "max_output_tokens") throw new TruncatedResponseError("reviewArtifact", retryTokens);
   }
 
-  let text = response.choices[0]?.message?.content ?? "";
+  let text = response.output_text ?? "";
   if (!text) {
     // Known, disclosed gap: OpenAI still bills the reasoning tokens burned
     // on this call even though there's no content to return, but throwing
@@ -88,7 +94,7 @@ export async function resolveReview(
     // the pre-flight worst-case check). Bounded in practice by the circuit
     // breaker opening after CONTROL_LIMITS.CIRCUIT_FAILURE_THRESHOLD
     // consecutive failures, not eliminated.
-    throw new Error(`OpenAI review returned empty content (finish_reason: ${response.choices[0]?.finish_reason})`);
+    throw new Error(`OpenAI review returned empty content (status: ${response.status}, incomplete_details: ${JSON.stringify(response.incomplete_details)})`);
   }
 
   // validate-before-consume: zero [MATERIAL]/[NIT] lines is read downstream
@@ -101,7 +107,7 @@ export async function resolveReview(
   if (!reviewFollowedFormat(text)) {
     const retryContent = `${userContent}\n\nYour previous response did not follow the required structure -- it must explicitly address all 4 named failure modes (Kitchen Sink, Wrong Abstraction, Optimistic Path, Runaway Refactor) by name, each with an explicit yes/no. Redo the review in the required format.`;
     response = await attempt(maxTokens, retryContent);
-    const retryText = response.choices[0]?.message?.content ?? "";
+    const retryText = response.output_text ?? "";
     if (!reviewFollowedFormat(retryText)) {
       throw new Error("Review response did not follow the required structure (missing the 4 named failure modes) twice in a row -- treated as a failure, not a clean review.");
     }
@@ -128,27 +134,25 @@ export async function reviewArtifact(
     `Spec given to the author model:\n${authorPrompt}\n\n` +
     `Artifact:\n${artifactHtml}`;
 
-  // gpt-5.5 is a reasoning model that spends part of max_completion_tokens
+  // gpt-5.5 is a reasoning model that spends part of max_output_tokens
   // on hidden reasoning before any visible output -- found by actually
   // running this call: an unset (default/high) effort with a 1200-token
   // cap consumed the whole budget on reasoning and returned empty content
-  // with finish_reason "length". A review is not deep architecture work;
-  // "low" leaves the budget for the actual critique.
-  async function attempt(attemptTokens: number, content: string): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-    return client.chat.completions.create({
+  // truncated at max_output_tokens. A review is not deep architecture
+  // work; "low" leaves the budget for the actual critique.
+  async function attempt(attemptTokens: number, content: string): Promise<OpenAI.Responses.Response> {
+    return client.responses.create({
       model,
-      max_completion_tokens: attemptTokens,
-      reasoning_effort: "low",
-      messages: [
-        { role: "system", content: REVIEW_SYSTEM_PROMPT },
-        { role: "user", content },
-      ],
+      max_output_tokens: attemptTokens,
+      reasoning: { effort: "low" },
+      instructions: REVIEW_SYSTEM_PROMPT,
+      input: content,
     });
   }
   const { response, text } = await resolveReview(attempt, maxTokens, userContent);
 
-  const inputTokens = response.usage?.prompt_tokens ?? 0;
-  const outputTokens = response.usage?.completion_tokens ?? 0;
+  const inputTokens = response.usage?.input_tokens ?? 0;
+  const outputTokens = response.usage?.output_tokens ?? 0;
   return { text, model, inputTokens, outputTokens, costUsd: costUsd(model, inputTokens, outputTokens), wallTimeMs: Date.now() - start };
 }
 
