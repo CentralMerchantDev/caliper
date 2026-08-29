@@ -292,6 +292,37 @@ footer a{color:var(--ink2)}
 .action-bar.bar-done{background:var(--goodSoft)}
 .action-bar.bar-error{background:var(--accentSoft);border-top-color:var(--accent)}
 
+/* Feature CSS: Letterbox, Canvas Buttons, Cmd+K, Spotlight Modal */
+.letterbox-bar{position:absolute;left:0;right:0;height:24px;background:#0f172a;z-index:12;transition:transform .4s cubic-bezier(.16,1,.3,1);pointer-events:none}
+.letterbox-top{top:0;transform:translateY(-100%)}
+.letterbox-bottom{bottom:0;transform:translateY(100%)}
+.letterbox-top.active{transform:translateY(0)}
+.letterbox-bottom.active{transform:translateY(0)}
+
+.canvas-btn-bar{position:absolute;z-index:10;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.canvas-btn-bar.top-left{top:12px;left:12px}
+
+.canvas-btn{background:rgba(15,23,42,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.16);color:var(--paper,#f8fafc);font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:8px;cursor:pointer;transition:all .2s ease;display:inline-flex;align-items:center;gap:4px}
+.canvas-btn:hover{background:rgba(30,41,59,.9);border-color:rgba(255,255,255,.3);transform:translateY(-1px)}
+.canvas-btn.active,.canvas-btn[aria-pressed="true"]{background:rgba(16,185,129,.25);border-color:#10b981;color:#34d399}
+
+.cmd-k-badge{background:rgba(15,23,42,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.16);color:var(--ink2,#94a3b8);font-family:var(--mono);font-size:12px;font-weight:600;padding:4px 8px;border-radius:6px;cursor:pointer;transition:all .2s ease}
+.cmd-k-badge:hover{background:rgba(30,41,59,.85);color:#fff;border-color:rgba(255,255,255,.3)}
+
+.cmd-modal-backdrop{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.68);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px 16px}
+.cmd-modal-card{width:100%;max-width:580px;background:rgba(15,23,42,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.18);border-radius:14px;box-shadow:0 25px 50px -12px rgba(0,0,0,.6);overflow:hidden;display:flex;flex-direction:column}
+.cmd-modal-header{display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.1);gap:12px}
+.cmd-search-icon{font-size:16px;opacity:.6;color:#f8fafc}
+.cmd-search-input{flex:1;background:transparent;border:none;outline:none;color:#f8fafc;font-size:16px;font-family:inherit}
+.cmd-esc-badge{font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.1);border-radius:4px;padding:2px 6px;color:#94a3b8}
+.cmd-modal-body{max-height:360px;overflow-y:auto}
+.cmd-items-list{list-style:none;margin:0;padding:8px}
+.cmd-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;cursor:pointer;color:#cbd5e1;font-size:14.5px;transition:background .15s ease,color .15s ease}
+.cmd-item.selected,.cmd-item:hover{background:rgba(59,130,246,.25);color:#fff}
+.cmd-item-category{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;font-family:var(--mono)}
+.cmd-modal-footer{padding:10px 18px;background:rgba(0,0,0,.2);border-top:1px solid rgba(255,255,255,.08);font-size:12px;color:#64748b;display:flex;justify-content:flex-end}
+.cmd-modal-footer kbd{background:rgba(255,255,255,.1);padding:1px 5px;border-radius:3px;font-family:var(--mono)}
+
 @media(prefers-reduced-motion:reduce){.spin{animation:none}}
 /* POLISH.md item 2: mobile, done properly, not just "no horizontal
    overflow". Every rule below traces to one specific, named complaint --
@@ -391,12 +422,20 @@ footer a{color:var(--ink2)}
             <button id="tod-dusk" type="button" aria-pressed="false">Dusk</button>
             <button id="tod-night" type="button" aria-pressed="false">Night</button>
           </div>
+          <button id="cmd-k-trigger" type="button" class="cmd-k-badge" title="Open Command Palette (Cmd+K / Ctrl+K)">⌘K</button>
         </div>
         <div class="sim-badge" id="sim-status-badge">
           <span class="pulse-dot">●</span> SIMULATION ACTIVE | <span id="badge-parcel-count">4</span> PARCELS | BUILD VERIFIED
         </div>
       </div>
       <div style="position:relative">
+        <div id="letterbox-top" class="letterbox-bar letterbox-top"></div>
+        <div id="letterbox-bottom" class="letterbox-bar letterbox-bottom"></div>
+        <div class="canvas-btn-bar top-left">
+          <button id="drone-tour-btn" type="button" class="canvas-btn" title="Cinematic camera tour">🎬 Tour</button>
+          <button id="spatial-diff-btn" type="button" class="canvas-btn" title="Highlight newly placed items">👁️ Spatial Diff</button>
+          <button id="sound-toggle-btn" type="button" class="canvas-btn" title="Toggle Web Audio sound">🔊 Sound: Off</button>
+        </div>
         <button id="reset-cam-btn" type="button" class="reset-cam-btn" title="Reset camera to default view">↺ Reset View</button>
         <canvas id="world-canvas" width="1400" height="900" role="img" aria-label="A living 3D view of the simulated neighbourhood"></canvas>
         <canvas id="world-canvas-2d" width="1400" height="900" role="img" aria-label="An architectural plan view of the simulated neighbourhood" style="display:none"></canvas>
@@ -651,6 +690,23 @@ footer a{color:var(--ink2)}
   </section>
 </div>
 
+<!-- Desktop-Class Command Palette Spotlight Modal -->
+<div id="cmd-palette-modal" class="cmd-modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Command Palette">
+  <div class="cmd-modal-card">
+    <div class="cmd-modal-header">
+      <span class="cmd-search-icon">🔍</span>
+      <input type="text" id="cmd-search-input" class="cmd-search-input" placeholder="Type a command or search... (e.g. Tavern, Night, Diff, Tour)" autocomplete="off">
+      <kbd class="cmd-esc-badge">ESC</kbd>
+    </div>
+    <div class="cmd-modal-body">
+      <ul id="cmd-items-list" class="cmd-items-list"></ul>
+    </div>
+    <div class="cmd-modal-footer">
+      <span>Use <kbd>↑</kbd> <kbd>↓</kbd> to navigate, <kbd>↵</kbd> to select, <kbd>ESC</kbd> to dismiss</span>
+    </div>
+  </div>
+</div>
+
 <footer><div class="wrap">
   Built by Mark Fraser ·
   <a href="/matrix-results">raw results</a> · <a href="/tasks">task list</a> ·
@@ -710,6 +766,161 @@ $('#inspect-focus-btn').addEventListener('click', () => {
 })
 $('#reset-cam-btn').addEventListener('click', () => {
   renderer3d.resetView()
+  renderer3d.playClickSound()
+})
+
+// --- Phase 1 Feature Listeners ---
+function toggleSpatialDiffUI() {
+  const active = renderer3d.toggleSpatialDiff()
+  const btn = $('#spatial-diff-btn')
+  if (btn) btn.setAttribute('aria-pressed', String(active))
+  renderer3d.playClickSound()
+}
+
+function toggleSoundUI() {
+  const active = renderer3d.toggleSound()
+  const btn = $('#sound-toggle-btn')
+  if (btn) {
+    btn.textContent = active ? '🔊 Sound: On' : '🔊 Sound: Off'
+    btn.setAttribute('aria-pressed', String(active))
+  }
+  renderer3d.playClickSound()
+}
+
+$('#drone-tour-btn').addEventListener('click', () => {
+  renderer3d.startDroneTour()
+  renderer3d.playClickSound()
+})
+$('#spatial-diff-btn').addEventListener('click', toggleSpatialDiffUI)
+$('#sound-toggle-btn').addEventListener('click', toggleSoundUI)
+
+window.addEventListener('pointerdown', () => {
+  if (renderer3d._impl && renderer3d._impl.audio) {
+    renderer3d._impl.audio.init()
+  }
+}, { once: true })
+
+// --- Spotlight Command Palette ---
+const COMMANDS = [
+  { id: 'jump-blacksmith', label: '📍 Jump to Blacksmith / Workshop', category: 'Navigation', action: () => renderer3d.focusParcel('workshop') },
+  { id: 'jump-tavern', label: '📍 Jump to Tavern / Shop', category: 'Navigation', action: () => renderer3d.focusParcel('shop') },
+  { id: 'jump-stables', label: '📍 Jump to Stables / Dwelling 2', category: 'Navigation', action: () => renderer3d.focusParcel('dwelling-2') },
+  { id: 'jump-cottage', label: '📍 Jump to Cottage / Dwelling 1', category: 'Navigation', action: () => renderer3d.focusParcel('dwelling-1') },
+  { id: 'reset-cam', label: '↺ Reset Camera to Overview', category: 'Navigation', action: () => renderer3d.resetView() },
+  { id: 'tod-day', label: '☀️ Atmosphere: Day', category: 'Lighting', action: () => setTimeOfDayToggle('day') },
+  { id: 'tod-dusk', label: '🌅 Atmosphere: Dusk', category: 'Lighting', action: () => setTimeOfDayToggle('dusk') },
+  { id: 'tod-night', label: '🌙 Atmosphere: Night', category: 'Lighting', action: () => setTimeOfDayToggle('night') },
+  { id: 'drone-tour', label: '🎬 Start Drone Tour', category: 'Camera', action: () => renderer3d.startDroneTour() },
+  { id: 'spatial-diff', label: '👁️ Toggle 3D Spatial Diff', category: 'Render', action: () => toggleSpatialDiffUI() },
+  { id: 'sound-toggle', label: '🔊 Toggle Web Audio Sound', category: 'Audio', action: () => toggleSoundUI() },
+  { id: 'preset-tavern', label: '⚡ Preset: Add 3 timber tables outside tavern', category: 'Presets', action: () => fillPresetPrompt('Add 3 timber tables outside the tavern') },
+  { id: 'preset-stables', label: '⚡ Preset: Place a stone trough near stables', category: 'Presets', action: () => fillPresetPrompt('Place a stone trough near the stables') },
+  { id: 'preset-canopy', label: '⚡ Preset: Construct a wood canopy over workshop', category: 'Presets', action: () => fillPresetPrompt('Construct a wood-framed canopy over workshop parcel') },
+]
+
+let cmdSelectedIndex = 0
+let filteredCommands = [...COMMANDS]
+
+function fillPresetPrompt(text) {
+  const input = $('#bar-request-input')
+  if (input) {
+    input.value = text
+    input.focus()
+  }
+  renderer3d.focusPreset(text)
+}
+
+function openCmdPalette() {
+  const modal = $('#cmd-palette-modal')
+  const input = $('#cmd-search-input')
+  if (!modal || !input) return
+  modal.style.display = 'flex'
+  input.value = ''
+  cmdSelectedIndex = 0
+  renderCmdItems('')
+  input.focus()
+}
+
+function closeCmdPalette() {
+  const modal = $('#cmd-palette-modal')
+  if (modal) modal.style.display = 'none'
+}
+
+function renderCmdItems(query) {
+  const q = query.toLowerCase().trim()
+  filteredCommands = COMMANDS.filter(c => c.label.toLowerCase().includes(q) || c.category.toLowerCase().includes(q))
+  if (cmdSelectedIndex >= filteredCommands.length) cmdSelectedIndex = 0
+  const listEl = $('#cmd-items-list')
+  if (!listEl) return
+
+  if (filteredCommands.length === 0) {
+    listEl.innerHTML = `<li style="padding:14px;color:var(--muted);text-align:center">No matching commands found</li>`
+    return
+  }
+
+  listEl.innerHTML = filteredCommands.map((c, i) => `
+    <li class="cmd-item ${i === cmdSelectedIndex ? 'selected' : ''}" data-index="${i}">
+      <span>${esc(c.label)}</span>
+      <span class="cmd-item-category">${esc(c.category)}</span>
+    </li>
+  `).join('')
+
+  listEl.querySelectorAll('.cmd-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.index, 10)
+      if (filteredCommands[idx]) {
+        filteredCommands[idx].action()
+        renderer3d.playClickSound()
+        closeCmdPalette()
+      }
+    })
+  })
+}
+
+$('#cmd-k-trigger').addEventListener('click', openCmdPalette)
+
+$('#cmd-search-input').addEventListener('input', (e) => {
+  cmdSelectedIndex = 0
+  renderCmdItems(e.target.value)
+})
+
+$('#cmd-palette-modal').addEventListener('click', (e) => {
+  if (e.target === $('#cmd-palette-modal')) closeCmdPalette()
+})
+
+window.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    const modal = $('#cmd-palette-modal')
+    if (modal && modal.style.display === 'flex') {
+      closeCmdPalette()
+    } else {
+      openCmdPalette()
+    }
+  } else if ($('#cmd-palette-modal').style.display === 'flex') {
+    if (e.key === 'Escape') {
+      closeCmdPalette()
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (filteredCommands.length > 0) {
+        cmdSelectedIndex = (cmdSelectedIndex + 1) % filteredCommands.length
+        renderCmdItems($('#cmd-search-input').value)
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (filteredCommands.length > 0) {
+        cmdSelectedIndex = (cmdSelectedIndex - 1 + filteredCommands.length) % filteredCommands.length
+        renderCmdItems($('#cmd-search-input').value)
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (filteredCommands[cmdSelectedIndex]) {
+        filteredCommands[cmdSelectedIndex].action()
+        renderer3d.playClickSound()
+        closeCmdPalette()
+      }
+    }
+  }
 })
 
 function setTimeOfDayToggle(todKey) {

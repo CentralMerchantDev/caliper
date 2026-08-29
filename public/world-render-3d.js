@@ -302,6 +302,110 @@ function makeContactShadowTexture() {
   return tex;
 }
 
+class AudioSynth {
+  constructor() {
+    this.ctx = null;
+    this.enabled = false;
+    this.ambientGain = null;
+    this.filter = null;
+    this.noiseNode = null;
+  }
+
+  init() {
+    if (this.ctx) return;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    this.ctx = new AudioCtx();
+  }
+
+  toggleSound(enable) {
+    this.enabled = enable !== undefined ? enable : !this.enabled;
+    if (this.enabled) {
+      this.init();
+      if (this.ctx && this.ctx.state === "suspended") {
+        this.ctx.resume();
+      }
+      this.startAmbient();
+      if (this.ambientGain && this.ctx) {
+        this.ambientGain.gain.setTargetAtTime(0.025, this.ctx.currentTime, 0.1);
+      }
+    } else {
+      if (this.ambientGain && this.ctx) {
+        this.ambientGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1);
+      }
+    }
+    return this.enabled;
+  }
+
+  playClick() {
+    if (!this.enabled || !this.ctx) return;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(1200, this.ctx.currentTime);
+      gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.004);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.004);
+    } catch (_) {}
+  }
+
+  playDropThud() {
+    if (!this.enabled || !this.ctx) return;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(65, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.35, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.08);
+    } catch (_) {}
+  }
+
+  startAmbient() {
+    if (!this.ctx || this.noiseNode) return;
+    try {
+      const bufferSize = 2 * this.ctx.sampleRate;
+      const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+      this.noiseNode = this.ctx.createBufferSource();
+      this.noiseNode.buffer = noiseBuffer;
+      this.noiseNode.loop = true;
+
+      this.filter = this.ctx.createBiquadFilter();
+      this.filter.type = "lowpass";
+      this.filter.frequency.value = 220;
+
+      this.ambientGain = this.ctx.createGain();
+      this.ambientGain.gain.setValueAtTime(this.enabled ? 0.025 : 0, this.ctx.currentTime);
+
+      this.noiseNode.connect(this.filter);
+      this.filter.connect(this.ambientGain);
+      this.ambientGain.connect(this.ctx.destination);
+      this.noiseNode.start();
+    } catch (_) {}
+  }
+
+  updateAmbient(nightAmt) {
+    if (!this.ctx || !this.filter || !this.enabled) return;
+    try {
+      const targetFreq = lerp(220, 750, nightAmt);
+      this.filter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.1);
+    } catch (_) {}
+  }
+}
+
 class Renderer3D {
   constructor(canvas, { reducedMotion = false, onInspect = null } = {}) {
     this.canvas = canvas;
@@ -317,6 +421,39 @@ class Renderer3D {
     this._emissiveAnimated = [];
     this._neighbourhoodBuilt = false;
     this._disposed = false;
+
+    this.audio = new AudioSynth();
+    this.spatialDiff = false;
+
+    this._smokeParticles = [];
+    this._smokeEmitters = [
+      new THREE.Vector3(-4.2, 2.5, -4.2),
+      new THREE.Vector3(4.2, 2.5, -3.8),
+    ];
+
+    this._fireflies = [];
+    this._dustParticles = [];
+
+    this._isDroneTour = false;
+    this._tourStartTime = 0;
+    this._tourDuration = 20000;
+
+    this._camCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 2.2, 10),
+      new THREE.Vector3(-6, 5.5, 3),
+      new THREE.Vector3(4, 2.8, 5),
+      new THREE.Vector3(9, 11, 11),
+    ], true);
+
+    this._lookCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0.5, 0),
+      new THREE.Vector3(-4, 1.2, -4),
+      new THREE.Vector3(3, 0.8, -2),
+      new THREE.Vector3(0, 0.5, 0),
+    ], true);
+
+    this._diffSlateMat = stdMat({ color: 0x334155, roughness: 0.85, metalness: 0.1 });
+    this._diffEmeraldMat = stdMat({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.9, roughness: 0.3 });
 
     this._raycaster = new THREE.Raycaster();
     this._mouse = new THREE.Vector2();
@@ -420,6 +557,21 @@ class Renderer3D {
     composer.addPass(vignette);
     composer.addPass(new OutputPass());
     this.composer = composer;
+
+    const fireflyGeo = new THREE.SphereGeometry(0.06, 8, 8);
+    this._fireflies = [];
+    for (let i = 0; i < 18; i++) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0xa3e635, transparent: true, opacity: 0 });
+      const mesh = new THREE.Mesh(fireflyGeo, mat);
+      const basePos = new THREE.Vector3(
+        (Math.random() - 0.5) * 14,
+        0.4 + Math.random() * 1.5,
+        (Math.random() - 0.5) * 14
+      );
+      mesh.position.copy(basePos);
+      scene.add(mesh);
+      this._fireflies.push({ mesh, basePos, phase: Math.random() * Math.PI * 2 });
+    }
 
     this.neighbourhoodGroup = new THREE.Group();
     scene.add(this.neighbourhoodGroup);
@@ -693,9 +845,12 @@ class Renderer3D {
     this._knownPlacementKeys.add(key);
 
     const group = new THREE.Group();
+    group.userData.isNewPlacement = isNew;
     if (isNew && this._neighbourhoodBuilt && !this.reducedMotion) {
       group.position.set(localX, 1.0, localZ);
       this._dropAnimItems.push({ group, startY: 1.0, targetY: 0, startTime: performance.now(), duration: 200 });
+      this._triggerDustRing(localX, localZ, parent);
+      this.audio.playDropThud();
     } else {
       group.position.set(localX, 0, localZ);
     }
@@ -707,10 +862,6 @@ class Renderer3D {
     const overrideColor = placement.overrides && placement.overrides.color;
     for (const part of typeDef.recipe || []) {
       const geo = this._geometryForPart(part);
-      // A colour override recolours the object's own material parts (wood,
-      // fabric, ceramic...) but not fixed metal fixtures or a light's own
-      // emissive glow -- "make the benches blue" should not turn a fridge's
-      // steel handle blue, or a lamp's bulb any colour but its own light.
       const recolorable = overrideColor && !(part.metalness >= 0.3) && !part.emissive;
       const mat = stdMat({
         color: recolorable ? overrideColor : part.color,
@@ -742,10 +893,84 @@ class Renderer3D {
     }
   }
 
+  _triggerDustRing(x, z, parent) {
+    const dustGeo = new THREE.SphereGeometry(0.04, 6, 6);
+    const num = 16;
+    for (let i = 0; i < num; i++) {
+      const angle = (i / num) * Math.PI * 2;
+      const dirX = Math.cos(angle);
+      const dirZ = Math.sin(angle);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xc2b280, transparent: true, opacity: 0.6 });
+      const mesh = new THREE.Mesh(dustGeo, mat);
+      mesh.position.set(x, 0.03, z);
+      parent.add(mesh);
+      this._dustParticles.push({
+        mesh,
+        dirX,
+        dirZ,
+        originX: x,
+        originZ: z,
+        startTime: performance.now(),
+        duration: 300,
+        parent,
+      });
+    }
+  }
+
+  toggleSpatialDiff(enable) {
+    this.spatialDiff = enable !== undefined ? enable : !this.spatialDiff;
+    if (!this.neighbourhoodGroup) return this.spatialDiff;
+
+    this.neighbourhoodGroup.traverse((child) => {
+      if (child.isMesh) {
+        if (!child.userData.origMat) {
+          child.userData.origMat = child.material;
+        }
+        if (this.spatialDiff) {
+          let parentGroup = child;
+          let isNew = false;
+          while (parentGroup && parentGroup !== this.neighbourhoodGroup) {
+            if (parentGroup.userData && parentGroup.userData.isNewPlacement) {
+              isNew = true;
+              break;
+            }
+            parentGroup = parentGroup.parent;
+          }
+          child.material = isNew ? this._diffEmeraldMat : this._diffSlateMat;
+        } else {
+          child.material = child.userData.origMat;
+        }
+      }
+    });
+    return this.spatialDiff;
+  }
+
+  startDroneTour() {
+    this._isDroneTour = true;
+    this._tourStartTime = performance.now();
+    const topBar = document.getElementById("letterbox-top");
+    const botBar = document.getElementById("letterbox-bottom");
+    if (topBar) topBar.classList.add("active");
+    if (botBar) botBar.classList.add("active");
+  }
+
+  stopDroneTour() {
+    if (!this._isDroneTour) return;
+    this._isDroneTour = false;
+    const topBar = document.getElementById("letterbox-top");
+    const botBar = document.getElementById("letterbox-bottom");
+    if (topBar) topBar.classList.remove("active");
+    if (botBar) botBar.classList.remove("active");
+    this.resetView();
+  }
+
   _bindOrbitControls() {
     const canvas = this.canvas;
     let clickStartX = 0, clickStartY = 0;
     const onDown = (e) => {
+      if (this._isDroneTour) {
+        this.stopDroneTour();
+      }
       this._orbit.dragging = true;
       this._orbit.startX = e.clientX;
       clickStartX = e.clientX;
@@ -766,14 +991,21 @@ class Renderer3D {
       }
       this._orbit.dragging = false;
     };
+    const onKeyDown = (e) => {
+      if (e.key === "Escape" && this._isDroneTour) {
+        this.stopDroneTour();
+      }
+    };
     canvas.style.touchAction = "pan-y";
     canvas.addEventListener("pointerdown", onDown);
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("keydown", onKeyDown);
     this._unbindOrbit = () => {
       canvas.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("keydown", onKeyDown);
     };
   }
 
@@ -994,19 +1226,104 @@ class Renderer3D {
     const daySky = SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth);
     const sky = SKY_NIGHT.clone().lerp(daySky, sun.dayAmt);
     const horizon = sky.clone().lerp(SKY_HORIZON, lerp(0.35, 0.62, sun.dayAmt));
-    updateSkyGradient(this._skyGradient, sky, horizon);
+    this.audio.updateAmbient(nightAmt);
+    if (this.spatialDiff && this._diffEmeraldMat) {
+      this._diffEmeraldMat.emissiveIntensity = 0.7 + Math.sin(performance.now() / 200) * 0.35;
+    }
 
-    // -- composed camera: target centered, lerped zoom & position --
-    const az = this._orbit.base + this._orbit.delta;
-    const fit = this._cameraFit || 1;
-    const currentDist = (this._camDist || 14) * fit;
-    const currentH = ((this._camDist || 14) * 8 / 14) * fit;
-    this.camera.position.set(
-      this._lookAt.x + Math.sin(az) * currentDist,
-      this._lookAt.y + currentH,
-      this._lookAt.z + Math.cos(az) * currentDist
-    );
-    this.camera.lookAt(this._lookAt);
+    // -- Smoke Particles Update --
+    if (!this.reducedMotion && this._neighbourhoodBuilt) {
+      const nowSec = performance.now() / 1000;
+      if (this._smokeParticles.length < 28 && Math.random() < 0.35) {
+        const emitterPos = this._smokeEmitters[Math.floor(Math.random() * this._smokeEmitters.length)];
+        const smokeGeo = new THREE.SphereGeometry(0.12, 8, 8);
+        const smokeMat = new THREE.MeshBasicMaterial({ color: 0xd6d6d6, transparent: true, opacity: 0.35, depthWrite: false });
+        const mesh = new THREE.Mesh(smokeGeo, smokeMat);
+        mesh.position.copy(emitterPos);
+        this.scene.add(mesh);
+        this._smokeParticles.push({
+          mesh,
+          origin: emitterPos.clone(),
+          life: 0,
+          maxLife: 2.5,
+          phase: Math.random() * Math.PI * 2,
+        });
+      }
+      this._smokeParticles = this._smokeParticles.filter((p) => {
+        p.life += 0.016;
+        const progress = p.life / p.maxLife;
+        if (progress >= 1) {
+          this.scene.remove(p.mesh);
+          p.mesh.geometry.dispose();
+          p.mesh.material.dispose();
+          return false;
+        }
+        p.mesh.position.y = p.origin.y + progress * 1.5;
+        p.mesh.position.x = p.origin.x + Math.sin(nowSec * 2 + p.phase) * 0.15 * progress;
+        p.mesh.position.z = p.origin.z + Math.cos(nowSec * 1.5 + p.phase) * 0.1 * progress;
+        const scale = lerp(1.0, 3.2, progress);
+        p.mesh.scale.set(scale, scale, scale);
+        p.mesh.material.opacity = lerp(0.35, 0, progress);
+        return true;
+      });
+    }
+
+    // -- Fireflies Update --
+    if (this._fireflies && this._fireflies.length > 0) {
+      const nowSec = performance.now() / 1000;
+      const targetOpacity = nightAmt > 0.2 ? lerp(0, 0.9, (nightAmt - 0.2) / 0.8) : 0;
+      this._fireflies.forEach((f) => {
+        f.mesh.position.x = f.basePos.x + Math.sin(nowSec * 1.4 + f.phase) * 0.4;
+        f.mesh.position.y = f.basePos.y + Math.sin(nowSec * 2.2 + f.phase * 1.5) * 0.25;
+        f.mesh.position.z = f.basePos.z + Math.cos(nowSec * 1.6 + f.phase) * 0.4;
+        f.mesh.material.opacity = lerp(f.mesh.material.opacity, targetOpacity, 0.05);
+      });
+    }
+
+    // -- Dust Particles Update --
+    if (this._dustParticles && this._dustParticles.length > 0) {
+      const nowMs = performance.now();
+      this._dustParticles = this._dustParticles.filter((p) => {
+        const elapsed = nowMs - p.startTime;
+        const progress = Math.min(1, elapsed / p.duration);
+        if (progress >= 1) {
+          p.parent.remove(p.mesh);
+          p.mesh.geometry.dispose();
+          p.mesh.material.dispose();
+          return false;
+        }
+        const dist = lerp(0.05, 0.9, progress);
+        p.mesh.position.x = p.originX + p.dirX * dist;
+        p.mesh.position.z = p.originZ + p.dirZ * dist;
+        p.mesh.material.opacity = lerp(0.6, 0, progress);
+        return true;
+      });
+    }
+
+    // -- composed camera: target centered, lerped zoom & position or Drone Tour --
+    if (this._isDroneTour && !this.reducedMotion) {
+      const elapsed = performance.now() - this._tourStartTime;
+      const u = Math.min(1, elapsed / this._tourDuration);
+      if (u >= 1) {
+        this.stopDroneTour();
+      } else {
+        const camPos = this._camCurve.getPointAt(u);
+        const lookPos = this._lookCurve.getPointAt(u);
+        this.camera.position.copy(camPos);
+        this.camera.lookAt(lookPos);
+      }
+    } else {
+      const az = this._orbit.base + this._orbit.delta;
+      const fit = this._cameraFit || 1;
+      const currentDist = (this._camDist || 14) * fit;
+      const currentH = ((this._camDist || 14) * 8 / 14) * fit;
+      this.camera.position.set(
+        this._lookAt.x + Math.sin(az) * currentDist,
+        this._lookAt.y + currentH,
+        this._lookAt.z + Math.cos(az) * currentDist
+      );
+      this.camera.lookAt(this._lookAt);
+    }
 
     // -- sims: interpolate between stations within their own home building --
     const sims = w.sims || [];
@@ -1107,6 +1424,24 @@ export class WorldRenderer {
   }
   setTimeOfDay(todKey) {
     if (this._impl.setTimeOfDay) this._impl.setTimeOfDay(todKey);
+  }
+  startDroneTour() {
+    if (this._impl.startDroneTour) this._impl.startDroneTour();
+  }
+  stopDroneTour() {
+    if (this._impl.stopDroneTour) this._impl.stopDroneTour();
+  }
+  toggleSpatialDiff(enable) {
+    return this._impl.toggleSpatialDiff ? this._impl.toggleSpatialDiff(enable) : false;
+  }
+  toggleSound(enable) {
+    return this._impl.audio ? this._impl.audio.toggleSound(enable) : false;
+  }
+  playClickSound() {
+    if (this._impl.audio) this._impl.audio.playClick();
+  }
+  playDropThudSound() {
+    if (this._impl.audio) this._impl.audio.playDropThud();
   }
   get nextWorld() {
     return this._impl.nextWorld;
