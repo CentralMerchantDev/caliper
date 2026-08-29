@@ -14,7 +14,7 @@
 // covered without a live sandbox; only the real runner needs one.
 import type { TestResult } from "./types";
 import type { ProposedCriterion } from "./criteria";
-import { STATIONS, ENTITY_TYPES } from "./worldStructure";
+import { OBJECT_TYPE_KEYS, ENTITY_TYPES } from "./worldStructure";
 
 export interface ProbeResult {
   actual?: unknown;
@@ -131,7 +131,15 @@ export async function evaluateCriterion(criterion: ProposedCriterion, probeCandi
     }
 
     case "render": {
-      const known = [...STATIONS.map((s) => s.key), ...(ENTITY_TYPES as readonly string[])];
+      // FOUNDATION.md item 1 found this checking only STATIONS + ENTITY_TYPES
+      // -- an outdoor type like "lampPost" (no station, so never in
+      // STATIONS) failed this check even though it's a perfectly real
+      // registry type. OBJECT_TYPE_KEYS is the single list that answers
+      // "can a placement of this type exist" -- stations and outdoor props
+      // together, derived from the same real registry, so this can't drift
+      // from what the renderer actually supports the way two separately
+      // maintained lists could.
+      const known = [...OBJECT_TYPE_KEYS, ...(ENTITY_TYPES as readonly string[])];
       const pass = known.includes(criterion.stationOrEntityKey);
       return {
         name: criterion.description + " (structural check only -- whether it actually draws without throwing is a client-side check, not run here)",

@@ -12,7 +12,7 @@
 // condition (a field exists, a type holds, a count is met) is ALREADY true
 // on the unmodified baseline -- so the criterion can never distinguish
 // "the change worked" from "nothing happened at all."
-import { STATIONS, ENTITY_TYPES } from "./worldStructure";
+import { OBJECT_TYPE_KEYS, ENTITY_TYPES } from "./worldStructure";
 import type { ProposedCriterion } from "./criteria";
 
 export type DryRunVerdict = { verdict: "valid"; reason: string } | { verdict: "invalid"; reason: string };
@@ -108,7 +108,11 @@ export function dryRunCriterion(criterion: ProposedCriterion, baselineFns: Recor
     }
 
     case "render": {
-      const known = [...STATIONS.map((s) => s.key), ...ENTITY_TYPES];
+      // Same OBJECT_TYPE_KEYS fix as criteriaExecution.ts's render case --
+      // an outdoor type like "lampPost" used to read as "not known yet"
+      // here even when it already exists, since STATIONS alone never
+      // included outdoor props.
+      const known = [...OBJECT_TYPE_KEYS, ...ENTITY_TYPES];
       if (!known.includes(criterion.stationOrEntityKey)) {
         // Not vacuous -- a render criterion about something that doesn't
         // exist yet is exactly the expected shape for a plan adding a new
