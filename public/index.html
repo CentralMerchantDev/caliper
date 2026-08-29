@@ -514,24 +514,17 @@ footer a{color:var(--ink2)}
     here too, with the reason.</p>
   <div id="history-content"><p style="color:var(--muted)">Loading…</p></div>
 
-  <h2 id="sandbox"><span class="n">Isolation</span>How the sandbox works</h2>
-  <p>Every generated function runs inside a Cloudflare <strong>Dynamic Worker</strong>: a fresh V8
-    isolate spun up per program, with no bindings (<span class="mono">env: {}</span>) and no
-    network access (<span class="mono">globalOutbound: null</span>). This was tested against the
-    live, deployed sandbox by writing code that deliberately tries to escape it.</p>
+  <h2 id="sandbox"><span class="n">Isolation</span>How the sandbox and world applier work</h2>
+  <p>Earlier builds evaluated patched source text via <span class="mono">new Function()</span>. That approach was replaced by AST-free sentinel JSON deserialization, schema validation in memory, and cloned-state mutation with zero runtime code execution.</p>
+  <p>Where dynamic code execution is required, functions run inside a Cloudflare <strong>Dynamic Worker</strong>: a fresh V8 isolate per program with empty bindings (<span class="mono">env: {}</span>) and disabled outbound networking (<span class="mono">globalOutbound: null</span>).</p>
   <ul>
-    <li><strong>Network access:</strong> <span class="mono">fetch()</span> throws immediately,
-      every time.</li>
-    <li><strong>Reading bindings or environment:</strong> <span class="mono">env</span> comes
-      back empty. No <span class="mono">process</span>, no leaked globals.</li>
-    <li><strong>A tight busy-loop</strong> under a deliberately small CPU budget: the isolate is
-      killed outright.</li>
-    <li><strong>Unbounded array growth:</strong> the isolate is killed outright.</li>
-    <li><strong>Unbounded recursion:</strong> a catchable <span class="mono">RangeError</span>,
-      caught inside the sandbox itself.</li>
+    <li><strong>Network access:</strong> <span class="mono">fetch()</span> throws an immediate error.</li>
+    <li><strong>Environment bindings:</strong> <span class="mono">env</span> returns empty. <span class="mono">process</span> and global access are disabled.</li>
+    <li><strong>CPU busy-loop:</strong> the isolate is terminated by the CPU time enforcement ceiling.</li>
+    <li><strong>Array expansion:</strong> memory limits trigger isolate termination.</li>
+    <li><strong>Recursion limit:</strong> <span class="mono">RangeError</span> is trapped cleanly within the isolate.</li>
   </ul>
-  <p>The calling code always gets an ordinary, catchable error. It never hangs, and it never fails
-    silently.</p>
+  <p>System execution returns explicit error responses without hanging or failing silently.</p>
 
   <h2 id="methodology">Methodology</h2>
   <h3>What was run (the cost experiment)</h3>
