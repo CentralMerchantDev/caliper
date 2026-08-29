@@ -72,7 +72,7 @@ export const PRICING: Record<string, { input: number; output: number }> = {
   "claude-opus-4-8": { input: 5.0, output: 25.0 },
 };
 
-const CODE_SCHEMA = {
+export const CODE_SCHEMA = {
   type: "object",
   properties: {
     code: {
@@ -214,7 +214,7 @@ export async function repairFunctionBody(
 // is the single place that enforces it, alongside the circuit breaker.
 // ---------------------------------------------------------------------
 
-const ARTIFACT_SCHEMA = {
+export const ARTIFACT_SCHEMA = {
   type: "object",
   properties: {
     code: {
@@ -373,7 +373,7 @@ export interface ChangePlan {
   implementationPath: "data-edit" | "source-edit";
 }
 
-const PLAN_SCHEMA = {
+export const PLAN_SCHEMA = {
   type: "object",
   properties: {
     understoodIntent: { type: "string", description: "What you understood the visitor wants, in your own words." },
@@ -536,7 +536,7 @@ export async function generatePlan(
   return { plan, model: DEFAULT_MODEL, inputTokens, outputTokens, costUsd: costUsd(DEFAULT_MODEL, inputTokens, outputTokens), wallTimeMs: Date.now() - start };
 }
 
-const CHANGE_SCHEMA = {
+export const CHANGE_SCHEMA = {
   type: "object",
   properties: {
     code: { type: "string", description: "The complete modified source file, replacing the current one in full." },
@@ -843,7 +843,7 @@ export async function generateBrief(apiKey: string, freeformPrompt: string, maxT
 // "a clean review is a real, valid outcome" instruction.
 // ---------------------------------------------------------------------
 
-const RETROSPECTIVE_SCHEMA = {
+export const RETROSPECTIVE_SCHEMA = {
   type: "object",
   properties: {
     lesson: {

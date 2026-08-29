@@ -85,7 +85,17 @@ export const WORLD_EDIT_SCHEMA = {
           placementId: { type: ["string", "null"], description: "overridePlacement only -- an existing placement's id." },
           overridesJson: { type: ["string", "null"], description: "overridePlacement only -- JSON-encoded { color?, plot?: {x,y} }. Also how you reposition an existing placement." },
           surfaceKey: { type: ["string", "null"], description: "setSurfaceField only." },
-          field: { type: ["string", "null"], enum: ["material", "color", null], description: "setSurfaceField only." },
+          // LAST.md item 1: enum combined with a nullable type array
+          // (type: ["string","null"]) is rejected by Anthropic's
+          // structured-output validator -- "Enum value 'material' does
+          // not match declared type '['string','null']'" -- regardless of
+          // what the enum contains. anyOf keeps the same "string, one of
+          // these two values, or null" meaning without ever pairing enum
+          // with a type array. This exact defect was found and fixed once
+          // already in this build (a different schema); see
+          // test/schemaAudit.test.ts for the guardrail that's supposed to
+          // stop it recurring a third time.
+          field: { anyOf: [{ type: "string", enum: ["material", "color"] }, { type: "null" }], description: "setSurfaceField only." },
           value: { type: ["string", "null"], description: "setSurfaceField only." },
         },
         required: ["op", "key", "definitionJson", "placementJson", "placementId", "overridesJson", "surfaceKey", "field", "value"],
