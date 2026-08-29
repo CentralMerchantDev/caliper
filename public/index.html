@@ -252,6 +252,13 @@ footer a{color:var(--ink2)}
   .hero{padding:28px 0 4px}
   h2{font-size:23px;margin-top:38px}
   .panel{padding:14px}
+  /* SHIP.md item 5: .action-bar's negative margin (-18px, cancelling
+     .panel's base 18px padding so the bar reaches the panel's true edge)
+     never had a matching override here when .panel's own padding shrinks
+     to 14px at this width -- a real 4px-per-side horizontal overflow,
+     found only by actually checking a real 375px viewport, not by
+     reading the CSS. */
+  .action-bar{margin:14px -14px -14px}
   #world-canvas{height:300px}
   table{font-size:13.5px}
   th,td{padding:9px 8px}
