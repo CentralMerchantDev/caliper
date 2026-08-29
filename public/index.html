@@ -554,19 +554,6 @@ footer a{color:var(--ink2)}
     scored against a reference computed independently of the model under test. Here, the rule is the
     same: a non-regression check is only ever compared against the baseline actually running, never a
     number a model computed by hand. Different project, same rule.</p>
-  <h3>Where a skeptical reader should push</h3>
-  <ul>
-    <li><strong>Sample size on convergence rate is small on the core set specifically</strong> and
-      has wide error bars there. It doesn't apply to the final-pass-rate numbers, which rest on
-      the full 54 or 21 cycles per model and are the load-bearing ones.</li>
-    <li><strong>Single vendor for the 32-task experiment.</strong> The world's own review stage is
-      genuinely cross-vendor (OpenAI reviewing Claude); the cost experiment itself is
-      Anthropic-only.</li>
-    <li><strong>"Not recallable" is not the same claim as "hard."</strong> See "The limit" above.</li>
-    <li><strong>No statistical trial sweep across many change requests yet.</strong> This build
-      proves the pipeline works end to end and the controls hold under real forcing; it does not
-      yet establish a "reviewed, nothing found" base rate across many kinds of request.</li>
-  </ul>
 
 </div>
 
