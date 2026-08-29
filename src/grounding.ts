@@ -70,8 +70,12 @@ export const GROUNDING_SYSTEM_PROMPT =
   "not a description someone wrote. Check every premise the request depends on against it. " +
   'A path or field existing is not the same as a feature existing -- "there is a room" does not mean ' +
   '"there is a second room". If a premise is false, name exactly which one and cite what the structure ' +
-  "summary actually says, then propose a concrete alternative the current structure can support. " +
-  "Do not guess about what the code might do -- only use what the structure summary states.";
+  "summary actually says. A halt is REQUIRED to name at least one concrete alternative the current " +
+  "structure can already support -- never a bare refusal. The structure summary states, plainly, which " +
+  "operations are cheap (placing another instance of an existing type, overriding a colour, adding a new " +
+  "type plus a placement) -- when the request is close to one of those, that IS the alternative to name, " +
+  "not a reason to invent a harder one. Do not guess about what the code might do -- only use what the " +
+  "structure summary states.";
 
 /** The exact text sent to the model, built once so it's identical between
  * groundRequest() and any test asserting on it -- no duplicated string. */
@@ -113,6 +117,17 @@ export function parseGroundingResponse(raw: RawGroundingResponse): GroundingResu
   }
   if (!raw.premisesHold && raw.falsePremises.length === 0) {
     throw new Error("grounding response: premisesHold is false but falsePremises is empty -- no specific premise named");
+  }
+  // FOUNDATION.md item 3: "a refusal without an alternative should not be a
+  // shape the system can emit." The street-lamp incident this brief fixes
+  // was exactly a halt with no alternative offered. Enforced here, not just
+  // asked for in the prompt above -- a model response that halts without
+  // naming anything the visitor could ask for instead is treated the same
+  // as any other malformed response: rejected before it ever reaches a
+  // visitor, with the caller free to retry rather than silently pass it
+  // through.
+  if (!raw.premisesHold && raw.alternatives.length === 0) {
+    throw new Error("grounding response: premisesHold is false but alternatives is empty -- a refusal with no alternative is not a valid response");
   }
   return {
     premisesHold: raw.premisesHold,
@@ -168,21 +183,45 @@ export function formatGroundingForPlan(result: GroundingResult): string {
 export async function groundRequest(apiKey: string, changeRequest: string, model: string, maxTokens: number): Promise<TextGenerationResult & { result: GroundingResult }> {
   const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const start = Date.now();
-  const response = await createWithTruncationGuard(client, "groundRequest", {
-    model,
-    max_tokens: maxTokens,
-    thinking: { type: "disabled" },
-    system: GROUNDING_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: groundingContextBlock(changeRequest) }],
-    output_config: { format: { type: "json_schema", schema: GROUNDING_SCHEMA } },
-  });
+
+  async function attempt(content: string) {
+    const response = await createWithTruncationGuard(client, "groundRequest", {
+      model,
+      max_tokens: maxTokens,
+      thinking: { type: "disabled" },
+      system: GROUNDING_SYSTEM_PROMPT,
+      messages: [{ role: "user", content }],
+      output_config: { format: { type: "json_schema", schema: GROUNDING_SCHEMA } },
+    });
+    if (response.stop_reason === "refusal") throw new Error("Grounding request was refused by Claude's safety classifiers");
+    const textBlock = response.content.find((b) => b.type === "text");
+    if (!textBlock || textBlock.type !== "text") throw new Error(`No text content in grounding response (stop_reason: ${response.stop_reason})`);
+    return { response, textBlock };
+  }
+
+  const initialContent = groundingContextBlock(changeRequest);
+  let { response, textBlock } = await attempt(initialContent);
+  let result: GroundingResult;
+  try {
+    result = parseGroundingResponse(JSON.parse(textBlock.text));
+  } catch (e) {
+    // FOUNDATION.md item 3: "if it cannot name an alternative... it should
+    // try again rather than stopping." Same retry-with-correction shape as
+    // generatePlan's JSON recovery -- a malformed or alternative-less halt
+    // is treated as a failure to redo, not content to pass through.
+    const correction =
+      `${initialContent}\n\nYour previous response was invalid (${String(e)}). If you are halting ` +
+      "(premisesHold: false), you MUST name at least one concrete alternative the current structure " +
+      "supports -- never an empty alternatives list. Redo the response, valid this time.";
+    ({ response, textBlock } = await attempt(correction));
+    try {
+      result = parseGroundingResponse(JSON.parse(textBlock.text));
+    } catch (e2) {
+      throw new Error(`Grounding response was invalid twice in a row -- treated as a failure, not content: ${String(e2)}`);
+    }
+  }
+
   const wallTimeMs = Date.now() - start;
-
-  if (response.stop_reason === "refusal") throw new Error("Grounding request was refused by Claude's safety classifiers");
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") throw new Error(`No text content in grounding response (stop_reason: ${response.stop_reason})`);
-
-  const result = parseGroundingResponse(JSON.parse(textBlock.text));
   const inputTokens = response.usage.input_tokens;
   const outputTokens = response.usage.output_tokens;
   return { result, text: textBlock.text, model, inputTokens, outputTokens, costUsd: costUsd(model, inputTokens, outputTokens), wallTimeMs };

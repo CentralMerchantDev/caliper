@@ -130,6 +130,21 @@ test("control: a genuinely consistent halt response (premisesHold=false, falsePr
 });
 
 // ---------------------------------------------------------------------
+// FOUNDATION.md item 3: the street-lamp incident this brief fixes was a
+// refusal with nothing offered instead. "A refusal without an alternative
+// should not be a shape the system can emit" -- planted here as a fixture
+// that names a real false premise but no alternative, asserting it is
+// rejected the same way any other malformed response is, not passed
+// through as a valid halt.
+// ---------------------------------------------------------------------
+test("guardrail: premisesHold=false with a named premise but empty alternatives is rejected -- a refusal with nothing offered instead is not a valid response", () => {
+  assert.throws(
+    () => parseGroundingResponse({ premisesHold: false, falsePremises: ["street lamps do not exist"], reasoning: "x", alternatives: [] } as any),
+    /alternatives is empty/,
+  );
+});
+
+// ---------------------------------------------------------------------
 // FINISH.md chunk 7: grounding no longer hard-stops on its own -- its
 // findings feed into the plan prompt regardless of outcome, via
 // formatGroundingForPlan. Both branches need their own test: a pass
