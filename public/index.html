@@ -481,6 +481,112 @@ html, body {
   border-radius: 8px;
 }
 
+/* Welcome / Mission Guide Card */
+.welcome-card {
+  position: fixed;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, calc(100vw - 24px));
+  z-index: 65;
+  padding: 16px 20px;
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: all 0.25s ease;
+}
+.welcome-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.welcome-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+.welcome-step-item {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+/* Tactile Navigation Pad (Right edge) */
+.nav-pad {
+  position: fixed;
+  right: 18px;
+  bottom: calc(170px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  padding: 8px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.nav-pad-title {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--sky);
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.nav-pad-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.nav-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.nav-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+.nav-btn:hover {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: var(--sky);
+  transform: scale(1.06);
+}
+.center-btn {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+.nav-zoom-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 3px;
+}
+.zoom-btn {
+  width: 48px;
+  height: 28px;
+  font-size: 11px;
+}
+
 @media(max-width: 768px) {
   .top-bar-wrapper {
     flex-direction: column;
@@ -638,12 +744,65 @@ html, body {
     </div>
 
     <!-- Utilities -->
+    <button id="welcome-guide-trigger" type="button" class="btn-pill active" title="How to play & kingdom mission">ℹ️ Guide</button>
     <button id="drone-tour-btn" type="button" class="btn-pill" title="Cinematic camera flythrough">🎬 Tour</button>
     <button id="spatial-diff-btn" type="button" class="btn-pill" title="Highlight recent changes">👁️ Diff</button>
     <button id="sound-toggle-btn" type="button" class="btn-pill" title="Toggle audio synthesizer">🔊 Audio</button>
     <button id="village-rules-trigger" type="button" class="btn-pill" title="Village rules & field guide">❓ Rules</button>
     <button id="arch-drawer-trigger" type="button" class="btn-pill" title="System Architecture & Safety Specs">📐 Architecture</button>
     <button id="cmd-k-trigger" type="button" class="btn-pill" title="Command Palette (Cmd+K)">⌘K</button>
+  </div>
+</div>
+
+<!-- Interactive Welcome & Mission Orientation Card -->
+<div id="welcome-mission-card" class="welcome-card glass" role="region" aria-label="Village Director Guide">
+  <div class="welcome-header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:24px">🏰</span>
+      <div>
+        <h2 style="margin:0;font-size:16px;font-weight:800;color:#fff;letter-spacing:-0.02em">CALIPER · Living Valley Simulation</h2>
+        <span style="font-size:11px;color:var(--sky);font-weight:600">Autonomous Settlement Engine · Powered by Cloudflare Workers</span>
+      </div>
+    </div>
+    <button type="button" id="welcome-close-btn" class="inspect-close" title="Dismiss Guide" style="position:static">✕</button>
+  </div>
+  <p style="margin:8px 0 10px;font-size:13px;color:#cbd5e1;line-height:1.5">
+    <strong>Welcome, Director!</strong> You are overseeing an autonomous 150m living valley kingdom. Settlers (Althea, Master Vane, Elora, Rowan) live, craft, eat, work, and sleep here in real time. Your role is to guide the kingdom's expansion.
+  </p>
+  <div class="welcome-steps-grid">
+    <div class="welcome-step-item">
+      <div style="font-size:16px;margin-bottom:2px">🧭</div>
+      <strong style="color:#fff;font-size:12px;display:block">1. Explore & Navigate</strong>
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Drag to orbit, pinch/scroll to zoom, or use the Nav Pad on the right.</span>
+    </div>
+    <div class="welcome-step-item">
+      <div style="font-size:16px;margin-bottom:2px">🔍</div>
+      <strong style="color:#fff;font-size:12px;display:block">2. Inspect Settlers</strong>
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Click any building, well, or character to inspect needs, routines, and roles.</span>
+    </div>
+    <div class="welcome-step-item">
+      <div style="font-size:16px;margin-bottom:2px">⚡</div>
+      <strong style="color:#fff;font-size:12px;display:block">3. Direct Construction</strong>
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Select a category below or type instructions, then hit <strong>⚡ Build</strong>.</span>
+    </div>
+  </div>
+</div>
+
+<!-- Floating Tactile Navigation Pad -->
+<div id="nav-compass-pad" class="nav-pad glass" role="toolbar" aria-label="Camera Navigation Pad">
+  <div class="nav-pad-title">🧭 NAVIGATE</div>
+  <div class="nav-pad-grid">
+    <button type="button" id="nav-pitch-up" class="nav-btn" title="Pitch Up">▲</button>
+    <div class="nav-row">
+      <button type="button" id="nav-rot-left" class="nav-btn" title="Orbit Left">◀</button>
+      <button type="button" id="nav-reset" class="nav-btn center-btn" title="Reset Camera">⌂</button>
+      <button type="button" id="nav-rot-right" class="nav-btn" title="Orbit Right">▶</button>
+    </div>
+    <button type="button" id="nav-pitch-down" class="nav-btn" title="Pitch Down">▼</button>
+  </div>
+  <div class="nav-zoom-row">
+    <button type="button" id="nav-zoom-in" class="nav-btn zoom-btn" title="Zoom In">➕</button>
+    <button type="button" id="nav-zoom-out" class="nav-btn zoom-btn" title="Zoom Out">➖</button>
   </div>
 </div>
 
@@ -1038,6 +1197,55 @@ $('#sound-toggle-btn').addEventListener('click', () => {
   renderer3d.playClickSound();
 });
 
+// Guide / Mission Card Handlers
+const welcomeCard = $('#welcome-mission-card');
+const welcomeGuideTrigger = $('#welcome-guide-trigger');
+const welcomeCloseBtn = $('#welcome-close-btn');
+
+welcomeCloseBtn?.addEventListener('click', () => {
+  if (welcomeCard) welcomeCard.style.display = 'none';
+  welcomeGuideTrigger?.classList.remove('active');
+  renderer3d.playClickSound();
+});
+
+welcomeGuideTrigger?.addEventListener('click', () => {
+  const isVisible = welcomeCard && welcomeCard.style.display !== 'none';
+  if (welcomeCard) welcomeCard.style.display = isVisible ? 'none' : 'block';
+  welcomeGuideTrigger?.classList.toggle('active', !isVisible);
+  renderer3d.playClickSound();
+});
+
+// Tactile Navigation Compass Pad Handlers
+$('#nav-rot-left')?.addEventListener('click', () => {
+  renderer3d.rotateCamera(0.28);
+  renderer3d.playClickSound();
+});
+$('#nav-rot-right')?.addEventListener('click', () => {
+  renderer3d.rotateCamera(-0.28);
+  renderer3d.playClickSound();
+});
+$('#nav-pitch-up')?.addEventListener('click', () => {
+  renderer3d.pitchCamera(-0.14);
+  renderer3d.playClickSound();
+});
+$('#nav-pitch-down')?.addEventListener('click', () => {
+  renderer3d.pitchCamera(0.14);
+  renderer3d.playClickSound();
+});
+$('#nav-reset')?.addEventListener('click', () => {
+  renderer3d.resetView();
+  renderer3d.playClickSound();
+  setTargetParcel('outdoors');
+});
+$('#nav-zoom-in')?.addEventListener('click', () => {
+  renderer3d.zoomCamera(0.8);
+  renderer3d.playClickSound();
+});
+$('#nav-zoom-out')?.addEventListener('click', () => {
+  renderer3d.zoomCamera(1.25);
+  renderer3d.playClickSound();
+});
+
 // Modals: Rules, Arch, Cmd+K
 $('#village-rules-trigger').addEventListener('click', () => {
   $('#village-guide-modal').style.display = 'flex';
@@ -1138,10 +1346,55 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Simulation Loop
-let world = null;
+// Default World Baseline (Guarantees instant frame-1 render with zero network delay)
+const DEFAULT_WORLD = {
+  tick: 0,
+  money: 100,
+  sims: [
+    { id: "sim1", home: "dwelling-1", needs: { hunger: 100, energy: 100, fun: 100, social: 100, hygiene: 100 }, lastAction: null },
+    { id: "sim2", home: "dwelling-2", needs: { hunger: 100, energy: 100, fun: 100, social: 100, hygiene: 100 }, lastAction: null },
+  ],
+  buildings: [
+    { id: "dwelling-1", type: "dwelling", label: "House 1", plot: { x: 0, y: 0 } },
+    { id: "dwelling-2", type: "dwelling", label: "House 2", plot: { x: 2, y: 0 } },
+    { id: "shop", type: "shop", label: "Tavern", plot: { x: 0, y: 2 } },
+    { id: "workshop", type: "workshop", label: "Workshop", plot: { x: 2, y: 2 } },
+  ],
+  placements: [
+    { id: "dwelling-1-bed", type: "bed", location: "dwelling-1" },
+    { id: "dwelling-1-fridge", type: "fridge", location: "dwelling-1" },
+    { id: "dwelling-1-shower", type: "shower", location: "dwelling-1" },
+    { id: "dwelling-1-desk", type: "desk", location: "dwelling-1" },
+    { id: "dwelling-2-bed", type: "bed", location: "dwelling-2" },
+    { id: "dwelling-2-fridge", type: "fridge", location: "dwelling-2" },
+    { id: "dwelling-2-shower", type: "shower", location: "dwelling-2" },
+    { id: "dwelling-2-desk", type: "desk", location: "dwelling-2" },
+    { id: "tree-1", type: "tree", location: "outdoors", plot: { x: 1, y: 0.7 } },
+    { id: "tree-2", type: "tree", location: "outdoors", plot: { x: 1, y: 1.3 } },
+    { id: "lamp-1", type: "lampPost", location: "outdoors", plot: { x: 0.7, y: 0.7 } },
+    { id: "lamp-2", type: "lampPost", location: "outdoors", plot: { x: 1.3, y: 1.3 } },
+  ],
+  objectTypes: {
+    bed: { footprint: { w: 0.6, d: 0.8 }, local: { x: 0.2, y: 0.8 } },
+    fridge: { footprint: { w: 0.6, d: 0.6 }, local: { x: 0.8, y: 0.2 } },
+    shower: { footprint: { w: 0.6, d: 0.6 }, local: { x: 0.2, y: 0.2 } },
+    desk: { footprint: { w: 0.8, d: 0.6 }, local: { x: 0.8, y: 0.8 } },
+    tree: { footprint: { w: 0.8, d: 0.8 } },
+    lampPost: { footprint: { w: 0.4, d: 0.4 } },
+  }
+};
+
+let world = DEFAULT_WORLD;
 let playing = true;
 const TICK_MS = 6250;
+
+// Push initial world immediately so 3D renders on the very first paint!
+renderer3d.pushTick(DEFAULT_WORLD);
+renderer3d.pushTick(DEFAULT_WORLD);
+renderer2d.pushTick(DEFAULT_WORLD);
+renderer2d.pushTick(DEFAULT_WORLD);
+renderer3d.draw(1);
+renderer2d.draw(1);
 
 async function bootWorld() {
   try {
@@ -1152,7 +1405,7 @@ async function bootWorld() {
     renderer2d.pushTick(w0); renderer2d.pushTick(w0);
     tickLoop(mod.tick);
   } catch (e) {
-    console.warn('Fallback or local tick error:', e);
+    console.warn('Live simulation source load fallback:', e);
   }
 }
 

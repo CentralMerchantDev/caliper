@@ -13,15 +13,7 @@
 // Day/Dusk/Night atmosphere cycle, and smooth orbital camera with district bookmarks.
 
 import * as THREE from "three";
-import { RoomEnvironment } from "./vendor/three/addons/environments/RoomEnvironment.js";
-import { HDRLoader } from "./vendor/three/addons/loaders/HDRLoader.js";
 import { RoundedBoxGeometry } from "./vendor/three/addons/geometries/RoundedBoxGeometry.js";
-import { EffectComposer } from "./vendor/three/addons/postprocessing/EffectComposer.js";
-import { RenderPass } from "./vendor/three/addons/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "./vendor/three/addons/postprocessing/UnrealBloomPass.js";
-import { ShaderPass } from "./vendor/three/addons/postprocessing/ShaderPass.js";
-import { VignetteShader } from "./vendor/three/addons/shaders/VignetteShader.js";
-import { OutputPass } from "./vendor/three/addons/postprocessing/OutputPass.js";
 import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
 
 // Building footprint constants exported for test/placementLayout.test.ts
@@ -495,25 +487,14 @@ class Renderer3D {
     scene.background = this._skyGradient.tex;
     this.scene = scene;
 
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    new HDRLoader().load(
-      "./vendor/hdri/kloofendal_48d_partly_cloudy_1k.hdr",
-      (hdrTexture) => {
-        const envMap = pmrem.fromEquirectangular(hdrTexture).texture;
-        hdrTexture.dispose();
-        pmrem.dispose();
-        if (this._disposed) {
-          envMap.dispose();
-          return;
-        }
-        scene.environment = envMap;
-      },
-      undefined,
-      () => {
-        pmrem.dispose();
-      },
-    );
+    // Direct, reliable PBR lighting
+    const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambient);
+    this.ambient = ambient;
+
+    const hemi = new THREE.HemisphereLight(0xbfdbfe, 0x64748b, 0.65);
+    scene.add(hemi);
+    this.hemi = hemi;
 
     const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 350);
     this.camera = camera;
@@ -534,10 +515,6 @@ class Renderer3D {
     scene.add(sun);
     scene.add(sun.target);
     this.sun = sun;
-
-    const hemi = new THREE.HemisphereLight(0x93b4d4, 0x6e5a47, 0.4);
-    scene.add(hemi);
-    this.hemi = hemi;
 
     this._contactTex = makeContactShadowTexture();
 
@@ -1828,6 +1805,22 @@ class Renderer3D {
     this._orbit.pitch = 0.58;
   }
 
+  rotateCamera(deltaAngle) {
+    if (this._isDroneTour) this.stopDroneTour();
+    this._orbit.delta += deltaAngle;
+  }
+
+  pitchCamera(deltaPitch) {
+    if (this._isDroneTour) this.stopDroneTour();
+    this._orbit.pitch = Math.max(0.12, Math.min(1.35, (this._orbit.pitch || 0.58) + deltaPitch));
+  }
+
+  zoomCamera(factor) {
+    if (this._isDroneTour) this.stopDroneTour();
+    this._camDist = Math.max(7, Math.min(140, (this._camDist || 18) * factor));
+    this._targetCamDist = this._camDist;
+  }
+
   setTimeOfDay(todKey) {
     if (todKey === "day") this._overrideHour = 12;
     else if (todKey === "dusk") this._overrideHour = 19.5;
@@ -2162,6 +2155,15 @@ export class WorldRenderer {
   }
   resetView() {
     if (this._impl.resetView) this._impl.resetView();
+  }
+  rotateCamera(angle) {
+    if (this._impl.rotateCamera) this._impl.rotateCamera(angle);
+  }
+  pitchCamera(angle) {
+    if (this._impl.pitchCamera) this._impl.pitchCamera(angle);
+  }
+  zoomCamera(factor) {
+    if (this._impl.zoomCamera) this._impl.zoomCamera(factor);
   }
   setTimeOfDay(todKey) {
     if (this._impl.setTimeOfDay) this._impl.setTimeOfDay(todKey);
