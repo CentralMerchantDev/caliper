@@ -487,6 +487,13 @@ import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
 const $ = s => document.querySelector(s)
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))
 const money = n => '$' + Number(n).toFixed(4)
+// FOUNDATION-2 ("emit the change, not the file"): the plan now decides,
+// visibly, whether a request is a small structured data edit or a full
+// source rewrite -- shown here so a visitor can actually see the cheap
+// case being taken, not just be told it exists somewhere in the code.
+const pathBadge = path => path === 'data-edit'
+  ? `<p class="summary-line" style="margin:0 0 8px"><strong style="color:var(--accent)">Data edit</strong> — applied directly to the world, no source file regenerated</p>`
+  : `<p class="summary-line" style="margin:0 0 8px"><strong>Source edit</strong> — this needs real simulation logic, so the full file is rewritten</p>`
 
 // ---------- the world, live ----------
 // FINAL.md item 7: a toggle between the 3D and plan views of the ONE
@@ -1013,6 +1020,7 @@ function connect(url) {
       // wants to do, what it will not do, how it will know it worked --
       // before any technical detail. Reasoning stays available, collapsed.
       planBlock.innerHTML = `<h4>Planned</h4>` +
+        pathBadge(p.implementationPath) +
         `<p><strong>What it wants to do:</strong> ${esc(p.willBuild)}</p>` +
         `<p><strong>What it will not do:</strong> ${esc(p.willNotTouch)}</p>` +
         (p.criteria.length ? `<p><strong>How it will know it worked (${p.criteria.length}):</strong></p><ul>${p.criteria.map(c => `<li>${esc(c.description)} <span class="mono" style="color:var(--muted)">[${esc(c.kind)}]</span></li>`).join('')}</ul>` : '<p style="color:var(--muted)">No new criteria proposed.</p>') +
@@ -1045,6 +1053,7 @@ function connect(url) {
     // FINAL.md item 3: what / won't / how, in that order, before detail.
     // The reasoning behind a false premise stays available, not first.
     b.innerHTML += `
+      ${pathBadge(p.implementationPath)}
       <p><strong>What it wants to do:</strong> ${esc(p.willBuild)}</p>
       <p><strong>What it will not do:</strong> ${esc(p.willNotTouch)}</p>
       ${p.criteria.length ? `<p><strong>How it will know it worked (${p.criteria.length}):</strong></p>

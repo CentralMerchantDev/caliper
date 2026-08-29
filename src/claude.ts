@@ -359,6 +359,17 @@ export interface ChangePlan {
   criteria: ProposedCriterion[];
   willNotTouch: string;
   question: string | null;
+  // FOUNDATION-2 ("emit the change, not the file"): which path implement
+  // will take -- decided HERE, at plan time, visible to the visitor at
+  // Gate 1 before anything is built, not a choice implement makes silently
+  // on its own. "data-edit" means the change is fully expressible as a
+  // WorldEdit (src/worldEdit.ts) -- a placement, a new type plus a
+  // placement, a colour override, a surface field -- applied deterministically
+  // to the real current world, never a regenerated file. "source-edit" is
+  // the fallback for a request that genuinely needs new simulation logic
+  // (a new action, a new entity kind, a new subsystem) -- the only case a
+  // full-file rewrite is actually necessary.
+  implementationPath: "data-edit" | "source-edit";
 }
 
 const PLAN_SCHEMA = {
@@ -385,8 +396,14 @@ const PLAN_SCHEMA = {
       description:
         "A specific question to ask the visitor, only if the request is genuinely ambiguous in a way that changes what you'd build, or asks for something you can't independently verify. Null if none -- most requests don't need one.",
     },
+    implementationPath: {
+      type: "string",
+      enum: ["data-edit", "source-edit"],
+      description:
+        '"data-edit" if this change is fully expressible as adding a placement, adding a new object type plus a placement, overriding a placement\'s colour, or changing a surface\'s material/colour -- the structure summary\'s cheap-operations list. "source-edit" ONLY if the change genuinely needs new simulation logic (a new sim action, a new entity kind, a new subsystem) that touches chooseAction/applyAction/tick or adds real code -- never choose source-edit just because the request "sounds like" a bigger ask; judge it against what the change actually requires, the same tiers used to size willBuild.',
+    },
   },
-  required: ["understoodIntent", "willBuild", "criteria", "willNotTouch", "question"],
+  required: ["understoodIntent", "willBuild", "criteria", "willNotTouch", "question", "implementationPath"],
   additionalProperties: false,
 };
 
@@ -406,6 +423,16 @@ const PLAN_SYSTEM_PROMPT =
   // request as ordinary as adding another lamp post ends up refused.
   "Judge how big a change is against the structure summary's stated cheap-versus-expensive tiers, not " +
   "against how much of the file the request happens to touch. " +
+  // FOUNDATION-2 ("emit the change, not the file"): implementationPath is
+  // a real, structural decision, not a formality -- data-edit means
+  // implement never regenerates the file at all, applying a small
+  // deterministic edit instead, at a fraction of the cost and time.
+  // Defaulting to source-edit when data-edit would actually work is the
+  // same mistake as an unnecessary refusal: treating a cheap operation as
+  // an expensive one.
+  "Set implementationPath to \"data-edit\" whenever the change is a placement, a new type plus a placement, " +
+  "a colour override, or a surface change -- the structure summary's cheap-operations list, almost always. " +
+  "Reserve \"source-edit\" for a change that genuinely needs new simulation logic. " +
   "Every criterion must be existence, structural, non-regression, or render (see the criteria field's own " +
   "description for what each means) -- never a criterion that names a specific value you computed by hand. " +
   "That restriction is enforced by the schema itself, not just this instruction: there is no field to put " +
@@ -418,7 +445,7 @@ const PLAN_SYSTEM_PROMPT =
   "default you chose instead of asking, wherever you can reasonably choose one yourself.";
 
 type RawPlanCriterion = { kind: unknown; description: unknown; fn: unknown; argsJson: unknown; field: unknown; check: unknown; expectedType: unknown; minCount: unknown; repeat: unknown; stationOrEntityKey: unknown };
-type RawPlan = { understoodIntent: string; willBuild: string; criteria: RawPlanCriterion[]; willNotTouch: string; question: string | null };
+type RawPlan = { understoodIntent: string; willBuild: string; criteria: RawPlanCriterion[]; willNotTouch: string; question: string | null; implementationPath?: unknown };
 
 export async function generatePlan(
   apiKey: string,
@@ -494,7 +521,14 @@ export async function generatePlan(
     accepted = retryResult.accepted;
     rejected = retryResult.rejected;
   }
-  const plan: ChangePlan = { understoodIntent: raw.understoodIntent, willBuild: raw.willBuild, criteria: accepted, willNotTouch: raw.willNotTouch, question: raw.question };
+  // validate-before-consume: the schema forces implementationPath to one of
+  // two enum values at the API layer, but this function doesn't assume
+  // that layer held (same discipline as parseGroundingResponse) -- an
+  // unrecognized value defaults to the safe, always-correct fallback
+  // rather than crashing the plan or silently taking the cheap path on
+  // bad data.
+  const implementationPath: "data-edit" | "source-edit" = raw.implementationPath === "data-edit" ? "data-edit" : "source-edit";
+  const plan: ChangePlan = { understoodIntent: raw.understoodIntent, willBuild: raw.willBuild, criteria: accepted, willNotTouch: raw.willNotTouch, question: raw.question, implementationPath };
 
   const inputTokens = response.usage.input_tokens;
   const outputTokens = response.usage.output_tokens;
