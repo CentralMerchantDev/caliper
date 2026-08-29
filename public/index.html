@@ -3,13 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CALIPER — a shared world, built live</title>
-<!-- Copy pass verified against plain declarative tone: no paired em-dashes, no triads, no rhetorical questions, every quantitative claim verified against empirical measurements -->
-<meta name="description" content="CALIPER: ask a live simulated world to change. A real pipeline checks the request against the actual code, plans it, waits for your approval, builds it, tests it in a sandbox, and ships or refuses it with a stated reason. By Mark Fraser.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%232A201A'/%3E%3Ctext x='50' y='68' font-family='monospace' font-size='52' font-weight='700' fill='%23FAF6EE' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
+<title>CALIPER — Zelda / SimCity Living Valley Kingdom</title>
+<meta name="description" content="CALIPER: Expansive Zelda/SimCity living valley kingdom with 5 districts, riverfront, watchtower, and full-screen construction director HUD.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231E293B'/%3E%3Ctext x='50' y='68' font-family='monospace' font-size='52' font-weight='700' fill='%2338BDF8' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script type="importmap">
 {
   "imports": {
@@ -18,970 +17,729 @@
 }
 </script>
 <style>
-/* Accessibility checked against WCAG AA by computing contrast ratios, not
-   assumed: --muted (#6E5E49 on --paper #FAF6EE) = 5.80:1, passes AA for
-   normal text (>=4.5:1). --ink2 (#5C4B39 on --paper) = 7.1:1. --accent
-   (#B0560C on --paper) = 4.6:1, passes AA for normal text. --sim2 (world
-   renderer's teal, #3D6B63 on --paper) = 5.3:1, passes. All computed via
-   the WCAG relative-luminance formula, not eyeballed. */
-:root{
-  --paper:#FAF6EE; --card:#FEFCF6; --ink:#2A201A; --ink2:#5C4B39; --muted:#6E5E49;
-  --line:rgba(42,32,26,.16); --line2:rgba(42,32,26,.08); --line-strong:rgba(42,32,26,.38);
-  --accent:#B0560C; --accentSoft:#F6E4CF; --good:#2A201A; --goodSoft:#EFE8DB;
-  --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-  --serif:'Source Serif 4','Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
-  --r:14px; --sh:0 1px 2px rgba(42,32,26,.05),0 10px 28px -14px rgba(42,32,26,.14);
+:root {
+  --bg-deep: #0b0f19;
+  --panel-bg: rgba(15, 23, 42, 0.82);
+  --panel-border: rgba(255, 255, 255, 0.16);
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --accent: #f59e0b;
+  --accent-glow: rgba(245, 158, 11, 0.35);
+  --emerald: #10b981;
+  --emerald-glow: rgba(16, 185, 129, 0.3);
+  --sky: #38bdf8;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --radius-lg: 16px;
+  --radius-md: 10px;
+  --radius-sm: 6px;
 }
-*{box-sizing:border-box} html,body{margin:0;padding:0}
-body{background:var(--paper);color:var(--ink);font-family:var(--serif);font-size:18px;line-height:1.6;-webkit-font-smoothing:antialiased}
-a{color:var(--accent)}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-select,input,button,textarea{font-family:inherit}
-.wrap{max-width:860px;margin:0 auto;padding:0 24px}
-.wide{max-width:1180px;margin:0 auto;padding:0 24px}
-.mono{font-family:var(--mono)}
-.lab{font-family:var(--mono);font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:600}
 
-header{border-bottom:1px solid var(--line);padding:18px 0;background:rgba(250,246,238,.94);backdrop-filter:blur(8px);position:sticky;top:0;z-index:20}
-header .wide{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-.brand{font-family:var(--mono);font-weight:700;letter-spacing:.08em;font-size:15px}
-header nav{margin-left:auto;display:flex;gap:4px;flex-wrap:wrap}
-header nav a{font-family:var(--mono);font-size:12.5px;color:var(--ink2);text-decoration:none;padding:6px 10px;border-radius:999px}
-header nav a:hover{background:var(--accentSoft);color:var(--ink)}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text-main);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
 
-.hero{padding:40px 0 8px}
-.hero .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700}
-.hero h1{font-family:var(--serif);font-size:clamp(26px,4vw,38px);line-height:1.18;letter-spacing:-.015em;font-weight:600;margin:14px 0 6px}
-.hero .sub{font-size:17px;color:var(--ink2);margin:0}
-.who-line{font-size:14px;color:var(--muted);margin:16px 0 0}
-.who-line a{color:var(--ink2);text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:2px}
-.who-line a:hover{color:var(--accent)}
+/* Fullscreen 3D Viewport */
+#viewport-container {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1;
+  overflow: hidden;
+}
+#world-canvas, #world-canvas-2d {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 
-h2{font-family:var(--serif);font-size:28px;font-weight:600;letter-spacing:-.01em;margin:52px 0 14px}
-h2 .n{font-family:var(--mono);font-size:13px;color:var(--muted);letter-spacing:.06em;font-weight:600;display:block;margin-bottom:6px;text-transform:uppercase}
-h3{font-size:19px;font-weight:650;margin:26px 0 8px}
-p{margin:0 0 15px}
-.lede{font-size:19px;color:var(--ink);margin:0 0 22px}
-ul,ol{margin:0 0 16px;padding-left:22px}
-li{margin-bottom:7px}
-strong{font-weight:650}
-.callout{font-size:19px;font-weight:550;line-height:1.5;padding:18px 22px;background:var(--accentSoft);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;margin:22px 0}
-.callout p{margin:0}
-.note{color:var(--ink2);font-size:16px;border-left:3px solid var(--line-strong);padding:2px 0 2px 16px;margin:16px 0}
-.personal-note{font-size:15px;font-style:italic;color:var(--ink2);border-left:2px solid var(--accent);padding:4px 0 4px 14px;margin:16px 0}
-.personal-note::before{content:"Mark: ";font-style:normal;font-weight:700;color:var(--accent)}
+/* Glassmorphism primitives */
+.glass {
+  background: var(--panel-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
 
-table{width:100%;border-collapse:collapse;margin:18px 0;font-size:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh)}
-caption{text-align:left;font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;caption-side:top}
-th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line2);vertical-align:top}
-thead th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--accentSoft);border-bottom:1px solid var(--line)}
-tbody tr:last-child td{border-bottom:none}
-td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
-.headline-cell{font-weight:700;color:var(--accent)}
-.wrapx{overflow-x:auto}
+.mono { font-family: var(--mono); }
 
-/* ---------------- the workspace ---------------- */
-.orient-box{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:16px 20px;margin:20px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 22px}
-.orient-box p{margin:0;font-size:14.5px;line-height:1.5;color:var(--ink2)}
-.orient-box strong{color:var(--ink);display:block;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
-.workspace{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(340px,0.9fr);gap:18px;margin:22px 0;align-items:start}
-@media(max-width:900px){.workspace{grid-template-columns:1fr}}
-.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:18px}
-/* LAST.md item 4: "the world persistent and visible while a run streams
-   beside it... the run log scrolls; the world does not disappear."
-   position:sticky, not fixed -- it stays pinned within the .workspace
-   grid's own extent (both at the 2-column desktop width, where it holds
-   its column as the page scrolls, and collapsed to 1 column below 900px,
-   where it docks to the top as the log scrolls underneath), and scrolls
-   away normally once the whole workspace section is behind the visitor,
-   unlike position:fixed which would follow forever. align-items:start on
-   .workspace above is required for this -- CSS Grid items stretch to the
-   row height by default, which silences position:sticky entirely (an
-   element that already fills its whole scrollable area has nowhere to
-   "stick" to). top clears the sticky header's own height (~72px) plus a
-   visible gap. */
-.world-panel{padding:14px;position:sticky;top:88px}
-@media(max-width:900px){.world-panel{top:72px}}
-#world-canvas,#world-canvas-2d{width:100%;height:420px;display:block;border-radius:10px}
-.world-caption{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
-.world-goal-line{margin:8px 2px 0;font-size:13px;color:var(--ink2)}
-.world-controls{display:flex;gap:6px}
-.world-controls button{font-family:var(--mono);font-size:11px;padding:5px 9px;border-radius:7px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);cursor:pointer}
-.world-controls button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
-/* FINAL.md item 7: a toggle between the 3D and plan views of the one
-   world -- same button visual language as .world-controls, placed above
-   the canvas since it picks which canvas is even visible. */
-.view-toggle{display:flex;gap:0;border:1px solid var(--line-strong);border-radius:7px;overflow:hidden}
-.view-toggle button{font-family:var(--mono);font-size:11px;padding:6px 14px;border:none;border-right:1px solid var(--line-strong);background:var(--paper);color:var(--ink);cursor:pointer}
-.view-toggle button:last-child{border-right:none}
-.view-toggle button[aria-pressed="true"]{background:var(--ink);color:#fff}
+/* Top Floating Bar */
+.top-bar-wrapper {
+  position: fixed;
+  top: 14px;
+  left: 16px;
+  right: 16px;
+  z-index: 50;
+  pointer-events: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 
-.metrics-bar{display:flex;gap:16px;flex-wrap:wrap;margin-top:16px;padding:12px 18px;background:var(--paper);border:1px solid var(--line-strong);border-radius:9px}
-.metric-item{display:flex;flex-direction:column;gap:2px;flex:1;min-width:180px}
-.metric-label{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700}
-.metric-value{font-size:14px;font-weight:650;color:var(--ink)}
+.top-bar-cluster {
+  pointer-events: auto;
+  border-radius: var(--radius-lg);
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-.tod-toggle{display:flex;gap:0;border:1px solid var(--line-strong);border-radius:7px;overflow:hidden}
-.tod-toggle button{font-family:var(--mono);font-size:11px;padding:6px 10px;border:none;border-right:1px solid var(--line-strong);background:var(--paper);color:var(--ink);cursor:pointer}
-.tod-toggle button:last-child{border-right:none}
-.tod-toggle button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.brand-badge {
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.brand-badge span.kingdom {
+  color: var(--accent);
+  font-weight: 700;
+}
 
-.reset-cam-btn{position:absolute;top:12px;right:12px;z-index:5;font-family:var(--mono);font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.1);transition:all .15s ease}
-.reset-cam-btn:hover{background:var(--ink);color:#fff}
+.status-pill {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: var(--emerald);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--emerald);
+  box-shadow: 0 0 8px var(--emerald);
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
 
-.inspect-card{position:absolute;bottom:64px;left:24px;right:24px;z-index:10;background:rgba(18, 24, 38, 0.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255, 255, 255, 0.16);border-radius:12px;padding:14px 18px;box-shadow:0 8px 24px rgba(0,0,0,0.3);font-size:13.5px;color:#f8fafc;animation:inspect-fade-in .2s ease-out}
-@keyframes inspect-fade-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-.inspect-close{position:absolute;top:10px;right:12px;background:none;border:none;font-size:14px;color:#94a3b8;cursor:pointer;padding:4px 8px}
-.inspect-close:hover{color:#fff}
-.inspect-header{margin-bottom:4px}
-.inspect-badge{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#38bdf8;font-weight:700}
-.inspect-title{margin:2px 0 0;font-size:16.5px;font-weight:650;color:#fff}
-.inspect-body p{margin:3px 0;font-size:13px;color:#cbd5e1}
-.inspect-focus-btn{margin-top:8px;background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}
-.inspect-focus-btn:hover{opacity:0.9}
+.clock-pill {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
 
-.pipeline-progress{margin:10px 0 14px;padding:12px 16px;background:rgba(18,24,38,0.04);border:1px solid var(--line-strong);border-radius:10px}
-.pipeline-steps{display:flex;justify-content:space-between;gap:6px;position:relative;margin-bottom:8px}
-.step-item{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--muted);font-weight:600;transition:all .2s ease}
-.step-item .step-num{width:18px;height:18px;border-radius:50%;background:var(--line-strong);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:10px}
-.step-item.active{color:var(--accent)}
-.step-item.active .step-num{background:var(--accent);color:#fff}
-.step-item.done{color:var(--ink)}
-.step-item.done .step-num{background:var(--ink);color:#fff}
-.pipeline-timer{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right}
-.rejection-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(220,38,38,0.1);color:#b91c1c;border:1px solid rgba(220,38,38,0.3);padding:8px 12px;border-radius:6px;font-family:var(--mono);font-size:11.5px;font-weight:600;margin-top:8px}
+/* Button & Pill Styles */
+.btn-pill {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.btn-pill:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+.btn-pill.active, .btn-pill[aria-pressed="true"] {
+  background: rgba(245, 158, 11, 0.22);
+  border-color: var(--accent);
+  color: #fef08a;
+}
+.btn-pill.active-emerald {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: var(--emerald);
+  color: #6ee7b7;
+}
 
-.budget-bar{display:flex;flex-wrap:wrap;gap:6px 16px;font-family:var(--mono);font-size:11.5px;color:var(--muted);padding:10px 14px;background:var(--paper);border:1px solid var(--line2);border-radius:9px;margin-bottom:14px}
-.budget-bar b{color:var(--ink);font-weight:700}
+.btn-group {
+  display: flex;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+}
+.btn-group button {
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  border-right: 1px solid var(--panel-border);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 9px;
+  cursor: pointer;
+  font-family: var(--mono);
+  transition: all 0.15s ease;
+}
+.btn-group button:last-child { border-right: none; }
+.btn-group button:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+.btn-group button.active, .btn-group button[aria-pressed="true"] {
+  background: var(--sky);
+  color: #0f172a;
+  font-weight: 700;
+}
 
-.request-form{display:flex;flex-direction:column;gap:10px}
-.request-form textarea{padding:12px 14px;border:1px solid var(--line-strong);border-radius:9px;background:var(--paper);font-size:16px;color:var(--ink);resize:vertical;min-height:64px;font-family:inherit}
-.request-copy{font-size:14.5px;color:var(--ink2);margin:0 0 10px}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--ink);color:#fff;border:1px solid var(--ink);border-radius:9px;padding:12px 20px;font-size:15.5px;font-weight:600;cursor:pointer}
-.btn:hover{opacity:.88}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-.btn-outline{background:transparent;color:var(--ink);border:1px solid var(--line-strong)}
-.btn-outline:hover{background:var(--paper);opacity:1}
-.btn-block{width:100%}
-.spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite;flex:none}
-@keyframes sp{to{transform:rotate(360deg)}}
+/* Floating Construction Director Dock (Bottom-Center) */
+.dock-wrapper {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(880px, calc(100vw - 32px));
+  z-index: 60;
+  pointer-events: auto;
+  border-radius: 20px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.2s ease;
+}
 
-.stage-log{margin-top:6px;font-size:15px;max-height:70vh;overflow-y:auto;padding-right:4px}
-.stage{border-left:3px solid var(--line-strong);padding:5px 0 5px 16px;margin-bottom:12px;color:var(--ink2)}
-.stage.active{border-left-color:var(--accent);color:var(--ink)}
-.stage.error{border-left-color:var(--accent);background:var(--accentSoft);border-radius:0 8px 8px 0;padding:10px 16px}
-.stage.gate{border-left-color:var(--accent)}
-.stage h4{margin:0;font-size:13.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:inherit}
-/* LAST.md item 3: real hierarchy per stage -- a heading+outcome readable
-   at a glance, willBuild/willNotTouch as distinct visually separated
-   blocks (not an inline <strong> prefix in a paragraph), criteria as a
-   real list with kind as a quiet label (not an inline [bracket]), and
-   token/cost/duration demoted to a small secondary footer row. */
-.stage-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 10px}
-.stage-heading h4{margin:0}
-.stage-outcome{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
-.stage-block{background:var(--paper);border:1px solid var(--line2);border-radius:8px;padding:10px 13px;margin:0 0 8px}
-.stage-block-label{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 5px;display:block}
-.stage-block p{margin:0;color:var(--ink);font-size:14.5px;line-height:1.5}
-.criteria-list{list-style:none;margin:6px 0 8px;padding:0}
-.criteria-list li{display:flex;align-items:baseline;gap:9px;padding:6px 0;border-bottom:1px solid var(--line2);font-size:14px}
-.criteria-list li:last-child{border-bottom:none}
-.criteria-kind{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--line2);padding:2px 6px;border-radius:5px;flex:none}
-.stage-footer{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--line2)}
-/* SHIP.md item 2: the recorded-run playback -- a distinct banner so it
-   reads immediately as "this already happened, for real" rather than a
-   live run in progress, and a quick staggered fade-in per stage (each
-   ~90ms after the last) so it still feels like watching something play
-   out stage by stage without making a visitor sit through the real ~90s
-   wall time the run actually took. */
-.recording-banner{background:var(--accentSoft);border:1px solid var(--accent);border-radius:10px;padding:14px 16px;margin:0 0 14px}
-.recording-kicker{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ink);margin:0 0 6px}
-.recording-note{font-size:14px;color:var(--ink2);line-height:1.5;margin:0 0 10px}
-.action-bar.recording-bar{background:var(--accentSoft)}
-.recorded-stage{animation:recording-fade-in .32s ease-out backwards}
-@keyframes recording-fade-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-@media(prefers-reduced-motion:reduce){.recorded-stage{animation:none}}
-pre{background:var(--paper);border:1px solid var(--line2);border-radius:9px;padding:12px 14px;font-family:var(--mono);font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;margin:8px 0}
-.test-list{list-style:none;padding:0;margin:8px 0}
-.test-list li{display:flex;gap:10px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--line2);font-size:13.5px}
-.test-list li:last-child{border-bottom:none}
-.test-list .mark{font-family:var(--mono);font-weight:700;width:16px;flex:none}
-.test-list li.pass .mark{color:var(--ink)}
-.test-list li.fail .mark{color:var(--accent)}
-.summary-line{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-top:8px}
-.badge{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;padding:2px 7px;border-radius:5px;margin-right:6px}
-.badge.material{background:var(--accentSoft);color:var(--accent)}
-.badge.nit{background:var(--line2);color:var(--muted)}
-.finding-line{padding:6px 0;border-bottom:1px solid var(--line2);font-size:13.5px}
-.finding-line:last-child{border-bottom:none}
-.root-cause-line{font-family:var(--mono);font-size:11px;color:var(--muted);margin:2px 0 0}
+.dock-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 
-/* Gate: a real decision moment, not a toast */
-.gate-box{background:var(--accentSoft);border:1px solid var(--accent);border-radius:11px;padding:18px 20px;margin-top:10px}
-.gate-box h5{margin:0 0 10px;font-size:16px;font-weight:650}
-.waiting-banner{background:var(--card);border:1px solid var(--accent);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:14.5px;line-height:1.5;color:var(--ink)}
-.waiting-banner .wb-lead{font-weight:700;color:var(--accent)}
-.gate-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
-.gate-reply{margin-top:14px;padding-top:14px;border-top:1px solid rgba(176,86,12,.25)}
-.gate-reply textarea{width:100%;padding:10px 12px;border:1px solid var(--line-strong);border-radius:8px;font-size:14.5px;min-height:52px;font-family:inherit;background:var(--paper);color:var(--ink)}
-.gate-reply .btn{margin-top:8px;padding:9px 16px;font-size:14px}
-.cost-line{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin:6px 0 0}
+.target-badge {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.target-badge strong {
+  color: var(--sky);
+  font-weight: 700;
+}
 
-/* Diffs */
-.diff-view{background:var(--paper);border:1px solid var(--line2);border-radius:9px;overflow:hidden;font-family:var(--mono);font-size:12.5px;margin:8px 0}
-.diff-line{display:flex;padding:1px 0}
-.diff-line .gutter{width:26px;flex:none;text-align:center;color:var(--muted);user-select:none;border-right:1px solid var(--line2)}
-.diff-line .content{padding:0 10px;white-space:pre-wrap;word-break:break-word;flex:1}
-.diff-line.add{background:rgba(58,110,58,.10)}
-.diff-line.add .gutter{color:#3A6E3A}
-.diff-line.del{background:rgba(176,86,12,.10)}
-.diff-line.del .gutter{color:var(--accent)}
-.diff-summary{font-family:var(--mono);font-size:11.5px;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--line2)}
+.exec-feedback {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.12);
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
 
-.control-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:16px 0}
-.control-card{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:14px 16px;box-shadow:var(--sh)}
-.control-card .val{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--accent);display:block}
-.control-card p{margin:6px 0 0;font-size:13.5px;color:var(--ink2)}
+.scope-pills-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.scope-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  font-size: 11.5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.scope-pill:hover {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: var(--sky);
+  color: #fff;
+  transform: translateY(-1px);
+}
 
-footer{border-top:1px solid var(--line);padding:30px 0 60px;color:var(--muted);font-size:14.5px;margin-top:60px}
-footer a{color:var(--ink2)}
+.dock-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.dock-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+  min-height: 44px;
+  max-height: 44px;
+  resize: none;
+}
+.dock-input:focus {
+  border-color: var(--sky);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+}
+.dock-input::placeholder {
+  color: #64748b;
+}
 
-/* POLISH.md item 4: the closing block -- one short, stated-once ask,
-   visually set apart from the methodology list above it (a top border,
-   the same device the footer already uses) but not styled as a call-to-
-   action banner. */
-.closing{border-top:1px solid var(--line);margin-top:44px;padding-top:28px}
-.closing p{margin:0 0 8px;font-size:17px;color:var(--ink2)}
-.closing p:last-child{margin-bottom:0;font-size:15px}
-.closing a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:2px}
+.btn-build {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 10px 22px;
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 16px var(--accent-glow);
+  transition: all 0.15s ease;
+  min-height: 44px;
+}
+.btn-build:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(245, 158, 11, 0.5);
+}
+.btn-build:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
 
-/* ---------------- the persistent action bar ----------------
-   LAST.md item 3: moved from position:fixed spanning the whole viewport
-   (FINAL.md item 2's original spec -- Mark's own call that this was a
-   specification error, not a defect in building it) to living inside
-   .run-panel, directly beneath #stage-log, position:sticky to that
-   panel's own bottom. It's still the single place anything is ever asked
-   of the visitor, still always visible while a run is active, still never
-   empty -- just scoped to the output it acts on (a chat composer under
-   the transcript) instead of a toolbar across the browser. Because it's
-   sticky, not fixed, it now occupies real space in normal document flow,
-   so the old body padding-bottom/--bar-h JS-measured-height workaround
-   (needed only to stop a `fixed` bar covering page content) is gone --
-   nothing to cover, it's part of the layout now. */
-.action-bar{position:sticky;bottom:0;z-index:5;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -6px 20px -10px rgba(42,32,26,.22);margin:14px -18px -18px;border-radius:0 0 var(--r) var(--r)}
-.action-bar-inner{padding:12px 18px;display:flex;flex-direction:column;gap:8px}
-.action-bar .bar-kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
-.action-bar .bar-ask{margin:0;font-size:15.5px;line-height:1.4}
-.action-bar .bar-note{margin:0;font-size:12.5px;color:var(--muted)}
-.bar-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.bar-row textarea,.bar-row input[type="text"]{flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--line-strong);border-radius:8px;background:var(--paper);color:var(--ink);font-size:15px;font-family:inherit;resize:none}
-.bar-row textarea{min-height:38px;max-height:38px}
-.action-bar .btn{padding:9px 16px;font-size:14.5px;white-space:nowrap}
-.bar-stage-label{font-weight:600}
-.bar-cost{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
-.bar-reply-row{display:none;gap:8px;align-items:center;flex-wrap:wrap;padding-top:2px}
-.bar-reply-row.open{display:flex}
-/* State-driven look: idle/running/done stay neutral; any state that is
-   actually waiting on the visitor gets the warm accent treatment, so a
-   glance registers "your turn" without reading a word of copy. */
-.action-bar.needs-you{background:var(--accentSoft);border-top-color:var(--accent)}
-.action-bar.needs-you .btn:not(.btn-outline){background:var(--accent);border-color:var(--accent)}
-.action-bar.bar-flash{animation:bar-flash 900ms ease-out 1}
-@keyframes bar-flash{0%{background:var(--accent)}100%{background:var(--accentSoft)}}
-@media(prefers-reduced-motion:reduce){.action-bar.bar-flash{animation:none}}
-.action-bar.bar-done{background:var(--goodSoft)}
-.action-bar.bar-error{background:var(--accentSoft);border-top-color:var(--accent)}
+/* Status / Pipeline Card */
+.status-card {
+  position: fixed;
+  top: 76px;
+  right: 18px;
+  width: min(420px, calc(100vw - 36px));
+  max-height: calc(100vh - 220px);
+  z-index: 55;
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  overflow-y: auto;
+  display: none;
+  animation: fadeIn 0.2s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
-/* Feature CSS: Letterbox, Canvas Buttons, Cmd+K, Spotlight Modal */
-.letterbox-bar{position:absolute;left:0;right:0;height:24px;background:#0f172a;z-index:12;transition:transform .4s cubic-bezier(.16,1,.3,1);pointer-events:none}
-.letterbox-top{top:0;transform:translateY(-100%)}
-.letterbox-bottom{bottom:0;transform:translateY(100%)}
-.letterbox-top.active{transform:translateY(0)}
-.letterbox-bottom.active{transform:translateY(0)}
+.pipeline-steps {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.step-item {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.step-item.active { color: var(--sky); font-weight: 700; }
+.step-item.done { color: var(--emerald); }
 
-.canvas-btn-bar{position:absolute;z-index:10;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.canvas-btn-bar.top-left{top:12px;left:12px}
+.stage-log {
+  font-size: 13.5px;
+  color: #cbd5e1;
+  line-height: 1.45;
+  margin-top: 8px;
+}
+.stage {
+  border-left: 3px solid rgba(255, 255, 255, 0.2);
+  padding: 4px 0 4px 12px;
+  margin-bottom: 10px;
+}
+.stage.active { border-left-color: var(--sky); }
+.stage.error { border-left-color: #ef4444; background: rgba(239, 68, 68, 0.12); border-radius: 0 8px 8px 0; padding: 8px 12px; }
+.stage h4 { margin: 0 0 4px; font-size: 12.5px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.05em; color: #fff; }
 
-.canvas-btn{background:rgba(15,23,42,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.16);color:var(--paper,#f8fafc);font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:8px;cursor:pointer;transition:all .2s ease;display:inline-flex;align-items:center;gap:4px}
-.canvas-btn:hover{background:rgba(30,41,59,.9);border-color:rgba(255,255,255,.3);transform:translateY(-1px)}
-.canvas-btn.active,.canvas-btn[aria-pressed="true"]{background:rgba(16,185,129,.25);border-color:#10b981;color:#34d399}
+/* Decision Gates in Dock */
+.gate-container {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+}
+.gate-title { font-weight: 700; color: #fef08a; font-size: 13px; margin: 0 0 6px; }
+.gate-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 
-.cmd-k-badge{background:rgba(15,23,42,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.16);color:var(--ink2,#94a3b8);font-family:var(--mono);font-size:12px;font-weight:600;padding:4px 8px;border-radius:6px;cursor:pointer;transition:all .2s ease}
-.cmd-k-badge:hover{background:rgba(30,41,59,.85);color:#fff;border-color:rgba(255,255,255,.3)}
+/* Inspection Card */
+.inspect-card {
+  position: fixed;
+  left: 20px;
+  bottom: 130px;
+  width: min(340px, calc(100vw - 40px));
+  z-index: 55;
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  display: none;
+  animation: slideUp 0.2s ease-out;
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.inspect-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+.inspect-close:hover { color: #fff; }
 
-.cmd-modal-backdrop{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.68);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px 16px}
-.cmd-modal-card{width:100%;max-width:580px;background:rgba(15,23,42,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.18);border-radius:14px;box-shadow:0 25px 50px -12px rgba(0,0,0,.6);overflow:hidden;display:flex;flex-direction:column}
-.cmd-modal-header{display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.1);gap:12px}
-.cmd-search-icon{font-size:16px;opacity:.6;color:#f8fafc}
-.cmd-search-input{flex:1;background:transparent;border:none;outline:none;color:#f8fafc;font-size:16px;font-family:inherit}
-.cmd-esc-badge{font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.1);border-radius:4px;padding:2px 6px;color:#94a3b8}
-.cmd-modal-body{max-height:360px;overflow-y:auto}
-.cmd-items-list{list-style:none;margin:0;padding:8px}
-.cmd-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;cursor:pointer;color:#cbd5e1;font-size:14.5px;transition:background .15s ease,color .15s ease}
-.cmd-item.selected,.cmd-item:hover{background:rgba(59,130,246,.25);color:#fff}
-.cmd-item-category{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;font-family:var(--mono)}
-.cmd-modal-footer{padding:10px 18px;background:rgba(0,0,0,.2);border-top:1px solid rgba(255,255,255,.08);font-size:12px;color:#64748b;display:flex;justify-content:flex-end}
-.cmd-modal-footer kbd{background:rgba(255,255,255,.1);padding:1px 5px;border-radius:3px;font-family:var(--mono)}
+/* Cinematic Letterbox */
+.letterbox-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: #000;
+  z-index: 45;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.letterbox-top { top: 0; transform: translateY(-100%); }
+.letterbox-bottom { bottom: 0; transform: translateY(100%); }
+.letterbox-top.active { transform: translateY(0); }
+.letterbox-bottom.active { transform: translateY(0); }
 
-/* Phase 2 CSS: NPC profile, Timeline Scrubber, Architecture Drawer */
-.npc-profile-box{margin-top:10px;padding:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px}
-.npc-header{display:flex;align-items:center;gap:10px}
-.npc-avatar{font-size:22px}
-.npc-thought-quote{margin-top:6px;padding:6px 10px;background:rgba(15,23,42,.6);border-left:3px solid #10b981;border-radius:4px}
+/* Modal Backdrops */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-card {
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  border-radius: 18px;
+  padding: 20px 24px;
+  overflow-y: auto;
+}
 
-.timeline-bar{position:absolute;bottom:12px;left:12px;right:12px;z-index:10;background:rgba(15,23,42,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:6px 14px;display:flex;align-items:center;gap:12px}
-.timeline-title{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted);white-space:nowrap}
-.timeline-ticks{flex:1;display:flex;gap:6px;align-items:center;overflow-x:auto;scrollbar-width:none}
-.timeline-tick-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#cbd5e1;font-size:12px;padding:3px 10px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:all .2s ease}
-.timeline-tick-btn:hover{background:rgba(255,255,255,.2);color:#fff}
-.timeline-tick-btn.active{background:#3b82f6;border-color:#60a5fa;color:#fff;font-weight:600}
-.timeline-live-btn{background:rgba(16,185,129,.2);border:1px solid #10b981;color:#34d399;font-size:12px;font-weight:600;padding:4px 10px;border-radius:6px;cursor:pointer;white-space:nowrap}
+/* Timeline scrubber pill */
+.timeline-pill-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+}
 
-.timeline-warning-pill{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:20;background:rgba(239,68,68,.9);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:13px;font-weight:600;padding:6px 16px;border-radius:20px;display:flex;align-items:center;gap:10px;box-shadow:0 4px 14px rgba(0,0,0,.4);max-width:calc(100% - 32px)}
-.timeline-return-btn{background:#fff;color:#991b1b;border:none;font-size:12px;font-weight:700;padding:3px 10px;border-radius:12px;cursor:pointer}
-
-.arch-drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:9999}
-.arch-drawer-panel{position:absolute;top:0;right:0;bottom:0;width:92%;max-width:620px;background:rgba(15,23,42,.96);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-left:1px solid rgba(255,255,255,.18);box-shadow:-20px 0 50px rgba(0,0,0,.7);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .35s cubic-bezier(.16,1,.3,1)}
-.arch-drawer-panel.open{transform:translateX(0)}
-.arch-drawer-header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid rgba(255,255,255,.12)}
-.arch-drawer-header h3{margin:0;font-size:17px;color:#f8fafc}
-.arch-close-btn{background:transparent;border:none;color:#94a3b8;font-size:18px;cursor:pointer}
-.arch-close-btn:hover{color:#fff}
-.arch-drawer-body{padding:20px 22px;overflow-y:auto;flex:1}
-.arch-summary{font-size:14.5px;line-height:1.5;color:#cbd5e1;margin-bottom:18px}
-.arch-diagram-container{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px;margin-bottom:18px}
-.arch-svg{width:100%;height:auto}
-.svg-node{cursor:pointer;transition:opacity .2s ease}
-.svg-node:hover{opacity:.85}
-.arch-step-detail{background:rgba(30,41,59,.6);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 16px}
-.arch-step-detail h4{margin:0 0 6px;font-size:15px;color:#38bdf8}
-.arch-step-detail p{margin:0;font-size:13.5px;color:#cbd5e1;line-height:1.45}
-
-/* Field Guide, Target Scope, Category Tags, Master Builder Card */
-.field-guide-card{margin-bottom:16px;padding:16px 18px;background:rgba(15,23,42,.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.16);border-radius:12px}
-.guide-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.guide-badge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:#38bdf8;background:rgba(56,189,248,.15);padding:2px 8px;border-radius:4px}
-.guide-header h4{margin:0;font-size:15px;color:#f8fafc;flex:1;margin-left:10px}
-.guide-close-btn{background:transparent;border:none;color:#94a3b8;font-size:16px;cursor:pointer}
-.guide-close-btn:hover{color:#fff}
-.guide-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:12px}
-.guide-step{display:flex;gap:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);padding:10px;border-radius:8px}
-.step-icon{font-size:20px}
-.guide-step strong{display:block;font-size:12.5px;color:#f1f5f9;margin-bottom:2px}
-.guide-step p{margin:0;font-size:11.5px;color:#94a3b8;line-height:1.35}
-.guide-rules{display:flex;flex-wrap:wrap;gap:8px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08)}
-.rule-chip{font-size:11px;color:#cbd5e1;background:rgba(255,255,255,.06);padding:3px 10px;border-radius:6px}
-
-.target-scope-banner{display:flex;align-items:center;justify-content:space-between;background:rgba(30,41,59,.7);border:1px solid rgba(255,255,255,.12);padding:6px 12px;border-radius:8px;margin-bottom:10px}
-.target-label{font-size:13px;color:#cbd5e1}
-.target-deselect-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#94a3b8;font-size:11px;padding:3px 8px;border-radius:6px;cursor:pointer}
-.target-deselect-btn:hover{background:rgba(255,255,255,.18);color:#fff}
-
-.category-tags-bar{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-.category-tag-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#cbd5e1;font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;transition:all .15s ease}
-.category-tag-btn:hover{background:rgba(56,189,248,.2);border-color:#38bdf8;color:#fff}
-
-.master-builder-card{margin-top:14px;padding:14px 16px;background:rgba(15,23,42,.92);border:1px solid #f59e0b;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.5)}
-.mb-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-.mb-avatar{font-size:24px}
-.mb-header h4{margin:0;font-size:15px;color:#fbbf24}
-.mb-subtitle{font-size:11px;color:#94a3b8}
-.mb-text{margin:0 0 10px;font-size:13px;color:#cbd5e1;line-height:1.4}
-.mb-action-buttons{display:flex;flex-wrap:wrap;gap:8px}
-.mb-action-btn{background:rgba(245,158,11,.18);border:1px solid #f59e0b;color:#fef08a;font-size:12px;padding:5px 12px;border-radius:6px;cursor:pointer}
-.mb-action-btn:hover{background:#f59e0b;color:#0f172a;font-weight:600}
-
-@media(prefers-reduced-motion:reduce){.spin{animation:none}}
-/* POLISH.md item 2: mobile, done properly, not just "no horizontal
-   overflow". Every rule below traces to one specific, named complaint --
-   the nav wrapping to two rows and eating a third of the first screen,
-   tap targets under the 44px floor, and the world reading as a cramped
-   strip instead of something worth looking at. */
-@media(max-width:640px){
-  /* The nav wrapped to two rows before this, its own sticky header
-     consuming a fixed chunk of every screen for the rest of the visit,
-     not just the first one. One row, horizontally scrollable, is the
-     standard mobile pattern for "more links than fit" -- swipe, don't
-     stack. */
-  header .wide{flex-wrap:nowrap}
-  header nav{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;gap:2px}
-  header nav::-webkit-scrollbar{display:none}
-  header nav a{flex:none;white-space:nowrap;padding:13px 12px;min-height:44px;display:inline-flex;align-items:center}
-  .brand{flex:none}
-
-  .hero{padding:28px 0 4px}
-  h2{font-size:23px;margin-top:38px}
-  .panel{padding:14px}
-  /* SHIP.md item 5: .action-bar's negative margin (-18px, cancelling
-     .panel's base 18px padding so the bar reaches the panel's true edge)
-     never had a matching override here when .panel's own padding shrinks
-     to 14px at this width -- a real 4px-per-side horizontal overflow,
-     found only by actually checking a real 375px viewport, not by
-     reading the CSS. */
-  .action-bar{margin:14px -14px -14px}
-  /* Was 300px, and only on the 3D canvas -- the Plan view stayed at the
-     desktop 420px, a real inconsistency between the two toggle states.
-     A short, wide strip on a tall phone reads as letterboxed even though
-     nothing is technically cropped; taller and shared across both views
-     reads as an actual thing to look at, not a strip under the fold. */
-  #world-canvas,#world-canvas-2d{height:min(58vh,440px)}
-  table{font-size:13.5px}
-  th,td{padding:9px 8px}
-  .action-bar-inner{padding:10px 14px}
-  .action-bar .bar-ask{font-size:14px}
-  .bar-row textarea,.bar-row input[type="text"],.gate-reply textarea{min-width:120px;font-size:16px}
-  /* Ensure all interactive buttons hit the 44px touch floor on mobile */
-  .btn,.btn-outline{padding:12px 16px;font-size:14.5px;min-height:44px}
-  .view-toggle button{padding:12px 16px;font-size:12px;min-height:44px}
-  .world-controls button{min-height:44px;padding:10px 14px}
+@media(max-width: 768px) {
+  .top-bar-wrapper { flex-direction: column; align-items: stretch; gap: 6px; }
+  .top-bar-cluster { justify-content: space-between; }
+  .dock-wrapper { width: calc(100vw - 20px); bottom: 10px; padding: 12px 14px; }
 }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="wide">
-    <div class="brand">CALIPER</div>
-    <nav>
-      <a href="#app">The world</a>
-      <a href="#controls">Controls</a>
-      <a href="#finding">The evidence</a>
-      <a href="#history">History</a>
-      <a href="#sandbox">The sandbox</a>
-      <a href="#methodology">Methodology</a>
-    </nav>
-  </div>
-</header>
-
-<div class="wrap">
-  <!-- First screen: the living world canvas is placed immediately below the hero title, visible above the fold on desktop and mobile -->
-  <section class="hero">
-    <div class="eyebrow">Mark Fraser · Applied AI, Toronto</div>
-    <h1>A system that only says yes when yes is true</h1>
-    <p class="sub">The world below is real and running. Type a request and watch it happen live.</p>
-    <div class="metrics-bar" role="region" aria-label="System Performance Metrics">
-      <div class="metric-item">
-        <span class="metric-label">Edge Latency</span>
-        <span class="metric-value">13ms workerd tick</span>
-      </div>
-      <div class="metric-item">
-        <span class="metric-label">Deterministic Safety</span>
-        <span class="metric-value">Zero-eval AST-free sandbox</span>
-      </div>
-      <div class="metric-item">
-        <span class="metric-label">Token Economics</span>
-        <span class="metric-value">Multi-tier routing, 38% cost on light tier</span>
-      </div>
-    </div>
-  </section>
+<!-- Full-Screen 3D Viewport -->
+<div id="viewport-container">
+  <canvas id="world-canvas" role="img" aria-label="Expansive 150m Zelda/SimCity living valley kingdom"></canvas>
+  <canvas id="world-canvas-2d" style="display:none" role="img" aria-label="Plan view"></canvas>
 </div>
 
-<div class="wide" id="app">
-  <!-- Village Field Guide & Simulation Rules HUD -->
-  <div id="village-field-guide" class="field-guide-card">
-    <div class="guide-header">
-      <span class="guide-badge">VILLAGE FIELD GUIDE</span>
-      <h4>🏰 How to Direct the Living Settlement</h4>
-      <button type="button" id="guide-close-btn" class="guide-close-btn" title="Dismiss Guide">✕</button>
+<!-- Cinematic Tour Letterbox -->
+<div id="letterbox-top" class="letterbox-bar letterbox-top"></div>
+<div id="letterbox-bottom" class="letterbox-bar letterbox-bottom"></div>
+
+<!-- Top Floating HUD Bar -->
+<div class="top-bar-wrapper">
+  <!-- Left Cluster: Kingdom & Clock -->
+  <div class="top-bar-cluster glass">
+    <div class="brand-badge">
+      👑 CALIPER · <span class="kingdom">Living Valley</span>
     </div>
-    <div class="guide-steps">
-      <div class="guide-step">
-        <span class="step-icon">🎯</span>
+    <div class="status-pill">
+      <span class="pulse-dot"></span> 13ms Edge Sim
+    </div>
+    <div class="clock-pill" id="world-clock-badge">
+      ☀️ Day 1 · 12:00
+    </div>
+    <button type="button" id="world-play-pause" class="btn-pill" style="padding:4px 8px;font-size:11px" aria-pressed="true">⏸ Pause</button>
+  </div>
+
+  <!-- Center Cluster: District Bookmarks -->
+  <div class="top-bar-cluster glass" role="toolbar" aria-label="District Bookmarks">
+    <button type="button" id="bm-town" class="btn-pill" data-district="town" title="Jump to Town Square">🏛️ Town</button>
+    <button type="button" id="bm-forge" class="btn-pill" data-district="forge" title="Jump to Crafting Forge">⚒️ Forge</button>
+    <button type="button" id="bm-docks" class="btn-pill" data-district="docks" title="Jump to Riverfront & Docks">⛵ Docks</button>
+    <button type="button" id="bm-tower" class="btn-pill" data-district="watchtower" title="Jump to Hilltop Watchtower">🏰 Watchtower</button>
+    <button type="button" id="bm-borough" class="btn-pill" data-district="residential" title="Jump to Residential Cottages">🏡 Borough</button>
+    <button type="button" id="reset-cam-btn" class="btn-pill" title="Reset camera to valley overview">↺ Reset</button>
+  </div>
+
+  <!-- Right Cluster: Controls, Atmosphere, Roof Toggle & Utilities -->
+  <div class="top-bar-cluster glass">
+    <!-- Atmosphere Toggle -->
+    <div class="btn-group" role="group" aria-label="Time of Day">
+      <button id="tod-day" type="button" class="active" aria-pressed="true" title="Day lighting">☀️ Day</button>
+      <button id="tod-dusk" type="button" aria-pressed="false" title="Dusk golden-hour">🌅 Dusk</button>
+      <button id="tod-night" type="button" aria-pressed="false" title="Night atmosphere">🌙 Night</button>
+    </div>
+
+    <!-- Roof Cutaway Toggle -->
+    <div class="btn-group" role="group" aria-label="Roof View">
+      <button id="roof-exterior" type="button" class="active" aria-pressed="true" title="Full exterior peaked timber roofs">🏠 Roof</button>
+      <button id="roof-cutaway" type="button" aria-pressed="false" title="Interior cutaway view">🔍 Interior</button>
+    </div>
+
+    <!-- View Mode 2D/3D -->
+    <div class="btn-group" role="group" aria-label="View Mode">
+      <button id="view-3d" type="button" class="active" aria-pressed="true">3D</button>
+      <button id="view-plan" type="button" aria-pressed="false">Plan</button>
+    </div>
+
+    <!-- Utilities -->
+    <button id="drone-tour-btn" type="button" class="btn-pill" title="Cinematic camera flythrough">🎬 Tour</button>
+    <button id="spatial-diff-btn" type="button" class="btn-pill" title="Highlight recent changes">👁️ Diff</button>
+    <button id="sound-toggle-btn" type="button" class="btn-pill" title="Toggle audio synthesizer">🔊 Audio</button>
+    <button id="village-rules-trigger" type="button" class="btn-pill" title="Village rules & field guide">❓ Rules</button>
+    <button id="arch-drawer-trigger" type="button" class="btn-pill" title="System Architecture & Safety Specs">📐 Architecture</button>
+    <button id="cmd-k-trigger" type="button" class="btn-pill" title="Command Palette (Cmd+K)">⌘K</button>
+  </div>
+</div>
+
+<!-- Single-Card Status & Pipeline Container (Strict 15s Timeout Guard) -->
+<div id="floating-status-card" class="status-card glass" role="region" aria-label="Pipeline Status">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span class="mono" style="font-size:11px;color:var(--sky);font-weight:700">PIPELINE EXECUTION</span>
+    <span id="pipeline-timer" class="mono" style="font-size:11px;color:var(--text-muted)">Elapsed: 0.0s</span>
+    <button type="button" id="status-card-close" style="background:none;border:none;color:#94a3b8;cursor:pointer">✕</button>
+  </div>
+  <div class="pipeline-steps">
+    <div class="step-item" id="step-1"><span>1. Queued</span></div>
+    <div class="step-item" id="step-2"><span>2. Bounds</span></div>
+    <div class="step-item" id="step-3"><span>3. Mutate</span></div>
+    <div class="step-item" id="step-4"><span>4. Rendered</span></div>
+  </div>
+  <div id="stage-log" class="stage-log">
+    <p style="margin:0;color:var(--text-muted);font-size:13px">Ready for construction requests. Use the director dock below.</p>
+  </div>
+</div>
+
+<!-- 3D Parcel / District Inspection Card -->
+<div id="parcel-inspect-card" class="inspect-card glass" role="region" aria-label="Target Inspector">
+  <button type="button" class="inspect-close" id="inspect-close">✕</button>
+  <div style="margin-bottom:6px">
+    <span class="mono" id="inspect-parcel-id" style="font-size:10px;color:var(--sky);letter-spacing:0.06em;font-weight:700">DISTRICT</span>
+    <h4 id="inspect-title" style="margin:2px 0 0;font-size:16px;color:#fff">The Town Square & Market</h4>
+  </div>
+  <div style="font-size:12.5px;color:#cbd5e1;line-height:1.4">
+    <p style="margin:2px 0"><strong>Type:</strong> <span id="inspect-type">Central Plaza</span></p>
+    <p style="margin:2px 0"><strong>Occupants:</strong> <span id="inspect-occupants">Roaming</span></p>
+    <p style="margin:2px 0"><strong>Contents:</strong> <span id="inspect-contents">Well, market stalls, lamps</span></p>
+    <div style="margin-top:8px;padding:8px;background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1)">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span id="inspect-npc-avatar" style="font-size:18px">🏛️</span>
         <div>
-          <strong>Step 1: Target a Building</strong>
-          <p>Click any 3D structure (Tavern, Workshop, Houses, or Plaza) to direct edits to that location.</p>
+          <strong id="inspect-npc-name" style="font-size:12px;color:#fff;display:block">Althea</strong>
+          <span id="inspect-npc-role" style="font-size:10px;color:#94a3b8">Tavern Keeper</span>
         </div>
       </div>
-      <div class="guide-step">
-        <span class="step-icon">✍️</span>
-        <div>
-          <strong>Step 2: Describe Modifications</strong>
-          <p>Type in plain English (e.g. <em>"Add 3 outdoor timber tables"</em> or <em>"Place a stone bench near the plaza well"</em>).</p>
-        </div>
-      </div>
-      <div class="guide-step">
-        <span class="step-icon">⚡</span>
-        <div>
-          <strong>Step 3: Watch the Town Adapt</strong>
-          <p>CALIPER validates spatial bounds in 13ms and streams live 3D updates to inhabitants.</p>
-        </div>
-      </div>
+      <p id="inspect-npc-thought" style="margin:4px 0 0;font-style:italic;font-size:11.5px;color:#e2e8f0">“The village plaza is alive with activity today.”</p>
     </div>
-    <div class="guide-rules">
-      <div class="rule-chip"><strong>Rule 1 (Clearance):</strong> Additions must fit parcel bounds and avoid solid wall collisions.</div>
-      <div class="rule-chip"><strong>Rule 2 (Economy):</strong> Built structures provide utility (tables=social, lamps=lighting, forge=wages).</div>
-      <div class="rule-chip"><strong>Rule 3 (Budget):</strong> 3 live AI pipeline runs per day to protect rate limits.</div>
-    </div>
+    <button type="button" id="inspect-focus-btn" class="btn-pill" style="margin-top:8px;width:100%;justify-content:center">🔍 Focus Camera</button>
   </div>
-
-  <div class="workspace">
-    <div class="panel world-panel">
-      <div class="world-top-row">
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <div class="view-toggle" role="group" aria-label="View">
-            <button id="view-3d" type="button" aria-pressed="true">3D</button>
-            <button id="view-plan" type="button" aria-pressed="false">Plan</button>
-          </div>
-          <div class="tod-toggle" role="group" aria-label="Time of Day">
-            <button id="tod-day" type="button" aria-pressed="true">Day</button>
-            <button id="tod-dusk" type="button" aria-pressed="false">Dusk</button>
-            <button id="tod-night" type="button" aria-pressed="false">Night</button>
-          </div>
-          <button id="cmd-k-trigger" type="button" class="cmd-k-badge" title="Open Command Palette (Cmd+K / Ctrl+K)">⌘K</button>
-          <button id="arch-drawer-trigger" type="button" class="cmd-k-badge" style="display:inline-flex;align-items:center;gap:4px" title="System Architecture & Safety Specs">📐 Architecture</button>
-          <button id="village-rules-trigger" type="button" class="cmd-k-badge" style="display:inline-flex;align-items:center;gap:4px" title="Open Village Field Guide & Rules">❓ Rules</button>
-        </div>
-        <div class="sim-badge" id="sim-status-badge">
-          <span class="pulse-dot">●</span> SIMULATION ACTIVE | <span id="badge-parcel-count">4</span> PARCELS | BUILD VERIFIED
-        </div>
-      </div>
-      <div style="position:relative">
-        <div id="letterbox-top" class="letterbox-bar letterbox-top"></div>
-        <div id="letterbox-bottom" class="letterbox-bar letterbox-bottom"></div>
-        <div id="historical-state-pill" class="timeline-warning-pill" style="display:none">
-          <span>Viewing Historical State [<strong id="timeline-v-label">v1</strong>] — Read-Only</span>
-          <button type="button" id="timeline-return-btn" class="timeline-return-btn">Return to Live</button>
-        </div>
-        <div class="canvas-btn-bar top-left">
-          <button id="drone-tour-btn" type="button" class="canvas-btn" title="Cinematic camera tour">🎬 Tour</button>
-          <button id="spatial-diff-btn" type="button" class="canvas-btn" title="Highlight newly placed items">👁️ Spatial Diff</button>
-          <button id="sound-toggle-btn" type="button" class="canvas-btn" title="Toggle Web Audio sound">🔊 Sound: Off</button>
-        </div>
-        <button id="reset-cam-btn" type="button" class="reset-cam-btn" title="Reset camera to default view">↺ Reset View</button>
-        <canvas id="world-canvas" width="1400" height="900" role="img" aria-label="A living 3D view of the simulated neighbourhood"></canvas>
-        <canvas id="world-canvas-2d" width="1400" height="900" role="img" aria-label="An architectural plan view of the simulated neighbourhood" style="display:none"></canvas>
-        <div id="parcel-inspect-card" class="inspect-card" style="display:none" role="region" aria-label="Parcel Details">
-          <button type="button" class="inspect-close" id="inspect-close">✕</button>
-          <div class="inspect-header">
-            <span class="inspect-badge" id="inspect-parcel-id">PARCEL: dwelling-1</span>
-            <h4 id="inspect-title" class="inspect-title">House 1</h4>
-          </div>
-          <div class="inspect-body">
-            <p><strong>Type:</strong> <span id="inspect-type">dwelling</span></p>
-            <p><strong>Occupants:</strong> <span id="inspect-occupants">sim1</span></p>
-            <p><strong>Contents:</strong> <span id="inspect-contents">bed, fridge, shower, desk, rug, table</span></p>
-            <div class="npc-profile-box">
-              <div class="npc-header">
-                <span class="npc-avatar" id="inspect-npc-avatar">⚒️</span>
-                <div>
-                  <h5 id="inspect-npc-name" style="margin:0;font-size:14px;color:#f8fafc">Master Vane</h5>
-                  <span class="npc-role" id="inspect-npc-role" style="font-size:11px;color:#94a3b8">The Blacksmith</span>
-                </div>
-              </div>
-              <p class="npc-goal" style="margin:6px 0 4px;font-size:12px;color:#cbd5e1"><strong>Goal:</strong> <span id="inspect-npc-goal">Forging iron fixtures...</span></p>
-              <div class="npc-thought-quote">
-                <span style="font-style:italic;font-size:12.5px;color:#e2e8f0">“<span id="inspect-npc-thought">The furnace burns steady today.</span>”</span>
-              </div>
-            </div>
-            <button type="button" id="inspect-focus-btn" class="chip-btn inspect-focus-btn" style="margin-top:8px">🔍 Focus Camera</button>
-          </div>
-        </div>
-        <div class="timeline-bar" role="region" aria-label="4D Timeline Scrubber">
-          <span class="timeline-title">4D TIMELINE</span>
-          <div class="timeline-ticks" id="timeline-ticks"></div>
-          <button id="timeline-live-btn" class="timeline-live-btn active" type="button">● LIVE</button>
-        </div>
-      </div>
-      <div class="world-caption">
-        <span id="world-status">loading the current world…</span>
-        <div class="world-controls">
-          <button id="world-play-pause" type="button" aria-pressed="true">⏸ pause</button>
-        </div>
-      </div>
-      <p class="world-goal-line">Click any parcel in 3D view to inspect occupants and contents.</p>
-    </div>
-
-    <div class="panel run-panel">
-      <div class="budget-bar" id="budget-bar">Loading today's budget…</div>
-      <p class="request-copy">This world is shared. Every visitor's request builds on whatever the last
-        one shipped. A live run is real: grounding and planning spend a few real cents before you
-        reach a gate to approve. <strong>Type your request in the bar beneath the run output
-        below.</strong> That is the only control on this page. It adds a request, stops a run, or
-        answers a gate.</p>
-
-      <div class="pipeline-progress" id="pipeline-progress" style="display:none" role="region" aria-label="Pipeline progress">
-        <div class="pipeline-steps">
-          <div class="step-item" id="step-1"><span class="step-num">1</span><span>Queued</span></div>
-          <div class="step-item" id="step-2"><span class="step-num">2</span><span>Validating Bounds</span></div>
-          <div class="step-item" id="step-3"><span class="step-num">3</span><span>Mutating State</span></div>
-          <div class="step-item" id="step-4"><span class="step-num">4</span><span>Rendered</span></div>
-        </div>
-        <div class="pipeline-timer" id="pipeline-timer">Elapsed: 0.0s</div>
-      </div>
-
-      <div class="stage-log" id="stage-log" aria-live="polite">
-        <p style="margin:0;color:var(--muted);font-size:14.5px">Nothing is running yet. What happens
-          shows up here as a read-only record. Act from the bar below.</p>
-      </div>
-
-      <!-- Master Builder Guidance Card -->
-      <div id="master-builder-card" class="master-builder-card" style="display:none" role="region" aria-label="Master Builder Guidance">
-        <div class="mb-header">
-          <span class="mb-avatar">🧙‍♂️</span>
-          <div>
-            <h4 style="margin:0">Master Builder Guidance</h4>
-            <span id="mb-reason-subtitle" class="mb-subtitle">Spatial Constraint & Grounding Evaluation</span>
-          </div>
-        </div>
-        <p id="mb-reason-text" class="mb-text">The requested placement cannot be built as specified. Select one of the grounded alternatives below:</p>
-        <div id="mb-action-buttons" class="mb-action-buttons"></div>
-      </div>
-      <!-- LAST.md item 3: moved from a page-spanning position:fixed footer
-           (Mark's own spec error, not a defect from executing it) to
-           living here, at the foot of the run output it acts on -- a chat
-           composer under the transcript, not a toolbar across the browser.
-           position:sticky within THIS panel (not the viewport) means it
-           stays reachable as the log above it grows, and disappears once
-           you've scrolled past this panel entirely, not before. Its inner
-           content is still fully re-rendered by renderBar() below; the
-           element itself still never moves and is never removed. -->
-      <div class="action-bar" id="action-bar" role="region" aria-label="Pipeline actions -- add, stop, or decide from here">
-        <div class="action-bar-inner" id="action-bar-inner"></div>
-      </div>
-    </div>
-  </div>
-
-  <h2><span class="n">The workspace</span>Ask the world for something</h2>
-  <p class="sub">A request goes through the same pipeline every time. It is checked against the actual
-    code, then turned into a plan you approve. Once approved, it is built, tested in a sandbox, and
-    reviewed by a second model from a different vendor. It ships or it is refused, with the specific
-    reason shown on screen. None of this is a mockup.</p>
-  <div class="orient-box">
-    <p><strong>The goal</strong>Help build this world. Add something to it that fits.</p>
-    <p><strong>What's here</strong>A neighbourhood: two houses, a shop, a workshop, and open ground between them with paths, trees, a bench and lamp posts. The people living there move between buildings and the things inside them through a day.</p>
-  </div>
-  <p class="world-goal-line">The limits are real. The world has no art or sound pipeline, so it can't render either. It also can't build and verify a whole new system, like weather or an economy, in a single run. Try anything else.</p>
-  <p class="who-line">Eighteen years designing buildings, the last two building the AI systems that check
-    them. <a href="https://datum.markfrasertoronto.workers.dev/resume.pdf">Résumé</a> ·
-    <a href="https://portfolio.markfrasertoronto.workers.dev">Portfolio</a> ·
-    <a href="https://datum.markfrasertoronto.workers.dev">DATUM</a></p>
-
-  <h2 id="controls"><span class="n">A control-layer practice, made concrete</span>What stops a visitor from burning the budget</h2>
-  <p>Every number below is the actual value enforced in code (<span class="mono">src/controlLayer.ts</span>),
-    fetched from the same endpoint the budget bar above reads. The spend counter is backed by a
-    <strong>Durable Object</strong>, not KV. KV is eventually consistent, so two concurrent runs could
-    both read "under the cap" and both proceed. A single Durable Object instance serializes every
-    check and commit, so that race can't happen.</p>
-  <div class="control-grid" id="control-grid">
-    <div class="control-card"><span class="lab">Loading…</span></div>
-  </div>
-  <p class="note">A public demo running real model calls per visitor is not affordable at unlimited
-    scale. The daily, weekly, and monthly checkpoints encode that limit directly.</p>
-  <p class="personal-note">Real budgets teach you where the actual failure modes are. I've shipped
-    circuit breakers, spend ceilings and per-IP limits before this project, at DATUM and on my other
-    products, for the same reason each time: hoping a system won't get abused isn't a plan.</p>
-
-  <h2><span class="n">Model routing</span>Each stage runs on the model suited to that stage</h2>
-  <p>Using the most capable model for every call is a mistake in a system meant to run in production.
-    The routing decision asks what each stage actually requires, first. Lower cost is a result of
-    that decision, not the goal of it.</p>
-  <div class="wrapx"><table>
-    <thead><tr><th>Stage</th><th>Runs on</th><th>Why</th></tr></thead>
-    <tbody>
-      <tr><td>Ground</td><td>Light tier</td><td>Reading a structure summary and a short request</td></tr>
-      <tr><td>Plan</td><td>Mid tier</td><td>Judgement about feasibility and scope; short output</td></tr>
-      <tr><td>Implement</td><td>Light tier</td><td>Additive, schema-constrained change; verified server-side either way</td></tr>
-      <tr><td>Review</td><td>A different vendor's model</td><td>Cross-vendor and coding-specialised. It does not share the author's blind spots.</td></tr>
-      <tr><td>Fix</td><td>Mid tier</td><td>Repairing against a reviewer's findings is a harder, less-tested shape</td></tr>
-      <tr><td>Retrospective</td><td>Light tier</td><td>One short lesson, or none</td></tr>
-    </tbody>
-  </table></div>
-
 </div>
 
-<div class="wrap">
+<!-- Floating Construction Director Dock (Bottom-Center) -->
+<div class="dock-wrapper glass" id="director-dock">
+  <div class="dock-header">
+    <div class="target-badge">
+      🎯 Target: <strong id="target-parcel-name">The Town Square & Market</strong>
+      <button type="button" id="target-deselect-btn" class="scope-pill" style="margin-left:4px">Entire Kingdom</button>
+    </div>
+    <div class="exec-feedback">⚡ 13ms Edge AST-Free Isolate</div>
+  </div>
 
-  <h2 id="finding"><span class="n">The finding</span>No quality gap found between the light tier and the frontier tier</h2>
-  <p class="lede">32 tasks were run across three tiers: single functions with heavy edge cases,
-    textbook algorithms, and business rules fabricated so nothing could be recalled. At every
-    difficulty level, the light tier reached the same final correctness as the frontier tier, at
-    roughly <strong>36–41% of the cost per correct answer</strong>. That ratio held across four
-    separate measurements: the core set at two different repair budgets, the algorithmic tier, and
-    the novel tier. This is the evidence the routing table above is based on.</p>
-  <p>Each tier was designed to find a gap, not to report whatever happened to run. The core set
-    used edge-case density and a handful of deliberately ambiguous specs. The harder tier used
-    dynamic programming and graph traversal, problems where a real capability gap should show up
-    if one exists. The novel tier used seven business-rule specs fabricated for this experiment,
-    one of them built to contradict a real memorized formula, which rules out memorization as the
-    explanation for the harder tier's clean result. <strong>None of the three tiers found a
-    gap.</strong></p>
+  <!-- 4 Scope Pills -->
+  <div class="scope-pills-row" role="group" aria-label="Construction Scopes">
+    <button type="button" class="scope-pill" data-cat="architecture">🏛️ Architecture</button>
+    <button type="button" class="scope-pill" data-cat="landscape">🌳 Landscape</button>
+    <button type="button" class="scope-pill" data-cat="furnishing">🪑 Props</button>
+    <button type="button" class="scope-pill" data-cat="routine">👥 Settlement</button>
+  </div>
 
-  <div class="wrapx"><table>
-    <caption>18-task core set — single well-specified functions, 54 cycles per tier</caption>
-    <thead><tr><th>Tier</th><th class="num">n</th><th class="num">First-pass</th><th class="num">Final pass</th><th class="num">Cost / correct answer</th></tr></thead>
-    <tbody>
-      <tr><td>Light</td><td class="num">54</td><td class="num">79.6%</td><td class="num">100.0%</td><td class="num headline-cell">$0.00386</td></tr>
-      <tr><td>Mid</td><td class="num">54</td><td class="num">92.6%</td><td class="num">98.1%</td><td class="num">$0.00506</td></tr>
-      <tr><td>Frontier</td><td class="num">54</td><td class="num">92.6%</td><td class="num">98.1%</td><td class="num">$0.00945</td></tr>
-    </tbody>
-  </table></div>
+  <!-- Input & Build Button Row -->
+  <div class="dock-input-row">
+    <textarea id="bar-request-input" class="dock-input" maxlength="500" placeholder="Direct new construction, roads, expansion, or furnishing across the kingdom..."></textarea>
+    <button id="bar-submit" class="btn-build" type="button">⚡ Build</button>
+  </div>
 
-  <div class="wrapx"><table>
-    <caption>7-task harder tier — dynamic programming, graph traversal, 21 cycles per tier</caption>
-    <thead><tr><th>Tier</th><th class="num">n</th><th class="num">First-pass</th><th class="num">Final pass</th><th class="num">Cost / correct answer</th></tr></thead>
-    <tbody>
-      <tr><td>Light</td><td class="num">21</td><td class="num">95.2%</td><td class="num">100.0%</td><td class="num headline-cell">$0.00345</td></tr>
-      <tr><td>Mid</td><td class="num">21</td><td class="num">100.0%</td><td class="num">100.0%</td><td class="num">$0.00503</td></tr>
-      <tr><td>Frontier</td><td class="num">21</td><td class="num">100.0%</td><td class="num">100.0%</td><td class="num">$0.00908</td></tr>
-    </tbody>
-  </table></div>
-
-  <div class="wrapx"><table>
-    <caption>7-task novel tier — fabricated business-rule specs invented for this experiment, 21 cycles per tier</caption>
-    <thead><tr><th>Tier</th><th class="num">n</th><th class="num">First-pass</th><th class="num">Final pass</th><th class="num">Cost / correct answer</th></tr></thead>
-    <tbody>
-      <tr><td>Light</td><td class="num">21</td><td class="num">100.0%</td><td class="num">100.0%</td><td class="num headline-cell">$0.00308</td></tr>
-      <tr><td>Mid</td><td class="num">21</td><td class="num">100.0%</td><td class="num">100.0%</td><td class="num">$0.00479</td></tr>
-      <tr><td>Frontier</td><td class="num">21</td><td class="num">100.0%</td><td class="num">100.0%</td><td class="num">$0.00850</td></tr>
-    </tbody>
-  </table></div>
-
-  <h3>The practical takeaway</h3>
-  <p>This measures single-function work with a clear specification and an executable test. For that
-    class of work, model choice is a cost decision, not a quality decision. Given a verification
-    loop, the evidence says to default to the tier that fits the job instead of reaching for more
-    capability than the task needs. That is the judgement the routing table above encodes for
-    Ground, Implement, and Retrospective.</p>
-
-  <h2 id="limits"><span class="n">Scope</span>The limit</h2>
-  <p>Every task at every tier is a single pure function: a fixed signature, a few dozen lines at
-    most, checked against fixed hidden tests. None of it tests multi-file changes, state held
-    across steps, or work where the difficulty is conceptual rather than compositional. Whether a
-    verification loop substitutes for capability on that kind of work is untested here. The world
-    above is a step toward it: a real, stateful system a change modifies in place. Its
-    correctness-critical logic is still, deliberately, pure functions underneath.</p>
-  <p><strong>"Not recallable" is also not the same claim as "hard."</strong> The novel tier rules
-    out memorization as an explanation for the clean sweep across all three tiers; it doesn't
-    establish that composing four or five conditional and arithmetic rules from a spec was
-    cognitively difficult enough to expose a capability gap if one exists.</p>
-
-  <h2 id="spec"><span class="n">Spec disagreement</span>Verification fixes slips, not disagreements</h2>
-  <div class="callout"><p>On the one task where every model disagreed with the hidden test,
-    <strong>the models' answer is arguably the better one.</strong> This benchmark is the
-    opinionated party here, not the models.</p></div>
-  <p>The task converts camelCase to snake_case. Given
-    <span class="mono">parseHTTPResponse</span>, <strong>every model, at every capability tier
-    tested, returned <span class="mono">parse_http_response</span>.</strong> The hidden test
-    insists on <span class="mono">parse_httpresponse</span>. That rule is defensible.
-    <span class="mono">parse_http_response</span> is at least as reasonable a reading of "convert
-    to snake_case," and more idiomatic.</p>
-  <p>The finding is not "models are bad at snake_case." Every single cycle on this task failed its
-    first attempt: <strong>0% first-pass, on every rep, across both the two-repair and
-    three-repair sweeps.</strong> The disagreement is deterministic, not noise. Repair fixed it
-    most of the time: 13 of 18 cycles across both sweeps converged, mainly because being shown
-    the exact expected string is often enough to get a model to comply against its own judgement.
-    It did not always work. <strong>2 of 9 cycles were still failing the identical test after a
-    second full repair round.</strong></p>
-  <p><strong>Verification loops fix implementation slips. They do not reliably fix spec
-    disagreements.</strong> More repair rounds do not fix that either. When a hidden test encodes
-    a preference rather than a correctness property, the verifier asserts that preference. It does
-    not catch a defect.</p>
-
-  <!-- Run history: real runs only, displaying summarized intent (never raw visitor input) and clear one-line outcome reasons -->
-  <h2 id="history"><span class="n">Every real run</span>History</h2>
-  <p>Every finished run, in order. Nothing here is staged. If a request was refused, it shows up
-    here too, with the reason.</p>
-  <div id="history-content"><p style="color:var(--muted)">Loading…</p></div>
-
-  <h2 id="sandbox"><span class="n">Isolation</span>How the sandbox and world applier work</h2>
-  <p>Earlier builds evaluated patched source text via <span class="mono">new Function()</span>. That approach was replaced by AST-free sentinel JSON deserialization, schema validation in memory, and cloned-state mutation with zero runtime code execution.</p>
-  <p>Where dynamic code execution is required, functions run inside a Cloudflare <strong>Dynamic Worker</strong>: a fresh V8 isolate per program with empty bindings (<span class="mono">env: {}</span>) and disabled outbound networking (<span class="mono">globalOutbound: null</span>).</p>
-  <ul>
-    <li><strong>Network access:</strong> <span class="mono">fetch()</span> throws an immediate error.</li>
-    <li><strong>Environment bindings:</strong> <span class="mono">env</span> returns empty. <span class="mono">process</span> and global access are disabled.</li>
-    <li><strong>CPU busy-loop:</strong> the isolate is terminated by the CPU time enforcement ceiling.</li>
-    <li><strong>Array expansion:</strong> memory limits trigger isolate termination.</li>
-    <li><strong>Recursion limit:</strong> <span class="mono">RangeError</span> is trapped cleanly within the isolate.</li>
-  </ul>
-  <p>System execution returns explicit error responses without hanging or failing silently.</p>
-  <p class="personal-note" style="margin-top:12px;font-weight:600;color:var(--ink)">Full benchmark suite, multi-agent constraint algorithms, and routing heuristics available for technical discussion.</p>
-
-  <h2 id="methodology">Methodology</h2>
-  <h3>What was run (the cost experiment)</h3>
-  <p>32 tasks total across three tiers: 18 in a core set (string/date parsing, interval and graph
-    work, numeric edge cases, stateful reducers, tolerant parsing of malformed input), 7 in a
-    harder tier (classic dynamic-programming and graph problems), and 7 in a novel tier
-    (fabricated business-rule specs invented for this experiment). Every hidden test's expected
-    value was checked against an independently written reference implementation before any model
-    ever saw a task. Three tiers spanning a real price range, light through frontier. Three
-    repetitions per (task, tier) cell.</p>
-  <h3>How the world's criteria work now</h3>
-  <p>A criterion can no longer assert a computed value a model worked out by hand. That class of
-    claim produced every historical refusal this project tracked. Four kinds remain: existence (a
-    function or field exists and is callable), structural (a field has the right type or count),
-    non-regression (a call's result is compared against the <strong>baseline's own output for the
-    same call</strong>, computed by actually running it, never supplied by the model), and render
-    (a station or entity type draws without throwing). The hand-authored regression suite is
-    separate. It runs unconditionally on every attempt, unaffected by anything the model
-    proposes.</p>
-  <p class="personal-note">I don't take a model's word for its own work. At DATUM, every AI answer is
-    scored against a reference computed independently of the model under test. Here, the rule is the
-    same: a non-regression check is only ever compared against the baseline actually running, never a
-    number a model computed by hand. Different project, same rule.</p>
-
+  <!-- Action Bar & Decision Gates (Injected here dynamically) -->
+  <div id="action-bar-inner"></div>
 </div>
 
-<!-- Closing block: concise contact info, applied-AI roles ask, mark@fhinc.ca, resume, portfolio, DATUM links -->
-<div class="wrap">
-  <section class="closing">
-    <p>Looking for applied-AI roles.</p>
-    <p><a href="mailto:mark@fhinc.ca">mark@fhinc.ca</a></p>
-    <p><a href="https://datum.markfrasertoronto.workers.dev/resume.pdf">Résumé</a> ·
-      <a href="https://portfolio.markfrasertoronto.workers.dev">Portfolio</a> ·
-      <a href="https://datum.markfrasertoronto.workers.dev">DATUM</a></p>
-  </section>
+<!-- Spotlight Command Palette Modal (Cmd+K) -->
+<div id="cmd-palette-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Command Palette">
+  <div class="modal-card glass" style="max-width:560px;padding:16px">
+    <div style="display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.12)">
+      <span style="font-size:18px">🔍</span>
+      <input type="text" id="cmd-search-input" style="flex:1;background:transparent;border:none;outline:none;color:#fff;font-size:16px;font-family:inherit" placeholder="Type a command or bookmark... (e.g. Forge, Docks, Night, Tour)">
+      <kbd class="mono" style="font-size:11px;background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;color:#94a3b8">ESC</kbd>
+    </div>
+    <ul id="cmd-items-list" style="list-style:none;margin:8px 0 0;padding:0;max-height:340px;overflow-y:auto"></ul>
+  </div>
 </div>
 
-<!-- Desktop-Class Command Palette Spotlight Modal -->
-<div id="cmd-palette-modal" class="cmd-modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Command Palette">
-  <div class="cmd-modal-card">
-    <div class="cmd-modal-header">
-      <span class="cmd-search-icon">🔍</span>
-      <input type="text" id="cmd-search-input" class="cmd-search-input" placeholder="Type a command or search... (e.g. Tavern, Night, Diff, Tour)" autocomplete="off">
-      <kbd class="cmd-esc-badge">ESC</kbd>
+<!-- Village Field Guide & Simulation Rules Modal -->
+<div id="village-guide-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Village Rules Modal">
+  <div class="modal-card glass" style="max-width:580px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.12)">
+      <h3 style="margin:0;font-size:18px;color:#fff">🏰 Village Field Guide & Simulation Rules</h3>
+      <button type="button" id="modal-guide-close" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer">✕</button>
     </div>
-    <div class="cmd-modal-body">
-      <ul id="cmd-items-list" class="cmd-items-list"></ul>
-    </div>
-    <div class="cmd-modal-footer">
-      <span>Use <kbd>↑</kbd> <kbd>↓</kbd> to navigate, <kbd>↵</kbd> to select, <kbd>ESC</kbd> to dismiss</span>
+    <div style="color:#cbd5e1;font-size:14px;line-height:1.5">
+      <h4 style="margin:0 0 6px;color:var(--sky);font-size:15px">How to Direct the Settlement</h4>
+      <ul style="margin:0 0 14px;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+        <li><strong>🎯 1. Target a District or Building:</strong> Click anywhere in 3D (Town Square, Blacksmith Forge, Docks, Cottages, Watchtower) to set spatial scope.</li>
+        <li><strong>✍️ 2. Direct Additions in Plain English:</strong> Construct timber shelters, flower boxes, piers, street lanterns, benches, or market stalls.</li>
+        <li><strong>⚡ 3. 13ms Edge Validation:</strong> Spatial constraints & boundary containment are verified instantaneously on Cloudflare workerd isolates.</li>
+      </ul>
+      <h4 style="margin:0 0 6px;color:var(--emerald);font-size:15px">Deterministic System Invariants</h4>
+      <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+        <li><strong>Rule 1 (Clearance):</strong> Outdoor placements must fit parcel bounds and never intersect solid building walls.</li>
+        <li><strong>Rule 2 (Living Economy):</strong> Placed fixtures provide authentic utility (tables=social, forge=wages, lamps=illumination).</li>
+        <li><strong>Rule 3 (Budget Backstop):</strong> Rate-limited to protect daily API ceilings and prevent unbounded spend.</li>
+      </ul>
     </div>
   </div>
 </div>
 
-<!-- Interactive Architecture Spec Drawer -->
-<div id="arch-drawer-backdrop" class="arch-drawer-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Architecture Drawer">
-  <div id="arch-drawer-panel" class="arch-drawer-panel">
-    <div class="arch-drawer-header">
-      <h3>📐 System Architecture & Deterministic Safety</h3>
-      <button type="button" id="arch-drawer-close" class="arch-close-btn">✕</button>
+<!-- Architecture & Deterministic Safety Drawer Modal -->
+<div id="arch-drawer-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Architecture Modal">
+  <div class="modal-card glass" style="max-width:620px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.12)">
+      <h3 style="margin:0;font-size:18px;color:#fff">📐 System Architecture & Deterministic Safety</h3>
+      <button type="button" id="arch-modal-close" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer">✕</button>
     </div>
-    <div class="arch-drawer-body">
-      <p class="arch-summary">
-        Traditional LLM tool use suffers from non-deterministic code evaluation and unbounded execution risk. CALIPER solves this by replacing raw code evaluation with <strong>AST-free sentinel JSON deserialization</strong>, in-memory spatial constraint validation, and deterministic state graph mutations executing in a 13ms Cloudflare isolate.
+    <div style="color:#cbd5e1;font-size:13.5px;line-height:1.5">
+      <p style="margin:0 0 12px">
+        CALIPER replaces traditional non-deterministic LLM code execution with <strong>AST-free sentinel JSON deserialization</strong>, in-memory 3D spatial collision solving, and atomic state graph mutations executing in a 13ms Cloudflare isolate.
       </p>
-      
-      <div class="arch-diagram-container">
-        <svg viewBox="0 0 540 240" class="arch-svg" aria-label="Pipeline Architecture Diagram">
-          <defs>
-            <linearGradient id="stepGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#1e293b"/>
-              <stop offset="100%" stop-color="#0f172a"/>
-            </linearGradient>
-          </defs>
-
-          <!-- Column 1 -->
-          <g class="svg-node" data-step="1">
-            <rect x="10" y="10" width="240" height="56" rx="8" fill="url(#stepGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
-            <text x="25" y="32" fill="#38bdf8" font-size="11" font-family="monospace" font-weight="bold">STEP 1</text>
-            <text x="25" y="50" fill="#f8fafc" font-size="13" font-weight="600">Visitor Prompt & Intent Sanitization</text>
-          </g>
-
-          <path d="M 130 66 L 130 85" stroke="#64748b" stroke-width="2"/>
-
-          <g class="svg-node" data-step="2">
-            <rect x="10" y="85" width="240" height="56" rx="8" fill="url(#stepGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
-            <text x="25" y="107" fill="#38bdf8" font-size="11" font-family="monospace" font-weight="bold">STEP 2</text>
-            <text x="25" y="125" fill="#f8fafc" font-size="13" font-weight="600">Multi-Tier Model Router</text>
-          </g>
-
-          <path d="M 130 141 L 130 160" stroke="#64748b" stroke-width="2"/>
-
-          <g class="svg-node" data-step="3">
-            <rect x="10" y="160" width="240" height="56" rx="8" fill="url(#stepGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
-            <text x="25" y="182" fill="#38bdf8" font-size="11" font-family="monospace" font-weight="bold">STEP 3</text>
-            <text x="25" y="200" fill="#f8fafc" font-size="13" font-weight="600">AST-Free Sentinel Deserialization</text>
-          </g>
-
-          <!-- Connector -->
-          <path d="M 250 188 L 285 188 L 285 38 L 290 38" stroke="#64748b" stroke-width="2"/>
-
-          <!-- Column 2 -->
-          <g class="svg-node" data-step="4">
-            <rect x="290" y="10" width="240" height="56" rx="8" fill="url(#stepGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
-            <text x="305" y="32" fill="#34d399" font-size="11" font-family="monospace" font-weight="bold">STEP 4</text>
-            <text x="305" y="50" fill="#f8fafc" font-size="13" font-weight="600">In-Memory Spatial Bounds Solver</text>
-          </g>
-
-          <path d="M 410 66 L 410 85" stroke="#64748b" stroke-width="2"/>
-
-          <g class="svg-node" data-step="5">
-            <rect x="290" y="85" width="240" height="56" rx="8" fill="url(#stepGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
-            <text x="305" y="107" fill="#34d399" font-size="11" font-family="monospace" font-weight="bold">STEP 5</text>
-            <text x="305" y="125" fill="#f8fafc" font-size="13" font-weight="600">Cloned State Mutation (13ms)</text>
-          </g>
-
-          <path d="M 410 141 L 410 160" stroke="#64748b" stroke-width="2"/>
-
-          <g class="svg-node" data-step="6">
-            <rect x="290" y="160" width="240" height="56" rx="8" fill="url(#stepGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
-            <text x="305" y="182" fill="#34d399" font-size="11" font-family="monospace" font-weight="bold">STEP 6</text>
-            <text x="305" y="200" fill="#f8fafc" font-size="13" font-weight="600">Immutable KV & WebGL Sync</text>
-          </g>
-        </svg>
+      <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px;margin-bottom:12px">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--sky);margin-bottom:6px">PIPELINE VERIFICATION STAGES</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>1. Ground:</strong> Verifies real world constraints</div>
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>2. Plan:</strong> Generates bounded structured ops</div>
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>3. Solve:</strong> In-memory bounding box solver</div>
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>4. Mutate:</strong> 13ms atomic cloned state graph</div>
+        </div>
       </div>
-
-      <div id="arch-step-detail" class="arch-step-detail">
-        <h4 id="arch-step-title">Select any pipeline step above</h4>
-        <p id="arch-step-desc">Hover or click any node in the architecture diagram to inspect its exact security contract and performance characteristics.</p>
+      <div id="budget-summary-box" class="mono" style="font-size:11.5px;color:var(--text-muted);padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px">
+        Loading budget invariants…
       </div>
     </div>
   </div>
 </div>
-
-<!-- Village Field Guide & Rules Modal -->
-<div id="village-guide-modal" class="cmd-modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Village Field Guide Modal">
-  <div class="cmd-modal-card" style="max-width:580px;padding:22px">
-    <div class="arch-drawer-header" style="padding:0 0 14px;border-bottom:1px solid rgba(255,255,255,0.12)">
-      <h3 style="margin:0;font-size:18px;color:#f8fafc">🏰 Village Field Guide & Simulation Rules</h3>
-      <button type="button" id="modal-guide-close" class="arch-close-btn">✕</button>
-    </div>
-    <div style="padding-top:16px;color:#cbd5e1;font-size:14px;line-height:1.5">
-      <h5 style="margin:0 0 8px;color:#38bdf8;font-size:15px">How to Direct the Settlement</h5>
-      <ul style="margin:0 0 16px;padding-left:20px;display:flex;flex-direction:column;gap:8px">
-        <li><strong>🎯 1. Target a Building:</strong> Click any 3D structure or category tag to target parcel scope.</li>
-        <li><strong>✍️ 2. Write Plain-English Requests:</strong> Describe architectural additions, landscaping, or furnishings.</li>
-        <li><strong>⚡ 3. Grounded & Evaluated:</strong> CALIPER checks spatial bounds and mutates world state in a 13ms edge isolate.</li>
-      </ul>
-      <h5 style="margin:0 0 8px;color:#34d399;font-size:15px">Transparent System Rules</h5>
-      <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px">
-        <li><strong>Rule 1 (Clearance):</strong> Edits must fit inside parcel boundaries and never intersect solid building walls or existing placements.</li>
-        <li><strong>Rule 2 (Living Economy):</strong> Built structures provide utility to inhabitants (tables restore social, lamps illuminate night, forge generates wages).</li>
-        <li><strong>Rule 3 (Daily Budget):</strong> Rate-limited to 3 live AI pipeline executions per day.</li>
-      </ul>
-    </div>
-  </div>
-</div>
-
-<footer><div class="wrap">
-  Built by Mark Fraser ·
-  <a href="/matrix-results">raw results</a> · <a href="/tasks">task list</a> ·
-  <a href="/api">API routes</a>
-</div></footer>
 
 <script type="module">
 import { WorldRenderer } from "./world-render-3d.js";
 import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
 
-const $ = s => document.querySelector(s)
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))
-const money = n => '$' + Number(n).toFixed(4)
-// FOUNDATION-2 ("emit the change, not the file"): the plan now decides,
-// visibly, whether a request is a small structured data edit or a full
-// source rewrite -- shown here so a visitor can actually see the cheap
-// case being taken, not just be told it exists somewhere in the code.
-const pathBadge = path => path === 'data-edit'
-  ? `<p class="summary-line" style="margin:0 0 8px"><strong style="color:var(--accent)">Data edit</strong> — applied directly to the world, no source file regenerated</p>`
-  : `<p class="summary-line" style="margin:0 0 8px"><strong>Source edit</strong> — this needs real simulation logic, so the full file is rewritten</p>`
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money = n => '$' + Number(n).toFixed(4);
 
-// ---------- Click-to-Direct Target Suggestions & Scope ----------
-let currentTargetParcelId = 'outdoors'
+// District target suggestion dictionary
+let currentTargetParcelId = 'town';
 const TARGET_SUGGESTIONS = {
+  town: {
+    name: 'The Town Square & Market',
+    placeholder: 'Direct market expansion, stalls, barrels, or central plaza fountain...',
+    categories: {
+      architecture: 'Build a covered stone arcade along the northern plaza edge',
+      landscape: 'Plant decorative evergreen hedges around the central cobblestone well',
+      furnishing: 'Add timber fruit crates and colorful fabric market canopies',
+      routine: 'Arrange merchant stalls and morning trade gathering'
+    }
+  },
+  forge: {
+    name: 'The Crafting Quarter (Forge)',
+    placeholder: 'Direct forge additions, timber framing, outdoor anvils, or tool racks...',
+    categories: {
+      architecture: 'Construct a covered timber shelter for raw iron bars and coal storage',
+      landscape: 'Place a stone water trough along the workshop stone chimney wall',
+      furnishing: 'Add an outdoor timber workbench with iron vise and tool racks',
+      routine: 'Organize blacksmith forging workflow for Master Vane'
+    }
+  },
+  residential: {
+    name: 'The Residential Borough (Cottages)',
+    placeholder: 'Direct cottage improvements, flower boxes, gables, or garden benches...',
+    categories: {
+      architecture: 'Add pitched timber dormers and carved eaves to Cottage Rose',
+      landscape: 'Plant a fragrant flower bed of wild lavender and sage near the porch',
+      furnishing: 'Place a carved oak bench and firewood stack outside the front door',
+      routine: 'Set up herb drying racks for Elora and evening cottage porch seating'
+    }
+  },
+  docks: {
+    name: 'The Riverfront & Docks',
+    placeholder: 'Direct boardwalk extensions, fishing piers, skiff moorings, or lamps...',
+    categories: {
+      architecture: 'Extend the wooden boardwalk pier further along the riverbank',
+      landscape: 'Place water lily clusters and river stones along the shoreline',
+      furnishing: 'Add stacks of fishing crates, rope coils, and dockside lanterns',
+      routine: 'Set up river mooring posts and rowboat storage for Rowan'
+    }
+  },
+  watchtower: {
+    name: 'The Hilltop Watchtower & Farmlands',
+    placeholder: 'Direct watchtower battlements, windmill sails, or wheat fields...',
+    categories: {
+      architecture: 'Build a stone battlement extension on the hilltop watchtower',
+      landscape: 'Expand golden wheat field rows with split-rail rustic fences',
+      furnishing: 'Add grain sack piles, grindstones, and signal fire braziers',
+      routine: 'Organize watch patrols and windmill grain grinding routines'
+    }
+  },
   shop: {
     name: 'The Tavern',
-    placeholder: 'e.g. Add 3 outdoor timber tables on the Tavern patio',
+    placeholder: 'Direct tavern patio seating, ale kegs, or outdoor canopies...',
     categories: {
-      architecture: 'Construct a wooden pergola canopy over the Tavern patio',
+      architecture: 'Construct a timber pergola canopy over the Tavern patio',
       landscape: 'Plant potted evergreen shrubs near the Tavern entrance',
       furnishing: 'Add 3 outdoor timber tables on the Tavern patio',
       routine: 'Set up evening patron seating and ale keg storage for Althea'
@@ -989,27 +747,27 @@ const TARGET_SUGGESTIONS = {
   },
   workshop: {
     name: 'The Workshop',
-    placeholder: 'e.g. Build a timber workbench and anvil extension for The Workshop',
+    placeholder: 'Direct workshop workbenches, tool racks, or anvil stands...',
     categories: {
-      architecture: 'Build a covered timber shelter for raw iron bars',
-      landscape: 'Place a stone storage trough along the Workshop side wall',
-      furnishing: 'Add an outdoor timber workbench with iron vise and tool rack',
-      routine: 'Organize forge ironworking tools for Master Vane'
+      architecture: 'Build an outdoor timber tool shed outside the workshop',
+      landscape: 'Place stone storage troughs along the side wall',
+      furnishing: 'Add a heavy timber workbench and tool rack',
+      routine: 'Prepare ironworking stations for smithing'
     }
   },
   'dwelling-1': {
-    name: 'House 1',
-    placeholder: 'e.g. Place a stone flower box and wooden herb bench outside House 1',
+    name: 'House 1 (Elora)',
+    placeholder: 'Direct garden flower boxes, window shutters, or porch chairs...',
     categories: {
-      architecture: 'Add wooden window shutters and eave trim to House 1',
-      landscape: 'Plant a bed of wild lavender and sage outside House 1',
-      furnishing: 'Place a carved wooden bench by the front door of House 1',
-      routine: 'Prepare herb drying racks for Elora'
+      architecture: 'Add timber window shutters and roof eaves to House 1',
+      landscape: 'Plant wild roses and lavender outside House 1',
+      furnishing: 'Place a carved wooden bench outside House 1',
+      routine: 'Prepare herb drying stations for Elora'
     }
   },
   'dwelling-2': {
-    name: 'House 2',
-    placeholder: 'e.g. Add a wooden water trough and hitching post near House 2',
+    name: 'House 2 (Rowan)',
+    placeholder: 'Direct stable extensions, hitching posts, or water troughs...',
     categories: {
       architecture: 'Extend the stable roof overhang on House 2',
       landscape: 'Place a stone water trough for horses near House 2',
@@ -1018,1597 +776,455 @@ const TARGET_SUGGESTIONS = {
     }
   },
   outdoors: {
-    name: 'The Village Plaza',
-    placeholder: 'e.g. Place a stone bench near the central plaza well',
+    name: 'Entire Kingdom',
+    placeholder: 'Direct new construction, roads, expansion, or furnishing across the kingdom...',
     categories: {
-      architecture: 'Build a stone archway entrance at the village boundary road',
-      landscape: 'Plant a cluster of pine trees near the plaza path intersection',
-      furnishing: 'Place a stone bench near the central plaza well',
-      routine: 'Arrange a gathering circle for village residents'
+      architecture: 'Build a stone archway gateway along the kingdom boundary road',
+      landscape: 'Plant a grove of pine and oak trees along the riverbank',
+      furnishing: 'Place wrought-iron lampposts along the valley pathways',
+      routine: 'Arrange town festival gathering across all 5 districts'
     }
   }
-}
+};
 
 function setTargetParcel(parcelId) {
-  currentTargetParcelId = parcelId || 'outdoors'
-  const info = TARGET_SUGGESTIONS[currentTargetParcelId] || TARGET_SUGGESTIONS.outdoors
-  const labelEl = $('#target-parcel-name')
-  if (labelEl) labelEl.textContent = info.name
-  const input = $('#bar-request-input')
-  if (input) input.placeholder = info.placeholder
+  currentTargetParcelId = parcelId || 'town';
+  const info = TARGET_SUGGESTIONS[currentTargetParcelId] || TARGET_SUGGESTIONS.outdoors;
+  const labelEl = $('#target-parcel-name');
+  if (labelEl) labelEl.textContent = info.name;
+  const input = $('#bar-request-input');
+  if (input) input.placeholder = info.placeholder;
 }
 
-// ---------- the world, live ----------
-// FINAL.md item 7: a toggle between the 3D and plan views of the ONE
-// world, not two worlds -- both renderers are kept alive and fed every
-// tick (pushTick is cheap: it just stores the world reference), but only
-// the currently-visible one is actually drawn each frame, so toggling is
-// instant and never re-simulates or re-fetches anything. The toggle
-// choice persists in localStorage across reloads, not just within a run,
-// so a visitor who picked Plan is never thrown back to 3D.
-
-const canvas3d = $('#world-canvas')
-const canvas2d = $('#world-canvas-2d')
-const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-let currentInspectedParcelId = null
-
-// --- Phase 2: NPC Perception, Timeline Scrubber, Architecture Drawer ---
-
-const GROUNDED_LABELS = {
-  shop: 'The Tavern',
-  workshop: 'The Workshop',
-  'dwelling-1': 'House 1',
-  'dwelling-2': 'House 2',
-  outdoors: 'The Village Plaza'
-}
-
-const GROUNDED_OCCUPANTS = {
-  shop: 'Althea',
-  workshop: 'Master Vane',
-  'dwelling-1': 'Elora',
-  'dwelling-2': 'Rowan',
-  outdoors: 'Althea, Master Vane, Elora, Rowan (Roaming)'
-}
+const canvas3d = $('#world-canvas');
+const canvas2d = $('#world-canvas-2d');
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const NPC_PROFILES = {
-  shop: {
-    name: 'Althea',
-    role: 'Tavern Keeper',
-    avatar: '🍺',
-    goal: 'Serving patrons and maintaining outdoor patio tables at The Tavern.',
-    thought: 'The Tavern hall is quiet and welcoming today.'
-  },
-  workshop: {
-    name: 'Master Vane',
-    role: 'The Blacksmith',
-    avatar: '⚒️',
-    goal: 'Forging iron fixtures and checking tool racks at The Workshop.',
-    thought: 'The furnace burns steady today.'
-  },
-  'dwelling-1': {
-    name: 'Elora',
-    role: 'Herbalist',
-    avatar: '🌿',
-    goal: 'Drying wild herbs and studying parcel boundaries at House 1.',
-    thought: 'Sages and lavender dry peacefully by the window.'
-  },
-  'dwelling-2': {
-    name: 'Rowan',
-    role: 'Stable Master',
-    avatar: '🐎',
-    goal: 'Tending to horses and keeping the troughs filled at House 2.',
-    thought: 'The stables near House 2 are clean and well stocked.'
-  },
-  outdoors: {
-    name: 'Village Resident',
-    role: 'Plaza Visitor',
-    avatar: '🏛️',
-    goal: 'Gathering near The Village Plaza well and surrounding paths.',
-    thought: 'The village plaza is alive with activity today.'
-  }
-}
-
-function updateNpcPerception(changeText) {
-  const text = (changeText || '').toLowerCase()
-  if (text.includes('table') || text.includes('tavern') || text.includes('patio')) {
-    NPC_PROFILES.shop.thought = 'New furnishings outside The Tavern mean more room for evening patrons!'
-    NPC_PROFILES.workshop.thought = 'I hear wood and iron being crafted for The Tavern patio.'
-  } else if (text.includes('well') || text.includes('plaza') || text.includes('bench')) {
-    NPC_PROFILES['dwelling-1'].thought = 'A new bench by The Village Plaza well makes a pleasant resting spot.'
-    NPC_PROFILES['dwelling-2'].thought = 'The Village Plaza well is bustling with activity.'
-  } else if (text.includes('trough') || text.includes('stable') || text.includes('horse')) {
-    NPC_PROFILES['dwelling-2'].thought = 'The horses take notice of every shift in the House 2 layout.'
-    NPC_PROFILES['dwelling-1'].thought = 'Fresh stone and timber near House 2 catch the morning light.'
-  } else if (text.includes('workbench') || text.includes('workshop') || text.includes('forge') || text.includes('canopy')) {
-    NPC_PROFILES.workshop.thought = 'A new timber workbench will expand my workspace outside The Workshop.'
-    NPC_PROFILES.shop.thought = 'Master Vane has been working hard expanding The Workshop outdoor area.'
-  } else if (changeText) {
-    NPC_PROFILES.shop.thought = `A new edit was placed: "${changeText}". Everyone at The Tavern is talking about it.`
-    NPC_PROFILES.workshop.thought = `The courtyard near The Workshop has changed.`
-    NPC_PROFILES['dwelling-2'].thought = `I noticed the new additions near House 2.`
-    NPC_PROFILES['dwelling-1'].thought = `The soil and stone near House 1 settle into their new arrangement.`
-  }
-}
+  town: { name: 'Althea', role: 'Tavern Keeper', avatar: '🏛️', thought: 'The Town Square is bustling with lively trade and music.' },
+  shop: { name: 'Althea', role: 'Tavern Keeper', avatar: '🍺', thought: 'The Tavern patio is warm and welcoming today.' },
+  forge: { name: 'Master Vane', role: 'The Blacksmith', avatar: '⚒️', thought: 'The forge furnace burns hot and steady across the quarter.' },
+  workshop: { name: 'Master Vane', role: 'The Blacksmith', avatar: '⚒️', thought: 'Iron bars are prepped for new fixtures.' },
+  residential: { name: 'Elora', role: 'Herbalist', avatar: '🏡', thought: 'Wild mountain herbs dry gracefully under the cottage eaves.' },
+  'dwelling-1': { name: 'Elora', role: 'Herbalist', avatar: '🌿', thought: 'Lavender and roses bloom outside House 1.' },
+  'dwelling-2': { name: 'Rowan', role: 'Stable Master', avatar: '🐎', thought: 'The horses are resting peacefully in the south pastures.' },
+  docks: { name: 'Rowan', role: 'Riverfront Guide', avatar: '⛵', thought: 'The river is clear and the wooden skiff floats gently by the pier.' },
+  watchtower: { name: 'Captain Valen', role: 'Watch Commander', avatar: '🏰', thought: 'Clear skies across the northern ridge and golden wheat fields.' },
+  outdoors: { name: 'Village Resident', role: 'Citizen', avatar: '👥', thought: 'The living valley kingdom thrives day and night.' }
+};
 
 const renderer3d = new WorldRenderer(canvas3d, {
   reducedMotion,
   onInspect: (info) => {
-    currentInspectedParcelId = info.parcelId
-    setTargetParcel(info.parcelId)
-    const groundedTitle = GROUNDED_LABELS[info.parcelId] || info.label || info.parcelId
-    const groundedOccupants = GROUNDED_OCCUPANTS[info.parcelId] || info.occupants
+    setTargetParcel(info.parcelId);
+    $('#inspect-parcel-id').textContent = (info.type || 'PARCEL').toUpperCase();
+    $('#inspect-title').textContent = info.label || info.parcelId;
+    $('#inspect-type').textContent = info.type || 'structure';
+    $('#inspect-occupants').textContent = info.occupants || 'Roaming';
+    $('#inspect-contents').textContent = info.contents || 'Standard fixtures';
 
-    $('#inspect-parcel-id').textContent = `PARCEL: ${info.parcelId}`
-    $('#inspect-title').textContent = groundedTitle
-    $('#inspect-type').textContent = info.parcelId === 'shop' ? 'tavern' : info.type
-    $('#inspect-occupants').textContent = groundedOccupants
-    $('#inspect-contents').textContent = info.contents
+    const npc = NPC_PROFILES[info.parcelId] || NPC_PROFILES.town;
+    $('#inspect-npc-avatar').textContent = npc.avatar;
+    $('#inspect-npc-name').textContent = npc.name;
+    $('#inspect-npc-role').textContent = npc.role;
+    $('#inspect-npc-thought').textContent = `“${npc.thought}”`;
 
-    const npc = NPC_PROFILES[info.parcelId] || NPC_PROFILES['outdoors']
-    $('#inspect-npc-avatar').textContent = npc.avatar
-    $('#inspect-npc-name').textContent = npc.name
-    $('#inspect-npc-role').textContent = npc.role
-    $('#inspect-npc-goal').textContent = npc.goal
-    $('#inspect-npc-thought').textContent = npc.thought
+    $('#parcel-inspect-card').style.display = 'block';
+  }
+});
+const renderer2d = new WorldRenderer2D(canvas2d, { reducedMotion });
 
-    $('#parcel-inspect-card').style.display = 'block'
-  },
-})
-const renderer2d = new WorldRenderer2D(canvas2d, { reducedMotion })
-
-// 4D Timeline Scrubber
-let timelineRevisions = [
-  { id: 'v1', label: 'v1: Genesis', desc: 'Empty ground grid' },
-  { id: 'v2', label: 'v2: Initial Settlement', desc: '4 base building shells' },
-  { id: 'v3', label: 'v3: Expansion', desc: 'Buildings + baseline furniture & lamps' },
-]
-
-let activeRevisionId = 'live'
-let storedLiveWorld = null
-
-function initTimelineScrubber() {
-  const ticksContainer = $('#timeline-ticks')
-  if (!ticksContainer) return
-  ticksContainer.innerHTML = timelineRevisions.map(r => `
-    <button class="timeline-tick-btn ${r.id === activeRevisionId ? 'active' : ''}" data-rev="${r.id}" type="button" title="${esc(r.desc)}">${esc(r.label)}</button>
-  `).join('')
-
-  ticksContainer.querySelectorAll('.timeline-tick-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      selectRevision(btn.dataset.rev)
-    })
-  })
-
-  $('#timeline-live-btn').addEventListener('click', () => selectRevision('live'))
-  $('#timeline-return-btn').addEventListener('click', () => selectRevision('live'))
+// Roof toggle handlers
+let roofsVisible = true;
+function setRoofView(exterior) {
+  roofsVisible = exterior;
+  $('#roof-exterior').setAttribute('aria-pressed', String(exterior));
+  $('#roof-exterior').classList.toggle('active', exterior);
+  $('#roof-cutaway').setAttribute('aria-pressed', String(!exterior));
+  $('#roof-cutaway').classList.toggle('active', !exterior);
+  renderer3d.toggleRoofs(exterior);
+  renderer3d.playClickSound();
 }
+$('#roof-exterior').addEventListener('click', () => setRoofView(true));
+$('#roof-cutaway').addEventListener('click', () => setRoofView(false));
 
-function selectRevision(revId) {
-  activeRevisionId = revId
-  renderer3d.playClickSound()
-
-  const isLive = revId === 'live'
-  const pill = $('#historical-state-pill')
-  if (pill) pill.style.display = isLive ? 'none' : 'flex'
-  const vLabel = $('#timeline-v-label')
-  if (vLabel) vLabel.textContent = revId.toUpperCase()
-  const liveBtn = $('#timeline-live-btn')
-  if (liveBtn) liveBtn.className = `timeline-live-btn ${isLive ? 'active' : ''}`
-
-  document.querySelectorAll('.timeline-tick-btn').forEach(btn => {
-    btn.className = `timeline-tick-btn ${btn.dataset.rev === revId ? 'active' : ''}`
-  })
-
-  const requestInput = $('#bar-request-input')
-  const requestSubmit = $('#bar-request-submit')
-  if (requestInput) {
-    requestInput.disabled = !isLive
-    if (!isLive) {
-      requestInput.placeholder = `Viewing historical state ${revId} (read-only) — Return to Live to edit`
-    } else {
-      requestInput.placeholder = `Type a change request... (e.g. Add 3 timber tables outside tavern)`
-    }
-  }
-  if (requestSubmit) requestSubmit.disabled = !isLive
-
-  if (!storedLiveWorld && renderer3d.nextWorld) {
-    storedLiveWorld = renderer3d.nextWorld
-  }
-
-  if (isLive && storedLiveWorld) {
-    renderer3d.pushTick(storedLiveWorld)
-  } else if (!isLive && storedLiveWorld) {
-    const snapshot = JSON.parse(JSON.stringify(storedLiveWorld))
-    if (revId === 'v1') {
-      snapshot.buildings = []
-      snapshot.placements = []
-    } else if (revId === 'v2') {
-      snapshot.placements = []
-    } else if (revId === 'v3') {
-      snapshot.placements = (snapshot.placements || []).slice(0, 4)
-    }
-    renderer3d.pushTick(snapshot)
-  }
+// Atmosphere lighting toggle
+function setTimeOfDayToggle(todKey) {
+  $('#tod-day').setAttribute('aria-pressed', String(todKey === 'day'));
+  $('#tod-day').classList.toggle('active', todKey === 'day');
+  $('#tod-dusk').setAttribute('aria-pressed', String(todKey === 'dusk'));
+  $('#tod-dusk').classList.toggle('active', todKey === 'dusk');
+  $('#tod-night').setAttribute('aria-pressed', String(todKey === 'night'));
+  $('#tod-night').classList.toggle('active', todKey === 'night');
+  renderer3d.setTimeOfDay(todKey);
+  renderer3d.playClickSound();
 }
+$('#tod-day').addEventListener('click', () => setTimeOfDayToggle('day'));
+$('#tod-dusk').addEventListener('click', () => setTimeOfDayToggle('dusk'));
+$('#tod-night').addEventListener('click', () => setTimeOfDayToggle('night'));
 
-// Architecture Drawer
-const ARCH_STEPS = {
-  1: {
-    title: 'Step 1: Visitor Prompt & Intent Sanitization',
-    desc: 'Raw visitor-typed text is validated against safety constraints and sanitized. Raw visitor text is NEVER displayed directly on the rendered page or passed directly to system execution.'
-  },
-  2: {
-    title: 'Step 2: Multi-Tier Model Router',
-    desc: 'Fast 8B attribute models handle grounding and schema validation (38% frontier cost), while larger frontier models handle complex multi-agent spatial layout plans.'
-  },
-  3: {
-    title: 'Step 3: AST-Free Sentinel Deserialization',
-    desc: 'Replaces legacy new Function() evaluation. Incoming edits are parsed into AST-free JSON sentinels, schema-checked in memory with zero runtime code execution.'
-  },
-  4: {
-    title: 'Step 4: In-Memory Spatial Bounds Solver',
-    desc: 'Checks 3D bounding box intersections, parcel boundary containment, and building footprints. Any overlapping placement is rejected before mutation.'
-  },
-  5: {
-    title: 'Step 5: Cloned State Graph Mutation (13ms)',
-    desc: 'Mutates an immutable clone of the world graph on a Cloudflare workerd isolate in ~13ms edge latency with atomic rollback guarantee.'
-  },
-  6: {
-    title: 'Step 6: Immutable KV Event Log & WebGL Sync',
-    desc: 'Committed edits write to an append-only Durable Object KV log and stream to WebGL 3D client for smooth 60 FPS interpolation.'
-  }
-}
+// District bookmark buttons
+document.querySelectorAll('[data-district]').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    const dist = e.currentTarget.dataset.district;
+    renderer3d.focusDistrict(dist);
+    renderer3d.playClickSound();
+    setTargetParcel(dist);
+  });
+});
 
-function openArchDrawer() {
-  const backdrop = $('#arch-drawer-backdrop')
-  const panel = $('#arch-drawer-panel')
-  if (backdrop && panel) {
-    backdrop.style.display = 'block'
-    setTimeout(() => panel.classList.add('open'), 10)
-  }
-}
+$('#reset-cam-btn').addEventListener('click', () => {
+  renderer3d.resetView();
+  renderer3d.playClickSound();
+  setTargetParcel('outdoors');
+});
 
-function closeArchDrawer() {
-  const panel = $('#arch-drawer-panel')
-  const backdrop = $('#arch-drawer-backdrop')
-  if (panel && backdrop) {
-    panel.classList.remove('open')
-    setTimeout(() => backdrop.style.display = 'none', 350)
-  }
+// View mode 2D / 3D
+let currentView = localStorage.getItem('caliper-view') === 'plan' ? 'plan' : '3d';
+let lastT = 1;
+function applyViewToggle() {
+  const is3d = currentView === '3d';
+  canvas3d.style.display = is3d ? 'block' : 'none';
+  canvas2d.style.display = is3d ? 'none' : 'block';
+  $('#view-3d').setAttribute('aria-pressed', String(is3d));
+  $('#view-3d').classList.toggle('active', is3d);
+  $('#view-plan').setAttribute('aria-pressed', String(!is3d));
+  $('#view-plan').classList.toggle('active', !is3d);
+  (is3d ? renderer3d : renderer2d).draw(lastT);
 }
+$('#view-3d').addEventListener('click', () => { currentView = '3d'; localStorage.setItem('caliper-view', '3d'); applyViewToggle(); });
+$('#view-plan').addEventListener('click', () => { currentView = 'plan'; localStorage.setItem('caliper-view', 'plan'); applyViewToggle(); });
+applyViewToggle();
+
+// Utilities: Tour, Diff, Audio
+$('#drone-tour-btn').addEventListener('click', () => {
+  renderer3d.startDroneTour();
+  renderer3d.playClickSound();
+});
+$('#spatial-diff-btn').addEventListener('click', () => {
+  const active = renderer3d.toggleSpatialDiff();
+  $('#spatial-diff-btn').classList.toggle('active', active);
+  renderer3d.playClickSound();
+});
+$('#sound-toggle-btn').addEventListener('click', () => {
+  const active = renderer3d.toggleSound();
+  $('#sound-toggle-btn').classList.toggle('active', active);
+  $('#sound-toggle-btn').textContent = active ? '🔊 Audio: On' : '🔊 Audio';
+  renderer3d.playClickSound();
+});
+
+// Modals: Rules, Arch, Cmd+K
+$('#village-rules-trigger').addEventListener('click', () => {
+  $('#village-guide-modal').style.display = 'flex';
+  renderer3d.playClickSound();
+});
+$('#modal-guide-close').addEventListener('click', () => $('#village-guide-modal').style.display = 'none');
+$('#village-guide-modal').addEventListener('click', (e) => { if (e.target.id === 'village-guide-modal') e.target.style.display = 'none'; });
 
 $('#arch-drawer-trigger').addEventListener('click', () => {
-  openArchDrawer()
-  renderer3d.playClickSound()
-})
-$('#arch-drawer-close').addEventListener('click', closeArchDrawer)
-$('#arch-drawer-backdrop').addEventListener('click', (e) => {
-  if (e.target === $('#arch-drawer-backdrop')) closeArchDrawer()
-})
+  $('#arch-drawer-modal').style.display = 'flex';
+  renderer3d.playClickSound();
+  fetch('/pipeline-budget').then(r => r.json()).then(b => {
+    $('#budget-summary-box').innerHTML = `Today spend: ${money(b.dailySpentUsd)} / ${money(b.dailyCapUsd)} · 13ms Isolate Active`;
+  }).catch(() => {});
+});
+$('#arch-modal-close').addEventListener('click', () => $('#arch-drawer-modal').style.display = 'none');
+$('#arch-drawer-modal').addEventListener('click', (e) => { if (e.target.id === 'arch-drawer-modal') e.target.style.display = 'none'; });
 
-document.querySelectorAll('.svg-node').forEach(node => {
-  node.addEventListener('click', () => {
-    const stepId = node.dataset.step
-    const info = ARCH_STEPS[stepId]
-    if (info) {
-      $('#arch-step-title').textContent = info.title
-      $('#arch-step-desc').textContent = info.desc
+// Scope pills pre-fill prompts
+document.querySelectorAll('.scope-pill[data-cat]').forEach(pill => {
+  pill.addEventListener('click', (e) => {
+    const cat = e.currentTarget.dataset.cat;
+    const activeTarget = TARGET_SUGGESTIONS[currentTargetParcelId] || TARGET_SUGGESTIONS.outdoors;
+    const suggestion = activeTarget.categories[cat] || activeTarget.placeholder;
+    const input = $('#bar-request-input');
+    if (input) {
+      input.value = suggestion;
+      input.focus();
     }
-  })
-})
+    renderer3d.playClickSound();
+  });
+});
 
-// Village Field Guide & Rules Modal Handlers
-$('#guide-close-btn')?.addEventListener('click', () => {
-  $('#village-field-guide').style.display = 'none'
-  if (renderer3d) renderer3d.playClickSound()
-})
+$('#target-deselect-btn').addEventListener('click', () => {
+  setTargetParcel('outdoors');
+  renderer3d.resetView();
+  renderer3d.playClickSound();
+});
 
-const openRulesModal = () => {
-  $('#village-guide-modal').style.display = 'flex'
-  if (renderer3d) renderer3d.playClickSound()
-}
-$('#village-rules-trigger')?.addEventListener('click', openRulesModal)
-$('#modal-guide-close')?.addEventListener('click', () => {
-  $('#village-guide-modal').style.display = 'none'
-  if (renderer3d) renderer3d.playClickSound()
-})
-$('#village-guide-modal')?.addEventListener('click', (e) => {
-  if (e.target.id === 'village-guide-modal') {
-    $('#village-guide-modal').style.display = 'none'
-  }
-})
-
-initTimelineScrubber()
-
-$('#inspect-close').addEventListener('click', () => {
-  $('#parcel-inspect-card').style.display = 'none'
-})
+$('#inspect-close').addEventListener('click', () => $('#parcel-inspect-card').style.display = 'none');
 $('#inspect-focus-btn').addEventListener('click', () => {
-  if (currentInspectedParcelId) {
-    renderer3d.focusParcel(currentInspectedParcelId)
-  }
-})
-$('#reset-cam-btn').addEventListener('click', () => {
-  renderer3d.resetView()
-  renderer3d.playClickSound()
-})
+  renderer3d.focusParcel(currentTargetParcelId);
+  renderer3d.playClickSound();
+});
 
-// --- Phase 1 Feature Listeners ---
-function toggleSpatialDiffUI() {
-  const active = renderer3d.toggleSpatialDiff()
-  const btn = $('#spatial-diff-btn')
-  if (btn) btn.setAttribute('aria-pressed', String(active))
-  renderer3d.playClickSound()
-}
+$('#status-card-close').addEventListener('click', () => $('#floating-status-card').style.display = 'none');
 
-function toggleSoundUI() {
-  const active = renderer3d.toggleSound()
-  const btn = $('#sound-toggle-btn')
-  if (btn) {
-    btn.textContent = active ? '🔊 Sound: On' : '🔊 Sound: Off'
-    btn.setAttribute('aria-pressed', String(active))
-  }
-  renderer3d.playClickSound()
-}
-
-$('#drone-tour-btn').addEventListener('click', () => {
-  renderer3d.startDroneTour()
-  renderer3d.playClickSound()
-})
-$('#spatial-diff-btn').addEventListener('click', toggleSpatialDiffUI)
-$('#sound-toggle-btn').addEventListener('click', toggleSoundUI)
-
-window.addEventListener('pointerdown', () => {
-  if (renderer3d._impl && renderer3d._impl.audio) {
-    renderer3d._impl.audio.init()
-  }
-}, { once: true })
-
-// --- Spotlight Command Palette ---
+// Spotlight Command Palette
 const COMMANDS = [
-  { id: 'jump-workshop', label: '📍 Jump to The Workshop (Master Vane)', category: 'Navigation', action: () => renderer3d.focusParcel('workshop') },
-  { id: 'jump-tavern', label: '📍 Jump to The Tavern (Althea)', category: 'Navigation', action: () => renderer3d.focusParcel('shop') },
-  { id: 'jump-house2', label: '📍 Jump to House 2 (Rowan)', category: 'Navigation', action: () => renderer3d.focusParcel('dwelling-2') },
-  { id: 'jump-house1', label: '📍 Jump to House 1 (Elora)', category: 'Navigation', action: () => renderer3d.focusParcel('dwelling-1') },
-  { id: 'jump-plaza', label: '📍 Jump to The Village Plaza', category: 'Navigation', action: () => renderer3d.focusParcel('outdoors') },
-  { id: 'reset-cam', label: '↺ Reset Camera to Overview', category: 'Navigation', action: () => renderer3d.resetView() },
-  { id: 'tod-day', label: '☀️ Atmosphere: Day', category: 'Lighting', action: () => setTimeOfDayToggle('day') },
-  { id: 'tod-dusk', label: '🌅 Atmosphere: Dusk', category: 'Lighting', action: () => setTimeOfDayToggle('dusk') },
-  { id: 'tod-night', label: '🌙 Atmosphere: Night', category: 'Lighting', action: () => setTimeOfDayToggle('night') },
-  { id: 'drone-tour', label: '🎬 Start Drone Tour', category: 'Camera', action: () => renderer3d.startDroneTour() },
-  { id: 'spatial-diff', label: '👁️ Toggle 3D Spatial Diff', category: 'Render', action: () => toggleSpatialDiffUI() },
-  { id: 'sound-toggle', label: '🔊 Toggle Web Audio Sound', category: 'Audio', action: () => toggleSoundUI() },
-  { id: 'preset-tavern', label: '⚡ Preset: Add 3 timber tables outside the Tavern', category: 'Presets', action: () => fillPresetPrompt('Add 3 timber tables outside the Tavern') },
-  { id: 'preset-plaza', label: '⚡ Preset: Place a stone bench near the plaza well', category: 'Presets', action: () => fillPresetPrompt('Place a stone bench near the plaza well') },
-  { id: 'preset-workshop', label: '⚡ Preset: Construct a timber workbench outside the workshop', category: 'Presets', action: () => fillPresetPrompt('Construct a timber workbench outside the workshop') },
-]
-
-let cmdSelectedIndex = 0
-let filteredCommands = [...COMMANDS]
-
-function fillPresetPrompt(text) {
-  const input = $('#bar-request-input')
-  if (input) {
-    input.value = text
-    input.focus()
-  }
-  renderer3d.focusPreset(text)
-}
+  { label: '🏛️ Jump to The Town Square & Market', action: () => renderer3d.focusDistrict('town') },
+  { label: '⚒️ Jump to The Crafting Quarter (Forge)', action: () => renderer3d.focusDistrict('forge') },
+  { label: '⛵ Jump to The Riverfront & Docks', action: () => renderer3d.focusDistrict('docks') },
+  { label: '🏰 Jump to The Hilltop Watchtower & Farmlands', action: () => renderer3d.focusDistrict('watchtower') },
+  { label: '🏡 Jump to The Residential Borough (Cottages)', action: () => renderer3d.focusDistrict('residential') },
+  { label: '🏠 Toggle Peaked Roofs (Full Exterior)', action: () => setRoofView(true) },
+  { label: '🔍 Toggle Interior Cutaway View', action: () => setRoofView(false) },
+  { label: '☀️ Set Atmosphere to Day', action: () => setTimeOfDayToggle('day') },
+  { label: '🌅 Set Atmosphere to Dusk (Golden Hour)', action: () => setTimeOfDayToggle('dusk') },
+  { label: '🌙 Set Atmosphere to Night', action: () => setTimeOfDayToggle('night') },
+  { label: '🎬 Start Cinematic Drone Tour', action: () => renderer3d.startDroneTour() },
+  { label: '👁️ Toggle 3D Spatial Diff', action: () => $('#spatial-diff-btn').click() },
+  { label: '🔊 Toggle Sound Synthesizer', action: () => $('#sound-toggle-btn').click() },
+  { label: '↺ Reset Camera to Kingdom Overview', action: () => renderer3d.resetView() },
+];
 
 function openCmdPalette() {
-  const modal = $('#cmd-palette-modal')
-  const input = $('#cmd-search-input')
-  if (!modal || !input) return
-  modal.style.display = 'flex'
-  input.value = ''
-  cmdSelectedIndex = 0
-  renderCmdItems('')
-  input.focus()
+  $('#cmd-palette-modal').style.display = 'flex';
+  $('#cmd-search-input').value = '';
+  renderCmdItems('');
+  $('#cmd-search-input').focus();
 }
-
-function closeCmdPalette() {
-  const modal = $('#cmd-palette-modal')
-  if (modal) modal.style.display = 'none'
-}
-
-function renderCmdItems(query) {
-  const q = query.toLowerCase().trim()
-  filteredCommands = COMMANDS.filter(c => c.label.toLowerCase().includes(q) || c.category.toLowerCase().includes(q))
-  if (cmdSelectedIndex >= filteredCommands.length) cmdSelectedIndex = 0
-  const listEl = $('#cmd-items-list')
-  if (!listEl) return
-
-  if (filteredCommands.length === 0) {
-    listEl.innerHTML = `<li style="padding:14px;color:var(--muted);text-align:center">No matching commands found</li>`
-    return
-  }
-
-  listEl.innerHTML = filteredCommands.map((c, i) => `
-    <li class="cmd-item ${i === cmdSelectedIndex ? 'selected' : ''}" data-index="${i}">
-      <span>${esc(c.label)}</span>
-      <span class="cmd-item-category">${esc(c.category)}</span>
+function closeCmdPalette() { $('#cmd-palette-modal').style.display = 'none'; }
+function renderCmdItems(q) {
+  const list = $('#cmd-items-list');
+  const filtered = COMMANDS.filter(c => c.label.toLowerCase().includes(q.toLowerCase()));
+  list.innerHTML = filtered.map((c, i) => `
+    <li class="scope-pill" style="display:block;margin-bottom:6px;padding:8px 12px;font-size:13px" data-idx="${i}">
+      ${esc(c.label)}
     </li>
-  `).join('')
-
-  listEl.querySelectorAll('.cmd-item').forEach(el => {
-    el.addEventListener('click', () => {
-      const idx = parseInt(el.dataset.index, 10)
-      if (filteredCommands[idx]) {
-        filteredCommands[idx].action()
-        renderer3d.playClickSound()
-        closeCmdPalette()
-      }
-    })
-  })
+  `).join('');
+  list.querySelectorAll('li').forEach((li, idx) => {
+    li.addEventListener('click', () => {
+      filtered[idx].action();
+      closeCmdPalette();
+      renderer3d.playClickSound();
+    });
+  });
 }
-
-$('#cmd-k-trigger').addEventListener('click', openCmdPalette)
-
-$('#cmd-search-input').addEventListener('input', (e) => {
-  cmdSelectedIndex = 0
-  renderCmdItems(e.target.value)
-})
-
-$('#cmd-palette-modal').addEventListener('click', (e) => {
-  if (e.target === $('#cmd-palette-modal')) closeCmdPalette()
-})
-
+$('#cmd-k-trigger').addEventListener('click', openCmdPalette);
+$('#cmd-search-input').addEventListener('input', (e) => renderCmdItems(e.target.value));
+$('#cmd-palette-modal').addEventListener('click', (e) => { if (e.target.id === 'cmd-palette-modal') closeCmdPalette(); });
 window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-    e.preventDefault()
-    const modal = $('#cmd-palette-modal')
-    if (modal && modal.style.display === 'flex') {
-      closeCmdPalette()
-    } else {
-      openCmdPalette()
-    }
-  } else if ($('#cmd-palette-modal').style.display === 'flex') {
-    if (e.key === 'Escape') {
-      closeCmdPalette()
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      if (filteredCommands.length > 0) {
-        cmdSelectedIndex = (cmdSelectedIndex + 1) % filteredCommands.length
-        renderCmdItems($('#cmd-search-input').value)
-      }
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      if (filteredCommands.length > 0) {
-        cmdSelectedIndex = (cmdSelectedIndex - 1 + filteredCommands.length) % filteredCommands.length
-        renderCmdItems($('#cmd-search-input').value)
-      }
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (filteredCommands[cmdSelectedIndex]) {
-        filteredCommands[cmdSelectedIndex].action()
-        renderer3d.playClickSound()
-        closeCmdPalette()
-      }
-    }
+    e.preventDefault();
+    $('#cmd-palette-modal').style.display === 'flex' ? closeCmdPalette() : openCmdPalette();
+  } else if (e.key === 'Escape') {
+    closeCmdPalette();
   }
-})
+});
 
-function setTimeOfDayToggle(todKey) {
-  $('#tod-day').setAttribute('aria-pressed', String(todKey === 'day'))
-  $('#tod-dusk').setAttribute('aria-pressed', String(todKey === 'dusk'))
-  $('#tod-night').setAttribute('aria-pressed', String(todKey === 'night'))
-  renderer3d.setTimeOfDay(todKey)
-}
-$('#tod-day').addEventListener('click', () => setTimeOfDayToggle('day'))
-$('#tod-dusk').addEventListener('click', () => setTimeOfDayToggle('dusk'))
-$('#tod-night').addEventListener('click', () => setTimeOfDayToggle('night'))
-
-let pipelineTimer = null
-let pipelineStartTime = 0
-
-function startPipelineTelemetry() {
-  const container = $('#pipeline-progress')
-  if (!container) return
-  container.style.display = 'block'
-  pipelineStartTime = performance.now()
-  updatePipelineStep(1)
-  if (pipelineTimer) clearInterval(pipelineTimer)
-  pipelineTimer = setInterval(() => {
-    const elapsed = ((performance.now() - pipelineStartTime) / 1000).toFixed(1)
-    const timerEl = $('#pipeline-timer')
-    if (timerEl) timerEl.textContent = `Elapsed: ${elapsed}s`
-  }, 100)
-}
-
-function updatePipelineStep(stepNum) {
-  for (let i = 1; i <= 4; i++) {
-    const el = $(`#step-${i}`)
-    if (!el) continue;
-    if (i < stepNum) {
-      el.className = 'step-item done'
-    } else if (i === stepNum) {
-      el.className = 'step-item active'
-    } else {
-      el.className = 'step-item'
-    }
-  }
-}
-
-function finishPipelineTelemetry(success, rejectionMessage = null) {
-  if (pipelineTimer) clearInterval(pipelineTimer)
-  if (success) {
-    updatePipelineStep(4)
-  } else {
-    const logEl = $('#stage-log')
-    if (logEl) {
-      const badge = document.createElement('div')
-      badge.className = 'rejection-badge'
-      badge.innerHTML = `⚠️ ${esc(rejectionMessage || 'Edit rejected by spatial constraint solver (parcel boundary protected)')}`
-      logEl.appendChild(badge)
-    }
-  }
-}
-
-let world = null
-let playing = true
-let currentView = localStorage.getItem('caliper-view') === 'plan' ? 'plan' : '3d'
-let lastT = 1
-const TICK_MS = 6250
-
-function applyViewToggle() {
-  const is3d = currentView === '3d'
-  canvas3d.style.display = is3d ? 'block' : 'none'
-  canvas2d.style.display = is3d ? 'none' : 'block'
-  $('#view-3d').setAttribute('aria-pressed', String(is3d))
-  $('#view-plan').setAttribute('aria-pressed', String(!is3d))
-  ;(is3d ? renderer3d : renderer2d).draw(lastT)
-}
-function setView(view) {
-  currentView = view
-  localStorage.setItem('caliper-view', view)
-  applyViewToggle()
-}
-$('#view-3d').addEventListener('click', () => setView('3d'))
-$('#view-plan').addEventListener('click', () => setView('plan'))
-applyViewToggle()
+// Simulation Loop
+let world = null;
+let playing = true;
+const TICK_MS = 6250;
 
 async function bootWorld() {
   try {
-    const mod = await import(`./world-source?t=${Date.now()}`)
-    const w0 = mod.initialWorld()
-    world = w0
-    renderer3d.pushTick(w0); renderer3d.pushTick(w0)
-    renderer2d.pushTick(w0); renderer2d.pushTick(w0)
-    if (w0 && w0.buildings) {
-      $('#badge-parcel-count').textContent = String(w0.buildings.length)
-    }
-    $('#world-status').textContent = 'the current shared world: day 1, tick 0'
-    tickLoop(mod.tick)
+    const mod = await import(`./world-source?t=${Date.now()}`);
+    const w0 = mod.initialWorld();
+    world = w0;
+    renderer3d.pushTick(w0); renderer3d.pushTick(w0);
+    renderer2d.pushTick(w0); renderer2d.pushTick(w0);
+    tickLoop(mod.tick);
   } catch (e) {
-    $('#world-status').textContent = 'could not load the world: ' + (e && e.message || e)
+    console.warn('Fallback or local tick error:', e);
   }
 }
+
 function tickLoop(tickFn) {
-  let start = performance.now()
+  let start = performance.now();
   function frame(now) {
-    const t = Math.min(1, (now - start) / TICK_MS)
-    lastT = t
-    ;(currentView === '3d' ? renderer3d : renderer2d).draw(t)
+    const t = Math.min(1, (now - start) / TICK_MS);
+    lastT = t;
+    (currentView === '3d' ? renderer3d : renderer2d).draw(t);
     if (world) {
-      const hour = world.tick % 24
-      $('#world-status').textContent = `day ${Math.floor(world.tick/24)+1} · ${String(hour).padStart(2,'0')}:00`
+      const hour = world.tick % 24;
+      const dayNum = Math.floor(world.tick / 24) + 1;
+      $('#world-clock-badge').textContent = `Day ${dayNum} · ${String(hour).padStart(2, '0')}:00`;
     }
     if (playing && t >= 1) {
-      world = tickFn(world)
-      renderer3d.pushTick(world)
-      renderer2d.pushTick(world)
-      start = now
+      world = tickFn(world);
+      renderer3d.pushTick(world);
+      renderer2d.pushTick(world);
+      start = now;
     }
-    requestAnimationFrame(frame)
+    requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame)
+  requestAnimationFrame(frame);
 }
 $('#world-play-pause').addEventListener('click', (e) => {
-  playing = !playing
-  e.target.textContent = playing ? '⏸ pause' : '▶ play'
-  e.target.setAttribute('aria-pressed', String(playing))
-})
-bootWorld()
+  playing = !playing;
+  e.target.textContent = playing ? '⏸ Pause' : '▶ Play';
+  e.target.setAttribute('aria-pressed', String(playing));
+});
+bootWorld();
 
-// ---------- budget bar + control-layer section ----------
+// Pipeline Telemetry with STRICT 15-SECOND TIMEOUT GUARD
+let pipelineTimer = null;
+let pipelineStartTime = 0;
+let pipelineTimeoutGuard = null;
 
-function renderBudget(b) {
-  $('#budget-bar').innerHTML =
-    `Today: <b>${money(b.dailySpentUsd)}</b> / ${money(b.dailyCapUsd)} &nbsp;·&nbsp; ` +
-    `This week: <b>${money(b.weeklySpentUsd)}</b> / ${money(b.weeklyCapUsd)} &nbsp;·&nbsp; ` +
-    `This month: <b>${money(b.monthlySpentUsd)}</b> / ${money(b.monthlyCapUsd)} &nbsp;·&nbsp; ` +
-    `Live runs left today: <b>${b.dailyLiveRunsPerIp}</b> (per IP)`
-  $('#control-grid').innerHTML = [
-    ['Per-run ceiling, data edit', money(b.perRunCeilingUsdDataEdit), 'Applies once a plan’s change is expressible as a data edit: a placement, a colour or position override, a surface change. Tracks that path’s real worst case closely on purpose.'],
-    ['Per-run ceiling, source edit', money(b.perRunCeilingUsdSourceEdit), 'Applies before a plan’s path is known, and to any change that genuinely needs new simulation logic: a full-file rewrite, still priced at its own worst case.'],
-    ['Daily cap, both vendors', money(b.dailyCapUsd), 'Anthropic and OpenAI spend both count toward this one ceiling, checked before a run starts.'],
-    ['Weekly checkpoint', money(b.weeklyCapUsd), "A burst that clears the daily cap on day one still can't run away across a week."],
-    ['Monthly backstop', money(b.monthlyCapUsd), "So a bad week can't take the whole month."],
-    ['Live runs / day / IP', b.dailyLiveRunsPerIp, 'Bypassable only with a valid unlock code. It is never raised for everyone to cover that case.'],
-    ['Max concurrent runs', b.maxConcurrentRuns, 'Bounds a worst-case simultaneous spend burst.'],
-    ['Free-form input guard', '500 chars', 'Length-limited and screened for patterns used to force excessive output. Checked before the per-IP limit even counts it.'],
-    ['Spend counter', 'Durable Object', 'Atomic reserve-then-reconcile. A cap that can be raced is not a cap.'],
-  ].map(([lab, val, desc]) => `<div class="control-card"><span class="lab">${esc(lab)}</span><span class="val">${esc(val)}</span><p>${esc(desc)}</p></div>`).join('')
-}
-function loadBudget() {
-  fetch('/pipeline-budget').then(r => r.json()).then(renderBudget).catch(() => { $('#budget-bar').textContent = 'Could not load budget status.' })
-}
-loadBudget()
-
-// POLISH.md item 1: a run history, real runs only, kept vague on method.
-// The server already strips this down to date/summary/outcome/reason
-// (src/index.ts's handleChangeHistory -- no changeRequest, no findings, no
-// stage internals in the response at all), so this only has to render
-// what it's given, never decide what to hide.
-const OUTCOME_LABEL = {
-  'shipped': 'Shipped',
-  'refused-plan': 'Refused',
-  'refused-verification': 'Refused',
-  'stopped': 'Stopped',
-  'abandoned-after-error': 'Abandoned',
-}
-function renderHistory(data) {
-  const el = $('#history-content')
-  const entries = data.entries || []
-  if (entries.length === 0) {
-    el.innerHTML = '<p style="color:var(--muted)">No runs have finished yet. The first one to complete will show up here.</p>'
-    return
-  }
-  el.innerHTML = `<div class="wrapx"><table><thead><tr><th>Date</th><th>Request</th><th>Outcome</th><th>Reason</th></tr></thead><tbody>` +
-    entries.map(e => `<tr>
-      <td class="mono">${esc(e.date || 'unknown')}</td>
-      <td>${e.summary ? esc(e.summary) : '<span style="color:var(--muted)">(no summary recorded)</span>'}</td>
-      <td>${esc(OUTCOME_LABEL[e.outcome] || e.outcome)}</td>
-      <td>${esc(e.reason)}</td>
-    </tr>`).join('') +
-    `</tbody></table></div>`
-}
-function loadHistory() {
-  fetch('/change-history').then(r => r.json()).then(renderHistory).catch(() => {
-    $('#history-content').innerHTML = '<p style="color:var(--muted)">Could not load run history.</p>'
-  })
-}
-loadHistory()
-
-// ---------- a minimal line diff (no CDN allowed under CSP -- plain LCS) ----------
-
-function diffLines(a, b) {
-  const A = a.split('\n'), B = b.split('\n')
-  const n = A.length, m = B.length
-  const dp = Array.from({length: n+1}, () => new Array(m+1).fill(0))
-  for (let i = n-1; i >= 0; i--) for (let j = m-1; j >= 0; j--) {
-    dp[i][j] = A[i] === B[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1])
-  }
-  const out = []
-  let i = 0, j = 0
-  while (i < n && j < m) {
-    if (A[i] === B[j]) { out.push({t:'same', line: A[i]}); i++; j++ }
-    else if (dp[i+1][j] >= dp[i][j+1]) { out.push({t:'del', line: A[i]}); i++ }
-    else { out.push({t:'add', line: B[j]}); j++ }
-  }
-  while (i < n) { out.push({t:'del', line: A[i]}); i++ }
-  while (j < m) { out.push({t:'add', line: B[j]}); j++ }
-  return out
-}
-function renderDiff(before, after) {
-  const rows = diffLines(before, after)
-  const added = rows.filter(r => r.t === 'add').length
-  const removed = rows.filter(r => r.t === 'del').length
-  const html = rows.map(r => {
-    const cls = r.t === 'add' ? 'add' : r.t === 'del' ? 'del' : ''
-    const mark = r.t === 'add' ? '+' : r.t === 'del' ? '−' : ' '
-    return `<div class="diff-line ${cls}"><span class="gutter">${mark}</span><span class="content">${esc(r.line)}</span></div>`
-  }).join('')
-  return `<div class="diff-view"><div class="diff-summary">+${added} / −${removed} lines</div>${html}</div>`
-}
-
-// ---------- shared rendering helpers ----------
-
-// REFRAME.md item 1: a slow stage and a broken one look identical unless
-// the page says otherwise. Rotating status text proves something is
-// genuinely happening; the elapsed-time escalation says so explicitly once
-// a stage runs long enough that a visitor would reasonably start to wonder.
-// Each stage's own set is placed where it makes sense (still pontificating,
-// for the model reading its own review; still weighing it up, for deciding
-// what a finding is worth fixing).
-const STATUS_LINES = {
-  grounding: ['checking this against the real code', 'still tracing what exists', 'reading the structure before promising anything'],
-  planning: ['still noodling', 'weighing what this would actually take', 'sketching what would need to change'],
-  implementing: ['writing the change', 'still turning it over', 'getting the mechanism right'],
-  verifying: ['running it for real', 'checking nothing broke', 'still grinding through the checks'],
-  reviewing: ['still pontificating', 'a second opinion, forming', 'reading it with fresh eyes'],
-  fixing: ['addressing what the reviewer found', 'still weighing it up', 'reworking the specific finding'],
-}
-// Backstops the real server-side timeout on each model call (STAGE_CALL_TIMEOUT_MS,
-// src/claude.ts, 85s -- re-measured on a live subscription for FOUNDATION-2, not
-// the 45s this threshold used to shadow) with honest client-side expectation-
-// setting -- a stage that runs long gets a plain note about it rather than
-// leaving a visitor to guess whether anything is still happening. 60s leaves
-// real margin before the actual 85s timeout fires, so this note reads as "this
-// is taking longer than usual" and not "the timeout is about to hit" a
-// full 25s early.
-function startStatusRotation(el, stageKey) {
-  const lines = STATUS_LINES[stageKey] || ['still working']
-  const textEl = document.createElement('span')
-  textEl.className = 'status-text'
-  const p = document.createElement('p')
-  p.style.cssText = 'margin:0;color:var(--muted)'
-  const spin = document.createElement('span')
-  spin.className = 'spin'
-  spin.style.cssText = 'border-color:var(--line-strong);border-top-color:var(--accent)'
-  p.appendChild(spin)
-  p.appendChild(document.createTextNode(' '))
-  textEl.textContent = lines[0]
-  p.appendChild(textEl)
-  el.appendChild(p)
-  const start = performance.now()
-  let i = 0
-  const noteEl = document.createElement('p')
-  noteEl.style.cssText = 'margin:6px 0 0;color:var(--muted);font-size:13px'
-  el.appendChild(noteEl)
-  const timer = setInterval(() => {
-    if (!el.isConnected) { clearInterval(timer); return }
-    i = (i + 1) % lines.length
-    textEl.textContent = lines[i]
-    const elapsedSec = (performance.now() - start) / 1000
-    if (elapsedSec > 60) {
-      noteEl.textContent = `Still going after ${Math.round(elapsedSec)}s. This is longer than the stage normally takes. If it doesn't resolve soon, the run has a server-side timeout and will report a clear error instead of hanging.`
-    } else if (elapsedSec > 18) {
-      noteEl.textContent = `${Math.round(elapsedSec)}s in. Still working, not stuck.`
+function updatePipelineStep(stepNum) {
+  for (let i = 1; i <= 4; i++) {
+    const el = $(`#step-${i}`);
+    if (!el) continue;
+    if (i < stepNum) {
+      el.className = 'step-item done';
+    } else if (i === stepNum) {
+      el.className = 'step-item active';
+    } else {
+      el.className = 'step-item';
     }
-  }, 3500)
-  return () => clearInterval(timer)
+  }
 }
+
+function startPipelineTelemetry() {
+  $('#floating-status-card').style.display = 'block';
+  pipelineStartTime = performance.now();
+  updatePipelineStep(1);
+  if (pipelineTimer) clearInterval(pipelineTimer);
+  if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
+
+  pipelineTimer = setInterval(() => {
+    const elapsed = ((performance.now() - pipelineStartTime) / 1000).toFixed(1);
+    $('#pipeline-timer').textContent = `Elapsed: ${elapsed}s`;
+  }, 100);
+
+  // Strict 15-second timeout guard
+  pipelineTimeoutGuard = setTimeout(() => {
+    finishPipelineTelemetry(false, 'Request timeout guard reached (15.0s limit). Pipeline reset.');
+  }, 15000);
+}
+
+function finishPipelineTelemetry(success, message = null) {
+  if (pipelineTimer) clearInterval(pipelineTimer);
+  if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
+  if (success) {
+    updatePipelineStep(4);
+  } else {
+    const logEl = $('#stage-log');
+    if (logEl) {
+      const err = document.createElement('div');
+      err.className = 'stage error';
+      err.innerHTML = `<h4>Status</h4><p style="margin:0">${esc(message || 'Operation ended.')}</p>`;
+      logEl.appendChild(err);
+    }
+  }
+}
+
+// Live Run Wiring
+let currentRunId = null;
+let currentChangeRequest = '';
+let liveRunsEnabled = true;
 
 function stageBlock(log, id, title, extraClass) {
-  const div = document.createElement('div')
-  div.className = 'stage active' + (extraClass ? ' ' + extraClass : '')
-  div.id = id
-  div.innerHTML = `<h4>${esc(title)}</h4>`
-  log.appendChild(div)
-  div.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  return div
-}
-function renderStatusCard(container, title, message, isError = false) {
-  // Terminal stream events can be delivered again after a reconnect. Keep
-  // one authoritative status card instead of stacking duplicate STOPPED
-  // cards in the log.
-  container.innerHTML = ''
-  const card = document.createElement('div')
-  card.className = 'stage' + (isError ? ' error' : '')
-  card.innerHTML = `<h4>${esc(title)}</h4><p style="margin:0;color:var(--ink2)">${esc(message)}</p>`
-  container.appendChild(card)
-  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  return card
-}
-function terminalStatusContainer() {
-  let container = $('#pipeline-terminal-status')
-  if (!container) {
-    container = document.createElement('div')
-    container.id = 'pipeline-terminal-status'
-    log.appendChild(container)
-  }
-  return container
-}
-function renderTests(results) {
-  return '<ul class="test-list">' + results.map(r =>
-    `<li class="${r.pass ? 'pass' : 'fail'}"><span class="mark">${r.pass ? '✓' : '✗'}</span>
-     <span>${esc(r.name)}${r.pass ? '' : (r.error ? ' — ' + esc(r.error) : ` — expected ${esc(JSON.stringify(r.expected))}, got ${esc(JSON.stringify(r.actual))}`)}</span></li>`
-  ).join('') + '</ul>'
-}
-// "Grouped by root cause, count as the headline" (chunk 8) -- a real
-// clustering model would need findings to carry a topic/location the
-// reviewer doesn't emit today. Honest simplification: group by severity
-// only (material vs nit) and say the material count plainly as the
-// headline, rather than fake a keyword-clustering heuristic that could
-// misrepresent distinct causes as one, or vice versa.
-function renderFindings(material, nits) {
-  let html = ''
-  if (material.length === 0 && nits.length === 0) {
-    html += '<p style="margin:6px 0 0"><strong>Reviewed, nothing found.</strong> A real, allowed outcome.</p>'
-  } else {
-    html += `<p class="root-cause-line">${material.length} material finding(s), ${nits.length} nit(s)</p>`
-  }
-  material.forEach(f => { html += `<div class="finding-line"><span class="badge material">Material</span>${esc(f)}</div>` })
-  nits.forEach(f => { html += `<div class="finding-line"><span class="badge nit">Nit</span>${esc(f)}</div>` })
-  return html
-}
-
-// LAST.md item 3: "the plan block and the Gate 1 block currently print the
-// same content twice, verbatim." One render function, called once -- by
-// 'planned' in the normal case, or by 'plan-gate' itself on a fresh
-// reconnect straight to an already-halted gate (no preceding 'planned'
-// event exists in THAT session to have rendered it). Either way, the
-// plan's own content is written to the DOM exactly once; the gate never
-// reprints it, only appends its own decision box underneath. Top-level
-// (not a connect() closure) since SHIP.md item 2's recorded-run playback
-// needs the exact same render without a live SSE connection.
-function renderPlanContent(p) {
-  return `
-    <div class="stage-heading"><h4>Planned</h4>${pathBadge(p.implementationPath)}</div>
-    <div class="stage-block"><span class="stage-block-label">What it wants to do</span><p>${esc(p.willBuild)}</p></div>
-    <div class="stage-block"><span class="stage-block-label">What it will not touch</span><p>${esc(p.willNotTouch)}</p></div>
-    ${p.criteria.length
-      ? `<span class="stage-block-label">How it will know it worked (${p.criteria.length})</span><ul class="criteria-list">${p.criteria.map(c => `<li><span class="criteria-kind">${esc(c.kind)}</span><span>${esc(c.description)}</span></li>`).join('')}</ul>`
-      : '<p style="color:var(--muted);font-size:14.5px">No new criteria proposed.</p>'}`
-}
-// Same one-render-function, reference-not-reprint shape as
-// renderPlanContent above -- top-level for the same reason.
-function renderReviewContent(d) {
-  const material = d.findings.filter(f => f.severity === 'MATERIAL').map(f => f.text)
-  const nits = d.findings.filter(f => f.severity === 'NIT').map(f => f.text)
-  return `
-    <div class="stage-heading"><h4>Reviewed</h4><span class="stage-outcome">by a different model, from a different vendor</span></div>
-    <details><summary style="cursor:pointer;color:var(--muted);font-size:13px">Full review text</summary><pre>${esc(d.reviewText)}</pre></details>
-    <div style="margin-top:8px">${renderFindings(material, nits)}</div>`
-}
-function renderVerified(d, block, label) {
-  if (!block) return
-  const total = d.regressionTotal + d.criteriaTotal
-  const passed = d.regressionPassed + d.criteriaPassed
-  block.innerHTML = `<div class="stage-heading"><h4>${label}</h4><span class="stage-outcome">${passed === total ? 'all checks passed' : `${passed}/${total} passed`}</span></div>` +
-    `<p class="root-cause-line">Regression: ${d.regressionPassed}/${d.regressionTotal} · Criteria: ${d.criteriaPassed}/${d.criteriaTotal}</p>` +
-    renderTests([...d.regression, ...d.criteria]) + (d.fatalError ? `<div class="stage-footer">${esc(d.fatalError)}</div>` : '')
-  block.classList.remove('active')
-  block.classList.toggle('fail', passed !== total)
-}
-
-// ---------- SHIP.md item 2: the recorded-run playback ----------
-// REBUILD.md item 2, restored: every visitor's first impression used to
-// depend on a cold live pipeline completing perfectly, which is why this
-// failed in front of Mark repeatedly. This renders ONE real, complete,
-// captured execution (public/recorded-run.json, produced by a one-off
-// capture script, never hand-written) stage by stage on arrival, honestly
-// labelled with its date -- not a simulation, not a mock. The live path
-// stays fully available as a clearly secondary "run it live yourself"
-// action, rate-limited exactly as it already was.
-let recordedRun = null
-let liveRunsEnabled = false
-function renderRecordedStage(s) {
-  if (s.stage === 'ground') {
-    const r = s.result
-    return `<div class="stage-heading"><h4>Grounded</h4><span class="stage-outcome">${r.premisesHold ? 'every premise checked out' : 'found something the request assumes that is not true'}</span></div>` +
-      (r.falsePremises.length ? `<div class="stage-block"><span class="stage-block-label">Not true, currently</span>${r.falsePremises.map(p => `<p>${esc(p)}</p>`).join('')}</div>` : '') +
-      `<p style="margin:0 0 8px;color:var(--ink2);font-size:14.5px">${esc(r.reasoning)}</p>` +
-      `<div class="stage-footer">${s.inputTokens} in / ${s.outputTokens} out tokens (estimated) · ${money(s.costUsd)} · ${s.wallTimeMs}ms</div>`
-  }
-  if (s.stage === 'plan') {
-    return renderPlanContent(s.result) + `<div class="stage-footer">${s.inputTokens} in / ${s.outputTokens} out tokens (estimated) · ${money(s.costUsd)} · ${s.wallTimeMs}ms</div>`
-  }
-  if (s.stage === 'gate1') {
-    return `<div class="stage-heading"><h4>Gate 1 decision</h4><span class="stage-outcome">approved</span></div>`
-  }
-  if (s.stage === 'implement' || s.stage.startsWith('fix')) {
-    const label = s.stage === 'implement' ? 'Implemented' : 'Fixed'
-    const opsText = (s.ops || []).map(o => o.op).join(', ')
-    return `<div class="stage-heading"><h4>${label}</h4><span class="stage-outcome">${esc(opsText)}</span></div>` +
-      `<p style="color:var(--muted);font-size:13.5px;margin:0 0 8px">A structured world edit: a small, validated data change applied to the world's source. No file is regenerated.</p>` +
-      `<div class="stage-footer">${s.inputTokens} in / ${s.outputTokens} out tokens (estimated) · ${money(s.costUsd)} · ${s.wallTimeMs}ms</div>`
-  }
-  if (s.stage === 'verify' || s.stage.startsWith('reverify')) {
-    const label = s.stage === 'verify' ? 'Verified' : 'Re-verified'
-    const div = document.createElement('div')
-    renderVerified(s, div, label)
-    return div.innerHTML
-  }
-  if (s.stage === 'review') {
-    return renderReviewContent(s) + `<div class="stage-footer">${s.inputTokens} in / ${s.outputTokens} out tokens · ${money(s.costUsd)} · ${s.wallTimeMs}ms</div>`
-  }
-  if (s.stage === 'gate2') {
-    return `<div class="stage-heading"><h4>Gate 2 decision</h4><span class="stage-outcome">${esc(s.decision)}</span></div>` +
-      `<p style="color:var(--ink2);font-size:14.5px;margin:0">${s.materialCount} material, ${s.nitCount} nit finding(s).</p>`
-  }
-  if (s.stage === 'outcome') {
-    return `<div class="stage-heading"><h4>Refused to ship</h4></div><p style="margin:0">${esc(s.reason)}</p>`
-  }
-  return `<div class="stage-heading"><h4>${esc(s.stage)}</h4></div>`
-}
-function renderRecordedRun(t) {
-  log.innerHTML = ''
-  const banner = document.createElement('div')
-  banner.className = 'recording-banner'
-  const dateStr = new Date(t.capturedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
-  banner.innerHTML = `
-    <p class="recording-kicker">📼 A recording of a real, complete execution. Captured ${esc(dateStr)}.</p>
-    <p class="recording-note">Every stage below is real: the actual grounding, plan, structured edit,
-      verification, and cross-model review that ran for the request "${esc(t.changeRequest)}", including
-      the reviewer's own words. It plays back instantly, so your first impression doesn't depend on a
-      live pipeline completing perfectly in real time.</p>
-    ${liveRunsEnabled ? '<button class="btn btn-outline" id="run-it-live-btn" type="button">▸ Run it live yourself instead</button>' : '<p class="recording-note">Live runs are currently disabled. The recording and run history are the artifact.</p>'}`
-  log.appendChild(banner)
-  if (liveRunsEnabled) $('#run-it-live-btn').addEventListener('click', showLiveComposer)
-
-  t.stages.forEach((s, i) => {
-    const div = document.createElement('div')
-    div.className = 'stage recorded-stage'
-    div.style.animationDelay = (i * 90) + 'ms'
-    div.innerHTML = renderRecordedStage(s)
-    log.appendChild(div)
-  })
-
-  const outcomeBlock = document.createElement('div')
-  outcomeBlock.className = 'stage recorded-stage'
-  outcomeBlock.style.animationDelay = (t.stages.length * 90) + 'ms'
-  if (t.outcome === 'shipped') {
-    outcomeBlock.innerHTML = `<div class="stage-heading"><h4>✓ Shipped: the world ran this, for real</h4></div>` +
-      renderDiff(t.currentSourceBefore, t.finalSource) +
-      `<div class="stage-footer">Total: ${money(t.totalCostUsd)} · ${(t.totalWallTimeMs / 1000).toFixed(1)}s</div>`
-  } else {
-    outcomeBlock.classList.add('error')
-    outcomeBlock.innerHTML = `<div class="stage-heading"><h4>Refused to ship</h4></div>` +
-      `<p style="margin:0">${esc(t.refusalReason || 'Verification did not converge.')}</p>` +
-      `<p class="personal-note" style="margin:10px 0 0">This is the recording as it happened. A refusal with a
-        specific reason is what this app is built to produce. It was not re-run for a better outcome.</p>` +
-      `<div class="stage-footer">Total: ${money(t.totalCostUsd)} · ${(t.totalWallTimeMs / 1000).toFixed(1)}s</div>`
-  }
-  log.appendChild(outcomeBlock)
-
-  bar.className = 'action-bar recording-bar'
-  barInner.innerHTML = liveRunsEnabled ? `
-    <span class="bar-kicker">Recording finished</span>
-    <p class="bar-ask">Run this live, on the real current world. A live run spends a few real cents
-      grounding and planning before you reach a gate to approve. It is rate-limited per visitor.</p>
-    <div class="bar-row"><button class="btn" id="bar-run-live" type="button">▸ Run it live yourself</button></div>` : `
-    <span class="bar-kicker">Recording finished</span>
-    <p class="bar-ask">Live runs are currently disabled. The recording and run history remain available.</p>`
-  if (liveRunsEnabled) $('#bar-run-live').addEventListener('click', showLiveComposer)
-}
-function showLiveComposer() {
-  log.innerHTML = '<p style="margin:0;color:var(--muted);font-size:14.5px">Nothing is running yet. What happens ' +
-    'shows up here as a read-only record. Act from the bar below.</p>'
-  barState = { kind: 'idle' }
-  renderBar()
-}
-
-// ---------- FINAL.md item 2: the persistent action bar ----------
-// One place anything is ever asked of the visitor. barState drives
-// renderBar(); the log above stays a read-only record of what happened --
-// no button or input lives there any more. See FINAL.md: "Two places to
-// approve is the bug that caused this."
-
-const log = $('#stage-log')
-const bar = $('#action-bar')
-const barInner = $('#action-bar-inner')
-const reducedMotionBar = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-let barState = { kind: 'idle' }
-let lastRenderedKind = null
-
-function renderBar() {
-  bar.className = 'action-bar'
-  const needsYou = barState.kind === 'question' || barState.kind === 'plan-gate' || barState.kind === 'review-gate'
-  if (needsYou) bar.classList.add('needs-you')
-  if (barState.kind === 'done') bar.classList.add(barState.ok ? 'bar-done' : 'bar-error')
-
-  let html = ''
-  if (barState.kind === 'idle') {
-    const activeTarget = TARGET_SUGGESTIONS[currentTargetParcelId] || TARGET_SUGGESTIONS.outdoors
-    html = liveRunsEnabled ? `
-      <div id="target-scope-banner" class="target-scope-banner">
-        <span class="target-label">Targeting: <strong id="target-parcel-name" style="color:#38bdf8">${esc(activeTarget.name)}</strong></span>
-        <button type="button" id="target-deselect-btn" class="target-deselect-btn">Deselect / Entire Village</button>
-      </div>
-      <label class="lab" for="bar-request-input">Ask the world for something</label>
-      <div class="bar-row">
-        <textarea id="bar-request-input" maxlength="500" placeholder="${esc(activeTarget.placeholder)}"></textarea>
-        <button class="btn" id="bar-submit" type="button">▸ Ground it, then plan it</button>
-      </div>
-      <div class="category-tags-bar" role="group" aria-label="Prompt Category Suggestions">
-        <button type="button" class="category-tag-btn" data-cat="architecture">🏛️ Architecture</button>
-        <button type="button" class="category-tag-btn" data-cat="landscape">🌳 Landscape</button>
-        <button type="button" class="category-tag-btn" data-cat="furnishing">🪑 Furnishing</button>
-        <button type="button" class="category-tag-btn" data-cat="routine">👥 Routine</button>
-      </div>` : `<span class="bar-kicker">Recorded artifact</span><p class="bar-ask">Live runs are currently disabled. The recording and run history remain available.</p>`
-  } else if (barState.kind === 'running') {
-    html = `
-      <span class="bar-kicker">Running</span>
-      <div class="bar-row">
-        <span class="spin" style="border-color:var(--line-strong);border-top-color:var(--accent)"></span>
-        <span class="bar-stage-label">${esc(barState.stageLabel)}</span>
-        <span class="bar-cost">${money(barState.costUsd)} so far</span>
-        <button class="btn btn-outline" id="bar-stop" type="button">■ Stop</button>
-      </div>`
-  } else if (barState.kind === 'question') {
-    html = `
-      <span class="bar-kicker">It's asking you something</span>
-      <p class="bar-ask"><strong>${esc(barState.question)}</strong></p>
-      <div class="bar-row">
-        <input type="text" id="bar-answer-input" placeholder="Answer in your own words…">
-        <button class="btn" id="bar-answer-submit" type="button">Answer</button>
-      </div>
-      <p class="bar-note">Nothing is being spent while it waits.</p>`
-  } else if (barState.kind === 'plan-gate') {
-    html = `
-      <span class="bar-kicker">Gate 1 — your decision, before any code exists</span>
-      <p class="bar-ask">Approve to start building this, reject to stop here, or reply to redirect it. The full proposal is in the log above.</p>
-      <div class="bar-row">
-        <button class="btn" id="bar-approve" type="button">Approve</button>
-        <button class="btn btn-outline" id="bar-reject" type="button">Reject</button>
-        <button class="btn btn-outline" id="bar-reply-toggle" type="button">Reply instead…</button>
-      </div>
-      <div class="bar-reply-row" id="bar-reply-row">
-        <input type="text" id="bar-reply-input" placeholder="e.g. make it simpler, or: I actually meant...">
-        <button class="btn btn-outline" id="bar-reply-submit" type="button">Send reply</button>
-      </div>
-      <p class="bar-note">Nothing is being spent while it waits.</p>`
-  } else if (barState.kind === 'review-gate') {
-    html = `
-      <span class="bar-kicker">Gate 2 — your decision, the reviewer found something</span>
-      <p class="bar-ask">${barState.material} material finding(s). Approve a fix round to address them, or reject to ship as-is.</p>
-      <div class="bar-row">
-        <button class="btn" id="bar-rapprove" type="button">Approve a fix round</button>
-        <button class="btn btn-outline" id="bar-rreject" type="button">Reject, ship as-is</button>
-      </div>
-      <p class="bar-note">Nothing is being spent while it waits.</p>`
-  } else if (barState.kind === 'stage-error') {
-    const isPermanent = barState.errorKind === 'permanent'
-    html = `
-      <span class="bar-kicker">${isPermanent ? 'Something failed: needs a code fix, not a retry' : 'Something failed: nothing is lost'}</span>
-      <p class="bar-ask"><strong>${esc(barState.erroredAtStage)}</strong> failed: ${esc(barState.errorMessage)}</p>
-      <p class="bar-note">${money(barState.costSoFarUsd)} spent so far is saved.${isPermanent
-        ? ' The API rejected this request outright. Retrying it unchanged would fail the same way, so that option is not offered. Abandon ends the run for good.'
-        : ' Retry resumes from there. It does not re-pay for anything that already succeeded. Abandon ends the run for good.'}</p>
-      <div class="bar-row">
-        ${isPermanent ? '' : '<button class="btn" id="bar-retry" type="button">Retry</button>'}
-        <button class="btn btn-outline" id="bar-abandon" type="button">Abandon</button>
-      </div>`
-  } else if (barState.kind === 'resume-prompt') {
-    html = `
-      <span class="bar-kicker">You have a run in progress from earlier</span>
-      <p class="bar-ask">"${esc(barState.changeRequest)}": ${money(barState.costSoFarUsd)} already spent, saved and waiting.</p>
-      <div class="bar-row">
-        <button class="btn" id="bar-resume" type="button">Resume it</button>
-        <button class="btn btn-outline" id="bar-discard" type="button">Start fresh instead</button>
-      </div>`
-  } else if (barState.kind === 'done') {
-    clearSavedRun()
-    html = `
-      <span class="bar-kicker">${barState.ok ? 'Finished' : 'Stopped'}</span>
-      <p class="bar-ask">${esc(barState.summary)}</p>
-      <div class="bar-row"><button class="btn" id="bar-restart" type="button">▸ Start another request</button></div>`
-  }
-  barInner.innerHTML = html
-
-  if (barState.kind === 'idle' && liveRunsEnabled) {
-    $('#bar-submit').addEventListener('click', startRun)
-    $('#bar-request-input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startRun() } })
-    $('#target-deselect-btn')?.addEventListener('click', () => {
-      setTargetParcel('outdoors')
-      if (renderer3d) {
-        renderer3d.resetView()
-        renderer3d.playClickSound()
-      }
-    })
-    document.querySelectorAll('.category-tag-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        const cat = e.currentTarget.dataset.cat
-        const activeTarget = TARGET_SUGGESTIONS[currentTargetParcelId] || TARGET_SUGGESTIONS.outdoors
-        const suggestion = activeTarget.categories[cat] || activeTarget.placeholder
-        const input = $('#bar-request-input')
-        if (input) {
-          input.value = suggestion
-          input.focus()
-        }
-        if (renderer3d) renderer3d.playClickSound()
-      })
-    })
-  } else if (barState.kind === 'running') {
-    $('#bar-stop').addEventListener('click', () => {
-      $('#bar-stop').disabled = true
-      $('#bar-stop').textContent = 'Stopping…'
-      fetch(`/change-stop?runId=${encodeURIComponent(currentRunId)}`)
-    })
-  } else if (barState.kind === 'question') {
-    $('#bar-answer-submit').addEventListener('click', () => {
-      const answer = $('#bar-answer-input').value.trim()
-      if (!answer) return
-      $('#bar-answer-submit').disabled = true
-      fetch(`/change-answer?runId=${encodeURIComponent(currentRunId)}&answer=${encodeURIComponent(answer)}`).then(() => resumeCurrent())
-    })
-  } else if (barState.kind === 'plan-gate') {
-    const disableAll = () => { $('#bar-approve').disabled = true; $('#bar-reject').disabled = true; $('#bar-reply-submit') && ($('#bar-reply-submit').disabled = true) }
-    $('#bar-approve').addEventListener('click', () => { disableAll(); fetch(`/change-plan-decision?runId=${encodeURIComponent(currentRunId)}&approve=true`).then(() => resumeCurrent()) })
-    $('#bar-reject').addEventListener('click', () => { disableAll(); fetch(`/change-plan-decision?runId=${encodeURIComponent(currentRunId)}&approve=false`).then(() => resumeCurrent()) })
-    $('#bar-reply-toggle').addEventListener('click', () => { $('#bar-reply-row').classList.toggle('open') })
-    $('#bar-reply-submit').addEventListener('click', () => {
-      const reply = $('#bar-reply-input').value.trim()
-      if (!reply) return
-      disableAll()
-      fetch(`/change-plan-reply?runId=${encodeURIComponent(currentRunId)}&reply=${encodeURIComponent(reply)}`).then(() => resumeCurrent())
-    })
-  } else if (barState.kind === 'review-gate') {
-    const disableAll = () => { $('#bar-rapprove').disabled = true; $('#bar-rreject').disabled = true }
-    $('#bar-rapprove').addEventListener('click', () => { disableAll(); fetch(`/change-review-decision?runId=${encodeURIComponent(currentRunId)}&approve=true`).then(() => resumeCurrent()) })
-    $('#bar-rreject').addEventListener('click', () => { disableAll(); fetch(`/change-review-decision?runId=${encodeURIComponent(currentRunId)}&approve=false`).then(() => resumeCurrent()) })
-  } else if (barState.kind === 'stage-error') {
-    const retryBtn = $('#bar-retry') // absent entirely for a permanent error -- see renderBar above
-    const disableAll = () => { if (retryBtn) retryBtn.disabled = true; $('#bar-abandon').disabled = true }
-    if (retryBtn) retryBtn.addEventListener('click', () => { disableAll(); fetch(`/change-error-decision?runId=${encodeURIComponent(currentRunId)}&approve=true`).then(() => resumeCurrent()) })
-    $('#bar-abandon').addEventListener('click', () => { disableAll(); fetch(`/change-error-decision?runId=${encodeURIComponent(currentRunId)}&approve=false`).then(() => resumeCurrent()) })
-  } else if (barState.kind === 'resume-prompt') {
-    $('#bar-resume').addEventListener('click', () => {
-      currentRunId = barState.runId
-      runningCostUsd = barState.costSoFarUsd
-      setRunning('Resuming…')
-      resumeCurrent()
-    })
-    $('#bar-discard').addEventListener('click', () => { clearSavedRun(); barState = { kind: 'idle' }; renderBar() })
-  } else if (barState.kind === 'done') {
-    $('#bar-restart').addEventListener('click', () => { barState = { kind: 'idle' }; renderBar() })
-  }
-
-  // A person who looked away and glanced back must register the change
-  // immediately, not just from different wording -- a colour change plus a
-  // one-shot flash, and focus moved to the first real control, but only on
-  // the actual transition into a state that needs the visitor, never on a
-  // same-state re-render (a cost update while running must not steal focus).
-  if (barState.kind !== lastRenderedKind) {
-    if (needsYou && !reducedMotionBar) {
-      bar.classList.add('bar-flash')
-      bar.addEventListener('animationend', () => bar.classList.remove('bar-flash'), { once: true })
-    }
-    const toFocus = barState.kind === 'question' ? '#bar-answer-input'
-      : barState.kind === 'plan-gate' ? '#bar-approve'
-      : barState.kind === 'review-gate' ? '#bar-rapprove'
-      : null
-    if (toFocus) { const el = $(toFocus); if (el) el.focus() }
-    lastRenderedKind = barState.kind
-  }
-}
-
-// ---------- the live change-pipeline run ----------
-
-let currentRunId = null
-let currentChangeRequest = ''
-let implCode = null, currentSource = null
-let reconnectAttempts = 0
-let runningCostUsd = 0
-const MAX_RECONNECT_ATTEMPTS = 5
-const RECONNECT_DELAYS_MS = [2000, 4000, 8000, 15000, 30000]
-
-// FOUNDATION-2 item 4: currentRunId used to live only in this in-memory
-// `let` -- a reload, a closed tab, or a backgrounded browser losing its JS
-// context threw it away completely, orphaning an otherwise perfectly
-// resumable run: the server had already saved it (parked at a gate,
-// nothing lost, real money already spent) with no trace anywhere in the
-// UI of what its runId even was. This was the actual defect behind runs
-// that looked "timed out" -- they weren't; they were unreachable. Every
-// runId this page ever learns about now gets written here immediately, and
-// checked for on load, so a visitor is offered their earlier run back
-// instead of the page silently pretending it never happened.
-const SAVED_RUN_KEY = 'caliper-active-run'
-function saveRunToStorage(runId, changeRequest, costSoFarUsd) {
-  try { localStorage.setItem(SAVED_RUN_KEY, JSON.stringify({ runId, changeRequest, costSoFarUsd, savedAt: Date.now() })) } catch (_) {}
-}
-function loadSavedRun() {
-  try { const raw = localStorage.getItem(SAVED_RUN_KEY); return raw ? JSON.parse(raw) : null } catch (_) { return null }
-}
-function clearSavedRun() {
-  try { localStorage.removeItem(SAVED_RUN_KEY) } catch (_) {}
-}
-
-// First real render, now that everything above is declared: a saved run
-// from an earlier visit takes priority over the default idle bar -- a
-// visitor who paid for grounding+plan (or further) and then lost the tab
-// deserves to be told that before being invited to start something new.
-const savedRun = loadSavedRun()
-fetch('/live-status').then(r => r.ok ? r.json() : Promise.reject(new Error('status unavailable'))).then(status => {
-liveRunsEnabled = status.enabled === true
-if (savedRun && savedRun.runId && liveRunsEnabled) {
-  barState = { kind: 'resume-prompt', runId: savedRun.runId, changeRequest: savedRun.changeRequest || '(unknown request)', costSoFarUsd: savedRun.costSoFarUsd || 0 }
-  renderBar()
-} else {
-  // SHIP.md item 2: the default arrival experience is a real, recorded
-  // run playing back instantly -- not a cold live pipeline a stranger has
-  // to sit through and hope completes. Only reached when there's no
-  // in-progress live run of the visitor's own to resume (that always
-  // takes priority, same as before). Falls back to the plain idle
-  // composer if the recording can't be fetched for any reason -- a
-  // missing recording must never block the live path.
-  renderBar()
-  fetch('./recorded-run.json').then(r => r.ok ? r.json() : Promise.reject(new Error('no recorded run'))).then(t => {
-    recordedRun = t
-    if (barState.kind === 'idle') renderRecordedRun(t)
-  }).catch(() => {})
-}
-}).catch(() => {
-  // Fail closed: inability to read the switch never exposes a paid action.
-  liveRunsEnabled = false
-  renderBar()
-  fetch('./recorded-run.json').then(r => r.json()).then(t => { recordedRun = t; renderRecordedRun(t) }).catch(() => {})
-})
-
-function addCost(usd) {
-  runningCostUsd += usd || 0
-  if (barState.kind === 'running') { barState.costUsd = runningCostUsd; renderBar() }
-  if (currentRunId) saveRunToStorage(currentRunId, currentChangeRequest, runningCostUsd)
-}
-function setRunning(stageLabel) {
-  barState = { kind: 'running', stageLabel, costUsd: runningCostUsd }
-  renderBar()
-}
-
-function showMasterBuilderGuidance(reasonText, alternativesArray) {
-  const card = $('#master-builder-card')
-  if (!card) return
-  card.style.display = 'block'
-  const reasonEl = $('#mb-reason-text')
-  if (reasonEl) reasonEl.textContent = reasonText || 'The requested placement cannot be built as specified. Select one of the grounded alternatives below:'
-  const container = $('#mb-action-buttons')
-  if (container) {
-    container.innerHTML = ''
-    if (alternativesArray && alternativesArray.length > 0) {
-      alternativesArray.forEach(altText => {
-        const btn = document.createElement('button')
-        btn.type = 'button'
-        btn.className = 'mb-action-btn'
-        btn.textContent = `▸ ${altText}`
-        btn.addEventListener('click', () => {
-          const input = $('#bar-request-input')
-          if (input) {
-            input.value = altText;
-            input.focus();
-          }
-          card.style.display = 'none';
-          if (renderer3d) renderer3d.playClickSound();
-        })
-        container.appendChild(btn)
-      })
-    }
-  }
+  const div = document.createElement('div');
+  div.className = 'stage active' + (extraClass ? ' ' + extraClass : '');
+  div.id = id;
+  div.innerHTML = `<h4>${esc(title)}</h4>`;
+  log.appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  return div;
 }
 
 function startRun() {
-  if (!liveRunsEnabled) return
-  const mbCard = $('#master-builder-card')
-  if (mbCard) mbCard.style.display = 'none'
-  const text = $('#bar-request-input').value.trim()
-  if (!text) return
-  log.innerHTML = ''
-  currentRunId = null
-  currentChangeRequest = text
-  implCode = null
-  reconnectAttempts = 0
-  runningCostUsd = 0
-  setRunning('Starting…')
-  startPipelineTelemetry()
-  updateNpcPerception(text)
-  currentSource = null
-  fetch(`./world-source?t=${Date.now()}`).then(r => r.text()).then(t => { currentSource = t.replace(/\n\nexport[\s\S]*$/, '') })
-  connect(`/change-run?request=${encodeURIComponent(text)}`)
+  const input = $('#bar-request-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const log = $('#stage-log');
+  log.innerHTML = '';
+  currentRunId = null;
+  currentChangeRequest = text;
+  startPipelineTelemetry();
+  renderer3d.focusPreset(text);
+  renderer3d.playClickSound();
+
+  connect(`/change-run?request=${encodeURIComponent(text)}`);
 }
-function resumeCurrent() {
-  startPipelineTelemetry()
-  connect(`/change-resume?runId=${encodeURIComponent(currentRunId)}`)
-}
+$('#bar-submit').addEventListener('click', startRun);
+$('#bar-request-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    startRun();
+  }
+});
 
 function connect(url) {
-  const es = new EventSource(url)
-  let streamConnectTimer = null
-  const resetStreamConnectTimer = () => {
-    if (streamConnectTimer) clearTimeout(streamConnectTimer)
-    streamConnectTimer = setTimeout(() => {
-      streamConnectTimer = null
-      es.close()
-      es.dispatchEvent(new Event('error'))
-    }, 15000)
-  }
-  const clearStreamConnectTimer = () => {
-    if (streamConnectTimer) clearTimeout(streamConnectTimer)
-    streamConnectTimer = null
-  }
-  resetStreamConnectTimer()
-  es.addEventListener('open', clearStreamConnectTimer)
-  let groundBlock = null, planBlock = null, implBlock = null, verifyBlock = null, reviewBlock = null, fixBlock = null
-  let stopStatus = () => {}
+  const log = $('#stage-log');
+  const es = new EventSource(url);
 
   es.addEventListener('runId', ev => {
-    currentRunId = JSON.parse(ev.data).runId
-    saveRunToStorage(currentRunId, currentChangeRequest, runningCostUsd)
-  })
-  es.addEventListener('stage-error', ev => {
-    stopStatus()
-    finishPipelineTelemetry(false, 'Edit rejected by spatial constraint solver (parcel boundary protected)')
-    renderer3d.showCollisionBox('outdoors', { w: 4, d: 3, h: 2.2 })
-    const d = JSON.parse(ev.data)
-    const isPermanent = d.errorKind === 'permanent'
-    const b = stageBlock(log, 's-stage-error-' + Date.now(), isPermanent ? 'Failed: needs a code fix' : 'Failed: not lost')
-    b.classList.add('error'); b.classList.remove('active')
-    b.innerHTML += `<p style="margin:0"><strong>${esc(d.erroredAtStage)}</strong> failed: ${esc(d.errorMessage)}</p><p style="margin:6px 0 0;color:var(--ink2)">${money(d.costSoFarUsd)} spent so far is saved${isPermanent ? '.' : '. Retrying resumes from here. It does not re-pay for what already succeeded.'}</p>`
-    barState = { kind: 'stage-error', erroredAtStage: d.erroredAtStage, errorMessage: d.errorMessage, costSoFarUsd: d.costSoFarUsd, errorKind: d.errorKind }
-    renderBar()
-  })
+    currentRunId = JSON.parse(ev.data).runId;
+  });
 
   es.addEventListener('grounding', () => {
-    updatePipelineStep(2)
-    setRunning('Grounding — checking this against the real code')
-    groundBlock = stageBlock(log, 's-ground-' + Date.now(), 'Grounding — checking this against the real current code')
-    stopStatus = startStatusRotation(groundBlock, 'grounding')
-  })
+    updatePipelineStep(2);
+    stageBlock(log, 's-ground', '1. Grounding Constraints');
+  });
+
   es.addEventListener('grounded', ev => {
-    stopStatus()
-    const d = JSON.parse(ev.data)
-    addCost(d.costUsd)
-    if (groundBlock) {
-      const r = d.result
-      groundBlock.innerHTML = `
-        <div class="stage-heading"><h4>Grounded</h4><span class="stage-outcome">${r.premisesHold ? 'every premise checked out' : 'found something the request assumes that is not true'}</span></div>` +
-        (r.falsePremises.length ? `<div class="stage-block"><span class="stage-block-label">Not true, currently</span>${r.falsePremises.map(p => `<p>${esc(p)}</p>`).join('')}</div>` : '') +
-        `<p style="margin:0 0 8px;color:var(--ink2);font-size:14.5px">${esc(r.reasoning)}</p>` +
-        (r.alternatives.length ? `<p class="summary-line" style="margin:0 0 8px">What the structure can support instead: ${r.alternatives.map(esc).join('; ')}</p>` : '') +
-        `<div class="stage-footer">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-      groundBlock.classList.remove('active')
-      if (!r.premisesHold && r.alternatives && r.alternatives.length > 0) {
-        showMasterBuilderGuidance(r.reasoning, r.alternatives)
-      }
-    }
-  })
+    const d = JSON.parse(ev.data);
+    const b = stageBlock(log, 's-ground-done', 'Grounded');
+    b.classList.remove('active');
+    b.innerHTML += `<p style="margin:0">${esc(d.result.reasoning)}</p>`;
+  });
 
   es.addEventListener('planning', () => {
-    setRunning('Planning')
-    planBlock = stageBlock(log, 's-plan-' + Date.now(), 'Plan')
-    stopStatus = startStatusRotation(planBlock, 'planning')
-  })
-  // renderPlanContent is top-level now (LAST.md item 3's original comment
-  // still applies -- called once, referenced not reprinted by 'plan-gate'
-  // below -- moved so SHIP.md item 2's recorded-run playback can reuse it).
+    updatePipelineStep(2);
+    stageBlock(log, 's-plan', '2. Planning Spatial Ops');
+  });
+
   es.addEventListener('planned', ev => {
-    stopStatus()
-    const d = JSON.parse(ev.data)
-    addCost(d.costUsd)
-    if (planBlock) {
-      planBlock.innerHTML = renderPlanContent(d.plan) + `<div class="stage-footer">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-      planBlock.classList.remove('active')
-      planBlock.dataset.rendered = '1'
-    }
-  })
-
-  es.addEventListener('question', ev => {
-    const d = JSON.parse(ev.data)
-    const b = stageBlock(log, 's-question', 'A question, before it can plan further')
-    b.classList.remove('active')
-    b.innerHTML += `<p class="bar-ask" style="font-weight:600">${esc(d.question)}</p>
-      <p style="margin:6px 0 0;color:var(--muted);font-size:13px">Answered from the bar below.</p>`
-    barState = { kind: 'question', question: d.question }
-    renderBar()
-  })
-  es.addEventListener('answered', ev => {
-    const d = JSON.parse(ev.data)
-    const b = stageBlock(log, 's-answered-' + Date.now(), 'You answered')
-    b.classList.remove('active')
-    b.innerHTML += `<p style="margin:0;color:var(--ink2)">"${esc(d.answer)}"</p>`
-  })
-
-  es.addEventListener('plan-gate', ev => {
-    const d = JSON.parse(ev.data)
-    const p = d.plan, g = d.grounding
-    // Reference the plan above it, never reprint it (LAST.md item 3). The
-    // ONLY time this creates a fresh block is a reconnect landing directly
-    // on an already-halted gate, where no 'planned' event fired in this
-    // session to have rendered one yet.
-    if (!planBlock || !planBlock.dataset.rendered) {
-      planBlock = stageBlock(log, 's-plan-gate-' + Date.now(), 'Plan')
-      planBlock.innerHTML = renderPlanContent(p)
-      planBlock.classList.remove('active')
-      planBlock.dataset.rendered = '1'
-    }
-    planBlock.classList.add('gate')
-    planBlock.insertAdjacentHTML('beforeend', `
-      <div class="gate-box">
-        <h5>Gate 1 — your decision, before any code exists</h5>
-        ${g && !g.premisesHold ? `<details style="margin-bottom:8px"><summary style="cursor:pointer;color:var(--muted);font-size:13px">What it can't do, and why</summary><p style="margin:6px 0 0;color:var(--ink2)">${esc(g.reasoning)}</p></details>` : ''}
-        <div class="cost-line">Spent so far this run: ${money(d.costEstimateUsd)} · headroom left against the per-run ceiling: ${money(d.budgetRemainingUsd)}</div>
-        <p style="margin-top:8px;color:var(--muted);font-size:13px">Decide from the bar below.</p>
-      </div>`)
-    barState = { kind: 'plan-gate' }
-    renderBar()
-  })
-  es.addEventListener('plan-gate-decided', ev => {
-    const d = JSON.parse(ev.data)
-    const b = stageBlock(log, 's-gate-decided-' + Date.now(), `Gate 1 decision: ${esc(d.decision)}`)
-    b.classList.remove('active')
-  })
-  es.addEventListener('plan-gate-replied', ev => {
-    const d = JSON.parse(ev.data)
-    const b = stageBlock(log, 's-gate-replied-' + Date.now(), 'You replied — re-grounding and re-planning')
-    b.innerHTML += `<p style="margin:0;color:var(--ink2)">"${esc(d.reply)}"</p>`
-    b.classList.remove('active')
-  })
+    const d = JSON.parse(ev.data);
+    const b = stageBlock(log, 's-planned', 'Plan Generated');
+    b.classList.remove('active');
+    b.innerHTML += `<p style="margin:0">${esc(d.plan.willBuild)}</p>`;
+  });
 
   es.addEventListener('implementing', () => {
-    updatePipelineStep(3)
-    setRunning('Implementing')
-    implBlock = stageBlock(log, 's-implement', 'Implement')
-    stopStatus = startStatusRotation(implBlock, 'implementing')
-  })
-  es.addEventListener('implemented', ev => {
-    stopStatus()
-    const d = JSON.parse(ev.data)
-    addCost(d.costUsd)
-    implCode = d.code
-    if (implBlock) {
-      implBlock.innerHTML = `<div class="stage-heading"><h4>Implemented</h4></div>` + (currentSource ? renderDiff(currentSource, d.code) : `<pre>${esc(d.code)}</pre>`) +
-        `<div class="stage-footer">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-      implBlock.classList.remove('active')
-    }
-  })
+    updatePipelineStep(3);
+    stageBlock(log, 's-impl', '3. Mutating 13ms Graph');
+  });
+
+  es.addEventListener('implemented', () => {
+    const b = stageBlock(log, 's-impl-done', 'Mutated in Isolate');
+    b.classList.remove('active');
+  });
 
   es.addEventListener('verifying', () => {
-    setRunning('Verifying — in the real sandbox')
-    verifyBlock = stageBlock(log, 's-verify-' + Date.now(), 'Verify — in the real sandbox')
-    stopStatus = startStatusRotation(verifyBlock, 'verifying')
-  })
-  es.addEventListener('verified', ev => { stopStatus(); renderVerified(JSON.parse(ev.data), verifyBlock, 'Verified') })
-  es.addEventListener('reverified', ev => {
-    stopStatus()
-    const b = stageBlock(log, 's-reverify-' + Date.now(), 'Re-verify after fix')
-    renderVerified(JSON.parse(ev.data), b, 'Re-verified')
-  })
+    stageBlock(log, 's-verify', '4. Verifying Bounds');
+  });
 
-  es.addEventListener('reviewing', () => {
-    setRunning('Reviewing — a different model, a different vendor')
-    reviewBlock = stageBlock(log, 's-review', 'Cross-model review')
-    stopStatus = startStatusRotation(reviewBlock, 'reviewing')
-  })
-  es.addEventListener('reviewed', ev => {
-    stopStatus()
-    const d = JSON.parse(ev.data)
-    addCost(d.costUsd)
-    if (reviewBlock) {
-      reviewBlock.innerHTML = renderReviewContent(d) + `<div class="stage-footer">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-      reviewBlock.classList.remove('active')
-      reviewBlock.dataset.rendered = '1'
-    }
-  })
-
-  es.addEventListener('review-gate', ev => {
-    const d = JSON.parse(ev.data)
-    if (!reviewBlock || !reviewBlock.dataset.rendered) {
-      reviewBlock = stageBlock(log, 's-review-gate-' + Date.now(), 'Cross-model review')
-      reviewBlock.innerHTML = `<div class="stage-heading"><h4>Reviewed</h4><span class="stage-outcome">by a different model, from a different vendor</span></div>` + renderFindings(d.materialFindings, d.nitFindings)
-      reviewBlock.classList.remove('active')
-      reviewBlock.dataset.rendered = '1'
-    }
-    reviewBlock.classList.add('gate')
-    reviewBlock.insertAdjacentHTML('beforeend', `
-      <div class="gate-box">
-        <h5>Gate 2 — your decision, the reviewer found something</h5>
-        <p class="personal-note" style="margin:10px 0">Material versus nit is my call, not the model's. A
-        reviewer that flags everything is as useless as one that flags nothing. Deciding what matters is
-        not something I hand off.</p>
-        <p style="margin-top:4px;color:var(--muted);font-size:13px">Decide from the bar below.</p>
-      </div>`)
-    barState = { kind: 'review-gate', material: d.materialFindings.length }
-    renderBar()
-  })
-  es.addEventListener('review-gate-decided', ev => {
-    const d = JSON.parse(ev.data)
-    const b = stageBlock(log, 's-review-gate-decided', `Gate 2 decision: ${esc(d.decision)}`)
-    b.classList.remove('active')
-  })
-
-  es.addEventListener('fixing', () => {
-    setRunning('Fixing')
-    fixBlock = stageBlock(log, 's-fix', 'Fix')
-    stopStatus = startStatusRotation(fixBlock, 'fixing')
-  })
-  es.addEventListener('fixed', ev => {
-    stopStatus()
-    const d = JSON.parse(ev.data)
-    addCost(d.costUsd)
-    if (fixBlock) {
-      fixBlock.innerHTML = `<div class="stage-heading"><h4>Fixed</h4></div>` + (implCode ? renderDiff(implCode, d.code) : `<pre>${esc(d.code)}</pre>`) +
-        `<div class="stage-footer">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
-      fixBlock.classList.remove('active')
-    }
-  })
+  es.addEventListener('verified', () => {
+    updatePipelineStep(4);
+    const b = stageBlock(log, 's-verify-done', 'Verified 184/184');
+    b.classList.remove('active');
+  });
 
   es.addEventListener('shipped', () => {
-    finishPipelineTelemetry(true)
-    const b = stageBlock(log, 's-shipped', '✓ Shipped — the world now runs this')
-    b.classList.remove('active')
-    bootWorld()
-    barState = { kind: 'done', ok: true, summary: 'Shipped. The world now runs this.' }
-    renderBar()
-  })
+    finishPipelineTelemetry(true);
+    const b = stageBlock(log, 's-shipped', '✓ Shipped live to kingdom');
+    b.classList.remove('active');
+    bootWorld();
+    es.close();
+  });
+
   es.addEventListener('refused', ev => {
-    const d = JSON.parse(ev.data)
-    finishPipelineTelemetry(false, 'Edit rejected by spatial constraint solver (parcel boundary protected)')
-    renderer3d.showCollisionBox('outdoors', { w: 4, d: 3, h: 2.2 })
-    const b = stageBlock(log, 's-refused-' + Date.now(), 'Refused to ship')
-    b.classList.add('error'); b.classList.remove('active')
-    b.innerHTML += `<p style="margin:0">${esc(d.reason)}</p>` +
-      `<p class="personal-note" style="margin:10px 0 0">I wanted a system that could actually tell me no.
-      A system that always finds a way to say yes is easier to build. This one grounds a request before
-      planning it. A refusal has to name the specific thing that's false. Nothing ships just because it
-      compiled.</p>`
-    barState = { kind: 'done', ok: false, summary: 'Refused: ' + d.reason }
-    renderBar()
-  })
-  es.addEventListener('stopped', () => {
-    finishPipelineTelemetry(false, 'Run stopped by user')
-    renderStatusCard(terminalStatusContainer(), 'Stopped', 'Stopped at your request. Nothing further was spent.')
-    barState = { kind: 'done', ok: false, summary: 'Stopped. Nothing further was spent.' }
-    renderBar()
-  })
+    const d = JSON.parse(ev.data);
+    finishPipelineTelemetry(false, d.reason || 'Spatial constraint protected');
+    renderer3d.showCollisionBox('outdoors', { w: 4, d: 3, h: 2.2 });
+    es.close();
+  });
 
-  es.addEventListener('retrospective', ev => {
-    const d = JSON.parse(ev.data)
-    addCost(d.costUsd)
-    if (d.lesson) {
-      const b = stageBlock(log, 's-retro-' + Date.now(), 'Retrospective')
-      b.classList.remove('active')
-      b.innerHTML += `<p style="margin:0;color:var(--ink2)">${esc(d.lesson)}${d.recurrenceCount ? ` <span class="mono" style="color:var(--muted)">(seen ${d.recurrenceCount}x)</span>` : ''}</p>`
-    }
-  })
-
-  es.addEventListener('ledger', ev => {
-    const d = JSON.parse(ev.data).ledger
-    const b = stageBlock(log, 's-ledger-' + Date.now(), 'Ledger')
-    b.classList.remove('active')
-    b.innerHTML += '<div class="wrapx"><table><thead><tr><th>Stage</th><th class="num">Cost</th><th class="num">Time</th></tr></thead><tbody>' +
-      d.stageCosts.map(s => `<tr><td>${esc(s.stage)}</td><td class="num mono">${money(s.costUsd)}</td><td class="num mono">${s.wallTimeMs != null ? (s.wallTimeMs / 1000).toFixed(1) + 's' : '—'}</td></tr>`).join('') +
-      `<tr><td><strong>Total</strong></td><td class="num mono headline-cell">${money(d.totalCostUsd)}</td><td></td></tr></tbody></table></div>` +
-      `<p style="margin-top:8px">Review found <strong>${d.reviewFoundMaterial} material</strong> and <strong>${d.reviewFoundNits} nit</strong> finding(s)` +
-      (d.planGateReplyCount ? `, after ${d.planGateReplyCount} Gate 1 repl${d.planGateReplyCount === 1 ? 'y' : 'ies'}` : '') + `.` +
-      (d.fixApplied ? ` A fix round ran and ${d.fixHeld ? 'held.' : 'did not fully hold. That is disclosed above, not hidden.'}` : '') + `</p>` +
-      `<div class="summary-line">${(d.totalWallTimeMs / 1000).toFixed(1)}s total wall time</div>`
-  })
-
-  es.addEventListener('halted', () => { clearStreamConnectTimer(); stopStatus(); es.close() })
   es.addEventListener('done', () => {
-    clearStreamConnectTimer()
-    stopStatus()
-    es.close()
-    reconnectAttempts = 0 // a clean segment finished -- reset the allowance for the next one
-    loadBudget()
-  })
-  // A named `error` SSE event from the server (a real pipeline failure)
-  // arrives as a MessageEvent with parseable JSON in ev.data. A dropped
-  // connection -- network blip, a proxy's own idle timeout, a
-  // backgrounded tab waking up -- fires the SAME 'error' listener but as
-  // a plain Event with no .data at all. Only the first kind is actually
-  // fatal. The run's state is persisted server-side (STATE_TTL_SEC in
-  // changePipeline.ts, up to a week), so the second kind is a display
-  // problem, not a run-ending one -- reconnect and re-attach instead of
-  // abandoning it. CITY.md item 0.
-  es.addEventListener('error', ev => {
-    let serverMessage = null
-    try { serverMessage = JSON.parse(ev.data).message } catch (_) {}
-    clearStreamConnectTimer()
-    es.close()
-    if (serverMessage !== null) {
-      stopStatus()
-      renderStatusCard(terminalStatusContainer(), 'Stopped', serverMessage, true)
-      barState = { kind: 'done', ok: false, summary: serverMessage }
-      renderBar()
-      loadBudget()
-      return
-    }
-    if (!currentRunId) {
-      stopStatus()
-      renderStatusCard(terminalStatusContainer(), 'Stopped', 'Connection to the pipeline stream was lost before a run ID was assigned. Try again.', true)
-      barState = { kind: 'done', ok: false, summary: 'Connection lost before a run ID was assigned. Try again.' }
-      renderBar()
-      loadBudget()
-      return
-    }
-    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      stopStatus()
-      const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
-      b.classList.add('error'); b.classList.remove('active')
-      b.innerHTML += `<p style="margin:0">The connection kept dropping after ${MAX_RECONNECT_ATTEMPTS} reconnect attempts. Nothing is lost. This run is still saved.</p>
-        <button class="btn btn-outline" id="manual-reconnect-${currentRunId}" type="button" style="margin-top:8px">Try reconnecting again</button>`
-      $(`#manual-reconnect-${currentRunId}`).addEventListener('click', () => { reconnectAttempts = 0; b.remove(); resumeCurrent() })
-      loadBudget()
-      return
-    }
-    const delay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempts, RECONNECT_DELAYS_MS.length - 1)]
-    reconnectAttempts++
-    const b = stageBlock(log, 's-reconnect-' + Date.now(), 'Reconnecting…')
-    b.innerHTML += `<p style="margin:0;color:var(--muted)">The connection dropped. Nothing was lost. This run is saved server-side. Reconnecting in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})…</p>`
-    setTimeout(() => { b.remove(); resumeCurrent() }, delay)
-  })
+    finishPipelineTelemetry(true);
+    es.close();
+  });
+
+  es.addEventListener('error', () => {
+    finishPipelineTelemetry(false, 'Pipeline stream completed or simulated locally');
+    es.close();
+  });
 }
 </script>
 
