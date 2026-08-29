@@ -207,6 +207,7 @@ function stdMat(opts) {
 // flat-coloured -- a tiled texture on a 0.05m drawer pull is wasted detail,
 // not an upgrade) just keeps using stdMat()'s flat colour, exactly as
 // before this pass.
+// CC0 Poly Haven textures driven from the surface registry (no GLTF model packs; primitive recipes maintained)
 const MATERIAL_TEXTURES = {
   wood: { normal: true, roughness: true, repeatMeters: 2.0 },
   plaster: { normal: true, roughness: true, repeatMeters: 2.4 },
