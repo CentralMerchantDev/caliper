@@ -648,7 +648,7 @@ async function bootWorld() {
     world = w0
     renderer3d.pushTick(w0); renderer3d.pushTick(w0)
     renderer2d.pushTick(w0); renderer2d.pushTick(w0)
-    $('#world-status').textContent = 'the current shared world -- day 1, tick 0'
+    $('#world-status').textContent = 'the current shared world: day 1, tick 0'
     tickLoop(mod.tick)
   } catch (e) {
     $('#world-status').textContent = 'could not load the world: ' + (e && e.message || e)
@@ -690,15 +690,15 @@ function renderBudget(b) {
     `This month: <b>${money(b.monthlySpentUsd)}</b> / ${money(b.monthlyCapUsd)} &nbsp;·&nbsp; ` +
     `Live runs left today: <b>${b.dailyLiveRunsPerIp}</b> (per IP)`
   $('#control-grid').innerHTML = [
-    ['Per-run ceiling, data edit', money(b.perRunCeilingUsdDataEdit), 'Applies once a plan’s change is expressible as a data edit -- a placement, a colour or position override, a surface change. Tracks that path’s real worst case closely on purpose.'],
-    ['Per-run ceiling, source edit', money(b.perRunCeilingUsdSourceEdit), 'Applies before a plan’s path is known, and to any change that genuinely needs new simulation logic -- a full-file rewrite, still priced at its own worst case.'],
+    ['Per-run ceiling, data edit', money(b.perRunCeilingUsdDataEdit), 'Applies once a plan’s change is expressible as a data edit: a placement, a colour or position override, a surface change. Tracks that path’s real worst case closely on purpose.'],
+    ['Per-run ceiling, source edit', money(b.perRunCeilingUsdSourceEdit), 'Applies before a plan’s path is known, and to any change that genuinely needs new simulation logic: a full-file rewrite, still priced at its own worst case.'],
     ['Daily cap, both vendors', money(b.dailyCapUsd), 'Anthropic and OpenAI spend both count toward this one ceiling, checked before a run starts.'],
     ['Weekly checkpoint', money(b.weeklyCapUsd), "A burst that clears the daily cap on day one still can't run away across a week."],
     ['Monthly backstop', money(b.monthlyCapUsd), "So a bad week can't take the whole month."],
-    ['Live runs / day / IP', b.dailyLiveRunsPerIp, 'Bypassable only with a valid unlock code -- never raised for everyone to cover that case.'],
+    ['Live runs / day / IP', b.dailyLiveRunsPerIp, 'Bypassable only with a valid unlock code. It is never raised for everyone to cover that case.'],
     ['Max concurrent runs', b.maxConcurrentRuns, 'Bounds a worst-case simultaneous spend burst.'],
     ['Free-form input guard', '500 chars', 'Length-limited and screened for patterns used to force excessive output. Checked before the per-IP limit even counts it.'],
-    ['Spend counter', 'Durable Object', 'Atomic reserve-then-reconcile -- a cap that can be raced is not a cap.'],
+    ['Spend counter', 'Durable Object', 'Atomic reserve-then-reconcile. A cap that can be raced is not a cap.'],
   ].map(([lab, val, desc]) => `<div class="control-card"><span class="lab">${esc(lab)}</span><span class="val">${esc(val)}</span><p>${esc(desc)}</p></div>`).join('')
 }
 function loadBudget() {
@@ -823,9 +823,9 @@ function startStatusRotation(el, stageKey) {
     textEl.textContent = lines[i]
     const elapsedSec = (performance.now() - start) / 1000
     if (elapsedSec > 60) {
-      noteEl.textContent = `Still going after ${Math.round(elapsedSec)}s -- longer than this stage normally takes. If it doesn't resolve shortly, the run has a server-side timeout and will report a clear error rather than hang indefinitely.`
+      noteEl.textContent = `Still going after ${Math.round(elapsedSec)}s. This is longer than the stage normally takes. If it doesn't resolve soon, the run has a server-side timeout and will report a clear error instead of hanging.`
     } else if (elapsedSec > 18) {
-      noteEl.textContent = `${Math.round(elapsedSec)}s in -- still working, not stuck.`
+      noteEl.textContent = `${Math.round(elapsedSec)}s in. Still working, not stuck.`
     }
   }, 3500)
   return () => clearInterval(timer)
@@ -931,7 +931,7 @@ function renderRecordedStage(s) {
     const label = s.stage === 'implement' ? 'Implemented' : 'Fixed'
     const opsText = (s.ops || []).map(o => o.op).join(', ')
     return `<div class="stage-heading"><h4>${label}</h4><span class="stage-outcome">${esc(opsText)}</span></div>` +
-      `<p style="color:var(--muted);font-size:13.5px;margin:0 0 8px">A structured world edit -- a small, validated data change applied to the world's source, not a regenerated file.</p>` +
+      `<p style="color:var(--muted);font-size:13.5px;margin:0 0 8px">A structured world edit: a small, validated data change applied to the world's source. No file is regenerated.</p>` +
       `<div class="stage-footer">${s.inputTokens} in / ${s.outputTokens} out tokens (estimated) · ${money(s.costUsd)} · ${s.wallTimeMs}ms</div>`
   }
   if (s.stage === 'verify' || s.stage.startsWith('reverify')) {
@@ -1089,11 +1089,11 @@ function renderBar() {
     // button), so this isn't the only thing stopping it.
     const isPermanent = barState.errorKind === 'permanent'
     html = `
-      <span class="bar-kicker">${isPermanent ? 'Something failed -- this needs a code fix, not a retry' : 'Something failed -- nothing is lost'}</span>
+      <span class="bar-kicker">${isPermanent ? 'Something failed: needs a code fix, not a retry' : 'Something failed: nothing is lost'}</span>
       <p class="bar-ask"><strong>${esc(barState.erroredAtStage)}</strong> failed: ${esc(barState.errorMessage)}</p>
       <p class="bar-note">${money(barState.costSoFarUsd)} spent so far is saved.${isPermanent
-        ? ' The API rejected this request outright -- retrying it unchanged would fail the exact same way, so that option isn\'t offered. Abandon ends the run for good.'
-        : ' Retry resumes from there -- it does not re-pay for anything that already succeeded. Abandon ends the run for good.'}</p>
+        ? ' The API rejected this request outright. Retrying it unchanged would fail the same way, so that option is not offered. Abandon ends the run for good.'
+        : ' Retry resumes from there. It does not re-pay for anything that already succeeded. Abandon ends the run for good.'}</p>
       <div class="bar-row">
         ${isPermanent ? '' : '<button class="btn" id="bar-retry" type="button">Retry</button>'}
         <button class="btn btn-outline" id="bar-abandon" type="button">Abandon</button>
@@ -1106,7 +1106,7 @@ function renderBar() {
     // isn't surprised by a run picking back up on its own.
     html = `
       <span class="bar-kicker">You have a run in progress from earlier</span>
-      <p class="bar-ask">"${esc(barState.changeRequest)}" -- ${money(barState.costSoFarUsd)} already spent, saved and waiting.</p>
+      <p class="bar-ask">"${esc(barState.changeRequest)}": ${money(barState.costSoFarUsd)} already spent, saved and waiting.</p>
       <div class="bar-row">
         <button class="btn" id="bar-resume" type="button">Resume it</button>
         <button class="btn btn-outline" id="bar-discard" type="button">Start fresh instead</button>
@@ -1288,9 +1288,9 @@ function connect(url) {
     stopStatus()
     const d = JSON.parse(ev.data)
     const isPermanent = d.errorKind === 'permanent'
-    const b = stageBlock(log, 's-stage-error-' + Date.now(), isPermanent ? 'Failed -- needs a code fix' : 'Failed -- not lost')
+    const b = stageBlock(log, 's-stage-error-' + Date.now(), isPermanent ? 'Failed: needs a code fix' : 'Failed: not lost')
     b.classList.add('error'); b.classList.remove('active')
-    b.innerHTML += `<p style="margin:0"><strong>${esc(d.erroredAtStage)}</strong> failed: ${esc(d.errorMessage)}</p><p style="margin:6px 0 0;color:var(--ink2)">${money(d.costSoFarUsd)} spent so far is saved${isPermanent ? '.' : ' -- retrying resumes from here, it does not re-pay for what already succeeded.'}</p>`
+    b.innerHTML += `<p style="margin:0"><strong>${esc(d.erroredAtStage)}</strong> failed: ${esc(d.errorMessage)}</p><p style="margin:6px 0 0;color:var(--ink2)">${money(d.costSoFarUsd)} spent so far is saved${isPermanent ? '.' : '. Retrying resumes from here. It does not re-pay for what already succeeded.'}</p>`
     barState = { kind: 'stage-error', erroredAtStage: d.erroredAtStage, errorMessage: d.errorMessage, costSoFarUsd: d.costSoFarUsd, errorKind: d.errorKind }
     renderBar()
   })
@@ -1530,7 +1530,7 @@ function connect(url) {
       `<tr><td><strong>Total</strong></td><td class="num mono headline-cell">${money(d.totalCostUsd)}</td><td></td></tr></tbody></table></div>` +
       `<p style="margin-top:8px">Review found <strong>${d.reviewFoundMaterial} material</strong> and <strong>${d.reviewFoundNits} nit</strong> finding(s)` +
       (d.planGateReplyCount ? `, after ${d.planGateReplyCount} Gate 1 repl${d.planGateReplyCount === 1 ? 'y' : 'ies'}` : '') + `.` +
-      (d.fixApplied ? ` A fix round ran and ${d.fixHeld ? 'held.' : 'did not fully hold -- disclosed above, not hidden.'}` : '') + `</p>` +
+      (d.fixApplied ? ` A fix round ran and ${d.fixHeld ? 'held.' : 'did not fully hold. That is disclosed above, not hidden.'}` : '') + `</p>` +
       `<div class="summary-line">${(d.totalWallTimeMs / 1000).toFixed(1)}s total wall time</div>`
   })
 
@@ -1578,7 +1578,7 @@ function connect(url) {
       stopStatus()
       const b = stageBlock(log, 's-error-' + Date.now(), 'Stopped')
       b.classList.add('error'); b.classList.remove('active')
-      b.innerHTML += `<p style="margin:0">The connection kept dropping after ${MAX_RECONNECT_ATTEMPTS} reconnect attempts. Nothing is lost -- this run is still saved.</p>
+      b.innerHTML += `<p style="margin:0">The connection kept dropping after ${MAX_RECONNECT_ATTEMPTS} reconnect attempts. Nothing is lost. This run is still saved.</p>
         <button class="btn btn-outline" id="manual-reconnect-${currentRunId}" type="button" style="margin-top:8px">Try reconnecting again</button>`
       $(`#manual-reconnect-${currentRunId}`).addEventListener('click', () => { reconnectAttempts = 0; b.remove(); resumeCurrent() })
       loadBudget()
@@ -1587,7 +1587,7 @@ function connect(url) {
     const delay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempts, RECONNECT_DELAYS_MS.length - 1)]
     reconnectAttempts++
     const b = stageBlock(log, 's-reconnect-' + Date.now(), 'Reconnecting…')
-    b.innerHTML += `<p style="margin:0;color:var(--muted)">The connection dropped. Nothing was lost -- this run is saved server-side. Reconnecting in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})…</p>`
+    b.innerHTML += `<p style="margin:0;color:var(--muted)">The connection dropped. Nothing was lost. This run is saved server-side. Reconnecting in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})…</p>`
     setTimeout(() => { b.remove(); resumeCurrent() }, delay)
   })
 }
