@@ -462,6 +462,9 @@ class Renderer3D {
     this._currentHour = 12;
     this._dropAnimItems = [];
     this._knownPlacementKeys = new Set();
+    this._roofsByBuildingId = {};
+    this._frontFacadesByBuildingId = {};
+    this._openedBuildingId = null;
 
     this._initScene();
     this._orbit = { base: 0.62, delta: 0, pitch: 0.58, dragging: false, startX: 0, startY: 0, startDelta: 0, startPitch: 0.58 };
@@ -837,10 +840,14 @@ class Renderer3D {
 
     // Stone forge yard plinth
     addBox(forge, [11, 0.3, 9], [0, 0, 0], 0x57534e);
-    // Timber framing & walls
-    addBox(forge, [7.5, 4.2, 0.4], [0, 2.1, -3.8], 0x78350f);
-    addBox(forge, [0.4, 4.2, 7.5], [-3.8, 2.1, 0], 0x78350f);
-    this._addPeakedRoof(forge, 8.5, 8.5, 4.1, PALETTE.roofTimber);
+    // Timber framing & walls (complete 4 sides with covered archway)
+    addBox(forge, [8.0, 4.2, 0.35], [0, 2.1, -3.8], 0x78350f);
+    addBox(forge, [0.35, 4.2, 7.6], [-3.8, 2.1, 0], 0x78350f);
+    addBox(forge, [0.35, 4.2, 7.6], [3.8, 2.1, 0], 0x78350f);
+    addBox(forge, [2.4, 4.2, 0.35], [-2.7, 2.1, 3.8], 0x78350f);
+    addBox(forge, [2.4, 4.2, 0.35], [2.7, 2.1, 3.8], 0x78350f);
+    addBox(forge, [3.0, 1.0, 0.35], [0, 3.7, 3.8], PALETTE.timberDark);
+    this._addPeakedRoof(forge, 8.8, 8.8, 4.1, PALETTE.roofTimber);
 
     // Tall smoking stone chimney stack
     addBox(forge, [1.4, 7.5, 1.4], [-2.8, 3.75, -2.8], 0x3f3f46, 0.95);
@@ -1141,21 +1148,40 @@ class Renderer3D {
     const roof = new THREE.Group();
     roof.visible = this._roofsVisible;
     const mat = stdMat({ color, roughness: 0.82 });
+
+    const peakHeight = Math.max(1.35, Math.min(2.8, w * 0.38));
+    const halfW = w / 2 + 0.32;
+    const slopeAngle = Math.atan2(peakHeight, halfW);
+    const slopeLen = Math.hypot(peakHeight, halfW) + 0.22;
+    const depthWithOverhang = d + 0.75;
+
+    // Pitch panels: -side * slopeAngle ensures a peaked /\ roof shape
     [-1, 1].forEach((side) => {
-      const panel = new THREE.Mesh(new THREE.BoxGeometry(w * 0.58, 0.28, d + 0.8), mat);
-      panel.position.set(side * w * 0.23, y + 1.15, 0);
-      panel.rotation.z = side * 0.58;
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(slopeLen, 0.2, depthWithOverhang), mat);
+      panel.position.set(side * (halfW * 0.5), y + peakHeight * 0.5, 0);
+      panel.rotation.z = -side * slopeAngle;
       panel.castShadow = true;
       roof.add(panel);
     });
-    // Gable end infill
-    const gableMat = stdMat({ color: PALETTE.timberDark, roughness: 0.85 });
+
+    // Solid timber ridge cap running along the peak
+    const ridge = new THREE.Mesh(
+      new RoundedBoxGeometry(0.26, 0.18, depthWithOverhang + 0.06, 1, 0.04),
+      stdMat({ color: PALETTE.timberDark, roughness: 0.85 })
+    );
+    ridge.position.set(0, y + peakHeight + 0.04, 0);
+    ridge.castShadow = true;
+    roof.add(ridge);
+
+    // Front and back timber gable infill
+    const gableMat = stdMat({ color: PALETTE.timberDark, roughness: 0.85, side: THREE.DoubleSide });
     [-1, 1].forEach((gz) => {
       const gableGeo = new THREE.BufferGeometry();
+      const zPos = gz * (d / 2 + 0.02);
       const vertices = new Float32Array([
-        -w * 0.48, y, gz * (d / 2 + 0.05),
-        w * 0.48, y, gz * (d / 2 + 0.05),
-        0, y + 1.6, gz * (d / 2 + 0.05),
+        -halfW, y, zPos,
+        halfW, y, zPos,
+        0, y + peakHeight, zPos,
       ]);
       gableGeo.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
       gableGeo.computeVertexNormals();
@@ -1178,7 +1204,37 @@ class Renderer3D {
     for (const roof of this._roofGroups) {
       roof.visible = this._roofsVisible;
     }
+    for (const id in this._frontFacadesByBuildingId) {
+      const front = this._frontFacadesByBuildingId[id];
+      if (front) front.visible = this._roofsVisible;
+    }
+    this._openedBuildingId = null;
     return this._roofsVisible;
+  }
+
+  openBuildingInterior(buildingId) {
+    this._openedBuildingId = buildingId;
+    for (const id in this._roofsByBuildingId) {
+      const roof = this._roofsByBuildingId[id];
+      const front = this._frontFacadesByBuildingId[id];
+      if (id === buildingId) {
+        if (roof) roof.visible = false;
+        if (front) front.visible = false;
+      } else {
+        if (roof) roof.visible = this._roofsVisible;
+        if (front) front.visible = this._roofsVisible;
+      }
+    }
+  }
+
+  closeAllBuildingInteriors() {
+    this._openedBuildingId = null;
+    for (const id in this._roofsByBuildingId) {
+      const roof = this._roofsByBuildingId[id];
+      const front = this._frontFacadesByBuildingId[id];
+      if (roof) roof.visible = this._roofsVisible;
+      if (front) front.visible = this._roofsVisible;
+    }
   }
 
   _buildBuildingShell(group, building, w, d) {
@@ -1199,32 +1255,32 @@ class Renderer3D {
     floor.receiveShadow = true;
     group.add(floor);
 
+    const wallH = 2.4;
+    const wallY = wallH / 2 - 0.15;
+    const wallThick = 0.18;
     const wallMaterialKey = surfaceMaterialKey(this._surfaces, "wall", "plaster");
-    const wallMat = texturedMat(wallMaterialKey, surfaceColor(this._surfaces, "wall", PALETTE.wall), (w + d) / 2, 2.3, { roughness: 0.85, metalness: 0.0 });
-    const backWall = new THREE.Mesh(new RoundedBoxGeometry(w, 2.3, 0.14, 2, 0.05), wallMat);
-    backWall.position.set(0, 1.0, -d / 2);
-    backWall.receiveShadow = true;
-    group.add(backWall);
-    const leftWall = new THREE.Mesh(new RoundedBoxGeometry(0.14, 2.3, d, 2, 0.05), wallMat);
-    leftWall.position.set(-w / 2, 1.0, 0);
-    leftWall.receiveShadow = true;
-    group.add(leftWall);
-
+    const wallMat = texturedMat(wallMaterialKey, surfaceColor(this._surfaces, "wall", PALETTE.wall), (w + d) / 2, wallH, { roughness: 0.85, metalness: 0.0 });
     const sillMat = stdMat({ color: 0x8c7a65, roughness: 0.85 });
     const frameMat = stdMat({ color: 0x4a3b2c, roughness: 0.85 });
     const windowGlowMat = stdMat({
       color: 0xffaa33,
       emissive: 0xffaa33,
-      emissiveIntensity: 0.25,
+      emissiveIntensity: 0.35,
       roughness: 0.4,
       transparent: true,
       opacity: 0.85,
     });
 
+    // 1. Back Wall (z = -d / 2)
+    const backWall = new THREE.Mesh(new RoundedBoxGeometry(w, wallH, wallThick, 2, 0.05), wallMat);
+    backWall.position.set(0, wallY, -d / 2);
+    backWall.receiveShadow = true; backWall.castShadow = true;
+    group.add(backWall);
+
+    // Back Window
     const backSill = new THREE.Mesh(new RoundedBoxGeometry(1.2, 0.06, 0.22, 1, 0.02), sillMat);
     backSill.position.set(0, 1.0, -d / 2 + 0.1);
-    backSill.castShadow = true;
-    group.add(backSill);
+    backSill.castShadow = true; group.add(backSill);
     const backFrame = new THREE.Mesh(new RoundedBoxGeometry(1.1, 0.9, 0.06, 1, 0.02), frameMat);
     backFrame.position.set(0, 1.45, -d / 2 + 0.04);
     group.add(backFrame);
@@ -1232,10 +1288,16 @@ class Renderer3D {
     windowPane.position.set(0, 1.45, -d / 2 + 0.08);
     group.add(windowPane);
 
+    // 2. Left Wall (x = -w / 2)
+    const leftWall = new THREE.Mesh(new RoundedBoxGeometry(wallThick, wallH, d, 2, 0.05), wallMat);
+    leftWall.position.set(-w / 2, wallY, 0);
+    leftWall.receiveShadow = true; leftWall.castShadow = true;
+    group.add(leftWall);
+
+    // Left Window
     const leftSill = new THREE.Mesh(new RoundedBoxGeometry(0.22, 0.06, 1.0, 1, 0.02), sillMat);
     leftSill.position.set(-w / 2 + 0.1, 1.0, 0);
-    leftSill.castShadow = true;
-    group.add(leftSill);
+    leftSill.castShadow = true; group.add(leftSill);
     const leftFrame = new THREE.Mesh(new RoundedBoxGeometry(0.06, 0.9, 0.9, 1, 0.02), frameMat);
     leftFrame.position.set(-w / 2 + 0.04, 1.45, 0);
     group.add(leftFrame);
@@ -1244,12 +1306,75 @@ class Renderer3D {
     sidePane.position.set(-w / 2 + 0.08, 1.45, 0);
     group.add(sidePane);
 
+    // 3. Right Wall (x = +w / 2)
+    const rightWall = new THREE.Mesh(new RoundedBoxGeometry(wallThick, wallH, d, 2, 0.05), wallMat);
+    rightWall.position.set(w / 2, wallY, 0);
+    rightWall.receiveShadow = true; rightWall.castShadow = true;
+    group.add(rightWall);
+
+    // Right Window
+    const rightFrame = new THREE.Mesh(new RoundedBoxGeometry(0.06, 0.9, 0.9, 1, 0.02), frameMat);
+    rightFrame.position.set(w / 2 - 0.04, 1.45, 0);
+    group.add(rightFrame);
+    const rightPane = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.75), windowGlowMat);
+    rightPane.rotation.y = -Math.PI / 2;
+    rightPane.position.set(w / 2 - 0.08, 1.45, 0);
+    group.add(rightPane);
+
+    // 4. Front Facade Group (Opens to reveal interior floor plan when inspected!)
+    const frontFacade = new THREE.Group();
+    frontFacade.visible = this._roofsVisible;
+    const doorW = Math.min(1.4, w * 0.32);
+    const doorH = 1.95;
+    const sideW = (w - doorW) / 2;
+
+    const frontLeft = new THREE.Mesh(new RoundedBoxGeometry(sideW, wallH, wallThick, 2, 0.05), wallMat);
+    frontLeft.position.set(-(w / 2 - sideW / 2), wallY, d / 2);
+    frontLeft.receiveShadow = true; frontLeft.castShadow = true;
+    frontFacade.add(frontLeft);
+
+    const frontRight = new THREE.Mesh(new RoundedBoxGeometry(sideW, wallH, wallThick, 2, 0.05), wallMat);
+    frontRight.position.set(w / 2 - sideW / 2, wallY, d / 2);
+    frontRight.receiveShadow = true; frontRight.castShadow = true;
+    frontFacade.add(frontRight);
+
+    const lintelH = wallH - doorH;
+    const lintel = new THREE.Mesh(new RoundedBoxGeometry(doorW + 0.1, lintelH, wallThick + 0.04, 1, 0.02), stdMat({ color: PALETTE.timberDark, roughness: 0.85 }));
+    lintel.position.set(0, doorH + lintelH / 2 - 0.15, d / 2);
+    lintel.castShadow = true;
+    frontFacade.add(lintel);
+
+    const doorMat = stdMat({ color: PALETTE.woodDark, roughness: 0.75 });
+    const doorLeaf = new THREE.Mesh(new RoundedBoxGeometry(doorW * 0.85, doorH * 0.96, 0.06, 1, 0.02), doorMat);
+    doorLeaf.position.set(-doorW * 0.18, doorH / 2 - 0.15, d / 2 + 0.05);
+    doorLeaf.rotation.y = -0.28;
+    doorLeaf.castShadow = true;
+    frontFacade.add(doorLeaf);
+
+    group.add(frontFacade);
+    this._frontFacadesByBuildingId[building.id] = frontFacade;
+
+    // 5. Corner Timber Posts (4 Corners)
+    [-w / 2, w / 2].forEach((px) => {
+      [-d / 2, d / 2].forEach((pz) => {
+        const post = new THREE.Mesh(new RoundedBoxGeometry(0.22, wallH + 0.1, 0.22, 1, 0.03), stdMat({ color: PALETTE.timberDark, roughness: 0.85 }));
+        post.position.set(px, wallY, pz);
+        post.castShadow = true;
+        group.add(post);
+      });
+    });
+
+    // 6. Peaked Gabled Roof on this building!
+    const roofColor = building.type === "workshop" ? PALETTE.roofSlate : building.type === "shop" ? PALETTE.roofTerracotta : PALETTE.roofTimber;
+    const roof = this._addPeakedRoof(group, w, d, wallH - 0.15, roofColor);
+    this._roofsByBuildingId[building.id] = roof;
+
     if (building.type === "shop") {
       const deck = new THREE.Mesh(
-        new RoundedBoxGeometry(w + 0.4, 0.08, 1.2, 1, 0.02),
+        new RoundedBoxGeometry(w + 0.4, 0.08, 1.4, 1, 0.02),
         stdMat({ color: 0x78350f, roughness: 0.8 })
       );
-      deck.position.set(0, -0.04, d / 2 + 0.6);
+      deck.position.set(0, -0.04, d / 2 + 0.7);
       deck.receiveShadow = true;
       group.add(deck);
 
@@ -1270,18 +1395,18 @@ class Renderer3D {
       this._pointLights.push(lanternLight);
     } else if (building.type === "workshop") {
       const chimney = new THREE.Mesh(
-        new RoundedBoxGeometry(0.65, 2.8, 0.65, 1, 0.05),
+        new RoundedBoxGeometry(0.75, 3.4, 0.75, 1, 0.05),
         stdMat({ color: PALETTE.stoneDark, roughness: 0.9 })
       );
-      chimney.position.set(-w / 2 + 0.35, 1.4, -d / 2 + 0.35);
+      chimney.position.set(-w / 2 + 0.4, 1.7, -d / 2 + 0.4);
       chimney.castShadow = true;
       group.add(chimney);
 
       const anvil = new THREE.Mesh(
-        new RoundedBoxGeometry(0.35, 0.35, 0.22, 1, 0.02),
+        new RoundedBoxGeometry(0.38, 0.4, 0.24, 1, 0.02),
         stdMat({ color: 0x334155, roughness: 0.4, metalness: 0.8 })
       );
-      anvil.position.set(w / 2 + 0.4, 0.18, 0);
+      anvil.position.set(w / 2 + 0.45, 0.2, 0);
       anvil.castShadow = true;
       group.add(anvil);
     } else {
@@ -1311,7 +1436,7 @@ class Renderer3D {
     this._buildSignPost(group, building.label, w / 2 + 0.3, d / 2 - 0.3, trimColor);
 
     const isHouseOne = building.id === "dwelling-1";
-    const interiorLight = new THREE.PointLight(isHouseOne ? 0xffaa44 : 0xffb066, isHouseOne ? 0.8 : 0.25, isHouseOne ? 6 : w * 0.9, 2);
+    const interiorLight = new THREE.PointLight(isHouseOne ? 0xffaa44 : 0xffb066, isHouseOne ? 0.8 : 0.4, isHouseOne ? 7 : w * 1.1, 2);
     interiorLight.position.set(0, 1.9, 0);
     interiorLight.userData.baseIntensity = isHouseOne ? 0.8 : 0.25;
     group.add(interiorLight);
@@ -1743,6 +1868,7 @@ class Renderer3D {
   }
 
   focusDistrict(districtName) {
+    this.closeAllBuildingInteriors();
     const d = this._districtTargets[districtName];
     if (d) {
       this.focusOn(d.pos, d.dist);
@@ -1762,10 +1888,12 @@ class Renderer3D {
 
   focusParcel(parcelId) {
     if (this._districtTargets[parcelId]) {
+      this.closeAllBuildingInteriors();
       this.focusDistrict(parcelId);
       return;
     }
     if (parcelId === "outdoors" || !parcelId) {
+      this.closeAllBuildingInteriors();
       this.focusDistrict("town");
       return;
     }
@@ -1773,7 +1901,9 @@ class Renderer3D {
     if (group) {
       const pos = group.position.clone();
       pos.y = 1.0;
-      this.focusOn(pos, 11.5);
+      this.focusOn(pos, 10.5);
+      // Reveal the interior floor plan of this building!
+      this.openBuildingInterior(parcelId);
     } else {
       this.resetView();
     }
@@ -1804,6 +1934,7 @@ class Renderer3D {
     this._cameraAnimStartTime = performance.now();
     this._orbit.delta = 0;
     this._orbit.pitch = 0.58;
+    this.closeAllBuildingInteriors();
   }
 
   rotateCamera(deltaAngle) {
@@ -2192,6 +2323,12 @@ export class WorldRenderer {
   }
   showCollisionBox(targetLocation, boxSize) {
     if (this._impl.showCollisionBox) this._impl.showCollisionBox(targetLocation, boxSize);
+  }
+  openBuildingInterior(buildingId) {
+    if (this._impl.openBuildingInterior) this._impl.openBuildingInterior(buildingId);
+  }
+  closeAllBuildingInteriors() {
+    if (this._impl.closeAllBuildingInteriors) this._impl.closeAllBuildingInteriors();
   }
   get nextWorld() {
     return this._impl.nextWorld;
