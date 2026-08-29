@@ -242,3 +242,65 @@ test("guardrail: one invalid op rejects the WHOLE edit -- no partial application
   const world = loadWorld(SIM_BASELINE_SOURCE);
   assert.ok(!world.placements.some((p: any) => p.id === "lamp-3"));
 });
+
+// ---------------------------------------------------------------------
+// Fail-closed on the splice mechanism itself: this codebase has eight
+// recorded instances, across other files, of a missing signal being read
+// as a pass rather than a failure (see grounding.ts/criteria.ts/
+// changePipeline.ts's own guardrail tests for that same class of bug in
+// other places). applyWorldEdit locates its target regions by exact
+// sentinel-comment string search (spliceBlock, worldEdit.ts) -- if a
+// sentinel is missing or corrupted (hand-edited simBaseline.ts, a bad
+// merge, anything), the applier must throw and be rejected by
+// runValidatedWorldEdit, never silently skip the splice, silently return
+// the untouched source as if it had applied, or produce a text-mangled
+// result. Constructed by corrupting the REAL SIM_BASELINE_SOURCE, not a
+// hand-typed stand-in -- the real sentinel strings are the exact ones
+// applyWorldEdit searches for.
+// ---------------------------------------------------------------------
+
+test("guardrail: a missing OBJECT_TYPES end sentinel fails the edit, not silently applies it", () => {
+  const corrupted = SIM_BASELINE_SOURCE.replace("/*@DATA:OBJECT_TYPES:END*/", "");
+  assert.ok(!corrupted.includes("/*@DATA:OBJECT_TYPES:END*/"), "the corruption itself must have taken -- otherwise this test proves nothing");
+  const edit: WorldEdit = { ops: [{ op: "addPlacement", placement: { id: "lamp-3", type: "lampPost", location: "outdoors", plot: { x: 1.8, y: 1.8 } } }] };
+  const result = runValidatedWorldEdit(corrupted, edit);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /sentinel markers.*not found/);
+});
+
+test("guardrail: a missing PLACEMENTS begin sentinel fails the edit, not silently applies it", () => {
+  const corrupted = SIM_BASELINE_SOURCE.replace("/*@DATA:PLACEMENTS:BEGIN*/", "");
+  assert.ok(!corrupted.includes("/*@DATA:PLACEMENTS:BEGIN*/"));
+  const edit: WorldEdit = { ops: [{ op: "addPlacement", placement: { id: "lamp-3", type: "lampPost", location: "outdoors", plot: { x: 1.8, y: 1.8 } } }] };
+  const result = runValidatedWorldEdit(corrupted, edit);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /sentinel markers.*not found/);
+});
+
+test("guardrail: a missing SURFACES sentinel fails the edit, not silently applies it", () => {
+  const corrupted = SIM_BASELINE_SOURCE.replace("/*@DATA:SURFACES:BEGIN*/", "");
+  const edit: WorldEdit = { ops: [{ op: "setSurfaceField", surfaceKey: "ground", field: "color", value: "#3a4a2e" }] };
+  const result = runValidatedWorldEdit(corrupted, edit);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /sentinel markers.*not found/);
+});
+
+test("guardrail: swapped BEGIN/END order (END appears before BEGIN) fails the edit, not silently applies it", () => {
+  // A corruption a naive indexOf-only check could miss: both markers are
+  // PRESENT, just in the wrong order -- spliceBlock explicitly checks
+  // endIdx < beginIdx, not just "both markers exist somewhere".
+  const corrupted = SIM_BASELINE_SOURCE
+    .replace("/*@DATA:OBJECT_TYPES:BEGIN*/", "\0TEMP_END\0")
+    .replace("/*@DATA:OBJECT_TYPES:END*/", "/*@DATA:OBJECT_TYPES:BEGIN*/")
+    .replace("\0TEMP_END\0", "/*@DATA:OBJECT_TYPES:END*/");
+  const edit: WorldEdit = { ops: [{ op: "addPlacement", placement: { id: "lamp-3", type: "lampPost", location: "outdoors", plot: { x: 1.8, y: 1.8 } } }] };
+  const result = runValidatedWorldEdit(corrupted, edit);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /sentinel markers.*not found/);
+});
+
+test("control: the same edit against the REAL, uncorrupted source still succeeds -- these guardrails fire on real corruption, not on the applier itself being broken", () => {
+  const edit: WorldEdit = { ops: [{ op: "addPlacement", placement: { id: "lamp-3", type: "lampPost", location: "outdoors", plot: { x: 1.8, y: 1.8 } } }] };
+  const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, edit);
+  assert.equal(result.ok, true);
+});
