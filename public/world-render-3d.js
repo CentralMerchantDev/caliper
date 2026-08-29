@@ -831,6 +831,59 @@ class Renderer3D {
     // Town Square Lampposts
     [[-10.5, 0], [10.5, 0], [0, -10.5], [0, 10.5]].forEach(([lx, lz]) => addLantern(town, lx, lz));
 
+    // Civic Town Guildhall & Meeting Hall (Northern anchor of the square)
+    const guildhall = new THREE.Group();
+    guildhall.position.set(0, 0, -14.5);
+    // Stone foundation & arcade plinth
+    addBox(guildhall, [14.0, 0.35, 8.2], [0, -0.15, 0], 0x57534e);
+    // Solid back and side walls
+    addBox(guildhall, [13.4, 4.8, 0.4], [0, 2.4, -3.8], 0x475569); // Back wall
+    addBox(guildhall, [0.4, 4.8, 7.6], [-6.5, 2.4, 0], 0x475569);  // Left wall
+    addBox(guildhall, [0.4, 4.8, 7.6], [6.5, 2.4, 0], 0x475569);   // Right wall
+    // Front stone colonnade arcade (4 arches facing the plaza)
+    [-5, -1.8, 1.8, 5].forEach(colX => {
+      addBox(guildhall, [0.65, 3.4, 0.65], [colX, 1.7, 3.8], 0x64748b);
+    });
+    addBox(guildhall, [13.4, 1.4, 0.65], [0, 4.1, 3.8], 0x475569); // Upper front wall
+    // Double entrance oak doors
+    addBox(guildhall, [2.2, 2.6, 0.12], [0, 1.3, 3.75], 0x3f2212);
+    // Central Belfry Bell Tower with cupola
+    addBox(guildhall, [2.4, 4.2, 2.4], [0, 6.8, 0], 0x334155);
+    // Bell tower peaked spire
+    this._addPeakedRoof(guildhall, 14.4, 8.6, 4.8, PALETTE.roofSlate);
+    town.add(guildhall);
+
+    // =========================================================================
+    // ARTERIAL HIGHWAY SPINE (Connecting all 5 districts organically)
+    // =========================================================================
+    const roads = new THREE.Group();
+    const roadMat = stdMat({ color: 0x94a3b8, roughness: 0.96 });
+    // South arterial road (Town Square -> Riverfront Docks)
+    const southRoad = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 24), roadMat);
+    southRoad.rotation.x = -Math.PI / 2;
+    southRoad.position.set(0, 0.02, 17);
+    southRoad.receiveShadow = true;
+    roads.add(southRoad);
+    // North arterial road (Town Square -> Watchtower Ridge)
+    const northRoad = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 22), roadMat);
+    northRoad.rotation.x = -Math.PI / 2;
+    northRoad.position.set(0, 0.02, -27);
+    northRoad.receiveShadow = true;
+    roads.add(northRoad);
+    // West connector road (Town Square -> Crafting Forge)
+    const westRoad = new THREE.Mesh(new THREE.PlaneGeometry(16, 3.6), roadMat);
+    westRoad.rotation.x = -Math.PI / 2;
+    westRoad.position.set(-13, 0.02, -6);
+    westRoad.receiveShadow = true;
+    roads.add(westRoad);
+    // East connector road (Town Square -> Residential Borough)
+    const eastRoad = new THREE.Mesh(new THREE.PlaneGeometry(14, 3.6), roadMat);
+    eastRoad.rotation.x = -Math.PI / 2;
+    eastRoad.position.set(13, 0.02, 3);
+    eastRoad.receiveShadow = true;
+    roads.add(eastRoad);
+    this.neighbourhoodGroup.add(roads);
+
     // =========================================================================
     // 2. THE CRAFTING QUARTER (Blacksmith Forge)
     // =========================================================================
@@ -885,6 +938,34 @@ class Renderer3D {
     tub.position.set(0.6, 0.35, 2.2);
     tub.castShadow = true;
     forge.add(tub);
+
+    // Artisan Carpentry & Lumber Yard (West of the Forge)
+    const lumberYard = new THREE.Group();
+    lumberYard.position.set(-36, 0, -14);
+    // Open timber shelter posts
+    addBox(lumberYard, [0.22, 3.2, 0.22], [-2.8, 1.6, -2.2], PALETTE.timberDark);
+    addBox(lumberYard, [0.22, 3.2, 0.22], [2.8, 1.6, -2.2], PALETTE.timberDark);
+    addBox(lumberYard, [0.22, 2.7, 0.22], [-2.8, 1.35, 2.2], PALETTE.timberDark);
+    addBox(lumberYard, [0.22, 2.7, 0.22], [2.8, 1.35, 2.2], PALETTE.timberDark);
+    // Slanted shelter roof
+    const shedRoof = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.16, 5.0), stdMat({ color: PALETTE.roofTimber, roughness: 0.85 }));
+    shedRoof.position.set(0, 3.1, 0);
+    shedRoof.rotation.x = 0.12;
+    shedRoof.castShadow = true;
+    lumberYard.add(shedRoof);
+    // Carpentry workbench & timber stock
+    addBox(lumberYard, [2.8, 0.95, 1.2], [0, 0.48, 0], 0x78350f);
+    // Stacked cut logs
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 4; c++) {
+        const log = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 2.4, 8), stdMat({ color: 0x5c3d2e, roughness: 0.9 }));
+        log.rotation.z = Math.PI / 2;
+        log.position.set(-1.8, 0.18 + r * 0.32, -1.2 + c * 0.38);
+        log.castShadow = true;
+        lumberYard.add(log);
+      }
+    }
+    this.neighbourhoodGroup.add(lumberYard);
 
     // =========================================================================
     // 3. THE RESIDENTIAL BOROUGH (Cottages)
@@ -988,6 +1069,25 @@ class Renderer3D {
       cBarrel.castShadow = true;
       docks.add(cBarrel);
     }
+
+    // Riverfront Boatyard & Fishery (West dock area)
+    const boatyard = new THREE.Group();
+    boatyard.position.set(-10, 0.4, 30);
+    // Timber boat-building cradle
+    addBox(boatyard, [0.3, 0.6, 5.0], [-1.2, 0.3, 0], 0x451a03);
+    addBox(boatyard, [0.3, 0.6, 5.0], [1.2, 0.3, 0], 0x451a03);
+    addBox(boatyard, [2.4, 0.2, 0.3], [0, 0.2, -1.8], 0x451a03);
+    addBox(boatyard, [2.4, 0.2, 0.3], [0, 0.2, 1.8], 0x451a03);
+    // Second rowboat resting in cradle
+    const boatFrame = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.0, 4.4, 8, 1, false, 0, Math.PI), stdMat({ color: 0x78350f, roughness: 0.85 }));
+    boatFrame.rotation.z = Math.PI / 2;
+    boatFrame.position.set(0, 0.7, 0);
+    boatyard.add(boatFrame);
+    // Net drying racks
+    addBox(boatyard, [0.12, 2.2, 0.12], [-2.5, 1.1, -1.5], 0x5c3d2e);
+    addBox(boatyard, [0.12, 2.2, 0.12], [-2.5, 1.1, 1.5], 0x5c3d2e);
+    addBox(boatyard, [0.1, 0.1, 3.0], [-2.5, 2.1, 0], 0x5c3d2e);
+    docks.add(boatyard);
     this.neighbourhoodGroup.add(docks);
 
     // Stone-Arch Bridge (West bridge over river, x: -22)
@@ -1078,6 +1178,30 @@ class Renderer3D {
     // Split-rail wooden fences
     addBox(this.neighbourhoodGroup, [18, 0.7, 0.14], [-12, 1.2, -46], 0x78350f);
     addBox(this.neighbourhoodGroup, [18, 0.7, 0.14], [16, 1.2, -46], 0x78350f);
+
+    // Ridge Bakery & Granary (East of Windmill)
+    const bakery = new THREE.Group();
+    bakery.position.set(28, 1.2, -40);
+    // Stone foundation & walls
+    addBox(bakery, [7.4, 0.35, 5.8], [0, -0.15, 0], 0x57534e);
+    addBox(bakery, [7.0, 3.8, 5.4], [0, 1.9, 0], 0x854d0e);
+    this._addPeakedRoof(bakery, 7.8, 6.2, 3.8, PALETTE.roofTerracotta);
+    // Stone chimney
+    addBox(bakery, [0.75, 4.8, 0.75], [2.6, 2.4, -1.8], 0x475569);
+    this._smokeEmitters.push(new THREE.Vector3(30.6, 6.2, -41.8));
+    // Outdoor stone dome wood-fired bread oven
+    addBox(bakery, [1.8, 0.7, 1.8], [-2.2, 0.35, 3.2], 0x57534e);
+    const ovenDome = new THREE.Mesh(
+      new THREE.SphereGeometry(0.8, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      stdMat({ color: 0xb45309, roughness: 0.9 })
+    );
+    ovenDome.position.set(-2.2, 0.7, 3.2);
+    bakery.add(ovenDome);
+    // Glowing bread embers
+    const breadGlow = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.35), stdMat({ color: 0xffaa33, emissive: 0xff8800, emissiveIntensity: 1.8 }));
+    breadGlow.position.set(-2.2, 0.85, 4.02);
+    bakery.add(breadGlow);
+    this.neighbourhoodGroup.add(bakery);
   }
 
   _buildPeripheralForests() {

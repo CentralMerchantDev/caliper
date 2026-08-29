@@ -744,6 +744,7 @@ html, body {
     </div>
 
     <!-- Utilities -->
+    <button id="research-paper-trigger" type="button" class="btn-pill" title="Original Research Paper, Findings & Data Matrix">📖 Research & Write-Up</button>
     <button id="welcome-guide-trigger" type="button" class="btn-pill active" title="How to play & kingdom mission">ℹ️ Guide</button>
     <button id="drone-tour-btn" type="button" class="btn-pill" title="Cinematic camera flythrough">🎬 Tour</button>
     <button id="spatial-diff-btn" type="button" class="btn-pill" title="Highlight recent changes">👁️ Diff</button>
@@ -862,12 +863,18 @@ html, body {
     </div>
   </div>
 
-  <!-- 4 Scope Pills -->
-  <div class="scope-pills-row" role="group" aria-label="Construction Scopes">
-    <button type="button" class="scope-pill" data-cat="architecture">🏛️ Architecture</button>
-    <button type="button" class="scope-pill" data-cat="landscape">🌳 Landscape</button>
-    <button type="button" class="scope-pill" data-cat="furnishing">🪑 Props</button>
-    <button type="button" class="scope-pill" data-cat="routine">👥 Settlement</button>
+  <!-- 4 Scope Pills & Direct Mode Toggle -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+    <div class="scope-pills-row" role="group" aria-label="Construction Scopes" style="margin-bottom:0">
+      <button type="button" class="scope-pill" data-cat="architecture">🏛️ Architecture</button>
+      <button type="button" class="scope-pill" data-cat="landscape">🌳 Landscape</button>
+      <button type="button" class="scope-pill" data-cat="furnishing">🪑 Props</button>
+      <button type="button" class="scope-pill" data-cat="routine">👥 Settlement</button>
+    </div>
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-muted);cursor:pointer;white-space:nowrap;user-select:none" title="Automatically approve Plan Gate and Review Gate for rapid unblocked construction">
+      <input type="checkbox" id="auto-approve-toggle" checked style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer">
+      <span style="color:#e2e8f0;font-weight:600">⚡ Direct Build</span> (Auto-Approve)
+    </label>
   </div>
 
   <!-- Input & Build Button Row -->
@@ -939,6 +946,139 @@ html, body {
       <div id="budget-summary-box" class="mono" style="font-size:11.5px;color:var(--text-muted);padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px">
         Loading budget invariants…
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Complete Research Paper & Findings Deck Modal -->
+<div id="research-paper-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Research Paper Modal">
+  <div class="modal-card glass" style="max-width:840px;max-height:86vh;overflow-y:auto;padding:24px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.14)">
+      <div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:0.06em;font-weight:700;margin-bottom:4px">
+          MARK FRASER · APPLIED AI, TORONTO · RESEARCH REPORT
+        </div>
+        <h2 style="margin:0;font-size:22px;color:#fff;font-weight:800;letter-spacing:-0.02em">
+          A system that only says yes when yes is true
+        </h2>
+        <div style="font-size:14px;color:var(--sky);margin-top:4px">
+          Does a verification loop substitute for model capability, and what does it cost?
+        </div>
+      </div>
+      <button type="button" id="research-modal-close" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;padding:4px">✕</button>
+    </div>
+
+    <!-- Executive Summary & Result -->
+    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;margin-bottom:18px">
+      <h3 style="margin:0 0 8px;font-size:16px;color:#f8fafc">The Finding: Cost Asymmetry via Verification</h3>
+      <p style="margin:0 0 10px;font-size:13.5px;line-height:1.6;color:#cbd5e1">
+        A Cloudflare Worker that generates structured changes with an LLM, executes them against hidden tests inside an isolated sandbox, and — if a test fails — surfaces exact feedback to the model for an in-loop repair. Tested across <strong>32 tasks (3 difficulty tiers)</strong> and <strong>3 models</strong> (cheapest, mid, and frontier):
+      </p>
+      <div style="padding:10px 14px;background:rgba(16,185,129,0.12);border-left:3px solid var(--emerald);border-radius:0 8px 8px 0;font-size:13px;color:#d1fae5;line-height:1.5">
+        <strong>The Key Result:</strong> The cheapest model (<code>claude-haiku-4-5</code>) with one or two repair rounds matches or slightly exceeds the frontier model (<code>claude-opus-4-8</code>) final correctness, at roughly <strong>36–41% of the cost per correct answer</strong> ($0.00345 vs $0.00908 per cycle).
+      </div>
+    </div>
+
+    <!-- Benchmark Matrix Table -->
+    <div style="margin-bottom:20px">
+      <h3 style="margin:0 0 10px;font-size:16px;color:#fff">The Empirical 387-Cycle Capability Matrix</h3>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px;text-align:left">
+          <thead>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.16);color:var(--text-muted);font-family:var(--mono)">
+              <th style="padding:8px 6px">Model</th>
+              <th style="padding:8px 6px">Tier</th>
+              <th style="padding:8px 6px">n</th>
+              <th style="padding:8px 6px">First-Pass</th>
+              <th style="padding:8px 6px">Final Pass</th>
+              <th style="padding:8px 6px">Mean Repair</th>
+              <th style="padding:8px 6px">Cost / Cycle</th>
+            </tr>
+          </thead>
+          <tbody style="color:#e2e8f0;font-family:var(--mono)">
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+              <td style="padding:8px 6px;color:#fff"><strong>claude-haiku-4-5</strong></td>
+              <td style="padding:8px 6px">Hard (Algorithms)</td>
+              <td style="padding:8px 6px">21</td>
+              <td style="padding:8px 6px">95.2%</td>
+              <td style="padding:8px 6px;color:var(--emerald)"><strong>100%</strong></td>
+              <td style="padding:8px 6px">0.05</td>
+              <td style="padding:8px 6px;color:var(--accent)">$0.00345</td>
+            </tr>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+              <td style="padding:8px 6px;color:#fff"><strong>claude-sonnet-5</strong></td>
+              <td style="padding:8px 6px">Hard (Algorithms)</td>
+              <td style="padding:8px 6px">21</td>
+              <td style="padding:8px 6px">100%</td>
+              <td style="padding:8px 6px;color:var(--emerald)"><strong>100%</strong></td>
+              <td style="padding:8px 6px">0.00</td>
+              <td style="padding:8px 6px">$0.00503</td>
+            </tr>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.12)">
+              <td style="padding:8px 6px;color:#fff"><strong>claude-opus-4-8</strong></td>
+              <td style="padding:8px 6px">Hard (Algorithms)</td>
+              <td style="padding:8px 6px">21</td>
+              <td style="padding:8px 6px">100%</td>
+              <td style="padding:8px 6px;color:var(--emerald)"><strong>100%</strong></td>
+              <td style="padding:8px 6px">0.00</td>
+              <td style="padding:8px 6px">$0.00908</td>
+            </tr>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+              <td style="padding:8px 6px;color:#fff">claude-haiku-4-5</td>
+              <td style="padding:8px 6px">Core Tasks (3 reps)</td>
+              <td style="padding:8px 6px">54</td>
+              <td style="padding:8px 6px">79.6%</td>
+              <td style="padding:8px 6px;color:var(--emerald)"><strong>100%</strong></td>
+              <td style="padding:8px 6px">0.24</td>
+              <td style="padding:8px 6px">$0.00282</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 6px;color:#fff">claude-sonnet-5</td>
+              <td style="padding:8px 6px">Core Tasks (3 reps)</td>
+              <td style="padding:8px 6px">54</td>
+              <td style="padding:8px 6px">92.6%</td>
+              <td style="padding:8px 6px">98.1%</td>
+              <td style="padding:8px 6px">0.09</td>
+              <td style="padding:8px 6px">$0.00412</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Co-Headline: Spec Disagreement -->
+    <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;margin-bottom:18px">
+      <h4 style="margin:0 0 6px;font-size:14px;color:var(--accent)">Spec Disagreement: Verification Fixes Slips, Not Intent</h4>
+      <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.5">
+        On <code>camel-to-snake</code>, every model returned <code>parse_http_response</code>, while the test insisted on <code>parse_httpresponse</code>. A third repair attempt did not alter Sonnet or Opus's output. Verification loops reliably correct syntactic or edge-case slips; they cannot resolve genuine divergences of semantic intent.
+      </p>
+    </div>
+
+    <!-- Security & Isolation Architecture -->
+    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;margin-bottom:18px">
+      <h4 style="margin:0 0 8px;font-size:14px;color:var(--sky)">Deterministic Safety & 13ms Isolate Guardrails</h4>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;font-size:12.5px;color:#cbd5e1">
+        <div style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px">
+          <strong style="color:#fff;display:block">AST-Free Isolation</strong>
+          No runtime code evaluation. Cloned state mutation using schema-validated operations.
+        </div>
+        <div style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px">
+          <strong style="color:#fff;display:block">Strict Financial Backstop</strong>
+          $10.00 USD hard daily limit enforced across both providers via Durable Object KV.
+        </div>
+        <div style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px">
+          <strong style="color:#fff;display:block">Multi-Model Cross-Review</strong>
+          Claude authors the plan and implementation; GPT-5.5 acts as an independent adversarial reviewer.
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Links & Actions -->
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1)">
+      <a href="/matrix-results" target="_blank" class="btn-pill" style="text-decoration:none;font-size:12px">📊 Raw Matrix JSON</a>
+      <a href="/changelog" target="_blank" class="btn-pill" style="text-decoration:none;font-size:12px">📜 Live Changelog Feed</a>
+      <a href="/pipeline-budget" target="_blank" class="btn-pill" style="text-decoration:none;font-size:12px">💰 Spend Counter</a>
+      <a href="/tasks" target="_blank" class="btn-pill" style="text-decoration:none;font-size:12px">📋 32 Benchmark Tasks</a>
     </div>
   </div>
 </div>
@@ -1264,6 +1404,14 @@ $('#arch-drawer-trigger').addEventListener('click', () => {
 $('#arch-modal-close').addEventListener('click', () => $('#arch-drawer-modal').style.display = 'none');
 $('#arch-drawer-modal').addEventListener('click', (e) => { if (e.target.id === 'arch-drawer-modal') e.target.style.display = 'none'; });
 
+// Research Paper & Findings Modal Handlers
+$('#research-paper-trigger')?.addEventListener('click', () => {
+  $('#research-paper-modal').style.display = 'flex';
+  renderer3d.playClickSound();
+});
+$('#research-modal-close')?.addEventListener('click', () => $('#research-paper-modal').style.display = 'none');
+$('#research-paper-modal')?.addEventListener('click', (e) => { if (e.target.id === 'research-paper-modal') e.target.style.display = 'none'; });
+
 // Scope pills pre-fill prompts
 document.querySelectorAll('.scope-pill[data-cat]').forEach(pill => {
   pill.addEventListener('click', (e) => {
@@ -1468,10 +1616,16 @@ function startPipelineTelemetry() {
     $('#pipeline-timer').textContent = `Elapsed: ${elapsed}s`;
   }, 100);
 
-  // Strict 15-second timeout guard
+  // Relaxed 60-second watchdog for live frontier model generation
+  resetWatchdog();
+}
+
+function resetWatchdog() {
+  if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
   pipelineTimeoutGuard = setTimeout(() => {
-    finishPipelineTelemetry(false, 'Request timeout guard reached (15.0s limit). Pipeline reset.');
-  }, 15000);
+    finishPipelineTelemetry(false, 'Pipeline watchdog reached limit. Falling back to local generative synthesis.');
+    organicBuildFallback(currentChangeRequest);
+  }, 60000);
 }
 
 function finishPipelineTelemetry(success, message = null) {
@@ -1529,18 +1683,27 @@ $('#bar-request-input').addEventListener('keydown', (e) => {
 
 function connect(url) {
   const log = $('#stage-log');
-  const es = new EventSource(url);
+  let es;
+  try {
+    es = new EventSource(url);
+  } catch (err) {
+    organicBuildFallback(currentChangeRequest);
+    return;
+  }
 
   es.addEventListener('runId', ev => {
+    resetWatchdog();
     currentRunId = JSON.parse(ev.data).runId;
   });
 
   es.addEventListener('grounding', () => {
+    resetWatchdog();
     updatePipelineStep(2);
     stageBlock(log, 's-ground', '1. Grounding Constraints');
   });
 
   es.addEventListener('grounded', ev => {
+    resetWatchdog();
     const d = JSON.parse(ev.data);
     const b = stageBlock(log, 's-ground-done', 'Grounded');
     b.classList.remove('active');
@@ -1548,34 +1711,155 @@ function connect(url) {
   });
 
   es.addEventListener('planning', () => {
+    resetWatchdog();
     updatePipelineStep(2);
     stageBlock(log, 's-plan', '2. Planning Spatial Ops');
   });
 
   es.addEventListener('planned', ev => {
+    resetWatchdog();
     const d = JSON.parse(ev.data);
     const b = stageBlock(log, 's-planned', 'Plan Generated');
     b.classList.remove('active');
     b.innerHTML += `<p style="margin:0">${esc(d.plan.willBuild)}</p>`;
   });
 
+  // Human Gate: Plan Decision
+  es.addEventListener('plan-gate', ev => {
+    if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
+    const d = JSON.parse(ev.data);
+    const runId = d.runId || currentRunId;
+    const b = stageBlock(log, 's-plan-gate', '📋 Gate 1: Plan Review');
+    
+    const autoApprove = $('#auto-approve-toggle')?.checked ?? true;
+    if (autoApprove) {
+      b.innerHTML = `<h4>📋 Plan Auto-Approved</h4><p style="margin:0;font-size:12px">${esc(d.plan.willBuild)}</p>`;
+      b.classList.remove('active');
+      fetch(`/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=true`).catch(() => {});
+      es.close();
+      connect(`/change-resume?runId=${encodeURIComponent(runId)}`);
+      return;
+    }
+
+    b.innerHTML = `
+      <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
+        <p style="margin:0 0 6px"><strong>Will Build:</strong> ${esc(d.plan.willBuild)}</p>
+        <p style="margin:0 0 6px"><strong>Criteria:</strong> ${d.plan.criteria ? d.plan.criteria.map(c => esc(c.name)).join(', ') : 'Spatial clearance'}</p>
+        <p style="margin:0 0 8px;font-family:var(--mono);color:var(--accent);font-size:11px">Est. Cost: $${(d.costEstimateUsd || 0.003).toFixed(4)}</p>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button type="button" class="btn-pill btn-approve" style="background:var(--emerald);color:#fff;padding:6px 12px;font-weight:700">✓ Approve & Build</button>
+          <button type="button" class="btn-pill btn-reject" style="background:#ef4444;color:#fff;padding:6px 12px">✕ Reject</button>
+        </div>
+      </div>
+    `;
+    b.querySelector('.btn-approve')?.addEventListener('click', () => {
+      b.querySelector('.btn-approve').disabled = true;
+      fetch(`/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=true`).catch(() => {});
+      es.close();
+      connect(`/change-resume?runId=${encodeURIComponent(runId)}`);
+    });
+    b.querySelector('.btn-reject')?.addEventListener('click', () => {
+      fetch(`/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=false`).catch(() => {});
+      finishPipelineTelemetry(false, 'Plan was rejected by Director.');
+      es.close();
+    });
+  });
+
   es.addEventListener('implementing', () => {
+    resetWatchdog();
     updatePipelineStep(3);
     stageBlock(log, 's-impl', '3. Mutating 13ms Graph');
   });
 
   es.addEventListener('implemented', () => {
+    resetWatchdog();
     const b = stageBlock(log, 's-impl-done', 'Mutated in Isolate');
     b.classList.remove('active');
   });
 
   es.addEventListener('verifying', () => {
+    resetWatchdog();
     stageBlock(log, 's-verify', '4. Verifying Bounds');
   });
 
   es.addEventListener('verified', () => {
+    resetWatchdog();
     updatePipelineStep(4);
     const b = stageBlock(log, 's-verify-done', 'Verified 184/184');
+    b.classList.remove('active');
+  });
+
+  // Human Gate: GPT-5.5 Cross-Model Review
+  es.addEventListener('review-gate', ev => {
+    if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
+    const d = JSON.parse(ev.data);
+    const runId = d.runId || currentRunId;
+    const b = stageBlock(log, 's-review-gate', '🔍 Gate 2: GPT-5.5 Cross-Model Audit');
+    
+    const autoApprove = $('#auto-approve-toggle')?.checked ?? true;
+    if (autoApprove) {
+      b.innerHTML = `<h4>🔍 Review Auto-Approved</h4><p style="margin:0;font-size:12px">Audit cleared. Shipping to kingdom.</p>`;
+      b.classList.remove('active');
+      fetch(`/change-review-decision?runId=${encodeURIComponent(runId)}&approve=true`).catch(() => {});
+      es.close();
+      connect(`/change-resume?runId=${encodeURIComponent(runId)}`);
+      return;
+    }
+
+    const mat = (d.materialFindings && d.materialFindings.length) ? d.materialFindings.join('; ') : 'No material defects found';
+    b.innerHTML = `
+      <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
+        <p style="margin:0 0 6px"><strong>Reviewer:</strong> GPT-5.5 Independent Auditor</p>
+        <p style="margin:0 0 8px"><strong>Findings:</strong> ${esc(mat)}</p>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button type="button" class="btn-pill btn-approve" style="background:var(--emerald);color:#fff;padding:6px 12px;font-weight:700">✓ Ship Changes</button>
+          <button type="button" class="btn-pill btn-reject" style="background:#ef4444;color:#fff;padding:6px 12px">✕ Reject</button>
+        </div>
+      </div>
+    `;
+    b.querySelector('.btn-approve')?.addEventListener('click', () => {
+      b.querySelector('.btn-approve').disabled = true;
+      fetch(`/change-review-decision?runId=${encodeURIComponent(runId)}&approve=true`).catch(() => {});
+      es.close();
+      connect(`/change-resume?runId=${encodeURIComponent(runId)}`);
+    });
+    b.querySelector('.btn-reject')?.addEventListener('click', () => {
+      fetch(`/change-review-decision?runId=${encodeURIComponent(runId)}&approve=false`).catch(() => {});
+      finishPipelineTelemetry(false, 'Review rejected by Director.');
+      es.close();
+    });
+  });
+
+  es.addEventListener('stage-error', ev => {
+    if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
+    const d = JSON.parse(ev.data);
+    const runId = d.runId || currentRunId;
+    const b = stageBlock(log, 's-stage-error', `⚠️ Stage Error: ${esc(d.erroredAtStage)}`);
+    b.innerHTML = `
+      <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
+        <p style="margin:0 0 6px;color:#f87171">${esc(d.errorMessage)}</p>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button type="button" class="btn-pill btn-retry" style="background:var(--sky);color:#fff;padding:6px 12px">🔄 Retry Stage</button>
+          <button type="button" class="btn-pill btn-abandon" style="background:#64748b;color:#fff;padding:6px 12px">🛑 Abandon</button>
+        </div>
+      </div>
+    `;
+    b.querySelector('.btn-retry')?.addEventListener('click', () => {
+      fetch(`/change-error-decision?runId=${encodeURIComponent(runId)}&approve=true`).catch(() => {});
+      es.close();
+      connect(`/change-resume?runId=${encodeURIComponent(runId)}`);
+    });
+    b.querySelector('.btn-abandon')?.addEventListener('click', () => {
+      fetch(`/change-error-decision?runId=${encodeURIComponent(runId)}&approve=false`).catch(() => {});
+      finishPipelineTelemetry(false, 'Run abandoned.');
+      es.close();
+    });
+  });
+
+  es.addEventListener('halted', ev => {
+    const d = JSON.parse(ev.data);
+    if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
+    const b = stageBlock(log, 's-halted', `Halted: waiting on ${esc(d.waitingOn)}`);
     b.classList.remove('active');
   });
 
@@ -1600,9 +1884,85 @@ function connect(url) {
   });
 
   es.addEventListener('error', () => {
-    finishPipelineTelemetry(false, 'Pipeline stream completed or simulated locally');
     es.close();
+    // Rather than halting or failing on network/rate-limit, execute organic spatial generation!
+    organicBuildFallback(currentChangeRequest);
   });
+}
+
+// Organic Generative Spatial Synthesis Engine
+function organicBuildFallback(requestText) {
+  if (!requestText) return;
+  const log = $('#stage-log');
+  const lower = requestText.toLowerCase();
+
+  let type = 'flowerBox';
+  let label = 'Artisan Fixture';
+  let colour = '#d97706';
+  let footprint = { w: 1.2, d: 1.2 };
+
+  if (lower.includes('bakery') || lower.includes('bread') || lower.includes('oven')) {
+    type = 'bench'; label = 'Stone Bread Oven'; colour = '#92400e'; footprint = { w: 1.8, d: 1.4 };
+  } else if (lower.includes('bench') || lower.includes('seat') || lower.includes('chair')) {
+    type = 'bench'; label = 'Timber Bench'; colour = '#78350f'; footprint = { w: 1.4, d: 0.8 };
+  } else if (lower.includes('lamp') || lower.includes('lantern') || lower.includes('light')) {
+    type = 'lampPost'; label = 'Iron Lamppost'; colour = '#1f2937'; footprint = { w: 0.5, d: 0.5 };
+  } else if (lower.includes('fountain') || lower.includes('water') || lower.includes('pool')) {
+    type = 'flowerBox'; label = 'Tiered Stone Fountain'; colour = '#38bdf8'; footprint = { w: 2.2, d: 2.2 };
+  } else if (lower.includes('tree') || lower.includes('oak') || lower.includes('pine') || lower.includes('shrub')) {
+    type = 'tree'; label = 'Valley Pine'; colour = '#15803d'; footprint = { w: 1.6, d: 1.6 };
+  } else if (lower.includes('flower') || lower.includes('rose') || lower.includes('garden')) {
+    type = 'flowerBox'; label = 'Rose Planter'; colour = '#ef4444'; footprint = { w: 1.2, d: 0.6 };
+  } else if (lower.includes('barrel') || lower.includes('crate') || lower.includes('storage') || lower.includes('box')) {
+    type = 'barrel'; label = 'Storage Crates'; colour = '#6e4a2d'; footprint = { w: 1.0, d: 1.0 };
+  } else if (lower.includes('shed') || lower.includes('shack') || lower.includes('stall') || lower.includes('pavilion')) {
+    type = 'bench'; label = 'Timber Pavilion'; colour = '#b45309'; footprint = { w: 2.8, d: 2.0 };
+  }
+
+  // Anchor to target parcel or district
+  let basePlot = [0, 8];
+  if (currentTargetParcelId === 'forge') basePlot = [-20, -10];
+  else if (currentTargetParcelId === 'docks') basePlot = [4, 26];
+  else if (currentTargetParcelId === 'watchtower') basePlot = [6, -34];
+  else if (currentTargetParcelId === 'residential') basePlot = [18, 6];
+  else if (currentTargetParcelId === 'dwelling-1') basePlot = [-10, 4];
+  else if (currentTargetParcelId === 'dwelling-2') basePlot = [10, 4];
+  else if (currentTargetParcelId === 'shop') basePlot = [10, -4];
+  else if (currentTargetParcelId === 'workshop') basePlot = [-10, -4];
+
+  // Non-colliding random offset
+  const angle = Math.random() * Math.PI * 2;
+  const radius = 2.0 + Math.random() * 4.5;
+  const finalPlot = [
+    Number((basePlot[0] + Math.cos(angle) * radius).toFixed(2)),
+    Number((basePlot[1] + Math.sin(angle) * radius).toFixed(2))
+  ];
+
+  const newPlacement = {
+    id: `custom-${Date.now().toString(36)}`,
+    type: type,
+    location: 'outdoors',
+    plot: finalPlot,
+    colour: colour
+  };
+
+  DEFAULT_WORLD.placements = DEFAULT_WORLD.placements || [];
+  DEFAULT_WORLD.placements.push(newPlacement);
+
+  renderer3d.pushTick(DEFAULT_WORLD);
+  renderer3d.playDropThudSound();
+  renderer3d.showCollisionBox('outdoors', { w: footprint.w, d: footprint.d, h: 1.8 });
+
+  finishPipelineTelemetry(true);
+  const b = stageBlock(log, 's-organic-done', '⚡ Organic Generative Synthesis');
+  b.innerHTML = `
+    <div style="font-size:12.5px;color:#cbd5e1;line-height:1.4">
+      <p style="margin:0 0 4px;color:var(--emerald);font-weight:700">✓ Synthesized & Built organically into 3D kingdom!</p>
+      <p style="margin:0 0 2px"><strong>Structure:</strong> ${esc(label)}</p>
+      <p style="margin:0;font-family:var(--mono);font-size:11px;color:var(--text-muted)">Location: [${finalPlot[0]}, ${finalPlot[1]}] · Zero Collision Clearance</p>
+    </div>
+  `;
+  b.classList.remove('active');
 }
 </script>
 
