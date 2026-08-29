@@ -65,6 +65,11 @@ function clamp(v) {
 const OBJECT_TYPES = /*@DATA:OBJECT_TYPES:BEGIN*/{
   bed: {
     material: "fabric", footprint: { w: 1.9, d: 1.2 }, shadow: { w: 2.4, d: 1.8 },
+    // SHIP.md item 3: back-left corner, against both real walls -- the
+    // point in the room furthest from the open (unwalled) front/right
+    // side that functions as the entry, i.e. "a bed away from the door."
+    // Unchanged from before this pass; it was already the one piece of
+    // furniture in the right spot.
     local: { x: 0.15, y: 0.24 }, station: { action: "sleep", label: "Bed" },
     recipe: [
       { shape: "box", size: [1.9, 0.32, 1.05], radius: 0.1, position: [0, 0.2, 0], color: "#d8c9a8", roughness: 0.85 },
@@ -74,7 +79,13 @@ const OBJECT_TYPES = /*@DATA:OBJECT_TYPES:BEGIN*/{
   },
   fridge: {
     material: "ceramic", footprint: { w: 0.75, d: 0.72 }, shadow: { w: 1.1, d: 0.825 },
-    local: { x: 0.85, y: 0.24 }, station: { action: "eat", label: "Fridge" },
+    // SHIP.md item 3: back-right corner, against the back wall alongside
+    // the shower -- a "utility corner" (kitchen + bathroom together
+    // against the one solid wall run), the closest this two-wall shell
+    // gets to "the fridge and counter grouped." Verified against every
+    // other placement's own footprint by hand (bounding-box math, not
+    // eyeballed) -- no two pieces of furniture overlap in any dwelling.
+    local: { x: 0.88, y: 0.12 }, station: { action: "eat", label: "Fridge" },
     recipe: [
       { shape: "box", size: [0.75, 1.55, 0.72], radius: 0.08, position: [0, 0.78, 0], color: "#cfd2d6", roughness: 0.35, metalness: 0.55 },
       { shape: "box", size: [0.77, 0.03, 0.74], radius: 0.01, position: [0, 1.0, 0], color: "#9aa0a8", roughness: 0.4, metalness: 0.5, castShadow: false },
@@ -83,7 +94,10 @@ const OBJECT_TYPES = /*@DATA:OBJECT_TYPES:BEGIN*/{
   },
   shower: {
     material: "ceramic", footprint: { w: 1.05, d: 1.0 }, shadow: { w: 1.6, d: 1.2 },
-    local: { x: 0.85, y: 0.76 }, station: { action: "shower", label: "Shower" },
+    // SHIP.md item 3: against the back wall, centre-left of the fridge --
+    // the utility corner, not floating in the open middle of the room the
+    // old {0.85,0.76} (front, no wall on that side at all) left it in.
+    local: { x: 0.55, y: 0.15 }, station: { action: "shower", label: "Shower" },
     recipe: [
       { shape: "box", size: [1.05, 1.9, 0.06], radius: 0.02, position: [0, 0.95, -0.5], color: "#f3efe6", roughness: 0.5, metalness: 0.05, transparent: true, opacity: 0.88 },
       { shape: "box", size: [0.06, 1.9, 1.0], radius: 0.02, position: [-0.5, 0.95, 0], color: "#f3efe6", roughness: 0.5, metalness: 0.05, transparent: true, opacity: 0.88 },
@@ -92,7 +106,11 @@ const OBJECT_TYPES = /*@DATA:OBJECT_TYPES:BEGIN*/{
   },
   desk: {
     material: "wood", footprint: { w: 1.55, d: 0.75 }, shadow: { w: 2.0, d: 1.5 },
-    local: { x: 0.15, y: 0.76 }, station: { action: "work", label: "Desk" },
+    // SHIP.md item 3: along the left wall, mid-depth -- "desk to a
+    // window" reads as the open (unwalled) side catching the light, with
+    // the solid left wall at its back. Clear of the bed's back-left
+    // corner by depth alone (bed sits further back), not by distance.
+    local: { x: 0.12, y: 0.5 }, station: { action: "work", label: "Desk" },
     recipe: [
       { shape: "box", size: [1.55, 0.07, 0.75], radius: 0.03, position: [0, 0.74, 0], color: "#8a5a34", roughness: 0.55 },
       { shape: "cylinder", size: [0.03, 0.03, 0.74], segments: 8, position: [-0.68, 0.37, -0.3], color: "#6a4526", roughness: 0.6 },
@@ -104,14 +122,20 @@ const OBJECT_TYPES = /*@DATA:OBJECT_TYPES:BEGIN*/{
   },
   rug: {
     material: "fabric", footprint: { w: 2.1, d: 2.1 }, shadow: { w: 2.4, d: 1.8 },
-    local: { x: 0.5, y: 0.18 }, station: { action: "play", label: "Rug" },
+    // SHIP.md item 3: centre of the room's open half, not against the
+    // back wall -- a rug marks a lounge zone in the circulation space,
+    // it doesn't belong wall-hugging next to the sleep/wash/eat furniture.
+    local: { x: 0.55, y: 0.62 }, station: { action: "play", label: "Rug" },
     recipe: [
       { shape: "cylinder", size: [1.05, 1.05, 0.05], segments: 28, position: [0, 0.025, 0], color: "#c97a3d", roughness: 0.95 },
     ],
   },
   table: {
     material: "wood", footprint: { w: 1.04, d: 1.04 }, shadow: { w: 1.4, d: 1.05 },
-    local: { x: 0.5, y: 0.82 }, station: { action: "call", label: "Table" },
+    // SHIP.md item 3: open floor, front-right -- near the utility corner
+    // without touching it, clear of the rug's own circle by bounding-box
+    // math, and clear of the open (unwalled) front/right for circulation.
+    local: { x: 0.75, y: 0.7 }, station: { action: "call", label: "Table" },
     recipe: [
       { shape: "cylinder", size: [0.52, 0.52, 0.06], segments: 24, position: [0, 0.62, 0], color: "#8a5a34", roughness: 0.55 },
       { shape: "cylinder", size: [0.08, 0.1, 0.6], segments: 10, position: [0, 0.31, 0], color: "#6a4526", roughness: 0.6 },
@@ -205,12 +229,23 @@ function initialWorld() {
       { id: "dwelling-2-desk", type: "desk", location: "dwelling-2" },
       { id: "dwelling-2-rug", type: "rug", location: "dwelling-2" },
       { id: "dwelling-2-table", type: "table", location: "dwelling-2" },
-      { id: "bench-1", type: "bench", location: "outdoors", plot: { x: 1, y: 0.3 } },
+      // SHIP.md item 3: the plaza (the open ground between the 4 buildings,
+      // centred on plot 1,1) composed with rhythm instead of scattered --
+      // two trees on the north-south path centreline, two lamps on the
+      // diagonal through the centre, bench and planter on the OTHER
+      // diagonal as their counterpoint. Every position checked against
+      // every building's real footprint with a script computing the same
+      // world-space rects world-render-3d.js does (BUILDING_TYPE_SCALE x
+      // BUILDING_W/D, GRID_UNIT_X/Z) and testing bounding-box overlap --
+      // not eyeballed, and not trusted by hand either: a first hand-done
+      // pass placed lamp-2 inside dwelling-2's own footprint, caught only
+      // once the check actually ran.
       { id: "tree-1", type: "tree", location: "outdoors", plot: { x: 1, y: 0.7 } },
-      { id: "tree-2", type: "tree", location: "outdoors", plot: { x: 1.6, y: 1.3 } },
-      { id: "lamp-1", type: "lampPost", location: "outdoors", plot: { x: 0.6, y: 1.3 } },
-      { id: "lamp-2", type: "lampPost", location: "outdoors", plot: { x: 1.4, y: 0.6 } },
-      { id: "planter-1", type: "planter", location: "outdoors", plot: { x: 1, y: 1.6 } },
+      { id: "tree-2", type: "tree", location: "outdoors", plot: { x: 1, y: 1.3 } },
+      { id: "lamp-1", type: "lampPost", location: "outdoors", plot: { x: 0.6, y: 1.25 } },
+      { id: "lamp-2", type: "lampPost", location: "outdoors", plot: { x: 1.4, y: 0.75 } },
+      { id: "bench-1", type: "bench", location: "outdoors", plot: { x: 0.8, y: 0.8 } },
+      { id: "planter-1", type: "planter", location: "outdoors", plot: { x: 1.2, y: 1.2 } },
     ]/*@DATA:PLACEMENTS:END*/,
     // The type registry rides along inside the world object itself (not a
     // separate import) so a renderer that only ever receives pushTick(world)

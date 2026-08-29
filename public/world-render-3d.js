@@ -36,20 +36,25 @@ import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
 // 11x7.5, shrunk slightly so two of them plus a path fit on one grid axis.
 // FOUNDATION.md item 4: every building is open-topped and built from the
 // same shell now, dwelling-sized or smaller (BUILDING_TYPE_SCALE below).
-const BUILDING_W = 8.5;
-const BUILDING_D = 6.0;
+// Exported (SHIP.md item 3): test/placementLayout.test.ts computes the same
+// world-space building/prop rects this file does, from these same
+// constants, to check every outdoor placement's plot position against
+// every real building footprint -- no separate, driftable copy of the
+// geometry.
+export const BUILDING_W = 8.5;
+export const BUILDING_D = 6.0;
 // FOUNDATION.md item 4: "every building open-topped in the same way." All
 // four building types share one shell constructor now; this is the only
 // per-type difference left -- footprint scale, not roof-or-not.
-const BUILDING_TYPE_SCALE = {
+export const BUILDING_TYPE_SCALE = {
   dwelling: { w: 1, d: 1 },
   shop: { w: 0.55, d: 0.7 },
   workshop: { w: 0.55, d: 0.7 },
 };
 // Half-spacing between plot steps (plots are 0/2 today; the formula below
 // is generic over whatever plot values the real world data contains).
-const GRID_UNIT_X = 6.0;
-const GRID_UNIT_Z = 4.5;
+export const GRID_UNIT_X = 6.0;
+export const GRID_UNIT_Z = 4.5;
 
 // CITY.md item 2: "everything currently sits in the top third of the
 // range, which is why it looks washed out." Floor/wall/ground darkened
