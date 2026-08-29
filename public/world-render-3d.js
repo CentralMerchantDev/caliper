@@ -333,10 +333,10 @@ class Renderer3D {
   _initScene() {
     const renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: "high-performance" });
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.85; // overwritten every draw() call; matches the new day-end value for the first frame before that runs
+    renderer.toneMappingExposure = 1.05;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.VSMShadowMap;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer = renderer;
 
     const scene = new THREE.Scene();
@@ -345,17 +345,6 @@ class Renderer3D {
     scene.background = this._skyGradient.tex;
     this.scene = scene;
 
-    // SHIP.md item 4: a real HDRI (CC0, Poly Haven -- see
-    // vendor/hdri/LICENSE.txt) drives ambient light and reflections
-    // instead of a synthetic RoomEnvironment -- the single largest free
-    // quality jump available for a scene this size, and the actual light
-    // information any real photo-real environment would use. Loaded
-    // async (HDRLoader.loadAsync can't block a synchronous constructor),
-    // so RoomEnvironment stays as the immediate fallback for the very
-    // first frame or two -- this constructor still returns with a valid,
-    // rendering scene either way, never a blank one waiting on a network
-    // fetch. Day/night still drives exposure and the sun/sky exactly as
-    // before; the HDRI only supplies the ambient/reflection floor.
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     new HDRLoader().load(
@@ -372,9 +361,6 @@ class Renderer3D {
       },
       undefined,
       () => {
-        // A failed fetch (offline, blocked, whatever) keeps the
-        // RoomEnvironment fallback already in place -- fail open to a
-        // still-lit scene, never to a dark one.
         pmrem.dispose();
       },
     );
@@ -394,7 +380,7 @@ class Renderer3D {
     scene.add(sun.target);
     this.sun = sun;
 
-    const hemi = new THREE.HemisphereLight(0xf6ecd8, 0x3a3226, 0.3);
+    const hemi = new THREE.HemisphereLight(0x8a99ad, 0x6e5a47, 0.35);
     scene.add(hemi);
     this.hemi = hemi;
 
@@ -565,7 +551,7 @@ class Renderer3D {
     // repeat reads fine on both, unlike the path's much more different N-S
     // vs E-W arm lengths above.
     const wallMaterialKey = surfaceMaterialKey(this._surfaces, "wall", "plaster");
-    const wallMat = texturedMat(wallMaterialKey, surfaceColor(this._surfaces, "wall", PALETTE.wall), (w + d) / 2, 2.3, { roughness: 0.92, metalness: 0.0 });
+    const wallMat = texturedMat(wallMaterialKey, surfaceColor(this._surfaces, "wall", PALETTE.wall), (w + d) / 2, 2.3, { roughness: 0.85, metalness: 0.0 });
     const backWall = new THREE.Mesh(new RoundedBoxGeometry(w, 2.3, 0.14, 2, 0.05), wallMat);
     backWall.position.set(0, 1.0, -d / 2);
     backWall.receiveShadow = true;
@@ -574,6 +560,54 @@ class Renderer3D {
     leftWall.position.set(-w / 2, 1.0, 0);
     leftWall.receiveShadow = true;
     group.add(leftWall);
+
+    // Roof eave overhangs along wall tops
+    const eaveMat = stdMat({ color: 0x5c4b39, roughness: 0.85 });
+    const backEave = new THREE.Mesh(new RoundedBoxGeometry(w + 0.3, 0.1, 0.28, 1, 0.02), eaveMat);
+    backEave.position.set(0, 2.2, -d / 2);
+    backEave.castShadow = true;
+    group.add(backEave);
+    const leftEave = new THREE.Mesh(new RoundedBoxGeometry(0.28, 0.1, d + 0.3, 1, 0.02), eaveMat);
+    leftEave.position.set(-w / 2, 2.2, 0);
+    leftEave.castShadow = true;
+    group.add(leftEave);
+
+    // Inset window sills and framed window panes with warm emissive tint (#ffaa33)
+    const sillMat = stdMat({ color: 0x8c7a65, roughness: 0.85 });
+    const frameMat = stdMat({ color: 0x4a3b2c, roughness: 0.85 });
+    const windowGlowMat = stdMat({
+      color: 0xffaa33,
+      emissive: 0xffaa33,
+      emissiveIntensity: 0.25,
+      roughness: 0.4,
+      transparent: true,
+      opacity: 0.85,
+    });
+
+    // Back wall window + sill
+    const backSill = new THREE.Mesh(new RoundedBoxGeometry(1.2, 0.06, 0.22, 1, 0.02), sillMat);
+    backSill.position.set(0, 1.0, -d / 2 + 0.1);
+    backSill.castShadow = true;
+    group.add(backSill);
+    const backFrame = new THREE.Mesh(new RoundedBoxGeometry(1.1, 0.9, 0.06, 1, 0.02), frameMat);
+    backFrame.position.set(0, 1.45, -d / 2 + 0.04);
+    group.add(backFrame);
+    const windowPane = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.75), windowGlowMat);
+    windowPane.position.set(0, 1.45, -d / 2 + 0.08);
+    group.add(windowPane);
+
+    // Left wall window + sill for shop/workshop/dwelling
+    const leftSill = new THREE.Mesh(new RoundedBoxGeometry(0.22, 0.06, 1.0, 1, 0.02), sillMat);
+    leftSill.position.set(-w / 2 + 0.1, 1.0, 0);
+    leftSill.castShadow = true;
+    group.add(leftSill);
+    const leftFrame = new THREE.Mesh(new RoundedBoxGeometry(0.06, 0.9, 0.9, 1, 0.02), frameMat);
+    leftFrame.position.set(-w / 2 + 0.04, 1.45, 0);
+    group.add(leftFrame);
+    const sidePane = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.75), windowGlowMat);
+    sidePane.rotation.y = Math.PI / 2;
+    sidePane.position.set(-w / 2 + 0.08, 1.45, 0);
+    group.add(sidePane);
 
     // Trim colour distinguishes shop/workshop from across the plot even
     // with no interior happening yet; dwellings get a plain wood-tone sign
@@ -820,7 +854,7 @@ class Renderer3D {
     // cycle. Night rises with it, proportionally, so the day/night
     // difference achieved in the previous pass holds rather than flattens:
     // night is still the darker end, just no longer near-black.
-    this.renderer.toneMappingExposure = lerp(0.85, 0.58, nightAmt);
+    this.renderer.toneMappingExposure = lerp(1.05, 0.72, nightAmt);
     // The RoomEnvironment IBL contributes a constant ambient floor
     // regardless of sun position. Scene-level environmentIntensity
     // multiplies every material's own envMapIntensity globally. Day raised
