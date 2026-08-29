@@ -8,7 +8,7 @@ import type { GenerationResult, TestResult, Task } from "./types";
 import { SIM_BASELINE_SOURCE } from "./simBaseline";
 import { SIM_REGRESSION_SUITE } from "./simRegression";
 import { runSimTests } from "./simSandbox";
-import { runChangePipeline, loadInstructions, type ChangeEvent } from "./changePipeline";
+import { runChangePipeline, loadInstructions, deriveHistoryReason, type ChangeEvent, type ChangeRecord } from "./changePipeline";
 import {
   getPipelineBudgetStatus,
   checkInputGuard,
@@ -453,6 +453,44 @@ async function handleChangeResume(env: Env, runId: string): Promise<Response> {
   return handleChangeRun(env, changeRequest, runId);
 }
 
+/** POLISH.md item 1: a run history, real runs only. Reads every completed
+ * run straight from changelog/ (written by every terminal outcome now,
+ * not just shipped/refused-verification -- see recordTerminalRun in
+ * changePipeline.ts) and reduces each one to exactly three public fields:
+ * a date, the system's own summary (never the raw visitor request --
+ * there is no code path in this function that ever reads
+ * record.changeRequest), and the outcome plus its one-line reason.
+ * Records written before this feature (missing completedAt/reason)
+ * still show up correctly -- the reason is derived at read time from the
+ * same deriveHistoryReason the write path uses, so there is no separate
+ * migration step for the backfill this was asked for. */
+async function handleChangeHistory(env: Env): Promise<Response> {
+  const list = await env.SPEND_KV.list({ prefix: "changelog/" });
+  const entries: { date: string; summary: string | null; outcome: string; reason: string }[] = [];
+  for (const key of list.keys) {
+    const raw = await env.SPEND_KV.get(key.name);
+    if (!raw) continue;
+    let record: ChangeRecord;
+    try {
+      record = JSON.parse(raw);
+    } catch {
+      continue; // a malformed record is skipped, not shown as a broken row
+    }
+    const completedAt = typeof record.completedAt === "number" && record.completedAt > 0 ? record.completedAt : 0;
+    const reason = record.reason || deriveHistoryReason(record.ledger);
+    entries.push({
+      date: completedAt > 0 ? new Date(completedAt).toISOString().slice(0, 10) : "",
+      summary: record.plan?.understoodIntent ?? null,
+      outcome: record.ledger.outcome,
+      reason,
+    });
+  }
+  // Most recent first; entries with no known date (pre-dating completedAt)
+  // sort last rather than first, so they don't masquerade as the newest.
+  entries.sort((a, b) => (b.date || "0000-00-00").localeCompare(a.date || "0000-00-00"));
+  return json({ entries: entries.slice(0, 200) });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -598,6 +636,10 @@ export default {
       const runId = url.searchParams.get("runId");
       if (!runId) return json({ error: "pass ?runId=<id>" }, 400);
       return handleChangeResume(env, runId);
+    }
+
+    if (url.pathname === "/change-history") {
+      return handleChangeHistory(env);
     }
 
     if (url.pathname === "/change-answer") {

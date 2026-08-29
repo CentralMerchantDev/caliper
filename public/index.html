@@ -278,6 +278,7 @@ footer a{color:var(--ink2)}
       <a href="#app">The world</a>
       <a href="#controls">Controls</a>
       <a href="#finding">The evidence</a>
+      <a href="#history">History</a>
       <a href="#sandbox">The sandbox</a>
       <a href="#methodology">Methodology</a>
     </nav>
@@ -477,6 +478,11 @@ footer a{color:var(--ink2)}
     test encodes a preference rather than a correctness property, the verifier is asserting that
     preference, not catching a defect.</p>
 
+  <h2 id="history"><span class="n">Every real run</span>History</h2>
+  <p>Every run that has finished, real, in order. Nothing here is staged. If a request was refused,
+    that shows up here too, with the reason.</p>
+  <div id="history-content"><p style="color:var(--muted)">Loading…</p></div>
+
   <h2 id="sandbox"><span class="n">Isolation</span>How the sandbox works</h2>
   <p>Every generated function runs inside a Cloudflare <strong>Dynamic Worker</strong> -- a fresh
     V8 isolate spun up per program, with no bindings (<span class="mono">env: {}</span>) and no
@@ -656,6 +662,41 @@ function loadBudget() {
   fetch('/pipeline-budget').then(r => r.json()).then(renderBudget).catch(() => { $('#budget-bar').textContent = 'Could not load budget status.' })
 }
 loadBudget()
+
+// POLISH.md item 1: a run history, real runs only, kept vague on method.
+// The server already strips this down to date/summary/outcome/reason
+// (src/index.ts's handleChangeHistory -- no changeRequest, no findings, no
+// stage internals in the response at all), so this only has to render
+// what it's given, never decide what to hide.
+const OUTCOME_LABEL = {
+  'shipped': 'Shipped',
+  'refused-plan': 'Refused',
+  'refused-verification': 'Refused',
+  'stopped': 'Stopped',
+  'abandoned-after-error': 'Abandoned',
+}
+function renderHistory(data) {
+  const el = $('#history-content')
+  const entries = data.entries || []
+  if (entries.length === 0) {
+    el.innerHTML = '<p style="color:var(--muted)">No runs have finished yet. The first one to complete will show up here.</p>'
+    return
+  }
+  el.innerHTML = `<div class="wrapx"><table><thead><tr><th>Date</th><th>Request</th><th>Outcome</th><th>Reason</th></tr></thead><tbody>` +
+    entries.map(e => `<tr>
+      <td class="mono">${esc(e.date || 'unknown')}</td>
+      <td>${e.summary ? esc(e.summary) : '<span style="color:var(--muted)">(no summary recorded)</span>'}</td>
+      <td>${esc(OUTCOME_LABEL[e.outcome] || e.outcome)}</td>
+      <td>${esc(e.reason)}</td>
+    </tr>`).join('') +
+    `</tbody></table></div>`
+}
+function loadHistory() {
+  fetch('/change-history').then(r => r.json()).then(renderHistory).catch(() => {
+    $('#history-content').innerHTML = '<p style="color:var(--muted)">Could not load run history.</p>'
+  })
+}
+loadHistory()
 
 // ---------- a minimal line diff (no CDN allowed under CSP -- plain LCS) ----------
 

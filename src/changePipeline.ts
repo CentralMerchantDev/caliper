@@ -141,6 +141,51 @@ export interface ChangeRecord {
   finalCode: string | null;
   findings: ReviewFinding[];
   ledger: ChangeLedger;
+  // POLISH.md item 1: a run history tab, real runs only. Every terminal
+  // outcome (not just shipped/refused-verification, the only one this
+  // used to cover) writes one of these to changelog/${runId} now, so the
+  // history endpoint has something to read for every real ending, not
+  // just the two that happened to already be logged.
+  completedAt: number;
+  reason: string;
+}
+
+/** One line, system-authored, never the raw visitor request -- the
+ * "reason" column in the history tab. Pure and exported so it's directly
+ * testable, and so the same logic backfills older changelog/ records
+ * that predate these two fields (read-time fallback, not a migration
+ * step -- see handleChangeHistory in index.ts). Deliberately vague on
+ * method: outcomes, not stage internals. */
+export function deriveHistoryReason(ledger: Pick<ChangeLedger, "outcome" | "fixApplied" | "fixHeld" | "reviewFoundMaterial">): string {
+  switch (ledger.outcome) {
+    case "shipped":
+      if (ledger.reviewFoundMaterial > 0 && ledger.fixApplied && ledger.fixHeld) return "It passed verification. A fix addressed what review found.";
+      if (ledger.reviewFoundMaterial > 0 && !ledger.fixApplied) return "It passed verification. The review's findings were accepted as is.";
+      return "It passed every check.";
+    case "refused-plan":
+      return "The plan was not approved.";
+    case "refused-verification":
+      return ledger.fixApplied ? "A fix was attempted. It still did not pass its checks." : "It did not pass its checks.";
+    case "stopped":
+      return "Stopped partway through, by request.";
+    case "abandoned-after-error":
+      return "It failed partway through and was not retried.";
+    default:
+      return "Still in progress.";
+  }
+}
+
+/** Writes the changelog entry every terminal branch below now calls
+ * before returning -- previously only the final shipped/refused-
+ * verification path did this, so "stopped", "refused at the plan gate",
+ * and "abandoned after an error" never showed up anywhere. A write
+ * failure here is swallowed (matches checkStopped's own delete a few
+ * lines up) -- a KV hiccup logging history must never turn an otherwise-
+ * successful run into a failed response. */
+async function recordTerminalRun(kv: KVNamespace, record: Omit<ChangeRecord, "completedAt" | "reason">): Promise<ChangeRecord> {
+  const full: ChangeRecord = { ...record, completedAt: Date.now(), reason: deriveHistoryReason(record.ledger) };
+  await kv.put(`changelog/${record.runId}`, JSON.stringify(full)).catch(() => {});
+  return full;
 }
 
 interface ChangeState {
@@ -559,7 +604,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       const ledger = buildAbandonedAfterErrorLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
       onEvent({ type: "stopped" });
       onEvent({ type: "ledger", ledger });
-      return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: existing.findings ?? [], ledger };
+      return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: existing.findings ?? [], ledger });
     }
     // LAST.md item 1: "stop retrying permanent errors... do not burn the
     // clock re-sending a request the API has already rejected." A
@@ -573,14 +618,17 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       onEvent({ type: "halted", runId, waitingOn: "error-decision" });
       const ledger = haltLedger(existing, "error-decision");
       onEvent({ type: "ledger", ledger });
-      return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: existing.findings ?? [], ledger };
+      // Not terminal -- still parked, waiting on a real decision -- so this
+      // never gets logged to history. completedAt/reason are placeholders,
+      // never read (nothing downstream of a halt return serializes it).
+      return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: existing.findings ?? [], ledger, completedAt: 0, reason: "" };
     }
     if (decision === null) {
       onEvent({ type: "stage-error", runId, erroredAtStage: existing.erroredAtStage ?? "unknown", errorMessage: existing.errorMessage ?? "unknown error", costSoFarUsd: budget.spent, errorKind: existing.errorKind ?? "transient" });
       onEvent({ type: "halted", runId, waitingOn: "error-decision" });
       const ledger = haltLedger(existing, "error-decision");
       onEvent({ type: "ledger", ledger });
-      return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: existing.findings ?? [], ledger };
+      return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: existing.findings ?? [], ledger, completedAt: 0, reason: "" };
     }
     // decision === "approve" && errorKind !== "permanent" -- fall through into the normal flow.
   }
@@ -622,7 +670,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       onEvent({ type: "halted", runId, waitingOn: "answer" });
       const ledger = haltLedger(state, "answer");
       onEvent({ type: "ledger", ledger });
-      return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
+      return { runId, changeRequest, plan, finalCode: null, findings: [], ledger, completedAt: 0, reason: "" };
     }
   } else if (existing.stage === "awaiting-answer") {
     const answer = await checkAnswer(env.SPEND_KV, `change/answer/${runId}`);
@@ -634,12 +682,12 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
         onEvent({ type: "stopped" });
         onEvent({ type: "ledger", ledger });
-        return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: [], ledger };
+        return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: [], ledger });
       }
       onEvent({ type: "halted", runId, waitingOn: "answer" });
       const ledger = haltLedger(existing, "answer");
       onEvent({ type: "ledger", ledger });
-      return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: [], ledger };
+      return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: [], ledger, completedAt: 0, reason: "" };
     }
     onEvent({ type: "answered", answer });
     ({ grounding, plan } = await groundAndPlan(answer, " (re-ground + re-plan after question)"));
@@ -694,7 +742,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
       onEvent({ type: "stopped" });
       onEvent({ type: "ledger", ledger });
-      return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
+      return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings: [], ledger });
     }
     onEvent({ type: "plan-gate", runId, plan, grounding, costEstimateUsd: budget.spent, budgetRemainingUsd: Math.max(0, budget.ceilingUsd - budget.spent) });
     const state: ChangeState = { runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, planGateReplyCount, runStartedAt, stage: "awaiting-plan-decision", plan, grounding };
@@ -702,7 +750,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     onEvent({ type: "halted", runId, waitingOn: "plan-decision" });
     const ledger = haltLedger(state, "plan-decision");
     onEvent({ type: "ledger", ledger });
-    return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
+    return { runId, changeRequest, plan, finalCode: null, findings: [], ledger, completedAt: 0, reason: "" };
   }
   if (!pastPlanGate) onEvent({ type: "plan-gate-decided", decision: planDecision });
 
@@ -730,7 +778,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       lessonRecurrenceCount: recurrenceCount,
     };
     onEvent({ type: "ledger", ledger });
-    return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
+    return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings: [], ledger });
   }
   pastGate1Approved = true;
 
@@ -742,7 +790,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
     onEvent({ type: "stopped" });
     onEvent({ type: "ledger", ledger });
-    return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
+    return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings: [], ledger });
   }
 
   // ---- Stages 2-3: implement, then verify -> fix loop TO CONVERGENCE --
@@ -837,7 +885,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
         onEvent({ type: "stopped" });
         onEvent({ type: "ledger", ledger });
-        return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
+        return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings: [], ledger });
       }
       convergenceFixAttempts++;
       inFlightStage = `fix (convergence attempt ${convergenceFixAttempts})`;
@@ -917,7 +965,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       };
       onEvent({ type: "refused", reason: convergenceReason });
       onEvent({ type: "ledger", ledger });
-      return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
+      return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings: [], ledger });
     }
 
     // Explicit gate, asserted in code, not just implied by the loop above:
@@ -942,7 +990,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
       onEvent({ type: "stopped" });
       onEvent({ type: "ledger", ledger });
-      return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
+      return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings: [], ledger });
     }
 
     inFlightStage = "review";
@@ -986,7 +1034,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
         onEvent({ type: "stopped" });
         onEvent({ type: "ledger", ledger });
-        return { runId, changeRequest, plan, finalCode: null, findings, ledger };
+        return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings, ledger });
       }
       onEvent({ type: "review-gate", runId, materialFindings: material, nitFindings: nits });
       const state: ChangeState = {
@@ -997,7 +1045,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       onEvent({ type: "halted", runId, waitingOn: "review-decision" });
       const ledger = haltLedger(state, "review-decision");
       onEvent({ type: "ledger", ledger });
-      return { runId, changeRequest, plan, finalCode: null, findings, ledger };
+      return { runId, changeRequest, plan, finalCode: null, findings, ledger, completedAt: 0, reason: "" };
     }
     reviewGateDecision = decision;
     onEvent({ type: "review-gate-decided", decision });
@@ -1007,7 +1055,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
       onEvent({ type: "stopped" });
       onEvent({ type: "ledger", ledger });
-      return { runId, changeRequest, plan, finalCode: null, findings, ledger };
+      return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings, ledger });
     }
 
     if (decision === "approve") {
@@ -1064,7 +1112,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
     onEvent({ type: "stopped" });
     onEvent({ type: "ledger", ledger });
-    return { runId, changeRequest, plan, finalCode: null, findings, ledger };
+    return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings, ledger });
   }
 
   const stillFailing = decideStillFailing(verifyFatalError, verifyRegression, verifyCriteria);
@@ -1114,9 +1162,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   };
   onEvent({ type: "ledger", ledger });
 
-  const record: ChangeRecord = { runId, changeRequest, plan, finalCode: outcome === "shipped" ? finalCode : null, findings, ledger };
-  await env.SPEND_KV.put(`changelog/${runId}`, JSON.stringify(record));
-  return record;
+  return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: outcome === "shipped" ? finalCode : null, findings, ledger });
 
   } catch (e) {
     // FOUNDATION-2 item 4: "a timeout must never lose a run." Everything
@@ -1158,7 +1204,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     onEvent({ type: "halted", runId, waitingOn: "error-decision" });
     const ledger = haltLedger(state, "error-decision");
     onEvent({ type: "ledger", ledger });
-    return { runId, changeRequest, plan: state.plan ?? null, finalCode: state.implCode ?? null, findings: state.findings ?? [], ledger };
+    return { runId, changeRequest, plan: state.plan ?? null, finalCode: state.implCode ?? null, findings: state.findings ?? [], ledger, completedAt: 0, reason: "" };
   }
 }
 
