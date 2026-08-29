@@ -83,10 +83,24 @@ td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabu
 .orient-box{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:16px 20px;margin:20px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 22px}
 .orient-box p{margin:0;font-size:14.5px;line-height:1.5;color:var(--ink2)}
 .orient-box strong{color:var(--ink);display:block;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
-.workspace{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(340px,0.9fr);gap:18px;margin:22px 0}
+.workspace{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(340px,0.9fr);gap:18px;margin:22px 0;align-items:start}
 @media(max-width:900px){.workspace{grid-template-columns:1fr}}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:18px}
-.world-panel{padding:14px}
+/* LAST.md item 4: "the world persistent and visible while a run streams
+   beside it... the run log scrolls; the world does not disappear."
+   position:sticky, not fixed -- it stays pinned within the .workspace
+   grid's own extent (both at the 2-column desktop width, where it holds
+   its column as the page scrolls, and collapsed to 1 column below 900px,
+   where it docks to the top as the log scrolls underneath), and scrolls
+   away normally once the whole workspace section is behind the visitor,
+   unlike position:fixed which would follow forever. align-items:start on
+   .workspace above is required for this -- CSS Grid items stretch to the
+   row height by default, which silences position:sticky entirely (an
+   element that already fills its whole scrollable area has nowhere to
+   "stick" to). top clears the sticky header's own height (~72px) plus a
+   visible gap. */
+.world-panel{padding:14px;position:sticky;top:88px}
+@media(max-width:900px){.world-panel{top:12px}}
 #world-canvas,#world-canvas-2d{width:100%;height:420px;display:block;border-radius:10px}
 .world-caption{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
 .world-goal-line{margin:8px 2px 0;font-size:13px;color:var(--ink2)}
@@ -121,7 +135,23 @@ td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabu
 .stage.active{border-left-color:var(--accent);color:var(--ink)}
 .stage.error{border-left-color:var(--accent);background:var(--accentSoft);border-radius:0 8px 8px 0;padding:10px 16px}
 .stage.gate{border-left-color:var(--accent)}
-.stage h4{margin:0 0 6px;font-size:13.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:inherit}
+.stage h4{margin:0;font-size:13.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:inherit}
+/* LAST.md item 3: real hierarchy per stage -- a heading+outcome readable
+   at a glance, willBuild/willNotTouch as distinct visually separated
+   blocks (not an inline <strong> prefix in a paragraph), criteria as a
+   real list with kind as a quiet label (not an inline [bracket]), and
+   token/cost/duration demoted to a small secondary footer row. */
+.stage-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+.stage-heading h4{margin:0}
+.stage-outcome{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.stage-block{background:var(--paper);border:1px solid var(--line2);border-radius:8px;padding:10px 13px;margin:0 0 8px}
+.stage-block-label{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 5px;display:block}
+.stage-block p{margin:0;color:var(--ink);font-size:14.5px;line-height:1.5}
+.criteria-list{list-style:none;margin:6px 0 8px;padding:0}
+.criteria-list li{display:flex;align-items:baseline;gap:9px;padding:6px 0;border-bottom:1px solid var(--line2);font-size:14px}
+.criteria-list li:last-child{border-bottom:none}
+.criteria-kind{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--line2);padding:2px 6px;border-radius:5px;flex:none}
+.stage-footer{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--line2)}
 pre{background:var(--paper);border:1px solid var(--line2);border-radius:9px;padding:12px 14px;font-family:var(--mono);font-size:13px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;margin:8px 0}
 .test-list{list-style:none;padding:0;margin:8px 0}
 .test-list li{display:flex;gap:10px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--line2);font-size:13.5px}
@@ -167,15 +197,21 @@ pre{background:var(--paper);border:1px solid var(--line2);border-radius:9px;padd
 footer{border-top:1px solid var(--line);padding:30px 0 60px;color:var(--muted);font-size:14.5px;margin-top:60px}
 footer a{color:var(--ink2)}
 
-/* ---------------- FINAL.md item 2: the persistent action bar ----------------
-   The single place anything is ever asked of the visitor. Fixed to the
-   viewport bottom, always visible, never empty. Its CONTENTS change with the
-   run's state; its POSITION never does. body gets bottom padding equal to
-   the bar's real measured height (set as --bar-h by JS on every render) so
-   it never covers page content, at any viewport width. */
-body{padding-bottom:var(--bar-h,64px)}
-.action-bar{position:fixed;left:0;right:0;bottom:0;z-index:70;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -6px 20px -10px rgba(42,32,26,.22)}
-.action-bar-inner{max-width:1180px;margin:0 auto;padding:12px 24px;display:flex;flex-direction:column;gap:8px}
+/* ---------------- the persistent action bar ----------------
+   LAST.md item 3: moved from position:fixed spanning the whole viewport
+   (FINAL.md item 2's original spec -- Mark's own call that this was a
+   specification error, not a defect in building it) to living inside
+   .run-panel, directly beneath #stage-log, position:sticky to that
+   panel's own bottom. It's still the single place anything is ever asked
+   of the visitor, still always visible while a run is active, still never
+   empty -- just scoped to the output it acts on (a chat composer under
+   the transcript) instead of a toolbar across the browser. Because it's
+   sticky, not fixed, it now occupies real space in normal document flow,
+   so the old body padding-bottom/--bar-h JS-measured-height workaround
+   (needed only to stop a `fixed` bar covering page content) is gone --
+   nothing to cover, it's part of the layout now. */
+.action-bar{position:sticky;bottom:0;z-index:5;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -6px 20px -10px rgba(42,32,26,.22);margin:14px -18px -18px;border-radius:0 0 var(--r) var(--r)}
+.action-bar-inner{padding:12px 18px;display:flex;flex-direction:column;gap:8px}
 .action-bar .bar-kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
 .action-bar .bar-ask{margin:0;font-size:15.5px;line-height:1.4}
 .action-bar .bar-note{margin:0;font-size:12.5px;color:var(--muted)}
@@ -268,16 +304,28 @@ body{padding-bottom:var(--bar-h,64px)}
       <p class="world-goal-line">This is the world you're adding to.</p>
     </div>
 
-    <div class="panel">
+    <div class="panel run-panel">
       <div class="budget-bar" id="budget-bar">Loading today's budget…</div>
       <p class="request-copy">This world is shared: every visitor's request builds on whatever the last
         one shipped. A live run is a real one -- grounding and planning alone spend a few real cents
-        before you ever see a gate to approve. <strong>Type your request in the bar fixed to the
-        bottom of the page</strong> -- that bar is the one place anything is ever asked of you here:
-        adding a request, stopping a run, or deciding at a gate.</p>
+        before you ever see a gate to approve. <strong>Type your request in the bar beneath the run
+        output below</strong> -- that bar is the one place anything is ever asked of you here: adding
+        a request, stopping a run, or deciding at a gate.</p>
       <div class="stage-log" id="stage-log" aria-live="polite">
         <p style="margin:0;color:var(--muted);font-size:14.5px">Nothing running yet -- what happens
           shows up here as a read-only record while it happens. Act from the bar below.</p>
+      </div>
+      <!-- LAST.md item 3: moved from a page-spanning position:fixed footer
+           (Mark's own spec error, not a defect from executing it) to
+           living here, at the foot of the run output it acts on -- a chat
+           composer under the transcript, not a toolbar across the browser.
+           position:sticky within THIS panel (not the viewport) means it
+           stays reachable as the log above it grows, and disappears once
+           you've scrolled past this panel entirely, not before. Its inner
+           content is still fully re-rendered by renderBar() below; the
+           element itself still never moves and is never removed. -->
+      <div class="action-bar" id="action-bar" role="region" aria-label="Pipeline actions -- add, stop, or decide from here">
+        <div class="action-bar-inner" id="action-bar-inner"></div>
       </div>
     </div>
   </div>
@@ -471,14 +519,6 @@ body{padding-bottom:var(--bar-h,64px)}
   <a href="/matrix-results">raw results</a> · <a href="/tasks">task list</a> ·
   <a href="/api">API routes</a>
 </div></footer>
-
-<!-- FINAL.md item 2: the persistent action bar -- fixed to the viewport
-     bottom, the single place anything is ever asked of the visitor. Its
-     inner content is fully re-rendered by renderBar() below; the element
-     itself never moves and is never removed. -->
-<div class="action-bar" id="action-bar" role="region" aria-label="Pipeline actions -- add, stop, or decide from here">
-  <div class="action-bar-inner" id="action-bar-inner"></div>
-</div>
 
 <script type="module">
 import { WorldRenderer } from "./world-render-3d.js";
@@ -734,10 +774,6 @@ const reducedMotionBar = window.matchMedia('(prefers-reduced-motion: reduce)').m
 let barState = { kind: 'idle' }
 let lastRenderedKind = null
 
-function setBarHeight() {
-  document.body.style.setProperty('--bar-h', bar.getBoundingClientRect().height + 'px')
-}
-
 function renderBar() {
   bar.className = 'action-bar'
   const needsYou = barState.kind === 'question' || barState.kind === 'plan-gate' || barState.kind === 'review-gate'
@@ -862,7 +898,7 @@ function renderBar() {
     const disableAll = () => { $('#bar-approve').disabled = true; $('#bar-reject').disabled = true; $('#bar-reply-submit') && ($('#bar-reply-submit').disabled = true) }
     $('#bar-approve').addEventListener('click', () => { disableAll(); fetch(`/change-plan-decision?runId=${encodeURIComponent(currentRunId)}&approve=true`).then(() => resumeCurrent()) })
     $('#bar-reject').addEventListener('click', () => { disableAll(); fetch(`/change-plan-decision?runId=${encodeURIComponent(currentRunId)}&approve=false`).then(() => resumeCurrent()) })
-    $('#bar-reply-toggle').addEventListener('click', () => { $('#bar-reply-row').classList.toggle('open'); setBarHeight() })
+    $('#bar-reply-toggle').addEventListener('click', () => { $('#bar-reply-row').classList.toggle('open') })
     $('#bar-reply-submit').addEventListener('click', () => {
       const reply = $('#bar-reply-input').value.trim()
       if (!reply) return
@@ -890,8 +926,6 @@ function renderBar() {
     $('#bar-restart').addEventListener('click', () => { barState = { kind: 'idle' }; renderBar() })
   }
 
-  setBarHeight()
-
   // A person who looked away and glanced back must register the change
   // immediately, not just from different wording -- a colour change plus a
   // one-shot flash, and focus moved to the first real control, but only on
@@ -910,7 +944,6 @@ function renderBar() {
     lastRenderedKind = barState.kind
   }
 }
-window.addEventListener('resize', setBarHeight)
 
 // ---------- the live change-pipeline run ----------
 
@@ -1013,11 +1046,12 @@ function connect(url) {
     addCost(d.costUsd)
     if (groundBlock) {
       const r = d.result
-      groundBlock.innerHTML = `<h4>Grounded</h4><p style="margin:0 0 6px">${r.premisesHold ? '<strong>Every premise checked out.</strong>' : '<strong>Found something the request assumes that is not true.</strong>'}</p>` +
-        (r.falsePremises.length ? '<ul>' + r.falsePremises.map(p => `<li>${esc(p)}</li>`).join('') + '</ul>' : '') +
-        `<p style="margin:6px 0 0;color:var(--ink2)">${esc(r.reasoning)}</p>` +
-        (r.alternatives.length ? `<p class="summary-line" style="margin-top:8px">What the structure can support instead: ${r.alternatives.map(esc).join('; ')}</p>` : '') +
-        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+      groundBlock.innerHTML = `
+        <div class="stage-heading"><h4>Grounded</h4><span class="stage-outcome">${r.premisesHold ? 'every premise checked out' : 'found something the request assumes that is not true'}</span></div>` +
+        (r.falsePremises.length ? `<div class="stage-block"><span class="stage-block-label">Not true, currently</span>${r.falsePremises.map(p => `<p>${esc(p)}</p>`).join('')}</div>` : '') +
+        `<p style="margin:0 0 8px;color:var(--ink2);font-size:14.5px">${esc(r.reasoning)}</p>` +
+        (r.alternatives.length ? `<p class="summary-line" style="margin:0 0 8px">What the structure can support instead: ${r.alternatives.map(esc).join('; ')}</p>` : '') +
+        `<div class="stage-footer">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
       groundBlock.classList.remove('active')
     }
   })
@@ -1027,22 +1061,30 @@ function connect(url) {
     planBlock = stageBlock(log, 's-plan-' + Date.now(), 'Plan')
     stopStatus = startStatusRotation(planBlock, 'planning')
   })
+  // LAST.md item 3: "the plan block and the Gate 1 block currently print
+  // the same content twice, verbatim." One render function, called once --
+  // by 'planned' in the normal case, or by 'plan-gate' itself on a fresh
+  // reconnect straight to an already-halted gate (no preceding 'planned'
+  // event exists in THAT session to have rendered it). Either way, the
+  // plan's own content is written to the DOM exactly once; the gate never
+  // reprints it, only appends its own decision box underneath.
+  function renderPlanContent(p) {
+    return `
+      <div class="stage-heading"><h4>Planned</h4>${pathBadge(p.implementationPath)}</div>
+      <div class="stage-block"><span class="stage-block-label">What it wants to do</span><p>${esc(p.willBuild)}</p></div>
+      <div class="stage-block"><span class="stage-block-label">What it will not touch</span><p>${esc(p.willNotTouch)}</p></div>
+      ${p.criteria.length
+        ? `<span class="stage-block-label">How it will know it worked (${p.criteria.length})</span><ul class="criteria-list">${p.criteria.map(c => `<li><span class="criteria-kind">${esc(c.kind)}</span><span>${esc(c.description)}</span></li>`).join('')}</ul>`
+        : '<p style="color:var(--muted);font-size:14.5px">No new criteria proposed.</p>'}`
+  }
   es.addEventListener('planned', ev => {
     stopStatus()
     const d = JSON.parse(ev.data)
     addCost(d.costUsd)
     if (planBlock) {
-      const p = d.plan
-      // FINAL.md item 3: structure over prose, in this order -- what it
-      // wants to do, what it will not do, how it will know it worked --
-      // before any technical detail. Reasoning stays available, collapsed.
-      planBlock.innerHTML = `<h4>Planned</h4>` +
-        pathBadge(p.implementationPath) +
-        `<p><strong>What it wants to do:</strong> ${esc(p.willBuild)}</p>` +
-        `<p><strong>What it will not do:</strong> ${esc(p.willNotTouch)}</p>` +
-        (p.criteria.length ? `<p><strong>How it will know it worked (${p.criteria.length}):</strong></p><ul>${p.criteria.map(c => `<li>${esc(c.description)} <span class="mono" style="color:var(--muted)">[${esc(c.kind)}]</span></li>`).join('')}</ul>` : '<p style="color:var(--muted)">No new criteria proposed.</p>') +
-        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+      planBlock.innerHTML = renderPlanContent(d.plan) + `<div class="stage-footer">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
       planBlock.classList.remove('active')
+      planBlock.dataset.rendered = '1'
     }
   })
 
@@ -1065,19 +1107,24 @@ function connect(url) {
   es.addEventListener('plan-gate', ev => {
     const d = JSON.parse(ev.data)
     const p = d.plan, g = d.grounding
-    const b = stageBlock(log, 's-gate', 'Gate 1 — a proposal, before any code exists')
-    b.classList.remove('active')
-    // FINAL.md item 3: what / won't / how, in that order, before detail.
-    // The reasoning behind a false premise stays available, not first.
-    b.innerHTML += `
-      ${pathBadge(p.implementationPath)}
-      <p><strong>What it wants to do:</strong> ${esc(p.willBuild)}</p>
-      <p><strong>What it will not do:</strong> ${esc(p.willNotTouch)}</p>
-      ${p.criteria.length ? `<p><strong>How it will know it worked (${p.criteria.length}):</strong></p>
-      <ul>${p.criteria.map(c => `<li>${esc(c.description)} <span class="mono" style="color:var(--muted)">[${esc(c.kind)}]</span></li>`).join('')}</ul>` : '<p style="color:var(--muted)">No new criteria proposed.</p>'}
-      ${g && !g.premisesHold ? `<details style="margin-top:6px"><summary style="cursor:pointer;color:var(--muted);font-size:13px">What it can't do, and why</summary><p style="margin:6px 0 0;color:var(--ink2)">${esc(g.reasoning)}</p></details>` : ''}
-      <div class="cost-line">Spent so far this run: ${money(d.costEstimateUsd)} · headroom left against the per-run ceiling: ${money(d.budgetRemainingUsd)}</div>
-      <p style="margin-top:8px;color:var(--muted);font-size:13px">Decide from the bar below.</p>`
+    // Reference the plan above it, never reprint it (LAST.md item 3). The
+    // ONLY time this creates a fresh block is a reconnect landing directly
+    // on an already-halted gate, where no 'planned' event fired in this
+    // session to have rendered one yet.
+    if (!planBlock || !planBlock.dataset.rendered) {
+      planBlock = stageBlock(log, 's-plan-gate-' + Date.now(), 'Plan')
+      planBlock.innerHTML = renderPlanContent(p)
+      planBlock.classList.remove('active')
+      planBlock.dataset.rendered = '1'
+    }
+    planBlock.classList.add('gate')
+    planBlock.insertAdjacentHTML('beforeend', `
+      <div class="gate-box">
+        <h5>Gate 1 — your decision, before any code exists</h5>
+        ${g && !g.premisesHold ? `<details style="margin-bottom:8px"><summary style="cursor:pointer;color:var(--muted);font-size:13px">What it can't do, and why</summary><p style="margin:6px 0 0;color:var(--ink2)">${esc(g.reasoning)}</p></details>` : ''}
+        <div class="cost-line">Spent so far this run: ${money(d.costEstimateUsd)} · headroom left against the per-run ceiling: ${money(d.budgetRemainingUsd)}</div>
+        <p style="margin-top:8px;color:var(--muted);font-size:13px">Decide from the bar below.</p>
+      </div>`)
     barState = { kind: 'plan-gate' }
     renderBar()
   })
@@ -1104,8 +1151,8 @@ function connect(url) {
     addCost(d.costUsd)
     implCode = d.code
     if (implBlock) {
-      implBlock.innerHTML = `<h4>Implemented</h4>` + (currentSource ? renderDiff(currentSource, d.code) : `<pre>${esc(d.code)}</pre>`) +
-        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+      implBlock.innerHTML = `<div class="stage-heading"><h4>Implemented</h4></div>` + (currentSource ? renderDiff(currentSource, d.code) : `<pre>${esc(d.code)}</pre>`) +
+        `<div class="stage-footer">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
       implBlock.classList.remove('active')
     }
   })
@@ -1120,9 +1167,9 @@ function connect(url) {
     if (!block) return
     const total = d.regressionTotal + d.criteriaTotal
     const passed = d.regressionPassed + d.criteriaPassed
-    block.innerHTML = `<h4>${label} — ${passed === total ? 'all checks passed' : `${passed}/${total} passed`}</h4>` +
+    block.innerHTML = `<div class="stage-heading"><h4>${label}</h4><span class="stage-outcome">${passed === total ? 'all checks passed' : `${passed}/${total} passed`}</span></div>` +
       `<p class="root-cause-line">Regression: ${d.regressionPassed}/${d.regressionTotal} · Criteria: ${d.criteriaPassed}/${d.criteriaTotal}</p>` +
-      renderTests([...d.regression, ...d.criteria]) + (d.fatalError ? `<div class="summary-line">${esc(d.fatalError)}</div>` : '')
+      renderTests([...d.regression, ...d.criteria]) + (d.fatalError ? `<div class="stage-footer">${esc(d.fatalError)}</div>` : '')
     block.classList.remove('active')
     block.classList.toggle('fail', passed !== total)
   }
@@ -1137,31 +1184,51 @@ function connect(url) {
     reviewBlock = stageBlock(log, 's-review', 'Cross-model review')
     stopStatus = startStatusRotation(reviewBlock, 'reviewing')
   })
+  // Same one-render-function, reference-not-reprint shape as
+  // renderPlanContent above -- 'review-gate' only ever fires when
+  // materialFindings.length > 0, always right after 'reviewed' in the
+  // normal case, so it can reference the SAME block instead of reprinting
+  // the findings.
+  function renderReviewContent(d) {
+    const material = d.findings.filter(f => f.severity === 'MATERIAL').map(f => f.text)
+    const nits = d.findings.filter(f => f.severity === 'NIT').map(f => f.text)
+    return `
+      <div class="stage-heading"><h4>Reviewed</h4><span class="stage-outcome">by a different model, from a different vendor</span></div>
+      <details><summary style="cursor:pointer;color:var(--muted);font-size:13px">Full review text</summary><pre>${esc(d.reviewText)}</pre></details>
+      <div style="margin-top:8px">${renderFindings(material, nits)}</div>`
+  }
   es.addEventListener('reviewed', ev => {
     stopStatus()
     const d = JSON.parse(ev.data)
     addCost(d.costUsd)
     if (reviewBlock) {
-      const material = d.findings.filter(f => f.severity === 'MATERIAL').map(f => f.text)
-      const nits = d.findings.filter(f => f.severity === 'NIT').map(f => f.text)
-      reviewBlock.innerHTML = `<h4>Reviewed by a different model, from a different vendor</h4>` +
-        `<details><summary style="cursor:pointer;color:var(--muted);font-size:13px">Full review text</summary><pre>${esc(d.reviewText)}</pre></details>` +
-        `<div style="margin-top:8px">${renderFindings(material, nits)}</div>` +
-        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+      reviewBlock.innerHTML = renderReviewContent(d) + `<div class="stage-footer">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
       reviewBlock.classList.remove('active')
+      reviewBlock.dataset.rendered = '1'
     }
   })
 
   es.addEventListener('review-gate', ev => {
     const d = JSON.parse(ev.data)
-    const b = stageBlock(log, 's-review-gate', 'Gate 2 — the reviewer found something')
-    b.classList.remove('active')
-    b.innerHTML += `<p><strong>${d.materialFindings.length} material finding(s)</strong></p>` +
-      renderFindings(d.materialFindings, d.nitFindings) +
-      `<p class="personal-note" style="margin:10px 0">Material versus nit is my call here, not the model's.
-      A reviewer that flags everything is as useless as one that flags nothing -- deciding what actually
-      matters is the judgment I don't hand off.</p>` +
-      `<p style="margin-top:4px;color:var(--muted);font-size:13px">Decide from the bar below.</p>`
+    // Fresh-reconnect fallback (see plan-gate's own comment) -- review-gate's
+    // own payload only carries the material/nit TEXT, not the full findings
+    // objects or reviewText/tokens 'reviewed' has, so this fallback render
+    // is necessarily plainer than the normal same-session path.
+    if (!reviewBlock || !reviewBlock.dataset.rendered) {
+      reviewBlock = stageBlock(log, 's-review-gate-' + Date.now(), 'Cross-model review')
+      reviewBlock.innerHTML = `<div class="stage-heading"><h4>Reviewed</h4><span class="stage-outcome">by a different model, from a different vendor</span></div>` + renderFindings(d.materialFindings, d.nitFindings)
+      reviewBlock.classList.remove('active')
+      reviewBlock.dataset.rendered = '1'
+    }
+    reviewBlock.classList.add('gate')
+    reviewBlock.insertAdjacentHTML('beforeend', `
+      <div class="gate-box">
+        <h5>Gate 2 — your decision, the reviewer found something</h5>
+        <p class="personal-note" style="margin:10px 0">Material versus nit is my call here, not the model's.
+        A reviewer that flags everything is as useless as one that flags nothing -- deciding what actually
+        matters is the judgment I don't hand off.</p>
+        <p style="margin-top:4px;color:var(--muted);font-size:13px">Decide from the bar below.</p>
+      </div>`)
     barState = { kind: 'review-gate', material: d.materialFindings.length }
     renderBar()
   })
@@ -1181,8 +1248,8 @@ function connect(url) {
     const d = JSON.parse(ev.data)
     addCost(d.costUsd)
     if (fixBlock) {
-      fixBlock.innerHTML = `<h4>Fixed</h4>` + (implCode ? renderDiff(implCode, d.code) : `<pre>${esc(d.code)}</pre>`) +
-        `<div class="summary-line">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
+      fixBlock.innerHTML = `<div class="stage-heading"><h4>Fixed</h4></div>` + (implCode ? renderDiff(implCode, d.code) : `<pre>${esc(d.code)}</pre>`) +
+        `<div class="stage-footer">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
       fixBlock.classList.remove('active')
     }
   })
