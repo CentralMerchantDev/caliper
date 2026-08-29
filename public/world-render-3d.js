@@ -541,18 +541,6 @@ class Renderer3D {
 
     this._contactTex = makeContactShadowTexture();
 
-    const composer = new EffectComposer(renderer);
-    composer.addPass(new RenderPass(scene, camera));
-    const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.12, 0.35, 0.94);
-    composer.addPass(bloom);
-    this._bloom = bloom;
-    const vignette = new ShaderPass(VignetteShader);
-    vignette.uniforms.offset.value = 0.92;
-    vignette.uniforms.darkness.value = 1.05;
-    composer.addPass(vignette);
-    composer.addPass(new OutputPass());
-    this.composer = composer;
-
     // Ambient evening fireflies
     const fireflyGeo = new THREE.SphereGeometry(0.08, 8, 8);
     this._fireflies = [];
@@ -1544,56 +1532,101 @@ class Renderer3D {
 
   _bindOrbitControls() {
     const canvas = this.canvas;
+    const activePointers = new Map();
+    let initialPinchDist = null;
+    let initialCamDist = this._camDist || 18;
     let clickStartX = 0, clickStartY = 0;
+
     const onDown = (e) => {
-      if (this._isDroneTour) {
-        this.stopDroneTour();
+      if (this._isDroneTour) this.stopDroneTour();
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (activePointers.size === 1) {
+        this._orbit.dragging = true;
+        this._orbit.startX = e.clientX;
+        this._orbit.startY = e.clientY;
+        clickStartX = e.clientX;
+        clickStartY = e.clientY;
+        this._orbit.startDelta = this._orbit.delta;
+        this._orbit.startPitch = this._orbit.pitch || 0.58;
+        initialPinchDist = null;
+      } else if (activePointers.size === 2) {
+        this._orbit.dragging = false;
+        const [p1, p2] = Array.from(activePointers.values());
+        initialPinchDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        initialCamDist = this._camDist || 18;
       }
-      this._orbit.dragging = true;
-      this._orbit.startX = e.clientX;
-      this._orbit.startY = e.clientY;
-      clickStartX = e.clientX;
-      clickStartY = e.clientY;
-      this._orbit.startDelta = this._orbit.delta;
-      this._orbit.startPitch = this._orbit.pitch || 0.58;
     };
+
     const onMove = (e) => {
-      if (!this._orbit.dragging) return;
-      const dx = (e.clientX - this._orbit.startX) / Math.max(1, canvas.clientWidth);
-      const dy = (e.clientY - this._orbit.startY) / Math.max(1, canvas.clientHeight);
-      this._orbit.delta = this._orbit.startDelta + dx * 2.2;
-      this._orbit.pitch = Math.max(0.12, Math.min(1.35, this._orbit.startPitch + dy * 1.2));
+      if (!activePointers.has(e.pointerId)) return;
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (activePointers.size === 2 && initialPinchDist) {
+        const [p1, p2] = Array.from(activePointers.values());
+        const currentDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        const ratio = initialPinchDist / Math.max(1, currentDist);
+        this._camDist = Math.max(7, Math.min(140, initialCamDist * ratio));
+        this._targetCamDist = this._camDist;
+        return;
+      }
+
+      if (this._orbit.dragging && activePointers.size === 1) {
+        const dx = (e.clientX - this._orbit.startX) / Math.max(1, canvas.clientWidth);
+        const dy = (e.clientY - this._orbit.startY) / Math.max(1, canvas.clientHeight);
+        this._orbit.delta = this._orbit.startDelta + dx * 2.2;
+        this._orbit.pitch = Math.max(0.12, Math.min(1.35, this._orbit.startPitch + dy * 1.2));
+      }
     };
+
     const onUp = (e) => {
+      activePointers.delete(e.pointerId);
       if (this._orbit.dragging) {
         const dist = Math.hypot(e.clientX - clickStartX, e.clientY - clickStartY);
         if (dist < 6) {
           this._inspectClick(e);
         }
       }
-      this._orbit.dragging = false;
+      if (activePointers.size === 0) {
+        this._orbit.dragging = false;
+        initialPinchDist = null;
+      } else if (activePointers.size === 1) {
+        const remaining = Array.from(activePointers.values())[0];
+        this._orbit.dragging = true;
+        this._orbit.startX = remaining.x;
+        this._orbit.startY = remaining.y;
+        this._orbit.startDelta = this._orbit.delta;
+        this._orbit.startPitch = this._orbit.pitch || 0.58;
+        initialPinchDist = null;
+      }
     };
+
     const onWheel = (e) => {
       e.preventDefault();
       const zoomFactor = e.deltaY > 0 ? 1.1 : 0.9;
       this._camDist = Math.max(7, Math.min(140, (this._camDist || 18) * zoomFactor));
       this._targetCamDist = this._camDist;
     };
+
     const onKeyDown = (e) => {
       if (e.key === "Escape" && this._isDroneTour) {
         this.stopDroneTour();
       }
     };
-    canvas.style.touchAction = "pan-y";
+
+    canvas.style.touchAction = "none";
     canvas.addEventListener("pointerdown", onDown);
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     canvas.addEventListener("wheel", onWheel, { passive: false });
     window.addEventListener("keydown", onKeyDown);
+
     this._unbindOrbit = () => {
       canvas.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
       canvas.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKeyDown);
     };
@@ -1809,8 +1842,6 @@ class Renderer3D {
     const h = Math.max(1, Math.round(rect.height));
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
-    this.composer.setSize(w, h);
-    this._bloom.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
 
@@ -1822,7 +1853,6 @@ class Renderer3D {
   destroy() {
     this._ro.disconnect();
     this._unbindOrbit();
-    this.composer.dispose();
     this.renderer.dispose();
     this._disposed = true;
   }
@@ -2064,7 +2094,7 @@ class Renderer3D {
       }
     });
 
-    this.composer.render();
+    this.renderer.render(this.scene, this.camera);
   }
 
   _buildSim(index) {
@@ -2105,7 +2135,12 @@ function webglAvailable() {
 
 export class WorldRenderer {
   constructor(canvas, opts = {}) {
-    this._impl = webglAvailable() ? new Renderer3D(canvas, opts) : new WorldRenderer2D(canvas, opts);
+    try {
+      this._impl = webglAvailable() ? new Renderer3D(canvas, opts) : new WorldRenderer2D(canvas, opts);
+    } catch (err) {
+      console.warn("Renderer3D failed, falling back to WorldRenderer2D:", err);
+      this._impl = new WorldRenderer2D(canvas, opts);
+    }
   }
   pushTick(world) {
     this._impl.pushTick(world);
