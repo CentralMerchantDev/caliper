@@ -781,7 +781,38 @@ function renderBar() {
         <button class="btn btn-outline" id="bar-rreject" type="button">Reject, ship as-is</button>
       </div>
       <p class="bar-note">Nothing is being spent while it waits.</p>`
+  } else if (barState.kind === 'stage-error') {
+    // FOUNDATION-2 item 4: a stage failing (a timeout, anything) is a halt,
+    // not a loss -- the run is saved server-side with everything already
+    // paid for intact, waiting here exactly like a plan/review gate does.
+    html = `
+      <span class="bar-kicker">Something failed -- nothing is lost</span>
+      <p class="bar-ask"><strong>${esc(barState.erroredAtStage)}</strong> failed: ${esc(barState.errorMessage)}</p>
+      <p class="bar-note">${money(barState.costSoFarUsd)} spent so far is saved. Retry resumes from there -- it does not re-pay for anything that already succeeded. Abandon ends the run for good.</p>
+      <div class="bar-row">
+        <button class="btn" id="bar-retry" type="button">Retry</button>
+        <button class="btn btn-outline" id="bar-abandon" type="button">Abandon</button>
+      </div>`
+  } else if (barState.kind === 'resume-prompt') {
+    // A run from an earlier visit (page reload, closed tab, backgrounded
+    // browser) that never reached a terminal state -- the only durable
+    // record of it is localStorage, restored on load below. Offered here
+    // rather than auto-resumed, so a visitor who deliberately walked away
+    // isn't surprised by a run picking back up on its own.
+    html = `
+      <span class="bar-kicker">You have a run in progress from earlier</span>
+      <p class="bar-ask">"${esc(barState.changeRequest)}" -- ${money(barState.costSoFarUsd)} already spent, saved and waiting.</p>
+      <div class="bar-row">
+        <button class="btn" id="bar-resume" type="button">Resume it</button>
+        <button class="btn btn-outline" id="bar-discard" type="button">Start fresh instead</button>
+      </div>`
   } else if (barState.kind === 'done') {
+    // The one place every terminal path converges (shipped, refused,
+    // stopped, abandoned-after-error) -- clearing the saved run here,
+    // rather than in each individual event handler that can reach 'done',
+    // means there's exactly one spot to keep correct as those handlers
+    // change, not several that all have to remember to do it.
+    clearSavedRun()
     html = `
       <span class="bar-kicker">${barState.ok ? 'Finished' : 'Stopped'}</span>
       <p class="bar-ask">${esc(barState.summary)}</p>
@@ -820,6 +851,18 @@ function renderBar() {
     const disableAll = () => { $('#bar-rapprove').disabled = true; $('#bar-rreject').disabled = true }
     $('#bar-rapprove').addEventListener('click', () => { disableAll(); fetch(`/change-review-decision?runId=${encodeURIComponent(currentRunId)}&approve=true`).then(() => resumeCurrent()) })
     $('#bar-rreject').addEventListener('click', () => { disableAll(); fetch(`/change-review-decision?runId=${encodeURIComponent(currentRunId)}&approve=false`).then(() => resumeCurrent()) })
+  } else if (barState.kind === 'stage-error') {
+    const disableAll = () => { $('#bar-retry').disabled = true; $('#bar-abandon').disabled = true }
+    $('#bar-retry').addEventListener('click', () => { disableAll(); fetch(`/change-error-decision?runId=${encodeURIComponent(currentRunId)}&approve=true`).then(() => resumeCurrent()) })
+    $('#bar-abandon').addEventListener('click', () => { disableAll(); fetch(`/change-error-decision?runId=${encodeURIComponent(currentRunId)}&approve=false`).then(() => resumeCurrent()) })
+  } else if (barState.kind === 'resume-prompt') {
+    $('#bar-resume').addEventListener('click', () => {
+      currentRunId = barState.runId
+      runningCostUsd = barState.costSoFarUsd
+      setRunning('Resuming…')
+      resumeCurrent()
+    })
+    $('#bar-discard').addEventListener('click', () => { clearSavedRun(); barState = { kind: 'idle' }; renderBar() })
   } else if (barState.kind === 'done') {
     $('#bar-restart').addEventListener('click', () => { barState = { kind: 'idle' }; renderBar() })
   }
@@ -844,21 +887,53 @@ function renderBar() {
     lastRenderedKind = barState.kind
   }
 }
-renderBar()
 window.addEventListener('resize', setBarHeight)
 
 // ---------- the live change-pipeline run ----------
 
 let currentRunId = null
+let currentChangeRequest = ''
 let implCode = null, currentSource = null
 let reconnectAttempts = 0
 let runningCostUsd = 0
 const MAX_RECONNECT_ATTEMPTS = 5
 const RECONNECT_DELAYS_MS = [2000, 4000, 8000, 15000, 30000]
 
+// FOUNDATION-2 item 4: currentRunId used to live only in this in-memory
+// `let` -- a reload, a closed tab, or a backgrounded browser losing its JS
+// context threw it away completely, orphaning an otherwise perfectly
+// resumable run: the server had already saved it (parked at a gate,
+// nothing lost, real money already spent) with no trace anywhere in the
+// UI of what its runId even was. This was the actual defect behind runs
+// that looked "timed out" -- they weren't; they were unreachable. Every
+// runId this page ever learns about now gets written here immediately, and
+// checked for on load, so a visitor is offered their earlier run back
+// instead of the page silently pretending it never happened.
+const SAVED_RUN_KEY = 'caliper-active-run'
+function saveRunToStorage(runId, changeRequest, costSoFarUsd) {
+  try { localStorage.setItem(SAVED_RUN_KEY, JSON.stringify({ runId, changeRequest, costSoFarUsd, savedAt: Date.now() })) } catch (_) {}
+}
+function loadSavedRun() {
+  try { const raw = localStorage.getItem(SAVED_RUN_KEY); return raw ? JSON.parse(raw) : null } catch (_) { return null }
+}
+function clearSavedRun() {
+  try { localStorage.removeItem(SAVED_RUN_KEY) } catch (_) {}
+}
+
+// First real render, now that everything above is declared: a saved run
+// from an earlier visit takes priority over the default idle bar -- a
+// visitor who paid for grounding+plan (or further) and then lost the tab
+// deserves to be told that before being invited to start something new.
+const savedRun = loadSavedRun()
+if (savedRun && savedRun.runId) {
+  barState = { kind: 'resume-prompt', runId: savedRun.runId, changeRequest: savedRun.changeRequest || '(unknown request)', costSoFarUsd: savedRun.costSoFarUsd || 0 }
+}
+renderBar()
+
 function addCost(usd) {
   runningCostUsd += usd || 0
   if (barState.kind === 'running') { barState.costUsd = runningCostUsd; renderBar() }
+  if (currentRunId) saveRunToStorage(currentRunId, currentChangeRequest, runningCostUsd)
 }
 function setRunning(stageLabel) {
   barState = { kind: 'running', stageLabel, costUsd: runningCostUsd }
@@ -870,6 +945,7 @@ function startRun() {
   if (!text) return
   log.innerHTML = ''
   currentRunId = null
+  currentChangeRequest = text
   implCode = null
   reconnectAttempts = 0
   runningCostUsd = 0
@@ -885,7 +961,22 @@ function connect(url) {
   let groundBlock = null, planBlock = null, implBlock = null, verifyBlock = null, reviewBlock = null, fixBlock = null
   let stopStatus = () => {}
 
-  es.addEventListener('runId', ev => { currentRunId = JSON.parse(ev.data).runId })
+  es.addEventListener('runId', ev => {
+    currentRunId = JSON.parse(ev.data).runId
+    // Saved the moment it's known -- before grounding even starts -- so a
+    // reload/close/background any time after this point still has
+    // something to recover, not just after the run reaches a gate.
+    saveRunToStorage(currentRunId, currentChangeRequest, runningCostUsd)
+  })
+  es.addEventListener('stage-error', ev => {
+    stopStatus()
+    const d = JSON.parse(ev.data)
+    const b = stageBlock(log, 's-stage-error-' + Date.now(), 'Failed -- not lost')
+    b.classList.add('error'); b.classList.remove('active')
+    b.innerHTML += `<p style="margin:0"><strong>${esc(d.erroredAtStage)}</strong> failed: ${esc(d.errorMessage)}</p><p style="margin:6px 0 0;color:var(--ink2)">${money(d.costSoFarUsd)} spent so far is saved -- retrying resumes from here, it does not re-pay for what already succeeded.</p>`
+    barState = { kind: 'stage-error', erroredAtStage: d.erroredAtStage, errorMessage: d.errorMessage, costSoFarUsd: d.costSoFarUsd }
+    renderBar()
+  })
 
   es.addEventListener('grounding', () => {
     setRunning('Grounding — checking this against the real code')

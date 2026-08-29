@@ -31,13 +31,31 @@ export async function createWithTruncationGuard(
 export const DEFAULT_MODEL = "claude-sonnet-5";
 const MAX_TOKENS = 1024;
 
-// REFRAME.md item 1: every stage here is short and cheap by design (a few
-// hundred to a few thousand tokens -- see CONTROL_LIMITS.TOKEN_CAPS). The
-// SDK's own default timeout is 10 minutes, which is indistinguishable from
-// "broken" to a visitor watching an SSE stream go quiet. Bounded well above
-// any real call's observed wall time, so a call that's actually just slow
-// still succeeds -- this only cuts off a call that's genuinely stuck.
-export const STAGE_CALL_TIMEOUT_MS = 45_000;
+// REFRAME.md item 1 set this to 45s, "bounded well above any real call's
+// observed wall time" -- unmeasured, as it turned out. FOUNDATION-2 item 3
+// measured every stage's real prompt, at its real token cap, against the
+// real world source, several times, on a live Claude subscription (not
+// this Worker's own key -- see FOUNDATION-2.md's own report for the full
+// method and numbers): ground ~15-17s, plan ~40-51s (already over 45s on
+// one of three reps), implement ~82-84s, fix ~114s, retrospective ~21s.
+// 45s was never enough for implement or fix -- both routinely exceed it,
+// which independently explains runs that looked lost after Gate 1: the
+// SDK-level timeout fired mid-call with no server-side trace saved (see
+// FOUNDATION-2 item 4's fix for that half of the problem).
+//
+// 85s is chosen, not a rounder or larger number, because Cloudflare
+// Workers appears to hard-cap a single outbound subrequest around 90-100s
+// regardless of what timeout this SDK is given (community-reported, not
+// authoritatively documented -- see FOUNDATION-2.md's report) -- raising
+// this past that ceiling would be pricing headroom the platform won't
+// honor. It comfortably covers ground/plan/retrospective and most
+// implement calls. It does NOT reliably cover fix, whose single measured
+// rep (114s) exceeds even the platform ceiling this constant is already
+// pressed against -- no SDK timeout value fixes that; the real backstop
+// for fix specifically is the checkpoint-and-resume behavior in
+// changePipeline.ts (a stage that still fails here parks resumably
+// instead of losing the run), not this number.
+export const STAGE_CALL_TIMEOUT_MS = 85_000;
 
 // Three models spanning a real capability/price range: the cheapest credible
 // option, a mid-tier default, and a frontier model. See docs/BUILD.md for why

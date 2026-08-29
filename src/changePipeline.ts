@@ -81,11 +81,33 @@ export type ChangeEvent =
   | { type: "shipped" }
   | { type: "refused"; reason: string }
   | { type: "stopped" }
-  | { type: "halted"; runId: string; waitingOn: "answer" | "plan-decision" | "review-decision" }
+  | { type: "halted"; runId: string; waitingOn: "answer" | "plan-decision" | "review-decision" | "error-decision" }
+  | {
+      // FOUNDATION-2 item 4: "a timeout must never lose a run... say
+      // plainly what happened and what the visitor can do." This is that
+      // plain statement -- sent the moment a stage throws, whether or not
+      // anyone is still listening on this connection, since it's also
+      // persisted to KV (see ChangeState.stage "errored") for whenever the
+      // visitor next reconnects.
+      type: "stage-error";
+      runId: string;
+      erroredAtStage: string;
+      errorMessage: string;
+      costSoFarUsd: number;
+    }
   | { type: "ledger"; ledger: ChangeLedger };
 
 export interface ChangeLedger {
-  outcome: "shipped" | "refused-plan" | "refused-verification" | "stopped" | "halted-awaiting-answer" | "halted-awaiting-plan-decision" | "halted-awaiting-review-decision";
+  outcome:
+    | "shipped"
+    | "refused-plan"
+    | "refused-verification"
+    | "stopped"
+    | "halted-awaiting-answer"
+    | "halted-awaiting-plan-decision"
+    | "halted-awaiting-review-decision"
+    | "halted-awaiting-error-decision"
+    | "abandoned-after-error";
   totalCostUsd: number;
   stageCosts: { stage: string; costUsd: number }[];
   reviewFoundMaterial: number;
@@ -122,13 +144,40 @@ interface ChangeState {
   questionAsked: boolean;
   planGateReplyCount: number;
   runStartedAt: number;
-  stage: "awaiting-answer" | "awaiting-plan-decision" | "awaiting-review-decision";
-  plan: ChangePlan;
-  grounding: GroundingResult;
+  // "errored" (this brief's fix): a stage threw -- a timeout, a network
+  // error, anything -- partway through a call that was never reached by
+  // one of the other halts below. Distinct from those: it isn't waiting on
+  // a human DECISION, it's reporting a FAILURE, with whatever partial
+  // progress (plan/implCode/etc, whichever of those had already been paid
+  // for and completed) survives it, so a retry never re-pays for work
+  // already done.
+  stage: "awaiting-answer" | "awaiting-plan-decision" | "awaiting-review-decision" | "errored";
+  // Optional, not required: an "errored" state reached before grounding
+  // and planning ever completed has neither yet.
+  plan?: ChangePlan;
+  grounding?: GroundingResult;
   implCode?: string;
   verifyRegression?: TestResult[];
   verifyCriteria?: TestResult[];
   findings?: ReviewFinding[];
+  /** Only set when stage === "errored". The exception's own message --
+   * shown to the visitor plainly, not paraphrased. */
+  errorMessage?: string;
+  /** Only set when stage === "errored". Which named stage was in flight --
+   * shown alongside errorMessage so the report reads "X failed: Y", not
+   * just "something failed". */
+  erroredAtStage?: string;
+  /** Only set when stage === "errored". True once Gate 1 has been approved
+   * for this run -- distinguishes "retry means re-ground-and-plan" from
+   * "retry means resume implement/verify/fix/review", since both can leave
+   * an errored state with a plan already attached. */
+  erroredPastGate1?: boolean;
+  /** Only set when stage === "errored" and no plan was produced yet. The
+   * clarification text (a question answer, or a Gate 1 free-text reply)
+   * that was in flight when groundAndPlan threw -- reused on retry instead
+   * of silently dropping it and re-grounding against the bare original
+   * request. */
+  erroredClarification?: string | null;
 }
 
 interface CallBudget {
@@ -306,9 +355,17 @@ export interface ChangeEnv {
   OPENAI_API_KEY: string;
 }
 
-function haltLedger(state: Pick<ChangeState, "stageCosts" | "budgetSpent" | "questionAsked" | "planGateReplyCount" | "runStartedAt">, waitingOn: "answer" | "plan-decision" | "review-decision"): ChangeLedger {
+function haltLedger(
+  state: Pick<ChangeState, "stageCosts" | "budgetSpent" | "questionAsked" | "planGateReplyCount" | "runStartedAt">,
+  waitingOn: "answer" | "plan-decision" | "review-decision" | "error-decision",
+): ChangeLedger {
+  const outcome =
+    waitingOn === "answer" ? "halted-awaiting-answer"
+    : waitingOn === "plan-decision" ? "halted-awaiting-plan-decision"
+    : waitingOn === "review-decision" ? "halted-awaiting-review-decision"
+    : "halted-awaiting-error-decision";
   return {
-    outcome: waitingOn === "answer" ? "halted-awaiting-answer" : waitingOn === "plan-decision" ? "halted-awaiting-plan-decision" : "halted-awaiting-review-decision",
+    outcome,
     totalCostUsd: state.budgetSpent,
     stageCosts: state.stageCosts,
     reviewFoundMaterial: 0,
@@ -321,6 +378,35 @@ function haltLedger(state: Pick<ChangeState, "stageCosts" | "budgetSpent" | "que
     questionAsked: state.questionAsked,
     totalWallTimeMs: Date.now() - state.runStartedAt,
     // A halted run isn't finished -- there's nothing to retrospect on yet.
+    retrospectiveLesson: null,
+    lessonRecurrenceCount: null,
+  };
+}
+
+/** Same shape as buildStoppedLedger, for the "abandon" branch of an
+ * error-decision -- a visitor choosing not to retry after a stage failed
+ * is the same terminal shape as a visitor choosing to stop, just reached
+ * from a different halt. */
+function buildAbandonedAfterErrorLedger(
+  stageCosts: { stage: string; costUsd: number }[],
+  budget: CallBudget,
+  questionAsked: boolean,
+  planGateReplyCount: number,
+  runStartedAt: number,
+): ChangeLedger {
+  return {
+    outcome: "abandoned-after-error",
+    totalCostUsd: budget.spent,
+    stageCosts,
+    reviewFoundMaterial: 0,
+    reviewFoundNits: 0,
+    fixApplied: false,
+    fixHeld: null,
+    planGateDecision: "approve",
+    reviewGateDecision: "not-needed",
+    questionAsked,
+    planGateReplyCount,
+    totalWallTimeMs: Date.now() - runStartedAt,
     retrospectiveLesson: null,
     lessonRecurrenceCount: null,
   };
@@ -399,6 +485,62 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   let questionAsked = existing?.questionAsked ?? false;
   let planGateReplyCount = existing?.planGateReplyCount ?? 0;
   const priorLessons = (await loadInstructions(env.SPEND_KV)).map((l) => `- ${l}`).join("\n");
+  // FOUNDATION-2 item 4: which named stage is currently in flight, kept up
+  // to date at every stage boundary below so a thrown error (a timeout,
+  // anything) can be reported and checkpointed against the right label
+  // rather than a generic "something failed".
+  let inFlightStage = "ground+plan";
+  // Declared here, ABOVE the try block below, on purpose: TypeScript block-
+  // scopes `let`, and the catch block that reports/checkpoints a thrown
+  // error needs to read whatever value each of these last held, however
+  // far the run got before failing. If these were declared inside the try
+  // (where they're actually assigned), the catch block simply couldn't see
+  // them.
+  let plan: ChangePlan | undefined;
+  let grounding: GroundingResult | undefined;
+  let lastClarification: string | null = null;
+  let implCode: string | undefined;
+  let verifyRegression: TestResult[] | undefined;
+  let verifyCriteria: TestResult[] | undefined;
+  let verifyFatalError: string | undefined;
+  let convergenceFixAttempts = 0;
+  let findings: ReviewFinding[] | undefined;
+  // Also hoisted above the try for the same reason: read by the catch
+  // block. pastPlanGate itself only depends on `existing` (safe to compute
+  // this early); pastGate1Approved starts mirroring it and flips true for
+  // real once this attempt passes Gate 1 (see "Plan approved" below).
+  const pastPlanGate = existing?.stage === "awaiting-review-decision" || (existing?.stage === "errored" && existing.erroredPastGate1 === true);
+  let pastGate1Approved = pastPlanGate;
+
+  // A run that errored out mid-stage halts here exactly like every other
+  // gate below: it does NOT retry on its own just because this function
+  // got called again (a stray reconnect must never silently re-spend) --
+  // it waits for an explicit decision, checked once, same contract as
+  // checkAnswer/checkDecision everywhere else in this file. "retry" falls
+  // through to the normal flow below, which -- via pastPlanGate and the
+  // no-plan-yet check just below -- resumes from whatever was already
+  // paid for and completed, never from scratch. "abandon" ends the run,
+  // same terminal shape as a stop.
+  if (existing?.stage === "errored") {
+    const decision = await checkDecision(env.SPEND_KV, `change/error-decision/${runId}`);
+    if (decision === "reject") {
+      await clearState(env.SPEND_KV, runId);
+      const ledger = buildAbandonedAfterErrorLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+      onEvent({ type: "stopped" });
+      onEvent({ type: "ledger", ledger });
+      return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: existing.findings ?? [], ledger };
+    }
+    if (decision === null) {
+      onEvent({ type: "stage-error", runId, erroredAtStage: existing.erroredAtStage ?? "unknown", errorMessage: existing.errorMessage ?? "unknown error", costSoFarUsd: budget.spent });
+      onEvent({ type: "halted", runId, waitingOn: "error-decision" });
+      const ledger = haltLedger(existing, "error-decision");
+      onEvent({ type: "ledger", ledger });
+      return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: existing.findings ?? [], ledger };
+    }
+    // decision === "approve" (retry) -- fall through into the normal flow.
+  }
+
+  try {
 
   // ---- Stage 0+1: Ground, then plan (FINISH.md chunk 7) ----
   // Grounding no longer hard-stops the run by itself -- it feeds directly
@@ -408,6 +550,8 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   // the stage-cost entries so repeated ground+plan rounds (after a
   // question, or after a Gate 1 reply) are distinguishable in the ledger.
   async function groundAndPlan(clarification: string | null, label: string): Promise<{ grounding: GroundingResult; plan: ChangePlan }> {
+    inFlightStage = "ground+plan";
+    lastClarification = clarification;
     onEvent({ type: "grounding" });
     const groundResult = await callAnthropic(env, budget, WORST_CASE.ground, () => groundRequest(env.ANTHROPIC_API_KEY, changeRequest, GROUND_MODEL, CONTROL_LIMITS.TOKEN_CAPS.ground));
     stageCosts.push({ stage: `ground${label}`, costUsd: groundResult.costUsd });
@@ -422,11 +566,8 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     return { grounding: groundResult.result, plan: planResult.plan };
   }
 
-  let plan: ChangePlan;
-  let grounding: GroundingResult;
-
-  if (!existing) {
-    ({ grounding, plan } = await groundAndPlan(null, ""));
+  if (!existing || (existing.stage === "errored" && !existing.plan)) {
+    ({ grounding, plan } = await groundAndPlan(existing?.erroredClarification ?? null, ""));
 
     if (plan.question) {
       questionAsked = true;
@@ -448,12 +589,12 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
         onEvent({ type: "stopped" });
         onEvent({ type: "ledger", ledger });
-        return { runId, changeRequest, plan: existing.plan, finalCode: null, findings: [], ledger };
+        return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: [], ledger };
       }
       onEvent({ type: "halted", runId, waitingOn: "answer" });
       const ledger = haltLedger(existing, "answer");
       onEvent({ type: "ledger", ledger });
-      return { runId, changeRequest, plan: existing.plan, finalCode: null, findings: [], ledger };
+      return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: [], ledger };
     }
     onEvent({ type: "answered", answer });
     ({ grounding, plan } = await groundAndPlan(answer, " (re-ground + re-plan after question)"));
@@ -461,6 +602,12 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     plan = existing.plan;
     grounding = existing.grounding;
   }
+  // Every branch above either assigns plan/grounding, or returns out of
+  // this function entirely (the question-halt return above) -- this is a
+  // real runtime safety net, not just a type-narrowing trick, since it's
+  // the one place that would catch a future branch added here that forgets
+  // to do either.
+  if (!plan || !grounding) throw new Error("internal error: plan/grounding not established before Gate 1");
 
   // ---- Stage 1.5: Gate 1 -- grounding + plan + criteria + cost, shown
   // together as one conversational moment (FINISH.md chunk 7). Three
@@ -474,7 +621,6 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   // any OTHER stage fell through neither branch, silently discarding that
   // the plan had already been approved. The correct check is the inverse:
   // skip this gate entirely once we know we're past it.
-  const pastPlanGate = existing?.stage === "awaiting-review-decision";
   let planDecision: "approve" | "reject" | null = pastPlanGate ? "approve" : null;
   if (!pastPlanGate) {
     while (true) {
@@ -535,6 +681,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     onEvent({ type: "ledger", ledger });
     return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
   }
+  pastGate1Approved = true;
 
   // Plan approved -- about to spend on implement/verify/fix/review, all in
   // this one call. Checked here so a stop clicked right after approving
@@ -564,27 +711,39 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   // sandbox error. If it can't get there, it refuses and reports exactly
   // what's still failing -- without spending a cent on a review of code
   // already known to be broken.
-  let implCode: string;
-  let verifyRegression: TestResult[];
-  let verifyCriteria: TestResult[];
-  let verifyFatalError: string | undefined;
-  let convergenceFixAttempts = 0;
-  let findings: ReviewFinding[];
 
-  if (existing?.stage === "awaiting-review-decision" && existing.implCode && existing.verifyRegression && existing.verifyCriteria && existing.findings) {
+  // (existing.stage === "awaiting-review-decision") is the pre-existing
+  // success-path halt; (existing.stage === "errored" && ...findings) is
+  // this brief's addition -- a retry after a failure that happened AFTER
+  // review already completed (e.g. during the post-review fix). Both mean
+  // the same thing: everything through review is already paid for and
+  // done, reuse all of it.
+  if (
+    (existing?.stage === "awaiting-review-decision" || existing?.stage === "errored") &&
+    existing.implCode && existing.verifyRegression && existing.verifyCriteria && existing.findings
+  ) {
     implCode = existing.implCode;
     verifyRegression = existing.verifyRegression;
     verifyCriteria = existing.verifyCriteria;
     findings = existing.findings;
   } else {
-    onEvent({ type: "implementing" });
-    const impl = await callAnthropic(env, budget, WORST_CASE.implement, () =>
-      implementChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan, changeRequest, IMPLEMENT_MODEL, CONTROL_LIMITS.TOKEN_CAPS.implement, priorLessons),
-    );
-    stageCosts.push({ stage: "implement", costUsd: impl.costUsd });
-    onEvent({ type: "implemented", model: impl.model, inputTokens: impl.inputTokens, outputTokens: impl.outputTokens, costUsd: impl.costUsd, wallTimeMs: impl.wallTimeMs, code: impl.code });
-    implCode = impl.code;
+    // A retry after a failure during verify/fix-loop/review: implement
+    // already succeeded and was checkpointed, so reuse its (expensive,
+    // measured at 80s+) output instead of paying for it again.
+    if (existing?.stage === "errored" && existing.implCode) {
+      implCode = existing.implCode;
+    } else {
+      inFlightStage = "implement";
+      onEvent({ type: "implementing" });
+      const impl = await callAnthropic(env, budget, WORST_CASE.implement, () =>
+        implementChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, changeRequest, IMPLEMENT_MODEL, CONTROL_LIMITS.TOKEN_CAPS.implement, priorLessons),
+      );
+      stageCosts.push({ stage: "implement", costUsd: impl.costUsd });
+      onEvent({ type: "implemented", model: impl.model, inputTokens: impl.inputTokens, outputTokens: impl.outputTokens, costUsd: impl.costUsd, wallTimeMs: impl.wallTimeMs, code: impl.code });
+      implCode = impl.code;
+    }
 
+    inFlightStage = "verify";
     onEvent({ type: "verifying" });
     const verify1 = await runVerification(env, implCode, plan.criteria, currentSourceAtStart, `change-${runId}-1`);
     verifyRegression = verify1.regression.results;
@@ -622,6 +781,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
       }
       convergenceFixAttempts++;
+      inFlightStage = `fix (convergence attempt ${convergenceFixAttempts})`;
       onEvent({ type: "fixing" });
       const verificationFailures = [
         ...verifyRegression.filter((r) => !r.pass).map((r) => describeFailure("regression", r)),
@@ -635,7 +795,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         // No reviewer findings exist yet at this point in the run -- this
         // fix round is repairing verification failures only, so the
         // materialFindings argument is empty on purpose.
-        fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan, implCode, [], FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
+        fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, implCode!, [], FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
       );
       stageCosts.push({ stage: `fix (convergence attempt ${convergenceFixAttempts})`, costUsd: fix.costUsd });
       implCode = fix.code;
@@ -704,14 +864,15 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // logic fails loud instead of quietly sending broken code to review.
     assertConvergedForReview(verifyFatalError, verifyRegression, verifyCriteria);
 
+    inFlightStage = "review";
     onEvent({ type: "reviewing" });
     const review = await callOpenAI(env, budget, WORST_CASE.review, () =>
       reviewArtifact(
         env.OPENAI_API_KEY,
         REVIEW_MODEL,
-        `Plan:\nWill build: ${plan.willBuild}\nWill not touch: ${plan.willNotTouch}\nCriteria:\n${plan.criteria.map((c) => `- ${c.description}`).join("\n")}`,
+        `Plan:\nWill build: ${plan!.willBuild}\nWill not touch: ${plan!.willNotTouch}\nCriteria:\n${plan!.criteria.map((c) => `- ${c.description}`).join("\n")}`,
         `Change request: ${changeRequest}\n\nOriginal source:\n${currentSourceAtStart}`,
-        implCode,
+        implCode!,
         CONTROL_LIMITS.TOKEN_CAPS.review,
         priorLessons,
       ),
@@ -720,6 +881,10 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     findings = parseFindings(review.text);
     onEvent({ type: "reviewed", model: review.model, inputTokens: review.inputTokens, outputTokens: review.outputTokens, costUsd: review.costUsd, wallTimeMs: review.wallTimeMs, reviewText: review.text, findings });
   }
+  // Same real safety net as the plan/grounding guard above: every branch
+  // through implement/verify/fix/review either assigns all four or returns
+  // out of this function.
+  if (!implCode || !verifyRegression || !verifyCriteria || !findings) throw new Error("internal error: implCode/verify results/findings not established before the review gate");
 
   const material = findings.filter((f) => f.severity === "MATERIAL").map((f) => f.text);
   const nits = findings.filter((f) => f.severity === "NIT").map((f) => f.text);
@@ -765,6 +930,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     }
 
     if (decision === "approve") {
+      inFlightStage = "fix (post-review)";
       onEvent({ type: "fixing" });
       const verificationFailures = [
         ...verifyRegression.filter((r) => !r.pass).map((r) => describeFailure("regression", r)),
@@ -775,7 +941,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         ...verifyCriteria.filter((r) => r.pass).map((r) => describePassing("criterion", r)),
       ];
       const fix = await callAnthropic(env, budget, WORST_CASE.fix, () =>
-        fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan, finalCode, material, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
+        fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, finalCode, material, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
       );
       stageCosts.push({ stage: "fix", costUsd: fix.costUsd });
       finalCode = fix.code;
@@ -851,6 +1017,33 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   const record: ChangeRecord = { runId, changeRequest, plan, finalCode: outcome === "shipped" ? finalCode : null, findings, ledger };
   await env.SPEND_KV.put(`changelog/${runId}`, JSON.stringify(record));
   return record;
+
+  } catch (e) {
+    // FOUNDATION-2 item 4: "a timeout must never lose a run." Everything
+    // above this point ran inside one try -- any throw (a stage call
+    // exceeding STAGE_CALL_TIMEOUT_MS, a network error, anything) lands
+    // here instead of propagating uncaught out of this function. Whatever
+    // was already paid for and completed -- plan/grounding from the closure
+    // above, implCode/verifyRegression/verifyCriteria/findings if that far
+    // along -- is still sitting in those `let`s at whatever value they last
+    // held, so the checkpoint below never loses it. This is a real halt,
+    // the same shape as every other gate in this function: it waits for an
+    // explicit decision (retry or abandon) rather than looping on its own,
+    // checked at the top of this function via change/error-decision/${runId}.
+    const errorMessage = String((e as Error)?.message ?? e);
+    const state: ChangeState = {
+      runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, planGateReplyCount, runStartedAt,
+      stage: "errored", errorMessage, erroredAtStage: inFlightStage, erroredPastGate1: pastGate1Approved,
+      erroredClarification: plan === undefined ? lastClarification : undefined,
+      plan, grounding, implCode, verifyRegression, verifyCriteria, findings,
+    };
+    await saveState(env.SPEND_KV, state);
+    onEvent({ type: "stage-error", runId, erroredAtStage: inFlightStage, errorMessage, costSoFarUsd: budget.spent });
+    onEvent({ type: "halted", runId, waitingOn: "error-decision" });
+    const ledger = haltLedger(state, "error-decision");
+    onEvent({ type: "ledger", ledger });
+    return { runId, changeRequest, plan: state.plan ?? null, finalCode: state.implCode ?? null, findings: state.findings ?? [], ledger };
+  }
 }
 
 /**

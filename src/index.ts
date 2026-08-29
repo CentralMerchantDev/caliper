@@ -473,6 +473,7 @@ export default {
           "GET /change-plan-decision?runId=<id>&approve=true|false": "approve/reject at Gate 1",
           "GET /change-plan-reply?runId=<id>&reply=<text>": "the third Gate 1 action -- reply in free text instead of approve/reject; re-grounds and re-plans",
           "GET /change-review-decision?runId=<id>&approve=true|false": "resolve the review gate",
+          "GET /change-error-decision?runId=<id>&approve=true|false": "resolve a stage-error halt -- true retries the failed stage (reusing whatever already succeeded), false abandons the run",
           "GET /change-answer?runId=<id>&answer=<text>": "answer a plan-mode clarifying question",
           "GET /change-stop?runId=<id>": "halt a run at its next stage boundary -- checked before the next paid call, never mid-call",
           "GET /sim-selftest": "run the regression suite against the current sim source",
@@ -565,6 +566,19 @@ export default {
       const approve = url.searchParams.get("approve") === "true";
       if (!runId) return json({ error: "pass ?runId=<id>&approve=true|false" }, 400);
       await env.SPEND_KV.put(`change/review-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
+      return json({ ok: true });
+    }
+
+    // FOUNDATION-2 item 4: the third gate a run can halt at -- not a human
+    // choice about the work, a human choice about what to do after a stage
+    // failed (approve=true means retry, approve=false means abandon). Same
+    // one-shot-signal shape as the two gates above, on purpose -- a stage
+    // error is a halt like any other, not a special case.
+    if (url.pathname === "/change-error-decision") {
+      const runId = url.searchParams.get("runId");
+      const approve = url.searchParams.get("approve") === "true";
+      if (!runId) return json({ error: "pass ?runId=<id>&approve=true|false" }, 400);
+      await env.SPEND_KV.put(`change/error-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
       return json({ ok: true });
     }
 
