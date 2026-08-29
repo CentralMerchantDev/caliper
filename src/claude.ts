@@ -4,6 +4,7 @@ import { assertUnderCap, recordSpend } from "./spendCap";
 import { CRITERION_SCHEMA, validateProposedCriteria, describeCriterion, type ProposedCriterion } from "./criteria";
 export type { ProposedCriterion } from "./criteria";
 import { TruncatedResponseError } from "./controlLayer";
+import { structureSummary } from "./worldStructure";
 
 /**
  * validate-before-consume (a production control-layer practice): a response that hit its
@@ -374,8 +375,19 @@ const PLAN_SCHEMA = {
 const PLAN_SYSTEM_PROMPT =
   "You are planning a change to an existing, working small simulated world, before writing any code -- " +
   "mirroring the real practice of a plan written and approved before implementation starts. Read the " +
-  "current source and the change request. Produce a plan: what you understood, what you will concretely " +
-  "build, and a list of checkable criteria for the new behavior. " +
+  "current source, the structure summary, and the change request. Produce a plan: what you understood, " +
+  "what you will concretely build, and a list of checkable criteria for the new behavior. " +
+  // FOUNDATION.md item 2: the structure summary below states, plainly,
+  // which operations are cheap -- placing another instance of an existing
+  // type, overriding a colour, adding a new type plus a placement -- versus
+  // the genuinely expensive case of a new sim action, entity kind, or
+  // subsystem. Judge scope against that list, not against how much code
+  // the request happens to touch: a one-line placements append is cheap
+  // even though it's a change to the same file a whole new subsystem
+  // would also touch. Treating every change as equally uncertain is how a
+  // request as ordinary as adding another lamp post ends up refused.
+  "Judge how big a change is against the structure summary's stated cheap-versus-expensive tiers, not " +
+  "against how much of the file the request happens to touch. " +
   "Every criterion must be existence, structural, non-regression, or render (see the criteria field's own " +
   "description for what each means) -- never a criterion that names a specific value you computed by hand. " +
   "That restriction is enforced by the schema itself, not just this instruction: there is no field to put " +
@@ -405,6 +417,11 @@ export async function generatePlan(
   const userContent =
     (priorLessons ? `Lessons recorded from previous runs -- apply any that are relevant here:\n${priorLessons}\n\n` : "") +
     `Current source:\n${currentSource}\n\n` +
+    // FOUNDATION.md item 2: the same code-derived structure summary
+    // grounding reads, including its cheap-operations tiering -- sent here
+    // too, not just relied on secondhand through grounding's note, so the
+    // plan stage judges scope against the real tiers directly.
+    `Structure summary (generated directly from the code):\n${structureSummary()}\n\n` +
     `Existing regression checks that must keep passing unless the request specifically asks to change ` +
     `that behavior:\n${regressionSummary}\n\n` +
     // Grounding (FINISH.md chunk 7) ran before this call and already
