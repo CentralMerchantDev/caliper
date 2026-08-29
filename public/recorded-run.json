@@ -1,0 +1,2674 @@
+{
+  "capturedAt": "2026-08-29T15:08:16.631Z",
+  "changeRequest": "add a lamp post near the workshop",
+  "currentSourceBefore": "// A small life-sim world: one sim, five decaying needs, a clock, a job.\n// All state is plain JSON. No DOM, no randomness in the baseline (a\n// rngState field is reserved for future use but unused so far).\n\nconst NEED_ORDER = [\"hunger\", \"energy\", \"hygiene\", \"fun\", \"social\"];\nconst CRITICAL_THRESHOLD = 30;\nconst DECAY = { hunger: 3, energy: 2, fun: 2, social: 2, hygiene: 1 };\nconst EAT_COST = 5;\nconst RESTORE = { hunger: 40, energy: 35, hygiene: 50, fun: 30, social: 15 };\nconst ACTION_FOR_NEED = { hunger: \"eat\", energy: \"sleep\", hygiene: \"shower\", fun: \"play\", social: \"call\" };\nconst WORK_HOUR_START = 9;\nconst WORK_HOUR_END = 17;\nconst WORK_WAGE = 20;\nconst WORK_ENERGY_EXTRA = 10;\nconst WORK_FUN_EXTRA = 5;\n\nfunction clamp(v) {\n  return Math.max(0, Math.min(100, v));\n}\n\n// FOUNDATION.md item 1: a type registry, not per-object special-casing.\n// Every object placed in the world -- an indoor station or an outdoor prop\n// -- is exactly one of these types. This is \"everything the system needs\n// to know\" about a type: its geometry as a small recipe of PRIMITIVES\n// (box/cylinder/sphere/icosahedron -- the shapes both renderers already\n// know how to draw), its material colour, its footprint (for spacing and\n// contact-shadow size), whether it emits light, and -- if it is a station\n// a sim can use -- which action it provides. A renderer draws ANY type\n// here from this data alone; it never special-cases a type by name.\n// Adding an instance of an EXISTING type is a placements append, zero\n// registry change. Adding a genuinely NEW type is exactly one entry here\n// (a recipe from these same primitives) plus a placement -- small,\n// bounded, and verifiable by existence, never a renderer change.\n//\n// Each recipe part: { shape: \"box\"|\"cylinder\"|\"sphere\"|\"icosahedron\",\n// size: box=[w,h,d] cylinder=[radiusTop,radiusBottom,height] sphere=[radius]\n// icosahedron=[radius,detail], position: [x,y,z], rotation?: [x,y,z] (radians),\n// scale?: [x,y,z], radius?: number (box corner rounding), segments?: number\n// (cylinder/sphere), color: \"#hex\", roughness?: number, metalness?: number,\n// emissive?: \"#hex\", emissiveIntensity?: number, emissiveAnimated?: boolean\n// (ramps brighter at night -- a light source's own bulb, not a lit\n// surface), transparent?: boolean, opacity?: number, castShadow?: boolean\n// (default true) }.\nconst OBJECT_TYPES = /*@DATA:OBJECT_TYPES:BEGIN*/{\n  bed: {\n    material: \"fabric\", footprint: { w: 1.9, d: 1.2 }, shadow: { w: 2.4, d: 1.8 },\n    local: { x: 0.15, y: 0.24 }, station: { action: \"sleep\", label: \"Bed\" },\n    recipe: [\n      { shape: \"box\", size: [1.9, 0.32, 1.05], radius: 0.1, position: [0, 0.2, 0], color: \"#d8c9a8\", roughness: 0.85 },\n      { shape: \"box\", size: [1.9, 0.55, 0.1], radius: 0.05, position: [0, 0.42, -0.52], color: \"#8a5a34\", roughness: 0.6 },\n      { shape: \"box\", size: [0.55, 0.14, 0.35], radius: 0.06, position: [-0.55, 0.42, -0.3], color: \"#fbf5e8\", roughness: 0.9 },\n    ],\n  },\n  fridge: {\n    material: \"ceramic\", footprint: { w: 0.75, d: 0.72 }, shadow: { w: 1.1, d: 0.825 },\n    local: { x: 0.85, y: 0.24 }, station: { action: \"eat\", label: \"Fridge\" },\n    recipe: [\n      { shape: \"box\", size: [0.75, 1.55, 0.72], radius: 0.08, position: [0, 0.78, 0], color: \"#cfd2d6\", roughness: 0.35, metalness: 0.55 },\n      { shape: \"box\", size: [0.77, 0.03, 0.74], radius: 0.01, position: [0, 1.0, 0], color: \"#9aa0a8\", roughness: 0.4, metalness: 0.5, castShadow: false },\n      { shape: \"box\", size: [0.04, 0.5, 0.05], radius: 0.02, position: [0.32, 1.1, 0.35], color: \"#4a4d52\", roughness: 0.3, metalness: 0.6, castShadow: false },\n    ],\n  },\n  shower: {\n    material: \"ceramic\", footprint: { w: 1.05, d: 1.0 }, shadow: { w: 1.6, d: 1.2 },\n    local: { x: 0.85, y: 0.76 }, station: { action: \"shower\", label: \"Shower\" },\n    recipe: [\n      { shape: \"box\", size: [1.05, 1.9, 0.06], radius: 0.02, position: [0, 0.95, -0.5], color: \"#f3efe6\", roughness: 0.5, metalness: 0.05, transparent: true, opacity: 0.88 },\n      { shape: \"box\", size: [0.06, 1.9, 1.0], radius: 0.02, position: [-0.5, 0.95, 0], color: \"#f3efe6\", roughness: 0.5, metalness: 0.05, transparent: true, opacity: 0.88 },\n      { shape: \"cylinder\", size: [0.09, 0.09, 0.05], segments: 12, position: [0, 1.7, -0.35], rotation: [0, 0, 1.5708], color: \"#cfd2d6\", roughness: 0.3, metalness: 0.7 },\n    ],\n  },\n  desk: {\n    material: \"wood\", footprint: { w: 1.55, d: 0.75 }, shadow: { w: 2.0, d: 1.5 },\n    local: { x: 0.15, y: 0.76 }, station: { action: \"work\", label: \"Desk\" },\n    recipe: [\n      { shape: \"box\", size: [1.55, 0.07, 0.75], radius: 0.03, position: [0, 0.74, 0], color: \"#8a5a34\", roughness: 0.55 },\n      { shape: \"cylinder\", size: [0.03, 0.03, 0.74], segments: 8, position: [-0.68, 0.37, -0.3], color: \"#6a4526\", roughness: 0.6 },\n      { shape: \"cylinder\", size: [0.03, 0.03, 0.74], segments: 8, position: [0.68, 0.37, -0.3], color: \"#6a4526\", roughness: 0.6 },\n      { shape: \"cylinder\", size: [0.03, 0.03, 0.74], segments: 8, position: [-0.68, 0.37, 0.3], color: \"#6a4526\", roughness: 0.6 },\n      { shape: \"cylinder\", size: [0.03, 0.03, 0.74], segments: 8, position: [0.68, 0.37, 0.3], color: \"#6a4526\", roughness: 0.6 },\n      { shape: \"box\", size: [0.5, 0.34, 0.04], radius: 0.03, position: [0, 1.0, -0.28], color: \"#2a2622\", roughness: 0.4, emissive: \"#3a4a5c\", emissiveIntensity: 0.4 },\n    ],\n  },\n  rug: {\n    material: \"fabric\", footprint: { w: 2.1, d: 2.1 }, shadow: { w: 2.4, d: 1.8 },\n    local: { x: 0.5, y: 0.18 }, station: { action: \"play\", label: \"Rug\" },\n    recipe: [\n      { shape: \"cylinder\", size: [1.05, 1.05, 0.05], segments: 28, position: [0, 0.025, 0], color: \"#c97a3d\", roughness: 0.95 },\n    ],\n  },\n  table: {\n    material: \"wood\", footprint: { w: 1.04, d: 1.04 }, shadow: { w: 1.4, d: 1.05 },\n    local: { x: 0.5, y: 0.82 }, station: { action: \"call\", label: \"Table\" },\n    recipe: [\n      { shape: \"cylinder\", size: [0.52, 0.52, 0.06], segments: 24, position: [0, 0.62, 0], color: \"#8a5a34\", roughness: 0.55 },\n      { shape: \"cylinder\", size: [0.08, 0.1, 0.6], segments: 10, position: [0, 0.31, 0], color: \"#6a4526\", roughness: 0.6 },\n      { shape: \"box\", size: [0.42, 0.08, 0.42], radius: 0.04, position: [0.85, 0.42, 0], color: \"#3d6b63\", roughness: 0.8 },\n      { shape: \"cylinder\", size: [0.03, 0.03, 0.42], segments: 8, position: [0.85, 0.21, 0], color: \"#6a4526\", roughness: 0.6 },\n    ],\n  },\n  bench: {\n    material: \"wood\", footprint: { w: 1.0, d: 0.34 }, shadow: { w: 1.2, d: 0.6 },\n    local: null, station: null,\n    recipe: [\n      { shape: \"box\", size: [1.0, 0.06, 0.34], radius: 0.02, position: [0, 0.42, 0], color: \"#8a5a34\", roughness: 0.65 },\n      { shape: \"box\", size: [1.0, 0.32, 0.05], radius: 0.02, position: [0, 0.6, -0.15], color: \"#8a5a34\", roughness: 0.65 },\n      { shape: \"box\", size: [0.05, 0.42, 0.3], radius: 0.02, position: [-0.42, 0.21, 0], color: \"#6a4526\", roughness: 0.7 },\n      { shape: \"box\", size: [0.05, 0.42, 0.3], radius: 0.02, position: [0.42, 0.21, 0], color: \"#6a4526\", roughness: 0.7 },\n    ],\n  },\n  tree: {\n    material: \"leaf\", footprint: { w: 1.24, d: 1.24 }, shadow: { w: 1.8, d: 1.8 },\n    local: null, station: null,\n    recipe: [\n      { shape: \"cylinder\", size: [0.09, 0.13, 1.1], segments: 8, position: [0, 0.55, 0], color: \"#6a4526\", roughness: 0.85 },\n      { shape: \"icosahedron\", size: [0.62, 1], position: [0, 1.35, 0], scale: [1, 0.85, 1], color: \"#4f6b47\", roughness: 0.85 },\n    ],\n  },\n  lampPost: {\n    material: \"metal\", footprint: { w: 0.22, d: 0.22 }, shadow: { w: 0.7, d: 0.7 }, emitsLight: true,\n    local: null, station: null,\n    light: { color: \"#ffb066\", distance: 5.5, decay: 2.2, baseIntensity: 0.7, isStreetLamp: true, position: [0, 1.72, 0] },\n    recipe: [\n      { shape: \"cylinder\", size: [0.035, 0.045, 1.7], segments: 8, position: [0, 0.85, 0], color: \"#3a3a3a\", roughness: 0.5, metalness: 0.4 },\n      { shape: \"sphere\", size: [0.11], segments: [12, 10], position: [0, 1.72, 0], color: \"#ffe9bf\", roughness: 0.4, emissive: \"#ffb066\", emissiveIntensity: 0.6, emissiveAnimated: true, castShadow: false },\n    ],\n  },\n  planter: {\n    material: \"leaf\", footprint: { w: 0.5, d: 0.5 }, shadow: { w: 0.6, d: 0.6 },\n    local: null, station: null,\n    recipe: [\n      { shape: \"box\", size: [0.5, 0.32, 0.5], radius: 0.04, position: [0, 0.16, 0], color: \"#6a4526\", roughness: 0.75 },\n      { shape: \"icosahedron\", size: [0.24, 0], position: [0, 0.44, 0], scale: [1, 0.7, 1], color: \"#4f6b47\", roughness: 0.9 },\n    ],\n  },\n}/*@DATA:OBJECT_TYPES:END*/;\n\n// CITY.md: the world becomes a neighbourhood, not a single room -- but only\n// initialWorld() grows. chooseAction/applyAction/tick below are byte-for-byte\n// the same functions that produced every value in simRegression.ts's suite;\n// they only ever read sim.needs, world.tick and world.money, so the new\n// fields here (buildings, placements, each sim's home, the type registry)\n// ride along on every tick via the existing Object.assign spreads without\n// those functions ever needing to know they exist. Two dwellings, each with\n// the same six stations the room always had, a shop and a workshop\n// (structures only -- no new action exists for them to drive, so none is\n// claimed), and a handful of objects in the open ground between them.\nfunction initialWorld() {\n  return {\n    // Starts at 09:00, not midnight -- a visitor's first frame is daylight,\n    // the renderer's best light. Night is still there, it's just something\n    // you reach by watching, not the first thing you see. Purely a starting\n    // VALUE for this pure-data function; chooseAction/applyAction/tick below\n    // don't care what tick they're handed and are untouched.\n    tick: 9,\n    rngState: 1,\n    money: 100,\n    sims: [\n      { id: \"sim1\", home: \"dwelling-1\", needs: { hunger: 100, energy: 100, fun: 100, social: 100, hygiene: 100 }, lastAction: null },\n      { id: \"sim2\", home: \"dwelling-2\", needs: { hunger: 100, energy: 100, fun: 100, social: 100, hygiene: 100 }, lastAction: null },\n    ],\n    buildings: [\n      { id: \"dwelling-1\", type: \"dwelling\", label: \"House 1\", plot: { x: 0, y: 0 } },\n      { id: \"dwelling-2\", type: \"dwelling\", label: \"House 2\", plot: { x: 2, y: 0 } },\n      { id: \"shop\", type: \"shop\", label: \"Shop\", plot: { x: 0, y: 2 } },\n      { id: \"workshop\", type: \"workshop\", label: \"Workshop\", plot: { x: 2, y: 2 } },\n    ],\n    // FOUNDATION.md item 1: the placement list -- the world's contents as\n    // data. Which type, where (a building's id, or \"outdoors\" with a plot\n    // position), and any per-instance override such as colour. Adding a\n    // placement is how \"add another street lamp\" or \"add a bench by the\n    // shop\" gets done: append one entry, verifiable by existence, no new\n    // code in this function or in either renderer.\n    placements: /*@DATA:PLACEMENTS:BEGIN*/[\n      { id: \"dwelling-1-bed\", type: \"bed\", location: \"dwelling-1\" },\n      { id: \"dwelling-1-fridge\", type: \"fridge\", location: \"dwelling-1\" },\n      { id: \"dwelling-1-shower\", type: \"shower\", location: \"dwelling-1\" },\n      { id: \"dwelling-1-desk\", type: \"desk\", location: \"dwelling-1\" },\n      { id: \"dwelling-1-rug\", type: \"rug\", location: \"dwelling-1\" },\n      { id: \"dwelling-1-table\", type: \"table\", location: \"dwelling-1\" },\n      { id: \"dwelling-2-bed\", type: \"bed\", location: \"dwelling-2\" },\n      { id: \"dwelling-2-fridge\", type: \"fridge\", location: \"dwelling-2\" },\n      { id: \"dwelling-2-shower\", type: \"shower\", location: \"dwelling-2\" },\n      { id: \"dwelling-2-desk\", type: \"desk\", location: \"dwelling-2\" },\n      { id: \"dwelling-2-rug\", type: \"rug\", location: \"dwelling-2\" },\n      { id: \"dwelling-2-table\", type: \"table\", location: \"dwelling-2\" },\n      { id: \"bench-1\", type: \"bench\", location: \"outdoors\", plot: { x: 1, y: 0.3 } },\n      { id: \"tree-1\", type: \"tree\", location: \"outdoors\", plot: { x: 1, y: 0.7 } },\n      { id: \"tree-2\", type: \"tree\", location: \"outdoors\", plot: { x: 1.6, y: 1.3 } },\n      { id: \"lamp-1\", type: \"lampPost\", location: \"outdoors\", plot: { x: 0.6, y: 1.3 } },\n      { id: \"lamp-2\", type: \"lampPost\", location: \"outdoors\", plot: { x: 1.4, y: 0.6 } },\n      { id: \"planter-1\", type: \"planter\", location: \"outdoors\", plot: { x: 1, y: 1.6 } },\n    ]/*@DATA:PLACEMENTS:END*/,\n    // The type registry rides along inside the world object itself (not a\n    // separate import) so a renderer that only ever receives pushTick(world)\n    // has everything it needs to draw generically -- no second channel, no\n    // separate deploy step to keep in sync.\n    objectTypes: OBJECT_TYPES,\n    // FINAL.md item 4, folded into the same model (FOUNDATION.md item 1):\n    // named surfaces, real addressable data, the same { material, color }\n    // shape every object-type entry above uses for its own material. Roof\n    // colours became trim/accent colours on FOUNDATION.md item 4 (every\n    // building is open-topped now, uniformly -- there is no roof plane left\n    // to colour), used on each building's own sign post instead.\n    surfaces: /*@DATA:SURFACES:BEGIN*/{\n      ground: { material: \"grass\", color: \"#6f6656\" },\n      path: { material: \"gravel\", color: \"#bfb49c\" },\n      floor: { material: \"wood\", color: \"#9c7a52\" },\n      wall: { material: \"plaster\", color: \"#b8ad93\" },\n      trimShop: { material: \"paint\", color: \"#9a5a3c\" },\n      trimWorkshop: { material: \"paint\", color: \"#5c6b5a\" },\n    }/*@DATA:SURFACES:END*/,\n  };\n}\n\n// Picks the next action for one sim, given the whole world (for the clock\n// and shared money). Priority: any critical need (below CRITICAL_THRESHOLD,\n// checked in NEED_ORDER, hunger skipped if unaffordable) beats everything;\n// otherwise work during work hours if energy allows; otherwise address\n// whichever need is lowest, or idle if every need is already maxed.\nfunction chooseAction(sim, world) {\n  const hour = world.tick % 24;\n  const isWorkHour = hour >= WORK_HOUR_START && hour < WORK_HOUR_END;\n\n  for (const need of NEED_ORDER) {\n    if (sim.needs[need] < CRITICAL_THRESHOLD) {\n      if (need === \"hunger\" && world.money < EAT_COST) continue;\n      return ACTION_FOR_NEED[need];\n    }\n  }\n\n  if (isWorkHour && sim.needs.energy > 20) return \"work\";\n\n  let lowest = NEED_ORDER[0];\n  for (const need of NEED_ORDER) if (sim.needs[need] < sim.needs[lowest]) lowest = need;\n  if (sim.needs[lowest] >= 100) return \"idle\";\n  if (lowest === \"hunger\" && world.money < EAT_COST) {\n    let second = NEED_ORDER.find((n) => n !== \"hunger\");\n    for (const need of NEED_ORDER) if (need !== \"hunger\" && sim.needs[need] < sim.needs[second]) second = need;\n    return ACTION_FOR_NEED[second];\n  }\n  return ACTION_FOR_NEED[lowest];\n}\n\n// Applies universal per-tick decay to every need, then the chosen action's\n// effect on top. Returns a new world; never mutates its input.\nfunction applyAction(world, simIndex, action) {\n  const sim = world.sims[simIndex];\n  const needs = Object.assign({}, sim.needs);\n  for (const n of NEED_ORDER) needs[n] = clamp(needs[n] - DECAY[n]);\n\n  let money = world.money;\n  if (action === \"eat\") {\n    needs.hunger = clamp(needs.hunger + RESTORE.hunger);\n    money -= EAT_COST;\n  } else if (action === \"sleep\") {\n    needs.energy = clamp(needs.energy + RESTORE.energy);\n  } else if (action === \"shower\") {\n    needs.hygiene = clamp(needs.hygiene + RESTORE.hygiene);\n  } else if (action === \"play\") {\n    needs.fun = clamp(needs.fun + RESTORE.fun);\n  } else if (action === \"call\") {\n    needs.social = clamp(needs.social + RESTORE.social);\n  } else if (action === \"work\") {\n    money += WORK_WAGE;\n    needs.energy = clamp(needs.energy - WORK_ENERGY_EXTRA);\n    needs.fun = clamp(needs.fun - WORK_FUN_EXTRA);\n  }\n\n  const newSims = world.sims.slice();\n  newSims[simIndex] = Object.assign({}, sim, { needs: needs, lastAction: action });\n  return Object.assign({}, world, { sims: newSims, money: money });\n}\n\n// Advances the whole world by exactly one discrete tick: every sim chooses\n// and applies one action, then the clock advances.\nfunction tick(world) {\n  let next = world;\n  for (let i = 0; i < next.sims.length; i++) {\n    const action = chooseAction(next.sims[i], next);\n    next = applyAction(next, i, action);\n  }\n  return Object.assign({}, next, { tick: next.tick + 1 });\n}",
+  "finalSource": "// A small life-sim world: one sim, five decaying needs, a clock, a job.\n// All state is plain JSON. No DOM, no randomness in the baseline (a\n// rngState field is reserved for future use but unused so far).\n\nconst NEED_ORDER = [\"hunger\", \"energy\", \"hygiene\", \"fun\", \"social\"];\nconst CRITICAL_THRESHOLD = 30;\nconst DECAY = { hunger: 3, energy: 2, fun: 2, social: 2, hygiene: 1 };\nconst EAT_COST = 5;\nconst RESTORE = { hunger: 40, energy: 35, hygiene: 50, fun: 30, social: 15 };\nconst ACTION_FOR_NEED = { hunger: \"eat\", energy: \"sleep\", hygiene: \"shower\", fun: \"play\", social: \"call\" };\nconst WORK_HOUR_START = 9;\nconst WORK_HOUR_END = 17;\nconst WORK_WAGE = 20;\nconst WORK_ENERGY_EXTRA = 10;\nconst WORK_FUN_EXTRA = 5;\n\nfunction clamp(v) {\n  return Math.max(0, Math.min(100, v));\n}\n\n// FOUNDATION.md item 1: a type registry, not per-object special-casing.\n// Every object placed in the world -- an indoor station or an outdoor prop\n// -- is exactly one of these types. This is \"everything the system needs\n// to know\" about a type: its geometry as a small recipe of PRIMITIVES\n// (box/cylinder/sphere/icosahedron -- the shapes both renderers already\n// know how to draw), its material colour, its footprint (for spacing and\n// contact-shadow size), whether it emits light, and -- if it is a station\n// a sim can use -- which action it provides. A renderer draws ANY type\n// here from this data alone; it never special-cases a type by name.\n// Adding an instance of an EXISTING type is a placements append, zero\n// registry change. Adding a genuinely NEW type is exactly one entry here\n// (a recipe from these same primitives) plus a placement -- small,\n// bounded, and verifiable by existence, never a renderer change.\n//\n// Each recipe part: { shape: \"box\"|\"cylinder\"|\"sphere\"|\"icosahedron\",\n// size: box=[w,h,d] cylinder=[radiusTop,radiusBottom,height] sphere=[radius]\n// icosahedron=[radius,detail], position: [x,y,z], rotation?: [x,y,z] (radians),\n// scale?: [x,y,z], radius?: number (box corner rounding), segments?: number\n// (cylinder/sphere), color: \"#hex\", roughness?: number, metalness?: number,\n// emissive?: \"#hex\", emissiveIntensity?: number, emissiveAnimated?: boolean\n// (ramps brighter at night -- a light source's own bulb, not a lit\n// surface), transparent?: boolean, opacity?: number, castShadow?: boolean\n// (default true) }.\nconst OBJECT_TYPES = /*@DATA:OBJECT_TYPES:BEGIN*/{\n  \"bed\": {\n    \"material\": \"fabric\",\n    \"footprint\": {\n      \"w\": 1.9,\n      \"d\": 1.2\n    },\n    \"shadow\": {\n      \"w\": 2.4,\n      \"d\": 1.8\n    },\n    \"local\": {\n      \"x\": 0.15,\n      \"y\": 0.24\n    },\n    \"station\": {\n      \"action\": \"sleep\",\n      \"label\": \"Bed\"\n    },\n    \"recipe\": [\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          1.9,\n          0.32,\n          1.05\n        ],\n        \"radius\": 0.1,\n        \"position\": [\n          0,\n          0.2,\n          0\n        ],\n        \"color\": \"#d8c9a8\",\n        \"roughness\": 0.85\n      },\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          1.9,\n          0.55,\n          0.1\n        ],\n        \"radius\": 0.05,\n        \"position\": [\n          0,\n          0.42,\n          -0.52\n        ],\n        \"color\": \"#8a5a34\",\n        \"roughness\": 0.6\n      },\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          0.55,\n          0.14,\n          0.35\n        ],\n        \"radius\": 0.06,\n        \"position\": [\n          -0.55,\n          0.42,\n          -0.3\n        ],\n        \"color\": \"#fbf5e8\",\n        \"roughness\": 0.9\n      }\n    ]\n  },\n  \"fridge\": {\n    \"material\": \"ceramic\",\n    \"footprint\": {\n      \"w\": 0.75,\n      \"d\": 0.72\n    },\n    \"shadow\": {\n      \"w\": 1.1,\n      \"d\": 0.825\n    },\n    \"local\": {\n      \"x\": 0.85,\n      \"y\": 0.24\n    },\n    \"station\": {\n      \"action\": \"eat\",\n      \"label\": \"Fridge\"\n    },\n    \"recipe\": [\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          0.75,\n          1.55,\n          0.72\n        ],\n        \"radius\": 0.08,\n        \"position\": [\n          0,\n          0.78,\n          0\n        ],\n        \"color\": \"#cfd2d6\",\n        \"roughness\": 0.35,\n        \"metalness\": 0.55\n      },\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          0.77,\n          0.03,\n          0.74\n        ],\n        \"radius\": 0.01,\n        \"position\": [\n          0,\n          1,\n          0\n        ],\n        \"color\": \"#9aa0a8\",\n        \"roughness\": 0.4,\n        \"metalness\": 0.5,\n        \"castShadow\": false\n      },\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          0.04,\n          0.5,\n          0.05\n        ],\n        \"radius\": 0.02,\n        \"position\": [\n          0.32,\n          1.1,\n          0.35\n        ],\n        \"color\": \"#4a4d52\",\n        \"roughness\": 0.3,\n        \"metalness\": 0.6,\n        \"castShadow\": false\n      }\n    ]\n  },\n  \"shower\": {\n    \"material\": \"ceramic\",\n    \"footprint\": {\n      \"w\": 1.05,\n      \"d\": 1\n    },\n    \"shadow\": {\n      \"w\": 1.6,\n      \"d\": 1.2\n    },\n    \"local\": {\n      \"x\": 0.85,\n      \"y\": 0.76\n    },\n    \"station\": {\n      \"action\": \"shower\",\n      \"label\": \"Shower\"\n    },\n    \"recipe\": [\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          1.05,\n          1.9,\n          0.06\n        ],\n        \"radius\": 0.02,\n        \"position\": [\n          0,\n          0.95,\n          -0.5\n        ],\n        \"color\": \"#f3efe6\",\n        \"roughness\": 0.5,\n        \"metalness\": 0.05,\n        \"transparent\": true,\n        \"opacity\": 0.88\n      },\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          0.06,\n          1.9,\n          1\n        ],\n        \"radius\": 0.02,\n        \"position\": [\n          -0.5,\n          0.95,\n          0\n        ],\n        \"color\": \"#f3efe6\",\n        \"roughness\": 0.5,\n        \"metalness\": 0.05,\n        \"transparent\": true,\n        \"opacity\": 0.88\n      },\n      {\n        \"shape\": \"cylinder\",\n        \"size\": [\n          0.09,\n          0.09,\n          0.05\n        ],\n        \"segments\": 12,\n        \"position\": [\n          0,\n          1.7,\n          -0.35\n        ],\n        \"rotation\": [\n          0,\n          0,\n          1.5708\n        ],\n        \"color\": \"#cfd2d6\",\n        \"roughness\": 0.3,\n        \"metalness\": 0.7\n      }\n    ]\n  },\n  \"desk\": {\n    \"material\": \"wood\",\n    \"footprint\": {\n      \"w\": 1.55,\n      \"d\": 0.75\n    },\n    \"shadow\": {\n      \"w\": 2,\n      \"d\": 1.5\n    },\n    \"local\": {\n      \"x\": 0.15,\n      \"y\": 0.76\n    },\n    \"station\": {\n      \"action\": \"work\",\n      \"label\": \"Desk\"\n    },\n    \"recipe\": [\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          1.55,\n          0.07,\n          0.75\n        ],\n        \"radius\": 0.03,\n        \"position\": [\n          0,\n          0.74,\n          0\n        ],\n        \"color\": \"#8a5a34\",\n        \"roughness\": 0.55\n      },\n      {\n        \"shape\": \"cylinder\",\n        \"size\": [\n          0.03,\n          0.03,\n          0.74\n        ],\n        \"segments\": 8,\n        \"position\": [\n          -0.68,\n          0.37,\n          -0.3\n        ],\n        \"color\": \"#6a4526\",\n        \"roughness\": 0.6\n      },\n      {\n        \"shape\": \"cylinder\",\n        \"size\": [\n          0.03,\n          0.03,\n          0.74\n        ],\n        \"segments\": 8,\n        \"position\": [\n          0.68,\n          0.37,\n          -0.3\n        ],\n        \"color\": \"#6a4526\",\n        \"roughness\": 0.6\n      },\n      {\n        \"shape\": \"cylinder\",\n        \"size\": [\n          0.03,\n          0.03,\n          0.74\n        ],\n        \"segments\": 8,\n        \"position\": [\n          -0.68,\n          0.37,\n          0.3\n        ],\n        \"color\": \"#6a4526\",\n        \"roughness\": 0.6\n      },\n      {\n        \"shape\": \"cylinder\",\n        \"size\": [\n          0.03,\n          0.03,\n          0.74\n        ],\n        \"segments\": 8,\n        \"position\": [\n          0.68,\n          0.37,\n          0.3\n        ],\n        \"color\": \"#6a4526\",\n        \"roughness\": 0.6\n      },\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          0.5,\n          0.34,\n          0.04\n        ],\n        \"radius\": 0.03,\n        \"position\": [\n          0,\n          1,\n          -0.28\n        ],\n        \"color\": \"#2a2622\",\n        \"roughness\": 0.4,\n        \"emissive\": \"#3a4a5c\",\n        \"emissiveIntensity\": 0.4\n      }\n    ]\n  },\n  \"rug\": {\n    \"material\": \"fabric\",\n    \"footprint\": {\n      \"w\": 2.1,\n      \"d\": 2.1\n    },\n    \"shadow\": {\n      \"w\": 2.4,\n      \"d\": 1.8\n    },\n    \"local\": {\n      \"x\": 0.5,\n      \"y\": 0.18\n    },\n    \"station\": {\n      \"action\": \"play\",\n      \"label\": \"Rug\"\n    },\n    \"recipe\": [\n      {\n        \"shape\": \"cylinder\",\n        \"size\": [\n          1.05,\n          1.05,\n          0.05\n        ],\n        \"segments\": 28,\n        \"position\": [\n          0,\n          0.025,\n          0\n        ],\n        \"color\": \"#c97a3d\",\n        \"roughness\": 0.95\n      }\n    ]\n  },\n  \"table\": {\n    \"material\": \"wood\",\n    \"footprint\": {\n      \"w\": 1.04,\n      \"d\": 1.04\n    },\n    \"shadow\": {\n      \"w\": 1.4,\n      \"d\": 1.05\n    },\n    \"local\": {\n      \"x\": 0.5,\n      \"y\": 0.82\n    },\n    \"station\": {\n      \"action\": \"call\",\n      \"label\": \"Table\"\n    },\n    \"recipe\": [\n      {\n        \"shape\": \"cylinder\",\n        \"size\": [\n          0.52,\n          0.52,\n          0.06\n        ],\n        \"segments\": 24,\n        \"position\": [\n          0,\n          0.62,\n          0\n        ],\n        \"color\": \"#8a5a34\",\n        \"roughness\": 0.55\n      },\n      {\n        \"shape\": \"cylinder\",\n        \"size\": [\n          0.08,\n          0.1,\n          0.6\n        ],\n        \"segments\": 10,\n        \"position\": [\n          0,\n          0.31,\n          0\n        ],\n        \"color\": \"#6a4526\",\n        \"roughness\": 0.6\n      },\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          0.42,\n          0.08,\n          0.42\n        ],\n        \"radius\": 0.04,\n        \"position\": [\n          0.85,\n          0.42,\n          0\n        ],\n        \"color\": \"#3d6b63\",\n        \"roughness\": 0.8\n      },\n      {\n        \"shape\": \"cylinder\",\n        \"size\": [\n          0.03,\n          0.03,\n          0.42\n        ],\n        \"segments\": 8,\n        \"position\": [\n          0.85,\n          0.21,\n          0\n        ],\n        \"color\": \"#6a4526\",\n        \"roughness\": 0.6\n      }\n    ]\n  },\n  \"bench\": {\n    \"material\": \"wood\",\n    \"footprint\": {\n      \"w\": 1,\n      \"d\": 0.34\n    },\n    \"shadow\": {\n      \"w\": 1.2,\n      \"d\": 0.6\n    },\n    \"local\": null,\n    \"station\": null,\n    \"recipe\": [\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          1,\n          0.06,\n          0.34\n        ],\n        \"radius\": 0.02,\n        \"position\": [\n          0,\n          0.42,\n          0\n        ],\n        \"color\": \"#8a5a34\",\n        \"roughness\": 0.65\n      },\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          1,\n          0.32,\n          0.05\n        ],\n        \"radius\": 0.02,\n        \"position\": [\n          0,\n          0.6,\n          -0.15\n        ],\n        \"color\": \"#8a5a34\",\n        \"roughness\": 0.65\n      },\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          0.05,\n          0.42,\n          0.3\n        ],\n        \"radius\": 0.02,\n        \"position\": [\n          -0.42,\n          0.21,\n          0\n        ],\n        \"color\": \"#6a4526\",\n        \"roughness\": 0.7\n      },\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          0.05,\n          0.42,\n          0.3\n        ],\n        \"radius\": 0.02,\n        \"position\": [\n          0.42,\n          0.21,\n          0\n        ],\n        \"color\": \"#6a4526\",\n        \"roughness\": 0.7\n      }\n    ]\n  },\n  \"tree\": {\n    \"material\": \"leaf\",\n    \"footprint\": {\n      \"w\": 1.24,\n      \"d\": 1.24\n    },\n    \"shadow\": {\n      \"w\": 1.8,\n      \"d\": 1.8\n    },\n    \"local\": null,\n    \"station\": null,\n    \"recipe\": [\n      {\n        \"shape\": \"cylinder\",\n        \"size\": [\n          0.09,\n          0.13,\n          1.1\n        ],\n        \"segments\": 8,\n        \"position\": [\n          0,\n          0.55,\n          0\n        ],\n        \"color\": \"#6a4526\",\n        \"roughness\": 0.85\n      },\n      {\n        \"shape\": \"icosahedron\",\n        \"size\": [\n          0.62,\n          1\n        ],\n        \"position\": [\n          0,\n          1.35,\n          0\n        ],\n        \"scale\": [\n          1,\n          0.85,\n          1\n        ],\n        \"color\": \"#4f6b47\",\n        \"roughness\": 0.85\n      }\n    ]\n  },\n  \"lampPost\": {\n    \"material\": \"metal\",\n    \"footprint\": {\n      \"w\": 0.22,\n      \"d\": 0.22\n    },\n    \"shadow\": {\n      \"w\": 0.7,\n      \"d\": 0.7\n    },\n    \"emitsLight\": true,\n    \"local\": null,\n    \"station\": null,\n    \"light\": {\n      \"color\": \"#ffb066\",\n      \"distance\": 5.5,\n      \"decay\": 2.2,\n      \"baseIntensity\": 0.7,\n      \"isStreetLamp\": true,\n      \"position\": [\n        0,\n        1.72,\n        0\n      ]\n    },\n    \"recipe\": [\n      {\n        \"shape\": \"cylinder\",\n        \"size\": [\n          0.035,\n          0.045,\n          1.7\n        ],\n        \"segments\": 8,\n        \"position\": [\n          0,\n          0.85,\n          0\n        ],\n        \"color\": \"#3a3a3a\",\n        \"roughness\": 0.5,\n        \"metalness\": 0.4\n      },\n      {\n        \"shape\": \"sphere\",\n        \"size\": [\n          0.11\n        ],\n        \"segments\": [\n          12,\n          10\n        ],\n        \"position\": [\n          0,\n          1.72,\n          0\n        ],\n        \"color\": \"#ffe9bf\",\n        \"roughness\": 0.4,\n        \"emissive\": \"#ffb066\",\n        \"emissiveIntensity\": 0.6,\n        \"emissiveAnimated\": true,\n        \"castShadow\": false\n      }\n    ]\n  },\n  \"planter\": {\n    \"material\": \"leaf\",\n    \"footprint\": {\n      \"w\": 0.5,\n      \"d\": 0.5\n    },\n    \"shadow\": {\n      \"w\": 0.6,\n      \"d\": 0.6\n    },\n    \"local\": null,\n    \"station\": null,\n    \"recipe\": [\n      {\n        \"shape\": \"box\",\n        \"size\": [\n          0.5,\n          0.32,\n          0.5\n        ],\n        \"radius\": 0.04,\n        \"position\": [\n          0,\n          0.16,\n          0\n        ],\n        \"color\": \"#6a4526\",\n        \"roughness\": 0.75\n      },\n      {\n        \"shape\": \"icosahedron\",\n        \"size\": [\n          0.24,\n          0\n        ],\n        \"position\": [\n          0,\n          0.44,\n          0\n        ],\n        \"scale\": [\n          1,\n          0.7,\n          1\n        ],\n        \"color\": \"#4f6b47\",\n        \"roughness\": 0.9\n      }\n    ]\n  }\n}/*@DATA:OBJECT_TYPES:END*/;\n\n// CITY.md: the world becomes a neighbourhood, not a single room -- but only\n// initialWorld() grows. chooseAction/applyAction/tick below are byte-for-byte\n// the same functions that produced every value in simRegression.ts's suite;\n// they only ever read sim.needs, world.tick and world.money, so the new\n// fields here (buildings, placements, each sim's home, the type registry)\n// ride along on every tick via the existing Object.assign spreads without\n// those functions ever needing to know they exist. Two dwellings, each with\n// the same six stations the room always had, a shop and a workshop\n// (structures only -- no new action exists for them to drive, so none is\n// claimed), and a handful of objects in the open ground between them.\nfunction initialWorld() {\n  return {\n    // Starts at 09:00, not midnight -- a visitor's first frame is daylight,\n    // the renderer's best light. Night is still there, it's just something\n    // you reach by watching, not the first thing you see. Purely a starting\n    // VALUE for this pure-data function; chooseAction/applyAction/tick below\n    // don't care what tick they're handed and are untouched.\n    tick: 9,\n    rngState: 1,\n    money: 100,\n    sims: [\n      { id: \"sim1\", home: \"dwelling-1\", needs: { hunger: 100, energy: 100, fun: 100, social: 100, hygiene: 100 }, lastAction: null },\n      { id: \"sim2\", home: \"dwelling-2\", needs: { hunger: 100, energy: 100, fun: 100, social: 100, hygiene: 100 }, lastAction: null },\n    ],\n    buildings: [\n      { id: \"dwelling-1\", type: \"dwelling\", label: \"House 1\", plot: { x: 0, y: 0 } },\n      { id: \"dwelling-2\", type: \"dwelling\", label: \"House 2\", plot: { x: 2, y: 0 } },\n      { id: \"shop\", type: \"shop\", label: \"Shop\", plot: { x: 0, y: 2 } },\n      { id: \"workshop\", type: \"workshop\", label: \"Workshop\", plot: { x: 2, y: 2 } },\n    ],\n    // FOUNDATION.md item 1: the placement list -- the world's contents as\n    // data. Which type, where (a building's id, or \"outdoors\" with a plot\n    // position), and any per-instance override such as colour. Adding a\n    // placement is how \"add another street lamp\" or \"add a bench by the\n    // shop\" gets done: append one entry, verifiable by existence, no new\n    // code in this function or in either renderer.\n    placements: /*@DATA:PLACEMENTS:BEGIN*/[\n  {\n    \"id\": \"dwelling-1-bed\",\n    \"type\": \"bed\",\n    \"location\": \"dwelling-1\"\n  },\n  {\n    \"id\": \"dwelling-1-fridge\",\n    \"type\": \"fridge\",\n    \"location\": \"dwelling-1\"\n  },\n  {\n    \"id\": \"dwelling-1-shower\",\n    \"type\": \"shower\",\n    \"location\": \"dwelling-1\"\n  },\n  {\n    \"id\": \"dwelling-1-desk\",\n    \"type\": \"desk\",\n    \"location\": \"dwelling-1\"\n  },\n  {\n    \"id\": \"dwelling-1-rug\",\n    \"type\": \"rug\",\n    \"location\": \"dwelling-1\"\n  },\n  {\n    \"id\": \"dwelling-1-table\",\n    \"type\": \"table\",\n    \"location\": \"dwelling-1\"\n  },\n  {\n    \"id\": \"dwelling-2-bed\",\n    \"type\": \"bed\",\n    \"location\": \"dwelling-2\"\n  },\n  {\n    \"id\": \"dwelling-2-fridge\",\n    \"type\": \"fridge\",\n    \"location\": \"dwelling-2\"\n  },\n  {\n    \"id\": \"dwelling-2-shower\",\n    \"type\": \"shower\",\n    \"location\": \"dwelling-2\"\n  },\n  {\n    \"id\": \"dwelling-2-desk\",\n    \"type\": \"desk\",\n    \"location\": \"dwelling-2\"\n  },\n  {\n    \"id\": \"dwelling-2-rug\",\n    \"type\": \"rug\",\n    \"location\": \"dwelling-2\"\n  },\n  {\n    \"id\": \"dwelling-2-table\",\n    \"type\": \"table\",\n    \"location\": \"dwelling-2\"\n  },\n  {\n    \"id\": \"bench-1\",\n    \"type\": \"bench\",\n    \"location\": \"outdoors\",\n    \"plot\": {\n      \"x\": 1,\n      \"y\": 0.3\n    }\n  },\n  {\n    \"id\": \"tree-1\",\n    \"type\": \"tree\",\n    \"location\": \"outdoors\",\n    \"plot\": {\n      \"x\": 1,\n      \"y\": 0.7\n    }\n  },\n  {\n    \"id\": \"tree-2\",\n    \"type\": \"tree\",\n    \"location\": \"outdoors\",\n    \"plot\": {\n      \"x\": 1.6,\n      \"y\": 1.3\n    }\n  },\n  {\n    \"id\": \"lamp-1\",\n    \"type\": \"lampPost\",\n    \"location\": \"outdoors\",\n    \"plot\": {\n      \"x\": 0.6,\n      \"y\": 1.3\n    }\n  },\n  {\n    \"id\": \"lamp-2\",\n    \"type\": \"lampPost\",\n    \"location\": \"outdoors\",\n    \"plot\": {\n      \"x\": 1.4,\n      \"y\": 0.6\n    }\n  },\n  {\n    \"id\": \"planter-1\",\n    \"type\": \"planter\",\n    \"location\": \"outdoors\",\n    \"plot\": {\n      \"x\": 1,\n      \"y\": 1.6\n    }\n  },\n  {\n    \"id\": \"lamp-3\",\n    \"type\": \"lampPost\",\n    \"location\": \"outdoors\",\n    \"plot\": {\n      \"x\": 1.7,\n      \"y\": 1.7\n    }\n  }\n]/*@DATA:PLACEMENTS:END*/,\n    // The type registry rides along inside the world object itself (not a\n    // separate import) so a renderer that only ever receives pushTick(world)\n    // has everything it needs to draw generically -- no second channel, no\n    // separate deploy step to keep in sync.\n    objectTypes: OBJECT_TYPES,\n    // FINAL.md item 4, folded into the same model (FOUNDATION.md item 1):\n    // named surfaces, real addressable data, the same { material, color }\n    // shape every object-type entry above uses for its own material. Roof\n    // colours became trim/accent colours on FOUNDATION.md item 4 (every\n    // building is open-topped now, uniformly -- there is no roof plane left\n    // to colour), used on each building's own sign post instead.\n    surfaces: /*@DATA:SURFACES:BEGIN*/{\n  \"ground\": {\n    \"material\": \"grass\",\n    \"color\": \"#6f6656\"\n  },\n  \"path\": {\n    \"material\": \"gravel\",\n    \"color\": \"#bfb49c\"\n  },\n  \"floor\": {\n    \"material\": \"wood\",\n    \"color\": \"#9c7a52\"\n  },\n  \"wall\": {\n    \"material\": \"plaster\",\n    \"color\": \"#b8ad93\"\n  },\n  \"trimShop\": {\n    \"material\": \"paint\",\n    \"color\": \"#9a5a3c\"\n  },\n  \"trimWorkshop\": {\n    \"material\": \"paint\",\n    \"color\": \"#5c6b5a\"\n  }\n}/*@DATA:SURFACES:END*/,\n  };\n}\n\n// Picks the next action for one sim, given the whole world (for the clock\n// and shared money). Priority: any critical need (below CRITICAL_THRESHOLD,\n// checked in NEED_ORDER, hunger skipped if unaffordable) beats everything;\n// otherwise work during work hours if energy allows; otherwise address\n// whichever need is lowest, or idle if every need is already maxed.\nfunction chooseAction(sim, world) {\n  const hour = world.tick % 24;\n  const isWorkHour = hour >= WORK_HOUR_START && hour < WORK_HOUR_END;\n\n  for (const need of NEED_ORDER) {\n    if (sim.needs[need] < CRITICAL_THRESHOLD) {\n      if (need === \"hunger\" && world.money < EAT_COST) continue;\n      return ACTION_FOR_NEED[need];\n    }\n  }\n\n  if (isWorkHour && sim.needs.energy > 20) return \"work\";\n\n  let lowest = NEED_ORDER[0];\n  for (const need of NEED_ORDER) if (sim.needs[need] < sim.needs[lowest]) lowest = need;\n  if (sim.needs[lowest] >= 100) return \"idle\";\n  if (lowest === \"hunger\" && world.money < EAT_COST) {\n    let second = NEED_ORDER.find((n) => n !== \"hunger\");\n    for (const need of NEED_ORDER) if (need !== \"hunger\" && sim.needs[need] < sim.needs[second]) second = need;\n    return ACTION_FOR_NEED[second];\n  }\n  return ACTION_FOR_NEED[lowest];\n}\n\n// Applies universal per-tick decay to every need, then the chosen action's\n// effect on top. Returns a new world; never mutates its input.\nfunction applyAction(world, simIndex, action) {\n  const sim = world.sims[simIndex];\n  const needs = Object.assign({}, sim.needs);\n  for (const n of NEED_ORDER) needs[n] = clamp(needs[n] - DECAY[n]);\n\n  let money = world.money;\n  if (action === \"eat\") {\n    needs.hunger = clamp(needs.hunger + RESTORE.hunger);\n    money -= EAT_COST;\n  } else if (action === \"sleep\") {\n    needs.energy = clamp(needs.energy + RESTORE.energy);\n  } else if (action === \"shower\") {\n    needs.hygiene = clamp(needs.hygiene + RESTORE.hygiene);\n  } else if (action === \"play\") {\n    needs.fun = clamp(needs.fun + RESTORE.fun);\n  } else if (action === \"call\") {\n    needs.social = clamp(needs.social + RESTORE.social);\n  } else if (action === \"work\") {\n    money += WORK_WAGE;\n    needs.energy = clamp(needs.energy - WORK_ENERGY_EXTRA);\n    needs.fun = clamp(needs.fun - WORK_FUN_EXTRA);\n  }\n\n  const newSims = world.sims.slice();\n  newSims[simIndex] = Object.assign({}, sim, { needs: needs, lastAction: action });\n  return Object.assign({}, world, { sims: newSims, money: money });\n}\n\n// Advances the whole world by exactly one discrete tick: every sim chooses\n// and applies one action, then the clock advances.\nfunction tick(world) {\n  let next = world;\n  for (let i = 0; i < next.sims.length; i++) {\n    const action = chooseAction(next.sims[i], next);\n    next = applyAction(next, i, action);\n  }\n  return Object.assign({}, next, { tick: next.tick + 1 });\n}",
+  "outcome": "shipped",
+  "fixApplied": false,
+  "fixHeld": null,
+  "stages": [
+    {
+      "stage": "ground",
+      "model": "claude-haiku-4-5",
+      "inputTokens": 1614,
+      "outputTokens": 111,
+      "costUsd": 0.002169,
+      "wallTimeMs": 11435,
+      "result": {
+        "premisesHold": true,
+        "falsePremises": [],
+        "reasoning": "The request assumes: (1) a lampPost object type exists — confirmed; (2) a workshop building exists — confirmed as a building type; (3) outdoor placement near buildings is possible — confirmed via placements with location='outdoors' and plot coordinates. This matches the cheap operation of placing another instance of an existing object type.",
+        "alternatives": []
+      }
+    },
+    {
+      "stage": "plan",
+      "model": "claude-sonnet-5",
+      "inputTokens": 6966,
+      "outputTokens": 749,
+      "costUsd": 0.021422,
+      "wallTimeMs": 58143,
+      "result": {
+        "understoodIntent": "Add one more lamp post (an existing outdoor prop type) placed near the workshop building, purely as a new entry in the placements list — no new object type, no new behavior.",
+        "willBuild": "Append a single new entry to the placements array: a lampPost-type object with location \"outdoors\" and a plot position chosen to sit just outside the workshop building (whose plot is {x:2, y:2}) — e.g. plot {x:1.7, y:1.7}, close enough to read as \"near the workshop\" without overlapping its footprint or the existing lamp-2 placement at {x:1.4, y:0.6}. Uses the existing lampPost recipe and default colour/light settings from OBJECT_TYPES unchanged. No changes to objectTypes, buildings, chooseAction, applyAction, or tick.",
+        "criteria": [
+          {
+            "kind": "existence",
+            "description": "The lampPost object type still exists in the registry returned by initialWorld (unaffected by the placement addition).",
+            "fn": "initialWorld",
+            "args": [],
+            "field": "objectTypes.lampPost"
+          },
+          {
+            "kind": "structural",
+            "description": "initialWorld().placements grows by at least one entry compared to its current 18-item baseline, reflecting the new lamp post placement.",
+            "fn": "initialWorld",
+            "args": [],
+            "field": "placements",
+            "check": "minCount",
+            "expectedType": null,
+            "minCount": 19
+          },
+          {
+            "kind": "render",
+            "description": "A lampPost placement (the type used for the new instance) draws without throwing.",
+            "stationOrEntityKey": "lampPost"
+          },
+          {
+            "kind": "non-regression",
+            "description": "Running tick() ten times in sequence from a minimal hand-built world (tick/money/sims only, no placements dependency) produces the same sequence of results as the pre-change baseline, since tick/chooseAction/applyAction never read placements.",
+            "fn": "tick",
+            "args": [
+              {
+                "tick": 9,
+                "money": 100,
+                "sims": [
+                  {
+                    "id": "sim1",
+                    "needs": {
+                      "hunger": 100,
+                      "energy": 100,
+                      "hygiene": 100,
+                      "fun": 100,
+                      "social": 100
+                    },
+                    "lastAction": null
+                  }
+                ]
+              }
+            ],
+            "repeat": 10
+          },
+          {
+            "kind": "non-regression",
+            "description": "applyAction with action 'eat' on a minimal hand-built world (no placements) still restores hunger and charges money identically to the pre-change baseline.",
+            "fn": "applyAction",
+            "args": [
+              {
+                "tick": 9,
+                "money": 100,
+                "sims": [
+                  {
+                    "id": "sim1",
+                    "needs": {
+                      "hunger": 10,
+                      "energy": 100,
+                      "hygiene": 100,
+                      "fun": 100,
+                      "social": 100
+                    },
+                    "lastAction": null
+                  }
+                ]
+              },
+              0,
+              "eat"
+            ],
+            "repeat": null
+          }
+        ],
+        "willNotTouch": "chooseAction, applyAction, tick, the objectTypes registry (lampPost's recipe/light/colour stay default), buildings, sims, surfaces, and every existing placement including the current two lamp posts (lamp-1, lamp-2).",
+        "question": null,
+        "implementationPath": "data-edit"
+      },
+      "rejectedCriteriaCount": 0
+    },
+    {
+      "stage": "gate1",
+      "decision": "approve"
+    },
+    {
+      "stage": "implement",
+      "model": "claude-haiku-4-5",
+      "inputTokens": 5288,
+      "outputTokens": 92,
+      "costUsd": 0.0057480000000000005,
+      "wallTimeMs": 17611,
+      "ops": [
+        {
+          "op": "addPlacement",
+          "placement": {
+            "id": "lamp-3",
+            "type": "lampPost",
+            "location": "outdoors",
+            "plot": {
+              "x": 1.7,
+              "y": 1.7
+            }
+          }
+        }
+      ]
+    },
+    {
+      "stage": "verify",
+      "regression": [
+        {
+          "name": "idle tick from full health does nothing but decay",
+          "fn": "tick",
+          "args": [
+            {
+              "tick": 0,
+              "money": 100,
+              "sims": [
+                {
+                  "id": "s",
+                  "needs": {
+                    "hunger": 100,
+                    "energy": 100,
+                    "fun": 100,
+                    "social": 100,
+                    "hygiene": 100
+                  },
+                  "lastAction": null
+                }
+              ]
+            }
+          ],
+          "pass": true,
+          "actual": {
+            "tick": 1,
+            "money": 100,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 97,
+                  "energy": 98,
+                  "fun": 98,
+                  "social": 98,
+                  "hygiene": 99
+                },
+                "lastAction": "idle"
+              }
+            ]
+          },
+          "expected": {
+            "tick": 1,
+            "money": 100,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 97,
+                  "energy": 98,
+                  "fun": 98,
+                  "social": 98,
+                  "hygiene": 99
+                },
+                "lastAction": "idle"
+              }
+            ]
+          }
+        },
+        {
+          "name": "10-tick trace from full health matches exactly, including a work cycle",
+          "fn": "tick",
+          "args": [
+            {
+              "tick": 0,
+              "money": 100,
+              "sims": [
+                {
+                  "id": "s",
+                  "needs": {
+                    "hunger": 100,
+                    "energy": 100,
+                    "fun": 100,
+                    "social": 100,
+                    "hygiene": 100
+                  },
+                  "lastAction": null
+                }
+              ]
+            }
+          ],
+          "repeat": 10,
+          "pass": true,
+          "actual": {
+            "tick": 10,
+            "money": 110,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 88,
+                  "energy": 84,
+                  "fun": 93,
+                  "social": 90,
+                  "hygiene": 98
+                },
+                "lastAction": "work"
+              }
+            ]
+          },
+          "expected": {
+            "tick": 10,
+            "money": 110,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 88,
+                  "energy": 84,
+                  "fun": 93,
+                  "social": 90,
+                  "hygiene": 98
+                },
+                "lastAction": "work"
+              }
+            ]
+          }
+        },
+        {
+          "name": "critical hunger overrides everything else",
+          "fn": "chooseAction",
+          "args": [
+            {
+              "id": "s",
+              "needs": {
+                "hunger": 25,
+                "energy": 90,
+                "fun": 90,
+                "social": 90,
+                "hygiene": 90
+              },
+              "lastAction": null
+            },
+            {
+              "tick": 0,
+              "money": 100,
+              "sims": []
+            }
+          ],
+          "pass": true,
+          "actual": "eat",
+          "expected": "eat"
+        },
+        {
+          "name": "applyAction(eat) restores hunger and charges money",
+          "fn": "applyAction",
+          "args": [
+            {
+              "tick": 0,
+              "money": 100,
+              "sims": [
+                {
+                  "id": "s",
+                  "needs": {
+                    "hunger": 25,
+                    "energy": 90,
+                    "fun": 90,
+                    "social": 90,
+                    "hygiene": 90
+                  },
+                  "lastAction": null
+                }
+              ]
+            },
+            0,
+            "eat"
+          ],
+          "pass": true,
+          "actual": {
+            "tick": 0,
+            "money": 95,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 62,
+                  "energy": 88,
+                  "fun": 88,
+                  "social": 88,
+                  "hygiene": 89
+                },
+                "lastAction": "eat"
+              }
+            ]
+          },
+          "expected": {
+            "tick": 0,
+            "money": 95,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 62,
+                  "energy": 88,
+                  "fun": 88,
+                  "social": 88,
+                  "hygiene": 89
+                },
+                "lastAction": "eat"
+              }
+            ]
+          }
+        },
+        {
+          "name": "cannot afford to eat -> falls back to the next-lowest need",
+          "fn": "tick",
+          "args": [
+            {
+              "tick": 0,
+              "money": 2,
+              "sims": [
+                {
+                  "id": "s",
+                  "needs": {
+                    "hunger": 10,
+                    "energy": 50,
+                    "fun": 90,
+                    "social": 90,
+                    "hygiene": 90
+                  },
+                  "lastAction": null
+                }
+              ]
+            }
+          ],
+          "pass": true,
+          "actual": {
+            "tick": 1,
+            "money": 2,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 7,
+                  "energy": 83,
+                  "fun": 88,
+                  "social": 88,
+                  "hygiene": 89
+                },
+                "lastAction": "sleep"
+              }
+            ]
+          },
+          "expected": {
+            "tick": 1,
+            "money": 2,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 7,
+                  "energy": 83,
+                  "fun": 88,
+                  "social": 88,
+                  "hygiene": 89
+                },
+                "lastAction": "sleep"
+              }
+            ]
+          }
+        },
+        {
+          "name": "work hour with energy and no urgent need triggers work",
+          "fn": "tick",
+          "args": [
+            {
+              "tick": 9,
+              "money": 50,
+              "sims": [
+                {
+                  "id": "s",
+                  "needs": {
+                    "hunger": 90,
+                    "energy": 90,
+                    "fun": 90,
+                    "social": 90,
+                    "hygiene": 90
+                  },
+                  "lastAction": null
+                }
+              ]
+            }
+          ],
+          "pass": true,
+          "actual": {
+            "tick": 10,
+            "money": 70,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 87,
+                  "energy": 78,
+                  "fun": 83,
+                  "social": 88,
+                  "hygiene": 89
+                },
+                "lastAction": "work"
+              }
+            ]
+          },
+          "expected": {
+            "tick": 10,
+            "money": 70,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 87,
+                  "energy": 78,
+                  "fun": 83,
+                  "social": 88,
+                  "hygiene": 89
+                },
+                "lastAction": "work"
+              }
+            ]
+          }
+        },
+        {
+          "name": "work hour but energy too low does not trigger work",
+          "fn": "tick",
+          "args": [
+            {
+              "tick": 9,
+              "money": 50,
+              "sims": [
+                {
+                  "id": "s",
+                  "needs": {
+                    "hunger": 90,
+                    "energy": 15,
+                    "fun": 90,
+                    "social": 90,
+                    "hygiene": 90
+                  },
+                  "lastAction": null
+                }
+              ]
+            }
+          ],
+          "pass": true,
+          "actual": {
+            "tick": 10,
+            "money": 50,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 87,
+                  "energy": 48,
+                  "fun": 88,
+                  "social": 88,
+                  "hygiene": 89
+                },
+                "lastAction": "sleep"
+              }
+            ]
+          },
+          "expected": {
+            "tick": 10,
+            "money": 50,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 87,
+                  "energy": 48,
+                  "fun": 88,
+                  "social": 88,
+                  "hygiene": 89
+                },
+                "lastAction": "sleep"
+              }
+            ]
+          }
+        },
+        {
+          "name": "needs never go negative even from a near-zero state",
+          "fn": "tick",
+          "args": [
+            {
+              "tick": 20,
+              "money": 0,
+              "sims": [
+                {
+                  "id": "s",
+                  "needs": {
+                    "hunger": 0,
+                    "energy": 1,
+                    "fun": 0,
+                    "social": 0,
+                    "hygiene": 0
+                  },
+                  "lastAction": null
+                }
+              ]
+            }
+          ],
+          "pass": true,
+          "actual": {
+            "tick": 21,
+            "money": 0,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 0,
+                  "energy": 35,
+                  "fun": 0,
+                  "social": 0,
+                  "hygiene": 0
+                },
+                "lastAction": "sleep"
+              }
+            ]
+          },
+          "expected": {
+            "tick": 21,
+            "money": 0,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 0,
+                  "energy": 35,
+                  "fun": 0,
+                  "social": 0,
+                  "hygiene": 0
+                },
+                "lastAction": "sleep"
+              }
+            ]
+          }
+        },
+        {
+          "name": "eating with exactly enough money never goes negative",
+          "fn": "applyAction",
+          "args": [
+            {
+              "tick": 0,
+              "money": 5,
+              "sims": [
+                {
+                  "id": "s",
+                  "needs": {
+                    "hunger": 10,
+                    "energy": 90,
+                    "fun": 90,
+                    "social": 90,
+                    "hygiene": 90
+                  },
+                  "lastAction": null
+                }
+              ]
+            },
+            0,
+            "eat"
+          ],
+          "pass": true,
+          "actual": {
+            "tick": 0,
+            "money": 0,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 47,
+                  "energy": 88,
+                  "fun": 88,
+                  "social": 88,
+                  "hygiene": 89
+                },
+                "lastAction": "eat"
+              }
+            ]
+          },
+          "expected": {
+            "tick": 0,
+            "money": 0,
+            "sims": [
+              {
+                "id": "s",
+                "needs": {
+                  "hunger": 47,
+                  "energy": 88,
+                  "fun": 88,
+                  "social": 88,
+                  "hygiene": 89
+                },
+                "lastAction": "eat"
+              }
+            ]
+          }
+        }
+      ],
+      "criteria": [
+        {
+          "name": "The lampPost object type still exists in the registry returned by initialWorld (unaffected by the placement addition).",
+          "pass": true,
+          "fn": "initialWorld",
+          "args": [],
+          "actual": {
+            "tick": 9,
+            "rngState": 1,
+            "money": 100,
+            "sims": [
+              {
+                "id": "sim1",
+                "home": "dwelling-1",
+                "needs": {
+                  "hunger": 100,
+                  "energy": 100,
+                  "fun": 100,
+                  "social": 100,
+                  "hygiene": 100
+                },
+                "lastAction": null
+              },
+              {
+                "id": "sim2",
+                "home": "dwelling-2",
+                "needs": {
+                  "hunger": 100,
+                  "energy": 100,
+                  "fun": 100,
+                  "social": 100,
+                  "hygiene": 100
+                },
+                "lastAction": null
+              }
+            ],
+            "buildings": [
+              {
+                "id": "dwelling-1",
+                "type": "dwelling",
+                "label": "House 1",
+                "plot": {
+                  "x": 0,
+                  "y": 0
+                }
+              },
+              {
+                "id": "dwelling-2",
+                "type": "dwelling",
+                "label": "House 2",
+                "plot": {
+                  "x": 2,
+                  "y": 0
+                }
+              },
+              {
+                "id": "shop",
+                "type": "shop",
+                "label": "Shop",
+                "plot": {
+                  "x": 0,
+                  "y": 2
+                }
+              },
+              {
+                "id": "workshop",
+                "type": "workshop",
+                "label": "Workshop",
+                "plot": {
+                  "x": 2,
+                  "y": 2
+                }
+              }
+            ],
+            "placements": [
+              {
+                "id": "dwelling-1-bed",
+                "type": "bed",
+                "location": "dwelling-1"
+              },
+              {
+                "id": "dwelling-1-fridge",
+                "type": "fridge",
+                "location": "dwelling-1"
+              },
+              {
+                "id": "dwelling-1-shower",
+                "type": "shower",
+                "location": "dwelling-1"
+              },
+              {
+                "id": "dwelling-1-desk",
+                "type": "desk",
+                "location": "dwelling-1"
+              },
+              {
+                "id": "dwelling-1-rug",
+                "type": "rug",
+                "location": "dwelling-1"
+              },
+              {
+                "id": "dwelling-1-table",
+                "type": "table",
+                "location": "dwelling-1"
+              },
+              {
+                "id": "dwelling-2-bed",
+                "type": "bed",
+                "location": "dwelling-2"
+              },
+              {
+                "id": "dwelling-2-fridge",
+                "type": "fridge",
+                "location": "dwelling-2"
+              },
+              {
+                "id": "dwelling-2-shower",
+                "type": "shower",
+                "location": "dwelling-2"
+              },
+              {
+                "id": "dwelling-2-desk",
+                "type": "desk",
+                "location": "dwelling-2"
+              },
+              {
+                "id": "dwelling-2-rug",
+                "type": "rug",
+                "location": "dwelling-2"
+              },
+              {
+                "id": "dwelling-2-table",
+                "type": "table",
+                "location": "dwelling-2"
+              },
+              {
+                "id": "bench-1",
+                "type": "bench",
+                "location": "outdoors",
+                "plot": {
+                  "x": 1,
+                  "y": 0.3
+                }
+              },
+              {
+                "id": "tree-1",
+                "type": "tree",
+                "location": "outdoors",
+                "plot": {
+                  "x": 1,
+                  "y": 0.7
+                }
+              },
+              {
+                "id": "tree-2",
+                "type": "tree",
+                "location": "outdoors",
+                "plot": {
+                  "x": 1.6,
+                  "y": 1.3
+                }
+              },
+              {
+                "id": "lamp-1",
+                "type": "lampPost",
+                "location": "outdoors",
+                "plot": {
+                  "x": 0.6,
+                  "y": 1.3
+                }
+              },
+              {
+                "id": "lamp-2",
+                "type": "lampPost",
+                "location": "outdoors",
+                "plot": {
+                  "x": 1.4,
+                  "y": 0.6
+                }
+              },
+              {
+                "id": "planter-1",
+                "type": "planter",
+                "location": "outdoors",
+                "plot": {
+                  "x": 1,
+                  "y": 1.6
+                }
+              },
+              {
+                "id": "lamp-3",
+                "type": "lampPost",
+                "location": "outdoors",
+                "plot": {
+                  "x": 1.7,
+                  "y": 1.7
+                }
+              }
+            ],
+            "objectTypes": {
+              "bed": {
+                "material": "fabric",
+                "footprint": {
+                  "w": 1.9,
+                  "d": 1.2
+                },
+                "shadow": {
+                  "w": 2.4,
+                  "d": 1.8
+                },
+                "local": {
+                  "x": 0.15,
+                  "y": 0.24
+                },
+                "station": {
+                  "action": "sleep",
+                  "label": "Bed"
+                },
+                "recipe": [
+                  {
+                    "shape": "box",
+                    "size": [
+                      1.9,
+                      0.32,
+                      1.05
+                    ],
+                    "radius": 0.1,
+                    "position": [
+                      0,
+                      0.2,
+                      0
+                    ],
+                    "color": "#d8c9a8",
+                    "roughness": 0.85
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      1.9,
+                      0.55,
+                      0.1
+                    ],
+                    "radius": 0.05,
+                    "position": [
+                      0,
+                      0.42,
+                      -0.52
+                    ],
+                    "color": "#8a5a34",
+                    "roughness": 0.6
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.55,
+                      0.14,
+                      0.35
+                    ],
+                    "radius": 0.06,
+                    "position": [
+                      -0.55,
+                      0.42,
+                      -0.3
+                    ],
+                    "color": "#fbf5e8",
+                    "roughness": 0.9
+                  }
+                ]
+              },
+              "fridge": {
+                "material": "ceramic",
+                "footprint": {
+                  "w": 0.75,
+                  "d": 0.72
+                },
+                "shadow": {
+                  "w": 1.1,
+                  "d": 0.825
+                },
+                "local": {
+                  "x": 0.85,
+                  "y": 0.24
+                },
+                "station": {
+                  "action": "eat",
+                  "label": "Fridge"
+                },
+                "recipe": [
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.75,
+                      1.55,
+                      0.72
+                    ],
+                    "radius": 0.08,
+                    "position": [
+                      0,
+                      0.78,
+                      0
+                    ],
+                    "color": "#cfd2d6",
+                    "roughness": 0.35,
+                    "metalness": 0.55
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.77,
+                      0.03,
+                      0.74
+                    ],
+                    "radius": 0.01,
+                    "position": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "color": "#9aa0a8",
+                    "roughness": 0.4,
+                    "metalness": 0.5,
+                    "castShadow": false
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.04,
+                      0.5,
+                      0.05
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      0.32,
+                      1.1,
+                      0.35
+                    ],
+                    "color": "#4a4d52",
+                    "roughness": 0.3,
+                    "metalness": 0.6,
+                    "castShadow": false
+                  }
+                ]
+              },
+              "shower": {
+                "material": "ceramic",
+                "footprint": {
+                  "w": 1.05,
+                  "d": 1
+                },
+                "shadow": {
+                  "w": 1.6,
+                  "d": 1.2
+                },
+                "local": {
+                  "x": 0.85,
+                  "y": 0.76
+                },
+                "station": {
+                  "action": "shower",
+                  "label": "Shower"
+                },
+                "recipe": [
+                  {
+                    "shape": "box",
+                    "size": [
+                      1.05,
+                      1.9,
+                      0.06
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      0,
+                      0.95,
+                      -0.5
+                    ],
+                    "color": "#f3efe6",
+                    "roughness": 0.5,
+                    "metalness": 0.05,
+                    "transparent": true,
+                    "opacity": 0.88
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.06,
+                      1.9,
+                      1
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      -0.5,
+                      0.95,
+                      0
+                    ],
+                    "color": "#f3efe6",
+                    "roughness": 0.5,
+                    "metalness": 0.05,
+                    "transparent": true,
+                    "opacity": 0.88
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.09,
+                      0.09,
+                      0.05
+                    ],
+                    "segments": 12,
+                    "position": [
+                      0,
+                      1.7,
+                      -0.35
+                    ],
+                    "rotation": [
+                      0,
+                      0,
+                      1.5708
+                    ],
+                    "color": "#cfd2d6",
+                    "roughness": 0.3,
+                    "metalness": 0.7
+                  }
+                ]
+              },
+              "desk": {
+                "material": "wood",
+                "footprint": {
+                  "w": 1.55,
+                  "d": 0.75
+                },
+                "shadow": {
+                  "w": 2,
+                  "d": 1.5
+                },
+                "local": {
+                  "x": 0.15,
+                  "y": 0.76
+                },
+                "station": {
+                  "action": "work",
+                  "label": "Desk"
+                },
+                "recipe": [
+                  {
+                    "shape": "box",
+                    "size": [
+                      1.55,
+                      0.07,
+                      0.75
+                    ],
+                    "radius": 0.03,
+                    "position": [
+                      0,
+                      0.74,
+                      0
+                    ],
+                    "color": "#8a5a34",
+                    "roughness": 0.55
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.03,
+                      0.03,
+                      0.74
+                    ],
+                    "segments": 8,
+                    "position": [
+                      -0.68,
+                      0.37,
+                      -0.3
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.6
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.03,
+                      0.03,
+                      0.74
+                    ],
+                    "segments": 8,
+                    "position": [
+                      0.68,
+                      0.37,
+                      -0.3
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.6
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.03,
+                      0.03,
+                      0.74
+                    ],
+                    "segments": 8,
+                    "position": [
+                      -0.68,
+                      0.37,
+                      0.3
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.6
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.03,
+                      0.03,
+                      0.74
+                    ],
+                    "segments": 8,
+                    "position": [
+                      0.68,
+                      0.37,
+                      0.3
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.6
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.5,
+                      0.34,
+                      0.04
+                    ],
+                    "radius": 0.03,
+                    "position": [
+                      0,
+                      1,
+                      -0.28
+                    ],
+                    "color": "#2a2622",
+                    "roughness": 0.4,
+                    "emissive": "#3a4a5c",
+                    "emissiveIntensity": 0.4
+                  }
+                ]
+              },
+              "rug": {
+                "material": "fabric",
+                "footprint": {
+                  "w": 2.1,
+                  "d": 2.1
+                },
+                "shadow": {
+                  "w": 2.4,
+                  "d": 1.8
+                },
+                "local": {
+                  "x": 0.5,
+                  "y": 0.18
+                },
+                "station": {
+                  "action": "play",
+                  "label": "Rug"
+                },
+                "recipe": [
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      1.05,
+                      1.05,
+                      0.05
+                    ],
+                    "segments": 28,
+                    "position": [
+                      0,
+                      0.025,
+                      0
+                    ],
+                    "color": "#c97a3d",
+                    "roughness": 0.95
+                  }
+                ]
+              },
+              "table": {
+                "material": "wood",
+                "footprint": {
+                  "w": 1.04,
+                  "d": 1.04
+                },
+                "shadow": {
+                  "w": 1.4,
+                  "d": 1.05
+                },
+                "local": {
+                  "x": 0.5,
+                  "y": 0.82
+                },
+                "station": {
+                  "action": "call",
+                  "label": "Table"
+                },
+                "recipe": [
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.52,
+                      0.52,
+                      0.06
+                    ],
+                    "segments": 24,
+                    "position": [
+                      0,
+                      0.62,
+                      0
+                    ],
+                    "color": "#8a5a34",
+                    "roughness": 0.55
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.08,
+                      0.1,
+                      0.6
+                    ],
+                    "segments": 10,
+                    "position": [
+                      0,
+                      0.31,
+                      0
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.6
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.42,
+                      0.08,
+                      0.42
+                    ],
+                    "radius": 0.04,
+                    "position": [
+                      0.85,
+                      0.42,
+                      0
+                    ],
+                    "color": "#3d6b63",
+                    "roughness": 0.8
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.03,
+                      0.03,
+                      0.42
+                    ],
+                    "segments": 8,
+                    "position": [
+                      0.85,
+                      0.21,
+                      0
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.6
+                  }
+                ]
+              },
+              "bench": {
+                "material": "wood",
+                "footprint": {
+                  "w": 1,
+                  "d": 0.34
+                },
+                "shadow": {
+                  "w": 1.2,
+                  "d": 0.6
+                },
+                "local": null,
+                "station": null,
+                "recipe": [
+                  {
+                    "shape": "box",
+                    "size": [
+                      1,
+                      0.06,
+                      0.34
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      0,
+                      0.42,
+                      0
+                    ],
+                    "color": "#8a5a34",
+                    "roughness": 0.65
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      1,
+                      0.32,
+                      0.05
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      0,
+                      0.6,
+                      -0.15
+                    ],
+                    "color": "#8a5a34",
+                    "roughness": 0.65
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.05,
+                      0.42,
+                      0.3
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      -0.42,
+                      0.21,
+                      0
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.7
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.05,
+                      0.42,
+                      0.3
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      0.42,
+                      0.21,
+                      0
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.7
+                  }
+                ]
+              },
+              "tree": {
+                "material": "leaf",
+                "footprint": {
+                  "w": 1.24,
+                  "d": 1.24
+                },
+                "shadow": {
+                  "w": 1.8,
+                  "d": 1.8
+                },
+                "local": null,
+                "station": null,
+                "recipe": [
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.09,
+                      0.13,
+                      1.1
+                    ],
+                    "segments": 8,
+                    "position": [
+                      0,
+                      0.55,
+                      0
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.85
+                  },
+                  {
+                    "shape": "icosahedron",
+                    "size": [
+                      0.62,
+                      1
+                    ],
+                    "position": [
+                      0,
+                      1.35,
+                      0
+                    ],
+                    "scale": [
+                      1,
+                      0.85,
+                      1
+                    ],
+                    "color": "#4f6b47",
+                    "roughness": 0.85
+                  }
+                ]
+              },
+              "lampPost": {
+                "material": "metal",
+                "footprint": {
+                  "w": 0.22,
+                  "d": 0.22
+                },
+                "shadow": {
+                  "w": 0.7,
+                  "d": 0.7
+                },
+                "emitsLight": true,
+                "local": null,
+                "station": null,
+                "light": {
+                  "color": "#ffb066",
+                  "distance": 5.5,
+                  "decay": 2.2,
+                  "baseIntensity": 0.7,
+                  "isStreetLamp": true,
+                  "position": [
+                    0,
+                    1.72,
+                    0
+                  ]
+                },
+                "recipe": [
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.035,
+                      0.045,
+                      1.7
+                    ],
+                    "segments": 8,
+                    "position": [
+                      0,
+                      0.85,
+                      0
+                    ],
+                    "color": "#3a3a3a",
+                    "roughness": 0.5,
+                    "metalness": 0.4
+                  },
+                  {
+                    "shape": "sphere",
+                    "size": [
+                      0.11
+                    ],
+                    "segments": [
+                      12,
+                      10
+                    ],
+                    "position": [
+                      0,
+                      1.72,
+                      0
+                    ],
+                    "color": "#ffe9bf",
+                    "roughness": 0.4,
+                    "emissive": "#ffb066",
+                    "emissiveIntensity": 0.6,
+                    "emissiveAnimated": true,
+                    "castShadow": false
+                  }
+                ]
+              },
+              "planter": {
+                "material": "leaf",
+                "footprint": {
+                  "w": 0.5,
+                  "d": 0.5
+                },
+                "shadow": {
+                  "w": 0.6,
+                  "d": 0.6
+                },
+                "local": null,
+                "station": null,
+                "recipe": [
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.5,
+                      0.32,
+                      0.5
+                    ],
+                    "radius": 0.04,
+                    "position": [
+                      0,
+                      0.16,
+                      0
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.75
+                  },
+                  {
+                    "shape": "icosahedron",
+                    "size": [
+                      0.24,
+                      0
+                    ],
+                    "position": [
+                      0,
+                      0.44,
+                      0
+                    ],
+                    "scale": [
+                      1,
+                      0.7,
+                      1
+                    ],
+                    "color": "#4f6b47",
+                    "roughness": 0.9
+                  }
+                ]
+              }
+            },
+            "surfaces": {
+              "ground": {
+                "material": "grass",
+                "color": "#6f6656"
+              },
+              "path": {
+                "material": "gravel",
+                "color": "#bfb49c"
+              },
+              "floor": {
+                "material": "wood",
+                "color": "#9c7a52"
+              },
+              "wall": {
+                "material": "plaster",
+                "color": "#b8ad93"
+              },
+              "trimShop": {
+                "material": "paint",
+                "color": "#9a5a3c"
+              },
+              "trimWorkshop": {
+                "material": "paint",
+                "color": "#5c6b5a"
+              }
+            }
+          },
+          "expected": "field \"objectTypes.lampPost\" present on the result"
+        },
+        {
+          "name": "initialWorld().placements grows by at least one entry compared to its current 18-item baseline, reflecting the new lamp post placement.",
+          "pass": true,
+          "fn": "initialWorld",
+          "args": [],
+          "actual": {
+            "tick": 9,
+            "rngState": 1,
+            "money": 100,
+            "sims": [
+              {
+                "id": "sim1",
+                "home": "dwelling-1",
+                "needs": {
+                  "hunger": 100,
+                  "energy": 100,
+                  "fun": 100,
+                  "social": 100,
+                  "hygiene": 100
+                },
+                "lastAction": null
+              },
+              {
+                "id": "sim2",
+                "home": "dwelling-2",
+                "needs": {
+                  "hunger": 100,
+                  "energy": 100,
+                  "fun": 100,
+                  "social": 100,
+                  "hygiene": 100
+                },
+                "lastAction": null
+              }
+            ],
+            "buildings": [
+              {
+                "id": "dwelling-1",
+                "type": "dwelling",
+                "label": "House 1",
+                "plot": {
+                  "x": 0,
+                  "y": 0
+                }
+              },
+              {
+                "id": "dwelling-2",
+                "type": "dwelling",
+                "label": "House 2",
+                "plot": {
+                  "x": 2,
+                  "y": 0
+                }
+              },
+              {
+                "id": "shop",
+                "type": "shop",
+                "label": "Shop",
+                "plot": {
+                  "x": 0,
+                  "y": 2
+                }
+              },
+              {
+                "id": "workshop",
+                "type": "workshop",
+                "label": "Workshop",
+                "plot": {
+                  "x": 2,
+                  "y": 2
+                }
+              }
+            ],
+            "placements": [
+              {
+                "id": "dwelling-1-bed",
+                "type": "bed",
+                "location": "dwelling-1"
+              },
+              {
+                "id": "dwelling-1-fridge",
+                "type": "fridge",
+                "location": "dwelling-1"
+              },
+              {
+                "id": "dwelling-1-shower",
+                "type": "shower",
+                "location": "dwelling-1"
+              },
+              {
+                "id": "dwelling-1-desk",
+                "type": "desk",
+                "location": "dwelling-1"
+              },
+              {
+                "id": "dwelling-1-rug",
+                "type": "rug",
+                "location": "dwelling-1"
+              },
+              {
+                "id": "dwelling-1-table",
+                "type": "table",
+                "location": "dwelling-1"
+              },
+              {
+                "id": "dwelling-2-bed",
+                "type": "bed",
+                "location": "dwelling-2"
+              },
+              {
+                "id": "dwelling-2-fridge",
+                "type": "fridge",
+                "location": "dwelling-2"
+              },
+              {
+                "id": "dwelling-2-shower",
+                "type": "shower",
+                "location": "dwelling-2"
+              },
+              {
+                "id": "dwelling-2-desk",
+                "type": "desk",
+                "location": "dwelling-2"
+              },
+              {
+                "id": "dwelling-2-rug",
+                "type": "rug",
+                "location": "dwelling-2"
+              },
+              {
+                "id": "dwelling-2-table",
+                "type": "table",
+                "location": "dwelling-2"
+              },
+              {
+                "id": "bench-1",
+                "type": "bench",
+                "location": "outdoors",
+                "plot": {
+                  "x": 1,
+                  "y": 0.3
+                }
+              },
+              {
+                "id": "tree-1",
+                "type": "tree",
+                "location": "outdoors",
+                "plot": {
+                  "x": 1,
+                  "y": 0.7
+                }
+              },
+              {
+                "id": "tree-2",
+                "type": "tree",
+                "location": "outdoors",
+                "plot": {
+                  "x": 1.6,
+                  "y": 1.3
+                }
+              },
+              {
+                "id": "lamp-1",
+                "type": "lampPost",
+                "location": "outdoors",
+                "plot": {
+                  "x": 0.6,
+                  "y": 1.3
+                }
+              },
+              {
+                "id": "lamp-2",
+                "type": "lampPost",
+                "location": "outdoors",
+                "plot": {
+                  "x": 1.4,
+                  "y": 0.6
+                }
+              },
+              {
+                "id": "planter-1",
+                "type": "planter",
+                "location": "outdoors",
+                "plot": {
+                  "x": 1,
+                  "y": 1.6
+                }
+              },
+              {
+                "id": "lamp-3",
+                "type": "lampPost",
+                "location": "outdoors",
+                "plot": {
+                  "x": 1.7,
+                  "y": 1.7
+                }
+              }
+            ],
+            "objectTypes": {
+              "bed": {
+                "material": "fabric",
+                "footprint": {
+                  "w": 1.9,
+                  "d": 1.2
+                },
+                "shadow": {
+                  "w": 2.4,
+                  "d": 1.8
+                },
+                "local": {
+                  "x": 0.15,
+                  "y": 0.24
+                },
+                "station": {
+                  "action": "sleep",
+                  "label": "Bed"
+                },
+                "recipe": [
+                  {
+                    "shape": "box",
+                    "size": [
+                      1.9,
+                      0.32,
+                      1.05
+                    ],
+                    "radius": 0.1,
+                    "position": [
+                      0,
+                      0.2,
+                      0
+                    ],
+                    "color": "#d8c9a8",
+                    "roughness": 0.85
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      1.9,
+                      0.55,
+                      0.1
+                    ],
+                    "radius": 0.05,
+                    "position": [
+                      0,
+                      0.42,
+                      -0.52
+                    ],
+                    "color": "#8a5a34",
+                    "roughness": 0.6
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.55,
+                      0.14,
+                      0.35
+                    ],
+                    "radius": 0.06,
+                    "position": [
+                      -0.55,
+                      0.42,
+                      -0.3
+                    ],
+                    "color": "#fbf5e8",
+                    "roughness": 0.9
+                  }
+                ]
+              },
+              "fridge": {
+                "material": "ceramic",
+                "footprint": {
+                  "w": 0.75,
+                  "d": 0.72
+                },
+                "shadow": {
+                  "w": 1.1,
+                  "d": 0.825
+                },
+                "local": {
+                  "x": 0.85,
+                  "y": 0.24
+                },
+                "station": {
+                  "action": "eat",
+                  "label": "Fridge"
+                },
+                "recipe": [
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.75,
+                      1.55,
+                      0.72
+                    ],
+                    "radius": 0.08,
+                    "position": [
+                      0,
+                      0.78,
+                      0
+                    ],
+                    "color": "#cfd2d6",
+                    "roughness": 0.35,
+                    "metalness": 0.55
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.77,
+                      0.03,
+                      0.74
+                    ],
+                    "radius": 0.01,
+                    "position": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "color": "#9aa0a8",
+                    "roughness": 0.4,
+                    "metalness": 0.5,
+                    "castShadow": false
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.04,
+                      0.5,
+                      0.05
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      0.32,
+                      1.1,
+                      0.35
+                    ],
+                    "color": "#4a4d52",
+                    "roughness": 0.3,
+                    "metalness": 0.6,
+                    "castShadow": false
+                  }
+                ]
+              },
+              "shower": {
+                "material": "ceramic",
+                "footprint": {
+                  "w": 1.05,
+                  "d": 1
+                },
+                "shadow": {
+                  "w": 1.6,
+                  "d": 1.2
+                },
+                "local": {
+                  "x": 0.85,
+                  "y": 0.76
+                },
+                "station": {
+                  "action": "shower",
+                  "label": "Shower"
+                },
+                "recipe": [
+                  {
+                    "shape": "box",
+                    "size": [
+                      1.05,
+                      1.9,
+                      0.06
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      0,
+                      0.95,
+                      -0.5
+                    ],
+                    "color": "#f3efe6",
+                    "roughness": 0.5,
+                    "metalness": 0.05,
+                    "transparent": true,
+                    "opacity": 0.88
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.06,
+                      1.9,
+                      1
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      -0.5,
+                      0.95,
+                      0
+                    ],
+                    "color": "#f3efe6",
+                    "roughness": 0.5,
+                    "metalness": 0.05,
+                    "transparent": true,
+                    "opacity": 0.88
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.09,
+                      0.09,
+                      0.05
+                    ],
+                    "segments": 12,
+                    "position": [
+                      0,
+                      1.7,
+                      -0.35
+                    ],
+                    "rotation": [
+                      0,
+                      0,
+                      1.5708
+                    ],
+                    "color": "#cfd2d6",
+                    "roughness": 0.3,
+                    "metalness": 0.7
+                  }
+                ]
+              },
+              "desk": {
+                "material": "wood",
+                "footprint": {
+                  "w": 1.55,
+                  "d": 0.75
+                },
+                "shadow": {
+                  "w": 2,
+                  "d": 1.5
+                },
+                "local": {
+                  "x": 0.15,
+                  "y": 0.76
+                },
+                "station": {
+                  "action": "work",
+                  "label": "Desk"
+                },
+                "recipe": [
+                  {
+                    "shape": "box",
+                    "size": [
+                      1.55,
+                      0.07,
+                      0.75
+                    ],
+                    "radius": 0.03,
+                    "position": [
+                      0,
+                      0.74,
+                      0
+                    ],
+                    "color": "#8a5a34",
+                    "roughness": 0.55
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.03,
+                      0.03,
+                      0.74
+                    ],
+                    "segments": 8,
+                    "position": [
+                      -0.68,
+                      0.37,
+                      -0.3
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.6
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.03,
+                      0.03,
+                      0.74
+                    ],
+                    "segments": 8,
+                    "position": [
+                      0.68,
+                      0.37,
+                      -0.3
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.6
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.03,
+                      0.03,
+                      0.74
+                    ],
+                    "segments": 8,
+                    "position": [
+                      -0.68,
+                      0.37,
+                      0.3
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.6
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.03,
+                      0.03,
+                      0.74
+                    ],
+                    "segments": 8,
+                    "position": [
+                      0.68,
+                      0.37,
+                      0.3
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.6
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.5,
+                      0.34,
+                      0.04
+                    ],
+                    "radius": 0.03,
+                    "position": [
+                      0,
+                      1,
+                      -0.28
+                    ],
+                    "color": "#2a2622",
+                    "roughness": 0.4,
+                    "emissive": "#3a4a5c",
+                    "emissiveIntensity": 0.4
+                  }
+                ]
+              },
+              "rug": {
+                "material": "fabric",
+                "footprint": {
+                  "w": 2.1,
+                  "d": 2.1
+                },
+                "shadow": {
+                  "w": 2.4,
+                  "d": 1.8
+                },
+                "local": {
+                  "x": 0.5,
+                  "y": 0.18
+                },
+                "station": {
+                  "action": "play",
+                  "label": "Rug"
+                },
+                "recipe": [
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      1.05,
+                      1.05,
+                      0.05
+                    ],
+                    "segments": 28,
+                    "position": [
+                      0,
+                      0.025,
+                      0
+                    ],
+                    "color": "#c97a3d",
+                    "roughness": 0.95
+                  }
+                ]
+              },
+              "table": {
+                "material": "wood",
+                "footprint": {
+                  "w": 1.04,
+                  "d": 1.04
+                },
+                "shadow": {
+                  "w": 1.4,
+                  "d": 1.05
+                },
+                "local": {
+                  "x": 0.5,
+                  "y": 0.82
+                },
+                "station": {
+                  "action": "call",
+                  "label": "Table"
+                },
+                "recipe": [
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.52,
+                      0.52,
+                      0.06
+                    ],
+                    "segments": 24,
+                    "position": [
+                      0,
+                      0.62,
+                      0
+                    ],
+                    "color": "#8a5a34",
+                    "roughness": 0.55
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.08,
+                      0.1,
+                      0.6
+                    ],
+                    "segments": 10,
+                    "position": [
+                      0,
+                      0.31,
+                      0
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.6
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.42,
+                      0.08,
+                      0.42
+                    ],
+                    "radius": 0.04,
+                    "position": [
+                      0.85,
+                      0.42,
+                      0
+                    ],
+                    "color": "#3d6b63",
+                    "roughness": 0.8
+                  },
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.03,
+                      0.03,
+                      0.42
+                    ],
+                    "segments": 8,
+                    "position": [
+                      0.85,
+                      0.21,
+                      0
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.6
+                  }
+                ]
+              },
+              "bench": {
+                "material": "wood",
+                "footprint": {
+                  "w": 1,
+                  "d": 0.34
+                },
+                "shadow": {
+                  "w": 1.2,
+                  "d": 0.6
+                },
+                "local": null,
+                "station": null,
+                "recipe": [
+                  {
+                    "shape": "box",
+                    "size": [
+                      1,
+                      0.06,
+                      0.34
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      0,
+                      0.42,
+                      0
+                    ],
+                    "color": "#8a5a34",
+                    "roughness": 0.65
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      1,
+                      0.32,
+                      0.05
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      0,
+                      0.6,
+                      -0.15
+                    ],
+                    "color": "#8a5a34",
+                    "roughness": 0.65
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.05,
+                      0.42,
+                      0.3
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      -0.42,
+                      0.21,
+                      0
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.7
+                  },
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.05,
+                      0.42,
+                      0.3
+                    ],
+                    "radius": 0.02,
+                    "position": [
+                      0.42,
+                      0.21,
+                      0
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.7
+                  }
+                ]
+              },
+              "tree": {
+                "material": "leaf",
+                "footprint": {
+                  "w": 1.24,
+                  "d": 1.24
+                },
+                "shadow": {
+                  "w": 1.8,
+                  "d": 1.8
+                },
+                "local": null,
+                "station": null,
+                "recipe": [
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.09,
+                      0.13,
+                      1.1
+                    ],
+                    "segments": 8,
+                    "position": [
+                      0,
+                      0.55,
+                      0
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.85
+                  },
+                  {
+                    "shape": "icosahedron",
+                    "size": [
+                      0.62,
+                      1
+                    ],
+                    "position": [
+                      0,
+                      1.35,
+                      0
+                    ],
+                    "scale": [
+                      1,
+                      0.85,
+                      1
+                    ],
+                    "color": "#4f6b47",
+                    "roughness": 0.85
+                  }
+                ]
+              },
+              "lampPost": {
+                "material": "metal",
+                "footprint": {
+                  "w": 0.22,
+                  "d": 0.22
+                },
+                "shadow": {
+                  "w": 0.7,
+                  "d": 0.7
+                },
+                "emitsLight": true,
+                "local": null,
+                "station": null,
+                "light": {
+                  "color": "#ffb066",
+                  "distance": 5.5,
+                  "decay": 2.2,
+                  "baseIntensity": 0.7,
+                  "isStreetLamp": true,
+                  "position": [
+                    0,
+                    1.72,
+                    0
+                  ]
+                },
+                "recipe": [
+                  {
+                    "shape": "cylinder",
+                    "size": [
+                      0.035,
+                      0.045,
+                      1.7
+                    ],
+                    "segments": 8,
+                    "position": [
+                      0,
+                      0.85,
+                      0
+                    ],
+                    "color": "#3a3a3a",
+                    "roughness": 0.5,
+                    "metalness": 0.4
+                  },
+                  {
+                    "shape": "sphere",
+                    "size": [
+                      0.11
+                    ],
+                    "segments": [
+                      12,
+                      10
+                    ],
+                    "position": [
+                      0,
+                      1.72,
+                      0
+                    ],
+                    "color": "#ffe9bf",
+                    "roughness": 0.4,
+                    "emissive": "#ffb066",
+                    "emissiveIntensity": 0.6,
+                    "emissiveAnimated": true,
+                    "castShadow": false
+                  }
+                ]
+              },
+              "planter": {
+                "material": "leaf",
+                "footprint": {
+                  "w": 0.5,
+                  "d": 0.5
+                },
+                "shadow": {
+                  "w": 0.6,
+                  "d": 0.6
+                },
+                "local": null,
+                "station": null,
+                "recipe": [
+                  {
+                    "shape": "box",
+                    "size": [
+                      0.5,
+                      0.32,
+                      0.5
+                    ],
+                    "radius": 0.04,
+                    "position": [
+                      0,
+                      0.16,
+                      0
+                    ],
+                    "color": "#6a4526",
+                    "roughness": 0.75
+                  },
+                  {
+                    "shape": "icosahedron",
+                    "size": [
+                      0.24,
+                      0
+                    ],
+                    "position": [
+                      0,
+                      0.44,
+                      0
+                    ],
+                    "scale": [
+                      1,
+                      0.7,
+                      1
+                    ],
+                    "color": "#4f6b47",
+                    "roughness": 0.9
+                  }
+                ]
+              }
+            },
+            "surfaces": {
+              "ground": {
+                "material": "grass",
+                "color": "#6f6656"
+              },
+              "path": {
+                "material": "gravel",
+                "color": "#bfb49c"
+              },
+              "floor": {
+                "material": "wood",
+                "color": "#9c7a52"
+              },
+              "wall": {
+                "material": "plaster",
+                "color": "#b8ad93"
+              },
+              "trimShop": {
+                "material": "paint",
+                "color": "#9a5a3c"
+              },
+              "trimWorkshop": {
+                "material": "paint",
+                "color": "#5c6b5a"
+              }
+            }
+          },
+          "expected": "field \"placements\" has count >= 19"
+        },
+        {
+          "name": "A lampPost placement (the type used for the new instance) draws without throwing. (structural check only -- whether it actually draws without throwing is a client-side check, not run here)",
+          "pass": true,
+          "expected": "\"lampPost\" is a known station/entity in worldStructure.ts",
+          "actual": "lampPost"
+        },
+        {
+          "name": "Running tick() ten times in sequence from a minimal hand-built world (tick/money/sims only, no placements dependency) produces the same sequence of results as the pre-change baseline, since tick/chooseAction/applyAction never read placements.",
+          "pass": true,
+          "fn": "tick",
+          "args": [
+            {
+              "tick": 9,
+              "money": 100,
+              "sims": [
+                {
+                  "id": "sim1",
+                  "needs": {
+                    "hunger": 100,
+                    "energy": 100,
+                    "hygiene": 100,
+                    "fun": 100,
+                    "social": 100
+                  },
+                  "lastAction": null
+                }
+              ]
+            }
+          ],
+          "repeat": 10,
+          "actual": {
+            "tick": 19,
+            "money": 240,
+            "sims": [
+              {
+                "id": "sim1",
+                "needs": {
+                  "hunger": 70,
+                  "energy": 80,
+                  "hygiene": 90,
+                  "fun": 75,
+                  "social": 80
+                },
+                "lastAction": "play"
+              }
+            ]
+          },
+          "expected": {
+            "tick": 19,
+            "money": 240,
+            "sims": [
+              {
+                "id": "sim1",
+                "needs": {
+                  "hunger": 70,
+                  "energy": 80,
+                  "hygiene": 90,
+                  "fun": 75,
+                  "social": 80
+                },
+                "lastAction": "play"
+              }
+            ]
+          }
+        },
+        {
+          "name": "applyAction with action 'eat' on a minimal hand-built world (no placements) still restores hunger and charges money identically to the pre-change baseline.",
+          "pass": true,
+          "fn": "applyAction",
+          "args": [
+            {
+              "tick": 9,
+              "money": 100,
+              "sims": [
+                {
+                  "id": "sim1",
+                  "needs": {
+                    "hunger": 10,
+                    "energy": 100,
+                    "hygiene": 100,
+                    "fun": 100,
+                    "social": 100
+                  },
+                  "lastAction": null
+                }
+              ]
+            },
+            0,
+            "eat"
+          ],
+          "actual": {
+            "tick": 9,
+            "money": 95,
+            "sims": [
+              {
+                "id": "sim1",
+                "needs": {
+                  "hunger": 47,
+                  "energy": 98,
+                  "hygiene": 99,
+                  "fun": 98,
+                  "social": 98
+                },
+                "lastAction": "eat"
+              }
+            ]
+          },
+          "expected": {
+            "tick": 9,
+            "money": 95,
+            "sims": [
+              {
+                "id": "sim1",
+                "needs": {
+                  "hunger": 47,
+                  "energy": 98,
+                  "hygiene": 99,
+                  "fun": 98,
+                  "social": 98
+                },
+                "lastAction": "eat"
+              }
+            ]
+          }
+        }
+      ],
+      "regressionPassed": 9,
+      "regressionTotal": 9,
+      "criteriaPassed": 5,
+      "criteriaTotal": 5
+    },
+    {
+      "stage": "review",
+      "model": "gpt-5.3-codex",
+      "inputTokens": 13530,
+      "outputTokens": 407,
+      "costUsd": 0.0293755,
+      "wallTimeMs": 5375,
+      "reviewText": "Kitchen Sink: **Yes** — it made broad, unrelated formatting rewrites (OBJECT_TYPES/placements/surfaces JSON-style quoting) instead of only appending one placement entry.\n\nWrong Abstraction: **No** — no new logic was introduced or duplicated; core functions remain single-source and unchanged.\n\nOptimistic Path: **No** — no new execution-path logic was added, so no new edge-case handling gaps were introduced.\n\nRunaway Refactor: **No** — despite noisy reformatting, there is no added architectural or algorithmic complexity.\n\n[NIT] Large non-functional reformatting of unrelated data blocks creates avoidable diff noise and review risk for a change that only needed a single placements append.",
+      "findings": [
+        {
+          "severity": "NIT",
+          "text": "Large non-functional reformatting of unrelated data blocks creates avoidable diff noise and review risk for a change that only needed a single placements append."
+        }
+      ]
+    },
+    {
+      "stage": "gate2",
+      "decision": "not-needed",
+      "materialCount": 0,
+      "nitCount": 1
+    }
+  ],
+  "totalCostUsd": 0.0587145,
+  "totalWallTimeMs": 92564
+}
