@@ -581,7 +581,8 @@ function renderBudget(b) {
     `This month: <b>${money(b.monthlySpentUsd)}</b> / ${money(b.monthlyCapUsd)} &nbsp;·&nbsp; ` +
     `Live runs left today: <b>${b.dailyLiveRunsPerIp}</b> (per IP)`
   $('#control-grid').innerHTML = [
-    ['Per-run ceiling', money(b.perRunCeilingUsd), 'Re-derived for the new routing -- tracks the real worst case closely on purpose.'],
+    ['Per-run ceiling, data edit', money(b.perRunCeilingUsdDataEdit), 'Applies once a plan’s change is expressible as a data edit -- a placement, a colour or position override, a surface change. Tracks that path’s real worst case closely on purpose.'],
+    ['Per-run ceiling, source edit', money(b.perRunCeilingUsdSourceEdit), 'Applies before a plan’s path is known, and to any change that genuinely needs new simulation logic -- a full-file rewrite, still priced at its own worst case.'],
     ['Daily cap, both vendors', money(b.dailyCapUsd), 'Anthropic and OpenAI spend both count toward this one ceiling, checked before a run starts.'],
     ['Weekly checkpoint', money(b.weeklyCapUsd), "A burst that clears the daily cap on day one still can't run away across a week."],
     ['Monthly backstop', money(b.monthlyCapUsd), "So a bad week can't take the whole month."],
@@ -646,9 +647,13 @@ const STATUS_LINES = {
   fixing: ['addressing what the reviewer found', 'still weighing it up', 'reworking the specific finding'],
 }
 // Backstops the real server-side timeout on each model call (STAGE_CALL_TIMEOUT_MS,
-// src/claude.ts) with honest client-side expectation-setting -- a stage that runs
-// long gets a plain note about it rather than leaving a visitor to guess whether
-// anything is still happening.
+// src/claude.ts, 85s -- re-measured on a live subscription for FOUNDATION-2, not
+// the 45s this threshold used to shadow) with honest client-side expectation-
+// setting -- a stage that runs long gets a plain note about it rather than
+// leaving a visitor to guess whether anything is still happening. 60s leaves
+// real margin before the actual 85s timeout fires, so this note reads as "this
+// is taking longer than usual" and not "the timeout is about to hit" a
+// full 25s early.
 function startStatusRotation(el, stageKey) {
   const lines = STATUS_LINES[stageKey] || ['still working']
   const textEl = document.createElement('span')
@@ -673,7 +678,7 @@ function startStatusRotation(el, stageKey) {
     i = (i + 1) % lines.length
     textEl.textContent = lines[i]
     const elapsedSec = (performance.now() - start) / 1000
-    if (elapsedSec > 45) {
+    if (elapsedSec > 60) {
       noteEl.textContent = `Still going after ${Math.round(elapsedSec)}s -- longer than this stage normally takes. If it doesn't resolve shortly, the run has a server-side timeout and will report a clear error rather than hang indefinitely.`
     } else if (elapsedSec > 18) {
       noteEl.textContent = `${Math.round(elapsedSec)}s in -- still working, not stuck.`

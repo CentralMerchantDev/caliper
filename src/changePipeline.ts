@@ -182,6 +182,13 @@ interface ChangeState {
 
 interface CallBudget {
   spent: number;
+  // FOUNDATION-2: which ceiling currently bounds this run -- starts at the
+  // safe SOURCE_EDIT ceiling (ground/plan cost the same under either path,
+  // and the path isn't known yet), flips to DATA_EDIT once plan.
+  // implementationPath says so. A field on the shared budget object, not a
+  // parameter threaded through every one of callAnthropic/callOpenAI's
+  // call sites, since budget is already passed to all of them.
+  ceilingUsd: number;
 }
 
 // reserve-before, reconcile-after (src/spendCounterDO.ts): the worst-case
@@ -192,7 +199,7 @@ interface CallBudget {
 // stay reserved against it.
 async function callAnthropic<T>(env: ChangeEnv, budget: CallBudget, estimateUsd: number, fn: () => Promise<T & { costUsd: number }>): Promise<T & { costUsd: number }> {
   await assertCircuitClosed(env.SPEND_KV, "anthropic" as Provider);
-  assertUnderRunCeiling(budget.spent, estimateUsd);
+  assertUnderRunCeiling(budget.spent, estimateUsd, budget.ceilingUsd);
   await assertUnderPipelineSpendCap(env.SPEND_COUNTER, estimateUsd);
   try {
     const result = await fn();
@@ -209,7 +216,7 @@ async function callAnthropic<T>(env: ChangeEnv, budget: CallBudget, estimateUsd:
 
 async function callOpenAI<T>(env: ChangeEnv, budget: CallBudget, estimateUsd: number, fn: () => Promise<T & { costUsd: number }>): Promise<T & { costUsd: number }> {
   await assertCircuitClosed(env.SPEND_KV, "openai" as Provider);
-  assertUnderRunCeiling(budget.spent, estimateUsd);
+  assertUnderRunCeiling(budget.spent, estimateUsd, budget.ceilingUsd);
   await assertUnderPipelineSpendCap(env.SPEND_COUNTER, estimateUsd);
   try {
     const result = await fn();
@@ -234,10 +241,10 @@ const RETROSPECTIVE_MAX_TOKENS = 300;
 
 // Priced against each stage's OWN routed model, not a blanket Opus
 // worst-case -- FINISH.md section 5: "remove it from the worst-case
-// estimates." This is what actually re-derives the per-run ceiling down
-// to ~$0.15 (see CONTROL_LIMITS.PER_RUN_CEILING_USD's own comment for the
-// arithmetic); pricing every stage at Opus rates is why it used to have to
-// be $0.35.
+// estimates." This is what actually re-derives the two per-run ceilings
+// (see CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT/_SOURCE_EDIT's own
+// comment for the arithmetic); pricing every stage at Opus rates is why
+// it used to have to be $0.35.
 const WORST_CASE = {
   ground: (CONTROL_LIMITS.TOKEN_CAPS.ground / 1_000_000) * ANTHROPIC_PRICING[GROUND_MODEL].output,
   plan: (PLAN_MAX_TOKENS / 1_000_000) * ANTHROPIC_PRICING[DEFAULT_MODEL].output,
@@ -483,7 +490,13 @@ async function runRetrospectiveAndRecord(
  */
 export async function runChangePipeline(env: ChangeEnv, runId: string, changeRequest: string, onEvent: (e: ChangeEvent) => void): Promise<ChangeRecord> {
   const existing = await loadState(env.SPEND_KV, runId);
-  const budget: CallBudget = { spent: existing?.budgetSpent ?? 0 };
+  const budget: CallBudget = {
+    spent: existing?.budgetSpent ?? 0,
+    // Safe default until plan.implementationPath is known -- ground and
+    // plan cost the same either way, so checking them against the wider
+    // ceiling is correct here, not just a placeholder.
+    ceilingUsd: existing?.plan?.implementationPath === "data-edit" ? CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT : CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT,
+  };
   const stageCosts = existing?.stageCosts ?? [];
   const runStartedAt = existing?.runStartedAt ?? Date.now();
   const currentSourceAtStart = existing?.currentSourceAtStart ?? (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
@@ -613,6 +626,12 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   // the one place that would catch a future branch added here that forgets
   // to do either.
   if (!plan || !grounding) throw new Error("internal error: plan/grounding not established before Gate 1");
+  // The path is known now -- switch to the ceiling that actually bounds
+  // it for every remaining call in this run (implement/fix/review/
+  // retrospective). Re-derived on every call into this function (not
+  // cached across resumes) so a retried run always checks against the
+  // right ceiling even if it's resuming mid-pipeline.
+  budget.ceilingUsd = plan.implementationPath === "data-edit" ? CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT : CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT;
 
   // ---- Stage 1.5: Gate 1 -- grounding + plan + criteria + cost, shown
   // together as one conversational moment (FINISH.md chunk 7). Three
@@ -650,7 +669,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       onEvent({ type: "ledger", ledger });
       return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
     }
-    onEvent({ type: "plan-gate", runId, plan, grounding, costEstimateUsd: budget.spent, budgetRemainingUsd: Math.max(0, CONTROL_LIMITS.PER_RUN_CEILING_USD - budget.spent) });
+    onEvent({ type: "plan-gate", runId, plan, grounding, costEstimateUsd: budget.spent, budgetRemainingUsd: Math.max(0, budget.ceilingUsd - budget.spent) });
     const state: ChangeState = { runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, planGateReplyCount, runStartedAt, stage: "awaiting-plan-decision", plan, grounding };
     await saveState(env.SPEND_KV, state);
     onEvent({ type: "halted", runId, waitingOn: "plan-decision" });

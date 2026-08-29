@@ -8,21 +8,37 @@
 // governing the plain 32-task routes unchanged.
 
 export const CONTROL_LIMITS = {
-  /** Abort the rest of a run if its running total would exceed this.
-   * Re-derived again for FINAL.md item 1: verification now runs a bounded
-   * fix loop to CONVERGENCE before the reviewer is ever called, instead of
-   * one post-review fix attempt as the only fix in the run. Worst case now
-   * stacks two fix rounds, not one -- up to MAX_FIX_ATTEMPTS pre-review
-   * fixes (fixing verification failures) plus the one existing post-review
-   * fix (fixing reviewer findings), both real, both possible in the same
-   * run: ground $0.0025 + plan $0.04 + implement $0.03 + fix*2 (pre-review,
+  /** Abort the rest of a run if its running total would exceed this --
+   * now TWO ceilings, not one, because FOUNDATION-2's data-edit path
+   * (src/worldEdit.ts) changed implement/fix's worst case but NOT
+   * source-edit's (implementChange/fixChange are untouched, still a
+   * full-file rewrite for a request that genuinely needs new simulation
+   * logic). A single shared ceiling can only ever be as low as the WORSE
+   * of the two paths' worst cases -- lowering it to the cheap path's
+   * figure would silently truncate every legitimate source-edit run
+   * partway through. Which one applies is decided the moment plan.
+   * implementationPath is known (see currentCeiling() in
+   * changePipeline.ts); before that (ground, plan), the SOURCE_EDIT
+   * ceiling applies, since the path isn't known yet and ground+plan cost
+   * the same either way.
+   *
+   * SOURCE_EDIT worst case, unchanged from before this brief: ground
+   * $0.0025 + plan $0.04 + implement $0.03 + fix*2 (pre-review,
    * MAX_FIX_ATTEMPTS) $0.08 + review $0.035 + fix $0.04 (post-review) +
-   * retrospective $0.0015 =~ $0.2275. $0.23 tracks that worst case closely
-   * on purpose, same philosophy as before: a real run rarely stacks every
-   * cap at once, so this is tight against the theoretical ceiling, not
-   * against typical spend. Re-derive again if a real run is ever clipped by
-   * it, or if MAX_FIX_ATTEMPTS changes. */
-  PER_RUN_CEILING_USD: 0.23,
+   * retrospective $0.0015 = $0.229. $0.23 tracks that closely on purpose.
+   *
+   * DATA_EDIT worst case (FOUNDATION-2 report, measured against a live
+   * Claude subscription, not this Worker's key): ground $0.0025 + plan
+   * $0.04 + implementEdit $0.0075 + fixEdit*2 (pre-review) $0.03 +
+   * review $0.035 + fixEdit $0.015 (post-review) + retrospective
+   * $0.0015 = $0.1315. $0.14 tracks that closely, same philosophy: tight
+   * against the theoretical ceiling, not against typical spend. Note
+   * plan + review alone already total $0.075 -- unaffected by this
+   * brief's optimization, since implement/fix's cost was never what made
+   * either of those two expensive. Re-derive again if MAX_FIX_ATTEMPTS,
+   * either path's token caps, or the routed models change. */
+  PER_RUN_CEILING_USD_SOURCE_EDIT: 0.23,
+  PER_RUN_CEILING_USD_DATA_EDIT: 0.14,
   /** Cross-model review must never see code that's still failing its own
    * checks (FINAL.md item 1: "the reviewer reads a diff that has already
    * passed CI"). This bounds the implement -> verify -> fix loop that runs
@@ -44,13 +60,17 @@ export const CONTROL_LIMITS = {
    * the full-file caps it replaces for the data-edit path. */
   TOKEN_CAPS: { brief: 800, ground: 500, implement: 6000, review: 2500, fix: 4000, implementEdit: 1500, fixEdit: 1500 },
   /** UPGRADE.md section 0: 3 live runs/IP/day (up from 2, permanent, not a
-   * temporary carve-out) -- 3 x the $0.15 worst case =~ $0.45/IP/day, still
-   * small next to the global daily cap below. Can go higher once the
-   * routing change (Haiku grounds/implements/retrospects, Sonnet
-   * plans/fixes, gpt-5.3-codex reviews, no Opus on any path) brings a
-   * typical run under $0.05. Bypassable only with a valid `?k=` unlock code
-   * (Mark's own use, e.g. demoing live), never raised for everyone to cover
-   * that case. */
+   * temporary carve-out) -- 3 x the $0.23 (source-edit) worst case =~
+   * $0.69/IP/day, still small next to the global daily cap below. This
+   * comment anticipated raising the limit once a typical run fell under
+   * $0.05 -- checked directly against FOUNDATION-2's re-derived data-edit
+   * ceiling (CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT's own comment):
+   * NOT MET, and not close. plan ($0.04 worst case) and review ($0.035)
+   * alone already total $0.075 before implement/fix are even counted --
+   * the data-edit optimization made implement/fix cheap, but neither of
+   * those two stages was ever what made a run expensive. Left at 3,
+   * unchanged; re-check this if plan or review's routing/token caps
+   * change, since those are what would actually move the number. */
   DAILY_LIVE_RUNS_PER_IP: 3,
   /** Global ceiling across BOTH vendors combined -- Anthropic and OpenAI
    * spend are separate budgets that both count toward this one number.
@@ -221,7 +241,12 @@ export interface PipelineBudgetStatus {
   monthlySpentUsd: number;
   monthlyCapUsd: number;
   monthlyRemainingUsd: number;
-  perRunCeilingUsd: number;
+  /** FOUNDATION-2: two ceilings, not one -- see CONTROL_LIMITS'
+   * PER_RUN_CEILING_USD_DATA_EDIT/_SOURCE_EDIT for the worst-case
+   * arithmetic behind each. Which one actually applies to a given run is
+   * decided once its plan declares implementationPath. */
+  perRunCeilingUsdDataEdit: number;
+  perRunCeilingUsdSourceEdit: number;
   dailyLiveRunsPerIp: number;
   maxConcurrentRuns: number;
 }
@@ -239,7 +264,8 @@ export async function getPipelineBudgetStatus(ns: DurableObjectNamespace): Promi
     monthlySpentUsd: monthly,
     monthlyCapUsd: CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD,
     monthlyRemainingUsd: Math.max(0, CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD - monthly),
-    perRunCeilingUsd: CONTROL_LIMITS.PER_RUN_CEILING_USD,
+    perRunCeilingUsdDataEdit: CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT,
+    perRunCeilingUsdSourceEdit: CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT,
     dailyLiveRunsPerIp: CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP,
     maxConcurrentRuns: CONTROL_LIMITS.MAX_CONCURRENT_PIPELINE_RUNS,
   };
@@ -247,12 +273,18 @@ export async function getPipelineBudgetStatus(ns: DurableObjectNamespace): Promi
 
 // ---------- 1. Per-run ceiling ----------
 
-export function assertUnderRunCeiling(spentSoFarUsd: number, nextEstimateUsd: number): void {
-  if (spentSoFarUsd + nextEstimateUsd > CONTROL_LIMITS.PER_RUN_CEILING_USD) {
+// FOUNDATION-2: ceilingUsd is now a parameter, not a single module
+// constant read internally -- the caller (changePipeline.ts's
+// currentCeiling()) picks PER_RUN_CEILING_USD_DATA_EDIT or _SOURCE_EDIT
+// based on plan.implementationPath, since the two paths have genuinely
+// different worst cases and a run must be checked against the one that
+// actually bounds it.
+export function assertUnderRunCeiling(spentSoFarUsd: number, nextEstimateUsd: number, ceilingUsd: number): void {
+  if (spentSoFarUsd + nextEstimateUsd > ceilingUsd) {
     throw new PipelineLimitError(
       "per-run-ceiling",
       `This run's cost ($${spentSoFarUsd.toFixed(4)} so far) would exceed the per-run ceiling ` +
-        `($${CONTROL_LIMITS.PER_RUN_CEILING_USD.toFixed(2)}) -- stopping here rather than continuing to spend.`,
+        `($${ceilingUsd.toFixed(2)}) -- stopping here rather than continuing to spend.`,
     );
   }
 }

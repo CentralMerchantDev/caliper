@@ -49,14 +49,21 @@ test("re-derived numbers match FINISH.md section 5 exactly", () => {
   assert.equal(CONTROL_LIMITS.PIPELINE_WEEKLY_CAP_USD, 7.0);
   assert.equal(CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD, 20.0);
   assert.equal(CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP, 3);
-  // Re-derived again for FINAL.md item 1: a bounded pre-review fix loop can
-  // now stack with the existing post-review fix in the same run, pushing
-  // worst case from ~$0.15 to ~$0.2275 (see controlLayer.ts's own comment
-  // on PER_RUN_CEILING_USD for the arithmetic). The invariant this guards
-  // is still "tracks the real worst case, not the old $0.35 Opus-priced
-  // ceiling" -- $0.30 catches a regression back toward that, not a false
-  // positive on the current, deliberate $0.23.
-  assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD <= 0.3, "per-run ceiling should track the current worst-case arithmetic (~$0.23), not the old $0.35");
+});
+
+// FOUNDATION-2 ("emit the change, not the file"): two ceilings now, not
+// one -- source-edit's worst case is unchanged (implementChange/fixChange
+// are untouched), data-edit's is genuinely lower (implementChangeAsEdit/
+// fixChangeAsEdit's much smaller token caps). The invariant both guard is
+// still "tracks the real worst case, not the old $0.35 Opus-priced
+// ceiling" -- catches a regression back toward that, not a false positive
+// on either current, deliberate value.
+test("per-run ceiling (source-edit) tracks the current worst-case arithmetic (~$0.23), not the old $0.35", () => {
+  assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT <= 0.3);
+});
+test("per-run ceiling (data-edit) tracks its own, lower worst-case arithmetic (~$0.14) -- genuinely cheaper than source-edit, not just relabeled", () => {
+  assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT <= 0.15);
+  assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT < CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT);
 });
 
 // ---------------------------------------------------------------------
