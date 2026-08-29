@@ -77,6 +77,10 @@ test("a stage failure checkpoints an errored, resumable state instead of losing 
   assert.ok(savedRaw, "the run must be discoverable in KV after a stage failure, not silently lost");
   const saved = JSON.parse(savedRaw!);
   assert.equal(saved.stage, "errored");
+  // LAST.md item 1: a 401 is a 4xx the API rejected outright -- permanent,
+  // not worth retrying unchanged. This is the exact classification that
+  // stops the "retried four times identically" failure mode.
+  assert.equal(saved.errorKind, "permanent", "a 401 (bad auth, a 4xx) must be classified permanent");
 
   // ---- Attempt 2: resume with NO decision posted yet -- must re-halt without re-attempting ----
   events = [];
@@ -84,12 +88,22 @@ test("a stage failure checkpoints an errored, resumable state instead of losing 
   assert.equal(rec2.ledger.outcome, "halted-awaiting-error-decision");
   assert.ok(!events.some((e) => e.type === "grounding"), "a bare resume with no decision must not re-spend on the failed stage");
 
-  // ---- Attempt 3: "retry" -- must actually re-attempt the failed stage ----
+  // ---- Attempt 3: "retry" on a PERMANENT error -- must be refused server-side, zero new spend, zero new API call ----
+  // This is the exact scenario LAST.md reports: a run retried four times
+  // identically against a request the API had already rejected. The fix
+  // is that "approve" on a permanent-error run no longer re-attempts the
+  // doomed call at all.
   await env.SPEND_KV.put(`change/error-decision/${runId}`, JSON.stringify({ approve: true }));
   events = [];
   const rec3 = await runChangePipeline(env, runId, changeRequest, onEvent);
-  assert.ok(events.some((e) => e.type === "grounding"), "retry must genuinely re-attempt the stage that failed, not just re-report it");
-  assert.equal(rec3.ledger.outcome, "halted-awaiting-error-decision", "the same bad key fails again -- still parked, still not lost");
+  assert.ok(!events.some((e) => e.type === "grounding"), "retry on a permanent error must NOT re-attempt the stage -- that's the exact bug this fixes");
+  assert.equal(rec3.ledger.outcome, "halted-awaiting-error-decision", "still parked, still not lost -- just not re-attempted");
+  const stageErrors3 = events.filter((e) => e.type === "stage-error");
+  assert.equal(stageErrors3.length, 1);
+  if (stageErrors3[0].type === "stage-error") {
+    assert.equal(stageErrors3[0].errorKind, "permanent");
+    assert.match(stageErrors3[0].errorMessage, /retrying without a code change will fail identically/);
+  }
 
   // ---- Attempt 4: "abandon" -- must end the run and clear its state ----
   await env.SPEND_KV.put(`change/error-decision/${runId}`, JSON.stringify({ approve: false }));
@@ -98,4 +112,35 @@ test("a stage failure checkpoints an errored, resumable state instead of losing 
   assert.equal(rec4.ledger.outcome, "abandoned-after-error");
   const stateAfterAbandon = await env.SPEND_KV.get(`change/state/${runId}`);
   assert.equal(stateAfterAbandon, null, "abandoning must clear the run's state, the same as stopping does");
+});
+
+test("a TRANSIENT error, unlike a permanent one, is genuinely retried on approval", async (t) => {
+  // Exercises the exact same branch in runChangePipeline as the test
+  // above, from the other side: a state whose errorKind is "transient"
+  // (what a real network blip or 5xx would produce -- see
+  // classifyErrorPermanence's own unit tests in controlLayer.test.ts for
+  // that classification) must actually re-attempt the failed stage on
+  // "approve", not be silently refused the way a permanent one is.
+  // Seeded directly rather than forcing real network flakiness, which
+  // can't be made to happen on demand -- this tests the real
+  // runChangePipeline control flow, not a reimplementation of it, just
+  // starting from a constructed checkpoint instead of a caused failure.
+  const env = makeEnv();
+  const runId = `test-transient-retry-${Date.now()}`;
+  const changeRequest = "add a lamp post near the workshop";
+
+  await env.SPEND_KV.put(
+    `change/state/${runId}`,
+    JSON.stringify({
+      runId, changeRequest, currentSourceAtStart: "", budgetSpent: 0, stageCosts: [],
+      questionAsked: false, planGateReplyCount: 0, runStartedAt: Date.now(),
+      stage: "errored", errorMessage: "simulated transient failure (network blip)", erroredAtStage: "ground+plan",
+      errorKind: "transient",
+    }),
+  );
+  await env.SPEND_KV.put(`change/error-decision/${runId}`, JSON.stringify({ approve: true }));
+
+  const events: ChangeEvent[] = [];
+  await runChangePipeline(env, runId, changeRequest, (e) => events.push(e));
+  assert.ok(events.some((e) => e.type === "grounding"), "a transient error must be genuinely retried, not refused the way a permanent one is");
 });

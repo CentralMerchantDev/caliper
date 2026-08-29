@@ -15,6 +15,8 @@ import {
   assertCircuitClosed,
   recordProviderSuccess,
   recordProviderFailure,
+  classifyErrorPermanence,
+  type ErrorPermanence,
   type Provider,
 } from "./controlLayer";
 
@@ -94,6 +96,12 @@ export type ChangeEvent =
       erroredAtStage: string;
       errorMessage: string;
       costSoFarUsd: number;
+      // LAST.md item 1: "stop retrying permanent errors." A permanent
+      // (4xx, not 429) error will fail identically on retry without a
+      // code change -- the client uses this to not even offer Retry as an
+      // option, rather than relying on a visitor to guess that clicking
+      // it four times in a row is pointless.
+      errorKind: ErrorPermanence;
     }
   | { type: "ledger"; ledger: ChangeLedger };
 
@@ -167,6 +175,11 @@ interface ChangeState {
    * shown alongside errorMessage so the report reads "X failed: Y", not
    * just "something failed". */
   erroredAtStage?: string;
+  /** Only set when stage === "errored". LAST.md item 1: "permanent" (a
+   * 4xx, not 429) means retrying without a code change fails identically
+   * -- a retry decision on a run in this state is refused server-side,
+   * not just hidden client-side. */
+  errorKind?: ErrorPermanence;
   /** Only set when stage === "errored". True once Gate 1 has been approved
    * for this run -- distinguishes "retry means re-ground-and-plan" from
    * "retry means resume implement/verify/fix/review", since both can leave
@@ -548,14 +561,28 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       onEvent({ type: "ledger", ledger });
       return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: existing.findings ?? [], ledger };
     }
-    if (decision === null) {
-      onEvent({ type: "stage-error", runId, erroredAtStage: existing.erroredAtStage ?? "unknown", errorMessage: existing.errorMessage ?? "unknown error", costSoFarUsd: budget.spent });
+    // LAST.md item 1: "stop retrying permanent errors... do not burn the
+    // clock re-sending a request the API has already rejected." A
+    // permanent error is refused here server-side, not just left unoffered
+    // by the client -- even an "approve" decision (retry) does not
+    // re-attempt the doomed call. Same halt, same message, zero new spend,
+    // instead of a fifth identical 400.
+    if (decision === "approve" && existing.errorKind === "permanent") {
+      const message = `${existing.errorMessage ?? "unknown error"} (this is a permanent request error -- retrying without a code change will fail identically; abandon this run instead)`;
+      onEvent({ type: "stage-error", runId, erroredAtStage: existing.erroredAtStage ?? "unknown", errorMessage: message, costSoFarUsd: budget.spent, errorKind: "permanent" });
       onEvent({ type: "halted", runId, waitingOn: "error-decision" });
       const ledger = haltLedger(existing, "error-decision");
       onEvent({ type: "ledger", ledger });
       return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: existing.findings ?? [], ledger };
     }
-    // decision === "approve" (retry) -- fall through into the normal flow.
+    if (decision === null) {
+      onEvent({ type: "stage-error", runId, erroredAtStage: existing.erroredAtStage ?? "unknown", errorMessage: existing.errorMessage ?? "unknown error", costSoFarUsd: budget.spent, errorKind: existing.errorKind ?? "transient" });
+      onEvent({ type: "halted", runId, waitingOn: "error-decision" });
+      const ledger = haltLedger(existing, "error-decision");
+      onEvent({ type: "ledger", ledger });
+      return { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: existing.findings ?? [], ledger };
+    }
+    // decision === "approve" && errorKind !== "permanent" -- fall through into the normal flow.
   }
 
   try {
@@ -1071,14 +1098,15 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // explicit decision (retry or abandon) rather than looping on its own,
     // checked at the top of this function via change/error-decision/${runId}.
     const errorMessage = String((e as Error)?.message ?? e);
+    const errorKind = classifyErrorPermanence(e);
     const state: ChangeState = {
       runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, planGateReplyCount, runStartedAt,
-      stage: "errored", errorMessage, erroredAtStage: inFlightStage, erroredPastGate1: pastGate1Approved,
+      stage: "errored", errorMessage, erroredAtStage: inFlightStage, erroredPastGate1: pastGate1Approved, errorKind,
       erroredClarification: plan === undefined ? lastClarification : undefined,
       plan, grounding, implCode, verifyRegression, verifyCriteria, findings,
     };
     await saveState(env.SPEND_KV, state);
-    onEvent({ type: "stage-error", runId, erroredAtStage: inFlightStage, errorMessage, costSoFarUsd: budget.spent });
+    onEvent({ type: "stage-error", runId, erroredAtStage: inFlightStage, errorMessage, costSoFarUsd: budget.spent, errorKind });
     onEvent({ type: "halted", runId, waitingOn: "error-decision" });
     const ledger = haltLedger(state, "error-decision");
     onEvent({ type: "ledger", ledger });

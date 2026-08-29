@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { CONTROL_LIMITS, assertUnderPipelineSpendCap, reconcilePipelineSpend, assertUnderPipelineRateLimit, recordPipelineRateLimitHit, PipelineLimitError } from "../src/controlLayer.ts";
+import { CONTROL_LIMITS, assertUnderPipelineSpendCap, reconcilePipelineSpend, assertUnderPipelineRateLimit, recordPipelineRateLimitHit, PipelineLimitError, classifyErrorPermanence } from "../src/controlLayer.ts";
 import { SpendCounterLogic, handleSpendCounterRequest, type StorageLike } from "../src/spendCounterDO.ts";
 
 function mockKv(initial: Record<string, string> = {}): KVNamespace {
@@ -64,6 +64,34 @@ test("per-run ceiling (source-edit) tracks the current worst-case arithmetic (~$
 test("per-run ceiling (data-edit) tracks its own, lower worst-case arithmetic (~$0.14) -- genuinely cheaper than source-edit, not just relabeled", () => {
   assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT <= 0.15);
   assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT < CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT);
+});
+
+// ---------------------------------------------------------------------
+// LAST.md item 1: "stop retrying permanent errors." A live run hit a 400
+// (a malformed schema, itself fixed separately) and was retried four
+// times, identically, because nothing distinguished "worth trying again"
+// from "guaranteed to fail the same way." classifyErrorPermanence is the
+// distinction -- exercised here against the SAME error shape both the
+// Anthropic and OpenAI SDKs actually throw (an object with a numeric
+// `.status`), not a hand-waved mock of "an error happened".
+// ---------------------------------------------------------------------
+test("classifyErrorPermanence: a 400 (the exact defect that killed a live run) is permanent", () => {
+  assert.equal(classifyErrorPermanence({ status: 400 }), "permanent");
+});
+test("classifyErrorPermanence: 401/403/404/422 are all permanent -- the request itself was rejected", () => {
+  for (const status of [401, 403, 404, 422]) assert.equal(classifyErrorPermanence({ status }), "permanent");
+});
+test("classifyErrorPermanence: 429 is NOT permanent -- a rate limit is about right now, not about the request being malformed", () => {
+  assert.equal(classifyErrorPermanence({ status: 429 }), "transient");
+});
+test("classifyErrorPermanence: 5xx is transient -- server-side, may resolve on retry", () => {
+  assert.equal(classifyErrorPermanence({ status: 500 }), "transient");
+  assert.equal(classifyErrorPermanence({ status: 503 }), "transient");
+});
+test("classifyErrorPermanence: an error with no status (network failure, timeout) defaults to transient", () => {
+  assert.equal(classifyErrorPermanence(new Error("ECONNRESET")), "transient");
+  assert.equal(classifyErrorPermanence(null), "transient");
+  assert.equal(classifyErrorPermanence(undefined), "transient");
 });
 
 // ---------------------------------------------------------------------

@@ -7,6 +7,26 @@
 // from the original experiment's spendCap.ts/rateLimit.ts, which keep
 // governing the plain 32-task routes unchanged.
 
+// LAST.md item 1: a live run hit a 400 from a malformed schema and was
+// retried four times, identically, because nothing distinguished "this
+// might succeed if tried again" from "this is guaranteed to fail exactly
+// the same way every time, because the REQUEST ITSELF was rejected, not
+// something transient about this one attempt." Both the Anthropic and
+// OpenAI SDKs expose the same shape on their APIError classes (a `.status`
+// number) -- checked structurally here rather than importing either SDK's
+// error class, since both providers' errors need the same classification
+// and neither import should know about the other's existence. A 429 is
+// deliberately NOT permanent -- a rate limit is about right now, not about
+// the request being malformed, and IS worth retrying later.
+export type ErrorPermanence = "permanent" | "transient";
+export function classifyErrorPermanence(e: unknown): ErrorPermanence {
+  const status = (e as { status?: unknown } | null | undefined)?.status;
+  if (typeof status !== "number") return "transient"; // network error, timeout, anything without a status -- assume worth retrying
+  if (status === 429) return "transient"; // rate limit -- about right now, not about the request being wrong
+  if (status >= 400 && status < 500) return "permanent"; // the API rejected the shape of the request itself; retrying it unchanged fails identically
+  return "transient"; // 5xx and anything else -- server-side, may resolve on retry
+}
+
 export const CONTROL_LIMITS = {
   /** Abort the rest of a run if its running total would exceed this --
    * now TWO ceilings, not one, because FOUNDATION-2's data-edit path

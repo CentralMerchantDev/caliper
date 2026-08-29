@@ -797,12 +797,22 @@ function renderBar() {
     // FOUNDATION-2 item 4: a stage failing (a timeout, anything) is a halt,
     // not a loss -- the run is saved server-side with everything already
     // paid for intact, waiting here exactly like a plan/review gate does.
+    // LAST.md item 1: a "permanent" error (a 4xx the API rejected outright,
+    // not a rate limit) will fail identically on retry until the code
+    // changes -- Retry isn't offered at all for that case, not just
+    // discouraged, since a button that's certain to fail is worse than no
+    // button. The server also refuses to honor a retry decision on a
+    // permanent-error run regardless (defense in depth, not just a hidden
+    // button), so this isn't the only thing stopping it.
+    const isPermanent = barState.errorKind === 'permanent'
     html = `
-      <span class="bar-kicker">Something failed -- nothing is lost</span>
+      <span class="bar-kicker">${isPermanent ? 'Something failed -- this needs a code fix, not a retry' : 'Something failed -- nothing is lost'}</span>
       <p class="bar-ask"><strong>${esc(barState.erroredAtStage)}</strong> failed: ${esc(barState.errorMessage)}</p>
-      <p class="bar-note">${money(barState.costSoFarUsd)} spent so far is saved. Retry resumes from there -- it does not re-pay for anything that already succeeded. Abandon ends the run for good.</p>
+      <p class="bar-note">${money(barState.costSoFarUsd)} spent so far is saved.${isPermanent
+        ? ' The API rejected this request outright -- retrying it unchanged would fail the exact same way, so that option isn\'t offered. Abandon ends the run for good.'
+        : ' Retry resumes from there -- it does not re-pay for anything that already succeeded. Abandon ends the run for good.'}</p>
       <div class="bar-row">
-        <button class="btn" id="bar-retry" type="button">Retry</button>
+        ${isPermanent ? '' : '<button class="btn" id="bar-retry" type="button">Retry</button>'}
         <button class="btn btn-outline" id="bar-abandon" type="button">Abandon</button>
       </div>`
   } else if (barState.kind === 'resume-prompt') {
@@ -864,8 +874,9 @@ function renderBar() {
     $('#bar-rapprove').addEventListener('click', () => { disableAll(); fetch(`/change-review-decision?runId=${encodeURIComponent(currentRunId)}&approve=true`).then(() => resumeCurrent()) })
     $('#bar-rreject').addEventListener('click', () => { disableAll(); fetch(`/change-review-decision?runId=${encodeURIComponent(currentRunId)}&approve=false`).then(() => resumeCurrent()) })
   } else if (barState.kind === 'stage-error') {
-    const disableAll = () => { $('#bar-retry').disabled = true; $('#bar-abandon').disabled = true }
-    $('#bar-retry').addEventListener('click', () => { disableAll(); fetch(`/change-error-decision?runId=${encodeURIComponent(currentRunId)}&approve=true`).then(() => resumeCurrent()) })
+    const retryBtn = $('#bar-retry') // absent entirely for a permanent error -- see renderBar above
+    const disableAll = () => { if (retryBtn) retryBtn.disabled = true; $('#bar-abandon').disabled = true }
+    if (retryBtn) retryBtn.addEventListener('click', () => { disableAll(); fetch(`/change-error-decision?runId=${encodeURIComponent(currentRunId)}&approve=true`).then(() => resumeCurrent()) })
     $('#bar-abandon').addEventListener('click', () => { disableAll(); fetch(`/change-error-decision?runId=${encodeURIComponent(currentRunId)}&approve=false`).then(() => resumeCurrent()) })
   } else if (barState.kind === 'resume-prompt') {
     $('#bar-resume').addEventListener('click', () => {
@@ -983,10 +994,11 @@ function connect(url) {
   es.addEventListener('stage-error', ev => {
     stopStatus()
     const d = JSON.parse(ev.data)
-    const b = stageBlock(log, 's-stage-error-' + Date.now(), 'Failed -- not lost')
+    const isPermanent = d.errorKind === 'permanent'
+    const b = stageBlock(log, 's-stage-error-' + Date.now(), isPermanent ? 'Failed -- needs a code fix' : 'Failed -- not lost')
     b.classList.add('error'); b.classList.remove('active')
-    b.innerHTML += `<p style="margin:0"><strong>${esc(d.erroredAtStage)}</strong> failed: ${esc(d.errorMessage)}</p><p style="margin:6px 0 0;color:var(--ink2)">${money(d.costSoFarUsd)} spent so far is saved -- retrying resumes from here, it does not re-pay for what already succeeded.</p>`
-    barState = { kind: 'stage-error', erroredAtStage: d.erroredAtStage, errorMessage: d.errorMessage, costSoFarUsd: d.costSoFarUsd }
+    b.innerHTML += `<p style="margin:0"><strong>${esc(d.erroredAtStage)}</strong> failed: ${esc(d.errorMessage)}</p><p style="margin:6px 0 0;color:var(--ink2)">${money(d.costSoFarUsd)} spent so far is saved${isPermanent ? '.' : ' -- retrying resumes from here, it does not re-pay for what already succeeded.'}</p>`
+    barState = { kind: 'stage-error', erroredAtStage: d.erroredAtStage, errorMessage: d.errorMessage, costSoFarUsd: d.costSoFarUsd, errorKind: d.errorKind }
     renderBar()
   })
 
