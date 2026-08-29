@@ -248,7 +248,23 @@ footer a{color:var(--ink2)}
 .action-bar.bar-error{background:var(--accentSoft);border-top-color:var(--accent)}
 
 @media(prefers-reduced-motion:reduce){.spin{animation:none}}
+/* POLISH.md item 2: mobile, done properly, not just "no horizontal
+   overflow". Every rule below traces to one specific, named complaint --
+   the nav wrapping to two rows and eating a third of the first screen,
+   tap targets under the 44px floor, and the world reading as a cramped
+   strip instead of something worth looking at. */
 @media(max-width:640px){
+  /* The nav wrapped to two rows before this, its own sticky header
+     consuming a fixed chunk of every screen for the rest of the visit,
+     not just the first one. One row, horizontally scrollable, is the
+     standard mobile pattern for "more links than fit" -- swipe, don't
+     stack. */
+  header .wide{flex-wrap:nowrap}
+  header nav{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;gap:2px}
+  header nav::-webkit-scrollbar{display:none}
+  header nav a{flex:none;white-space:nowrap;padding:13px 12px;min-height:44px;display:inline-flex;align-items:center}
+  .brand{flex:none}
+
   .hero{padding:28px 0 4px}
   h2{font-size:23px;margin-top:38px}
   .panel{padding:14px}
@@ -259,13 +275,23 @@ footer a{color:var(--ink2)}
      found only by actually checking a real 375px viewport, not by
      reading the CSS. */
   .action-bar{margin:14px -14px -14px}
-  #world-canvas{height:300px}
+  /* Was 300px, and only on the 3D canvas -- the Plan view stayed at the
+     desktop 420px, a real inconsistency between the two toggle states.
+     A short, wide strip on a tall phone reads as letterboxed even though
+     nothing is technically cropped; taller and shared across both views
+     reads as an actual thing to look at, not a strip under the fold. */
+  #world-canvas,#world-canvas-2d{height:min(58vh,440px)}
   table{font-size:13.5px}
   th,td{padding:9px 8px}
   .action-bar-inner{padding:10px 14px}
   .action-bar .bar-ask{font-size:14px}
   .bar-row textarea,.bar-row input[type="text"]{min-width:120px;font-size:14px}
-  .action-bar .btn{padding:8px 12px;font-size:13.5px}
+  /* Was shrinking further on mobile (8px/12px, ~33px tall) -- exactly
+     backwards from what a touch target needs. Gate decisions, retry,
+     stop: these are the highest-stakes taps on the page. */
+  .action-bar .btn{padding:13px 16px;font-size:14.5px;min-height:44px}
+  .view-toggle button{padding:12px 16px;font-size:12px;min-height:44px}
+  .world-controls button{min-height:44px;padding:10px 14px}
 }
 </style>
 </head>
@@ -289,25 +315,11 @@ footer a{color:var(--ink2)}
   <section class="hero">
     <div class="eyebrow">Mark Fraser · Applied AI, Toronto</div>
     <h1>A system that only says yes when yes is true</h1>
-    <p class="sub">The world below is real and running, and you can ask it to change. Type a request and
-      watch it happen live: grounded against the actual code, planned into criteria that can be checked
-      by running them, held for your approval before anything is built, implemented, verified in a real
-      sandbox, reviewed by a second model from a different vendor, and shipped -- or refused, with the
-      specific reason on screen. Nothing on this page is a mockup of that process. It is that process.</p>
-    <p class="who-line">Eighteen years designing buildings, the last two building the AI systems that check
-      them. <a href="https://datum.markfrasertoronto.workers.dev/resume.pdf">Résumé</a> ·
-      <a href="https://portfolio.markfrasertoronto.workers.dev">Portfolio</a> ·
-      <a href="https://datum.markfrasertoronto.workers.dev">DATUM</a></p>
+    <p class="sub">The world below is real and running. Type a request and watch it happen live.</p>
   </section>
 </div>
 
 <div class="wide" id="app">
-  <h2><span class="n">The workspace</span>Ask the world for something</h2>
-  <div class="orient-box">
-    <p><strong>The goal</strong>Help build this world. Add something to it that fits.</p>
-    <p><strong>What's here</strong>A neighbourhood: two houses, a shop, a workshop, and open ground between them with paths, trees, a bench and lamp posts. The people living there move between buildings and the things inside them through a day.</p>
-  </div>
-  <p class="world-goal-line">The limits are real, not invented: no art or sound the world can't render, and no new system -- weather, an economy -- built and verified in one run. Everything else is worth trying.</p>
   <div class="workspace">
     <div class="panel world-panel">
       <div class="view-toggle" role="group" aria-label="View">
@@ -350,6 +362,21 @@ footer a{color:var(--ink2)}
       </div>
     </div>
   </div>
+
+  <h2><span class="n">The workspace</span>Ask the world for something</h2>
+  <p class="sub">Grounded against the actual code, planned into criteria that can be checked by running
+    them, held for your approval before anything is built, verified in a real sandbox, reviewed by a
+    second model from a different vendor, and shipped or refused with the specific reason on screen.
+    Nothing here is a mockup of that process.</p>
+  <div class="orient-box">
+    <p><strong>The goal</strong>Help build this world. Add something to it that fits.</p>
+    <p><strong>What's here</strong>A neighbourhood: two houses, a shop, a workshop, and open ground between them with paths, trees, a bench and lamp posts. The people living there move between buildings and the things inside them through a day.</p>
+  </div>
+  <p class="world-goal-line">The limits are real, not invented: no art or sound the world can't render, and no new system -- weather, an economy -- built and verified in one run. Everything else is worth trying.</p>
+  <p class="who-line">Eighteen years designing buildings, the last two building the AI systems that check
+    them. <a href="https://datum.markfrasertoronto.workers.dev/resume.pdf">Résumé</a> ·
+    <a href="https://portfolio.markfrasertoronto.workers.dev">Portfolio</a> ·
+    <a href="https://datum.markfrasertoronto.workers.dev">DATUM</a></p>
 
   <h2 id="controls"><span class="n">A control-layer practice, made concrete</span>What stops a visitor from burning the budget</h2>
   <p>Every number below is the actual value enforced in code (<span class="mono">src/controlLayer.ts</span>),
