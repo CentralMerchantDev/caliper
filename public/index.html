@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CALIPER — a shared world, built live</title>
-<meta name="description" content="CALIPER: ask a live simulated world to change, and watch a real pipeline ground the request against the actual code, plan it, stop for your approval, build it, verify it in a sandbox, get reviewed by a second model, and ship it or refuse it with a cited reason. By Mark Fraser.">
+<meta name="description" content="CALIPER: ask a live simulated world to change. A real pipeline checks the request against the actual code, plans it, waits for your approval, builds it, tests it in a sandbox, and ships or refuses it with a stated reason. By Mark Fraser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%232A201A'/%3E%3Ctext x='50' y='68' font-family='monospace' font-size='52' font-weight='700' fill='%23FAF6EE' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -348,14 +348,14 @@ footer a{color:var(--ink2)}
 
     <div class="panel run-panel">
       <div class="budget-bar" id="budget-bar">Loading today's budget…</div>
-      <p class="request-copy">This world is shared: every visitor's request builds on whatever the last
-        one shipped. A live run is a real one -- grounding and planning alone spend a few real cents
-        before you ever see a gate to approve. <strong>Type your request in the bar beneath the run
-        output below</strong> -- that bar is the one place anything is ever asked of you here: adding
-        a request, stopping a run, or deciding at a gate.</p>
+      <p class="request-copy">This world is shared. Every visitor's request builds on whatever the last
+        one shipped. A live run is real: grounding and planning spend a few real cents before you
+        reach a gate to approve. <strong>Type your request in the bar beneath the run output
+        below.</strong> That is the only control on this page. It adds a request, stops a run, or
+        answers a gate.</p>
       <div class="stage-log" id="stage-log" aria-live="polite">
-        <p style="margin:0;color:var(--muted);font-size:14.5px">Nothing running yet -- what happens
-          shows up here as a read-only record while it happens. Act from the bar below.</p>
+        <p style="margin:0;color:var(--muted);font-size:14.5px">Nothing is running yet. What happens
+          shows up here as a read-only record. Act from the bar below.</p>
       </div>
       <!-- LAST.md item 3: moved from a page-spanning position:fixed footer
            (Mark's own spec error, not a defect from executing it) to
@@ -373,15 +373,15 @@ footer a{color:var(--ink2)}
   </div>
 
   <h2><span class="n">The workspace</span>Ask the world for something</h2>
-  <p class="sub">Grounded against the actual code, planned into criteria that can be checked by running
-    them, held for your approval before anything is built, verified in a real sandbox, reviewed by a
-    second model from a different vendor, and shipped or refused with the specific reason on screen.
-    Nothing here is a mockup of that process.</p>
+  <p class="sub">A request goes through the same pipeline every time. It is checked against the actual
+    code, then turned into a plan you approve. Once approved, it is built, tested in a sandbox, and
+    reviewed by a second model from a different vendor. It ships or it is refused, with the specific
+    reason shown on screen. None of this is a mockup.</p>
   <div class="orient-box">
     <p><strong>The goal</strong>Help build this world. Add something to it that fits.</p>
     <p><strong>What's here</strong>A neighbourhood: two houses, a shop, a workshop, and open ground between them with paths, trees, a bench and lamp posts. The people living there move between buildings and the things inside them through a day.</p>
   </div>
-  <p class="world-goal-line">The limits are real, not invented: no art or sound the world can't render, and no new system -- weather, an economy -- built and verified in one run. Everything else is worth trying.</p>
+  <p class="world-goal-line">The limits are real. The world has no art or sound pipeline, so it can't render either. It also can't build and verify a whole new system, like weather or an economy, in a single run. Try anything else.</p>
   <p class="who-line">Eighteen years designing buildings, the last two building the AI systems that check
     them. <a href="https://datum.markfrasertoronto.workers.dev/resume.pdf">Résumé</a> ·
     <a href="https://portfolio.markfrasertoronto.workers.dev">Portfolio</a> ·
@@ -389,32 +389,30 @@ footer a{color:var(--ink2)}
 
   <h2 id="controls"><span class="n">A control-layer practice, made concrete</span>What stops a visitor from burning the budget</h2>
   <p>Every number below is the actual value enforced in code (<span class="mono">src/controlLayer.ts</span>),
-    fetched from the same endpoint the budget bar above reads. The spend counter itself is backed by a
-    <strong>Durable Object</strong>, not KV -- KV's eventual consistency made a genuine race possible
-    (two concurrent runs both reading "under the cap" and both proceeding); a single Durable Object
-    instance serializes every check-and-commit, closing that race structurally.</p>
+    fetched from the same endpoint the budget bar above reads. The spend counter is backed by a
+    <strong>Durable Object</strong>, not KV. KV is eventually consistent, so two concurrent runs could
+    both read "under the cap" and both proceed. A single Durable Object instance serializes every
+    check and commit, so that race can't happen.</p>
   <div class="control-grid" id="control-grid">
     <div class="control-card"><span class="lab">Loading…</span></div>
   </div>
   <p class="note">A public demo running real model calls per visitor is not affordable at unlimited
-    scale -- that's a real product constraint the daily/weekly/monthly checkpoints encode, not just a
-    UX choice.</p>
+    scale. The daily, weekly, and monthly checkpoints encode that limit directly.</p>
   <p class="personal-note">Real budgets teach you where the actual failure modes are. I've shipped
     circuit breakers, spend ceilings and per-IP limits before this project, at DATUM and on my other
     products, for the same reason each time: hoping a system won't get abused isn't a plan.</p>
 
   <h2><span class="n">Model routing</span>Each stage runs on the model suited to that stage</h2>
-  <p>Treating every call the same -- the most capable model available, every time -- is its own kind of
-    mistake in a system meant to run in production. The routing decision comes first: what does this
-    specific stage actually require. A fraction of the cost most stages don't need is what falls out of
-    getting that right, not the goal itself.</p>
+  <p>Using the most capable model for every call is a mistake in a system meant to run in production.
+    The routing decision asks what each stage actually requires, first. Lower cost is a result of
+    that decision, not the goal of it.</p>
   <div class="wrapx"><table>
     <thead><tr><th>Stage</th><th>Runs on</th><th>Why</th></tr></thead>
     <tbody>
       <tr><td>Ground</td><td>Light tier</td><td>Reading a structure summary and a short request</td></tr>
       <tr><td>Plan</td><td>Mid tier</td><td>Judgement about feasibility and scope; short output</td></tr>
       <tr><td>Implement</td><td>Light tier</td><td>Additive, schema-constrained change; verified server-side either way</td></tr>
-      <tr><td>Review</td><td>A different vendor's model</td><td>Cross-vendor, coding-specialised -- a second opinion that doesn't share the author's blind spots</td></tr>
+      <tr><td>Review</td><td>A different vendor's model</td><td>Cross-vendor and coding-specialised. It does not share the author's blind spots.</td></tr>
       <tr><td>Fix</td><td>Mid tier</td><td>Repairing against a reviewer's findings is a harder, less-tested shape</td></tr>
       <tr><td>Retrospective</td><td>Light tier</td><td>One short lesson, or none</td></tr>
     </tbody>
@@ -425,22 +423,19 @@ footer a{color:var(--ink2)}
 <div class="wrap">
 
   <h2 id="finding"><span class="n">The finding</span>No quality gap found between the light tier and the frontier tier</h2>
-  <p class="lede">Across 32 tasks in three tiers -- edge-case-heavy single functions, textbook
-    algorithms, and business rules fabricated specifically so nothing could be recalled -- the
-    light tier reached the same final correctness as the frontier tier, at every difficulty level,
-    while costing roughly <strong>36–41% as much per correct answer</strong>. That ratio held
-    across four separate measurements: the core set at two different repair budgets, the
-    algorithmic tier, and the novel tier. This is the evidence base the routing table above points
-    to.</p>
-  <p>Each tier was built as a deliberate attempt to find a gap, not a report of whatever happened
-    to be run. The core set applied pressure through edge-case density and a handful of
-    deliberately ambiguous specs. The harder tier applied pressure through algorithmic
-    difficulty -- dynamic programming and graph traversal, exactly the kind of problem where a
-    real capability gap would be expected to surface. The novel tier applied pressure through
-    unfamiliarity, specifically to rule out the possibility that the harder tier's clean result
-    was memorization rather than capability: seven business-rule specs fabricated for this
-    experiment, one of them built to actively contradict a real memorized formula. <strong>None
-    of the three attempts found a gap.</strong></p>
+  <p class="lede">32 tasks were run across three tiers: single functions with heavy edge cases,
+    textbook algorithms, and business rules fabricated so nothing could be recalled. At every
+    difficulty level, the light tier reached the same final correctness as the frontier tier, at
+    roughly <strong>36–41% of the cost per correct answer</strong>. That ratio held across four
+    separate measurements: the core set at two different repair budgets, the algorithmic tier, and
+    the novel tier. This is the evidence the routing table above is based on.</p>
+  <p>Each tier was designed to find a gap, not to report whatever happened to run. The core set
+    used edge-case density and a handful of deliberately ambiguous specs. The harder tier used
+    dynamic programming and graph traversal, problems where a real capability gap should show up
+    if one exists. The novel tier used seven business-rule specs fabricated for this experiment,
+    one of them built to contradict a real memorized formula, which rules out memorization as the
+    explanation for the harder tier's clean result. <strong>None of the three tiers found a
+    gap.</strong></p>
 
   <div class="wrapx"><table>
     <caption>18-task core set — single well-specified functions, 54 cycles per tier</caption>
@@ -473,20 +468,19 @@ footer a{color:var(--ink2)}
   </table></div>
 
   <h3>The practical takeaway</h3>
-  <p>For single-function work with a clear specification and an executable test -- the class of
-    work measured here -- model choice is a cost decision, not a quality decision. Given a
-    verification loop, the evidence here says to default to the tier that fits the job rather than
-    reaching for more capability than the task needs. That's the judgement the routing table above
-    encodes for Ground, Implement, and Retrospective.</p>
+  <p>This measures single-function work with a clear specification and an executable test. For that
+    class of work, model choice is a cost decision, not a quality decision. Given a verification
+    loop, the evidence says to default to the tier that fits the job instead of reaching for more
+    capability than the task needs. That is the judgement the routing table above encodes for
+    Ground, Implement, and Retrospective.</p>
 
   <h2 id="limits"><span class="n">Scope</span>The limit</h2>
   <p>Every task at every tier is a single pure function: a fixed signature, a few dozen lines at
-    most, checked against fixed hidden tests. Nothing here tests multi-file changes, systems that
-    hold state across steps, or work where the difficulty is conceptual rather than
-    compositional. Whether a verification loop substitutes for capability on that kind of work is
-    untested here -- the world above (a real, stateful system a change modifies in place) is the
-    step toward richer work; its correctness-critical logic is still, deliberately, pure functions
-    underneath.</p>
+    most, checked against fixed hidden tests. None of it tests multi-file changes, state held
+    across steps, or work where the difficulty is conceptual rather than compositional. Whether a
+    verification loop substitutes for capability on that kind of work is untested here. The world
+    above is a step toward it: a real, stateful system a change modifies in place. Its
+    correctness-critical logic is still, deliberately, pure functions underneath.</p>
   <p><strong>"Not recallable" is also not the same claim as "hard."</strong> The novel tier rules
     out memorization as an explanation for the clean sweep across all three tiers; it doesn't
     establish that composing four or five conditional and arithmetic rules from a spec was
@@ -496,47 +490,47 @@ footer a{color:var(--ink2)}
   <div class="callout"><p>On the one task where every model disagreed with the hidden test,
     <strong>the models' answer is arguably the better one.</strong> This benchmark is the
     opinionated party here, not the models.</p></div>
-  <p>The task: convert camelCase to snake_case -- <span class="mono">parseHTTPResponse</span> →
-    what? <strong>Every model, at every capability tier tested, returned
-    <span class="mono">parse_http_response</span>.</strong> The hidden test insists on
-    <span class="mono">parse_httpresponse</span>. That rule is defensible.
+  <p>The task converts camelCase to snake_case. Given
+    <span class="mono">parseHTTPResponse</span>, <strong>every model, at every capability tier
+    tested, returned <span class="mono">parse_http_response</span>.</strong> The hidden test
+    insists on <span class="mono">parse_httpresponse</span>. That rule is defensible.
     <span class="mono">parse_http_response</span> is at least as reasonable a reading of "convert
-    to snake_case" -- arguably more readable, certainly more idiomatic.</p>
-  <p>Given that, the finding isn't "models are bad at snake_case." It's sharper: every single
-    cycle on this task failed its first attempt -- <strong>0% first-pass, on every rep, across
-    both the two-repair and three-repair sweeps</strong> -- because the disagreement is
-    deterministic, not noise. Repair fixed it most of the time (13 of 18 cycles across both
-    sweeps converged) simply because being shown the exact expected string is often enough to get
-    a model to comply even against its own judgment. But not always: <strong>2 of 9 cycles were
-    still failing the identical test after a second full repair round.</strong></p>
+    to snake_case," and more idiomatic.</p>
+  <p>The finding is not "models are bad at snake_case." Every single cycle on this task failed its
+    first attempt: <strong>0% first-pass, on every rep, across both the two-repair and
+    three-repair sweeps.</strong> The disagreement is deterministic, not noise. Repair fixed it
+    most of the time: 13 of 18 cycles across both sweeps converged, mainly because being shown
+    the exact expected string is often enough to get a model to comply against its own judgement.
+    It did not always work. <strong>2 of 9 cycles were still failing the identical test after a
+    second full repair round.</strong></p>
   <p><strong>Verification loops fix implementation slips. They do not reliably fix spec
-    disagreements, and more repair rounds don't reliably fix that either.</strong> When a hidden
-    test encodes a preference rather than a correctness property, the verifier is asserting that
-    preference, not catching a defect.</p>
+    disagreements.</strong> More repair rounds do not fix that either. When a hidden test encodes
+    a preference rather than a correctness property, the verifier asserts that preference. It does
+    not catch a defect.</p>
 
   <h2 id="history"><span class="n">Every real run</span>History</h2>
-  <p>Every run that has finished, real, in order. Nothing here is staged. If a request was refused,
-    that shows up here too, with the reason.</p>
+  <p>Every finished run, in order. Nothing here is staged. If a request was refused, it shows up
+    here too, with the reason.</p>
   <div id="history-content"><p style="color:var(--muted)">Loading…</p></div>
 
   <h2 id="sandbox"><span class="n">Isolation</span>How the sandbox works</h2>
-  <p>Every generated function runs inside a Cloudflare <strong>Dynamic Worker</strong> -- a fresh
-    V8 isolate spun up per program, with no bindings (<span class="mono">env: {}</span>) and no
-    network access (<span class="mono">globalOutbound: null</span>). Proven adversarially against
-    the live, deployed sandbox -- by writing code that deliberately tries the escape:</p>
+  <p>Every generated function runs inside a Cloudflare <strong>Dynamic Worker</strong>: a fresh V8
+    isolate spun up per program, with no bindings (<span class="mono">env: {}</span>) and no
+    network access (<span class="mono">globalOutbound: null</span>). This was tested against the
+    live, deployed sandbox by writing code that deliberately tries to escape it.</p>
   <ul>
-    <li><strong>Network access</strong> -- <span class="mono">fetch()</span> throws immediately,
+    <li><strong>Network access:</strong> <span class="mono">fetch()</span> throws immediately,
       every time.</li>
-    <li><strong>Reading bindings or environment</strong> -- <span class="mono">env</span> comes
-      back empty, no <span class="mono">process</span>, no leaked globals.</li>
-    <li><strong>A tight busy-loop</strong> under a deliberately small CPU budget -- the isolate is
+    <li><strong>Reading bindings or environment:</strong> <span class="mono">env</span> comes
+      back empty. No <span class="mono">process</span>, no leaked globals.</li>
+    <li><strong>A tight busy-loop</strong> under a deliberately small CPU budget: the isolate is
       killed outright.</li>
-    <li><strong>Unbounded array growth</strong> -- the isolate is killed outright.</li>
-    <li><strong>Unbounded recursion</strong> -- a catchable <span class="mono">RangeError</span>,
+    <li><strong>Unbounded array growth:</strong> the isolate is killed outright.</li>
+    <li><strong>Unbounded recursion:</strong> a catchable <span class="mono">RangeError</span>,
       caught inside the sandbox itself.</li>
   </ul>
-  <p>In every case the calling code gets an ordinary, catchable error -- never a hung request,
-    never a silent nothing.</p>
+  <p>The calling code always gets an ordinary, catchable error. It never hangs, and it never fails
+    silently.</p>
 
   <h2 id="methodology">Methodology</h2>
   <h3>What was run (the cost experiment)</h3>
@@ -548,13 +542,13 @@ footer a{color:var(--ink2)}
     ever saw a task. Three tiers spanning a real price range, light through frontier. Three
     repetitions per (task, tier) cell.</p>
   <h3>How the world's criteria work now</h3>
-  <p>A criterion can no longer assert a computed value a model worked out by hand -- that class of
+  <p>A criterion can no longer assert a computed value a model worked out by hand. That class of
     claim produced every historical refusal this project tracked. Four kinds remain: existence (a
     function or field exists and is callable), structural (a field has the right type or count),
     non-regression (a call's result is compared against the <strong>baseline's own output for the
-    same call</strong>, computed by actually running it -- never supplied by the model), and
-    render (a station or entity type draws without throwing). The hand-authored regression suite
-    is separate and runs unconditionally on every attempt, unaffected by anything the model
+    same call</strong>, computed by actually running it, never supplied by the model), and render
+    (a station or entity type draws without throwing). The hand-authored regression suite is
+    separate. It runs unconditionally on every attempt, unaffected by anything the model
     proposes.</p>
   <p class="personal-note">I don't take a model's word for its own work. At DATUM, every AI answer is
     scored against a reference computed independently of the model under test. Here, the rule is the
@@ -964,11 +958,11 @@ function renderRecordedRun(t) {
   banner.className = 'recording-banner'
   const dateStr = new Date(t.capturedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
   banner.innerHTML = `
-    <p class="recording-kicker">📼 Recording of a real, complete execution -- captured ${esc(dateStr)}</p>
-    <p class="recording-note">This is not a simulation or a mock -- every stage below is the actual grounding,
-      plan, structured edit, verification, and cross-model review that ran for the request
-      "${esc(t.changeRequest)}", including the real reviewer's own words. It plays back instantly so your
-      first impression doesn't depend on a cold pipeline completing perfectly live.</p>
+    <p class="recording-kicker">📼 A recording of a real, complete execution. Captured ${esc(dateStr)}.</p>
+    <p class="recording-note">Every stage below is real: the actual grounding, plan, structured edit,
+      verification, and cross-model review that ran for the request "${esc(t.changeRequest)}", including
+      the reviewer's own words. It plays back instantly, so your first impression doesn't depend on a
+      live pipeline completing perfectly in real time.</p>
     <button class="btn btn-outline" id="run-it-live-btn" type="button">▸ Run it live yourself instead</button>`
   log.appendChild(banner)
   $('#run-it-live-btn').addEventListener('click', showLiveComposer)
@@ -985,15 +979,15 @@ function renderRecordedRun(t) {
   outcomeBlock.className = 'stage recorded-stage'
   outcomeBlock.style.animationDelay = (t.stages.length * 90) + 'ms'
   if (t.outcome === 'shipped') {
-    outcomeBlock.innerHTML = `<div class="stage-heading"><h4>✓ Shipped -- the world ran this, for real</h4></div>` +
+    outcomeBlock.innerHTML = `<div class="stage-heading"><h4>✓ Shipped: the world ran this, for real</h4></div>` +
       renderDiff(t.currentSourceBefore, t.finalSource) +
       `<div class="stage-footer">Total: ${money(t.totalCostUsd)} · ${(t.totalWallTimeMs / 1000).toFixed(1)}s</div>`
   } else {
     outcomeBlock.classList.add('error')
     outcomeBlock.innerHTML = `<div class="stage-heading"><h4>Refused to ship</h4></div>` +
       `<p style="margin:0">${esc(t.refusalReason || 'Verification did not converge.')}</p>` +
-      `<p class="personal-note" style="margin:10px 0 0">This is a fine, honest recording -- a refusal with a specific
-        reason is the thing this app is actually arguing for. It was not re-run to get a prettier outcome.</p>` +
+      `<p class="personal-note" style="margin:10px 0 0">This is the recording as it happened. A refusal with a
+        specific reason is what this app is built to produce. It was not re-run for a better outcome.</p>` +
       `<div class="stage-footer">Total: ${money(t.totalCostUsd)} · ${(t.totalWallTimeMs / 1000).toFixed(1)}s</div>`
   }
   log.appendChild(outcomeBlock)
@@ -1001,14 +995,14 @@ function renderRecordedRun(t) {
   bar.className = 'action-bar recording-bar'
   barInner.innerHTML = `
     <span class="bar-kicker">Recording finished</span>
-    <p class="bar-ask">Want to see this happen live, on the real current world? A live run spends a few real
-      cents grounding and planning before you reach a gate to approve, and is rate-limited per visitor.</p>
+    <p class="bar-ask">Run this live, on the real current world. A live run spends a few real cents
+      grounding and planning before you reach a gate to approve. It is rate-limited per visitor.</p>
     <div class="bar-row"><button class="btn" id="bar-run-live" type="button">▸ Run it live yourself</button></div>`
   $('#bar-run-live').addEventListener('click', showLiveComposer)
 }
 function showLiveComposer() {
-  log.innerHTML = '<p style="margin:0;color:var(--muted);font-size:14.5px">Nothing running yet -- what happens ' +
-    'shows up here as a read-only record while it happens. Act from the bar below.</p>'
+  log.innerHTML = '<p style="margin:0;color:var(--muted);font-size:14.5px">Nothing is running yet. What happens ' +
+    'shows up here as a read-only record. Act from the bar below.</p>'
   barState = { kind: 'idle' }
   renderBar()
 }
@@ -1460,9 +1454,9 @@ function connect(url) {
     reviewBlock.insertAdjacentHTML('beforeend', `
       <div class="gate-box">
         <h5>Gate 2 — your decision, the reviewer found something</h5>
-        <p class="personal-note" style="margin:10px 0">Material versus nit is my call here, not the model's.
-        A reviewer that flags everything is as useless as one that flags nothing -- deciding what actually
-        matters is the judgment I don't hand off.</p>
+        <p class="personal-note" style="margin:10px 0">Material versus nit is my call, not the model's. A
+        reviewer that flags everything is as useless as one that flags nothing. Deciding what matters is
+        not something I hand off.</p>
         <p style="margin-top:4px;color:var(--muted);font-size:13px">Decide from the bar below.</p>
       </div>`)
     barState = { kind: 'review-gate', material: d.materialFindings.length }
@@ -1503,9 +1497,9 @@ function connect(url) {
     b.classList.add('error'); b.classList.remove('active')
     b.innerHTML += `<p style="margin:0">${esc(d.reason)}</p>` +
       `<p class="personal-note" style="margin:10px 0 0">I wanted a system that could actually tell me no.
-      That's harder to build than one that always finds a way to say yes -- it means grounding has to run
-      before planning, a refusal has to cite the specific thing that's false, and nothing ships just
-      because it technically compiled.</p>`
+      A system that always finds a way to say yes is easier to build. This one grounds a request before
+      planning it. A refusal has to name the specific thing that's false. Nothing ships just because it
+      compiled.</p>`
     barState = { kind: 'done', ok: false, summary: 'Refused: ' + d.reason }
     renderBar()
   })
