@@ -1,0 +1,27 @@
+Asset: Painted Plaster Wall
+Source: https://polyhaven.com/a/painted_plaster_wall
+Author: Amal Kumar
+License: CC0 1.0 (Creative Commons Zero / Public Domain)
+  https://polyhaven.com/license
+  "Our assets are all licensed as CC0, which is effectively Public
+  Domain even in jurisdictions that do not support the Public Domain."
+
+Downloaded (originals, verified against Poly Haven's own published file
+hash at download time -- same technique as vendor/hdri/LICENSE.txt):
+  painted_plaster_wall_diff_1k.jpg    MD5 15ba8c1f63a5ab412b1eabe31728540a
+  painted_plaster_wall_nor_gl_1k.jpg  MD5 43fff290583dbdfc9bfa088a2750e840
+  painted_plaster_wall_rough_1k.jpg   MD5 e076a6360329a2bc18c7397dc50c074a
+Direct source URLs:
+  https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/painted_plaster_wall/painted_plaster_wall_diff_1k.jpg
+  https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/painted_plaster_wall/painted_plaster_wall_nor_gl_1k.jpg
+  https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/painted_plaster_wall/painted_plaster_wall_rough_1k.jpg
+
+Vendored files (diffuse.webp, normal.webp, roughness.webp) are the
+above originals resized 1k -> 512x512 and re-encoded as WebP (POLISH.md
+item 5: "texture payload modest") -- a lossy transform of a CC0 asset,
+not a distinct work, done for file size only. Re-download and verify
+the MD5s above to check the originals if this ever needs redoing.
+
+No attribution is legally required under CC0, but it's recorded here
+for provenance -- this is a real, deliberately-chosen asset, not a
+placeholder.

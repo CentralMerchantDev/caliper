@@ -91,6 +91,14 @@ function surfaceColor(surfaces, key, fallback) {
   return c || fallback;
 }
 
+// Same idea, for the `material` string next to that colour (world.surfaces'
+// { material, color } shape -- the same shape every OBJECT_TYPES recipe
+// part already uses for its own material name).
+function surfaceMaterialKey(surfaces, key, fallback) {
+  const m = surfaces && surfaces[key] && surfaces[key].material;
+  return m || fallback;
+}
+
 // FOUNDATION.md item 1: which registry type provides a given sim action --
 // derived from world.objectTypes at runtime (every type with a `station`
 // whose action matches), never a static imported list. A sim with no
@@ -184,6 +192,67 @@ function lerp(a, b, t) {
 // contribution stays tame by default everywhere.
 function stdMat(opts) {
   return new THREE.MeshStandardMaterial({ envMapIntensity: 0.15, ...opts });
+}
+
+// POLISH.md item 5: CC0 Poly Haven textures (vendor/textures/*/LICENSE.txt
+// records source, author, and the MD5 of each original download) for the
+// four surfaces that are large enough flat planes for a tiled photographed
+// texture to read as an upgrade over a flat colour -- ground, path, floor,
+// wall. Keyed by the `material` string world.surfaces already carries next
+// to each surface's colour (src/simBaseline.ts), the same field every
+// OBJECT_TYPES recipe part already declares -- so a surface (or, in the
+// future, an object type) that names an EXISTING material key here picks
+// this up automatically, with no renderer change. A material name with no
+// entry below (or an object type's own small furniture parts, which stay
+// flat-coloured -- a tiled texture on a 0.05m drawer pull is wasted detail,
+// not an upgrade) just keeps using stdMat()'s flat colour, exactly as
+// before this pass.
+const MATERIAL_TEXTURES = {
+  wood: { normal: true, roughness: true, repeatMeters: 2.0 },
+  plaster: { normal: true, roughness: true, repeatMeters: 2.4 },
+  grass: { repeatMeters: 3.2 },
+  gravel: { repeatMeters: 2.8 },
+};
+const _textureLoader = new THREE.TextureLoader();
+/** Loads one tiled texture and attaches it to `material[slot]` only once the
+ * image has actually arrived, via TextureLoader's own onLoad callback --
+ * never the texture object load() returns synchronously. Assigning a
+ * still-loading texture straight into a material that's already in the
+ * render loop (this scene's first frame renders within a tick of world
+ * data arriving, well before a same-origin fetch can round-trip) is what
+ * was producing "Texture marked for update but no image data found":
+ * something in that path bumps the texture's internal version before its
+ * image is set, and once bumped it never gets corrected, so it re-warns on
+ * every frame after. Setting it only inside onLoad (image guaranteed
+ * present) plus a material.needsUpdate afterward (forces the one shader
+ * recompile a newly-added map needs) sidesteps that regardless of the
+ * precise internal cause. Until then the material keeps its flat stdMat()
+ * colour -- a one-frame flash before the texture pops in, not a blank one. */
+function attachTiledTexture(material, slot, materialKey, filename, isColorData, repeatX, repeatY) {
+  _textureLoader.load(`./vendor/textures/${materialKey}/${filename}`, (t) => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    if (isColorData) t.colorSpace = THREE.SRGBColorSpace; // diffuse only -- normal/roughness stay linear data
+    t.repeat.set(repeatX, repeatY);
+    material[slot] = t;
+    if (slot === "roughnessMap") material.roughness = 1; // let the map drive it; base value becomes a multiplier three.js applies against it
+    material.needsUpdate = true;
+  });
+}
+/** Textured variant of stdMat() for a real-world w x d plane, tinted by the
+ * surface's own colour (so a `surfaces[key].color` override in world data
+ * still does something -- it multiplies the photographed texture instead of
+ * replacing it outright). Falls back to a flat stdMat() for any material
+ * key with no entry in MATERIAL_TEXTURES. */
+function texturedMat(materialKey, color, w, d, extraOpts) {
+  const spec = MATERIAL_TEXTURES[materialKey];
+  const material = stdMat({ color, ...extraOpts });
+  if (!spec) return material;
+  const repeatX = Math.max(1, Math.round(w / spec.repeatMeters));
+  const repeatY = Math.max(1, Math.round(d / spec.repeatMeters));
+  attachTiledTexture(material, "map", materialKey, "diffuse.webp", true, repeatX, repeatY);
+  if (spec.normal) attachTiledTexture(material, "normalMap", materialKey, "normal.webp", false, repeatX, repeatY);
+  if (spec.roughness) attachTiledTexture(material, "roughnessMap", materialKey, "roughness.webp", false, repeatX, repeatY);
+  return material;
 }
 
 /** A vertical two-stop gradient, redrawn in place every frame as the sky
@@ -440,9 +509,10 @@ class Renderer3D {
     const zs = buildings.map((b) => Math.abs((b.plot.y - centerZ) * GRID_UNIT_Z) + (scaleFor(b.type).d * BUILDING_D) / 2);
     const groundW = Math.max(...xs) * 2 + 5;
     const groundD = Math.max(...zs) * 2 + 5;
+    const groundMaterialKey = surfaceMaterialKey(this._surfaces, "ground", "grass");
     const ground = new THREE.Mesh(
       new RoundedBoxGeometry(groundW, 0.25, groundD, 3, 0.15),
-      stdMat({ color: surfaceColor(this._surfaces, "ground", PALETTE.ground), roughness: 0.95, metalness: 0.0 }),
+      texturedMat(groundMaterialKey, surfaceColor(this._surfaces, "ground", PALETTE.ground), groundW, groundD, { roughness: 0.95, metalness: 0.0 }),
     );
     ground.position.y = -0.2;
     ground.receiveShadow = true;
@@ -453,13 +523,19 @@ class Renderer3D {
     // building's side of the grid -- not routed building-to-building
     // individually (that's real pathfinding for a later run), just an
     // honest "there is open, walkable ground here" cue.
-    const pathMat = stdMat({ color: surfaceColor(this._surfaces, "path", PALETTE.path), roughness: 0.9 });
-    const pathNS = new THREE.Mesh(new THREE.PlaneGeometry(2.4, groundD - 1), pathMat);
+    const pathMaterialKey = surfaceMaterialKey(this._surfaces, "path", "gravel");
+    const pathColor = surfaceColor(this._surfaces, "path", PALETTE.path);
+    // Two separate materials, not one shared between both arms: they're
+    // different real-world sizes (the N-S arm is as long as the plaza is
+    // deep, the E-W arm as long as it's wide), so a shared tiling repeat
+    // would stretch whichever arm doesn't match the size it was computed
+    // from.
+    const pathNS = new THREE.Mesh(new THREE.PlaneGeometry(2.4, groundD - 1), texturedMat(pathMaterialKey, pathColor, 2.4, groundD - 1, { roughness: 0.9 }));
     pathNS.rotation.x = -Math.PI / 2;
     pathNS.position.y = -0.06;
     pathNS.receiveShadow = true;
     this.neighbourhoodGroup.add(pathNS);
-    const pathEW = new THREE.Mesh(new THREE.PlaneGeometry(groundW - 1, 2.4), pathMat);
+    const pathEW = new THREE.Mesh(new THREE.PlaneGeometry(groundW - 1, 2.4), texturedMat(pathMaterialKey, pathColor, groundW - 1, 2.4, { roughness: 0.9 }));
     pathEW.rotation.x = -Math.PI / 2;
     pathEW.position.y = -0.06;
     pathEW.receiveShadow = true;
@@ -474,15 +550,21 @@ class Renderer3D {
    * exactly like a dwelling, just smaller, so the whole neighbourhood
    * reads as one consistent build view. */
   _buildBuildingShell(group, building, w, d) {
+    const floorMaterialKey = surfaceMaterialKey(this._surfaces, "floor", "wood");
     const floor = new THREE.Mesh(
       new RoundedBoxGeometry(w, 0.3, d, 3, 0.12),
-      stdMat({ color: surfaceColor(this._surfaces, "floor", PALETTE.floor), roughness: 0.86, metalness: 0.02 }),
+      texturedMat(floorMaterialKey, surfaceColor(this._surfaces, "floor", PALETTE.floor), w, d, { roughness: 0.86, metalness: 0.02 }),
     );
     floor.position.y = -0.15;
     floor.receiveShadow = true;
     group.add(floor);
 
-    const wallMat = stdMat({ color: surfaceColor(this._surfaces, "wall", PALETTE.wall), roughness: 0.92, metalness: 0.0 });
+    // Both walls share one material: they're close enough in length (w vs
+    // d, the same building's own two footprint dimensions) that one tiling
+    // repeat reads fine on both, unlike the path's much more different N-S
+    // vs E-W arm lengths above.
+    const wallMaterialKey = surfaceMaterialKey(this._surfaces, "wall", "plaster");
+    const wallMat = texturedMat(wallMaterialKey, surfaceColor(this._surfaces, "wall", PALETTE.wall), (w + d) / 2, 2.3, { roughness: 0.92, metalness: 0.0 });
     const backWall = new THREE.Mesh(new RoundedBoxGeometry(w, 2.3, 0.14, 2, 0.05), wallMat);
     backWall.position.set(0, 1.0, -d / 2);
     backWall.receiveShadow = true;

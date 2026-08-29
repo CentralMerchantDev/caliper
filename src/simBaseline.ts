@@ -178,6 +178,36 @@ const OBJECT_TYPES = /*@DATA:OBJECT_TYPES:BEGIN*/{
       { shape: "icosahedron", size: [0.24, 0], position: [0, 0.44, 0], scale: [1, 0.7, 1], color: "#4f6b47", roughness: 0.9 },
     ],
   },
+  // POLISH.md item 5: "fill the empty shop and workshop" -- both buildings
+  // existed (FOUNDATION.md item 4's shell) but had zero placements naming
+  // them as a location, so they rendered as an empty floor and two walls.
+  // Neither claims a sim action (no new action exists for a shop or
+  // workshop to drive), so station stays null, same as bench/tree/planter
+  // above -- but unlike those, local is set, because indoor placement
+  // requires it (see world-render-3d.js's _buildNeighbourhoodIfNeeded: an
+  // indoor placement with no typeDef.local is skipped, not defaulted).
+  counter: {
+    material: "wood", footprint: { w: 1.8, d: 0.6 }, shadow: { w: 2.2, d: 0.9 },
+    local: { x: 0.5, y: 0.15 }, station: null,
+    recipe: [
+      { shape: "box", size: [1.8, 0.85, 0.55], radius: 0.05, position: [0, 0.425, 0], color: "#8a5a34", roughness: 0.6 },
+      { shape: "box", size: [1.86, 0.04, 0.6], radius: 0.02, position: [0, 0.87, 0], color: "#cfd2d6", roughness: 0.3, metalness: 0.2 },
+      { shape: "box", size: [0.34, 0.22, 0.24], radius: 0.02, position: [0.55, 1.0, 0], color: "#3a3a3a", roughness: 0.4, metalness: 0.5 },
+    ],
+  },
+  workbench: {
+    material: "wood", footprint: { w: 1.6, d: 0.7 }, shadow: { w: 2.0, d: 1.1 },
+    local: { x: 0.5, y: 0.15 }, station: null,
+    recipe: [
+      { shape: "box", size: [1.6, 0.07, 0.7], radius: 0.02, position: [0, 0.78, 0], color: "#8a5a34", roughness: 0.65 },
+      { shape: "cylinder", size: [0.04, 0.04, 0.76], segments: 8, position: [-0.7, 0.39, -0.28], color: "#6a4526", roughness: 0.7 },
+      { shape: "cylinder", size: [0.04, 0.04, 0.76], segments: 8, position: [0.7, 0.39, -0.28], color: "#6a4526", roughness: 0.7 },
+      { shape: "cylinder", size: [0.04, 0.04, 0.76], segments: 8, position: [-0.7, 0.39, 0.28], color: "#6a4526", roughness: 0.7 },
+      { shape: "cylinder", size: [0.04, 0.04, 0.76], segments: 8, position: [0.7, 0.39, 0.28], color: "#6a4526", roughness: 0.7 },
+      { shape: "box", size: [0.22, 0.2, 0.16], radius: 0.02, position: [-0.45, 0.92, 0], color: "#5c6b5a", roughness: 0.5, metalness: 0.3 },
+      { shape: "cylinder", size: [0.03, 0.03, 0.18], segments: 8, position: [0.3, 0.9, 0], rotation: [1.5708, 0, 0], color: "#9aa0a8", roughness: 0.4, metalness: 0.6 },
+    ],
+  },
 }/*@DATA:OBJECT_TYPES:END*/;
 
 // CITY.md: the world becomes a neighbourhood, not a single room -- but only
@@ -246,6 +276,13 @@ function initialWorld() {
       { id: "lamp-2", type: "lampPost", location: "outdoors", plot: { x: 1.4, y: 0.75 } },
       { id: "bench-1", type: "bench", location: "outdoors", plot: { x: 0.8, y: 0.8 } },
       { id: "planter-1", type: "planter", location: "outdoors", plot: { x: 1.2, y: 1.2 } },
+      // POLISH.md item 5: one placement each, against the back wall the
+      // same way every dwelling station sits against a real wall (this
+      // file's own SHIP.md item 3 convention) -- the shop and workshop had
+      // a floor and two walls and nothing else since FOUNDATION.md item 4
+      // gave them the same open-topped shell as a dwelling.
+      { id: "shop-counter", type: "counter", location: "shop" },
+      { id: "workshop-workbench", type: "workbench", location: "workshop" },
     ]/*@DATA:PLACEMENTS:END*/,
     // The type registry rides along inside the world object itself (not a
     // separate import) so a renderer that only ever receives pushTick(world)

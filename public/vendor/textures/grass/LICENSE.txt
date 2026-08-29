@@ -1,0 +1,26 @@
+Asset: Withered Grass
+Source: https://polyhaven.com/a/withered_grass
+Author: Charlotte Baglioni
+License: CC0 1.0 (Creative Commons Zero / Public Domain)
+  https://polyhaven.com/license
+  "Our assets are all licensed as CC0, which is effectively Public
+  Domain even in jurisdictions that do not support the Public Domain."
+
+Downloaded (original, verified against Poly Haven's own published file
+hash at download time -- same technique as vendor/hdri/LICENSE.txt):
+  withered_grass_diff_1k.jpg   MD5 a6e00946839a9ab1975457ae4a39823b
+Direct source URL:
+  https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/withered_grass/withered_grass_diff_1k.jpg
+
+Diffuse only -- this surface is the wide ground plane, mostly seen from
+a distance and an oblique angle, where a normal map earns its payload
+far less than it does on the floor/wall interiors. Vendored file
+(diffuse.webp) is the above original resized 1k -> 512x512 and
+re-encoded as WebP (POLISH.md item 5: "texture payload modest") -- a
+lossy transform of a CC0 asset, not a distinct work, done for file size
+only. Re-download and verify the MD5 above to check the original if
+this ever needs redoing.
+
+No attribution is legally required under CC0, but it's recorded here
+for provenance -- this is a real, deliberately-chosen asset, not a
+placeholder.
