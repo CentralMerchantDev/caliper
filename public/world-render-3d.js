@@ -303,9 +303,10 @@ function makeContactShadowTexture() {
 }
 
 class Renderer3D {
-  constructor(canvas, { reducedMotion = false } = {}) {
+  constructor(canvas, { reducedMotion = false, onInspect = null } = {}) {
     this.canvas = canvas;
     this.reducedMotion = reducedMotion;
+    this.onInspect = onInspect;
     this.prevWorld = null;
     this.nextWorld = null;
     this._simMeshes = [];
@@ -313,13 +314,12 @@ class Renderer3D {
     this._buildingsById = {};
     this._buildingScaleById = {};
     this._objectTypes = {};
-    // Materials that ramp brighter at night (a light source's own bulb, an
-    // object type's recipe part flagged emissiveAnimated -- FOUNDATION.md
-    // item 1) -- tracked generically instead of hunting the scene graph
-    // for a hardcoded "lampBulb" userData key by name.
     this._emissiveAnimated = [];
     this._neighbourhoodBuilt = false;
     this._disposed = false;
+
+    this._raycaster = new THREE.Raycaster();
+    this._mouse = new THREE.Vector2();
 
     this._initScene();
     this._orbit = { base: 0.62, delta: 0, dragging: false, startX: 0, startDelta: 0 };
@@ -722,9 +722,12 @@ class Renderer3D {
 
   _bindOrbitControls() {
     const canvas = this.canvas;
+    let clickStartX = 0, clickStartY = 0;
     const onDown = (e) => {
       this._orbit.dragging = true;
       this._orbit.startX = e.clientX;
+      clickStartX = e.clientX;
+      clickStartY = e.clientY;
       this._orbit.startDelta = this._orbit.delta;
     };
     const onMove = (e) => {
@@ -732,7 +735,13 @@ class Renderer3D {
       const dx = (e.clientX - this._orbit.startX) / Math.max(1, canvas.clientWidth);
       this._orbit.delta = Math.max(-0.45, Math.min(0.45, this._orbit.startDelta + dx * 1.6));
     };
-    const onUp = () => {
+    const onUp = (e) => {
+      if (this._orbit.dragging) {
+        const dist = Math.hypot(e.clientX - clickStartX, e.clientY - clickStartY);
+        if (dist < 6) {
+          this._inspectClick(e);
+        }
+      }
       this._orbit.dragging = false;
     };
     canvas.style.touchAction = "pan-y";
@@ -744,6 +753,59 @@ class Renderer3D {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
+  }
+
+  _inspectClick(e) {
+    if (!this.nextWorld || !this.onInspect) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this._mouse.set(x, y);
+    this._raycaster.setFromCamera(this._mouse, this.camera);
+
+    const intersects = this._raycaster.intersectObjects(this.neighbourhoodGroup.children, true);
+    if (intersects.length === 0) return;
+
+    let hitObj = intersects[0].object;
+    let bId = null;
+
+    while (hitObj && hitObj !== this.neighbourhoodGroup) {
+      for (const id in this._buildingGroupsById) {
+        if (this._buildingGroupsById[id] === hitObj) {
+          bId = id;
+          break;
+        }
+      }
+      if (bId) break;
+      hitObj = hitObj.parent;
+    }
+
+    const world = this.nextWorld;
+    const buildings = world.buildings || [];
+    const placements = world.placements || [];
+    const sims = world.sims || [];
+
+    if (bId) {
+      const b = buildings.find((item) => item.id === bId);
+      const bPlacements = placements.filter((p) => p.location === bId).map((p) => p.type);
+      const bSims = sims.filter((s) => s.home === bId).map((s) => s.id);
+      this.onInspect({
+        parcelId: bId,
+        label: b ? b.label : bId,
+        type: b ? b.type : "dwelling",
+        occupants: bSims.length ? bSims.join(", ") : "None assigned",
+        contents: bPlacements.length ? bPlacements.join(", ") : "Standard fixtures",
+      });
+    } else {
+      const outdoorPlacements = placements.filter((p) => p.location === "outdoors").map((p) => p.type);
+      this.onInspect({
+        parcelId: "outdoors",
+        label: "Central Plaza",
+        type: "outdoor plot",
+        occupants: "Active sims roaming",
+        contents: outdoorPlacements.length ? outdoorPlacements.join(", ") : "Trees, lamps, bench, planter",
+      });
+    }
   }
 
   _resize() {

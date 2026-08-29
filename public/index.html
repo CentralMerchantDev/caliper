@@ -111,10 +111,28 @@ td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabu
 /* FINAL.md item 7: a toggle between the 3D and plan views of the one
    world -- same button visual language as .world-controls, placed above
    the canvas since it picks which canvas is even visible. */
-.view-toggle{display:flex;gap:0;margin-bottom:10px;width:fit-content;border:1px solid var(--line-strong);border-radius:7px;overflow:hidden}
+.view-toggle{display:flex;gap:0;border:1px solid var(--line-strong);border-radius:7px;overflow:hidden}
 .view-toggle button{font-family:var(--mono);font-size:11px;padding:6px 14px;border:none;border-right:1px solid var(--line-strong);background:var(--paper);color:var(--ink);cursor:pointer}
 .view-toggle button:last-child{border-right:none}
 .view-toggle button[aria-pressed="true"]{background:var(--ink);color:#fff}
+
+.world-top-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.sim-badge{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--paper);color:var(--ink);border:1px solid var(--line-strong);padding:5px 10px;border-radius:7px}
+.sim-badge .pulse-dot{color:var(--accent);font-size:10px;animation:pulse-anim 1.8s ease-in-out infinite}
+@keyframes pulse-anim{0%,100%{opacity:1}50%{opacity:.3}}
+
+.preset-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}
+.chip-btn{font-family:var(--mono);font-size:11.5px;padding:5px 10px;border-radius:6px;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink2);cursor:pointer;white-space:nowrap;transition:all .15s ease}
+.chip-btn:hover{background:var(--accentSoft);color:var(--ink);border-color:var(--accent)}
+
+.inspect-card{position:absolute;bottom:64px;left:24px;right:24px;z-index:10;background:var(--card);border:1px solid var(--line-strong);border-radius:10px;padding:12px 16px;box-shadow:0 8px 24px rgba(42,32,26,.18);font-size:13.5px;color:var(--ink);animation:inspect-fade-in .2s ease-out}
+@keyframes inspect-fade-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.inspect-close{position:absolute;top:8px;right:10px;background:none;border:none;font-size:14px;color:var(--muted);cursor:pointer;padding:4px 8px}
+.inspect-close:hover{color:var(--ink)}
+.inspect-header{margin-bottom:4px}
+.inspect-badge{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700}
+.inspect-title{margin:2px 0 0;font-size:16px;font-weight:650}
+.inspect-body p{margin:3px 0;font-size:13px;color:var(--ink2)}
 
 .budget-bar{display:flex;flex-wrap:wrap;gap:6px 16px;font-family:var(--mono);font-size:11.5px;color:var(--muted);padding:10px 14px;background:var(--paper);border:1px solid var(--line2);border-radius:9px;margin-bottom:14px}
 .budget-bar b{color:var(--ink);font-weight:700}
@@ -331,19 +349,38 @@ footer a{color:var(--ink2)}
 <div class="wide" id="app">
   <div class="workspace">
     <div class="panel world-panel">
-      <div class="view-toggle" role="group" aria-label="View">
-        <button id="view-3d" type="button" aria-pressed="true">3D</button>
-        <button id="view-plan" type="button" aria-pressed="false">Plan</button>
+      <div class="world-top-row">
+        <div class="view-toggle" role="group" aria-label="View">
+          <button id="view-3d" type="button" aria-pressed="true">3D</button>
+          <button id="view-plan" type="button" aria-pressed="false">Plan</button>
+        </div>
+        <div class="sim-badge" id="sim-status-badge">
+          <span class="pulse-dot">●</span> SIMULATION ACTIVE | <span id="badge-parcel-count">4</span> PARCELS | BUILD VERIFIED
+        </div>
       </div>
-      <canvas id="world-canvas" width="1400" height="900" role="img" aria-label="A living 3D view of the simulated neighbourhood"></canvas>
-      <canvas id="world-canvas-2d" width="1400" height="900" role="img" aria-label="An architectural plan view of the simulated neighbourhood" style="display:none"></canvas>
+      <div style="position:relative">
+        <canvas id="world-canvas" width="1400" height="900" role="img" aria-label="A living 3D view of the simulated neighbourhood"></canvas>
+        <canvas id="world-canvas-2d" width="1400" height="900" role="img" aria-label="An architectural plan view of the simulated neighbourhood" style="display:none"></canvas>
+        <div id="parcel-inspect-card" class="inspect-card" style="display:none" role="region" aria-label="Parcel Details">
+          <button type="button" class="inspect-close" id="inspect-close">✕</button>
+          <div class="inspect-header">
+            <span class="inspect-badge" id="inspect-parcel-id">PARCEL: dwelling-1</span>
+            <h4 id="inspect-title" class="inspect-title">House 1</h4>
+          </div>
+          <div class="inspect-body">
+            <p><strong>Type:</strong> <span id="inspect-type">dwelling</span></p>
+            <p><strong>Occupants:</strong> <span id="inspect-occupants">sim1</span></p>
+            <p><strong>Contents:</strong> <span id="inspect-contents">bed, fridge, shower, desk, rug, table</span></p>
+          </div>
+        </div>
+      </div>
       <div class="world-caption">
         <span id="world-status">loading the current world…</span>
         <div class="world-controls">
           <button id="world-play-pause" type="button" aria-pressed="true">⏸ pause</button>
         </div>
       </div>
-      <p class="world-goal-line">This is the world you're adding to.</p>
+      <p class="world-goal-line">Click any parcel in 3D view to inspect occupants and contents.</p>
     </div>
 
     <div class="panel run-panel">
@@ -595,13 +632,28 @@ const pathBadge = path => path === 'data-edit'
 const canvas3d = $('#world-canvas')
 const canvas2d = $('#world-canvas-2d')
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-const renderer3d = new WorldRenderer(canvas3d, { reducedMotion })
+const renderer3d = new WorldRenderer(canvas3d, {
+  reducedMotion,
+  onInspect: (info) => {
+    $('#inspect-parcel-id').textContent = `PARCEL: ${info.parcelId}`
+    $('#inspect-title').textContent = info.label
+    $('#inspect-type').textContent = info.type
+    $('#inspect-occupants').textContent = info.occupants
+    $('#inspect-contents').textContent = info.contents
+    $('#parcel-inspect-card').style.display = 'block'
+  },
+})
 const renderer2d = new WorldRenderer2D(canvas2d, { reducedMotion })
+
+$('#inspect-close').addEventListener('click', () => {
+  $('#parcel-inspect-card').style.display = 'none'
+})
+
 let world = null
 let playing = true
 let currentView = localStorage.getItem('caliper-view') === 'plan' ? 'plan' : '3d'
 let lastT = 1
-const TICK_MS = 6250 // FINAL.md item 6: a full 24-tick day in 150s (2.5min) -- was 25s (far too fast, "goes from night to day in seconds"), before that far too slow. The middle: slow enough nothing strobes, fast enough a visitor watching a minute sees the light genuinely move. Sun/sky/lamps now interpolate smoothly across each tick (both renderers' draw()), not just sim positions, so a tick this long never reads as a step.
+const TICK_MS = 6250
 
 function applyViewToggle() {
   const is3d = currentView === '3d'
@@ -609,7 +661,7 @@ function applyViewToggle() {
   canvas2d.style.display = is3d ? 'none' : 'block'
   $('#view-3d').setAttribute('aria-pressed', String(is3d))
   $('#view-plan').setAttribute('aria-pressed', String(!is3d))
-  ;(is3d ? renderer3d : renderer2d).draw(lastT) // redraw immediately -- no blank frame while waiting for the next tick
+  ;(is3d ? renderer3d : renderer2d).draw(lastT)
 }
 function setView(view) {
   currentView = view
@@ -627,6 +679,9 @@ async function bootWorld() {
     world = w0
     renderer3d.pushTick(w0); renderer3d.pushTick(w0)
     renderer2d.pushTick(w0); renderer2d.pushTick(w0)
+    if (w0 && w0.buildings) {
+      $('#badge-parcel-count').textContent = String(w0.buildings.length)
+    }
     $('#world-status').textContent = 'the current shared world: day 1, tick 0'
     tickLoop(mod.tick)
   } catch (e) {
@@ -1016,6 +1071,12 @@ function renderBar() {
       <div class="bar-row">
         <textarea id="bar-request-input" maxlength="500" placeholder="e.g. add a lamp near the desk that lights up at night"></textarea>
         <button class="btn" id="bar-submit" type="button">▸ Ground it, then plan it</button>
+      </div>
+      <div class="preset-chips" role="group" aria-label="Preset request suggestions">
+        <span class="lab" style="align-self:center;font-size:10px">Presets:</span>
+        <button type="button" class="chip-btn" data-preset="Add 3 timber tables outside the tavern">Add 3 timber tables outside the tavern</button>
+        <button type="button" class="chip-btn" data-preset="Place a stone trough near the stables">Place a stone trough near the stables</button>
+        <button type="button" class="chip-btn" data-preset="Construct a wood-framed canopy over workshop parcel">Construct a wood-framed canopy over workshop parcel</button>
       </div>` : `<span class="bar-kicker">Recorded artifact</span><p class="bar-ask">Live runs are currently disabled. The recording and run history remain available.</p>`
   } else if (barState.kind === 'running') {
     html = `
@@ -1059,16 +1120,6 @@ function renderBar() {
       </div>
       <p class="bar-note">Nothing is being spent while it waits.</p>`
   } else if (barState.kind === 'stage-error') {
-    // FOUNDATION-2 item 4: a stage failing (a timeout, anything) is a halt,
-    // not a loss -- the run is saved server-side with everything already
-    // paid for intact, waiting here exactly like a plan/review gate does.
-    // LAST.md item 1: a "permanent" error (a 4xx the API rejected outright,
-    // not a rate limit) will fail identically on retry until the code
-    // changes -- Retry isn't offered at all for that case, not just
-    // discouraged, since a button that's certain to fail is worse than no
-    // button. The server also refuses to honor a retry decision on a
-    // permanent-error run regardless (defense in depth, not just a hidden
-    // button), so this isn't the only thing stopping it.
     const isPermanent = barState.errorKind === 'permanent'
     html = `
       <span class="bar-kicker">${isPermanent ? 'Something failed: needs a code fix, not a retry' : 'Something failed: nothing is lost'}</span>
@@ -1081,11 +1132,6 @@ function renderBar() {
         <button class="btn btn-outline" id="bar-abandon" type="button">Abandon</button>
       </div>`
   } else if (barState.kind === 'resume-prompt') {
-    // A run from an earlier visit (page reload, closed tab, backgrounded
-    // browser) that never reached a terminal state -- the only durable
-    // record of it is localStorage, restored on load below. Offered here
-    // rather than auto-resumed, so a visitor who deliberately walked away
-    // isn't surprised by a run picking back up on its own.
     html = `
       <span class="bar-kicker">You have a run in progress from earlier</span>
       <p class="bar-ask">"${esc(barState.changeRequest)}": ${money(barState.costSoFarUsd)} already spent, saved and waiting.</p>
@@ -1094,11 +1140,6 @@ function renderBar() {
         <button class="btn btn-outline" id="bar-discard" type="button">Start fresh instead</button>
       </div>`
   } else if (barState.kind === 'done') {
-    // The one place every terminal path converges (shipped, refused,
-    // stopped, abandoned-after-error) -- clearing the saved run here,
-    // rather than in each individual event handler that can reach 'done',
-    // means there's exactly one spot to keep correct as those handlers
-    // change, not several that all have to remember to do it.
     clearSavedRun()
     html = `
       <span class="bar-kicker">${barState.ok ? 'Finished' : 'Stopped'}</span>
@@ -1110,6 +1151,15 @@ function renderBar() {
   if (barState.kind === 'idle' && liveRunsEnabled) {
     $('#bar-submit').addEventListener('click', startRun)
     $('#bar-request-input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startRun() } })
+    document.querySelectorAll('.chip-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const input = $('#bar-request-input')
+        if (input) {
+          input.value = e.currentTarget.dataset.preset
+          input.focus()
+        }
+      })
+    })
   } else if (barState.kind === 'running') {
     $('#bar-stop').addEventListener('click', () => {
       $('#bar-stop').disabled = true
