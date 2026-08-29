@@ -881,53 +881,79 @@ let currentInspectedParcelId = null
 
 // --- Phase 2: NPC Perception, Timeline Scrubber, Architecture Drawer ---
 
+const GROUNDED_LABELS = {
+  shop: 'The Tavern',
+  workshop: 'The Workshop',
+  'dwelling-1': 'House 1',
+  'dwelling-2': 'House 2',
+  outdoors: 'The Village Plaza'
+}
+
+const GROUNDED_OCCUPANTS = {
+  shop: 'Althea',
+  workshop: 'Master Vane',
+  'dwelling-1': 'Elora',
+  'dwelling-2': 'Rowan',
+  outdoors: 'Althea, Master Vane, Elora, Rowan (Roaming)'
+}
+
 const NPC_PROFILES = {
-  workshop: {
-    name: 'Master Vane',
-    role: 'The Blacksmith',
-    avatar: '⚒️',
-    goal: 'Forging iron fixtures and checking tool racks.',
-    thought: 'The furnace burns steady today.'
-  },
   shop: {
     name: 'Althea',
     role: 'Tavern Keeper',
     avatar: '🍺',
-    goal: 'Serving patrons and maintaining outdoor patio tables.',
-    thought: 'The tavern hall is quiet and welcoming.'
+    goal: 'Serving patrons and maintaining outdoor patio tables at The Tavern.',
+    thought: 'The Tavern hall is quiet and welcoming today.'
   },
-  'dwelling-2': {
-    name: 'Rowan',
-    role: 'Stable Master',
-    avatar: '🐎',
-    goal: 'Tending to horses and keeping the troughs filled.',
-    thought: 'The stables are clean and well stocked.'
+  workshop: {
+    name: 'Master Vane',
+    role: 'The Blacksmith',
+    avatar: '⚒️',
+    goal: 'Forging iron fixtures and checking tool racks at The Workshop.',
+    thought: 'The furnace burns steady today.'
   },
   'dwelling-1': {
     name: 'Elora',
     role: 'Herbalist',
     avatar: '🌿',
-    goal: 'Drying wild herbs and studying parcel boundaries.',
+    goal: 'Drying wild herbs and studying parcel boundaries at House 1.',
     thought: 'Sages and lavender dry peacefully by the window.'
+  },
+  'dwelling-2': {
+    name: 'Rowan',
+    role: 'Stable Master',
+    avatar: '🐎',
+    goal: 'Tending to horses and keeping the troughs filled at House 2.',
+    thought: 'The stables near House 2 are clean and well stocked.'
+  },
+  outdoors: {
+    name: 'Village Resident',
+    role: 'Plaza Visitor',
+    avatar: '🏛️',
+    goal: 'Gathering near The Village Plaza well and surrounding paths.',
+    thought: 'The village plaza is alive with activity today.'
   }
 }
 
 function updateNpcPerception(changeText) {
   const text = (changeText || '').toLowerCase()
   if (text.includes('table') || text.includes('tavern') || text.includes('patio')) {
-    NPC_PROFILES.shop.thought = 'New furnishings outside mean more room for evening patrons!'
-    NPC_PROFILES.workshop.thought = 'I hear wood and iron being crafted for the tavern patio.'
+    NPC_PROFILES.shop.thought = 'New furnishings outside The Tavern mean more room for evening patrons!'
+    NPC_PROFILES.workshop.thought = 'I hear wood and iron being crafted for The Tavern patio.'
+  } else if (text.includes('well') || text.includes('plaza') || text.includes('bench')) {
+    NPC_PROFILES['dwelling-1'].thought = 'A new bench by The Village Plaza well makes a pleasant resting spot.'
+    NPC_PROFILES['dwelling-2'].thought = 'The Village Plaza well is bustling with activity.'
   } else if (text.includes('trough') || text.includes('stable') || text.includes('horse')) {
-    NPC_PROFILES['dwelling-2'].thought = 'The horses take notice of every shift in the courtyard layout.'
-    NPC_PROFILES['dwelling-1'].thought = 'Fresh stone and timber near the stables catch the morning light.'
-  } else if (text.includes('canopy') || text.includes('workshop') || text.includes('forge')) {
-    NPC_PROFILES.workshop.thought = 'A new roof overhang will keep the rain off the forge materials.'
-    NPC_PROFILES.shop.thought = 'Vane has been working hard expanding his workspace shelter.'
+    NPC_PROFILES['dwelling-2'].thought = 'The horses take notice of every shift in the House 2 layout.'
+    NPC_PROFILES['dwelling-1'].thought = 'Fresh stone and timber near House 2 catch the morning light.'
+  } else if (text.includes('workbench') || text.includes('workshop') || text.includes('forge') || text.includes('canopy')) {
+    NPC_PROFILES.workshop.thought = 'A new timber workbench will expand my workspace outside The Workshop.'
+    NPC_PROFILES.shop.thought = 'Master Vane has been working hard expanding The Workshop outdoor area.'
   } else if (changeText) {
-    NPC_PROFILES.shop.thought = `A new edit was placed: "${changeText}". Everyone is talking about it.`
-    NPC_PROFILES.workshop.thought = `The courtyard has changed. I can see new structures from the forge.`
-    NPC_PROFILES['dwelling-2'].thought = `I noticed the new additions near the path.`
-    NPC_PROFILES['dwelling-1'].thought = `The soil and stone settle into their new arrangement.`
+    NPC_PROFILES.shop.thought = `A new edit was placed: "${changeText}". Everyone at The Tavern is talking about it.`
+    NPC_PROFILES.workshop.thought = `The courtyard near The Workshop has changed.`
+    NPC_PROFILES['dwelling-2'].thought = `I noticed the new additions near House 2.`
+    NPC_PROFILES['dwelling-1'].thought = `The soil and stone near House 1 settle into their new arrangement.`
   }
 }
 
@@ -935,13 +961,16 @@ const renderer3d = new WorldRenderer(canvas3d, {
   reducedMotion,
   onInspect: (info) => {
     currentInspectedParcelId = info.parcelId
+    const groundedTitle = GROUNDED_LABELS[info.parcelId] || info.label || info.parcelId
+    const groundedOccupants = GROUNDED_OCCUPANTS[info.parcelId] || info.occupants
+
     $('#inspect-parcel-id').textContent = `PARCEL: ${info.parcelId}`
-    $('#inspect-title').textContent = info.label
-    $('#inspect-type').textContent = info.type
-    $('#inspect-occupants').textContent = info.occupants
+    $('#inspect-title').textContent = groundedTitle
+    $('#inspect-type').textContent = info.parcelId === 'shop' ? 'tavern' : info.type
+    $('#inspect-occupants').textContent = groundedOccupants
     $('#inspect-contents').textContent = info.contents
 
-    const npc = NPC_PROFILES[info.parcelId] || NPC_PROFILES['dwelling-1']
+    const npc = NPC_PROFILES[info.parcelId] || NPC_PROFILES['outdoors']
     $('#inspect-npc-avatar').textContent = npc.avatar
     $('#inspect-npc-name').textContent = npc.name
     $('#inspect-npc-role').textContent = npc.role
@@ -1143,10 +1172,11 @@ window.addEventListener('pointerdown', () => {
 
 // --- Spotlight Command Palette ---
 const COMMANDS = [
-  { id: 'jump-blacksmith', label: '📍 Jump to Blacksmith / Workshop', category: 'Navigation', action: () => renderer3d.focusParcel('workshop') },
-  { id: 'jump-tavern', label: '📍 Jump to Tavern / Shop', category: 'Navigation', action: () => renderer3d.focusParcel('shop') },
-  { id: 'jump-stables', label: '📍 Jump to Stables / Dwelling 2', category: 'Navigation', action: () => renderer3d.focusParcel('dwelling-2') },
-  { id: 'jump-cottage', label: '📍 Jump to Cottage / Dwelling 1', category: 'Navigation', action: () => renderer3d.focusParcel('dwelling-1') },
+  { id: 'jump-workshop', label: '📍 Jump to The Workshop (Master Vane)', category: 'Navigation', action: () => renderer3d.focusParcel('workshop') },
+  { id: 'jump-tavern', label: '📍 Jump to The Tavern (Althea)', category: 'Navigation', action: () => renderer3d.focusParcel('shop') },
+  { id: 'jump-house2', label: '📍 Jump to House 2 (Rowan)', category: 'Navigation', action: () => renderer3d.focusParcel('dwelling-2') },
+  { id: 'jump-house1', label: '📍 Jump to House 1 (Elora)', category: 'Navigation', action: () => renderer3d.focusParcel('dwelling-1') },
+  { id: 'jump-plaza', label: '📍 Jump to The Village Plaza', category: 'Navigation', action: () => renderer3d.focusParcel('outdoors') },
   { id: 'reset-cam', label: '↺ Reset Camera to Overview', category: 'Navigation', action: () => renderer3d.resetView() },
   { id: 'tod-day', label: '☀️ Atmosphere: Day', category: 'Lighting', action: () => setTimeOfDayToggle('day') },
   { id: 'tod-dusk', label: '🌅 Atmosphere: Dusk', category: 'Lighting', action: () => setTimeOfDayToggle('dusk') },
@@ -1154,9 +1184,9 @@ const COMMANDS = [
   { id: 'drone-tour', label: '🎬 Start Drone Tour', category: 'Camera', action: () => renderer3d.startDroneTour() },
   { id: 'spatial-diff', label: '👁️ Toggle 3D Spatial Diff', category: 'Render', action: () => toggleSpatialDiffUI() },
   { id: 'sound-toggle', label: '🔊 Toggle Web Audio Sound', category: 'Audio', action: () => toggleSoundUI() },
-  { id: 'preset-tavern', label: '⚡ Preset: Add 3 timber tables outside tavern', category: 'Presets', action: () => fillPresetPrompt('Add 3 timber tables outside the tavern') },
-  { id: 'preset-stables', label: '⚡ Preset: Place a stone trough near stables', category: 'Presets', action: () => fillPresetPrompt('Place a stone trough near the stables') },
-  { id: 'preset-canopy', label: '⚡ Preset: Construct a wood canopy over workshop', category: 'Presets', action: () => fillPresetPrompt('Construct a wood-framed canopy over workshop parcel') },
+  { id: 'preset-tavern', label: '⚡ Preset: Add 3 timber tables outside the Tavern', category: 'Presets', action: () => fillPresetPrompt('Add 3 timber tables outside the Tavern') },
+  { id: 'preset-plaza', label: '⚡ Preset: Place a stone bench near the plaza well', category: 'Presets', action: () => fillPresetPrompt('Place a stone bench near the plaza well') },
+  { id: 'preset-workshop', label: '⚡ Preset: Construct a timber workbench outside the workshop', category: 'Presets', action: () => fillPresetPrompt('Construct a timber workbench outside the workshop') },
 ]
 
 let cmdSelectedIndex = 0
@@ -1745,9 +1775,9 @@ function renderBar() {
       </div>
       <div class="preset-chips" role="group" aria-label="Preset request suggestions">
         <span class="lab" style="align-self:center;font-size:10px">Presets:</span>
-        <button type="button" class="chip-btn" data-preset="Add 3 timber tables outside the tavern">Add 3 timber tables outside the tavern</button>
-        <button type="button" class="chip-btn" data-preset="Place a stone trough near the stables">Place a stone trough near the stables</button>
-        <button type="button" class="chip-btn" data-preset="Construct a wood-framed canopy over workshop parcel">Construct a wood-framed canopy over workshop parcel</button>
+        <button type="button" class="chip-btn" data-preset="Add 3 timber tables outside the Tavern">Add 3 timber tables outside the Tavern</button>
+        <button type="button" class="chip-btn" data-preset="Place a stone bench near the plaza well">Place a stone bench near the plaza well</button>
+        <button type="button" class="chip-btn" data-preset="Construct a timber workbench outside the workshop">Construct a timber workbench outside the workshop</button>
       </div>` : `<span class="bar-kicker">Recorded artifact</span><p class="bar-ask">Live runs are currently disabled. The recording and run history remain available.</p>`
   } else if (barState.kind === 'running') {
     html = `

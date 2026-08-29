@@ -323,6 +323,41 @@ function makeThoughtBubbleTexture() {
   return tex;
 }
 
+function getGroundedBuildingLabel(id, label) {
+  if (id === "shop" || label === "shop" || label === "Tavern") return "The Tavern";
+  if (id === "workshop" || label === "workshop") return "The Workshop";
+  if (id === "dwelling-1" || label === "dwelling-1" || label === "House 1") return "House 1";
+  if (id === "dwelling-2" || label === "dwelling-2" || label === "House 2") return "House 2";
+  if (id === "outdoors" || label === "outdoors" || label === "Central Plaza") return "The Village Plaza";
+  return label || id;
+}
+
+function makeTextLabelTexture(text, bgColor = "rgba(15, 23, 42, 0.85)", textColor = "#f8fafc") {
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 64;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = bgColor;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  if (ctx.roundRect) {
+    ctx.roundRect(6, 6, 244, 52, 10);
+  } else {
+    ctx.rect(6, 6, 244, 52);
+  }
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = textColor;
+  ctx.font = "bold 20px system-ui, -apple-system, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 128, 32);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 class AudioSynth {
   constructor() {
     this.ctx = null;
@@ -696,6 +731,26 @@ class Renderer3D {
         sprite.userData = { isThoughtBubble: true, parcelId: id, basePosY: pos.y, phase: Math.random() * Math.PI * 2 };
         this.scene.add(sprite);
         this._thoughtBubbles.push(sprite);
+      });
+    }
+    if (!this._floatingLabels || this._floatingLabels.length === 0) {
+      this._floatingLabels = [];
+      const labelConfigs = [
+        { id: "workshop", text: "The Workshop", pos: new THREE.Vector3(-4.2, 2.65, -4.2) },
+        { id: "shop", text: "The Tavern", pos: new THREE.Vector3(4.2, 2.65, -3.8) },
+        { id: "dwelling-2", text: "House 2", pos: new THREE.Vector3(-4.2, 2.65, 4.2) },
+        { id: "dwelling-1", text: "House 1", pos: new THREE.Vector3(4.2, 2.65, 3.8) },
+        { id: "outdoors", text: "The Village Plaza", pos: new THREE.Vector3(0, 2.1, 0) },
+      ];
+      labelConfigs.forEach(({ id, text, pos }) => {
+        const tex = makeTextLabelTexture(text);
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.9, depthTest: false });
+        const sprite = new THREE.Sprite(mat);
+        sprite.position.copy(pos);
+        sprite.scale.set(2.0, 0.5, 1);
+        sprite.userData = { isFloatingLabel: true, parcelId: id, basePosY: pos.y };
+        this.scene.add(sprite);
+        this._floatingLabels.push(sprite);
       });
     }
     this._fitCamera(buildings, centerX, centerZ, scaleFor);
@@ -1108,12 +1163,28 @@ class Renderer3D {
     this._mouse.set(x, y);
     this._raycaster.setFromCamera(this._mouse, this.camera);
 
-    if (this._thoughtBubbles && this._thoughtBubbles.length > 0) {
-      const bubbleHits = this._raycaster.intersectObjects(this._thoughtBubbles);
-      if (bubbleHits.length > 0) {
-        const hitBubble = bubbleHits[0].object;
-        if (hitBubble.userData && hitBubble.userData.parcelId) {
-          const parcelId = hitBubble.userData.parcelId;
+    const clickTargets = [];
+    if (this._thoughtBubbles) clickTargets.push(...this._thoughtBubbles);
+    if (this._floatingLabels) clickTargets.push(...this._floatingLabels);
+
+    if (clickTargets.length > 0) {
+      const spriteHits = this._raycaster.intersectObjects(clickTargets);
+      if (spriteHits.length > 0) {
+        const hitSprite = spriteHits[0].object;
+        if (hitSprite.userData && hitSprite.userData.parcelId) {
+          const parcelId = hitSprite.userData.parcelId;
+          if (parcelId === "outdoors") {
+            const outdoorPlacements = (this.nextWorld.placements || []).filter((p) => p.location === "outdoors").map((p) => p.type);
+            this.resetView();
+            this.onInspect({
+              parcelId: "outdoors",
+              label: "The Village Plaza",
+              type: "outdoor plot",
+              occupants: "Althea, Master Vane, Elora, Rowan (Roaming)",
+              contents: outdoorPlacements.length ? outdoorPlacements.join(", ") : "Trees, lamps, bench, well",
+            });
+            return;
+          }
           const bGroup = this._buildingGroupsById[parcelId];
           const b = (this.nextWorld.buildings || []).find((item) => item.id === parcelId);
           const bPlacements = (this.nextWorld.placements || []).filter((p) => p.location === parcelId).map((p) => p.type);
@@ -1121,7 +1192,7 @@ class Renderer3D {
           this.focusParcel(parcelId);
           this.onInspect({
             parcelId,
-            label: b ? b.label : (bGroup ? bGroup.userData.label : parcelId),
+            label: getGroundedBuildingLabel(parcelId, b ? b.label : (bGroup ? bGroup.userData.label : parcelId)),
             type: b ? b.type : "dwelling",
             occupants: bSims.length ? bSims.join(", ") : "None assigned",
             contents: bPlacements.length ? bPlacements.join(", ") : "Standard fixtures",
@@ -1160,7 +1231,7 @@ class Renderer3D {
       this.focusParcel(bId);
       this.onInspect({
         parcelId: bId,
-        label: b ? b.label : bId,
+        label: getGroundedBuildingLabel(bId, b ? b.label : bId),
         type: b ? b.type : "dwelling",
         occupants: bSims.length ? bSims.join(", ") : "None assigned",
         contents: bPlacements.length ? bPlacements.join(", ") : "Standard fixtures",
@@ -1170,10 +1241,10 @@ class Renderer3D {
       this.resetView();
       this.onInspect({
         parcelId: "outdoors",
-        label: "Central Plaza",
+        label: "The Village Plaza",
         type: "outdoor plot",
-        occupants: "Active sims roaming",
-        contents: outdoorPlacements.length ? outdoorPlacements.join(", ") : "Trees, lamps, bench, planter",
+        occupants: "Althea, Master Vane, Elora, Rowan (Roaming)",
+        contents: outdoorPlacements.length ? outdoorPlacements.join(", ") : "Trees, lamps, bench, well",
       });
     }
   }
@@ -1205,9 +1276,11 @@ class Renderer3D {
     const text = String(presetText).toLowerCase();
     if (text.includes("tavern") || text.includes("table")) {
       this.focusParcel("shop");
-    } else if (text.includes("stable") || text.includes("trough")) {
+    } else if (text.includes("well") || text.includes("plaza") || text.includes("bench")) {
+      this.focusParcel("outdoors");
+    } else if (text.includes("stable") || text.includes("trough") || text.includes("house 2")) {
       this.focusParcel("dwelling-2");
-    } else if (text.includes("workshop") || text.includes("canopy")) {
+    } else if (text.includes("workshop") || text.includes("workbench") || text.includes("canopy")) {
       this.focusParcel("workshop");
     } else {
       this.focusParcel("dwelling-1");
