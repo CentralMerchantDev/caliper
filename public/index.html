@@ -210,6 +210,15 @@ pre{background:var(--paper);border:1px solid var(--line2);border-radius:9px;padd
 footer{border-top:1px solid var(--line);padding:30px 0 60px;color:var(--muted);font-size:14.5px;margin-top:60px}
 footer a{color:var(--ink2)}
 
+/* POLISH.md item 4: the closing block -- one short, stated-once ask,
+   visually set apart from the methodology list above it (a top border,
+   the same device the footer already uses) but not styled as a call-to-
+   action banner. */
+.closing{border-top:1px solid var(--line);margin-top:44px;padding-top:28px}
+.closing p{margin:0 0 8px;font-size:17px;color:var(--ink2)}
+.closing p:last-child{margin-bottom:0;font-size:15px}
+.closing a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line-strong);text-underline-offset:2px}
+
 /* ---------------- the persistent action bar ----------------
    LAST.md item 3: moved from position:fixed spanning the whole viewport
    (FINAL.md item 2's original spec -- Mark's own call that this was a
@@ -565,6 +574,19 @@ footer a{color:var(--ink2)}
       yet establish a "reviewed, nothing found" base rate across many kinds of request.</li>
   </ul>
 
+</div>
+
+<!-- POLISH.md item 4: "someone reaches the bottom impressed and there is
+     no next step... it currently has no ask." One short block, stated
+     once, no call-to-action language. -->
+<div class="wrap">
+  <section class="closing">
+    <p>Looking for applied-AI roles.</p>
+    <p><a href="mailto:mark@fhinc.ca">mark@fhinc.ca</a></p>
+    <p><a href="https://datum.markfrasertoronto.workers.dev/resume.pdf">Résumé</a> ·
+      <a href="https://portfolio.markfrasertoronto.workers.dev">Portfolio</a> ·
+      <a href="https://datum.markfrasertoronto.workers.dev">DATUM</a></p>
+  </section>
 </div>
 
 <footer><div class="wrap">
