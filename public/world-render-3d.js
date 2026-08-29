@@ -321,6 +321,19 @@ class Renderer3D {
     this._raycaster = new THREE.Raycaster();
     this._mouse = new THREE.Vector2();
 
+    this._targetLookAt = new THREE.Vector3(0, 0.9, 0);
+    this._startLookAt = new THREE.Vector3(0, 0.9, 0);
+    this._targetCamDist = 14;
+    this._startCamDist = 14;
+    this._camDist = 14;
+    this._cameraAnimStartTime = 0;
+    this._cameraAnimDuration = 600;
+
+    this._overrideHour = null;
+    this._currentHour = 12;
+    this._dropAnimItems = [];
+    this._knownPlacementKeys = new Set();
+
     this._initScene();
     this._orbit = { base: 0.62, delta: 0, dragging: false, startX: 0, startDelta: 0 };
     this._bindOrbitControls();
@@ -675,8 +688,17 @@ class Renderer3D {
    * positioned at the building's origin (or the neighbourhood root for
    * outdoors); localX/localZ is this placement's own position within it. */
   _buildPlacementInstance(typeDef, placement, parent, localX, localZ) {
+    const key = `${placement.location}_${placement.type}_${localX.toFixed(2)}_${localZ.toFixed(2)}`;
+    const isNew = !this._knownPlacementKeys.has(key);
+    this._knownPlacementKeys.add(key);
+
     const group = new THREE.Group();
-    group.position.set(localX, 0, localZ);
+    if (isNew && this._neighbourhoodBuilt && !this.reducedMotion) {
+      group.position.set(localX, 1.0, localZ);
+      this._dropAnimItems.push({ group, startY: 1.0, targetY: 0, startTime: performance.now(), duration: 200 });
+    } else {
+      group.position.set(localX, 0, localZ);
+    }
     parent.add(group);
 
     const shadow = typeDef.shadow || { w: 1.2, d: 0.9 };
@@ -789,6 +811,7 @@ class Renderer3D {
       const b = buildings.find((item) => item.id === bId);
       const bPlacements = placements.filter((p) => p.location === bId).map((p) => p.type);
       const bSims = sims.filter((s) => s.home === bId).map((s) => s.id);
+      this.focusParcel(bId);
       this.onInspect({
         parcelId: bId,
         label: b ? b.label : bId,
@@ -798,6 +821,7 @@ class Renderer3D {
       });
     } else {
       const outdoorPlacements = placements.filter((p) => p.location === "outdoors").map((p) => p.type);
+      this.resetView();
       this.onInspect({
         parcelId: "outdoors",
         label: "Central Plaza",
@@ -806,6 +830,58 @@ class Renderer3D {
         contents: outdoorPlacements.length ? outdoorPlacements.join(", ") : "Trees, lamps, bench, planter",
       });
     }
+  }
+
+  focusOn(targetVec3, dist = 10.5) {
+    this._startLookAt.copy(this._lookAt);
+    this._targetLookAt.copy(targetVec3);
+    this._startCamDist = this._camDist || 14;
+    this._targetCamDist = dist;
+    this._cameraAnimStartTime = performance.now();
+  }
+
+  focusParcel(parcelId) {
+    if (parcelId === "outdoors" || !parcelId) {
+      this.resetView();
+      return;
+    }
+    const group = this._buildingGroupsById[parcelId];
+    if (group) {
+      const pos = group.position.clone();
+      pos.y = 0.9;
+      this.focusOn(pos, 10.2);
+    } else {
+      this.resetView();
+    }
+  }
+
+  focusPreset(presetText) {
+    const text = String(presetText).toLowerCase();
+    if (text.includes("tavern") || text.includes("table")) {
+      this.focusParcel("shop");
+    } else if (text.includes("stable") || text.includes("trough")) {
+      this.focusParcel("dwelling-2");
+    } else if (text.includes("workshop") || text.includes("canopy")) {
+      this.focusParcel("workshop");
+    } else {
+      this.focusParcel("dwelling-1");
+    }
+  }
+
+  resetView() {
+    this._startLookAt.copy(this._lookAt);
+    this._targetLookAt.set(0, 0.9, 0);
+    this._startCamDist = this._camDist || 14;
+    this._targetCamDist = 14;
+    this._cameraAnimStartTime = performance.now();
+    this._orbit.delta = 0;
+  }
+
+  setTimeOfDay(todKey) {
+    if (todKey === "day") this._overrideHour = 12;
+    else if (todKey === "dusk") this._overrideHour = 19.5;
+    else if (todKey === "night") this._overrideHour = 2;
+    else this._overrideHour = null;
   }
 
   _resize() {
@@ -853,93 +929,83 @@ class Renderer3D {
     if (!this._neighbourhoodBuilt) return; // no buildings yet -- nothing to draw
     if (this.reducedMotion) t = 1;
     const prev = this.prevWorld || w;
-    // FINAL.md item 6: interpolated, not snapped to the new tick the
-    // instant it lands. sunFor() is continuous in hour (no discrete
-    // lookups), so blending prev.tick -> prev.tick+1 by the same t used
-    // for sim positions makes the sky/lamps move smoothly across the
-    // whole tick instead of jumping once per tick -- the difference that
-    // matters once a tick is several seconds long, not sub-second.
-    const hour = (prev.tick + t) % 24;
-    const sun = sunFor(hour);
+
+    // -- Camera lerp --
+    if (this._cameraAnimStartTime > 0 && !this.reducedMotion) {
+      const elapsed = performance.now() - this._cameraAnimStartTime;
+      const progress = Math.min(1, elapsed / this._cameraAnimDuration);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      this._lookAt.lerpVectors(this._startLookAt, this._targetLookAt, ease);
+      this._camDist = lerp(this._startCamDist, this._targetCamDist, ease);
+      if (progress >= 1) this._cameraAnimStartTime = 0;
+    }
+
+    // -- Item drop animation --
+    if (this._dropAnimItems.length > 0 && !this.reducedMotion) {
+      const now = performance.now();
+      this._dropAnimItems = this._dropAnimItems.filter((item) => {
+        const elapsed = now - item.startTime;
+        const progress = Math.min(1, elapsed / item.duration);
+        const ease = 1 - Math.pow(1 - progress, 2);
+        item.group.position.y = lerp(item.startY, item.targetY, ease);
+        return progress < 1;
+      });
+    }
+
+    // -- Time of day calculation --
+    const simHour = (prev.tick + t) % 24;
+    const targetHour = this._overrideHour !== null ? this._overrideHour : simHour;
+    if (Math.abs(this._currentHour - targetHour) > 0.05) {
+      this._currentHour = lerp(this._currentHour, targetHour, 0.08);
+    } else {
+      this._currentHour = targetHour;
+    }
+    const sun = sunFor(this._currentHour);
 
     // -- lighting for this hour --
     const dist = Math.max(20, (this._camDist || 14) * 1.4);
     const sx = Math.cos(sun.azimuth) * Math.cos(sun.elevation) * dist;
     const sy = Math.max(0.6, Math.sin(sun.elevation) * dist);
     const sz = Math.sin(sun.azimuth) * Math.cos(sun.elevation) * dist;
-    this.sun.position.set(sx, sy, sz);
-    this.sun.target.position.set(0, 0.5, 0);
-    // FINAL.md item 6: nightAmt now comes from sunFor()'s continuous
-    // dayAmt, not a hard isDay boolean -- every lerp below that reads
-    // nightAmt (point lights, lamp emissive, exposure, environmentIntensity)
-    // was already written to blend smoothly; the only thing that used to
-    // make it step was this single line snapping between 0 and 1 exactly
-    // at hour 6 and hour 20.
+    this.sun.position.set(sx + this._lookAt.x, sy, sz + this._lookAt.z);
+    this.sun.target.position.copy(this._lookAt);
+
     const nightAmt = 1 - sun.dayAmt;
-    // FINAL.md item 5: "too dark both day and at night" -- the previous
-    // pass overcorrected chasing the muddy-night note and pulled the day
-    // end down with it. Raised both ends together, day more than night, so
-    // day is the strongest frame in the cycle again while night keeps the
-    // contrast already achieved (below) instead of flattening it out.
     const daySunIntensity = lerp(0.5, 0.95, Math.min(1, sun.elevation));
     this.sun.intensity = lerp(0.08, daySunIntensity, sun.dayAmt);
     const sunColor = sun.warmth >= 1 ? SUN_COLOR_DAY : SUN_COLOR_WARM.clone().lerp(SUN_COLOR_DAY, sun.warmth);
     this.sun.color.copy(SUN_COLOR_NIGHT).lerp(sunColor, sun.dayAmt);
-    // Night's ambient floor raised off nearly zero -- "a person should see
-    // the whole neighbourhood, with the lamp pools as the warm accents
-    // rather than the only light. Not black, not brown." Still well below
-    // day, so the point lights below still read as the thing carrying the
-    // scene, not the only source of visibility.
+
     const dayHemi = lerp(0.2, 0.32, Math.min(1, sun.elevation));
     this.hemi.intensity = lerp(0.07, dayHemi, sun.dayAmt);
-    // CITY.md item 2/3: "at night the point lights carry the scene and the
-    // sun is gone." Street lamps get a stronger night curve than interior
-    // lights -- they're the thing meant to read as a warm pool against a
-    // dark ground, not just a faint indoor glow.
+
     for (const light of this._pointLights) {
       const base = light.userData.baseIntensity || 0.3;
       const nightMult = light.userData.isStreetLamp ? 2.6 : 1.3;
       light.intensity = lerp(base * 0.2, base * nightMult, nightAmt);
     }
-    // Emissive materials on the light sources themselves: a lamp bulb
-    // barely glows in daylight, but reads as a genuinely bright object at
-    // night -- not just a pool of light on the ground beneath it. Tracked
-    // generically (any recipe part flagged emissiveAnimated, any type) in
-    // _emissiveAnimated, not a hunt through the scene graph for one
-    // hardcoded object name.
     for (const mat of this._emissiveAnimated) {
       mat.emissiveIntensity = lerp(0.3, 4.5, nightAmt);
     }
-    // Exposure raised at both ends (FINAL.md item 5) -- day was
-    // underexposed at 0.62, reading dim rather than "clearly daylight,
-    // everything legible" for what should be the strongest frame in the
-    // cycle. Night rises with it, proportionally, so the day/night
-    // difference achieved in the previous pass holds rather than flattens:
-    // night is still the darker end, just no longer near-black.
+
     this.renderer.toneMappingExposure = lerp(1.05, 0.72, nightAmt);
-    // The RoomEnvironment IBL contributes a constant ambient floor
-    // regardless of sun position. Scene-level environmentIntensity
-    // multiplies every material's own envMapIntensity globally. Day raised
-    // for a warmer, brighter first impression; night raised further off
-    // its near-zero floor so the neighbourhood reads as a whole scene
-    // again, not just the lamp-lit patches around each point light.
     this.scene.environmentIntensity = lerp(1.3, 0.18, nightAmt);
 
     const daySky = SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth);
     const sky = SKY_NIGHT.clone().lerp(daySky, sun.dayAmt);
-    // A paler, warmer band near the horizon than directly overhead -- the
-    // simple atmospheric-haze cue that turns a flat fill into a sense of
-    // distance behind the neighbourhood. Stronger by day (a bright haze
-    // line) than by night (still present, just a faint lift off the deep
-    // night blue rather than a bright band).
     const horizon = sky.clone().lerp(SKY_HORIZON, lerp(0.35, 0.62, sun.dayAmt));
     updateSkyGradient(this._skyGradient, sky, horizon);
 
-    // -- composed camera: fixed 3/4 shot of the whole plot, small user-driven orbit only --
+    // -- composed camera: target centered, lerped zoom & position --
     const az = this._orbit.base + this._orbit.delta;
     const fit = this._cameraFit || 1;
-    const camDist = (this._camDist || 14) * fit, camH = (this._camH || 8) * fit;
-    this.camera.position.set(Math.sin(az) * camDist, camH, Math.cos(az) * camDist);
+    const currentDist = (this._camDist || 14) * fit;
+    const currentH = ((this._camDist || 14) * 8 / 14) * fit;
+    this.camera.position.set(
+      this._lookAt.x + Math.sin(az) * currentDist,
+      this._lookAt.y + currentH,
+      this._lookAt.z + Math.cos(az) * currentDist
+    );
     this.camera.lookAt(this._lookAt);
 
     // -- sims: interpolate between stations within their own home building --
@@ -1029,6 +1095,18 @@ export class WorldRenderer {
   }
   destroy() {
     this._impl.destroy();
+  }
+  focusParcel(parcelId) {
+    if (this._impl.focusParcel) this._impl.focusParcel(parcelId);
+  }
+  focusPreset(presetText) {
+    if (this._impl.focusPreset) this._impl.focusPreset(presetText);
+  }
+  resetView() {
+    if (this._impl.resetView) this._impl.resetView();
+  }
+  setTimeOfDay(todKey) {
+    if (this._impl.setTimeOfDay) this._impl.setTimeOfDay(todKey);
   }
   get nextWorld() {
     return this._impl.nextWorld;
