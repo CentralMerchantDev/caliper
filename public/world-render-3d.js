@@ -23,6 +23,7 @@
 // fallback, reading the exact same placements/objectTypes data.
 import * as THREE from "three";
 import { RoomEnvironment } from "./vendor/three/addons/environments/RoomEnvironment.js";
+import { HDRLoader } from "./vendor/three/addons/loaders/HDRLoader.js";
 import { RoundedBoxGeometry } from "./vendor/three/addons/geometries/RoundedBoxGeometry.js";
 import { EffectComposer } from "./vendor/three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "./vendor/three/addons/postprocessing/RenderPass.js";
@@ -274,9 +275,39 @@ class Renderer3D {
     scene.background = this._skyGradient.tex;
     this.scene = scene;
 
+    // SHIP.md item 4: a real HDRI (CC0, Poly Haven -- see
+    // vendor/hdri/LICENSE.txt) drives ambient light and reflections
+    // instead of a synthetic RoomEnvironment -- the single largest free
+    // quality jump available for a scene this size, and the actual light
+    // information any real photo-real environment would use. Loaded
+    // async (HDRLoader.loadAsync can't block a synchronous constructor),
+    // so RoomEnvironment stays as the immediate fallback for the very
+    // first frame or two -- this constructor still returns with a valid,
+    // rendering scene either way, never a blank one waiting on a network
+    // fetch. Day/night still drives exposure and the sun/sky exactly as
+    // before; the HDRI only supplies the ambient/reflection floor.
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    pmrem.dispose();
+    new HDRLoader().load(
+      "./vendor/hdri/kloofendal_48d_partly_cloudy_1k.hdr",
+      (hdrTexture) => {
+        const envMap = pmrem.fromEquirectangular(hdrTexture).texture;
+        hdrTexture.dispose();
+        pmrem.dispose();
+        if (this._disposed) {
+          envMap.dispose();
+          return;
+        }
+        scene.environment = envMap;
+      },
+      undefined,
+      () => {
+        // A failed fetch (offline, blocked, whatever) keeps the
+        // RoomEnvironment fallback already in place -- fail open to a
+        // still-lit scene, never to a dark one.
+        pmrem.dispose();
+      },
+    );
 
     const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 90);
     this.camera = camera;

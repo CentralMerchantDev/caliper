@@ -1,0 +1,16 @@
+Asset: Kloofendal 48d Partly Cloudy (1K HDRI)
+Source: https://polyhaven.com/a/kloofendal_48d_partly_cloudy
+Author: Greg Zaal
+License: CC0 1.0 (Creative Commons Zero / Public Domain)
+  https://polyhaven.com/license
+  "Our assets are all licensed as CC0, which is effectively Public
+  Domain even in jurisdictions that do not support the Public Domain."
+
+Downloaded file: kloofendal_48d_partly_cloudy_1k.hdr
+Direct source URL: https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloofendal_48d_partly_cloudy_1k.hdr
+MD5: ee096fe9e26ce29d8f110b5ba0579011 (verified against Poly Haven's
+own published file hash at download time -- SHIP.md item 4)
+
+No attribution is legally required under CC0, but it's recorded here
+for provenance -- this is a real, deliberately-chosen asset, not a
+placeholder.
