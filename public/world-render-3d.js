@@ -799,102 +799,6 @@ class Renderer3D {
     pathEW.receiveShadow = true;
     this.neighbourhoodGroup.add(pathEW);
 
-    // -- Northern Knoll Windmill with Rotating Sails --
-    const windmillGroup = new THREE.Group();
-    windmillGroup.position.set(0, 0, -groundD / 2 + 0.8);
-    const millTower = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.55, 0.85, 2.6, 12),
-      stdMat({ color: PALETTE.stoneDark, roughness: 0.85 })
-    );
-    millTower.position.y = 1.3;
-    millTower.castShadow = true;
-    windmillGroup.add(millTower);
-    const millCap = new THREE.Mesh(
-      new THREE.ConeGeometry(0.65, 0.8, 12),
-      stdMat({ color: 0x4a3222, roughness: 0.75 })
-    );
-    millCap.position.y = 2.8;
-    millCap.castShadow = true;
-    windmillGroup.add(millCap);
-
-    const sailsGroup = new THREE.Group();
-    sailsGroup.position.set(0, 2.4, 0.58);
-    for (let i = 0; i < 4; i++) {
-      const sail = new THREE.Mesh(
-        new RoundedBoxGeometry(0.12, 1.4, 0.03, 1, 0.01),
-        stdMat({ color: 0x78350f, roughness: 0.7 })
-      );
-      sail.rotation.z = (i * Math.PI) / 2;
-      sail.position.set(Math.sin((i * Math.PI) / 2) * 0.7, Math.cos((i * Math.PI) / 2) * 0.7, 0);
-      sailsGroup.add(sail);
-    }
-    windmillGroup.add(sailsGroup);
-    this._windmillSails = sailsGroup;
-    this.neighbourhoodGroup.add(windmillGroup);
-
-    // -- Southern Sparkling River & Wooden Footbridge --
-    const riverGeo = new THREE.PlaneGeometry(groundW + 2, 2.6);
-    const riverMat = stdMat({
-      color: 0x38bdf8,
-      emissive: 0x0284c7,
-      emissiveIntensity: 0.35,
-      roughness: 0.1,
-      transparent: true,
-      opacity: 0.88
-    });
-    const river = new THREE.Mesh(riverGeo, riverMat);
-    river.rotation.x = -Math.PI / 2;
-    river.position.set(0, -0.08, groundD / 2 - 1.2);
-    this.neighbourhoodGroup.add(river);
-
-    // Rustic wooden footbridge
-    const bridgeGroup = new THREE.Group();
-    bridgeGroup.position.set(0, 0.05, groundD / 2 - 1.2);
-    const bridgePlank = new THREE.Mesh(
-      new RoundedBoxGeometry(2.6, 0.12, 2.8, 2, 0.04),
-      stdMat({ color: 0x78350f, roughness: 0.8 })
-    );
-    bridgePlank.castShadow = true;
-    bridgeGroup.add(bridgePlank);
-    const railMat = stdMat({ color: 0x451a03, roughness: 0.8 });
-    const railLeft = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.5, 2.8, 1, 0.02), railMat);
-    railLeft.position.set(-1.2, 0.3, 0);
-    const railRight = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.5, 2.8, 1, 0.02), railMat);
-    railRight.position.set(1.2, 0.3, 0);
-    bridgeGroup.add(railLeft);
-    bridgeGroup.add(railRight);
-    this.neighbourhoodGroup.add(bridgeGroup);
-
-    // -- Agricultural Wheat Patch & Scarecrow --
-    const farmPatch = new THREE.Mesh(
-      new RoundedBoxGeometry(3.6, 0.05, 2.6, 1, 0.02),
-      stdMat({ color: 0x5c3d2e, roughness: 0.95 })
-    );
-    farmPatch.position.set(-groundW / 2 + 2.4, -0.04, 0);
-    farmPatch.receiveShadow = true;
-    this.neighbourhoodGroup.add(farmPatch);
-
-    // Wheat stalks (12 stalks)
-    const wheatMat = stdMat({ color: 0xeab308, roughness: 0.7 });
-    for (let wx = -1.2; wx <= 1.2; wx += 0.8) {
-      for (let wz = -0.8; wz <= 0.8; wz += 0.8) {
-        const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.45, 6), wheatMat);
-        stalk.position.set(-groundW / 2 + 2.4 + wx, 0.2, wz);
-        stalk.castShadow = true;
-        this.neighbourhoodGroup.add(stalk);
-      }
-    }
-    // Scarecrow
-    const scarecrowGroup = new THREE.Group();
-    scarecrowGroup.position.set(-groundW / 2 + 2.4, 0.4, 0);
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 6), stdMat({ color: 0x78350f, roughness: 0.9 }));
-    post.castShadow = true;
-    scarecrowGroup.add(post);
-    const arms = new THREE.Mesh(new RoundedBoxGeometry(0.7, 0.05, 0.05, 1, 0.01), stdMat({ color: 0xb45309, roughness: 0.9 }));
-    arms.position.y = 0.25;
-    scarecrowGroup.add(arms);
-    this.neighbourhoodGroup.add(scarecrowGroup);
-
     // -- Perimeter Pine Trees --
     const pineMat = stdMat({ color: 0x15803d, roughness: 0.8 });
     const trunkMat = stdMat({ color: 0x451a03, roughness: 0.9 });
@@ -955,24 +859,6 @@ class Renderer3D {
     leftWall.position.set(-w / 2, 1.0, 0);
     leftWall.receiveShadow = true;
     group.add(leftWall);
-
-    // Gabled timber roof structure over wall tops with 0.25m overhanging eaves
-    const eaveMat = stdMat({ color: 0x4a3222, roughness: 0.8 });
-    const fasciaMat = stdMat({ color: 0x2b1d14, roughness: 0.7 });
-    const backEave = new THREE.Mesh(new RoundedBoxGeometry(w + 0.5, 0.12, 0.35, 1, 0.02), eaveMat);
-    backEave.position.set(0, 2.22, -d / 2);
-    backEave.castShadow = true;
-    group.add(backEave);
-    const leftEave = new THREE.Mesh(new RoundedBoxGeometry(0.35, 0.12, d + 0.5, 1, 0.02), eaveMat);
-    leftEave.position.set(-w / 2, 2.22, 0);
-    leftEave.castShadow = true;
-    group.add(leftEave);
-
-    // Gabled roof cap trim
-    const roofTrim = new THREE.Mesh(new RoundedBoxGeometry(w + 0.5, 0.18, 0.18, 1, 0.02), fasciaMat);
-    roofTrim.position.set(0, 2.34, -d / 2);
-    roofTrim.castShadow = true;
-    group.add(roofTrim);
 
     // Inset window sills and framed window panes with warm emissive tint (#ffaa33)
     const sillMat = stdMat({ color: 0x8c7a65, roughness: 0.85 });
@@ -1081,9 +967,13 @@ class Renderer3D {
     const trimColor = trimKey ? surfaceColor(this._surfaces, trimKey, PALETTE[trimKey]) : 0x8a5a34;
     this._buildSignPost(group, building.label, w / 2 + 0.3, d / 2 - 0.3, trimColor);
 
-    const interiorLight = new THREE.PointLight(0xffb066, 0.25, w * 0.9, 2);
+    // House 1 gets a small warm lantern instead of the former harsh,
+    // oversized interior/pillar light. Other parcels retain their subtle
+    // ambient interior glow.
+    const isHouseOne = building.id === "dwelling-1";
+    const interiorLight = new THREE.PointLight(isHouseOne ? 0xffaa44 : 0xffb066, isHouseOne ? 0.8 : 0.25, isHouseOne ? 6 : w * 0.9, 2);
     interiorLight.position.set(0, 1.9, 0);
-    interiorLight.userData.baseIntensity = 0.25;
+    interiorLight.userData.baseIntensity = isHouseOne ? 0.8 : 0.25;
     group.add(interiorLight);
     this._pointLights.push(interiorLight);
   }
@@ -1597,10 +1487,6 @@ class Renderer3D {
     this.audio.updateAmbient(nightAmt);
     if (this.spatialDiff && this._diffEmeraldMat) {
       this._diffEmeraldMat.emissiveIntensity = 0.7 + Math.sin(performance.now() / 200) * 0.35;
-    }
-
-    if (this._windmillSails && !this.reducedMotion) {
-      this._windmillSails.rotation.z += 0.015;
     }
 
     // -- Smoke Particles Update --
