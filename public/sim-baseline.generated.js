@@ -210,8 +210,8 @@ function initialWorld() {
     surfaces: /*@DATA:SURFACES:BEGIN*/{
       ground: { material: "grass", color: "#6f6656" },
       path: { material: "gravel", color: "#bfb49c" },
-      floor: { material: "wood", color: "#a79c85" },
-      wall: { material: "plaster", color: "#a5997e" },
+      floor: { material: "wood", color: "#9c7a52" },
+      wall: { material: "plaster", color: "#b8ad93" },
       trimShop: { material: "paint", color: "#9a5a3c" },
       trimWorkshop: { material: "paint", color: "#5c6b5a" },
     }/*@DATA:SURFACES:END*/,

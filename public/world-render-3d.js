@@ -64,8 +64,8 @@ const GRID_UNIT_Z = 4.5;
 // object type's own recipe in src/simBaseline.ts, since that data is what
 // actually needs to be addressable and editable, not a renderer constant.
 const PALETTE = {
-  floor: 0xa79c85,
-  wall: 0xa5997e,
+  floor: 0x9c7a52,
+  wall: 0xb8ad93,
   ground: 0x6f6656,
   path: 0xbfb49c,
   trimShop: 0x9a5a3c,
@@ -168,6 +168,7 @@ const SUN_COLOR_NIGHT = new THREE.Color(0x5b6ea8);
 const SKY_DAY = new THREE.Color(0xf3ead6);
 const SKY_DUSK = new THREE.Color(0xe7c9a0);
 const SKY_NIGHT = new THREE.Color(0x2b3350);
+const SKY_HORIZON = new THREE.Color(0xfdf3df);
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
@@ -177,6 +178,33 @@ function lerp(a, b, t) {
 // contribution stays tame by default everywhere.
 function stdMat(opts) {
   return new THREE.MeshStandardMaterial({ envMapIntensity: 0.15, ...opts });
+}
+
+/** A vertical two-stop gradient, redrawn in place every frame as the sky
+ * colours shift with the clock -- cheap (a handful of pixels) and it's what
+ * turns a flat single-colour background into an actual sense of a horizon.
+ * LAST.md item 5: "the 3d and graphics are still kind of weak" -- a flat
+ * background behind a fixed 3/4 shot with a lot of open sky was a big part
+ * of why the scene read as plain no matter how the ground-level materials
+ * varied. */
+function makeSkyGradientTexture() {
+  const w = 4, h = 128;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return { canvas: c, ctx: c.getContext("2d"), tex };
+}
+
+function updateSkyGradient(sky, topColor, horizonColor) {
+  const { canvas, ctx, tex } = sky;
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  g.addColorStop(0, `#${topColor.getHexString()}`);
+  g.addColorStop(1, `#${horizonColor.getHexString()}`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  tex.needsUpdate = true;
 }
 
 /** A soft radial-gradient disc, reused (scaled per-instance) as a cheap
@@ -236,7 +264,9 @@ class Renderer3D {
     this.renderer = renderer;
 
     const scene = new THREE.Scene();
-    scene.background = SKY_DAY.clone();
+    this._skyGradient = makeSkyGradientTexture();
+    updateSkyGradient(this._skyGradient, SKY_DAY, SKY_DAY);
+    scene.background = this._skyGradient.tex;
     this.scene = scene;
 
     const pmrem = new THREE.PMREMGenerator(renderer);
@@ -682,7 +712,13 @@ class Renderer3D {
 
     const daySky = SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth);
     const sky = SKY_NIGHT.clone().lerp(daySky, sun.dayAmt);
-    this.scene.background = sky.clone();
+    // A paler, warmer band near the horizon than directly overhead -- the
+    // simple atmospheric-haze cue that turns a flat fill into a sense of
+    // distance behind the neighbourhood. Stronger by day (a bright haze
+    // line) than by night (still present, just a faint lift off the deep
+    // night blue rather than a bright band).
+    const horizon = sky.clone().lerp(SKY_HORIZON, lerp(0.35, 0.62, sun.dayAmt));
+    updateSkyGradient(this._skyGradient, sky, horizon);
 
     // -- composed camera: fixed 3/4 shot of the whole plot, small user-driven orbit only --
     const az = this._orbit.base + this._orbit.delta;
