@@ -59,7 +59,7 @@ export interface Placement {
 export type WorldEditOp =
   | { op: "addObjectType"; key: string; definition: ObjectTypeDefinition }
   | { op: "addPlacement"; placement: Placement }
-  | { op: "overridePlacement"; placementId: string; overrides: { color?: string } }
+  | { op: "overridePlacement"; placementId: string; overrides: { color?: string; plot?: { x: number; y: number } } }
   | { op: "setSurfaceField"; surfaceKey: string; field: "material" | "color"; value: string };
 
 export interface WorldEdit {
@@ -83,7 +83,7 @@ export const WORLD_EDIT_SCHEMA = {
           definitionJson: { type: ["string", "null"], description: "addObjectType only -- JSON-encoded ObjectTypeDefinition." },
           placementJson: { type: ["string", "null"], description: "addPlacement only -- JSON-encoded Placement." },
           placementId: { type: ["string", "null"], description: "overridePlacement only -- an existing placement's id." },
-          overridesJson: { type: ["string", "null"], description: "overridePlacement only -- JSON-encoded { color? }." },
+          overridesJson: { type: ["string", "null"], description: "overridePlacement only -- JSON-encoded { color?, plot?: {x,y} }. Also how you reposition an existing placement." },
           surfaceKey: { type: ["string", "null"], description: "setSurfaceField only." },
           field: { type: ["string", "null"], enum: ["material", "color", null], description: "setSurfaceField only." },
           value: { type: ["string", "null"], description: "setSurfaceField only." },
@@ -133,7 +133,7 @@ export function parseRawWorldEdit(raw: { ops: unknown[] }): WorldEdit {
       case "overridePlacement": {
         if (typeof o.placementId !== "string" || !o.placementId) throw new Error(`op[${i}] overridePlacement: "placementId" is missing`);
         if (typeof o.overridesJson !== "string") throw new Error(`op[${i}] overridePlacement: "overridesJson" is missing`);
-        let overrides: { color?: string };
+        let overrides: { color?: string; plot?: { x: number; y: number } };
         try {
           overrides = JSON.parse(o.overridesJson);
         } catch (e) {
@@ -283,9 +283,18 @@ export function validateWorldEdit(world: LiveWorld, edit: WorldEdit): { valid: t
         if (!placementIds.has(op.placementId)) return { valid: false, reason: `op[${i}] overridePlacement: placement id "${op.placementId}" does not exist` };
         const keys = Object.keys(op.overrides ?? {});
         if (keys.length === 0) return { valid: false, reason: `op[${i}] overridePlacement: overrides is empty` };
-        const badKey = keys.find((k) => k !== "color");
-        if (badKey) return { valid: false, reason: `op[${i}] overridePlacement: overrides has unsupported field "${badKey}" -- only color is supported` };
+        // FOUNDATION-2 re-measurement found this the hard way: a real fix
+        // call, asked to correct a placement's position, naturally tried
+        // addPlacement again with the same id (correctly rejected as a
+        // duplicate) because there was no way to express "reposition" --
+        // plot is a property of a placement the same way colour is, so it
+        // belongs in overridePlacement too, not a new op.
+        const badKey = keys.find((k) => k !== "color" && k !== "plot");
+        if (badKey) return { valid: false, reason: `op[${i}] overridePlacement: overrides has unsupported field "${badKey}" -- only color and plot are supported` };
         if (op.overrides.color !== undefined && !HEX_COLOR.test(op.overrides.color)) return { valid: false, reason: `op[${i}] overridePlacement: overrides.color must be a "#hex" string` };
+        if (op.overrides.plot !== undefined && (typeof op.overrides.plot.x !== "number" || typeof op.overrides.plot.y !== "number")) {
+          return { valid: false, reason: `op[${i}] overridePlacement: overrides.plot must be { x: number, y: number }` };
+        }
         break;
       }
       case "setSurfaceField": {
@@ -339,7 +348,18 @@ export function applyWorldEdit(currentSource: string, edit: WorldEdit): string {
       placements.push(op.placement);
     } else if (op.op === "overridePlacement") {
       const idx = placements.findIndex((p) => p.id === op.placementId);
-      placements[idx] = { ...placements[idx], overrides: { ...placements[idx].overrides, ...op.overrides } };
+      // plot replaces the placement's own top-level field (that's the
+      // shape every renderer already reads for position); colour merges
+      // into .overrides (that's the shape every renderer already reads
+      // for a colour override). Two different destinations for one op,
+      // both matching the data shape that already exists -- no renderer
+      // change needed for either.
+      const { color, plot } = op.overrides;
+      placements[idx] = {
+        ...placements[idx],
+        ...(plot !== undefined ? { plot } : {}),
+        ...(color !== undefined ? { overrides: { ...placements[idx].overrides, color } } : {}),
+      };
     } else if (op.op === "setSurfaceField") {
       surfaces[op.surfaceKey] = { ...surfaces[op.surfaceKey], [op.field]: op.value };
     }

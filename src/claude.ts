@@ -688,8 +688,11 @@ const WORLD_EDIT_SYSTEM_PROMPT =
   "never a regenerated file. The world is a type registry (objectTypes) and a placement list; describe " +
   "exactly what changes as one or more operations: addObjectType (a genuinely new type plus its geometry " +
   "recipe, built from primitive shapes -- box, cylinder, sphere, icosahedron), addPlacement (an instance of " +
-  "an existing type, or one you are adding in this same edit), overridePlacement (a colour override on one " +
-  "existing placement, by its real id), or setSurfaceField (a surface's material or colour, by its real " +
+  "an existing type, or one you are adding in this same edit), overridePlacement (a colour and/or position " +
+  "override on one existing placement, by its real id -- this is also how you REPOSITION something already " +
+  "placed; there is no separate move/remove op, express a correction to an existing placement's colour or " +
+  "position as an overridePlacement, never by adding a new placement with the same id), or setSurfaceField " +
+  "(a surface's material or colour, by its real " +
   "key). Return ONLY the ops array via the schema. Every type key, placement id, and surface key you " +
   "reference must be a REAL one from the current world shown to you, or one you are adding in this same " +
   "edit -- never invent or guess a name.";

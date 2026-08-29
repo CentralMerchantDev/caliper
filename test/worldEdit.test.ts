@@ -90,6 +90,36 @@ test("overridePlacement: a colour change applies to the named placement only", (
   assert.equal(world.placements.find((p: any) => p.id === "lamp-2").overrides, undefined, "only the named placement changes");
 });
 
+test("overridePlacement: a position change (repositioning, the real fix scenario this was extended for) replaces plot without touching colour", () => {
+  const edit: WorldEdit = { ops: [{ op: "overridePlacement", placementId: "lamp-1", overrides: { plot: { x: 2.4, y: 2 } } }] };
+  const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, edit);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const world = loadWorld(result.source);
+  const lamp = world.placements.find((p: any) => p.id === "lamp-1");
+  assert.deepEqual(lamp.plot, { x: 2.4, y: 2 });
+  assert.equal(lamp.overrides, undefined, "a plot-only override must not add an empty overrides object");
+});
+
+test("overridePlacement: colour and position can change together in one op", () => {
+  const edit: WorldEdit = { ops: [{ op: "overridePlacement", placementId: "lamp-1", overrides: { color: "#112233", plot: { x: 0.9, y: 1.1 } } }] };
+  const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, edit);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const world = loadWorld(result.source);
+  const lamp = world.placements.find((p: any) => p.id === "lamp-1");
+  assert.deepEqual(lamp.plot, { x: 0.9, y: 1.1 });
+  assert.equal(lamp.overrides.color, "#112233");
+});
+
+test("guardrail: overridePlacement.plot with a non-numeric coordinate is rejected", () => {
+  const world = loadWorld(SIM_BASELINE_SOURCE);
+  const edit: WorldEdit = { ops: [{ op: "overridePlacement", placementId: "lamp-1", overrides: { plot: { x: "far", y: 2 } as any } }] };
+  const v = validateWorldEdit(world, edit);
+  assert.equal(v.valid, false);
+  if (!v.valid) assert.match(v.reason, /overrides\.plot must be/);
+});
+
 test("setSurfaceField: a ground colour change applies without touching material", () => {
   const edit: WorldEdit = { ops: [{ op: "setSurfaceField", surfaceKey: "ground", field: "color", value: "#3a4a2e" }] };
   const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, edit);
