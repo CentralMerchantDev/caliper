@@ -302,6 +302,27 @@ function makeContactShadowTexture() {
   return tex;
 }
 
+function makeThoughtBubbleTexture() {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 128;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+  ctx.beginPath();
+  ctx.arc(64, 64, 52, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  ctx.font = "44px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("💭", 64, 66);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 class AudioSynth {
   constructor() {
     this.ctx = null;
@@ -370,6 +391,23 @@ class AudioSynth {
     } catch (_) {}
   }
 
+  playErrorBuzz() {
+    if (!this.enabled || !this.ctx) return;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(120, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(70, this.ctx.currentTime + 0.18);
+      gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.18);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.18);
+    } catch (_) {}
+  }
+
   startAmbient() {
     if (!this.ctx || this.noiseNode) return;
     try {
@@ -433,6 +471,8 @@ class Renderer3D {
 
     this._fireflies = [];
     this._dustParticles = [];
+    this._collisionBoxes = [];
+    this._thoughtBubbles = [];
 
     this._isDroneTour = false;
     this._tourStartTime = 0;
@@ -639,6 +679,25 @@ class Renderer3D {
     }
 
     this._neighbourhoodBuilt = true;
+    if (!this._thoughtBubbles || this._thoughtBubbles.length === 0) {
+      this._thoughtBubbles = [];
+      const bubbleTex = makeThoughtBubbleTexture();
+      const bubbleMat = new THREE.SpriteMaterial({ map: bubbleTex, transparent: true, opacity: 0.9, depthTest: false });
+      const positions = [
+        { id: "workshop", pos: new THREE.Vector3(-4.2, 3.2, -4.2) },
+        { id: "shop", pos: new THREE.Vector3(4.2, 3.2, -3.8) },
+        { id: "dwelling-2", pos: new THREE.Vector3(-4.2, 3.2, 4.2) },
+        { id: "dwelling-1", pos: new THREE.Vector3(4.2, 3.2, 3.8) },
+      ];
+      positions.forEach(({ id, pos }) => {
+        const sprite = new THREE.Sprite(bubbleMat);
+        sprite.position.copy(pos);
+        sprite.scale.set(0.9, 0.9, 0.9);
+        sprite.userData = { isThoughtBubble: true, parcelId: id, basePosY: pos.y, phase: Math.random() * Math.PI * 2 };
+        this.scene.add(sprite);
+        this._thoughtBubbles.push(sprite);
+      });
+    }
     this._fitCamera(buildings, centerX, centerZ, scaleFor);
   }
 
@@ -964,6 +1023,38 @@ class Renderer3D {
     this.resetView();
   }
 
+  showCollisionBox(targetLocation = "outdoors", boxSize = { w: 4, d: 3, h: 2.2 }) {
+    let cx = 0, cz = 0;
+    if (targetLocation && targetLocation !== "outdoors" && this._buildingsById[targetLocation]) {
+      const b = this._buildingsById[targetLocation];
+      const pos = plotToWorldXZ(b.plot, this._plotCenter.x, this._plotCenter.z);
+      cx = pos.x;
+      cz = pos.z;
+    } else {
+      cx = 0;
+      cz = 0;
+    }
+
+    const geo = new THREE.BoxGeometry(boxSize.w, boxSize.h, boxSize.d);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xef4444,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(cx, boxSize.h / 2 + 0.05, cz);
+    this.scene.add(mesh);
+
+    this._collisionBoxes.push({
+      mesh,
+      startTime: performance.now(),
+      duration: 2000,
+    });
+
+    this.audio.playErrorBuzz();
+  }
+
   _bindOrbitControls() {
     const canvas = this.canvas;
     let clickStartX = 0, clickStartY = 0;
@@ -1016,6 +1107,29 @@ class Renderer3D {
     const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     this._mouse.set(x, y);
     this._raycaster.setFromCamera(this._mouse, this.camera);
+
+    if (this._thoughtBubbles && this._thoughtBubbles.length > 0) {
+      const bubbleHits = this._raycaster.intersectObjects(this._thoughtBubbles);
+      if (bubbleHits.length > 0) {
+        const hitBubble = bubbleHits[0].object;
+        if (hitBubble.userData && hitBubble.userData.parcelId) {
+          const parcelId = hitBubble.userData.parcelId;
+          const bGroup = this._buildingGroupsById[parcelId];
+          const b = (this.nextWorld.buildings || []).find((item) => item.id === parcelId);
+          const bPlacements = (this.nextWorld.placements || []).filter((p) => p.location === parcelId).map((p) => p.type);
+          const bSims = (this.nextWorld.sims || []).filter((s) => s.home === parcelId).map((s) => s.id);
+          this.focusParcel(parcelId);
+          this.onInspect({
+            parcelId,
+            label: b ? b.label : (bGroup ? bGroup.userData.label : parcelId),
+            type: b ? b.type : "dwelling",
+            occupants: bSims.length ? bSims.join(", ") : "None assigned",
+            contents: bPlacements.length ? bPlacements.join(", ") : "Standard fixtures",
+          });
+          return;
+        }
+      }
+    }
 
     const intersects = this._raycaster.intersectObjects(this.neighbourhoodGroup.children, true);
     if (intersects.length === 0) return;
@@ -1300,6 +1414,31 @@ class Renderer3D {
       });
     }
 
+    // -- Thought Bubbles Bobbing --
+    if (this._thoughtBubbles && this._thoughtBubbles.length > 0) {
+      const nowSec = performance.now() / 1000;
+      this._thoughtBubbles.forEach((tb) => {
+        tb.position.y = tb.userData.basePosY + Math.sin(nowSec * 2.2 + tb.userData.phase) * 0.08;
+      });
+    }
+
+    // -- Collision Boxes Fade --
+    if (this._collisionBoxes && this._collisionBoxes.length > 0) {
+      const nowMs = performance.now();
+      this._collisionBoxes = this._collisionBoxes.filter((cb) => {
+        const elapsed = nowMs - cb.startTime;
+        const progress = Math.min(1, elapsed / cb.duration);
+        if (progress >= 1) {
+          this.scene.remove(cb.mesh);
+          cb.mesh.geometry.dispose();
+          cb.mesh.material.dispose();
+          return false;
+        }
+        cb.mesh.material.opacity = lerp(0.85, 0, progress);
+        return true;
+      });
+    }
+
     // -- composed camera: target centered, lerped zoom & position or Drone Tour --
     if (this._isDroneTour && !this.reducedMotion) {
       const elapsed = performance.now() - this._tourStartTime;
@@ -1442,6 +1581,9 @@ export class WorldRenderer {
   }
   playDropThudSound() {
     if (this._impl.audio) this._impl.audio.playDropThud();
+  }
+  showCollisionBox(targetLocation, boxSize) {
+    if (this._impl.showCollisionBox) this._impl.showCollisionBox(targetLocation, boxSize);
   }
   get nextWorld() {
     return this._impl.nextWorld;

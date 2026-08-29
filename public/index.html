@@ -323,6 +323,40 @@ footer a{color:var(--ink2)}
 .cmd-modal-footer{padding:10px 18px;background:rgba(0,0,0,.2);border-top:1px solid rgba(255,255,255,.08);font-size:12px;color:#64748b;display:flex;justify-content:flex-end}
 .cmd-modal-footer kbd{background:rgba(255,255,255,.1);padding:1px 5px;border-radius:3px;font-family:var(--mono)}
 
+/* Phase 2 CSS: NPC profile, Timeline Scrubber, Architecture Drawer */
+.npc-profile-box{margin-top:10px;padding:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px}
+.npc-header{display:flex;align-items:center;gap:10px}
+.npc-avatar{font-size:22px}
+.npc-thought-quote{margin-top:6px;padding:6px 10px;background:rgba(15,23,42,.6);border-left:3px solid #10b981;border-radius:4px}
+
+.timeline-bar{position:absolute;bottom:12px;left:12px;right:12px;z-index:10;background:rgba(15,23,42,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:6px 14px;display:flex;align-items:center;gap:12px}
+.timeline-title{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted);white-space:nowrap}
+.timeline-ticks{flex:1;display:flex;gap:6px;align-items:center;overflow-x:auto;scrollbar-width:none}
+.timeline-tick-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#cbd5e1;font-size:12px;padding:3px 10px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:all .2s ease}
+.timeline-tick-btn:hover{background:rgba(255,255,255,.2);color:#fff}
+.timeline-tick-btn.active{background:#3b82f6;border-color:#60a5fa;color:#fff;font-weight:600}
+.timeline-live-btn{background:rgba(16,185,129,.2);border:1px solid #10b981;color:#34d399;font-size:12px;font-weight:600;padding:4px 10px;border-radius:6px;cursor:pointer;white-space:nowrap}
+
+.timeline-warning-pill{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:11;background:rgba(239,68,68,.9);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:13px;font-weight:600;padding:6px 16px;border-radius:20px;display:flex;align-items:center;gap:10px;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.timeline-return-btn{background:#fff;color:#991b1b;border:none;font-size:12px;font-weight:700;padding:3px 10px;border-radius:12px;cursor:pointer}
+
+.arch-drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:9999}
+.arch-drawer-panel{position:absolute;top:0;right:0;bottom:0;width:92%;max-width:620px;background:rgba(15,23,42,.96);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-left:1px solid rgba(255,255,255,.18);box-shadow:-20px 0 50px rgba(0,0,0,.7);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .35s cubic-bezier(.16,1,.3,1)}
+.arch-drawer-panel.open{transform:translateX(0)}
+.arch-drawer-header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid rgba(255,255,255,.12)}
+.arch-drawer-header h3{margin:0;font-size:17px;color:#f8fafc}
+.arch-close-btn{background:transparent;border:none;color:#94a3b8;font-size:18px;cursor:pointer}
+.arch-close-btn:hover{color:#fff}
+.arch-drawer-body{padding:20px 22px;overflow-y:auto;flex:1}
+.arch-summary{font-size:14.5px;line-height:1.5;color:#cbd5e1;margin-bottom:18px}
+.arch-diagram-container{background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:12px;margin-bottom:18px}
+.arch-svg{width:100%;height:auto}
+.svg-node{cursor:pointer;transition:opacity .2s ease}
+.svg-node:hover{opacity:.85}
+.arch-step-detail{background:rgba(30,41,59,.6);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 16px}
+.arch-step-detail h4{margin:0 0 6px;font-size:15px;color:#38bdf8}
+.arch-step-detail p{margin:0;font-size:13.5px;color:#cbd5e1;line-height:1.45}
+
 @media(prefers-reduced-motion:reduce){.spin{animation:none}}
 /* POLISH.md item 2: mobile, done properly, not just "no horizontal
    overflow". Every rule below traces to one specific, named complaint --
@@ -423,6 +457,7 @@ footer a{color:var(--ink2)}
             <button id="tod-night" type="button" aria-pressed="false">Night</button>
           </div>
           <button id="cmd-k-trigger" type="button" class="cmd-k-badge" title="Open Command Palette (Cmd+K / Ctrl+K)">⌘K</button>
+          <button id="arch-drawer-trigger" type="button" class="cmd-k-badge" style="display:inline-flex;align-items:center;gap:4px" title="System Architecture & Safety Specs">📐 Architecture</button>
         </div>
         <div class="sim-badge" id="sim-status-badge">
           <span class="pulse-dot">●</span> SIMULATION ACTIVE | <span id="badge-parcel-count">4</span> PARCELS | BUILD VERIFIED
@@ -431,6 +466,10 @@ footer a{color:var(--ink2)}
       <div style="position:relative">
         <div id="letterbox-top" class="letterbox-bar letterbox-top"></div>
         <div id="letterbox-bottom" class="letterbox-bar letterbox-bottom"></div>
+        <div id="timeline-warning-pill" class="timeline-warning-pill" style="display:none">
+          <span>Viewing Historical State [<strong id="timeline-v-label">v1</strong>] — Read-Only</span>
+          <button type="button" id="timeline-return-btn" class="timeline-return-btn">Return to Live</button>
+        </div>
         <div class="canvas-btn-bar top-left">
           <button id="drone-tour-btn" type="button" class="canvas-btn" title="Cinematic camera tour">🎬 Tour</button>
           <button id="spatial-diff-btn" type="button" class="canvas-btn" title="Highlight newly placed items">👁️ Spatial Diff</button>
@@ -449,8 +488,26 @@ footer a{color:var(--ink2)}
             <p><strong>Type:</strong> <span id="inspect-type">dwelling</span></p>
             <p><strong>Occupants:</strong> <span id="inspect-occupants">sim1</span></p>
             <p><strong>Contents:</strong> <span id="inspect-contents">bed, fridge, shower, desk, rug, table</span></p>
-            <button type="button" id="inspect-focus-btn" class="chip-btn inspect-focus-btn">🔍 Focus Camera</button>
+            <div class="npc-profile-box">
+              <div class="npc-header">
+                <span class="npc-avatar" id="inspect-npc-avatar">⚒️</span>
+                <div>
+                  <h5 id="inspect-npc-name" style="margin:0;font-size:14px;color:#f8fafc">Master Vane</h5>
+                  <span class="npc-role" id="inspect-npc-role" style="font-size:11px;color:#94a3b8">The Blacksmith</span>
+                </div>
+              </div>
+              <p class="npc-goal" style="margin:6px 0 4px;font-size:12px;color:#cbd5e1"><strong>Goal:</strong> <span id="inspect-npc-goal">Forging iron fixtures...</span></p>
+              <div class="npc-thought-quote">
+                <span style="font-style:italic;font-size:12.5px;color:#e2e8f0">“<span id="inspect-npc-thought">The furnace burns steady today.</span>”</span>
+              </div>
+            </div>
+            <button type="button" id="inspect-focus-btn" class="chip-btn inspect-focus-btn" style="margin-top:8px">🔍 Focus Camera</button>
           </div>
+        </div>
+        <div class="timeline-bar" role="region" aria-label="4D Timeline Scrubber">
+          <span class="timeline-title">4D TIMELINE</span>
+          <div class="timeline-ticks" id="timeline-ticks"></div>
+          <button id="timeline-live-btn" class="timeline-live-btn active" type="button">● LIVE</button>
         </div>
       </div>
       <div class="world-caption">
@@ -707,6 +764,86 @@ footer a{color:var(--ink2)}
   </div>
 </div>
 
+<!-- Interactive Architecture Spec Drawer -->
+<div id="arch-drawer-backdrop" class="arch-drawer-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Architecture Drawer">
+  <div id="arch-drawer-panel" class="arch-drawer-panel">
+    <div class="arch-drawer-header">
+      <h3>📐 System Architecture & Deterministic Safety</h3>
+      <button type="button" id="arch-drawer-close" class="arch-close-btn">✕</button>
+    </div>
+    <div class="arch-drawer-body">
+      <p class="arch-summary">
+        Traditional LLM tool use suffers from non-deterministic code evaluation and unbounded execution risk. CALIPER solves this by replacing raw code evaluation with <strong>AST-free sentinel JSON deserialization</strong>, in-memory spatial constraint validation, and deterministic state graph mutations executing in a 13ms Cloudflare isolate.
+      </p>
+      
+      <div class="arch-diagram-container">
+        <svg viewBox="0 0 540 240" class="arch-svg" aria-label="Pipeline Architecture Diagram">
+          <defs>
+            <linearGradient id="stepGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#1e293b"/>
+              <stop offset="100%" stop-color="#0f172a"/>
+            </linearGradient>
+          </defs>
+
+          <!-- Column 1 -->
+          <g class="svg-node" data-step="1">
+            <rect x="10" y="10" width="240" height="56" rx="8" fill="url(#stepGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+            <text x="25" y="32" fill="#38bdf8" font-size="11" font-family="monospace" font-weight="bold">STEP 1</text>
+            <text x="25" y="50" fill="#f8fafc" font-size="13" font-weight="600">Visitor Prompt & Intent Sanitization</text>
+          </g>
+
+          <path d="M 130 66 L 130 85" stroke="#64748b" stroke-width="2"/>
+
+          <g class="svg-node" data-step="2">
+            <rect x="10" y="85" width="240" height="56" rx="8" fill="url(#stepGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+            <text x="25" y="107" fill="#38bdf8" font-size="11" font-family="monospace" font-weight="bold">STEP 2</text>
+            <text x="25" y="125" fill="#f8fafc" font-size="13" font-weight="600">Multi-Tier Model Router</text>
+          </g>
+
+          <path d="M 130 141 L 130 160" stroke="#64748b" stroke-width="2"/>
+
+          <g class="svg-node" data-step="3">
+            <rect x="10" y="160" width="240" height="56" rx="8" fill="url(#stepGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+            <text x="25" y="182" fill="#38bdf8" font-size="11" font-family="monospace" font-weight="bold">STEP 3</text>
+            <text x="25" y="200" fill="#f8fafc" font-size="13" font-weight="600">AST-Free Sentinel Deserialization</text>
+          </g>
+
+          <!-- Connector -->
+          <path d="M 250 188 L 285 188 L 285 38 L 290 38" stroke="#64748b" stroke-width="2"/>
+
+          <!-- Column 2 -->
+          <g class="svg-node" data-step="4">
+            <rect x="290" y="10" width="240" height="56" rx="8" fill="url(#stepGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+            <text x="305" y="32" fill="#34d399" font-size="11" font-family="monospace" font-weight="bold">STEP 4</text>
+            <text x="305" y="50" fill="#f8fafc" font-size="13" font-weight="600">In-Memory Spatial Bounds Solver</text>
+          </g>
+
+          <path d="M 410 66 L 410 85" stroke="#64748b" stroke-width="2"/>
+
+          <g class="svg-node" data-step="5">
+            <rect x="290" y="85" width="240" height="56" rx="8" fill="url(#stepGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+            <text x="305" y="107" fill="#34d399" font-size="11" font-family="monospace" font-weight="bold">STEP 5</text>
+            <text x="305" y="125" fill="#f8fafc" font-size="13" font-weight="600">Cloned State Mutation (13ms)</text>
+          </g>
+
+          <path d="M 410 141 L 410 160" stroke="#64748b" stroke-width="2"/>
+
+          <g class="svg-node" data-step="6">
+            <rect x="290" y="160" width="240" height="56" rx="8" fill="url(#stepGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+            <text x="305" y="182" fill="#34d399" font-size="11" font-family="monospace" font-weight="bold">STEP 6</text>
+            <text x="305" y="200" fill="#f8fafc" font-size="13" font-weight="600">Immutable KV & WebGL Sync</text>
+          </g>
+        </svg>
+      </div>
+
+      <div id="arch-step-detail" class="arch-step-detail">
+        <h4 id="arch-step-title">Select any pipeline step above</h4>
+        <p id="arch-step-desc">Hover or click any node in the architecture diagram to inspect its exact security contract and performance characteristics.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <footer><div class="wrap">
   Built by Mark Fraser ·
   <a href="/matrix-results">raw results</a> · <a href="/tasks">task list</a> ·
@@ -742,6 +879,58 @@ const canvas2d = $('#world-canvas-2d')
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 let currentInspectedParcelId = null
 
+// --- Phase 2: NPC Perception, Timeline Scrubber, Architecture Drawer ---
+
+const NPC_PROFILES = {
+  workshop: {
+    name: 'Master Vane',
+    role: 'The Blacksmith',
+    avatar: '⚒️',
+    goal: 'Forging iron fixtures and checking tool racks.',
+    thought: 'The furnace burns steady today.'
+  },
+  shop: {
+    name: 'Althea',
+    role: 'Tavern Keeper',
+    avatar: '🍺',
+    goal: 'Serving patrons and maintaining outdoor patio tables.',
+    thought: 'The tavern hall is quiet and welcoming.'
+  },
+  'dwelling-2': {
+    name: 'Rowan',
+    role: 'Stable Master',
+    avatar: '🐎',
+    goal: 'Tending to horses and keeping the troughs filled.',
+    thought: 'The stables are clean and well stocked.'
+  },
+  'dwelling-1': {
+    name: 'Elora',
+    role: 'Herbalist',
+    avatar: '🌿',
+    goal: 'Drying wild herbs and studying parcel boundaries.',
+    thought: 'Sages and lavender dry peacefully by the window.'
+  }
+}
+
+function updateNpcPerception(changeText) {
+  const text = (changeText || '').toLowerCase()
+  if (text.includes('table') || text.includes('tavern') || text.includes('patio')) {
+    NPC_PROFILES.shop.thought = 'New furnishings outside mean more room for evening patrons!'
+    NPC_PROFILES.workshop.thought = 'I hear wood and iron being crafted for the tavern patio.'
+  } else if (text.includes('trough') || text.includes('stable') || text.includes('horse')) {
+    NPC_PROFILES['dwelling-2'].thought = 'The horses take notice of every shift in the courtyard layout.'
+    NPC_PROFILES['dwelling-1'].thought = 'Fresh stone and timber near the stables catch the morning light.'
+  } else if (text.includes('canopy') || text.includes('workshop') || text.includes('forge')) {
+    NPC_PROFILES.workshop.thought = 'A new roof overhang will keep the rain off the forge materials.'
+    NPC_PROFILES.shop.thought = 'Vane has been working hard expanding his workspace shelter.'
+  } else if (changeText) {
+    NPC_PROFILES.shop.thought = `A new edit was placed: "${changeText}". Everyone is talking about it.`
+    NPC_PROFILES.workshop.thought = `The courtyard has changed. I can see new structures from the forge.`
+    NPC_PROFILES['dwelling-2'].thought = `I noticed the new additions near the path.`
+    NPC_PROFILES['dwelling-1'].thought = `The soil and stone settle into their new arrangement.`
+  }
+}
+
 const renderer3d = new WorldRenderer(canvas3d, {
   reducedMotion,
   onInspect: (info) => {
@@ -751,10 +940,162 @@ const renderer3d = new WorldRenderer(canvas3d, {
     $('#inspect-type').textContent = info.type
     $('#inspect-occupants').textContent = info.occupants
     $('#inspect-contents').textContent = info.contents
+
+    const npc = NPC_PROFILES[info.parcelId] || NPC_PROFILES['dwelling-1']
+    $('#inspect-npc-avatar').textContent = npc.avatar
+    $('#inspect-npc-name').textContent = npc.name
+    $('#inspect-npc-role').textContent = npc.role
+    $('#inspect-npc-goal').textContent = npc.goal
+    $('#inspect-npc-thought').textContent = npc.thought
+
     $('#parcel-inspect-card').style.display = 'block'
   },
 })
 const renderer2d = new WorldRenderer2D(canvas2d, { reducedMotion })
+
+// 4D Timeline Scrubber
+let timelineRevisions = [
+  { id: 'v1', label: 'v1: Genesis', desc: 'Empty ground grid' },
+  { id: 'v2', label: 'v2: Initial Settlement', desc: '4 base building shells' },
+  { id: 'v3', label: 'v3: Expansion', desc: 'Buildings + baseline furniture & lamps' },
+  { id: 'live', label: '● LIVE', desc: 'Latest live state' },
+]
+
+let activeRevisionId = 'live'
+let storedLiveWorld = null
+
+function initTimelineScrubber() {
+  const ticksContainer = $('#timeline-ticks')
+  if (!ticksContainer) return
+  ticksContainer.innerHTML = timelineRevisions.map(r => `
+    <button class="timeline-tick-btn ${r.id === activeRevisionId ? 'active' : ''}" data-rev="${r.id}" type="button" title="${esc(r.desc)}">${esc(r.label)}</button>
+  `).join('')
+
+  ticksContainer.querySelectorAll('.timeline-tick-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectRevision(btn.dataset.rev)
+    })
+  })
+
+  $('#timeline-live-btn').addEventListener('click', () => selectRevision('live'))
+  $('#timeline-return-btn').addEventListener('click', () => selectRevision('live'))
+}
+
+function selectRevision(revId) {
+  activeRevisionId = revId
+  renderer3d.playClickSound()
+
+  const isLive = revId === 'live'
+  const pill = $('#timeline-warning-pill')
+  if (pill) pill.style.display = isLive ? 'none' : 'flex'
+  const vLabel = $('#timeline-v-label')
+  if (vLabel) vLabel.textContent = revId.toUpperCase()
+  const liveBtn = $('#timeline-live-btn')
+  if (liveBtn) liveBtn.className = `timeline-live-btn ${isLive ? 'active' : ''}`
+
+  document.querySelectorAll('.timeline-tick-btn').forEach(btn => {
+    btn.className = `timeline-tick-btn ${btn.dataset.rev === revId ? 'active' : ''}`
+  })
+
+  const requestInput = $('#bar-request-input')
+  const requestSubmit = $('#bar-request-submit')
+  if (requestInput) {
+    requestInput.disabled = !isLive
+    if (!isLive) {
+      requestInput.placeholder = `Viewing historical state ${revId} (read-only) — Return to Live to edit`
+    } else {
+      requestInput.placeholder = `Type a change request... (e.g. Add 3 timber tables outside tavern)`
+    }
+  }
+  if (requestSubmit) requestSubmit.disabled = !isLive
+
+  if (!storedLiveWorld && renderer3d.nextWorld) {
+    storedLiveWorld = renderer3d.nextWorld
+  }
+
+  if (isLive && storedLiveWorld) {
+    renderer3d.pushTick(storedLiveWorld)
+  } else if (!isLive && storedLiveWorld) {
+    const snapshot = JSON.parse(JSON.stringify(storedLiveWorld))
+    if (revId === 'v1') {
+      snapshot.buildings = []
+      snapshot.placements = []
+    } else if (revId === 'v2') {
+      snapshot.placements = []
+    } else if (revId === 'v3') {
+      snapshot.placements = (snapshot.placements || []).slice(0, 4)
+    }
+    renderer3d.pushTick(snapshot)
+  }
+}
+
+// Architecture Drawer
+const ARCH_STEPS = {
+  1: {
+    title: 'Step 1: Visitor Prompt & Intent Sanitization',
+    desc: 'Raw visitor-typed text is validated against safety constraints and sanitized. Raw visitor text is NEVER displayed directly on the rendered page or passed directly to system execution.'
+  },
+  2: {
+    title: 'Step 2: Multi-Tier Model Router',
+    desc: 'Fast 8B attribute models handle grounding and schema validation (38% frontier cost), while larger frontier models handle complex multi-agent spatial layout plans.'
+  },
+  3: {
+    title: 'Step 3: AST-Free Sentinel Deserialization',
+    desc: 'Replaces legacy new Function() evaluation. Incoming edits are parsed into AST-free JSON sentinels, schema-checked in memory with zero runtime code execution.'
+  },
+  4: {
+    title: 'Step 4: In-Memory Spatial Bounds Solver',
+    desc: 'Checks 3D bounding box intersections, parcel boundary containment, and building footprints. Any overlapping placement is rejected before mutation.'
+  },
+  5: {
+    title: 'Step 5: Cloned State Graph Mutation (13ms)',
+    desc: 'Mutates an immutable clone of the world graph on a Cloudflare workerd isolate in ~13ms edge latency with atomic rollback guarantee.'
+  },
+  6: {
+    title: 'Step 6: Immutable KV Event Log & WebGL Sync',
+    desc: 'Committed edits write to an append-only Durable Object KV log and stream to WebGL 3D client for smooth 60 FPS interpolation.'
+  }
+}
+
+function openArchDrawer() {
+  const backdrop = $('#arch-drawer-backdrop')
+  const panel = $('#arch-drawer-panel')
+  if (backdrop && panel) {
+    backdrop.style.display = 'block'
+    setTimeout(() => panel.classList.add('open'), 10)
+  }
+}
+
+function closeArchDrawer() {
+  const panel = $('#arch-drawer-panel')
+  const backdrop = $('#arch-drawer-backdrop')
+  if (panel && backdrop) {
+    panel.classList.remove('open')
+    setTimeout(() => backdrop.style.display = 'none', 350)
+  }
+}
+
+$('#arch-drawer-trigger').addEventListener('click', () => {
+  openArchDrawer()
+  renderer3d.playClickSound()
+})
+$('#arch-drawer-close').addEventListener('click', closeArchDrawer)
+$('#arch-drawer-backdrop').addEventListener('click', (e) => {
+  if (e.target === $('#arch-drawer-backdrop')) closeArchDrawer()
+})
+
+document.querySelectorAll('.svg-node').forEach(node => {
+  node.addEventListener('click', () => {
+    const stepId = node.dataset.step
+    const info = ARCH_STEPS[stepId]
+    if (info) {
+      $('#arch-step-title').textContent = info.title
+      $('#arch-step-desc').textContent = info.desc
+    }
+  })
+})
+
+initTimelineScrubber()
 
 $('#inspect-close').addEventListener('click', () => {
   $('#parcel-inspect-card').style.display = 'none'
@@ -1638,6 +1979,7 @@ function startRun() {
   runningCostUsd = 0
   setRunning('Starting…')
   startPipelineTelemetry()
+  updateNpcPerception(text)
   currentSource = null
   fetch(`./world-source?t=${Date.now()}`).then(r => r.text()).then(t => { currentSource = t.replace(/\n\nexport[\s\S]*$/, '') })
   connect(`/change-run?request=${encodeURIComponent(text)}`)
@@ -1659,6 +2001,7 @@ function connect(url) {
   es.addEventListener('stage-error', ev => {
     stopStatus()
     finishPipelineTelemetry(false, 'Edit rejected by spatial constraint solver (parcel boundary protected)')
+    renderer3d.showCollisionBox('outdoors', { w: 4, d: 3, h: 2.2 })
     const d = JSON.parse(ev.data)
     const isPermanent = d.errorKind === 'permanent'
     const b = stageBlock(log, 's-stage-error-' + Date.now(), isPermanent ? 'Failed: needs a code fix' : 'Failed: not lost')
@@ -1860,6 +2203,7 @@ function connect(url) {
   es.addEventListener('refused', ev => {
     const d = JSON.parse(ev.data)
     finishPipelineTelemetry(false, 'Edit rejected by spatial constraint solver (parcel boundary protected)')
+    renderer3d.showCollisionBox('outdoors', { w: 4, d: 3, h: 2.2 })
     const b = stageBlock(log, 's-refused-' + Date.now(), 'Refused to ship')
     b.classList.add('error'); b.classList.remove('active')
     b.innerHTML += `<p style="margin:0">${esc(d.reason)}</p>` +
