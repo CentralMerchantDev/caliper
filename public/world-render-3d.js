@@ -1151,16 +1151,17 @@ class Renderer3D {
     // Gable end infill
     const gableMat = stdMat({ color: PALETTE.timberDark, roughness: 0.85 });
     [-1, 1].forEach((gz) => {
-      const gable = new THREE.Mesh(new THREE.BufferGeometry(), gableMat);
-      // Triangle geometry for gable
+      const gableGeo = new THREE.BufferGeometry();
       const vertices = new Float32Array([
         -w * 0.48, y, gz * (d / 2 + 0.05),
         w * 0.48, y, gz * (d / 2 + 0.05),
         0, y + 1.6, gz * (d / 2 + 0.05),
       ]);
-      gable.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
-      gable.computeVertexNormals();
-      roof.add(new THREE.Mesh(gable, gableMat));
+      gableGeo.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+      gableGeo.computeVertexNormals();
+      const gableMesh = new THREE.Mesh(gableGeo, gableMat);
+      gableMesh.castShadow = true;
+      roof.add(gableMesh);
     });
 
     parent.add(roof);
