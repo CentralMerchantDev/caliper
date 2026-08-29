@@ -10,6 +10,14 @@
 // Every numeric rule below was verified against an independent reference
 // script (not transcribed by hand) before use -- see the regression suite
 // in simRegression.ts, whose expected values came from that same reference.
+//
+// FOUNDATION-2 item (structured edits): the /*@DATA:...:BEGIN*/.../*@DATA:...:END*/
+// comment pairs around OBJECT_TYPES, placements, and surfaces are sentinel
+// markers src/worldEdit.ts's applyWorldEdit() splices against -- exact
+// string search, not brace-counting or a text diff -- to replace just that
+// block with freshly serialized data and leave everything else (this
+// comment, chooseAction/applyAction/tick, every other line) byte-identical.
+// They're plain JS block comments, inert at runtime either way.
 export const SIM_BASELINE_SOURCE = `
 // A small life-sim world: one sim, five decaying needs, a clock, a job.
 // All state is plain JSON. No DOM, no randomness in the baseline (a
@@ -54,7 +62,7 @@ function clamp(v) {
 // (ramps brighter at night -- a light source's own bulb, not a lit
 // surface), transparent?: boolean, opacity?: number, castShadow?: boolean
 // (default true) }.
-const OBJECT_TYPES = {
+const OBJECT_TYPES = /*@DATA:OBJECT_TYPES:BEGIN*/{
   bed: {
     material: "fabric", footprint: { w: 1.9, d: 1.2 }, shadow: { w: 2.4, d: 1.8 },
     local: { x: 0.15, y: 0.24 }, station: { action: "sleep", label: "Bed" },
@@ -146,7 +154,7 @@ const OBJECT_TYPES = {
       { shape: "icosahedron", size: [0.24, 0], position: [0, 0.44, 0], scale: [1, 0.7, 1], color: "#4f6b47", roughness: 0.9 },
     ],
   },
-};
+}/*@DATA:OBJECT_TYPES:END*/;
 
 // CITY.md: the world becomes a neighbourhood, not a single room -- but only
 // initialWorld() grows. chooseAction/applyAction/tick below are byte-for-byte
@@ -184,7 +192,7 @@ function initialWorld() {
     // placement is how "add another street lamp" or "add a bench by the
     // shop" gets done: append one entry, verifiable by existence, no new
     // code in this function or in either renderer.
-    placements: [
+    placements: /*@DATA:PLACEMENTS:BEGIN*/[
       { id: "dwelling-1-bed", type: "bed", location: "dwelling-1" },
       { id: "dwelling-1-fridge", type: "fridge", location: "dwelling-1" },
       { id: "dwelling-1-shower", type: "shower", location: "dwelling-1" },
@@ -203,7 +211,7 @@ function initialWorld() {
       { id: "lamp-1", type: "lampPost", location: "outdoors", plot: { x: 0.6, y: 1.3 } },
       { id: "lamp-2", type: "lampPost", location: "outdoors", plot: { x: 1.4, y: 0.6 } },
       { id: "planter-1", type: "planter", location: "outdoors", plot: { x: 1, y: 1.6 } },
-    ],
+    ]/*@DATA:PLACEMENTS:END*/,
     // The type registry rides along inside the world object itself (not a
     // separate import) so a renderer that only ever receives pushTick(world)
     // has everything it needs to draw generically -- no second channel, no
@@ -215,14 +223,14 @@ function initialWorld() {
     // colours became trim/accent colours on FOUNDATION.md item 4 (every
     // building is open-topped now, uniformly -- there is no roof plane left
     // to colour), used on each building's own sign post instead.
-    surfaces: {
+    surfaces: /*@DATA:SURFACES:BEGIN*/{
       ground: { material: "grass", color: "#6f6656" },
       path: { material: "gravel", color: "#bfb49c" },
       floor: { material: "wood", color: "#a79c85" },
       wall: { material: "plaster", color: "#a5997e" },
       trimShop: { material: "paint", color: "#9a5a3c" },
       trimWorkshop: { material: "paint", color: "#5c6b5a" },
-    },
+    }/*@DATA:SURFACES:END*/,
   };
 }
 
