@@ -55,6 +55,22 @@ function makeEnv(): ChangeEnv {
 }
 
 test("a stage failure checkpoints an errored, resumable state instead of losing the run -- real network call, zero spend", async (t) => {
+  // Exercise the SDK's real HTTP-error wrapper deterministically. Depending
+  // on the host network/proxy, a request to the real endpoint can fail at
+  // DNS/TLS and surface only "Connection error", which is correctly
+  // transient but cannot prove the permanent-401 branch this test names.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" || input instanceof URL ? String(input) : input.url;
+    if (url.startsWith("https://api.anthropic.com/")) {
+      return Promise.resolve(new Response(JSON.stringify({ type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }), {
+        status: 401,
+        headers: { "content-type": "application/json", "request-id": "test-auth-rejection" },
+      }));
+    }
+    return realFetch(input, init);
+  }) as typeof fetch;
+  t.after(() => { globalThis.fetch = realFetch; });
   const env = makeEnv();
   const runId = `test-error-recovery-${Date.now()}`;
   const changeRequest = "add a lamp post near the workshop";

@@ -66,6 +66,13 @@ export interface WorldEdit {
   ops: WorldEditOp[];
 }
 
+export interface LiveWorld {
+  buildings: { id: string; type: string; label: string; plot: { x: number; y: number } }[];
+  placements: Placement[];
+  objectTypes: Record<string, ObjectTypeDefinition>;
+  surfaces: Record<string, { material: string; color: string }>;
+}
+
 // The structured-output shape sent to the API's json_schema forcing --
 // mirrors CRITERION_SCHEMA/GROUNDING_SCHEMA's own pattern in this project:
 // closed vocabulary, no free-form "value" field, nothing a model can smuggle
@@ -164,16 +171,43 @@ export function parseRawWorldEdit(raw: { ops: unknown[] }): WorldEdit {
   return { ops };
 }
 
-interface LiveWorld {
-  buildings: { id: string; type: string; label: string; plot: { x: number; y: number } }[];
-  placements: Placement[];
-  objectTypes: Record<string, ObjectTypeDefinition>;
-  surfaces: Record<string, { material: string; color: string }>;
+import JSON5 from "json5";
+
+const DATA_BLOCKS = ["BUILDINGS", "OBJECT_TYPES", "PLACEMENTS", "SURFACES"] as const;
+
+function blockBounds(source: string, name: string): { contentStart: number; contentEnd: number } {
+  const begin = `/*@DATA:${name}:BEGIN*/`;
+  const end = `/*@DATA:${name}:END*/`;
+  const beginIdx = source.indexOf(begin);
+  const endIdx = source.indexOf(end);
+  const duplicateBegin = beginIdx !== -1 && source.indexOf(begin, beginIdx + begin.length) !== -1;
+  const duplicateEnd = endIdx !== -1 && source.indexOf(end, endIdx + end.length) !== -1;
+  if (beginIdx === -1 || endIdx === -1 || endIdx < beginIdx || duplicateBegin || duplicateEnd) {
+    throw new Error(`sentinel markers for ${name} not found in source -- cannot read or serialize world data`);
+  }
+  return { contentStart: beginIdx + begin.length, contentEnd: endIdx };
 }
 
-function loadLiveWorld(source: string): LiveWorld {
-  const factory = new Function(`${source}\nreturn { initialWorld };`) as () => { initialWorld: () => LiveWorld };
-  return factory().initialWorld();
+function readDataBlock(source: string, name: (typeof DATA_BLOCKS)[number]): unknown {
+  const { contentStart, contentEnd } = blockBounds(source, name);
+  try {
+    return JSON5.parse(source.slice(contentStart, contentEnd));
+  } catch (e) {
+    throw new Error(`world data block ${name} is malformed: ${String((e as Error)?.message ?? e)}`);
+  }
+}
+
+/** Deserializes only the four inert data blocks. It never executes source. */
+export function readWorldData(source: string): LiveWorld {
+  const world = {
+    buildings: readDataBlock(source, "BUILDINGS") as LiveWorld["buildings"],
+    objectTypes: readDataBlock(source, "OBJECT_TYPES") as LiveWorld["objectTypes"],
+    placements: readDataBlock(source, "PLACEMENTS") as LiveWorld["placements"],
+    surfaces: readDataBlock(source, "SURFACES") as LiveWorld["surfaces"],
+  };
+  const error = validateWorldDataShape(world);
+  if (error) throw new Error(`world data is invalid: ${error}`);
+  return world;
 }
 
 const KNOWN_SHAPES = new Set(["box", "cylinder", "sphere", "icosahedron"]);
@@ -217,8 +251,13 @@ function validateRecipePart(part: unknown, where: string): string | null {
 function validateObjectTypeDefinition(def: unknown, where: string): string | null {
   if (typeof def !== "object" || def === null) return `${where}: not an object`;
   const d = def as Record<string, unknown>;
+  const allowedKeys = new Set(["material", "footprint", "shadow", "local", "station", "emitsLight", "light", "recipe"]);
+  const unknownKey = Object.keys(d).find((key) => !allowedKeys.has(key));
+  if (unknownKey) return `${where}: unknown field "${unknownKey}"`;
   if (typeof d.material !== "string" || !d.material) return `${where}: material is required`;
-  if (typeof d.footprint !== "object" || d.footprint === null || typeof (d.footprint as any).w !== "number" || typeof (d.footprint as any).d !== "number") {
+  if (typeof d.footprint !== "object" || d.footprint === null || Object.keys(d.footprint).some((key) => key !== "w" && key !== "d") ||
+      typeof (d.footprint as any).w !== "number" || !Number.isFinite((d.footprint as any).w) || (d.footprint as any).w <= 0 ||
+      typeof (d.footprint as any).d !== "number" || !Number.isFinite((d.footprint as any).d) || (d.footprint as any).d <= 0) {
     return `${where}: footprint must be { w: number, d: number }`;
   }
   if (d.station !== null) {
@@ -247,6 +286,115 @@ function validateObjectTypeDefinition(def: unknown, where: string): string | nul
   return null;
 }
 
+const PARCEL_MIN = 0;
+const PARCEL_MAX = 2;
+const BUILDING_W = 8.5;
+const BUILDING_D = 6.0;
+const GRID_UNIT_X = 6.0;
+const GRID_UNIT_Z = 4.5;
+const BUILDING_TYPE_SCALE: Record<string, { w: number; d: number }> = {
+  dwelling: { w: 1, d: 1 },
+  shop: { w: 0.55, d: 0.7 },
+  workshop: { w: 0.55, d: 0.7 },
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function exactKeys(value: Record<string, unknown>, allowed: string[], where: string): string | null {
+  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
+  return unknown ? `${where}: unknown field "${unknown}"` : null;
+}
+
+function validPlot(value: unknown): value is { x: number; y: number } {
+  return isRecord(value) && Object.keys(value).every((key) => key === "x" || key === "y") &&
+    typeof value.x === "number" && Number.isFinite(value.x) && typeof value.y === "number" && Number.isFinite(value.y);
+}
+
+function plotInParcel(plot: { x: number; y: number }): boolean {
+  return plot.x >= PARCEL_MIN && plot.x <= PARCEL_MAX && plot.y >= PARCEL_MIN && plot.y <= PARCEL_MAX;
+}
+
+interface Rect { id: string; x: number; z: number; w: number; d: number }
+function overlaps(a: Rect, b: Rect): boolean {
+  return Math.abs(a.x - b.x) < (a.w + b.w) / 2 && Math.abs(a.z - b.z) < (a.d + b.d) / 2;
+}
+
+function validateOutdoorLayout(world: LiveWorld, placements = world.placements): string | null {
+  const buildingRects: Rect[] = world.buildings.map((building) => {
+    const scale = BUILDING_TYPE_SCALE[building.type];
+    return { id: building.id, x: building.plot.x * GRID_UNIT_X, z: building.plot.y * GRID_UNIT_Z, w: scale.w * BUILDING_W, d: scale.d * BUILDING_D };
+  });
+  for (let i = 0; i < buildingRects.length; i++) {
+    for (let j = i + 1; j < buildingRects.length; j++) {
+      if (overlaps(buildingRects[i], buildingRects[j])) return `buildings "${buildingRects[i].id}" and "${buildingRects[j].id}" collide`;
+    }
+  }
+  const outdoorRects: Rect[] = [];
+  for (const placement of placements) {
+    if (placement.location !== "outdoors") continue;
+    if (!placement.plot || !plotInParcel(placement.plot)) return `placement "${placement.id}" is outside parcel bounds ${PARCEL_MIN}..${PARCEL_MAX}`;
+    const footprint = world.objectTypes[placement.type]?.footprint;
+    if (!footprint) return `placement "${placement.id}" has no valid type footprint`;
+    const rect = { id: placement.id, x: placement.plot.x * GRID_UNIT_X, z: placement.plot.y * GRID_UNIT_Z, w: footprint.w, d: footprint.d };
+    const building = buildingRects.find((candidate) => overlaps(rect, candidate));
+    if (building) return `placement "${placement.id}" collides with building "${building.id}"`;
+    const other = outdoorRects.find((candidate) => overlaps(rect, candidate));
+    if (other) return `placements "${placement.id}" and "${other.id}" collide`;
+    outdoorRects.push(rect);
+  }
+  return null;
+}
+
+function validateWorldDataShape(world: LiveWorld): string | null {
+  if (!Array.isArray(world.buildings) || world.buildings.length === 0) return "BUILDINGS must be a non-empty array";
+  if (!isRecord(world.objectTypes) || Object.keys(world.objectTypes).length === 0) return "OBJECT_TYPES must be a non-empty object";
+  if (!Array.isArray(world.placements)) return "PLACEMENTS must be an array";
+  if (!isRecord(world.surfaces) || Object.keys(world.surfaces).length === 0) return "SURFACES must be a non-empty object";
+
+  const buildingIds = new Set<string>();
+  for (let i = 0; i < world.buildings.length; i++) {
+    const building = world.buildings[i] as unknown;
+    if (!isRecord(building)) return `BUILDINGS[${i}] must be an object`;
+    const extra = exactKeys(building, ["id", "type", "label", "plot"], `BUILDINGS[${i}]`);
+    if (extra) return extra;
+    if (typeof building.id !== "string" || !building.id) return `BUILDINGS[${i}].id is required`;
+    if (buildingIds.has(building.id)) return `BUILDINGS has duplicate id "${building.id}"`;
+    if (typeof building.type !== "string" || !BUILDING_TYPE_SCALE[building.type]) return `BUILDINGS[${i}].type is unknown`;
+    if (typeof building.label !== "string" || !building.label) return `BUILDINGS[${i}].label is required`;
+    if (!validPlot(building.plot) || !plotInParcel(building.plot)) return `BUILDINGS[${i}].plot must be within parcel bounds ${PARCEL_MIN}..${PARCEL_MAX}`;
+    buildingIds.add(building.id);
+  }
+  for (const [key, definition] of Object.entries(world.objectTypes)) {
+    const error = validateObjectTypeDefinition(definition, `OBJECT_TYPES.${key}`);
+    if (error) return error;
+  }
+  const placementIds = new Set<string>();
+  for (let i = 0; i < world.placements.length; i++) {
+    const placement = world.placements[i] as unknown;
+    if (!isRecord(placement)) return `PLACEMENTS[${i}] must be an object`;
+    const extra = exactKeys(placement, ["id", "type", "location", "plot", "overrides"], `PLACEMENTS[${i}]`);
+    if (extra) return extra;
+    if (typeof placement.id !== "string" || !placement.id || placementIds.has(placement.id)) return `PLACEMENTS[${i}].id is missing or duplicate`;
+    if (typeof placement.type !== "string" || !world.objectTypes[placement.type]) return `PLACEMENTS[${i}].type does not exist`;
+    if (typeof placement.location !== "string" || (placement.location !== "outdoors" && !buildingIds.has(placement.location))) return `PLACEMENTS[${i}].location is invalid`;
+    if (placement.location === "outdoors" && !validPlot(placement.plot)) return `PLACEMENTS[${i}].plot is required for outdoors`;
+    if (placement.plot !== undefined && !validPlot(placement.plot)) return `PLACEMENTS[${i}].plot is malformed`;
+    if (placement.overrides !== undefined) {
+      if (!isRecord(placement.overrides) || exactKeys(placement.overrides, ["color"], `PLACEMENTS[${i}].overrides`)) return `PLACEMENTS[${i}].overrides is malformed`;
+      if (placement.overrides.color !== undefined && (typeof placement.overrides.color !== "string" || !HEX_COLOR.test(placement.overrides.color))) return `PLACEMENTS[${i}].overrides.color is invalid`;
+    }
+    placementIds.add(placement.id);
+  }
+  for (const [key, surface] of Object.entries(world.surfaces)) {
+    if (!isRecord(surface) || exactKeys(surface, ["material", "color"], `SURFACES.${key}`) || typeof surface.material !== "string" || !surface.material || typeof surface.color !== "string" || !HEX_COLOR.test(surface.color)) {
+      return `SURFACES.${key} must be exactly { material, color: "#hex" }`;
+    }
+  }
+  return validateOutdoorLayout(world);
+}
+
 /** Every op checked against the REAL current world (never a model's claim
  * about it), accumulating state across ops within the same edit so
  * "addObjectType then addPlacement of that type" validates correctly in
@@ -255,7 +403,9 @@ export function validateWorldEdit(world: LiveWorld, edit: WorldEdit): { valid: t
   if (edit.ops.length === 0) return { valid: false, reason: "edit has no ops" };
 
   const objectTypeKeys = new Set(Object.keys(world.objectTypes));
+  const objectTypes = { ...world.objectTypes };
   const placementIds = new Set(world.placements.map((p) => p.id));
+  const placements: Placement[] = world.placements.map((placement) => ({ ...placement, plot: placement.plot && { ...placement.plot }, overrides: placement.overrides && { ...placement.overrides } }));
   const buildingIds = new Set(world.buildings.map((b) => b.id));
   const surfaceKeys = new Set(Object.keys(world.surfaces));
 
@@ -268,6 +418,7 @@ export function validateWorldEdit(world: LiveWorld, edit: WorldEdit): { valid: t
         const err = validateObjectTypeDefinition(op.definition, `op[${i}] addObjectType.definition`);
         if (err) return { valid: false, reason: err };
         objectTypeKeys.add(op.key);
+        objectTypes[op.key] = op.definition;
         break;
       }
       case "addPlacement": {
@@ -286,6 +437,10 @@ export function validateWorldEdit(world: LiveWorld, edit: WorldEdit): { valid: t
           if (badKey) return { valid: false, reason: `op[${i}] addPlacement: overrides has unsupported field "${badKey}" -- only color is supported` };
           if (p.overrides.color !== undefined && !HEX_COLOR.test(p.overrides.color)) return { valid: false, reason: `op[${i}] addPlacement: overrides.color must be a "#hex" string` };
         }
+        const prospective = [...placements, p];
+        const layoutError = validateOutdoorLayout({ ...world, objectTypes }, prospective);
+        if (layoutError) return { valid: false, reason: `op[${i}] addPlacement: ${layoutError}` };
+        placements.push(p);
         placementIds.add(p.id);
         break;
       }
@@ -305,6 +460,14 @@ export function validateWorldEdit(world: LiveWorld, edit: WorldEdit): { valid: t
         if (op.overrides.plot !== undefined && (typeof op.overrides.plot.x !== "number" || typeof op.overrides.plot.y !== "number")) {
           return { valid: false, reason: `op[${i}] overridePlacement: overrides.plot must be { x: number, y: number }` };
         }
+        if (op.overrides.plot !== undefined) {
+          const placementIndex = placements.findIndex((placement) => placement.id === op.placementId);
+          if (placements[placementIndex].location !== "outdoors") return { valid: false, reason: `op[${i}] overridePlacement: only an outdoor placement can have plot overridden` };
+          const prospective = placements.map((placement, index) => index === placementIndex ? { ...placement, plot: op.overrides.plot } : placement);
+          const layoutError = validateOutdoorLayout({ ...world, objectTypes }, prospective);
+          if (layoutError) return { valid: false, reason: `op[${i}] overridePlacement: ${layoutError}` };
+          placements[placementIndex] = prospective[placementIndex];
+        }
         break;
       }
       case "setSurfaceField": {
@@ -321,17 +484,26 @@ export function validateWorldEdit(world: LiveWorld, edit: WorldEdit): { valid: t
   return { valid: true };
 }
 
-function spliceBlock(source: string, name: string, replacement: string): string {
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function serializeBlock(source: string, name: (typeof DATA_BLOCKS)[number], value: unknown): string {
   const begin = `/*@DATA:${name}:BEGIN*/`;
   const end = `/*@DATA:${name}:END*/`;
-  const beginIdx = source.indexOf(begin);
-  const endIdx = source.indexOf(end);
-  if (beginIdx === -1 || endIdx === -1 || endIdx < beginIdx) {
-    throw new Error(`internal error: sentinel markers for ${name} not found in source -- cannot apply a structured edit to this source`);
-  }
-  const before = source.slice(0, beginIdx + begin.length);
-  const after = source.slice(endIdx);
-  return before + replacement + after;
+  // blockBounds supplies the strict missing/duplicate/order checks first.
+  // The regex then replaces the WHOLE marked block, preserving only the
+  // two markers. No character from the old payload can survive.
+  blockBounds(source, name);
+  const pattern = new RegExp(`${escapeRegExp(begin)}[\\s\\S]*?${escapeRegExp(end)}`, "g");
+  let replacements = 0;
+  const serialized = JSON.stringify(value, null, 2);
+  const next = source.replace(pattern, () => {
+    replacements++;
+    return `${begin}${serialized}${end}`;
+  });
+  if (replacements !== 1) throw new Error(`sentinel block ${name} could not be serialized exactly once`);
+  return next;
 }
 
 /** Applies a VALIDATED edit to the real current source, returning the new
@@ -343,7 +515,7 @@ function spliceBlock(source: string, name: string, replacement: string): string 
  * without having validated first (see runValidatedWorldEdit below for the
  * combined, safe entry point). */
 export function applyWorldEdit(currentSource: string, edit: WorldEdit): string {
-  const world = loadLiveWorld(currentSource);
+  const world = readWorldData(currentSource);
   const validation = validateWorldEdit(world, edit);
   if (!validation.valid) throw new Error(`invalid world edit: ${validation.reason}`);
 
@@ -376,9 +548,15 @@ export function applyWorldEdit(currentSource: string, edit: WorldEdit): string {
   }
 
   let next = currentSource;
-  next = spliceBlock(next, "OBJECT_TYPES", JSON.stringify(objectTypes, null, 2));
-  next = spliceBlock(next, "PLACEMENTS", JSON.stringify(placements, null, 2));
-  next = spliceBlock(next, "SURFACES", JSON.stringify(surfaces, null, 2));
+  // Serialize the complete data model, including unchanged BUILDINGS, so
+  // every sentinel payload has one canonical shape and no stale source
+  // fragments can remain between its markers.
+  next = serializeBlock(next, "BUILDINGS", world.buildings);
+  next = serializeBlock(next, "OBJECT_TYPES", objectTypes);
+  next = serializeBlock(next, "PLACEMENTS", placements);
+  next = serializeBlock(next, "SURFACES", surfaces);
+  // Fail closed on serializer bugs before the source can reach verification.
+  readWorldData(next);
   return next;
 }
 
@@ -389,10 +567,10 @@ export function applyWorldEdit(currentSource: string, edit: WorldEdit): string {
  * rejected edit is an expected, reportable outcome for the fix stage to
  * react to, not a program error. */
 export function runValidatedWorldEdit(currentSource: string, edit: WorldEdit): { ok: true; source: string } | { ok: false; reason: string } {
-  const world = loadLiveWorld(currentSource);
-  const validation = validateWorldEdit(world, edit);
-  if (!validation.valid) return { ok: false, reason: validation.reason };
   try {
+    const world = readWorldData(currentSource);
+    const validation = validateWorldEdit(world, edit);
+    if (!validation.valid) return { ok: false, reason: validation.reason };
     return { ok: true, source: applyWorldEdit(currentSource, edit) };
   } catch (e) {
     return { ok: false, reason: String((e as Error)?.message ?? e) };
@@ -407,5 +585,5 @@ export function runValidatedWorldEdit(currentSource: string, edit: WorldEdit): {
  * actual DECISION of which path a specific request needs is the plan
  * model's judgement call, informed by this. */
 export function worldEditPathAvailable(source: string): boolean {
-  return source.includes("/*@DATA:OBJECT_TYPES:BEGIN*/") && source.includes("/*@DATA:PLACEMENTS:BEGIN*/") && source.includes("/*@DATA:SURFACES:BEGIN*/");
+  return DATA_BLOCKS.every((name) => source.includes(`/*@DATA:${name}:BEGIN*/`) && source.includes(`/*@DATA:${name}:END*/`));
 }

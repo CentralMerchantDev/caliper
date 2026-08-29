@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { evaluateCriterion, type ProbeRunner } from "../src/criteriaExecution.ts";
+import { evaluateCriteria, evaluateCriterion, type ProbeRunner } from "../src/criteriaExecution.ts";
 import type { ExistenceCriterion, StructuralCriterion, NonRegressionCriterion, RenderCriterion } from "../src/criteria.ts";
 
 function mockProbe(byFn: Record<string, unknown>): ProbeRunner {
@@ -95,6 +95,18 @@ test("guardrail-on-the-guardrail: with a healthy baseline probe, the same criter
   const probe = mockProbe({ tick: { hunger: 52 } });
   const r = await evaluateCriterion(c, probe, probe);
   assert.equal(r.pass, true);
+
+  const calls: string[] = [];
+  const orderedProbe: ProbeRunner = async (fn) => {
+    calls.push(fn);
+    await Promise.resolve();
+    return { actual: { hunger: 52 } };
+  };
+  await evaluateCriteria([
+    { ...c, description: "first", fn: "first" },
+    { ...c, description: "second", fn: "second" },
+  ], orderedProbe, orderedProbe);
+  assert.deepEqual(calls, ["first", "first", "second", "second"], "Dynamic Worker probes must run sequentially in criterion order");
 });
 
 test("render: a known station passes the structural check", async () => {

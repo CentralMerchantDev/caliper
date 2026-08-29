@@ -15,7 +15,7 @@ const testDir = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(testDir, ".built");
 mkdirSync(outDir, { recursive: true });
 
-const testFiles = readdirSync(testDir).filter((f) => f.endsWith(".test.ts"));
+const testFiles = readdirSync(testDir).filter((f) => f.endsWith(".test.ts") && !f.endsWith(".workers.test.ts"));
 
 for (const file of testFiles) {
   const outfile = path.join(outDir, file.replace(/\.ts$/, ".mjs"));

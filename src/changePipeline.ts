@@ -184,7 +184,11 @@ export function deriveHistoryReason(ledger: Pick<ChangeLedger, "outcome" | "fixA
  * successful run into a failed response. */
 async function recordTerminalRun(kv: KVNamespace, record: Omit<ChangeRecord, "completedAt" | "reason">): Promise<ChangeRecord> {
   const full: ChangeRecord = { ...record, completedAt: Date.now(), reason: deriveHistoryReason(record.ledger) };
-  await kv.put(`changelog/${record.runId}`, JSON.stringify(full)).catch(() => {});
+  // The pipeline needs the visitor's raw request while a run is active and
+  // returns it to that visitor, but the public changelog must never retain it.
+  // History uses plan.understoodIntent, which is the system-authored summary.
+  const { changeRequest: _rawVisitorRequest, ...changelogRecord } = full;
+  await kv.put(`changelog/${record.runId}`, JSON.stringify(changelogRecord)).catch(() => {});
   return full;
 }
 
@@ -580,6 +584,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   let verifyCriteria: TestResult[] | undefined;
   let verifyFatalError: string | undefined;
   let convergenceFixAttempts = 0;
+  let convergenceRejectionReason: string | undefined;
   let findings: ReviewFinding[] | undefined;
   // Also hoisted above the try for the same reason: read by the catch
   // block. pastPlanGate itself only depends on `existing` (safe to compute
@@ -909,6 +914,10 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
             fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, implCode!, [], FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
           );
       stageCosts.push({ stage: `fix (${plan!.implementationPath}, convergence attempt ${convergenceFixAttempts})`, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs });
+      if (fix.rejectionReason) {
+        convergenceRejectionReason = fix.rejectionReason;
+        break;
+      }
       implCode = fix.code;
       onEvent({ type: "fixed", model: fix.model, inputTokens: fix.inputTokens, outputTokens: fix.outputTokens, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, code: implCode });
 
@@ -939,9 +948,9 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         ...verifyRegression.filter((r) => !r.pass).map((r) => describeFailure("regression", r)),
         ...verifyCriteria.filter((r) => !r.pass).map((r) => describeFailure("criterion", r)),
       ];
-      const convergenceReason = verifyFatalError
+      const convergenceReason = convergenceRejectionReason ?? (verifyFatalError
         ? `verification could not run: ${verifyFatalError}`
-        : `could not make every regression and criteria check pass within ${convergenceFixAttempts} fix attempt(s) (limit ${CONTROL_LIMITS.MAX_FIX_ATTEMPTS}) -- still failing: ${stillFailingList.join("; ") || "none listed"}`;
+        : `could not make every regression and criteria check pass within ${convergenceFixAttempts} fix attempt(s) (limit ${CONTROL_LIMITS.MAX_FIX_ATTEMPTS}) -- still failing: ${stillFailingList.join("; ") || "none listed"}`);
       const { lesson, recurrenceCount } = await runRetrospectiveAndRecord(
         env, budget, stageCosts,
         `Change request: ${changeRequest}\nPlan: ${plan.willBuild}\nOutcome: the implementation never converged before review -- ${convergenceReason}.`,
@@ -1077,26 +1086,31 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
             fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, finalCode, material, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
           );
       stageCosts.push({ stage: `fix (${plan!.implementationPath})`, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs });
-      finalCode = fix.code;
-      fixApplied = true;
-      onEvent({ type: "fixed", model: fix.model, inputTokens: fix.inputTokens, outputTokens: fix.outputTokens, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, code: finalCode });
+      if (fix.rejectionReason) {
+        verifyFatalError = fix.rejectionReason;
+        fixHeld = false;
+      } else {
+        finalCode = fix.code;
+        fixApplied = true;
+        onEvent({ type: "fixed", model: fix.model, inputTokens: fix.inputTokens, outputTokens: fix.outputTokens, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, code: finalCode });
 
-      onEvent({ type: "verifying" });
-      const verify2 = await runVerification(env, finalCode, plan.criteria, currentSourceAtStart, `change-${runId}-2`);
-      verifyRegression = verify2.regression.results;
-      verifyCriteria = verify2.criteria.results;
-      verifyFatalError = verify2.regression.fatalError ?? verify2.criteria.fatalError;
-      fixHeld = !verifyFatalError && verifyRegression.length > 0 && verifyRegression.every((r) => r.pass) && verifyCriteria.every((r) => r.pass);
-      onEvent({
-        type: "reverified",
-        regression: verifyRegression,
-        criteria: verifyCriteria,
-        regressionPassed: verifyRegression.filter((r) => r.pass).length,
-        regressionTotal: verifyRegression.length,
-        criteriaPassed: verifyCriteria.filter((r) => r.pass).length,
-        criteriaTotal: verifyCriteria.length,
-        fatalError: verifyFatalError,
-      });
+        onEvent({ type: "verifying" });
+        const verify2 = await runVerification(env, finalCode, plan.criteria, currentSourceAtStart, `change-${runId}-2`);
+        verifyRegression = verify2.regression.results;
+        verifyCriteria = verify2.criteria.results;
+        verifyFatalError = verify2.regression.fatalError ?? verify2.criteria.fatalError;
+        fixHeld = !verifyFatalError && verifyRegression.length > 0 && verifyRegression.every((r) => r.pass) && verifyCriteria.every((r) => r.pass);
+        onEvent({
+          type: "reverified",
+          regression: verifyRegression,
+          criteria: verifyCriteria,
+          regressionPassed: verifyRegression.filter((r) => r.pass).length,
+          regressionTotal: verifyRegression.length,
+          criteriaPassed: verifyCriteria.filter((r) => r.pass).length,
+          criteriaTotal: verifyCriteria.length,
+          fatalError: verifyFatalError,
+        });
+      }
     }
   }
 

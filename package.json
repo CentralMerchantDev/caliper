@@ -8,16 +8,21 @@
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
     "cf-typegen": "wrangler types",
-    "test": "node test/run.mjs"
+    "build": "wrangler deploy --dry-run",
+    "test": "node test/run.mjs && vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
+    "json5": "^2.2.3",
     "openai": "^7.5.0"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260825.1",
     "esbuild": "^0.28.1",
+    "three": "^0.185.1",
     "typescript": "^5.6.0",
+    "vitest": "^4.1.11",
     "wrangler": "^4.126.0"
   }
 }

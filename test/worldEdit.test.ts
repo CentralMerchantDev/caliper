@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 
 import { SIM_BASELINE_SOURCE } from "../src/simBaseline.ts";
 import { SIM_REGRESSION_SUITE } from "../src/simRegression.ts";
-import { validateWorldEdit, runValidatedWorldEdit, worldEditPathAvailable, type WorldEdit } from "../src/worldEdit.ts";
+import { readWorldData, validateWorldEdit, runValidatedWorldEdit, worldEditPathAvailable, type WorldEdit } from "../src/worldEdit.ts";
 
 function loadWorld(source: string) {
   return new Function(`${source}\nreturn { initialWorld };`)().initialWorld();
@@ -36,13 +36,20 @@ test("worldEditPathAvailable is true for the real current source", () => {
 });
 
 test("addPlacement: a second street lamp applies, splices cleanly, and the regression suite still passes 9/9", () => {
-  const edit: WorldEdit = { ops: [{ op: "addPlacement", placement: { id: "lamp-3", type: "lampPost", location: "outdoors", plot: { x: 1.8, y: 1.8 } } }] };
+  const edit: WorldEdit = { ops: [{ op: "addPlacement", placement: { id: "lamp-3", type: "lampPost", location: "outdoors", plot: { x: 1, y: 1 } } }] };
   const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, edit);
   assert.equal(result.ok, true);
   if (!result.ok) return;
 
   const world = loadWorld(result.source);
   assert.ok(world.placements.some((p: any) => p.id === "lamp-3" && p.type === "lampPost"));
+  for (const name of ["OBJECT_TYPES", "BUILDINGS", "PLACEMENTS"] as const) {
+    const begin = `/*@DATA:${name}:BEGIN*/`;
+    const end = `/*@DATA:${name}:END*/`;
+    assert.equal(result.source.split(begin).length - 1, 1, `${name} BEGIN marker must occur exactly once`);
+    assert.equal(result.source.split(end).length - 1, 1, `${name} END marker must occur exactly once`);
+    assert.doesNotThrow(() => JSON.parse(result.source.slice(result.source.indexOf(begin) + begin.length, result.source.indexOf(end))), `${name} payload must be clean JSON with no leftover source syntax`);
+  }
 
   const fnsBefore = loadFns(SIM_BASELINE_SOURCE);
   const fnsAfter = loadFns(result.source);
@@ -68,7 +75,7 @@ test("addObjectType + addPlacement in one edit: a genuinely new type applies tog
           recipe: [{ shape: "cylinder", size: [0.5, 0.5, 0.15], position: [0, 0.6, 0], color: "#9a9186" }],
         },
       },
-      { op: "addPlacement", placement: { id: "birdbath-1", type: "birdbath", location: "outdoors", plot: { x: 0.4, y: 0.4 } } },
+      { op: "addPlacement", placement: { id: "birdbath-1", type: "birdbath", location: "outdoors", plot: { x: 1, y: 1 } } },
     ],
   };
   const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, edit);
@@ -91,13 +98,13 @@ test("overridePlacement: a colour change applies to the named placement only", (
 });
 
 test("overridePlacement: a position change (repositioning, the real fix scenario this was extended for) replaces plot without touching colour", () => {
-  const edit: WorldEdit = { ops: [{ op: "overridePlacement", placementId: "lamp-1", overrides: { plot: { x: 2.4, y: 2 } } }] };
+  const edit: WorldEdit = { ops: [{ op: "overridePlacement", placementId: "lamp-1", overrides: { plot: { x: 1, y: 1 } } }] };
   const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, edit);
   assert.equal(result.ok, true);
   if (!result.ok) return;
   const world = loadWorld(result.source);
   const lamp = world.placements.find((p: any) => p.id === "lamp-1");
-  assert.deepEqual(lamp.plot, { x: 2.4, y: 2 });
+  assert.deepEqual(lamp.plot, { x: 1, y: 1 });
   assert.equal(lamp.overrides, undefined, "a plot-only override must not add an empty overrides object");
 });
 
@@ -231,7 +238,7 @@ test("guardrail: an edit with no ops is rejected", () => {
 test("guardrail: one invalid op rejects the WHOLE edit -- no partial application", () => {
   const edit: WorldEdit = {
     ops: [
-      { op: "addPlacement", placement: { id: "lamp-3", type: "lampPost", location: "outdoors", plot: { x: 1.8, y: 1.8 } } },
+      { op: "addPlacement", placement: { id: "lamp-3", type: "lampPost", location: "outdoors", plot: { x: 1, y: 1 } } },
       { op: "addPlacement", placement: { id: "x-4", type: "doesNotExist", location: "outdoors", plot: { x: 0, y: 0 } } },
     ],
   };
@@ -300,7 +307,38 @@ test("guardrail: swapped BEGIN/END order (END appears before BEGIN) fails the ed
 });
 
 test("control: the same edit against the REAL, uncorrupted source still succeeds -- these guardrails fire on real corruption, not on the applier itself being broken", () => {
-  const edit: WorldEdit = { ops: [{ op: "addPlacement", placement: { id: "lamp-3", type: "lampPost", location: "outdoors", plot: { x: 1.8, y: 1.8 } } }] };
+  const edit: WorldEdit = { ops: [{ op: "addPlacement", placement: { id: "lamp-3", type: "lampPost", location: "outdoors", plot: { x: 1, y: 1 } } }] };
   const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, edit);
   assert.equal(result.ok, true);
+});
+
+test("guardrail: a syntactically valid but structurally malformed data block is rejected", () => {
+  const malformed = SIM_BASELINE_SOURCE.replace(
+    /\/\*@DATA:PLACEMENTS:BEGIN\*\/[\s\S]*?\/\*@DATA:PLACEMENTS:END\*\//,
+    "/*@DATA:PLACEMENTS:BEGIN*/{}/*@DATA:PLACEMENTS:END*/",
+  );
+  assert.throws(() => readWorldData(malformed), /PLACEMENTS must be an array/);
+});
+
+test("guardrail: duplicate sentinel blocks are rejected as ambiguous", () => {
+  const duplicated = SIM_BASELINE_SOURCE.replace("/*@DATA:SURFACES:END*/", "/*@DATA:SURFACES:END*//*@DATA:SURFACES:BEGIN*/{}/*@DATA:SURFACES:END*/");
+  assert.throws(() => readWorldData(duplicated), /sentinel markers.*not found/);
+});
+
+test("guardrail: an outdoor placement outside parcel bounds is rejected", () => {
+  const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, { ops: [{ op: "addPlacement", placement: { id: "outside", type: "lampPost", location: "outdoors", plot: { x: 3, y: 1 } } }] });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /outside parcel bounds/);
+});
+
+test("guardrail: an outdoor placement colliding with a building is rejected", () => {
+  const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, { ops: [{ op: "addPlacement", placement: { id: "collision", type: "lampPost", location: "outdoors", plot: { x: 0, y: 0 } } }] });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /collides with building "dwelling-1"/);
+});
+
+test("guardrail: an outdoor placement colliding with another placement is rejected", () => {
+  const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, { ops: [{ op: "addPlacement", placement: { id: "collision", type: "lampPost", location: "outdoors", plot: { x: 0.6, y: 1.25 } } }] });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /collide/);
 });

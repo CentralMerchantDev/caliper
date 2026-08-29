@@ -108,10 +108,11 @@ export async function evaluateCriterion(criterion: ProposedCriterion, probeCandi
     }
 
     case "non-regression": {
-      const [candidate, baseline] = await Promise.all([
-        probeCandidate(criterion.fn, criterion.args, criterion.repeat),
-        probeBaseline(criterion.fn, criterion.args, criterion.repeat),
-      ]);
+      // Each probe is a Dynamic Worker invocation in production. Workers
+      // permits only a small number of concurrent dynamic invocations per
+      // request, so keep even the candidate/baseline pair sequential.
+      const candidate = await probeCandidate(criterion.fn, criterion.args, criterion.repeat);
+      const baseline = await probeBaseline(criterion.fn, criterion.args, criterion.repeat);
       if (candidate.error) return { name: criterion.description, pass: false, fn: criterion.fn, args: criterion.args, repeat: criterion.repeat ?? undefined, error: candidate.error, stack: candidate.stack };
       // The baseline itself failing to run means there is nothing real to
       // compare against -- fail closed, never treat "couldn't establish
@@ -152,5 +153,9 @@ export async function evaluateCriterion(criterion: ProposedCriterion, probeCandi
 }
 
 export async function evaluateCriteria(criteria: ProposedCriterion[], probeCandidate: ProbeRunner, probeBaseline: ProbeRunner): Promise<TestResult[]> {
-  return Promise.all(criteria.map((c) => evaluateCriterion(c, probeCandidate, probeBaseline)));
+  const results: TestResult[] = [];
+  for (const criterion of criteria) {
+    results.push(await evaluateCriterion(criterion, probeCandidate, probeBaseline));
+  }
+  return results;
 }

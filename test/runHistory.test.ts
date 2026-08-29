@@ -127,6 +127,7 @@ test("a run stopped mid-flight now writes a changelog entry -- it did not before
   const raw = await kv.get(`changelog/${runId}`);
   assert.ok(raw, "a stopped run must now be findable in changelog/ for the history tab");
   const stored = JSON.parse(raw!);
+  assert.equal(stored.changeRequest, undefined, "the changelog must never persist the raw visitor request");
   assert.equal(stored.ledger.outcome, "stopped");
   assert.equal(stored.reason, "Stopped partway through, by request.");
   assert.ok(stored.completedAt > 0);

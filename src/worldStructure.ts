@@ -15,6 +15,7 @@
 // with it automatically, on the next load -- not on the next person who
 // remembers to update two files in the same commit.
 import { SIM_BASELINE_SOURCE } from "./simBaseline";
+import { readWorldData } from "./worldEdit";
 
 interface BaselineObjectType {
   material: string;
@@ -29,14 +30,8 @@ interface BaselineWorld {
   surfaces: Record<string, { material: string; color: string }>;
 }
 
-/** Evaluates the real sim source once, at module load, to get its actual
- * initialWorld() output -- the same technique used client-side throughout
- * this project to run the real, unmodified source in a browser console.
- * Server-side here it needs no sandbox: this is trusted, deployed code
- * reading its own sibling file, not visitor input. */
 function loadBaselineWorld(): BaselineWorld {
-  const factory = new Function(`${SIM_BASELINE_SOURCE}\nreturn { initialWorld };`) as () => { initialWorld: () => BaselineWorld };
-  return factory().initialWorld();
+  return readWorldData(SIM_BASELINE_SOURCE);
 }
 
 const BASELINE_WORLD = loadBaselineWorld();
@@ -68,6 +63,7 @@ export const ENTITY_TYPES = ["sim"] as const;
 // "workshop" exist as real, drawn structures with no interior stations
 // yet -- honestly reported as such, not padded out with fake behavior.
 export const BUILDING_TYPES = [...new Set(BASELINE_WORLD.buildings.map((b) => b.type))];
+export const BUILDING_NAMES = BASELINE_WORLD.buildings.map((b) => `${b.label} (id: ${b.id}, type: ${b.type})`);
 
 // Every registry type that is NOT a station -- freestanding outdoor props.
 // Derived the same way as STATIONS, from the same real registry, so the
@@ -150,15 +146,16 @@ export function structureSummary(): string {
   return [
     `Entity types that exist: ${ENTITY_TYPES.join(", ")}.`,
     `The world is a neighbourhood: a plot of ground with ${BUILDING_TYPES.length} building types (${BUILDING_TYPES.join(", ")}) laid out on a grid, paths and open ground between them, and objects placed indoors or outdoors from a type registry.`,
+    `Named buildings: ${BUILDING_NAMES.join(", ")}. "The tavern" means the building whose id and type are "shop"; use "shop" as the location id in placement data.`,
     `World state fields: ${Object.entries(WORLD_FIELDS)
       .map(([k, v]) => `${k} (${v})`)
       .join("; ")}.`,
     `Actions a sim can take: ${ACTIONS.join(", ")}.`,
-    `Station types (each provides one sim action): ${STATIONS.map((s) => `${s.label} (${s.action})`).join(", ")}. Every dwelling has the same set placed inside it; shop and workshop have none.`,
+    `Station types (each provides one sim action): ${STATIONS.map((s) => `${s.label} (${s.action})`).join(", ")}. Every dwelling has the same set placed inside it; the Tavern (shop) and workshop have none.`,
     `Outdoor prop types (no action, purely placed): ${OUTDOOR_OBJECT_TYPES.join(", ")}.`,
     `Named surfaces, each a real { material, color } pair in world state the renderer reads directly: ${SURFACE_TYPES.join(", ")}.`,
     `Cheap, always-possible operations on this world, cheapest first -- a request matching one of these is NOT the expensive case and should not be refused as one:\n` +
-      `  1. Placing another instance of an EXISTING object type (${OBJECT_TYPE_KEYS.join(", ")}) -- one entry appended to the placements array. No new code, no renderer change, verifiable by existence alone. This is what "add another street lamp" or "add a bench by the shop" is.\n` +
+      `  1. Placing another instance of an EXISTING object type (${OBJECT_TYPE_KEYS.join(", ")}) -- one entry appended to the placements array. No new code, no renderer change, verifiable by existence alone. This is what "add another street lamp" or "add a bench by the tavern" (location id "shop") is.\n` +
       `  2. Overriding a placement's colour, or changing an object type's or a surface's colour in the registry/surfaces data -- a small, existing-field edit.\n` +
       `  3. Adding a genuinely NEW object type -- one registry entry (a geometry recipe built from primitive shapes: box, cylinder, sphere, icosahedron -- the same primitives every existing type already uses) plus at least one placement referencing it. Small and bounded, not a rewrite.\n` +
       `  The expensive case -- the honest place for a refusal -- is a request for a new SIM ACTION, a new ENTITY kind with its own behavior, or a new simulation subsystem (weather, economy, traffic). Those require touching chooseAction/applyAction/tick or adding real logic, not just data.`,

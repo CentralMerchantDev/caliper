@@ -170,6 +170,9 @@ export interface SandboxRunner {
 
 export interface GenerationResult {
   code: string;
+  /** A deterministic edit rejection that the pipeline should report and
+   * stop on, rather than treating unchanged code as a successful fix. */
+  rejectionReason?: string;
   model: string;
   inputTokens: number;
   outputTokens: number;

@@ -234,12 +234,12 @@ function initialWorld() {
       { id: "sim1", home: "dwelling-1", needs: { hunger: 100, energy: 100, fun: 100, social: 100, hygiene: 100 }, lastAction: null },
       { id: "sim2", home: "dwelling-2", needs: { hunger: 100, energy: 100, fun: 100, social: 100, hygiene: 100 }, lastAction: null },
     ],
-    buildings: [
+    buildings: /*@DATA:BUILDINGS:BEGIN*/[
       { id: "dwelling-1", type: "dwelling", label: "House 1", plot: { x: 0, y: 0 } },
       { id: "dwelling-2", type: "dwelling", label: "House 2", plot: { x: 2, y: 0 } },
-      { id: "shop", type: "shop", label: "Shop", plot: { x: 0, y: 2 } },
+      { id: "shop", type: "shop", label: "Tavern", plot: { x: 0, y: 2 } },
       { id: "workshop", type: "workshop", label: "Workshop", plot: { x: 2, y: 2 } },
-    ],
+    ]/*@DATA:BUILDINGS:END*/,
     // FOUNDATION.md item 1: the placement list -- the world's contents as
     // data. Which type, where (a building's id, or "outdoors" with a plot
     // position), and any per-instance override such as colour. Adding a

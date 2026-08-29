@@ -44,6 +44,7 @@
     }
   ],
   "vars": {
+    "LIVE_RUN_ENABLED": "true",
     // Hard spend cap in USD across all generation calls, enforced in code
     // (see src/spendCap.ts), not just documented here. Sized to comfortably
     // cover a full matrix sweep across every task, model, and repetition
@@ -68,6 +69,8 @@
       "/security-check",
       "/spend",
       "/pipeline-budget",
+      "/live-status",
+      "/world-edit-selftest",
       "/sim-selftest",
       "/world-source",
       "/spend-counter-selftest",

@@ -50,5 +50,7 @@ test("structureSummary is deterministic and mentions every NOT_YET_PRESENT item 
 test("structureSummary reports a real neighbourhood, not a single room", () => {
   const summary = structureSummary();
   assert.match(summary, /neighbourhood/);
+  assert.match(summary, /Tavern \(id: shop, type: shop\)/);
+  assert.match(summary, /"The tavern" means.*"shop"/);
   assert.doesNotMatch(summary, /no second location/);
 });

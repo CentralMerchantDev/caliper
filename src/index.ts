@@ -28,6 +28,8 @@ export interface Env {
   ANTHROPIC_API_KEY: string;
   OPENAI_API_KEY: string;
   ASSETS: Fetcher;
+  /** Set to "false" to disable new public change runs in one deploy. */
+  LIVE_RUN_ENABLED?: string;
   /** Optional. When set, ?k=<UNLOCK_CODE> on /change-run bypasses the
    * per-IP daily live-run limit -- for Mark's own use (demoing live)
    * without raising the number every visitor gets. Unset means the bypass
@@ -50,6 +52,21 @@ function json(data: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function jsonError(error: string, reason: string, status: number): Response {
+  return json({ error, reason }, status);
+}
+
+export function liveRunsEnabled(env: Pick<Env, "LIVE_RUN_ENABLED">): boolean {
+  // Fail closed: missing, malformed, or unreadable configuration never
+  // exposes a paid public action. Only the explicit string "true" enables it.
+  return env.LIVE_RUN_ENABLED === "true";
+}
+
+export function liveRunsDisabledResponse(): Response {
+  const reason = "Live runs are disabled. The recording and run history remain available.";
+  return jsonError("live_runs_disabled", reason, 503);
 }
 
 const MAX_ATTEMPTS = 3; // one shot + up to two repair attempts -- see docs/MATRIX-RESULTS.md for how this budget was chosen
@@ -240,7 +257,7 @@ async function handleRun(env: Env, taskId: string, model: string, ip: string): P
   try {
     await assertUnderRateLimit(env.SPEND_KV, ip);
   } catch (e) {
-    if (e instanceof RateLimitExceededError) return json({ error: e.message }, 429);
+    if (e instanceof RateLimitExceededError) return jsonError("rate_limit_exceeded", e.message, 429);
     throw e;
   }
   await recordRateLimitHit(env.SPEND_KV, ip);
@@ -402,7 +419,7 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
   try {
     await tryLeaseActiveRun(env.SPEND_KV, runId);
   } catch (e) {
-    if (e instanceof PipelineLimitError) return json({ error: e.message }, 429);
+    if (e instanceof PipelineLimitError) return jsonError("rate_limit_exceeded", e.message, 429);
     throw e;
   }
 
@@ -506,6 +523,8 @@ export default {
           "GET /security-check": "run the deliberate sandbox-escape probes (no model calls, no cost)",
           "GET /spend": "cumulative spend against the hard cap",
           "GET /pipeline-budget": "today's/this month's change-pipeline spend against the caps",
+          "GET /live-status": "whether new public live change runs are enabled",
+          "GET /world-edit-selftest": "apply and validate a deterministic in-memory data edit (no model call, no persistence)",
           "GET /change-run?request=<text>": "CALIPER v2 (BUILD-V2.md): plan -> implement -> verify -> review -> ship, one call per stage-boundary",
           "GET /change-resume?runId=<id>": "continue a halted change run after a real decision/answer has been posted",
           "GET /change-plan-decision?runId=<id>&approve=true|false": "approve/reject at Gate 1",
@@ -567,14 +586,35 @@ export default {
       return json(await getPipelineBudgetStatus(env.SPEND_COUNTER));
     }
 
+    if (url.pathname === "/live-status") {
+      return json({ enabled: liveRunsEnabled(env) });
+    }
+
+    if (url.pathname === "/world-edit-selftest") {
+      const { runValidatedWorldEdit, readWorldData } = await import("./worldEdit");
+      const rejection = url.searchParams.get("reject");
+      const edit = rejection === "collision"
+        ? { ops: [{ op: "addPlacement" as const, placement: { id: "selftest-collision", type: "lampPost", location: "outdoors", plot: { x: 0, y: 0 } } }] }
+        : rejection === "unknown-placement"
+          ? { ops: [{ op: "overridePlacement" as const, placementId: "missing-placement", overrides: { color: "#ffffff" } }] }
+          : rejection === "invalid-parcel"
+            ? { ops: [{ op: "addPlacement" as const, placement: { id: "selftest-outside", type: "lampPost", location: "outdoors", plot: { x: 3, y: 1 } } }] }
+            : { ops: [{ op: "addPlacement" as const, placement: { id: "selftest-lamp", type: "lampPost", location: "outdoors", plot: { x: 1, y: 1 } } }] };
+      const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, edit);
+      if (!result.ok) return jsonError("world_edit_rejected", result.reason, rejection ? 400 : 500);
+      const world = readWorldData(result.source);
+      return json({ passed: world.placements.some((p) => p.id === "selftest-lamp"), persisted: false });
+    }
+
     if (url.pathname === "/change-run") {
+      if (!liveRunsEnabled(env)) return liveRunsDisabledResponse();
       const request_ = url.searchParams.get("request");
       if (!request_) return json({ error: "pass ?request=<text>" }, 400);
       // The only path where a visitor controls raw input, so the only one
       // that gets attacked -- checked first, before it can consume a
       // per-IP rate-limit slot on a request that should never have counted.
       const guard = checkInputGuard(request_);
-      if (!guard.ok) return json({ error: `Request rejected: ${guard.reason}` }, 400);
+      if (!guard.ok) return jsonError("request_rejected", guard.reason, 400);
       // Only a fresh run counts against the per-IP daily limit -- resuming
       // an already-started run (/change-resume) isn't a second live run.
       const unlocked = !!env.UNLOCK_CODE && url.searchParams.get("k") === env.UNLOCK_CODE;
@@ -583,7 +623,7 @@ export default {
         try {
           await assertUnderPipelineRateLimit(env.SPEND_KV, ip);
         } catch (e) {
-          if (e instanceof PipelineLimitError) return json({ error: e.message }, 429);
+          if (e instanceof PipelineLimitError) return jsonError("rate_limit_exceeded", e.message, 429);
           throw e;
         }
         await recordPipelineRateLimitHit(env.SPEND_KV, ip);

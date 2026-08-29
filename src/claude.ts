@@ -695,7 +695,9 @@ const WORLD_EDIT_SYSTEM_PROMPT =
   "(a surface's material or colour, by its real " +
   "key). Return ONLY the ops array via the schema. Every type key, placement id, and surface key you " +
   "reference must be a REAL one from the current world shown to you, or one you are adding in this same " +
-  "edit -- never invent or guess a name.";
+  "edit -- never invent or guess a name. Every operation object must include every schema field, using null " +
+  "for fields belonging to other operation kinds. For overridePlacement, placementId and overridesJson are " +
+  "mandatory: overridesJson must be a JSON string encoding a non-empty object with color and/or plot.";
 
 async function callForWorldEdit(client: Anthropic, model: string, maxTokens: number, messages: Anthropic.MessageParam[]): Promise<{ edit: WorldEdit; response: Anthropic.Message }> {
   const response = await createWithTruncationGuard(client, "implementChangeAsEdit/fixChangeAsEdit", {
@@ -743,7 +745,7 @@ export async function implementChangeAsEdit(
   const criteriaText = plan.criteria.map((c) => `- ${describeCriterion(c)}`).join("\n");
   const baseContent =
     (priorLessons ? `Lessons recorded from previous runs -- apply any that are relevant here:\n${priorLessons}\n\n` : "") +
-    `Current world source (evaluate this to see the real objectTypes/placements/surfaces before naming anything):\n${worldSource}\n\n` +
+    `Current world source (read its sentinel-marked data blocks to see the real objectTypes/placements/surfaces before naming anything):\n${worldSource}\n\n` +
     `Change request: ${changeRequest}\n\n` +
     `Approved plan:\nWill build: ${plan.willBuild}\nWill not touch: ${plan.willNotTouch}\n\n` +
     `It must satisfy these exact test cases:\n${criteriaText}`;
@@ -789,7 +791,7 @@ export async function fixChangeAsEdit(
   const passingText = stillPassing.length ? `\n\nThese checks currently pass -- your edit must not break them:\n${stillPassing.map((f) => `- ${f}`).join("\n")}` : "";
   const baseContent =
     (priorLessons ? `Lessons recorded from previous runs -- apply any that are relevant here:\n${priorLessons}\n\n` : "") +
-    `Current world source, including the previous edit already applied (evaluate this to see the real current state):\n${previousWorldSource}\n\n` +
+    `Current world source, including the previous edit already applied (read its sentinel-marked data blocks to see the real current state):\n${previousWorldSource}\n\n` +
     `Change being made: ${plan.willBuild}\n\n` +
     (materialFindings.length ? `An independent reviewer found ${materialFindings.length} material issue(s):\n${findingsText}` : "") +
     verificationText + passingText +
@@ -800,10 +802,36 @@ export async function fixChangeAsEdit(
     return { edit, response, result: runValidatedWorldEdit(previousWorldSource, edit) };
   }
 
-  let { response, result } = await attempt(baseContent);
+  let { edit, response, result } = await attempt(baseContent);
+  if (edit.ops.length === 0) {
+    const inputTokens = response.usage.input_tokens;
+    const outputTokens = response.usage.output_tokens;
+    return {
+      code: previousWorldSource,
+      rejectionReason: "fixChangeAsEdit rejected a zero-op edit: no correction was applied",
+      model,
+      inputTokens,
+      outputTokens,
+      costUsd: costUsd(model, inputTokens, outputTokens),
+      wallTimeMs: Date.now() - start,
+    };
+  }
   if (!result.ok) {
     const correction = `${baseContent}\n\nYour previous edit was invalid: ${result.reason}\n\nRe-emit a corrected ops array, referencing only real names from the current world shown above.`;
-    ({ response, result } = await attempt(correction));
+    ({ edit, response, result } = await attempt(correction));
+    if (edit.ops.length === 0) {
+      const inputTokens = response.usage.input_tokens;
+      const outputTokens = response.usage.output_tokens;
+      return {
+        code: previousWorldSource,
+        rejectionReason: "fixChangeAsEdit rejected a zero-op correction: no correction was applied",
+        model,
+        inputTokens,
+        outputTokens,
+        costUsd: costUsd(model, inputTokens, outputTokens),
+        wallTimeMs: Date.now() - start,
+      };
+    }
     if (!result.ok) throw new Error(`fixChangeAsEdit: world edit invalid twice in a row -- treated as a failure, not content: ${result.reason}`);
   }
   const inputTokens = response.usage.input_tokens;
