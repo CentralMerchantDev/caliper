@@ -773,8 +773,8 @@ class Renderer3D {
   _buildGround(buildings, centerX, centerZ, scaleFor) {
     const xs = buildings.map((b) => Math.abs((b.plot.x - centerX) * GRID_UNIT_X) + (scaleFor(b.type).w * BUILDING_W) / 2);
     const zs = buildings.map((b) => Math.abs((b.plot.y - centerZ) * GRID_UNIT_Z) + (scaleFor(b.type).d * BUILDING_D) / 2);
-    const groundW = Math.max(...xs) * 2 + 5;
-    const groundD = Math.max(...zs) * 2 + 5;
+    const groundW = Math.max(...xs) * 2 + 6;
+    const groundD = Math.max(...zs) * 2 + 6;
     const groundMaterialKey = surfaceMaterialKey(this._surfaces, "ground", "grass");
     const ground = new THREE.Mesh(
       new RoundedBoxGeometry(groundW, 0.25, groundD, 3, 0.15),
@@ -785,17 +785,9 @@ class Renderer3D {
     this.neighbourhoodGroup.add(ground);
     this._groundExtent = { w: groundW, d: groundD };
 
-    // Simple cross-shaped path through the central plaza, connecting every
-    // building's side of the grid -- not routed building-to-building
-    // individually (that's real pathfinding for a later run), just an
-    // honest "there is open, walkable ground here" cue.
+    // Gravel pathways connecting all 4 doorways directly to central plaza
     const pathMaterialKey = surfaceMaterialKey(this._surfaces, "path", "gravel");
     const pathColor = surfaceColor(this._surfaces, "path", PALETTE.path);
-    // Two separate materials, not one shared between both arms: they're
-    // different real-world sizes (the N-S arm is as long as the plaza is
-    // deep, the E-W arm as long as it's wide), so a shared tiling repeat
-    // would stretch whichever arm doesn't match the size it was computed
-    // from.
     const pathNS = new THREE.Mesh(new THREE.PlaneGeometry(2.4, groundD - 1), texturedMat(pathMaterialKey, pathColor, 2.4, groundD - 1, { roughness: 0.9 }));
     pathNS.rotation.x = -Math.PI / 2;
     pathNS.position.y = -0.06;
@@ -806,6 +798,125 @@ class Renderer3D {
     pathEW.position.y = -0.06;
     pathEW.receiveShadow = true;
     this.neighbourhoodGroup.add(pathEW);
+
+    // -- Northern Knoll Windmill with Rotating Sails --
+    const windmillGroup = new THREE.Group();
+    windmillGroup.position.set(0, 0, -groundD / 2 + 0.8);
+    const millTower = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55, 0.85, 2.6, 12),
+      stdMat({ color: PALETTE.stoneDark, roughness: 0.85 })
+    );
+    millTower.position.y = 1.3;
+    millTower.castShadow = true;
+    windmillGroup.add(millTower);
+    const millCap = new THREE.Mesh(
+      new THREE.ConeGeometry(0.65, 0.8, 12),
+      stdMat({ color: 0x4a3222, roughness: 0.75 })
+    );
+    millCap.position.y = 2.8;
+    millCap.castShadow = true;
+    windmillGroup.add(millCap);
+
+    const sailsGroup = new THREE.Group();
+    sailsGroup.position.set(0, 2.4, 0.58);
+    for (let i = 0; i < 4; i++) {
+      const sail = new THREE.Mesh(
+        new RoundedBoxGeometry(0.12, 1.4, 0.03, 1, 0.01),
+        stdMat({ color: 0x78350f, roughness: 0.7 })
+      );
+      sail.rotation.z = (i * Math.PI) / 2;
+      sail.position.set(Math.sin((i * Math.PI) / 2) * 0.7, Math.cos((i * Math.PI) / 2) * 0.7, 0);
+      sailsGroup.add(sail);
+    }
+    windmillGroup.add(sailsGroup);
+    this._windmillSails = sailsGroup;
+    this.neighbourhoodGroup.add(windmillGroup);
+
+    // -- Southern Sparkling River & Wooden Footbridge --
+    const riverGeo = new THREE.PlaneGeometry(groundW + 2, 2.6);
+    const riverMat = stdMat({
+      color: 0x38bdf8,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.35,
+      roughness: 0.1,
+      transparent: true,
+      opacity: 0.88
+    });
+    const river = new THREE.Mesh(riverGeo, riverMat);
+    river.rotation.x = -Math.PI / 2;
+    river.position.set(0, -0.08, groundD / 2 - 1.2);
+    this.neighbourhoodGroup.add(river);
+
+    // Rustic wooden footbridge
+    const bridgeGroup = new THREE.Group();
+    bridgeGroup.position.set(0, 0.05, groundD / 2 - 1.2);
+    const bridgePlank = new THREE.Mesh(
+      new RoundedBoxGeometry(2.6, 0.12, 2.8, 2, 0.04),
+      stdMat({ color: 0x78350f, roughness: 0.8 })
+    );
+    bridgePlank.castShadow = true;
+    bridgeGroup.add(bridgePlank);
+    const railMat = stdMat({ color: 0x451a03, roughness: 0.8 });
+    const railLeft = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.5, 2.8, 1, 0.02), railMat);
+    railLeft.position.set(-1.2, 0.3, 0);
+    const railRight = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.5, 2.8, 1, 0.02), railMat);
+    railRight.position.set(1.2, 0.3, 0);
+    bridgeGroup.add(railLeft);
+    bridgeGroup.add(railRight);
+    this.neighbourhoodGroup.add(bridgeGroup);
+
+    // -- Agricultural Wheat Patch & Scarecrow --
+    const farmPatch = new THREE.Mesh(
+      new RoundedBoxGeometry(3.6, 0.05, 2.6, 1, 0.02),
+      stdMat({ color: 0x5c3d2e, roughness: 0.95 })
+    );
+    farmPatch.position.set(-groundW / 2 + 2.4, -0.04, 0);
+    farmPatch.receiveShadow = true;
+    this.neighbourhoodGroup.add(farmPatch);
+
+    // Wheat stalks (12 stalks)
+    const wheatMat = stdMat({ color: 0xeab308, roughness: 0.7 });
+    for (let wx = -1.2; wx <= 1.2; wx += 0.8) {
+      for (let wz = -0.8; wz <= 0.8; wz += 0.8) {
+        const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.45, 6), wheatMat);
+        stalk.position.set(-groundW / 2 + 2.4 + wx, 0.2, wz);
+        stalk.castShadow = true;
+        this.neighbourhoodGroup.add(stalk);
+      }
+    }
+    // Scarecrow
+    const scarecrowGroup = new THREE.Group();
+    scarecrowGroup.position.set(-groundW / 2 + 2.4, 0.4, 0);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 6), stdMat({ color: 0x78350f, roughness: 0.9 }));
+    post.castShadow = true;
+    scarecrowGroup.add(post);
+    const arms = new THREE.Mesh(new RoundedBoxGeometry(0.7, 0.05, 0.05, 1, 0.01), stdMat({ color: 0xb45309, roughness: 0.9 }));
+    arms.position.y = 0.25;
+    scarecrowGroup.add(arms);
+    this.neighbourhoodGroup.add(scarecrowGroup);
+
+    // -- Perimeter Pine Trees --
+    const pineMat = stdMat({ color: 0x15803d, roughness: 0.8 });
+    const trunkMat = stdMat({ color: 0x451a03, roughness: 0.9 });
+    const treePositions = [
+      { x: -groundW / 2 + 1.2, z: -groundD / 2 + 1.2 },
+      { x: groundW / 2 - 1.2, z: -groundD / 2 + 1.2 },
+      { x: -groundW / 2 + 1.2, z: groundD / 2 - 3.2 },
+      { x: groundW / 2 - 1.2, z: groundD / 2 - 3.2 },
+    ];
+    treePositions.forEach((pos) => {
+      const tree = new THREE.Group();
+      tree.position.set(pos.x, 0, pos.z);
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.6, 8), trunkMat);
+      trunk.position.y = 0.3;
+      trunk.castShadow = true;
+      tree.add(trunk);
+      const foliage = new THREE.Mesh(new THREE.ConeGeometry(0.85, 1.8, 8), pineMat);
+      foliage.position.y = 1.3;
+      foliage.castShadow = true;
+      tree.add(foliage);
+      this.neighbourhoodGroup.add(tree);
+    });
   }
 
   /** FOUNDATION.md item 4: one shell, every building type, open-topped --
@@ -816,6 +927,15 @@ class Renderer3D {
    * exactly like a dwelling, just smaller, so the whole neighbourhood
    * reads as one consistent build view. */
   _buildBuildingShell(group, building, w, d) {
+    // Stone foundation plinth at base of building
+    const plinth = new THREE.Mesh(
+      new RoundedBoxGeometry(w + 0.25, 0.35, d + 0.25, 2, 0.08),
+      stdMat({ color: PALETTE.stoneDark, roughness: 0.9 })
+    );
+    plinth.position.y = -0.32;
+    plinth.receiveShadow = true;
+    group.add(plinth);
+
     const floorMaterialKey = surfaceMaterialKey(this._surfaces, "floor", "wood");
     const floor = new THREE.Mesh(
       new RoundedBoxGeometry(w, 0.3, d, 3, 0.12),
@@ -825,10 +945,6 @@ class Renderer3D {
     floor.receiveShadow = true;
     group.add(floor);
 
-    // Both walls share one material: they're close enough in length (w vs
-    // d, the same building's own two footprint dimensions) that one tiling
-    // repeat reads fine on both, unlike the path's much more different N-S
-    // vs E-W arm lengths above.
     const wallMaterialKey = surfaceMaterialKey(this._surfaces, "wall", "plaster");
     const wallMat = texturedMat(wallMaterialKey, surfaceColor(this._surfaces, "wall", PALETTE.wall), (w + d) / 2, 2.3, { roughness: 0.85, metalness: 0.0 });
     const backWall = new THREE.Mesh(new RoundedBoxGeometry(w, 2.3, 0.14, 2, 0.05), wallMat);
@@ -840,16 +956,23 @@ class Renderer3D {
     leftWall.receiveShadow = true;
     group.add(leftWall);
 
-    // Roof eave overhangs along wall tops
-    const eaveMat = stdMat({ color: 0x5c4b39, roughness: 0.85 });
-    const backEave = new THREE.Mesh(new RoundedBoxGeometry(w + 0.3, 0.1, 0.28, 1, 0.02), eaveMat);
-    backEave.position.set(0, 2.2, -d / 2);
+    // Gabled timber roof structure over wall tops with 0.25m overhanging eaves
+    const eaveMat = stdMat({ color: 0x4a3222, roughness: 0.8 });
+    const fasciaMat = stdMat({ color: 0x2b1d14, roughness: 0.7 });
+    const backEave = new THREE.Mesh(new RoundedBoxGeometry(w + 0.5, 0.12, 0.35, 1, 0.02), eaveMat);
+    backEave.position.set(0, 2.22, -d / 2);
     backEave.castShadow = true;
     group.add(backEave);
-    const leftEave = new THREE.Mesh(new RoundedBoxGeometry(0.28, 0.1, d + 0.3, 1, 0.02), eaveMat);
-    leftEave.position.set(-w / 2, 2.2, 0);
+    const leftEave = new THREE.Mesh(new RoundedBoxGeometry(0.35, 0.12, d + 0.5, 1, 0.02), eaveMat);
+    leftEave.position.set(-w / 2, 2.22, 0);
     leftEave.castShadow = true;
     group.add(leftEave);
+
+    // Gabled roof cap trim
+    const roofTrim = new THREE.Mesh(new RoundedBoxGeometry(w + 0.5, 0.18, 0.18, 1, 0.02), fasciaMat);
+    roofTrim.position.set(0, 2.34, -d / 2);
+    roofTrim.castShadow = true;
+    group.add(roofTrim);
 
     // Inset window sills and framed window panes with warm emissive tint (#ffaa33)
     const sillMat = stdMat({ color: 0x8c7a65, roughness: 0.85 });
@@ -875,7 +998,7 @@ class Renderer3D {
     windowPane.position.set(0, 1.45, -d / 2 + 0.08);
     group.add(windowPane);
 
-    // Left wall window + sill for shop/workshop/dwelling
+    // Left wall window + sill
     const leftSill = new THREE.Mesh(new RoundedBoxGeometry(0.22, 0.06, 1.0, 1, 0.02), sillMat);
     leftSill.position.set(-w / 2 + 0.1, 1.0, 0);
     leftSill.castShadow = true;
@@ -888,18 +1011,76 @@ class Renderer3D {
     sidePane.position.set(-w / 2 + 0.08, 1.45, 0);
     group.add(sidePane);
 
-    // Trim colour distinguishes shop/workshop from across the plot even
-    // with no interior happening yet; dwellings get a plain wood-tone sign
-    // (there's no per-dwelling accent in world.surfaces, and none is
-    // needed -- the two houses are already told apart by their sims).
+    // -- Building Specific Details --
+    if (building.type === "shop") {
+      // Tavern: Wooden outdoor pergola porch deck + barrels + hanging lantern
+      const deck = new THREE.Mesh(
+        new RoundedBoxGeometry(w + 0.4, 0.08, 1.2, 1, 0.02),
+        stdMat({ color: 0x78350f, roughness: 0.8 })
+      );
+      deck.position.set(0, -0.04, d / 2 + 0.6);
+      deck.receiveShadow = true;
+      group.add(deck);
+
+      const barrel1 = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.55, 10), stdMat({ color: 0x6e4a2d, roughness: 0.7 }));
+      barrel1.position.set(w / 2 - 0.3, 0.25, d / 2 + 0.5);
+      barrel1.castShadow = true;
+      group.add(barrel1);
+      const barrel2 = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.5, 10), stdMat({ color: 0x5c3d2e, roughness: 0.7 }));
+      barrel2.position.set(w / 2 - 0.7, 0.23, d / 2 + 0.5);
+      barrel2.castShadow = true;
+      group.add(barrel2);
+
+      const lanternLight = new THREE.PointLight(0xffaa33, 0.8, 4, 2);
+      lanternLight.position.set(0, 1.8, d / 2 + 0.4);
+      lanternLight.userData.baseIntensity = 0.8;
+      lanternLight.userData.isStreetLamp = true;
+      group.add(lanternLight);
+      this._pointLights.push(lanternLight);
+    } else if (building.type === "workshop") {
+      // Workshop: Stepped stone forge chimney emitting smoke + anvil & tool rack
+      const chimney = new THREE.Mesh(
+        new RoundedBoxGeometry(0.65, 2.8, 0.65, 1, 0.05),
+        stdMat({ color: PALETTE.stoneDark, roughness: 0.9 })
+      );
+      chimney.position.set(-w / 2 + 0.35, 1.4, -d / 2 + 0.35);
+      chimney.castShadow = true;
+      group.add(chimney);
+
+      const anvil = new THREE.Mesh(
+        new RoundedBoxGeometry(0.35, 0.35, 0.22, 1, 0.02),
+        stdMat({ color: 0x334155, roughness: 0.4, metalness: 0.8 })
+      );
+      anvil.position.set(w / 2 + 0.4, 0.18, 0);
+      anvil.castShadow = true;
+      group.add(anvil);
+    } else {
+      // Dwellings: Wooden flower boxes under windows + shutters
+      const flowerBox = new THREE.Mesh(
+        new RoundedBoxGeometry(1.0, 0.14, 0.18, 1, 0.02),
+        stdMat({ color: 0x78350f, roughness: 0.8 })
+      );
+      flowerBox.position.set(0, 0.92, -d / 2 + 0.16);
+      group.add(flowerBox);
+
+      const flowers = new THREE.Mesh(
+        new THREE.SphereGeometry(0.09, 6, 6),
+        stdMat({ color: 0xef4444, roughness: 0.6 })
+      );
+      flowers.position.set(-0.2, 1.04, -d / 2 + 0.16);
+      group.add(flowers);
+      const flowers2 = new THREE.Mesh(
+        new THREE.SphereGeometry(0.09, 6, 6),
+        stdMat({ color: 0xf59e0b, roughness: 0.6 })
+      );
+      flowers2.position.set(0.2, 1.04, -d / 2 + 0.16);
+      group.add(flowers2);
+    }
+
     const trimKey = building.type === "workshop" ? "trimWorkshop" : building.type === "shop" ? "trimShop" : null;
     const trimColor = trimKey ? surfaceColor(this._surfaces, trimKey, PALETTE[trimKey]) : 0x8a5a34;
     this._buildSignPost(group, building.label, w / 2 + 0.3, d / 2 - 0.3, trimColor);
 
-    // Every building gets one interior light now (FOUNDATION.md item 4:
-    // shop/workshop are no longer dark boxes with nothing lighting them at
-    // night, now that they're open-topped like everything else), scaled to
-    // its own footprint.
     const interiorLight = new THREE.PointLight(0xffb066, 0.25, w * 0.9, 2);
     interiorLight.position.set(0, 1.9, 0);
     interiorLight.userData.baseIntensity = 0.25;
@@ -1416,6 +1597,10 @@ class Renderer3D {
     this.audio.updateAmbient(nightAmt);
     if (this.spatialDiff && this._diffEmeraldMat) {
       this._diffEmeraldMat.emissiveIntensity = 0.7 + Math.sin(performance.now() / 200) * 0.35;
+    }
+
+    if (this._windmillSails && !this.reducedMotion) {
+      this._windmillSails.rotation.z += 0.015;
     }
 
     // -- Smoke Particles Update --

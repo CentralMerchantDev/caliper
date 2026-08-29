@@ -357,6 +357,40 @@ footer a{color:var(--ink2)}
 .arch-step-detail h4{margin:0 0 6px;font-size:15px;color:#38bdf8}
 .arch-step-detail p{margin:0;font-size:13.5px;color:#cbd5e1;line-height:1.45}
 
+/* Field Guide, Target Scope, Category Tags, Master Builder Card */
+.field-guide-card{margin-bottom:16px;padding:16px 18px;background:rgba(15,23,42,.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.16);border-radius:12px}
+.guide-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.guide-badge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;color:#38bdf8;background:rgba(56,189,248,.15);padding:2px 8px;border-radius:4px}
+.guide-header h4{margin:0;font-size:15px;color:#f8fafc;flex:1;margin-left:10px}
+.guide-close-btn{background:transparent;border:none;color:#94a3b8;font-size:16px;cursor:pointer}
+.guide-close-btn:hover{color:#fff}
+.guide-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:12px}
+.guide-step{display:flex;gap:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);padding:10px;border-radius:8px}
+.step-icon{font-size:20px}
+.guide-step strong{display:block;font-size:12.5px;color:#f1f5f9;margin-bottom:2px}
+.guide-step p{margin:0;font-size:11.5px;color:#94a3b8;line-height:1.35}
+.guide-rules{display:flex;flex-wrap:wrap;gap:8px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08)}
+.rule-chip{font-size:11px;color:#cbd5e1;background:rgba(255,255,255,.06);padding:3px 10px;border-radius:6px}
+
+.target-scope-banner{display:flex;align-items:center;justify-content:space-between;background:rgba(30,41,59,.7);border:1px solid rgba(255,255,255,.12);padding:6px 12px;border-radius:8px;margin-bottom:10px}
+.target-label{font-size:13px;color:#cbd5e1}
+.target-deselect-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#94a3b8;font-size:11px;padding:3px 8px;border-radius:6px;cursor:pointer}
+.target-deselect-btn:hover{background:rgba(255,255,255,.18);color:#fff}
+
+.category-tags-bar{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.category-tag-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#cbd5e1;font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;transition:all .15s ease}
+.category-tag-btn:hover{background:rgba(56,189,248,.2);border-color:#38bdf8;color:#fff}
+
+.master-builder-card{margin-top:14px;padding:14px 16px;background:rgba(15,23,42,.92);border:1px solid #f59e0b;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+.mb-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.mb-avatar{font-size:24px}
+.mb-header h4{margin:0;font-size:15px;color:#fbbf24}
+.mb-subtitle{font-size:11px;color:#94a3b8}
+.mb-text{margin:0 0 10px;font-size:13px;color:#cbd5e1;line-height:1.4}
+.mb-action-buttons{display:flex;flex-wrap:wrap;gap:8px}
+.mb-action-btn{background:rgba(245,158,11,.18);border:1px solid #f59e0b;color:#fef08a;font-size:12px;padding:5px 12px;border-radius:6px;cursor:pointer}
+.mb-action-btn:hover{background:#f59e0b;color:#0f172a;font-weight:600}
+
 @media(prefers-reduced-motion:reduce){.spin{animation:none}}
 /* POLISH.md item 2: mobile, done properly, not just "no horizontal
    overflow". Every rule below traces to one specific, named complaint --
@@ -443,6 +477,43 @@ footer a{color:var(--ink2)}
 </div>
 
 <div class="wide" id="app">
+  <!-- Village Field Guide & Simulation Rules HUD -->
+  <div id="village-field-guide" class="field-guide-card">
+    <div class="guide-header">
+      <span class="guide-badge">VILLAGE FIELD GUIDE</span>
+      <h4>🏰 How to Direct the Living Settlement</h4>
+      <button type="button" id="guide-close-btn" class="guide-close-btn" title="Dismiss Guide">✕</button>
+    </div>
+    <div class="guide-steps">
+      <div class="guide-step">
+        <span class="step-icon">🎯</span>
+        <div>
+          <strong>Step 1: Target a Building</strong>
+          <p>Click any 3D structure (Tavern, Workshop, Houses, or Plaza) to direct edits to that location.</p>
+        </div>
+      </div>
+      <div class="guide-step">
+        <span class="step-icon">✍️</span>
+        <div>
+          <strong>Step 2: Describe Modifications</strong>
+          <p>Type in plain English (e.g. <em>"Add 3 outdoor timber tables"</em> or <em>"Place a stone bench near the plaza well"</em>).</p>
+        </div>
+      </div>
+      <div class="guide-step">
+        <span class="step-icon">⚡</span>
+        <div>
+          <strong>Step 3: Watch the Town Adapt</strong>
+          <p>CALIPER validates spatial bounds in 13ms and streams live 3D updates to inhabitants.</p>
+        </div>
+      </div>
+    </div>
+    <div class="guide-rules">
+      <div class="rule-chip"><strong>Rule 1 (Clearance):</strong> Additions must fit parcel bounds and avoid solid wall collisions.</div>
+      <div class="rule-chip"><strong>Rule 2 (Economy):</strong> Built structures provide utility (tables=social, lamps=lighting, forge=wages).</div>
+      <div class="rule-chip"><strong>Rule 3 (Budget):</strong> 3 live AI pipeline runs per day to protect rate limits.</div>
+    </div>
+  </div>
+
   <div class="workspace">
     <div class="panel world-panel">
       <div class="world-top-row">
@@ -458,6 +529,7 @@ footer a{color:var(--ink2)}
           </div>
           <button id="cmd-k-trigger" type="button" class="cmd-k-badge" title="Open Command Palette (Cmd+K / Ctrl+K)">⌘K</button>
           <button id="arch-drawer-trigger" type="button" class="cmd-k-badge" style="display:inline-flex;align-items:center;gap:4px" title="System Architecture & Safety Specs">📐 Architecture</button>
+          <button id="village-rules-trigger" type="button" class="cmd-k-badge" style="display:inline-flex;align-items:center;gap:4px" title="Open Village Field Guide & Rules">❓ Rules</button>
         </div>
         <div class="sim-badge" id="sim-status-badge">
           <span class="pulse-dot">●</span> SIMULATION ACTIVE | <span id="badge-parcel-count">4</span> PARCELS | BUILD VERIFIED
@@ -474,6 +546,7 @@ footer a{color:var(--ink2)}
           <button id="drone-tour-btn" type="button" class="canvas-btn" title="Cinematic camera tour">🎬 Tour</button>
           <button id="spatial-diff-btn" type="button" class="canvas-btn" title="Highlight newly placed items">👁️ Spatial Diff</button>
           <button id="sound-toggle-btn" type="button" class="canvas-btn" title="Toggle Web Audio sound">🔊 Sound: Off</button>
+          <button id="canvas-rules-btn" type="button" class="canvas-btn" title="Open Village Field Guide & Rules">❓ Rules</button>
         </div>
         <button id="reset-cam-btn" type="button" class="reset-cam-btn" title="Reset camera to default view">↺ Reset View</button>
         <canvas id="world-canvas" width="1400" height="900" role="img" aria-label="A living 3D view of the simulated neighbourhood"></canvas>
@@ -540,6 +613,19 @@ footer a{color:var(--ink2)}
       <div class="stage-log" id="stage-log" aria-live="polite">
         <p style="margin:0;color:var(--muted);font-size:14.5px">Nothing is running yet. What happens
           shows up here as a read-only record. Act from the bar below.</p>
+      </div>
+
+      <!-- Master Builder Guidance Card -->
+      <div id="master-builder-card" class="master-builder-card" style="display:none" role="region" aria-label="Master Builder Guidance">
+        <div class="mb-header">
+          <span class="mb-avatar">🧙‍♂️</span>
+          <div>
+            <h4 style="margin:0">Master Builder Guidance</h4>
+            <span id="mb-reason-subtitle" class="mb-subtitle">Spatial Constraint & Grounding Evaluation</span>
+          </div>
+        </div>
+        <p id="mb-reason-text" class="mb-text">The requested placement cannot be built as specified. Select one of the grounded alternatives below:</p>
+        <div id="mb-action-buttons" class="mb-action-buttons"></div>
       </div>
       <!-- LAST.md item 3: moved from a page-spanning position:fixed footer
            (Mark's own spec error, not a defect from executing it) to
@@ -844,6 +930,30 @@ footer a{color:var(--ink2)}
   </div>
 </div>
 
+<!-- Village Field Guide & Rules Modal -->
+<div id="village-guide-modal" class="cmd-modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Village Field Guide Modal">
+  <div class="cmd-modal-card" style="max-width:580px;padding:22px">
+    <div class="arch-drawer-header" style="padding:0 0 14px;border-bottom:1px solid rgba(255,255,255,0.12)">
+      <h3 style="margin:0;font-size:18px;color:#f8fafc">🏰 Village Field Guide & Simulation Rules</h3>
+      <button type="button" id="modal-guide-close" class="arch-close-btn">✕</button>
+    </div>
+    <div style="padding-top:16px;color:#cbd5e1;font-size:14px;line-height:1.5">
+      <h5 style="margin:0 0 8px;color:#38bdf8;font-size:15px">How to Direct the Settlement</h5>
+      <ul style="margin:0 0 16px;padding-left:20px;display:flex;flex-direction:column;gap:8px">
+        <li><strong>🎯 1. Target a Building:</strong> Click any 3D structure or category tag to target parcel scope.</li>
+        <li><strong>✍️ 2. Write Plain-English Requests:</strong> Describe architectural additions, landscaping, or furnishings.</li>
+        <li><strong>⚡ 3. Grounded & Evaluated:</strong> CALIPER checks spatial bounds and mutates world state in a 13ms edge isolate.</li>
+      </ul>
+      <h5 style="margin:0 0 8px;color:#34d399;font-size:15px">Transparent System Rules</h5>
+      <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px">
+        <li><strong>Rule 1 (Clearance):</strong> Edits must fit inside parcel boundaries and never intersect solid building walls or existing placements.</li>
+        <li><strong>Rule 2 (Living Economy):</strong> Built structures provide utility to inhabitants (tables restore social, lamps illuminate night, forge generates wages).</li>
+        <li><strong>Rule 3 (Daily Budget):</strong> Rate-limited to 3 live AI pipeline executions per day.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
 <footer><div class="wrap">
   Built by Mark Fraser ·
   <a href="/matrix-results">raw results</a> · <a href="/tasks">task list</a> ·
@@ -864,6 +974,70 @@ const money = n => '$' + Number(n).toFixed(4)
 const pathBadge = path => path === 'data-edit'
   ? `<p class="summary-line" style="margin:0 0 8px"><strong style="color:var(--accent)">Data edit</strong> — applied directly to the world, no source file regenerated</p>`
   : `<p class="summary-line" style="margin:0 0 8px"><strong>Source edit</strong> — this needs real simulation logic, so the full file is rewritten</p>`
+
+// ---------- Click-to-Direct Target Suggestions & Scope ----------
+let currentTargetParcelId = 'outdoors'
+const TARGET_SUGGESTIONS = {
+  shop: {
+    name: 'The Tavern',
+    placeholder: 'e.g. Add 3 outdoor timber tables on the Tavern patio',
+    categories: {
+      architecture: 'Construct a wooden pergola canopy over the Tavern patio',
+      landscape: 'Plant potted evergreen shrubs near the Tavern entrance',
+      furnishing: 'Add 3 outdoor timber tables on the Tavern patio',
+      routine: 'Set up evening patron seating and ale keg storage for Althea'
+    }
+  },
+  workshop: {
+    name: 'The Workshop',
+    placeholder: 'e.g. Build a timber workbench and anvil extension for The Workshop',
+    categories: {
+      architecture: 'Build a covered timber shelter for raw iron bars',
+      landscape: 'Place a stone storage trough along the Workshop side wall',
+      furnishing: 'Add an outdoor timber workbench with iron vise and tool rack',
+      routine: 'Organize forge ironworking tools for Master Vane'
+    }
+  },
+  'dwelling-1': {
+    name: 'House 1',
+    placeholder: 'e.g. Place a stone flower box and wooden herb bench outside House 1',
+    categories: {
+      architecture: 'Add wooden window shutters and eave trim to House 1',
+      landscape: 'Plant a bed of wild lavender and sage outside House 1',
+      furnishing: 'Place a carved wooden bench by the front door of House 1',
+      routine: 'Prepare herb drying racks for Elora'
+    }
+  },
+  'dwelling-2': {
+    name: 'House 2',
+    placeholder: 'e.g. Add a wooden water trough and hitching post near House 2',
+    categories: {
+      architecture: 'Extend the stable roof overhang on House 2',
+      landscape: 'Place a stone water trough for horses near House 2',
+      furnishing: 'Add a wooden hay storage rack outside House 2',
+      routine: 'Set up stable maintenance equipment for Rowan'
+    }
+  },
+  outdoors: {
+    name: 'The Village Plaza',
+    placeholder: 'e.g. Place a stone bench near the central plaza well',
+    categories: {
+      architecture: 'Build a stone archway entrance at the village boundary road',
+      landscape: 'Plant a cluster of pine trees near the plaza path intersection',
+      furnishing: 'Place a stone bench near the central plaza well',
+      routine: 'Arrange a gathering circle for village residents'
+    }
+  }
+}
+
+function setTargetParcel(parcelId) {
+  currentTargetParcelId = parcelId || 'outdoors'
+  const info = TARGET_SUGGESTIONS[currentTargetParcelId] || TARGET_SUGGESTIONS.outdoors
+  const labelEl = $('#target-parcel-name')
+  if (labelEl) labelEl.textContent = info.name
+  const input = $('#bar-request-input')
+  if (input) input.placeholder = info.placeholder
+}
 
 // ---------- the world, live ----------
 // FINAL.md item 7: a toggle between the 3D and plan views of the ONE
@@ -961,6 +1135,7 @@ const renderer3d = new WorldRenderer(canvas3d, {
   reducedMotion,
   onInspect: (info) => {
     currentInspectedParcelId = info.parcelId
+    setTargetParcel(info.parcelId)
     const groundedTitle = GROUNDED_LABELS[info.parcelId] || info.label || info.parcelId
     const groundedOccupants = GROUNDED_OCCUPANTS[info.parcelId] || info.occupants
 
@@ -1122,6 +1297,28 @@ document.querySelectorAll('.svg-node').forEach(node => {
       $('#arch-step-desc').textContent = info.desc
     }
   })
+})
+
+// Village Field Guide & Rules Modal Handlers
+$('#guide-close-btn')?.addEventListener('click', () => {
+  $('#village-field-guide').style.display = 'none'
+  if (renderer3d) renderer3d.playClickSound()
+})
+
+const openRulesModal = () => {
+  $('#village-guide-modal').style.display = 'flex'
+  if (renderer3d) renderer3d.playClickSound()
+}
+$('#village-rules-trigger')?.addEventListener('click', openRulesModal)
+$('#canvas-rules-btn')?.addEventListener('click', openRulesModal)
+$('#modal-guide-close')?.addEventListener('click', () => {
+  $('#village-guide-modal').style.display = 'none'
+  if (renderer3d) renderer3d.playClickSound()
+})
+$('#village-guide-modal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'village-guide-modal') {
+    $('#village-guide-modal').style.display = 'none'
+  }
 })
 
 initTimelineScrubber()
@@ -1767,17 +1964,22 @@ function renderBar() {
 
   let html = ''
   if (barState.kind === 'idle') {
+    const activeTarget = TARGET_SUGGESTIONS[currentTargetParcelId] || TARGET_SUGGESTIONS.outdoors
     html = liveRunsEnabled ? `
+      <div id="target-scope-banner" class="target-scope-banner">
+        <span class="target-label">Targeting: <strong id="target-parcel-name" style="color:#38bdf8">${esc(activeTarget.name)}</strong></span>
+        <button type="button" id="target-deselect-btn" class="target-deselect-btn">Deselect / Entire Village</button>
+      </div>
       <label class="lab" for="bar-request-input">Ask the world for something</label>
       <div class="bar-row">
-        <textarea id="bar-request-input" maxlength="500" placeholder="e.g. add a lamp near the desk that lights up at night"></textarea>
+        <textarea id="bar-request-input" maxlength="500" placeholder="${esc(activeTarget.placeholder)}"></textarea>
         <button class="btn" id="bar-submit" type="button">▸ Ground it, then plan it</button>
       </div>
-      <div class="preset-chips" role="group" aria-label="Preset request suggestions">
-        <span class="lab" style="align-self:center;font-size:10px">Presets:</span>
-        <button type="button" class="chip-btn" data-preset="Add 3 timber tables outside the Tavern">Add 3 timber tables outside the Tavern</button>
-        <button type="button" class="chip-btn" data-preset="Place a stone bench near the plaza well">Place a stone bench near the plaza well</button>
-        <button type="button" class="chip-btn" data-preset="Construct a timber workbench outside the workshop">Construct a timber workbench outside the workshop</button>
+      <div class="category-tags-bar" role="group" aria-label="Prompt Category Suggestions">
+        <button type="button" class="category-tag-btn" data-cat="architecture">🏛️ Architecture</button>
+        <button type="button" class="category-tag-btn" data-cat="landscape">🌳 Landscape</button>
+        <button type="button" class="category-tag-btn" data-cat="furnishing">🪑 Furnishing</button>
+        <button type="button" class="category-tag-btn" data-cat="routine">👥 Routine</button>
       </div>` : `<span class="bar-kicker">Recorded artifact</span><p class="bar-ask">Live runs are currently disabled. The recording and run history remain available.</p>`
   } else if (barState.kind === 'running') {
     html = `
@@ -1852,13 +2054,24 @@ function renderBar() {
   if (barState.kind === 'idle' && liveRunsEnabled) {
     $('#bar-submit').addEventListener('click', startRun)
     $('#bar-request-input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startRun() } })
-    document.querySelectorAll('.chip-btn').forEach(btn => {
+    $('#target-deselect-btn')?.addEventListener('click', () => {
+      setTargetParcel('outdoors')
+      if (renderer3d) {
+        renderer3d.resetView()
+        renderer3d.playClickSound()
+      }
+    })
+    document.querySelectorAll('.category-tag-btn').forEach(btn => {
       btn.addEventListener('click', e => {
+        const cat = e.currentTarget.dataset.cat
+        const activeTarget = TARGET_SUGGESTIONS[currentTargetParcelId] || TARGET_SUGGESTIONS.outdoors
+        const suggestion = activeTarget.categories[cat] || activeTarget.placeholder
         const input = $('#bar-request-input')
         if (input) {
-          input.value = e.currentTarget.dataset.preset
+          input.value = suggestion
           input.focus()
         }
+        if (renderer3d) renderer3d.playClickSound()
       })
     })
   } else if (barState.kind === 'running') {
@@ -1997,8 +2210,40 @@ function setRunning(stageLabel) {
   renderBar()
 }
 
+function showMasterBuilderGuidance(reasonText, alternativesArray) {
+  const card = $('#master-builder-card')
+  if (!card) return
+  card.style.display = 'block'
+  const reasonEl = $('#mb-reason-text')
+  if (reasonEl) reasonEl.textContent = reasonText || 'The requested placement cannot be built as specified. Select one of the grounded alternatives below:'
+  const container = $('#mb-action-buttons')
+  if (container) {
+    container.innerHTML = ''
+    if (alternativesArray && alternativesArray.length > 0) {
+      alternativesArray.forEach(altText => {
+        const btn = document.createElement('button')
+        btn.type = 'button'
+        btn.className = 'mb-action-btn'
+        btn.textContent = `▸ ${altText}`
+        btn.addEventListener('click', () => {
+          const input = $('#bar-request-input')
+          if (input) {
+            input.value = altText;
+            input.focus();
+          }
+          card.style.display = 'none';
+          if (renderer3d) renderer3d.playClickSound();
+        })
+        container.appendChild(btn)
+      })
+    }
+  }
+}
+
 function startRun() {
   if (!liveRunsEnabled) return
+  const mbCard = $('#master-builder-card')
+  if (mbCard) mbCard.style.display = 'none'
   const text = $('#bar-request-input').value.trim()
   if (!text) return
   log.innerHTML = ''
@@ -2060,6 +2305,9 @@ function connect(url) {
         (r.alternatives.length ? `<p class="summary-line" style="margin:0 0 8px">What the structure can support instead: ${r.alternatives.map(esc).join('; ')}</p>` : '') +
         `<div class="stage-footer">${d.inputTokens} in / ${d.outputTokens} out tokens · ${money(d.costUsd)} · ${d.wallTimeMs}ms</div>`
       groundBlock.classList.remove('active')
+      if (!r.premisesHold && r.alternatives && r.alternatives.length > 0) {
+        showMasterBuilderGuidance(r.reasoning, r.alternatives)
+      }
     }
   })
 
