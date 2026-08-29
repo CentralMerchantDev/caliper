@@ -1,10 +1,10 @@
-// CALIPER world renderer, v3 (CITY.md item 1): a neighbourhood of buildings
-// on a grid instead of a single room. Same design language (warm paper,
-// ink, the accent) and the same public contract as before --
-// constructor(canvas, {reducedMotion}), pushTick(world), draw(t), destroy(),
-// plus the .nextWorld/.reducedMotion instance fields the visual-check
-// harness pokes directly -- so callers needed zero changes beyond what
-// they already have.
+// CALIPER world renderer, v4 (FOUNDATION.md item 1): draws whatever is in
+// world.placements, using world.objectTypes -- it never names an individual
+// object type. Same design language (warm paper, ink, the accent) and the
+// same public contract as before -- constructor(canvas, {reducedMotion}),
+// pushTick(world), draw(t), destroy(), plus the .nextWorld/.reducedMotion
+// instance fields the visual-check harness pokes directly -- so callers
+// needed zero changes beyond what they already have.
 //
 // Vendored, not CDN-loaded: this is a real deployed demo, not a sandboxed
 // snippet, and a live show-and-tell shouldn't depend on a third-party CDN
@@ -12,17 +12,15 @@
 // ./vendor/three/, resolved through the import map in index.html/world.html.
 //
 // Sim logic is untouched -- this file only ever reads world JSON
-// (tick/money/sims[].needs/lastAction/home, buildings[], outdoorObjects[]),
-// the same shape src/simBaseline.ts's tick() returns. What to draw comes
-// from the real world.buildings/outdoorObjects arrays read at runtime, not
-// a hand-written layout -- a change that adds a fifth building or a new
-// outdoor object type draws here without this file needing to know about
-// it in advance (new outdoor object TYPES still need a case in
-// _buildOutdoorObject, same as a new station type would; the COUNT and
-// PLOT LAYOUT of buildings/objects never does). STATIONS (which action
-// maps to which piece of dwelling furniture) is imported from the 2D
-// renderer so the two files can never silently disagree, and the 2D
-// renderer itself becomes this file's WebGL-unavailable fallback.
+// (tick/money/sims[].needs/lastAction/home, buildings[], placements[],
+// objectTypes, surfaces), the same shape src/simBaseline.ts's tick()
+// returns. What to draw comes entirely from world.placements + the type
+// registry in world.objectTypes, read at runtime -- adding a placement of
+// an EXISTING type, or a whole new registry entry (a geometry recipe built
+// from the primitive shapes _buildFromRecipe already knows how to draw:
+// box, cylinder, sphere, icosahedron), needs zero changes to this file.
+// The 2D renderer (./world-render.js) is this file's WebGL-unavailable
+// fallback, reading the exact same placements/objectTypes data.
 import * as THREE from "three";
 import { RoomEnvironment } from "./vendor/three/addons/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "./vendor/three/addons/geometries/RoundedBoxGeometry.js";
@@ -32,12 +30,22 @@ import { UnrealBloomPass } from "./vendor/three/addons/postprocessing/UnrealBloo
 import { ShaderPass } from "./vendor/three/addons/postprocessing/ShaderPass.js";
 import { VignetteShader } from "./vendor/three/addons/shaders/VignetteShader.js";
 import { OutputPass } from "./vendor/three/addons/postprocessing/OutputPass.js";
-import { STATIONS, WorldRenderer as WorldRenderer2D } from "./world-render.js";
+import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
 
 // A dwelling's own interior footprint -- close to the old single room's
 // 11x7.5, shrunk slightly so two of them plus a path fit on one grid axis.
+// FOUNDATION.md item 4: every building is open-topped and built from the
+// same shell now, dwelling-sized or smaller (BUILDING_TYPE_SCALE below).
 const BUILDING_W = 8.5;
 const BUILDING_D = 6.0;
+// FOUNDATION.md item 4: "every building open-topped in the same way." All
+// four building types share one shell constructor now; this is the only
+// per-type difference left -- footprint scale, not roof-or-not.
+const BUILDING_TYPE_SCALE = {
+  dwelling: { w: 1, d: 1 },
+  shop: { w: 0.55, d: 0.7 },
+  workshop: { w: 0.55, d: 0.7 },
+};
 // Half-spacing between plot steps (plots are 0/2 today; the formula below
 // is generic over whatever plot values the real world data contains).
 const GRID_UNIT_X = 6.0;
@@ -49,38 +57,50 @@ const GRID_UNIT_Z = 4.5;
 // lighter than the ground either side of it) -- contrast comes from
 // letting the point lights below create brightness against these,
 // instead of starting everything pre-lit.
+// Fallbacks only, used when a world state predates a given surface (an
+// in-flight run resumed across a deploy) -- surfaceColor() below always
+// prefers the real data. Everything else that used to live in a bigger
+// PALETTE (furniture woods, fabrics, metals...) is now inline in each
+// object type's own recipe in src/simBaseline.ts, since that data is what
+// actually needs to be addressable and editable, not a renderer constant.
 const PALETTE = {
   floor: 0xa79c85,
   wall: 0xa5997e,
-  wood: 0x8a5a34,
-  woodDark: 0x6a4526,
-  metal: 0xcfd2d6,
-  fabricBed: 0xd8c9a8,
-  fabricRug: 0xc97a3d, // deliberately NOT PALETTE.accent -- sim1 uses that exact colour, and a same-colour sim standing on its own rug read as camouflaged, invisible
-  ceramic: 0xf3efe6,
-  accent: 0xb0560c, // sim 1
-  sim2: 0x3d6b63, // sim 2
-  ground: 0x6f6656, // deepened again -- night was reading as one flat brown value, not dark with warm pools
+  ground: 0x6f6656,
   path: 0xbfb49c,
-  roofShop: 0x9a5a3c,
-  roofWorkshop: 0x5c6b5a,
-  leaf: 0x4f6b47,
+  trimShop: 0x9a5a3c,
+  trimWorkshop: 0x5c6b5a,
+  woodDark: 0x6a4526, // sign posts only -- a structural neutral, not tied to any surface
+  accent: 0xb0560c, // sim 1
+  sim2: 0x3d6b63, // sim 2 -- deliberately not the same hue as any registry colour, so a sim never reads as camouflaged against its own furniture
 };
 
-// FINAL.md item 4: surfaces are real, addressable world data now
-// (world.surfaces, src/simBaseline.ts's initialWorld()) -- this reads
-// straight from it instead of the PALETTE constants above owning the only
-// copy. Falls back to the PALETTE default only for a world state that
-// predates this field (an in-flight run resumed across a deploy), never
-// silently on a genuinely present-but-different value.
+// FINAL.md item 4 / FOUNDATION.md item 1: surfaces are real, addressable
+// world data (world.surfaces, src/simBaseline.ts's initialWorld()) -- this
+// reads straight from it instead of a renderer constant owning the only
+// copy. Falls back to PALETTE only for a world state that predates a given
+// key, never silently on a genuinely present-but-different value.
 function surfaceColor(surfaces, key, fallback) {
   const c = surfaces && surfaces[key] && surfaces[key].color;
   return c || fallback;
 }
 
-function stationFor(action) {
-  for (const key in STATIONS) if (STATIONS[key].action === action) return STATIONS[key];
-  return STATIONS.center;
+// FOUNDATION.md item 1: which registry type provides a given sim action --
+// derived from world.objectTypes at runtime (every type with a `station`
+// whose action matches), never a static imported list. A sim with no
+// matching action (idle) stands at a fixed centre point local to its
+// building; there is no "idle station" object to place there.
+const IDLE_LOCAL = { x: 0.5, y: 0.5 };
+function stationTypeFor(action, objectTypes) {
+  for (const key in objectTypes) {
+    const t = objectTypes[key];
+    if (t.station && t.station.action === action) return t;
+  }
+  return null;
+}
+function localForAction(action, objectTypes) {
+  const t = stationTypeFor(action, objectTypes);
+  return t && t.local ? t.local : IDLE_LOCAL;
 }
 
 // A grid plot {x,y} (whatever units the real world data uses) -> world (x,z).
@@ -91,9 +111,11 @@ function plotToWorldXZ(plot, centerX, centerZ) {
   return { x: (plot.x - centerX) * GRID_UNIT_X, z: (plot.y - centerZ) * GRID_UNIT_Z };
 }
 
-// A station's 0..1 layout -> local (x,z) within its own building's footprint.
-function stationLocalXZ(s) {
-  return { x: (s.x - 0.5) * BUILDING_W, z: (s.y - 0.5) * BUILDING_D };
+// A station's 0..1 local layout -> local (x,z) within its own building's
+// footprint (footprint size passed in -- dwellings and shop/workshop no
+// longer share one fixed size, FOUNDATION.md item 4).
+function stationLocalXZ(local, w, d) {
+  return { x: (local.x - 0.5) * w, z: (local.y - 0.5) * d };
 }
 
 // A sim's stand position is offset from its station's centre, toward the
@@ -109,9 +131,10 @@ const STAND_OFFSET = {
   call: { x: 0.07, y: 0 },
   idle: { x: 0, y: 0 },
 };
-function standLocalXZ(s) {
-  const off = STAND_OFFSET[s.action] || STAND_OFFSET.idle;
-  return { x: (s.x + off.x - 0.5) * BUILDING_W, z: (s.y + off.y - 0.5) * BUILDING_D };
+function standLocalXZ(action, objectTypes, w, d) {
+  const local = localForAction(action, objectTypes);
+  const off = STAND_OFFSET[action] || STAND_OFFSET.idle;
+  return { x: (local.x + off.x - 0.5) * w, z: (local.y + off.y - 0.5) * d };
 }
 
 // Sun elevation/azimuth/colour across the 24h clock. FINAL.md item 6:
@@ -184,6 +207,13 @@ class Renderer3D {
     this._simMeshes = [];
     this._buildingGroupsById = {};
     this._buildingsById = {};
+    this._buildingScaleById = {};
+    this._objectTypes = {};
+    // Materials that ramp brighter at night (a light source's own bulb, an
+    // object type's recipe part flagged emissiveAnimated -- FOUNDATION.md
+    // item 1) -- tracked generically instead of hunting the scene graph
+    // for a hardcoded "lampBulb" userData key by name.
+    this._emissiveAnimated = [];
     this._neighbourhoodBuilt = false;
     this._disposed = false;
 
@@ -270,24 +300,29 @@ class Renderer3D {
     return mesh;
   }
 
-  /** Reads world.buildings/outdoorObjects the first time real world data
-   * arrives and builds the whole neighbourhood from it. Only ever runs
-   * once per world shape -- buildings/outdoor objects are static for a
-   * given source (a shipped change that adds one would reload the page
-   * via bootWorld(), which constructs a fresh renderer anyway). */
+  /** Reads world.buildings/placements/objectTypes the first time real world
+   * data arrives and builds the whole neighbourhood from it. Only ever runs
+   * once per world shape -- the layout is static for a given source (a
+   * shipped change reloads the page via bootWorld(), which constructs a
+   * fresh renderer anyway). FOUNDATION.md item 1: this method and
+   * everything it calls draws from world.placements + world.objectTypes
+   * generically -- it never names an individual placement or type. */
   _buildNeighbourhoodIfNeeded(world) {
     if (this._neighbourhoodBuilt) return;
     const buildings = world.buildings || [];
-    const outdoorObjects = world.outdoorObjects || [];
+    const placements = world.placements || [];
     this._surfaces = world.surfaces || {};
+    this._objectTypes = world.objectTypes || {};
     if (buildings.length === 0) return; // nothing to build yet
+
+    const scaleFor = (type) => BUILDING_TYPE_SCALE[type] || BUILDING_TYPE_SCALE.dwelling;
 
     const xs = buildings.map((b) => b.plot.x), ys = buildings.map((b) => b.plot.y);
     const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
     const centerZ = (Math.min(...ys) + Math.max(...ys)) / 2;
     this._plotCenter = { x: centerX, z: centerZ };
 
-    this._buildGround(buildings, outdoorObjects, centerX, centerZ);
+    this._buildGround(buildings, centerX, centerZ, scaleFor);
 
     for (const b of buildings) {
       const pos = plotToWorldXZ(b.plot, centerX, centerZ);
@@ -296,22 +331,33 @@ class Renderer3D {
       this.neighbourhoodGroup.add(group);
       this._buildingGroupsById[b.id] = group;
       this._buildingsById[b.id] = b;
-      if (b.type === "dwelling") this._buildDwelling(group, b);
-      else this._buildSimpleBuilding(group, b);
+      const scale = scaleFor(b.type);
+      this._buildingScaleById[b.id] = scale;
+      this._buildBuildingShell(group, b, scale.w * BUILDING_W, scale.d * BUILDING_D);
     }
 
-    for (const o of outdoorObjects) {
-      const pos = plotToWorldXZ(o.plot, centerX, centerZ);
-      this._buildOutdoorObject(o, pos);
+    for (const p of placements) {
+      const typeDef = this._objectTypes[p.type];
+      if (!typeDef) continue; // a placement naming an unknown type -- nothing to draw, not a crash
+      if (p.location === "outdoors") {
+        const pos = plotToWorldXZ(p.plot, centerX, centerZ);
+        this._buildPlacementInstance(typeDef, p, this.neighbourhoodGroup, pos.x, pos.z);
+      } else {
+        const home = this._buildingGroupsById[p.location];
+        const scale = this._buildingScaleById[p.location];
+        if (!home || !scale || !typeDef.local) continue; // a station-shaped placement with nowhere to stand -- skip, don't throw
+        const local = stationLocalXZ(typeDef.local, scale.w * BUILDING_W, scale.d * BUILDING_D);
+        this._buildPlacementInstance(typeDef, p, home, local.x, local.z);
+      }
     }
 
     this._neighbourhoodBuilt = true;
-    this._fitCamera(buildings, centerX, centerZ);
+    this._fitCamera(buildings, centerX, centerZ, scaleFor);
   }
 
-  _fitCamera(buildings, centerX, centerZ) {
-    const xs = buildings.map((b) => Math.abs((b.plot.x - centerX) * GRID_UNIT_X) + BUILDING_W / 2);
-    const zs = buildings.map((b) => Math.abs((b.plot.y - centerZ) * GRID_UNIT_Z) + BUILDING_D / 2);
+  _fitCamera(buildings, centerX, centerZ, scaleFor) {
+    const xs = buildings.map((b) => Math.abs((b.plot.x - centerX) * GRID_UNIT_X) + (scaleFor(b.type).w * BUILDING_W) / 2);
+    const zs = buildings.map((b) => Math.abs((b.plot.y - centerZ) * GRID_UNIT_Z) + (scaleFor(b.type).d * BUILDING_D) / 2);
     const halfW = Math.max(...xs, BUILDING_W / 2);
     const halfD = Math.max(...zs, BUILDING_D / 2);
     const radius = Math.sqrt(halfW * halfW + halfD * halfD);
@@ -323,9 +369,9 @@ class Renderer3D {
     this.sun.shadow.camera.bottom = -(halfD + 3);
   }
 
-  _buildGround(buildings, outdoorObjects, centerX, centerZ) {
-    const xs = buildings.map((b) => Math.abs((b.plot.x - centerX) * GRID_UNIT_X) + BUILDING_W / 2);
-    const zs = buildings.map((b) => Math.abs((b.plot.y - centerZ) * GRID_UNIT_Z) + BUILDING_D / 2);
+  _buildGround(buildings, centerX, centerZ, scaleFor) {
+    const xs = buildings.map((b) => Math.abs((b.plot.x - centerX) * GRID_UNIT_X) + (scaleFor(b.type).w * BUILDING_W) / 2);
+    const zs = buildings.map((b) => Math.abs((b.plot.y - centerZ) * GRID_UNIT_Z) + (scaleFor(b.type).d * BUILDING_D) / 2);
     const groundW = Math.max(...xs) * 2 + 5;
     const groundD = Math.max(...zs) * 2 + 5;
     const ground = new THREE.Mesh(
@@ -354,72 +400,49 @@ class Renderer3D {
     this.neighbourhoodGroup.add(pathEW);
   }
 
-  _buildDwelling(group, building) {
+  /** FOUNDATION.md item 4: one shell, every building type, open-topped --
+   * floor and two walls (back + left), no roof, whatever the building's
+   * own footprint size is. "Two of four buildings were open-topped and two
+   * were not -- it reads as a bug because it is one." A shop and a
+   * workshop used to be a sealed box with a roof plane; now they are built
+   * exactly like a dwelling, just smaller, so the whole neighbourhood
+   * reads as one consistent build view. */
+  _buildBuildingShell(group, building, w, d) {
     const floor = new THREE.Mesh(
-      new RoundedBoxGeometry(BUILDING_W, 0.3, BUILDING_D, 3, 0.12),
+      new RoundedBoxGeometry(w, 0.3, d, 3, 0.12),
       stdMat({ color: surfaceColor(this._surfaces, "floor", PALETTE.floor), roughness: 0.86, metalness: 0.02 }),
     );
     floor.position.y = -0.15;
     floor.receiveShadow = true;
     group.add(floor);
 
-    const wallMat = stdMat({ color: PALETTE.wall, roughness: 0.92, metalness: 0.0 });
-    const backWall = new THREE.Mesh(new RoundedBoxGeometry(BUILDING_W, 2.3, 0.14, 2, 0.05), wallMat);
-    backWall.position.set(0, 1.0, -BUILDING_D / 2);
+    const wallMat = stdMat({ color: surfaceColor(this._surfaces, "wall", PALETTE.wall), roughness: 0.92, metalness: 0.0 });
+    const backWall = new THREE.Mesh(new RoundedBoxGeometry(w, 2.3, 0.14, 2, 0.05), wallMat);
+    backWall.position.set(0, 1.0, -d / 2);
     backWall.receiveShadow = true;
     group.add(backWall);
-    const leftWall = new THREE.Mesh(new RoundedBoxGeometry(0.14, 2.3, BUILDING_D, 2, 0.05), wallMat);
-    leftWall.position.set(-BUILDING_W / 2, 1.0, 0);
+    const leftWall = new THREE.Mesh(new RoundedBoxGeometry(0.14, 2.3, d, 2, 0.05), wallMat);
+    leftWall.position.set(-w / 2, 1.0, 0);
     leftWall.receiveShadow = true;
     group.add(leftWall);
 
-    // A small label plank by the entrance so the building reads as
-    // labelled ("House 1"), not just a shape -- matches building.label.
-    this._buildSignPost(group, building.label, BUILDING_W / 2 + 0.3, BUILDING_D / 2 - 0.3, PALETTE.wood);
+    // Trim colour distinguishes shop/workshop from across the plot even
+    // with no interior happening yet; dwellings get a plain wood-tone sign
+    // (there's no per-dwelling accent in world.surfaces, and none is
+    // needed -- the two houses are already told apart by their sims).
+    const trimKey = building.type === "workshop" ? "trimWorkshop" : building.type === "shop" ? "trimShop" : null;
+    const trimColor = trimKey ? surfaceColor(this._surfaces, trimKey, PALETTE[trimKey]) : 0x8a5a34;
+    this._buildSignPost(group, building.label, w / 2 + 0.3, d / 2 - 0.3, trimColor);
 
-    const interiorLight = new THREE.PointLight(0xffb066, 0.25, BUILDING_W * 0.9, 2);
+    // Every building gets one interior light now (FOUNDATION.md item 4:
+    // shop/workshop are no longer dark boxes with nothing lighting them at
+    // night, now that they're open-topped like everything else), scaled to
+    // its own footprint.
+    const interiorLight = new THREE.PointLight(0xffb066, 0.25, w * 0.9, 2);
     interiorLight.position.set(0, 1.9, 0);
     interiorLight.userData.baseIntensity = 0.25;
     group.add(interiorLight);
     this._pointLights.push(interiorLight);
-
-    const stationsToBuild = building.stations && building.stations.length ? building.stations : [];
-    for (const key in STATIONS) {
-      const s = STATIONS[key];
-      if (s.label === null) continue;
-      if (!stationsToBuild.includes(key)) continue;
-      this._buildStation(group, s);
-    }
-  }
-
-  /** shop/workshop: a real, drawn structure with no interior stations --
-   * honest about that rather than padded out with fake furniture. Smaller
-   * enclosed volume with a distinguishing roof colour per type, plus a
-   * sign post, so the two read as different buildings from across the
-   * plot even though neither has anything happening inside yet. */
-  _buildSimpleBuilding(group, building) {
-    const w = BUILDING_W * 0.55, d = BUILDING_D * 0.7, h = 1.7;
-    const roofColor =
-      building.type === "workshop"
-        ? surfaceColor(this._surfaces, "roofWorkshop", PALETTE.roofWorkshop)
-        : surfaceColor(this._surfaces, "roofShop", PALETTE.roofShop);
-    const shell = new THREE.Mesh(
-      new RoundedBoxGeometry(w, h, d, 2, 0.08),
-      stdMat({ color: PALETTE.wall, roughness: 0.88 }),
-    );
-    shell.position.y = h / 2;
-    shell.castShadow = true;
-    shell.receiveShadow = true;
-    group.add(shell);
-    const roof = new THREE.Mesh(
-      new RoundedBoxGeometry(w + 0.35, 0.22, d + 0.35, 2, 0.06),
-      stdMat({ color: roofColor, roughness: 0.7 }),
-    );
-    roof.position.y = h + 0.11;
-    roof.castShadow = true;
-    group.add(roof);
-    this._contactShadow(w + 0.8, d + 0.8, group, 0.006);
-    this._buildSignPost(group, building.label, w / 2 + 0.4, d / 2 + 0.5, roofColor);
   }
 
   _buildSignPost(group, label, x, z, plankColor) {
@@ -433,168 +456,84 @@ class Renderer3D {
     group.add(plank);
   }
 
-  _buildStation(group, s) {
-    const local = stationLocalXZ(s);
-    const stGroup = new THREE.Group();
-    stGroup.position.set(local.x, 0, local.z);
-    group.add(stGroup);
-
-    const shadowSize = { sleep: 2.4, eat: 1.1, shower: 1.6, work: 2.0, play: 2.4, call: 1.4 }[s.action] || 1.2;
-    this._contactShadow(shadowSize, shadowSize * 0.75, stGroup);
-
-    const set = (mesh, cast = true) => {
-      mesh.castShadow = cast;
-      mesh.receiveShadow = true;
-      stGroup.add(mesh);
-      return mesh;
-    };
-
-    switch (s.action) {
-      case "sleep": {
-        const mattress = new THREE.Mesh(new RoundedBoxGeometry(1.9, 0.32, 1.05, 2, 0.1), stdMat({ color: PALETTE.fabricBed, roughness: 0.85 }));
-        mattress.position.y = 0.2;
-        set(mattress);
-        const headboard = new THREE.Mesh(new RoundedBoxGeometry(1.9, 0.55, 0.1, 2, 0.05), stdMat({ color: PALETTE.wood, roughness: 0.6 }));
-        headboard.position.set(0, 0.42, -0.52);
-        set(headboard);
-        const pillow = new THREE.Mesh(new RoundedBoxGeometry(0.55, 0.14, 0.35, 2, 0.06), stdMat({ color: 0xfbf5e8, roughness: 0.9 }));
-        pillow.position.set(-0.55, 0.42, -0.3);
-        set(pillow);
-        break;
+  /** One shape primitive from a recipe part -- box, cylinder, sphere, or
+   * icosahedron, the same small set every object type in the registry is
+   * built from (FOUNDATION.md item 1: "geometry recipe from primitives").
+   * Adding a new object type never needs a new case here as long as its
+   * recipe uses these four; it only needs a new registry entry. */
+  _geometryForPart(part) {
+    switch (part.shape) {
+      case "box": {
+        const [w, h, d] = part.size;
+        const r = part.radius ?? Math.min(0.08, Math.min(w, h, d) * 0.2);
+        return new RoundedBoxGeometry(w, h, d, 2, r);
       }
-      case "eat": {
-        const body = new THREE.Mesh(new RoundedBoxGeometry(0.75, 1.55, 0.72, 2, 0.08), stdMat({ color: PALETTE.metal, roughness: 0.35, metalness: 0.55 }));
-        body.position.y = 0.78;
-        set(body);
-        const seam = new THREE.Mesh(new RoundedBoxGeometry(0.77, 0.03, 0.74, 1, 0.01), stdMat({ color: 0x9aa0a8, roughness: 0.4, metalness: 0.5 }));
-        seam.position.y = 1.0;
-        set(seam, false);
-        const handle = new THREE.Mesh(new RoundedBoxGeometry(0.04, 0.5, 0.05, 1, 0.02), stdMat({ color: 0x4a4d52, roughness: 0.3, metalness: 0.6 }));
-        handle.position.set(0.32, 1.1, 0.35);
-        set(handle, false);
-        break;
+      case "cylinder": {
+        const [rt, rb, h] = part.size;
+        return new THREE.CylinderGeometry(rt, rb, h, part.segments || 12);
       }
-      case "shower": {
-        const wallMat = stdMat({ color: PALETTE.ceramic, roughness: 0.5, metalness: 0.05, transparent: true, opacity: 0.88 });
-        const back = new THREE.Mesh(new RoundedBoxGeometry(1.05, 1.9, 0.06, 1, 0.02), wallMat);
-        back.position.set(0, 0.95, -0.5);
-        set(back);
-        const side = new THREE.Mesh(new RoundedBoxGeometry(0.06, 1.9, 1.0, 1, 0.02), wallMat);
-        side.position.set(-0.5, 0.95, 0);
-        set(side);
-        const head = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.05, 12), stdMat({ color: PALETTE.metal, roughness: 0.3, metalness: 0.7 }));
-        head.rotation.z = Math.PI / 2;
-        head.position.set(0, 1.7, -0.35);
-        set(head);
-        break;
+      case "sphere": {
+        const [r] = part.size;
+        const [ws, hs] = Array.isArray(part.segments) ? part.segments : [part.segments || 12, part.segments || 10];
+        return new THREE.SphereGeometry(r, ws, hs);
       }
-      case "work": {
-        const top = new THREE.Mesh(new RoundedBoxGeometry(1.55, 0.07, 0.75, 2, 0.03), stdMat({ color: PALETTE.wood, roughness: 0.55 }));
-        top.position.y = 0.74;
-        set(top);
-        for (const [lx, lz] of [[-0.68, -0.3], [0.68, -0.3], [-0.68, 0.3], [0.68, 0.3]]) {
-          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.74, 8), stdMat({ color: PALETTE.woodDark, roughness: 0.6 }));
-          leg.position.set(lx, 0.37, lz);
-          set(leg);
-        }
-        const monitor = new THREE.Mesh(new RoundedBoxGeometry(0.5, 0.34, 0.04, 1, 0.03), stdMat({ color: 0x2a2622, roughness: 0.4, emissive: 0x3a4a5c, emissiveIntensity: 0.4 }));
-        monitor.position.set(0, 1.0, -0.28);
-        set(monitor);
-        break;
+      case "icosahedron": {
+        const [r, detail] = part.size;
+        return new THREE.IcosahedronGeometry(r, detail || 0);
       }
-      case "play": {
-        const rug = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.05, 28), stdMat({ color: PALETTE.fabricRug, roughness: 0.95 }));
-        rug.position.y = 0.025;
-        set(rug);
-        break;
-      }
-      case "call": {
-        const top = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.06, 24), stdMat({ color: PALETTE.wood, roughness: 0.55 }));
-        top.position.y = 0.62;
-        set(top);
-        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.6, 10), stdMat({ color: PALETTE.woodDark, roughness: 0.6 }));
-        leg.position.y = 0.31;
-        set(leg);
-        const seat = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.08, 0.42, 1, 0.04), stdMat({ color: PALETTE.sim2, roughness: 0.8 }));
-        seat.position.set(0.85, 0.42, 0);
-        set(seat);
-        const seatLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.42, 8), stdMat({ color: PALETTE.woodDark, roughness: 0.6 }));
-        seatLeg.position.set(0.85, 0.21, 0);
-        set(seatLeg);
-        break;
-      }
+      default:
+        return new THREE.BoxGeometry(0.2, 0.2, 0.2); // an unknown shape name -- draw SOMETHING rather than throw, so one bad recipe part doesn't blank the whole scene
     }
   }
 
-  _buildOutdoorObject(o, pos) {
+  /** Builds one placement (a station inside a building, or an outdoor prop)
+   * from its type's recipe -- the one function every object in the world
+   * is drawn through now, regardless of type. `parent` is already
+   * positioned at the building's origin (or the neighbourhood root for
+   * outdoors); localX/localZ is this placement's own position within it. */
+  _buildPlacementInstance(typeDef, placement, parent, localX, localZ) {
     const group = new THREE.Group();
-    group.position.set(pos.x, 0, pos.z);
-    this.neighbourhoodGroup.add(group);
-    const set = (mesh, cast = true) => {
-      mesh.castShadow = cast;
+    group.position.set(localX, 0, localZ);
+    parent.add(group);
+
+    const shadow = typeDef.shadow || { w: 1.2, d: 0.9 };
+    this._contactShadow(shadow.w, shadow.d, group);
+
+    const overrideColor = placement.overrides && placement.overrides.color;
+    for (const part of typeDef.recipe || []) {
+      const geo = this._geometryForPart(part);
+      // A colour override recolours the object's own material parts (wood,
+      // fabric, ceramic...) but not fixed metal fixtures or a light's own
+      // emissive glow -- "make the benches blue" should not turn a fridge's
+      // steel handle blue, or a lamp's bulb any colour but its own light.
+      const recolorable = overrideColor && !(part.metalness >= 0.3) && !part.emissive;
+      const mat = stdMat({
+        color: recolorable ? overrideColor : part.color,
+        roughness: part.roughness ?? 0.7,
+        metalness: part.metalness ?? 0,
+        emissive: part.emissive,
+        emissiveIntensity: part.emissiveIntensity,
+        transparent: part.transparent,
+        opacity: part.opacity,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(...(part.position || [0, 0, 0]));
+      if (part.rotation) mesh.rotation.set(...part.rotation);
+      if (part.scale) mesh.scale.set(...part.scale);
+      mesh.castShadow = part.castShadow !== false;
       mesh.receiveShadow = true;
       group.add(mesh);
-      return mesh;
-    };
-    switch (o.type) {
-      case "bench": {
-        this._contactShadow(1.2, 0.6, group);
-        const seat = new THREE.Mesh(new RoundedBoxGeometry(1.0, 0.06, 0.34, 1, 0.02), stdMat({ color: PALETTE.wood, roughness: 0.65 }));
-        seat.position.y = 0.42;
-        set(seat);
-        const back = new THREE.Mesh(new RoundedBoxGeometry(1.0, 0.32, 0.05, 1, 0.02), stdMat({ color: PALETTE.wood, roughness: 0.65 }));
-        back.position.set(0, 0.6, -0.15);
-        set(back);
-        for (const lx of [-0.42, 0.42]) {
-          const leg = new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.42, 0.3, 1, 0.02), stdMat({ color: PALETTE.woodDark, roughness: 0.7 }));
-          leg.position.set(lx, 0.21, 0);
-          set(leg);
-        }
-        break;
-      }
-      case "tree": {
-        this._contactShadow(1.8, 1.8, group);
-        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 1.1, 8), stdMat({ color: PALETTE.woodDark, roughness: 0.85 }));
-        trunk.position.y = 0.55;
-        set(trunk);
-        const canopy = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 1), stdMat({ color: PALETTE.leaf, roughness: 0.85 }));
-        canopy.position.y = 1.35;
-        canopy.scale.set(1, 0.85, 1);
-        set(canopy);
-        break;
-      }
-      case "lampPost": {
-        this._contactShadow(0.7, 0.7, group);
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.7, 8), stdMat({ color: 0x3a3a3a, roughness: 0.5, metalness: 0.4 }));
-        pole.position.y = 0.85;
-        set(pole);
-        const lamp = new THREE.Mesh(
-          new THREE.SphereGeometry(0.11, 12, 10),
-          stdMat({ color: 0xffe9bf, roughness: 0.4, emissive: 0xffb066, emissiveIntensity: 0.6 }),
-        );
-        lamp.position.y = 1.72;
-        set(lamp, false);
-        group.userData.lampBulb = lamp;
-        const lampLight = new THREE.PointLight(0xffb066, 0.7, 5.5, 2.2);
-        lampLight.position.y = 1.72;
-        lampLight.userData.baseIntensity = 0.7;
-        lampLight.userData.isStreetLamp = true; // gets a stronger night curve than interior lights, below
-        group.add(lampLight);
-        this._pointLights.push(lampLight);
-        group.userData.lampLight = lampLight;
-        break;
-      }
-      case "planter": {
-        this._contactShadow(0.6, 0.6, group);
-        const box = new THREE.Mesh(new RoundedBoxGeometry(0.5, 0.32, 0.5, 1, 0.04), stdMat({ color: PALETTE.woodDark, roughness: 0.75 }));
-        box.position.y = 0.16;
-        set(box);
-        const tuft = new THREE.Mesh(new THREE.IcosahedronGeometry(0.24, 0)); tuft.material = stdMat({ color: PALETTE.leaf, roughness: 0.9 });
-        tuft.position.y = 0.44;
-        tuft.scale.set(1, 0.7, 1);
-        set(tuft);
-        break;
-      }
+      if (part.emissiveAnimated) this._emissiveAnimated.push(mesh.material);
+    }
+
+    if (typeDef.light) {
+      const l = typeDef.light;
+      const light = new THREE.PointLight(l.color, l.baseIntensity, l.distance, l.decay);
+      light.position.set(...(l.position || [0, 1, 0]));
+      light.userData.baseIntensity = l.baseIntensity;
+      light.userData.isStreetLamp = !!l.isStreetLamp;
+      group.add(light);
+      this._pointLights.push(light);
     }
   }
 
@@ -661,10 +600,6 @@ class Renderer3D {
     this.nextWorld = world;
   }
 
-  _stationForSim(sim) {
-    return stationFor(sim.lastAction || "idle");
-  }
-
   draw(t) {
     if (this._disposed) return;
     const w = this.nextWorld;
@@ -723,11 +658,12 @@ class Renderer3D {
     }
     // Emissive materials on the light sources themselves: a lamp bulb
     // barely glows in daylight, but reads as a genuinely bright object at
-    // night -- not just a pool of light on the ground beneath it.
-    for (const building of this.neighbourhoodGroup.children) {
-      if (building.userData && building.userData.lampBulb) {
-        building.userData.lampBulb.material.emissiveIntensity = lerp(0.3, 4.5, nightAmt);
-      }
+    // night -- not just a pool of light on the ground beneath it. Tracked
+    // generically (any recipe part flagged emissiveAnimated, any type) in
+    // _emissiveAnimated, not a hunt through the scene graph for one
+    // hardcoded object name.
+    for (const mat of this._emissiveAnimated) {
+      mat.emissiveIntensity = lerp(0.3, 4.5, nightAmt);
     }
     // Exposure raised at both ends (FINAL.md item 5) -- day was
     // underexposed at 0.62, reading dim rather than "clearly daylight,
@@ -759,11 +695,13 @@ class Renderer3D {
     const sims = w.sims || [];
     sims.forEach((sim, i) => {
       const home = this._buildingsById[sim.home];
-      if (!home) return; // sim has no known home building yet -- nothing to place
+      const homeScale = this._buildingScaleById[sim.home];
+      if (!home || !homeScale) return; // sim has no known home building yet -- nothing to place
       const buildingPos = plotToWorldXZ(home.plot, this._plotCenter.x, this._plotCenter.z);
       const prevSim = (prev.sims || [])[i] || sim;
-      const fromLocal = standLocalXZ(this._stationForSim(prevSim));
-      const toLocal = standLocalXZ(this._stationForSim(sim));
+      const bw = homeScale.w * BUILDING_W, bd = homeScale.d * BUILDING_D;
+      const fromLocal = standLocalXZ(prevSim.lastAction || "idle", this._objectTypes, bw, bd);
+      const toLocal = standLocalXZ(sim.lastAction || "idle", this._objectTypes, bw, bd);
       let mesh = this._simMeshes[i];
       if (!mesh) mesh = this._simMeshes[i] = this._buildSim(i);
       mesh.position.x = buildingPos.x + lerp(fromLocal.x, toLocal.x, t);
@@ -851,5 +789,3 @@ export class WorldRenderer {
     this._impl.reducedMotion = v;
   }
 }
-
-export { STATIONS, sunFor };

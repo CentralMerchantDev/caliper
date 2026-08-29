@@ -1,38 +1,33 @@
-// Chunk 4's actual claim ("one source of truth... made legible") is only
-// true if src/worldStructure.ts's STATIONS can never silently drift from
-// public/world-render.js's STATIONS -- otherwise this is two lists someone
-// has to remember to keep in sync, which is exactly the kind of thing that
-// quietly goes stale. This test makes drift a failing test, not a hope.
+// FOUNDATION.md item 1: chunk 4's original claim ("one source of truth...
+// made legible") used to require this test to compare TWO hand-typed
+// station lists -- src/worldStructure.ts's and public/world-render.js's own
+// copy -- for drift. That second list is gone: world-render.js now derives
+// station positions from world.objectTypes at draw time, the same registry
+// worldStructure.ts reads. There is one list, not two, so there is nothing
+// left to drift.
+//
+// What CAN still silently regress is narrower but real: world-render.js
+// keeps a hand-tuned plan-view SYMBOL_DRAWERS entry per known type for
+// visual quality (see its header comment); a station type present in the
+// registry but missing a drawer entry would silently fall back to the
+// plainer generic symbol. This test catches that specific omission.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { STATIONS as PIPELINE_STATIONS, ACTIONS, structureSummary, NOT_YET_PRESENT } from "../src/worldStructure.ts";
-import { STATIONS as RENDERER_STATIONS } from "../public/world-render.js";
+import { WorldRenderer } from "../public/world-render.js";
 
-function normalize(stations: Record<string, unknown>) {
-  return Object.entries(stations)
-    .filter(([, v]) => (v as { label: string | null }).label !== null) // "center" is an idle fallback, not a drawn station
-    .map(([key, v]) => ({ key, action: (v as { action: string }).action, label: (v as { label: string }).label }))
-    .sort((a, b) => a.key.localeCompare(b.key));
-}
-
-test("worldStructure's STATIONS match world-render.js's STATIONS exactly -- no drift", () => {
-  const fromPipeline = [...PIPELINE_STATIONS].sort((a, b) => a.key.localeCompare(b.key));
-  const fromRenderer = normalize(RENDERER_STATIONS as Record<string, unknown>);
-  assert.deepEqual(fromPipeline, fromRenderer);
+test("world-render.js has a hand-tuned plan symbol for every station type worldStructure.ts knows about -- no silent drop to the generic fallback", () => {
+  const drawers = WorldRenderer.SYMBOL_DRAWERS as Record<string, unknown>;
+  for (const s of PIPELINE_STATIONS) assert.ok(s.key in drawers, `${s.key} has no SYMBOL_DRAWERS entry in world-render.js -- would silently draw with the generic 2D fallback instead`);
 });
 
-// The guardrail test itself needs a test: does the comparison above actually
-// fail on real drift, or would it silently pass no matter what? Simulate
-// the drift directly against the same comparison logic instead of trusting
-// that "deepEqual" does the right thing by construction.
-test("guardrail: the same comparison actually fails when the two lists genuinely disagree", () => {
-  const fromPipeline = [...PIPELINE_STATIONS].sort((a, b) => a.key.localeCompare(b.key));
-  const driftedRenderer = normalize({
-    ...(RENDERER_STATIONS as Record<string, unknown>),
-    bed: { ...(RENDERER_STATIONS as any).bed, action: "wrong-action-planted-on-purpose" },
-  });
-  assert.throws(() => assert.deepEqual(fromPipeline, driftedRenderer));
+// The guardrail test itself needs a test: does the check above actually
+// fail on a real omission, or would it silently pass no matter what?
+test("guardrail: the same check actually fails when a station's symbol is missing", () => {
+  const drawers = { ...(WorldRenderer.SYMBOL_DRAWERS as Record<string, unknown>) };
+  delete drawers.bed;
+  assert.throws(() => assert.ok("bed" in drawers, "bed has no SYMBOL_DRAWERS entry"));
 });
 
 test("every station's action is a real action in ACTIONS", () => {

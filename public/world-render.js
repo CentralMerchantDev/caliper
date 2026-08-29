@@ -1,16 +1,15 @@
 // CALIPER world renderer — an architectural plan view, not a game sprite sheet.
 // Self-contained canvas module: no dependencies, no build step. Consumes plain
-// world-state JSON (the same shape src/simBaseline.ts's tick() returns) and
-// station metadata derived from the world structure summary (see
-// src/worldStructure.ts).
+// world-state JSON (the same shape src/simBaseline.ts's tick() returns).
 //
-// FINAL.md item 7: draws the real neighbourhood (world.buildings,
-// world.outdoorObjects, world.surfaces) -- every building on its own plot,
-// paths between them, outdoor objects as plan symbols -- not the single
-// fixed room this file drew before CITY.md's neighbourhood upgrade. Grid
-// math (BUILDING_W/D, GRID_UNIT_X/Z, plot -> position) intentionally mirrors
-// world-render-3d.js's so the two views agree on layout: this is a second
-// view of the one world, not a second world.
+// FOUNDATION.md item 1: draws world.placements using world.objectTypes, the
+// same registry+placement data world-render-3d.js reads -- not a second,
+// independently-hand-typed picture of the world. A KNOWN type (the ten the
+// registry ships with) gets a hand-tuned plan symbol via SYMBOL_DRAWERS
+// below; anything else -- a type this file has never heard of -- still
+// draws correctly from generic data alone (its own footprint, its own
+// colour, its own label), just plainer. Both are real support, not a
+// crash either way; see _drawGenericSymbol.
 //
 // Design language carried from DATUM/the portfolio: warm paper ground, fine
 // confident linework, soft material fills, long soft shadows that rotate and
@@ -32,41 +31,41 @@ const TOKENS = {
   sim2: "#3D6B63", // second sim's tone -- a muted teal that sits quietly next to the warm accent
 };
 
-// A dwelling's six action-linked stations, in a 0..1 space LOCAL to its own
-// building footprint -- every dwelling places them identically. Kept in
-// lockstep with src/worldStructure.ts's STATIONS by
-// test/worldStructure.test.ts (key/action/label only; x/y are this file's
-// own layout choice and not part of that contract).
-const STATIONS = {
-  bed: { x: 0.15, y: 0.24, action: "sleep", label: "Bed" },
-  fridge: { x: 0.85, y: 0.24, action: "eat", label: "Fridge" },
-  shower: { x: 0.85, y: 0.76, action: "shower", label: "Shower" },
-  desk: { x: 0.15, y: 0.76, action: "work", label: "Desk" },
-  rug: { x: 0.5, y: 0.18, action: "play", label: "Rug" },
-  table: { x: 0.5, y: 0.82, action: "call", label: "Table" },
-  center: { x: 0.5, y: 0.5, action: "idle", label: null },
-};
-
-function stationFor(action) {
-  for (const key in STATIONS) if (STATIONS[key].action === action) return STATIONS[key];
-  return STATIONS.center;
-}
-
 function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
 // Grid geometry, deliberately the same numbers world-render-3d.js uses
-// (BUILDING_W/D, GRID_UNIT_X/Z) -- plan units, not pixels; mapped to the
-// canvas by _fitPlan() below. Two views of the one world agree on layout
-// because they share the same source proportions, not by coincidence.
+// (BUILDING_W/D, GRID_UNIT_X/Z, BUILDING_TYPE_SCALE) -- plan units, not
+// pixels; mapped to the canvas by _fitPlan() below. Two views of the one
+// world agree on layout because they share the same source proportions,
+// not by coincidence.
 const BUILDING_W = 8.5;
 const BUILDING_D = 6.0;
 const GRID_UNIT_X = 6.0;
 const GRID_UNIT_Z = 4.5;
+const BUILDING_TYPE_SCALE = {
+  dwelling: { w: 1, d: 1 },
+  shop: { w: 0.55, d: 0.7 },
+  workshop: { w: 0.55, d: 0.7 },
+};
+function scaleFor(type) {
+  return BUILDING_TYPE_SCALE[type] || BUILDING_TYPE_SCALE.dwelling;
+}
 
 function plotToPlanXY(plot, centerX, centerZ) {
   return { x: (plot.x - centerX) * GRID_UNIT_X, y: (plot.y - centerZ) * GRID_UNIT_Z };
+}
+
+// FOUNDATION.md item 1: which registry type provides a given sim action --
+// derived from world.objectTypes at runtime, same as world-render-3d.js.
+const IDLE_LOCAL = { x: 0.5, y: 0.5 };
+function localForAction(action, objectTypes) {
+  for (const key in objectTypes) {
+    const t = objectTypes[key];
+    if (t.station && t.station.action === action) return t.local || IDLE_LOCAL;
+  }
+  return IDLE_LOCAL;
 }
 
 // Sun angle across a 24-hour clock: rises ~6, sets ~20. Returns
@@ -130,11 +129,6 @@ export class WorldRenderer {
     this.nextWorld = world;
   }
 
-  _stationForSim(sim) {
-    const action = sim.lastAction || "idle";
-    return stationFor(action);
-  }
-
   /** Computes the plan-units -> canvas-pixels transform once per building
    * layout: every building's plot -> plan position, the overall bounding
    * box, and a uniform scale that fits it inside the drawing area (the
@@ -147,8 +141,8 @@ export class WorldRenderer {
     const xs = buildings.map((b) => b.plot.x), ys = buildings.map((b) => b.plot.y);
     const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
     const centerZ = (Math.min(...ys) + Math.max(...ys)) / 2;
-    const halfWs = buildings.map((b) => Math.abs((b.plot.x - centerX) * GRID_UNIT_X) + BUILDING_W / 2);
-    const halfDs = buildings.map((b) => Math.abs((b.plot.y - centerZ) * GRID_UNIT_Z) + BUILDING_D / 2);
+    const halfWs = buildings.map((b) => Math.abs((b.plot.x - centerX) * GRID_UNIT_X) + (scaleFor(b.type).w * BUILDING_W) / 2);
+    const halfDs = buildings.map((b) => Math.abs((b.plot.y - centerZ) * GRID_UNIT_Z) + (scaleFor(b.type).d * BUILDING_D) / 2);
     const halfW = Math.max(...halfWs, BUILDING_W / 2) + 2; // + margin for outdoor objects near the edge
     const halfD = Math.max(...halfDs, BUILDING_D / 2) + 2;
     const scale = Math.min(roomW / (halfW * 2), roomH / (halfD * 2));
@@ -182,6 +176,7 @@ export class WorldRenderer {
     const hour = (prev.tick + t) % 24;
     const sun = sunFor(hour);
     const surfaces = w.surfaces || {};
+    const objectTypes = w.objectTypes || {};
 
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = TOKENS.paper;
@@ -232,31 +227,47 @@ export class WorldRenderer {
     ctx.globalAlpha = 1;
     ctx.restore();
 
-    // -- buildings: each a labelled room outline at its own plot --
+    // -- buildings: each a labelled room outline at its own plot, open-
+    // topped uniformly (FOUNDATION.md item 4) --
+    const buildingsById = {};
+    for (const b of buildings) buildingsById[b.id] = b;
     for (const b of buildings) {
       const pos = plotToPlanXY(b.plot, plan.centerX, plan.centerZ);
       this._drawBuilding(plan, pos, b, sun, dpr, pad, roomW, roomH, surfaces);
     }
 
-    // -- outdoor objects: plan symbols at their plot positions --
-    for (const o of w.outdoorObjects || []) {
-      const pos = plotToPlanXY(o.plot, plan.centerX, plan.centerZ);
-      const { px, py } = this._toPx(plan, pos.x, pos.y, pad, roomW, roomH);
-      this._drawOutdoorObject(px, py, o, sun, dpr);
+    // -- placements: every station inside a building, every prop outdoors,
+    // all from the one placements array (FOUNDATION.md item 1) --
+    for (const p of w.placements || []) {
+      const typeDef = objectTypes[p.type];
+      if (!typeDef) continue; // an unknown type on a placement -- nothing to draw, not a crash
+      let px, py;
+      if (p.location === "outdoors") {
+        const pos = plotToPlanXY(p.plot, plan.centerX, plan.centerZ);
+        ({ px, py } = this._toPx(plan, pos.x, pos.y, pad, roomW, roomH));
+      } else {
+        const home = buildingsById[p.location];
+        if (!home || !typeDef.local) continue; // a station-shaped placement with nowhere to stand -- skip, don't throw
+        const homePos = plotToPlanXY(home.plot, plan.centerX, plan.centerZ);
+        const s = scaleFor(home.type);
+        const planX = homePos.x + (typeDef.local.x - 0.5) * s.w * BUILDING_W;
+        const planY = homePos.y + (typeDef.local.y - 0.5) * s.d * BUILDING_D;
+        ({ px, py } = this._toPx(plan, planX, planY, pad, roomW, roomH));
+      }
+      this._drawPlacement(px, py, p, typeDef, sun, dpr);
     }
 
     // -- sims, interpolated between stations within their own home building --
-    const buildingsById = {};
-    for (const b of buildings) buildingsById[b.id] = b;
     (w.sims || []).forEach((sim, i) => {
       const prevSim = (prev.sims || []).find((s) => s.id === sim.id) || sim;
       const home = buildingsById[sim.home];
       if (!home) return; // a sim with no matching home in this world state -- nothing to draw
       const homePos = plotToPlanXY(home.plot, plan.centerX, plan.centerZ);
-      const from = this._stationForSim(prevSim);
-      const to = this._stationForSim(sim);
+      const s = scaleFor(home.type);
+      const from = localForAction(prevSim.lastAction || "idle", objectTypes);
+      const to = localForAction(sim.lastAction || "idle", objectTypes);
       const localX = lerp(from.x, to.x, t) - 0.5, localY = lerp(from.y, to.y, t) - 0.5;
-      const planX = homePos.x + localX * BUILDING_W, planY = homePos.y + localY * BUILDING_D;
+      const planX = homePos.x + localX * s.w * BUILDING_W, planY = homePos.y + localY * s.d * BUILDING_D;
       const { px, py } = this._toPx(plan, planX, planY, pad, roomW, roomH);
       this._drawSim(px, py, sim, i, sun, dpr);
     });
@@ -291,17 +302,17 @@ export class WorldRenderer {
     return { dx: Math.cos(sun.azimuth) * len, dy: Math.sin(sun.azimuth) * len * 0.4 + 6 * dpr };
   }
 
-  /** One building's room outline, in plan pixels: a dwelling gets full
-   * four-wall floor-plan convention (walls as lines, its six stations as
-   * plan symbols inside) -- standard floor-plan reading, and actually a
-   * more correct plan than the 3D view's own cutaway walls. A shop/
-   * workshop, with no interior stations yet, is an honest labelled
-   * rectangle -- not padded out with furniture that doesn't exist. */
+  /** One building's room outline, in plan pixels -- full four-wall floor-
+   * plan convention (walls as lines), open-topped, uniformly across every
+   * building type (FOUNDATION.md item 4: "two of four were open-topped and
+   * two were not -- it reads as a bug because it is one"). Shop/workshop
+   * get a small trim-coloured swatch by their label instead of a roof
+   * tint, still visually distinct from across the plot. */
   _drawBuilding(plan, pos, building, sun, dpr, pad, roomW, roomH, surfaces) {
     const { ctx } = this;
-    const isDwelling = building.type === "dwelling";
-    const w = (isDwelling ? BUILDING_W : BUILDING_W * 0.55) * plan.scale;
-    const h = (isDwelling ? BUILDING_D : BUILDING_D * 0.7) * plan.scale;
+    const s = scaleFor(building.type);
+    const w = s.w * BUILDING_W * plan.scale;
+    const h = s.d * BUILDING_D * plan.scale;
     const { px: cx, py: cy } = this._toPx(plan, pos.x, pos.y, pad, roomW, roomH);
     const x0 = cx - w / 2, y0 = cy - h / 2;
 
@@ -312,15 +323,10 @@ export class WorldRenderer {
     ctx.fill();
     ctx.restore();
 
-    const roofKey = building.type === "workshop" ? "roofWorkshop" : building.type === "shop" ? "roofShop" : null;
-    const fillColor = roofKey && surfaces[roofKey] && surfaces[roofKey].color ? surfaces[roofKey].color : TOKENS.card;
-
     ctx.save();
     this._roundRect(x0, y0, w, h, 10 * dpr);
-    ctx.fillStyle = isDwelling ? TOKENS.card : fillColor;
-    ctx.globalAlpha = isDwelling ? 1 : 0.35;
+    ctx.fillStyle = TOKENS.card;
     ctx.fill();
-    ctx.globalAlpha = 1;
     ctx.lineWidth = Math.max(1, 1.5 * dpr);
     ctx.strokeStyle = TOKENS.lineStrong;
     ctx.stroke();
@@ -343,6 +349,18 @@ export class WorldRenderer {
     ctx.stroke();
     ctx.restore();
 
+    // Trim swatch for shop/workshop -- the plan-view equivalent of the 3D
+    // view's coloured sign post, using the same real surfaces data
+    // (trimShop/trimWorkshop).
+    const trimKey = building.type === "workshop" ? "trimWorkshop" : building.type === "shop" ? "trimShop" : null;
+    if (trimKey && surfaces[trimKey] && surfaces[trimKey].color) {
+      ctx.save();
+      ctx.fillStyle = surfaces[trimKey].color;
+      this._roundRect(cx - 5 * dpr, y0 - 12 * dpr, 10 * dpr, 4 * dpr, 2 * dpr);
+      ctx.fill();
+      ctx.restore();
+    }
+
     // Label -- every building is named, not just dwellings.
     ctx.save();
     ctx.fillStyle = TOKENS.ink2;
@@ -351,137 +369,128 @@ export class WorldRenderer {
     ctx.textBaseline = "top";
     ctx.fillText(building.label || building.id, cx, y0 - 13 * dpr);
     ctx.restore();
-
-    if (isDwelling) {
-      for (const key in STATIONS) {
-        const s = STATIONS[key];
-        if (s.label === null) continue;
-        this._drawStationAt(x0 + s.x * w, y0 + s.y * h, s, sun, dpr);
-      }
-    }
   }
 
-  _drawOutdoorObject(x, y, obj, sun, dpr) {
-    const { ctx } = this;
-    const sh = this._shadowOffset(sun, dpr);
-    ctx.save();
-    ctx.fillStyle = "rgba(42,32,26,0.10)";
-    switch (obj.type) {
-      case "tree": {
-        const r = 11 * dpr;
-        ctx.beginPath();
-        ctx.ellipse(x + sh.dx * 0.5, y + sh.dy * 0.5 + r * 0.5, r * 0.9, r * 0.4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "rgba(79,107,71,0.85)"; // PALETTE.leaf, matching the 3D view's tree colour
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = TOKENS.lineStrong;
-        ctx.lineWidth = Math.max(1, dpr);
-        ctx.stroke();
-        break;
-      }
-      case "bench": {
-        const bw = 20 * dpr, bh = 8 * dpr;
-        ctx.beginPath();
-        ctx.ellipse(x + sh.dx * 0.4, y + sh.dy * 0.4 + bh, bw * 0.55, bh * 0.4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        this._roundRect(x - bw / 2, y - bh / 2, bw, bh, 2 * dpr);
-        ctx.fillStyle = TOKENS.accentSoft;
-        ctx.fill();
-        ctx.strokeStyle = TOKENS.lineStrong;
-        ctx.lineWidth = Math.max(1, 1.2 * dpr);
-        ctx.stroke();
-        break;
-      }
-      case "lampPost": {
-        const r = 4.5 * dpr;
-        ctx.beginPath();
-        ctx.ellipse(x + sh.dx * 0.3, y + sh.dy * 0.3 + r, r * 1.4, r * 0.5, 0, 0, Math.PI * 2);
-        ctx.fill();
+  /** Hand-tuned plan symbols for the ten types the registry ships with --
+   * kept because they read well at small sizes and it would be a real
+   * visual downgrade to flatten them to the generic fallback. A type NOT
+   * in this table (FOUNDATION.md item 1's "add a genuinely new type" case)
+   * still draws correctly via _drawGenericSymbol below -- plainer, not
+   * broken, and never a reason to refuse a request that would exercise it. */
+  static get SYMBOL_DRAWERS() {
+    return {
+      bed: (ctx, rr, x, y, sz) => {
+        rr(x - sz, y - sz * 0.6, sz * 2, sz * 1.2, 4);
+        ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - sz + 4, y - sz * 0.6); ctx.lineTo(x - sz + 4, y + sz * 0.6); ctx.stroke();
+      },
+      fridge: (ctx, rr, x, y, sz) => {
+        rr(x - sz * 0.5, y - sz, sz, sz * 2, 3);
+        ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - sz * 0.5, y - sz * 0.2); ctx.lineTo(x + sz * 0.5, y - sz * 0.2); ctx.stroke();
+      },
+      shower: (ctx, rr, x, y, sz) => {
+        rr(x - sz * 0.7, y - sz * 0.7, sz * 1.4, sz * 1.4, 3);
+        ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y - sz * 0.55, sz * 0.35, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+      },
+      desk: (ctx, rr, x, y, sz) => {
+        rr(x - sz, y - sz * 0.15, sz * 2, sz * 0.5, 2);
+        ctx.fill(); ctx.stroke();
+        rr(x - sz * 0.4, y - sz * 0.7, sz * 0.8, sz * 0.55, 2);
+        ctx.fillStyle = TOKENS.card; ctx.fill(); ctx.stroke();
+      },
+      rug: (ctx, rr, x, y, sz) => {
+        ctx.beginPath(); ctx.ellipse(x, y, sz * 1.1, sz * 0.6, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(176,86,12,0.10)"; ctx.fill(); ctx.strokeStyle = TOKENS.line; ctx.stroke();
+      },
+      table: (ctx, rr, x, y, sz) => {
+        ctx.beginPath(); ctx.arc(x, y, sz * 0.55, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+      },
+      tree: (ctx, rr, x, y, sz, sh) => {
+        ctx.beginPath(); ctx.ellipse(x + sh.dx * 0.5, y + sh.dy * 0.5 + sz * 0.5, sz * 0.9, sz * 0.4, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(42,32,26,0.10)"; ctx.fill();
+        ctx.fillStyle = "rgba(79,107,71,0.85)";
+        ctx.beginPath(); ctx.arc(x, y, sz, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = TOKENS.lineStrong; ctx.stroke();
+      },
+      bench: (ctx, rr, x, y, sz, sh) => {
+        const bw = sz * 1.8, bh = sz * 0.7;
+        ctx.beginPath(); ctx.ellipse(x + sh.dx * 0.4, y + sh.dy * 0.4 + bh, bw * 0.55, bh * 0.4, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(42,32,26,0.10)"; ctx.fill();
+        rr(x - bw / 2, y - bh / 2, bw, bh, 2);
+        ctx.fillStyle = TOKENS.accentSoft; ctx.fill(); ctx.strokeStyle = TOKENS.lineStrong; ctx.stroke();
+      },
+      lampPost: (ctx, rr, x, y, sz, sh) => {
+        ctx.beginPath(); ctx.ellipse(x + sh.dx * 0.3, y + sh.dy * 0.3 + sz, sz * 1.4, sz * 0.5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(42,32,26,0.10)"; ctx.fill();
         ctx.strokeStyle = TOKENS.muted;
-        ctx.lineWidth = Math.max(1, 1.2 * dpr);
-        ctx.beginPath();
-        ctx.moveTo(x, y + r * 1.6);
-        ctx.lineTo(x, y - r * 0.6);
-        ctx.stroke();
-        ctx.fillStyle = "#ffb066"; // matches the 3D view's lamp warmth
-        ctx.beginPath();
-        ctx.arc(x, y - r * 0.6, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = TOKENS.lineStrong;
-        ctx.lineWidth = Math.max(1, dpr);
-        ctx.stroke();
-        break;
-      }
-      case "planter": {
-        const s = 9 * dpr;
-        this._roundRect(x - s / 2, y - s / 2, s, s, 2 * dpr);
-        ctx.fillStyle = "rgba(79,107,71,0.5)";
-        ctx.fill();
-        ctx.strokeStyle = TOKENS.lineStrong;
-        ctx.lineWidth = Math.max(1, dpr);
-        ctx.stroke();
-        break;
-      }
-      default:
-        ctx.beginPath();
-        ctx.arc(x, y, 5 * dpr, 0, Math.PI * 2);
-        ctx.fillStyle = TOKENS.line;
-        ctx.fill();
-    }
-    ctx.restore();
+        ctx.beginPath(); ctx.moveTo(x, y + sz * 1.6); ctx.lineTo(x, y - sz * 0.6); ctx.stroke();
+        ctx.fillStyle = "#ffb066";
+        ctx.beginPath(); ctx.arc(x, y - sz * 0.6, sz, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = TOKENS.lineStrong; ctx.stroke();
+      },
+      planter: (ctx, rr, x, y, sz) => {
+        rr(x - sz / 2, y - sz / 2, sz, sz, 2);
+        ctx.fillStyle = "rgba(79,107,71,0.5)"; ctx.fill();
+        ctx.strokeStyle = TOKENS.lineStrong; ctx.stroke();
+      },
+    };
   }
 
-  /** One dwelling station's plan symbol at an already-resolved canvas
-   * position -- the same six shapes regardless of which building or which
-   * dwelling it belongs to. */
-  _drawStationAt(cx, cy, s, sun, dpr) {
+  /** A type this file has no hand-tuned symbol for: a plain, correctly
+   * sized (from the type's own real footprint) rounded rect with the
+   * type's own first recipe colour and its key as a label -- legible,
+   * genuinely drawn, never a crash or a blank spot. FOUNDATION.md item 1's
+   * "add a genuinely new type" case draws through here until someone
+   * chooses to give it a nicer symbol above; both are real support. */
+  _drawGenericSymbol(x, y, typeKey, typeDef, sh, dpr) {
     const { ctx } = this;
-    const sh = this._shadowOffset(sun, dpr);
-    const size = 13 * dpr;
-
+    const fp = typeDef.footprint || { w: 0.6, d: 0.6 };
+    const w = Math.max(10 * dpr, fp.w * 6 * dpr), d = Math.max(10 * dpr, fp.d * 6 * dpr);
+    const color = (typeDef.recipe && typeDef.recipe[0] && typeDef.recipe[0].color) || TOKENS.accentSoft;
     ctx.save();
     ctx.fillStyle = "rgba(42,32,26,0.10)";
     ctx.beginPath();
-    ctx.ellipse(cx + sh.dx * 0.5, cy + sh.dy * 0.5 + size * 0.55, size * 0.6, size * 0.22, 0, 0, Math.PI * 2);
+    ctx.ellipse(x + sh.dx * 0.4, y + sh.dy * 0.4 + d * 0.3, w * 0.5, d * 0.3, 0, 0, Math.PI * 2);
     ctx.fill();
-
+    this._roundRect(x - w / 2, y - d / 2, w, d, Math.min(3 * dpr, w * 0.2));
+    ctx.fillStyle = color;
+    ctx.fill();
     ctx.strokeStyle = TOKENS.lineStrong;
-    ctx.fillStyle = TOKENS.accentSoft;
-    ctx.lineWidth = Math.max(1, 1.1 * dpr);
+    ctx.lineWidth = Math.max(1, dpr);
+    ctx.stroke();
+    ctx.fillStyle = TOKENS.muted;
+    ctx.font = `${7 * dpr}px 'IBM Plex Mono', monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(typeKey, x, y + d / 2 + 2 * dpr);
+    ctx.restore();
+  }
 
-    switch (s.action) {
-      case "sleep": // bed
-        this._roundRect(cx - size, cy - size * 0.6, size * 2, size * 1.2, 4 * dpr);
-        ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(cx - size + 4 * dpr, cy - size * 0.6); ctx.lineTo(cx - size + 4 * dpr, cy + size * 0.6); ctx.stroke();
-        break;
-      case "eat": // fridge
-        this._roundRect(cx - size * 0.5, cy - size, size, size * 2, 3 * dpr);
-        ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(cx - size * 0.5, cy - size * 0.2); ctx.lineTo(cx + size * 0.5, cy - size * 0.2); ctx.stroke();
-        break;
-      case "shower": // shower stall
-        this._roundRect(cx - size * 0.7, cy - size * 0.7, size * 1.4, size * 1.4, 3 * dpr);
-        ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.arc(cx, cy - size * 0.55, size * 0.35, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
-        break;
-      case "work": // desk
-        this._roundRect(cx - size, cy - size * 0.15, size * 2, size * 0.5, 2 * dpr);
-        ctx.fill(); ctx.stroke();
-        this._roundRect(cx - size * 0.4, cy - size * 0.7, size * 0.8, size * 0.55, 2 * dpr);
-        ctx.fillStyle = TOKENS.card; ctx.fill(); ctx.stroke();
-        break;
-      case "play": // rug
-        ctx.beginPath(); ctx.ellipse(cx, cy, size * 1.1, size * 0.6, 0, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(176,86,12,0.10)"; ctx.fill(); ctx.strokeStyle = TOKENS.line; ctx.stroke();
-        break;
-      case "call": // table + chair
-        ctx.beginPath(); ctx.arc(cx, cy, size * 0.55, 0, Math.PI * 2);
-        ctx.fill(); ctx.stroke();
-        break;
+  /** One placement's plan symbol -- a station inside a building or a prop
+   * outdoors, dispatched by TYPE (not by sim action, so this covers
+   * non-station outdoor props the same way). */
+  _drawPlacement(x, y, placement, typeDef, sun, dpr) {
+    const { ctx } = this;
+    const sh = this._shadowOffset(sun, dpr);
+    const drawer = WorldRenderer.SYMBOL_DRAWERS[placement.type];
+    if (!drawer) {
+      this._drawGenericSymbol(x, y, placement.type, typeDef, sh, dpr);
+      return;
     }
+    const size = 13 * dpr;
+    ctx.save();
+    ctx.fillStyle = "rgba(42,32,26,0.10)";
+    ctx.beginPath();
+    ctx.ellipse(x + sh.dx * 0.5, y + sh.dy * 0.5 + size * 0.55, size * 0.6, size * 0.22, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = TOKENS.lineStrong;
+    ctx.fillStyle = (placement.overrides && placement.overrides.color) || TOKENS.accentSoft;
+    ctx.lineWidth = Math.max(1, 1.1 * dpr);
+    const rr = (rx, ry, rw, rh, rad) => this._roundRect(rx, ry, rw, rh, rad * dpr);
+    drawer(ctx, rr, x, y, size, sh);
     ctx.restore();
   }
 
@@ -567,4 +576,4 @@ export class WorldRenderer {
   }
 }
 
-export { STATIONS, sunFor };
+export { sunFor };
