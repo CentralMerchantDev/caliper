@@ -144,3 +144,101 @@ test("a TRANSIENT error, unlike a permanent one, is genuinely retried on approva
   await runChangePipeline(env, runId, changeRequest, (e) => events.push(e));
   assert.ok(events.some((e) => e.type === "grounding"), "a transient error must be genuinely retried, not refused the way a permanent one is");
 });
+
+// ---------------------------------------------------------------------
+// SHIP.md item 1: "Mark aborted a run. It stayed on screen. It offered
+// retry. He retried. Nothing happened." Root cause, found by tracing
+// every checkStopped() call site against every stage the "running" bar
+// offers a Stop button for: a stop clicked during Implementing/Verifying
+// had nowhere to be checked before a real (unrelated) error occurred and
+// got checkpointed -- so the stop signal was left sitting in KV,
+// unconsumed, for the rest of its 10-minute TTL. A later Retry on that
+// SAME run then hit the pre-existing checkStopped() check right before
+// implement (changePipeline.ts, "about to spend on implement/verify/
+// fix/review") and found that STALE flag from the original abort
+// attempt -- indistinguishable, from the visitor's seat, from Retry
+// doing nothing at all.
+//
+// This exercises the real fix (the catch block now consumes any pending
+// stop signal when it checkpoints an error) against the real
+// runChangePipeline, with a real invalid-key-induced failure (zero
+// spend, same technique as every other test in this file) -- not a
+// reimplementation of the control flow. The one part that can't be
+// forced on demand is the exact race (the stop signal arriving in KV
+// WHILE implement is in flight, between the pre-existing check and the
+// catch block) -- simulated by making the fake KV's own get()/delete()
+// answer that key exactly the way a stop clicked mid-stage would: absent
+// on the first check (implement is allowed to start), present by the
+// time the catch block asks.
+// ---------------------------------------------------------------------
+test("SHIP.md item 1: a stop signal that arrives mid-stage and misses every checkpoint is consumed when the resulting error is checkpointed, not left to silently swallow the retry that follows", async (t) => {
+  const env = makeEnv();
+  const runId = `test-stray-stop-${Date.now()}`;
+  const changeRequest = "add a lamp post near the workshop";
+
+  // A run whose plan was already approved in an earlier, successful
+  // invocation -- erroredPastGate1 makes pastPlanGate true on resume, so
+  // this run heads straight for implement, the same as a real retry from
+  // "Implementing failed" would.
+  const plan = { willBuild: "add a lamp post", willNotTouch: "everything else", criteria: [], implementationPath: "data-edit", question: null };
+  const grounding = { premisesHold: true, reasoning: "the workshop plot exists", falsePremises: [] };
+  await env.SPEND_KV.put(
+    `change/state/${runId}`,
+    JSON.stringify({
+      runId, changeRequest, currentSourceAtStart: "", budgetSpent: 0, stageCosts: [],
+      questionAsked: false, planGateReplyCount: 0, runStartedAt: Date.now(),
+      stage: "errored", errorMessage: "simulated prior transient blip", erroredAtStage: "implement",
+      errorKind: "transient", erroredPastGate1: true, plan, grounding,
+    }),
+  );
+  await env.SPEND_KV.put(`change/error-decision/${runId}`, JSON.stringify({ approve: true })); // "Mark clicks Retry"
+
+  // Simulate the race described above: the stop key reads as absent the
+  // FIRST time (the pre-existing checkStopped() right before implement,
+  // unchanged by this fix, lets the retry proceed) but "arrives" by the
+  // time anything checks it again -- exactly what a stop clicked while
+  // "Implementing" was showing looks like from KV's point of view, since
+  // nothing between there and a real error consumes it.
+  const stopKey = `change/stop/${runId}`;
+  let stopValue: string | null = null;
+  let firstStopCheckDone = false;
+  const originalGet = env.SPEND_KV.get.bind(env.SPEND_KV);
+  const originalDelete = env.SPEND_KV.delete.bind(env.SPEND_KV);
+  env.SPEND_KV.get = (async (key: string) => {
+    if (key === stopKey) {
+      if (!firstStopCheckDone) {
+        firstStopCheckDone = true;
+        stopValue = "1"; // arrives right after the pre-existing check misses it
+        return null;
+      }
+      return stopValue;
+    }
+    return originalGet(key);
+  }) as typeof env.SPEND_KV.get;
+  env.SPEND_KV.delete = (async (key: string) => {
+    if (key === stopKey) {
+      stopValue = null;
+      return;
+    }
+    return originalDelete(key);
+  }) as typeof env.SPEND_KV.delete;
+
+  const events1: ChangeEvent[] = [];
+  const rec1 = await runChangePipeline(env, runId, changeRequest, (e) => events1.push(e));
+  assert.equal(rec1.ledger.outcome, "halted-awaiting-error-decision", "the real (invalid-key) failure must be reported honestly, not silently swallowed as a stop");
+  assert.ok(events1.some((e) => e.type === "stage-error"), "a genuine stage-error must fire for this attempt");
+  assert.ok(!events1.some((e) => e.type === "stopped"), "this attempt must not report itself as stopped -- the flag arrived mid-implement, after the pre-existing pre-implement check already passed");
+
+  // The flag that arrived mid-flight must not survive past this checkpoint.
+  assert.equal(stopValue, null, "the stray stop signal must be consumed when the error is checkpointed, or it silently swallows the next retry");
+
+  // Retry again -- must genuinely re-attempt implement (hitting the same
+  // real invalid-key failure again), not immediately re-halt as
+  // "stopped" because of the now-stale flag from the FIRST attempt.
+  await env.SPEND_KV.put(`change/error-decision/${runId}`, JSON.stringify({ approve: true }));
+  const events2: ChangeEvent[] = [];
+  const rec2 = await runChangePipeline(env, runId, changeRequest, (e) => events2.push(e));
+  assert.ok(!events2.some((e) => e.type === "stopped"), "SHIP.md item 1: this is the exact bug -- retry silently swallowed by a stale stop flag instead of genuinely re-attempting");
+  assert.ok(events2.some((e) => e.type === "stage-error"), "the retry must genuinely re-attempt and hit the same real failure again, not stop silently");
+  assert.equal(rec2.ledger.outcome, "halted-awaiting-error-decision");
+});

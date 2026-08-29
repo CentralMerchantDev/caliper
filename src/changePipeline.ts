@@ -927,6 +927,24 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // logic fails loud instead of quietly sending broken code to review.
     assertConvergedForReview(verifyFatalError, verifyRegression, verifyCriteria);
 
+    // SHIP.md item 1: the only checkStopped() gap that mattered in
+    // practice. Every OTHER real paid call is preceded by a check (ground,
+    // plan, implement, each fix-loop iteration) -- but a run whose
+    // implement+verify converged on the FIRST try never enters the
+    // fix-loop's while body at all, so its checkStopped() (above) never
+    // runs either. That let a stop clicked during "Implementing" or
+    // "Verifying" sail straight through, unhonored, into a real paid
+    // review call. Reproduced by tracing every checkStopped() call site
+    // against every stage the "running" bar offers a Stop button for --
+    // this was the one stretch with no checkpoint at all.
+    if (await checkStopped(env.SPEND_KV, runId)) {
+      await clearState(env.SPEND_KV, runId);
+      const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+      onEvent({ type: "stopped" });
+      onEvent({ type: "ledger", ledger });
+      return { runId, changeRequest, plan, finalCode: null, findings: [], ledger };
+    }
+
     inFlightStage = "review";
     onEvent({ type: "reviewing" });
     const review = await callOpenAI(env, budget, WORST_CASE.review, () =>
@@ -1034,6 +1052,21 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     }
   }
 
+  // SHIP.md item 1: the other side of the same gap -- a stop clicked during
+  // "Reviewing" or the post-review "Fixing" round has nowhere left to be
+  // honored before the free (but real, visible-to-every-visitor) ship
+  // write below. Shipping costs nothing further, but completing it anyway
+  // after a stop was asked for is the same broken promise as spending
+  // anyway would be -- the button said it would stop the run, not "stop
+  // the run unless it's nearly done."
+  if (await checkStopped(env.SPEND_KV, runId)) {
+    await clearState(env.SPEND_KV, runId);
+    const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+    onEvent({ type: "stopped" });
+    onEvent({ type: "ledger", ledger });
+    return { runId, changeRequest, plan, finalCode: null, findings, ledger };
+  }
+
   const stillFailing = decideStillFailing(verifyFatalError, verifyRegression, verifyCriteria);
 
   // ---- Stage 5: Ship, or refuse to close (BUILD-V2.md) ----
@@ -1099,6 +1132,21 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // checked at the top of this function via change/error-decision/${runId}.
     const errorMessage = String((e as Error)?.message ?? e);
     const errorKind = classifyErrorPermanence(e);
+    // SHIP.md item 1: the actual defect behind "aborted, then retried, and
+    // retry did nothing." A stop clicked during a stretch with no
+    // checkStopped() checkpoint (the gap fixed above) left change/stop/
+    // ${runId} sitting in KV, unconsumed, for up to its full 10-minute TTL
+    // -- and if THIS run then happened to hit a genuine, unrelated error
+    // and got checkpointed here, a later Retry would resume past Gate 1,
+    // hit the very first checkStopped() check on the way back through, find
+    // that STALE flag from the original abort attempt, and immediately
+    // re-halt as "stopped" instead of ever re-attempting the failed stage
+    // -- indistinguishable, from the visitor's seat, from Retry doing
+    // nothing. The real error reported below is still the honest thing to
+    // show (it really happened, and hiding it behind "stopped" would be
+    // its own dishonesty) -- but any stray stop signal is consumed here,
+    // now, so it can never survive to poison a retry of THIS checkpoint.
+    await checkStopped(env.SPEND_KV, runId).catch(() => false);
     const state: ChangeState = {
       runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, planGateReplyCount, runStartedAt,
       stage: "errored", errorMessage, erroredAtStage: inFlightStage, erroredPastGate1: pastGate1Approved, errorKind,
