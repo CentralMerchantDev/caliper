@@ -9,7 +9,6 @@
   "stages": [
     {
       "stage": "ground",
-      "model": "claude-haiku-4-5",
       "inputTokens": 1614,
       "outputTokens": 111,
       "costUsd": 0.002169,
@@ -23,7 +22,6 @@
     },
     {
       "stage": "plan",
-      "model": "claude-sonnet-5",
       "inputTokens": 6966,
       "outputTokens": 749,
       "costUsd": 0.021422,
@@ -119,7 +117,6 @@
     },
     {
       "stage": "implement",
-      "model": "claude-haiku-4-5",
       "inputTokens": 5288,
       "outputTokens": 92,
       "costUsd": 0.0057480000000000005,
@@ -2649,7 +2646,6 @@
     },
     {
       "stage": "review",
-      "model": "gpt-5.3-codex",
       "inputTokens": 13530,
       "outputTokens": 407,
       "costUsd": 0.0293755,
