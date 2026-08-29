@@ -100,7 +100,7 @@ td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabu
    "stick" to). top clears the sticky header's own height (~72px) plus a
    visible gap. */
 .world-panel{padding:14px;position:sticky;top:88px}
-@media(max-width:900px){.world-panel{top:12px}}
+@media(max-width:900px){.world-panel{top:72px}}
 #world-canvas,#world-canvas-2d{width:100%;height:420px;display:block;border-radius:10px}
 .world-caption{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
 .world-goal-line{margin:8px 2px 0;font-size:13px;color:var(--ink2)}
@@ -294,11 +294,9 @@ footer a{color:var(--ink2)}
   th,td{padding:9px 8px}
   .action-bar-inner{padding:10px 14px}
   .action-bar .bar-ask{font-size:14px}
-  .bar-row textarea,.bar-row input[type="text"]{min-width:120px;font-size:14px}
-  /* Was shrinking further on mobile (8px/12px, ~33px tall) -- exactly
-     backwards from what a touch target needs. Gate decisions, retry,
-     stop: these are the highest-stakes taps on the page. */
-  .action-bar .btn{padding:13px 16px;font-size:14.5px;min-height:44px}
+  .bar-row textarea,.bar-row input[type="text"],.gate-reply textarea{min-width:120px;font-size:16px}
+  /* Ensure all interactive buttons hit the 44px touch floor on mobile */
+  .btn,.btn-outline{padding:12px 16px;font-size:14.5px;min-height:44px}
   .view-toggle button{padding:12px 16px;font-size:12px;min-height:44px}
   .world-controls button{min-height:44px;padding:10px 14px}
 }
@@ -900,6 +898,7 @@ function renderVerified(d, block, label) {
 // stays fully available as a clearly secondary "run it live yourself"
 // action, rate-limited exactly as it already was.
 let recordedRun = null
+let liveRunsEnabled = false
 function renderRecordedStage(s) {
   if (s.stage === 'ground') {
     const r = s.result
@@ -950,9 +949,9 @@ function renderRecordedRun(t) {
       verification, and cross-model review that ran for the request "${esc(t.changeRequest)}", including
       the reviewer's own words. It plays back instantly, so your first impression doesn't depend on a
       live pipeline completing perfectly in real time.</p>
-    <button class="btn btn-outline" id="run-it-live-btn" type="button">▸ Run it live yourself instead</button>`
+    ${liveRunsEnabled ? '<button class="btn btn-outline" id="run-it-live-btn" type="button">▸ Run it live yourself instead</button>' : '<p class="recording-note">Live runs are currently disabled. The recording and run history are the artifact.</p>'}`
   log.appendChild(banner)
-  $('#run-it-live-btn').addEventListener('click', showLiveComposer)
+  if (liveRunsEnabled) $('#run-it-live-btn').addEventListener('click', showLiveComposer)
 
   t.stages.forEach((s, i) => {
     const div = document.createElement('div')
@@ -980,12 +979,14 @@ function renderRecordedRun(t) {
   log.appendChild(outcomeBlock)
 
   bar.className = 'action-bar recording-bar'
-  barInner.innerHTML = `
+  barInner.innerHTML = liveRunsEnabled ? `
     <span class="bar-kicker">Recording finished</span>
     <p class="bar-ask">Run this live, on the real current world. A live run spends a few real cents
       grounding and planning before you reach a gate to approve. It is rate-limited per visitor.</p>
-    <div class="bar-row"><button class="btn" id="bar-run-live" type="button">▸ Run it live yourself</button></div>`
-  $('#bar-run-live').addEventListener('click', showLiveComposer)
+    <div class="bar-row"><button class="btn" id="bar-run-live" type="button">▸ Run it live yourself</button></div>` : `
+    <span class="bar-kicker">Recording finished</span>
+    <p class="bar-ask">Live runs are currently disabled. The recording and run history remain available.</p>`
+  if (liveRunsEnabled) $('#bar-run-live').addEventListener('click', showLiveComposer)
 }
 function showLiveComposer() {
   log.innerHTML = '<p style="margin:0;color:var(--muted);font-size:14.5px">Nothing is running yet. What happens ' +
@@ -1016,12 +1017,12 @@ function renderBar() {
 
   let html = ''
   if (barState.kind === 'idle') {
-    html = `
+    html = liveRunsEnabled ? `
       <label class="lab" for="bar-request-input">Ask the world for something</label>
       <div class="bar-row">
         <textarea id="bar-request-input" maxlength="500" placeholder="e.g. add a lamp near the desk that lights up at night"></textarea>
         <button class="btn" id="bar-submit" type="button">▸ Ground it, then plan it</button>
-      </div>`
+      </div>` : `<span class="bar-kicker">Recorded artifact</span><p class="bar-ask">Live runs are currently disabled. The recording and run history remain available.</p>`
   } else if (barState.kind === 'running') {
     html = `
       <span class="bar-kicker">Running</span>
@@ -1112,7 +1113,7 @@ function renderBar() {
   }
   barInner.innerHTML = html
 
-  if (barState.kind === 'idle') {
+  if (barState.kind === 'idle' && liveRunsEnabled) {
     $('#bar-submit').addEventListener('click', startRun)
     $('#bar-request-input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startRun() } })
   } else if (barState.kind === 'running') {
@@ -1215,7 +1216,9 @@ function clearSavedRun() {
 // visitor who paid for grounding+plan (or further) and then lost the tab
 // deserves to be told that before being invited to start something new.
 const savedRun = loadSavedRun()
-if (savedRun && savedRun.runId) {
+fetch('/live-status').then(r => r.ok ? r.json() : Promise.reject(new Error('status unavailable'))).then(status => {
+liveRunsEnabled = status.enabled === true
+if (savedRun && savedRun.runId && liveRunsEnabled) {
   barState = { kind: 'resume-prompt', runId: savedRun.runId, changeRequest: savedRun.changeRequest || '(unknown request)', costSoFarUsd: savedRun.costSoFarUsd || 0 }
   renderBar()
 } else {
@@ -1232,6 +1235,12 @@ if (savedRun && savedRun.runId) {
     if (barState.kind === 'idle') renderRecordedRun(t)
   }).catch(() => {})
 }
+}).catch(() => {
+  // Fail closed: inability to read the switch never exposes a paid action.
+  liveRunsEnabled = false
+  renderBar()
+  fetch('./recorded-run.json').then(r => r.json()).then(t => { recordedRun = t; renderRecordedRun(t) }).catch(() => {})
+})
 
 function addCost(usd) {
   runningCostUsd += usd || 0
@@ -1244,6 +1253,7 @@ function setRunning(stageLabel) {
 }
 
 function startRun() {
+  if (!liveRunsEnabled) return
   const text = $('#bar-request-input').value.trim()
   if (!text) return
   log.innerHTML = ''
