@@ -1211,9 +1211,9 @@ function connect(url) {
     const d = JSON.parse(ev.data).ledger
     const b = stageBlock(log, 's-ledger-' + Date.now(), 'Ledger')
     b.classList.remove('active')
-    b.innerHTML += '<div class="wrapx"><table><thead><tr><th>Stage</th><th class="num">Cost</th></tr></thead><tbody>' +
-      d.stageCosts.map(s => `<tr><td>${esc(s.stage)}</td><td class="num mono">${money(s.costUsd)}</td></tr>`).join('') +
-      `<tr><td><strong>Total</strong></td><td class="num mono headline-cell">${money(d.totalCostUsd)}</td></tr></tbody></table></div>` +
+    b.innerHTML += '<div class="wrapx"><table><thead><tr><th>Stage</th><th class="num">Cost</th><th class="num">Time</th></tr></thead><tbody>' +
+      d.stageCosts.map(s => `<tr><td>${esc(s.stage)}</td><td class="num mono">${money(s.costUsd)}</td><td class="num mono">${s.wallTimeMs != null ? (s.wallTimeMs / 1000).toFixed(1) + 's' : '—'}</td></tr>`).join('') +
+      `<tr><td><strong>Total</strong></td><td class="num mono headline-cell">${money(d.totalCostUsd)}</td><td></td></tr></tbody></table></div>` +
       `<p style="margin-top:8px">Review found <strong>${d.reviewFoundMaterial} material</strong> and <strong>${d.reviewFoundNits} nit</strong> finding(s)` +
       (d.planGateReplyCount ? `, after ${d.planGateReplyCount} Gate 1 repl${d.planGateReplyCount === 1 ? 'y' : 'ies'}` : '') + `.` +
       (d.fixApplied ? ` A fix round ran and ${d.fixHeld ? 'held.' : 'did not fully hold -- disclosed above, not hidden.'}` : '') + `</p>` +

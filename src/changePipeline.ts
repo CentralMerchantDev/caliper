@@ -1,5 +1,5 @@
 import type { SimTestCase, TestResult } from "./types";
-import { generatePlan, implementChange, fixChange, runRetrospective, DEFAULT_MODEL, type ChangePlan, PRICING as ANTHROPIC_PRICING } from "./claude";
+import { generatePlan, implementChange, fixChange, implementChangeAsEdit, fixChangeAsEdit, runRetrospective, DEFAULT_MODEL, type ChangePlan, PRICING as ANTHROPIC_PRICING } from "./claude";
 import { reviewArtifact, parseFindings, REVIEW_MODEL, PRICING as OPENAI_PRICING, type ReviewFinding } from "./openai";
 import { runSimTests } from "./simSandbox";
 import { SIM_REGRESSION_SUITE } from "./simRegression";
@@ -109,7 +109,7 @@ export interface ChangeLedger {
     | "halted-awaiting-error-decision"
     | "abandoned-after-error";
   totalCostUsd: number;
-  stageCosts: { stage: string; costUsd: number }[];
+  stageCosts: { stage: string; costUsd: number; wallTimeMs: number }[];
   reviewFoundMaterial: number;
   reviewFoundNits: number;
   fixApplied: boolean;
@@ -140,7 +140,7 @@ interface ChangeState {
   changeRequest: string;
   currentSourceAtStart: string;
   budgetSpent: number;
-  stageCosts: { stage: string; costUsd: number }[];
+  stageCosts: { stage: string; costUsd: number; wallTimeMs: number }[];
   questionAsked: boolean;
   planGateReplyCount: number;
   runStartedAt: number;
@@ -245,6 +245,11 @@ const WORST_CASE = {
   review: (CONTROL_LIMITS.TOKEN_CAPS.review / 1_000_000) * OPENAI_PRICING[REVIEW_MODEL].output,
   fix: (CONTROL_LIMITS.TOKEN_CAPS.fix / 1_000_000) * ANTHROPIC_PRICING[FIX_MODEL].output,
   retrospective: (RETROSPECTIVE_MAX_TOKENS / 1_000_000) * ANTHROPIC_PRICING[RETROSPECTIVE_MODEL].output,
+  // FOUNDATION-2 ("emit the change, not the file"): the data-edit path's
+  // own, much smaller worst case -- same models as implement/fix, a
+  // fraction of the token cap, since a WorldEdit is never a file.
+  implementEdit: (CONTROL_LIMITS.TOKEN_CAPS.implementEdit / 1_000_000) * ANTHROPIC_PRICING[IMPLEMENT_MODEL].output,
+  fixEdit: (CONTROL_LIMITS.TOKEN_CAPS.fixEdit / 1_000_000) * ANTHROPIC_PRICING[FIX_MODEL].output,
 };
 
 function stateKey(runId: string): string {
@@ -320,7 +325,7 @@ export async function checkStopped(kv: KVNamespace, runId: string): Promise<bool
 }
 
 function buildStoppedLedger(
-  stageCosts: { stage: string; costUsd: number }[],
+  stageCosts: { stage: string; costUsd: number; wallTimeMs: number }[],
   budget: CallBudget,
   questionAsked: boolean,
   planGateReplyCount: number,
@@ -388,7 +393,7 @@ function haltLedger(
  * is the same terminal shape as a visitor choosing to stop, just reached
  * from a different halt. */
 function buildAbandonedAfterErrorLedger(
-  stageCosts: { stage: string; costUsd: number }[],
+  stageCosts: { stage: string; costUsd: number; wallTimeMs: number }[],
   budget: CallBudget,
   questionAsked: boolean,
   planGateReplyCount: number,
@@ -457,11 +462,11 @@ async function recordLessonOccurrence(kv: KVNamespace, lesson: string): Promise<
 async function runRetrospectiveAndRecord(
   env: ChangeEnv,
   budget: CallBudget,
-  stageCosts: { stage: string; costUsd: number }[],
+  stageCosts: { stage: string; costUsd: number; wallTimeMs: number }[],
   runSummary: string,
 ): Promise<{ lesson: string | null; recurrenceCount: number | null }> {
   const retro = await callAnthropic(env, budget, WORST_CASE.retrospective, () => runRetrospective(env.ANTHROPIC_API_KEY, runSummary, RETROSPECTIVE_MAX_TOKENS, RETROSPECTIVE_MODEL));
-  stageCosts.push({ stage: "retrospective", costUsd: retro.costUsd });
+  stageCosts.push({ stage: "retrospective", costUsd: retro.costUsd, wallTimeMs: retro.wallTimeMs });
   let recurrenceCount: number | null = null;
   if (retro.lesson) {
     await appendInstruction(env.SPEND_KV, retro.lesson);
@@ -554,14 +559,14 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     lastClarification = clarification;
     onEvent({ type: "grounding" });
     const groundResult = await callAnthropic(env, budget, WORST_CASE.ground, () => groundRequest(env.ANTHROPIC_API_KEY, changeRequest, GROUND_MODEL, CONTROL_LIMITS.TOKEN_CAPS.ground));
-    stageCosts.push({ stage: `ground${label}`, costUsd: groundResult.costUsd });
+    stageCosts.push({ stage: `ground${label}`, costUsd: groundResult.costUsd, wallTimeMs: groundResult.wallTimeMs });
     onEvent({ type: "grounded", result: groundResult.result, model: groundResult.model, inputTokens: groundResult.inputTokens, outputTokens: groundResult.outputTokens, costUsd: groundResult.costUsd, wallTimeMs: groundResult.wallTimeMs });
 
     onEvent({ type: "planning" });
     const planResult = await callAnthropic(env, budget, WORST_CASE.plan, () =>
       generatePlan(env.ANTHROPIC_API_KEY, currentSourceAtStart, regressionSummaryText(), changeRequest, clarification, PLAN_MAX_TOKENS, priorLessons, formatGroundingForPlan(groundResult.result)),
     );
-    stageCosts.push({ stage: `plan${label}`, costUsd: planResult.costUsd });
+    stageCosts.push({ stage: `plan${label}`, costUsd: planResult.costUsd, wallTimeMs: planResult.wallTimeMs });
     onEvent({ type: "planned", plan: planResult.plan, model: planResult.model, inputTokens: planResult.inputTokens, outputTokens: planResult.outputTokens, costUsd: planResult.costUsd, wallTimeMs: planResult.wallTimeMs });
     return { grounding: groundResult.result, plan: planResult.plan };
   }
@@ -735,10 +740,18 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     } else {
       inFlightStage = "implement";
       onEvent({ type: "implementing" });
-      const impl = await callAnthropic(env, budget, WORST_CASE.implement, () =>
-        implementChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, changeRequest, IMPLEMENT_MODEL, CONTROL_LIMITS.TOKEN_CAPS.implement, priorLessons),
-      );
-      stageCosts.push({ stage: "implement", costUsd: impl.costUsd });
+      // FOUNDATION-2 ("emit the change, not the file"): the plan already
+      // decided, at Gate 1, which path this run takes -- implement doesn't
+      // choose again here, it just executes the decision the visitor saw
+      // and approved.
+      const impl = plan!.implementationPath === "data-edit"
+        ? await callAnthropic(env, budget, WORST_CASE.implementEdit, () =>
+            implementChangeAsEdit(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, changeRequest, IMPLEMENT_MODEL, CONTROL_LIMITS.TOKEN_CAPS.implementEdit, priorLessons),
+          )
+        : await callAnthropic(env, budget, WORST_CASE.implement, () =>
+            implementChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, changeRequest, IMPLEMENT_MODEL, CONTROL_LIMITS.TOKEN_CAPS.implement, priorLessons),
+          );
+      stageCosts.push({ stage: `implement (${plan!.implementationPath})`, costUsd: impl.costUsd, wallTimeMs: impl.wallTimeMs });
       onEvent({ type: "implemented", model: impl.model, inputTokens: impl.inputTokens, outputTokens: impl.outputTokens, costUsd: impl.costUsd, wallTimeMs: impl.wallTimeMs, code: impl.code });
       implCode = impl.code;
     }
@@ -791,13 +804,17 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         ...verifyRegression.filter((r) => r.pass).map((r) => describePassing("regression", r)),
         ...verifyCriteria.filter((r) => r.pass).map((r) => describePassing("criterion", r)),
       ];
-      const fix = await callAnthropic(env, budget, WORST_CASE.fix, () =>
-        // No reviewer findings exist yet at this point in the run -- this
-        // fix round is repairing verification failures only, so the
-        // materialFindings argument is empty on purpose.
-        fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, implCode!, [], FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
-      );
-      stageCosts.push({ stage: `fix (convergence attempt ${convergenceFixAttempts})`, costUsd: fix.costUsd });
+      // No reviewer findings exist yet at this point in the run -- this
+      // fix round is repairing verification failures only, so the
+      // materialFindings argument is empty on purpose.
+      const fix = plan!.implementationPath === "data-edit"
+        ? await callAnthropic(env, budget, WORST_CASE.fixEdit, () =>
+            fixChangeAsEdit(env.ANTHROPIC_API_KEY, plan!, implCode!, [], FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fixEdit, verificationFailures, stillPassing, priorLessons),
+          )
+        : await callAnthropic(env, budget, WORST_CASE.fix, () =>
+            fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, implCode!, [], FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
+          );
+      stageCosts.push({ stage: `fix (${plan!.implementationPath}, convergence attempt ${convergenceFixAttempts})`, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs });
       implCode = fix.code;
       onEvent({ type: "fixed", model: fix.model, inputTokens: fix.inputTokens, outputTokens: fix.outputTokens, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, code: implCode });
 
@@ -877,7 +894,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         priorLessons,
       ),
     );
-    stageCosts.push({ stage: "review", costUsd: review.costUsd });
+    stageCosts.push({ stage: "review", costUsd: review.costUsd, wallTimeMs: review.wallTimeMs });
     findings = parseFindings(review.text);
     onEvent({ type: "reviewed", model: review.model, inputTokens: review.inputTokens, outputTokens: review.outputTokens, costUsd: review.costUsd, wallTimeMs: review.wallTimeMs, reviewText: review.text, findings });
   }
@@ -940,10 +957,14 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         ...verifyRegression.filter((r) => r.pass).map((r) => describePassing("regression", r)),
         ...verifyCriteria.filter((r) => r.pass).map((r) => describePassing("criterion", r)),
       ];
-      const fix = await callAnthropic(env, budget, WORST_CASE.fix, () =>
-        fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, finalCode, material, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
-      );
-      stageCosts.push({ stage: "fix", costUsd: fix.costUsd });
+      const fix = plan!.implementationPath === "data-edit"
+        ? await callAnthropic(env, budget, WORST_CASE.fixEdit, () =>
+            fixChangeAsEdit(env.ANTHROPIC_API_KEY, plan!, finalCode, material, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fixEdit, verificationFailures, stillPassing, priorLessons),
+          )
+        : await callAnthropic(env, budget, WORST_CASE.fix, () =>
+            fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, finalCode, material, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
+          );
+      stageCosts.push({ stage: `fix (${plan!.implementationPath})`, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs });
       finalCode = fix.code;
       fixApplied = true;
       onEvent({ type: "fixed", model: fix.model, inputTokens: fix.inputTokens, outputTokens: fix.outputTokens, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, code: finalCode });

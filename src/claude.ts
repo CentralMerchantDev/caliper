@@ -5,6 +5,7 @@ import { CRITERION_SCHEMA, validateProposedCriteria, describeCriterion, type Pro
 export type { ProposedCriterion } from "./criteria";
 import { TruncatedResponseError } from "./controlLayer";
 import { structureSummary } from "./worldStructure";
+import { WORLD_EDIT_SCHEMA, parseRawWorldEdit, runValidatedWorldEdit, type WorldEdit } from "./worldEdit";
 
 /**
  * validate-before-consume (a production control-layer practice): a response that hit its
@@ -665,6 +666,146 @@ export async function fixChange(
     }
   }
   return result;
+}
+
+// ---------------------------------------------------------------------
+// FOUNDATION-2 ("emit the change, not the file"): implementChange/fixChange
+// above ask a model to reproduce the ENTIRE ~16KB source for every change,
+// even a one-line placements append -- measured at 79-143s for implement,
+// never completing within 300s for fix (see FOUNDATION-2.md's own
+// report). When plan.implementationPath === "data-edit", these two
+// functions are used instead: the model returns a handful of WorldEdit
+// ops (src/worldEdit.ts) -- add a type, add a placement, override a
+// colour, change a surface -- and the server applies them deterministically.
+// No file regeneration, no text-diff context matching, and the output
+// contract stays identical (GenerationResult.code, the resulting source)
+// so changePipeline.ts's verify/fix/review/ship logic needs no changes at
+// all -- it can't tell which path produced the code it's checking.
+// ---------------------------------------------------------------------
+
+const WORLD_EDIT_SYSTEM_PROMPT =
+  "You produce a small, structured edit to a simulated world's DATA -- never source code, never prose, " +
+  "never a regenerated file. The world is a type registry (objectTypes) and a placement list; describe " +
+  "exactly what changes as one or more operations: addObjectType (a genuinely new type plus its geometry " +
+  "recipe, built from primitive shapes -- box, cylinder, sphere, icosahedron), addPlacement (an instance of " +
+  "an existing type, or one you are adding in this same edit), overridePlacement (a colour override on one " +
+  "existing placement, by its real id), or setSurfaceField (a surface's material or colour, by its real " +
+  "key). Return ONLY the ops array via the schema. Every type key, placement id, and surface key you " +
+  "reference must be a REAL one from the current world shown to you, or one you are adding in this same " +
+  "edit -- never invent or guess a name.";
+
+async function callForWorldEdit(client: Anthropic, model: string, maxTokens: number, messages: Anthropic.MessageParam[]): Promise<{ edit: WorldEdit; response: Anthropic.Message }> {
+  const response = await createWithTruncationGuard(client, "implementChangeAsEdit/fixChangeAsEdit", {
+    model,
+    max_tokens: maxTokens,
+    thinking: { type: "disabled" },
+    system: WORLD_EDIT_SYSTEM_PROMPT,
+    messages,
+    output_config: { format: { type: "json_schema", schema: WORLD_EDIT_SCHEMA } },
+  });
+  if (response.stop_reason === "refusal") throw new Error("World-edit request was refused by Claude's safety classifiers");
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error(`No text content in world-edit response (stop_reason: ${response.stop_reason})`);
+  let raw: { ops: unknown[] };
+  try {
+    raw = JSON.parse(textBlock.text);
+  } catch (e) {
+    throw new Error(`Failed to parse world-edit JSON: ${String(e)}`);
+  }
+  const edit = parseRawWorldEdit(raw);
+  return { edit, response };
+}
+
+/** The data-edit counterpart to implementChange -- same call signature and
+ * same GenerationResult return shape (code = the resulting source), so
+ * changePipeline.ts branches only on which of these two it calls, nothing
+ * downstream. worldSource is the world the edit applies against (the
+ * CURRENT one, evaluated fresh at validation time -- never trusted from
+ * the model's own claim about it). Retries once, with the specific
+ * rejection reason, on an edit that fails validateWorldEdit; two
+ * rejections in a row is a real failure, not silently accepted or
+ * silently downgraded to a source-edit -- the visitor approved a
+ * data-edit plan, not a promise to fall back quietly. */
+export async function implementChangeAsEdit(
+  apiKey: string,
+  worldSource: string,
+  plan: ChangePlan,
+  changeRequest: string,
+  model: string,
+  maxTokens: number,
+  priorLessons: string = "",
+): Promise<GenerationResult> {
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
+  const start = Date.now();
+  const criteriaText = plan.criteria.map((c) => `- ${describeCriterion(c)}`).join("\n");
+  const baseContent =
+    (priorLessons ? `Lessons recorded from previous runs -- apply any that are relevant here:\n${priorLessons}\n\n` : "") +
+    `Current world source (evaluate this to see the real objectTypes/placements/surfaces before naming anything):\n${worldSource}\n\n` +
+    `Change request: ${changeRequest}\n\n` +
+    `Approved plan:\nWill build: ${plan.willBuild}\nWill not touch: ${plan.willNotTouch}\n\n` +
+    `It must satisfy these exact test cases:\n${criteriaText}`;
+
+  async function attempt(content: string) {
+    const { edit, response } = await callForWorldEdit(client, model, maxTokens, [{ role: "user", content }]);
+    return { edit, response, result: runValidatedWorldEdit(worldSource, edit) };
+  }
+
+  let { response, result } = await attempt(baseContent);
+  if (!result.ok) {
+    const correction =
+      `${baseContent}\n\nYour previous edit was invalid: ${result.reason}\n\n` +
+      `Re-emit a corrected ops array, referencing only real type keys, placement ids, and surface keys from the current world shown above.`;
+    ({ response, result } = await attempt(correction));
+    if (!result.ok) throw new Error(`implementChangeAsEdit: world edit invalid twice in a row -- treated as a failure, not content: ${result.reason}`);
+  }
+  const inputTokens = response.usage.input_tokens;
+  const outputTokens = response.usage.output_tokens;
+  return { code: result.source, model, inputTokens, outputTokens, costUsd: costUsd(model, inputTokens, outputTokens), wallTimeMs: Date.now() - start };
+}
+
+/** The data-edit counterpart to fixChange. previousWorldSource is the
+ * LATEST attempt (already carrying whatever the prior edit applied) -- a
+ * fix edit is applied on top of it, describing what changes NEXT, the
+ * same "keep building on the real current state" shape addPlacement/
+ * overridePlacement already have. */
+export async function fixChangeAsEdit(
+  apiKey: string,
+  plan: ChangePlan,
+  previousWorldSource: string,
+  materialFindings: string[],
+  model: string,
+  maxTokens: number,
+  verificationFailures: string[] = [],
+  stillPassing: string[] = [],
+  priorLessons: string = "",
+): Promise<GenerationResult> {
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
+  const start = Date.now();
+  const findingsText = materialFindings.map((f) => `- ${f}`).join("\n");
+  const verificationText = verificationFailures.length ? `\n\nVerification also failed these checks:\n${verificationFailures.map((f) => `- ${f}`).join("\n")}` : "";
+  const passingText = stillPassing.length ? `\n\nThese checks currently pass -- your edit must not break them:\n${stillPassing.map((f) => `- ${f}`).join("\n")}` : "";
+  const baseContent =
+    (priorLessons ? `Lessons recorded from previous runs -- apply any that are relevant here:\n${priorLessons}\n\n` : "") +
+    `Current world source, including the previous edit already applied (evaluate this to see the real current state):\n${previousWorldSource}\n\n` +
+    `Change being made: ${plan.willBuild}\n\n` +
+    (materialFindings.length ? `An independent reviewer found ${materialFindings.length} material issue(s):\n${findingsText}` : "") +
+    verificationText + passingText +
+    `\n\nReturn a corrective ops array via the schema that addresses every failing check above without breaking any of the passing ones.`;
+
+  async function attempt(content: string) {
+    const { edit, response } = await callForWorldEdit(client, model, maxTokens, [{ role: "user", content }]);
+    return { edit, response, result: runValidatedWorldEdit(previousWorldSource, edit) };
+  }
+
+  let { response, result } = await attempt(baseContent);
+  if (!result.ok) {
+    const correction = `${baseContent}\n\nYour previous edit was invalid: ${result.reason}\n\nRe-emit a corrected ops array, referencing only real names from the current world shown above.`;
+    ({ response, result } = await attempt(correction));
+    if (!result.ok) throw new Error(`fixChangeAsEdit: world edit invalid twice in a row -- treated as a failure, not content: ${result.reason}`);
+  }
+  const inputTokens = response.usage.input_tokens;
+  const outputTokens = response.usage.output_tokens;
+  return { code: result.source, model, inputTokens, outputTokens, costUsd: costUsd(model, inputTokens, outputTokens), wallTimeMs: Date.now() - start };
 }
 
 export async function generateBrief(apiKey: string, freeformPrompt: string, maxTokens: number): Promise<TextGenerationResult> {

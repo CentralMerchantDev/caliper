@@ -37,8 +37,12 @@ export const CONTROL_LIMITS = {
    * numbers -- the implement stage's first measurement hit a 3000-token cap
    * mid-artifact; this is deliberately larger. `ground` added for the new
    * grounding stage (FINISH.md chunk 7) -- small, since it returns a short
-   * structured verdict, not code. */
-  TOKEN_CAPS: { brief: 800, ground: 500, implement: 6000, review: 2500, fix: 4000 },
+   * structured verdict, not code. `implementEdit`/`fixEdit` (FOUNDATION-2,
+   * "emit the change, not the file"): a WorldEdit is a handful of ops, not
+   * a file -- even addObjectType's full geometry recipe fits comfortably
+   * under 1500 tokens; sized with real headroom over that, not copied from
+   * the full-file caps it replaces for the data-edit path. */
+  TOKEN_CAPS: { brief: 800, ground: 500, implement: 6000, review: 2500, fix: 4000, implementEdit: 1500, fixEdit: 1500 },
   /** UPGRADE.md section 0: 3 live runs/IP/day (up from 2, permanent, not a
    * temporary carve-out) -- 3 x the $0.15 worst case =~ $0.45/IP/day, still
    * small next to the global daily cap below. Can go higher once the
