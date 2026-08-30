@@ -428,3 +428,21 @@ test("guardrail: recipe geometry offset outside declared footprint is strictly r
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.reason, /does not enclose recipe geometry envelope/);
 });
+
+test("guardrail: recipe geometry with 3D X/Z rotation projecting height outside footprint is strictly rejected", () => {
+  // A box with size [0.5, 2.0, 0.5] tilted 90 deg around X projects its 2.0m height into the Z footprint
+  const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, {
+    ops: [{
+      op: "addObjectType",
+      key: "tiltedPillar",
+      definition: {
+        material: "stone",
+        footprint: { w: 1.0, d: 1.0 },
+        station: null,
+        recipe: [{ shape: "box", size: [0.5, 2.0, 0.5], rotation: [Math.PI / 2, 0, 0], position: [0, 0.25, 0], color: "#ffffff" }]
+      }
+    }]
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /does not enclose recipe geometry envelope/);
+});

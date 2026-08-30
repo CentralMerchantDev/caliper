@@ -3820,11 +3820,11 @@ class Renderer3D {
       }
     };
 
-    // Upgraded Smooth Logarithmic Wheel Zoom: max distance up to 1200m, slow and controllable 1.028x factor
+    // Upgraded Smooth Logarithmic Wheel Zoom: max distance up to CAMERA_MAX_DIST (3600m), slow and controllable 1.028x factor
     const onWheel = (e) => {
       e.preventDefault();
       const zoomFactor = e.deltaY > 0 ? 1.028 : 0.973;
-      this._camDist = Math.max(4, Math.min(3600, (this._camDist || 48) * zoomFactor));
+      this._camDist = Math.max(CAMERA_MIN_DIST, Math.min(CAMERA_MAX_DIST, (this._camDist || 48) * zoomFactor));
       this._targetCamDist = this._camDist;
     };
 
@@ -4253,7 +4253,7 @@ class Renderer3D {
 
   zoomCamera(factor) {
     if (this._isDroneTour) this.stopDroneTour();
-    this._camDist = Math.max(4, Math.min(3600, (this._camDist || 48) * factor));
+    this._camDist = Math.max(CAMERA_MIN_DIST, Math.min(CAMERA_MAX_DIST, (this._camDist || 48) * factor));
     this._targetCamDist = this._camDist;
   }
 

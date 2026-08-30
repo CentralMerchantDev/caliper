@@ -313,7 +313,7 @@ export function assertUnderRunCeiling(spentSoFarUsd: number, nextEstimateUsd: nu
 
 const ACTIVE_PREFIX = "pipeline/active/";
 
-export async function tryLeaseActiveRun(kv: KVNamespace, runId: string, spendCounterDO?: DurableObjectNamespace): Promise<void> {
+export async function tryLeaseActiveRun(kv: KVNamespace, runId: string, spendCounterDO?: DurableObjectNamespace): Promise<string | null> {
   if (spendCounterDO) {
     try {
       const id = spendCounterDO.idFromName("global");
@@ -324,13 +324,16 @@ export async function tryLeaseActiveRun(kv: KVNamespace, runId: string, spendCou
         body: JSON.stringify({ runId, maxConcurrent: CONTROL_LIMITS.MAX_CONCURRENT_PIPELINE_RUNS }),
       });
       if (res.ok) {
-        const data = (await res.json()) as { ok: boolean; reason?: string };
+        const data = (await res.json()) as { ok: boolean; leaseToken?: string; reason?: string };
         if (!data.ok) {
           throw new PipelineLimitError("concurrency", data.reason || "Concurrent pipeline run limit reached");
         }
+        if (data.leaseToken) {
+          await kv.put(`change/lease-token/${runId}`, data.leaseToken, { expirationTtl: CONTROL_LIMITS.ACTIVE_RUN_LEASE_TTL_SEC });
+        }
         // Mirror to KV for observability
         await kv.put(`${ACTIVE_PREFIX}${runId}`, "1", { expirationTtl: CONTROL_LIMITS.ACTIVE_RUN_LEASE_TTL_SEC });
-        return;
+        return data.leaseToken ?? null;
       }
       throw new PipelineLimitError("concurrency", `Lease coordinator returned HTTP ${res.status}. Concurrency slot could not be secured.`);
     } catch (e) {
@@ -351,20 +354,28 @@ export async function tryLeaseActiveRun(kv: KVNamespace, runId: string, spendCou
     );
   }
   await kv.put(`${ACTIVE_PREFIX}${runId}`, "1", { expirationTtl: CONTROL_LIMITS.ACTIVE_RUN_LEASE_TTL_SEC });
+  return null;
 }
 
-export async function releaseActiveRun(kv: KVNamespace, runId: string, spendCounterDO?: DurableObjectNamespace): Promise<void> {
+export async function releaseActiveRun(kv: KVNamespace, runId: string, spendCounterDO?: DurableObjectNamespace, leaseToken?: string): Promise<void> {
+  const token = leaseToken || (await kv.get(`change/lease-token/${runId}`)) || undefined;
   if (spendCounterDO) {
     try {
       const id = spendCounterDO.idFromName("global");
       const stub = spendCounterDO.get(id);
-      await stub.fetch("https://spend-counter.internal/release-run", {
+      const res = await stub.fetch("https://spend-counter.internal/release-run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ runId }),
+        body: JSON.stringify({ runId, leaseToken: token }),
       });
-    } catch {}
+      if (!res.ok) {
+        console.warn(`[lease] release-run returned HTTP ${res.status} for runId ${runId}`);
+      }
+    } catch (err) {
+      console.warn(`[lease] release-run coordinator error for runId ${runId}:`, err);
+    }
   }
+  await kv.delete(`change/lease-token/${runId}`).catch(() => {});
   await kv.delete(`${ACTIVE_PREFIX}${runId}`).catch(() => {});
 }
 

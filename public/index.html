@@ -1999,6 +1999,7 @@ async function submitGateDecision(decisionUrl, resumeUrl, cardEl, isReject = fal
     if (!res.ok) {
       throw new Error(`Gate decision failed with HTTP ${res.status}: ${res.statusText}`);
     }
+    const resData = await res.json().catch(() => ({}));
     // Verify stream generation is still the current active stream
     if (activeEs !== capturedEs || currentRunId !== capturedRunId) {
       return;
@@ -2015,8 +2016,10 @@ async function submitGateDecision(decisionUrl, resumeUrl, cardEl, isReject = fal
       activeEs.close();
       activeEs = null;
     }
-    const tokenParam = currentControlToken ? `&controlToken=${encodeURIComponent(currentControlToken)}` : '';
-    const finalResumeUrl = resumeUrl.includes('?') ? `${resumeUrl}${tokenParam}` : `${resumeUrl}?${tokenParam.slice(1)}`;
+    // Narrow single-use ticket in URL protects long-lived controlToken from URL logs/traces
+    const ticket = resData?.resumeTicket;
+    const ticketParam = ticket ? `&ticket=${encodeURIComponent(ticket)}` : (currentControlToken ? `&controlToken=${encodeURIComponent(currentControlToken)}` : '');
+    const finalResumeUrl = resumeUrl.includes('?') ? `${resumeUrl}${ticketParam}` : `${resumeUrl}?${ticketParam.slice(1)}`;
     connect(finalResumeUrl);
   } catch (err) {
     btns.forEach(b => b.disabled = false);

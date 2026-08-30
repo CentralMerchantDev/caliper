@@ -151,11 +151,12 @@ export class SpendCounterLogic {
    * Atomic lease acquisition for active pipeline runs:
    * Prevents concurrent runs from exceeding MAX_CONCURRENT_PIPELINE_RUNS,
    * ensures a runId cannot be leased twice simultaneously,
-   * and auto-prunes stale leases whose lease duration expired (e.g. crashed Workers).
+   * auto-prunes stale leases whose lease duration expired,
+   * and issues a unique cryptographic leaseToken to prevent ABA release races.
    */
-  async leaseRun(runId: string, maxConcurrent = 3, ttlSec = 600): Promise<{ ok: boolean; reason?: string }> {
+  async leaseRun(runId: string, maxConcurrent = 3, ttlSec = 600): Promise<{ ok: boolean; leaseToken?: string; expiresAt?: number; reason?: string }> {
     const now = Date.now();
-    const rawLeases = (await this.storage.get<Array<{ runId: string; expiresAt: number }>>("pipeline/active-leases")) ?? [];
+    const rawLeases = (await this.storage.get<Array<{ runId: string; leaseToken: string; expiresAt: number }>>("pipeline/active-leases")) ?? [];
     // Prune expired leases
     const activeLeases = rawLeases.filter(l => l.expiresAt > now);
 
@@ -165,22 +166,35 @@ export class SpendCounterLogic {
     if (activeLeases.length >= maxConcurrent) {
       return { ok: false, reason: `${activeLeases.length} pipeline runs are already in flight (max ${maxConcurrent}) -- try again in a moment.` };
     }
-    activeLeases.push({ runId, expiresAt: now + ttlSec * 1000 });
+    const leaseToken = crypto.randomUUID();
+    const expiresAt = now + ttlSec * 1000;
+    activeLeases.push({ runId, leaseToken, expiresAt });
     await this.storage.put("pipeline/active-leases", activeLeases);
     // Keep legacy active-runs key synchronized for diagnostics
     await this.storage.put("pipeline/active-runs", activeLeases.map(l => l.runId));
-    return { ok: true };
+    return { ok: true, leaseToken, expiresAt };
   }
 
   /**
    * Releases an active run lease atomically.
+   * If leaseToken is provided, verifies that the caller owns the current lease generation
+   * to strictly eliminate ABA races where a timed-out predecessor releases a successor's lease.
    */
-  async releaseRun(runId: string): Promise<void> {
+  async releaseRun(runId: string, leaseToken?: string): Promise<{ ok: boolean; released: boolean }> {
     const now = Date.now();
-    const rawLeases = (await this.storage.get<Array<{ runId: string; expiresAt: number }>>("pipeline/active-leases")) ?? [];
+    const rawLeases = (await this.storage.get<Array<{ runId: string; leaseToken: string; expiresAt: number }>>("pipeline/active-leases")) ?? [];
+    const target = rawLeases.find(l => l.runId === runId);
+    if (!target) {
+      return { ok: true, released: false };
+    }
+    // If leaseToken is passed, release ONLY if token matches current lease generation
+    if (leaseToken && target.leaseToken !== leaseToken) {
+      return { ok: true, released: false };
+    }
     const filtered = rawLeases.filter(l => l.runId !== runId && l.expiresAt > now);
     await this.storage.put("pipeline/active-leases", filtered);
     await this.storage.put("pipeline/active-runs", filtered.map(l => l.runId));
+    return { ok: true, released: true };
   }
 }
 
@@ -219,9 +233,9 @@ export async function handleSpendCounterRequest(logic: SpendCounterLogic, reques
       return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
     }
     if (url.pathname === "/release-run" && request.method === "POST") {
-      const body = (await request.json()) as { runId: string };
-      await logic.releaseRun(body.runId);
-      return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+      const body = (await request.json()) as { runId: string; leaseToken?: string };
+      const result = await logic.releaseRun(body.runId, body.leaseToken);
+      return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
     }
     return new Response("not found", { status: 404 });
   } catch (e) {

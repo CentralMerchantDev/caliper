@@ -683,7 +683,27 @@ export default {
       return out;
     }
 
+    async function createResumeTicket(runId: string): Promise<string> {
+      const ticket = crypto.randomUUID();
+      // Single-use, short-lived 90-second ticket specifically for establishing the EventSource resume stream
+      await env.SPEND_KV.put(`change/resume-ticket/${runId}/${ticket}`, "1", { expirationTtl: 90 });
+      return ticket;
+    }
+
     async function verifyRunAuth(req: Request, runId: string, payload: Record<string, unknown>): Promise<boolean> {
+      // Check single-use short-lived resume ticket first (narrow scope for EventSource URL)
+      const ticket = (typeof payload.ticket === "string" ? payload.ticket : null) ||
+        (typeof payload.resumeTicket === "string" ? payload.resumeTicket : null);
+      if (ticket) {
+        const ticketKey = `change/resume-ticket/${runId}/${ticket.trim()}`;
+        const validTicket = await env.SPEND_KV.get(ticketKey);
+        if (validTicket) {
+          // Atomically consume ticket (single-use)
+          await env.SPEND_KV.delete(ticketKey).catch(() => {});
+          return true;
+        }
+      }
+
       const storedToken = await env.SPEND_KV.get(`change/token/${runId}`);
       if (!storedToken) return false; // Strictly fail-closed: unauthenticated or unknown run
       const token = req.headers.get("x-control-token") ||
@@ -701,7 +721,8 @@ export default {
       if (!runId) return json({ error: "pass runId & approve (boolean) via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/plan-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
-      return json({ ok: true });
+      const resumeTicket = await createResumeTicket(runId);
+      return json({ ok: true, resumeTicket });
     }
 
     if (url.pathname === "/change-review-decision") {
@@ -712,7 +733,8 @@ export default {
       if (!runId) return json({ error: "pass runId & approve (boolean) via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/review-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
-      return json({ ok: true });
+      const resumeTicket = await createResumeTicket(runId);
+      return json({ ok: true, resumeTicket });
     }
 
     // FOUNDATION-2 item 4: the third gate a run can halt at -- not a human
@@ -728,7 +750,8 @@ export default {
       if (!runId) return json({ error: "pass runId & approve (boolean) via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/error-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
-      return json({ ok: true });
+      const resumeTicket = await createResumeTicket(runId);
+      return json({ ok: true, resumeTicket });
     }
 
     // FINAL.md item 2: "a stop action that actually halts the run" -- writes
@@ -766,7 +789,8 @@ export default {
       if (!runId || answer === null) return json({ error: "pass runId & answer via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/answer/${runId}`, JSON.stringify({ answer }), { expirationTtl: 600 });
-      return json({ ok: true });
+      const resumeTicket = await createResumeTicket(runId);
+      return json({ ok: true, resumeTicket });
     }
 
     // FINISH.md chunk 7: the third Gate 1 action -- reply in free text
@@ -780,7 +804,8 @@ export default {
       if (!runId || reply === null) return json({ error: "pass runId & reply via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/plan-reply/${runId}`, JSON.stringify({ answer: reply }), { expirationTtl: 600 });
-      return json({ ok: true });
+      const resumeTicket = await createResumeTicket(runId);
+      return json({ ok: true, resumeTicket });
     }
 
     if (url.pathname === "/change-instructions") {
@@ -844,7 +869,21 @@ export default {
     }
 
     if (url.pathname === "/sim-selftest") {
-      const source = (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
+      let source: string | null = null;
+      if (env.SPEND_COUNTER) {
+        try {
+          const id = env.SPEND_COUNTER.idFromName("global");
+          const stub = env.SPEND_COUNTER.get(id);
+          const res = await stub.fetch("https://spend-counter.internal/get-source");
+          if (res.ok) {
+            const data = (await res.json()) as { source: string | null };
+            if (data.source) source = data.source;
+          }
+        } catch {}
+      }
+      if (!source) {
+        source = (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
+      }
       // Worker Loader's loader.get(id, getCode) only calls getCode on a
       // cache miss for that id -- a fixed id here would mean every call
       // after the first silently re-serves whichever source built the

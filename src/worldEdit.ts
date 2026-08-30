@@ -345,19 +345,54 @@ function validateObjectTypeDefinition(def: unknown, where: string): string | nul
     let partHalfD = 0.5;
 
     if (part.shape === "box") {
-      const rawW = part.size[0] * scaleX;
-      const rawD = part.size[2] * scaleZ;
-      const rotY = (part.rotation && typeof part.rotation[1] === "number") ? part.rotation[1] : 0;
-      // Rotated bounding box in the X-Z plane: |w * cos(θ)| + |d * sin(θ)|
-      const effW = Math.abs(rawW * Math.cos(rotY)) + Math.abs(rawD * Math.sin(rotY));
-      const effD = Math.abs(rawW * Math.sin(rotY)) + Math.abs(rawD * Math.cos(rotY));
-      partHalfW = effW / 2;
-      partHalfD = effD / 2;
+      const hx = (part.size[0] * scaleX) / 2;
+      const hy = (part.size[1] * (part.scale ? part.scale[1] : 1)) / 2;
+      const hz = (part.size[2] * scaleZ) / 2;
+      const rx = (part.rotation && typeof part.rotation[0] === "number") ? part.rotation[0] : 0;
+      const ry = (part.rotation && typeof part.rotation[1] === "number") ? part.rotation[1] : 0;
+      const rz = (part.rotation && typeof part.rotation[2] === "number") ? part.rotation[2] : 0;
+
+      // Full 3D Euler XYZ rotation matrix transformation across all 8 corners
+      const cx = Math.cos(rx), sx = Math.sin(rx);
+      const cy = Math.cos(ry), sy = Math.sin(ry);
+      const cz = Math.cos(rz), sz = Math.sin(rz);
+
+      // Rotation matrix elements (Euler XYZ order)
+      const m00 = cy * cz;
+      const m01 = -cy * sz;
+      const m02 = sy;
+      const m20 = sx * sz - cx * cz * sy;
+      const m21 = sx * cz + cx * sy * sz;
+      const m22 = cx * cy;
+
+      let maxCornerX = 0;
+      let maxCornerZ = 0;
+      for (const sx_ of [-1, 1]) {
+        for (const sy_ of [-1, 1]) {
+          for (const sz_ of [-1, 1]) {
+            const x = sx_ * hx;
+            const y = sy_ * hy;
+            const z = sz_ * hz;
+            const tx = m00 * x + m01 * y + m02 * z;
+            const tz = m20 * x + m21 * y + m22 * z;
+            maxCornerX = Math.max(maxCornerX, Math.abs(tx));
+            maxCornerZ = Math.max(maxCornerZ, Math.abs(tz));
+          }
+        }
+      }
+      partHalfW = maxCornerX;
+      partHalfD = maxCornerZ;
     } else if (part.shape === "cylinder") {
       // Cylinder size is [radiusTop, radiusBottom, height]
+      // Project upright radius and potential height tilt
       const r = Math.max(part.size[0], part.size[1]) * Math.max(scaleX, scaleZ);
-      partHalfW = r;
-      partHalfD = r;
+      const h = part.size[2] * (part.scale ? part.scale[1] : 1);
+      const rx = (part.rotation && typeof part.rotation[0] === "number") ? part.rotation[0] : 0;
+      const rz = (part.rotation && typeof part.rotation[2] === "number") ? part.rotation[2] : 0;
+      const tiltX = Math.abs(Math.sin(rz)) * (h / 2);
+      const tiltZ = Math.abs(Math.sin(rx)) * (h / 2);
+      partHalfW = r + tiltX;
+      partHalfD = r + tiltZ;
     } else if (part.shape === "sphere" || part.shape === "icosahedron") {
       const r = part.size[0] * Math.max(scaleX, scaleZ);
       partHalfW = r;
