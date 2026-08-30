@@ -640,6 +640,19 @@ class AudioSynth {
       this.filter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.1);
     } catch (_) {}
   }
+
+  destroy() {
+    this.enabled = false;
+    if (this._musicInterval) {
+      clearInterval(this._musicInterval);
+      this._musicInterval = null;
+    }
+    try {
+      if (this.ctx && this.ctx.state !== "closed") {
+        this.ctx.close();
+      }
+    } catch (_) {}
+  }
 }
 
 class Renderer3D {
@@ -2336,6 +2349,11 @@ class Renderer3D {
     const tramGroup = new THREE.Group();
     tramGroup.position.set(-6.5, 0, 10.1);
     roadGroup.add(tramGroup);
+    this._tramVehicle = tramGroup;
+    this._tramSpeed = 0;
+    this._tramDirection = 1; // 1 = eastbound, -1 = westbound
+    this._tramState = "cruise"; // "cruise" | "dwell"
+    this._tramDwellTimer = 0;
 
     const tramBodyMat = stdMat({ color: 0xf8fafc, roughness: 0.3, metalness: 0.2 });
     const tramAccentMat = stdMat({ color: 0x0284c7, roughness: 0.4, metalness: 0.5 });
@@ -2493,7 +2511,12 @@ class Renderer3D {
           "The sandstone sea-wall has held up beautifully since the 1920s.",
           "I love how the morning light catches the cantilevered roofs of the modern civic center.",
           "If you plan to design along the promenade, make sure to respect the public pedestrian easements!"
-        ]
+        ],
+        intents: {
+          history: "This coastal settlement was founded in 1894 as a timber port before being re-zoned for cultural and civic masterplanning.",
+          materials: "We specify local dolomitic limestone and marine-grade 316 stainless steel to withstand salt air corrosion.",
+          zoning: "All waterfront setbacks enforce a minimum 14-metre public access easement under OBC Part 9 civic guidelines."
+        }
       },
       {
         id: 'npc_walk_2',
@@ -2505,7 +2528,12 @@ class Renderer3D {
           "Notice how the avenue widths allow natural sea breezes into the downtown urban core.",
           "We engineered the causeway grade so it remains above the 100-year king-tide surge.",
           "A street should always be a living room for the neighbourhood, not just a channel for cars."
-        ]
+        ],
+        intents: {
+          transit: "The coastal tram runs on 750V DC catenary at 27 km/h with 4-second dwell cycles at the glass transit pavilion.",
+          traffic: "By prioritizing autonomous light-rail along the median corridor, we cut personal vehicular volume by 68%.",
+          pedestrian: "Continuous grade-separated sidewalks and zebra crosswalks give citizens priority access to the shoreline."
+        }
       },
       {
         id: 'npc_walk_3',
@@ -5253,6 +5281,52 @@ class Renderer3D {
       }
     }
 
+    // -------------------------------------------------------------
+    // AUTONOMOUS COASTAL TRAM KINEMATICS & STATION ROUTING
+    // -------------------------------------------------------------
+    if (this._tramVehicle && !this.reducedMotion) {
+      const tram = this._tramVehicle;
+      const dt = deltaSec; // frame-rate independent delta seconds
+      const stationX = 8.5;
+      const westBound = -42.0;
+      const eastBound = 42.0;
+      const cruiseSpeed = 7.5; // m/s (27 km/h)
+      const accel = 2.4; // m/s^2
+
+      if (this._tramState === "dwell") {
+        this._tramDwellTimer -= dt;
+        this._tramSpeed = Math.max(0, this._tramSpeed - accel * 2 * dt);
+        if (this._tramDwellTimer <= 0) {
+          this._tramState = "cruise";
+        }
+      } else {
+        // Accelerate up to cruising speed
+        this._tramSpeed = Math.min(cruiseSpeed, this._tramSpeed + accel * dt);
+        tram.position.x += this._tramDirection * this._tramSpeed * dt;
+
+        // Check station dwell trigger at x = 8.5 (within 1.2m tolerance and moving eastward)
+        if (this._tramDirection === 1 && Math.abs(tram.position.x - stationX) < 0.6 && this._tramSpeed > 2.0) {
+          this._tramState = "dwell";
+          this._tramDwellTimer = 4.0; // 4 second passenger dwell at transit pavilion
+        }
+
+        // East terminus turnaround
+        if (tram.position.x >= eastBound) {
+          tram.position.x = eastBound;
+          this._tramDirection = -1;
+          this._tramState = "dwell";
+          this._tramDwellTimer = 3.0;
+        }
+        // West terminus turnaround
+        else if (tram.position.x <= westBound) {
+          tram.position.x = westBound;
+          this._tramDirection = 1;
+          this._tramState = "dwell";
+          this._tramDwellTimer = 3.0;
+        }
+      }
+    }
+
     // 4D Dynamic Water & Marine Vessel Wave Bobbing
     if (!this.reducedMotion) {
       const nowSec = performance.now() / 1000;
@@ -5605,6 +5679,22 @@ export class WorldRenderer {
   }
   set reducedMotion(v) {
     this._impl.reducedMotion = v;
+  }
+  destroy() {
+    if (this._impl) {
+      if (this._impl.audio && typeof this._impl.audio.destroy === "function") {
+        this._impl.audio.destroy();
+      }
+      if (this._impl._unbindOrbit && typeof this._impl._unbindOrbit === "function") {
+        this._impl._unbindOrbit();
+      }
+      if (this._impl._ro && typeof this._impl._ro.disconnect === "function") {
+        this._impl._ro.disconnect();
+      }
+      if (this._impl.renderer && typeof this._impl.renderer.dispose === "function") {
+        this._impl.renderer.dispose();
+      }
+    }
   }
 }
 

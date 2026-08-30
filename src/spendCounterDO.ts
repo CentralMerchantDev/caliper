@@ -129,12 +129,21 @@ export class SpendCounterLogic {
   /**
    * Atomic Compare-and-Swap publication for world source code.
    * Ensures Pipeline A and Pipeline B racing at Stage 5 serialize through the DO:
-   * verifies expectedSource === currentSource, updates source atomically, and returns success/conflict.
+   * verifies expectedSource === currentSource, validates lease ownership, updates source atomically,
+   * and returns success/conflict.
    */
-  async publishSource(expectedSource: string, newSource: string): Promise<{ ok: boolean; conflict?: boolean }> {
+  async publishSource(expectedSource: string, newSource: string, runId?: string, leaseToken?: string): Promise<{ ok: boolean; conflict?: boolean; reason?: string }> {
+    const now = Date.now();
+    if (runId && leaseToken) {
+      const rawLeases = (await this.storage.get<Array<{ runId: string; leaseToken: string; expiresAt: number }>>("pipeline/active-leases")) ?? [];
+      const active = rawLeases.find(l => l.runId === runId && l.expiresAt > now);
+      if (!active || active.leaseToken !== leaseToken) {
+        return { ok: false, conflict: true, reason: "Active run lease expired or was revoked prior to publication" };
+      }
+    }
     const current = (await this.storage.get<string>("sim/current-source")) ?? expectedSource;
     if (current !== expectedSource) {
-      return { ok: false, conflict: true };
+      return { ok: false, conflict: true, reason: "Concurrent source modification detected" };
     }
     await this.storage.put("sim/current-source", newSource);
     return { ok: true };
@@ -265,8 +274,8 @@ export async function handleSpendCounterRequest(logic: SpendCounterLogic, reques
       return new Response(JSON.stringify(await logic.status()), { headers: { "content-type": "application/json" } });
     }
     if (url.pathname === "/publish-source" && request.method === "POST") {
-      const body = (await request.json()) as { expectedSource: string; newSource: string };
-      const result = await logic.publishSource(body.expectedSource, body.newSource);
+      const body = (await request.json()) as { expectedSource: string; newSource: string; runId?: string; leaseToken?: string };
+      const result = await logic.publishSource(body.expectedSource, body.newSource, body.runId, body.leaseToken);
       return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
     }
     if (url.pathname === "/get-source") {

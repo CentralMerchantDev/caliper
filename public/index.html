@@ -1554,48 +1554,54 @@ $('#drone-tour-btn').addEventListener('click', () => {
   renderer3d.playClickSound();
 });
 
-// Architectural 4K High-Res Blueprint Export Handler
+// Genuine 4K UHD Architectural Blueprint & Masterplan Exporter
 $('#export-render-btn')?.addEventListener('click', () => {
-  const canvas = $('#world-canvas');
-  if (!canvas) return;
+  const activeCanvas = currentView === 'plan' ? canvas2d : canvas3d;
+  if (!activeCanvas) return;
   renderer3d.playClickSound();
 
   const exportCanvas = document.createElement('canvas');
-  exportCanvas.width = canvas.width || 1920;
-  exportCanvas.height = canvas.height || 1080;
+  // True 4K UHD resolution
+  exportCanvas.width = 3840;
+  exportCanvas.height = 2160;
   const ctx = exportCanvas.getContext('2d');
   if (!ctx) return;
 
-  // Draw 3D WebGL frame
-  ctx.drawImage(canvas, 0, 0, exportCanvas.width, exportCanvas.height);
+  // High quality interpolation
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
-  // Draw Professional Architectural Title Block (Bottom-Right)
-  const tbW = 440, tbH = 100;
-  const tbX = exportCanvas.width - tbW - 24;
-  const tbY = exportCanvas.height - tbH - 24;
+  // Draw active render (3D or 2D Architectural Plan)
+  ctx.drawImage(activeCanvas, 0, 0, 3840, 2160);
 
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-  ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
-  ctx.lineWidth = 2;
+  // Scaled Architectural Title Block for 4K (Bottom-Right)
+  const tbW = 960, tbH = 220;
+  const tbX = 3840 - tbW - 54;
+  const tbY = 2160 - tbH - 54;
+
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+  ctx.lineWidth = 4;
   ctx.fillRect(tbX, tbY, tbW, tbH);
   ctx.strokeRect(tbX, tbY, tbW, tbH);
 
-  // Title Block Typography
+  // Title Block Typography (Scaled for 4K)
   ctx.fillStyle = '#38bdf8';
-  ctx.font = 'bold 13px ui-monospace, monospace';
-  ctx.fillText('CALIPER · AUTONOMOUS EDGE SPATIAL SIMULATION', tbX + 16, tbY + 26);
+  ctx.font = 'bold 26px ui-monospace, monospace';
+  ctx.fillText('CALIPER · AUTONOMOUS EDGE SPATIAL SIMULATION', tbX + 36, tbY + 56);
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 15px system-ui, sans-serif';
-  ctx.fillText('Civic Centre Masterplan & Dual Harbours', tbX + 16, tbY + 48);
+  ctx.font = 'bold 34px system-ui, sans-serif';
+  const viewTitle = currentView === 'plan' ? '2D Architectural Plan & Coordinate Blueprint' : 'Civic Centre Masterplan & Dual Harbours (3D Model)';
+  ctx.fillText(viewTitle, tbX + 36, tbY + 104);
 
   ctx.fillStyle = '#94a3b8';
-  ctx.font = '12px system-ui, sans-serif';
-  ctx.fillText(`Architect: Mark Fraser (18 Yrs AEC & Applied AI) · ${new Date().toLocaleDateString()}`, tbX + 16, tbY + 70);
-  ctx.fillText('Zoning: OBC Part 9 Verified · Scale: 1:500 Metric · Cloudflare Isolate', tbX + 16, tbY + 88);
+  ctx.font = '24px system-ui, sans-serif';
+  ctx.fillText(`Architect: Mark Fraser (18 Yrs AEC & Applied AI) · ${new Date().toLocaleDateString()}`, tbX + 36, tbY + 152);
+  ctx.fillText('Zoning: OBC Part 9 Verified · Scale: 1:500 Metric · 4K UHD 3840x2160', tbX + 36, tbY + 190);
 
   const link = document.createElement('a');
-  link.download = `caliper-masterplan-mark-fraser-${Date.now()}.png`;
+  link.download = `caliper-4k-${currentView}-mark-fraser-${Date.now()}.png`;
   link.href = exportCanvas.toDataURL('image/png');
   link.click();
 });

@@ -551,7 +551,7 @@ async function runRetrospectiveAndRecord(
  * checks once for that decision and either continues from exactly there or
  * halts again, unchanged. Never polls, never times out into proceeding.
  */
-export async function runChangePipeline(env: ChangeEnv, runId: string, changeRequest: string, onEvent: (e: ChangeEvent) => void): Promise<ChangeRecord> {
+export async function runChangePipeline(env: ChangeEnv, runId: string, changeRequest: string, onEvent: (e: ChangeEvent) => void, leaseToken?: string | null): Promise<ChangeRecord> {
   const existing = await loadState(env.SPEND_KV, runId);
   const budget: CallBudget = {
     spent: existing?.budgetSpent ?? 0,
@@ -1168,6 +1168,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // Atomic Compare-and-Swap publication: serialized through Durable Object if available, fallback to KV only on infrastructure absence
     let published = false;
     let casConflict = false;
+    let conflictReason: string | null = null;
     if (env.SPEND_COUNTER) {
       try {
         const id = env.SPEND_COUNTER.idFromName("global");
@@ -1175,15 +1176,21 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         const res = await stub.fetch("https://spend-counter.internal/publish-source", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ expectedSource: currentSourceAtStart, newSource: finalCode }),
+          body: JSON.stringify({
+            expectedSource: currentSourceAtStart,
+            newSource: finalCode,
+            runId,
+            leaseToken: leaseToken ?? undefined,
+          }),
         });
         if (res.ok) {
-          const data = (await res.json()) as { ok: boolean; conflict?: boolean };
+          const data = (await res.json()) as { ok: boolean; conflict?: boolean; reason?: string };
           if (data.ok) {
             published = true;
             await env.SPEND_KV.put("sim/current-source", finalCode);
           } else if (data.conflict) {
             casConflict = true;
+            conflictReason = data.reason || null;
           }
         }
       } catch {}
@@ -1191,7 +1198,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
 
     if (casConflict) {
       outcome = "refused-verification";
-      refusalReason = "conflict: another concurrent pipeline run shipped changes while this run was in progress. Please re-run your change request against the updated world.";
+      refusalReason = conflictReason || "conflict: another concurrent pipeline run shipped changes while this run was in progress. Please re-run your change request against the updated world.";
       onEvent({ type: "refused", reason: refusalReason });
     } else if (!published && !env.SPEND_COUNTER) {
       // KV fallback only when Durable Object binding is completely absent in environment

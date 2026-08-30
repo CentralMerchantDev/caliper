@@ -495,7 +495,7 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
         }
         send(e.type, e);
       };
-      await runChangePipeline(env, runId, changeRequest, onEvent);
+      await runChangePipeline(env, runId, changeRequest, onEvent, leaseToken ?? null);
       if (leaseLost) {
         throw new Error(leaseAbortError || "Run lease lost before completion");
       }
@@ -519,7 +519,7 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
       "x-content-type-options": "nosniff",
       "referrer-policy": "strict-origin-when-cross-origin",
       "x-frame-options": "SAMEORIGIN",
-      "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net data: blob:; frame-ancestors 'self';",
+      "content-security-policy": SECURITY_HEADERS["content-security-policy"],
     },
   });
 }
@@ -726,23 +726,21 @@ export default {
     }
 
     async function createResumeTicket(runId: string): Promise<string> {
-      if (env.SPEND_COUNTER) {
-        const id = env.SPEND_COUNTER.idFromName("global");
-        const stub = env.SPEND_COUNTER.get(id);
-        const res = await stub.fetch("https://spend-counter.internal/create-resume-ticket", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ runId, ttlSec: 90 }),
-        });
-        if (!res.ok) {
-          throw new Error(`Durable Object failed to create resume ticket: HTTP ${res.status}`);
-        }
-        const data = (await res.json()) as { ok: boolean; ticket: string };
-        return data.ticket;
+      if (!env.SPEND_COUNTER) {
+        throw new Error("SPEND_COUNTER Durable Object binding required for atomic single-use resume tickets");
       }
-      const ticket = crypto.randomUUID();
-      await env.SPEND_KV.put(`change/resume-ticket/${runId}/${ticket}`, "1", { expirationTtl: 90 });
-      return ticket;
+      const id = env.SPEND_COUNTER.idFromName("global");
+      const stub = env.SPEND_COUNTER.get(id);
+      const res = await stub.fetch("https://spend-counter.internal/create-resume-ticket", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ runId, ttlSec: 90 }),
+      });
+      if (!res.ok) {
+        throw new Error(`Durable Object failed to create resume ticket: HTTP ${res.status}`);
+      }
+      const data = (await res.json()) as { ok: boolean; ticket: string };
+      return data.ticket;
     }
 
     async function verifyResumeAuth(req: Request, runId: string, payload: Record<string, unknown>): Promise<boolean> {
@@ -751,32 +749,25 @@ export default {
       if (!ticket) {
         return false; // Strictly fail-closed: /change-resume requires single-use ticket
       }
-      if (env.SPEND_COUNTER) {
-        try {
-          const id = env.SPEND_COUNTER.idFromName("global");
-          const stub = env.SPEND_COUNTER.get(id);
-          const res = await stub.fetch("https://spend-counter.internal/consume-resume-ticket", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ runId, ticket: ticket.trim() }),
-          });
-          if (res.ok) {
-            const data = (await res.json()) as { ok: boolean; valid: boolean };
-            return data.valid === true;
-          }
-          return false;
-        } catch {
-          return false; // Fail closed if DO unavailable
+      if (!env.SPEND_COUNTER) {
+        return false; // Strictly fail-closed: requires atomic Durable Object coordinator
+      }
+      try {
+        const id = env.SPEND_COUNTER.idFromName("global");
+        const stub = env.SPEND_COUNTER.get(id);
+        const res = await stub.fetch("https://spend-counter.internal/consume-resume-ticket", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ runId, ticket: ticket.trim() }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { ok: boolean; valid: boolean };
+          return data.valid === true;
         }
+        return false;
+      } catch {
+        return false; // Fail closed if DO unavailable
       }
-      // KV fallback strictly for test harness when SPEND_COUNTER binding is absent
-      const ticketKey = `change/resume-ticket/${runId}/${ticket.trim()}`;
-      const validTicket = await env.SPEND_KV.get(ticketKey);
-      if (validTicket) {
-        await env.SPEND_KV.delete(ticketKey).catch(() => {});
-        return true;
-      }
-      return false;
     }
 
     async function verifyRunAuth(req: Request, runId: string, payload: Record<string, unknown>): Promise<boolean> {
