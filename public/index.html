@@ -1574,25 +1574,65 @@ $('#drone-tour-btn').addEventListener('click', () => {
   renderer3d.playClickSound();
 });
 
-// Genuine 4K UHD Architectural Blueprint & Masterplan Exporter
+// Genuine Native 4K UHD Architectural Blueprint & Masterplan Exporter
 $('#export-render-btn')?.addEventListener('click', () => {
-  const activeCanvas = currentView === 'plan' ? canvas2d : canvas3d;
-  if (!activeCanvas) return;
+  const isPlan = currentView === 'plan';
   renderer3d.playClickSound();
 
   const exportCanvas = document.createElement('canvas');
-  // True 4K UHD resolution
+  // Exact Native 4K UHD resolution
   exportCanvas.width = 3840;
   exportCanvas.height = 2160;
+
+  if (isPlan) {
+    // Native 4K vector rerender for 2D Architectural Plan
+    const offscreenRenderer2d = new WorldRenderer2D(exportCanvas, { reducedMotion: true });
+    if (renderer2d.nextWorld) {
+      offscreenRenderer2d.pushTick(renderer2d.nextWorld);
+      offscreenRenderer2d.draw(1);
+    }
+    offscreenRenderer2d.destroy();
+  } else {
+    // Native 4K offscreen WebGL render pass for 3D Masterplan
+    if (renderer3d._impl && renderer3d._impl.renderer && renderer3d._impl.camera && renderer3d._impl.scene) {
+      const origSize = new THREE.Vector2();
+      renderer3d._impl.renderer.getSize(origSize);
+      const origPixelRatio = renderer3d._impl.renderer.getPixelRatio();
+
+      // Temporarily size WebGL renderer to 3840x2160 UHD
+      renderer3d._impl.renderer.setPixelRatio(1);
+      renderer3d._impl.renderer.setSize(3840, 2160, false);
+      renderer3d._impl.camera.aspect = 3840 / 2160;
+      renderer3d._impl.camera.updateProjectionMatrix();
+
+      if (renderer3d._impl.composer) {
+        renderer3d._impl.composer.setSize(3840, 2160);
+        renderer3d._impl.composer.render();
+      } else {
+        renderer3d._impl.renderer.render(renderer3d._impl.scene, renderer3d._impl.camera);
+      }
+
+      // Copy rendered native 4K frame buffer
+      const ctx = exportCanvas.getContext('2d');
+      if (ctx) ctx.drawImage(canvas3d, 0, 0, 3840, 2160);
+
+      // Restore interactive display resolution
+      renderer3d._impl.renderer.setPixelRatio(origPixelRatio);
+      renderer3d._impl.renderer.setSize(origSize.x, origSize.y, false);
+      renderer3d._impl.camera.aspect = origSize.x / origSize.y;
+      renderer3d._impl.camera.updateProjectionMatrix();
+      if (renderer3d._impl.composer) {
+        renderer3d._impl.composer.setSize(origSize.x, origSize.y);
+      }
+      renderer3d._impl.draw(lastT);
+    } else {
+      const ctx = exportCanvas.getContext('2d');
+      if (ctx) ctx.drawImage(canvas3d, 0, 0, 3840, 2160);
+    }
+  }
+
   const ctx = exportCanvas.getContext('2d');
   if (!ctx) return;
-
-  // High quality interpolation
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-
-  // Draw active render (3D or 2D Architectural Plan)
-  ctx.drawImage(activeCanvas, 0, 0, 3840, 2160);
 
   // Scaled Architectural Title Block for 4K (Bottom-Right)
   const tbW = 960, tbH = 220;
@@ -1612,13 +1652,13 @@ $('#export-render-btn')?.addEventListener('click', () => {
 
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 34px system-ui, sans-serif';
-  const viewTitle = currentView === 'plan' ? '2D Architectural Plan & Coordinate Blueprint' : 'Civic Centre Masterplan & Dual Harbours (3D Model)';
+  const viewTitle = isPlan ? '2D Architectural Plan & Coordinate Blueprint' : 'Civic Centre Masterplan & Dual Harbours (3D Model)';
   ctx.fillText(viewTitle, tbX + 36, tbY + 104);
 
   ctx.fillStyle = '#94a3b8';
   ctx.font = '24px system-ui, sans-serif';
   ctx.fillText(`Architect: Mark Fraser (18 Yrs AEC & Applied AI) · ${new Date().toLocaleDateString()}`, tbX + 36, tbY + 152);
-  ctx.fillText('Zoning: OBC Part 9 Verified · Scale: 1:500 Metric · 4K UHD 3840x2160', tbX + 36, tbY + 190);
+  ctx.fillText('Zoning: OBC Part 9 Verified · Scale: 1:500 Metric · Native 4K UHD (3840x2160)', tbX + 36, tbY + 190);
 
   const link = document.createElement('a');
   link.download = `caliper-4k-${currentView}-mark-fraser-${Date.now()}.png`;

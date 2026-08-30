@@ -130,3 +130,45 @@ test("guardrail: even with lost updates, the bare class never reports a total th
   assert.ok(status.dailySpentUsd <= CAPS.dailyCapUsd, "whatever total survives is still a real, valid multiple of perCall, never garbage");
   assert.ok(Number.isFinite(status.dailySpentUsd) && status.dailySpentUsd >= 0);
 });
+
+test("publishSource: rejects publication when lease credentials are missing", async () => {
+  const logic = new SpendCounterLogic(mockStorage());
+  const res1 = await logic.publishSource("old", "new");
+  assert.equal(res1.ok, false);
+  assert.equal(res1.conflict, true);
+  assert.match(res1.reason || "", /Active lease credentials required/);
+
+  const res2 = await logic.publishSource("old", "new", "run-123");
+  assert.equal(res2.ok, false);
+  assert.equal(res2.conflict, true);
+});
+
+test("publishSource: rejects publication when lease is mismatched or expired", async () => {
+  const store = mockStorage();
+  const logic = new SpendCounterLogic(store);
+
+  // Acquire legitimate lease
+  const lease = await logic.leaseRun("run-abc", 3, 600);
+  assert.equal(lease.ok, true);
+
+  // Mismatched token
+  const badTokenRes = await logic.publishSource("baseline", "new", "run-abc", "invalid-token");
+  assert.equal(badTokenRes.ok, false);
+  assert.equal(badTokenRes.conflict, true);
+  assert.match(badTokenRes.reason || "", /Active run lease expired or was revoked/);
+
+  // Expired lease
+  const expiredStore = mockStorage();
+  const expiredLogic = new SpendCounterLogic(expiredStore);
+  const now = Date.now();
+  await expiredStore.put("pipeline/active-leases", [{ runId: "run-xyz", leaseToken: "tok-1", expiresAt: now - 1000 }]);
+  const expiredRes = await expiredLogic.publishSource("baseline", "new", "run-xyz", "tok-1");
+  assert.equal(expiredRes.ok, false);
+  assert.equal(expiredRes.conflict, true);
+
+  // Valid credentials and matching expectedSource succeeds atomically
+  const successRes = await logic.publishSource("baseline", "shipped-code", "run-abc", lease.leaseToken!);
+  assert.equal(successRes.ok, true);
+  const current = await logic.getSource();
+  assert.equal(current, "shipped-code");
+});

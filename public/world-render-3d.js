@@ -4796,6 +4796,9 @@ class Renderer3D {
   }
 
   destroy() {
+    if (this.audio && typeof this.audio.destroy === 'function') {
+      this.audio.destroy();
+    }
     this._ro.disconnect();
     this._unbindOrbit();
 
@@ -5674,22 +5677,6 @@ export class WorldRenderer {
   }
   set reducedMotion(v) {
     this._impl.reducedMotion = v;
-  }
-  destroy() {
-    if (this._impl) {
-      if (this._impl.audio && typeof this._impl.audio.destroy === "function") {
-        this._impl.audio.destroy();
-      }
-      if (this._impl._unbindOrbit && typeof this._impl._unbindOrbit === "function") {
-        this._impl._unbindOrbit();
-      }
-      if (this._impl._ro && typeof this._impl._ro.disconnect === "function") {
-        this._impl._ro.disconnect();
-      }
-      if (this._impl.renderer && typeof this._impl.renderer.dispose === "function") {
-        this._impl.renderer.dispose();
-      }
-    }
   }
 }
 

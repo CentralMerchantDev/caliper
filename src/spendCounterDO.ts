@@ -129,17 +129,18 @@ export class SpendCounterLogic {
   /**
    * Atomic Compare-and-Swap publication for world source code.
    * Ensures Pipeline A and Pipeline B racing at Stage 5 serialize through the DO:
-   * verifies expectedSource === currentSource, validates lease ownership, updates source atomically,
-   * and returns success/conflict.
+   * strictly verifies active unexpired lease credentials, validates expectedSource === currentSource,
+   * updates source atomically, and returns success/conflict.
    */
   async publishSource(expectedSource: string, newSource: string, runId?: string, leaseToken?: string): Promise<{ ok: boolean; conflict?: boolean; reason?: string }> {
+    if (!runId || !leaseToken) {
+      return { ok: false, conflict: true, reason: "Active lease credentials required for source publication" };
+    }
     const now = Date.now();
-    if (runId && leaseToken) {
-      const rawLeases = (await this.storage.get<Array<{ runId: string; leaseToken: string; expiresAt: number }>>("pipeline/active-leases")) ?? [];
-      const active = rawLeases.find(l => l.runId === runId && l.expiresAt > now);
-      if (!active || active.leaseToken !== leaseToken) {
-        return { ok: false, conflict: true, reason: "Active run lease expired or was revoked prior to publication" };
-      }
+    const rawLeases = (await this.storage.get<Array<{ runId: string; leaseToken: string; expiresAt: number }>>("pipeline/active-leases")) ?? [];
+    const active = rawLeases.find(l => l.runId === runId && l.expiresAt > now);
+    if (!active || active.leaseToken !== leaseToken) {
+      return { ok: false, conflict: true, reason: "Active run lease expired or was revoked prior to publication" };
     }
     const current = (await this.storage.get<string>("sim/current-source")) ?? expectedSource;
     if (current !== expectedSource) {
