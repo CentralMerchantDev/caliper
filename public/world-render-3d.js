@@ -4251,10 +4251,10 @@ class Renderer3D {
         const dx = (e.clientX - this._orbit.startX) / Math.max(1, canvas.clientWidth);
         const dy = (e.clientY - this._orbit.startY) / Math.max(1, canvas.clientHeight);
 
-        if (this._navigationMode === 'walk' || this._navigationMode === 'drive') {
-          // In street mode, dragging looks around in first/third person
+        if (this._navigationMode === 'walk' || this._navigationMode === 'drive' || this._navigationMode === 'fly') {
+          // In first/third person and fly modes, dragging looks around
           this._streetAngle = this._streetStartAngle - dx * 2.8;
-          this._streetPitch = Math.max(-0.65, Math.min(0.75, this._streetStartPitch - dy * 1.8));
+          this._streetPitch = Math.max(-1.1, Math.min(1.1, this._streetStartPitch - dy * 2.0));
         } else {
           // Standard orbit navigation
           this._orbit.delta = this._orbit.startDelta + dx * 2.2;
@@ -4390,6 +4390,8 @@ class Renderer3D {
     };
 
     canvas.style.touchAction = "none";
+    const onContextMenu = (e) => e.preventDefault();
+    canvas.addEventListener("contextmenu", onContextMenu);
     canvas.addEventListener("pointerdown", onDown);
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -4399,6 +4401,7 @@ class Renderer3D {
     window.addEventListener("keyup", onKeyUp);
 
     this._unbindOrbit = () => {
+      canvas.removeEventListener("contextmenu", onContextMenu);
       canvas.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
@@ -4448,7 +4451,7 @@ class Renderer3D {
 
   setNavigationMode(mode) {
     if (this._navigationMode === mode) return;
-    this._navigationMode = mode; // 'orbit' | 'walk' | 'drive'
+    this._navigationMode = mode; // 'orbit' | 'walk' | 'drive' | 'fly'
 
     if (mode === 'walk') {
       // Spawn pedestrian at street level
@@ -4461,6 +4464,11 @@ class Renderer3D {
       this._streetSpeed = 0;
       this._ensurePlayerVehicle();
       if (this._vehicleGroup) this._vehicleGroup.visible = true;
+    } else if (mode === 'fly') {
+      // Free flight mode
+      this._streetPos.set(this.camera.position.x, Math.max(12, this.camera.position.y), this.camera.position.z);
+      this._streetSpeed = 0;
+      if (this._vehicleGroup) this._vehicleGroup.visible = false;
     } else {
       if (this._vehicleGroup) this._vehicleGroup.visible = false;
     }
@@ -5475,6 +5483,39 @@ class Renderer3D {
         );
         this.camera.lookAt(lookTarget);
       }
+    } else if (this._navigationMode === 'fly') {
+      // -------------------------------------------------------------
+      // FREE FLIGHT / DRONE SPECTATOR MODE
+      // -------------------------------------------------------------
+      const dt = deltaSec;
+      const flySpeed = (this._keysDown.has('shift') ? 45.0 : 18.0);
+      let forwardInput = 0;
+      let strafeInput = 0;
+      let vertInput = 0;
+
+      if (this._keysDown.has('w') || this._keysDown.has('arrowup')) forwardInput += 1;
+      if (this._keysDown.has('s') || this._keysDown.has('arrowdown')) forwardInput -= 1;
+      if (this._keysDown.has('a') || this._keysDown.has('arrowleft')) strafeInput += 1;
+      if (this._keysDown.has('d') || this._keysDown.has('arrowright')) strafeInput -= 1;
+      if (this._keysDown.has('e') || this._keysDown.has(' ')) vertInput += 1;
+      if (this._keysDown.has('q') || this._keysDown.has('c')) vertInput -= 1;
+
+      const fwdX = Math.sin(this._streetAngle);
+      const fwdZ = Math.cos(this._streetAngle);
+      const rightX = Math.cos(this._streetAngle);
+      const rightZ = -Math.sin(this._streetAngle);
+
+      this._streetPos.x += (fwdX * forwardInput + rightX * strafeInput) * flySpeed * dt;
+      this._streetPos.z += (fwdZ * forwardInput + rightZ * strafeInput) * flySpeed * dt;
+      this._streetPos.y = Math.max(1.8, Math.min(280, (this._streetPos.y || 25) + vertInput * flySpeed * dt));
+
+      this.camera.position.set(this._streetPos.x, this._streetPos.y, this._streetPos.z);
+      const lookTarget = new THREE.Vector3(
+        this._streetPos.x + fwdX * 10.0,
+        this._streetPos.y + this._streetPitch * 8.0,
+        this._streetPos.z + fwdZ * 10.0
+      );
+      this.camera.lookAt(lookTarget);
     } else {
       // Standard Orbit Camera
       const az = this._orbit.base + this._orbit.delta;

@@ -520,33 +520,72 @@ html, body {
   border-radius: 10px;
 }
 
-/* Tactile Navigation Pad (Bottom-Center) */
+/* Tactile Navigation Pad (Bottom-Right Corner) */
 .nav-pad {
   position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  right: auto;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  z-index: 60;
-  padding: 6px 10px;
-  border-radius: 14px;
+  right: 18px;
+  left: auto;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  transform: none;
+  z-index: 90;
+  padding: 8px 12px;
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  gap: 5px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55);
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  user-select: none;
 }
 .nav-pad-title {
   font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  letter-spacing: 0.1em;
   color: var(--sky);
   font-weight: 700;
   margin-bottom: 2px;
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  align-items: center;
+}
+.nav-mode-selector {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  margin-bottom: 4px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.nav-mode-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.nav-mode-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.nav-mode-btn.active {
+  background: var(--sky);
+  color: #0f172a;
+  font-weight: 700;
+  border-color: var(--sky);
 }
 .nav-pad-grid {
   display: flex;
@@ -894,21 +933,31 @@ html, body {
   </div>
 </div>
 
-<!-- Floating Tactile Navigation Pad -->
+<!-- Floating Tactile Navigation Pad (Bottom-Right) -->
 <div id="nav-compass-pad" class="nav-pad glass" role="toolbar" aria-label="Camera Navigation Pad">
-  <div class="nav-pad-title">🧭 NAVIGATE</div>
+  <div class="nav-pad-title">
+    <span>🧭 NAVIGATION</span>
+    <span id="nav-mode-indicator" style="color:#38bdf8;font-size:9px">ORBIT</span>
+  </div>
+  <!-- Eye-Level Person, Vehicle, Fly, & Orbit Mode Selectors -->
+  <div class="nav-mode-selector">
+    <button type="button" class="nav-mode-btn active" id="btn-mode-orbit" data-nav-mode="orbit" title="Orbital aerial camera view">🌐 Orbit</button>
+    <button type="button" class="nav-mode-btn" id="btn-mode-walk" data-nav-mode="walk" title="Eye-level pedestrian walk mode (WASD + Shift to sprint)">🚶 Walk</button>
+    <button type="button" class="nav-mode-btn" id="btn-mode-drive" data-nav-mode="drive" title="Drive red sports car along the waterfront esplanade">🏎️ Drive</button>
+    <button type="button" class="nav-mode-btn" id="btn-mode-fly" data-nav-mode="fly" title="Free 3D flight drone spectator mode (WASD + Q/E to elevate)">🕊️ Fly</button>
+  </div>
   <div class="nav-pad-grid">
-    <button type="button" id="nav-pitch-up" class="nav-btn" title="Pitch Up" aria-label="Pitch camera up">▲</button>
+    <button type="button" id="nav-pitch-up" class="nav-btn" title="Pitch Up / Look Up" aria-label="Pitch camera up">▲</button>
     <div class="nav-row">
-      <button type="button" id="nav-rot-left" class="nav-btn" title="Orbit Left" aria-label="Orbit camera left">◀</button>
-      <button type="button" id="nav-reset" class="nav-btn center-btn" title="Reset Camera" aria-label="Reset camera to default view">⌂</button>
-      <button type="button" id="nav-rot-right" class="nav-btn" title="Orbit Right" aria-label="Orbit camera right">▶</button>
+      <button type="button" id="nav-rot-left" class="nav-btn" title="Orbit / Turn Left" aria-label="Orbit camera left">◀</button>
+      <button type="button" id="nav-reset" class="nav-btn center-btn" title="Reset Camera / Eye-Level" aria-label="Reset camera to default view">⌂</button>
+      <button type="button" id="nav-rot-right" class="nav-btn" title="Orbit / Turn Right" aria-label="Orbit camera right">▶</button>
     </div>
-    <button type="button" id="nav-pitch-down" class="nav-btn" title="Pitch Down" aria-label="Pitch camera down">▼</button>
+    <button type="button" id="nav-pitch-down" class="nav-btn" title="Pitch Down / Look Down" aria-label="Pitch camera down">▼</button>
   </div>
   <div class="nav-zoom-row">
-    <button type="button" id="nav-zoom-in" class="nav-btn zoom-btn" title="Zoom In (Smooth)" aria-label="Zoom camera in">➕ Zoom</button>
-    <button type="button" id="nav-zoom-out" class="nav-btn zoom-btn" title="Zoom Out (Panoramic)" aria-label="Zoom camera out">➖ Zoom</button>
+    <button type="button" id="nav-zoom-in" class="nav-btn zoom-btn" title="Zoom In (Smooth)" aria-label="Zoom camera in">➕ Zoom In</button>
+    <button type="button" id="nav-zoom-out" class="nav-btn zoom-btn" title="Zoom Out (Panoramic)" aria-label="Zoom camera out">➖ Zoom Out</button>
   </div>
   <div class="nav-action-row">
     <button type="button" id="nav-pick-center" class="nav-action-btn" title="Click anywhere on the map to set camera pivot point">🎯 Set Pivot</button>
@@ -918,8 +967,8 @@ html, body {
 
 <!-- Street-Level Interactive HUD -->
 <div id="street-level-hud" class="street-hud" role="status" aria-live="polite">
-  <span id="street-hud-mode-text" class="street-hud-pill">🚶 STREET LEVEL (WALK)</span>
-  <span class="street-hud-keys">WASD / Arrows to Move · Drag Mouse to Look</span>
+  <span id="street-hud-mode-text" class="street-hud-pill">🚶 EYE-LEVEL WALK</span>
+  <span class="street-hud-keys">WASD / Arrows to Move · Drag Mouse to Look around (Esc to exit)</span>
   <button type="button" id="street-hud-exit-btn" class="street-hud-exit" title="Exit to Orbit Mode (Esc)">✕ Exit to Orbit</button>
 </div>
 
@@ -1455,6 +1504,10 @@ function setTargetParcel(parcelId) {
 
 const canvas3d = $('#world-canvas');
 const canvas2d = $('#world-canvas-2d');
+if (canvas3d) canvas3d.addEventListener('contextmenu', e => e.preventDefault());
+if (canvas2d) canvas2d.addEventListener('contextmenu', e => e.preventDefault());
+const viewportContainer = $('#viewport-container');
+if (viewportContainer) viewportContainer.addEventListener('contextmenu', e => e.preventDefault());
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const NPC_PROFILES = {
@@ -1760,49 +1813,51 @@ $('#nav-save-view')?.addEventListener('click', () => {
   }, 1800);
 });
 
-// Street Mode Navigation Handlers (Walk & Drive)
+// Street & Flight Mode Navigation Handlers (Orbit, Walk, Drive, Fly)
 const streetHud = $('#street-level-hud');
 const streetHudText = $('#street-hud-mode-text');
-const walkBtn = $('#mode-walk-btn');
-const driveBtn = $('#mode-drive-btn');
+const navModeIndicator = $('#nav-mode-indicator');
+const navModeButtons = document.querySelectorAll('.nav-mode-btn[data-nav-mode]');
 
-function updateStreetModeUI(mode) {
-  walkBtn?.classList.toggle('active', mode === 'walk');
-  driveBtn?.classList.toggle('active', mode === 'drive');
+function updateNavigationModeUI(mode) {
+  navModeButtons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.navMode === mode);
+  });
+  if (navModeIndicator) navModeIndicator.textContent = mode.toUpperCase();
 
   if (mode === 'walk') {
     streetHud.style.display = 'flex';
-    streetHudText.textContent = '🚶 STREET LEVEL (WALK)';
+    streetHudText.textContent = '🚶 EYE-LEVEL WALK';
+    streetHud.querySelector('.street-hud-keys').textContent = 'WASD to Walk · Shift to Sprint · Drag Mouse to Look around (Esc to Exit)';
   } else if (mode === 'drive') {
     streetHud.style.display = 'flex';
-    streetHudText.textContent = '🚗 WATERFRONT CRUISE (DRIVE)';
+    streetHudText.textContent = '🏎️ WATERFRONT DRIVE';
+    streetHud.querySelector('.street-hud-keys').textContent = 'W/S to Accelerate/Brake · A/D to Steer · Drag Mouse for Orbit Cam (Esc to Exit)';
+  } else if (mode === 'fly') {
+    streetHud.style.display = 'flex';
+    streetHudText.textContent = '🕊️ FREE FLIGHT / DRONE';
+    streetHud.querySelector('.street-hud-keys').textContent = 'WASD to Fly · Q/E or Space/C to Ascend/Descend · Shift for Turbo · Drag Mouse to Look (Esc to Exit)';
   } else {
     streetHud.style.display = 'none';
   }
 }
 
-walkBtn?.addEventListener('click', () => {
-  const currentMode = renderer3d._impl?._navigationMode;
-  const newMode = currentMode === 'walk' ? 'orbit' : 'walk';
-  renderer3d.setNavigationMode(newMode);
-  updateStreetModeUI(newMode);
-});
-
-driveBtn?.addEventListener('click', () => {
-  const currentMode = renderer3d._impl?._navigationMode;
-  const newMode = currentMode === 'drive' ? 'orbit' : 'drive';
-  renderer3d.setNavigationMode(newMode);
-  updateStreetModeUI(newMode);
+navModeButtons.forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    const mode = e.currentTarget.dataset.navMode;
+    renderer3d.setNavigationMode(mode);
+    updateNavigationModeUI(mode);
+  });
 });
 
 $('#street-hud-exit-btn')?.addEventListener('click', () => {
   renderer3d.setNavigationMode('orbit');
-  updateStreetModeUI('orbit');
+  updateNavigationModeUI('orbit');
 });
 
 if (renderer3d._impl) {
   renderer3d._impl._onNavModeChange = (mode) => {
-    updateStreetModeUI(mode);
+    updateNavigationModeUI(mode);
   };
 }
 
