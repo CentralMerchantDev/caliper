@@ -4574,13 +4574,8 @@ class Renderer3D {
           label: `${citizenHit.name} (${citizenHit.role})`,
           type: "citizen",
           occupants: citizenHit.bio,
-          contents: `💬 "${dialogue}"`,
+          contents: `💬 "${dialogue}"\n\n💡 Tip: Ask about ${Object.keys(citizenHit.intents || { 'architecture': 1 }).join(', ')} or direct a kingdom build below.`,
         });
-      }
-      const barInput = document.getElementById('bar-request-input');
-      if (barInput) {
-        barInput.value = `Ask ${citizenHit.name} about: `;
-        barInput.focus();
       }
       return;
     }
