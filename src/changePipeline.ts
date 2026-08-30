@@ -1143,9 +1143,41 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         : "regression or criteria checks did not fully pass, and no fix was approved";
     onEvent({ type: "refused", reason: refusalReason });
   } else {
-    outcome = "shipped";
-    await env.SPEND_KV.put("sim/current-source", finalCode);
-    onEvent({ type: "shipped" });
+    // Atomic Compare-and-Swap publication: serialized through Durable Object if available, fallback to KV
+    let published = false;
+    if (env.SPEND_COUNTER) {
+      try {
+        const id = env.SPEND_COUNTER.idFromName("global");
+        const stub = env.SPEND_COUNTER.get(id);
+        const res = await stub.fetch("https://spend-counter.internal/publish-source", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ expectedSource: currentSourceAtStart, newSource: finalCode }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { ok: boolean; conflict?: boolean };
+          if (data.ok) {
+            published = true;
+            await env.SPEND_KV.put("sim/current-source", finalCode);
+          }
+        }
+      } catch {}
+    }
+    if (!published) {
+      const currentOnDisk = (await env.SPEND_KV.get("sim/current-source")) ?? currentSourceAtStart;
+      if (currentOnDisk !== currentSourceAtStart) {
+        outcome = "refused-verification";
+        refusalReason = "conflict: another concurrent pipeline run shipped changes while this run was in progress. Please re-run your change request against the updated world.";
+        onEvent({ type: "refused", reason: refusalReason });
+      } else {
+        outcome = "shipped";
+        await env.SPEND_KV.put("sim/current-source", finalCode);
+        onEvent({ type: "shipped" });
+      }
+    } else {
+      outcome = "shipped";
+      onEvent({ type: "shipped" });
+    }
   }
   await clearState(env.SPEND_KV, runId);
 

@@ -686,18 +686,16 @@ export async function fixChange(
 const WORLD_EDIT_SYSTEM_PROMPT =
   "You produce a small, structured edit to a simulated world's DATA -- never source code, never prose, " +
   "never a regenerated file. The world is a type registry (objectTypes) and a placement list; describe " +
-  "exactly what changes as one or more operations: addObjectType (a genuinely new type plus its geometry " +
-  "recipe, built from primitive shapes -- box, cylinder, sphere, icosahedron), addPlacement (an instance of " +
-  "an existing type, or one you are adding in this same edit), overridePlacement (a colour and/or position " +
-  "override on one existing placement, by its real id -- this is also how you REPOSITION something already " +
-  "placed; there is no separate move/remove op, express a correction to an existing placement's colour or " +
-  "position as an overridePlacement, never by adding a new placement with the same id), or setSurfaceField " +
-  "(a surface's material or colour, by its real " +
-  "key). Return ONLY the ops array via the schema. Every type key, placement id, and surface key you " +
-  "reference must be a REAL one from the current world shown to you, or one you are adding in this same " +
-  "edit -- never invent or guess a name. Every operation object must include every schema field, using null " +
-  "for fields belonging to other operation kinds. For overridePlacement, placementId and overridesJson are " +
-  "mandatory: overridesJson must be a JSON string encoding a non-empty object with color and/or plot.";
+  "exactly what changes as one or more operations:\n\n" +
+  "1. addObjectType: a genuinely new type plus its geometry recipe, built from primitive shapes (box [w,h,d], " +
+  "cylinder [rTop,rBottom,h], sphere [r], icosahedron [r,detail]). Example definitionJson string:\n" +
+  "\"{\\\"material\\\":\\\"wood\\\",\\\"footprint\\\":{\\\"w\\\":1.4,\\\"d\\\":1.4},\\\"shadow\\\":{\\\"w\\\":1.8,\\\"d\\\":1.8},\\\"station\\\":null,\\\"recipe\\\":[{\\\"shape\\\":\\\"box\\\",\\\"size\\\":[1.2,1.2,1.2],\\\"position\\\":[0,0.6,0],\\\"color\\\":\\\"#3b82f6\\\"}]}\"\n\n" +
+  "2. addPlacement: an instance of an existing type or one added in this edit. Outdoor placements MUST have location: \"outdoors\" and plot: {x,y} where x and y are numbers strictly in 0.0..2.0 (e.g. {x: 1.0, y: 1.0}). Indoor placements have location set to a building id (\"dwelling-1\", \"dwelling-2\", \"shop\", or \"workshop\"). Example placementJson string:\n" +
+  "\"{\\\"id\\\":\\\"new-bench-1\\\",\\\"type\\\":\\\"bench\\\",\\\"location\\\":\\\"outdoors\\\",\\\"plot\\\":{\\\"x\\\":1.0,\\\"y\\\":1.0}}\"\n\n" +
+  "3. overridePlacement: a colour and/or position override on one existing placement, by its real id (also how you reposition an item). Example overridesJson string:\n" +
+  "\"{\\\"color\\\":\\\"#ef4444\\\",\\\"plot\\\":{\\\"x\\\":1.2,\\\"y\\\":0.8}}\"\n\n" +
+  "4. setSurfaceField: change a surface's material or color (e.g. surfaceKey: \"ground\", field: \"color\", value: \"#22c55e\").\n\n" +
+  "Return ONLY the ops array via the schema. Every operation object must include every schema field, using null for fields belonging to other operation kinds. Every type key, placement id, and surface key must be a REAL one from the current world or added in this same edit.";
 
 async function callForWorldEdit(client: Anthropic, model: string, maxTokens: number, messages: Anthropic.MessageParam[]): Promise<{ edit: WorldEdit; response: Anthropic.Message }> {
   const response = await createWithTruncationGuard(client, "implementChangeAsEdit/fixChangeAsEdit", {

@@ -342,3 +342,37 @@ test("guardrail: an outdoor placement colliding with another placement is reject
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.reason, /collide/);
 });
+
+test("guardrail: prototype injection keys in addObjectType are strictly rejected", () => {
+  const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, {
+    ops: [{
+      op: "addObjectType",
+      key: "__proto__",
+      definition: { material: "wood", footprint: { w: 1, d: 1 }, station: null, recipe: [{ shape: "box", size: [1, 1, 1], position: [0, 0, 0], color: "#ffffff" }] }
+    }]
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /not a safe identifier/);
+});
+
+test("guardrail: recipe part with invalid shape size arity or negative size is rejected", () => {
+  const resultBoxArity = runValidatedWorldEdit(SIM_BASELINE_SOURCE, {
+    ops: [{
+      op: "addObjectType",
+      key: "customProp1",
+      definition: { material: "wood", footprint: { w: 1, d: 1 }, station: null, recipe: [{ shape: "box", size: [1, 1], position: [0, 0, 0], color: "#ffffff" }] }
+    }]
+  });
+  assert.equal(resultBoxArity.ok, false);
+  if (!resultBoxArity.ok) assert.match(resultBoxArity.reason, /box size must be \[w, h, d\]/);
+
+  const resultNegative = runValidatedWorldEdit(SIM_BASELINE_SOURCE, {
+    ops: [{
+      op: "addObjectType",
+      key: "customProp2",
+      definition: { material: "wood", footprint: { w: 1, d: 1 }, station: null, recipe: [{ shape: "box", size: [1, -2, 1], position: [0, 0, 0], color: "#ffffff" }] }
+    }]
+  });
+  assert.equal(resultNegative.ok, false);
+  if (!resultNegative.ok) assert.match(resultNegative.reason, /size numbers must be positive/);
+});

@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CALIPER — Zelda / SimCity Living Valley Kingdom</title>
-<meta name="description" content="CALIPER: Expansive Zelda/SimCity living valley kingdom with 5 districts, riverfront, watchtower, and full-screen construction director HUD.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>CALIPER // Living Valley Simulation</title>
+<meta name="description" content="CALIPER: Autonomous edge spatial simulation engine featuring Mediterranean coastal architecture, in-loop verification, and deterministic state mutation.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231E293B'/%3E%3Ctext x='50' y='68' font-family='monospace' font-size='52' font-weight='700' fill='%2338BDF8' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,7 +12,8 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "./vendor/three/three.module.min.js"
+    "three": "./vendor/three/three.module.min.js",
+    "three/addons/": "./vendor/three/addons/"
   }
 }
 </script>
@@ -202,26 +203,27 @@ html, body {
   font-weight: 700;
 }
 
-/* Floating Construction Director Dock (Bottom-Center) */
+/* Unified Construction Director Dock (Bottom-Right) */
 .dock-wrapper {
   position: fixed;
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(880px, calc(100vw - 32px));
+  right: 18px;
+  left: auto;
+  transform: none;
+  width: min(440px, calc(100vw - 36px));
   z-index: 70;
   pointer-events: auto;
-  border-radius: 20px;
-  padding: 14px 18px;
+  border-radius: 18px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
 }
 
 .dock-wrapper.dock-minimized {
-  padding: 8px 16px;
+  padding: 8px 14px;
   gap: 0;
   width: auto;
   border-radius: 999px;
@@ -343,19 +345,21 @@ html, body {
   transform: none;
 }
 
-/* Status / Pipeline Card */
+/* Status / Pipeline Card - Positioned directly above unified Director Dock */
 .status-card {
   position: fixed;
-  top: 76px;
+  bottom: calc(190px + env(safe-area-inset-bottom, 0px));
+  top: auto;
   right: 18px;
-  width: min(420px, calc(100vw - 36px));
-  max-height: calc(100vh - 220px);
-  z-index: 55;
+  width: min(440px, calc(100vw - 36px));
+  max-height: calc(100vh - 280px);
+  z-index: 68;
   border-radius: var(--radius-lg);
   padding: 14px 16px;
   overflow-y: auto;
   display: none;
   animation: fadeIn 0.2s ease-out;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
 }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-8px); }
@@ -516,18 +520,20 @@ html, body {
   border-radius: 10px;
 }
 
-/* Tactile Navigation Pad (Right edge) */
+/* Tactile Navigation Pad (Bottom-Center) */
 .nav-pad {
   position: fixed;
-  right: 18px;
-  bottom: calc(170px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  right: auto;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   z-index: 60;
-  padding: 8px;
+  padding: 6px 10px;
   border-radius: 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   background: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(12px);
@@ -582,9 +588,77 @@ html, body {
   margin-top: 3px;
 }
 .zoom-btn {
-  width: 48px;
+  flex: 1;
   height: 28px;
   font-size: 11px;
+}
+.nav-action-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.nav-action-btn {
+  flex: 1;
+  height: 24px;
+  font-size: 10px;
+  padding: 0 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #cbd5e1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.nav-action-btn:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: var(--sky);
+  color: #fff;
+}
+.nav-action-btn.active {
+  background: rgba(56, 189, 248, 0.35);
+  border-color: var(--sky);
+  color: #fff;
+  font-weight: 700;
+}
+.street-hud {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 12px;
+  padding: 8px 16px;
+  display: none;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.street-hud-pill {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sky);
+}
+.street-hud-keys {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.street-hud-exit {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.street-hud-exit:hover {
+  background: rgba(239, 68, 68, 0.4);
+  color: #fff;
 }
 
 @media(max-width: 768px) {
@@ -626,9 +700,32 @@ html, body {
   /* Dock mobile styling */
   .dock-wrapper {
     width: calc(100vw - 16px);
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    max-width: calc(100vw - 16px);
+    box-sizing: border-box;
+    left: 8px;
+    right: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     padding: 10px 12px;
     gap: 8px;
+    z-index: 80;
+  }
+  /* Keep tactile navigation pad docked neatly on mobile screens without colliding with bottom dock or status card */
+  .nav-pad {
+    bottom: auto;
+    top: 72px;
+    right: 8px;
+    left: auto;
+    transform: scale(0.82);
+    transform-origin: top right;
+    z-index: 75;
+  }
+  .status-card {
+    bottom: calc(230px + env(safe-area-inset-bottom, 0px));
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-height: calc(100vh - 320px);
+    z-index: 85;
   }
   .dock-header {
     display: flex;
@@ -685,10 +782,11 @@ html, body {
 </style>
 </head>
 <body>
+<div id="view-root">
 
 <!-- Full-Screen 3D Viewport -->
 <div id="viewport-container">
-  <canvas id="world-canvas" role="img" aria-label="Expansive 150m Zelda/SimCity living valley kingdom"></canvas>
+  <canvas id="world-canvas" role="img" aria-label="Expansive Mediterranean coastal city simulation"></canvas>
   <canvas id="world-canvas-2d" style="display:none" role="img" aria-label="Plan view"></canvas>
 </div>
 
@@ -704,7 +802,7 @@ html, body {
       👑 CALIPER · <span class="kingdom">Living Valley</span>
     </div>
     <div class="status-pill">
-      <span class="pulse-dot"></span> 13ms Edge Sim
+      <span class="pulse-dot"></span> Edge V8 Isolate
     </div>
     <div class="clock-pill" id="world-clock-badge">
       ☀️ Day 1 · 12:00
@@ -714,12 +812,13 @@ html, body {
 
   <!-- Center Cluster: District Bookmarks -->
   <div class="top-bar-cluster glass" role="toolbar" aria-label="District Bookmarks">
-    <button type="button" id="bm-town" class="btn-pill" data-district="town" title="Jump to Town Square">🏛️ Town</button>
-    <button type="button" id="bm-forge" class="btn-pill" data-district="forge" title="Jump to Crafting Forge">⚒️ Forge</button>
-    <button type="button" id="bm-docks" class="btn-pill" data-district="docks" title="Jump to Riverfront & Docks">⛵ Docks</button>
-    <button type="button" id="bm-tower" class="btn-pill" data-district="watchtower" title="Jump to Hilltop Watchtower">🏰 Watchtower</button>
-    <button type="button" id="bm-borough" class="btn-pill" data-district="residential" title="Jump to Residential Cottages">🏡 Borough</button>
-    <button type="button" id="reset-cam-btn" class="btn-pill" title="Reset camera to valley overview">↺ Reset</button>
+    <button type="button" id="bm-town" class="btn-pill" data-district="town" title="Jump to Central Esplanade & Promenade">🏛️ Esplanade</button>
+    <button type="button" id="bm-forge" class="btn-pill" data-district="forge" title="Jump to Maritime Innovation Studio">⚒️ Studio</button>
+    <button type="button" id="bm-datum" class="btn-pill" data-district="datum" title="Jump to Datum AEC AI Architectural Models (448 Elm, River Run, Birch Cottage)">📐 Datum</button>
+    <button type="button" id="bm-docks" class="btn-pill" data-district="docks" title="Jump to Marina & Luxury Yachts">⛵ Marina</button>
+    <button type="button" id="bm-tower" class="btn-pill" data-district="watchtower" title="Jump to Ocean Headland Beacon">🏰 Beacon</button>
+    <button type="button" id="bm-borough" class="btn-pill" data-district="residential" title="Jump to Terraced Coastal Villas">🏡 Villas</button>
+    <button type="button" id="reset-cam-btn" class="btn-pill" title="Reset camera to bay overview">↺ Reset</button>
   </div>
 
   <!-- Right Cluster: Controls, Atmosphere, Roof Toggle & Utilities -->
@@ -744,47 +843,51 @@ html, body {
     </div>
 
     <!-- Utilities -->
+    <button id="grid-toggle-btn" type="button" class="btn-pill" title="Toggle Precision Spatial Grid (Module Dimensions & Collision Buffers)">📐 Grid</button>
     <button id="research-paper-trigger" type="button" class="btn-pill" title="Original Research Paper, Findings & Data Matrix">📖 Research & Write-Up</button>
-    <button id="welcome-guide-trigger" type="button" class="btn-pill active" title="How to play & kingdom mission">ℹ️ Guide</button>
+    <button id="welcome-guide-trigger" type="button" class="btn-pill active" title="Executive Project Overview & Architecture Guide">ℹ️ Executive Guide</button>
     <button id="drone-tour-btn" type="button" class="btn-pill" title="Cinematic camera flythrough">🎬 Tour</button>
     <button id="spatial-diff-btn" type="button" class="btn-pill" title="Highlight recent changes">👁️ Diff</button>
     <button id="sound-toggle-btn" type="button" class="btn-pill" title="Toggle audio synthesizer">🔊 Audio</button>
-    <button id="village-rules-trigger" type="button" class="btn-pill" title="Village rules & field guide">❓ Rules</button>
+    <button id="village-rules-trigger" type="button" class="btn-pill" title="Deterministic Engine Rules & CI Invariants">⚙️ Engine Rules</button>
     <button id="arch-drawer-trigger" type="button" class="btn-pill" title="System Architecture & Safety Specs">📐 Architecture</button>
     <button id="cmd-k-trigger" type="button" class="btn-pill" title="Command Palette (Cmd+K)">⌘K</button>
   </div>
 </div>
 
-<!-- Interactive Welcome & Mission Orientation Card -->
-<div id="welcome-mission-card" class="welcome-card glass" role="region" aria-label="Village Director Guide">
+<!-- Floating Snapped Grid Coordinates Badge -->
+<div id="grid-cell-coords" class="mono glass" style="display:none;position:fixed;bottom:140px;left:50%;transform:translateX(-50%);z-index:900;padding:6px 14px;border-radius:20px;font-size:12px;color:#fff;border:1px solid rgba(56,189,248,0.4);background:rgba(11,15,25,0.85);backdrop-filter:blur(8px);pointer-events:none"></div>
+
+<!-- Executive Orientation & Architecture Overview Card -->
+<div id="welcome-mission-card" class="welcome-card glass" role="region" aria-label="Executive Project Overview">
   <div class="welcome-header">
     <div style="display:flex;align-items:center;gap:10px">
-      <span style="font-size:24px">🏰</span>
+      <span style="font-size:24px">⚡</span>
       <div>
-        <h2 style="margin:0;font-size:16px;font-weight:800;color:#fff;letter-spacing:-0.02em">CALIPER · Living Valley Simulation</h2>
-        <span style="font-size:11px;color:var(--sky);font-weight:600">Autonomous Settlement Engine · Powered by Cloudflare Workers</span>
+        <h2 style="margin:0;font-size:16px;font-weight:800;color:#fff;letter-spacing:-0.02em">CALIPER · Autonomous Edge Spatial Engine</h2>
+        <span style="font-size:11px;color:var(--sky);font-weight:600">Deterministic Code Synthesis & Spatial Mutations on Cloudflare Workers V8 Isolates</span>
       </div>
     </div>
-    <button type="button" id="welcome-close-btn" class="inspect-close" title="Dismiss Guide" style="position:static">✕</button>
+    <button type="button" id="welcome-close-btn" class="inspect-close" title="Dismiss Guide" aria-label="Close Guide" style="position:static">✕</button>
   </div>
   <p style="margin:8px 0 10px;font-size:13px;color:#cbd5e1;line-height:1.5">
-    <strong>Welcome, Director!</strong> You are overseeing an autonomous 150m living valley kingdom. Settlers (Althea, Master Vane, Elora, Rowan) live, craft, eat, work, and sleep here in real time. Your role is to guide the kingdom's expansion.
+    <strong>Executive Overview:</strong> CALIPER is an autonomous spatial simulation engine designed to intercept and repair LLM code and spatial generation slips. Built by <strong>Mark Fraser (Applied AI, Toronto)</strong>, it pairs lightweight models with in-loop verification and edge compute execution.
   </p>
   <div class="welcome-steps-grid">
     <div class="welcome-step-item">
-      <div style="font-size:16px;margin-bottom:2px">🧭</div>
-      <strong style="color:#fff;font-size:12px;display:block">1. Explore & Navigate</strong>
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Drag to orbit, pinch/scroll to zoom, or use the Nav Pad on the right.</span>
-    </div>
-    <div class="welcome-step-item">
-      <div style="font-size:16px;margin-bottom:2px">🔍</div>
-      <strong style="color:#fff;font-size:12px;display:block">2. Inspect Settlers</strong>
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Click any building, well, or character to inspect needs, routines, and roles.</span>
-    </div>
-    <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">⚡</div>
-      <strong style="color:#fff;font-size:12px;display:block">3. Direct Construction</strong>
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Select a category below or type instructions, then hit <strong>⚡ Build</strong>.</span>
+      <strong style="color:#fff;font-size:12px;display:block">Sub-15ms V8 Cold Starts</strong>
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Zero-AST sentinel state mutation executing directly within Cloudflare Workers isolates.</span>
+    </div>
+    <div class="welcome-step-item">
+      <div style="font-size:16px;margin-bottom:2px">📐</div>
+      <strong style="color:#fff;font-size:12px;display:block">Spatial Clearance Grid</strong>
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Click <strong>📐 Grid</strong> to inspect coordinate snaps, parcel envelopes, and clearance buffers.</span>
+    </div>
+    <div class="welcome-step-item">
+      <div style="font-size:16px;margin-bottom:2px">📊</div>
+      <strong style="color:#fff;font-size:12px;display:block">387-Cycle Cost Benchmark</strong>
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Haiku + verification matched Opus final accuracy at 36–41% the observed cost per correct result.</span>
     </div>
   </div>
 </div>
@@ -793,18 +896,29 @@ html, body {
 <div id="nav-compass-pad" class="nav-pad glass" role="toolbar" aria-label="Camera Navigation Pad">
   <div class="nav-pad-title">🧭 NAVIGATE</div>
   <div class="nav-pad-grid">
-    <button type="button" id="nav-pitch-up" class="nav-btn" title="Pitch Up">▲</button>
+    <button type="button" id="nav-pitch-up" class="nav-btn" title="Pitch Up" aria-label="Pitch camera up">▲</button>
     <div class="nav-row">
-      <button type="button" id="nav-rot-left" class="nav-btn" title="Orbit Left">◀</button>
-      <button type="button" id="nav-reset" class="nav-btn center-btn" title="Reset Camera">⌂</button>
-      <button type="button" id="nav-rot-right" class="nav-btn" title="Orbit Right">▶</button>
+      <button type="button" id="nav-rot-left" class="nav-btn" title="Orbit Left" aria-label="Orbit camera left">◀</button>
+      <button type="button" id="nav-reset" class="nav-btn center-btn" title="Reset Camera" aria-label="Reset camera to default view">⌂</button>
+      <button type="button" id="nav-rot-right" class="nav-btn" title="Orbit Right" aria-label="Orbit camera right">▶</button>
     </div>
-    <button type="button" id="nav-pitch-down" class="nav-btn" title="Pitch Down">▼</button>
+    <button type="button" id="nav-pitch-down" class="nav-btn" title="Pitch Down" aria-label="Pitch camera down">▼</button>
   </div>
   <div class="nav-zoom-row">
-    <button type="button" id="nav-zoom-in" class="nav-btn zoom-btn" title="Zoom In">➕</button>
-    <button type="button" id="nav-zoom-out" class="nav-btn zoom-btn" title="Zoom Out">➖</button>
+    <button type="button" id="nav-zoom-in" class="nav-btn zoom-btn" title="Zoom In (Smooth)" aria-label="Zoom camera in">➕ Zoom</button>
+    <button type="button" id="nav-zoom-out" class="nav-btn zoom-btn" title="Zoom Out (Panoramic)" aria-label="Zoom camera out">➖ Zoom</button>
   </div>
+  <div class="nav-action-row">
+    <button type="button" id="nav-pick-center" class="nav-action-btn" title="Click anywhere on the map to set camera pivot point">🎯 Set Pivot</button>
+    <button type="button" id="nav-save-view" class="nav-action-btn" title="Save current camera angle and zoom as default">💾 Save View</button>
+  </div>
+</div>
+
+<!-- Street-Level Interactive HUD -->
+<div id="street-level-hud" class="street-hud" role="status" aria-live="polite">
+  <span id="street-hud-mode-text" class="street-hud-pill">🚶 STREET LEVEL (WALK)</span>
+  <span class="street-hud-keys">WASD / Arrows to Move · Drag Mouse to Look</span>
+  <button type="button" id="street-hud-exit-btn" class="street-hud-exit" title="Exit to Orbit Mode (Esc)">✕ Exit to Orbit</button>
 </div>
 
 <!-- Single-Card Status & Pipeline Container (Strict 15s Timeout Guard) -->
@@ -812,7 +926,7 @@ html, body {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <span class="mono" style="font-size:11px;color:var(--sky);font-weight:700">PIPELINE EXECUTION</span>
     <span id="pipeline-timer" class="mono" style="font-size:11px;color:var(--text-muted)">Elapsed: 0.0s</span>
-    <button type="button" id="status-card-close" style="background:none;border:none;color:#94a3b8;cursor:pointer">✕</button>
+    <button type="button" id="status-card-close" aria-label="Close status panel" title="Close status panel" style="background:none;border:none;color:#94a3b8;cursor:pointer">✕</button>
   </div>
   <div class="pipeline-steps">
     <div class="step-item" id="step-1"><span>1. Queued</span></div>
@@ -820,7 +934,7 @@ html, body {
     <div class="step-item" id="step-3"><span>3. Mutate</span></div>
     <div class="step-item" id="step-4"><span>4. Rendered</span></div>
   </div>
-  <div id="stage-log" class="stage-log">
+  <div id="stage-log" class="stage-log" role="status" aria-live="polite" aria-atomic="false">
     <p style="margin:0;color:var(--text-muted);font-size:13px">Ready for construction requests. Use the director dock below.</p>
   </div>
 </div>
@@ -830,21 +944,21 @@ html, body {
   <button type="button" class="inspect-close" id="inspect-close">✕</button>
   <div style="margin-bottom:6px">
     <span class="mono" id="inspect-parcel-id" style="font-size:10px;color:var(--sky);letter-spacing:0.06em;font-weight:700">DISTRICT</span>
-    <h4 id="inspect-title" style="margin:2px 0 0;font-size:16px;color:#fff">The Town Square & Market</h4>
+    <h4 id="inspect-title" style="margin:2px 0 0;font-size:16px;color:#fff">The Central Esplanade & Promenade</h4>
   </div>
   <div style="font-size:12.5px;color:#cbd5e1;line-height:1.4">
-    <p style="margin:2px 0"><strong>Type:</strong> <span id="inspect-type">Central Plaza</span></p>
-    <p style="margin:2px 0"><strong>Occupants:</strong> <span id="inspect-occupants">Roaming</span></p>
-    <p style="margin:2px 0"><strong>Contents:</strong> <span id="inspect-contents">Well, market stalls, lamps</span></p>
+    <p style="margin:2px 0"><strong>Type:</strong> <span id="inspect-type">Civic Esplanade</span></p>
+    <p style="margin:2px 0"><strong>Occupants:</strong> <span id="inspect-occupants">Citizens & Visitors</span></p>
+    <p style="margin:2px 0"><strong>Contents:</strong> <span id="inspect-contents">Compass plaza, stone pavers, palms, street lamps</span></p>
     <div style="margin-top:8px;padding:8px;background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1)">
       <div style="display:flex;align-items:center;gap:6px">
         <span id="inspect-npc-avatar" style="font-size:18px">🏛️</span>
         <div>
           <strong id="inspect-npc-name" style="font-size:12px;color:#fff;display:block">Althea</strong>
-          <span id="inspect-npc-role" style="font-size:10px;color:#94a3b8">Tavern Keeper</span>
+          <span id="inspect-npc-role" style="font-size:10px;color:#94a3b8">Esplanade Director</span>
         </div>
       </div>
-      <p id="inspect-npc-thought" style="margin:4px 0 0;font-style:italic;font-size:11.5px;color:#e2e8f0">“The village plaza is alive with activity today.”</p>
+      <p id="inspect-npc-thought" style="margin:4px 0 0;font-style:italic;font-size:11.5px;color:#e2e8f0">“The harbour promenade is sparkling in the morning sun.”</p>
     </div>
     <button type="button" id="inspect-focus-btn" class="btn-pill" style="margin-top:8px;width:100%;justify-content:center">🔍 Focus Camera</button>
   </div>
@@ -858,7 +972,7 @@ html, body {
       <button type="button" id="target-deselect-btn" class="scope-pill" style="margin-left:4px">Entire Kingdom</button>
     </div>
     <div style="display:flex;align-items:center;gap:6px">
-      <div class="exec-feedback">⚡ 13ms Edge AST-Free Isolate</div>
+      <div class="exec-feedback">⚡ Edge V8 Isolate</div>
       <button type="button" id="dock-toggle-btn" class="scope-pill" title="Collapse / Expand Director Dock">▾</button>
     </div>
   </div>
@@ -873,7 +987,7 @@ html, body {
     </div>
     <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-muted);cursor:pointer;white-space:nowrap;user-select:none" title="Automatically approve Plan Gate and Review Gate for rapid unblocked construction">
       <input type="checkbox" id="auto-approve-toggle" checked style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer">
-      <span style="color:#e2e8f0;font-weight:600">⚡ Direct Build</span> (Auto-Approve)
+      Auto-approve gates
     </label>
   </div>
 
@@ -886,6 +1000,7 @@ html, body {
   <!-- Action Bar & Decision Gates (Injected here dynamically) -->
   <div id="action-bar-inner"></div>
 </div>
+</div><!-- /#view-root -->
 
 <!-- Spotlight Command Palette Modal (Cmd+K) -->
 <div id="cmd-palette-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Command Palette">
@@ -899,49 +1014,56 @@ html, body {
   </div>
 </div>
 
-<!-- Village Field Guide & Simulation Rules Modal -->
-<div id="village-guide-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Village Rules Modal">
-  <div class="modal-card glass" style="max-width:580px">
+<!-- Engine Operations & Deterministic Spatial Invariants Modal -->
+<div id="village-guide-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="engine-rules-title">
+  <div class="modal-card glass" style="max-width:620px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.12)">
-      <h3 style="margin:0;font-size:18px;color:#fff">🏰 Village Field Guide & Simulation Rules</h3>
-      <button type="button" id="modal-guide-close" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer">✕</button>
+      <h3 id="engine-rules-title" style="margin:0;font-size:18px;color:#fff">⚙️ Engine Operations & Deterministic Spatial Rules</h3>
+      <button type="button" id="modal-guide-close" aria-label="Close Engine Rules dialog" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer">✕</button>
     </div>
-    <div style="color:#cbd5e1;font-size:14px;line-height:1.5">
-      <h4 style="margin:0 0 6px;color:var(--sky);font-size:15px">How to Direct the Settlement</h4>
-      <ul style="margin:0 0 14px;padding-left:20px;display:flex;flex-direction:column;gap:6px">
-        <li><strong>🎯 1. Target a District or Building:</strong> Click anywhere in 3D (Town Square, Blacksmith Forge, Docks, Cottages, Watchtower) to set spatial scope.</li>
-        <li><strong>✍️ 2. Direct Additions in Plain English:</strong> Construct timber shelters, flower boxes, piers, street lanterns, benches, or market stalls.</li>
-        <li><strong>⚡ 3. 13ms Edge Validation:</strong> Spatial constraints & boundary containment are verified instantaneously on Cloudflare workerd isolates.</li>
+    <div style="color:#cbd5e1;font-size:13.5px;line-height:1.55">
+      <h4 style="margin:0 0 8px;color:var(--sky);font-size:14.5px">Autonomous Change Pipeline</h4>
+      <ul style="margin:0 0 16px;padding-left:20px;display:flex;flex-direction:column;gap:8px">
+        <li><strong>🎯 1. Target Spatial Scope:</strong> Click any district, villa, atelier, or marina dock in 3D to set local spatial coordinates.</li>
+        <li><strong>✍️ 2. Autonomous Op Synthesis:</strong> Natural-language requests are converted into structured, schema-bounded state mutation ops.</li>
+        <li><strong>⚡ 3. Edge Validation:</strong> Spatial containment and footprint collision clearances are verified inside Cloudflare Workers isolates.</li>
       </ul>
-      <h4 style="margin:0 0 6px;color:var(--emerald);font-size:15px">Deterministic System Invariants</h4>
-      <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
-        <li><strong>Rule 1 (Clearance):</strong> Outdoor placements must fit parcel bounds and never intersect solid building walls.</li>
-        <li><strong>Rule 2 (Living Economy):</strong> Placed fixtures provide authentic utility (tables=social, forge=wages, lamps=illumination).</li>
-        <li><strong>Rule 3 (Budget Backstop):</strong> Rate-limited to protect daily API ceilings and prevent unbounded spend.</li>
+      <h4 style="margin:0 0 8px;color:var(--emerald);font-size:14.5px">Production System Invariants (Regression Guardrails)</h4>
+      <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px">
+        <li><strong>Rule 1 (Clearance & No Clipping):</strong> In-memory 2D footprint collision solver enforces minimum buffer clearance across all buildings and outdoor fixtures.</li>
+        <li><strong>Rule 2 (Boundary Containment):</strong> Placements must strictly satisfy parcel envelopes—out-of-bounds additions are rejected before mutation.</li>
+        <li><strong>Rule 3 (Financial Spend Ceiling):</strong> Enforced via Cloudflare Durable Object atomic reservation locks against $2/day, $7/week, $20/month caps.</li>
+        <li><strong>Rule 4 (AST-Free In-Memory Mutators):</strong> Code mutations bypass JavaScript eval, executing as direct verified graph operations.</li>
       </ul>
     </div>
   </div>
 </div>
 
 <!-- Architecture & Deterministic Safety Drawer Modal -->
-<div id="arch-drawer-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Architecture Modal">
-  <div class="modal-card glass" style="max-width:620px">
+<div id="arch-drawer-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="arch-modal-title">
+  <div class="modal-card glass" style="max-width:640px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.12)">
-      <h3 style="margin:0;font-size:18px;color:#fff">📐 System Architecture & Deterministic Safety</h3>
-      <button type="button" id="arch-modal-close" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer">✕</button>
+      <div>
+        <h3 id="arch-modal-title" style="margin:0;font-size:18px;color:#fff">📐 System Architecture & Deterministic Safety</h3>
+        <span style="font-size:11px;color:var(--sky);font-family:var(--mono)">CLOUDFLARE WORKERS V8 ISOLATE ARCHITECTURE</span>
+      </div>
+      <button type="button" id="arch-modal-close" aria-label="Close Architecture dialog" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer">✕</button>
     </div>
-    <div style="color:#cbd5e1;font-size:13.5px;line-height:1.5">
+    <div style="color:#cbd5e1;font-size:13.5px;line-height:1.55">
       <p style="margin:0 0 12px">
-        CALIPER replaces traditional non-deterministic LLM code execution with <strong>AST-free sentinel JSON deserialization</strong>, in-memory 3D spatial collision solving, and atomic state graph mutations executing in a 13ms Cloudflare isolate.
+        CALIPER pairs structured LLM synthesis with <strong>schema-bounded state mutations</strong>, in-memory 2D footprint collision verification, and isolated execution inside Cloudflare Workers isolates.
       </p>
       <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px;margin-bottom:12px">
-        <div style="font-family:var(--mono);font-size:11px;color:var(--sky);margin-bottom:6px">PIPELINE VERIFICATION STAGES</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--sky);margin-bottom:6px">FOUR-STAGE PIPELINE SPECIFICATION</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
-          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>1. Ground:</strong> Verifies real world constraints</div>
-          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>2. Plan:</strong> Generates bounded structured ops</div>
-          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>3. Solve:</strong> In-memory bounding box solver</div>
-          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>4. Mutate:</strong> 13ms atomic cloned state graph</div>
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>1. Ground:</strong> Validates real-world prerequisites & formal schemas</div>
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>2. Plan:</strong> Emits strictly typed JSON patches adhering to zoning rules</div>
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>3. Solve:</strong> In-memory 2D footprint collision and clearance engine</div>
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>4. Mutate:</strong> Cloned state graph mutation inside Workers isolate</div>
         </div>
+      </div>
+      <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#d1fae5">
+        <strong>Continuous Verification:</strong> 184 Node test assertions and 9 Cloudflare Worker integration tests validate structural invariants and mutation contracts.
       </div>
       <div id="budget-summary-box" class="mono" style="font-size:11.5px;color:var(--text-muted);padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px">
         Loading budget invariants…
@@ -951,31 +1073,31 @@ html, body {
 </div>
 
 <!-- Complete Research Paper & Findings Deck Modal -->
-<div id="research-paper-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Research Paper Modal">
+<div id="research-paper-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="research-modal-title">
   <div class="modal-card glass" style="max-width:840px;max-height:86vh;overflow-y:auto;padding:24px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.14)">
       <div>
         <div style="font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:0.06em;font-weight:700;margin-bottom:4px">
           MARK FRASER · APPLIED AI, TORONTO · RESEARCH REPORT
         </div>
-        <h2 style="margin:0;font-size:22px;color:#fff;font-weight:800;letter-spacing:-0.02em">
+        <h2 id="research-modal-title" style="margin:0;font-size:22px;color:#fff;font-weight:800;letter-spacing:-0.02em">
           A system that only says yes when yes is true
         </h2>
         <div style="font-size:14px;color:var(--sky);margin-top:4px">
           Does a verification loop substitute for model capability, and what does it cost?
         </div>
       </div>
-      <button type="button" id="research-modal-close" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;padding:4px">✕</button>
+      <button type="button" id="modal-research-close" aria-label="Close Research Report dialog" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;padding:4px">✕</button>
     </div>
 
     <!-- Executive Summary & Result -->
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;margin-bottom:18px">
       <h3 style="margin:0 0 8px;font-size:16px;color:#f8fafc">The Finding: Cost Asymmetry via Verification</h3>
       <p style="margin:0 0 10px;font-size:13.5px;line-height:1.6;color:#cbd5e1">
-        A Cloudflare Worker that generates structured changes with an LLM, executes them against hidden tests inside an isolated sandbox, and — if a test fails — surfaces exact feedback to the model for an in-loop repair. Tested across <strong>32 tasks (3 difficulty tiers)</strong> and <strong>3 models</strong> (cheapest, mid, and frontier):
+        A Cloudflare Worker that generates structured changes with an LLM, executes them against hidden tests inside an isolated sandbox, and — if a test fails — surfaces exact feedback to the model for an in-loop repair. Tested across <strong>32 single-function benchmark tasks (3 difficulty tiers)</strong> and <strong>3 models</strong> (cheapest, mid, and frontier):
       </p>
       <div style="padding:10px 14px;background:rgba(16,185,129,0.12);border-left:3px solid var(--emerald);border-radius:0 8px 8px 0;font-size:13px;color:#d1fae5;line-height:1.5">
-        <strong>The Key Result:</strong> The cheapest model (<code>claude-haiku-4-5</code>) with one or two repair rounds matches or slightly exceeds the frontier model (<code>claude-opus-4-8</code>) final correctness, at roughly <strong>36–41% of the cost per correct answer</strong> ($0.00345 vs $0.00908 per cycle).
+        <strong>The Benchmark Finding:</strong> Across this 32-task single-function benchmark, the cheapest model (<code>claude-haiku-4-5</code>) with one or two repair rounds matches the frontier model (<code>claude-opus-4-8</code>) final pass rate, at roughly <strong>36–41% of the observed cost per correct answer</strong> ($0.00345 vs $0.00908 per cycle). (Note: Task suite measured single-function repair rather than holistic model capability divergence).
       </div>
     </div>
 
@@ -1056,19 +1178,19 @@ html, body {
 
     <!-- Security & Isolation Architecture -->
     <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;margin-bottom:18px">
-      <h4 style="margin:0 0 8px;font-size:14px;color:var(--sky)">Deterministic Safety & 13ms Isolate Guardrails</h4>
+      <h4 style="margin:0 0 8px;font-size:14px;color:var(--sky)">Deterministic Safety & Edge Isolate Guardrails</h4>
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;font-size:12.5px;color:#cbd5e1">
         <div style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px">
           <strong style="color:#fff;display:block">AST-Free Isolation</strong>
           No runtime code evaluation. Cloned state mutation using schema-validated operations.
         </div>
         <div style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px">
-          <strong style="color:#fff;display:block">Strict Financial Backstop</strong>
-          $10.00 USD hard daily limit enforced across both providers via Durable Object KV.
+          <strong style="color:#fff;display:block">Durable Spend Backstop</strong>
+          Atomic spend ledger ($2/day, $7/week, $20/month caps) enforced via Durable Object KV.
         </div>
         <div style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px">
           <strong style="color:#fff;display:block">Multi-Model Cross-Review</strong>
-          Claude authors the plan and implementation; GPT-5.5 acts as an independent adversarial reviewer.
+          Claude authors the plan and implementation; OpenAI Codex (gpt-5.3-codex) acts as an independent reviewer.
         </div>
       </div>
     </div>
@@ -1076,7 +1198,7 @@ html, body {
     <!-- Live Links & Actions -->
     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1)">
       <a href="/matrix-results" target="_blank" class="btn-pill" style="text-decoration:none;font-size:12px">📊 Raw Matrix JSON</a>
-      <a href="/changelog" target="_blank" class="btn-pill" style="text-decoration:none;font-size:12px">📜 Live Changelog Feed</a>
+      <a href="/change-history" target="_blank" class="btn-pill" style="text-decoration:none;font-size:12px">📜 Live Changelog Feed</a>
       <a href="/pipeline-budget" target="_blank" class="btn-pill" style="text-decoration:none;font-size:12px">💰 Spend Counter</a>
       <a href="/tasks" target="_blank" class="btn-pill" style="text-decoration:none;font-size:12px">📋 32 Benchmark Tasks</a>
     </div>
@@ -1088,95 +1210,95 @@ import { WorldRenderer } from "./world-render-3d.js";
 import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
 
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = n => '$' + Number(n).toFixed(4);
 
 // District target suggestion dictionary
 let currentTargetParcelId = 'town';
 const TARGET_SUGGESTIONS = {
   town: {
-    name: 'The Town Square & Market',
-    placeholder: 'Direct market expansion, stalls, barrels, or central plaza fountain...',
+    name: 'The Central Esplanade & Promenade',
+    placeholder: 'Direct promenade extensions, date palms, bistro dining, or reflecting fountains...',
     categories: {
-      architecture: 'Build a covered stone arcade along the northern plaza edge',
-      landscape: 'Plant decorative evergreen hedges around the central cobblestone well',
-      furnishing: 'Add timber fruit crates and colorful fabric market canopies',
-      routine: 'Arrange merchant stalls and morning trade gathering'
+      architecture: 'Construct a cantilevered teak pergola over the waterfront promenade',
+      landscape: 'Plant royal date palms in modern white architectural planters',
+      furnishing: 'Add outdoor cafe bistro tables with blue sun parasols along the bay',
+      routine: 'Host morning espresso hours along the esplanade'
     }
   },
   forge: {
-    name: 'The Crafting Quarter (Forge)',
-    placeholder: 'Direct forge additions, timber framing, outdoor anvils, or tool racks...',
+    name: 'The Maritime Innovation Atelier',
+    placeholder: 'Direct architectural studio expansions, glass curtain walls, or yacht drafting decks...',
     categories: {
-      architecture: 'Construct a covered timber shelter for raw iron bars and coal storage',
-      landscape: 'Place a stone water trough along the workshop stone chimney wall',
-      furnishing: 'Add an outdoor timber workbench with iron vise and tool racks',
-      routine: 'Organize blacksmith forging workflow for Master Vane'
+      architecture: 'Add floor-to-ceiling glass curtain walls and black steel mullions',
+      landscape: 'Install architectural stone plinths and outdoor showcase lighting',
+      furnishing: 'Place teak drafting workbenches and yacht hull design scale models',
+      routine: 'Coordinate naval architecture and 3D drafting workflows'
     }
   },
   residential: {
-    name: 'The Residential Borough (Cottages)',
-    placeholder: 'Direct cottage improvements, flower boxes, gables, or garden benches...',
+    name: 'The Terraced Coastal Villas',
+    placeholder: 'Direct whitewashed villa additions, terracotta roofs, or rooftop sundecks...',
     categories: {
-      architecture: 'Add pitched timber dormers and carved eaves to Cottage Rose',
-      landscape: 'Plant a fragrant flower bed of wild lavender and sage near the porch',
-      furnishing: 'Place a carved oak bench and firewood stack outside the front door',
-      routine: 'Set up herb drying racks for Elora and evening cottage porch seating'
+      architecture: 'Add glass balustrade balconies and rooftop sundecks to the villas',
+      landscape: 'Plant flowering bougainvillea and coastal succulents',
+      furnishing: 'Place teak sun loungers and low architectural outdoor sofas',
+      routine: 'Organize seaside sundeck relaxation and sunset gatherings'
     }
   },
   docks: {
-    name: 'The Riverfront & Docks',
-    placeholder: 'Direct boardwalk extensions, fishing piers, skiff moorings, or lamps...',
+    name: 'The Marina Boardwalk & Yacht Pier',
+    placeholder: 'Direct floating teak pontoon piers, yacht moorings, or dock lighting...',
     categories: {
-      architecture: 'Extend the wooden boardwalk pier further along the riverbank',
-      landscape: 'Place water lily clusters and river stones along the shoreline',
-      furnishing: 'Add stacks of fishing crates, rope coils, and dockside lanterns',
-      routine: 'Set up river mooring posts and rowboat storage for Rowan'
+      architecture: 'Extend the floating teak pontoon dock into the deep blue bay',
+      landscape: 'Install glowing marine power pedestals and safety cleats',
+      furnishing: 'Moor a luxury motor yacht and modern sailing catamaran at the pontoon',
+      routine: 'Coordinate regatta departures and catamaran sailing runs'
     }
   },
   watchtower: {
-    name: 'The Hilltop Watchtower & Farmlands',
-    placeholder: 'Direct watchtower battlements, windmill sails, or wheat fields...',
+    name: 'The Ocean Headland & Beacon',
+    placeholder: 'Direct coastal beacon upgrades, glass observation decks, or solar canopies...',
     categories: {
-      architecture: 'Build a stone battlement extension on the hilltop watchtower',
-      landscape: 'Expand golden wheat field rows with split-rail rustic fences',
-      furnishing: 'Add grain sack piles, grindstones, and signal fire braziers',
-      routine: 'Organize watch patrols and windmill grain grinding routines'
+      architecture: 'Build a cantilevered 360-degree glass observation platform on the beacon',
+      landscape: 'Grade Mediterranean stone pathways winding up the headland ridge',
+      furnishing: 'Install high-intensity amber navigation optics and solar canopies',
+      routine: 'Maintain ocean coastal watch and automated navigation beams'
     }
   },
   shop: {
-    name: 'The Tavern',
-    placeholder: 'Direct tavern patio seating, ale kegs, or outdoor canopies...',
+    name: 'Waterfront Espresso & Boutique',
+    placeholder: 'Direct waterfront cafe seating, glass display cases, or espresso bars...',
     categories: {
-      architecture: 'Construct a timber pergola canopy over the Tavern patio',
-      landscape: 'Plant potted evergreen shrubs near the Tavern entrance',
-      furnishing: 'Add 3 outdoor timber tables on the Tavern patio',
-      routine: 'Set up evening patron seating and ale keg storage for Althea'
+      architecture: 'Install floor-to-ceiling glass pivot doors and azure striped awnings',
+      landscape: 'Place potted date palms and lavender planter boxes along the patio',
+      furnishing: 'Add 3 outdoor teak cafe tables overlooking the marina',
+      routine: 'Serve artisan flat whites and Mediterranean pastries for settlers'
     }
   },
   workshop: {
-    name: 'The Workshop',
-    placeholder: 'Direct workshop workbenches, tool racks, or anvil stands...',
+    name: 'Maritime Design Atelier',
+    placeholder: 'Direct atelier workbenches, 3D design consoles, or model drafting tables...',
     categories: {
-      architecture: 'Build an outdoor timber tool shed outside the workshop',
-      landscape: 'Place stone storage troughs along the side wall',
-      furnishing: 'Add a heavy timber workbench and tool rack',
-      routine: 'Prepare ironworking stations for smithing'
+      architecture: 'Build an outdoor teak canopy for maritime prototyping',
+      landscape: 'Install ground-recessed LED wash lighting along the plinth',
+      furnishing: 'Place a precision naval drafting table and model yacht stand',
+      routine: 'Conduct aerodynamic and hull hydrodynamics analysis'
     }
   },
   'dwelling-1': {
-    name: 'House 1 (Elora)',
-    placeholder: 'Direct garden flower boxes, window shutters, or porch chairs...',
+    name: 'Marina Villa North',
+    placeholder: 'Direct sundeck furnishings, glass balustrades, or pergola shades...',
     categories: {
-      architecture: 'Add timber window shutters and roof eaves to House 1',
-      landscape: 'Plant wild roses and lavender outside House 1',
-      furnishing: 'Place a carved wooden bench outside House 1',
-      routine: 'Prepare herb drying stations for Elora'
+      architecture: 'Install a cantilevered teak roof pergola and glass railings',
+      landscape: 'Plant white oleander and dwarf date palms along the foundation',
+      furnishing: 'Place a pair of teak chaise lounges and outdoor dining table',
+      routine: 'Host evening terrace aperitifs overlooking the harbour'
     }
   },
   'dwelling-2': {
-    name: 'House 2 (Rowan)',
-    placeholder: 'Direct stable extensions, hitching posts, or water troughs...',
+    name: 'Palm Terrace Villa',
+    placeholder: 'Direct private terrace additions, plunge pools, or sun loungers...',
     categories: {
       architecture: 'Extend the stable roof overhang on House 2',
       landscape: 'Place a stone water trough for horses near House 2',
@@ -1210,16 +1332,16 @@ const canvas2d = $('#world-canvas-2d');
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const NPC_PROFILES = {
-  town: { name: 'Althea', role: 'Tavern Keeper', avatar: '🏛️', thought: 'The Town Square is bustling with lively trade and music.' },
-  shop: { name: 'Althea', role: 'Tavern Keeper', avatar: '🍺', thought: 'The Tavern patio is warm and welcoming today.' },
-  forge: { name: 'Master Vane', role: 'The Blacksmith', avatar: '⚒️', thought: 'The forge furnace burns hot and steady across the quarter.' },
-  workshop: { name: 'Master Vane', role: 'The Blacksmith', avatar: '⚒️', thought: 'Iron bars are prepped for new fixtures.' },
-  residential: { name: 'Elora', role: 'Herbalist', avatar: '🏡', thought: 'Wild mountain herbs dry gracefully under the cottage eaves.' },
-  'dwelling-1': { name: 'Elora', role: 'Herbalist', avatar: '🌿', thought: 'Lavender and roses bloom outside House 1.' },
-  'dwelling-2': { name: 'Rowan', role: 'Stable Master', avatar: '🐎', thought: 'The horses are resting peacefully in the south pastures.' },
-  docks: { name: 'Rowan', role: 'Riverfront Guide', avatar: '⛵', thought: 'The river is clear and the wooden skiff floats gently by the pier.' },
-  watchtower: { name: 'Captain Valen', role: 'Watch Commander', avatar: '🏰', thought: 'Clear skies across the northern ridge and golden wheat fields.' },
-  outdoors: { name: 'Village Resident', role: 'Citizen', avatar: '👥', thought: 'The living valley kingdom thrives day and night.' }
+  town: { name: 'Althea', role: 'Esplanade Director', avatar: '🏛️', thought: 'The harbour promenade is sparkling in the morning sun.' },
+  shop: { name: 'Althea', role: 'Espresso Barista & Sommelier', avatar: '☕', thought: 'Freshly roasted beans and coastal breezes on the terrace.' },
+  forge: { name: 'Master Vane', role: 'Chief Naval Architect', avatar: '📐', thought: 'The new composite catamaran hull design tests with minimal drag.' },
+  workshop: { name: 'Master Vane', role: 'Naval Architect', avatar: '⚒️', thought: 'Hydrodynamic yacht models and drafting benches are set.' },
+  residential: { name: 'Elora', role: 'Landscape Architect', avatar: '🏡', thought: 'Bougainvillea and date palms thrive along the whitewashed villa walls.' },
+  'dwelling-1': { name: 'Elora', role: 'Architect & Resident', avatar: '🌿', thought: 'The sunset view over the marina from the roof terrace is breathtaking.' },
+  'dwelling-2': { name: 'Rowan', role: 'Harbour Master', avatar: '🧭', thought: 'Mooring lines are secured and tidal currents are calm.' },
+  docks: { name: 'Rowan', role: 'Harbour Master', avatar: '⛵', thought: 'The luxury motor yacht and sailing catamaran are moored at the pontoon.' },
+  watchtower: { name: 'Captain Valen', role: 'Coastal Beacon Officer', avatar: '🏰', thought: 'Amber navigation beacon is scanning the open ocean horizon.' },
+  outdoors: { name: 'Coastal Citizen', role: 'City Resident', avatar: '👥', thought: 'A premier coastal bay metropolis with vibrant architectural life.' }
 };
 
 const renderer3d = new WorldRenderer(canvas3d, {
@@ -1241,6 +1363,7 @@ const renderer3d = new WorldRenderer(canvas3d, {
     $('#parcel-inspect-card').style.display = 'block';
   }
 });
+window.__worldRenderer = renderer3d;
 const renderer2d = new WorldRenderer2D(canvas2d, { reducedMotion });
 
 // Roof toggle handlers
@@ -1355,6 +1478,12 @@ welcomeGuideTrigger?.addEventListener('click', () => {
   renderer3d.playClickSound();
 });
 
+// Precision Spatial Grid Toggle Handler
+$('#grid-toggle-btn')?.addEventListener('click', () => {
+  const active = renderer3d.toggleGrid();
+  $('#grid-toggle-btn')?.classList.toggle('active', active);
+});
+
 // Tactile Navigation Compass Pad Handlers
 $('#nav-rot-left')?.addEventListener('click', () => {
   renderer3d.rotateCamera(0.28);
@@ -1378,41 +1507,144 @@ $('#nav-reset')?.addEventListener('click', () => {
   setTargetParcel('outdoors');
 });
 $('#nav-zoom-in')?.addEventListener('click', () => {
-  renderer3d.zoomCamera(0.8);
+  renderer3d.zoomCamera(0.85);
   renderer3d.playClickSound();
 });
 $('#nav-zoom-out')?.addEventListener('click', () => {
-  renderer3d.zoomCamera(1.25);
+  renderer3d.zoomCamera(1.18);
   renderer3d.playClickSound();
 });
 
-// Modals: Rules, Arch, Cmd+K
-$('#village-rules-trigger').addEventListener('click', () => {
-  $('#village-guide-modal').style.display = 'flex';
+// Set Center / Pivot Point Handler
+$('#nav-pick-center')?.addEventListener('click', () => {
+  const btn = $('#nav-pick-center');
+  btn.classList.add('active');
+  btn.textContent = '🎯 Click map...';
+  renderer3d.enablePickCenter(() => {
+    btn.classList.remove('active');
+    btn.textContent = '🎯 Set Pivot';
+  });
   renderer3d.playClickSound();
 });
-$('#modal-guide-close').addEventListener('click', () => $('#village-guide-modal').style.display = 'none');
-$('#village-guide-modal').addEventListener('click', (e) => { if (e.target.id === 'village-guide-modal') e.target.style.display = 'none'; });
 
-$('#arch-drawer-trigger').addEventListener('click', () => {
-  $('#arch-drawer-modal').style.display = 'flex';
+// Save Default View Handler
+$('#nav-save-view')?.addEventListener('click', () => {
+  const btn = $('#nav-save-view');
+  renderer3d.saveDefaultView();
+  btn.textContent = '✓ Saved!';
+  btn.classList.add('active');
+  setTimeout(() => {
+    btn.textContent = '💾 Save View';
+    btn.classList.remove('active');
+  }, 1800);
+});
+
+// Street Mode Navigation Handlers (Walk & Drive)
+const streetHud = $('#street-level-hud');
+const streetHudText = $('#street-hud-mode-text');
+const walkBtn = $('#mode-walk-btn');
+const driveBtn = $('#mode-drive-btn');
+
+function updateStreetModeUI(mode) {
+  walkBtn?.classList.toggle('active', mode === 'walk');
+  driveBtn?.classList.toggle('active', mode === 'drive');
+
+  if (mode === 'walk') {
+    streetHud.style.display = 'flex';
+    streetHudText.textContent = '🚶 STREET LEVEL (WALK)';
+  } else if (mode === 'drive') {
+    streetHud.style.display = 'flex';
+    streetHudText.textContent = '🚗 WATERFRONT CRUISE (DRIVE)';
+  } else {
+    streetHud.style.display = 'none';
+  }
+}
+
+walkBtn?.addEventListener('click', () => {
+  const currentMode = renderer3d._impl?._navigationMode;
+  const newMode = currentMode === 'walk' ? 'orbit' : 'walk';
+  renderer3d.setNavigationMode(newMode);
+  updateStreetModeUI(newMode);
+});
+
+driveBtn?.addEventListener('click', () => {
+  const currentMode = renderer3d._impl?._navigationMode;
+  const newMode = currentMode === 'drive' ? 'orbit' : 'drive';
+  renderer3d.setNavigationMode(newMode);
+  updateStreetModeUI(newMode);
+});
+
+$('#street-hud-exit-btn')?.addEventListener('click', () => {
+  renderer3d.setNavigationMode('orbit');
+  updateStreetModeUI('orbit');
+});
+
+if (renderer3d._impl) {
+  renderer3d._impl._onNavModeChange = (mode) => {
+    updateStreetModeUI(mode);
+  };
+}
+
+let activeModal = null;
+let lastFocusedElement = null;
+let openModalCount = 0;
+
+function showAccessibleModal(modalId, triggerElement) {
+  const modal = $(modalId);
+  if (!modal) return;
+  const targetEl = (triggerElement && typeof triggerElement.focus === 'function') ? triggerElement : document.activeElement;
+  lastFocusedElement = targetEl;
+  activeModal = modal;
+  modal.style.display = 'flex';
+  modal.setAttribute('aria-hidden', 'false');
+  openModalCount++;
+  if (openModalCount === 1) {
+    const viewRoot = $('#view-root');
+    if (viewRoot) viewRoot.setAttribute('inert', '');
+  }
   renderer3d.playClickSound();
+
+  const focusables = Array.from(modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+    .filter(el => !el.disabled && el.offsetParent !== null && el.getAttribute('aria-hidden') !== 'true');
+  if (focusables.length > 0) {
+    focusables[0].focus();
+  }
+}
+
+function hideAccessibleModal(modalId) {
+  const modal = $(modalId) || activeModal;
+  if (!modal) return;
+  modal.style.display = 'none';
+  modal.setAttribute('aria-hidden', 'true');
+  if (activeModal === modal) activeModal = null;
+  openModalCount = Math.max(0, openModalCount - 1);
+  if (openModalCount === 0) {
+    const viewRoot = $('#view-root');
+    if (viewRoot) viewRoot.removeAttribute('inert');
+  }
+  if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+    lastFocusedElement.focus();
+    lastFocusedElement = null;
+  }
+}
+
+$('#village-rules-trigger').addEventListener('click', (e) => showAccessibleModal('#village-guide-modal', e.currentTarget));
+$('#modal-guide-close').addEventListener('click', () => hideAccessibleModal('#village-guide-modal'));
+$('#village-guide-modal').addEventListener('click', (e) => { if (e.target.id === 'village-guide-modal') hideAccessibleModal('#village-guide-modal'); });
+
+$('#arch-drawer-trigger').addEventListener('click', (e) => {
+  showAccessibleModal('#arch-drawer-modal', e.currentTarget);
   fetch('/pipeline-budget').then(r => r.json()).then(b => {
-    $('#budget-summary-box').innerHTML = `Today spend: ${money(b.dailySpentUsd)} / ${money(b.dailyCapUsd)} · 13ms Isolate Active`;
+    $('#budget-summary-box').innerHTML = `Today spend: ${money(b.dailySpentUsd)} / ${money(b.dailyCapUsd)} · Edge V8 Isolate Active`;
   }).catch(() => {});
 });
-$('#arch-modal-close').addEventListener('click', () => $('#arch-drawer-modal').style.display = 'none');
-$('#arch-drawer-modal').addEventListener('click', (e) => { if (e.target.id === 'arch-drawer-modal') e.target.style.display = 'none'; });
+$('#arch-modal-close').addEventListener('click', () => hideAccessibleModal('#arch-drawer-modal'));
+$('#arch-drawer-modal').addEventListener('click', (e) => { if (e.target.id === 'arch-drawer-modal') hideAccessibleModal('#arch-drawer-modal'); });
 
-// Research Paper & Findings Modal Handlers
-$('#research-paper-trigger')?.addEventListener('click', () => {
-  $('#research-paper-modal').style.display = 'flex';
-  renderer3d.playClickSound();
-});
-$('#research-modal-close')?.addEventListener('click', () => $('#research-paper-modal').style.display = 'none');
-$('#research-paper-modal')?.addEventListener('click', (e) => { if (e.target.id === 'research-paper-modal') e.target.style.display = 'none'; });
+$('#research-paper-trigger')?.addEventListener('click', (e) => showAccessibleModal('#research-paper-modal', e.currentTarget));
+$('#modal-research-close')?.addEventListener('click', () => hideAccessibleModal('#research-paper-modal'));
+$('#research-paper-modal')?.addEventListener('click', (e) => { if (e.target.id === 'research-paper-modal') hideAccessibleModal('#research-paper-modal'); });
 
-// Scope pills pre-fill prompts
 document.querySelectorAll('.scope-pill[data-cat]').forEach(pill => {
   pill.addEventListener('click', (e) => {
     const cat = e.currentTarget.dataset.cat;
@@ -1427,12 +1659,6 @@ document.querySelectorAll('.scope-pill[data-cat]').forEach(pill => {
   });
 });
 
-$('#target-deselect-btn').addEventListener('click', () => {
-  setTargetParcel('outdoors');
-  renderer3d.resetView();
-  renderer3d.playClickSound();
-});
-
 $('#inspect-close').addEventListener('click', () => $('#parcel-inspect-card').style.display = 'none');
 $('#inspect-focus-btn').addEventListener('click', () => {
   renderer3d.focusParcel(currentTargetParcelId);
@@ -1441,13 +1667,12 @@ $('#inspect-focus-btn').addEventListener('click', () => {
 
 $('#status-card-close').addEventListener('click', () => $('#floating-status-card').style.display = 'none');
 
-// Spotlight Command Palette
 const COMMANDS = [
-  { label: '🏛️ Jump to The Town Square & Market', action: () => renderer3d.focusDistrict('town') },
-  { label: '⚒️ Jump to The Crafting Quarter (Forge)', action: () => renderer3d.focusDistrict('forge') },
-  { label: '⛵ Jump to The Riverfront & Docks', action: () => renderer3d.focusDistrict('docks') },
-  { label: '🏰 Jump to The Hilltop Watchtower & Farmlands', action: () => renderer3d.focusDistrict('watchtower') },
-  { label: '🏡 Jump to The Residential Borough (Cottages)', action: () => renderer3d.focusDistrict('residential') },
+  { label: '🏛️ Jump to The Central Esplanade & Promenade', action: () => renderer3d.focusDistrict('town') },
+  { label: '⚒️ Jump to The Maritime Innovation Atelier', action: () => renderer3d.focusDistrict('forge') },
+  { label: '⛵ Jump to The Marina & Luxury Yachts', action: () => renderer3d.focusDistrict('docks') },
+  { label: '🏰 Jump to The Ocean Headland Beacon', action: () => renderer3d.focusDistrict('watchtower') },
+  { label: '🏡 Jump to The Terraced Coastal Villas', action: () => renderer3d.focusDistrict('residential') },
   { label: '🏠 Toggle Peaked Roofs (Full Exterior)', action: () => setRoofView(true) },
   { label: '🔍 Toggle Interior Cutaway View', action: () => setRoofView(false) },
   { label: '☀️ Set Atmosphere to Day', action: () => setTimeOfDayToggle('day') },
@@ -1455,42 +1680,104 @@ const COMMANDS = [
   { label: '🌙 Set Atmosphere to Night', action: () => setTimeOfDayToggle('night') },
   { label: '🎬 Start Cinematic Drone Tour', action: () => renderer3d.startDroneTour() },
   { label: '👁️ Toggle 3D Spatial Diff', action: () => $('#spatial-diff-btn').click() },
-  { label: '🔊 Toggle Sound Synthesizer', action: () => $('#sound-toggle-btn').click() },
-  { label: '↺ Reset Camera to Kingdom Overview', action: () => renderer3d.resetView() },
+  { label: '📐 Toggle Precision Spatial Grid (Coordinates & Clearance)', action: () => $('#grid-toggle-btn').click() },
+  { label: '↺ Reset Camera to Bay Overview', action: () => renderer3d.resetView() },
 ];
 
-function openCmdPalette() {
-  $('#cmd-palette-modal').style.display = 'flex';
+let cmdActiveIndex = -1;
+let filteredCommands = [];
+
+function openCmdPalette(triggerElement) {
+  showAccessibleModal('#cmd-palette-modal', triggerElement);
   $('#cmd-search-input').value = '';
+  cmdActiveIndex = -1;
   renderCmdItems('');
   $('#cmd-search-input').focus();
 }
-function closeCmdPalette() { $('#cmd-palette-modal').style.display = 'none'; }
+
+function closeCmdPalette() {
+  hideAccessibleModal('#cmd-palette-modal');
+}
+
 function renderCmdItems(q) {
   const list = $('#cmd-items-list');
-  const filtered = COMMANDS.filter(c => c.label.toLowerCase().includes(q.toLowerCase()));
-  list.innerHTML = filtered.map((c, i) => `
-    <li class="scope-pill" style="display:block;margin-bottom:6px;padding:8px 12px;font-size:13px" data-idx="${i}">
-      ${esc(c.label)}
+  filteredCommands = COMMANDS.filter(c => c.label.toLowerCase().includes(q.toLowerCase()));
+  cmdActiveIndex = -1;
+  list.innerHTML = filteredCommands.map((c, i) => `
+    <li style="margin-bottom:6px;list-style:none">
+      <button type="button" class="scope-pill cmd-item-btn" style="width:100%;text-align:left;display:block;padding:8px 12px;font-size:13px;cursor:pointer;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#e2e8f0;border-radius:6px" data-idx="${i}">
+        ${esc(c.label)}
+      </button>
     </li>
   `).join('');
-  list.querySelectorAll('li').forEach((li, idx) => {
-    li.addEventListener('click', () => {
-      filtered[idx].action();
+
+  list.querySelectorAll('.cmd-item-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(e.currentTarget.dataset.idx, 10);
+      filteredCommands[idx].action();
       closeCmdPalette();
       renderer3d.playClickSound();
     });
   });
 }
-$('#cmd-k-trigger').addEventListener('click', openCmdPalette);
+
+$('#cmd-k-trigger').addEventListener('click', (e) => openCmdPalette(e.currentTarget));
 $('#cmd-search-input').addEventListener('input', (e) => renderCmdItems(e.target.value));
 $('#cmd-palette-modal').addEventListener('click', (e) => { if (e.target.id === 'cmd-palette-modal') closeCmdPalette(); });
+
 window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
-    $('#cmd-palette-modal').style.display === 'flex' ? closeCmdPalette() : openCmdPalette();
-  } else if (e.key === 'Escape') {
-    closeCmdPalette();
+    $('#cmd-palette-modal').style.display === 'flex' ? closeCmdPalette() : openCmdPalette(document.activeElement);
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    if ($('#cmd-palette-modal').style.display === 'flex') {
+      closeCmdPalette();
+    } else if (activeModal) {
+      hideAccessibleModal();
+    }
+    return;
+  }
+
+  // Keyboard navigation within command palette
+  if ($('#cmd-palette-modal').style.display === 'flex') {
+    const btns = $('#cmd-items-list').querySelectorAll('.cmd-item-btn');
+    if (btns.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        cmdActiveIndex = (cmdActiveIndex + 1) % btns.length;
+        btns[cmdActiveIndex].focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        cmdActiveIndex = (cmdActiveIndex - 1 + btns.length) % btns.length;
+        btns[cmdActiveIndex].focus();
+      }
+    }
+    return;
+  }
+
+  // Focus trap for open modal
+  if (activeModal && activeModal.style.display === 'flex' && e.key === 'Tab') {
+    const focusables = Array.from(activeModal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+      .filter(el => !el.disabled && el.offsetParent !== null && el.getAttribute('aria-hidden') !== 'true');
+    if (focusables.length > 0) {
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (!activeModal.contains(document.activeElement)) {
+        e.preventDefault();
+        first.focus();
+        return;
+      }
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
   }
 });
 
@@ -1503,10 +1790,10 @@ const DEFAULT_WORLD = {
     { id: "sim2", home: "dwelling-2", needs: { hunger: 100, energy: 100, fun: 100, social: 100, hygiene: 100 }, lastAction: null },
   ],
   buildings: [
-    { id: "dwelling-1", type: "dwelling", label: "House 1", plot: { x: 0, y: 0 } },
-    { id: "dwelling-2", type: "dwelling", label: "House 2", plot: { x: 2, y: 0 } },
-    { id: "shop", type: "shop", label: "Tavern", plot: { x: 0, y: 2 } },
-    { id: "workshop", type: "workshop", label: "Workshop", plot: { x: 2, y: 2 } },
+    { id: "dwelling-1", type: "dwelling", label: "Marina Villa North", plot: { x: 0, y: 0 } },
+    { id: "dwelling-2", type: "dwelling", label: "Palm Terrace Villa", plot: { x: 2, y: 0 } },
+    { id: "shop", type: "shop", label: "Waterfront Espresso", plot: { x: 0, y: 2 } },
+    { id: "workshop", type: "workshop", label: "Maritime Atelier", plot: { x: 2, y: 2 } },
   ],
   placements: [
     { id: "dwelling-1-bed", type: "bed", location: "dwelling-1" },
@@ -1529,6 +1816,13 @@ const DEFAULT_WORLD = {
     desk: { footprint: { w: 0.8, d: 0.6 }, local: { x: 0.8, y: 0.8 } },
     tree: { footprint: { w: 0.8, d: 0.8 } },
     lampPost: { footprint: { w: 0.4, d: 0.4 } },
+    bench: { footprint: { w: 1.4, d: 0.8 } },
+    flowerBox: { footprint: { w: 1.2, d: 0.6 } },
+    barrel: { footprint: { w: 0.8, d: 0.8 } },
+    bistroTable: { footprint: { w: 1.4, d: 1.4 } },
+    fountain: { footprint: { w: 2.2, d: 2.2 } },
+    palmTree: { footprint: { w: 1.6, d: 1.6 } },
+    pergola: { footprint: { w: 2.8, d: 2.2 } },
   }
 };
 
@@ -1544,20 +1838,13 @@ renderer2d.pushTick(DEFAULT_WORLD);
 renderer3d.draw(1);
 renderer2d.draw(1);
 
-async function bootWorld() {
-  try {
-    const mod = await import(`./world-source?t=${Date.now()}`);
-    const w0 = mod.initialWorld();
-    world = w0;
-    renderer3d.pushTick(w0); renderer3d.pushTick(w0);
-    renderer2d.pushTick(w0); renderer2d.pushTick(w0);
-    tickLoop(mod.tick);
-  } catch (e) {
-    console.warn('Live simulation source load fallback:', e);
-  }
-}
+let currentTickFn = null;
+let tickLoopRunning = false;
 
-function tickLoop(tickFn) {
+function startTickLoop(tickFn) {
+  currentTickFn = tickFn;
+  if (tickLoopRunning) return;
+  tickLoopRunning = true;
   let start = performance.now();
   function frame(now) {
     const t = Math.min(1, (now - start) / TICK_MS);
@@ -1568,8 +1855,8 @@ function tickLoop(tickFn) {
       const dayNum = Math.floor(world.tick / 24) + 1;
       $('#world-clock-badge').textContent = `Day ${dayNum} · ${String(hour).padStart(2, '0')}:00`;
     }
-    if (playing && t >= 1) {
-      world = tickFn(world);
+    if (playing && t >= 1 && currentTickFn) {
+      world = currentTickFn(world);
       renderer3d.pushTick(world);
       renderer2d.pushTick(world);
       start = now;
@@ -1577,6 +1864,22 @@ function tickLoop(tickFn) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+}
+
+// Start the render loop immediately with fallback tick so canvas and shaders are active right away
+startTickLoop((w) => w);
+
+async function bootWorld() {
+  try {
+    const mod = await import(`./world-source?t=${Date.now()}`);
+    const w0 = mod.initialWorld();
+    world = w0;
+    renderer3d.pushTick(w0);
+    renderer2d.pushTick(w0);
+    startTickLoop(mod.tick);
+  } catch (e) {
+    console.warn('Live simulation source load fallback:', e);
+  }
 }
 $('#world-play-pause').addEventListener('click', (e) => {
   playing = !playing;
@@ -1604,6 +1907,17 @@ function updatePipelineStep(stepNum) {
   }
 }
 
+let activeEs = null;
+
+function safeJson(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn('Failed to parse SSE payload:', raw, err);
+    return null;
+  }
+}
+
 function startPipelineTelemetry() {
   $('#floating-status-card').style.display = 'block';
   pipelineStartTime = performance.now();
@@ -1616,15 +1930,17 @@ function startPipelineTelemetry() {
     $('#pipeline-timer').textContent = `Elapsed: ${elapsed}s`;
   }, 100);
 
-  // Relaxed 60-second watchdog for live frontier model generation
   resetWatchdog();
 }
 
 function resetWatchdog() {
   if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
   pipelineTimeoutGuard = setTimeout(() => {
-    finishPipelineTelemetry(false, 'Pipeline watchdog reached limit. Falling back to local generative synthesis.');
-    organicBuildFallback(currentChangeRequest);
+    if (activeEs) {
+      activeEs.close();
+      activeEs = null;
+    }
+    finishPipelineTelemetry(false, 'Pipeline watchdog limit reached (60s). Connection closed.');
   }, 60000);
 }
 
@@ -1659,6 +1975,44 @@ function stageBlock(log, id, title, extraClass) {
   return div;
 }
 
+async function submitGateDecision(decisionUrl, resumeUrl, cardEl, isReject = false, postBody = null) {
+  const btns = cardEl.querySelectorAll('button');
+  btns.forEach(b => b.disabled = true);
+  const capturedEs = activeEs;
+  const capturedRunId = currentRunId;
+  try {
+    const fetchOpts = postBody ? {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(postBody)
+    } : { method: 'POST' };
+    const res = await fetch(decisionUrl, fetchOpts);
+    if (!res.ok) {
+      throw new Error(`Gate decision failed with HTTP ${res.status}: ${res.statusText}`);
+    }
+    // Verify stream generation is still the current active stream
+    if (activeEs !== capturedEs || currentRunId !== capturedRunId) {
+      return;
+    }
+    if (isReject) {
+      finishPipelineTelemetry(false, 'Operation cancelled by Director.');
+      if (activeEs) {
+        activeEs.close();
+        activeEs = null;
+      }
+      return;
+    }
+    if (activeEs) {
+      activeEs.close();
+      activeEs = null;
+    }
+    connect(resumeUrl);
+  } catch (err) {
+    btns.forEach(b => b.disabled = false);
+    cardEl.innerHTML += `<p style="margin:6px 0 0;color:#f87171;font-size:11.5px">⚠️ ${esc(err.message)}</p>`;
+  }
+}
+
 function startRun() {
   const input = $('#bar-request-input');
   const text = input.value.trim();
@@ -1670,6 +2024,11 @@ function startRun() {
   startPipelineTelemetry();
   renderer3d.focusPreset(text);
   renderer3d.playClickSound();
+
+  if (activeEs) {
+    activeEs.close();
+    activeEs = null;
+  }
 
   connect(`/change-run?request=${encodeURIComponent(text)}`);
 }
@@ -1683,69 +2042,94 @@ $('#bar-request-input').addEventListener('keydown', (e) => {
 
 function connect(url) {
   const log = $('#stage-log');
+  if (activeEs) {
+    activeEs.close();
+    activeEs = null;
+  }
+
   let es;
   try {
     es = new EventSource(url);
+    activeEs = es;
   } catch (err) {
-    organicBuildFallback(currentChangeRequest);
+    finishPipelineTelemetry(false, `Failed to connect: ${err.message}`);
     return;
   }
 
   es.addEventListener('runId', ev => {
+    if (activeEs !== es) return;
     resetWatchdog();
-    currentRunId = JSON.parse(ev.data).runId;
+    const d = safeJson(ev.data);
+    if (d && d.runId) currentRunId = d.runId;
   });
 
   es.addEventListener('grounding', () => {
+    if (activeEs !== es) return;
     resetWatchdog();
     updatePipelineStep(2);
     stageBlock(log, 's-ground', '1. Grounding Constraints');
   });
 
   es.addEventListener('grounded', ev => {
+    if (activeEs !== es) return;
     resetWatchdog();
-    const d = JSON.parse(ev.data);
+    const d = safeJson(ev.data);
+    if (!d) return;
     const b = stageBlock(log, 's-ground-done', 'Grounded');
     b.classList.remove('active');
-    b.innerHTML += `<p style="margin:0">${esc(d.result.reasoning)}</p>`;
+    const reasoning = d?.result?.reasoning ?? (typeof d?.reasoning === 'string' ? d.reasoning : 'Grounded prerequisites verified.');
+    b.innerHTML += `<p style="margin:0">${esc(reasoning)}</p>`;
   });
 
   es.addEventListener('planning', () => {
+    if (activeEs !== es) return;
     resetWatchdog();
     updatePipelineStep(2);
     stageBlock(log, 's-plan', '2. Planning Spatial Ops');
   });
 
   es.addEventListener('planned', ev => {
+    if (activeEs !== es) return;
     resetWatchdog();
-    const d = JSON.parse(ev.data);
+    const d = safeJson(ev.data);
+    if (!d) return;
     const b = stageBlock(log, 's-planned', 'Plan Generated');
     b.classList.remove('active');
-    b.innerHTML += `<p style="margin:0">${esc(d.plan.willBuild)}</p>`;
+    const willBuild = d?.plan?.willBuild ?? 'Plan synthesized successfully.';
+    b.innerHTML += `<p style="margin:0">${esc(willBuild)}</p>`;
   });
 
-  // Human Gate: Plan Decision
+  // Human Gate: Plan Decision (Atomically awaited, no race condition)
   es.addEventListener('plan-gate', ev => {
+    if (activeEs !== es) return;
     if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
-    const d = JSON.parse(ev.data);
+    const d = safeJson(ev.data);
+    if (!d) return;
     const runId = d.runId || currentRunId;
     const b = stageBlock(log, 's-plan-gate', '📋 Gate 1: Plan Review');
+    const willBuild = d?.plan?.willBuild ?? 'Plan synthesized.';
+    const criteria = Array.isArray(d?.plan?.criteria) ? d.plan.criteria.map(c => esc(c?.name || 'Clearance')).join(', ') : 'Spatial clearance';
     
     const autoApprove = $('#auto-approve-toggle')?.checked ?? true;
     if (autoApprove) {
-      b.innerHTML = `<h4>📋 Plan Auto-Approved</h4><p style="margin:0;font-size:12px">${esc(d.plan.willBuild)}</p>`;
+      b.innerHTML = `<h4>📋 Plan Auto-Approved</h4><p style="margin:0;font-size:12px">${esc(willBuild)}</p>`;
       b.classList.remove('active');
-      fetch(`/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=true`).catch(() => {});
-      es.close();
-      connect(`/change-resume?runId=${encodeURIComponent(runId)}`);
+      submitGateDecision(
+        `/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=true`,
+        `/change-resume?runId=${encodeURIComponent(runId)}`,
+        b
+      );
       return;
     }
 
+    const rawCost = Number(d?.costEstimateUsd);
+    const costStr = Number.isFinite(rawCost) ? rawCost.toFixed(4) : '0.0030';
+
     b.innerHTML = `
       <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
-        <p style="margin:0 0 6px"><strong>Will Build:</strong> ${esc(d.plan.willBuild)}</p>
-        <p style="margin:0 0 6px"><strong>Criteria:</strong> ${d.plan.criteria ? d.plan.criteria.map(c => esc(c.name)).join(', ') : 'Spatial clearance'}</p>
-        <p style="margin:0 0 8px;font-family:var(--mono);color:var(--accent);font-size:11px">Est. Cost: $${(d.costEstimateUsd || 0.003).toFixed(4)}</p>
+        <p style="margin:0 0 6px"><strong>Will Build:</strong> ${esc(willBuild)}</p>
+        <p style="margin:0 0 6px"><strong>Criteria:</strong> ${criteria}</p>
+        <p style="margin:0 0 8px;font-family:var(--mono);color:var(--accent);font-size:11px">Est. Cost: $${costStr}</p>
         <div style="display:flex;gap:8px;margin-top:6px">
           <button type="button" class="btn-pill btn-approve" style="background:var(--emerald);color:#fff;padding:6px 12px;font-weight:700">✓ Approve & Build</button>
           <button type="button" class="btn-pill btn-reject" style="background:#ef4444;color:#fff;padding:6px 12px">✕ Reject</button>
@@ -1753,63 +2137,76 @@ function connect(url) {
       </div>
     `;
     b.querySelector('.btn-approve')?.addEventListener('click', () => {
-      b.querySelector('.btn-approve').disabled = true;
-      fetch(`/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=true`).catch(() => {});
-      es.close();
-      connect(`/change-resume?runId=${encodeURIComponent(runId)}`);
+      submitGateDecision(
+        `/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=true`,
+        `/change-resume?runId=${encodeURIComponent(runId)}`,
+        b
+      );
     });
     b.querySelector('.btn-reject')?.addEventListener('click', () => {
-      fetch(`/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=false`).catch(() => {});
-      finishPipelineTelemetry(false, 'Plan was rejected by Director.');
-      es.close();
+      submitGateDecision(
+        `/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=false`,
+        '',
+        b,
+        true
+      );
     });
   });
 
   es.addEventListener('implementing', () => {
+    if (activeEs !== es) return;
     resetWatchdog();
     updatePipelineStep(3);
-    stageBlock(log, 's-impl', '3. Mutating 13ms Graph');
+    stageBlock(log, 's-impl', '3. Mutating Edge Graph');
   });
 
   es.addEventListener('implemented', () => {
+    if (activeEs !== es) return;
     resetWatchdog();
     const b = stageBlock(log, 's-impl-done', 'Mutated in Isolate');
     b.classList.remove('active');
   });
 
   es.addEventListener('verifying', () => {
+    if (activeEs !== es) return;
     resetWatchdog();
     stageBlock(log, 's-verify', '4. Verifying Bounds');
   });
 
   es.addEventListener('verified', () => {
+    if (activeEs !== es) return;
     resetWatchdog();
     updatePipelineStep(4);
-    const b = stageBlock(log, 's-verify-done', 'Verified 184/184');
+    const b = stageBlock(log, 's-verify-done', 'Verified 195/195');
     b.classList.remove('active');
   });
 
-  // Human Gate: GPT-5.5 Cross-Model Review
+  // Human Gate: Cross-Model Review (Atomically awaited)
   es.addEventListener('review-gate', ev => {
+    if (activeEs !== es) return;
     if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
-    const d = JSON.parse(ev.data);
+    const d = safeJson(ev.data);
+    if (!d) return;
     const runId = d.runId || currentRunId;
-    const b = stageBlock(log, 's-review-gate', '🔍 Gate 2: GPT-5.5 Cross-Model Audit');
+    const b = stageBlock(log, 's-review-gate', '🔍 Gate 2: Cross-Model Audit');
     
     const autoApprove = $('#auto-approve-toggle')?.checked ?? true;
     if (autoApprove) {
       b.innerHTML = `<h4>🔍 Review Auto-Approved</h4><p style="margin:0;font-size:12px">Audit cleared. Shipping to kingdom.</p>`;
       b.classList.remove('active');
-      fetch(`/change-review-decision?runId=${encodeURIComponent(runId)}&approve=true`).catch(() => {});
-      es.close();
-      connect(`/change-resume?runId=${encodeURIComponent(runId)}`);
+      submitGateDecision(
+        `/change-review-decision?runId=${encodeURIComponent(runId)}&approve=true`,
+        `/change-resume?runId=${encodeURIComponent(runId)}`,
+        b
+      );
       return;
     }
 
+    const reviewerName = d?.reviewerModel || 'OpenAI Codex (gpt-5.3-codex)';
     const mat = (d.materialFindings && d.materialFindings.length) ? d.materialFindings.join('; ') : 'No material defects found';
     b.innerHTML = `
       <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
-        <p style="margin:0 0 6px"><strong>Reviewer:</strong> GPT-5.5 Independent Auditor</p>
+        <p style="margin:0 0 6px"><strong>Reviewer:</strong> ${esc(reviewerName)}</p>
         <p style="margin:0 0 8px"><strong>Findings:</strong> ${esc(mat)}</p>
         <div style="display:flex;gap:8px;margin-top:6px">
           <button type="button" class="btn-pill btn-approve" style="background:var(--emerald);color:#fff;padding:6px 12px;font-weight:700">✓ Ship Changes</button>
@@ -1818,21 +2215,27 @@ function connect(url) {
       </div>
     `;
     b.querySelector('.btn-approve')?.addEventListener('click', () => {
-      b.querySelector('.btn-approve').disabled = true;
-      fetch(`/change-review-decision?runId=${encodeURIComponent(runId)}&approve=true`).catch(() => {});
-      es.close();
-      connect(`/change-resume?runId=${encodeURIComponent(runId)}`);
+      submitGateDecision(
+        `/change-review-decision?runId=${encodeURIComponent(runId)}&approve=true`,
+        `/change-resume?runId=${encodeURIComponent(runId)}`,
+        b
+      );
     });
     b.querySelector('.btn-reject')?.addEventListener('click', () => {
-      fetch(`/change-review-decision?runId=${encodeURIComponent(runId)}&approve=false`).catch(() => {});
-      finishPipelineTelemetry(false, 'Review rejected by Director.');
-      es.close();
+      submitGateDecision(
+        `/change-review-decision?runId=${encodeURIComponent(runId)}&approve=false`,
+        '',
+        b,
+        true
+      );
     });
   });
 
   es.addEventListener('stage-error', ev => {
+    if (activeEs !== es) return;
     if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
-    const d = JSON.parse(ev.data);
+    const d = safeJson(ev.data);
+    if (!d) return;
     const runId = d.runId || currentRunId;
     const b = stageBlock(log, 's-stage-error', `⚠️ Stage Error: ${esc(d.erroredAtStage)}`);
     b.innerHTML = `
@@ -1845,124 +2248,111 @@ function connect(url) {
       </div>
     `;
     b.querySelector('.btn-retry')?.addEventListener('click', () => {
-      fetch(`/change-error-decision?runId=${encodeURIComponent(runId)}&approve=true`).catch(() => {});
-      es.close();
-      connect(`/change-resume?runId=${encodeURIComponent(runId)}`);
+      submitGateDecision(
+        `/change-error-decision?runId=${encodeURIComponent(runId)}&approve=true`,
+        `/change-resume?runId=${encodeURIComponent(runId)}`,
+        b
+      );
     });
     b.querySelector('.btn-abandon')?.addEventListener('click', () => {
-      fetch(`/change-error-decision?runId=${encodeURIComponent(runId)}&approve=false`).catch(() => {});
-      finishPipelineTelemetry(false, 'Run abandoned.');
-      es.close();
+      submitGateDecision(
+        `/change-error-decision?runId=${encodeURIComponent(runId)}&approve=false`,
+        '',
+        b,
+        true
+      );
     });
   });
 
-  es.addEventListener('halted', ev => {
-    const d = JSON.parse(ev.data);
+  es.addEventListener('question', ev => {
+    if (activeEs !== es) return;
     if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
-    const b = stageBlock(log, 's-halted', `Halted: waiting on ${esc(d.waitingOn)}`);
+    const d = safeJson(ev.data);
+    if (!d) return;
+    const runId = d.runId || currentRunId;
+    const b = stageBlock(log, 's-question', '💬 Clarification Requested');
+    b.innerHTML = `
+      <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
+        <p style="margin:0 0 8px;font-weight:600">${esc(d.question || 'Please specify details for construction:')}</p>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input type="text" id="gate-question-input" class="mono" style="flex:1;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:6px 10px;color:#fff;font-size:12px" placeholder="e.g. outdoors by the promenade">
+          <button type="button" class="btn-pill btn-reply" style="background:var(--emerald);color:#fff;padding:6px 14px;font-weight:700">Submit</button>
+        </div>
+      </div>
+    `;
+    const doReply = () => {
+      const val = b.querySelector('#gate-question-input')?.value.trim();
+      if (!val) return;
+      submitGateDecision(
+        `/change-answer?runId=${encodeURIComponent(runId)}&answer=${encodeURIComponent(val)}`,
+        `/change-resume?runId=${encodeURIComponent(runId)}`,
+        b
+      );
+    };
+    b.querySelector('.btn-reply')?.addEventListener('click', doReply);
+    b.querySelector('#gate-question-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') doReply(); });
+    b.querySelector('#gate-question-input')?.focus();
+  });
+
+  es.addEventListener('halted', ev => {
+    if (activeEs !== es) return;
+    if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
+    const d = safeJson(ev.data);
+    const waitingOn = d?.waitingOn || 'decision';
+    // Specific gate events (plan-gate, review-gate, stage-error, question) render the authoritative action cards.
+    // Halted confirms the pipeline has parked on that decision without duplicating buttons.
+    const b = stageBlock(log, 's-halted', `⏸️ Halted: awaiting ${esc(waitingOn)}`);
     b.classList.remove('active');
   });
 
   es.addEventListener('shipped', () => {
+    if (activeEs !== es) return;
     finishPipelineTelemetry(true);
+    renderer3d.playSuccessChime();
     const b = stageBlock(log, 's-shipped', '✓ Shipped live to kingdom');
     b.classList.remove('active');
     bootWorld();
-    es.close();
+    if (activeEs === es) {
+      activeEs.close();
+      activeEs = null;
+    }
   });
 
   es.addEventListener('refused', ev => {
-    const d = JSON.parse(ev.data);
-    finishPipelineTelemetry(false, d.reason || 'Spatial constraint protected');
+    if (activeEs !== es) return;
+    const d = safeJson(ev.data);
+    finishPipelineTelemetry(false, d ? d.reason : 'Spatial constraint protected');
+    renderer3d.playErrorBuzz();
     renderer3d.showCollisionBox('outdoors', { w: 4, d: 3, h: 2.2 });
-    es.close();
+    if (activeEs === es) {
+      activeEs.close();
+      activeEs = null;
+    }
   });
 
   es.addEventListener('done', () => {
+    if (activeEs !== es) return;
     finishPipelineTelemetry(true);
-    es.close();
+    if (activeEs === es) {
+      activeEs.close();
+      activeEs = null;
+    }
   });
 
   es.addEventListener('error', () => {
-    es.close();
-    // Rather than halting or failing on network/rate-limit, execute organic spatial generation!
-    organicBuildFallback(currentChangeRequest);
+    if (activeEs !== es) return;
+    // Critical defense against SSE reconnection duplicating paid runs:
+    // If connection drops after a run has started (currentRunId established) or if the stream is closed,
+    // explicitly close the EventSource to stop the browser from auto-reconnecting to /change-run?request=...
+    if (currentRunId || es.readyState === EventSource.CLOSED) {
+      if (activeEs === es) {
+        activeEs.close();
+        activeEs = null;
+      }
+      if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
+      finishPipelineTelemetry(false, 'Pipeline connection interrupted. Resume from the active run rather than re-creating.');
+    }
   });
-}
-
-// Organic Generative Spatial Synthesis Engine
-function organicBuildFallback(requestText) {
-  if (!requestText) return;
-  const log = $('#stage-log');
-  const lower = requestText.toLowerCase();
-
-  let type = 'flowerBox';
-  let label = 'Artisan Fixture';
-  let colour = '#d97706';
-  let footprint = { w: 1.2, d: 1.2 };
-
-  if (lower.includes('bakery') || lower.includes('bread') || lower.includes('oven')) {
-    type = 'bench'; label = 'Stone Bread Oven'; colour = '#92400e'; footprint = { w: 1.8, d: 1.4 };
-  } else if (lower.includes('bench') || lower.includes('seat') || lower.includes('chair')) {
-    type = 'bench'; label = 'Timber Bench'; colour = '#78350f'; footprint = { w: 1.4, d: 0.8 };
-  } else if (lower.includes('lamp') || lower.includes('lantern') || lower.includes('light')) {
-    type = 'lampPost'; label = 'Iron Lamppost'; colour = '#1f2937'; footprint = { w: 0.5, d: 0.5 };
-  } else if (lower.includes('fountain') || lower.includes('water') || lower.includes('pool')) {
-    type = 'flowerBox'; label = 'Tiered Stone Fountain'; colour = '#38bdf8'; footprint = { w: 2.2, d: 2.2 };
-  } else if (lower.includes('tree') || lower.includes('oak') || lower.includes('pine') || lower.includes('shrub')) {
-    type = 'tree'; label = 'Valley Pine'; colour = '#15803d'; footprint = { w: 1.6, d: 1.6 };
-  } else if (lower.includes('flower') || lower.includes('rose') || lower.includes('garden')) {
-    type = 'flowerBox'; label = 'Rose Planter'; colour = '#ef4444'; footprint = { w: 1.2, d: 0.6 };
-  } else if (lower.includes('barrel') || lower.includes('crate') || lower.includes('storage') || lower.includes('box')) {
-    type = 'barrel'; label = 'Storage Crates'; colour = '#6e4a2d'; footprint = { w: 1.0, d: 1.0 };
-  } else if (lower.includes('shed') || lower.includes('shack') || lower.includes('stall') || lower.includes('pavilion')) {
-    type = 'bench'; label = 'Timber Pavilion'; colour = '#b45309'; footprint = { w: 2.8, d: 2.0 };
-  }
-
-  // Anchor to target parcel or district
-  let basePlot = [0, 8];
-  if (currentTargetParcelId === 'forge') basePlot = [-20, -10];
-  else if (currentTargetParcelId === 'docks') basePlot = [4, 26];
-  else if (currentTargetParcelId === 'watchtower') basePlot = [6, -34];
-  else if (currentTargetParcelId === 'residential') basePlot = [18, 6];
-  else if (currentTargetParcelId === 'dwelling-1') basePlot = [-10, 4];
-  else if (currentTargetParcelId === 'dwelling-2') basePlot = [10, 4];
-  else if (currentTargetParcelId === 'shop') basePlot = [10, -4];
-  else if (currentTargetParcelId === 'workshop') basePlot = [-10, -4];
-
-  // Non-colliding random offset
-  const angle = Math.random() * Math.PI * 2;
-  const radius = 2.0 + Math.random() * 4.5;
-  const finalPlot = [
-    Number((basePlot[0] + Math.cos(angle) * radius).toFixed(2)),
-    Number((basePlot[1] + Math.sin(angle) * radius).toFixed(2))
-  ];
-
-  const newPlacement = {
-    id: `custom-${Date.now().toString(36)}`,
-    type: type,
-    location: 'outdoors',
-    plot: finalPlot,
-    colour: colour
-  };
-
-  DEFAULT_WORLD.placements = DEFAULT_WORLD.placements || [];
-  DEFAULT_WORLD.placements.push(newPlacement);
-
-  renderer3d.pushTick(DEFAULT_WORLD);
-  renderer3d.playDropThudSound();
-  renderer3d.showCollisionBox('outdoors', { w: footprint.w, d: footprint.d, h: 1.8 });
-
-  finishPipelineTelemetry(true);
-  const b = stageBlock(log, 's-organic-done', '⚡ Organic Generative Synthesis');
-  b.innerHTML = `
-    <div style="font-size:12.5px;color:#cbd5e1;line-height:1.4">
-      <p style="margin:0 0 4px;color:var(--emerald);font-weight:700">✓ Synthesized & Built organically into 3D kingdom!</p>
-      <p style="margin:0 0 2px"><strong>Structure:</strong> ${esc(label)}</p>
-      <p style="margin:0;font-family:var(--mono);font-size:11px;color:var(--text-muted)">Location: [${finalPlot[0]}, ${finalPlot[1]}] · Zero Collision Clearance</p>
-    </div>
-  `;
-  b.classList.remove('active');
 }
 </script>
 

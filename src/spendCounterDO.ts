@@ -125,6 +125,47 @@ export class SpendCounterLogic {
   async status(): Promise<SpendStatus> {
     return this.getAll();
   }
+
+  /**
+   * Atomic Compare-and-Swap publication for world source code.
+   * Ensures Pipeline A and Pipeline B racing at Stage 5 serialize through the DO:
+   * verifies expectedSource === currentSource, updates source atomically, and returns success/conflict.
+   */
+  async publishSource(expectedSource: string, newSource: string): Promise<{ ok: boolean; conflict?: boolean }> {
+    const current = (await this.storage.get<string>("sim/current-source")) ?? expectedSource;
+    if (current !== expectedSource) {
+      return { ok: false, conflict: true };
+    }
+    await this.storage.put("sim/current-source", newSource);
+    return { ok: true };
+  }
+
+  /**
+   * Atomic lease acquisition for active pipeline runs:
+   * Prevents concurrent runs from exceeding MAX_CONCURRENT_PIPELINE_RUNS,
+   * and ensures a runId cannot be leased or resumed twice simultaneously.
+   */
+  async leaseRun(runId: string, maxConcurrent = 3): Promise<{ ok: boolean; reason?: string }> {
+    const activeRuns = (await this.storage.get<string[]>("pipeline/active-runs")) ?? [];
+    if (activeRuns.includes(runId)) {
+      return { ok: true }; // already leased by this run
+    }
+    if (activeRuns.length >= maxConcurrent) {
+      return { ok: false, reason: `${activeRuns.length} pipeline runs are already in flight (max ${maxConcurrent}) -- try again in a moment.` };
+    }
+    activeRuns.push(runId);
+    await this.storage.put("pipeline/active-runs", activeRuns);
+    return { ok: true };
+  }
+
+  /**
+   * Releases an active run lease atomically.
+   */
+  async releaseRun(runId: string): Promise<void> {
+    const activeRuns = (await this.storage.get<string[]>("pipeline/active-runs")) ?? [];
+    const filtered = activeRuns.filter(id => id !== runId);
+    await this.storage.put("pipeline/active-runs", filtered);
+  }
 }
 
 /** Routes a fetch() request to the right SpendCounterLogic method and
@@ -146,6 +187,21 @@ export async function handleSpendCounterRequest(logic: SpendCounterLogic, reques
     }
     if (url.pathname === "/status") {
       return new Response(JSON.stringify(await logic.status()), { headers: { "content-type": "application/json" } });
+    }
+    if (url.pathname === "/publish-source" && request.method === "POST") {
+      const body = (await request.json()) as { expectedSource: string; newSource: string };
+      const result = await logic.publishSource(body.expectedSource, body.newSource);
+      return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
+    }
+    if (url.pathname === "/lease-run" && request.method === "POST") {
+      const body = (await request.json()) as { runId: string; maxConcurrent?: number };
+      const result = await logic.leaseRun(body.runId, body.maxConcurrent);
+      return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
+    }
+    if (url.pathname === "/release-run" && request.method === "POST") {
+      const body = (await request.json()) as { runId: string };
+      await logic.releaseRun(body.runId);
+      return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
     }
     return new Response("not found", { status: 404 });
   } catch (e) {

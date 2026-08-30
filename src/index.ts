@@ -47,10 +47,25 @@ async function sha256Hex(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function json(data: unknown, status = 200): Response {
+function timingSafeCompare(aStr: string, bStr: string): boolean {
+  const a = new TextEncoder().encode(aStr);
+  const b = new TextEncoder().encode(bStr);
+  if (a.byteLength !== b.byteLength) return false;
+  return crypto.subtle.timingSafeEqual(a, b);
+}
+
+const SECURITY_HEADERS: Record<string, string> = {
+  "content-type": "application/json",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "x-frame-options": "SAMEORIGIN",
+  "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net data: blob:;",
+};
+
+function json(data: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { ...SECURITY_HEADERS, ...extraHeaders },
   });
 }
 
@@ -459,7 +474,15 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
   })();
 
   return new Response(readable, {
-    headers: { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" },
+    headers: {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "x-frame-options": "SAMEORIGIN",
+      "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net data: blob:; frame-ancestors 'self';",
+    },
   });
 }
 
@@ -546,7 +569,22 @@ export default {
       return json(TASKS.map((t) => ({ id: t.id, title: t.title, hiddenTestCount: t.hiddenTests.length })));
     }
 
+    function isAuthorizedSecret(req: Request, urlObj: URL): boolean {
+      if (!env.UNLOCK_CODE) return false;
+      const authHeader = req.headers.get("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        const token = authHeader.slice(7).trim();
+        if (timingSafeCompare(token, env.UNLOCK_CODE)) return true;
+      }
+      const xHeader = req.headers.get("x-unlock-code");
+      if (xHeader && timingSafeCompare(xHeader.trim(), env.UNLOCK_CODE)) return true;
+      const keyParam = urlObj.searchParams.get("k");
+      if (keyParam && timingSafeCompare(keyParam, env.UNLOCK_CODE)) return true;
+      return false;
+    }
+
     if (url.pathname === "/run") {
+      if (!isAuthorizedSecret(request, url)) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <token> or ?k=<secret>)" }, 403);
       const taskId = url.searchParams.get("task");
       if (!taskId) return json({ error: "pass ?task=<id>", availableTasks: TASKS.map((t) => t.id) }, 400);
       const model = url.searchParams.get("model") ?? MODELS[0];
@@ -554,6 +592,7 @@ export default {
     }
 
     if (url.pathname === "/live-run") {
+      if (!isAuthorizedSecret(request, url)) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <token> or ?k=<secret>)" }, 403);
       const taskId = url.searchParams.get("task");
       const model = url.searchParams.get("model") ?? MODELS[0];
       if (!taskId) return json({ error: "pass ?task=<id>&model=<id>" }, 400);
@@ -561,6 +600,7 @@ export default {
     }
 
     if (url.pathname === "/matrix-run") {
+      if (!isAuthorizedSecret(request, url)) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <token> or ?k=<secret>)" }, 403);
       const taskId = url.searchParams.get("task");
       const model = url.searchParams.get("model");
       const rep = parseInt(url.searchParams.get("rep") ?? "0", 10);
@@ -617,7 +657,9 @@ export default {
       if (!guard.ok) return jsonError("request_rejected", guard.reason, 400);
       // Only a fresh run counts against the per-IP daily limit -- resuming
       // an already-started run (/change-resume) isn't a second live run.
-      const unlocked = !!env.UNLOCK_CODE && url.searchParams.get("k") === env.UNLOCK_CODE;
+      // Constant-time comparison against configured secret only; no hardcoded bypass tokens.
+      const keyParam = url.searchParams.get("k");
+      const unlocked = !!env.UNLOCK_CODE && !!keyParam && timingSafeCompare(keyParam, env.UNLOCK_CODE);
       const ip = clientIp(request);
       if (!unlocked) {
         try {
@@ -631,18 +673,33 @@ export default {
       return handleChangeRun(env, request_);
     }
 
+    // Helper to read payload from POST JSON body or GET query params
+    async function readDecisionPayload(req: Request, urlObj: URL): Promise<Record<string, unknown>> {
+      if (req.method === "POST") {
+        try {
+          const body = await req.json();
+          if (body && typeof body === "object") return body as Record<string, unknown>;
+        } catch {}
+      }
+      const out: Record<string, unknown> = {};
+      urlObj.searchParams.forEach((v, k) => { out[k] = v; });
+      return out;
+    }
+
     if (url.pathname === "/change-plan-decision") {
-      const runId = url.searchParams.get("runId");
-      const approve = url.searchParams.get("approve") === "true";
-      if (!runId) return json({ error: "pass ?runId=<id>&approve=true|false" }, 400);
+      const payload = await readDecisionPayload(request, url);
+      const runId = typeof payload.runId === "string" ? payload.runId : null;
+      const approve = payload.approve === true || payload.approve === "true";
+      if (!runId) return json({ error: "pass runId & approve (boolean) via POST body or query" }, 400);
       await env.SPEND_KV.put(`change/plan-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
       return json({ ok: true });
     }
 
     if (url.pathname === "/change-review-decision") {
-      const runId = url.searchParams.get("runId");
-      const approve = url.searchParams.get("approve") === "true";
-      if (!runId) return json({ error: "pass ?runId=<id>&approve=true|false" }, 400);
+      const payload = await readDecisionPayload(request, url);
+      const runId = typeof payload.runId === "string" ? payload.runId : null;
+      const approve = payload.approve === true || payload.approve === "true";
+      if (!runId) return json({ error: "pass runId & approve (boolean) via POST body or query" }, 400);
       await env.SPEND_KV.put(`change/review-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
       return json({ ok: true });
     }
@@ -653,9 +710,10 @@ export default {
     // one-shot-signal shape as the two gates above, on purpose -- a stage
     // error is a halt like any other, not a special case.
     if (url.pathname === "/change-error-decision") {
-      const runId = url.searchParams.get("runId");
-      const approve = url.searchParams.get("approve") === "true";
-      if (!runId) return json({ error: "pass ?runId=<id>&approve=true|false" }, 400);
+      const payload = await readDecisionPayload(request, url);
+      const runId = typeof payload.runId === "string" ? payload.runId : null;
+      const approve = payload.approve === true || payload.approve === "true";
+      if (!runId) return json({ error: "pass runId & approve (boolean) via POST body or query" }, 400);
       await env.SPEND_KV.put(`change/error-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
       return json({ ok: true });
     }
@@ -666,14 +724,16 @@ export default {
     // Works whether the run is actively processing (checked before its next
     // paid call) or halted at a gate (checked on the next /change-resume).
     if (url.pathname === "/change-stop") {
-      const runId = url.searchParams.get("runId");
-      if (!runId) return json({ error: "pass ?runId=<id>" }, 400);
+      const payload = await readDecisionPayload(request, url);
+      const runId = typeof payload.runId === "string" ? payload.runId : null;
+      if (!runId) return json({ error: "pass runId via POST body or query" }, 400);
       await env.SPEND_KV.put(`change/stop/${runId}`, "1", { expirationTtl: 600 });
       return json({ ok: true });
     }
 
     if (url.pathname === "/change-resume") {
-      const runId = url.searchParams.get("runId");
+      const payload = await readDecisionPayload(request, url);
+      const runId = typeof payload.runId === "string" ? payload.runId : null;
       if (!runId) return json({ error: "pass ?runId=<id>" }, 400);
       return handleChangeResume(env, runId);
     }
@@ -683,9 +743,10 @@ export default {
     }
 
     if (url.pathname === "/change-answer") {
-      const runId = url.searchParams.get("runId");
-      const answer = url.searchParams.get("answer");
-      if (!runId || answer === null) return json({ error: "pass ?runId=<id>&answer=<text>" }, 400);
+      const payload = await readDecisionPayload(request, url);
+      const runId = typeof payload.runId === "string" ? payload.runId : null;
+      const answer = typeof payload.answer === "string" ? payload.answer : null;
+      if (!runId || answer === null) return json({ error: "pass runId & answer via POST body or query" }, 400);
       await env.SPEND_KV.put(`change/answer/${runId}`, JSON.stringify({ answer }), { expirationTtl: 600 });
       return json({ ok: true });
     }
@@ -694,9 +755,10 @@ export default {
     // instead of approve/reject. checkAnswer (changePipeline.ts) reads this
     // same {answer} shape; re-used rather than inventing a parallel one.
     if (url.pathname === "/change-plan-reply") {
-      const runId = url.searchParams.get("runId");
-      const reply = url.searchParams.get("reply");
-      if (!runId || reply === null) return json({ error: "pass ?runId=<id>&reply=<text>" }, 400);
+      const payload = await readDecisionPayload(request, url);
+      const runId = typeof payload.runId === "string" ? payload.runId : null;
+      const reply = typeof payload.reply === "string" ? payload.reply : (typeof payload.answer === "string" ? payload.answer : null);
+      if (!runId || reply === null) return json({ error: "pass runId & reply via POST body or query" }, 400);
       await env.SPEND_KV.put(`change/plan-reply/${runId}`, JSON.stringify({ answer: reply }), { expirationTtl: 600 });
       return json({ ok: true });
     }

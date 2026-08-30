@@ -228,25 +228,75 @@ function validateRecipePart(part: unknown, where: string): string | null {
   const p = part as Record<string, unknown>;
   if (typeof p.shape !== "string" || !KNOWN_SHAPES.has(p.shape)) return `${where}: shape must be one of ${[...KNOWN_SHAPES].join(", ")}`;
   if (!isNumberArray(p.size) || p.size.length === 0) return `${where}: size must be a non-empty array of numbers`;
+
+  // Strict shape-specific size arity and bounds checks
+  for (let i = 0; i < p.size.length; i++) {
+    const num = p.size[i];
+    // Detail level (second arg of icosahedron) can be 0 or positive integer
+    const isDetailArg = p.shape === "icosahedron" && i === 1;
+    if (!Number.isFinite(num) || (isDetailArg ? num < 0 : num <= 0) || num > 60) {
+      return `${where}: size numbers must be positive (or non-negative detail) and <= 60m`;
+    }
+  }
+  if (p.shape === "box" && p.size.length !== 3) return `${where}: box size must be [w, h, d] (3 numbers)`;
+  if (p.shape === "cylinder" && p.size.length !== 3) return `${where}: cylinder size must be [rTop, rBottom, height] (3 numbers)`;
+  if (p.shape === "sphere" && p.size.length !== 1) return `${where}: sphere size must be [radius] (1 number)`;
+  if (p.shape === "icosahedron" && p.size.length !== 2) return `${where}: icosahedron size must be [radius, detail] (2 numbers)`;
+
   if (!isNumberArray(p.position) || p.position.length !== 3) return `${where}: position must be [x,y,z]`;
+  for (const pos of p.position) {
+    if (!Number.isFinite(pos) || Math.abs(pos) > 100) return `${where}: position values must be finite and within [-100, 100]`;
+  }
+
   if (typeof p.color !== "string" || !HEX_COLOR.test(p.color)) return `${where}: color must be a "#hex" string`;
-  if (p.rotation !== undefined && (!isNumberArray(p.rotation) || p.rotation.length !== 3)) return `${where}: rotation, if present, must be [x,y,z]`;
-  if (p.scale !== undefined && (!isNumberArray(p.scale) || p.scale.length !== 3)) return `${where}: scale, if present, must be [x,y,z]`;
-  if (p.radius !== undefined && typeof p.radius !== "number") return `${where}: radius, if present, must be a number`;
-  if (p.segments !== undefined && typeof p.segments !== "number" && !isNumberArray(p.segments)) return `${where}: segments, if present, must be a number or [number,number]`;
-  if (p.roughness !== undefined && typeof p.roughness !== "number") return `${where}: roughness, if present, must be a number`;
-  if (p.metalness !== undefined && typeof p.metalness !== "number") return `${where}: metalness, if present, must be a number`;
+  if (p.rotation !== undefined) {
+    if (!isNumberArray(p.rotation) || p.rotation.length !== 3) return `${where}: rotation, if present, must be [x,y,z]`;
+    for (const rot of p.rotation) {
+      if (!Number.isFinite(rot) || Math.abs(rot) > 100) return `${where}: rotation values must be finite numbers`;
+    }
+  }
+  if (p.scale !== undefined) {
+    if (!isNumberArray(p.scale) || p.scale.length !== 3) return `${where}: scale, if present, must be [x,y,z]`;
+    for (const sc of p.scale) {
+      if (!Number.isFinite(sc) || sc <= 0 || sc > 20) return `${where}: scale values must be positive finite numbers <= 20`;
+    }
+  }
+  if (p.radius !== undefined && (typeof p.radius !== "number" || !Number.isFinite(p.radius) || p.radius < 0 || p.radius > 20)) {
+    return `${where}: radius, if present, must be a finite number between 0 and 20`;
+  }
+  if (p.segments !== undefined) {
+    if (typeof p.segments === "number") {
+      if (!Number.isInteger(p.segments) || p.segments < 3 || p.segments > 64) return `${where}: segments must be an integer between 3 and 64`;
+    } else if (isNumberArray(p.segments)) {
+      if (p.segments.length !== 2 || !p.segments.every(s => Number.isInteger(s) && s >= 3 && s <= 64)) return `${where}: segments array must be [int, int] between 3 and 64`;
+    } else {
+      return `${where}: segments, if present, must be a number or [number,number]`;
+    }
+  }
+  if (p.roughness !== undefined && (typeof p.roughness !== "number" || !Number.isFinite(p.roughness) || p.roughness < 0 || p.roughness > 1)) {
+    return `${where}: roughness, if present, must be a number in [0.0, 1.0]`;
+  }
+  if (p.metalness !== undefined && (typeof p.metalness !== "number" || !Number.isFinite(p.metalness) || p.metalness < 0 || p.metalness > 1)) {
+    return `${where}: metalness, if present, must be a number in [0.0, 1.0]`;
+  }
   if (p.emissive !== undefined && (typeof p.emissive !== "string" || !HEX_COLOR.test(p.emissive))) return `${where}: emissive, if present, must be a "#hex" string`;
-  if (p.emissiveIntensity !== undefined && typeof p.emissiveIntensity !== "number") return `${where}: emissiveIntensity, if present, must be a number`;
+  if (p.emissiveIntensity !== undefined && (typeof p.emissiveIntensity !== "number" || !Number.isFinite(p.emissiveIntensity) || p.emissiveIntensity < 0 || p.emissiveIntensity > 20)) {
+    return `${where}: emissiveIntensity, if present, must be a finite number between 0 and 20`;
+  }
   if (p.emissiveAnimated !== undefined && typeof p.emissiveAnimated !== "boolean") return `${where}: emissiveAnimated, if present, must be a boolean`;
   if (p.transparent !== undefined && typeof p.transparent !== "boolean") return `${where}: transparent, if present, must be a boolean`;
-  if (p.opacity !== undefined && typeof p.opacity !== "number") return `${where}: opacity, if present, must be a number`;
+  if (p.opacity !== undefined && (typeof p.opacity !== "number" || !Number.isFinite(p.opacity) || p.opacity < 0 || p.opacity > 1)) {
+    return `${where}: opacity, if present, must be a number in [0.0, 1.0]`;
+  }
   if (p.castShadow !== undefined && typeof p.castShadow !== "boolean") return `${where}: castShadow, if present, must be a boolean`;
   const KNOWN_KEYS = new Set(["shape", "size", "position", "rotation", "scale", "radius", "segments", "color", "roughness", "metalness", "emissive", "emissiveIntensity", "emissiveAnimated", "transparent", "opacity", "castShadow"]);
   const smuggled = Object.keys(p).find((k) => !KNOWN_KEYS.has(k));
   if (smuggled) return `${where}: unknown field "${smuggled}" -- not part of the recipe-part shape`;
   return null;
 }
+
+const FORBIDDEN_OBJECT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const VALID_STATION_ACTIONS = new Set(["idle", "eat", "sleep", "shower", "play", "call", "work"]);
 
 function validateObjectTypeDefinition(def: unknown, where: string): string | null {
   if (typeof def !== "object" || def === null) return `${where}: not an object`;
@@ -256,31 +306,67 @@ function validateObjectTypeDefinition(def: unknown, where: string): string | nul
   if (unknownKey) return `${where}: unknown field "${unknownKey}"`;
   if (typeof d.material !== "string" || !d.material) return `${where}: material is required`;
   if (typeof d.footprint !== "object" || d.footprint === null || Object.keys(d.footprint).some((key) => key !== "w" && key !== "d") ||
-      typeof (d.footprint as any).w !== "number" || !Number.isFinite((d.footprint as any).w) || (d.footprint as any).w <= 0 ||
-      typeof (d.footprint as any).d !== "number" || !Number.isFinite((d.footprint as any).d) || (d.footprint as any).d <= 0) {
-    return `${where}: footprint must be { w: number, d: number }`;
+      typeof (d.footprint as any).w !== "number" || !Number.isFinite((d.footprint as any).w) || (d.footprint as any).w <= 0 || (d.footprint as any).w > 30 ||
+      typeof (d.footprint as any).d !== "number" || !Number.isFinite((d.footprint as any).d) || (d.footprint as any).d <= 0 || (d.footprint as any).d > 30) {
+    return `${where}: footprint must be { w: number, d: number } with positive finite dimensions <= 30m`;
   }
   if (d.station !== null) {
     if (typeof d.station !== "object" || typeof (d.station as any)?.action !== "string" || typeof (d.station as any)?.label !== "string") {
       return `${where}: station must be null or { action: string, label: string }`;
     }
+    const labelStr = (d.station as any).label.trim();
+    if (!labelStr || labelStr.length > 60) {
+      return `${where}: station.label must be non-empty and at most 60 characters`;
+    }
+    const actionStr = (d.station as any).action;
+    if (!VALID_STATION_ACTIONS.has(actionStr)) {
+      return `${where}: station.action "${actionStr}" is not a recognized simulation action (${[...VALID_STATION_ACTIONS].join(", ")})`;
+    }
   }
-  if (!Array.isArray(d.recipe) || d.recipe.length === 0) return `${where}: recipe must be a non-empty array`;
+  if (!Array.isArray(d.recipe) || d.recipe.length === 0 || d.recipe.length > 25) {
+    return `${where}: recipe must be a non-empty array with at most 25 parts`;
+  }
   for (let i = 0; i < d.recipe.length; i++) {
     const err = validateRecipePart(d.recipe[i], `${where}.recipe[${i}]`);
     if (err) return err;
   }
-  if (d.shadow !== undefined && (typeof d.shadow !== "object" || d.shadow === null || typeof (d.shadow as any).w !== "number" || typeof (d.shadow as any).d !== "number")) {
-    return `${where}: shadow, if present, must be { w: number, d: number }`;
+  if (d.shadow !== undefined) {
+    if (typeof d.shadow !== "object" || d.shadow === null || typeof (d.shadow as any).w !== "number" || typeof (d.shadow as any).d !== "number") {
+      return `${where}: shadow, if present, must be { w: positive finite number, d: positive finite number }`;
+    }
+    const sw = (d.shadow as any).w;
+    const sd = (d.shadow as any).d;
+    if (!Number.isFinite(sw) || sw <= 0 || sw > 40 || !Number.isFinite(sd) || sd <= 0 || sd > 40) {
+      return `${where}: shadow dimensions must be positive finite numbers <= 40m`;
+    }
   }
-  if (d.local !== undefined && d.local !== null && (typeof d.local !== "object" || typeof (d.local as any).x !== "number" || typeof (d.local as any).y !== "number")) {
-    return `${where}: local, if present, must be null or { x: number, y: number }`;
+  if (d.local !== undefined && d.local !== null) {
+    if (typeof d.local !== "object" || typeof (d.local as any).x !== "number" || typeof (d.local as any).y !== "number") {
+      return `${where}: local, if present, must be null or { x: number, y: number }`;
+    }
+    const lx = (d.local as any).x;
+    const ly = (d.local as any).y;
+    if (!Number.isFinite(lx) || lx < 0 || lx > 1 || !Number.isFinite(ly) || ly < 0 || ly > 1) {
+      return `${where}: local coordinate fractions must be finite numbers in [0.0, 1.0]`;
+    }
   }
   if (d.emitsLight !== undefined && typeof d.emitsLight !== "boolean") return `${where}: emitsLight, if present, must be a boolean`;
   if (d.light !== undefined) {
     const l = d.light as Record<string, unknown>;
-    if (typeof l !== "object" || l === null || typeof l.color !== "string" || typeof l.distance !== "number" || typeof l.decay !== "number" || typeof l.baseIntensity !== "number" || !isNumberArray(l.position)) {
-      return `${where}: light, if present, must be { color, distance, decay, baseIntensity, position: [x,y,z] }`;
+    if (typeof l !== "object" || l === null || typeof l.color !== "string" || !HEX_COLOR.test(l.color) || typeof l.distance !== "number" || typeof l.decay !== "number" || typeof l.baseIntensity !== "number" || !isNumberArray(l.position) || l.position.length !== 3) {
+      return `${where}: light, if present, must be { color: "#hex", distance: number, decay: number, baseIntensity: number, position: [x,y,z] }`;
+    }
+    if (!Number.isFinite(l.distance) || (l.distance as number) <= 0 || (l.distance as number) > 50) {
+      return `${where}: light.distance must be a positive finite number <= 50m`;
+    }
+    if (!Number.isFinite(l.decay) || (l.decay as number) < 0 || (l.decay as number) > 10) {
+      return `${where}: light.decay must be a non-negative finite number <= 10`;
+    }
+    if (!Number.isFinite(l.baseIntensity) || (l.baseIntensity as number) < 0 || (l.baseIntensity as number) > 20) {
+      return `${where}: light.baseIntensity must be a non-negative finite number <= 20`;
+    }
+    for (const p of l.position as number[]) {
+      if (!Number.isFinite(p) || Math.abs(p) > 20) return `${where}: light.position coordinates must be finite and within [-20, 20]`;
     }
   }
   return null;
@@ -400,7 +486,8 @@ function validateWorldDataShape(world: LiveWorld): string | null {
  * "addObjectType then addPlacement of that type" validates correctly in
  * one edit -- but nothing is actually applied here; see applyWorldEdit. */
 export function validateWorldEdit(world: LiveWorld, edit: WorldEdit): { valid: true } | { valid: false; reason: string } {
-  if (edit.ops.length === 0) return { valid: false, reason: "edit has no ops" };
+  if (!Array.isArray(edit.ops) || edit.ops.length === 0) return { valid: false, reason: "edit has no ops" };
+  if (edit.ops.length > 50) return { valid: false, reason: "edit has too many ops -- maximum allowed is 50 ops per batch" };
 
   const objectTypeKeys = new Set(Object.keys(world.objectTypes));
   const objectTypes = { ...world.objectTypes };
@@ -414,6 +501,9 @@ export function validateWorldEdit(world: LiveWorld, edit: WorldEdit): { valid: t
     switch (op.op) {
       case "addObjectType": {
         if (!op.key) return { valid: false, reason: `op[${i}] addObjectType: key is empty` };
+        if (FORBIDDEN_OBJECT_KEYS.has(op.key) || op.key.includes("proto") || op.key.length > 50) {
+          return { valid: false, reason: `op[${i}] addObjectType: key "${op.key}" is not a safe identifier` };
+        }
         if (objectTypeKeys.has(op.key)) return { valid: false, reason: `op[${i}] addObjectType: type "${op.key}" already exists -- use overridePlacement or setSurfaceField to change an existing thing, not addObjectType` };
         const err = validateObjectTypeDefinition(op.definition, `op[${i}] addObjectType.definition`);
         if (err) return { valid: false, reason: err };
@@ -424,6 +514,7 @@ export function validateWorldEdit(world: LiveWorld, edit: WorldEdit): { valid: t
       case "addPlacement": {
         const p = op.placement;
         if (!p || typeof p.id !== "string" || !p.id) return { valid: false, reason: `op[${i}] addPlacement: placement.id is missing` };
+        if (FORBIDDEN_OBJECT_KEYS.has(p.id) || p.id.length > 50) return { valid: false, reason: `op[${i}] addPlacement: placement id is not a safe identifier` };
         if (placementIds.has(p.id)) return { valid: false, reason: `op[${i}] addPlacement: placement id "${p.id}" already exists` };
         if (typeof p.type !== "string" || !objectTypeKeys.has(p.type)) return { valid: false, reason: `op[${i}] addPlacement: type "${p.type}" does not exist in the registry -- known types: ${[...objectTypeKeys].join(", ")}` };
         if (typeof p.location !== "string" || !p.location) return { valid: false, reason: `op[${i}] addPlacement: placement.location is missing` };
