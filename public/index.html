@@ -1904,18 +1904,18 @@ function hideAccessibleModal(modalId) {
   }
 }
 
-$('#village-rules-trigger').addEventListener('click', (e) => showAccessibleModal('#village-guide-modal', e.currentTarget));
-$('#modal-guide-close').addEventListener('click', () => hideAccessibleModal('#village-guide-modal'));
-$('#village-guide-modal').addEventListener('click', (e) => { if (e.target.id === 'village-guide-modal') hideAccessibleModal('#village-guide-modal'); });
+$('#village-rules-trigger')?.addEventListener('click', (e) => showAccessibleModal('#village-guide-modal', e.currentTarget));
+$('#modal-guide-close')?.addEventListener('click', () => hideAccessibleModal('#village-guide-modal'));
+$('#village-guide-modal')?.addEventListener('click', (e) => { if (e.target.id === 'village-guide-modal') hideAccessibleModal('#village-guide-modal'); });
 
-$('#arch-drawer-trigger').addEventListener('click', (e) => {
+$('#arch-drawer-trigger')?.addEventListener('click', (e) => {
   showAccessibleModal('#arch-drawer-modal', e.currentTarget);
   fetch('/pipeline-budget').then(r => r.json()).then(b => {
     $('#budget-summary-box').innerHTML = `Today spend: ${money(b.dailySpentUsd)} / ${money(b.dailyCapUsd)} · Edge V8 Isolate Active`;
   }).catch(() => {});
 });
-$('#arch-modal-close').addEventListener('click', () => hideAccessibleModal('#arch-drawer-modal'));
-$('#arch-drawer-modal').addEventListener('click', (e) => { if (e.target.id === 'arch-drawer-modal') hideAccessibleModal('#arch-drawer-modal'); });
+$('#arch-modal-close')?.addEventListener('click', () => hideAccessibleModal('#arch-drawer-modal'));
+$('#arch-drawer-modal')?.addEventListener('click', (e) => { if (e.target.id === 'arch-drawer-modal') hideAccessibleModal('#arch-drawer-modal'); });
 
 $('#portfolio-btn')?.addEventListener('click', (e) => showAccessibleModal('#portfolio-modal', e.currentTarget));
 $('#modal-portfolio-close')?.addEventListener('click', () => hideAccessibleModal('#portfolio-modal'));
