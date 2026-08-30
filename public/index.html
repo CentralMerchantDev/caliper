@@ -797,60 +797,61 @@ html, body {
 <!-- Top Floating HUD Bar -->
 <div class="top-bar-wrapper">
   <!-- Left Cluster: Kingdom & Clock -->
+  <!-- Left Cluster: Portfolio Identity, Mark Fraser Hub & Clock -->
   <div class="top-bar-cluster glass">
     <div class="brand-badge">
-      👑 CALIPER · <span class="kingdom">Living Valley</span>
+      👑 CALIPER · <span class="kingdom">Mark Fraser</span>
     </div>
     <div class="status-pill">
       <span class="pulse-dot"></span> Edge V8 Isolate
     </div>
+    <button type="button" id="portfolio-btn" class="btn-pill active-emerald" title="View Mark Fraser Architectural & AI Portfolio">📁 Portfolio</button>
+    <button type="button" id="resume-btn" class="btn-pill" title="View Professional Resume">📄 Resume</button>
+    <button type="button" id="datum-btn" class="btn-pill" title="Open Datum AEC AI App Preview">📐 Datum App</button>
     <div class="clock-pill" id="world-clock-badge">
       ☀️ Day 1 · 12:00
     </div>
     <button type="button" id="world-play-pause" class="btn-pill" style="padding:4px 8px;font-size:11px" aria-pressed="true">⏸ Pause</button>
   </div>
 
-  <!-- Center Cluster: District Bookmarks -->
+  <!-- Center Cluster: Coastal District Bookmarks & Navigation -->
   <div class="top-bar-cluster glass" role="toolbar" aria-label="District Bookmarks">
-    <button type="button" id="bm-town" class="btn-pill" data-district="town" title="Jump to Central Esplanade & Promenade">🏛️ Esplanade</button>
+    <button type="button" id="bm-town" class="btn-pill" data-district="town" title="Jump to Town Hall, Supreme Courts & Promenade">🏛️ Town Hall</button>
     <button type="button" id="bm-forge" class="btn-pill" data-district="forge" title="Jump to Maritime Innovation Studio">⚒️ Studio</button>
-    <button type="button" id="bm-datum" class="btn-pill" data-district="datum" title="Jump to Datum AEC AI Architectural Models (448 Elm, River Run, Birch Cottage)">📐 Datum</button>
-    <button type="button" id="bm-docks" class="btn-pill" data-district="docks" title="Jump to Marina & Luxury Yachts">⛵ Marina</button>
+    <button type="button" id="bm-datum" class="btn-pill" data-district="datum" title="Jump to Datum AEC AI Architectural Models">📐 Datum Models</button>
+    <button type="button" id="bm-docks" class="btn-pill" data-district="docks" title="Jump to Grand Marina & Yachts">⛵ Marina</button>
     <button type="button" id="bm-tower" class="btn-pill" data-district="watchtower" title="Jump to Ocean Headland Beacon">🏰 Beacon</button>
     <button type="button" id="bm-borough" class="btn-pill" data-district="residential" title="Jump to Terraced Coastal Villas">🏡 Villas</button>
     <button type="button" id="reset-cam-btn" class="btn-pill" title="Reset camera to bay overview">↺ Reset</button>
   </div>
 
-  <!-- Right Cluster: Controls, Atmosphere, Roof Toggle & Utilities -->
+  <!-- Right Cluster: Atmosphere, Audio Synthesizer, 2D/3D & Architecture Guide -->
   <div class="top-bar-cluster glass">
     <!-- Atmosphere Toggle -->
     <div class="btn-group" role="group" aria-label="Time of Day">
-      <button id="tod-day" type="button" class="active" aria-pressed="true" title="Day lighting">☀️ Day</button>
-      <button id="tod-dusk" type="button" aria-pressed="false" title="Dusk golden-hour">🌅 Dusk</button>
-      <button id="tod-night" type="button" aria-pressed="false" title="Night atmosphere">🌙 Night</button>
-    </div>
-
-    <!-- Roof Cutaway Toggle -->
-    <div class="btn-group" role="group" aria-label="Roof View">
-      <button id="roof-exterior" type="button" class="active" aria-pressed="true" title="Full exterior peaked timber roofs">🏠 Roof</button>
-      <button id="roof-cutaway" type="button" aria-pressed="false" title="Interior cutaway view">🔍 Interior</button>
+      <button id="tod-day" type="button" class="active" aria-pressed="true" title="High-sun clear daytime">☀️ Day</button>
+      <button id="tod-dusk" type="button" aria-pressed="false" title="Dusk golden-hour warmth">🌅 Dusk</button>
+      <button id="tod-night" type="button" aria-pressed="false" title="Night starry sky & celestial moon">🌙 Night</button>
     </div>
 
     <!-- View Mode 2D/3D -->
     <div class="btn-group" role="group" aria-label="View Mode">
       <button id="view-3d" type="button" class="active" aria-pressed="true">3D</button>
-      <button id="view-plan" type="button" aria-pressed="false">Plan</button>
+      <button id="view-plan" type="button" aria-pressed="false">2D Plan</button>
+    </div>
+
+    <!-- Roof Cutaway Toggle -->
+    <div class="btn-group" role="group" aria-label="Roof View">
+      <button id="roof-exterior" type="button" class="active" aria-pressed="true" title="Full exterior architecture">🏠 Roof</button>
+      <button id="roof-cutaway" type="button" aria-pressed="false" title="Interior architectural cutaway">🔍 Cutaway</button>
     </div>
 
     <!-- Utilities -->
-    <button id="grid-toggle-btn" type="button" class="btn-pill" title="Toggle Precision Spatial Grid (Module Dimensions & Collision Buffers)">📐 Grid</button>
+    <button id="grid-toggle-btn" type="button" class="btn-pill" title="Toggle Precision Spatial Grid (600m with XYZ World Axes)">📐 Grid</button>
+    <button id="sound-toggle-btn" type="button" class="btn-pill" title="Toggle Chill House Lounge Synthesizer & Ocean Acoustics">🎵 Lounge Audio</button>
+    <button id="drone-tour-btn" type="button" class="btn-pill" title="Cinematic camera flythrough">🎬 Tour</button>
     <button id="research-paper-trigger" type="button" class="btn-pill" title="Original Research Paper, Findings & Data Matrix">📖 Research & Write-Up</button>
     <button id="welcome-guide-trigger" type="button" class="btn-pill active" title="Executive Project Overview & Architecture Guide">ℹ️ Executive Guide</button>
-    <button id="drone-tour-btn" type="button" class="btn-pill" title="Cinematic camera flythrough">🎬 Tour</button>
-    <button id="spatial-diff-btn" type="button" class="btn-pill" title="Highlight recent changes">👁️ Diff</button>
-    <button id="sound-toggle-btn" type="button" class="btn-pill" title="Toggle audio synthesizer">🔊 Audio</button>
-    <button id="village-rules-trigger" type="button" class="btn-pill" title="Deterministic Engine Rules & CI Invariants">⚙️ Engine Rules</button>
-    <button id="arch-drawer-trigger" type="button" class="btn-pill" title="System Architecture & Safety Specs">📐 Architecture</button>
     <button id="cmd-k-trigger" type="button" class="btn-pill" title="Command Palette (Cmd+K)">⌘K</button>
   </div>
 </div>
@@ -1068,6 +1069,110 @@ html, body {
       <div id="budget-summary-box" class="mono" style="font-size:11.5px;color:var(--text-muted);padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px">
         Loading budget invariants…
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Mark Fraser Portfolio In-App Modal -->
+<div id="portfolio-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="portfolio-modal-title">
+  <div class="modal-card glass" style="max-width:880px;max-height:88vh;overflow-y:auto;padding:24px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.14)">
+      <div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:0.06em;font-weight:700;margin-bottom:4px">
+          MARK FRASER · ARCHITECTURAL DESIGN (18 YEARS) & APPLIED AI
+        </div>
+        <h2 id="portfolio-modal-title" style="margin:0;font-size:22px;color:#fff;font-weight:800;letter-spacing:-0.02em">
+          Selected Architectural Portfolio & AI Systems
+        </h2>
+        <div style="font-size:13.5px;color:var(--sky);margin-top:4px">
+          Toronto, Canada · Applied AI Engineering · Parametric AEC Systems
+        </div>
+      </div>
+      <button type="button" id="modal-portfolio-close" aria-label="Close Portfolio dialog" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;padding:4px">✕</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(250px, 1fr));gap:16px;margin-bottom:20px">
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px">
+        <div style="font-size:20px;margin-bottom:6px">🏛️</div>
+        <h4 style="margin:0 0 6px;color:#fff;font-size:15px">AEC Spatial Synthesis & Datum</h4>
+        <p style="margin:0;font-size:12.5px;color:#cbd5e1;line-height:1.5">
+          Ontario Building Code Part 9 compliance solver, automated massing generation, and real-time kinetic visual models.
+        </p>
+      </div>
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px">
+        <div style="font-size:20px;margin-bottom:6px">⚡</div>
+        <h4 style="margin:0 0 6px;color:#fff;font-size:15px">CALIPER Autonomous Edge Engine</h4>
+        <p style="margin:0;font-size:12.5px;color:#cbd5e1;line-height:1.5">
+          Cloudflare Workers V8 isolate spatial engine pairing lightweight LLM inference with deterministic in-loop verification.
+        </p>
+      </div>
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px">
+        <div style="font-size:20px;margin-bottom:6px">📐</div>
+        <h4 style="margin:0 0 6px;color:#fff;font-size:15px">18 Years Architecture & Interiors</h4>
+        <p style="margin:0;font-size:12.5px;color:#cbd5e1;line-height:1.5">
+          High-end residential, modern civic structures, commercial hospitality, and sustainable urban coastal master planning.
+        </p>
+      </div>
+    </div>
+    <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:14px;font-size:13px;color:#94a3b8;line-height:1.5">
+      <strong>Engineering Rationale:</strong> All applications, codebases, and architectural design prototypes are presented directly inside the application environment without external data leakage or tracking.
+    </div>
+  </div>
+</div>
+
+<!-- Mark Fraser Resume In-App Modal -->
+<div id="resume-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="resume-modal-title">
+  <div class="modal-card glass" style="max-width:760px;max-height:86vh;overflow-y:auto;padding:24px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.14)">
+      <div>
+        <h2 id="resume-modal-title" style="margin:0;font-size:22px;color:#fff;font-weight:800;letter-spacing:-0.02em">
+          Mark Fraser · Professional Resume
+        </h2>
+        <div style="font-size:13.5px;color:var(--sky);margin-top:4px">
+          Architectural Designer (18 Years) & Applied AI Engineer · Toronto, ON
+        </div>
+      </div>
+      <button type="button" id="modal-resume-close" aria-label="Close Resume dialog" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;padding:4px">✕</button>
+    </div>
+    <div style="color:#cbd5e1;font-size:13.5px;line-height:1.6">
+      <h3 style="margin:0 0 8px;color:#fff;font-size:16px">Executive Summary</h3>
+      <p style="margin:0 0 16px">
+        Dual-discipline leader with 18 years in architectural & interior design, combined with modern applied AI engineering. Creator of CALIPER (deterministic edge isolate simulation engine) and Datum (AEC AI compliance platform). Expert in spatial computing, WebGL/Three.js, Cloudflare Workers V8 isolates, and LLM verification loops.
+      </p>
+      <h3 style="margin:0 0 8px;color:#fff;font-size:16px">Core Competencies</h3>
+      <ul style="margin:0 0 16px;padding-left:20px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <li>Architectural & Interior Design (18 yrs)</li>
+        <li>Applied AI & In-Loop Verification</li>
+        <li>Edge Compute & Cloudflare Workers</li>
+        <li>3D Spatial Computing (WebGL/Three.js)</li>
+        <li>OBC Part 9 Regulatory Compliance</li>
+        <li>TypeScript, Node.js & Distributed KV/DO</li>
+      </ul>
+      <div style="padding:12px;background:rgba(16,185,129,0.12);border-radius:8px;border:1px solid rgba(16,185,129,0.3);color:#d1fae5;font-size:13px">
+        📄 Complete official PDF and references available on confidential request.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Datum App In-App Viewer Modal -->
+<div id="datum-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="datum-modal-title">
+  <div class="modal-card glass" style="max-width:920px;max-height:90vh;overflow-y:auto;padding:24px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.14)">
+      <div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:0.06em;font-weight:700;margin-bottom:4px">
+          DATUM AEC AI PLATFORM · MARK FRASER
+        </div>
+        <h2 id="datum-modal-title" style="margin:0;font-size:20px;color:#fff;font-weight:800;letter-spacing:-0.02em">
+          Parametric Building Code & Generative Design Engine
+        </h2>
+      </div>
+      <button type="button" id="modal-datum-close" aria-label="Close Datum dialog" style="background:none;border:none;color:#94a3b8;font-size:22px;cursor:pointer;padding:4px">✕</button>
+    </div>
+    <div style="margin-bottom:14px">
+      <iframe src="https://datum.markfrasertoronto.workers.dev" title="Datum AEC App" style="width:100%;height:520px;border:1px solid rgba(255,255,255,0.15);border-radius:12px;background:#0f172a" sandbox="allow-scripts allow-same-origin"></iframe>
+    </div>
+    <div style="font-size:12px;color:#94a3b8">
+      Production deployment: <code>datum.markfrasertoronto.workers.dev</code> · Hosted on Cloudflare Workers edge network.
     </div>
   </div>
 </div>
@@ -1641,6 +1746,18 @@ $('#arch-drawer-trigger').addEventListener('click', (e) => {
 $('#arch-modal-close').addEventListener('click', () => hideAccessibleModal('#arch-drawer-modal'));
 $('#arch-drawer-modal').addEventListener('click', (e) => { if (e.target.id === 'arch-drawer-modal') hideAccessibleModal('#arch-drawer-modal'); });
 
+$('#portfolio-btn')?.addEventListener('click', (e) => showAccessibleModal('#portfolio-modal', e.currentTarget));
+$('#modal-portfolio-close')?.addEventListener('click', () => hideAccessibleModal('#portfolio-modal'));
+$('#portfolio-modal')?.addEventListener('click', (e) => { if (e.target.id === 'portfolio-modal') hideAccessibleModal('#portfolio-modal'); });
+
+$('#resume-btn')?.addEventListener('click', (e) => showAccessibleModal('#resume-modal', e.currentTarget));
+$('#modal-resume-close')?.addEventListener('click', () => hideAccessibleModal('#resume-modal'));
+$('#resume-modal')?.addEventListener('click', (e) => { if (e.target.id === 'resume-modal') hideAccessibleModal('#resume-modal'); });
+
+$('#datum-btn')?.addEventListener('click', (e) => showAccessibleModal('#datum-modal', e.currentTarget));
+$('#modal-datum-close')?.addEventListener('click', () => hideAccessibleModal('#datum-modal'));
+$('#datum-modal')?.addEventListener('click', (e) => { if (e.target.id === 'datum-modal') hideAccessibleModal('#datum-modal'); });
+
 $('#research-paper-trigger')?.addEventListener('click', (e) => showAccessibleModal('#research-paper-modal', e.currentTarget));
 $('#modal-research-close')?.addEventListener('click', () => hideAccessibleModal('#research-paper-modal'));
 $('#research-paper-modal')?.addEventListener('click', (e) => { if (e.target.id === 'research-paper-modal') hideAccessibleModal('#research-paper-modal'); });
@@ -2018,7 +2135,10 @@ async function submitGateDecision(decisionUrl, resumeUrl, cardEl, isReject = fal
     }
     // Narrow single-use ticket in URL protects long-lived controlToken from URL logs/traces
     const ticket = resData?.resumeTicket;
-    const ticketParam = ticket ? `&ticket=${encodeURIComponent(ticket)}` : (currentControlToken ? `&controlToken=${encodeURIComponent(currentControlToken)}` : '');
+    if (!ticket) {
+      throw new Error('Gate resume ticket could not be secured from coordinator.');
+    }
+    const ticketParam = `&ticket=${encodeURIComponent(ticket)}`;
     const finalResumeUrl = resumeUrl.includes('?') ? `${resumeUrl}${ticketParam}` : `${resumeUrl}?${ticketParam.slice(1)}`;
     connect(finalResumeUrl);
   } catch (err) {

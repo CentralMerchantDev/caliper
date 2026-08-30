@@ -176,25 +176,71 @@ export class SpendCounterLogic {
   }
 
   /**
-   * Releases an active run lease atomically.
-   * If leaseToken is provided, verifies that the caller owns the current lease generation
-   * to strictly eliminate ABA races where a timed-out predecessor releases a successor's lease.
+   * Extends the lease duration of an actively executing run.
+   * Atomically verifies that the caller owns the active leaseToken before extending.
    */
-  async releaseRun(runId: string, leaseToken?: string): Promise<{ ok: boolean; released: boolean }> {
+  async renewLease(runId: string, leaseToken: string, extensionSec = 600): Promise<{ ok: boolean; renewed: boolean }> {
+    const now = Date.now();
+    const rawLeases = (await this.storage.get<Array<{ runId: string; leaseToken: string; expiresAt: number }>>("pipeline/active-leases")) ?? [];
+    const target = rawLeases.find(l => l.runId === runId);
+    if (!target || target.leaseToken !== leaseToken || target.expiresAt <= now) {
+      return { ok: false, renewed: false };
+    }
+    target.expiresAt = now + extensionSec * 1000;
+    await this.storage.put("pipeline/active-leases", rawLeases);
+    return { ok: true, renewed: true };
+  }
+
+  /**
+   * Releases an active run lease atomically.
+   * Mandates matching leaseToken to strictly eliminate ABA races where a timed-out
+   * predecessor releases a successor's lease.
+   */
+  async releaseRun(runId: string, leaseToken: string): Promise<{ ok: boolean; released: boolean }> {
     const now = Date.now();
     const rawLeases = (await this.storage.get<Array<{ runId: string; leaseToken: string; expiresAt: number }>>("pipeline/active-leases")) ?? [];
     const target = rawLeases.find(l => l.runId === runId);
     if (!target) {
       return { ok: true, released: false };
     }
-    // If leaseToken is passed, release ONLY if token matches current lease generation
-    if (leaseToken && target.leaseToken !== leaseToken) {
-      return { ok: true, released: false };
+    // Strictly require matching cryptographic lease token: reject tokenless or mismatched releases
+    if (!leaseToken || target.leaseToken !== leaseToken) {
+      return { ok: false, released: false };
     }
     const filtered = rawLeases.filter(l => l.runId !== runId && l.expiresAt > now);
     await this.storage.put("pipeline/active-leases", filtered);
     await this.storage.put("pipeline/active-runs", filtered.map(l => l.runId));
     return { ok: true, released: true };
+  }
+  /**
+   * Generates and stores a short-lived single-use resume ticket atomically in DO storage.
+   */
+  async createResumeTicket(runId: string, ttlSec = 90): Promise<{ ok: boolean; ticket: string }> {
+    const now = Date.now();
+    const ticket = crypto.randomUUID();
+    const rawTickets = (await this.storage.get<Array<{ runId: string; ticket: string; expiresAt: number }>>("pipeline/resume-tickets")) ?? [];
+    const active = rawTickets.filter(t => t.expiresAt > now);
+    active.push({ runId, ticket, expiresAt: now + ttlSec * 1000 });
+    await this.storage.put("pipeline/resume-tickets", active);
+    return { ok: true, ticket };
+  }
+
+  /**
+   * Atomically verifies and single-use consumes a resume ticket in DO storage.
+   */
+  async consumeResumeTicket(runId: string, ticket: string): Promise<{ ok: boolean; valid: boolean }> {
+    const now = Date.now();
+    const rawTickets = (await this.storage.get<Array<{ runId: string; ticket: string; expiresAt: number }>>("pipeline/resume-tickets")) ?? [];
+    const active = rawTickets.filter(t => t.expiresAt > now);
+    const idx = active.findIndex(t => t.runId === runId && t.ticket === ticket);
+    if (idx === -1) {
+      await this.storage.put("pipeline/resume-tickets", active);
+      return { ok: true, valid: false };
+    }
+    // Atomically consume (single-use)
+    active.splice(idx, 1);
+    await this.storage.put("pipeline/resume-tickets", active);
+    return { ok: true, valid: true };
   }
 }
 
@@ -232,9 +278,24 @@ export async function handleSpendCounterRequest(logic: SpendCounterLogic, reques
       const result = await logic.leaseRun(body.runId, body.maxConcurrent);
       return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
     }
+    if (url.pathname === "/renew-lease" && request.method === "POST") {
+      const body = (await request.json()) as { runId: string; leaseToken: string; extensionSec?: number };
+      const result = await logic.renewLease(body.runId, body.leaseToken, body.extensionSec);
+      return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
+    }
     if (url.pathname === "/release-run" && request.method === "POST") {
-      const body = (await request.json()) as { runId: string; leaseToken?: string };
+      const body = (await request.json()) as { runId: string; leaseToken: string };
       const result = await logic.releaseRun(body.runId, body.leaseToken);
+      return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
+    }
+    if (url.pathname === "/create-resume-ticket" && request.method === "POST") {
+      const body = (await request.json()) as { runId: string; ttlSec?: number };
+      const result = await logic.createResumeTicket(body.runId, body.ttlSec);
+      return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
+    }
+    if (url.pathname === "/consume-resume-ticket" && request.method === "POST") {
+      const body = (await request.json()) as { runId: string; ticket: string };
+      const result = await logic.consumeResumeTicket(body.runId, body.ticket);
       return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
     }
     return new Response("not found", { status: 404 });

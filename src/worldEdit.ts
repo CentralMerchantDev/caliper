@@ -384,15 +384,34 @@ function validateObjectTypeDefinition(def: unknown, where: string): string | nul
       partHalfD = maxCornerZ;
     } else if (part.shape === "cylinder") {
       // Cylinder size is [radiusTop, radiusBottom, height]
-      // Project upright radius and potential height tilt
       const r = Math.max(part.size[0], part.size[1]) * Math.max(scaleX, scaleZ);
-      const h = part.size[2] * (part.scale ? part.scale[1] : 1);
+      const halfH = (part.size[2] * (part.scale ? part.scale[1] : 1)) / 2;
       const rx = (part.rotation && typeof part.rotation[0] === "number") ? part.rotation[0] : 0;
+      const ry = (part.rotation && typeof part.rotation[1] === "number") ? part.rotation[1] : 0;
       const rz = (part.rotation && typeof part.rotation[2] === "number") ? part.rotation[2] : 0;
-      const tiltX = Math.abs(Math.sin(rz)) * (h / 2);
-      const tiltZ = Math.abs(Math.sin(rx)) * (h / 2);
-      partHalfW = r + tiltX;
-      partHalfD = r + tiltZ;
+
+      // Full 3D rotation of cylinder central axis vector (0, 1, 0)
+      const cx = Math.cos(rx), sx = Math.sin(rx);
+      const cy = Math.cos(ry), sy = Math.sin(ry);
+      const cz = Math.cos(rz), sz = Math.sin(rz);
+
+      // Rotation matrix Euler XYZ
+      const m01 = -cy * sz;
+      const m21 = sx * cz + cx * sy * sz;
+
+      // Axis components along world X and Z
+      const ax = m01;
+      const az = m21;
+
+      // Planar projection of cylinder with axis vector (ax, ay, az) and radius r:
+      // axial contribution: |ax| * halfH, radial disc projection: r * sqrt(1 - ax^2)
+      const axialX = Math.abs(ax) * halfH;
+      const radialX = r * Math.sqrt(Math.max(0, 1 - ax * ax));
+      const axialZ = Math.abs(az) * halfH;
+      const radialZ = r * Math.sqrt(Math.max(0, 1 - az * az));
+
+      partHalfW = axialX + radialX;
+      partHalfD = axialZ + radialZ;
     } else if (part.shape === "sphere" || part.shape === "icosahedron") {
       const r = part.size[0] * Math.max(scaleX, scaleZ);
       partHalfW = r;

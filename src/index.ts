@@ -47,11 +47,11 @@ async function sha256Hex(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function timingSafeCompare(aStr: string, bStr: string): boolean {
-  const a = new TextEncoder().encode(aStr);
-  const b = new TextEncoder().encode(bStr);
-  if (a.byteLength !== b.byteLength) return false;
-  return crypto.subtle.timingSafeEqual(a, b);
+async function timingSafeCompare(aStr: string, bStr: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const aDigest = await crypto.subtle.digest("SHA-256", encoder.encode(aStr));
+  const bDigest = await crypto.subtle.digest("SHA-256", encoder.encode(bStr));
+  return crypto.subtle.timingSafeEqual(aDigest, bDigest);
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -431,8 +431,9 @@ function randomRunId(): string {
 // real API spend, which only happens while a call is actively executing.
 async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: string): Promise<Response> {
   const runId = existingRunId ?? randomRunId();
+  let leaseToken: string | null = null;
   try {
-    await tryLeaseActiveRun(env.SPEND_KV, runId, env.SPEND_COUNTER);
+    leaseToken = await tryLeaseActiveRun(env.SPEND_KV, runId, env.SPEND_COUNTER);
   } catch (e) {
     if (e instanceof PipelineLimitError) return jsonError("rate_limit_exceeded", e.message, 429);
     throw e;
@@ -450,8 +451,20 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
   const encoder = new TextEncoder();
   const send = (event: string, data: unknown) => writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)).catch(() => {});
 
-  const heartbeatTimer = setInterval(() => {
+  // Periodic heartbeat & lease renewal: extends active lease every 30s while actively executing
+  const heartbeatTimer = setInterval(async () => {
     writer.write(encoder.encode(`: keep-alive\n\n`)).catch(() => {});
+    if (env.SPEND_COUNTER && leaseToken) {
+      try {
+        const id = env.SPEND_COUNTER.idFromName("global");
+        const stub = env.SPEND_COUNTER.get(id);
+        await stub.fetch("https://spend-counter.internal/renew-lease", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ runId, leaseToken, extensionSec: 600 }),
+        });
+      } catch {}
+    }
   }, 15_000);
 
   (async () => {
@@ -464,7 +477,7 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
       send("error", { message: String((e as Error)?.message ?? e) });
     } finally {
       clearInterval(heartbeatTimer);
-      await releaseActiveRun(env.SPEND_KV, runId, env.SPEND_COUNTER);
+      await releaseActiveRun(env.SPEND_KV, runId, env.SPEND_COUNTER, leaseToken ?? undefined);
       await writer.close().catch(() => {});
     }
   })();
@@ -545,7 +558,7 @@ export default {
           "GET /live-status": "whether new public live change runs are enabled",
           "GET /world-edit-selftest": "apply and validate a deterministic in-memory data edit (no model call, no persistence)",
           "GET /change-run?request=<text>": "CALIPER v2 (BUILD-V2.md): plan -> implement -> verify -> review -> ship, one call per stage-boundary",
-          "GET /change-resume?runId=<id>&controlToken=<token>": "continue an authenticated halted change run after a real decision/answer has been posted",
+          "GET /change-resume?runId=<id>&ticket=<single-use-ticket>": "continue an authenticated halted change run via short-lived single-use resume ticket issued by decision endpoints",
           "POST /change-plan-decision": "approve/reject at Gate 1 (JSON body: { runId, approve: boolean, controlToken })",
           "POST /change-plan-reply": "the third Gate 1 action -- reply in free text instead of approve/reject; re-grounds and re-plans (JSON body: { runId, reply: string, controlToken })",
           "POST /change-review-decision": "resolve the review gate (JSON body: { runId, approve: boolean, controlToken })",
@@ -565,23 +578,23 @@ export default {
       return json(TASKS.map((t) => ({ id: t.id, title: t.title, hiddenTestCount: t.hiddenTests.length })));
     }
 
-    function isAuthorizedSecret(req: Request, urlObj: URL): boolean {
+    async function isAuthorizedSecret(req: Request, urlObj: URL): Promise<boolean> {
       if (!env.UNLOCK_CODE) return false;
       const authHeader = req.headers.get("authorization");
       if (authHeader && authHeader.startsWith("Bearer ")) {
         const token = authHeader.slice(7).trim();
-        if (timingSafeCompare(token, env.UNLOCK_CODE)) return true;
+        if (await timingSafeCompare(token, env.UNLOCK_CODE)) return true;
       }
       const xHeader = req.headers.get("x-unlock-code");
-      if (xHeader && timingSafeCompare(xHeader.trim(), env.UNLOCK_CODE)) return true;
+      if (xHeader && await timingSafeCompare(xHeader.trim(), env.UNLOCK_CODE)) return true;
       // Fallback query secret supported with deprecation
       const keyParam = urlObj.searchParams.get("k");
-      if (keyParam && timingSafeCompare(keyParam, env.UNLOCK_CODE)) return true;
+      if (keyParam && await timingSafeCompare(keyParam, env.UNLOCK_CODE)) return true;
       return false;
     }
 
     if (url.pathname === "/run") {
-      if (!isAuthorizedSecret(request, url)) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <secret> or X-Unlock-Code header)" }, 403);
+      if (!(await isAuthorizedSecret(request, url))) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <secret> or X-Unlock-Code header)" }, 403);
       const taskId = url.searchParams.get("task");
       if (!taskId) return json({ error: "pass ?task=<id>", availableTasks: TASKS.map((t) => t.id) }, 400);
       const model = url.searchParams.get("model") ?? MODELS[0];
@@ -589,7 +602,7 @@ export default {
     }
 
     if (url.pathname === "/live-run") {
-      if (!isAuthorizedSecret(request, url)) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <secret> or X-Unlock-Code header)" }, 403);
+      if (!(await isAuthorizedSecret(request, url))) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <secret> or X-Unlock-Code header)" }, 403);
       const taskId = url.searchParams.get("task");
       const model = url.searchParams.get("model") ?? MODELS[0];
       if (!taskId) return json({ error: "pass ?task=<id>&model=<id>" }, 400);
@@ -597,7 +610,7 @@ export default {
     }
 
     if (url.pathname === "/matrix-run") {
-      if (!isAuthorizedSecret(request, url)) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <secret> or X-Unlock-Code header)" }, 403);
+      if (!(await isAuthorizedSecret(request, url))) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <secret> or X-Unlock-Code header)" }, 403);
       const taskId = url.searchParams.get("task");
       const model = url.searchParams.get("model");
       const rep = parseInt(url.searchParams.get("rep") ?? "0", 10);
@@ -656,7 +669,7 @@ export default {
       // an already-started run (/change-resume) isn't a second live run.
       // Constant-time comparison against configured secret only; no hardcoded bypass tokens.
       const keyParam = url.searchParams.get("k");
-      const unlocked = !!env.UNLOCK_CODE && !!keyParam && timingSafeCompare(keyParam, env.UNLOCK_CODE);
+      const unlocked = !!env.UNLOCK_CODE && !!keyParam && (await timingSafeCompare(keyParam, env.UNLOCK_CODE));
       const ip = clientIp(request);
       if (!unlocked) {
         try {
@@ -670,47 +683,81 @@ export default {
       return handleChangeRun(env, request_);
     }
 
-    // Helper to read payload from POST JSON body or GET query params
+    // Parse decision body: accept POST JSON body with query param fallback
     async function readDecisionPayload(req: Request, urlObj: URL): Promise<Record<string, unknown>> {
-      if (req.method === "POST") {
+      const out: Record<string, unknown> = {};
+      if (req.method === "POST" || req.method === "PUT") {
         try {
-          const body = await req.json();
-          if (body && typeof body === "object") return body as Record<string, unknown>;
+          const body = (await req.json()) as Record<string, unknown>;
+          if (body && typeof body === "object") Object.assign(out, body);
         } catch {}
       }
-      const out: Record<string, unknown> = {};
       urlObj.searchParams.forEach((v, k) => { out[k] = v; });
       return out;
     }
 
     async function createResumeTicket(runId: string): Promise<string> {
+      if (env.SPEND_COUNTER) {
+        try {
+          const id = env.SPEND_COUNTER.idFromName("global");
+          const stub = env.SPEND_COUNTER.get(id);
+          const res = await stub.fetch("https://spend-counter.internal/create-resume-ticket", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ runId, ttlSec: 90 }),
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { ok: boolean; ticket: string };
+            return data.ticket;
+          }
+        } catch {}
+      }
       const ticket = crypto.randomUUID();
-      // Single-use, short-lived 90-second ticket specifically for establishing the EventSource resume stream
       await env.SPEND_KV.put(`change/resume-ticket/${runId}/${ticket}`, "1", { expirationTtl: 90 });
       return ticket;
     }
 
-    async function verifyRunAuth(req: Request, runId: string, payload: Record<string, unknown>): Promise<boolean> {
-      // Check single-use short-lived resume ticket first (narrow scope for EventSource URL)
+    async function verifyResumeAuth(req: Request, runId: string, payload: Record<string, unknown>): Promise<boolean> {
       const ticket = (typeof payload.ticket === "string" ? payload.ticket : null) ||
         (typeof payload.resumeTicket === "string" ? payload.resumeTicket : null);
-      if (ticket) {
-        const ticketKey = `change/resume-ticket/${runId}/${ticket.trim()}`;
-        const validTicket = await env.SPEND_KV.get(ticketKey);
-        if (validTicket) {
-          // Atomically consume ticket (single-use)
-          await env.SPEND_KV.delete(ticketKey).catch(() => {});
-          return true;
+      if (!ticket) {
+        return false; // Strictly fail-closed: /change-resume requires single-use ticket
+      }
+      if (env.SPEND_COUNTER) {
+        try {
+          const id = env.SPEND_COUNTER.idFromName("global");
+          const stub = env.SPEND_COUNTER.get(id);
+          const res = await stub.fetch("https://spend-counter.internal/consume-resume-ticket", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ runId, ticket: ticket.trim() }),
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { ok: boolean; valid: boolean };
+            return data.valid === true;
+          }
+          return false;
+        } catch {
+          return false; // Fail closed if DO unavailable
         }
       }
+      // KV fallback strictly for test harness when SPEND_COUNTER binding is absent
+      const ticketKey = `change/resume-ticket/${runId}/${ticket.trim()}`;
+      const validTicket = await env.SPEND_KV.get(ticketKey);
+      if (validTicket) {
+        await env.SPEND_KV.delete(ticketKey).catch(() => {});
+        return true;
+      }
+      return false;
+    }
 
+    async function verifyRunAuth(req: Request, runId: string, payload: Record<string, unknown>): Promise<boolean> {
       const storedToken = await env.SPEND_KV.get(`change/token/${runId}`);
       if (!storedToken) return false; // Strictly fail-closed: unauthenticated or unknown run
       const token = req.headers.get("x-control-token") ||
-        (typeof payload.controlToken === "string" ? payload.controlToken : null) ||
-        (typeof payload.token === "string" ? payload.token : null);
+        (typeof payload.controlToken === "string" ? payload.controlToken : null);
       if (!token) return false; // Strictly fail-closed: missing token rejected
-      return timingSafeCompare(token.trim(), storedToken.trim());
+      return await timingSafeCompare(token.trim(), storedToken.trim());
     }
 
     if (url.pathname === "/change-plan-decision") {
@@ -773,7 +820,7 @@ export default {
       const payload = await readDecisionPayload(request, url);
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       if (!runId) return json({ error: "pass ?runId=<id>" }, 400);
-      if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
+      if (!(await verifyResumeAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid or already-consumed resume ticket" }, 403);
       return handleChangeResume(env, runId);
     }
 
@@ -849,12 +896,19 @@ export default {
           const res = await stub.fetch("https://spend-counter.internal/get-source");
           if (res.ok) {
             const data = (await res.json()) as { source: string | null };
-            if (data.source) source = data.source;
+            source = data.source;
+          } else {
+            return new Response("Service Unavailable: coordinator failed to yield authoritative source", { status: 503 });
           }
-        } catch {}
+        } catch {
+          return new Response("Service Unavailable: source coordinator unreachable", { status: 503 });
+        }
+      } else {
+        // Fallback strictly for test harness when SPEND_COUNTER binding is deliberately absent
+        source = (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
       }
       if (!source) {
-        source = (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
+        source = SIM_BASELINE_SOURCE;
       }
       const trimmed = source.trim();
       return new Response(`${trimmed}\n\nexport { initialWorld, chooseAction, applyAction, tick };\n`, {
@@ -877,20 +931,19 @@ export default {
           const res = await stub.fetch("https://spend-counter.internal/get-source");
           if (res.ok) {
             const data = (await res.json()) as { source: string | null };
-            if (data.source) source = data.source;
+            source = data.source;
+          } else {
+            return jsonError("service_unavailable", "coordinator failed to yield authoritative source", 503);
           }
-        } catch {}
-      }
-      if (!source) {
+        } catch (e) {
+          return jsonError("service_unavailable", `source coordinator unreachable: ${(e as Error).message || "network error"}`, 503);
+        }
+      } else {
         source = (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
       }
-      // Worker Loader's loader.get(id, getCode) only calls getCode on a
-      // cache miss for that id -- a fixed id here would mean every call
-      // after the first silently re-serves whichever source built the
-      // first-ever isolate, no matter what sim/current-source says by the
-      // time of a later call. Found by actually hitting this repeatedly
-      // with different KV contents and getting the same stale result each
-      // time. A unique id per call means a self-test is always live.
+      if (!source) {
+        source = SIM_BASELINE_SOURCE;
+      }
       const outcome = await runSimTests(env.LOADER, source, SIM_REGRESSION_SUITE, `sim-selftest-${crypto.randomUUID()}`);
       return json({ ...outcome, passed: outcome.results.filter((r) => r.pass).length, total: outcome.results.length });
     }

@@ -192,40 +192,75 @@ export class WorldRenderer {
     const plan = this._plan;
 
     // -- open ground: a soft plaza plate under everything, using the real
-    // ground surface colour (src/simBaseline.ts's world.surfaces.ground) --
-    // architectural plans conventionally keep the paper as the substrate
-    // rather than washing the whole sheet in a literal ground colour, so
-    // this reads as a light poché tint, not a colour swap.
+    // -- Full Coastal Geography & Dual Harbour Plan View --
     ctx.save();
     this._roundRect(pad, pad, roomW, roomH, 18 * dpr);
     ctx.clip();
+
+    // Paper card background
     ctx.fillStyle = TOKENS.card;
     ctx.fillRect(pad, pad, roomW, roomH);
-    if (surfaces.ground && surfaces.ground.color) {
-      ctx.globalAlpha = 0.14;
-      ctx.fillStyle = surfaces.ground.color;
-      ctx.fillRect(pad, pad, roomW, roomH);
-      ctx.globalAlpha = 1;
+
+    // North Green Parkland & Urban District
+    ctx.fillStyle = "#ecfdf5";
+    ctx.fillRect(pad, pad, roomW, roomH * 0.58);
+
+    // Inner Marina Basin & Coastal Bay (South half)
+    const bayY = pad + roomH * 0.62;
+    ctx.fillStyle = "#e0f2fe"; // Turquoise marina water
+    ctx.fillRect(pad, bayY, roomW, roomH - (bayY - pad));
+
+    // Outer Ocean Deep Blue Wash
+    const oceanY = pad + roomH * 0.82;
+    ctx.fillStyle = "#bae6fd";
+    ctx.fillRect(pad, oceanY, roomW, roomH - (oceanY - pad));
+
+    // Golden Sand Beach
+    ctx.fillStyle = "#fef3c7";
+    ctx.fillRect(pad, bayY - 12 * dpr, roomW, 14 * dpr);
+
+    // Hardwood Boardwalk / Promenade Promenade
+    ctx.fillStyle = "#d97706";
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(pad, bayY - 26 * dpr, roomW, 14 * dpr);
+    ctx.globalAlpha = 1.0;
+
+    // Curved Granite Breakwater Line
+    ctx.beginPath();
+    ctx.arc(pad + roomW * 0.5, bayY + 38 * dpr, 68 * dpr, Math.PI * 0.85, Math.PI * 0.15, true);
+    ctx.lineWidth = 4 * dpr;
+    ctx.strokeStyle = "#475569";
+    ctx.stroke();
+
+    // Coordinate Grid lines (10m and 5m architectural grid)
+    ctx.lineWidth = 0.5 * dpr;
+    ctx.strokeStyle = "rgba(100, 116, 139, 0.22)";
+    const gridStep = 24 * dpr;
+    for (let gx = pad; gx < pad + roomW; gx += gridStep) {
+      ctx.beginPath();
+      ctx.moveTo(gx, pad);
+      ctx.lineTo(gx, pad + roomH);
+      ctx.stroke();
     }
+    for (let gy = pad; gy < pad + roomH; gy += gridStep) {
+      ctx.beginPath();
+      ctx.moveTo(pad, gy);
+      ctx.lineTo(pad + roomW, gy);
+      ctx.stroke();
+    }
+
+    // Central Esplanade & East-West Avenues
+    ctx.fillStyle = "#cbd5e1";
+    const ns = this._toPx(plan, 0, 0, pad, roomW, roomH);
+    const aveHalfW = 2.8 * plan.scale;
+    ctx.fillRect(ns.px - aveHalfW, pad, aveHalfW * 2, bayY - 26 * dpr - pad);
+    ctx.fillRect(pad, ns.py - aveHalfW, roomW, aveHalfW * 2);
+
     ctx.restore();
     ctx.lineWidth = Math.max(1, 1.5 * dpr);
     ctx.strokeStyle = TOKENS.lineStrong;
     this._roundRect(pad, pad, roomW, roomH, 18 * dpr);
     ctx.stroke();
-
-    // -- a cross-shaped path through the plaza, matching the 3D view's own
-    // path layout, in the real path surface colour --
-    ctx.save();
-    this._roundRect(pad, pad, roomW, roomH, 18 * dpr);
-    ctx.clip();
-    ctx.fillStyle = (surfaces.path && surfaces.path.color) || TOKENS.line;
-    ctx.globalAlpha = 0.55;
-    const pathHalfW = 1.2 * plan.scale;
-    const ns = this._toPx(plan, 0, 0, pad, roomW, roomH);
-    ctx.fillRect(ns.px - pathHalfW, pad, pathHalfW * 2, roomH);
-    ctx.fillRect(pad, ns.py - pathHalfW, roomW, pathHalfW * 2);
-    ctx.globalAlpha = 1;
-    ctx.restore();
 
     // -- buildings: each a labelled room outline at its own plot, open-
     // topped uniformly (FOUNDATION.md item 4) --

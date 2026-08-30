@@ -133,19 +133,33 @@ function standLocalXZ(action, objectTypes, w, d) {
 }
 
 function sunFor(hour) {
-  const rampHalf = 1.2;
   const clamp01 = (v) => Math.min(1, Math.max(0, v));
-  const dawnRamp = clamp01((hour - 5.5 + rampHalf) / (2 * rampHalf));
-  const duskRamp = clamp01((20.5 - hour + rampHalf) / (2 * rampHalf));
+  // Dawn starts at 5:30, dusk ends at 20:00 (14.5 hours daylight)
+  const isDaytime = hour >= 5.5 && hour <= 20.0;
+  const dawnRamp = clamp01((hour - 5.0) / 1.5);
+  const duskRamp = clamp01((20.5 - hour) / 1.5);
   const dayAmt = Math.min(dawnRamp, duskRamp);
   const isDay = dayAmt >= 0.5;
-  const dayFrac = Math.min(1, Math.max(0, ((hour - 5.5 + 24) % 24) / 15));
-  const dayElevation = Math.sin(dayFrac * Math.PI) * 1.1 + 0.08;
-  const elevation = lerp(0.04, dayElevation, dayAmt);
-  const azimuth = (((hour - 5.5 + 24) % 24) / 24) * Math.PI * 2;
-  const dayWarmth = hour < 9 ? (hour - 5.5) / 3.5 : hour < 17.5 ? 1 : 1 - (hour - 17.5) / 3;
-  const warmth = Math.max(0, dayWarmth) * dayAmt;
-  return { isDay, dayAmt, elevation, azimuth, warmth };
+
+  // Realistic solar elevation arc reaching 68 degrees (1.18 rad) at solar noon (12:45)
+  const solarFraction = isDaytime ? (hour - 5.5) / 14.5 : 0;
+  const sunElevation = Math.max(0.08, Math.sin(solarFraction * Math.PI) * 1.18 + 0.08);
+  const elevation = isDaytime ? sunElevation : 0.05;
+
+  // Sun tracks east-to-west across the sky
+  const azimuth = isDaytime
+    ? ((hour - 5.5) / 14.5) * Math.PI * 0.95 + 0.35
+    : Math.PI + 0.5;
+
+  // Golden hour warmth at dawn and dusk, pure daylight at midday
+  const middayDist = Math.abs(hour - 12.75);
+  const warmth = clamp01(1 - (middayDist / 4.2)) * dayAmt;
+
+  // Moon trajectory when night
+  const nightHour = (hour + 12) % 24;
+  const moonElevation = Math.max(0.12, Math.sin(((nightHour - 5.5) / 14.5) * Math.PI) * 1.05);
+
+  return { isDay, dayAmt, elevation, azimuth, warmth, moonElevation };
 }
 
 const SUN_COLOR_WARM = new THREE.Color(0xffaa5e);
@@ -523,13 +537,106 @@ class AudioSynth {
       this.filter.connect(this.ambientGain);
       this.ambientGain.connect(this.ctx.destination);
       this.noiseNode.start();
+
+      // Generative Deep House / Lounge Chill Synthesizer
+      this._startDeepHouseLounge();
+    } catch (_) {}
+  }
+
+  _startDeepHouseLounge() {
+    if (!this.ctx || this._musicInterval) return;
+    // Classic Deep House chords (Cm9 - Abmaj7 - Fm9 - Bb13) in 4/4 chilled tempo (118 BPM)
+    const chords = [
+      [261.63, 311.13, 392.00, 466.16, 587.33], // Cm9
+      [207.65, 261.63, 311.13, 392.00, 466.16], // Abmaj7
+      [174.61, 207.65, 261.63, 311.13, 392.00], // Fm9
+      [233.08, 293.66, 349.23, 440.00, 523.25], // Bb13
+    ];
+    let step = 0;
+    const beatMs = (60 / 118) * 1000 * 2; // Two-beat pulse
+
+    this._musicGain = this.ctx.createGain();
+    this._musicGain.gain.setValueAtTime(0.045, this.ctx.currentTime);
+    this._musicGain.connect(this.ctx.destination);
+
+    this._musicInterval = setInterval(() => {
+      if (!this.enabled || !this.ctx || this.ctx.state === "suspended") return;
+      try {
+        const chord = chords[step % chords.length];
+        const now = this.ctx.currentTime;
+        step++;
+
+        // Warm analog filtered Rhodes/Pad chords
+        chord.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const filter = this.ctx.createBiquadFilter();
+          const gain = this.ctx.createGain();
+
+          osc.type = idx === 0 ? "triangle" : "sine";
+          osc.frequency.setValueAtTime(freq, now);
+
+          filter.type = "lowpass";
+          filter.frequency.setValueAtTime(650 + idx * 80, now);
+          filter.frequency.exponentialRampToValueAtTime(320, now + 1.6);
+
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.028, now + 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 2.4);
+
+          osc.connect(filter);
+          filter.connect(gain);
+          gain.connect(this._musicGain);
+
+          osc.start(now);
+          osc.stop(now + 2.5);
+        });
+
+        // Soft sub-bass kick on 1 and 3
+        const kickOsc = this.ctx.createOscillator();
+        const kickGain = this.ctx.createGain();
+        kickOsc.type = "sine";
+        kickOsc.frequency.setValueAtTime(110, now);
+        kickOsc.frequency.exponentialRampToValueAtTime(38, now + 0.12);
+        kickGain.gain.setValueAtTime(0.06, now);
+        kickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+        kickOsc.connect(kickGain);
+        kickGain.connect(this._musicGain);
+        kickOsc.start(now);
+        kickOsc.stop(now + 0.18);
+      } catch (_) {}
+    }, beatMs);
+  }
+
+  setMusicVolume(vol) {
+    if (this._musicGain && this.ctx) {
+      this._musicGain.gain.setTargetAtTime(Math.max(0, Math.min(0.2, vol)), this.ctx.currentTime, 0.05);
+    }
+  }
+
+  setAmbientVolume(vol) {
+    if (this.ambientGain && this.ctx) {
+      this.ambientGain.gain.setTargetAtTime(Math.max(0, Math.min(0.1, vol)), this.ctx.currentTime, 0.05);
+    }
+  }
+
+  updateSpatialAcoustics(camPos) {
+    if (!this.ctx || !this.filter || !this.enabled || !camPos) return;
+    try {
+      // Dynamic location acoustic response:
+      // Over the water/marina (z > 18): ocean waves sound (gentle filtered wash)
+      // Downtown/streets (|x| < 30, -20 < z < 15): urban cafe acoustics
+      // Headlands/beacon (z < -30 or |x| > 80): coastal wind breeze
+      const isOcean = camPos.z > 20;
+      const isHeadland = camPos.z < -35 || Math.abs(camPos.x) > 75;
+      const targetCutoff = isOcean ? 580 : isHeadland ? 850 : 280;
+      this.filter.frequency.setTargetAtTime(targetCutoff, this.ctx.currentTime, 0.2);
     } catch (_) {}
   }
 
   updateAmbient(nightAmt) {
     if (!this.ctx || !this.filter || !this.enabled) return;
     try {
-      const targetFreq = lerp(220, 750, nightAmt);
+      const targetFreq = lerp(280, 650, nightAmt);
       this.filter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.1);
     } catch (_) {}
   }
@@ -597,12 +704,12 @@ class Renderer3D {
     ], true);
 
     this._districtTargets = {
-      town: { pos: new THREE.Vector3(0, 1.8, 12.0), dist: 46, label: "The Central Civic Promenade & Dual Harbours" },
-      forge: { pos: new THREE.Vector3(-28.5, 1.8, -12), dist: 18, label: "The Maritime Innovation Atelier" },
-      residential: { pos: new THREE.Vector3(31, 1.5, -8), dist: 22, label: "The Coastal Terraced Villas" },
-      docks: { pos: new THREE.Vector3(0, 0.4, 30), dist: 34, label: "The Grand Marina Yacht Club & Bay" },
-      watchtower: { pos: new THREE.Vector3(26, 3.5, -20), dist: 22, label: "The Seaside Headland Rotunda & Beacon" },
-      datum: { pos: new THREE.Vector3(12.0, 2.0, 18.5), dist: 13, delta: 0, pitch: 0.36, label: "The Datum AEC AI Pavilion (Mark Fraser, Applied AI)" },
+      town: { pos: new THREE.Vector3(0, 1.8, 12.0), dist: 52, delta: 0, pitch: 0.46, label: "The Central Civic Promenade & Dual Harbours" },
+      forge: { pos: new THREE.Vector3(-28.5, 2.5, -12), dist: 28, delta: 0.75, pitch: 0.48, label: "The Maritime Innovation Atelier" },
+      residential: { pos: new THREE.Vector3(31, 2.2, -8), dist: 28, delta: -0.65, pitch: 0.45, label: "The Coastal Terraced Villas" },
+      docks: { pos: new THREE.Vector3(0, 0.8, 30), dist: 42, delta: 0, pitch: 0.42, label: "The Grand Marina Yacht Club & Bay" },
+      watchtower: { pos: new THREE.Vector3(26, 4.0, -20), dist: 28, delta: 0.4, pitch: 0.44, label: "The Seaside Headland Rotunda & Beacon" },
+      datum: { pos: new THREE.Vector3(12.0, 2.2, 18.5), dist: 16, delta: 0, pitch: 0.40, label: "The Datum AEC AI Pavilion (Mark Fraser, Applied AI)" },
     };
 
     this._diffSlateMat = stdMat({ color: 0x334155, roughness: 0.85, metalness: 0.1 });
@@ -748,11 +855,11 @@ class Renderer3D {
       composer.addPass(renderPass);
       const w = typeof window !== 'undefined' ? window.innerWidth : 1280;
       const h = typeof window !== 'undefined' ? window.innerHeight : 800;
-      const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.10, 0.28, 0.95);
+      const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.04, 0.15, 0.98);
       composer.addPass(bloomPass);
       const vignettePass = new ShaderPass(VignetteShader);
-      vignettePass.uniforms["offset"].value = 1.05;
-      vignettePass.uniforms["darkness"].value = 0.95;
+      vignettePass.uniforms["offset"].value = 1.35;
+      vignettePass.uniforms["darkness"].value = 0.65;
       composer.addPass(vignettePass);
       const outputPass = new OutputPass();
       composer.addPass(outputPass);
@@ -781,6 +888,61 @@ class Renderer3D {
     this.sun = sun;
 
     this._contactTex = makeContactShadowTexture();
+
+    // 3D Celestial Moon with pale crater glow and directional moon light
+    const moonGeo = new THREE.SphereGeometry(18, 24, 24);
+    const moonMat = new THREE.MeshBasicMaterial({ color: 0xe0f2fe, depthWrite: false });
+    const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+    scene.add(moonMesh);
+    this._moonMesh = moonMesh;
+
+    const moonLight = new THREE.DirectionalLight(0xa5b4fc, 0.28);
+    scene.add(moonLight);
+    scene.add(moonLight.target);
+    this._moonLight = moonLight;
+
+    // Starfield points (1,200 twinkling stars) for clear night skies
+    const starGeo = new THREE.BufferGeometry();
+    const starCount = 1200;
+    const starPos = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(Math.random() * 0.95 + 0.05); // Upper hemisphere only
+      const r = 5500 + Math.random() * 800;
+      starPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      starPos[i * 3 + 1] = r * Math.cos(phi);
+      starPos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 4.5, transparent: true, opacity: 0 });
+    const starsMesh = new THREE.Points(starGeo, starMat);
+    scene.add(starsMesh);
+    this._starsMesh = starsMesh;
+
+    // Drifting Cumulus Cloud Puffs over bay and headlands
+    const cloudsGroup = new THREE.Group();
+    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.96, metalness: 0.0, transparent: true, opacity: 0.82 });
+    const cloudGeo = new THREE.DodecahedronGeometry(14, 1);
+    this._cloudPuffs = [];
+    for (let c = 0; c < 18; c++) {
+      const cluster = new THREE.Group();
+      const numPuffs = 4 + Math.floor(Math.random() * 4);
+      for (let p = 0; p < numPuffs; p++) {
+        const puff = new THREE.Mesh(cloudGeo, cloudMat);
+        puff.position.set((Math.random() - 0.5) * 36, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 36);
+        const s = 0.8 + Math.random() * 1.4;
+        puff.scale.set(s * 1.5, s * 0.7, s * 1.2);
+        cluster.add(puff);
+      }
+      const cx = (Math.random() - 0.5) * 1600;
+      const cy = 160 + Math.random() * 90;
+      const cz = (Math.random() - 0.5) * 1600;
+      cluster.position.set(cx, cy, cz);
+      cloudsGroup.add(cluster);
+      this._cloudPuffs.push({ cluster, speed: 0.8 + Math.random() * 1.2 });
+    }
+    scene.add(cloudsGroup);
+    this._cloudsGroup = cloudsGroup;
 
     // Ambient evening fireflies
     const fireflyGeo = new THREE.SphereGeometry(0.08, 8, 8);
@@ -976,7 +1138,11 @@ class Renderer3D {
         y = 0.0;
       }
 
-      terrainPos.setY(i, y);
+      // Realistic planetary curvature: drop y by -((dist / 1200)^2 * 1.8m) towards distant horizon
+      const rDist = Math.hypot(x, z);
+      const curvatureDrop = Math.pow(rDist / 1200, 2) * 1.85;
+
+      terrainPos.setY(i, y - curvatureDrop);
     }
     terrainGeo.computeVertexNormals();
 
@@ -1387,9 +1553,81 @@ class Renderer3D {
 
     esplanade.add(fountainGroup);
 
-    // Waterfront outdoor bistro dining along the west promenade (x <= -7.5, >5m from fountain)
-    addBistroTable(esplanade, -7.5, 18.5, 0x0284c7);
-    addBistroTable(esplanade, -12.5, 18.5, 0x0f766e);
+    // =========================================================================
+    // 1B. GRAND MODERN TOWN HALL & SUPREME CIVIC COURTS (North Promenade Spine)
+    // Designed to 18-year architectural masterplan standard: Cantilevered limestone
+    // portico, post-tensioned double-height glass rotunda, civic flagstaffs & courts
+    // =========================================================================
+    const civicComplex = new THREE.Group();
+    civicComplex.position.set(0, 0, -22.0);
+    this.neighbourhoodGroup.add(civicComplex);
+
+    // Elevated Travertine Marble Podium Steps
+    const podium = new THREE.Mesh(
+      new RoundedBoxGeometry(28.0, 0.9, 16.0, 2, 0.1),
+      stdMat({ color: 0xf1f5f9, roughness: 0.72, metalness: 0.1 })
+    );
+    podium.position.set(0, 0.45, 0);
+    podium.receiveShadow = true;
+    civicComplex.add(podium);
+
+    // Grand Civic Portico & Colonnade (6 modern fluted square columns)
+    const colMat = stdMat({ color: 0xffffff, roughness: 0.35, metalness: 0.15 });
+    [-11, -6.6, -2.2, 2.2, 6.6, 11].forEach(cx => {
+      const col = new THREE.Mesh(new RoundedBoxGeometry(0.85, 7.8, 0.85, 2, 0.06), colMat);
+      col.position.set(cx, 4.35, 6.5);
+      col.castShadow = true; col.receiveShadow = true;
+      civicComplex.add(col);
+    });
+
+    // Main Civic Hall & Justice Courts Building Body
+    const courtBody = new THREE.Mesh(
+      new RoundedBoxGeometry(26.0, 7.2, 13.0, 2, 0.12),
+      stdMat({ color: 0xe2e8f0, roughness: 0.85 })
+    );
+    courtBody.position.set(0, 4.5, -0.5);
+    courtBody.castShadow = true; courtBody.receiveShadow = true;
+    civicComplex.add(courtBody);
+
+    // Double-height Structural Glass Curtain Wall & Public Atrium
+    const courtGlassMat = stdMat({ color: 0x38bdf8, transparent: true, opacity: 0.65, roughness: 0.08, metalness: 0.35 });
+    const courtGlass = new THREE.Mesh(new THREE.PlaneGeometry(21.0, 6.2), courtGlassMat);
+    courtGlass.position.set(0, 4.5, 6.05);
+    civicComplex.add(courtGlass);
+
+    // Cantilevered Modern Floating Roof Canopy
+    const courtRoof = new THREE.Mesh(
+      new RoundedBoxGeometry(29.5, 0.55, 17.5, 2, 0.1),
+      stdMat({ color: PALETTE.charcoal, roughness: 0.4, metalness: 0.85 })
+    );
+    courtRoof.position.set(0, 8.4, 0);
+    courtRoof.castShadow = true;
+    civicComplex.add(courtRoof);
+
+    // Modern Crown Skylight Lantern & Clock Tower Feature
+    const lantern = new THREE.Mesh(
+      new RoundedBoxGeometry(8.0, 3.2, 6.0, 2, 0.08),
+      stdMat({ color: 0xffffff, roughness: 0.25, metalness: 0.2 })
+    );
+    lantern.position.set(0, 10.2, 0);
+    civicComplex.add(lantern);
+
+    const clockGlow = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.1, 1.1, 0.1, 24),
+      stdMat({ color: 0xfff4e6, emissive: 0xfff4e6, emissiveIntensity: 2.2 })
+    );
+    clockGlow.rotation.x = Math.PI / 2;
+    clockGlow.position.set(0, 10.4, 3.05);
+    civicComplex.add(clockGlow);
+    this._emissiveAnimated.push(clockGlow.material);
+
+    // Civic Court Plaza Sconce Lights
+    const courtLight = new THREE.PointLight(0xfff1e0, 1.2, 18, 2);
+    courtLight.position.set(0, 6.5, 6.8);
+    courtLight.userData.baseIntensity = 1.2;
+    courtLight.userData.isStreetLamp = true;
+    civicComplex.add(courtLight);
+    this._pointLights.push(courtLight);
 
     // =========================================================================
     // 2. THE MARITIME INNOVATION ATELIER & STUDIO (West District, clear of West Avenue)
@@ -2170,16 +2408,126 @@ class Renderer3D {
   _build4DPedestrians() {
     this._pedestrians = [];
     const npcConfigs = [
-      { id: 'npc_walk_1', x: -14, z: 20.0, dirX: 1, minX: -22, maxX: 22, speed: 1.1, color: 0x0284c7, type: 'walker' },
-      { id: 'npc_walk_2', x: 8, z: 20.0, dirX: -1, minX: -20, maxX: 20, speed: 0.9, color: 0xf59e0b, type: 'walker' },
-      { id: 'npc_walk_3', x: -4, z: 20.0, dirX: 1, minX: -18, maxX: 18, speed: 1.25, color: 0x10b981, type: 'walker' },
-      { id: 'npc_walk_4', x: 1.2, z: -8, dirZ: 1, minZ: -12, maxZ: 7, speed: 1.0, color: 0xec4899, type: 'walker_ns' },
-      { id: 'npc_walk_5', x: -1.2, z: 4, dirZ: -1, minZ: -10, maxZ: 7, speed: 0.85, color: 0x6366f1, type: 'walker_ns' },
-      { id: 'npc_sit_1', x: -7.5, z: 18.2, color: 0xf8fafc, type: 'seated' },
-      { id: 'npc_sit_2', x: -12.5, z: 18.2, color: 0x059669, type: 'seated' },
-      { id: 'npc_sit_3', x: 8.5, z: 14.8, color: 0xd97706, type: 'seated' },
-      { id: 'npc_dock_1', x: -6.5, z: 27.5, color: 0x1e3a8a, type: 'idle' },
-      { id: 'npc_dock_2', x: 12.0, z: 27.5, color: 0x0284c7, type: 'idle' },
+      {
+        id: 'npc_walk_1',
+        name: 'Elena Rostova',
+        role: 'Architectural Conservator',
+        bio: 'Oversees historical masonry restorations along the harbour seawall.',
+        x: -14, z: 20.0, dirX: 1, minX: -22, maxX: 22, speed: 1.1, color: 0x0284c7, type: 'walker',
+        dialogues: [
+          "The sandstone sea-wall has held up beautifully since the 1920s.",
+          "I love how the morning light catches the cantilevered roofs of the modern civic center.",
+          "If you plan to design along the promenade, make sure to respect the public pedestrian easements!"
+        ]
+      },
+      {
+        id: 'npc_walk_2',
+        name: 'Julian Vance',
+        role: 'Urban Mobility Engineer',
+        bio: 'Designs autonomous multi-modal transit networks for coastal cities.',
+        x: 8, z: 20.0, dirX: -1, minX: -20, maxX: 20, speed: 0.9, color: 0xf59e0b, type: 'walker',
+        dialogues: [
+          "Notice how the avenue widths allow natural sea breezes into the downtown urban core.",
+          "We engineered the causeway grade so it remains above the 100-year king-tide surge.",
+          "A street should always be a living room for the neighbourhood, not just a channel for cars."
+        ]
+      },
+      {
+        id: 'npc_walk_3',
+        name: 'Chloe Lin',
+        role: 'Landscape Architect',
+        bio: 'Curates coastal vegetation and urban parklands.',
+        x: -4, z: 20.0, dirX: 1, minX: -18, maxX: 18, speed: 1.25, color: 0x10b981, type: 'walker',
+        dialogues: [
+          "The Canary Island date palms along the boardwalk thrive in our salty sea air.",
+          "We're planting native coastal shrubs on the headland to prevent dune erosion.",
+          "Every civic plaza needs shaded seating and native plantings to truly feel welcoming."
+        ]
+      },
+      {
+        id: 'npc_walk_4',
+        name: 'Marcus Sterling',
+        role: 'Structural Consultant',
+        bio: 'Advises on coastal foundation pilings and seismic resilience.',
+        x: 1.2, z: -8, dirZ: 1, minZ: -12, maxZ: 7, speed: 1.0, color: 0xec4899, type: 'walker_ns',
+        dialogues: [
+          "Deep pile foundations into the bedrock keep these coastal towers rock steady.",
+          "Mark Fraser's Datum AEC models set a great precedent for intelligent parametric building layout.",
+          "The clean cantilevered court balconies are an exquisite example of post-tensioned concrete."
+        ]
+      },
+      {
+        id: 'npc_walk_5',
+        name: 'Sarah Chen',
+        role: 'Maritime Harbor Master',
+        bio: 'Coordinates yacht dockings and bay navigation channels.',
+        x: -1.2, z: 4, dirZ: -1, minZ: -10, maxZ: 7, speed: 0.85, color: 0x6366f1, type: 'walker_ns',
+        dialogues: [
+          "Tides are high today; the harbour breakwater is doing its job keeping the marina calm.",
+          "We have two forty-meter superyachts arriving in the outer harbour this evening.",
+          "Nothing compares to standing on the breakwater beacon at sunset listening to the waves."
+        ]
+      },
+      {
+        id: 'npc_sit_1',
+        name: 'David Thorne',
+        role: 'Resident & Author',
+        bio: 'Writing a history of waterfront architecture while sipping espresso.',
+        x: -7.5, z: 18.2, color: 0xf8fafc, type: 'seated',
+        dialogues: [
+          "The espresso from the promenade café is roasted right down the boulevard.",
+          "Sitting here overlooking the yachts is where I find all my inspiration.",
+          "Good urban architecture creates places where people want to linger."
+        ]
+      },
+      {
+        id: 'npc_sit_2',
+        name: 'Maya Patel',
+        role: 'AEC Generative AI Researcher',
+        bio: 'Specializes in edge isolate procedural world synthesis.',
+        x: -12.5, z: 18.2, color: 0x059669, type: 'seated',
+        dialogues: [
+          "CALIPER's deterministic spatial verification engine runs right in the Cloudflare V8 isolate.",
+          "Imagine being able to converse with every citizen in the city without consuming external API tokens!",
+          "Interactive procedural worlds are the future of architectural pair-programming."
+        ]
+      },
+      {
+        id: 'npc_sit_3',
+        name: 'Captain Robert',
+        role: 'Ferry Operator',
+        bio: 'Runs shuttle lines across the bay between the CBD and South Peninsula.',
+        x: 8.5, z: 14.8, color: 0xd97706, type: 'seated',
+        dialogues: [
+          "Crossing the inner bay takes just eight minutes on the electric catamaran.",
+          "The city skyline reflected off the water at dusk is unforgettable.",
+          "All aboard for the Peninsula headland crossing!"
+        ]
+      },
+      {
+        id: 'npc_dock_1',
+        name: 'Liam O\'Connor',
+        role: 'Yacht Rigger',
+        bio: 'Inspects masts and composite hulls along the marina pontoons.',
+        x: -6.5, z: 27.5, color: 0x1e3a8a, type: 'idle',
+        dialogues: [
+          "The marina slips can accommodate up to thirty-six vessels comfortably.",
+          "Clean teak decks and polished brass—that's how we keep the fleet pristine.",
+          "Fair winds and calm seas across the bay today!"
+        ]
+      },
+      {
+        id: 'npc_dock_2',
+        name: 'Zoe Becker',
+        role: 'Marine Biologist',
+        bio: 'Monitors seagrass meadows and coastal water quality in the bay.',
+        x: 12.0, z: 27.5, color: 0x0284c7, type: 'idle',
+        dialogues: [
+          "The water clarity inside the marina basin is pristine thanks to our eco-breakwater.",
+          "We spotted a pod of coastal dolphins playing near the outer bridge this morning!",
+          "Sustainable urban development must always protect coastal marine ecosystems."
+        ]
+      },
     ];
 
     for (const cfg of npcConfigs) {
@@ -2218,6 +2566,9 @@ class Renderer3D {
         npcGroup.userData.leftLeg = leftLeg;
         npcGroup.userData.rightLeg = rightLeg;
       }
+
+      npcGroup.userData.isCitizen = true;
+      npcGroup.userData.citizen = cfg;
 
       this._contactShadow(0.7, 0.7, npcGroup);
       this.neighbourhoodGroup.add(npcGroup);
@@ -2853,21 +3204,28 @@ class Renderer3D {
     this.neighbourhoodGroup.add(gridGroup);
     this._gridGroup = gridGroup;
 
-    // 1. Fine placement grid lines (1m intervals)
-    const minorGrid = new THREE.GridHelper(84, 84, 0x38bdf8, 0x64748b);
+    // 1. Fine placement grid lines (1m intervals across full 600m region)
+    const minorGrid = new THREE.GridHelper(600, 600, 0x38bdf8, 0x475569);
     minorGrid.position.set(0, 0.02, 0);
-    minorGrid.material.opacity = 0.28;
+    minorGrid.material.opacity = 0.22;
     minorGrid.material.transparent = true;
     minorGrid.material.depthWrite = false;
     gridGroup.add(minorGrid);
 
-    // 2. Major building module grid lines (6m intervals matching GRID_UNIT_X = 6.0, GRID_UNIT_Z = 4.5)
-    const majorGrid = new THREE.GridHelper(84, 14, 0x0284c7, 0x0284c7);
+    // 2. Major building module grid lines (10m intervals)
+    const majorGrid = new THREE.GridHelper(600, 60, 0x0284c7, 0x0284c7);
     majorGrid.position.set(0, 0.03, 0);
     majorGrid.material.opacity = 0.55;
     majorGrid.material.transparent = true;
     majorGrid.material.depthWrite = false;
     gridGroup.add(majorGrid);
+
+    // 3. Precision 3D Coordinate World Axes (X=Red, Y=Green, Z=Blue)
+    const axesHelper = new THREE.AxesHelper(36);
+    axesHelper.position.set(0, 0.04, 0);
+    axesHelper.material.depthTest = false;
+    axesHelper.renderOrder = 999;
+    gridGroup.add(axesHelper);
 
     // 3. Highlighted Parcel Zones
     const parcelBounds = [
@@ -2927,7 +3285,7 @@ class Renderer3D {
       this._raycaster.setFromCamera(this._mouse, this.camera);
 
       if (this._raycaster.ray.intersectPlane(groundPlane, hitPt)) {
-        if (Math.abs(hitPt.x) <= 40 && hitPt.z >= -25 && hitPt.z <= 22) {
+        if (Math.abs(hitPt.x) <= 280 && hitPt.z >= -160 && hitPt.z <= 320) {
           const snappedX = Math.round(hitPt.x);
           const snappedZ = Math.round(hitPt.z);
 
@@ -3183,6 +3541,12 @@ class Renderer3D {
       const front = this._frontFacadesByBuildingId[id];
       if (front) front.visible = this._roofsVisible;
     }
+    // Also toggle any district roofs, canopies, and pergolas
+    this.neighbourhoodGroup.traverse((child) => {
+      if (child.userData && child.userData.isRoof) {
+        child.visible = this._roofsVisible;
+      }
+    });
     this._openedBuildingId = null;
     return this._roofsVisible;
   }
@@ -4083,8 +4447,36 @@ class Renderer3D {
     const intersects = this._raycaster.intersectObjects(this.neighbourhoodGroup.children, true);
     if (intersects.length === 0) return;
 
-    let hitObj = intersects[0].object;
-    let bId = null;
+    // First check if a citizen NPC was clicked!
+    let citizenHit = null;
+    let curr = hitObj;
+    while (curr && curr !== this.neighbourhoodGroup) {
+      if (curr.userData && curr.userData.isCitizen) {
+        citizenHit = curr.userData.citizen;
+        break;
+      }
+      curr = curr.parent;
+    }
+
+    if (citizenHit) {
+      this.playSuccessChime();
+      const dialogue = citizenHit.dialogues[Math.floor(Math.random() * citizenHit.dialogues.length)];
+      if (this.onInspect) {
+        this.onInspect({
+          parcelId: citizenHit.id,
+          label: `${citizenHit.name} (${citizenHit.role})`,
+          type: "citizen",
+          occupants: citizenHit.bio,
+          contents: `💬 "${dialogue}"`,
+        });
+      }
+      const barInput = document.getElementById('bar-request-input');
+      if (barInput) {
+        barInput.value = `Ask ${citizenHit.name} about: `;
+        barInput.focus();
+      }
+      return;
+    }
 
     while (hitObj && hitObj !== this.neighbourhoodGroup) {
       for (const id in this._buildingGroupsById) {
@@ -4107,13 +4499,20 @@ class Renderer3D {
       const bPlacements = placements.filter((p) => p.location === bId).map((p) => p.type);
       const bSims = sims.filter((s) => s.home === bId).map((s) => s.id);
       this.focusParcel(bId);
+      const label = getGroundedBuildingLabel(bId, b ? b.label : bId);
       this.onInspect({
         parcelId: bId,
-        label: getGroundedBuildingLabel(bId, b ? b.label : bId),
+        label,
         type: b ? b.type : "dwelling",
         occupants: bSims.length ? bSims.join(", ") : "None assigned",
         contents: bPlacements.length ? bPlacements.join(", ") : "Standard fixtures",
       });
+
+      // Populate construction input so the user can easily tell the coding agent how to modify this specific feature
+      const barInput = document.getElementById('bar-request-input');
+      if (barInput && !barInput.value) {
+        barInput.placeholder = `Tell coding agent what to change for ${label}...`;
+      }
     } else {
       // Check hit position to see if a specific district was clicked
       const hitPoint = intersects[0].point;
@@ -4605,13 +5004,39 @@ class Renderer3D {
       this._skyUniforms['mieDirectionalG'].value = 0.85;
     }
 
-    const daySunIntensity = lerp(0.42, 0.88, Math.min(1, sun.elevation));
-    this.sun.intensity = lerp(0.06, daySunIntensity, sun.dayAmt);
+    // Realistic coastal lighting with high clear daytime illumination
+    const daySunIntensity = lerp(0.85, 1.45, Math.min(1, sun.elevation));
+    this.sun.intensity = lerp(0.02, daySunIntensity, sun.dayAmt);
     const sunColor = sun.warmth >= 1 ? SUN_COLOR_DAY : SUN_COLOR_WARM.clone().lerp(SUN_COLOR_DAY, sun.warmth);
     this.sun.color.copy(SUN_COLOR_NIGHT).lerp(sunColor, sun.dayAmt);
 
-    const dayHemi = lerp(0.18, 0.32, Math.min(1, sun.elevation));
-    this.hemi.intensity = lerp(0.06, dayHemi, sun.dayAmt);
+    const dayHemi = lerp(0.35, 0.55, Math.min(1, sun.elevation));
+    this.hemi.intensity = lerp(0.08, dayHemi, sun.dayAmt);
+
+    // Update Celestial Moon & Night Sky Stars
+    if (this._moonMesh && this._moonLight) {
+      const moonDist = 2800;
+      const mx = -sx / (dist || 1) * moonDist;
+      const my = Math.max(180, Math.sin(sun.moonElevation || 0.4) * 1600);
+      const mz = -sz / (dist || 1) * moonDist;
+      this._moonMesh.position.set(mx + this._lookAt.x, my, mz + this._lookAt.z);
+      this._moonMesh.visible = nightAmt > 0.15;
+      this._moonLight.position.set(mx + this._lookAt.x, my, mz + this._lookAt.z);
+      this._moonLight.target.position.copy(this._lookAt);
+      this._moonLight.intensity = lerp(0.0, 0.32, nightAmt);
+    }
+    if (this._starsMesh) {
+      this._starsMesh.material.opacity = Math.max(0, (nightAmt - 0.25) * 1.33);
+    }
+
+    // Gentle realistic cloud drift across the sky
+    if (this._cloudPuffs && !this.reducedMotion) {
+      const dt = 0.016;
+      for (const puff of this._cloudPuffs) {
+        puff.cluster.position.x += puff.speed * dt * 14;
+        if (puff.cluster.position.x > 850) puff.cluster.position.x = -850;
+      }
+    }
 
     for (const light of this._pointLights) {
       const base = light.userData.baseIntensity || 0.4;
@@ -4622,15 +5047,16 @@ class Renderer3D {
       mat.emissiveIntensity = lerp(0.4, 4.5, nightAmt);
     }
 
-    // Crisp Australian coastal contrast without daytime haze blowout
-    this.renderer.toneMappingExposure = lerp(0.78, 0.68, nightAmt);
-    this.scene.environmentIntensity = lerp(0.35, 0.10, nightAmt);
+    // High clarity, wide dynamic range exposure (crisp model, no fog blowout)
+    this.renderer.toneMappingExposure = lerp(0.96, 0.76, nightAmt);
+    this.scene.environmentIntensity = lerp(0.45, 0.12, nightAmt);
 
     const daySky = SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth);
     const sky = SKY_NIGHT.clone().lerp(daySky, sun.dayAmt);
     const horizon = sky.clone().lerp(SKY_HORIZON, lerp(0.35, 0.65, sun.dayAmt));
     updateSkyGradient(this._skyGradient, sky, horizon);
     this.audio.updateAmbient(nightAmt);
+    this.audio.updateSpatialAcoustics(this.camera.position);
 
     if (this.spatialDiff && this._diffEmeraldMat) {
       this._diffEmeraldMat.emissiveIntensity = 0.7 + Math.sin(performance.now() / 200) * 0.35;

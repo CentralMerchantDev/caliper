@@ -9,6 +9,7 @@ import { evaluateCriteria, type ProbeRunner } from "./criteriaExecution";
 import { groundRequest, formatGroundingForPlan, type GroundingResult } from "./grounding";
 import {
   CONTROL_LIMITS,
+  PipelineLimitError,
   assertUnderRunCeiling,
   assertUnderPipelineSpendCap,
   reconcilePipelineSpend,
@@ -562,18 +563,27 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   const stageCosts = existing?.stageCosts ?? [];
   const runStartedAt = existing?.runStartedAt ?? Date.now();
   let authoritativeSource: string | null = null;
-  if (!existing?.currentSourceAtStart && env.SPEND_COUNTER) {
-    try {
-      const id = env.SPEND_COUNTER.idFromName("global");
-      const stub = env.SPEND_COUNTER.get(id);
-      const res = await stub.fetch("https://spend-counter.internal/get-source");
-      if (res.ok) {
-        const data = (await res.json()) as { source: string | null };
-        if (data.source) authoritativeSource = data.source;
+  if (!existing?.currentSourceAtStart) {
+    if (env.SPEND_COUNTER) {
+      try {
+        const id = env.SPEND_COUNTER.idFromName("global");
+        const stub = env.SPEND_COUNTER.get(id);
+        const res = await stub.fetch("https://spend-counter.internal/get-source");
+        if (res.ok) {
+          const data = (await res.json()) as { source: string | null };
+          authoritativeSource = data.source;
+        } else {
+          throw new PipelineLimitError("concurrency", "Source coordinator unavailable to provide canonical baseline.");
+        }
+      } catch (err) {
+        if (err instanceof PipelineLimitError) throw err;
+        throw new PipelineLimitError("concurrency", `Source coordinator connection failure: ${(err as Error).message || "network error"}`);
       }
-    } catch {}
+    } else {
+      authoritativeSource = (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
+    }
   }
-  const currentSourceAtStart = existing?.currentSourceAtStart ?? authoritativeSource ?? (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
+  const currentSourceAtStart = existing?.currentSourceAtStart ?? authoritativeSource ?? SIM_BASELINE_SOURCE;
   let questionAsked = existing?.questionAsked ?? false;
   let planGateReplyCount = existing?.planGateReplyCount ?? 0;
   const priorLessons = (await loadInstructions(env.SPEND_KV)).map((l) => `- ${l}`).join("\n");

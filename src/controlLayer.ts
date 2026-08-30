@@ -358,15 +358,14 @@ export async function tryLeaseActiveRun(kv: KVNamespace, runId: string, spendCou
 }
 
 export async function releaseActiveRun(kv: KVNamespace, runId: string, spendCounterDO?: DurableObjectNamespace, leaseToken?: string): Promise<void> {
-  const token = leaseToken || (await kv.get(`change/lease-token/${runId}`)) || undefined;
-  if (spendCounterDO) {
+  if (spendCounterDO && leaseToken) {
     try {
       const id = spendCounterDO.idFromName("global");
       const stub = spendCounterDO.get(id);
       const res = await stub.fetch("https://spend-counter.internal/release-run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ runId, leaseToken: token }),
+        body: JSON.stringify({ runId, leaseToken }),
       });
       if (!res.ok) {
         console.warn(`[lease] release-run returned HTTP ${res.status} for runId ${runId}`);
@@ -375,7 +374,6 @@ export async function releaseActiveRun(kv: KVNamespace, runId: string, spendCoun
       console.warn(`[lease] release-run coordinator error for runId ${runId}:`, err);
     }
   }
-  await kv.delete(`change/lease-token/${runId}`).catch(() => {});
   await kv.delete(`${ACTIVE_PREFIX}${runId}`).catch(() => {});
 }
 
