@@ -1651,8 +1651,26 @@ class Renderer3D {
     const glassMat = stdMat({ color: PALETTE.glass, transparent: true, opacity: 0.72, roughness: 0.1, metalness: 0.3 });
     const glassWall = new THREE.Mesh(new THREE.PlaneGeometry(13.2, 4.2), glassMat);
     glassWall.position.set(0, 2.2, 5.1);
-    studio.add(glassWall);
-    [-4, 0, 4].forEach(colX => addBox(studio, [0.24, 4.4, 0.24], [colX, 2.2, 5.15], PALETTE.charcoal, 0.5, 0.8));
+    // Studio Interior Architectural Layout (Boardroom conference table, leather chairs & drafting bench)
+    const interiorGroup = new THREE.Group();
+    studio.add(interiorGroup);
+    // Hardwood herringbone floor slab
+    addBox(interiorGroup, [12.2, 0.05, 9.6], [0, 0.32, 0], PALETTE.teak, 0.65);
+    // Modern conference boardroom table
+    addBox(interiorGroup, [4.2, 0.75, 1.8], [-1.2, 0.72, 0], PALETTE.charcoal, 0.35, 0.6);
+    // Barcelona conference chairs around table
+    [-2.2, 0.0, 2.2].forEach(cx => {
+      [-1.2, 1.2].forEach(cz => {
+        addBox(interiorGroup, [0.55, 0.85, 0.55], [cx - 1.2, 0.75, cz], 0x94a3b8, 0.8);
+      });
+    });
+    // Architectural drafting table & model display bench
+    addBox(interiorGroup, [3.2, 0.95, 1.2], [3.5, 0.8, -2.8], 0xf8fafc, 0.4);
+    // Recessed ceiling troffer illumination
+    const studioIntLight = new THREE.PointLight(0xfff5ea, 0.9, 14, 2);
+    studioIntLight.position.set(0, 3.8, 0);
+    interiorGroup.add(studioIntLight);
+    this._pointLights.push(studioIntLight);
 
     // Modern flat cantilevered roof terrace with warm ceiling lighting
     addBox(studio, [15.2, 0.32, 12.2], [0, 4.45, 0], PALETTE.charcoal, 0.5, 0.8);
@@ -2300,6 +2318,79 @@ class Renderer3D {
     sideAveEast.receiveShadow = true;
     roadGroup.add(sideAveEast);
 
+    // -------------------------------------------------------------
+    // 3. AUTONOMOUS COASTAL LIGHT RAIL / TRAM TRANSIT CORRIDOR
+    // -------------------------------------------------------------
+    const tramTrackGroup = new THREE.Group();
+    tramTrackGroup.position.set(0, 0, 10.1);
+    roadGroup.add(tramTrackGroup);
+
+    const trackSteelMat = stdMat({ color: 0x94a3b8, metalness: 0.95, roughness: 0.2 });
+    [-0.55, 0.55].forEach(rz => {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(96, 0.05, 0.08), trackSteelMat);
+      rail.position.set(0, 0.04, rz);
+      tramTrackGroup.add(rail);
+    });
+
+    // Modern Articulated Coastal Tram Vehicle
+    const tramGroup = new THREE.Group();
+    tramGroup.position.set(-6.5, 0, 10.1);
+    roadGroup.add(tramGroup);
+
+    const tramBodyMat = stdMat({ color: 0xf8fafc, roughness: 0.3, metalness: 0.2 });
+    const tramAccentMat = stdMat({ color: 0x0284c7, roughness: 0.4, metalness: 0.5 });
+    const tramGlassMat = stdMat({ color: 0x0f172a, transparent: true, opacity: 0.75, roughness: 0.1, metalness: 0.85 });
+
+    const car1 = new THREE.Mesh(new RoundedBoxGeometry(5.8, 1.8, 1.7, 2, 0.15), tramBodyMat);
+    car1.position.set(-3.2, 1.15, 0);
+    car1.castShadow = true;
+    tramGroup.add(car1);
+
+    const car2 = new THREE.Mesh(new RoundedBoxGeometry(5.8, 1.8, 1.7, 2, 0.15), tramBodyMat);
+    car2.position.set(3.2, 1.15, 0);
+    car2.castShadow = true;
+    tramGroup.add(car2);
+
+    const bellow = new THREE.Mesh(new RoundedBoxGeometry(0.7, 1.75, 1.62, 1, 0.04), stdMat({ color: 0x1e293b, roughness: 0.9 }));
+    bellow.position.set(0, 1.12, 0);
+    tramGroup.add(bellow);
+
+    [-3.2, 3.2].forEach(cx => {
+      const glassRibbon = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.75, 1.74), tramGlassMat);
+      glassRibbon.position.set(cx, 1.35, 0);
+      tramGroup.add(glassRibbon);
+
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.12, 1.73), tramAccentMat);
+      stripe.position.set(cx, 0.75, 0);
+      tramGroup.add(stripe);
+    });
+
+    const pantoArm = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.9, 6), stdMat({ color: 0x475569, metalness: 0.9 }));
+    pantoArm.rotation.z = Math.PI / 4;
+    pantoArm.position.set(1.5, 2.35, 0);
+    tramGroup.add(pantoArm);
+
+    // Modern Coastal Tram Station (Cantilevered Glass Transit Shelter at x = 8.5)
+    const shelter = new THREE.Group();
+    shelter.position.set(8.5, 0, 14.8);
+    const shelterRoof = new THREE.Mesh(
+      new RoundedBoxGeometry(4.6, 0.12, 2.2, 2, 0.08),
+      stdMat({ color: PALETTE.charcoal, metalness: 0.8, roughness: 0.3 })
+    );
+    shelterRoof.position.set(0, 2.45, 0.2);
+    shelter.add(shelterRoof);
+    const windbreak = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 2.1), tramGlassMat);
+    windbreak.position.set(0, 1.25, 0.85);
+    shelter.add(windbreak);
+    const arrivalBoard = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9, 0.35, 0.06),
+      stdMat({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 2.0 })
+    );
+    arrivalBoard.position.set(0, 2.05, 0.6);
+    shelter.add(arrivalBoard);
+    this._emissiveAnimated.push(arrivalBoard.material);
+    roadGroup.add(shelter);
+
     // 4. Modern Coastal Vehicles
     const buildCar = (x, z, rotY, bodyColor, isConvertible = true) => {
       const car = new THREE.Group();
@@ -2386,23 +2477,7 @@ class Renderer3D {
     // Vehicle 3: Sleek Pearl White Convertible parked on West Avenue bay
     buildCar(-18.0, 2.5, -Math.PI / 2, 0xf8fafc, true);
 
-    // 5. Modern Glass & Steel Transit Shelter at x = 8.5, z = 14.8 on South Sidewalk
-    const shelter = new THREE.Group();
-    shelter.position.set(8.5, 0, 14.8);
-    const steelMat = stdMat({ color: 0x334155, roughness: 0.4, metalness: 0.8 });
-    const shelterGlass = stdMat({ color: 0x94a3b8, transparent: true, opacity: 0.55, roughness: 0.1 });
-    const backPanel = new THREE.Mesh(new THREE.BoxGeometry(3.6, 2.2, 0.06), shelterGlass);
-    backPanel.position.set(0, 1.15, 0.75);
-    shelter.add(backPanel);
-    const canopy = new THREE.Mesh(new RoundedBoxGeometry(4.0, 0.1, 1.6, 1, 0.04), steelMat);
-    canopy.position.set(0, 2.3, 0);
-    canopy.castShadow = true;
-    shelter.add(canopy);
-    const bench = new THREE.Mesh(new RoundedBoxGeometry(2.4, 0.08, 0.42, 1, 0.02), stdMat({ color: PALETTE.teak, roughness: 0.6 }));
-    bench.position.set(0, 0.45, 0.3);
-    bench.castShadow = true;
-    shelter.add(bench);
-    roadGroup.add(shelter);
+    // 4. Modern Coastal Vehicles (Riviera Blue Cabriolet, Bordeaux Red Coupe, Pearl White Convertible)
   }
 
   _build4DPedestrians() {
@@ -5235,6 +5310,24 @@ class Renderer3D {
         const lookPos = this._lookCurve.getPointAt(u);
         this.camera.position.copy(camPos);
         this.camera.lookAt(lookPos);
+
+        // Lower-third architectural guided tour captions (18-year architect masterplan narrative)
+        const botBar = document.getElementById("letterbox-bottom");
+        if (botBar) {
+          let caption = "🏛️ Architectural Masterplan · Mark Fraser, Applied AI (Toronto)";
+          if (u < 0.20) {
+            caption = "📍 1. Grand Town Hall & Supreme Courts: Double-height structural glass atrium providing civic transparency.";
+          } else if (u < 0.40) {
+            caption = "📍 2. Central Esplanade & Tram Corridor: Autonomous light-rail transit gliding along the palm-lined median.";
+          } else if (u < 0.60) {
+            caption = "📍 3. Datum AEC AI Pavilion: Interactive Ontario Building Code Part 9 compliance solver with kinetic DNA helix.";
+          } else if (u < 0.80) {
+            caption = "📍 4. Marina & Luxury Waterfront: Sheltered inner yacht basin protected by curved granite breakwater arms.";
+          } else {
+            caption = "📍 5. Coastal Headland & Beacon: Sustainable ocean orientation with 2400m planetary curvature horizon.";
+          }
+          if (botBar.textContent !== caption) botBar.textContent = caption;
+        }
       }
     } else if (this._navigationMode === 'walk' || this._navigationMode === 'drive') {
       // -------------------------------------------------------------
