@@ -1962,6 +1962,7 @@ function finishPipelineTelemetry(success, message = null) {
 
 // Live Run Wiring
 let currentRunId = null;
+let currentControlToken = null;
 let currentChangeRequest = '';
 let liveRunsEnabled = true;
 
@@ -1981,11 +1982,19 @@ async function submitGateDecision(decisionUrl, resumeUrl, cardEl, isReject = fal
   const capturedEs = activeEs;
   const capturedRunId = currentRunId;
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (currentControlToken) {
+      headers['X-Control-Token'] = currentControlToken;
+    }
     const fetchOpts = postBody ? {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(postBody)
-    } : { method: 'POST' };
+      headers,
+      body: JSON.stringify({ ...postBody, controlToken: currentControlToken })
+    } : {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ runId: currentRunId, controlToken: currentControlToken })
+    };
     const res = await fetch(decisionUrl, fetchOpts);
     if (!res.ok) {
       throw new Error(`Gate decision failed with HTTP ${res.status}: ${res.statusText}`);
@@ -2020,6 +2029,7 @@ function startRun() {
   const log = $('#stage-log');
   log.innerHTML = '';
   currentRunId = null;
+  currentControlToken = null;
   currentChangeRequest = text;
   startPipelineTelemetry();
   renderer3d.focusPreset(text);
@@ -2060,7 +2070,10 @@ function connect(url) {
     if (activeEs !== es) return;
     resetWatchdog();
     const d = safeJson(ev.data);
-    if (d && d.runId) currentRunId = d.runId;
+    if (d && d.runId) {
+      currentRunId = d.runId;
+      if (d.controlToken) currentControlToken = d.controlToken;
+    }
   });
 
   es.addEventListener('grounding', () => {

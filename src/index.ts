@@ -438,29 +438,25 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
     throw e;
   }
 
+  // Generate or retrieve per-run cryptographic controlToken
+  let controlToken = await env.SPEND_KV.get(`change/token/${runId}`);
+  if (!controlToken) {
+    controlToken = crypto.randomUUID();
+    await env.SPEND_KV.put(`change/token/${runId}`, controlToken, { expirationTtl: 604800 });
+  }
+
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
   const send = (event: string, data: unknown) => writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)).catch(() => {});
 
-  // CITY.md item 0: this stream is only ever open while a stage is actively
-  // running (grounding/planning/implementing/verifying/reviewing/fixing,
-  // each bounded by STAGE_CALL_TIMEOUT_MS) -- it always closes cleanly with
-  // a `done` event the moment a run halts at a gate, it never blocks open
-  // waiting on a human decision (confirmed by reading and by an empirical
-  // idle-connection test: a raw 3-minute idle stream over this same path
-  // did not drop on its own). A heartbeat during that active window is
-  // still cheap, standard SSE practice and protects against networks with
-  // shorter idle timeouts than tested here -- a `:`-prefixed comment line,
-  // which EventSource never surfaces as an event, so it can't collide with
-  // real pipeline events.
   const heartbeatTimer = setInterval(() => {
     writer.write(encoder.encode(`: keep-alive\n\n`)).catch(() => {});
   }, 15_000);
 
   (async () => {
     try {
-      send("runId", { runId });
+      send("runId", { runId, controlToken });
       const onEvent = (e: ChangeEvent) => send(e.type, e);
       await runChangePipeline(env, runId, changeRequest, onEvent);
       send("done", { runId });
@@ -686,11 +682,20 @@ export default {
       return out;
     }
 
+    async function verifyRunAuth(req: Request, runId: string, payload: Record<string, unknown>): Promise<boolean> {
+      const storedToken = await env.SPEND_KV.get(`change/token/${runId}`);
+      if (!storedToken) return true; // Legacy run or unmanaged run, allow fallback
+      const token = req.headers.get("x-control-token") || (typeof payload.controlToken === "string" ? payload.controlToken : null);
+      if (!token) return true; // Graceful compatibility if token omitted by legacy clients
+      return timingSafeCompare(token.trim(), storedToken.trim());
+    }
+
     if (url.pathname === "/change-plan-decision") {
       const payload = await readDecisionPayload(request, url);
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const approve = payload.approve === true || payload.approve === "true";
       if (!runId) return json({ error: "pass runId & approve (boolean) via POST body or query" }, 400);
+      if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/plan-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
       return json({ ok: true });
     }
@@ -700,6 +705,7 @@ export default {
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const approve = payload.approve === true || payload.approve === "true";
       if (!runId) return json({ error: "pass runId & approve (boolean) via POST body or query" }, 400);
+      if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/review-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
       return json({ ok: true });
     }
@@ -714,6 +720,7 @@ export default {
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const approve = payload.approve === true || payload.approve === "true";
       if (!runId) return json({ error: "pass runId & approve (boolean) via POST body or query" }, 400);
+      if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/error-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
       return json({ ok: true });
     }
@@ -727,6 +734,7 @@ export default {
       const payload = await readDecisionPayload(request, url);
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       if (!runId) return json({ error: "pass runId via POST body or query" }, 400);
+      if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/stop/${runId}`, "1", { expirationTtl: 600 });
       return json({ ok: true });
     }
@@ -747,6 +755,7 @@ export default {
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const answer = typeof payload.answer === "string" ? payload.answer : null;
       if (!runId || answer === null) return json({ error: "pass runId & answer via POST body or query" }, 400);
+      if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/answer/${runId}`, JSON.stringify({ answer }), { expirationTtl: 600 });
       return json({ ok: true });
     }
@@ -759,6 +768,7 @@ export default {
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const reply = typeof payload.reply === "string" ? payload.reply : (typeof payload.answer === "string" ? payload.answer : null);
       if (!runId || reply === null) return json({ error: "pass runId & reply via POST body or query" }, 400);
+      if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/plan-reply/${runId}`, JSON.stringify({ answer: reply }), { expirationTtl: 600 });
       return json({ ok: true });
     }
