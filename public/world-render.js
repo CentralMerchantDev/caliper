@@ -92,33 +92,52 @@ function ambientOverlay(hour) {
 
 export class WorldRenderer {
   /** @param {HTMLCanvasElement} canvas */
-  constructor(canvas, { reducedMotion = false } = {}) {
+  constructor(canvas, { reducedMotion = false, width = null, height = null } = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.reducedMotion = reducedMotion;
+    this.explicitWidth = width;
+    this.explicitHeight = height;
     this.prevWorld = null;
     this.nextWorld = null;
     this._plan = null; // computed once per distinct building layout, see _fitPlan
     this._resize();
-    this._ro = new ResizeObserver(() => this._resize());
-    this._ro.observe(canvas);
+    if (typeof ResizeObserver !== "undefined" && !this.explicitWidth && !this.explicitHeight) {
+      this._ro = new ResizeObserver(() => this._resize());
+      this._ro.observe(canvas);
+    } else {
+      this._ro = null;
+    }
   }
 
   _resize() {
+    if (this.explicitWidth && this.explicitHeight) {
+      this.canvas.width = this.explicitWidth;
+      this.canvas.height = this.explicitHeight;
+      this.dpr = 1;
+      this._plan = null;
+      return;
+    }
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const rect = this.canvas.getBoundingClientRect();
-    const w = Math.max(1, Math.round(rect.width * dpr));
-    const h = Math.max(1, Math.round(rect.height * dpr));
+    // If the canvas has an explicit backing store and no layout rect (offscreen/detached), preserve backing store
+    const rectW = rect && rect.width > 0 ? rect.width : (this.canvas.width || 800);
+    const rectH = rect && rect.height > 0 ? rect.height : (this.canvas.height || 600);
+    const w = Math.max(1, Math.round(rectW * (rect.width > 0 ? dpr : 1)));
+    const h = Math.max(1, Math.round(rectH * (rect.height > 0 ? dpr : 1)));
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
       this.canvas.height = h;
     }
-    this.dpr = dpr;
+    this.dpr = rect.width > 0 ? dpr : 1;
     this._plan = null; // canvas size changed -- refit on next draw
   }
 
   destroy() {
-    this._ro.disconnect();
+    if (this._ro) {
+      this._ro.disconnect();
+      this._ro = null;
+    }
   }
 
   /** Feed a new discrete tick result. The renderer interpolates FROM the

@@ -1585,8 +1585,8 @@ $('#export-render-btn')?.addEventListener('click', () => {
   exportCanvas.height = 2160;
 
   if (isPlan) {
-    // Native 4K vector rerender for 2D Architectural Plan
-    const offscreenRenderer2d = new WorldRenderer2D(exportCanvas, { reducedMotion: true });
+    // Native 4K vector rerender for 2D Architectural Plan (explicit 3840x2160 backing store)
+    const offscreenRenderer2d = new WorldRenderer2D(exportCanvas, { reducedMotion: true, width: 3840, height: 2160 });
     if (renderer2d.nextWorld) {
       offscreenRenderer2d.pushTick(renderer2d.nextWorld);
       offscreenRenderer2d.draw(1);
@@ -1626,8 +1626,17 @@ $('#export-render-btn')?.addEventListener('click', () => {
       }
       renderer3d._impl.draw(lastT);
     } else {
-      const ctx = exportCanvas.getContext('2d');
-      if (ctx) ctx.drawImage(canvas3d, 0, 0, 3840, 2160);
+      // Direct WebGL context native 4K render
+      const offscreenGl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      offscreenGl.setSize(3840, 2160, false);
+      const scene = renderer3d.scene || (renderer3d._impl && renderer3d._impl.scene);
+      const camera = renderer3d.camera || (renderer3d._impl && renderer3d._impl.camera);
+      if (scene && camera) {
+        offscreenGl.render(scene, camera);
+        const ctx = exportCanvas.getContext('2d');
+        if (ctx) ctx.drawImage(offscreenGl.domElement, 0, 0, 3840, 2160);
+      }
+      offscreenGl.dispose();
     }
   }
 
