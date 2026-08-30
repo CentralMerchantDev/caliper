@@ -59,7 +59,7 @@ const SECURITY_HEADERS: Record<string, string> = {
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-frame-options": "SAMEORIGIN",
-  "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net data: blob:;",
+  "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net data: blob:; frame-src 'self' https://datum.markfrasertoronto.workers.dev; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://*;",
 };
 
 function json(data: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
@@ -451,33 +451,62 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
   const encoder = new TextEncoder();
   const send = (event: string, data: unknown) => writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)).catch(() => {});
 
-  // Periodic heartbeat & lease renewal: extends active lease every 30s while actively executing
+  let leaseLost = false;
+  let leaseAbortError: string | null = null;
+
+  // Periodic heartbeat & lease renewal: extends active lease every 15s while actively executing
   const heartbeatTimer = setInterval(async () => {
     writer.write(encoder.encode(`: keep-alive\n\n`)).catch(() => {});
-    if (env.SPEND_COUNTER && leaseToken) {
+    if (env.SPEND_COUNTER && leaseToken && !leaseLost) {
       try {
         const id = env.SPEND_COUNTER.idFromName("global");
         const stub = env.SPEND_COUNTER.get(id);
-        await stub.fetch("https://spend-counter.internal/renew-lease", {
+        const res = await stub.fetch("https://spend-counter.internal/renew-lease", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ runId, leaseToken, extensionSec: 600 }),
         });
-      } catch {}
+        if (res.ok) {
+          const data = (await res.json()) as { ok: boolean; renewed: boolean };
+          if (!data.renewed) {
+            leaseLost = true;
+            leaseAbortError = "Run lease expired or concurrency slot was acquired by a successor";
+            clearInterval(heartbeatTimer);
+          }
+        } else {
+          leaseLost = true;
+          leaseAbortError = `Lease renewal failed: HTTP ${res.status}`;
+          clearInterval(heartbeatTimer);
+        }
+      } catch (err) {
+        leaseLost = true;
+        leaseAbortError = `Lease coordinator error: ${String((err as Error)?.message ?? err)}`;
+        clearInterval(heartbeatTimer);
+      }
     }
   }, 15_000);
 
   (async () => {
     try {
       send("runId", { runId, controlToken });
-      const onEvent = (e: ChangeEvent) => send(e.type, e);
+      const onEvent = (e: ChangeEvent) => {
+        if (leaseLost) {
+          throw new Error(leaseAbortError || "Run lease lost during pipeline execution");
+        }
+        send(e.type, e);
+      };
       await runChangePipeline(env, runId, changeRequest, onEvent);
+      if (leaseLost) {
+        throw new Error(leaseAbortError || "Run lease lost before completion");
+      }
       send("done", { runId });
     } catch (e) {
       send("error", { message: String((e as Error)?.message ?? e) });
     } finally {
       clearInterval(heartbeatTimer);
-      await releaseActiveRun(env.SPEND_KV, runId, env.SPEND_COUNTER, leaseToken ?? undefined);
+      if (!leaseLost) {
+        await releaseActiveRun(env.SPEND_KV, runId, env.SPEND_COUNTER, leaseToken ?? undefined);
+      }
       await writer.close().catch(() => {});
     }
   })();
@@ -698,19 +727,18 @@ export default {
 
     async function createResumeTicket(runId: string): Promise<string> {
       if (env.SPEND_COUNTER) {
-        try {
-          const id = env.SPEND_COUNTER.idFromName("global");
-          const stub = env.SPEND_COUNTER.get(id);
-          const res = await stub.fetch("https://spend-counter.internal/create-resume-ticket", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ runId, ttlSec: 90 }),
-          });
-          if (res.ok) {
-            const data = (await res.json()) as { ok: boolean; ticket: string };
-            return data.ticket;
-          }
-        } catch {}
+        const id = env.SPEND_COUNTER.idFromName("global");
+        const stub = env.SPEND_COUNTER.get(id);
+        const res = await stub.fetch("https://spend-counter.internal/create-resume-ticket", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ runId, ttlSec: 90 }),
+        });
+        if (!res.ok) {
+          throw new Error(`Durable Object failed to create resume ticket: HTTP ${res.status}`);
+        }
+        const data = (await res.json()) as { ok: boolean; ticket: string };
+        return data.ticket;
       }
       const ticket = crypto.randomUUID();
       await env.SPEND_KV.put(`change/resume-ticket/${runId}/${ticket}`, "1", { expirationTtl: 90 });

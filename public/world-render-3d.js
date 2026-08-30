@@ -143,7 +143,7 @@ function sunFor(hour) {
 
   // Realistic solar elevation arc reaching 68 degrees (1.18 rad) at solar noon (12:45)
   const solarFraction = isDaytime ? (hour - 5.5) / 14.5 : 0;
-  const sunElevation = Math.max(0.08, Math.sin(solarFraction * Math.PI) * 1.18 + 0.08);
+  const sunElevation = Math.max(0.08, Math.sin(solarFraction * Math.PI) * 1.10 + 0.08);
   const elevation = isDaytime ? sunElevation : 0.05;
 
   // Sun tracks east-to-west across the sky
@@ -3355,6 +3355,7 @@ class Renderer3D {
             // 6. Check static district structures with calibrated non-overlapping footprints
             if (!occupied) {
               const staticObstacles = [
+                { x: 0.0, z: -22.0, hw: 14.8, hd: 8.8 }, // Grand Town Hall & Supreme Civic Courts complex
                 { x: 29.0, z: 18.0, hw: 6.8, hd: 4.0 },  // Yacht Club Pavilion (Marina Waterfront, z = 18.0)
                 { x: -29.0, z: 18.0, hw: 7.5, hd: 4.0 }, // Terraced Townhouses (Bayview Waterfront, z = 18.0)
                 { x: -28.5, z: 0.0, hw: 6.5, hd: 5.0 },  // Boutique Hotel & Rooftop Bar
@@ -4447,6 +4448,9 @@ class Renderer3D {
     const intersects = this._raycaster.intersectObjects(this.neighbourhoodGroup.children, true);
     if (intersects.length === 0) return;
 
+    let hitObj = intersects[0].object;
+    let bId = null;
+
     // First check if a citizen NPC was clicked!
     let citizenHit = null;
     let curr = hitObj;
@@ -5029,9 +5033,9 @@ class Renderer3D {
       this._starsMesh.material.opacity = Math.max(0, (nightAmt - 0.25) * 1.33);
     }
 
-    // Gentle realistic cloud drift across the sky
+    // Gentle realistic cloud drift across the sky (frame-rate independent)
     if (this._cloudPuffs && !this.reducedMotion) {
-      const dt = 0.016;
+      const dt = Math.min(0.05, deltaSec || 0.016);
       for (const puff of this._cloudPuffs) {
         puff.cluster.position.x += puff.speed * dt * 14;
         if (puff.cluster.position.x > 850) puff.cluster.position.x = -850;
