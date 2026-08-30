@@ -70,7 +70,7 @@ test("addObjectType + addPlacement in one edit: a genuinely new type applies tog
         key: "birdbath",
         definition: {
           material: "stone",
-          footprint: { w: 0.5, d: 0.5 },
+          footprint: { w: 1.0, d: 1.0 },
           station: null,
           recipe: [{ shape: "cylinder", size: [0.5, 0.5, 0.15], position: [0, 0.6, 0], color: "#9a9186" }],
         },

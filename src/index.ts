@@ -432,7 +432,7 @@ function randomRunId(): string {
 async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: string): Promise<Response> {
   const runId = existingRunId ?? randomRunId();
   try {
-    await tryLeaseActiveRun(env.SPEND_KV, runId);
+    await tryLeaseActiveRun(env.SPEND_KV, runId, env.SPEND_COUNTER);
   } catch (e) {
     if (e instanceof PipelineLimitError) return jsonError("rate_limit_exceeded", e.message, 429);
     throw e;
@@ -464,7 +464,7 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
       send("error", { message: String((e as Error)?.message ?? e) });
     } finally {
       clearInterval(heartbeatTimer);
-      await releaseActiveRun(env.SPEND_KV, runId);
+      await releaseActiveRun(env.SPEND_KV, runId, env.SPEND_COUNTER);
       await writer.close().catch(() => {});
     }
   })();
@@ -574,13 +574,14 @@ export default {
       }
       const xHeader = req.headers.get("x-unlock-code");
       if (xHeader && timingSafeCompare(xHeader.trim(), env.UNLOCK_CODE)) return true;
+      // Fallback query secret supported with deprecation
       const keyParam = urlObj.searchParams.get("k");
       if (keyParam && timingSafeCompare(keyParam, env.UNLOCK_CODE)) return true;
       return false;
     }
 
     if (url.pathname === "/run") {
-      if (!isAuthorizedSecret(request, url)) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <token> or ?k=<secret>)" }, 403);
+      if (!isAuthorizedSecret(request, url)) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <secret> or X-Unlock-Code header)" }, 403);
       const taskId = url.searchParams.get("task");
       if (!taskId) return json({ error: "pass ?task=<id>", availableTasks: TASKS.map((t) => t.id) }, 400);
       const model = url.searchParams.get("model") ?? MODELS[0];
@@ -588,7 +589,7 @@ export default {
     }
 
     if (url.pathname === "/live-run") {
-      if (!isAuthorizedSecret(request, url)) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <token> or ?k=<secret>)" }, 403);
+      if (!isAuthorizedSecret(request, url)) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <secret> or X-Unlock-Code header)" }, 403);
       const taskId = url.searchParams.get("task");
       const model = url.searchParams.get("model") ?? MODELS[0];
       if (!taskId) return json({ error: "pass ?task=<id>&model=<id>" }, 400);
@@ -596,7 +597,7 @@ export default {
     }
 
     if (url.pathname === "/matrix-run") {
-      if (!isAuthorizedSecret(request, url)) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <token> or ?k=<secret>)" }, 403);
+      if (!isAuthorizedSecret(request, url)) return json({ error: "Unauthorized: this legacy evaluation endpoint requires authorization (Authorization: Bearer <secret> or X-Unlock-Code header)" }, 403);
       const taskId = url.searchParams.get("task");
       const model = url.searchParams.get("model");
       const rep = parseInt(url.searchParams.get("rep") ?? "0", 10);
@@ -684,27 +685,29 @@ export default {
 
     async function verifyRunAuth(req: Request, runId: string, payload: Record<string, unknown>): Promise<boolean> {
       const storedToken = await env.SPEND_KV.get(`change/token/${runId}`);
-      if (!storedToken) return true; // Legacy run or unmanaged run, allow fallback
+      if (!storedToken) return false; // Strictly fail-closed: unauthenticated or unknown run
       const token = req.headers.get("x-control-token") || (typeof payload.controlToken === "string" ? payload.controlToken : null);
-      if (!token) return true; // Graceful compatibility if token omitted by legacy clients
+      if (!token) return false; // Strictly fail-closed: missing token rejected
       return timingSafeCompare(token.trim(), storedToken.trim());
     }
 
     if (url.pathname === "/change-plan-decision") {
+      if (request.method !== "POST") return json({ error: "POST required" }, 405);
       const payload = await readDecisionPayload(request, url);
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const approve = payload.approve === true || payload.approve === "true";
-      if (!runId) return json({ error: "pass runId & approve (boolean) via POST body or query" }, 400);
+      if (!runId) return json({ error: "pass runId & approve (boolean) via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/plan-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
       return json({ ok: true });
     }
 
     if (url.pathname === "/change-review-decision") {
+      if (request.method !== "POST") return json({ error: "POST required" }, 405);
       const payload = await readDecisionPayload(request, url);
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const approve = payload.approve === true || payload.approve === "true";
-      if (!runId) return json({ error: "pass runId & approve (boolean) via POST body or query" }, 400);
+      if (!runId) return json({ error: "pass runId & approve (boolean) via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/review-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
       return json({ ok: true });
@@ -716,10 +719,11 @@ export default {
     // one-shot-signal shape as the two gates above, on purpose -- a stage
     // error is a halt like any other, not a special case.
     if (url.pathname === "/change-error-decision") {
+      if (request.method !== "POST") return json({ error: "POST required" }, 405);
       const payload = await readDecisionPayload(request, url);
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const approve = payload.approve === true || payload.approve === "true";
-      if (!runId) return json({ error: "pass runId & approve (boolean) via POST body or query" }, 400);
+      if (!runId) return json({ error: "pass runId & approve (boolean) via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/error-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
       return json({ ok: true });
@@ -731,9 +735,10 @@ export default {
     // Works whether the run is actively processing (checked before its next
     // paid call) or halted at a gate (checked on the next /change-resume).
     if (url.pathname === "/change-stop") {
+      if (request.method !== "POST") return json({ error: "POST required" }, 405);
       const payload = await readDecisionPayload(request, url);
       const runId = typeof payload.runId === "string" ? payload.runId : null;
-      if (!runId) return json({ error: "pass runId via POST body or query" }, 400);
+      if (!runId) return json({ error: "pass runId via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/stop/${runId}`, "1", { expirationTtl: 600 });
       return json({ ok: true });
@@ -743,6 +748,7 @@ export default {
       const payload = await readDecisionPayload(request, url);
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       if (!runId) return json({ error: "pass ?runId=<id>" }, 400);
+      if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       return handleChangeResume(env, runId);
     }
 
@@ -751,10 +757,11 @@ export default {
     }
 
     if (url.pathname === "/change-answer") {
+      if (request.method !== "POST") return json({ error: "POST required" }, 405);
       const payload = await readDecisionPayload(request, url);
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const answer = typeof payload.answer === "string" ? payload.answer : null;
-      if (!runId || answer === null) return json({ error: "pass runId & answer via POST body or query" }, 400);
+      if (!runId || answer === null) return json({ error: "pass runId & answer via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/answer/${runId}`, JSON.stringify({ answer }), { expirationTtl: 600 });
       return json({ ok: true });
@@ -764,10 +771,11 @@ export default {
     // instead of approve/reject. checkAnswer (changePipeline.ts) reads this
     // same {answer} shape; re-used rather than inventing a parallel one.
     if (url.pathname === "/change-plan-reply") {
+      if (request.method !== "POST") return json({ error: "POST required" }, 405);
       const payload = await readDecisionPayload(request, url);
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const reply = typeof payload.reply === "string" ? payload.reply : (typeof payload.answer === "string" ? payload.answer : null);
-      if (!runId || reply === null) return json({ error: "pass runId & reply via POST body or query" }, 400);
+      if (!runId || reply === null) return json({ error: "pass runId & reply via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/plan-reply/${runId}`, JSON.stringify({ answer: reply }), { expirationTtl: 600 });
       return json({ ok: true });
@@ -814,7 +822,15 @@ export default {
       // text with export statements appended, importable directly by the
       // browser exactly like public/sim-baseline.generated.js already is.
       const source = ((await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE).trim();
-      return new Response(`${source}\n\nexport { initialWorld, chooseAction, applyAction, tick };\n`, { headers: { "content-type": "text/javascript", "cache-control": "no-store" } });
+      return new Response(`${source}\n\nexport { initialWorld, chooseAction, applyAction, tick };\n`, {
+        headers: {
+          "content-type": "text/javascript; charset=utf-8",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "x-frame-options": "SAMEORIGIN",
+        },
+      });
     }
 
     if (url.pathname === "/sim-selftest") {

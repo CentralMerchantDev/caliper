@@ -68,7 +68,7 @@ export const CONTROL_LIMITS = {
    * reasoning as MAX_CONCURRENT_PIPELINE_RUNS below: real convergence
    * usually takes 0 or 1 rounds; a demo doesn't need to try indefinitely,
    * and every extra round is itself a real, billed model call. */
-  MAX_FIX_ATTEMPTS: 2,
+  MAX_FIX_ATTEMPTS: 3,
   /** max_tokens per stage, sized from docs/REBUILD-PROPOSAL.md's measured
    * numbers -- the implement stage's first measurement hit a 3000-token cap
    * mid-artifact; this is deliberately larger. `ground` added for the new
@@ -313,8 +313,33 @@ export function assertUnderRunCeiling(spentSoFarUsd: number, nextEstimateUsd: nu
 
 const ACTIVE_PREFIX = "pipeline/active/";
 
-export async function tryLeaseActiveRun(kv: KVNamespace, runId: string): Promise<void> {
+export async function tryLeaseActiveRun(kv: KVNamespace, runId: string, spendCounterDO?: DurableObjectNamespace): Promise<void> {
+  if (spendCounterDO) {
+    try {
+      const id = spendCounterDO.idFromName("global");
+      const stub = spendCounterDO.get(id);
+      const res = await stub.fetch("https://spend-counter.internal/lease-run", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ runId, maxConcurrent: CONTROL_LIMITS.MAX_CONCURRENT_PIPELINE_RUNS }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { ok: boolean; reason?: string };
+        if (!data.ok) {
+          throw new PipelineLimitError("concurrency", data.reason || "Concurrent pipeline run limit reached");
+        }
+        return;
+      }
+    } catch (e) {
+      if (e instanceof PipelineLimitError) throw e;
+    }
+  }
+
+  // Fallback to KV prefix check
   const list = await kv.list({ prefix: ACTIVE_PREFIX });
+  if (list.keys.some(k => k.name === `${ACTIVE_PREFIX}${runId}`)) {
+    throw new PipelineLimitError("concurrency", `Pipeline run "${runId}" is already actively executing.`);
+  }
   if (list.keys.length >= CONTROL_LIMITS.MAX_CONCURRENT_PIPELINE_RUNS) {
     throw new PipelineLimitError(
       "concurrency",
@@ -324,7 +349,18 @@ export async function tryLeaseActiveRun(kv: KVNamespace, runId: string): Promise
   await kv.put(`${ACTIVE_PREFIX}${runId}`, "1", { expirationTtl: CONTROL_LIMITS.ACTIVE_RUN_LEASE_TTL_SEC });
 }
 
-export async function releaseActiveRun(kv: KVNamespace, runId: string): Promise<void> {
+export async function releaseActiveRun(kv: KVNamespace, runId: string, spendCounterDO?: DurableObjectNamespace): Promise<void> {
+  if (spendCounterDO) {
+    try {
+      const id = spendCounterDO.idFromName("global");
+      const stub = spendCounterDO.get(id);
+      await stub.fetch("https://spend-counter.internal/release-run", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ runId }),
+      });
+    } catch {}
+  }
   await kv.delete(`${ACTIVE_PREFIX}${runId}`).catch(() => {});
 }
 

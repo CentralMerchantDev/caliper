@@ -148,7 +148,7 @@ export class SpendCounterLogic {
   async leaseRun(runId: string, maxConcurrent = 3): Promise<{ ok: boolean; reason?: string }> {
     const activeRuns = (await this.storage.get<string[]>("pipeline/active-runs")) ?? [];
     if (activeRuns.includes(runId)) {
-      return { ok: true }; // already leased by this run
+      return { ok: false, reason: `Pipeline run "${runId}" is already actively executing.` };
     }
     if (activeRuns.length >= maxConcurrent) {
       return { ok: false, reason: `${activeRuns.length} pipeline runs are already in flight (max ${maxConcurrent}) -- try again in a moment.` };

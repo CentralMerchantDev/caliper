@@ -326,9 +326,54 @@ function validateObjectTypeDefinition(def: unknown, where: string): string | nul
   if (!Array.isArray(d.recipe) || d.recipe.length === 0 || d.recipe.length > 25) {
     return `${where}: recipe must be a non-empty array with at most 25 parts`;
   }
+  // Verify recipe parts and compute actual local X/Z geometry envelope
+  let minGeoX = Infinity, maxGeoX = -Infinity;
+  let minGeoZ = Infinity, maxGeoZ = -Infinity;
+
   for (let i = 0; i < d.recipe.length; i++) {
-    const err = validateRecipePart(d.recipe[i], `${where}.recipe[${i}]`);
+    const part = d.recipe[i] as any;
+    const err = validateRecipePart(part, `${where}.recipe[${i}]`);
     if (err) return err;
+
+    // Calculate part local X/Z bounding extent
+    const posX = part.position[0];
+    const posZ = part.position[2];
+    const scaleX = part.scale ? part.scale[0] : 1;
+    const scaleZ = part.scale ? part.scale[2] : 1;
+
+    let partHalfW = 0.5;
+    let partHalfD = 0.5;
+
+    if (part.shape === "box") {
+      partHalfW = (part.size[0] * scaleX) / 2;
+      partHalfD = (part.size[2] * scaleZ) / 2;
+    } else if (part.shape === "cylinder") {
+      // Cylinder size is [radiusTop, radiusBottom, height]
+      const r = Math.max(part.size[0], part.size[1]) * Math.max(scaleX, scaleZ);
+      partHalfW = r;
+      partHalfD = r;
+    } else if (part.shape === "sphere" || part.shape === "icosahedron") {
+      const r = part.size[0] * Math.max(scaleX, scaleZ);
+      partHalfW = r;
+      partHalfD = r;
+    }
+
+    minGeoX = Math.min(minGeoX, posX - partHalfW);
+    maxGeoX = Math.max(maxGeoX, posX + partHalfW);
+    minGeoZ = Math.min(minGeoZ, posZ - partHalfD);
+    maxGeoZ = Math.max(maxGeoZ, posZ + partHalfD);
+  }
+
+  // Strict Footprint Containment Verification:
+  // Declared footprint must enclose the actual synthesized primitive geometry with a 0.35m tolerance
+  const actualGeoW = Math.max(0.1, maxGeoX - minGeoX);
+  const actualGeoD = Math.max(0.1, maxGeoZ - minGeoZ);
+  const declaredW = (d.footprint as any).w;
+  const declaredD = (d.footprint as any).d;
+  const TOLERANCE = 0.35;
+
+  if (actualGeoW > (declaredW + TOLERANCE) || actualGeoD > (declaredD + TOLERANCE)) {
+    return `${where}: declared footprint (${declaredW.toFixed(1)}m x ${declaredD.toFixed(1)}m) does not enclose recipe geometry envelope (${actualGeoW.toFixed(1)}m x ${actualGeoD.toFixed(1)}m) -- footprint must cover actual visual geometry`;
   }
   if (d.shadow !== undefined) {
     if (typeof d.shadow !== "object" || d.shadow === null || typeof (d.shadow as any).w !== "number" || typeof (d.shadow as any).d !== "number") {

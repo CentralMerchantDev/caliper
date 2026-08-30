@@ -1143,8 +1143,9 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         : "regression or criteria checks did not fully pass, and no fix was approved";
     onEvent({ type: "refused", reason: refusalReason });
   } else {
-    // Atomic Compare-and-Swap publication: serialized through Durable Object if available, fallback to KV
+    // Atomic Compare-and-Swap publication: serialized through Durable Object if available, fallback to KV only on infrastructure absence
     let published = false;
+    let casConflict = false;
     if (env.SPEND_COUNTER) {
       try {
         const id = env.SPEND_COUNTER.idFromName("global");
@@ -1159,11 +1160,19 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
           if (data.ok) {
             published = true;
             await env.SPEND_KV.put("sim/current-source", finalCode);
+          } else if (data.conflict) {
+            casConflict = true;
           }
         }
       } catch {}
     }
-    if (!published) {
+
+    if (casConflict) {
+      outcome = "refused-verification";
+      refusalReason = "conflict: another concurrent pipeline run shipped changes while this run was in progress. Please re-run your change request against the updated world.";
+      onEvent({ type: "refused", reason: refusalReason });
+    } else if (!published && !env.SPEND_COUNTER) {
+      // KV fallback only when Durable Object binding is completely absent in environment
       const currentOnDisk = (await env.SPEND_KV.get("sim/current-source")) ?? currentSourceAtStart;
       if (currentOnDisk !== currentSourceAtStart) {
         outcome = "refused-verification";
@@ -1174,9 +1183,14 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         await env.SPEND_KV.put("sim/current-source", finalCode);
         onEvent({ type: "shipped" });
       }
-    } else {
+    } else if (published) {
       outcome = "shipped";
       onEvent({ type: "shipped" });
+    } else {
+      // DO was present but errored or unreachable: fail-closed
+      outcome = "refused-verification";
+      refusalReason = "publication failed: coordinator unavailable. Changes were not committed.";
+      onEvent({ type: "refused", reason: refusalReason });
     }
   }
   await clearState(env.SPEND_KV, runId);

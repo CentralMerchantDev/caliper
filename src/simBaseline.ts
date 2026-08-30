@@ -139,8 +139,8 @@ const OBJECT_TYPES = /*@DATA:OBJECT_TYPES:BEGIN*/{
     recipe: [
       { shape: "cylinder", size: [0.52, 0.52, 0.06], segments: 24, position: [0, 0.62, 0], color: "#8a5a34", roughness: 0.55 },
       { shape: "cylinder", size: [0.08, 0.1, 0.6], segments: 10, position: [0, 0.31, 0], color: "#6a4526", roughness: 0.6 },
-      { shape: "box", size: [0.42, 0.08, 0.42], radius: 0.04, position: [0.85, 0.42, 0], color: "#3d6b63", roughness: 0.8 },
-      { shape: "cylinder", size: [0.03, 0.03, 0.42], segments: 8, position: [0.85, 0.21, 0], color: "#6a4526", roughness: 0.6 },
+      { shape: "box", size: [0.36, 0.08, 0.36], radius: 0.04, position: [0.32, 0.42, 0], color: "#3d6b63", roughness: 0.8 },
+      { shape: "cylinder", size: [0.03, 0.03, 0.42], segments: 8, position: [0.32, 0.21, 0], color: "#6a4526", roughness: 0.6 },
     ],
   },
   bench: {
