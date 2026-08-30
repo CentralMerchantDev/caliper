@@ -610,9 +610,9 @@ class Renderer3D {
 
     this._targetLookAt = new THREE.Vector3(0, 4.0, 0.0);
     this._startLookAt = new THREE.Vector3(0, 4.0, 0.0);
-    this._targetCamDist = 130;
-    this._startCamDist = 130;
-    this._camDist = 130;
+    this._targetCamDist = 180;
+    this._startCamDist = 180;
+    this._camDist = 180;
     this._cameraAnimStartTime = 0;
     this._cameraAnimDuration = 650;
 
@@ -680,7 +680,7 @@ class Renderer3D {
     // Physical Preetham Atmospheric Sky Shader (Sky.js)
     try {
       const sky = new Sky();
-      sky.scale.setScalar(950);
+      sky.scale.setScalar(3200);
       scene.add(sky);
       const skyUniforms = sky.material.uniforms;
       // Tuned for crystal-clear Australian maritime atmosphere (Melbourne/Gold Coast)
@@ -734,7 +734,7 @@ class Renderer3D {
     scene.add(hemi);
     this.hemi = hemi;
 
-    const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 1200);
+    const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 4500);
     this.camera = camera;
     this._lookAt = new THREE.Vector3(0, 4.0, 0.0);
 
@@ -934,31 +934,41 @@ class Renderer3D {
   }
 
   _buildGround(buildings, centerX, centerZ, scaleFor) {
-    const groundW = 160;
-    const groundD = 160;
+    const groundW = 800;
+    const groundD = 800;
     const groundMaterialKey = surfaceMaterialKey(this._surfaces, "ground", "grass");
-    const terrainGeo = new THREE.PlaneGeometry(groundW, groundD, 64, 64);
+    const terrainGeo = new THREE.PlaneGeometry(groundW, groundD, 128, 128);
     terrainGeo.rotateX(-Math.PI / 2);
     const terrainPos = terrainGeo.attributes.position;
 
-    // Engineered modern coastal city terrain:
-    // Core urban esplanade (-42 <= x <= 42, -26 <= z <= 22) is graded completely flat at y = 0.0m.
-    // South harbour bay (z > 22) drops down to ocean bed y = -1.4m.
-    // North Mediterranean coastal headland (z < -26) rises smoothly to y = 3.4m.
+    // Engineered Melbourne / Vancouver coastal topography:
+    // Core urban esplanade (-45 <= x <= 45, -26 <= z <= 22) is graded flat at y = 0.0m.
+    // South harbour bay (z > 22 to 140) drops down to ocean bed y = -2.2m.
+    // Outer peninsula & headland (z > 210 to 400) rises across the bay at y = 3.5m to 14m.
+    // North CBD ridgeline (z < -36) rises smoothly to y = 8.5m.
+    // East and West coastal promontories (|x| > 85) rise to natural headlands.
     for (let i = 0; i < terrainPos.count; i++) {
       const x = terrainPos.getX(i), z = terrainPos.getZ(i);
 
       let y = 0.0;
-      if (z > 22) {
-        // Ocean bay drop
-        const oceanRamp = Math.min(1, (z - 22) / 6);
-        y = -1.4 * oceanRamp;
-      } else if (z < -26) {
-        // Northern coastal headland rise (Lisbon / Sydney cliff)
-        const hillProgress = Math.min(1, (-z - 26) / 36);
-        y = Math.sin(hillProgress * Math.PI * 0.5) * 3.4;
+      if (z > 22 && z < 185 && Math.abs(x) < 280) {
+        // Sheltered inner bay & marine channel
+        const oceanRamp = Math.min(1, (z - 22) / 12);
+        y = -2.4 * oceanRamp;
+      } else if (z >= 185 && z <= 380) {
+        // Distant Southern Harbour Headland & Coastal Parklands across the bay
+        const southRise = Math.min(1, (z - 185) / 50);
+        y = -1.2 + southRise * 8.5 + Math.sin(x * 0.03) * 1.5;
+      } else if (z < -32) {
+        // Northern metropolitan ridgeline overlooking the harbour
+        const hillProgress = Math.min(1, (-z - 32) / 80);
+        y = Math.sin(hillProgress * Math.PI * 0.5) * 8.4 + Math.cos(x * 0.02) * 2.0;
+      } else if (Math.abs(x) > 75) {
+        // East / West coastal cliffs framing the harbour
+        const sideRise = Math.min(1, (Math.abs(x) - 75) / 90);
+        y = sideRise * 6.5;
       } else {
-        // Urban waterfront esplanade - flat buildable terrace
+        // Core Downtown & Waterfront Promenade Terrace
         y = 0.0;
       }
 
@@ -975,12 +985,13 @@ class Renderer3D {
     this._groundExtent = { w: groundW, d: groundD };
 
     // =========================================================================
-    // MELBOURNE DUAL-HARBOUR TOPOGRAPHY: INNER BASIN & VAST OUTER OCEAN BAY
+    // MELBOURNE DUAL-HARBOUR TOPOGRAPHY: INNER MARINA BASIN, BRIDGES & VAST OCEAN
     // =========================================================================
-    // 1. INNER HARBOUR / YARRA MARINA BASIN (Sheltered teal water from z = 22.0 to 52.0)
-    const innerHarbourGeo = new THREE.PlaneGeometry(160, 32);
+    // 1. INNER HARBOUR / YARRA MARINA BASIN (Sheltered turquoise water from z = 22.0 to 65.0, width 520m)
+    const innerHarbourGeo = new THREE.PlaneGeometry(560, 48);
     innerHarbourGeo.rotateX(-Math.PI / 2);
     const waterNormals = makeWaterNormalTexture();
+    waterNormals.repeat.set(16, 6);
     const innerWaterMat = stdMat({
       color: 0x0284c7, // Sheltered turquoise marina water
       normalMap: waterNormals,
@@ -988,95 +999,103 @@ class Renderer3D {
       roughness: 0.15,
       metalness: 0.82,
       transparent: true,
-      opacity: 0.90,
+      opacity: 0.92,
     });
     const innerHarbour = new THREE.Mesh(innerHarbourGeo, innerWaterMat);
-    innerHarbour.position.set(0, -0.42, 38.0);
+    innerHarbour.position.set(0, -0.42, 44.0);
     this.neighbourhoodGroup.add(innerHarbour);
     this._innerHarbourMesh = innerHarbour;
     this._waterNormalTex = waterNormals;
 
-    // 2. CURVED GRANITE BREAKWATER & LIGHTHOUSE SPIT (Separating Inner & Outer Harbour at z = 54)
-    // Modeled after Melbourne Port Melbourne Pier & St Kilda Breakwater
+    // 2. CURVED GRANITE BREAKWATER & LIGHTHOUSE SPIT (Separating Inner Marina & Outer Harbour at z = 68)
     const breakwaterGroup = new THREE.Group();
-    breakwaterGroup.position.set(0, -0.3, 54.0);
+    breakwaterGroup.position.set(0, -0.3, 68.0);
     this.neighbourhoodGroup.add(breakwaterGroup);
 
-    // West Rock Arm (x = -75 to -18)
+    // West Rock Arm (x = -160 to -24)
     const breakwaterWest = new THREE.Mesh(
-      new RoundedBoxGeometry(58, 2.2, 5.5, 2, 0.4),
+      new RoundedBoxGeometry(136, 2.6, 7.5, 3, 0.5),
       stdMat({ color: 0x334155, roughness: 0.94, metalness: 0.05 })
     );
-    breakwaterWest.position.set(-46, 0.6, 0);
+    breakwaterWest.position.set(-92, 0.8, 0);
     breakwaterWest.castShadow = true; breakwaterWest.receiveShadow = true;
     breakwaterGroup.add(breakwaterWest);
 
-    // East Rock Arm (x = 18 to 75)
+    // East Rock Arm (x = 24 to 160)
     const breakwaterEast = new THREE.Mesh(
-      new RoundedBoxGeometry(58, 2.2, 5.5, 2, 0.4),
+      new RoundedBoxGeometry(136, 2.6, 7.5, 3, 0.5),
       stdMat({ color: 0x334155, roughness: 0.94, metalness: 0.05 })
     );
-    breakwaterEast.position.set(46, 0.6, 0);
+    breakwaterEast.position.set(92, 0.8, 0);
     breakwaterEast.castShadow = true; breakwaterEast.receiveShadow = true;
     breakwaterGroup.add(breakwaterEast);
 
-    // Navigational Harbor Entrance Navigation Beacons (flanking the channel x in [-18, 18])
-    [-18, 18].forEach((bx, idx) => {
-      const beaconBase = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.8, 2.6, 16), stdMat({ color: PALETTE.sandstone, roughness: 0.8 }));
-      beaconBase.position.set(bx, 1.8, 0);
+    // Navigational Harbor Entrance Navigation Beacons (flanking the 48m channel x in [-24, 24])
+    [-24, 24].forEach((bx, idx) => {
+      const beaconBase = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.6, 3.8, 20), stdMat({ color: PALETTE.sandstone, roughness: 0.8 }));
+      beaconBase.position.set(bx, 2.2, 0);
       beaconBase.castShadow = true;
       breakwaterGroup.add(beaconBase);
 
       const lightColor = idx === 0 ? 0xef4444 : 0x10b981; // Port (Red) & Starboard (Green)
       const beaconLight = new THREE.Mesh(
-        new THREE.SphereGeometry(0.42, 12, 12),
-        stdMat({ color: lightColor, emissive: lightColor, emissiveIntensity: 2.2 })
+        new THREE.SphereGeometry(0.65, 16, 16),
+        stdMat({ color: lightColor, emissive: lightColor, emissiveIntensity: 2.6 })
       );
-      beaconLight.position.set(bx, 3.4, 0);
+      beaconLight.position.set(bx, 4.5, 0);
       breakwaterGroup.add(beaconLight);
 
-      const navP = new THREE.PointLight(lightColor, 1.2, 18, 2);
-      navP.position.set(bx, 3.5, 0);
+      const navP = new THREE.PointLight(lightColor, 1.8, 28, 2);
+      navP.position.set(bx, 4.6, 0);
       breakwaterGroup.add(navP);
       this._pointLights.push(navP);
     });
 
-    // 3. VAST OUTER HARBOUR / OPEN PACIFIC OCEAN BAY (z = 54 to 180, deep navy blue)
+    // 3. VAST EXPANDED OUTER HARBOUR & OPEN OCEAN (z = 68 to 360, width 800m, deep oceanic blue)
     const outerWaterNormals = makeWaterNormalTexture();
-    outerWaterNormals.repeat.set(10, 8);
-    const outerOceanGeo = new THREE.PlaneGeometry(240, 130);
+    outerWaterNormals.repeat.set(24, 18);
+    const outerOceanGeo = new THREE.PlaneGeometry(800, 320);
     outerOceanGeo.rotateX(-Math.PI / 2);
     const outerOceanMat = stdMat({
       color: 0x0369a1, // Deep coastal bay navy
       normalMap: outerWaterNormals,
-      normalScale: new THREE.Vector2(0.55, 0.55),
-      roughness: 0.12,
-      metalness: 0.88,
+      normalScale: new THREE.Vector2(0.65, 0.65),
+      roughness: 0.10,
+      metalness: 0.90,
       transparent: true,
-      opacity: 0.94,
+      opacity: 0.95,
     });
     const outerOcean = new THREE.Mesh(outerOceanGeo, outerOceanMat);
-    outerOcean.position.set(0, -0.48, 118);
+    outerOcean.position.set(0, -0.48, 220);
     this.neighbourhoodGroup.add(outerOcean);
     this._outerOceanMesh = outerOcean;
     this._outerWaterNormalTex = outerWaterNormals;
 
+    // 4. GOLDEN SAND BEACH (z = 22.0 to 25.5, continuous along the shoreline)
+    const beachGeo = new THREE.PlaneGeometry(260, 4.5);
+    beachGeo.rotateX(-Math.PI / 2);
+    const beachMat = stdMat({ color: 0xfef3c7, roughness: 0.92 });
+    const beach = new THREE.Mesh(beachGeo, beachMat);
+    beach.position.set(0, 0.015, 23.8);
+    beach.receiveShadow = true;
+    this.neighbourhoodGroup.add(beach);
+
     // Granite Marina Seawall & Capping Stones along z = 22
     const seawall = new THREE.Mesh(
-      new RoundedBoxGeometry(96, 1.6, 1.4, 2, 0.05),
+      new RoundedBoxGeometry(160, 1.8, 1.6, 2, 0.08),
       stdMat({ color: 0x475569, roughness: 0.92 })
     );
-    seawall.position.set(0, -0.2, 22.0);
+    seawall.position.set(0, -0.15, 22.0);
     seawall.receiveShadow = true;
     seawall.castShadow = true;
     this.neighbourhoodGroup.add(seawall);
 
     // Polished sandstone seawall promenade coping
     const coping = new THREE.Mesh(
-      new RoundedBoxGeometry(98, 0.22, 1.8, 2, 0.04),
+      new RoundedBoxGeometry(162, 0.25, 2.0, 2, 0.06),
       stdMat({ color: PALETTE.sandstone, roughness: 0.85 })
     );
-    coping.position.set(0, 0.65, 22.0);
+    coping.position.set(0, 0.70, 22.0);
     coping.receiveShadow = true;
     this.neighbourhoodGroup.add(coping);
 
@@ -2602,8 +2621,8 @@ class Renderer3D {
     buildSteppedTerraceTower(62, 18, 12, 11, 36, "East Esplanade Residences");
 
     // -------------------------------------------------------------
-    // 3. ELEVATED COASTAL FLYOVER HIGHWAY (SimCity / Melbourne Viaduct)
-    // Sweeping curved concrete highway along the headland perimeter
+    // 3. ELEVATED COASTAL FLYOVER HIGHWAY & ICONIC HARBOUR BRIDGES (Melbourne Bolte / West Gate)
+    // Sweeping high-speed concrete viaduct and suspension bridge linking the city across the harbour
     // -------------------------------------------------------------
     const highwayGroup = new THREE.Group();
     skylineGroup.add(highwayGroup);
@@ -2611,47 +2630,138 @@ class Renderer3D {
     const highwayDeckMat = stdMat({ color: 0x1e293b, roughness: 0.85 });
     const concretePierMat = stdMat({ color: 0x94a3b8, roughness: 0.7, metalness: 0.1 });
     const barrierMat = stdMat({ color: 0xffffff, roughness: 0.6 });
+    const steelCableMat = stdMat({ color: 0xe2e8f0, roughness: 0.3, metalness: 0.9 });
 
-    // Viaduct Deck spanning across the coastal boundary (x = -72 to +72, z = 20.5, elevation y = 4.8m)
-    const deckWidth = 144;
-    const deckDepth = 5.2;
-    const deckHeight = 0.65;
-    const highwayElevation = 6.8;
+    // Primary Expressway Viaduct Deck spanning across the bay entrance (x = -180 to +180, z = 62.0, elevation y = 9.5m)
+    const deckWidth = 360;
+    const deckDepth = 6.4;
+    const deckHeight = 0.85;
+    const highwayElevation = 9.5;
 
     const deckMesh = new THREE.Mesh(
-      new RoundedBoxGeometry(deckWidth, deckHeight, deckDepth, 2, 0.15),
+      new RoundedBoxGeometry(deckWidth, deckHeight, deckDepth, 3, 0.2),
       highwayDeckMat
     );
-    deckMesh.position.set(0, highwayElevation, 48.0);
+    deckMesh.position.set(0, highwayElevation, 62.0);
     deckMesh.castShadow = true; deckMesh.receiveShadow = true;
     highwayGroup.add(deckMesh);
 
     // Highway Lane Divider lines
     const hPaintMat = stdMat({ color: 0xfacc15, roughness: 0.35 });
-    for (let hx = -68; hx <= 68; hx += 4.5) {
-      const hDash = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.16), hPaintMat);
+    for (let hx = -172; hx <= 172; hx += 5.5) {
+      const hDash = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 0.22), hPaintMat);
       hDash.rotation.x = -Math.PI / 2;
-      hDash.position.set(hx, highwayElevation + deckHeight / 2 + 0.02, 48.0);
+      hDash.position.set(hx, highwayElevation + deckHeight / 2 + 0.02, 62.0);
       highwayGroup.add(hDash);
     }
 
-    // Concrete Viaduct Piers / Pylons (supporting the elevated expressway)
-    for (let px = -64; px <= 64; px += 16) {
+    // Concrete Viaduct Piers / Pylons (supporting the elevated expressway over the water)
+    for (let px = -160; px <= 160; px += 24) {
+      if (Math.abs(px) < 20) continue; // Keep main shipping channel clear
       const pier = new THREE.Mesh(
-        new RoundedBoxGeometry(1.6, highwayElevation, 3.8, 2, 0.2),
+        new RoundedBoxGeometry(2.4, highwayElevation + 1.2, 4.8, 2, 0.25),
         concretePierMat
       );
-      pier.position.set(px, highwayElevation / 2, 48.0);
+      pier.position.set(px, (highwayElevation - 0.6) / 2, 62.0);
       pier.castShadow = true; pier.receiveShadow = true;
       highwayGroup.add(pier);
 
       // Pier crosshead support beam
       const crosshead = new THREE.Mesh(
-        new RoundedBoxGeometry(2.2, 0.6, 4.8, 1, 0.1),
+        new RoundedBoxGeometry(3.2, 0.8, 6.2, 2, 0.15),
         concretePierMat
       );
-      crosshead.position.set(px, highwayElevation - 0.3, 48.0);
+      crosshead.position.set(px, highwayElevation - 0.45, 62.0);
       highwayGroup.add(crosshead);
+    }
+
+    // Iconic Twin Suspension Cable Towers (flanking the channel at x = -28 and +28, rising 42m high)
+    [-28, 28].forEach((tx) => {
+      const towerH = 38;
+      const towerLegL = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.4, towerH, 16), concretePierMat);
+      towerLegL.position.set(tx, towerH / 2, 62.0 - 2.6);
+      towerLegL.castShadow = true;
+      highwayGroup.add(towerLegL);
+
+      const towerLegR = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.4, towerH, 16), concretePierMat);
+      towerLegR.position.set(tx, towerH / 2, 62.0 + 2.6);
+      towerLegR.castShadow = true;
+      highwayGroup.add(towerLegR);
+
+      // Top Portal Strut
+      const topCross = new THREE.Mesh(new RoundedBoxGeometry(2.2, 1.8, 6.4, 2, 0.2), concretePierMat);
+      topCross.position.set(tx, towerH - 1.2, 62.0);
+      highwayGroup.add(topCross);
+
+      // High-tension steel stay cables radiating from tower top down to deck
+      for (let c = 1; c <= 5; c++) {
+        const offset = c * 9.5;
+        const cableGeo = new THREE.CylinderGeometry(0.04, 0.04, Math.hypot(offset, towerH - highwayElevation), 6);
+        const cableMeshL = new THREE.Mesh(cableGeo, steelCableMat);
+        const angle = Math.atan2(offset, towerH - highwayElevation);
+        cableMeshL.rotation.z = (tx < 0 ? 1 : -1) * angle;
+        cableMeshL.position.set(tx + (tx < 0 ? -offset / 2 : offset / 2), (towerH + highwayElevation) / 2, 62.0);
+        highwayGroup.add(cableMeshL);
+      }
+    });
+
+    // -------------------------------------------------------------
+    // 4. CENTRAL CAUSEWAY & DOWNTOWN LINK BRIDGE (Connecting City to South Peninsula)
+    // Runs North-South from Waterfront z = 22m, across the inner marina to z = 185m
+    // -------------------------------------------------------------
+    const causewayMesh = new THREE.Mesh(
+      new RoundedBoxGeometry(10.5, 1.2, 140, 3, 0.3),
+      stdMat({ color: 0x334155, roughness: 0.85 })
+    );
+    causewayMesh.position.set(45.0, 1.8, 105.0);
+    causewayMesh.receiveShadow = true; causewayMesh.castShadow = true;
+    highwayGroup.add(causewayMesh);
+
+    // Causeway Pylons
+    for (let cz = 50; cz <= 165; cz += 22) {
+      const cPier = new THREE.Mesh(
+        new RoundedBoxGeometry(3.6, 4.2, 3.6, 2, 0.2),
+        concretePierMat
+      );
+      cPier.position.set(45.0, 0.6, cz);
+      cPier.castShadow = true; cPier.receiveShadow = true;
+      highwayGroup.add(cPier);
+    }
+
+    // Causeway modern streetlights
+    for (let cz = 45; cz <= 165; cz += 18) {
+      [-4.6, 4.6].forEach(cx => {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.10, 4.5, 8), stdMat({ color: PALETTE.charcoal }));
+        pole.position.set(45.0 + cx, 4.0, cz);
+        highwayGroup.add(pole);
+
+        const lum = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), stdMat({ color: 0xfff4e6, emissive: 0xfff4e6, emissiveIntensity: 2.2 }));
+        lum.position.set(45.0 + cx + (cx > 0 ? -0.4 : 0.4), 6.2, cz);
+        highwayGroup.add(lum);
+      });
+    }
+
+    // -------------------------------------------------------------
+    // 5. DISTANT SOUTHERN HEADLAND TOWN & PARKLAND (Across the Bay at z = 230 to 360)
+    // -------------------------------------------------------------
+    const southPeninsulaGroup = new THREE.Group();
+    southPeninsulaGroup.position.set(0, 0, 260);
+    skylineGroup.add(southPeninsulaGroup);
+
+    // Coastal residential villas and green hills across the water
+    const southVillaMat = stdMat({ color: 0xf8fafc, roughness: 0.7 });
+    const southRoofMat = stdMat({ color: PALETTE.terracotta, roughness: 0.75 });
+    for (let sx = -140; sx <= 140; sx += 22) {
+      const sv = new THREE.Mesh(new RoundedBoxGeometry(9.5, 6.2, 8.0, 2, 0.25), southVillaMat);
+      sv.position.set(sx + (sx % 7), 5.5, (sx % 13) * 3);
+      sv.castShadow = true; sv.receiveShadow = true;
+      southPeninsulaGroup.add(sv);
+
+      const sr = new THREE.Mesh(new THREE.ConeGeometry(7.2, 3.2, 4), southRoofMat);
+      sr.rotation.y = Math.PI / 4;
+      sr.position.set(sx + (sx % 7), 10.0, (sx % 13) * 3);
+      sr.castShadow = true;
+      southPeninsulaGroup.add(sr);
     }
 
     // Modern White Guardrail Barriers with Integrated LED Glow Strips
@@ -3121,26 +3231,26 @@ class Renderer3D {
       opacity: 0.85,
     });
 
-    // 1. Back Wall (z = -d / 2)
-    const backWall = new THREE.Mesh(new RoundedBoxGeometry(w, wallH, wallThick, 2, 0.05), wallMat);
+    // 1. Back Wall (z = -d / 2) with smooth rounded bevel
+    const backWall = new THREE.Mesh(new RoundedBoxGeometry(w, wallH, wallThick, 3, 0.08), wallMat);
     backWall.position.set(0, wallY, -d / 2);
     backWall.receiveShadow = true; backWall.castShadow = true;
     group.add(backWall);
 
-    // 2. Left Wall (x = -w / 2) with window
+    // 2. Left Wall (x = -w / 2) with smoothly filleted window piers
     const leftWall = new THREE.Group();
-    const leftSolid1 = new THREE.Mesh(new RoundedBoxGeometry(wallThick, wallH, d * 0.3, 2, 0.05), wallMat);
+    const leftSolid1 = new THREE.Mesh(new RoundedBoxGeometry(wallThick, wallH, d * 0.3, 3, 0.08), wallMat);
     leftSolid1.position.set(-w / 2, wallY, -d * 0.35);
     leftSolid1.castShadow = true; leftSolid1.receiveShadow = true;
     leftWall.add(leftSolid1);
-    const leftSolid2 = new THREE.Mesh(new RoundedBoxGeometry(wallThick, wallH, d * 0.3, 2, 0.05), wallMat);
+    const leftSolid2 = new THREE.Mesh(new RoundedBoxGeometry(wallThick, wallH, d * 0.3, 3, 0.08), wallMat);
     leftSolid2.position.set(-w / 2, wallY, d * 0.35);
     leftSolid2.castShadow = true; leftSolid2.receiveShadow = true;
     leftWall.add(leftSolid2);
-    const leftSill = new THREE.Mesh(new RoundedBoxGeometry(wallThick + 0.08, 0.8, d * 0.4, 2, 0.03), sillMat);
+    const leftSill = new THREE.Mesh(new RoundedBoxGeometry(wallThick + 0.12, 0.8, d * 0.4, 2, 0.06), sillMat);
     leftSill.position.set(-w / 2, floorTop + 0.4, 0);
     leftWall.add(leftSill);
-    const leftLintel = new THREE.Mesh(new RoundedBoxGeometry(wallThick + 0.08, 0.5, d * 0.4, 2, 0.03), sillMat);
+    const leftLintel = new THREE.Mesh(new RoundedBoxGeometry(wallThick + 0.12, 0.5, d * 0.4, 2, 0.06), sillMat);
     leftLintel.position.set(-w / 2, roofBaseY - 0.25, 0);
     leftWall.add(leftLintel);
     const leftGlass = new THREE.Mesh(new THREE.PlaneGeometry(d * 0.38, 1.2), windowGlowMat);
@@ -3149,20 +3259,20 @@ class Renderer3D {
     leftWall.add(leftGlass);
     group.add(leftWall);
 
-    // 3. Right Wall (x = w / 2) with window
+    // 3. Right Wall (x = +w / 2) with matching filleted window piers
     const rightWall = new THREE.Group();
-    const rightSolid1 = new THREE.Mesh(new RoundedBoxGeometry(wallThick, wallH, d * 0.3, 2, 0.05), wallMat);
+    const rightSolid1 = new THREE.Mesh(new RoundedBoxGeometry(wallThick, wallH, d * 0.3, 3, 0.08), wallMat);
     rightSolid1.position.set(w / 2, wallY, -d * 0.35);
     rightSolid1.castShadow = true; rightSolid1.receiveShadow = true;
     rightWall.add(rightSolid1);
-    const rightSolid2 = new THREE.Mesh(new RoundedBoxGeometry(wallThick, wallH, d * 0.3, 2, 0.05), wallMat);
+    const rightSolid2 = new THREE.Mesh(new RoundedBoxGeometry(wallThick, wallH, d * 0.3, 3, 0.08), wallMat);
     rightSolid2.position.set(w / 2, wallY, d * 0.35);
     rightSolid2.castShadow = true; rightSolid2.receiveShadow = true;
     rightWall.add(rightSolid2);
-    const rightSill = new THREE.Mesh(new RoundedBoxGeometry(wallThick + 0.08, 0.8, d * 0.4, 2, 0.03), sillMat);
+    const rightSill = new THREE.Mesh(new RoundedBoxGeometry(wallThick + 0.12, 0.8, d * 0.4, 2, 0.06), sillMat);
     rightSill.position.set(w / 2, floorTop + 0.4, 0);
     rightWall.add(rightSill);
-    const rightLintel = new THREE.Mesh(new RoundedBoxGeometry(wallThick + 0.08, 0.5, d * 0.4, 2, 0.03), sillMat);
+    const rightLintel = new THREE.Mesh(new RoundedBoxGeometry(wallThick + 0.12, 0.5, d * 0.4, 2, 0.06), sillMat);
     rightLintel.position.set(w / 2, roofBaseY - 0.25, 0);
     rightWall.add(rightLintel);
     const rightGlass = new THREE.Mesh(new THREE.PlaneGeometry(d * 0.38, 1.2), windowGlowMat);
@@ -3667,11 +3777,11 @@ class Renderer3D {
       }
     };
 
-    // Upgraded Smooth Logarithmic Wheel Zoom: max distance up to 320m, 1.045x factor
+    // Upgraded Smooth Logarithmic Wheel Zoom: max distance up to 1200m, slow and controllable 1.028x factor
     const onWheel = (e) => {
       e.preventDefault();
-      const zoomFactor = e.deltaY > 0 ? 1.045 : 0.957;
-      this._camDist = Math.max(5, Math.min(320, (this._camDist || 48) * zoomFactor));
+      const zoomFactor = e.deltaY > 0 ? 1.028 : 0.973;
+      this._camDist = Math.max(4, Math.min(1200, (this._camDist || 48) * zoomFactor));
       this._targetCamDist = this._camDist;
     };
 
@@ -4100,7 +4210,7 @@ class Renderer3D {
 
   zoomCamera(factor) {
     if (this._isDroneTour) this.stopDroneTour();
-    this._camDist = Math.max(5, Math.min(320, (this._camDist || 48) * factor));
+    this._camDist = Math.max(4, Math.min(1200, (this._camDist || 48) * factor));
     this._targetCamDist = this._camDist;
   }
 
