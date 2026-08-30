@@ -141,20 +141,34 @@ export class SpendCounterLogic {
   }
 
   /**
+   * Single authoritative source retrieval directly from the coordinator.
+   */
+  async getSource(): Promise<string | null> {
+    return (await this.storage.get<string>("sim/current-source")) ?? null;
+  }
+
+  /**
    * Atomic lease acquisition for active pipeline runs:
    * Prevents concurrent runs from exceeding MAX_CONCURRENT_PIPELINE_RUNS,
-   * and ensures a runId cannot be leased or resumed twice simultaneously.
+   * ensures a runId cannot be leased twice simultaneously,
+   * and auto-prunes stale leases whose lease duration expired (e.g. crashed Workers).
    */
-  async leaseRun(runId: string, maxConcurrent = 3): Promise<{ ok: boolean; reason?: string }> {
-    const activeRuns = (await this.storage.get<string[]>("pipeline/active-runs")) ?? [];
-    if (activeRuns.includes(runId)) {
+  async leaseRun(runId: string, maxConcurrent = 3, ttlSec = 600): Promise<{ ok: boolean; reason?: string }> {
+    const now = Date.now();
+    const rawLeases = (await this.storage.get<Array<{ runId: string; expiresAt: number }>>("pipeline/active-leases")) ?? [];
+    // Prune expired leases
+    const activeLeases = rawLeases.filter(l => l.expiresAt > now);
+
+    if (activeLeases.some(l => l.runId === runId)) {
       return { ok: false, reason: `Pipeline run "${runId}" is already actively executing.` };
     }
-    if (activeRuns.length >= maxConcurrent) {
-      return { ok: false, reason: `${activeRuns.length} pipeline runs are already in flight (max ${maxConcurrent}) -- try again in a moment.` };
+    if (activeLeases.length >= maxConcurrent) {
+      return { ok: false, reason: `${activeLeases.length} pipeline runs are already in flight (max ${maxConcurrent}) -- try again in a moment.` };
     }
-    activeRuns.push(runId);
-    await this.storage.put("pipeline/active-runs", activeRuns);
+    activeLeases.push({ runId, expiresAt: now + ttlSec * 1000 });
+    await this.storage.put("pipeline/active-leases", activeLeases);
+    // Keep legacy active-runs key synchronized for diagnostics
+    await this.storage.put("pipeline/active-runs", activeLeases.map(l => l.runId));
     return { ok: true };
   }
 
@@ -162,9 +176,11 @@ export class SpendCounterLogic {
    * Releases an active run lease atomically.
    */
   async releaseRun(runId: string): Promise<void> {
-    const activeRuns = (await this.storage.get<string[]>("pipeline/active-runs")) ?? [];
-    const filtered = activeRuns.filter(id => id !== runId);
-    await this.storage.put("pipeline/active-runs", filtered);
+    const now = Date.now();
+    const rawLeases = (await this.storage.get<Array<{ runId: string; expiresAt: number }>>("pipeline/active-leases")) ?? [];
+    const filtered = rawLeases.filter(l => l.runId !== runId && l.expiresAt > now);
+    await this.storage.put("pipeline/active-leases", filtered);
+    await this.storage.put("pipeline/active-runs", filtered.map(l => l.runId));
   }
 }
 
@@ -192,6 +208,10 @@ export async function handleSpendCounterRequest(logic: SpendCounterLogic, reques
       const body = (await request.json()) as { expectedSource: string; newSource: string };
       const result = await logic.publishSource(body.expectedSource, body.newSource);
       return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
+    }
+    if (url.pathname === "/get-source") {
+      const source = await logic.getSource();
+      return new Response(JSON.stringify({ source }), { headers: { "content-type": "application/json" } });
     }
     if (url.pathname === "/lease-run" && request.method === "POST") {
       const body = (await request.json()) as { runId: string; maxConcurrent?: number };

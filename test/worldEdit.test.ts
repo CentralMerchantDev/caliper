@@ -376,3 +376,55 @@ test("guardrail: recipe part with invalid shape size arity or negative size is r
   assert.equal(resultNegative.ok, false);
   if (!resultNegative.ok) assert.match(resultNegative.reason, /size numbers must be positive/);
 });
+
+test("guardrail: recipe geometry exceeding declared footprint is strictly rejected", () => {
+  const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, {
+    ops: [{
+      op: "addObjectType",
+      key: "oversizedKiosk",
+      definition: {
+        material: "wood",
+        footprint: { w: 1.0, d: 1.0 },
+        station: null,
+        recipe: [{ shape: "box", size: [1.8, 1.0, 1.0], position: [0, 0.5, 0], color: "#ffffff" }]
+      }
+    }]
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /does not enclose recipe geometry envelope/);
+});
+
+test("guardrail: recipe geometry rotated outside declared footprint is strictly rejected", () => {
+  // A 1.4m x 0.4m box fits inside 1.4m footprint unrotated, but rotated 45 deg width becomes ~1.27m + ~0.28m = ~1.55m
+  const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, {
+    ops: [{
+      op: "addObjectType",
+      key: "rotatedBench",
+      definition: {
+        material: "wood",
+        footprint: { w: 1.4, d: 0.8 },
+        station: null,
+        recipe: [{ shape: "box", size: [1.4, 0.5, 0.4], rotation: [0, Math.PI / 4, 0], position: [0, 0.25, 0], color: "#ffffff" }]
+      }
+    }]
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /does not enclose recipe geometry envelope/);
+});
+
+test("guardrail: recipe geometry offset outside declared footprint is strictly rejected", () => {
+  const result = runValidatedWorldEdit(SIM_BASELINE_SOURCE, {
+    ops: [{
+      op: "addObjectType",
+      key: "offsetLamp",
+      definition: {
+        material: "metal",
+        footprint: { w: 1.0, d: 1.0 },
+        station: null,
+        recipe: [{ shape: "cylinder", size: [0.2, 0.2, 1.0], position: [1.2, 0.5, 0], color: "#ffffff" }]
+      }
+    }]
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /does not enclose recipe geometry envelope/);
+});

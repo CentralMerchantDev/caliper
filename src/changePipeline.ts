@@ -561,7 +561,19 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   };
   const stageCosts = existing?.stageCosts ?? [];
   const runStartedAt = existing?.runStartedAt ?? Date.now();
-  const currentSourceAtStart = existing?.currentSourceAtStart ?? (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
+  let authoritativeSource: string | null = null;
+  if (!existing?.currentSourceAtStart && env.SPEND_COUNTER) {
+    try {
+      const id = env.SPEND_COUNTER.idFromName("global");
+      const stub = env.SPEND_COUNTER.get(id);
+      const res = await stub.fetch("https://spend-counter.internal/get-source");
+      if (res.ok) {
+        const data = (await res.json()) as { source: string | null };
+        if (data.source) authoritativeSource = data.source;
+      }
+    } catch {}
+  }
+  const currentSourceAtStart = existing?.currentSourceAtStart ?? authoritativeSource ?? (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
   let questionAsked = existing?.questionAsked ?? false;
   let planGateReplyCount = existing?.planGateReplyCount ?? 0;
   const priorLessons = (await loadInstructions(env.SPEND_KV)).map((l) => `- ${l}`).join("\n");

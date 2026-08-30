@@ -345,8 +345,14 @@ function validateObjectTypeDefinition(def: unknown, where: string): string | nul
     let partHalfD = 0.5;
 
     if (part.shape === "box") {
-      partHalfW = (part.size[0] * scaleX) / 2;
-      partHalfD = (part.size[2] * scaleZ) / 2;
+      const rawW = part.size[0] * scaleX;
+      const rawD = part.size[2] * scaleZ;
+      const rotY = (part.rotation && typeof part.rotation[1] === "number") ? part.rotation[1] : 0;
+      // Rotated bounding box in the X-Z plane: |w * cos(θ)| + |d * sin(θ)|
+      const effW = Math.abs(rawW * Math.cos(rotY)) + Math.abs(rawD * Math.sin(rotY));
+      const effD = Math.abs(rawW * Math.sin(rotY)) + Math.abs(rawD * Math.cos(rotY));
+      partHalfW = effW / 2;
+      partHalfD = effD / 2;
     } else if (part.shape === "cylinder") {
       // Cylinder size is [radiusTop, radiusBottom, height]
       const r = Math.max(part.size[0], part.size[1]) * Math.max(scaleX, scaleZ);
@@ -365,15 +371,17 @@ function validateObjectTypeDefinition(def: unknown, where: string): string | nul
   }
 
   // Strict Footprint Containment Verification:
-  // Declared footprint must enclose the actual synthesized primitive geometry with a 0.35m tolerance
-  const actualGeoW = Math.max(0.1, maxGeoX - minGeoX);
-  const actualGeoD = Math.max(0.1, maxGeoZ - minGeoZ);
+  // Declared footprint centered at origin [-w/2, w/2] and [-d/2, d/2] must strictly enclose all primitive parts
   const declaredW = (d.footprint as any).w;
   const declaredD = (d.footprint as any).d;
-  const TOLERANCE = 0.35;
+  const TOLERANCE = 0.08; // 8cm floating-point precision tolerance
 
-  if (actualGeoW > (declaredW + TOLERANCE) || actualGeoD > (declaredD + TOLERANCE)) {
-    return `${where}: declared footprint (${declaredW.toFixed(1)}m x ${declaredD.toFixed(1)}m) does not enclose recipe geometry envelope (${actualGeoW.toFixed(1)}m x ${actualGeoD.toFixed(1)}m) -- footprint must cover actual visual geometry`;
+  // Both the bounding box span and distance from center must fit within declared footprint
+  const maxSpanX = Math.max(Math.abs(minGeoX), Math.abs(maxGeoX)) * 2;
+  const maxSpanZ = Math.max(Math.abs(minGeoZ), Math.abs(maxGeoZ)) * 2;
+
+  if (maxSpanX > (declaredW + TOLERANCE) || maxSpanZ > (declaredD + TOLERANCE)) {
+    return `${where}: declared footprint (${declaredW.toFixed(1)}m x ${declaredD.toFixed(1)}m) does not enclose recipe geometry envelope (${maxSpanX.toFixed(1)}m x ${maxSpanZ.toFixed(1)}m) -- footprint must cover actual visual geometry`;
   }
   if (d.shadow !== undefined) {
     if (typeof d.shadow !== "object" || d.shadow === null || typeof (d.shadow as any).w !== "number" || typeof (d.shadow as any).d !== "number") {

@@ -2015,7 +2015,9 @@ async function submitGateDecision(decisionUrl, resumeUrl, cardEl, isReject = fal
       activeEs.close();
       activeEs = null;
     }
-    connect(resumeUrl);
+    const tokenParam = currentControlToken ? `&controlToken=${encodeURIComponent(currentControlToken)}` : '';
+    const finalResumeUrl = resumeUrl.includes('?') ? `${resumeUrl}${tokenParam}` : `${resumeUrl}?${tokenParam.slice(1)}`;
+    connect(finalResumeUrl);
   } catch (err) {
     btns.forEach(b => b.disabled = false);
     cardEl.innerHTML += `<p style="margin:6px 0 0;color:#f87171;font-size:11.5px">⚠️ ${esc(err.message)}</p>`;

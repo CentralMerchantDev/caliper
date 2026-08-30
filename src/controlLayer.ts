@@ -328,14 +328,18 @@ export async function tryLeaseActiveRun(kv: KVNamespace, runId: string, spendCou
         if (!data.ok) {
           throw new PipelineLimitError("concurrency", data.reason || "Concurrent pipeline run limit reached");
         }
+        // Mirror to KV for observability
+        await kv.put(`${ACTIVE_PREFIX}${runId}`, "1", { expirationTtl: CONTROL_LIMITS.ACTIVE_RUN_LEASE_TTL_SEC });
         return;
       }
+      throw new PipelineLimitError("concurrency", `Lease coordinator returned HTTP ${res.status}. Concurrency slot could not be secured.`);
     } catch (e) {
       if (e instanceof PipelineLimitError) throw e;
+      throw new PipelineLimitError("concurrency", `Lease coordinator unavailable: ${(e as Error).message || "connection error"}`);
     }
   }
 
-  // Fallback to KV prefix check
+  // Fallback to KV prefix check ONLY when Durable Object binding is completely absent in test harness
   const list = await kv.list({ prefix: ACTIVE_PREFIX });
   if (list.keys.some(k => k.name === `${ACTIVE_PREFIX}${runId}`)) {
     throw new PipelineLimitError("concurrency", `Pipeline run "${runId}" is already actively executing.`);

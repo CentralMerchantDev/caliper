@@ -545,13 +545,13 @@ export default {
           "GET /live-status": "whether new public live change runs are enabled",
           "GET /world-edit-selftest": "apply and validate a deterministic in-memory data edit (no model call, no persistence)",
           "GET /change-run?request=<text>": "CALIPER v2 (BUILD-V2.md): plan -> implement -> verify -> review -> ship, one call per stage-boundary",
-          "GET /change-resume?runId=<id>": "continue a halted change run after a real decision/answer has been posted",
-          "GET /change-plan-decision?runId=<id>&approve=true|false": "approve/reject at Gate 1",
-          "GET /change-plan-reply?runId=<id>&reply=<text>": "the third Gate 1 action -- reply in free text instead of approve/reject; re-grounds and re-plans",
-          "GET /change-review-decision?runId=<id>&approve=true|false": "resolve the review gate",
-          "GET /change-error-decision?runId=<id>&approve=true|false": "resolve a stage-error halt -- true retries the failed stage (reusing whatever already succeeded), false abandons the run",
-          "GET /change-answer?runId=<id>&answer=<text>": "answer a plan-mode clarifying question",
-          "GET /change-stop?runId=<id>": "halt a run at its next stage boundary -- checked before the next paid call, never mid-call",
+          "GET /change-resume?runId=<id>&controlToken=<token>": "continue an authenticated halted change run after a real decision/answer has been posted",
+          "POST /change-plan-decision": "approve/reject at Gate 1 (JSON body: { runId, approve: boolean, controlToken })",
+          "POST /change-plan-reply": "the third Gate 1 action -- reply in free text instead of approve/reject; re-grounds and re-plans (JSON body: { runId, reply: string, controlToken })",
+          "POST /change-review-decision": "resolve the review gate (JSON body: { runId, approve: boolean, controlToken })",
+          "POST /change-error-decision": "resolve a stage-error halt -- true retries the failed stage, false abandons the run (JSON body: { runId, approve: boolean, controlToken })",
+          "POST /change-answer": "answer a plan-mode clarifying question (JSON body: { runId, answer: string, controlToken })",
+          "POST /change-stop": "halt a run at its next stage boundary (JSON body: { runId, controlToken })",
           "GET /sim-selftest": "run the regression suite against the current sim source",
           "GET /spend-counter-selftest?n=<count>": "fire n concurrent reservations at an isolated DO instance and confirm none are lost (free, no real spend touched)",
           "GET /change-instructions": "the accumulated lessons file, fed into plan/implement/review/fix prompts on future runs",
@@ -686,7 +686,9 @@ export default {
     async function verifyRunAuth(req: Request, runId: string, payload: Record<string, unknown>): Promise<boolean> {
       const storedToken = await env.SPEND_KV.get(`change/token/${runId}`);
       if (!storedToken) return false; // Strictly fail-closed: unauthenticated or unknown run
-      const token = req.headers.get("x-control-token") || (typeof payload.controlToken === "string" ? payload.controlToken : null);
+      const token = req.headers.get("x-control-token") ||
+        (typeof payload.controlToken === "string" ? payload.controlToken : null) ||
+        (typeof payload.token === "string" ? payload.token : null);
       if (!token) return false; // Strictly fail-closed: missing token rejected
       return timingSafeCompare(token.trim(), storedToken.trim());
     }
@@ -814,15 +816,23 @@ export default {
     }
 
     if (url.pathname === "/world-source") {
-      // Chunk 8: "a shared world, add something to it" is only honest if
-      // the visitor actually sees the CURRENT world, including whatever a
-      // prior shipped run changed -- not a static snapshot frozen at build
-      // time. Returns the exact live sim/current-source (or the baseline,
-      // for a fresh deploy that's never shipped anything), as plain JS
-      // text with export statements appended, importable directly by the
-      // browser exactly like public/sim-baseline.generated.js already is.
-      const source = ((await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE).trim();
-      return new Response(`${source}\n\nexport { initialWorld, chooseAction, applyAction, tick };\n`, {
+      let source: string | null = null;
+      if (env.SPEND_COUNTER) {
+        try {
+          const id = env.SPEND_COUNTER.idFromName("global");
+          const stub = env.SPEND_COUNTER.get(id);
+          const res = await stub.fetch("https://spend-counter.internal/get-source");
+          if (res.ok) {
+            const data = (await res.json()) as { source: string | null };
+            if (data.source) source = data.source;
+          }
+        } catch {}
+      }
+      if (!source) {
+        source = (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
+      }
+      const trimmed = source.trim();
+      return new Response(`${trimmed}\n\nexport { initialWorld, chooseAction, applyAction, tick };\n`, {
         headers: {
           "content-type": "text/javascript; charset=utf-8",
           "cache-control": "no-store",

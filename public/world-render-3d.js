@@ -35,6 +35,9 @@ export const BUILDING_TYPE_SCALE = {
 export const GRID_UNIT_X = 6.0;
 export const GRID_UNIT_Z = 4.5;
 
+export const CAMERA_MIN_DIST = 4.0;
+export const CAMERA_MAX_DIST = 3600.0;
+
 // Authoritative Master City Spatial Zoning and Setback Constants
 export const CITY_ZONING = {
   ROAD_CARRIAGEWAY: { zMin: 9.4, zMax: 13.8 },
@@ -1013,23 +1016,43 @@ class Renderer3D {
     breakwaterGroup.position.set(0, -0.3, 78.0);
     this.neighbourhoodGroup.add(breakwaterGroup);
 
-    // West Rock Arm (x = -420 to -35)
-    const breakwaterWest = new THREE.Mesh(
-      new RoundedBoxGeometry(385, 3.2, 9.5, 3, 0.6),
-      stdMat({ color: 0x334155, roughness: 0.94, metalness: 0.05 })
-    );
-    breakwaterWest.position.set(-227.5, 1.1, 0);
-    breakwaterWest.castShadow = true; breakwaterWest.receiveShadow = true;
-    breakwaterGroup.add(breakwaterWest);
+    const breakwaterMat = stdMat({ color: 0x334155, roughness: 0.94, metalness: 0.05 });
+    // Build visibly curved multi-segment granite masonry breakwater arms
+    // West Arm: curves gently from x = -440, z = -14 inwards to x = -35, z = 0
+    const westSegments = 10;
+    for (let s = 0; s < westSegments; s++) {
+      const u0 = s / westSegments;
+      const u1 = (s + 1) / westSegments;
+      const x0 = -440 + u0 * 405;
+      const x1 = -440 + u1 * 405;
+      const z0 = -Math.sin(u0 * Math.PI * 0.5) * 16.0;
+      const z1 = -Math.sin(u1 * Math.PI * 0.5) * 16.0;
+      const segLen = Math.hypot(x1 - x0, z1 - z0);
+      const angle = Math.atan2(z1 - z0, x1 - x0);
+      const seg = new THREE.Mesh(new RoundedBoxGeometry(segLen, 3.2, 9.5, 2, 0.4), breakwaterMat);
+      seg.position.set((x0 + x1) / 2, 1.1, (z0 + z1) / 2);
+      seg.rotation.y = -angle;
+      seg.castShadow = true; seg.receiveShadow = true;
+      breakwaterGroup.add(seg);
+    }
 
-    // East Rock Arm (x = 35 to 420)
-    const breakwaterEast = new THREE.Mesh(
-      new RoundedBoxGeometry(385, 3.2, 9.5, 3, 0.6),
-      stdMat({ color: 0x334155, roughness: 0.94, metalness: 0.05 })
-    );
-    breakwaterEast.position.set(227.5, 1.1, 0);
-    breakwaterEast.castShadow = true; breakwaterEast.receiveShadow = true;
-    breakwaterGroup.add(breakwaterEast);
+    // East Arm: curves gently from x = 440, z = -14 inwards to x = 35, z = 0
+    const eastSegments = 10;
+    for (let s = 0; s < eastSegments; s++) {
+      const u0 = s / eastSegments;
+      const u1 = (s + 1) / eastSegments;
+      const x0 = 440 - u0 * 405;
+      const x1 = 440 - u1 * 405;
+      const z0 = -Math.sin(u0 * Math.PI * 0.5) * 16.0;
+      const z1 = -Math.sin(u1 * Math.PI * 0.5) * 16.0;
+      const segLen = Math.hypot(x1 - x0, z1 - z0);
+      const angle = Math.atan2(z1 - z0, x1 - x0);
+      const seg = new THREE.Mesh(new RoundedBoxGeometry(segLen, 3.2, 9.5, 2, 0.4), breakwaterMat);
+      seg.position.set((x0 + x1) / 2, 1.1, (z0 + z1) / 2);
+      seg.rotation.y = -angle;
+      seg.castShadow = true; seg.receiveShadow = true;
+      breakwaterGroup.add(seg);
+    }
 
     // Navigational Harbor Entrance Navigation Beacons (flanking the 70m shipping channel x in [-35, 35])
     [-35, 35].forEach((bx, idx) => {
@@ -2650,6 +2673,7 @@ class Renderer3D {
     const steelCableMat = stdMat({ color: 0xe2e8f0, roughness: 0.3, metalness: 0.9 });
 
     // Primary Expressway Viaduct Deck spanning across the bay entrance (x = -550 to +550, z = 72.0, elevation y = 12.5m)
+    const BRIDGE_Z = 72.0;
     const deckWidth = 1100;
     const deckDepth = 7.4;
     const deckHeight = 1.1;
@@ -2659,7 +2683,7 @@ class Renderer3D {
       new RoundedBoxGeometry(deckWidth, deckHeight, deckDepth, 3, 0.25),
       highwayDeckMat
     );
-    deckMesh.position.set(0, highwayElevation, 72.0);
+    deckMesh.position.set(0, highwayElevation, BRIDGE_Z);
     deckMesh.castShadow = true; deckMesh.receiveShadow = true;
     highwayGroup.add(deckMesh);
 
@@ -2668,7 +2692,7 @@ class Renderer3D {
     for (let hx = -530; hx <= 530; hx += 6.5) {
       const hDash = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.26), hPaintMat);
       hDash.rotation.x = -Math.PI / 2;
-      hDash.position.set(hx, highwayElevation + deckHeight / 2 + 0.02, 72.0);
+      hDash.position.set(hx, highwayElevation + deckHeight / 2 + 0.02, BRIDGE_Z);
       highwayGroup.add(hDash);
     }
 
@@ -2679,7 +2703,7 @@ class Renderer3D {
         new RoundedBoxGeometry(2.8, highwayElevation + 1.5, 5.4, 2, 0.3),
         concretePierMat
       );
-      pier.position.set(px, (highwayElevation - 0.6) / 2, 72.0);
+      pier.position.set(px, (highwayElevation - 0.6) / 2, BRIDGE_Z);
       pier.castShadow = true; pier.receiveShadow = true;
       highwayGroup.add(pier);
 
@@ -2688,7 +2712,7 @@ class Renderer3D {
         new RoundedBoxGeometry(3.6, 0.9, 6.8, 2, 0.18),
         concretePierMat
       );
-      crosshead.position.set(px, highwayElevation - 0.55, 72.0);
+      crosshead.position.set(px, highwayElevation - 0.55, BRIDGE_Z);
       highwayGroup.add(crosshead);
     }
 
@@ -2696,29 +2720,31 @@ class Renderer3D {
     [-42, 42].forEach((tx) => {
       const towerH = 56;
       const towerLegL = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.8, towerH, 16), concretePierMat);
-      towerLegL.position.set(tx, towerH / 2, 72.0 - 3.2);
+      towerLegL.position.set(tx, towerH / 2, BRIDGE_Z - 3.2);
       towerLegL.castShadow = true;
       highwayGroup.add(towerLegL);
 
       const towerLegR = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.8, towerH, 16), concretePierMat);
-      towerLegR.position.set(tx, towerH / 2, 72.0 + 3.2);
+      towerLegR.position.set(tx, towerH / 2, BRIDGE_Z + 3.2);
       towerLegR.castShadow = true;
       highwayGroup.add(towerLegR);
 
       // Top Portal Struts
       const topCross = new THREE.Mesh(new RoundedBoxGeometry(2.6, 2.2, 7.8, 2, 0.25), concretePierMat);
-      topCross.position.set(tx, towerH - 1.4, 72.0);
+      topCross.position.set(tx, towerH - 1.4, BRIDGE_Z);
       highwayGroup.add(topCross);
 
-      // High-tension steel stay cables radiating from tower top down to deck
-      for (let c = 1; c <= 7; c++) {
-        const offset = c * 14.0;
-        const cableGeo = new THREE.CylinderGeometry(0.05, 0.05, Math.hypot(offset, towerH - highwayElevation), 6);
-        const cableMeshL = new THREE.Mesh(cableGeo, steelCableMat);
-        const angle = Math.atan2(offset, towerH - highwayElevation);
-        cableMeshL.rotation.z = (tx < 0 ? 1 : -1) * angle;
-        cableMeshL.position.set(tx + (tx < 0 ? -offset / 2 : offset / 2), (towerH + highwayElevation) / 2, 72.0);
-        highwayGroup.add(cableMeshL);
+      // Full symmetric stay cables radiating from tower top down to deck in both directions (+X and -X)
+      for (let dir of [-1, 1]) {
+        for (let c = 1; c <= 7; c++) {
+          const offset = c * 14.0 * dir;
+          const cableGeo = new THREE.CylinderGeometry(0.05, 0.05, Math.hypot(Math.abs(offset), towerH - highwayElevation), 6);
+          const cableMesh = new THREE.Mesh(cableGeo, steelCableMat);
+          const angle = Math.atan2(offset, towerH - highwayElevation);
+          cableMesh.rotation.z = -angle;
+          cableMesh.position.set(tx + offset / 2, (towerH + highwayElevation) / 2, BRIDGE_Z);
+          highwayGroup.add(cableMesh);
+        }
       }
     });
 
@@ -2787,14 +2813,14 @@ class Renderer3D {
         new RoundedBoxGeometry(deckWidth, 0.85, 0.25, 1, 0.04),
         barrierMat
       );
-      barrier.position.set(0, highwayElevation + deckHeight / 2 + 0.42, 48.0 + bz);
+      barrier.position.set(0, highwayElevation + deckHeight / 2 + 0.42, BRIDGE_Z + bz);
       highwayGroup.add(barrier);
 
       const ledStrip = new THREE.Mesh(
         new THREE.PlaneGeometry(deckWidth, 0.08),
         stdMat({ color: 0x38bdf8, emissive: 0x38bdf8, emissiveIntensity: 1.4 })
       );
-      ledStrip.position.set(0, highwayElevation + deckHeight / 2 + 0.70, 48.0 + bz + (bz > 0 ? -0.14 : 0.14));
+      ledStrip.position.set(0, highwayElevation + deckHeight / 2 + 0.70, BRIDGE_Z + bz + (bz > 0 ? -0.14 : 0.14));
       if (bz > 0) ledStrip.rotation.y = Math.PI;
       highwayGroup.add(ledStrip);
       this._emissiveAnimated.push(ledStrip.material);
@@ -2803,18 +2829,18 @@ class Renderer3D {
     // Elevated Highway Overhead Gantry Signs & Streetlights
     [-32, 32].forEach((gx) => {
       const gantryPoleL = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 4.8, 8), concretePierMat);
-      gantryPoleL.position.set(gx, highwayElevation + 2.4, 48.0 - 2.8);
+      gantryPoleL.position.set(gx, highwayElevation + 2.4, BRIDGE_Z - 2.8);
       highwayGroup.add(gantryPoleL);
       const gantryPoleR = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 4.8, 8), concretePierMat);
-      gantryPoleR.position.set(gx, highwayElevation + 2.4, 48.0 + 2.8);
+      gantryPoleR.position.set(gx, highwayElevation + 2.4, BRIDGE_Z + 2.8);
       highwayGroup.add(gantryPoleR);
 
       const gantryBeam = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 6.0), concretePierMat);
-      gantryBeam.position.set(gx, highwayElevation + 4.6, 48.0);
+      gantryBeam.position.set(gx, highwayElevation + 4.6, BRIDGE_Z);
       highwayGroup.add(gantryBeam);
 
       const gantrySign = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 1.2), stdMat({ color: 0x059669, roughness: 0.4 }));
-      gantrySign.position.set(gx, highwayElevation + 3.8, 48.0);
+      gantrySign.position.set(gx, highwayElevation + 3.8, BRIDGE_Z);
       gantrySign.rotation.y = Math.PI / 2;
       highwayGroup.add(gantrySign);
     });
@@ -3748,7 +3774,7 @@ class Renderer3D {
         const [p1, p2] = Array.from(activePointers.values());
         const currentDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
         const ratio = initialPinchDist / Math.max(1, currentDist);
-        this._camDist = Math.max(5, Math.min(320, initialCamDist * ratio));
+        this._camDist = Math.max(CAMERA_MIN_DIST, Math.min(CAMERA_MAX_DIST, initialCamDist * ratio));
         this._targetCamDist = this._camDist;
         return;
       }
@@ -3877,13 +3903,13 @@ class Renderer3D {
             break;
           case "+":
           case "=":
-            this._camDist = Math.max(5, (this._camDist || 48) * 0.92);
+            this._camDist = Math.max(CAMERA_MIN_DIST, (this._camDist || 48) * 0.92);
             this._targetCamDist = this._camDist;
             e.preventDefault();
             break;
           case "-":
           case "_":
-            this._camDist = Math.min(320, (this._camDist || 48) * 1.08);
+            this._camDist = Math.min(CAMERA_MAX_DIST, (this._camDist || 48) * 1.08);
             this._targetCamDist = this._camDist;
             e.preventDefault();
             break;
