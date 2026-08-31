@@ -776,12 +776,12 @@ class Renderer3D {
     ], true);
 
     this._districtTargets = {
-      town: { pos: new THREE.Vector3(0, 1.8, 12.0), dist: 52, delta: 0, pitch: 0.46, label: "The Central Civic Promenade & Dual Harbours" },
-      forge: { pos: new THREE.Vector3(-28.5, 2.5, -12), dist: 28, delta: 0.75, pitch: 0.48, label: "The Maritime Innovation Atelier" },
-      residential: { pos: new THREE.Vector3(31, 2.2, -8), dist: 28, delta: -0.65, pitch: 0.45, label: "The Coastal Terraced Villas" },
-      docks: { pos: new THREE.Vector3(0, 0.8, 30), dist: 42, delta: 0, pitch: 0.42, label: "The Grand Marina Yacht Club & Bay" },
-      watchtower: { pos: new THREE.Vector3(26, 4.0, -20), dist: 28, delta: 0.4, pitch: 0.44, label: "The Seaside Headland Rotunda & Beacon" },
-      datum: { pos: new THREE.Vector3(12.0, 2.2, 18.5), dist: 16, delta: 0, pitch: 0.40, label: "The Datum AEC AI Pavilion (Mark Fraser, Applied AI)" },
+      town: { pos: new THREE.Vector3(0, 5.0, -16.0), dist: 64, delta: 0, pitch: 0.38, label: "The Central Civic Promenade & Dual Harbours" },
+      forge: { pos: new THREE.Vector3(-28.5, 3.5, -12), dist: 46, delta: 0.35, pitch: 0.32, label: "The Maritime Innovation Atelier" },
+      residential: { pos: new THREE.Vector3(31, 2.2, -8), dist: 48, delta: -0.55, pitch: 0.38, label: "The Coastal Terraced Villas" },
+      docks: { pos: new THREE.Vector3(0, 1.2, 28), dist: 58, delta: 0, pitch: 0.36, label: "The Grand Marina Yacht Club & Bay" },
+      watchtower: { pos: new THREE.Vector3(26, 4.0, -20), dist: 45, delta: 0.4, pitch: 0.40, label: "The Seaside Headland Rotunda & Beacon" },
+      datum: { pos: new THREE.Vector3(12.0, 2.2, 18.5), dist: 22, delta: 0, pitch: 0.38, label: "The Datum AEC AI Pavilion (Mark Fraser, Applied AI)" },
     };
 
     this._diffSlateMat = stdMat({ color: 0x334155, roughness: 0.85, metalness: 0.1 });
@@ -4854,7 +4854,13 @@ class Renderer3D {
     this._targetLookAt.copy(targetVec3);
     this._startCamDist = this._camDist || 18;
     this._targetCamDist = dist;
-    this._cameraAnimStartTime = performance.now();
+    if (this.reducedMotion) {
+      this._lookAt.copy(targetVec3);
+      this._camDist = dist;
+      this._cameraAnimStartTime = 0;
+    } else {
+      this._cameraAnimStartTime = performance.now();
+    }
   }
 
   focusDistrict(districtName) {
@@ -4862,11 +4868,13 @@ class Renderer3D {
     const d = this._districtTargets[districtName];
     if (d) {
       this.focusOn(d.pos, d.dist);
-      if (typeof d.delta === "number") {
-        this._orbit.delta = d.delta;
-      }
-      if (typeof d.pitch === "number") {
-        this._orbit.pitch = d.pitch;
+      this._startOrbitDelta = this._orbit.delta;
+      this._targetOrbitDelta = typeof d.delta === "number" ? d.delta : this._orbit.delta;
+      this._startOrbitPitch = this._orbit.pitch;
+      this._targetOrbitPitch = typeof d.pitch === "number" ? d.pitch : this._orbit.pitch;
+      if (this.reducedMotion) {
+        this._orbit.delta = this._targetOrbitDelta;
+        this._orbit.pitch = this._targetOrbitPitch;
       }
       if (this.onInspect) {
         this.onInspect({
@@ -5262,6 +5270,12 @@ class Renderer3D {
       const ease = 1 - Math.pow(1 - progress, 3);
       this._lookAt.lerpVectors(this._startLookAt, this._targetLookAt, ease);
       this._camDist = lerp(this._startCamDist, this._targetCamDist, ease);
+      if (typeof this._targetOrbitDelta === "number") {
+        this._orbit.delta = lerp(this._startOrbitDelta, this._targetOrbitDelta, ease);
+      }
+      if (typeof this._targetOrbitPitch === "number") {
+        this._orbit.pitch = lerp(this._startOrbitPitch, this._targetOrbitPitch, ease);
+      }
       if (progress >= 1) this._cameraAnimStartTime = 0;
     }
 
