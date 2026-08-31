@@ -71,7 +71,13 @@ export const ATTACK_PROBES: AttackProbe[] = [
     // point is to see the memory ceiling, not re-confirm the CPU one.
     cpuMs: 10000,
     expectedOutcome: "allocation fails with a catchable error before the isolate is killed outright",
-    judge: (o) => !o.invoked || !!o.error, // Must error or terminate; cannot succeed without error
+    judge: (o) => {
+      // Must either terminate the isolate or throw an allocation/memory/exhaustion error
+      if (!o.invoked) return true; // Isolate was terminated by runtime
+      if (!o.error) return false;
+      const err = o.error.toLowerCase();
+      return err.includes("memory") || err.includes("allocation") || err.includes("out of") || err.includes("exhaust") || err.includes("rangeerror");
+    },
     code: `
         const chunks = [];
         let totalBytes = 0;
@@ -86,7 +92,13 @@ export const ATTACK_PROBES: AttackProbe[] = [
     description: "Recurses with no base case until the call stack is exhausted",
     cpuMs: 10000,
     expectedOutcome: "stack overflow surfaces as a catchable RangeError",
-    judge: (o) => !o.invoked || !!o.error, // Must error or terminate; cannot return arbitrary success
+    judge: (o) => {
+      // Must either terminate the isolate or throw a call-stack RangeError
+      if (!o.invoked) return true; // Isolate was killed
+      if (!o.error) return false;
+      const err = o.error.toLowerCase();
+      return err.includes("rangeerror") || err.includes("stack") || err.includes("recursion") || err.includes("call stack");
+    },
     code: `
         function recurse(n) { return 1 + recurse(n + 1); }
         return recurse(0);

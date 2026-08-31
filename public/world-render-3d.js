@@ -848,12 +848,12 @@ class Renderer3D {
       console.warn("HDRI PMREM loader init deferred:", e);
     }
 
-    // Direct, reliable PBR lighting calibrated for Australian coastal sun
-    const ambient = new THREE.AmbientLight(0xffffff, 0.42);
+    // Direct, reliable PBR lighting calibrated for crisp Mediterranean & Australian coastal sun
+    const ambient = new THREE.AmbientLight(0xffffff, 0.52);
     scene.add(ambient);
     this.ambient = ambient;
 
-    const hemi = new THREE.HemisphereLight(0x38bdf8, 0x475569, 0.45);
+    const hemi = new THREE.HemisphereLight(0x7dd3fc, 0x334155, 0.55);
     scene.add(hemi);
     this.hemi = hemi;
 
@@ -868,11 +868,11 @@ class Renderer3D {
       composer.addPass(renderPass);
       const w = typeof window !== 'undefined' ? window.innerWidth : 1280;
       const h = typeof window !== 'undefined' ? window.innerHeight : 800;
-      const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.04, 0.15, 0.98);
+      const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.02, 0.12, 0.99);
       composer.addPass(bloomPass);
       const vignettePass = new ShaderPass(VignetteShader);
-      vignettePass.uniforms["offset"].value = 1.35;
-      vignettePass.uniforms["darkness"].value = 0.65;
+      vignettePass.uniforms["offset"].value = 1.45;
+      vignettePass.uniforms["darkness"].value = 0.45;
       composer.addPass(vignettePass);
       const outputPass = new OutputPass();
       composer.addPass(outputPass);
@@ -884,8 +884,8 @@ class Renderer3D {
       this.composer = null;
     }
 
-    // Warm golden-hour sun
-    const sun = new THREE.DirectionalLight(0xfff5e6, 1.45);
+    // High-definition crisp architectural sunlight
+    const sun = new THREE.DirectionalLight(0xfffaed, 2.15);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.near = 1;
@@ -894,8 +894,8 @@ class Renderer3D {
     sun.shadow.camera.right = 90;
     sun.shadow.camera.top = 90;
     sun.shadow.camera.bottom = -90;
-    sun.shadow.bias = -0.0012;
-    sun.shadow.normalBias = 0.025;
+    sun.shadow.bias = -0.00018;
+    sun.shadow.normalBias = 0.018;
     scene.add(sun);
     scene.add(sun.target);
     this.sun = sun;

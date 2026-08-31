@@ -118,7 +118,7 @@ export const NOT_YET_PRESENT = [
   "any entity type other than a sim (no pet, no NPC, no object with its own behavior)",
   "any sim action beyond the existing seven (idle, eat, sleep, shower, play, call, work) -- adding one means touching chooseAction/applyAction, not just the registry",
   "a per-sim wallet (money is shared, world-level state)",
-  "external 3D glTF/FBX mesh imports beyond the procedural geometry and PBR materials the renderer already draws natively",
+  "external 3D glTF/FBX mesh imports beyond the procedural geometry, vendored tiled PBR textures (wood, plaster, grass, gravel), and Poly Haven HDR celestial environment the renderer already draws natively",
   "external pre-recorded speech/voice files beyond the in-engine Web Audio synthesizer and procedural ocean acoustics",
   "a new simulation subsystem such as weather, economy, or traffic logic -- more than one run's budget can implement and verify",
   "state shared between visitors in real time -- the world advances per visitor's own session, not a single synchronized clock everyone watches together",

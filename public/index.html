@@ -748,14 +748,14 @@ html, body {
     gap: 8px;
     z-index: 80;
   }
-  /* Keep tactile navigation pad docked neatly on mobile screens without colliding with bottom dock or status card */
+  /* Keep tactile navigation pad strictly bottom-left across all mobile & tablet screens */
   .nav-pad {
-    bottom: auto;
-    top: 72px;
-    right: 8px;
-    left: auto;
-    transform: scale(0.82);
-    transform-origin: top right;
+    bottom: calc(220px + env(safe-area-inset-bottom, 0px));
+    top: auto;
+    left: 8px;
+    right: auto;
+    transform: scale(0.85);
+    transform-origin: bottom left;
     z-index: 75;
   }
   .status-card {
@@ -2521,8 +2521,15 @@ function connect(url) {
     resetWatchdog();
     updatePipelineStep(4);
     const d = safeJson(ev.data);
-    const testCount = (d && d.total) ? `${d.passed}/${d.total}` : '204/204';
-    const b = stageBlock(log, 's-verify-done', `Verified ${testCount} Invariants`);
+    let countStr = 'Verified';
+    if (d) {
+      const p = typeof d.passed === 'number' ? d.passed : (Number(d.regressionPassed || 0) + Number(d.criteriaPassed || 0));
+      const t = typeof d.total === 'number' ? d.total : (Number(d.regressionTotal || 0) + Number(d.criteriaTotal || 0));
+      if (t > 0) {
+        countStr = `Verified ${p}/${t} Invariants`;
+      }
+    }
+    const b = stageBlock(log, 's-verify-done', countStr);
     b.classList.remove('active');
   });
 
