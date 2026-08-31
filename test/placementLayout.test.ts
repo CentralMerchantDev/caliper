@@ -102,13 +102,138 @@ test("SHIP.md item 3: the four buildings sit on a consistent grid module, not sc
   assert.equal(ys.length, 2, `expected buildings on 2 distinct y-rows, found ${ys.length}: ${ys}`);
 });
 
-test("3D masterplan invariants: road is strictly on terra firma and clear of harbour water", async () => {
+// Loads the masterplan zoning and the terrain height function out of the real
+// renderer source and evaluates them, so these assertions test the actual
+// geometry rather than the spelling of a line.
+//
+// The previous version of this test matched `coping.position.set(0, 0.70, 22.0)`
+// as a string and called it "seawall must begin at z = 22.0". It did not: a
+// 1.6m-deep wall centred on 22.0 begins at 21.2. The test passed while the
+// invariant it advertised was false, and it would have failed on a pure
+// reformat. A test that checks a string is not checking the property.
+async function loadMasterplan() {
   const fs = await import("node:fs");
-  const code = fs.readFileSync("public/world-render-3d.js", "utf-8");
-  // Roadway is placed at z = 11.6 on terra firma
-  assert.match(code, /position\.set\(0,\s*0\.03,\s*11\.6\)/, "roadway carriageway must sit at z = 11.6");
-  // Seawall begins at z = 22.0 (10.4m from road centerline, >8m from road curb edge at z = 13.8)
-  assert.match(code, /coping\.position\.set\(0,\s*0\.70,\s*22\.0\)/, "seawall must begin at z = 22.0");
+  const src = fs.readFileSync("public/world-render-3d.js", "utf-8");
+  const zone = src.match(/export const ZONE = \{[\s\S]*?\n\};/);
+  const fn = src.match(/function terrainHeightAt\(x, z\) \{[\s\S]*?\n\}/);
+  assert.ok(zone, "ZONE block must exist in the renderer -- it is the single source of masterplan truth");
+  assert.ok(fn, "terrainHeightAt must exist in the renderer");
+  const factory = new Function(
+    `${zone![0].replace("export ", "")}\n${fn![0]}\nreturn { ZONE, terrainHeightAt };`
+  );
+  return { ...factory(), src } as {
+    ZONE: Record<string, number>;
+    terrainHeightAt: (x: number, z: number) => number;
+    src: string;
+  };
+}
+
+test("masterplan zones are contiguous: no gaps and no overlaps between downtown, boulevard, seawall and beach", async () => {
+  const { ZONE } = await loadMasterplan();
+  const bounds = [
+    ["downtown core", ZONE.ISLAND_Z_MIN, ZONE.DOWNTOWN_Z_MAX],
+    ["boulevard + tram", ZONE.DOWNTOWN_Z_MAX, ZONE.SEAWALL_Z_MIN],
+    ["seawall", ZONE.SEAWALL_Z_MIN, ZONE.SEAWALL_Z_MAX],
+    ["beach", ZONE.SEAWALL_Z_MAX, ZONE.BEACH_Z_MAX],
+  ] as [string, number, number][];
+  for (const [name, zMin, zMax] of bounds) {
+    assert.ok(zMax > zMin, `${name} must have positive depth, got ${zMin} -> ${zMax}`);
+  }
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const [aName, , aMax] = bounds[i];
+    const [bName, bMin] = bounds[i + 1];
+    assert.equal(aMax, bMin, `${aName} must meet ${bName} exactly -- ${aMax} vs ${bMin} is a gap or an overlap`);
+  }
+});
+
+test("the whole island -- downtown, boulevard AND beach -- is genuinely flat, not a ramp into the sea", async () => {
+  const { ZONE, terrainHeightAt } = await loadMasterplan();
+  // Only the deliberate planetary-curvature roll is allowed. Anything larger
+  // means the seabed slope is interpolating back into the land, which is what
+  // sank the promenade to -0.29m and put the beach under the waterline.
+  const CURVATURE_TOLERANCE = 0.02;
+  let worst = 0;
+  let worstAt = "";
+  for (let z = ZONE.ISLAND_Z_MIN; z <= ZONE.BEACH_Z_MAX; z += 0.5) {
+    for (const x of [0, -40, 40, -ZONE.ISLAND_X_HALF + 1, ZONE.ISLAND_X_HALF - 1]) {
+      const y = Math.abs(terrainHeightAt(x, z));
+      if (y > worst) { worst = y; worstAt = `(${x}, ${z})`; }
+    }
+  }
+  assert.ok(
+    worst <= CURVATURE_TOLERANCE,
+    `island must be flat within ${CURVATURE_TOLERANCE}m; worst deviation ${worst.toFixed(3)}m at ${worstAt}`
+  );
+});
+
+test("guardrail: the flatness check actually fails when the seabed slope reaches into the land", async () => {
+  // Plant the exact defect: a slope that starts at the shoreline instead of out
+  // at sea. If this does not throw, the test above proves nothing.
+  const broken = (x: number, z: number) => (z > 22 ? -3.4 * Math.min(1, (z - 22) / 24) : 0);
+  let sawViolation = false;
+  for (let z = -15; z <= 30; z += 0.5) {
+    if (Math.abs(broken(0, z)) > 0.02) sawViolation = true;
+  }
+  assert.ok(sawViolation, "planted seabed-into-land defect must be detected by this bound");
+});
+
+test("open water never reaches north of the beach edge, and the seabed only drops out at sea", async () => {
+  const { ZONE, terrainHeightAt } = await loadMasterplan();
+  assert.ok(
+    ZONE.OCEAN_FLOOR_START > ZONE.BEACH_Z_MAX,
+    `the seabed slope must begin south of the beach edge, else vertex interpolation drags the shoreline under: ` +
+      `OCEAN_FLOOR_START ${ZONE.OCEAN_FLOOR_START} vs BEACH_Z_MAX ${ZONE.BEACH_Z_MAX}`
+  );
+  // Dry at the beach edge, genuinely deep further out.
+  assert.ok(terrainHeightAt(0, ZONE.BEACH_Z_MAX) > -0.02, "the beach edge must be at or above the waterline");
+  assert.ok(terrainHeightAt(0, 60) < -1.5, "open sea must be genuinely deep, not a shallow shelf");
+});
+
+test("the road carriageway and the tram corridor both sit on land, inside the boulevard zone", async () => {
+  const { ZONE, terrainHeightAt, src } = await loadMasterplan();
+  const road = src.match(/roadMesh\.position\.set\(0,\s*[\d.]+,\s*([\d.]+)\)/);
+  assert.ok(road, "the carriageway must be placed via roadMesh.position.set");
+  const roadZ = Number(road![1]);
+  assert.ok(
+    roadZ > ZONE.DOWNTOWN_Z_MAX && roadZ < ZONE.SEAWALL_Z_MIN,
+    `carriageway centreline ${roadZ} must lie inside the boulevard zone ${ZONE.DOWNTOWN_Z_MAX} -> ${ZONE.SEAWALL_Z_MIN}`
+  );
+  // Same flat ground as downtown, allowing only the deliberate curvature roll --
+  // an exact-equality assert here fails on a 0.2mm difference that is by design.
+  const drop = Math.abs(terrainHeightAt(0, roadZ) - terrainHeightAt(0, 0));
+  assert.ok(drop < 0.02, `the carriageway must be on the same flat ground as downtown; differs by ${drop.toFixed(4)}m`);
+
+  // The tram is a SEPARATE corridor in the masterplan, not a rail laid down the
+  // middle of the traffic lanes. It must be derived from ZONE (so it cannot
+  // drift), and its physical body must clear the carriageway and the seawall.
+  assert.match(
+    src,
+    /tramTrackGroup\.position\.set\(0,\s*0,\s*TRAM_CENTRE_Z\)/,
+    "the tram must be positioned from the zoning, not a hardcoded z"
+  );
+  const tramZ = (ZONE.TRAM_Z_MIN + ZONE.PROMENADE_Z_MIN) / 2;
+  const TRAM_BODY_DEPTH = 1.7;
+  const tramNear = tramZ - TRAM_BODY_DEPTH / 2;
+  const tramFar = tramZ + TRAM_BODY_DEPTH / 2;
+  assert.ok(
+    tramNear > ZONE.MEDIAN_Z_MIN,
+    `the tram body must not reach into the carriageway: body starts ${tramNear}, carriageway ends ${ZONE.MEDIAN_Z_MIN}`
+  );
+  assert.ok(
+    tramFar < ZONE.SEAWALL_Z_MIN,
+    `the tram body must not reach into the seawall: body ends ${tramFar}, seawall starts ${ZONE.SEAWALL_Z_MIN}`
+  );
+});
+
+test("guardrail: the tram-clearance check actually fails when the tram is put back in the traffic lanes", async () => {
+  const { ZONE } = await loadMasterplan();
+  // The exact shipped defect: tram centred at z = 10.1, inside the carriageway.
+  const brokenTramZ = 10.1;
+  const near = brokenTramZ - 1.7 / 2;
+  assert.ok(
+    !(near > ZONE.MEDIAN_Z_MIN),
+    "a tram at z=10.1 must be caught as overlapping the carriageway -- if this passes, the check above proves nothing"
+  );
 });
 
 test("3D visual invariants: crisp architectural lighting, tight shadow bias, and glulam trusses", async () => {

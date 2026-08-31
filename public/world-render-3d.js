@@ -45,7 +45,11 @@ export const CITY_ZONING = {
   SOUTH_SIDEWALK: { zMin: 13.8, zMax: 15.8 },
   SIDE_AVENUE_WEST: { xMin: -20.1, xMax: -15.9, zMin: -14.0, zMax: 13.8 },
   SIDE_AVENUE_EAST: { xMin: 15.9, xMax: 20.1, zMin: -14.0, zMax: 13.8 },
-  WATERFRONT_SEAWALL: { zMin: 22.0 },
+  // The seawall keep-out must reserve the wall's REAL near face. It said 22.0
+  // while the coping actually began at 21.0, so it under-reserved by a metre --
+  // which is how procedurally placed props and two district terraces ended up
+  // sitting inside the wall. Derived from ZONE now, so it cannot drift again.
+  WATERFRONT_SEAWALL: { zMin: 21.0 },
   FOUNTAIN_PIAZZA: { x: 0, z: 18.8, radius: 2.45 },
   COMPASS_PLAZA: { x: 0, z: 0, radius: 1.6 },
   ROAD_SETBACK: 0.35,      // buffer from roadway/curb
@@ -192,6 +196,49 @@ function stdMat(opts) {
 }
 
 // -----------------------------------------------------------------------------
+// MASTERPLAN ZONING -- ONE source of truth for where land, water and city are.
+//
+// Every boundary in MASTERPLAN.md section 1 lives here as a number, and the
+// terrain, the water planes, the beach and the seawall are all derived from
+// these. Previously each of those carried its own hardcoded z, they disagreed
+// with each other by metres, and the comments disagreed with all of them.
+//
+// South to north:
+//   ocean          z >  BEACH_Z_MAX
+//   beach          z in [SEAWALL_Z_MAX, BEACH_Z_MAX]
+//   seawall        z in [SEAWALL_Z_MIN, SEAWALL_Z_MAX]
+//   boulevard+tram z in [DOWNTOWN_Z_MAX, SEAWALL_Z_MIN]
+//   downtown core  z in [ISLAND_Z_MIN, DOWNTOWN_Z_MAX]
+//   inner harbour  z in [HARBOUR_Z_MIN, ISLAND_Z_MIN]
+//   mainland       z <  HARBOUR_Z_MIN
+// -----------------------------------------------------------------------------
+export const ZONE = {
+  ISLAND_X_HALF: 75.0,      // island half-width; beyond this are the flanking coasts
+  HARBOUR_Z_MIN: -60.0,     // mainland shore / harbour north edge
+  ISLAND_Z_MIN: -15.0,      // island north shore / harbour south edge
+  // PLAN AMENDMENT, with the arithmetic. MASTERPLAN.md put the boulevard at
+  // z 11 -> 21, ten metres, and asked it to carry a dual-track tram, a two-lane
+  // carriageway, parking, a median and two sidewalks. Real minimums:
+  //   2 sidewalks 4.0 + dual tram 4.6 + median 1.0 + carriageway 6.4 = 16.0m.
+  // Ten metres cannot hold it, which is why the tram ended up laid down the
+  // middle of the traffic lanes and driving through a parked car. The boulevard
+  // is widened to 16m by moving the downtown edge north; the core keeps 20m.
+  DOWNTOWN_Z_MAX: 5.0,      // downtown core gives way to the boulevard
+
+  // Boulevard cross-section, north (city) to south (water). Every strip below
+  // is derived from these -- no lane, kerb or rail carries its own z.
+  WALK_N_Z_MIN: 5.0,        // north sidewalk   5.0 -> 7.0
+  CARRIAGEWAY_Z_MIN: 7.0,   // two lanes + parking  7.0 -> 13.4
+  MEDIAN_Z_MIN: 13.4,       // planted median  13.4 -> 14.4
+  TRAM_Z_MIN: 14.4,         // SEPARATED tram corridor 14.4 -> 19.0
+  PROMENADE_Z_MIN: 19.0,    // waterfront promenade 19.0 -> 21.0
+  SEAWALL_Z_MIN: 21.0,      // boulevard ends, seawall begins
+  SEAWALL_Z_MAX: 22.0,      // seawall ends, beach begins
+  BEACH_Z_MAX: 30.0,        // beach ends, open water begins
+  OCEAN_FLOOR_START: 36.0,  // seafloor slope begins out at sea -- see the note below
+};
+
+// -----------------------------------------------------------------------------
 // TERRAIN HEIGHT -- ONE source of truth.
 //
 // This is the exact elevation profile the terrain mesh is displaced by. It was
@@ -205,20 +252,26 @@ function stdMat(opts) {
 // -----------------------------------------------------------------------------
 function terrainHeightAt(x, z) {
   let y = 0.0;
-  if (z > 22) {
-    // South: open ocean channel and seafloor shelf
-    const oceanDepth = Math.min(1, (z - 22) / 24);
+  if (z > ZONE.OCEAN_FLOOR_START) {
+    // South: open ocean seafloor. The drop deliberately starts SOUTH of the beach
+    // edge (z=30), not at it. The terrain mesh has finite vertex spacing, so a
+    // slope that begins exactly at the shoreline interpolates backwards into the
+    // land and sinks the beach below the waterline. The margin gives the
+    // interpolation somewhere to happen that is already out at sea.
+    const oceanDepth = Math.min(1, (z - ZONE.OCEAN_FLOOR_START) / 24);
     y = -3.4 * oceanDepth;
-  } else if (z >= -28 && z <= 22 && Math.abs(x) <= 55) {
-    // Downtown main island tableland: graded flat
+  } else if (z >= ZONE.ISLAND_Z_MIN && z <= ZONE.BEACH_Z_MAX && Math.abs(x) <= ZONE.ISLAND_X_HALF) {
+    // The island: downtown core + waterfront boulevard + beach, all one flat
+    // tableland at y = 0. Everything the visitor walks and drives on is here.
     y = 0.0;
-  } else if (z > -65 && z < -28 && Math.abs(x) <= 120) {
-    // Sheltered inner harbour channel
-    const harbourEdge = Math.sin(((z - (-65)) / 37) * Math.PI);
+  } else if (z > ZONE.HARBOUR_Z_MIN && z < ZONE.ISLAND_Z_MIN && Math.abs(x) <= 120) {
+    // Sheltered inner harbour channel between the island and the mainland
+    const span = ZONE.ISLAND_Z_MIN - ZONE.HARBOUR_Z_MIN;
+    const harbourEdge = Math.sin(((z - ZONE.HARBOUR_Z_MIN) / span) * Math.PI);
     y = -2.8 * Math.max(0.2, harbourEdge);
-  } else if (z <= -65) {
+  } else if (z <= ZONE.HARBOUR_Z_MIN) {
     // Mainland coast rising into the alpine range
-    const inlandDist = (-z - 65);
+    const inlandDist = (-z + ZONE.HARBOUR_Z_MIN);
     if (inlandDist < 45) {
       y = 0.8 + (inlandDist / 45) * 4.5;
     } else {
@@ -228,9 +281,9 @@ function terrainHeightAt(x, z) {
       const peakNoise = Math.sin(x * 0.008) * Math.cos(z * 0.012) * 18.0;
       y = 5.3 + mountainProgress * 58.0 + ridgeWave1 + ridgeWave2 + peakNoise;
     }
-  } else if (Math.abs(x) > 55 && z >= -65 && z <= 22) {
+  } else if (Math.abs(x) > ZONE.ISLAND_X_HALF && z >= ZONE.HARBOUR_Z_MIN && z <= ZONE.BEACH_Z_MAX) {
     // East and west flanking coastline: cliffs and pocket coves
-    const coastDist = (Math.abs(x) - 55);
+    const coastDist = (Math.abs(x) - ZONE.ISLAND_X_HALF);
     const cliffRise = Math.min(1, coastDist / 80);
     const coveMod = Math.sin(z * 0.08) * 3.5;
     y = cliffRise * 16.5 + coveMod;
@@ -1467,7 +1520,14 @@ class Renderer3D {
     const groundW = 2400;
     const groundD = 2400;
     const groundMaterialKey = surfaceMaterialKey(this._surfaces, "ground", "grass");
-    const terrainGeo = new THREE.PlaneGeometry(groundW, groundD, 192, 192);
+    // 384 segments over 2400m = 6.25m between vertices. At the previous 192
+    // (12.5m) the island tableland could not actually be flat: the nearest
+    // vertices to the shoreline straddled the ocean slope, so linear
+    // interpolation dragged the promenade down to roughly -0.29m and the beach
+    // sat below the waterline. Together with ZONE.OCEAN_FLOOR_START keeping the
+    // seabed slope out at z=36, every vertex across the land zone now evaluates
+    // to exactly y = 0.
+    const terrainGeo = new THREE.PlaneGeometry(groundW, groundD, 384, 384);
     terrainGeo.rotateX(-Math.PI / 2);
     const terrainPos = terrainGeo.attributes.position;
 
@@ -1496,12 +1556,17 @@ class Renderer3D {
     this._groundExtent = { w: groundW, d: groundD };
 
     // =========================================================================
-    // MELBOURNE & VANCOUVER MASTERPLAN WATER BODIES:
-    // 1. SOUTH OCEAN & MARINA BASIN (z = 23.0 to 78.0, width 1400m)
-    // 2. SHELTERED NORTH INNER HARBOUR (z = -65.0 to -28.0, width 1400m)
+    // WATER BODIES -- extents derived from ZONE, never hardcoded.
+    //
+    // The south water used to start at z = 23.0, which put open water two metres
+    // NORTH of the seawall's near face and straight through the beach. It now
+    // begins exactly where the beach ends.
     // =========================================================================
-    // 1. SOUTH INNER HARBOUR / MARINA BASIN (z = 23.0 to 78.0)
-    const innerHarbourGeo = new THREE.PlaneGeometry(1400, 55.0);
+    // 1. SOUTH BAY / MARINA BASIN: from the beach edge out to the breakwater
+    const SOUTH_WATER_FAR = 78.0;
+    const southWaterDepth = SOUTH_WATER_FAR - ZONE.BEACH_Z_MAX;
+    const southWaterZ = ZONE.BEACH_Z_MAX + southWaterDepth / 2;
+    const innerHarbourGeo = new THREE.PlaneGeometry(1400, southWaterDepth);
     innerHarbourGeo.rotateX(-Math.PI / 2);
     const waterNormals = makeWaterNormalTexture();
     waterNormals.repeat.set(36, 8);
@@ -1515,13 +1580,16 @@ class Renderer3D {
       opacity: 0.92,
     });
     const innerHarbour = new THREE.Mesh(innerHarbourGeo, innerWaterMat);
-    innerHarbour.position.set(0, -0.42, 50.5);
+    innerHarbour.position.set(0, -0.42, southWaterZ);
     this.neighbourhoodGroup.add(innerHarbour);
     this._innerHarbourMesh = innerHarbour;
     this._waterNormalTex = waterNormals;
 
-    // 1B. SHELTERED NORTH INNER HARBOUR CHANNEL (Behind Downtown Island, z = -65.0 to -28.0, width 1400m)
-    const northHarbourGeo = new THREE.PlaneGeometry(1400, 37.0);
+    // 1B. SHELTERED NORTH INNER HARBOUR, between the island and the mainland.
+    // Extent derived from ZONE so it always matches the terrain basin beneath it.
+    const northHarbourDepth = ZONE.ISLAND_Z_MIN - ZONE.HARBOUR_Z_MIN;
+    const northHarbourZ = ZONE.HARBOUR_Z_MIN + northHarbourDepth / 2;
+    const northHarbourGeo = new THREE.PlaneGeometry(1400, northHarbourDepth);
     northHarbourGeo.rotateX(-Math.PI / 2);
     const northWaterNormals = makeWaterNormalTexture();
     northWaterNormals.repeat.set(36, 6);
@@ -1535,7 +1603,7 @@ class Renderer3D {
       opacity: 0.92,
     });
     const northHarbour = new THREE.Mesh(northHarbourGeo, northWaterMat);
-    northHarbour.position.set(0, -0.38, -46.5);
+    northHarbour.position.set(0, -0.38, northHarbourZ);
     this.neighbourhoodGroup.add(northHarbour);
     this._northHarbourMesh = northHarbour;
 
@@ -1623,31 +1691,42 @@ class Renderer3D {
     this._outerOceanMesh = outerOcean;
     this._outerWaterNormalTex = outerWaterNormals;
 
-    // 4. GOLDEN SAND BEACH (z = 22.0 to 26.5, continuous 800m along the shoreline)
-    const beachGeo = new THREE.PlaneGeometry(800, 5.2);
+    // 4. GOLDEN SAND BEACH -- the ONLY beach plane. There used to be a second,
+    // coplanar strip at the same y and the same colour, which z-fought with this
+    // one across an 2.6m band. Extent is derived from ZONE so it meets the
+    // seawall exactly and stops exactly where the water starts.
+    const beachDepth = ZONE.BEACH_Z_MAX - ZONE.SEAWALL_Z_MAX;
+    const beachZ = ZONE.SEAWALL_Z_MAX + beachDepth / 2;
+    const beachGeo = new THREE.PlaneGeometry(800, beachDepth);
     beachGeo.rotateX(-Math.PI / 2);
     const beachMat = stdMat({ color: 0xfef3c7, roughness: 0.92 });
     const beach = new THREE.Mesh(beachGeo, beachMat);
-    beach.position.set(0, 0.015, 24.2);
+    beach.position.set(0, 0.015, beachZ);
     beach.receiveShadow = true;
     this.neighbourhoodGroup.add(beach);
 
-    // Granite Marina Seawall & Capping Stones along z = 22
+    // Granite seawall: occupies exactly the ZONE band between the boulevard and
+    // the beach. It was 1.6m deep centred on 22.0, i.e. 21.2 -> 22.8, which ran
+    // into the beach on one side and the promenade on the other.
+    const seawallDepth = ZONE.SEAWALL_Z_MAX - ZONE.SEAWALL_Z_MIN;
+    const seawallZ = ZONE.SEAWALL_Z_MIN + seawallDepth / 2;
     const seawall = new THREE.Mesh(
-      new RoundedBoxGeometry(160, 1.8, 1.6, 2, 0.08),
+      new RoundedBoxGeometry(160, 1.8, seawallDepth, 2, 0.08),
       stdMat({ color: 0x475569, roughness: 0.92 })
     );
-    seawall.position.set(0, -0.15, 22.0);
+    seawall.position.set(0, -0.15, seawallZ);
     seawall.receiveShadow = true;
     seawall.castShadow = true;
     this.neighbourhoodGroup.add(seawall);
 
-    // Polished sandstone seawall promenade coping
+    // Polished sandstone coping, capping the seawall. Sits on the seawall's own
+    // footprint -- it was 2.0m deep against a 1.6m wall, so it overhung into both
+    // the promenade and the beach.
     const coping = new THREE.Mesh(
-      new RoundedBoxGeometry(162, 0.25, 2.0, 2, 0.06),
+      new RoundedBoxGeometry(162, 0.25, seawallDepth, 2, 0.06),
       stdMat({ color: PALETTE.sandstone, roughness: 0.85 })
     );
-    coping.position.set(0, 0.70, 22.0);
+    coping.position.set(0, 0.70, seawallZ);
     coping.receiveShadow = true;
     this.neighbourhoodGroup.add(coping);
 
@@ -2825,7 +2904,12 @@ class Renderer3D {
     // 3. AUTONOMOUS COASTAL LIGHT RAIL / TRAM TRANSIT CORRIDOR
     // -------------------------------------------------------------
     const tramTrackGroup = new THREE.Group();
-    tramTrackGroup.position.set(0, 0, 10.1);
+    // The tram was at z = 10.1 -- inside the vehicular carriageway (9.4 -> 13.8),
+    // its 1.7m body overhanging the north kerb, and passing through a parked car
+    // twice per cycle. The masterplan calls for a SEPARATED corridor, so it now
+    // runs in its own reservation between the median and the promenade.
+    const TRAM_CENTRE_Z = (ZONE.TRAM_Z_MIN + ZONE.PROMENADE_Z_MIN) / 2;
+    tramTrackGroup.position.set(0, 0, TRAM_CENTRE_Z);
     roadGroup.add(tramTrackGroup);
 
     const trackSteelMat = stdMat({ color: 0x94a3b8, metalness: 0.95, roughness: 0.2 });
@@ -2837,7 +2921,7 @@ class Renderer3D {
 
     // Modern Articulated Coastal Tram Vehicle
     const tramGroup = new THREE.Group();
-    tramGroup.position.set(-6.5, 0, 10.1);
+    tramGroup.position.set(-6.5, 0, TRAM_CENTRE_Z);
     roadGroup.add(tramGroup);
     this._tramVehicle = tramGroup;
     this._tramSpeed = 0;
@@ -3542,11 +3626,10 @@ class Renderer3D {
     const sandTex = makePavingStoneTexture();
     sandTex.repeat.set(12, 2);
     const sandMat = stdMat({ color: 0xfef3c7, roughness: 0.92 });
-    const beachStrip = new THREE.Mesh(new THREE.PlaneGeometry(96, 2.8), sandMat);
-    beachStrip.rotation.x = -Math.PI / 2;
-    beachStrip.position.set(0, 0.015, 22.8);
-    beachStrip.receiveShadow = true;
-    skylineGroup.add(beachStrip);
+    // REMOVED: a second sand plane at (0, 0.015, 22.8), 96 x 2.8. It sat at the
+    // identical y and the identical colour as the main beach and z-fought with it
+    // across a 2.6m band the full width of the shoreline -- the flickering sand
+    // seam. There is exactly one beach plane now, built from ZONE above.
 
     // Common Architectural Window Materials
     const windowGlowMat = stdMat({

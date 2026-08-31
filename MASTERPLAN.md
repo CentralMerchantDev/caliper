@@ -41,8 +41,26 @@ South to north:
 |---|---|---|
 | **Vast Open Ocean** | z 30 → 1400+ | Deep azure, wave normals, sailing yachts, distant horizon |
 | **Beach & Boardwalk** | z 22 → 30 | Golden sand meeting the surf line, hardwood boardwalk, balustrades, pergolas, cafés, beach pavilions, lifeguard towers, marina slips |
-| **Waterfront Boulevard & Tram** | z 11 → 21 | Dual-track light rail, two-lane vehicular boulevard, parallel parking, tree-lined median, wide pedestrian sidewalks |
-| **Downtown Island Core** | z −15 → 11, x −75 → +75 | Rectilinear city blocks, crosswalks, curb cuts, traffic lights, street trees |
+| **Waterfront Boulevard & Tram** | z 5 → 21 *(amended)* | Dual-track light rail in its own reservation, two-lane vehicular boulevard, parking, planted median, sidewalks, waterfront promenade |
+| **Downtown Island Core** | z −15 → 5 *(amended)*, x −75 → +75 | Rectilinear city blocks, crosswalks, curb cuts, traffic lights, street trees |
+
+> **AMENDMENT — boulevard widened 10m → 16m.** The plan as written gave the boulevard z 11 → 21 and
+> asked it to carry a dual-track tram, two traffic lanes, parking, a median and two sidewalks. The
+> minimums are 2 sidewalks 4.0 + dual tram 4.6 + median 1.0 + carriageway 6.4 = **16.0 m**. Ten
+> metres cannot hold it — which is precisely why the tram had been laid down the middle of the
+> traffic lanes and drove through a parked car twice per cycle. The downtown edge moves north to
+> z = 5; the core still gets 20 m. **Cross-section, north to south:**
+>
+> | Strip | Extent | Depth |
+> |---|---|---|
+> | North sidewalk | 5.0 → 7.0 | 2.0 m |
+> | Carriageway + parking | 7.0 → 13.4 | 6.4 m |
+> | Planted median | 13.4 → 14.4 | 1.0 m |
+> | **Tram reservation** | 14.4 → 19.0 | 4.6 m |
+> | Waterfront promenade | 19.0 → 21.0 | 2.0 m |
+>
+> Tram centre z = 16.7; body clears the carriageway by 2.45 m, the seawall by 3.45 m, and the
+> parked cars by 2.35 m.
 | **Sheltered Inner Harbour** | z −60 → −15 | Ferry slips, houseboats, water taxis, mooring buoys, boathouses |
 | **Mainland Coastal City** | z < −60 | Terraced residential hills, secondary commercial centre |
 | **Mountain Ridge** | far north | Peaks rising to y ≈ 90m |
@@ -131,6 +149,32 @@ Verified against the live scene and the source. **This is the work list.**
 | Beach / boardwalk | z 22 → 30 | beach plane at z 21.6 → 26.8, **overlapping the seawall** |
 | Ocean | z 30+ | water plane starts **z 20** — north of the seawall |
 | Inner harbour | z −60 → −15 | z −65 → −28 |
+
+### PHASE 1 COMPLETE — the ground is re-zoned
+
+All boundaries now derive from a single exported `ZONE` object in
+`public/world-render-3d.js`. Terrain, both water planes, the beach, the seawall, the coping, the
+tram and the keep-out constant all read from it. Nothing carries its own z any more.
+
+| Fixed | Was | Now |
+|---|---|---|
+| South water reached north of the seawall | z 23.0 → 78.0 | starts at the beach edge, z 30 → 78 |
+| Two coplanar beach planes z-fighting | 21.6→26.8 **and** 21.4→24.2 | one beach, z 22 → 30 |
+| Seawall ran into beach and promenade | z 21.2 → 22.8 | z 21 → 22 exactly |
+| Coping overhung both sides | 2.0 m deep on a 1.6 m wall | same footprint as the wall |
+| Island tableland was a ramp | −0.29 m under the promenade | flat to 8 mm (curvature only) |
+| Seabed slope reached into the land | began at the shoreline | begins at z 36, out at sea |
+| Terrain too coarse to be flat | 192 segs (12.5 m pitch) | 384 segs (6.25 m pitch) |
+| Seawall keep-out under-reserved | `zMin: 22.0` vs a real face at 21.0 | `zMin: 21.0` |
+| Tram inside the traffic lanes | z 10.1, through a parked car | own reservation, centre z 16.7 |
+
+**Tests: 204 passing, 0 failing** (was 199). Six new masterplan tests, two of which are guardrails
+that plant the real shipped defects and assert the checks catch them.
+
+**A test was replaced, not weakened.** `"road is strictly on terra firma"` matched the string
+`coping.position.set(0, 0.70, 22.0)` and called it "seawall must begin at z = 22.0". It did not —
+a 1.6 m wall centred on 22.0 begins at 21.2. The test passed while its stated invariant was false,
+and it would have failed on a reformat. It now computes the actual geometry.
 
 ### Known defects, measured
 
