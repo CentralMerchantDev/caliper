@@ -124,4 +124,9 @@ test("3D visual invariants: crisp architectural lighting, tight shadow bias, and
   assert.match(code, /Triangulated Warren \/ Pratt timber truss assemblies/, "studio must feature glulam trusses");
   assert.match(code, /bottomChord/, "studio must have bottom chord");
   assert.match(code, /topChord/, "studio must have top chord");
+  // Dedicated procedural stone texture systems
+  assert.match(code, /function makeTravertineTexture\(\)/, "must implement procedural travertine texture generator");
+  assert.match(code, /function makeLimestoneTexture\(\)/, "must implement procedural limestone texture generator");
+  assert.match(code, /map:\s*travertineTex/, "travertine texture must be attached to civic steps/podium");
+  assert.match(code, /map:\s*limestoneTex/, "limestone texture must be attached to civic colonnade");
 });

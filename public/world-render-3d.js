@@ -272,6 +272,65 @@ function makePavingStoneTexture() {
   return tex;
 }
 
+function makeTravertineTexture() {
+  const size = 512;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#f5f5f0";
+  ctx.fillRect(0, 0, size, size);
+
+  const bands = 32;
+  const bandH = size / bands;
+  const bandTones = ["#e8e6df", "#f0eee6", "#dfdcd3", "#eae7de", "#f7f6f2"];
+  for (let b = 0; b < bands; b++) {
+    ctx.fillStyle = bandTones[b % bandTones.length];
+    const waveOffset = Math.sin(b * 0.4) * 6;
+    ctx.fillRect(0, b * bandH + waveOffset, size, bandH * 0.85);
+  }
+
+  const imgData = ctx.getImageData(0, 0, size, size);
+  const data = imgData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    if (Math.random() < 0.04) {
+      const pit = (Math.random() * 28 + 12);
+      data[i] = Math.max(0, data[i] - pit);
+      data[i + 1] = Math.max(0, data[i + 1] - pit);
+      data[i + 2] = Math.max(0, data[i + 2] - pit);
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeLimestoneTexture() {
+  const size = 512;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#f8fafc";
+  ctx.fillRect(0, 0, size, size);
+
+  const imgData = ctx.getImageData(0, 0, size, size);
+  const data = imgData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const grain = (Math.random() - 0.5) * 14;
+    data[i] = Math.min(255, Math.max(0, data[i] + grain));
+    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + grain));
+    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + grain));
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function makeWaterNormalTexture() {
   const size = 512;
   const c = document.createElement("canvas");
@@ -1576,16 +1635,19 @@ class Renderer3D {
     this.neighbourhoodGroup.add(civicComplex);
 
     // Elevated Travertine Marble Podium Steps (multi-tiered with ramp access)
+    const travertineTex = makeTravertineTexture();
+    travertineTex.repeat.set(4, 2);
+    const travertineMat = stdMat({ map: travertineTex, roughness: 0.65, metalness: 0.08 });
     const podium = new THREE.Mesh(
       new RoundedBoxGeometry(32.0, 0.8, 18.0, 2, 0.12),
-      stdMat({ color: 0xf1f5f9, roughness: 0.68, metalness: 0.08 })
+      travertineMat
     );
     podium.position.set(0, 0.4, 0);
     podium.receiveShadow = true;
     civicComplex.add(podium);
 
     // Front Travertine Monumental Steps descending towards North Promenade
-    const stepsMat = stdMat({ color: 0xe2e8f0, roughness: 0.75 });
+    const stepsMat = stdMat({ map: travertineTex, roughness: 0.72 });
     for (let st = 0; st < 4; st++) {
       const step = new THREE.Mesh(
         new RoundedBoxGeometry(22.0 - st * 1.2, 0.2, 1.2),
@@ -1613,8 +1675,10 @@ class Renderer3D {
     poolWater.position.set(-16.0, 0.48, 3.5);
     civicComplex.add(poolWater);
 
-    // Grand Civic Colonnade (8 modern fluted architectural columns, 8.2m tall)
-    const colMat = stdMat({ color: 0xffffff, roughness: 0.28, metalness: 0.12 });
+    // Grand Civic Colonnade (8 modern fluted architectural columns, 8.2m tall, Portland limestone texture)
+    const limestoneTex = makeLimestoneTexture();
+    limestoneTex.repeat.set(1, 4);
+    const colMat = stdMat({ map: limestoneTex, roughness: 0.32, metalness: 0.1 });
     [-13.5, -9.6, -5.8, -2.0, 2.0, 5.8, 9.6, 13.5].forEach(cx => {
       const col = new THREE.Mesh(new RoundedBoxGeometry(0.85, 8.2, 0.85, 2, 0.08), colMat);
       col.position.set(cx, 4.5, 7.2);
