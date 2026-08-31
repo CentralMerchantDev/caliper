@@ -1134,17 +1134,23 @@ class Renderer3D {
     scene.background = this._skyGradient.tex;
     this.scene = scene;
 
-    // Aerial perspective: exponential distance fog so the near city stays
-    // crisp and the backdrop skyline/mountains (out past ~500m) recede into
-    // haze, the same atmospheric-perspective cue that reads as "real" in a
-    // photograph more than any single other effect. Colour is kept in sync
-    // with the sky horizon tint every frame (see the day/night update) so it
-    // reads correctly at both noon and midnight instead of a fixed grey haze.
+    // Atmosphere: see the fog decision immediately below.
     // Density is tuned by eye against the reference: strong enough that the
     // mainland skyline (z ~ -74 to -180, roughly 300-650m from the default
     // view) visibly recedes, gentle enough that nothing within the editable
     // downtown island (z in [-28, 22]) is touched.
-    scene.fog = new THREE.FogExp2(SKY_HORIZON.getHex(), 0.0011);
+    // NO FOG. This is a masterplan decision, not a tuning preference.
+    //
+    // The approved plan calls for a crisp coastal daylight with crystal-clear
+    // horizon and mountain visibility. Fog was added at density 0.0011, which
+    // washed the alpine range and the entire far skyline to flat white and turned
+    // the harbour grey. Tested live at 0.0011, at 0.00022, and off: off is
+    // decisively the best -- distant towers keep their definition and the hills
+    // read as hills.
+    //
+    // If aerial perspective is ever wanted back, it belongs as a height-based
+    // gradient on the sky, not as scene fog over a 2400m world.
+    scene.fog = null;
 
     // Physical Preetham Atmospheric Sky Shader (Sky.js)
     try {
@@ -4004,8 +4010,18 @@ class Renderer3D {
     const barrierMat = stdMat({ color: 0xffffff, roughness: 0.6 });
     const steelCableMat = stdMat({ color: 0xe2e8f0, roughness: 0.3, metalness: 0.9 });
 
-    // Primary Expressway Viaduct Deck spanning across the bay entrance (x = -550 to +550, z = 72.0, elevation y = 12.5m)
-    const BRIDGE_Z = 72.0;
+    // Primary Expressway Viaduct Deck spanning across the bay entrance.
+    //
+    // This was at z = 72.0 -- fifty metres off the civic waterfront (the seawall
+    // is at z = 22). An 1100m elevated expressway with 56m suspension towers sat
+    // directly between the viewer and the city in every default view, and its
+    // stay cables (94m long, near-white) crossed the entire frame. That was the
+    // white X spanning the screen.
+    //
+    // Moved far out into the bay so it reads as a distant landmark framing the
+    // water instead of an obstruction across the foreground. No urban designer
+    // puts an elevated expressway across the front of a civic waterfront.
+    const BRIDGE_Z = 262.0;
     const deckWidth = 1100;
     const deckDepth = 7.4;
     const deckHeight = 1.1;
@@ -6116,7 +6132,11 @@ class Renderer3D {
 
     // High clarity, wide dynamic range exposure (crisp model, no fog blowout)
     this.renderer.toneMappingExposure = lerp(0.96, 0.76, nightAmt);
-    this.scene.environmentIntensity = lerp(0.45, 0.12, nightAmt);
+    // NOTE: this runs every frame and OVERWRITES anything set at construction,
+    // so it -- not any per-material envMapIntensity -- is the real daylight IBL
+    // control. Day value verified by eye on the live scene; 0.85 enriches the
+    // water and the lit forms without blowing out under ACES.
+    this.scene.environmentIntensity = lerp(0.85, 0.14, nightAmt);
 
     const daySky = SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth);
     const sky = SKY_NIGHT.clone().lerp(daySky, sun.dayAmt);
