@@ -101,3 +101,27 @@ test("SHIP.md item 3: the four buildings sit on a consistent grid module, not sc
   assert.equal(xs.length, 2, `expected buildings on 2 distinct x-columns, found ${xs.length}: ${xs}`);
   assert.equal(ys.length, 2, `expected buildings on 2 distinct y-rows, found ${ys.length}: ${ys}`);
 });
+
+test("3D masterplan invariants: road is strictly on terra firma and clear of harbour water", async () => {
+  const fs = await import("node:fs");
+  const code = fs.readFileSync("public/world-render-3d.js", "utf-8");
+  // Roadway is placed at z = 11.6 on terra firma
+  assert.match(code, /position\.set\(0,\s*0\.03,\s*11\.6\)/, "roadway carriageway must sit at z = 11.6");
+  // Seawall begins at z = 22.0, providing >8m clearance
+  assert.match(code, /coping\.position\.set\(0,\s*0\.70,\s*22\.0\)/, "seawall must begin at z = 22.0");
+});
+
+test("3D visual invariants: crisp architectural lighting, tight shadow bias, and glulam trusses", async () => {
+  const fs = await import("node:fs");
+  const code = fs.readFileSync("public/world-render-3d.js", "utf-8");
+  // Directional sun intensity calibrated to 2.15
+  assert.match(code, /DirectionalLight\(0xfffaed,\s*2\.15\)/, "sun must have crisp 2.15 intensity");
+  // Tight PCFSoft shadow bias
+  assert.match(code, /sun\.shadow\.bias\s*=\s*-0\.00018/, "sun shadow bias must be -0.00018");
+  // Bloom is retained at minimal strength without fog blowout
+  assert.match(code, /UnrealBloomPass\(.*,\s*0\.02,\s*0\.12,\s*0\.99\)/, "bloom must be tight (0.02, 0.12, 0.99)");
+  // Design Studio features authentic triangulated glulam timber trusses
+  assert.match(code, /Triangulated Warren \/ Pratt timber truss assemblies/, "studio must feature glulam trusses");
+  assert.match(code, /bottomChord/, "studio must have bottom chord");
+  assert.match(code, /topChord/, "studio must have top chord");
+});

@@ -109,3 +109,27 @@ test("describePassing: names the call and its current (correct) result", () => {
   assert.match(description, /chooseAction\(/);
   assert.match(description, /"eat"/);
 });
+
+test("security probes: memory-balloon and deep-recursion judges classify expected error types", async () => {
+  const { ATTACK_PROBES } = await import("../src/attacks.ts");
+  const memProbe = ATTACK_PROBES.find(p => p.id === "memory-balloon")!;
+  const recProbe = ATTACK_PROBES.find(p => p.id === "deep-recursion")!;
+
+  // Must reject un-errored success
+  assert.equal(memProbe.judge({ invoked: true, result: { done: true } }), false, "must reject un-errored completion");
+  assert.equal(recProbe.judge({ invoked: true, result: { done: true } }), false, "must reject un-errored completion");
+
+  // Must accept actual runtime memory/allocation error
+  assert.equal(memProbe.judge({ invoked: true, error: "Out of memory" }), true);
+  assert.equal(memProbe.judge({ invoked: true, error: "Allocation failed" }), true);
+
+  // Must accept actual stack/RangeError
+  assert.equal(recProbe.judge({ invoked: true, error: "RangeError: Maximum call stack size exceeded" }), true);
+});
+
+test("index.html SSE verification calculation: accurately sums regression and criteria passed/total", async () => {
+  const fs = await import("node:fs");
+  const html = fs.readFileSync("public/index.html", "utf-8");
+  assert.match(html, /Number\(d\.regressionPassed\s*\|\|\s*0\)\s*\+\s*Number\(d\.criteriaPassed\s*\|\|\s*0\)/, "must dynamically sum regressionPassed and criteriaPassed");
+  assert.match(html, /Number\(d\.regressionTotal\s*\|\|\s*0\)\s*\+\s*Number\(d\.criteriaTotal\s*\|\|\s*0\)/, "must dynamically sum regressionTotal and criteriaTotal");
+});

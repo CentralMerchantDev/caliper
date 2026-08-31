@@ -1724,18 +1724,41 @@ class Renderer3D {
     for (let l = -4.5; l <= 4.5; l += 1.1) {
       addBox(studio, [0.14, 4.5, 0.48], [7.1, 2.4, l], PALETTE.teak, 0.65);
     }
-    // Structural glulam post-and-beam portal frames
-    const glulamMat = stdMat({ color: 0xb45309, roughness: 0.65 });
+    // Structural exposed glulam timber roof trusses (Triangulated Warren / Pratt timber truss assemblies)
+    const glulamMat = stdMat({ color: 0xb45309, roughness: 0.62 });
     [-4.5, 0, 4.5].forEach(gx => {
+      // Structural column posts supporting the truss ends
       const postBack = new THREE.Mesh(new RoundedBoxGeometry(0.24, 4.8, 0.24), glulamMat);
       postBack.position.set(gx, 2.4, -5.2);
       studio.add(postBack);
       const postFront = new THREE.Mesh(new RoundedBoxGeometry(0.24, 4.8, 0.24), glulamMat);
       postFront.position.set(gx, 2.4, 5.4);
       studio.add(postFront);
-      const beam = new THREE.Mesh(new RoundedBoxGeometry(0.24, 0.45, 11.0), glulamMat);
-      beam.position.set(gx, 4.6, 0.1);
-      studio.add(beam);
+
+      // Truss Bottom Chord (horizontal tension tie spanning 10.6m)
+      const bottomChord = new THREE.Mesh(new RoundedBoxGeometry(0.22, 0.22, 10.6), glulamMat);
+      bottomChord.position.set(gx, 4.15, 0.1);
+      studio.add(bottomChord);
+
+      // Truss Top Chord (horizontal compression member)
+      const topChord = new THREE.Mesh(new RoundedBoxGeometry(0.22, 0.22, 10.6), glulamMat);
+      topChord.position.set(gx, 4.75, 0.1);
+      studio.add(topChord);
+
+      // Vertical Struts (king & queen posts at 2.2m bays)
+      [-4.0, -1.8, 0.4, 2.6, 4.8].forEach(vz => {
+        const vPost = new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.6, 0.16), glulamMat);
+        vPost.position.set(gx, 4.45, vz);
+        studio.add(vPost);
+      });
+
+      // Diagonal Web Members forming authentic triangulated truss geometry
+      [-2.9, -0.7, 1.5, 3.7].forEach((dz, idx) => {
+        const diag = new THREE.Mesh(new RoundedBoxGeometry(0.14, 0.85, 0.14), glulamMat);
+        diag.position.set(gx, 4.45, dz);
+        diag.rotation.x = (idx % 2 === 0 ? 1 : -1) * 0.65;
+        studio.add(diag);
+      });
     });
 
     // Front full-height ultra-clear architectural glass curtain wall with slim black mullions
