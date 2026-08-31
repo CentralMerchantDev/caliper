@@ -40,30 +40,124 @@ export const WORLD = {
 // geometry derives its position from these; nothing carries its own z.
 // -----------------------------------------------------------------------------
 export const BANDS = {
-  OPEN_OCEAN_Z:      1400,   // z >  1400  deep water to the horizon
-  OUTER_BAY_Z:        620,   // 620 .. 1400  outer bay, shipping, sailing
-  BEACH_Z_MAX:        560,   // 560 ..  620  surf line
-  BEACH_Z_MIN:        500,   // 500 ..  560  sand
-  SEAWALL_Z_MAX:      500,   // 496 ..  500  seawall + coping
-  SEAWALL_Z_MIN:      496,
-  ISLAND_Z_MAX:       496,   // island south shore (the waterfront boulevard)
-  ISLAND_Z_MIN:     -500,    // island north shore
-  HARBOUR_Z_MIN:    -900,    // -900 .. -500  sheltered inner harbour
-  MAINLAND_Z:       -900,    // z < -900  mainland shore, suburbs, then mountains
-  MOUNTAIN_Z:      -1800,    // z < -1800  alpine range
-  ISLAND_X_HALF:     800,    // island spans x -800 .. +800
-  MAINLAND_X_HALF:  3200,    // mainland/coast width before open water
+  OPEN_OCEAN_Z:      2600,   // deep water to the horizon
+  OUTER_BAY_Z:        900,   // outer bay, shipping, sailing
+  BEACH_Z_MAX:        600,   // surf line
+  BEACH_Z_MIN:        525,   // sand
+  SEAWALL_Z_MAX:      525,   // seawall + coping
+  SEAWALL_Z_MIN:      520,
+  ISLAND_Z_MAX:       575,   // island south shore (the waterfront boulevard)
+  ISLAND_Z_MIN:     -720,    // island north shore (coastline bounding box)
+  HARBOUR_Z_MIN:   -1500,    // mainland shore / harbour north edge
+  MAINLAND_Z:      -1500,    // mainland shore, suburbs, then mountains
+  MOUNTAIN_Z:      -3000,    // alpine range
+  ISLAND_X_HALF:    1470,    // coastline bounding box, x -1470 .. +1400
+  MAINLAND_X_HALF:  4800,    // mainland/coast width before open water
 };
 
 // Derived, so nothing recomputes them by hand.
 export const ISLAND = {
-  width:  BANDS.ISLAND_X_HALF * 2,                       // 1600 m east-west
-  depth:  BANDS.ISLAND_Z_MAX - BANDS.ISLAND_Z_MIN,       //  996 m north-south
+  width:  BANDS.ISLAND_X_HALF * 2,
+  depth:  BANDS.ISLAND_Z_MAX - BANDS.ISLAND_Z_MIN,
   xMin:  -BANDS.ISLAND_X_HALF,
   xMax:   BANDS.ISLAND_X_HALF,
   zMin:   BANDS.ISLAND_Z_MIN,
   zMax:   BANDS.ISLAND_Z_MAX,
 };
+
+// =============================================================================
+// COASTLINE
+//
+// The island was a rectangle, which is the single thing that made the whole
+// masterplan read as a diagram rather than a place. Real waterfront cities are
+// shaped by their water, so the coast is designed here as explicit control
+// points and smoothed with a Catmull-Rom spline: designable point by point,
+// still pure data, still testable.
+//
+// Proportions checked against real places rather than invented:
+//   Melbourne Hoddle Grid  1.61 x 0.80 km, 201m blocks, 30m streets
+//   Downtown Vancouver     3.7 km2 peninsula, water both sides, mountains behind
+//   Key Biscayne           8 km long x 1.6-3.2 km wide barrier island
+//   Biscayne Bay           56 km long, up to 13 km wide -- the WATER dominates
+//
+// The old island was 1.6 x 1.0 km (1.59 km2), roughly Melbourne's CBD but only
+// 43% of downtown Vancouver, and it sat in an ocean that did nothing. It is now
+// 2.8 x 1.6 km with a real harbour bite, a headland, a marina inlet and a long
+// ocean beach -- and the bay around it is scaled like Biscayne Bay.
+//
+// Points run clockwise starting at the south-west. +z is seaward (south).
+// =============================================================================
+export const COAST = [
+  // --- south / ocean frontage: one long shallow crescent, Miami Beach style ---
+  [-1400,  360], [-1150,  455], [-820,  520], [-450,  560], [-60,  575],
+  [  380,  560], [  760,  520], [ 1080,  450], [ 1310,  330],
+  // --- east headland and marina inlet ---
+  [ 1400,  150], [ 1355,  -30], [ 1180,  -70], [ 1120, -230],   // inlet cut inland
+  [ 1290, -300], [ 1400, -450],
+  // --- north / harbour frontage, with a deep sheltered bite ---
+  [ 1180, -620], [  840, -700], [  520, -690],
+  [  360, -520], [  120, -470], [ -110, -530], [ -260, -690],   // Coal-Harbour-like bite
+  [ -600, -720], [ -940, -690], [-1230, -600],
+  // --- west headland, back round to the ocean beach ---
+  [-1420, -430], [-1470, -180], [-1430,   80], [-1400,  360],
+];
+
+/** Catmull-Rom through the control points -- a smooth, closed, natural coast. */
+export function coastlinePolygon(samplesPerSegment = 10) {
+  const p = COAST;
+  const n = p.length;
+  const out = [];
+  const at = (i) => p[((i % n) + n) % n];
+  for (let i = 0; i < n; i++) {
+    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+    for (let s = 0; s < samplesPerSegment; s++) {
+      const t = s / samplesPerSegment, t2 = t * t, t3 = t2 * t;
+      out.push([
+        0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+        0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3),
+      ]);
+    }
+  }
+  return out;
+}
+
+const _coastCache = coastlinePolygon(12);
+
+/** Is (x, z) on land? Standard ray-crossing test against the smoothed coast. */
+export function isOnLand(x, z, poly = _coastCache) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i], [xj, zj] = poly[j];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Shortest distance from (x, z) to the coast. Negative offshore. */
+export function distanceToCoast(x, z, poly = _coastCache) {
+  let best = Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i], [xj, zj] = poly[j];
+    const dx = xj - xi, dz = zj - zi;
+    const len2 = dx * dx + dz * dz || 1;
+    let t = ((x - xi) * dx + (z - zi) * dz) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const px = xi + t * dx, pz = zi + t * dz;
+    const d = Math.hypot(x - px, z - pz);
+    if (d < best) best = d;
+  }
+  return isOnLand(x, z, poly) ? best : -best;
+}
+
+/** Every corner of a rectangle must be inland of the shoreline margin. */
+export function rectIsBuildable(xMin, xMax, zMin, zMax, margin = 0) {
+  return (
+    distanceToCoast(xMin, zMin) > margin &&
+    distanceToCoast(xMax, zMin) > margin &&
+    distanceToCoast(xMin, zMax) > margin &&
+    distanceToCoast(xMax, zMax) > margin
+  );
+}
 
 // -----------------------------------------------------------------------------
 // 3. ROAD HIERARCHY
@@ -87,11 +181,13 @@ export const ROADS = {
 // Spacing is centre-to-centre of the rights-of-way. A block's buildable
 // interior is the spacing minus half a ROW on each side.
 // -----------------------------------------------------------------------------
+export const SHORE_MARGIN = 26;   // metres of foreshore kept clear of buildings
+
 export const GRID = {
-  AVENUE_SPACING: 200,   // north-south roads, every 200 m across the island
-  STREET_SPACING: 140,   // east-west roads, every 140 m
-  ORIGIN_X: -800,
-  ORIGIN_Z: -500,
+  AVENUE_SPACING: 230,   // 200m block + 30m street, Melbourne Hoddle Grid calibration
+  STREET_SPACING: 170,   // east-west roads
+  ORIGIN_X: -1470,
+  ORIGIN_Z: -720,
 };
 
 // -----------------------------------------------------------------------------
@@ -134,7 +230,7 @@ export const DISTRICTS = [
   {
     id: "waterfront",
     name: "Waterfront & Promenade",
-    bounds: { xMin: -800, xMax: 800, zMin: 340, zMax: 496 },
+    bounds: { xMin: -1470, xMax: 1400, zMin: 330, zMax: 575 },
     primary: "MIDRISE",
     allow: ["MIDRISE", "TOWER", "PARK", "CIVIC"],
     character: "hotels, dining pavilions, waterfront condos, public realm",
@@ -142,7 +238,7 @@ export const DISTRICTS = [
   {
     id: "downtown",
     name: "Downtown Core",
-    bounds: { xMin: -520, xMax: 520, zMin: -40, zMax: 340 },
+    bounds: { xMin: -700, xMax: 700, zMin: -60, zMax: 330 },
     primary: "TOWER",
     allow: ["TOWER", "MIDRISE", "CIVIC"],
     character: "2020s curtain-wall towers, podium retail, sky gardens",
@@ -153,7 +249,7 @@ export const DISTRICTS = [
     // Extends south to the port edge. It previously stopped at z = -40, which
     // left a 500 x 260m hole on the west side belonging to no district -- so no
     // blocks generated there and the island had a bite out of it.
-    bounds: { xMin: -800, xMax: -520, zMin: -300, zMax: 340 },
+    bounds: { xMin: -1470, xMax: -700, zMin: -60, zMax: 330 },
     primary: "TERRACE",
     allow: ["TERRACE", "TOWNHOUSE", "MIDRISE"],
     character: "1880s-1920s brick and sandstone, arcaded shopfronts",
@@ -164,7 +260,7 @@ export const DISTRICTS = [
     // no blocks -- the island had a second bite out of it.
     id: "eastside",
     name: "Eastside Mixed Quarter",
-    bounds: { xMin: 520, xMax: 800, zMin: -40, zMax: 340 },
+    bounds: { xMin: 700, xMax: 1400, zMin: -60, zMax: 330 },
     primary: "MIDRISE",
     allow: ["MIDRISE", "TOWNHOUSE", "TERRACE", "PARK"],
     character: "mixed-use mid-rise, courtyard housing over ground-floor retail",
@@ -174,7 +270,7 @@ export const DISTRICTS = [
     name: "Civic Quarter",
     // Widened west to x = -520 to close the same gap; it now meets the Heritage
     // Quarter's east edge exactly.
-    bounds: { xMin: -520, xMax: 300, zMin: -300, zMax: -40 },
+    bounds: { xMin: -1470, xMax: 500, zMin: -400, zMax: -60 },
     primary: "CIVIC",
     allow: ["CIVIC", "PARK", "MIDRISE"],
     character: "city hall, hospital, fire station, civic square",
@@ -182,7 +278,7 @@ export const DISTRICTS = [
   {
     id: "residential",
     name: "Residential Borough",
-    bounds: { xMin: 300, xMax: 800, zMin: -500, zMax: -40 },
+    bounds: { xMin: 500, xMax: 1400, zMin: -720, zMax: -60 },
     primary: "TOWNHOUSE",
     allow: ["TOWNHOUSE", "TERRACE", "MIDRISE", "PARK"],
     character: "terraced housing, courtyard blocks, neighbourhood parks",
@@ -190,7 +286,7 @@ export const DISTRICTS = [
   {
     id: "port",
     name: "Harbour & Port",
-    bounds: { xMin: -800, xMax: 300, zMin: -500, zMax: -300 },
+    bounds: { xMin: -1470, xMax: 500, zMin: -720, zMax: -400 },
     primary: "MIDRISE",
     allow: ["MIDRISE", "CIVIC", "PARK"],
     character: "ferry terminal, boatyards, working harbour edge",
@@ -263,6 +359,10 @@ export function generateBlocks() {
       const nextZ = z + GRID.STREET_SPACING;
       const zMax = (nextZ >= lastStreetZ ? lastStreetZ : nextZ) - stHalf;
       if (xMax - xMin < PLOT_RULES.MIN_ANY_W || zMax - zMin < PLOT_RULES.MIN_ANY_D) continue;
+      // The island is a coastline, not a rectangle: a block only exists if the
+      // whole of it is inland of the shore, with a margin for the sea wall and
+      // the foreshore walk.
+      if (!rectIsBuildable(xMin, xMax, zMin, zMax, SHORE_MARGIN)) continue;
 
       const cx = (xMin + xMax) / 2, cz = (zMin + zMax) / 2;
       const d = districtAt(cx, cz);
