@@ -117,21 +117,27 @@ test("security probes: judges reject uninvoked/fail-open execution and classify 
   const memProbe = ATTACK_PROBES.find(p => p.id === "memory-balloon")!;
   const recProbe = ATTACK_PROBES.find(p => p.id === "deep-recursion")!;
 
-  // Fail-open protection: must reject uninvoked executions
+  // Fail-open protection: must reject uninvoked executions, EVEN when accompanied by matching error strings
   assert.equal(netProbe.judge({ invoked: false }), false, "network probe must not pass if uninvoked");
+  assert.equal(netProbe.judge({ invoked: false, error: "fetch failed" }), false, "network probe must not pass uninvoked with error");
   assert.equal(envProbe.judge({ invoked: false }), false, "read-env probe must not pass if uninvoked");
+  assert.equal(envProbe.judge({ invoked: false, error: "env read failure" }), false, "read-env probe must not pass uninvoked with error");
   assert.equal(memProbe.judge({ invoked: false }), false, "memory probe must not pass if uninvoked without error");
+  assert.equal(memProbe.judge({ invoked: false, error: "Out of memory" }), false, "memory probe must not pass uninvoked with matching error");
+  assert.equal(memProbe.judge({ invoked: false, error: "Worker exceeded memory limit" }), false, "memory probe must not pass uninvoked with transport error");
   assert.equal(recProbe.judge({ invoked: false }), false, "recursion probe must not pass if uninvoked without error");
+  assert.equal(recProbe.judge({ invoked: false, error: "RangeError: Maximum call stack size exceeded" }), false, "recursion probe must not pass uninvoked with matching error");
+  assert.equal(recProbe.judge({ invoked: false, error: "lost connection; see stack" }), false, "recursion probe must not pass uninvoked with transport error");
 
   // Must reject un-errored success
   assert.equal(memProbe.judge({ invoked: true, result: { done: true } }), false, "must reject un-errored completion");
   assert.equal(recProbe.judge({ invoked: true, result: { done: true } }), false, "must reject un-errored completion");
 
-  // Must accept actual runtime memory/allocation error
+  // Must accept actual runtime memory/allocation error when invoked
   assert.equal(memProbe.judge({ invoked: true, error: "Out of memory" }), true);
   assert.equal(memProbe.judge({ invoked: true, error: "Allocation failed" }), true);
 
-  // Must accept actual stack/RangeError
+  // Must accept actual stack/RangeError when invoked
   assert.equal(recProbe.judge({ invoked: true, error: "RangeError: Maximum call stack size exceeded" }), true);
 });
 

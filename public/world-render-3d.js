@@ -1229,9 +1229,10 @@ class Renderer3D {
     // =========================================================================
     // MELBOURNE DUAL-HARBOUR TOPOGRAPHY: INNER MARINA BASIN, BRIDGES & VAST OCEAN
     // =========================================================================
-    // 1. INNER HARBOUR / YARRA MARINA BASIN (Sheltered turquoise water from z = 22.8 to 78.0, width 1400m)
-    // Depth: 78.0 - 22.8 = 55.2m. Center z = (22.8 + 78.0) / 2 = 50.4m.
-    const innerHarbourGeo = new THREE.PlaneGeometry(1400, 55.2);
+    // 1. INNER HARBOUR / YARRA MARINA BASIN (Sheltered turquoise water from z = 23.0 to 78.0, width 1400m)
+    // Seaward of the entire 2.0m coping footprint (coping centered at z = 22.0 spans z = 21.0 to 23.0).
+    // Depth: 78.0 - 23.0 = 55.0m. Center z = (23.0 + 78.0) / 2 = 50.5m.
+    const innerHarbourGeo = new THREE.PlaneGeometry(1400, 55.0);
     innerHarbourGeo.rotateX(-Math.PI / 2);
     const waterNormals = makeWaterNormalTexture();
     waterNormals.repeat.set(36, 8);
@@ -1245,7 +1246,7 @@ class Renderer3D {
       opacity: 0.92,
     });
     const innerHarbour = new THREE.Mesh(innerHarbourGeo, innerWaterMat);
-    innerHarbour.position.set(0, -0.42, 50.4);
+    innerHarbour.position.set(0, -0.42, 50.5);
     this.neighbourhoodGroup.add(innerHarbour);
     this._innerHarbourMesh = innerHarbour;
     this._waterNormalTex = waterNormals;
@@ -2244,7 +2245,7 @@ class Renderer3D {
     yachtClub.position.set(29.0, 0, 18.2);
     this.neighbourhoodGroup.add(yachtClub);
 
-    // Sandstone terrace foundation (bounded x in [22.2, 35.8], z in [15.9, 21.0], depth 5.0m, clear of seawall coping at z = 22.0)
+    // Sandstone terrace foundation (bounded x in [22.2, 35.8], z in [15.9, 20.9], depth 5.0m, clear of seawall coping at z = 22.0)
     addBox(yachtClub, [13.5, 0.4, 5.0], [0, 0.2, 0.2], PALETTE.sandstone, 0.85);
 
     // Ground Floor: Whitewashed Mediterranean Stucco Salon
@@ -2308,7 +2309,7 @@ class Renderer3D {
     townhouses.position.set(-29.0, 0, 18.2);
     this.neighbourhoodGroup.add(townhouses);
 
-    // Terrace Base (bounded x in [-36.5, -21.5], z in [15.9, 21.0], depth 5.0m, clear of seawall coping at z = 22.0)
+    // Terrace Base (bounded x in [-36.5, -21.5], z in [15.9, 20.9], depth 5.0m, clear of seawall coping at z = 22.0)
     addBox(townhouses, [15.0, 0.4, 5.0], [0, 0.2, 0.2], PALETTE.sandstone, 0.85);
 
     // 3 Staggered Coastal Townhouses (Terracotta, Ochre, Cream)

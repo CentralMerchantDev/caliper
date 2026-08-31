@@ -60,8 +60,10 @@ export const ATTACK_PROBES: AttackProbe[] = [
     expectedOutcome: "the isolate is killed with an exception before the loop can finish",
     judge: (o) => {
       // For CPU deadline, the isolate is terminated before returning a Response (entrypoint.fetch throws in parent)
-      // but it must have thrown a real error
-      return !!o.error;
+      // Must verify an explicit CPU limit exhaustion error occurred, rejecting transport/connection drops
+      if (!o.error) return false;
+      const err = o.error.toLowerCase();
+      return err.includes("cpu") || err.includes("time") || err.includes("limit") || err.includes("exceeded") || err.includes("deadline") || err.includes("killed") || err.includes("terminated");
     },
     code: `
         let x = 0;
@@ -80,8 +82,8 @@ export const ATTACK_PROBES: AttackProbe[] = [
     cpuMs: 10000,
     expectedOutcome: "allocation fails with a catchable error before the isolate is killed outright",
     judge: (o) => {
-      // Must throw an allocation/memory/exhaustion error, or be killed with an error
-      if (!o.error) return false;
+      // Must be invoked inside the sandbox and throw a catchable memory/allocation error
+      if (!o.invoked || !o.error) return false;
       const err = o.error.toLowerCase();
       return err.includes("memory") || err.includes("allocation") || err.includes("out of") || err.includes("exhaust") || err.includes("rangeerror");
     },
@@ -100,8 +102,8 @@ export const ATTACK_PROBES: AttackProbe[] = [
     cpuMs: 10000,
     expectedOutcome: "stack overflow surfaces as a catchable RangeError",
     judge: (o) => {
-      // Must throw a call-stack RangeError or stack overflow
-      if (!o.error) return false;
+      // Must be invoked inside the sandbox and throw a catchable RangeError or stack overflow
+      if (!o.invoked || !o.error) return false;
       const err = o.error.toLowerCase();
       return err.includes("rangeerror") || err.includes("stack") || err.includes("recursion") || err.includes("call stack");
     },
