@@ -402,6 +402,198 @@ function makeLimestoneTexture() {
   return tex;
 }
 
+// -----------------------------------------------------------------------------
+// SKYLINE FACADE DETAIL -- procedural window/mullion grid, floor slabs,
+// balconies and rooftop plant for the backdrop towers.
+//
+// The gap between this scene and a photoreal archviz render is not lighting,
+// it's geometry: reference towers are individually modelled with mullions,
+// expressed floor slabs and rooftop plant; a RoundedBoxGeometry glass panel
+// reads as a box no matter how good the HDRI is. This stays entirely
+// procedural (canvas textures + primitive geometry, same technique as
+// makeTravertineTexture above) -- it is set dressing behind the editable
+// world, never an imported mesh, so NOT_YET_PRESENT's "no external glTF/FBX
+// mesh imports" claim in src/worldStructure.ts stays true unmodified.
+// -----------------------------------------------------------------------------
+const FACADE_BAY_W = 2.4;    // metres per window bay, mullion to mullion
+const FACADE_FLOOR_H = 3.6;  // metres per storey, spandrel to spandrel
+const FACADE_GRID_COLS = 8;
+const FACADE_GRID_ROWS = 16;
+const FACADE_TILE_W = FACADE_BAY_W * FACADE_GRID_COLS;   // one texture repeat = 19.2m
+const FACADE_TILE_H = FACADE_FLOOR_H * FACADE_GRID_ROWS; // one texture repeat = 57.6m
+
+let _facadeWindowCanvas = null;
+function facadeWindowCanvas() {
+  if (_facadeWindowCanvas) return _facadeWindowCanvas;
+  const size = 512;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  // Dark mullion/spandrel base, multiplied against each tower's own glass
+  // tint at render time -- one canvas serves every archetype and colour.
+  ctx.fillStyle = "#0b1220";
+  ctx.fillRect(0, 0, size, size);
+
+  const cols = FACADE_GRID_COLS, rows = FACADE_GRID_ROWS;
+  const cellW = size / cols, cellH = size / rows;
+  const mullion = 2.6;
+  for (let r = 0; r < rows; r++) {
+    for (let cCol = 0; cCol < cols; cCol++) {
+      const x = cCol * cellW + mullion;
+      const y = r * cellH + mullion;
+      const w = cellW - mullion * 2;
+      const h = cellH - mullion * 2;
+      const lit = Math.random() < 0.14;
+      if (lit) {
+        const warm = 210 + Math.floor(Math.random() * 45);
+        ctx.fillStyle = `rgb(255, ${warm}, ${Math.floor(warm * 0.62)})`;
+      } else {
+        const base = 128 + Math.floor(Math.random() * 55);
+        ctx.fillStyle = `rgb(${base}, ${base + 6}, ${base + 16})`;
+      }
+      ctx.fillRect(x, y, w, h);
+      // Faint sill shadow -- reads as a floor-slab line even before the
+      // real 3D slabs are added on top.
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      ctx.fillRect(x, y + h - 3, w, 3);
+    }
+  }
+  _facadeWindowCanvas = c;
+  return c;
+}
+
+const _facadeTexCache = new Map();
+function facadeGlassTexture(worldWidth, worldHeight) {
+  const rx = Math.max(1, Math.round(worldWidth / FACADE_TILE_W));
+  const ry = Math.max(1, Math.round(worldHeight / FACADE_TILE_H));
+  const key = `${rx}x${ry}`;
+  let tex = _facadeTexCache.get(key);
+  if (tex) return tex;
+  tex = new THREE.CanvasTexture(facadeWindowCanvas());
+  tex.anisotropy = _maxAnisotropy;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.repeat.set(rx, ry);
+  _facadeTexCache.set(key, tex);
+  return tex;
+}
+
+// Clones a shared glass material (so the original stays untouched for other
+// callers) and gives it a window/mullion map sized to this tower's real
+// facade dimensions, so bay proportions read consistently at every height.
+function facadeGlassMat(baseMat, worldWidth, worldHeight) {
+  const m = baseMat.clone();
+  m.map = facadeGlassTexture(worldWidth, worldHeight);
+  return m;
+}
+
+// Expressed floor slabs: thin concrete bands protruding past the glass line
+// at every storey -- the strongest single depth cue a flat facade is
+// missing. One InstancedMesh per tower keeps this cheap across two dozen
+// towers and a phone-class GPU.
+const _facadeSlabGeo = new THREE.BoxGeometry(1, 1, 1);
+function addFloorSlabs(parent, width, depth, baseY, height, tint) {
+  const floors = Math.max(1, Math.floor(height / FACADE_FLOOR_H));
+  const mat = stdMat({ color: tint || 0xe7e9ee, roughness: 0.65, metalness: 0.08 });
+  const inst = new THREE.InstancedMesh(_facadeSlabGeo, mat, floors);
+  const m = new THREE.Matrix4();
+  for (let f = 0; f < floors; f++) {
+    const y = baseY + f * FACADE_FLOOR_H;
+    m.compose(
+      new THREE.Vector3(0, y, 0),
+      new THREE.Quaternion(),
+      new THREE.Vector3(width + 0.3, 0.16, depth + 0.3)
+    );
+    inst.setMatrixAt(f, m);
+  }
+  inst.instanceMatrix.needsUpdate = true;
+  inst.castShadow = true;
+  parent.add(inst);
+  return inst;
+}
+
+// Recessed balcony ledges + glass railing on residential archetypes, more
+// frequent than the existing tier-break sky-gardens -- the cue that reads
+// "apartment tower" rather than "office tower".
+const _facadeBalconyGeo = new THREE.BoxGeometry(1, 1, 1);
+const _facadeRailGeo = new THREE.BoxGeometry(1, 1, 1);
+function addBalconyBands(parent, width, depth, baseY, height, everyNFloors) {
+  const floors = Math.max(1, Math.floor(height / FACADE_FLOOR_H));
+  const step = Math.max(1, everyNFloors || 2);
+  const count = Math.floor(floors / step);
+  if (count <= 0) return;
+  const slabMat = stdMat({ color: 0xe7e9ee, roughness: 0.7 });
+  const railMat = stdMat({ color: 0x38bdf8, transparent: true, opacity: 0.45, roughness: 0.12 });
+  const slabs = new THREE.InstancedMesh(_facadeBalconyGeo, slabMat, count);
+  const rails = new THREE.InstancedMesh(_facadeRailGeo, railMat, count);
+  const m = new THREE.Matrix4();
+  let i = 0;
+  for (let f = step; f < floors; f += step) {
+    const y = baseY + f * FACADE_FLOOR_H;
+    m.compose(new THREE.Vector3(0, y, depth / 2 + 0.5), new THREE.Quaternion(), new THREE.Vector3(width * 0.92, 0.14, 1.0));
+    slabs.setMatrixAt(i, m);
+    m.compose(new THREE.Vector3(0, y + 0.5, depth / 2 + 0.98), new THREE.Quaternion(), new THREE.Vector3(width * 0.92, 0.9, 0.06));
+    rails.setMatrixAt(i, m);
+    i++;
+  }
+  slabs.count = i; rails.count = i;
+  slabs.instanceMatrix.needsUpdate = true;
+  rails.instanceMatrix.needsUpdate = true;
+  slabs.castShadow = true;
+  parent.add(slabs);
+  parent.add(rails);
+}
+
+// Rooftop mechanical plant: AC condensers, a water tank and a vent stack,
+// offset from centre so they read alongside (not on top of) each
+// archetype's existing crown/spire/dome.
+function addRooftopPlant(parent, width, depth, topY) {
+  const plantMat = stdMat({ color: 0x94a3b8, roughness: 0.75, metalness: 0.2 });
+  const unitPositions = [
+    [width * 0.26, depth * 0.24], [width * 0.30, -depth * 0.30], [-width * 0.28, depth * 0.10],
+  ];
+  unitPositions.forEach(([px, pz]) => {
+    const unit = new THREE.Mesh(new RoundedBoxGeometry(1.3, 0.9, 0.95, 1, 0.08), plantMat);
+    unit.position.set(px, topY + 0.45, pz);
+    unit.castShadow = true;
+    parent.add(unit);
+  });
+  const tank = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.65, 0.65, 1.5, 12),
+    stdMat({ color: 0x64748b, roughness: 0.6, metalness: 0.3 })
+  );
+  tank.position.set(-width * 0.30, topY + 0.75, -depth * 0.26);
+  tank.castShadow = true;
+  parent.add(tank);
+  const vent = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.12, 1.6, 8),
+    stdMat({ color: 0x475569, roughness: 0.7 })
+  );
+  vent.position.set(width * 0.05, topY + 0.8, depth * 0.32);
+  parent.add(vent);
+}
+
+// Ground-floor retail glazing: a taller, darker, more reflective band at
+// street level, visually distinct from the tinted office/residential glass
+// rising above it -- the "activated frontage" read in the reference image.
+function addGroundFloorGlazing(parent, width, depth, groundH) {
+  const gh = groundH || 4.6;
+  const band = new THREE.Mesh(
+    new RoundedBoxGeometry(width + 0.16, gh, depth + 0.16, 1, 0.05),
+    stdMat({ color: 0x0f172a, roughness: 0.08, metalness: 0.55, transparent: true, opacity: 0.88 })
+  );
+  band.position.y = gh / 2;
+  band.castShadow = true; band.receiveShadow = true;
+  parent.add(band);
+  const canopy = new THREE.Mesh(
+    new RoundedBoxGeometry(width + 0.6, 0.14, depth + 0.6, 1, 0.04),
+    stdMat({ color: 0xe2e8f0, roughness: 0.5, metalness: 0.3 })
+  );
+  canopy.position.y = gh;
+  canopy.castShadow = true;
+  parent.add(canopy);
+}
+
 function makeWaterNormalTexture() {
   const size = 512;
   const c = document.createElement("canvas");
@@ -3371,11 +3563,11 @@ class Renderer3D {
       podium.castShadow = true; podium.receiveShadow = true;
       g.add(podium);
 
-      // Curved tapered glass cylinder body
+      // Curved tapered glass cylinder body, dressed with a real window/mullion grid
       const towerH = height - podiumH;
       const towerBody = new THREE.Mesh(
         new THREE.CylinderGeometry(radius * 0.72, radius, towerH, 32),
-        glassMat
+        facadeGlassMat(glassMat, 2 * Math.PI * radius * 0.86, towerH)
       );
       towerBody.position.y = podiumH + towerH / 2;
       towerBody.castShadow = true;
@@ -3454,13 +3646,19 @@ class Renderer3D {
         tierCore.castShadow = true; tierCore.receiveShadow = true;
         g.add(tierCore);
 
-        // Reflective glass curtain panel
+        // Reflective glass curtain panel, dressed with a real window/mullion grid
         const glass = new THREE.Mesh(
           new THREE.PlaneGeometry(tier.w * 0.86, tier.h * 0.88),
-          cyanGlassMat
+          facadeGlassMat(cyanGlassMat, tier.w * 0.86, tier.h * 0.88)
         );
         glass.position.set(0, tier.y + tier.h / 2, tier.d / 2 + 0.05);
         g.add(glass);
+
+        // Expressed floor slabs, every storey within this tier
+        addFloorSlabs(g, tier.w, tier.d, tier.y, tier.h, 0xf1f5f9);
+
+        // Recessed apartment balconies on the front face -- residential archetype
+        addBalconyBands(g, tier.w, tier.d, tier.y, tier.h, 2);
 
         // Cantilevered green terrace garden on top of tier
         if (idx < tiers.length - 1) {
@@ -3482,6 +3680,9 @@ class Renderer3D {
         }
       });
 
+      // Ground-floor retail glazing, distinct from the tower glass above
+      addGroundFloorGlazing(g, baseW, baseD, 4.2);
+
       // Rooftop Pergola and Spire
       const roofCrown = new THREE.Mesh(
         new RoundedBoxGeometry(baseW * 0.36, 1.8, baseD * 0.38, 1, 0.08),
@@ -3497,6 +3698,8 @@ class Renderer3D {
       mast.position.y = height + 1.8 + (height * 0.11);
       g.add(mast);
 
+      addRooftopPlant(g, tiers[tiers.length - 1].w, tiers[tiers.length - 1].d, height);
+
       skylineGroup.add(g);
     };
 
@@ -3508,13 +3711,13 @@ class Renderer3D {
       [-span / 2, span / 2].forEach((tx) => {
         const t = new THREE.Mesh(
           new RoundedBoxGeometry(towerW, height, towerD, 3, towerW * 0.38),
-          azureGlassMat
+          facadeGlassMat(azureGlassMat, towerW, height)
         );
         t.position.set(tx, height / 2, 0);
         t.castShadow = true;
         g.add(t);
 
-        // Horizontal architectural accent louvres
+        // Horizontal architectural accent louvres -- the expressed floor line
         for (let l = 6; l < height - 6; l += 4.5) {
           const louvre = new THREE.Mesh(
             new THREE.BoxGeometry(towerW + 0.5, 0.18, towerD + 0.5),
@@ -3523,6 +3726,15 @@ class Renderer3D {
           louvre.position.set(tx, l, 0);
           g.add(louvre);
         }
+
+        // Ground-floor retail glazing, distinct from the tower glass above
+        const towerGround = new THREE.Group();
+        towerGround.position.x = tx;
+        g.add(towerGround);
+        addGroundFloorGlazing(towerGround, towerW * 0.9, towerD * 0.9, 4.0);
+
+        // Rooftop mechanical plant, below the spire crown
+        addRooftopPlant(towerGround, towerW, towerD, height);
 
         // Tapered Spire Crown
         const crownSpire = new THREE.Mesh(
@@ -3560,12 +3772,15 @@ class Renderer3D {
       const g = new THREE.Group();
       g.position.set(x, 0, z);
 
-      // Hexagonal Core
+      // Hexagonal Core, dressed with a real window/mullion grid
       const coreGeo = new THREE.CylinderGeometry(width * 0.62, width * 0.70, height, 6);
-      const core = new THREE.Mesh(coreGeo, navyGlassMat);
+      const core = new THREE.Mesh(coreGeo, facadeGlassMat(navyGlassMat, 6 * width * 0.66, height));
       core.position.y = height / 2;
       core.castShadow = true;
       g.add(core);
+
+      // Ground-floor retail glazing, distinct from the tower glass above
+      addGroundFloorGlazing(g, width * 1.15, width * 1.15, 4.4);
 
       // Cantilevered Circular Helipad Platform
       const padRadius = width * 0.75;
@@ -3606,16 +3821,16 @@ class Renderer3D {
       const g = new THREE.Group();
       g.position.set(x, 0, z);
 
-      // Slender tower shaft
+      // Slender tower shaft, dressed with a real window/mullion grid
       const shaft = new THREE.Mesh(
         new RoundedBoxGeometry(width, height, depth, 2, 0.4),
-        cyanGlassMat
+        facadeGlassMat(cyanGlassMat, width, height)
       );
       shaft.position.y = height / 2;
       shaft.castShadow = true;
       g.add(shaft);
 
-      // Horizontal white architectural accent reveals
+      // Horizontal white architectural accent reveals -- the expressed floor line
       for (let y = 5; y < height; y += 5.5) {
         const band = new THREE.Mesh(
           new THREE.BoxGeometry(width + 0.35, 0.22, depth + 0.35),
@@ -3624,6 +3839,12 @@ class Renderer3D {
         band.position.y = y;
         g.add(band);
       }
+
+      // Ground-floor retail glazing, distinct from the tower glass above
+      addGroundFloorGlazing(g, width, depth, 4.5);
+
+      // Rooftop mechanical plant, below the gold crown
+      addRooftopPlant(g, width, depth, height);
 
       // 24-Carat Gold Observation Top Crown (Melbourne Eureka 88 style)
       const crownH = height * 0.18;
