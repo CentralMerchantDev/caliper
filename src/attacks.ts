@@ -25,7 +25,11 @@ export const ATTACK_PROBES: AttackProbe[] = [
     description: "Attempts an outbound fetch() to a public URL",
     cpuMs: 200,
     expectedOutcome: "fetch() throws because globalOutbound is null",
-    judge: (o) => !o.invoked || !!o.error,
+    judge: (o) => {
+      // Must have actually been invoked and failed with an error
+      if (!o.invoked) return false;
+      return !!o.error;
+    },
     code: `
         const res = await fetch("https://example.com/");
         return { leaked: true, status: res.status };
@@ -37,8 +41,8 @@ export const ATTACK_PROBES: AttackProbe[] = [
     cpuMs: 200,
     expectedOutcome: "env is an empty object; no Cloudflare bindings or Node env are reachable",
     judge: (o) => {
-      if (!o.invoked) return true; // killed outright also counts as holding
-      if (o.error) return true; // threw trying to read something -- also holds
+      if (!o.invoked) return false; // Must have actually run in the sandbox
+      if (o.error) return true; // Threw trying to read something -- held
       const r = o.result as { envKeys?: unknown[]; hasProcess?: boolean; globalHasKv?: boolean } | undefined;
       return !!r && Array.isArray(r.envKeys) && r.envKeys.length === 0 && !r.hasProcess && !r.globalHasKv;
     },
@@ -54,7 +58,11 @@ export const ATTACK_PROBES: AttackProbe[] = [
     description: "Busy-loops well past a deliberately tight CPU limit",
     cpuMs: 50,
     expectedOutcome: "the isolate is killed with an exception before the loop can finish",
-    judge: (o) => !o.invoked || !!o.error,
+    judge: (o) => {
+      // For CPU deadline, the isolate is terminated before returning a Response (entrypoint.fetch throws in parent)
+      // but it must have thrown a real error
+      return !!o.error;
+    },
     code: `
         let x = 0;
         const deadline = Date.now() + 10000;
@@ -72,8 +80,7 @@ export const ATTACK_PROBES: AttackProbe[] = [
     cpuMs: 10000,
     expectedOutcome: "allocation fails with a catchable error before the isolate is killed outright",
     judge: (o) => {
-      // Must either terminate the isolate or throw an allocation/memory/exhaustion error
-      if (!o.invoked) return true; // Isolate was terminated by runtime
+      // Must throw an allocation/memory/exhaustion error, or be killed with an error
       if (!o.error) return false;
       const err = o.error.toLowerCase();
       return err.includes("memory") || err.includes("allocation") || err.includes("out of") || err.includes("exhaust") || err.includes("rangeerror");
@@ -93,8 +100,7 @@ export const ATTACK_PROBES: AttackProbe[] = [
     cpuMs: 10000,
     expectedOutcome: "stack overflow surfaces as a catchable RangeError",
     judge: (o) => {
-      // Must either terminate the isolate or throw a call-stack RangeError
-      if (!o.invoked) return true; // Isolate was killed
+      // Must throw a call-stack RangeError or stack overflow
       if (!o.error) return false;
       const err = o.error.toLowerCase();
       return err.includes("rangeerror") || err.includes("stack") || err.includes("recursion") || err.includes("call stack");

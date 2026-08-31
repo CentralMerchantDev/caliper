@@ -1229,8 +1229,9 @@ class Renderer3D {
     // =========================================================================
     // MELBOURNE DUAL-HARBOUR TOPOGRAPHY: INNER MARINA BASIN, BRIDGES & VAST OCEAN
     // =========================================================================
-    // 1. INNER HARBOUR / YARRA MARINA BASIN (Sheltered turquoise water from z = 22.0 to 75.0, width 1400m)
-    const innerHarbourGeo = new THREE.PlaneGeometry(1400, 56);
+    // 1. INNER HARBOUR / YARRA MARINA BASIN (Sheltered turquoise water from z = 22.8 to 78.0, width 1400m)
+    // Depth: 78.0 - 22.8 = 55.2m. Center z = (22.8 + 78.0) / 2 = 50.4m.
+    const innerHarbourGeo = new THREE.PlaneGeometry(1400, 55.2);
     innerHarbourGeo.rotateX(-Math.PI / 2);
     const waterNormals = makeWaterNormalTexture();
     waterNormals.repeat.set(36, 8);
@@ -1244,7 +1245,7 @@ class Renderer3D {
       opacity: 0.92,
     });
     const innerHarbour = new THREE.Mesh(innerHarbourGeo, innerWaterMat);
-    innerHarbour.position.set(0, -0.42, 48.0);
+    innerHarbour.position.set(0, -0.42, 50.4);
     this.neighbourhoodGroup.add(innerHarbour);
     this._innerHarbourMesh = innerHarbour;
     this._waterNormalTex = waterNormals;
@@ -1809,18 +1810,22 @@ class Renderer3D {
       topChord.position.set(gx, 4.75, 0.1);
       studio.add(topChord);
 
-      // Vertical Struts (king & queen posts at 2.2m bays)
+      // Vertical Struts (king & queen posts at 2.2m bays: vz = -4.0, -1.8, 0.4, 2.6, 4.8)
       [-4.0, -1.8, 0.4, 2.6, 4.8].forEach(vz => {
         const vPost = new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.6, 0.16), glulamMat);
         vPost.position.set(gx, 4.45, vz);
         studio.add(vPost);
       });
 
-      // Diagonal Web Members forming authentic triangulated truss geometry
+      // Diagonal Web Members forming authentic triangulated Warren / Pratt truss geometry
+      // Height Delta dy = 0.60m, Bay Width dz = 2.20m.
+      // True Hypotenuse = sqrt(0.60^2 + 2.20^2) = 2.280m.
+      // Slope angle = atan2(2.20, 0.60) = 1.303 rad.
+      // Centered at mid-bay dz_mid = (z1 + z2)/2, y_mid = 4.45m.
       [-2.9, -0.7, 1.5, 3.7].forEach((dz, idx) => {
-        const diag = new THREE.Mesh(new RoundedBoxGeometry(0.14, 0.85, 0.14), glulamMat);
+        const diag = new THREE.Mesh(new RoundedBoxGeometry(0.14, 2.28, 0.14), glulamMat);
         diag.position.set(gx, 4.45, dz);
-        diag.rotation.x = (idx % 2 === 0 ? 1 : -1) * 0.65;
+        diag.rotation.x = (idx % 2 === 0 ? 1 : -1) * 1.303;
         studio.add(diag);
       });
     });
@@ -2232,39 +2237,39 @@ class Renderer3D {
     canopy.castShadow = true; headland.add(canopy);
 
     // -------------------------------------------------------------
-    // DISTRICT 6: THE GRAND MARINA YACHT CLUB PAVILION (Marina Waterfront, x: 29, z: 22)
+    // DISTRICT 6: THE GRAND MARINA YACHT CLUB PAVILION (Marina Waterfront, x: 29, z: 18.2)
     // Completely South of South Sidewalk (z = 15.8m) & East of East Ave (x = 20.1m)
     // -------------------------------------------------------------
     const yachtClub = new THREE.Group();
-    yachtClub.position.set(29.0, 0, 18.0);
+    yachtClub.position.set(29.0, 0, 18.2);
     this.neighbourhoodGroup.add(yachtClub);
 
-    // Sandstone terrace foundation (bounded x in [22.2, 35.8], z in [18.0, 26.0])
-    addBox(yachtClub, [13.5, 0.4, 8.0], [0, 0.2, 0], PALETTE.sandstone, 0.85);
+    // Sandstone terrace foundation (bounded x in [22.2, 35.8], z in [15.9, 21.0], depth 5.0m, clear of seawall coping at z = 22.0)
+    addBox(yachtClub, [13.5, 0.4, 5.0], [0, 0.2, 0.2], PALETTE.sandstone, 0.85);
 
     // Ground Floor: Whitewashed Mediterranean Stucco Salon
-    addBox(yachtClub, [12.4, 3.2, 7.2], [0, 1.8, 0], 0xf8fafc, 0.35);
+    addBox(yachtClub, [12.4, 3.2, 4.4], [0, 1.8, 0], 0xf8fafc, 0.35);
 
     // Curved Panoramic Glass Curtain Wall overlooking the marina
     const ycGlassMat = stdMat({ color: 0x38bdf8, transparent: true, opacity: 0.55, roughness: 0.1, metalness: 0.3 });
-    const ycGlass = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 3.0, 24, 1, false, 0, Math.PI), ycGlassMat);
-    ycGlass.position.set(0, 1.8, 3.6);
+    const ycGlass = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, 3.0, 24, 1, false, 0, Math.PI), ycGlassMat);
+    ycGlass.position.set(0, 1.8, 2.2);
     yachtClub.add(ycGlass);
 
     // First Floor Cantilevered Nautical Teak Deck
-    const ycDeck = new THREE.Mesh(new RoundedBoxGeometry(13.8, 0.28, 8.0, 1, 0.04), stdMat({ color: PALETTE.teak, roughness: 0.7 }));
-    ycDeck.position.set(0, 3.5, 0);
+    const ycDeck = new THREE.Mesh(new RoundedBoxGeometry(13.8, 0.28, 5.2, 1, 0.04), stdMat({ color: PALETTE.teak, roughness: 0.7 }));
+    ycDeck.position.set(0, 3.5, 0.2);
     ycDeck.castShadow = true; ycDeck.receiveShadow = true;
     yachtClub.add(ycDeck);
 
     // Second Floor Lounge & Rooftop Shade Pergola
-    const pergRoof = new THREE.Mesh(new RoundedBoxGeometry(8.5, 0.16, 5.5, 1, 0.04), stdMat({ color: PALETTE.charcoal, roughness: 0.4, metalness: 0.8 }));
-    pergRoof.position.set(0, 5.8, -0.5);
+    const pergRoof = new THREE.Mesh(new RoundedBoxGeometry(8.5, 0.16, 4.2, 1, 0.04), stdMat({ color: PALETTE.charcoal, roughness: 0.4, metalness: 0.8 }));
+    pergRoof.position.set(0, 5.8, -0.2);
     pergRoof.castShadow = true;
     yachtClub.add(pergRoof);
 
     // 4 Slim Charcoal Pergola Support Columns
-    [[-3.8, -2.4], [3.8, -2.4], [-3.8, 2.0], [3.8, 2.0]].forEach(([px, pz]) => {
+    [[-3.8, -1.8], [3.8, -1.8], [-3.8, 1.5], [3.8, 1.5]].forEach(([px, pz]) => {
       const col = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.2, 8), stdMat({ color: PALETTE.charcoal, metalness: 0.9 }));
       col.position.set(px, 4.65, pz);
       col.castShadow = true;
@@ -2273,17 +2278,17 @@ class Renderer3D {
 
     // Nautical Stainless Flagpole with Maritime Pennant
     const flagpole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 6.2, 8), stdMat({ color: 0xffffff, metalness: 0.9, roughness: 0.2 }));
-    flagpole.position.set(6.2, 3.1, 3.6);
+    flagpole.position.set(6.2, 3.1, 2.4);
     flagpole.castShadow = true;
     yachtClub.add(flagpole);
     const pennant = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.65), stdMat({ color: 0x0284c7, roughness: 0.5, side: THREE.DoubleSide }));
-    pennant.position.set(6.8, 5.8, 3.6);
+    pennant.position.set(6.8, 5.8, 2.4);
     yachtClub.add(pennant);
 
     // White Sun Loungers on the yacht club deck
     for (let l = -2.5; l <= 2.5; l += 2.5) {
       const lounger = new THREE.Mesh(new RoundedBoxGeometry(0.7, 0.25, 1.8, 1, 0.04), stdMat({ color: 0xf8fafc, roughness: 0.6 }));
-      lounger.position.set(l, 3.75, 2.2);
+      lounger.position.set(l, 3.75, 1.4);
       lounger.castShadow = true;
       yachtClub.add(lounger);
     }
@@ -2293,24 +2298,24 @@ class Renderer3D {
     ycLight.position.set(0, 2.2, 0);
     yachtClub.add(ycLight);
     this._pointLights.push(ycLight);
-    this._contactShadow(14.0, 8.5, yachtClub);
+    this._contactShadow(14.0, 5.5, yachtClub);
 
     // -------------------------------------------------------------
-    // DISTRICT 7: PROMENADE TERRACED TOWNHOUSES (Waterfront Coastal Villas, x: -29, z: 22)
+    // DISTRICT 7: PROMENADE TERRACED TOWNHOUSES (Waterfront Coastal Villas, x: -29, z: 18.2)
     // Completely South of South Sidewalk (z = 15.8m) & West of West Ave (x = -20.1m)
     // -------------------------------------------------------------
     const townhouses = new THREE.Group();
-    townhouses.position.set(-29.0, 0, 18.0);
+    townhouses.position.set(-29.0, 0, 18.2);
     this.neighbourhoodGroup.add(townhouses);
 
-    // Terrace Base (bounded x in [-36.5, -21.5], z in [18.0, 26.0])
-    addBox(townhouses, [15.0, 0.4, 8.0], [0, 0.2, 0], PALETTE.sandstone, 0.85);
+    // Terrace Base (bounded x in [-36.5, -21.5], z in [15.9, 21.0], depth 5.0m, clear of seawall coping at z = 22.0)
+    addBox(townhouses, [15.0, 0.4, 5.0], [0, 0.2, 0.2], PALETTE.sandstone, 0.85);
 
     // 3 Staggered Coastal Townhouses (Terracotta, Ochre, Cream)
     const thConfigs = [
-      { x: -4.6, w: 4.4, h: 7.4, d: 7.2, color: 0x9a3412, roofColor: PALETTE.terracotta },
-      { x: 0.0,  w: 4.4, h: 8.2, d: 7.5, color: 0xd97706, roofColor: 0x78350f },
-      { x: 4.6,  w: 4.4, h: 6.8, d: 7.0, color: 0xfef3c7, roofColor: PALETTE.terracotta }
+      { x: -4.6, w: 4.4, h: 7.4, d: 4.4, color: 0x9a3412, roofColor: PALETTE.terracotta },
+      { x: 0.0,  w: 4.4, h: 8.2, d: 4.6, color: 0xd97706, roofColor: 0x78350f },
+      { x: 4.6,  w: 4.4, h: 6.8, d: 4.4, color: 0xfef3c7, roofColor: PALETTE.terracotta }
     ];
 
     thConfigs.forEach((cfg) => {
@@ -2474,7 +2479,7 @@ class Renderer3D {
     // Parallel parking bay markings
     const bayEast = new THREE.Mesh(new THREE.PlaneGeometry(5.8, 1.9), stdMat({ color: 0x242831, roughness: 0.85 }));
     bayEast.rotation.x = -Math.PI / 2;
-    bayEast.position.set(13.8, 0.032, 10.5);
+    bayEast.position.set(13.8, 0.032, 12.7);
     bayEast.receiveShadow = true;
     roadGroup.add(bayEast);
 
@@ -2673,8 +2678,8 @@ class Renderer3D {
       return car;
     };
 
-    // Vehicle 1: Riviera Blue Cabriolet in East marked bay
-    buildCar(13.8, 10.5, 0, 0x0284c7, true);
+    // Vehicle 1: Riviera Blue Cabriolet in East marked bay (clear of tram line at z = 10.1)
+    buildCar(13.8, 12.7, 0, 0x0284c7, true);
 
     // Vehicle 2: Monaco Bordeaux Red Coupe in West marked bay
     buildCar(-13.8, 12.7, Math.PI, 0x991b1b, false);
@@ -3294,8 +3299,8 @@ class Renderer3D {
     buildCrownSpireTower(-110, 12, 14, 13, 52, "Williamstown Beacon");
     buildCylindricalDiagridTower(-135, -5, 8.0, 58, "Portside Obelisk", cyanGlassMat);
 
-    // 3. East Coastal Headland Promontory (Solid ground x: 55 to 180, z: -10 to +35)
-    buildHeliportSkyscraper(58, 6, 13, 13, 46, "East Bay Executive");
+    // 3. East Coastal Headland Promontory (Solid ground x: 65 to 180, z: -10 to +35)
+    buildHeliportSkyscraper(85, 6, 13, 13, 46, "East Bay Executive");
     buildTwinEllipticalTowers(68, -12, 7.5, 7.5, 48, 16, "Harbour Gate Twin");
     buildSteppedTerraceTower(62, 18, 12, 11, 36, "East Esplanade Residences");
     buildCrownSpireTower(110, 12, 14, 13, 50, "St Kilda Horizon");
@@ -4905,6 +4910,8 @@ class Renderer3D {
     if (group) {
       const pos = group.position.clone();
       pos.y = 1.0;
+      this._targetOrbitDelta = null;
+      this._targetOrbitPitch = null;
       this.focusOn(pos, 10.5);
       // Reveal the interior floor plan of this building!
       this.openBuildingInterior(parcelId);
@@ -4934,14 +4941,26 @@ class Renderer3D {
     if (this._navigationMode !== 'orbit') {
       this.setNavigationMode('orbit');
     }
-    const def = this._defaultCameraSettings || { lookAt: { x: 0, y: 1.8, z: 12.0 }, dist: 68, delta: 0, pitch: 0.38 };
+    const def = this._defaultCameraSettings || { lookAt: { x: 0, y: 5.0, z: -16.0 }, dist: 64, delta: 0, pitch: 0.38 };
     this._startLookAt.copy(this._lookAt);
     this._targetLookAt.set(def.lookAt.x, def.lookAt.y, def.lookAt.z);
     this._startCamDist = this._camDist || def.dist;
     this._targetCamDist = def.dist;
-    this._cameraAnimStartTime = performance.now();
-    this._orbit.delta = def.delta || 0;
-    this._orbit.pitch = def.pitch || 0.38;
+    this._startOrbitDelta = this._orbit.delta;
+    this._targetOrbitDelta = def.delta || 0;
+    this._startOrbitPitch = this._orbit.pitch;
+    this._targetOrbitPitch = def.pitch || 0.38;
+    if (this.reducedMotion) {
+      this._lookAt.copy(this._targetLookAt);
+      this._camDist = def.dist;
+      this._orbit.delta = def.delta || 0;
+      this._orbit.pitch = def.pitch || 0.38;
+      this._targetOrbitDelta = null;
+      this._targetOrbitPitch = null;
+      this._cameraAnimStartTime = 0;
+    } else {
+      this._cameraAnimStartTime = performance.now();
+    }
     this.closeAllBuildingInteriors();
   }
 
@@ -5276,7 +5295,11 @@ class Renderer3D {
       if (typeof this._targetOrbitPitch === "number") {
         this._orbit.pitch = lerp(this._startOrbitPitch, this._targetOrbitPitch, ease);
       }
-      if (progress >= 1) this._cameraAnimStartTime = 0;
+      if (progress >= 1) {
+        this._cameraAnimStartTime = 0;
+        this._targetOrbitDelta = null;
+        this._targetOrbitPitch = null;
+      }
     }
 
     // Item drop animation

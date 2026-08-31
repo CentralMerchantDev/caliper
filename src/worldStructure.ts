@@ -115,7 +115,7 @@ export const TICK_TOUCHES = ["chooseAction", "applyAction"] as const;
 // touching chooseAction/applyAction/tick and are the genuinely bounded
 // case.
 export const NOT_YET_PRESENT = [
-  "any entity type other than a sim (no pet, no NPC, no object with its own behavior)",
+  "any autonomous simulation entity with its own needs/actions other than a sim (the 10 interactive voiced pedestrians along the promenade are scripted citizens, not autonomous sim entities; no pet or animal entity with needs)",
   "any sim action beyond the existing seven (idle, eat, sleep, shower, play, call, work) -- adding one means touching chooseAction/applyAction, not just the registry",
   "a per-sim wallet (money is shared, world-level state)",
   "external 3D glTF/FBX mesh imports beyond the procedural geometry, vendored tiled PBR textures (wood, plaster, grass, gravel), and Poly Haven HDR celestial environment the renderer already draws natively",

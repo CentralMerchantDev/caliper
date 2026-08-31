@@ -110,10 +110,18 @@ test("describePassing: names the call and its current (correct) result", () => {
   assert.match(description, /"eat"/);
 });
 
-test("security probes: memory-balloon and deep-recursion judges classify expected error types", async () => {
+test("security probes: judges reject uninvoked/fail-open execution and classify expected error types", async () => {
   const { ATTACK_PROBES } = await import("../src/attacks.ts");
+  const netProbe = ATTACK_PROBES.find(p => p.id === "network-egress")!;
+  const envProbe = ATTACK_PROBES.find(p => p.id === "read-env-and-bindings")!;
   const memProbe = ATTACK_PROBES.find(p => p.id === "memory-balloon")!;
   const recProbe = ATTACK_PROBES.find(p => p.id === "deep-recursion")!;
+
+  // Fail-open protection: must reject uninvoked executions
+  assert.equal(netProbe.judge({ invoked: false }), false, "network probe must not pass if uninvoked");
+  assert.equal(envProbe.judge({ invoked: false }), false, "read-env probe must not pass if uninvoked");
+  assert.equal(memProbe.judge({ invoked: false }), false, "memory probe must not pass if uninvoked without error");
+  assert.equal(recProbe.judge({ invoked: false }), false, "recursion probe must not pass if uninvoked without error");
 
   // Must reject un-errored success
   assert.equal(memProbe.judge({ invoked: true, result: { done: true } }), false, "must reject un-errored completion");

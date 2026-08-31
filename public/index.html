@@ -750,7 +750,7 @@ html, body {
   }
   /* Keep tactile navigation pad strictly bottom-left across all mobile & tablet screens */
   .nav-pad {
-    bottom: calc(220px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(210px + env(safe-area-inset-bottom, 0px));
     top: auto;
     left: 8px;
     right: auto;
@@ -758,12 +758,14 @@ html, body {
     transform-origin: bottom left;
     z-index: 75;
   }
+  /* Status card docks cleanly to the top on mobile, completely eliminating overlap with nav-pad and bottom dock */
   .status-card {
-    bottom: calc(230px + env(safe-area-inset-bottom, 0px));
+    top: calc(54px + env(safe-area-inset-top, 0px));
+    bottom: auto;
     left: 8px;
     right: 8px;
     width: auto;
-    max-height: calc(100vh - 320px);
+    max-height: calc(50vh - 40px);
     z-index: 85;
   }
   .dock-header {
