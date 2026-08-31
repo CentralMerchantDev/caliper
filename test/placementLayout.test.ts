@@ -107,15 +107,15 @@ test("3D masterplan invariants: road is strictly on terra firma and clear of har
   const code = fs.readFileSync("public/world-render-3d.js", "utf-8");
   // Roadway is placed at z = 11.6 on terra firma
   assert.match(code, /position\.set\(0,\s*0\.03,\s*11\.6\)/, "roadway carriageway must sit at z = 11.6");
-  // Seawall begins at z = 22.0, providing >8m clearance
+  // Seawall begins at z = 22.0 (10.4m from road centerline, >8m from road curb edge at z = 13.8)
   assert.match(code, /coping\.position\.set\(0,\s*0\.70,\s*22\.0\)/, "seawall must begin at z = 22.0");
 });
 
 test("3D visual invariants: crisp architectural lighting, tight shadow bias, and glulam trusses", async () => {
   const fs = await import("node:fs");
   const code = fs.readFileSync("public/world-render-3d.js", "utf-8");
-  // Directional sun intensity calibrated to 2.15
-  assert.match(code, /DirectionalLight\(0xfffaed,\s*2\.15\)/, "sun must have crisp 2.15 intensity");
+  // Directional sun initial base intensity calibrated to 2.15 (governed dynamically between 0.02 and 1.45 at runtime)
+  assert.match(code, /DirectionalLight\(0xfffaed,\s*2\.15\)/, "sun must have crisp 2.15 base intensity");
   // Tight PCFSoft shadow bias
   assert.match(code, /sun\.shadow\.bias\s*=\s*-0\.00018/, "sun shadow bias must be -0.00018");
   // Bloom is retained at minimal strength without fog blowout
