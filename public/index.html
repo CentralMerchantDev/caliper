@@ -345,10 +345,13 @@ html, body {
   transform: none;
 }
 
-/* Status / Pipeline Card - Positioned directly above unified Director Dock */
+/* Status / Pipeline Card - Positioned directly above the unified Director
+   Dock, whose height is published as --dock-h (see watchPanelHeights in the
+   main script) so this clearance tracks the dock's REAL height instead of
+   drifting stale the next time the dock grows a row of content. */
 .status-card {
   position: fixed;
-  bottom: calc(190px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--dock-h, 190px) + 24px + env(safe-area-inset-bottom, 0px));
   top: auto;
   right: 18px;
   width: min(440px, calc(100vw - 36px));
@@ -425,6 +428,16 @@ html, body {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+/* The nav pad and the district/NPC inspect card both want the bottom-left
+   corner; per the "one of them moves" rule, the inspect card wins (it's
+   the thing the user just asked to look at) and the nav pad hides while it
+   is open. Applies at every width -- not just the mobile breakpoint this
+   was originally scoped to -- since the same collision reproduces on
+   desktop the moment the card's content pushes past 130px tall. */
+body.inspecting-mobile #nav-compass-pad {
+  display: none !important;
+}
+
 .inspect-close {
   position: absolute;
   top: 10px;
@@ -670,7 +683,11 @@ html, body {
 }
 .street-hud {
   position: absolute;
-  top: 60px;
+  /* Tracks the top bar's real measured bottom edge (--topbar-bottom, a
+     viewport-space Y coordinate) so this always clears it, even when the
+     top bar wraps onto extra rows (narrow window, more district bookmarks)
+     instead of colliding at a stale fixed offset. */
+  top: calc(var(--topbar-bottom, 60px) + 12px);
   left: 50%;
   transform: translateX(-50%);
   background: rgba(15, 23, 42, 0.88);
@@ -756,9 +773,13 @@ html, body {
     gap: 8px;
     z-index: 80;
   }
-  /* Status card and Inspect card dock cleanly to the top on mobile, completely eliminating overlap with nav-pad and bottom dock */
+  /* Status card and Inspect card dock cleanly to the top on mobile, below
+     the top bar's REAL measured bottom edge (--topbar-bottom, published by
+     watchPanelHeights) -- the top bar stacks 3 clusters in a column at this
+     width, so a fixed 54px undershoots the moment it wraps to more rows
+     than assumed. */
   .status-card, .inspect-card {
-    top: calc(54px + env(safe-area-inset-top, 0px)) !important;
+    top: calc(var(--topbar-bottom, 54px) + 10px) !important;
     bottom: auto !important;
     left: 8px !important;
     right: 8px !important;
@@ -767,19 +788,17 @@ html, body {
     overflow-y: auto;
     z-index: 95;
   }
-  /* On compact mobile screens, lower the nav-pad scale and tuck it cleanly above bottom dock */
+  /* On compact mobile screens, lower the nav-pad scale and tuck it above the
+     bottom dock -- clearance tracks the dock's REAL height (--dock-h) so it
+     doesn't undershoot when the dock grows a row of content. */
   .nav-pad {
-    bottom: calc(180px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--dock-h, 180px) + 16px + env(safe-area-inset-bottom, 0px));
     top: auto;
     left: 8px;
     right: auto;
     transform: scale(0.70);
     transform-origin: bottom left;
     z-index: 75;
-  }
-  /* When inspect card is open on mobile, hide the floating nav pad */
-  body.inspecting-mobile #nav-compass-pad {
-    display: none !important;
   }
   .dock-header {
     display: flex;
@@ -1408,6 +1427,48 @@ import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = n => '$' + Number(n).toFixed(4);
+
+// Floating-panel overlap prevention: the dock (Build panel) and the top bar
+// both grow/shrink with their own content (more scope pills, more district
+// bookmarks), and every other panel that clears them ("status card sits
+// above the dock", "street HUD sits below the top bar") used to hard-code
+// that clearance as a pixel constant. The constant goes stale the moment
+// the panel it's clearing grows -- which is exactly how the nav-pad/inspect
+// card, top-bar/street-HUD and status-card/dock overlaps happened. Publish
+// each panel's REAL measured height as a CSS custom property instead, so
+// dependent panels' clearance tracks it automatically and can't drift.
+(function watchPanelHeights() {
+  const dock = document.getElementById('director-dock');
+  const topBar = document.querySelector('.top-bar-wrapper');
+  if (!dock || !topBar || typeof ResizeObserver === 'undefined') return;
+  const root = document.documentElement.style;
+  // dock is bottom-anchored, and so is everything that clears it (status
+  // card, mobile nav-pad) -- both share the "distance from viewport bottom"
+  // coordinate system, so dock's own HEIGHT is the right clearance unit.
+  const publishHeight = (el, prop) => {
+    if (!el) return;
+    root.setProperty(prop, `${Math.ceil(el.getBoundingClientRect().height)}px`);
+  };
+  // topBar is top-anchored (top: 14px desktop / 8px mobile) and so is the
+  // street HUD it needs to clear -- using topBar's height alone silently
+  // drops its own top offset, undershooting by exactly that offset. Publish
+  // its real BOTTOM edge (viewport-space Y) instead, so "clear the top bar"
+  // means exactly that, with no second offset constant to keep in sync.
+  const publishBottomEdge = (el, prop) => {
+    if (!el) return;
+    root.setProperty(prop, `${Math.ceil(el.getBoundingClientRect().bottom)}px`);
+  };
+  const ro = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.target === dock) publishHeight(dock, '--dock-h');
+      else if (entry.target === topBar) publishBottomEdge(topBar, '--topbar-bottom');
+    }
+  });
+  ro.observe(dock);
+  ro.observe(topBar);
+  publishHeight(dock, '--dock-h');
+  publishBottomEdge(topBar, '--topbar-bottom');
+})();
 
 // District target suggestion dictionary
 let currentTargetParcelId = 'town';
