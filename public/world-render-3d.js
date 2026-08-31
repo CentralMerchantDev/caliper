@@ -1575,69 +1575,133 @@ class Renderer3D {
     civicComplex.position.set(0, 0, -22.0);
     this.neighbourhoodGroup.add(civicComplex);
 
-    // Elevated Travertine Marble Podium Steps
+    // Elevated Travertine Marble Podium Steps (multi-tiered with ramp access)
     const podium = new THREE.Mesh(
-      new RoundedBoxGeometry(28.0, 0.9, 16.0, 2, 0.1),
-      stdMat({ color: 0xf1f5f9, roughness: 0.72, metalness: 0.1 })
+      new RoundedBoxGeometry(32.0, 0.8, 18.0, 2, 0.12),
+      stdMat({ color: 0xf1f5f9, roughness: 0.68, metalness: 0.08 })
     );
-    podium.position.set(0, 0.45, 0);
+    podium.position.set(0, 0.4, 0);
     podium.receiveShadow = true;
     civicComplex.add(podium);
 
-    // Grand Civic Portico & Colonnade (6 modern fluted square columns)
-    const colMat = stdMat({ color: 0xffffff, roughness: 0.35, metalness: 0.15 });
-    [-11, -6.6, -2.2, 2.2, 6.6, 11].forEach(cx => {
-      const col = new THREE.Mesh(new RoundedBoxGeometry(0.85, 7.8, 0.85, 2, 0.06), colMat);
-      col.position.set(cx, 4.35, 6.5);
+    // Front Travertine Monumental Steps descending towards North Promenade
+    const stepsMat = stdMat({ color: 0xe2e8f0, roughness: 0.75 });
+    for (let st = 0; st < 4; st++) {
+      const step = new THREE.Mesh(
+        new RoundedBoxGeometry(22.0 - st * 1.2, 0.2, 1.2),
+        stepsMat
+      );
+      step.position.set(0, 0.1 + st * 0.1, 9.0 + st * 0.8);
+      step.receiveShadow = true;
+      civicComplex.add(step);
+    }
+
+    // Civic Reflecting Pool flanking the entrance plaza (left side)
+    const poolBasin = new THREE.Mesh(
+      new RoundedBoxGeometry(6.4, 0.35, 8.0, 2, 0.08),
+      stdMat({ color: PALETTE.sandstone, roughness: 0.7 })
+    );
+    poolBasin.position.set(-16.0, 0.35, 3.5);
+    poolBasin.castShadow = true; poolBasin.receiveShadow = true;
+    civicComplex.add(poolBasin);
+
+    const poolWater = new THREE.Mesh(
+      new THREE.PlaneGeometry(5.8, 7.4),
+      stdMat({ color: 0x0284c7, roughness: 0.05, metalness: 0.9, transparent: true, opacity: 0.85 })
+    );
+    poolWater.rotation.x = -Math.PI / 2;
+    poolWater.position.set(-16.0, 0.48, 3.5);
+    civicComplex.add(poolWater);
+
+    // Grand Civic Colonnade (8 modern fluted architectural columns, 8.2m tall)
+    const colMat = stdMat({ color: 0xffffff, roughness: 0.28, metalness: 0.12 });
+    [-13.5, -9.6, -5.8, -2.0, 2.0, 5.8, 9.6, 13.5].forEach(cx => {
+      const col = new THREE.Mesh(new RoundedBoxGeometry(0.85, 8.2, 0.85, 2, 0.08), colMat);
+      col.position.set(cx, 4.5, 7.2);
       col.castShadow = true; col.receiveShadow = true;
       civicComplex.add(col);
+
+      // Capital & Base Trim Plates
+      const cap = new THREE.Mesh(new RoundedBoxGeometry(1.1, 0.16, 1.1), stdMat({ color: PALETTE.charcoal, roughness: 0.4, metalness: 0.8 }));
+      cap.position.set(cx, 8.55, 7.2);
+      civicComplex.add(cap);
+      const basePlate = new THREE.Mesh(new RoundedBoxGeometry(1.1, 0.16, 1.1), stdMat({ color: PALETTE.charcoal, roughness: 0.4, metalness: 0.8 }));
+      basePlate.position.set(cx, 0.88, 7.2);
+      civicComplex.add(basePlate);
     });
 
-    // Main Civic Hall & Justice Courts Building Body
+    // Main Civic Hall & Justice Courts Building Body (Portland stone finish)
     const courtBody = new THREE.Mesh(
-      new RoundedBoxGeometry(26.0, 7.2, 13.0, 2, 0.12),
-      stdMat({ color: 0xe2e8f0, roughness: 0.85 })
+      new RoundedBoxGeometry(29.0, 7.8, 14.5, 2, 0.15),
+      stdMat({ color: 0xe2e8f0, roughness: 0.82 })
     );
-    courtBody.position.set(0, 4.5, -0.5);
+    courtBody.position.set(0, 4.7, -0.5);
     courtBody.castShadow = true; courtBody.receiveShadow = true;
     civicComplex.add(courtBody);
 
-    // Double-height Structural Glass Curtain Wall & Public Atrium
-    const courtGlassMat = stdMat({ color: 0x38bdf8, transparent: true, opacity: 0.65, roughness: 0.08, metalness: 0.35 });
-    const courtGlass = new THREE.Mesh(new THREE.PlaneGeometry(21.0, 6.2), courtGlassMat);
-    courtGlass.position.set(0, 4.5, 6.05);
+    // Double-height Structural Glass Curtain Wall with Warm Douglas Fir Mullions
+    const courtGlassMat = stdMat({ color: 0x38bdf8, transparent: true, opacity: 0.62, roughness: 0.06, metalness: 0.35 });
+    const courtGlass = new THREE.Mesh(new THREE.PlaneGeometry(25.0, 6.8), courtGlassMat);
+    courtGlass.position.set(0, 4.8, 6.76);
     civicComplex.add(courtGlass);
 
-    // Cantilevered Modern Floating Roof Canopy
-    const courtRoof = new THREE.Mesh(
-      new RoundedBoxGeometry(29.5, 0.55, 17.5, 2, 0.1),
-      stdMat({ color: PALETTE.charcoal, roughness: 0.4, metalness: 0.85 })
+    // Vertical Timber Mullions
+    const mullionMat = stdMat({ color: PALETTE.teak, roughness: 0.65 });
+    for (let mx = -12; mx <= 12; mx += 3.0) {
+      const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.12, 6.8, 0.16), mullionMat);
+      mullion.position.set(mx, 4.8, 6.82);
+      mullion.castShadow = true;
+      civicComplex.add(mullion);
+    }
+
+    // Grand Monumental Bronze Entry Portal
+    const bronzePortal = new THREE.Mesh(
+      new RoundedBoxGeometry(3.6, 4.4, 0.25, 2, 0.06),
+      stdMat({ color: 0x78350f, roughness: 0.35, metalness: 0.85 })
     );
-    courtRoof.position.set(0, 8.4, 0);
+    bronzePortal.position.set(0, 3.0, 6.86);
+    bronzePortal.castShadow = true;
+    civicComplex.add(bronzePortal);
+
+    // Cantilevered Modern Floating Roof Canopy (Standing-seam charcoal zinc with warm cedar soffit)
+    const courtRoof = new THREE.Mesh(
+      new RoundedBoxGeometry(33.0, 0.65, 19.5, 2, 0.12),
+      stdMat({ color: PALETTE.charcoal, roughness: 0.35, metalness: 0.88 })
+    );
+    courtRoof.position.set(0, 8.95, 0.2);
     courtRoof.castShadow = true;
     civicComplex.add(courtRoof);
 
-    // Modern Crown Skylight Lantern & Clock Tower Feature
+    // Warm Cedar Underside Soffit Fascia
+    const soffit = new THREE.Mesh(
+      new THREE.PlaneGeometry(32.4, 18.8),
+      texturedMat("wood", PALETTE.teak, 32, 18, { roughness: 0.72 })
+    );
+    soffit.rotation.x = Math.PI / 2;
+    soffit.position.set(0, 8.6, 0.2);
+    civicComplex.add(soffit);
+
+    // Modern Crown Skylight Lantern & Illuminated Clock Tower Feature
     const lantern = new THREE.Mesh(
-      new RoundedBoxGeometry(8.0, 3.2, 6.0, 2, 0.08),
+      new RoundedBoxGeometry(9.2, 3.6, 7.2, 2, 0.1),
       stdMat({ color: 0xffffff, roughness: 0.25, metalness: 0.2 })
     );
-    lantern.position.set(0, 10.2, 0);
+    lantern.position.set(0, 11.0, 0);
     civicComplex.add(lantern);
 
     const clockGlow = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.1, 1.1, 0.1, 24),
-      stdMat({ color: 0xfff4e6, emissive: 0xfff4e6, emissiveIntensity: 2.2 })
+      new THREE.CylinderGeometry(1.25, 1.25, 0.12, 24),
+      stdMat({ color: 0xfff4e6, emissive: 0xfff4e6, emissiveIntensity: 2.4 })
     );
     clockGlow.rotation.x = Math.PI / 2;
-    clockGlow.position.set(0, 10.4, 3.05);
+    clockGlow.position.set(0, 11.2, 3.65);
     civicComplex.add(clockGlow);
     this._emissiveAnimated.push(clockGlow.material);
 
-    // Civic Court Plaza Sconce Lights
-    const courtLight = new THREE.PointLight(0xfff1e0, 1.2, 18, 2);
-    courtLight.position.set(0, 6.5, 6.8);
-    courtLight.userData.baseIntensity = 1.2;
+    // Civic Court Plaza Sconce Lights & Architectural Downlights
+    const courtLight = new THREE.PointLight(0xfff1e0, 1.4, 22, 2);
+    courtLight.position.set(0, 7.2, 7.6);
+    courtLight.userData.baseIntensity = 1.4;
     courtLight.userData.isStreetLamp = true;
     civicComplex.add(courtLight);
     this._pointLights.push(courtLight);
@@ -1649,47 +1713,75 @@ class Renderer3D {
     studio.position.set(-28.5, 0, -12);
     this.neighbourhoodGroup.add(studio);
 
-    // Modern polished sandstone studio plinth (bounded x in [-35.0, -22.0], >1.9m from West Ave)
-    addBox(studio, [13.0, 0.28, 10.5], [0, 0.14, 0], PALETTE.sandstone, 0.85);
-    // Back solid wall
-    addBox(studio, [12.4, 4.4, 0.35], [0, 2.2, -4.9], 0xf8fafc, 0.9);
-    // Left solid wall
-    addBox(studio, [0.35, 4.4, 9.8], [-6.2, 2.2, 0], 0xf8fafc, 0.9);
-    // Right wall with teak vertical louvers
-    addBox(studio, [0.35, 4.4, 10.4], [6.6, 2.2, 0], PALETTE.charcoal, 0.6);
-    for (let l = -4; l <= 4; l += 1.2) {
-      addBox(studio, [0.12, 4.0, 0.45], [6.7, 2.2, l], PALETTE.teak, 0.6);
+    // Modern polished sandstone studio plinth (bounded x in [-36.0, -21.0], >2.5m from West Ave)
+    addBox(studio, [14.0, 0.32, 11.5], [0, 0.16, 0], PALETTE.sandstone, 0.85);
+    // Back solid travertine acoustic wall
+    addBox(studio, [13.4, 4.8, 0.38], [0, 2.4, -5.4], 0xf8fafc, 0.9);
+    // West solid wall with ribbon clerestory windows
+    addBox(studio, [0.38, 4.8, 10.8], [-6.8, 2.4, 0], 0xf8fafc, 0.9);
+    // East wall with warm Douglas fir vertical louvers & brise-soleil
+    addBox(studio, [0.38, 4.8, 11.2], [7.0, 2.4, 0], PALETTE.charcoal, 0.5, 0.8);
+    for (let l = -4.5; l <= 4.5; l += 1.1) {
+      addBox(studio, [0.14, 4.5, 0.48], [7.1, 2.4, l], PALETTE.teak, 0.65);
     }
-    // Front full-height glass curtain wall with black mullions
-    const glassMat = stdMat({ color: PALETTE.glass, transparent: true, opacity: 0.72, roughness: 0.1, metalness: 0.3 });
-    const glassWall = new THREE.Mesh(new THREE.PlaneGeometry(13.2, 4.2), glassMat);
-    glassWall.position.set(0, 2.2, 5.1);
-    // Studio Interior Architectural Layout (Boardroom conference table, leather chairs & drafting bench)
+    // Structural glulam post-and-beam portal frames
+    const glulamMat = stdMat({ color: 0xb45309, roughness: 0.65 });
+    [-4.5, 0, 4.5].forEach(gx => {
+      const postBack = new THREE.Mesh(new RoundedBoxGeometry(0.24, 4.8, 0.24), glulamMat);
+      postBack.position.set(gx, 2.4, -5.2);
+      studio.add(postBack);
+      const postFront = new THREE.Mesh(new RoundedBoxGeometry(0.24, 4.8, 0.24), glulamMat);
+      postFront.position.set(gx, 2.4, 5.4);
+      studio.add(postFront);
+      const beam = new THREE.Mesh(new RoundedBoxGeometry(0.24, 0.45, 11.0), glulamMat);
+      beam.position.set(gx, 4.6, 0.1);
+      studio.add(beam);
+    });
+
+    // Front full-height ultra-clear architectural glass curtain wall with slim black mullions
+    const glassMat = stdMat({ color: 0x38bdf8, transparent: true, opacity: 0.55, roughness: 0.05, metalness: 0.35 });
+    const glassWall = new THREE.Mesh(new THREE.PlaneGeometry(14.0, 4.6), glassMat);
+    glassWall.position.set(0, 2.4, 5.5);
+    studio.add(glassWall);
+
+    // Studio Interior Layout (Boardroom conference table, leather executive chairs, architectural drawing bench & spotlighting)
     const interiorGroup = new THREE.Group();
     studio.add(interiorGroup);
     // Hardwood herringbone floor slab
-    addBox(interiorGroup, [12.2, 0.05, 9.6], [0, 0.32, 0], PALETTE.teak, 0.65);
-    // Modern conference boardroom table
-    addBox(interiorGroup, [4.2, 0.75, 1.8], [-1.2, 0.72, 0], PALETTE.charcoal, 0.35, 0.6);
-    // Barcelona conference chairs around table
-    [-2.2, 0.0, 2.2].forEach(cx => {
-      [-1.2, 1.2].forEach(cz => {
-        addBox(interiorGroup, [0.55, 0.85, 0.55], [cx - 1.2, 0.75, cz], 0x94a3b8, 0.8);
+    addBox(interiorGroup, [13.2, 0.06, 10.6], [0, 0.35, 0], PALETTE.teak, 0.65);
+    // Executive walnut boardroom conference table
+    addBox(interiorGroup, [4.8, 0.75, 2.0], [-1.2, 0.72, 0], 0x451a03, 0.4, 0.3);
+    // Executive conference chairs around table
+    [-2.4, -0.8, 0.8, 2.4].forEach(cx => {
+      [-1.3, 1.3].forEach(cz => {
+        addBox(interiorGroup, [0.55, 0.85, 0.55], [cx - 1.2, 0.75, cz], 0x1e293b, 0.7);
       });
     });
-    // Architectural drafting table & model display bench
-    addBox(interiorGroup, [3.2, 0.95, 1.2], [3.5, 0.8, -2.8], 0xf8fafc, 0.4);
-    // Recessed ceiling troffer illumination
-    const studioIntLight = new THREE.PointLight(0xfff5ea, 0.9, 14, 2);
-    studioIntLight.position.set(0, 3.8, 0);
+    // Architectural scale model display plinth & drafting bench
+    addBox(interiorGroup, [3.6, 0.95, 1.4], [4.2, 0.8, -3.2], 0xf8fafc, 0.35);
+    // Miniature architectural block on drafting bench
+    const miniModel = new THREE.Mesh(new RoundedBoxGeometry(1.6, 0.6, 0.8, 1, 0.04), stdMat({ color: 0x0284c7, roughness: 0.3 }));
+    miniModel.position.set(4.2, 1.58, -3.2);
+    miniModel.castShadow = true;
+    interiorGroup.add(miniModel);
+
+    // Recessed ceiling LED troffer illumination
+    const studioIntLight = new THREE.PointLight(0xfff5ea, 1.1, 16, 2);
+    studioIntLight.position.set(0, 4.2, 0);
     interiorGroup.add(studioIntLight);
     this._pointLights.push(studioIntLight);
 
-    // Modern flat cantilevered roof terrace with warm ceiling lighting
-    addBox(studio, [15.2, 0.32, 12.2], [0, 4.45, 0], PALETTE.charcoal, 0.5, 0.8);
-    // Teak rooftop pergola
-    for (let b = -6; b <= 6; b += 2.0) {
-      addBox(studio, [0.12, 0.24, 11.5], [b, 5.2, 0], PALETTE.teak, 0.6);
+    // Cantilevered charcoal zinc floating roof canopy with warm cedar soffit
+    addBox(studio, [16.2, 0.38, 13.2], [0, 4.95, 0], PALETTE.charcoal, 0.45, 0.85);
+    // Warm cedar underside soffit
+    const studioSoffit = new THREE.Mesh(new THREE.PlaneGeometry(15.8, 12.8), texturedMat("wood", PALETTE.teak, 16, 13, { roughness: 0.72 }));
+    studioSoffit.rotation.x = Math.PI / 2;
+    studioSoffit.position.set(0, 4.74, 0);
+    studio.add(studioSoffit);
+
+    // Architectural rooftop cedar pergola structure
+    for (let b = -6.5; b <= 6.5; b += 1.8) {
+      addBox(studio, [0.14, 0.26, 12.2], [b, 5.5, 0], PALETTE.teak, 0.6);
     }
 
     // -------------------------------------------------------------
@@ -1818,25 +1910,33 @@ class Renderer3D {
 
     // Terraced modern coastal villas with rooftop sun terraces & terracotta tile accents
     const villas = [
-      { x: -3, z: 0, w: 9.5, d: 7.2, h: 4.8, label: "Villa Azure" },
-      { x: 7, z: 8, w: 8.5, d: 6.8, h: 4.2, label: "Villa Palmera" },
+      { x: -3, z: 0, w: 10.5, d: 8.2, h: 5.2, label: "Villa Azure" },
+      { x: 8, z: 8, w: 9.5, d: 7.6, h: 4.6, label: "Villa Palmera" },
     ];
     villas.forEach((v) => {
       const villa = new THREE.Group();
       villa.position.set(v.x, 0, v.z);
       // Clean sandstone foundation plinth
-      addBox(villa, [v.w + 0.6, 0.3, v.d + 0.6], [0, 0.15, 0], PALETTE.sandstone);
+      addBox(villa, [v.w + 0.8, 0.35, v.d + 0.8], [0, 0.175, 0], PALETTE.sandstone);
       // Whitewashed stucco main body
-      addBox(villa, [v.w, v.h, v.d], [0, v.h / 2 + 0.15, 0], 0xf8fafc, 0.88);
-      // Modern Mediterranean terracotta peaked roof
-      this._addPeakedRoof(villa, v.w + 0.8, v.d + 0.8, v.h + 0.15, PALETTE.terracotta);
+      addBox(villa, [v.w, v.h, v.d], [0, v.h / 2 + 0.175, 0], 0xf8fafc, 0.88);
+      // Second storey tiered setback volume
+      addBox(villa, [v.w * 0.65, 2.4, v.d * 0.7], [v.w * 0.15, v.h + 1.2 + 0.175, -v.d * 0.1], 0xf1f5f9, 0.85);
+      // Modern Mediterranean terracotta peaked roof on upper volume
+      this._addPeakedRoof(villa, v.w * 0.65 + 0.6, v.d * 0.7 + 0.6, v.h + 2.4 + 0.175, PALETTE.terracotta);
+      // Cedar sun louvers / brise-soleil on western exposures
+      for (let lz = -v.d * 0.3; lz <= v.d * 0.3; lz += 0.9) {
+        addBox(villa, [0.1, v.h * 0.7, 0.35], [-v.w / 2 - 0.1, v.h * 0.5 + 0.175, lz], PALETTE.teak, 0.65);
+      }
       // Glass balcony with teak railing overlooking the bay
-      const balc = new THREE.Mesh(new THREE.BoxGeometry(v.w * 0.7, 0.8, 0.06), glassMat);
-      balc.position.set(0, v.h * 0.65, v.d / 2 + 0.05);
+      const balc = new THREE.Mesh(new THREE.BoxGeometry(v.w * 0.75, 0.9, 0.08), glassMat);
+      balc.position.set(0, v.h * 0.65, v.d / 2 + 0.06);
       villa.add(balc);
-      // Modern architectural downlight
-      const vLight = new THREE.PointLight(0xfff1e0, 0.75, 8, 2);
-      vLight.position.set(0, v.h * 0.8, v.d / 2 + 0.5);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(v.w * 0.76, 0.08, 0.12), stdMat({ color: PALETTE.teak, roughness: 0.6 }));
+      rail.position.set(0, v.h * 0.65 + 0.45, v.d / 2 + 0.06);
+      villa.add(rail);
+      const vLight = new THREE.PointLight(0xfff1e0, 0.85, 10, 2);
+      vLight.position.set(0, v.h * 0.8, v.d / 2 + 0.6);
       villa.add(vLight);
       eastQuarter.add(villa);
     });
