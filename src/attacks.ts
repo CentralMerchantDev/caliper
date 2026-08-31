@@ -60,10 +60,13 @@ export const ATTACK_PROBES: AttackProbe[] = [
     expectedOutcome: "the isolate is killed with an exception before the loop can finish",
     judge: (o) => {
       // For CPU deadline, the isolate is terminated before returning a Response (entrypoint.fetch throws in parent)
-      // Must verify an explicit CPU limit exhaustion error occurred, rejecting transport/connection drops
+      // Must verify an explicit CPU limit or execution deadline exhaustion error occurred, strictly rejecting other runtime/stack/memory drops
       if (!o.error) return false;
       const err = o.error.toLowerCase();
-      return err.includes("cpu") || err.includes("time") || err.includes("limit") || err.includes("exceeded") || err.includes("deadline") || err.includes("killed") || err.includes("terminated");
+      if (err.includes("stack") || err.includes("rangeerror") || err.includes("memory") || err.includes("allocation")) {
+        return false;
+      }
+      return err.includes("cpu") || err.includes("deadline") || (err.includes("time") && (err.includes("limit") || err.includes("exceeded")));
     },
     code: `
         let x = 0;

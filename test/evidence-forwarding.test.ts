@@ -139,6 +139,13 @@ test("security probes: judges reject uninvoked/fail-open execution and classify 
 
   // Must accept actual stack/RangeError when invoked
   assert.equal(recProbe.judge({ invoked: true, error: "RangeError: Maximum call stack size exceeded" }), true);
+
+  // cpu-deadline probe specificity: strictly requires CPU/deadline errors and rejects stack/memory errors
+  const cpuProbe = ATTACK_PROBES.find(p => p.id === "cpu-deadline")!;
+  assert.equal(cpuProbe.judge({ invoked: false, error: "RangeError: Maximum call stack size exceeded" }), false, "cpu probe must reject RangeError");
+  assert.equal(cpuProbe.judge({ invoked: false, error: "Out of memory" }), false, "cpu probe must reject memory error");
+  assert.equal(cpuProbe.judge({ invoked: false, error: "Script execution timed out: CPU limit exceeded" }), true, "cpu probe must accept CPU limit exceeded");
+  assert.equal(cpuProbe.judge({ invoked: false, error: "CPU deadline reached" }), true, "cpu probe must accept CPU deadline error");
 });
 
 test("index.html SSE verification calculation: accurately sums regression and criteria passed/total", async () => {
