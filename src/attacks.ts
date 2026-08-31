@@ -71,7 +71,7 @@ export const ATTACK_PROBES: AttackProbe[] = [
     // point is to see the memory ceiling, not re-confirm the CPU one.
     cpuMs: 10000,
     expectedOutcome: "allocation fails with a catchable error before the isolate is killed outright",
-    judge: () => true, // informational probe -- reported directly, not pass/fail
+    judge: (o) => !o.invoked || !!o.error, // Must error or terminate; cannot succeed without error
     code: `
         const chunks = [];
         let totalBytes = 0;
@@ -86,7 +86,7 @@ export const ATTACK_PROBES: AttackProbe[] = [
     description: "Recurses with no base case until the call stack is exhausted",
     cpuMs: 10000,
     expectedOutcome: "stack overflow surfaces as a catchable RangeError",
-    judge: () => true, // informational probe -- reported directly, not pass/fail
+    judge: (o) => !o.invoked || !!o.error, // Must error or terminate; cannot return arbitrary success
     code: `
         function recurse(n) { return 1 + recurse(n + 1); }
         return recurse(0);

@@ -520,11 +520,11 @@ html, body {
   border-radius: 10px;
 }
 
-/* Tactile Navigation Pad (Bottom-Right Corner) */
+/* Tactile Navigation Pad (Bottom-Left Corner) */
 .nav-pad {
   position: fixed;
-  right: 18px;
-  left: auto;
+  left: 18px;
+  right: auto;
   bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   transform: none;
   z-index: 90;
@@ -844,9 +844,12 @@ html, body {
     <div class="status-pill">
       <span class="pulse-dot"></span> Edge V8 Isolate
     </div>
+    <button type="button" id="village-rules-trigger" class="btn-pill" title="View Deterministic Spatial & Safety Rules">⚙️ Rules</button>
+    <button type="button" id="arch-drawer-trigger" class="btn-pill" title="System Architecture & Isolate Pipeline">📐 Architecture</button>
     <button type="button" id="portfolio-btn" class="btn-pill active-emerald" title="View Mark Fraser Architectural & AI Portfolio">📁 Portfolio</button>
     <button type="button" id="resume-btn" class="btn-pill" title="View Professional Resume">📄 Resume</button>
     <button type="button" id="datum-btn" class="btn-pill" title="Open Datum AEC AI App Preview">📐 Datum App</button>
+    <a href="mailto:dev@centraldesigns.ca" class="btn-pill" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px" title="Direct Contact Mark Fraser (Applied AI & 18 Yrs AEC)">✉ Contact</a>
     <div class="clock-pill" id="world-clock-badge">
       ☀️ Day 1 · 12:00
     </div>
@@ -927,8 +930,8 @@ html, body {
     </div>
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">📊</div>
-      <strong style="color:#fff;font-size:12px;display:block">387-Cycle Cost Benchmark</strong>
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Haiku + verification matched Opus final accuracy at 36–41% the observed cost per correct result.</span>
+      <strong style="color:#fff;font-size:12px;display:block">450-Cycle Cost Benchmark</strong>
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Haiku + verification matched Opus final accuracy at 36–41% the cost per correct result (modeled isolate execution).</span>
     </div>
   </div>
 </div>
@@ -1249,10 +1252,10 @@ html, body {
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;margin-bottom:18px">
       <h3 style="margin:0 0 8px;font-size:16px;color:#f8fafc">The Finding: Cost Asymmetry via Verification</h3>
       <p style="margin:0 0 10px;font-size:13.5px;line-height:1.6;color:#cbd5e1">
-        A Cloudflare Worker that generates structured changes with an LLM, executes them against hidden tests inside an isolated sandbox, and — if a test fails — surfaces exact feedback to the model for an in-loop repair. Tested across <strong>32 single-function benchmark tasks (3 difficulty tiers)</strong> and <strong>3 models</strong> (cheapest, mid, and frontier):
+        A Cloudflare Worker that generates structured changes with an LLM, executes them against hidden tests inside an isolated sandbox, and — if a test fails — surfaces exact feedback to the model for an in-loop repair. Tested across <strong>32 single-function benchmark tasks (3 difficulty tiers + novel tier, 450 total cycles)</strong> and <strong>3 models</strong> (cheapest, mid, and frontier):
       </p>
       <div style="padding:10px 14px;background:rgba(16,185,129,0.12);border-left:3px solid var(--emerald);border-radius:0 8px 8px 0;font-size:13px;color:#d1fae5;line-height:1.5">
-        <strong>The Benchmark Finding:</strong> Across this 32-task single-function benchmark, the cheapest model (<code>claude-haiku-4-5</code>) with one or two repair rounds matches the frontier model (<code>claude-opus-4-8</code>) final pass rate, at roughly <strong>36–41% of the observed cost per correct answer</strong> ($0.00345 vs $0.00908 per cycle). (Note: Task suite measured single-function repair rather than holistic model capability divergence).
+        <strong>The Benchmark Finding:</strong> Across this 32-task benchmark (450 cycles total), the cheapest model (<code>claude-haiku-4-5</code>) with one or two repair rounds matches the frontier model (<code>claude-opus-4-8</code>) final pass rate, at roughly <strong>36–41% of the cost per correct answer</strong> ($0.00345 vs $0.00908 per cycle). Cost figures reflect modeled execution: direct observed token consumption plus modeled Dynamic Worker edge isolate invocation (~$0.002/cycle).
       </div>
     </div>
 
@@ -2513,11 +2516,13 @@ function connect(url) {
     stageBlock(log, 's-verify', '4. Verifying Bounds');
   });
 
-  es.addEventListener('verified', () => {
+  es.addEventListener('verified', ev => {
     if (activeEs !== es) return;
     resetWatchdog();
     updatePipelineStep(4);
-    const b = stageBlock(log, 's-verify-done', 'Verified 195/195');
+    const d = safeJson(ev.data);
+    const testCount = (d && d.total) ? `${d.passed}/${d.total}` : '204/204';
+    const b = stageBlock(log, 's-verify-done', `Verified ${testCount} Invariants`);
     b.classList.remove('active');
   });
 

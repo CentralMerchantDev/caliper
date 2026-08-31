@@ -42,21 +42,14 @@ export const CONTROL_LIMITS = {
    * ceiling applies, since the path isn't known yet and ground+plan cost
    * the same either way.
    *
-   * SOURCE_EDIT worst case, unchanged from before this brief: ground
-   * $0.0025 + plan $0.04 + implement $0.03 + fix*2 (pre-review,
-   * MAX_FIX_ATTEMPTS) $0.08 + review $0.035 + fix $0.04 (post-review) +
-   * retrospective $0.0015 = $0.229. $0.23 tracks that closely on purpose.
+   * SOURCE_EDIT worst case: ground $0.0025 + plan $0.04 + implement $0.03 +
+   * fix*2 (pre-review, MAX_FIX_ATTEMPTS) $0.08 + review $0.035 + fix $0.04
+   * (post-review) + retrospective $0.0015 = $0.229. $0.23 tracks that closely on purpose.
    *
-   * DATA_EDIT worst case (FOUNDATION-2 report, measured against a live
-   * Claude subscription, not this Worker's key): ground $0.0025 + plan
-   * $0.04 + implementEdit $0.0075 + fixEdit*2 (pre-review) $0.03 +
-   * review $0.035 + fixEdit $0.015 (post-review) + retrospective
-   * $0.0015 = $0.1315. $0.14 tracks that closely, same philosophy: tight
-   * against the theoretical ceiling, not against typical spend. Note
-   * plan + review alone already total $0.075 -- unaffected by this
-   * brief's optimization, since implement/fix's cost was never what made
-   * either of those two expensive. Re-derive again if MAX_FIX_ATTEMPTS,
-   * either path's token caps, or the routed models change. */
+   * DATA_EDIT worst case: ground $0.0025 + plan $0.04 + implementEdit $0.0075 +
+   * fixEdit*2 (pre-review) $0.03 + review $0.035 + fixEdit $0.015 (post-review) +
+   * retrospective $0.0015 = $0.1315. $0.14 tracks that closely.
+   */
   PER_RUN_CEILING_USD_SOURCE_EDIT: 0.23,
   PER_RUN_CEILING_USD_DATA_EDIT: 0.14,
   /** Cross-model review must never see code that's still failing its own
