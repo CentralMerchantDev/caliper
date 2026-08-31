@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CALIPER — Masterplan Massing</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d1117;overflow:hidden;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
+  canvas{display:block}
+  #hud{position:fixed;left:16px;top:14px;color:#e8e4dc;font-size:12px;line-height:1.55;
+       background:rgba(14,18,24,.72);backdrop-filter:blur(8px);padding:12px 14px;border-radius:10px;
+       border:1px solid rgba(255,255,255,.12);max-width:290px}
+  #hud b{font-size:14px;letter-spacing:.04em}
+  #hud .k{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:7px;vertical-align:-1px}
+  #hud .row{margin:3px 0;opacity:.92}
+  #tip{position:fixed;left:16px;bottom:14px;color:#b9b3a6;font-size:11px;
+       background:rgba(14,18,24,.72);padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1)}
+  #views{position:fixed;right:16px;top:14px;display:flex;flex-direction:column;gap:6px}
+  #views button{background:rgba(14,18,24,.78);color:#e8e4dc;border:1px solid rgba(255,255,255,.16);
+       border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;min-width:128px;text-align:left}
+  #views button:hover{background:rgba(40,50,64,.9)}
+</style>
+</head>
+<body>
+<div id="hud"><b>MASTERPLAN MASSING</b><div id="legend"></div></div>
+<div id="views"></div>
+<div id="tip">drag to orbit · scroll to zoom · this is massing only — no facades, no detail yet</div>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.min.js","three/addons/":"./vendor/three/addons/"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { RoundedBoxGeometry } from "./vendor/three/addons/geometries/RoundedBoxGeometry.js";
+import { generateCityPlan, DISTRICTS, ROADS, BANDS, ISLAND, WORLD, SUBURBS, BRIDGES, PLOT_CLASSES } from "./city-plan.js";
+
+const plan = generateCityPlan();
+
+// Deterministic pseudo-random from a string, so massing is stable between loads.
+function hash01(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%10000)/10000;}
+
+// Storey heights per class, with real variation so the skyline is not a bar chart.
+const HEIGHT = {
+  TERRACE:   (r)=> 11 + r*8,
+  TOWNHOUSE: (r)=> 8  + r*7,
+  MIDRISE:   (r)=> 22 + r*33,
+  TOWER:     (r)=> 55 + Math.pow(r,1.7)*160,
+  CIVIC:     (r)=> 18 + r*30,
+  PARK:      ()=> 0,
+};
+const TINT = {
+  TERRACE:0xb08163, TOWNHOUSE:0xc2a883, MIDRISE:0xa9b3bd, TOWER:0x8fa6c4, CIVIC:0xd8d2c4, PARK:0x6f9455,
+};
+
+const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:"high-performance"});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9fc6dd);
+// No fog: the masterplan calls for crystal-clear horizon.
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, 1, 30000);
+
+const sun = new THREE.DirectionalLight(0xfff4e2, 2.4);
+sun.position.set(-900, 1200, 700);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+const S = 1500;
+sun.shadow.camera.left=-S; sun.shadow.camera.right=S; sun.shadow.camera.top=S; sun.shadow.camera.bottom=-S;
+sun.shadow.camera.near=1; sun.shadow.camera.far=5000; sun.shadow.bias=-0.0004;
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xcfe6f5, 0x6b6a5e, 0.75));
+
+const mat = (c,r=0.9,m=0)=> new THREE.MeshStandardMaterial({color:c, roughness:r, metalness:m});
+
+// ---- water, land, island, beach -------------------------------------------
+function plane(w,d,color,y,z,opts={}){
+  const g = new THREE.PlaneGeometry(w,d); g.rotateX(-Math.PI/2);
+  const m = new THREE.Mesh(g, mat(color, opts.rough ?? 0.9, opts.metal ?? 0));
+  m.position.set(0,y,z); m.receiveShadow = true; scene.add(m); return m;
+}
+plane(WORLD.SIZE, WORLD.SIZE, 0x2d6f96, -1.2, 0, {rough:0.16, metal:0.55});           // sea
+plane(WORLD.SIZE, Math.abs(BANDS.MAINLAND_Z)+WORLD.SIZE/2, 0x6c7f57, -0.05,
+      BANDS.MAINLAND_Z - (Math.abs(BANDS.MAINLAND_Z)+WORLD.SIZE/2)/2 + Math.abs(BANDS.MAINLAND_Z)/2); // mainland
+{ // island
+  const g = new THREE.BoxGeometry(ISLAND.width, 3, ISLAND.depth);
+  const m = new THREE.Mesh(g, mat(0xc9c6ba));
+  m.position.set(0,-1.5,(ISLAND.zMin+ISLAND.zMax)/2); m.receiveShadow=true; scene.add(m);
+}
+plane(ISLAND.width, BANDS.BEACH_Z_MAX-BANDS.SEAWALL_Z_MAX, 0xe8d9ac, 0.02,
+      (BANDS.SEAWALL_Z_MAX+BANDS.BEACH_Z_MAX)/2);                                      // beach
+
+// mountains behind the mainland
+for(let i=0;i<26;i++){
+  const r=hash01("mtn"+i), r2=hash01("mtn2"+i);
+  const h=280+r*520, rad=340+r2*420;
+  const c=new THREE.Mesh(new THREE.ConeGeometry(rad,h,7), mat(0x5d6b55));
+  c.position.set(-3600+i*300+r*160, h/2-40, BANDS.MOUNTAIN_Z - r2*900);
+  c.castShadow=true; scene.add(c);
+}
+
+// ---- roads -----------------------------------------------------------------
+const roadMat = mat(0x3f4550, 0.95);
+for(const r of plan.roads){
+  const row = ROADS[r.class].row;
+  const len = r.to - r.from;
+  const g = new THREE.PlaneGeometry(r.axis==="ew"?len:row, r.axis==="ew"?row:len);
+  g.rotateX(-Math.PI/2);
+  const m = new THREE.Mesh(g, roadMat);
+  m.position.set(r.axis==="ew"?(r.from+r.to)/2:r.at, 0.06, r.axis==="ew"?r.at:(r.from+r.to)/2);
+  m.receiveShadow=true; scene.add(m);
+}
+
+// ---- building massing ------------------------------------------------------
+const byClass = {};
+for(const p of plan.plots){
+  const r = hash01(p.id);
+  const h = HEIGHT[p.className](r);
+  if(h<=0) continue;
+  const bw = Math.max(2, p.buildable.xMax-p.buildable.xMin);
+  const bd = Math.max(2, p.buildable.zMax-p.buildable.zMin);
+  const g = new RoundedBoxGeometry(bw, h, bd, 1, Math.min(0.6, bw*0.03));
+  const shade = 0.86 + hash01(p.id+"c")*0.28;
+  const col = new THREE.Color(TINT[p.className]).multiplyScalar(shade);
+  const m = new THREE.Mesh(g, mat(col, 0.82));
+  m.position.set((p.buildable.xMin+p.buildable.xMax)/2, h/2, (p.buildable.zMin+p.buildable.zMax)/2);
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+  byClass[p.className]=(byClass[p.className]||0)+1;
+}
+
+// ---- suburbs + bridges -----------------------------------------------------
+for(const s of SUBURBS){
+  const b=s.bounds;
+  for(let x=b.xMin+30; x<b.xMax-30; x+=70) for(let z=b.zMin+30; z<b.zMax-30; z+=70){
+    const r=hash01(s.id+x+z); const h=7+r*8;
+    const m=new THREE.Mesh(new RoundedBoxGeometry(34,h,34,1,0.5), mat(new THREE.Color(0xc7b79a).multiplyScalar(0.85+r*0.3),0.85));
+    m.position.set(x+r*10,h/2,z+r*10); m.castShadow=true; scene.add(m);
+  }
+}
+for(const br of BRIDGES){
+  const len = Math.abs(BANDS.ISLAND_Z_MIN - BANDS.HARBOUR_Z_MIN);
+  const deck=new THREE.Mesh(new RoundedBoxGeometry(26,3,len,1,0.4), mat(0xb9b3a6));
+  deck.position.set(br.x, 26, (BANDS.ISLAND_Z_MIN+BANDS.HARBOUR_Z_MIN)/2);
+  deck.castShadow=true; scene.add(deck);
+  for(const pz of [BANDS.ISLAND_Z_MIN-len*0.28, BANDS.HARBOUR_Z_MIN+len*0.28]){
+    const t=new THREE.Mesh(new RoundedBoxGeometry(9,86,9,1,0.4), mat(0xd6d0c2));
+    t.position.set(br.x,43,pz); t.castShadow=true; scene.add(t);
+  }
+}
+
+// ---- camera + views --------------------------------------------------------
+let target=new THREE.Vector3(0,0,(ISLAND.zMin+ISLAND.zMax)/2), dist=2600, az=0.0, pitch=0.42;
+function apply(){
+  camera.position.set(target.x+Math.sin(az)*Math.cos(pitch)*dist, target.y+Math.sin(pitch)*dist, target.z+Math.cos(az)*Math.cos(pitch)*dist);
+  camera.lookAt(target);
+}
+const VIEWS = {
+  "Whole world":      ()=>{target.set(0,0,-300); dist=5200; az=0; pitch=0.55;},
+  "The island":       ()=>{target.set(0,0,(ISLAND.zMin+ISLAND.zMax)/2); dist=2400; az=0; pitch=0.42;},
+  "From the sea":     ()=>{target.set(0,40,240); dist=1500; az=0; pitch=0.13;},
+  "Downtown":         ()=>{target.set(0,60,160); dist=900; az=0.5; pitch=0.22;},
+  "Heritage quarter": ()=>{target.set(-660,20,150); dist=520; az=-0.7; pitch=0.25;},
+  "Harbour + bridges":()=>{target.set(-300,20,-620); dist=1700; az=0.2; pitch=0.30;},
+};
+const vbox=document.getElementById("views");
+for(const [name,fn] of Object.entries(VIEWS)){
+  const b=document.createElement("button"); b.textContent=name;
+  b.onclick=()=>{fn(); apply();}; vbox.appendChild(b);
+}
+
+let drag=false,lx=0,ly=0;
+addEventListener("pointerdown",e=>{if(e.target.tagName==="BUTTON")return;drag=true;lx=e.clientX;ly=e.clientY;});
+addEventListener("pointerup",()=>drag=false);
+addEventListener("pointermove",e=>{if(!drag)return;az-=(e.clientX-lx)*0.005;pitch=Math.max(0.05,Math.min(1.45,pitch+(e.clientY-ly)*0.004));lx=e.clientX;ly=e.clientY;apply();});
+addEventListener("wheel",e=>{dist=Math.max(220,Math.min(9000,dist*(e.deltaY>0?1.09:0.92)));apply();},{passive:true});
+addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+
+// legend
+const names={TERRACE:"Heritage terraces",TOWNHOUSE:"Townhouses",MIDRISE:"Mid-rise",TOWER:"Towers",CIVIC:"Civic"};
+document.getElementById("legend").innerHTML =
+  `<div class="row" style="opacity:.75;margin-bottom:6px">island ${ISLAND.width}×${ISLAND.depth}m · ${plan.plots.length} plots</div>` +
+  Object.entries(byClass).sort((a,b)=>b[1]-a[1]).map(([k,n])=>
+    `<div class="row"><span class="k" style="background:#${new THREE.Color(TINT[k]).getHexString()}"></span>${names[k]||k} — ${n}</div>`).join("");
+
+VIEWS["The island"](); apply();
+(function loop(){ requestAnimationFrame(loop); renderer.render(scene,camera); })();
+</script>
+</body>
+</html>
