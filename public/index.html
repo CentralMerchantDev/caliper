@@ -748,25 +748,31 @@ html, body {
     gap: 8px;
     z-index: 80;
   }
-  /* Keep tactile navigation pad strictly bottom-left across all mobile & tablet screens */
+  /* Status card and Inspect card dock cleanly to the top on mobile, completely eliminating overlap with nav-pad and bottom dock */
+  .status-card, .inspect-card {
+    top: calc(54px + env(safe-area-inset-top, 0px)) !important;
+    bottom: auto !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 95;
+  }
+  /* On compact mobile screens, lower the nav-pad scale and tuck it cleanly above bottom dock */
   .nav-pad {
-    bottom: calc(210px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(180px + env(safe-area-inset-bottom, 0px));
     top: auto;
     left: 8px;
     right: auto;
-    transform: scale(0.85);
+    transform: scale(0.70);
     transform-origin: bottom left;
     z-index: 75;
   }
-  /* Status card docks cleanly to the top on mobile, completely eliminating overlap with nav-pad and bottom dock */
-  .status-card {
-    top: calc(54px + env(safe-area-inset-top, 0px));
-    bottom: auto;
-    left: 8px;
-    right: 8px;
-    width: auto;
-    max-height: calc(50vh - 40px);
-    z-index: 85;
+  /* When inspect card is open on mobile, hide the floating nav pad */
+  #parcel-inspect-card:not([style*="display: none"]):not([style*="display:none"]) ~ #nav-compass-pad,
+  body.inspecting-mobile #nav-compass-pad {
+    display: none !important;
   }
   .dock-header {
     display: flex;
@@ -1545,6 +1551,7 @@ const renderer3d = new WorldRenderer(canvas3d, {
     $('#inspect-npc-thought').textContent = `“${npc.thought}”`;
 
     $('#parcel-inspect-card').style.display = 'block';
+    document.body.classList.add('inspecting-mobile');
   }
 });
 window.__worldRenderer = renderer3d;
@@ -1983,7 +1990,10 @@ document.querySelectorAll('.scope-pill[data-cat]').forEach(pill => {
   });
 });
 
-$('#inspect-close').addEventListener('click', () => $('#parcel-inspect-card').style.display = 'none');
+$('#inspect-close').addEventListener('click', () => {
+  $('#parcel-inspect-card').style.display = 'none';
+  document.body.classList.remove('inspecting-mobile');
+});
 $('#inspect-focus-btn').addEventListener('click', () => {
   renderer3d.focusParcel(currentTargetParcelId);
   renderer3d.playClickSound();
