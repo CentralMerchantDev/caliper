@@ -1134,6 +1134,18 @@ class Renderer3D {
     scene.background = this._skyGradient.tex;
     this.scene = scene;
 
+    // Aerial perspective: exponential distance fog so the near city stays
+    // crisp and the backdrop skyline/mountains (out past ~500m) recede into
+    // haze, the same atmospheric-perspective cue that reads as "real" in a
+    // photograph more than any single other effect. Colour is kept in sync
+    // with the sky horizon tint every frame (see the day/night update) so it
+    // reads correctly at both noon and midnight instead of a fixed grey haze.
+    // Density is tuned by eye against the reference: strong enough that the
+    // mainland skyline (z ~ -74 to -180, roughly 300-650m from the default
+    // view) visibly recedes, gentle enough that nothing within the editable
+    // downtown island (z in [-28, 22]) is touched.
+    scene.fog = new THREE.FogExp2(SKY_HORIZON.getHex(), 0.0011);
+
     // Physical Preetham Atmospheric Sky Shader (Sky.js)
     try {
       const sky = new Sky();
@@ -6110,6 +6122,7 @@ class Renderer3D {
     const sky = SKY_NIGHT.clone().lerp(daySky, sun.dayAmt);
     const horizon = sky.clone().lerp(SKY_HORIZON, lerp(0.35, 0.65, sun.dayAmt));
     updateSkyGradient(this._skyGradient, sky, horizon);
+    if (this.scene.fog) this.scene.fog.color.copy(horizon);
     this.audio.updateAmbient(nightAmt);
     this.audio.updateSpatialAcoustics(this.camera.position);
 
