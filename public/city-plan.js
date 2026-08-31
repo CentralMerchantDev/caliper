@@ -29,9 +29,78 @@
 // now larger than that entire previous world.
 // -----------------------------------------------------------------------------
 export const WORLD = {
-  SIZE: 9600,          // full terrain square, -4800 .. +4800 on both axes
-  HORIZON: 12000,      // camera far plane / skybox radius
-};
+  SIZE: 40000,         // 40 km square. The previous 9.6 km world was smaller
+  HORIZON: 52000,      // than Biscayne Bay is WIDE (13 km) -- a square of a
+};                     // world, not a world.
+
+// =============================================================================
+// LAND MASSES
+//
+// A coastal city is never one shape in an empty sea. Every reference we worked
+// from is an INTERLOCK of land and water: Miami is a barrier island, a lagoon, a
+// bay and a mainland; Vancouver is a peninsula, an inlet and a mountain wall;
+// Hong Kong is an island, a harbour and a mainland; Malé is a single island
+// built edge to edge. The world is now made of several land masses with real
+// water between them.
+//
+// Real distances used to size the gaps:
+//   Miami Beach barrier island   15 km long x 1-2 km wide
+//   Biscayne Bay                 56 km long, up to 13 km wide
+//   Venetian Causeway crossing   4.5 km
+//   Victoria Harbour (Hong Kong) ~1.5 km across at its narrowest
+//   Downtown Vancouver           3.7 km2
+//
+// Each mass is a set of control points, smoothed by the same Catmull-Rom used
+// for the downtown island. Coordinates are metres; +z is south (seaward).
+// =============================================================================
+export const LANDMASSES = [
+  {
+    id: "downtown", name: "Downtown Island", kind: "city", baseHeight: 10,
+    // control points supplied below from COAST, the calibrated 3.14 km2 island
+  },
+  {
+    id: "barrier", name: "Ocean Barrier Island", kind: "beach-strip", baseHeight: 6,
+    // 16 km of ocean frontage, 900-1600 m deep. Miami Beach proportions.
+    points: [
+      [-8200, 2050], [-6400, 1960], [-4300, 1900], [-2000, 1870], [ 400, 1880],
+      [ 2900, 1930], [ 5200, 2010], [ 7300, 2130], [ 8400, 2260],
+      [ 8500, 3050], [ 7200, 3250], [ 5000, 3340], [ 2600, 3380], [ 200, 3360],
+      [-2300, 3300], [-4700, 3220], [-6700, 3120], [-8300, 2950],
+    ],
+  },
+  {
+    id: "mainland", name: "Mainland Coast", kind: "mainland", baseHeight: 14,
+    // A real coast: two bays, a river mouth, headlands. Not a straight edge.
+    points: [
+      [-19000, -3400], [-15000, -3550], [-12200, -3300], [-10400, -4200],
+      [ -8600, -3450], [ -6200, -3250], [ -4800, -4300], [ -3300, -3600],
+      [ -1200, -3350], [   900, -3550], [  2600, -4400], [  4200, -3500],
+      [  6600, -3300], [  9000, -3600], [ 12000, -3350], [ 15500, -3500],
+      [ 19000, -3300],
+      [ 19000, -19000], [-19000, -19000],
+    ],
+  },
+  {
+    id: "north-key", name: "North Key", kind: "island", baseHeight: 8,
+    points: [[3900,-1750],[4900,-1600],[5500,-1150],[5250,-700],[4400,-560],[3600,-800],[3350,-1300]],
+  },
+  {
+    id: "west-key", name: "West Key", kind: "island", baseHeight: 8,
+    points: [[-6100,-1500],[-5000,-1600],[-4300,-1200],[-4500,-650],[-5400,-450],[-6300,-750],[-6500,-1150]],
+  },
+  {
+    id: "harbour-isle", name: "Harbour Isle", kind: "island", baseHeight: 7,
+    points: [[-2600,-2350],[-1750,-2450],[-1250,-2100],[-1450,-1700],[-2250,-1600],[-2800,-1900]],
+  },
+];
+
+// Causeways. Real crossings, sized off the Venetian Causeway's 4.5 km.
+export const CAUSEWAYS = [
+  { id: "north-causeway", x:  -450, from: "downtown", to: "mainland" },
+  { id: "east-causeway",  x:  1150, from: "downtown", to: "mainland" },
+  { id: "beach-causeway", x:  -100, from: "downtown", to: "barrier"  },
+  { id: "east-beach-link",x:  2400, from: "downtown", to: "barrier"  },
+];
 
 // -----------------------------------------------------------------------------
 // 2. TERRAIN BANDS — south (seaward) to north (inland)
@@ -101,6 +170,33 @@ export const COAST = [
   // --- west headland, back round to the ocean beach ---
   [-1420, -430], [-1470, -180], [-1430,   80], [-1400,  360],
 ];
+
+/** Catmull-Rom through ANY closed set of control points. */
+export function splinePolygon(p, samplesPerSegment = 10) {
+  const n = p.length;
+  const out = [];
+  const at = (i) => p[((i % n) + n) % n];
+  for (let i = 0; i < n; i++) {
+    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+    for (let s = 0; s < samplesPerSegment; s++) {
+      const t = s / samplesPerSegment, t2 = t * t, t3 = t2 * t;
+      out.push([
+        0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+        0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3),
+      ]);
+    }
+  }
+  return out;
+}
+
+/** Every land mass as a smoothed polygon, ready to draw or to test against. */
+export function landmassPolygons(samplesPerSegment = 10) {
+  return LANDMASSES.map((lm) => ({
+    ...lm,
+    polygon: splinePolygon(lm.id === "downtown" ? COAST : lm.points,
+                           lm.kind === "mainland" ? 4 : samplesPerSegment),
+  }));
+}
 
 /** Catmull-Rom through the control points -- a smooth, closed, natural coast. */
 export function coastlinePolygon(samplesPerSegment = 10) {

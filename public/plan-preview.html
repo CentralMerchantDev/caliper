@@ -3,246 +3,329 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CALIPER — Masterplan Massing</title>
+<title>CALIPER — City</title>
 <style>
   html,body{margin:0;height:100%;background:#0b1016;overflow:hidden;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
   canvas{display:block}
-  .panel{position:fixed;background:rgba(12,16,22,.66);backdrop-filter:blur(10px);
-         border:1px solid rgba(255,255,255,.13);border-radius:11px;color:#eae6de}
-  #hud{left:16px;top:14px;padding:13px 15px;font-size:12px;line-height:1.6;max-width:280px}
-  #hud b{font-size:13px;letter-spacing:.07em}
-  #hud .k{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:8px;vertical-align:-1px}
-  #hud .m{opacity:.62;font-size:11px;margin:5px 0 9px}
+  .panel{position:fixed;background:rgba(10,14,20,.62);backdrop-filter:blur(12px);
+         border:1px solid rgba(255,255,255,.14);border-radius:12px;color:#f0ece4}
+  #hud{left:16px;top:14px;padding:13px 16px;font-size:12px;line-height:1.6;max-width:250px}
+  #hud b{font-size:13px;letter-spacing:.08em}
+  #hud .m{opacity:.6;font-size:11px;margin:5px 0 0}
   #views{right:16px;top:14px;padding:8px;display:flex;flex-direction:column;gap:5px}
-  #views button{background:rgba(255,255,255,.05);color:#eae6de;border:1px solid rgba(255,255,255,.12);
-       border-radius:7px;padding:7px 13px;font-size:12px;cursor:pointer;min-width:142px;text-align:left}
-  #views button:hover{background:rgba(255,255,255,.14)}
-  #tip{left:16px;bottom:14px;padding:8px 13px;font-size:11px;color:#a9a396}
+  #views button{background:rgba(255,255,255,.06);color:#f0ece4;border:1px solid rgba(255,255,255,.13);
+       border-radius:8px;padding:8px 14px;font-size:12px;cursor:pointer;min-width:150px;text-align:left}
+  #views button:hover{background:rgba(255,255,255,.16)}
+  #tip{left:16px;bottom:14px;padding:8px 13px;font-size:11px;color:#b3ada0}
 </style>
 </head>
 <body>
-<div id="hud" class="panel"><b>MASTERPLAN MASSING</b><div id="legend"></div></div>
+<div id="hud" class="panel"><b>CALIPER CITY</b><div id="legend"></div></div>
 <div id="views" class="panel"></div>
-<div id="tip" class="panel">drag to orbit · scroll to zoom · massing study — no facades yet</div>
+<div id="tip" class="panel">drag to orbit · scroll to zoom</div>
 <script type="importmap">
 {"imports":{"three":"./vendor/three/three.module.min.js","three/addons/":"./vendor/three/addons/"}}
 </script>
 <script type="module">
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "./vendor/three/addons/geometries/RoundedBoxGeometry.js";
-import { generateCityPlan, coastlinePolygon, isOnLand, distanceToCoast,
-         DISTRICTS, ROADS, BANDS, ISLAND, WORLD, SUBURBS, BRIDGES } from "./city-plan.js";
+import { generateCityPlan, coastlinePolygon, distanceToCoast, landmassPolygons,
+         ROADS, BANDS, WORLD, SUBURBS, BRIDGES, CAUSEWAYS } from "./city-plan.js";
 
-const plan  = generateCityPlan();
-const coast = coastlinePolygon(14);
-const rnd = (s)=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%100000)/100000;};
+const plan = generateCityPlan();
+const coast = coastlinePolygon(16);
+const R = (s)=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%100000)/100000;};
+
+// ---------------------------------------------------------------- palette
+// Saturated and curated. Grey massing reads as a study model; colour with
+// contrasting roofs is most of what makes a stylised city look like a city.
+const WALLS = {
+  TERRACE:   [0xd98b5f,0xc4694c,0xe0a878,0xb5533f,0xd9a066,0xa8604a],
+  TOWNHOUSE: [0xf0e2cb,0xe6d3b3,0xdcc9a8,0xf5ead8,0xd8c7a0],
+  MIDRISE:   [0xe8e4dc,0xd6dde2,0xf2efe6,0xcdd6dd,0xe4dcd0],
+  TOWER:     [0x9fc4dd,0x7fa8cc,0xbcd6e8,0x6f97be,0xa8cfe0,0x8fb5d4],
+  CIVIC:     [0xf5efe0,0xece4d2,0xfaf5ea],
+};
+const ROOFS = {
+  TERRACE:   [0x8a4436,0x9c5340,0x7a3b30],
+  TOWNHOUSE: [0xb04a3c,0x8f5a44,0xa85b48,0x6d7f8c],
+  MIDRISE:   [0x5b6670,0x6b7580,0x4f5a63],
+  TOWER:     [0x46525e,0x3c4650,0x505d6a],
+  CIVIC:     [0x4f7a6a,0x3f6a5c,0x8a6a4a],
+};
+const pick=(arr,s)=>arr[Math.floor(R(s)*arr.length)%arr.length];
 
 const HEIGHT = {
-  TERRACE:(r)=>12+r*7, TOWNHOUSE:(r)=>9+r*6, MIDRISE:(r)=>24+r*36,
-  TOWER:(r)=>60+Math.pow(r,1.8)*185, CIVIC:(r)=>20+r*26, PARK:()=>0 };
-const TINT = { TERRACE:0xa87256, TOWNHOUSE:0xbda284, MIDRISE:0xb6bcc2, TOWER:0x9aacc4, CIVIC:0xe0d9c8, PARK:0x5f8a49 };
+  TERRACE:(r)=>13+r*8, TOWNHOUSE:(r)=>9+r*7, MIDRISE:(r)=>26+r*40,
+  TOWER:(r)=>65+Math.pow(r,1.75)*190, CIVIC:(r)=>22+r*28, PARK:()=>0 };
 
 // ---------------------------------------------------------------- renderer
-const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:"high-performance"});
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:"high-performance"});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.setSize(innerWidth,innerHeight);
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05;
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.16;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
-
 const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(36, innerWidth/innerHeight, 2, 60000);
+const camera=new THREE.PerspectiveCamera(34,innerWidth/innerHeight,2,60000);
 
 // ---------------------------------------------------------------- sky
-// A real gradient dome, not a flat background colour -- the single cheapest
-// thing that stops a render reading as a diagram.
 {
-  const g=new THREE.SphereGeometry(WORLD.HORIZON*2, 32, 20);
-  const m=new THREE.ShaderMaterial({side:THREE.BackSide, depthWrite:false, uniforms:{
-      top:{value:new THREE.Color(0x2f6ea8)}, mid:{value:new THREE.Color(0x9dc4dd)}, bot:{value:new THREE.Color(0xe8e0cf)}},
-    vertexShader:`varying vec3 vP; void main(){vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-    fragmentShader:`varying vec3 vP; uniform vec3 top,mid,bot;
-      void main(){ float h=normalize(vP).y;
-        vec3 c = h>0.0 ? mix(mid,top,pow(clamp(h,0.,1.),0.62)) : mix(mid,bot,pow(clamp(-h*3.,0.,1.),0.7));
-        gl_FragColor=vec4(c,1.);}`});
-  scene.add(new THREE.Mesh(g,m));
+  const m=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,uniforms:{
+    top:{value:new THREE.Color(0x2a7fc4)},mid:{value:new THREE.Color(0x9fd0ea)},bot:{value:new THREE.Color(0xf3ecdc)}},
+    vertexShader:`varying vec3 v;void main(){v=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+    fragmentShader:`varying vec3 v;uniform vec3 top,mid,bot;
+      void main(){float h=normalize(v).y;
+      vec3 c=h>0.?mix(mid,top,pow(clamp(h,0.,1.),.55)):mix(mid,bot,pow(clamp(-h*3.5,0.,1.),.8));
+      gl_FragColor=vec4(c,1.);}`});
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(WORLD.HORIZON*2,32,20),m));
 }
 
-// ---------------------------------------------------------------- lighting
-const sun=new THREE.DirectionalLight(0xfff2dc, 2.7);
-sun.position.set(-1600,2100,1500); sun.castShadow=true;
-sun.shadow.mapSize.set(4096,4096);
-const S=2600; Object.assign(sun.shadow.camera,{left:-S,right:S,top:S,bottom:-S,near:10,far:9000});
-sun.shadow.bias=-0.0006; sun.shadow.normalBias=1.2;
-scene.add(sun);
-scene.add(new THREE.HemisphereLight(0xbcd9ef, 0x5d5a4c, 0.62));
+// ------------------------------------------------- TWO-LIGHT RIG: key + fill
+// A single sun crushes the shaded faces to near-black, which is what makes a
+// render look heavy. A cool fill from the opposite side keeps every face
+// readable -- this is the biggest single lighting difference in a stylised look.
+const key=new THREE.DirectionalLight(0xfff0d4,2.9);
+key.position.set(-1700,2200,1400); key.castShadow=true;
+key.shadow.mapSize.set(4096,4096);
+const S=2800; Object.assign(key.shadow.camera,{left:-S,right:S,top:S,bottom:-S,near:10,far:9000});
+key.shadow.bias=-0.0005; key.shadow.normalBias=1.4; scene.add(key);
+const fill=new THREE.DirectionalLight(0x9dc8f0,0.85); fill.position.set(1500,900,-1300); scene.add(fill);
+scene.add(new THREE.HemisphereLight(0xd6ecff,0x6f6a55,0.75));
 
-const mat=(c,r=.88,m=0)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m});
+const M=(c,r=.85,m=0)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m});
 
-// ---------------------------------------------------------------- water
+// ---------------------------------------------------------------- textures
+function windowBands(){
+  // Horizontal storey banding. Without it a box has no scale at any size --
+  // this single texture is what turns massing into architecture.
+  const w=64,h=512,c=document.createElement("canvas");c.width=w;c.height=h;
+  const x=c.getContext("2d");
+  x.fillStyle="#ffffff";x.fillRect(0,0,w,h);
+  for(let i=0;i<h;i+=16){ x.fillStyle="rgba(40,58,78,0.55)"; x.fillRect(0,i+4,w,8); }
+  for(let i=0;i<w;i+=16){ x.fillStyle="rgba(255,255,255,0.5)"; x.fillRect(i,0,3,h); }
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.anisotropy=renderer.capabilities.getMaxAnisotropy(); return t;
+}
+const bandTex=windowBands();
+
 function waterNormals(){
-  const N=512,c=document.createElement("canvas");c.width=c.height=N;const x=c.getContext("2d");
-  const d=x.createImageData(N,N);
+  const N=512,c=document.createElement("canvas");c.width=c.height=N;const g=c.getContext("2d");
+  const d=g.createImageData(N,N);
   for(let i=0;i<N;i++)for(let j=0;j<N;j++){
-    const v=Math.sin(i*0.09)*Math.cos(j*0.07)+Math.sin((i+j)*0.045)*0.7;
-    const k=(i*N+j)*4; d.data[k]=128+v*26; d.data[k+1]=128+Math.cos(i*0.06)*22; d.data[k+2]=255; d.data[k+3]=255;}
-  x.putImageData(d,0,0);
-  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(90,90); return t;
+    const v=Math.sin(i*.085)*Math.cos(j*.062)+Math.sin((i+j)*.041)*.75+Math.sin(i*.021-j*.017)*.5;
+    const k=(i*N+j)*4; d.data[k]=128+v*24; d.data[k+1]=128+Math.cos(i*.055+j*.03)*20; d.data[k+2]=255; d.data[k+3]=255;}
+  g.putImageData(d,0,0);
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(70,70);return t;
 }
 const wn=waterNormals();
-const seaMat=new THREE.MeshStandardMaterial({color:0x16506e, roughness:0.09, metalness:0.72,
-  normalMap:wn, normalScale:new THREE.Vector2(0.55,0.55)});
-const sea=new THREE.Mesh(new THREE.PlaneGeometry(WORLD.SIZE*2.6, WORLD.SIZE*2.6), seaMat);
-sea.rotation.x=-Math.PI/2; sea.position.y=-0.6; sea.receiveShadow=true; scene.add(sea);
-// shallow shelf ringing the island so the water reads as having depth
-{
-  const s=new THREE.Shape(coast.map(p=>new THREE.Vector2(p[0],p[1])));
-  const g=new THREE.ShapeGeometry(s); g.rotateX(Math.PI/2);
-  const m=new THREE.Mesh(g, new THREE.MeshStandardMaterial({color:0x2f89a8,roughness:0.12,metalness:0.6,
-    transparent:true,opacity:0.85, normalMap:wn, normalScale:new THREE.Vector2(0.4,0.4)}));
-  m.scale.set(1.13,1,1.13); m.position.y=-0.45; scene.add(m);
+
+// contact-shadow sprite: soft dark ellipse, the cheapest AO there is
+function blobTex(){
+  const N=128,c=document.createElement("canvas");c.width=c.height=N;const g=c.getContext("2d");
+  const grd=g.createRadialGradient(N/2,N/2,0,N/2,N/2,N/2);
+  grd.addColorStop(0,"rgba(0,0,0,0.5)");grd.addColorStop(0.55,"rgba(0,0,0,0.22)");grd.addColorStop(1,"rgba(0,0,0,0)");
+  g.fillStyle=grd;g.fillRect(0,0,N,N);
+  return new THREE.CanvasTexture(c);
+}
+const blobMat=new THREE.MeshBasicMaterial({map:blobTex(),transparent:true,depthWrite:false});
+
+// ---------------------------------------------------------------- water
+const sea=new THREE.Mesh(new THREE.PlaneGeometry(WORLD.SIZE*3,WORLD.SIZE*3),
+  new THREE.MeshStandardMaterial({color:0x10557e,roughness:.06,metalness:.78,
+    normalMap:wn,normalScale:new THREE.Vector2(.5,.5)}));
+sea.rotation.x=-Math.PI/2; sea.position.y=-0.8; sea.receiveShadow=true; scene.add(sea);
+// Bright turquoise shallows ringing EVERY land mass -- the depth gradient is
+// what stops a flat blue plane reading as paint.
+for (const lm of landmassPolygons(16)) {
+  const sh = new THREE.Shape(lm.polygon.map(q=>new THREE.Vector2(q[0],q[1])));
+  const g = new THREE.ShapeGeometry(sh); g.rotateX(Math.PI/2);
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({color:0x36b3c4,roughness:.08,metalness:.6,
+    transparent:true,opacity:.9,normalMap:wn,normalScale:new THREE.Vector2(.38,.38)}));
+  const k = lm.kind==="mainland" ? 1.012 : 1.22;
+  m.scale.set(k,1,k); m.position.y=-.55; scene.add(m);
 }
 
-// ---------------------------------------------------------------- the island
-const shape=new THREE.Shape(coast.map(p=>new THREE.Vector2(p[0],p[1])));
-{ // sand ring: the island outline scaled slightly out, sitting just under the land
-  const g=new THREE.ShapeGeometry(shape); g.rotateX(Math.PI/2);
-  const m=new THREE.Mesh(g, mat(0xe4d3a6,0.96)); m.scale.set(1.055,1,1.055);
-  m.position.y=0.05; m.receiveShadow=true; scene.add(m);
+// ---------------------------------------------------------------- land masses
+// Every land mass is drawn the same way: a sand apron, then an extruded body.
+// The world is an interlock of land and water, not one shape in an empty sea.
+const LAND_TINT = { city:0x86a06d, "beach-strip":0xd8c893, island:0x7f9a66, mainland:0x74915b };
+const masses = landmassPolygons(16);
+for (const lm of masses){
+  const shp = new THREE.Shape(lm.polygon.map(q=>new THREE.Vector2(q[0],q[1])));
+  // sand apron just proud of the shore
+  const sg = new THREE.ShapeGeometry(shp); sg.rotateX(Math.PI/2);
+  const sm = new THREE.Mesh(sg, M(0xf0dfae,.97));
+  sm.scale.set(lm.kind==="mainland"?1.004:1.055, 1, lm.kind==="mainland"?1.004:1.055);
+  sm.position.y = .06; sm.receiveShadow = true; scene.add(sm);
+  // the land itself
+  const h = lm.baseHeight;
+  const eg = new THREE.ExtrudeGeometry(shp,{depth:h, bevelEnabled:true, bevelSize:4, bevelThickness:3, bevelSegments:2});
+  eg.rotateX(Math.PI/2);
+  const em = new THREE.Mesh(eg, M(LAND_TINT[lm.kind]||0x86a06d,.95));
+  em.position.y = h; em.receiveShadow = true; em.castShadow = true; scene.add(em);
 }
-{ // land mass, extruded so it has a real edge above the water
-  const g=new THREE.ExtrudeGeometry(shape,{depth:9, bevelEnabled:true, bevelSize:3.5, bevelThickness:2.5, bevelSegments:2});
-  g.rotateX(Math.PI/2);
-  const m=new THREE.Mesh(g, mat(0x9aa891,0.95));
-  m.position.y=9; m.receiveShadow=true; m.castShadow=true; scene.add(m);
-}
-
-// ---------------------------------------------------------------- mainland + relief
-{
-  const g=new THREE.PlaneGeometry(WORLD.SIZE*2, 5200, 90, 30); g.rotateX(-Math.PI/2);
-  const p=g.attributes.position;
-  for(let i=0;i<p.count;i++){
-    const x=p.getX(i), z=p.getZ(i);
-    const inland=Math.max(0,(-z-600)/2400);
-    p.setY(i, 6 + Math.pow(inland,1.6)*260 + Math.sin(x*0.0016)*26*inland + Math.cos(x*0.0037+z*0.002)*14*inland);
-  }
-  g.computeVertexNormals();
-  const m=new THREE.Mesh(g, mat(0x6d7f58,0.97));
-  m.position.z=BANDS.MAINLAND_Z-2200; m.receiveShadow=true; m.castShadow=true; scene.add(m);
-}
-{ // mountains
-  const geos=[],matM=mat(0x59684f,0.98);
-  for(let i=0;i<34;i++){
-    const r=rnd("m"+i), r2=rnd("n"+i);
-    const h=420+r*760, rad=420+r2*520;
-    const c=new THREE.Mesh(new THREE.ConeGeometry(rad,h,6+Math.round(r*3)), matM);
-    c.position.set(-5200+i*330+r*220, h/2+120, BANDS.MOUNTAIN_Z-r2*1600);
-    c.rotation.y=r*3.14; c.castShadow=true; scene.add(c);
-  }
-}
+// mountain wall hard behind the mainland -- Hong Kong / Vancouver
+{ const mm=M(0x62795a,.97), snow=M(0xf2f6fa,.85);
+  for(let i=0;i<70;i++){const r=R("m"+i),r2=R("n"+i);const hh=900+r*2100,rad=900+r2*1400;
+    const c=new THREE.Mesh(new THREE.ConeGeometry(rad,hh,7),mm);
+    c.position.set(-19000+i*560+r*420,hh/2+40,-5200-r2*7000);c.rotation.y=r*3.14;c.castShadow=true;scene.add(c);
+    if(hh>1900){const cap=new THREE.Mesh(new THREE.ConeGeometry(rad*.33,hh*.25,7),snow);
+      cap.position.set(c.position.x,c.position.y+hh*.375,c.position.z);scene.add(cap);} }}
 
 // ---------------------------------------------------------------- roads
-const roadMat=mat(0x33373f,0.97);
+const roadMat=M(0x4a4f58,.95), lineMat=M(0xf3e6a8,.8);
 for(const r of plan.roads){
-  const row=ROADS[r.class].row, len=r.to-r.from;
-  const g=new THREE.PlaneGeometry(r.axis==="ew"?len:row, r.axis==="ew"?row:len); g.rotateX(-Math.PI/2);
-  const m=new THREE.Mesh(g, roadMat);
-  m.position.set(r.axis==="ew"?(r.from+r.to)/2:r.at, 9.12, r.axis==="ew"?r.at:(r.from+r.to)/2);
-  m.receiveShadow=true; scene.add(m);
+  const row=ROADS[r.class].row,len=r.to-r.from,ew=r.axis==="ew";
+  const g=new THREE.PlaneGeometry(ew?len:row,ew?row:len);g.rotateX(-Math.PI/2);
+  const m=new THREE.Mesh(g,roadMat);
+  m.position.set(ew?(r.from+r.to)/2:r.at,10.14,ew?r.at:(r.from+r.to)/2);m.receiveShadow=true;scene.add(m);
+  const cg=new THREE.PlaneGeometry(ew?len:0.7,ew?0.7:len);cg.rotateX(-Math.PI/2);
+  const cm=new THREE.Mesh(cg,lineMat);
+  cm.position.set(ew?(r.from+r.to)/2:r.at,10.17,ew?r.at:(r.from+r.to)/2);scene.add(cm);
 }
 
-// ---------------------------------------------------------------- buildings
+// --------------------------------------------- COMPOSITE BUILDINGS
+// Body + contrasting roof slab + parapet + rooftop plant. The silhouette
+// variety this creates is most of the stylised-city read; a single box is not.
 const byClass={};
-const bGeo=[], bMat=[];
 for(const p of plan.plots){
-  const r=rnd(p.id), h=HEIGHT[p.className](r);
-  if(h<=0) continue;
+  const r=R(p.id),h=HEIGHT[p.className](r); if(h<=0) continue;
   const bw=Math.max(3,p.buildable.xMax-p.buildable.xMin);
   const bd=Math.max(3,p.buildable.zMax-p.buildable.zMin);
-  const g=new RoundedBoxGeometry(bw,h,bd,1,Math.min(1.1,bw*0.035));
-  const col=new THREE.Color(TINT[p.className]).multiplyScalar(0.84+rnd(p.id+"c")*0.3);
-  const m=new THREE.Mesh(g, new THREE.MeshStandardMaterial({color:col, roughness:0.72, metalness:p.className==="TOWER"?0.28:0.05}));
-  m.position.set((p.buildable.xMin+p.buildable.xMax)/2, 9+h/2, (p.buildable.zMin+p.buildable.zMax)/2);
-  m.castShadow=true; m.receiveShadow=true; scene.add(m);
+  const cx=(p.buildable.xMin+p.buildable.xMax)/2, cz=(p.buildable.zMin+p.buildable.zMax)/2;
+  const tall=p.className==="TOWER"||p.className==="MIDRISE";
+
+  const wall=new THREE.Color(pick(WALLS[p.className],p.id+"w"));
+  const bodyMat=new THREE.MeshStandardMaterial({
+    color:wall, roughness:tall?.42:.8, metalness:tall?.22:.03,
+    map:tall?bandTex.clone():null });
+  if(bodyMat.map){ bodyMat.map.needsUpdate=true; bodyMat.map.repeat.set(Math.max(1,bw/9), Math.max(1,h/9)); }
+
+  const body=new THREE.Mesh(new RoundedBoxGeometry(bw,h,bd,1,Math.min(1.2,bw*.03)),bodyMat);
+  body.position.set(cx,10+h/2,cz); body.castShadow=true; body.receiveShadow=true; scene.add(body);
+
+  // roof slab in a contrasting colour + parapet upstand
+  const rc=pick(ROOFS[p.className],p.id+"r");
+  const roof=new THREE.Mesh(new RoundedBoxGeometry(bw*1.03,1.6,bd*1.03,1,.35),M(rc,.85));
+  roof.position.set(cx,10+h+.8,cz); roof.castShadow=true; scene.add(roof);
+  const par=new THREE.Mesh(new RoundedBoxGeometry(bw*1.04,2.4,bd*1.04,1,.3),M(rc,.85));
+  par.position.set(cx,10+h+1.4,cz); scene.add(par);
+
+  // rooftop plant / penthouse, only on the tall ones
+  if(tall && r>0.25){
+    const pw=bw*(.28+R(p.id+"p")*.22), ph=3+R(p.id+"q")*7;
+    const box=new THREE.Mesh(new RoundedBoxGeometry(pw,ph,bd*.3,1,.3),M(rc,.8));
+    box.position.set(cx+(R(p.id+"o")-.5)*bw*.25,10+h+2.6+ph/2,cz+(R(p.id+"t")-.5)*bd*.2);
+    box.castShadow=true; scene.add(box);
+  }
+  // ground-floor band: a darker plinth reads as retail and anchors the tower
+  if(tall){
+    const pl=new THREE.Mesh(new RoundedBoxGeometry(bw*1.06,7,bd*1.06,1,.4),M(new THREE.Color(rc).multiplyScalar(1.25),.8));
+    pl.position.set(cx,10+3.5,cz); pl.castShadow=true; pl.receiveShadow=true; scene.add(pl);
+  }
+  // contact shadow
+  const blob=new THREE.Mesh(new THREE.PlaneGeometry(bw*2.1,bd*2.1),blobMat);
+  blob.rotation.x=-Math.PI/2; blob.position.set(cx,10.22,cz); scene.add(blob);
   byClass[p.className]=(byClass[p.className]||0)+1;
 }
 
-// ---------------------------------------------------------------- greenery
+// ---------------------------------------------------------------- trees
+// Instanced, and lots of them: street trees on every road plus park canopies.
 {
-  const trunk=mat(0x5b4630,0.95), leaf=mat(0x4e7a3c,0.92);
-  const tg=new THREE.CylinderGeometry(0.8,1.1,7,5), lg=new THREE.SphereGeometry(6.5,7,6);
-  let n=0;
-  for(let i=0;i<1400 && n<900;i++){
-    const x=-1500+rnd("tx"+i)*2950, z=-760+rnd("tz"+i)*1380;
-    if(distanceToCoast(x,z)<40) continue;
-    if(plan.plots.some(p=>x>p.xMin-6&&x<p.xMax+6&&z>p.zMin-6&&z<p.zMax+6)) continue;
-    if(plan.roads.some(r=>{const w=ROADS[r.class].row/2+5;
-      return r.axis==="ew" ? Math.abs(z-r.at)<w : Math.abs(x-r.at)<w;})) continue;
-    const s=0.75+rnd("ts"+i)*0.7;
-    const t=new THREE.Mesh(tg,trunk); t.position.set(x,9+3.5*s,z); t.scale.setScalar(s); t.castShadow=true; scene.add(t);
-    const l=new THREE.Mesh(lg,leaf); l.position.set(x,9+10*s,z); l.scale.setScalar(s); l.castShadow=true; scene.add(l);
-    n++;
+  const trunkG=new THREE.CylinderGeometry(.55,.85,6,5), canG=new THREE.SphereGeometry(1,7,6);
+  const spots=[];
+  for(const r of plan.roads){ // street trees down both sides
+    const row=ROADS[r.class].row, ew=r.axis==="ew";
+    for(let t=r.from+18;t<r.to-18;t+=26) for(const side of [-1,1]){
+      const x=ew?t:r.at+side*(row/2+4), z=ew?r.at+side*(row/2+4):t;
+      if(distanceToCoast(x,z)<12) continue;
+      if(plan.plots.some(p=>x>p.xMin-2&&x<p.xMax+2&&z>p.zMin-2&&z<p.zMax+2)) continue;
+      spots.push([x,z,.8+R("s"+x+z)*.5]);
+    }
   }
+  for(let i=0;i<900;i++){ // park / infill canopies
+    const x=-1500+R("px"+i)*2950, z=-760+R("pz"+i)*1400;
+    if(distanceToCoast(x,z)<28) continue;
+    if(plan.plots.some(p=>x>p.xMin-4&&x<p.xMax+4&&z>p.zMin-4&&z<p.zMax+4)) continue;
+    if(plan.roads.some(r=>{const w=ROADS[r.class].row/2+3;return r.axis==="ew"?Math.abs(z-r.at)<w:Math.abs(x-r.at)<w;})) continue;
+    spots.push([x,z,1+R("ps"+i)*.8]);
+  }
+  const n=spots.length;
+  const tI=new THREE.InstancedMesh(trunkG,M(0x63482f,.95),n);
+  const cI=new THREE.InstancedMesh(canG,M(0x4f8a3e,.9),n);
+  tI.castShadow=cI.castShadow=true; cI.receiveShadow=true;
+  const d=new THREE.Object3D();
+  spots.forEach(([x,z,s],i)=>{
+    d.position.set(x,10+3*s,z); d.scale.setScalar(s); d.updateMatrix(); tI.setMatrixAt(i,d.matrix);
+    d.position.set(x,10+8.5*s,z); d.scale.set(5.5*s,4.6*s,5.5*s); d.updateMatrix(); cI.setMatrixAt(i,d.matrix);
+    cI.setColorAt(i,new THREE.Color(0x4f8a3e).offsetHSL(0,(R("h"+i)-.5)*.08,(R("l"+i)-.5)*.16));
+  });
+  scene.add(tI,cI); window.__trees=n;
 }
 
-// ---------------------------------------------------------------- suburbs + bridges
-for(const s of SUBURBS){
-  const b=s.bounds;
-  for(let x=b.xMin+40;x<b.xMax-40;x+=88) for(let z=b.zMin+40;z<b.zMax-40;z+=88){
-    const r=rnd(s.id+x+z); if(r<0.22) continue;
-    const h=8+r*9, jx=(rnd("jx"+x+z)-0.5)*26, jz=(rnd("jz"+x+z)-0.5)*26;
-    const m=new THREE.Mesh(new RoundedBoxGeometry(30+r*14,h,26+r*12,1,0.6),
-      mat(new THREE.Color(0xbfae90).multiplyScalar(0.82+r*0.34),0.9));
-    m.position.set(x+jx, 12+h/2, z+jz); m.rotation.y=(r-0.5)*0.25; m.castShadow=true; scene.add(m);
-  }
+// ---------------------------------------------------------------- suburbs, bridges, boats
+for(const s of SUBURBS){const b=s.bounds;
+  for(let x=b.xMin+40;x<b.xMax-40;x+=80)for(let z=b.zMin+40;z<b.zMax-40;z+=80){
+    const r=R(s.id+x+z); if(r<.25) continue;
+    const h=8+r*8, w=26+r*12, dp=22+r*10;
+    const wm=M(new THREE.Color(pick(WALLS.TOWNHOUSE,s.id+x+z)).multiplyScalar(.94),.88);
+    const m=new THREE.Mesh(new RoundedBoxGeometry(w,h,dp,1,.5),wm);
+    m.position.set(x+(r-.5)*22,14+h/2,z+(R("j"+x+z)-.5)*22);m.rotation.y=(r-.5)*.3;m.castShadow=true;scene.add(m);
+    const rf=new THREE.Mesh(new THREE.ConeGeometry(w*.78,6,4),M(pick(ROOFS.TOWNHOUSE,s.id+x+z+"r"),.85));
+    rf.position.set(m.position.x,14+h+3,m.position.z);rf.rotation.y=m.rotation.y+Math.PI/4;rf.castShadow=true;scene.add(rf);}}
+for(const cw of CAUSEWAYS){
+  const isBeach = cw.to==="barrier";
+  const z0 = isBeach ? 620 : -760, z1 = isBeach ? 1980 : -3350;
+  const len = Math.abs(z1-z0), mid=(z0+z1)/2;
+  const deck=new THREE.Mesh(new RoundedBoxGeometry(34,4,len,1,.6),M(0xe4dccb,.85));
+  deck.position.set(cw.x,26,mid);deck.castShadow=true;deck.receiveShadow=true;scene.add(deck);
+  for(let t=0.12;t<0.95;t+=0.16){const py=z0+(z1-z0)*t;
+    const pr=new THREE.Mesh(new RoundedBoxGeometry(7,30,7,1,.4),M(0xd8d0bd,.9));
+    pr.position.set(cw.x,12,py);pr.castShadow=true;scene.add(pr);}
+  if(!isBeach){ for(const t of [.34,.66]){const py=z0+(z1-z0)*t;
+    const tw=new THREE.Mesh(new RoundedBoxGeometry(12,150,12,1,.6),M(0xf2ebd9,.8));
+    tw.position.set(cw.x,96,py);tw.castShadow=true;scene.add(tw);} }
 }
-for(const br of BRIDGES){
-  const z0=BANDS.ISLAND_Z_MIN-40, z1=BANDS.MAINLAND_Z+700, len=Math.abs(z1-z0);
-  const deck=new THREE.Mesh(new RoundedBoxGeometry(30,3.4,len,1,0.5), mat(0xcfc9ba,0.85));
-  deck.position.set(br.x,42,(z0+z1)/2); deck.castShadow=true; scene.add(deck);
-  for(const pz of [z0-len*0.22+len*0.5, z1+len*0.22-len*0.5]){
-    const t=new THREE.Mesh(new RoundedBoxGeometry(11,120,11,1,0.5), mat(0xe0dacb,0.8));
-    t.position.set(br.x,72,pz); t.castShadow=true; scene.add(t);
-  }
-}
+{ const hull=M(0xf7f4ec,.7), sail=M(0xffffff,.6);
+  for(let i=0;i<260;i++){const x=-12000+R("bx"+i)*24000, z=-3000+R("bz"+i)*6400;
+    if(distanceToCoast(x,z)>-40) continue;
+    const s=.8+R("bs"+i)*1.1;
+    const b=new THREE.Mesh(new RoundedBoxGeometry(16*s,3*s,5*s,1,.6),hull);
+    b.position.set(x,1.2,z);b.rotation.y=R("br"+i)*6.28;b.castShadow=true;scene.add(b);
+    if(R("bt"+i)>.45){const m2=new THREE.Mesh(new THREE.ConeGeometry(3.4*s,13*s,3),sail);
+      m2.position.set(x,8*s,z);m2.rotation.y=b.rotation.y;m2.castShadow=true;scene.add(m2);} } }
 
 // ---------------------------------------------------------------- camera
-let target=new THREE.Vector3(0,0,-60), dist=3400, az=0, pitch=0.40;
-function apply(){
-  camera.position.set(target.x+Math.sin(az)*Math.cos(pitch)*dist, target.y+Math.sin(pitch)*dist, target.z+Math.cos(az)*Math.cos(pitch)*dist);
-  camera.lookAt(target);
-}
+let target=new THREE.Vector3(0,0,-60),dist=3200,az=0,pitch=.42;
+function apply(){camera.position.set(target.x+Math.sin(az)*Math.cos(pitch)*dist,target.y+Math.sin(pitch)*dist,target.z+Math.cos(az)*Math.cos(pitch)*dist);camera.lookAt(target);}
 const VIEWS={
-  "Whole world":      ()=>{target.set(0,0,-700);dist=7600;az=0;pitch=0.50;},
-  "The island":       ()=>{target.set(0,0,-60);dist=3300;az=0;pitch=0.40;},
-  "From the sea":     ()=>{target.set(0,60,320);dist=2100;az=0;pitch=0.10;},
-  "Downtown":         ()=>{target.set(0,80,130);dist=1250;az=0.55;pitch=0.20;},
-  "Heritage quarter": ()=>{target.set(-1050,25,130);dist=760;az=-0.75;pitch=0.22;},
-  "Harbour bite":     ()=>{target.set(-150,25,-560);dist=1500;az=0.15;pitch=0.26;},
-  "Marina inlet":     ()=>{target.set(1210,25,-140);dist=1000;az=-0.5;pitch=0.24;},
+ "Whole world":()=>{target.set(0,0,-1400);dist=26000;az=0;pitch=.62;},
+ "The city":()=>{target.set(0,0,-60);dist=3100;az=0;pitch=.42;},
+ "From the sea":()=>{target.set(0,70,900);dist=3400;az=0;pitch=.11;},
+ "Barrier island":()=>{target.set(0,40,2600);dist=6000;az=0;pitch=.24;},
+ "Bay + causeways":()=>{target.set(0,60,-1800);dist=7000;az=0;pitch=.34;},
+ "Downtown":()=>{target.set(0,90,120);dist=1150;az=.6;pitch=.19;},
+ "Heritage quarter":()=>{target.set(-1050,30,130);dist=700;az=-.8;pitch=.21;},
+ "Harbour bite":()=>{target.set(-150,30,-560);dist=1450;az=.15;pitch=.25;},
+ "Marina inlet":()=>{target.set(1210,30,-140);dist=950;az=-.55;pitch=.23;},
 };
 const vb=document.getElementById("views");
 for(const [n,f] of Object.entries(VIEWS)){const b=document.createElement("button");b.textContent=n;b.onclick=()=>{f();apply();};vb.appendChild(b);}
-
 let drag=false,lx=0,ly=0;
 addEventListener("pointerdown",e=>{if(e.target.tagName==="BUTTON")return;drag=true;lx=e.clientX;ly=e.clientY;});
 addEventListener("pointerup",()=>drag=false);
-addEventListener("pointermove",e=>{if(!drag)return;az-=(e.clientX-lx)*0.005;pitch=Math.max(0.04,Math.min(1.45,pitch+(e.clientY-ly)*0.004));lx=e.clientX;ly=e.clientY;apply();});
-addEventListener("wheel",e=>{dist=Math.max(300,Math.min(16000,dist*(e.deltaY>0?1.09:0.92)));apply();},{passive:true});
+addEventListener("pointermove",e=>{if(!drag)return;az-=(e.clientX-lx)*.005;pitch=Math.max(.04,Math.min(1.45,pitch+(e.clientY-ly)*.004));lx=e.clientX;ly=e.clientY;apply();});
+addEventListener("wheel",e=>{dist=Math.max(280,Math.min(46000,dist*(e.deltaY>0?1.09:.92)));apply();},{passive:true});
 addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 
-let A=0; for(let i=0,j=coast.length-1;i<coast.length;j=i++) A+=(coast[j][0]+coast[i][0])*(coast[j][1]-coast[i][1]);
-const km2=Math.abs(A/2)/1e6;
-const nm={TERRACE:"Heritage terraces",TOWNHOUSE:"Townhouses",MIDRISE:"Mid-rise",TOWER:"Towers",CIVIC:"Civic"};
+let A=0;for(let i=0,j=coast.length-1;i<coast.length;j=i++)A+=(coast[j][0]+coast[i][0])*(coast[j][1]-coast[i][1]);
 document.getElementById("legend").innerHTML=
-  `<div class="m">island ${km2.toFixed(2)} km² · ${plan.plots.length} plots<br>Vancouver downtown 3.7 · Melbourne CBD 1.29</div>`+
-  Object.entries(byClass).sort((a,b)=>b[1]-a[1]).map(([k,n])=>
-   `<div><span class="k" style="background:#${new THREE.Color(TINT[k]).getHexString()}"></span>${nm[k]||k} — ${n}</div>`).join("");
+ `<div class="m">${(Math.abs(A/2)/1e6).toFixed(2)} km² island · ${plan.plots.length} buildings<br>${window.__trees} trees · ${plan.roads.length} roads</div>`;
 
-VIEWS["The island"](); apply();
-let t=0;
-(function loop(){requestAnimationFrame(loop); t+=0.0004; wn.offset.set(t,t*0.6); renderer.render(scene,camera);})();
+VIEWS["The city"]();apply();
+let t=0;(function loop(){requestAnimationFrame(loop);t+=.00035;wn.offset.set(t,t*.62);renderer.render(scene,camera);})();
 </script>
 </body>
 </html>
