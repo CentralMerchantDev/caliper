@@ -163,12 +163,12 @@ function sunFor(hour) {
 }
 
 const SUN_COLOR_WARM = new THREE.Color(0xffaa5e);
-const SUN_COLOR_DAY = new THREE.Color(0xfff5e6);
+const SUN_COLOR_DAY = new THREE.Color(0xfffaf0);
 const SUN_COLOR_NIGHT = new THREE.Color(0x6073a8);
-const SKY_DAY = new THREE.Color(0xe6f2ff);
-const SKY_DUSK = new THREE.Color(0xf5b584);
-const SKY_NIGHT = new THREE.Color(0x131a33);
-const SKY_HORIZON = new THREE.Color(0xffeed9);
+const SKY_DAY = new THREE.Color(0x38bdf8); // Vivid, crisp coastal azure sky
+const SKY_DUSK = new THREE.Color(0xf59e0b);
+const SKY_NIGHT = new THREE.Color(0x0f172a);
+const SKY_HORIZON = new THREE.Color(0xbae6fd); // Crisp clear sea-horizon azure tint
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
@@ -807,13 +807,13 @@ class Renderer3D {
     this._openedBuildingId = null;
 
     this._initScene();
-    // Low-angle cinematic perspective looking south towards the marina, breakwater, skyline towers and ocean
-    this._orbit = { base: Math.PI * 0.35, delta: 0, pitch: 0.32, dragging: false, startX: 0, startY: 0, startDelta: 0, startPitch: 0.32 };
+    // Masterplan cinematic perspective looking north towards downtown island, civic hall and mountain backdrop
+    this._orbit = { base: 0, delta: 0, pitch: 0.32, dragging: false, startX: 0, startY: 0, startDelta: 0, startPitch: 0.32 };
 
     // Navigation & Street-Level Navigation Mode State
     this._navigationMode = 'orbit'; // 'orbit' | 'walk' | 'drive'
     this._streetPos = new THREE.Vector3(0, 1.75, 11.6);
-    this._streetAngle = Math.PI; // Heading facing South toward marina
+    this._streetAngle = 0; // Heading facing North toward Downtown Island
     this._streetPitch = 0.0;
     this._streetSpeed = 0.0;
     this._vehicleGroup = null;
@@ -823,8 +823,8 @@ class Renderer3D {
 
     // Load saved default camera settings if present
     this._defaultCameraSettings = {
-      lookAt: { x: 0, y: 4.0, z: -5.0 },
-      dist: 130,
+      lookAt: { x: 0, y: 5.0, z: -10.0 },
+      dist: 85,
       delta: 0,
       pitch: 0.32
     };
@@ -1178,39 +1178,54 @@ class Renderer3D {
     terrainGeo.rotateX(-Math.PI / 2);
     const terrainPos = terrainGeo.attributes.position;
 
-    // Engineered Melbourne / Vancouver coastal topography:
-    // Core urban esplanade (-45 <= x <= 45, -26 <= z <= 22) is graded flat at y = 0.0m.
-    // Inner marina basin (z > 22 to 85) drops to y = -2.4m.
-    // Deep ocean channel & Outer Bay (z > 85 to 650) drops to y = -4.5m.
-    // Expansive Southern Peninsula & Headlands (z > 450 to 1180) rise across the bay at y = 4.5m to 24m.
-    // Northern metropolitan CBD ridge (z < -45) rises smoothly to y = 14.5m.
-    // East and West coastal cliffs (|x| > 90) rise to majestic panoramic headlands.
+    // =========================================================================
+    // MASTERPLAN ISLAND METROPOLIS GEOGRAPHY & TOPOGRAPHY:
+    // 1. South (z > 22 to 1200): Expansive open ocean with golden sand beach (z in [22, 27]).
+    // 2. Downtown Main Island (z in [-28, 22], x in [-55, 55]): Graded flat urban tableland at y = 0.0m.
+    // 3. Sheltered Inner Harbour (z in [-65, -28], x in [-550, 550]): Deep shipping harbour basin at y = -2.8m.
+    // 4. Northern Mainland City & Majestic Mountain Range (z < -65): Mainland coast rising from y = 1.5m to dramatic alpine peaks y = 45m to 92m.
+    // 5. Flanking Coasts (East & West, |x| > 60): Rocky headland cliffs (y = 8m to 24m) interspersed with pocket coves.
+    // =========================================================================
     for (let i = 0; i < terrainPos.count; i++) {
       const x = terrainPos.getX(i), z = terrainPos.getZ(i);
 
       let y = 0.0;
-      if (z > 22 && z < 460 && Math.abs(x) < 850) {
-        // Sheltered inner bay & vast shipping channels
-        const oceanRamp = Math.min(1, (z - 22) / 18);
-        y = -3.2 * oceanRamp;
-      } else if (z >= 460 && z <= 1180) {
-        // Vast Southern Harbour Peninsula & Coastal Parklands across the bay
-        const southRise = Math.min(1, (z - 460) / 180);
-        y = -1.2 + southRise * 22.0 + Math.sin(x * 0.012) * 4.5 + Math.cos(z * 0.008) * 3.0;
-      } else if (z < -42) {
-        // Northern metropolitan ridgeline overlooking the harbour
-        const hillProgress = Math.min(1, (-z - 42) / 240);
-        y = Math.sin(hillProgress * Math.PI * 0.5) * 16.5 + Math.cos(x * 0.009) * 4.0;
-      } else if (Math.abs(x) > 85) {
-        // East / West coastal cliffs framing the harbour
-        const sideRise = Math.min(1, (Math.abs(x) - 85) / 280);
-        y = sideRise * 14.0 + Math.sin(z * 0.015) * 2.5;
+      if (z > 22) {
+        // South: Open ocean channel and seafloor shelf
+        const oceanDepth = Math.min(1, (z - 22) / 24);
+        y = -3.4 * oceanDepth;
+      } else if (z >= -28 && z <= 22 && Math.abs(x) <= 55) {
+        // Downtown Main Island tableland: perfectly graded at y = 0.0m
+        y = 0.0;
+      } else if (z > -65 && z < -28 && Math.abs(x) <= 120) {
+        // Sheltered Inner Harbour channel separating Downtown Island from Mainland
+        const harbourEdge = Math.sin(((z - (-65)) / 37) * Math.PI);
+        y = -2.8 * Math.max(0.2, harbourEdge);
+      } else if (z <= -65) {
+        // Mainland Northern Coastal City & Majestic Alpine Mountain Range
+        const inlandDist = (-z - 65);
+        if (inlandDist < 45) {
+          // Mainland waterfront urban terrace
+          y = 0.8 + (inlandDist / 45) * 4.5;
+        } else {
+          // Dramatic Alpine Mountain Range with craggy peaks & ridges
+          const mountainProgress = Math.min(1, (inlandDist - 45) / 280);
+          const ridgeWave1 = Math.sin(x * 0.018) * 14.0;
+          const ridgeWave2 = Math.cos(x * 0.035 + z * 0.02) * 9.5;
+          const peakNoise = Math.sin(x * 0.008) * Math.cos(z * 0.012) * 18.0;
+          y = 5.3 + mountainProgress * 58.0 + ridgeWave1 + ridgeWave2 + peakNoise;
+        }
+      } else if (Math.abs(x) > 55 && z >= -65 && z <= 22) {
+        // East & West flanking coastlines: Rocky headland cliffs and pocket coves
+        const coastDist = (Math.abs(x) - 55);
+        const cliffRise = Math.min(1, coastDist / 80);
+        const coveMod = Math.sin(z * 0.08) * 3.5;
+        y = cliffRise * 16.5 + coveMod;
       } else {
-        // Core Downtown & Waterfront Promenade Terrace
         y = 0.0;
       }
 
-      // Realistic planetary curvature: drop y by -((dist / 1200)^2 * 1.8m) towards distant horizon
+      // Realistic planetary curvature: gentle horizon roll
       const rDist = Math.hypot(x, z);
       const curvatureDrop = Math.pow(rDist / 1200, 2) * 1.85;
 
@@ -1227,11 +1242,11 @@ class Renderer3D {
     this._groundExtent = { w: groundW, d: groundD };
 
     // =========================================================================
-    // MELBOURNE DUAL-HARBOUR TOPOGRAPHY: INNER MARINA BASIN, BRIDGES & VAST OCEAN
+    // MELBOURNE & VANCOUVER MASTERPLAN WATER BODIES:
+    // 1. SOUTH OCEAN & MARINA BASIN (z = 23.0 to 78.0, width 1400m)
+    // 2. SHELTERED NORTH INNER HARBOUR (z = -65.0 to -28.0, width 1400m)
     // =========================================================================
-    // 1. INNER HARBOUR / YARRA MARINA BASIN (Sheltered turquoise water from z = 23.0 to 78.0, width 1400m)
-    // Seaward of the entire 2.0m coping footprint (coping centered at z = 22.0 spans z = 21.0 to 23.0).
-    // Depth: 78.0 - 23.0 = 55.0m. Center z = (23.0 + 78.0) / 2 = 50.5m.
+    // 1. SOUTH INNER HARBOUR / MARINA BASIN (z = 23.0 to 78.0)
     const innerHarbourGeo = new THREE.PlaneGeometry(1400, 55.0);
     innerHarbourGeo.rotateX(-Math.PI / 2);
     const waterNormals = makeWaterNormalTexture();
@@ -1250,6 +1265,25 @@ class Renderer3D {
     this.neighbourhoodGroup.add(innerHarbour);
     this._innerHarbourMesh = innerHarbour;
     this._waterNormalTex = waterNormals;
+
+    // 1B. SHELTERED NORTH INNER HARBOUR CHANNEL (Behind Downtown Island, z = -65.0 to -28.0, width 1400m)
+    const northHarbourGeo = new THREE.PlaneGeometry(1400, 37.0);
+    northHarbourGeo.rotateX(-Math.PI / 2);
+    const northWaterNormals = makeWaterNormalTexture();
+    northWaterNormals.repeat.set(36, 6);
+    const northWaterMat = stdMat({
+      color: 0x0369a1, // Deep sheltered inner channel
+      normalMap: northWaterNormals,
+      normalScale: new THREE.Vector2(0.42, 0.42),
+      roughness: 0.12,
+      metalness: 0.86,
+      transparent: true,
+      opacity: 0.92,
+    });
+    const northHarbour = new THREE.Mesh(northHarbourGeo, northWaterMat);
+    northHarbour.position.set(0, -0.38, -46.5);
+    this.neighbourhoodGroup.add(northHarbour);
+    this._northHarbourMesh = northHarbour;
 
     // 2. CURVED GRANITE BREAKWATER & LIGHTHOUSE SPIT (Separating Inner Marina & Outer Harbour at z = 78)
     const breakwaterGroup = new THREE.Group();
@@ -2426,6 +2460,15 @@ class Renderer3D {
   }
 
   _buildRoadsAndVehicles() {
+    const addBox = (parent, size, pos, color, roughness = 0.8, metalness = 0) => {
+      const mesh = new THREE.Mesh(new RoundedBoxGeometry(...size, 2, 0.06), stdMat({ color, roughness, metalness }));
+      mesh.position.set(...pos);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      return mesh;
+    };
+
     const roadGroup = new THREE.Group();
     this.neighbourhoodGroup.add(roadGroup);
 
@@ -2688,7 +2731,307 @@ class Renderer3D {
     // Vehicle 3: Sleek Pearl White Convertible parked on West Avenue bay
     buildCar(-18.0, 2.5, -Math.PI / 2, 0xf8fafc, true);
 
-    // 4. Modern Coastal Vehicles (Riviera Blue Cabriolet, Bordeaux Red Coupe, Pearl White Convertible)
+    // =========================================================================
+    // 5. DOWNTOWN CIVIC ARCHITECTURE, EMERGENCY SERVICES & HISTORIC STREETSCAPES
+    // (1800s Heritage Brick Storefronts to 2026 Contemporary Glass Architecture)
+    // =========================================================================
+    const downtownCivicGroup = new THREE.Group();
+    this.neighbourhoodGroup.add(downtownCivicGroup);
+
+    // -------------------------------------------------------------------------
+    // A. CLASSICAL CITY HALL (x: 0, z: -23.5)
+    // 1890s Classical Civic Architecture with grand limestone colonnade & copper dome clock tower
+    // -------------------------------------------------------------------------
+    const cityHall = new THREE.Group();
+    cityHall.position.set(0, 0, -23.5);
+    downtownCivicGroup.add(cityHall);
+
+    // Grand granite podium & ceremonial entrance steps
+    addBox(cityHall, [24.0, 0.9, 14.0], [0, 0.45, 0], PALETTE.sandstone, 0.85);
+    // Main classical portico and administration hall
+    addBox(cityHall, [22.0, 7.5, 12.0], [0, 4.65, 0], 0xf1f5f9, 0.7);
+
+    // Classical Corinthian colonnade (8 fluted columns across front facade)
+    for (let colX = -9.0; colX <= 9.0; colX += 2.57) {
+      const column = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.32, 0.38, 7.5, 16),
+        stdMat({ color: PALETTE.sandstone, roughness: 0.75 })
+      );
+      column.position.set(colX, 4.65, 6.2);
+      column.castShadow = true; column.receiveShadow = true;
+      cityHall.add(column);
+    }
+
+    // Classical triangular pediment roof above colonnade
+    const pediment = new THREE.Mesh(
+      new THREE.ConeGeometry(11.5, 3.2, 4),
+      stdMat({ color: PALETTE.sandstone, roughness: 0.75 })
+    );
+    pediment.rotation.y = Math.PI / 4;
+    pediment.scale.set(1.0, 1.0, 0.45);
+    pediment.position.set(0, 10.0, 5.2);
+    pediment.castShadow = true;
+    cityHall.add(pediment);
+
+    // Heritage Central Clock Tower & Copper Dome
+    addBox(cityHall, [4.8, 8.5, 4.8], [0, 12.65, 0], 0xf1f5f9, 0.65);
+    // 4-faced golden glowing municipal clock
+    [[-2.45, 0, 0], [2.45, 0, 0], [0, 0, -2.45], [0, 0, 2.45]].forEach(([cx, cy, cz]) => {
+      const clockDial = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.85, 0.85, 0.12, 16),
+        stdMat({ color: 0xfffbeb, emissive: 0xfef08a, emissiveIntensity: 1.5, roughness: 0.2 })
+      );
+      clockDial.position.set(cx, 14.2, cz);
+      if (Math.abs(cx) > 0) clockDial.rotation.z = Math.PI / 2;
+      else clockDial.rotation.x = Math.PI / 2;
+      cityHall.add(clockDial);
+    });
+
+    // Oxidized copper lantern cupola & spire
+    const cupola = new THREE.Mesh(
+      new THREE.SphereGeometry(2.2, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+      stdMat({ color: 0x0f766e, roughness: 0.4, metalness: 0.35 })
+    );
+    cupola.position.set(0, 16.9, 0);
+    cityHall.add(cupola);
+    const hallSpire = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.22, 4.5, 8),
+      stdMat({ color: 0xd97706, metalness: 0.9, roughness: 0.2 })
+    );
+    hallSpire.position.set(0, 20.0, 0);
+    cityHall.add(hallSpire);
+
+    // -------------------------------------------------------------------------
+    // B. METRO GENERAL HOSPITAL & EMERGENCY HELIPORT (x: -36.0, z: -21.0)
+    // Modern 2024 healthcare complex with acute care wing, rooftop helipad & ambulance bay
+    // -------------------------------------------------------------------------
+    const hospital = new THREE.Group();
+    hospital.position.set(-36.0, 0, -21.0);
+    downtownCivicGroup.add(hospital);
+
+    // Hospital main block (white clinical panels + sea-glass windows)
+    addBox(hospital, [16.5, 12.0, 11.5], [0, 6.0, 0], 0xf8fafc, 0.35);
+    // Hospital emergency entrance canopy
+    const erCanopy = new THREE.Mesh(
+      new RoundedBoxGeometry(7.5, 0.35, 4.2, 1, 0.06),
+      stdMat({ color: 0xef4444, roughness: 0.3 })
+    );
+    erCanopy.position.set(0, 3.2, 6.5);
+    hospital.add(erCanopy);
+
+    // Red Cross Illuminated Emissive Signage
+    const crossVert = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 1.8, 0.12),
+      stdMat({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 2.2 })
+    );
+    crossVert.position.set(0, 9.5, 5.82);
+    hospital.add(crossVert);
+    const crossHoriz = new THREE.Mesh(
+      new THREE.BoxGeometry(1.8, 0.45, 0.12),
+      stdMat({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 2.2 })
+    );
+    crossHoriz.position.set(0, 9.5, 5.82);
+    hospital.add(crossHoriz);
+    this._emissiveAnimated.push(crossVert.material);
+
+    // Rooftop Helipad Pad with H marker
+    const helipadMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(4.6, 4.6, 0.25, 24),
+      stdMat({ color: 0x334155, roughness: 0.85 })
+    );
+    helipadMesh.position.set(0, 12.15, 0);
+    hospital.add(helipadMesh);
+
+    const heliPhoneRing = new THREE.Mesh(
+      new THREE.RingGeometry(3.6, 3.9, 24),
+      stdMat({ color: 0xfacc15, roughness: 0.4, side: THREE.DoubleSide })
+    );
+    heliPhoneRing.rotation.x = -Math.PI / 2;
+    heliPhoneRing.position.set(0, 12.30, 0);
+    hospital.add(heliPhoneRing);
+
+    // Ambulance emergency vehicle parked at ER bay
+    const ambulance = new THREE.Group();
+    ambulance.position.set(0, 0.1, 6.2);
+    const ambBody = new THREE.Mesh(new RoundedBoxGeometry(3.6, 1.6, 1.7, 1, 0.08), stdMat({ color: 0xffffff, roughness: 0.3 }));
+    ambBody.position.set(0, 0.9, 0);
+    ambBody.castShadow = true; ambulance.add(ambBody);
+    const ambStripe = new THREE.Mesh(new THREE.BoxGeometry(3.65, 0.25, 1.72), stdMat({ color: 0xef4444, roughness: 0.4 }));
+    ambStripe.position.set(0, 0.85, 0);
+    ambulance.add(ambStripe);
+    const siren = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.14, 0.4), stdMat({ color: 0x38bdf8, emissive: 0x38bdf8, emissiveIntensity: 2.0 }));
+    siren.position.set(0.6, 1.8, 0);
+    ambulance.add(siren);
+    hospital.add(ambulance);
+
+    // -------------------------------------------------------------------------
+    // C. MUNICIPAL FIREHALL & RESCUE STATION (x: 36.0, z: -21.0)
+    // Classic 1910s Red Brick Municipal Firehouse with dual apparatus roll-up bay doors & hose tower
+    // -------------------------------------------------------------------------
+    const firehall = new THREE.Group();
+    firehall.position.set(36.0, 0, -21.0);
+    downtownCivicGroup.add(firehall);
+
+    // Traditional red face-brick firehouse body
+    addBox(firehall, [15.0, 7.8, 10.5], [0, 3.9, 0], 0x991b1b, 0.82);
+
+    // Dual Apparatus Engine Bays with roll-up ribbed garage doors
+    [-3.4, 3.4].forEach((gx) => {
+      const bayDoor = new THREE.Mesh(
+        new RoundedBoxGeometry(3.6, 4.4, 0.2, 1, 0.04),
+        stdMat({ color: 0xd97706, roughness: 0.45, metalness: 0.3 })
+      );
+      bayDoor.position.set(gx, 2.2, 5.3);
+      firehall.add(bayDoor);
+
+      // Ribbed door panels
+      for (let ry = 0.6; ry <= 3.8; ry += 0.8) {
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 0.22), stdMat({ color: 0x78350f, metalness: 0.6 }));
+        slat.position.set(gx, ry, 5.31);
+        firehall.add(slat);
+      }
+    });
+
+    // Square Brick Hose Drying & Lookout Tower
+    addBox(firehall, [3.8, 13.5, 3.8], [5.6, 6.75, -2.5], 0x7f1d1d, 0.85);
+    const hoseTowerRoof = new THREE.Mesh(
+      new THREE.ConeGeometry(2.8, 2.2, 4),
+      stdMat({ color: 0x1e293b, roughness: 0.6 })
+    );
+    hoseTowerRoof.rotation.y = Math.PI / 4;
+    hoseTowerRoof.position.set(5.6, 14.6, -2.5);
+    firehall.add(hoseTowerRoof);
+
+    // Red Municipal Fire Engine outside bay
+    const fireTruck = new THREE.Group();
+    fireTruck.position.set(-3.4, 0.1, 8.2);
+    const ftBody = new THREE.Mesh(new RoundedBoxGeometry(5.2, 1.9, 2.0, 2, 0.12), stdMat({ color: 0xdc2626, roughness: 0.25, metalness: 0.4 }));
+    ftBody.position.set(0, 1.1, 0);
+    ftBody.castShadow = true; fireTruck.add(ftBody);
+    const ladder = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.18, 0.9), stdMat({ color: 0xe2e8f0, metalness: 0.9, roughness: 0.2 }));
+    ladder.position.set(-0.2, 2.15, 0);
+    fireTruck.add(ladder);
+    firehall.add(fireTruck);
+
+    // -------------------------------------------------------------------------
+    // D. 1880s-1920s HERITAGE RETAIL STREETSCAPE (West Side Avenue, x in [-20, -16])
+    // Ornate Victorian brick storefronts, dentil cornices, arched transoms & striped awnings
+    // -------------------------------------------------------------------------
+    const heritageRow = new THREE.Group();
+    heritageRow.position.set(-22.5, 0, -8.0);
+    downtownCivicGroup.add(heritageRow);
+
+    const storefronts = [
+      { z: -4.0, w: 4.8, h: 7.2, d: 5.5, brickColor: 0x854d0e, awningColor: 0x0284c7, label: "Apothecary" },
+      { z: 1.5,  w: 5.2, h: 8.5, d: 5.5, brickColor: 0x9a3412, awningColor: 0x059669, label: "Bakery & Cafe" },
+      { z: 7.0,  w: 4.6, h: 6.8, d: 5.5, brickColor: 0x451a03, awningColor: 0xd97706, label: "Bookshop" },
+    ];
+
+    storefronts.forEach((sf) => {
+      // Brick facade
+      addBox(heritageRow, [sf.w, sf.h, sf.d], [0, sf.h / 2, sf.z], sf.brickColor, 0.85);
+      // Ornate roofline dentil cornice
+      addBox(heritageRow, [sf.w + 0.4, 0.45, sf.d + 0.4], [0, sf.h + 0.22, sf.z], PALETTE.sandstone, 0.7);
+
+      // Cast-iron display window with arched transom on ground floor
+      const shopWindow = new THREE.Mesh(
+        new THREE.PlaneGeometry(sf.w * 0.75, 2.2),
+        stdMat({ color: 0xfef08a, emissive: 0xfef08a, emissiveIntensity: 0.8, roughness: 0.1 })
+      );
+      shopWindow.position.set(sf.w / 2 + 0.02, 1.4, sf.z);
+      shopWindow.rotation.y = Math.PI / 2;
+      heritageRow.add(shopWindow);
+
+      // Striped Parisian sidewalk awning
+      const awning = new THREE.Mesh(
+        new THREE.ConeGeometry(sf.w * 0.45, 1.2, 3),
+        stdMat({ color: sf.awningColor, roughness: 0.6 })
+      );
+      awning.position.set(sf.w / 2 + 0.8, 2.7, sf.z);
+      awning.rotation.z = -Math.PI / 2;
+      awning.scale.set(1.0, 0.3, sf.w / 3.2);
+      awning.castShadow = true;
+      heritageRow.add(awning);
+    });
+
+    // -------------------------------------------------------------------------
+    // E. 2024-2026 CONTEMPORARY HIGH-RISE CONDOMINIUMS & COMMERCIAL TOWERS
+    // Curved glass balconies, vertical acoustic louvers, landscaped sky gardens
+    // -------------------------------------------------------------------------
+    const contemporaryTowers = new THREE.Group();
+    contemporaryTowers.position.set(0, 0, 0);
+    downtownCivicGroup.add(contemporaryTowers);
+
+    // Tower 1: The Azure Spire (x: -42, z: -6, height 38m)
+    const azureSpire = new THREE.Mesh(
+      new RoundedBoxGeometry(11.5, 38, 9.5, 2, 0.35),
+      stdMat({ color: 0x0284c7, roughness: 0.15, metalness: 0.75, transparent: true, opacity: 0.88 })
+    );
+    azureSpire.position.set(-42, 19, -6);
+    azureSpire.castShadow = true;
+    contemporaryTowers.add(azureSpire);
+
+    // Floor division horizontal fins
+    for (let f = 3; f <= 36; f += 3.2) {
+      const slabFin = new THREE.Mesh(new THREE.BoxGeometry(12.2, 0.18, 10.2), stdMat({ color: 0xffffff, roughness: 0.3, metalness: 0.8 }));
+      slabFin.position.set(-42, f, -6);
+      contemporaryTowers.add(slabFin);
+    }
+
+    // Tower 2: The Lumina Terraces (x: 44, z: -6, height 34m)
+    // Terraced stepped condo tower with landscaped rooftop terraces
+    const luminaLower = new THREE.Mesh(new RoundedBoxGeometry(12.5, 18, 10.5, 2, 0.3), stdMat({ color: 0x38bdf8, roughness: 0.2, metalness: 0.7 }));
+    luminaLower.position.set(44, 9, -6);
+    contemporaryTowers.add(luminaLower);
+    const luminaMid = new THREE.Mesh(new RoundedBoxGeometry(9.5, 10, 8.5, 2, 0.25), stdMat({ color: 0x38bdf8, roughness: 0.2, metalness: 0.7 }));
+    luminaMid.position.set(44, 23, -6);
+    contemporaryTowers.add(luminaMid);
+    const luminaTop = new THREE.Mesh(new RoundedBoxGeometry(6.5, 6, 6.5, 2, 0.2), stdMat({ color: 0x38bdf8, roughness: 0.2, metalness: 0.7 }));
+    luminaTop.position.set(44, 31, -6);
+    contemporaryTowers.add(luminaTop);
+
+    // -------------------------------------------------------------------------
+    // F. INNER HARBOUR WATER TAXIS & HOUSEBOATS (Moored in North Harbour Channel z: -46)
+    // -------------------------------------------------------------------------
+    const northWatercraftGroup = new THREE.Group();
+    downtownCivicGroup.add(northWatercraftGroup);
+
+    // Houseboat 1 (x: -18, z: -42)
+    const houseboat1 = new THREE.Group();
+    houseboat1.position.set(-18, -0.3, -42);
+    const hbPontoon = new THREE.Mesh(new RoundedBoxGeometry(7.2, 0.6, 3.8, 1, 0.08), stdMat({ color: 0x334155, roughness: 0.8 }));
+    hbPontoon.position.y = 0.3; houseboat1.add(hbPontoon);
+    const hbCabin = new THREE.Mesh(new RoundedBoxGeometry(5.8, 2.2, 3.2, 1, 0.08), stdMat({ color: 0x0284c7, roughness: 0.4 }));
+    hbCabin.position.y = 1.7; houseboat1.add(hbCabin);
+    const hbRoof = new THREE.Mesh(new RoundedBoxGeometry(6.2, 0.16, 3.6, 1, 0.04), stdMat({ color: PALETTE.teak, roughness: 0.6 }));
+    hbRoof.position.y = 2.85; houseboat1.add(hbRoof);
+    northWatercraftGroup.add(houseboat1);
+
+    // Houseboat 2 (x: 18, z: -42)
+    const houseboat2 = new THREE.Group();
+    houseboat2.position.set(18, -0.3, -42);
+    const hb2Pontoon = new THREE.Mesh(new RoundedBoxGeometry(7.2, 0.6, 3.8, 1, 0.08), stdMat({ color: 0x334155, roughness: 0.8 }));
+    hb2Pontoon.position.y = 0.3; houseboat2.add(hb2Pontoon);
+    const hb2Cabin = new THREE.Mesh(new RoundedBoxGeometry(5.8, 2.2, 3.2, 1, 0.08), stdMat({ color: 0xd97706, roughness: 0.4 }));
+    hb2Cabin.position.y = 1.7; houseboat2.add(hb2Cabin);
+    const hb2Roof = new THREE.Mesh(new RoundedBoxGeometry(6.2, 0.16, 3.6, 1, 0.04), stdMat({ color: 0xf8fafc, roughness: 0.3 }));
+    hb2Roof.position.y = 2.85; houseboat2.add(hb2Roof);
+    northWatercraftGroup.add(houseboat2);
+
+    // Autonomous Yellow Harbour Water Taxi (x: 0, z: -46)
+    const waterTaxi = new THREE.Group();
+    waterTaxi.position.set(0, -0.3, -46);
+    const wtHull = new THREE.Mesh(new RoundedBoxGeometry(6.8, 0.9, 2.4, 2, 0.12), stdMat({ color: 0xfacc15, roughness: 0.3, metalness: 0.2 }));
+    wtHull.position.y = 0.45; wtHull.castShadow = true; waterTaxi.add(wtHull);
+    const wtCabin = new THREE.Mesh(new RoundedBoxGeometry(4.2, 1.1, 1.9, 1, 0.06), stdMat({ color: 0x1e293b, roughness: 0.2, metalness: 0.8 }));
+    wtCabin.position.set(-0.2, 1.3, 0); waterTaxi.add(wtCabin);
+    northWatercraftGroup.add(waterTaxi);
+
+    this._harbourVessels.push(
+      { group: houseboat1, basePosY: -0.3, phase: 0.5, pitchPhase: 0.9 },
+      { group: houseboat2, basePosY: -0.3, phase: 2.1, pitchPhase: 1.4 },
+      { group: waterTaxi, basePosY: -0.3, phase: 1.2, pitchPhase: 2.0 }
+    );
   }
 
   _build4DPedestrians() {
@@ -3268,30 +3611,66 @@ class Renderer3D {
     };
 
     // -------------------------------------------------------------
-    // TOPOGRAPHICALLY ACCURATE CBD PLACEMENTS
-    // (Solid Northern Ridgeline z: -38 to -68 & Coastal Promontories x: +-54 to +-78)
-    // WATER CHANNEL (x in [-45, 45], z > 22) HAS ZERO BUILDINGS!
+    // -------------------------------------------------------------
+    // TOPOGRAPHICALLY ACCURATE CBD & MOUNTAIN RANGE PLACEMENTS
+    // (Northern Mainland Shoreline z <= -72 & Dramatic Mountain Ridge z <= -110)
+    // INNER HARBOUR CHANNEL (z in [-65, -28]) IS OPEN WATER WITH WATER TAXIS & HOUSEBOATS!
     // -------------------------------------------------------------
 
-    // 1. Northern Skyline Ridge (Majestic backdrop overlooking the city and bay)
-    buildCrownSpireTower(0, -48, 15, 14, 68, "Eureka Pinnacle");
-    buildCylindricalDiagridTower(-22, -45, 7.5, 58, "Pacific Gherkin", cyanGlassMat);
-    buildSteppedTerraceTower(22, -45, 16, 14, 52, "Southbank Terraces");
-    buildTwinEllipticalTowers(-42, -42, 8.5, 8.5, 62, 18, "Oceanic Twin Towers");
-    buildHeliportSkyscraper(42, -42, 14, 14, 56, "Metropolis Heliport");
+    // 1. Northern Mainland Waterfront City (Across Inner Harbour, z = -72 to -95)
+    buildCrownSpireTower(0, -78, 16, 15, 78, "Mainland Pinnacle");
+    buildCylindricalDiagridTower(-26, -74, 8.5, 68, "Harbour Gate North", cyanGlassMat);
+    buildSteppedTerraceTower(26, -74, 17, 15, 62, "North Shore Terraces");
+    buildTwinEllipticalTowers(-55, -76, 9.0, 9.0, 72, 20, "Alpine Twin Towers");
+    buildHeliportSkyscraper(55, -76, 15, 15, 66, "Northport Heliport");
 
-    // Second northern tier (distant ridge towers)
-    buildCylindricalDiagridTower(-12, -74, 8.5, 82, "Australis Spire", azureGlassMat);
-    buildCrownSpireTower(14, -78, 17, 16, 92, "Port Phillip Horizon");
-    buildSteppedTerraceTower(-36, -72, 19, 16, 76, "Victoria Summit");
-    buildHeliportSkyscraper(36, -72, 16, 16, 74, "Crown Sovereign");
+    // Second mainland tier (foothills cluster, z = -98 to -125)
+    buildCylindricalDiagridTower(-18, -105, 9.5, 92, "Cascade Spire", azureGlassMat);
+    buildCrownSpireTower(20, -112, 18, 17, 104, "Northern Horizon Tower");
+    buildSteppedTerraceTower(-48, -115, 20, 17, 86, "Summit View Residences");
+    buildHeliportSkyscraper(48, -115, 17, 17, 84, "Highland Crown Sovereign");
 
-    // Third northern tier (deep CBD background cluster across 2400m ridge)
-    buildCrownSpireTower(-65, -110, 18, 18, 105, "Collins Financial Centre");
-    buildTwinEllipticalTowers(0, -125, 10.5, 10.5, 115, 24, "Grand Southern Gate");
-    buildCylindricalDiagridTower(65, -110, 9.5, 96, "Meridian Tower", cyanGlassMat);
-    buildSteppedTerraceTower(-95, -135, 22, 18, 88, "Carlton Crest");
-    buildHeliportSkyscraper(95, -135, 18, 18, 85, "Flinders Observation");
+    // Third tier: Deep mainland metropolitan skyline (z = -140 to -180)
+    buildCrownSpireTower(-75, -150, 20, 20, 118, "Grand Continental Tower");
+    buildTwinEllipticalTowers(0, -165, 12.0, 12.0, 130, 26, "Great Northern Gate");
+    buildCylindricalDiagridTower(75, -150, 10.5, 110, "Apex Meridian Tower", cyanGlassMat);
+
+    // 1B. Dramatic Snow-Dusted Alpine Mountain Peaks (Majestic backdrop at z = -220 to -480)
+    const mountainGroup = new THREE.Group();
+    mountainGroup.position.set(0, 0, -280);
+    skylineGroup.add(mountainGroup);
+
+    const rockMat = stdMat({ color: 0x475569, roughness: 0.95 });
+    const snowMat = stdMat({ color: 0xf8fafc, roughness: 0.65, metalness: 0.1 });
+
+    const mountainPeaks = [
+      { x: 0, z: -80, r: 85, h: 96 },
+      { x: -140, z: -60, r: 95, h: 110 },
+      { x: 140, z: -70, r: 90, h: 105 },
+      { x: -280, z: -100, r: 120, h: 125 },
+      { x: 280, z: -90, r: 115, h: 120 },
+      { x: -420, z: -120, r: 130, h: 135 },
+      { x: 420, z: -110, r: 125, h: 130 },
+    ];
+
+    mountainPeaks.forEach((p) => {
+      // Main craggy mountain body
+      const peakBody = new THREE.Mesh(
+        new THREE.ConeGeometry(p.r, p.h, 7),
+        rockMat
+      );
+      peakBody.position.set(p.x, p.h / 2, p.z);
+      peakBody.castShadow = true; peakBody.receiveShadow = true;
+      mountainGroup.add(peakBody);
+
+      // Snow-capped peak summit
+      const snowCap = new THREE.Mesh(
+        new THREE.ConeGeometry(p.r * 0.42, p.h * 0.38, 7),
+        snowMat
+      );
+      snowCap.position.set(p.x, p.h * 0.81, p.z);
+      mountainGroup.add(snowCap);
+    });
 
     // 2. West Coastal Headland Promontory (Solid ground x: -55 to -180, z: -10 to +35)
     buildCrownSpireTower(-58, 6, 13, 12, 44, "West Bay Spire");
@@ -3306,6 +3685,35 @@ class Renderer3D {
     buildSteppedTerraceTower(62, 18, 12, 11, 36, "East Esplanade Residences");
     buildCrownSpireTower(110, 12, 14, 13, 50, "St Kilda Horizon");
     buildCylindricalDiagridTower(135, -5, 8.0, 55, "Brighton Headland Tower", azureGlassMat);
+
+    // -------------------------------------------------------------
+    // 3B. EAST & WEST ARCHED COASTAL VIADUCTS & SUSPENSION BRIDGES
+    // Connecting Downtown Island to the East & West Coasts across the water
+    // -------------------------------------------------------------
+    const bridgeMat = stdMat({ color: 0x334155, roughness: 0.8 });
+    const cableMat = stdMat({ color: 0xe2e8f0, roughness: 0.3, metalness: 0.9 });
+
+    // West Coastal Bridge (spanning from x = -50 to x = -68 at z = 0, y = 3.5m)
+    const westBridge = new THREE.Mesh(new RoundedBoxGeometry(22, 1.2, 5.8, 1, 0.15), bridgeMat);
+    westBridge.position.set(-59, 3.5, 0);
+    westBridge.castShadow = true; westBridge.receiveShadow = true;
+    skylineGroup.add(westBridge);
+
+    // West Bridge Twin Pylons & Stay Cables
+    const westPylon = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.9, 18, 12), bridgeMat);
+    westPylon.position.set(-59, 9, 0);
+    skylineGroup.add(westPylon);
+
+    // East Coastal Bridge (spanning from x = 50 to x = 68 at z = 0, y = 3.5m)
+    const eastBridge = new THREE.Mesh(new RoundedBoxGeometry(22, 1.2, 5.8, 1, 0.15), bridgeMat);
+    eastBridge.position.set(59, 3.5, 0);
+    eastBridge.castShadow = true; eastBridge.receiveShadow = true;
+    skylineGroup.add(eastBridge);
+
+    // East Bridge Twin Pylons & Stay Cables
+    const eastPylon = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.9, 18, 12), bridgeMat);
+    eastPylon.position.set(59, 9, 0);
+    skylineGroup.add(eastPylon);
 
     // -------------------------------------------------------------
     // 3. ELEVATED COASTAL FLYOVER HIGHWAY & ICONIC HARBOUR BRIDGES (Melbourne Bolte / West Gate)
@@ -4501,8 +4909,14 @@ class Renderer3D {
         }
       }
 
-      // Track key states for Street Mode (Walk / Drive)
-      this._keysDown.add(e.key.toLowerCase());
+      // Track key states for Street Mode (Walk / Drive / Fly)
+      const k = e.key.toLowerCase();
+      this._keysDown.add(k);
+
+      const navKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'q', 'e', ' ', 'c', 'shift'];
+      if (this._navigationMode !== 'orbit' && (navKeys.includes(k) || navKeys.includes(e.key))) {
+        e.preventDefault();
+      }
 
       const activeEl = document.activeElement;
       const activeTag = activeEl?.tagName?.toLowerCase();
@@ -4646,21 +5060,31 @@ class Renderer3D {
     if (this._navigationMode === mode) return;
     this._navigationMode = mode; // 'orbit' | 'walk' | 'drive' | 'fly'
 
+    if (this.canvas && typeof this.canvas.focus === 'function') {
+      try { this.canvas.focus(); } catch (_) {}
+    }
+
     if (mode === 'walk') {
       // Spawn pedestrian at street level
       this._streetPos.set(this._lookAt.x, 1.75, this._lookAt.z);
       this._streetSpeed = 0;
+      this._streetAngle = this._orbit.base + this._orbit.delta + Math.PI;
+      this._streetPitch = 0.0;
       if (this._vehicleGroup) this._vehicleGroup.visible = false;
     } else if (mode === 'drive') {
       // Spawn sports car on vehicular roadway (z = 11.6)
       this._streetPos.set(Math.max(-40, Math.min(40, this._lookAt.x)), 0.35, 11.6);
       this._streetSpeed = 0;
+      this._streetAngle = Math.PI / 2; // Face eastbound along roadway
+      this._streetPitch = 0.0;
       this._ensurePlayerVehicle();
       if (this._vehicleGroup) this._vehicleGroup.visible = true;
     } else if (mode === 'fly') {
       // Free flight mode
       this._streetPos.set(this.camera.position.x, Math.max(12, this.camera.position.y), this.camera.position.z);
       this._streetSpeed = 0;
+      this._streetAngle = this._orbit.base + this._orbit.delta + Math.PI;
+      this._streetPitch = -0.25;
       if (this._vehicleGroup) this._vehicleGroup.visible = false;
     } else {
       if (this._vehicleGroup) this._vehicleGroup.visible = false;
@@ -5730,8 +6154,8 @@ class Renderer3D {
       const rightX = Math.cos(this._streetAngle);
       const rightZ = -Math.sin(this._streetAngle);
 
-      this._streetPos.x += (fwdX * forwardInput + rightX * strafeInput) * flySpeed * dt;
-      this._streetPos.z += (fwdZ * forwardInput + rightZ * strafeInput) * flySpeed * dt;
+      this._streetPos.x += (fwdX * forwardInput - rightX * strafeInput) * flySpeed * dt;
+      this._streetPos.z += (fwdZ * forwardInput - rightZ * strafeInput) * flySpeed * dt;
       this._streetPos.y = Math.max(1.8, Math.min(280, (this._streetPos.y || 25) + vertInput * flySpeed * dt));
 
       this.camera.position.set(this._streetPos.x, this._streetPos.y, this._streetPos.z);

@@ -2204,7 +2204,12 @@ startTickLoop((w) => w);
 
 async function bootWorld() {
   try {
-    const mod = await import(`./world-source?t=${Date.now()}`);
+    let mod;
+    try {
+      mod = await import(`./world-source?t=${Date.now()}`);
+    } catch (_) {
+      mod = await import(`./sim-baseline.generated.js`);
+    }
     const w0 = mod.initialWorld();
     world = w0;
     renderer3d.pushTick(w0);
