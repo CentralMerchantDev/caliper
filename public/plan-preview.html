@@ -29,10 +29,11 @@
 <script type="module">
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "./vendor/three/addons/geometries/RoundedBoxGeometry.js";
-import { generateCityPlan, coastlinePolygon, distanceToCoast, landmassPolygons,
-         ROADS, BANDS, WORLD, SUBURBS, BRIDGES, CAUSEWAYS } from "./city-plan.js";
+import { generateCityPlan, generateWorld, coastlinePolygon, distanceToCoast, landmassPolygons,
+         ROADS, BANDS, WORLD, CAUSEWAYS, HIGHWAYS, SETTLEMENTS } from "./city-plan.js";
 
 const plan = generateCityPlan();
+const world = generateWorld();
 const coast = coastlinePolygon(16);
 const R = (s)=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return ((h>>>0)%100000)/100000;};
 
@@ -45,6 +46,11 @@ const WALLS = {
   MIDRISE:   [0xe8e4dc,0xd6dde2,0xf2efe6,0xcdd6dd,0xe4dcd0],
   TOWER:     [0x9fc4dd,0x7fa8cc,0xbcd6e8,0x6f97be,0xa8cfe0,0x8fb5d4],
   CIVIC:     [0xf5efe0,0xece4d2,0xfaf5ea],
+  RESORT:    [0xf7f2e6,0xffffff,0xf2e4d0,0xe8f0f4,0xfdf6ea],
+  VILLA:     [0xf5ead6,0xeadcc2,0xfdf4e4,0xe2d6bd,0xf7efe0],
+  WAREHOUSE: [0xb9c0c6,0xa8b2ba,0xc8ced2,0x9fa9b1],
+  FARM:      [0xc9b98f,0xd6c9a2,0xbca97e],
+  HANGAR:    [0xd2d8dc,0xc2cad0,0xe0e5e8],
 };
 const ROOFS = {
   TERRACE:   [0x8a4436,0x9c5340,0x7a3b30],
@@ -52,12 +58,19 @@ const ROOFS = {
   MIDRISE:   [0x5b6670,0x6b7580,0x4f5a63],
   TOWER:     [0x46525e,0x3c4650,0x505d6a],
   CIVIC:     [0x4f7a6a,0x3f6a5c,0x8a6a4a],
+  RESORT:    [0x3f7f96,0x2f6f86,0x4d8fa6],
+  VILLA:     [0xb85a44,0xa04a3a,0xc76b52,0x8a6a52],
+  WAREHOUSE: [0x6c757c,0x5c656c],
+  FARM:      [0x8a5f3e,0x9c6f48,0x7a5236],
+  HANGAR:    [0x7f878c,0x6f777c],
 };
 const pick=(arr,s)=>arr[Math.floor(R(s)*arr.length)%arr.length];
 
 const HEIGHT = {
   TERRACE:(r)=>13+r*8, TOWNHOUSE:(r)=>9+r*7, MIDRISE:(r)=>26+r*40,
-  TOWER:(r)=>65+Math.pow(r,1.75)*190, CIVIC:(r)=>22+r*28, PARK:()=>0 };
+  TOWER:(r)=>65+Math.pow(r,1.75)*190, CIVIC:(r)=>22+r*28, PARK:()=>0,
+  RESORT:(r)=>18+Math.pow(r,1.5)*48, VILLA:(r)=>7+r*6, WAREHOUSE:(r)=>12+r*9,
+  FARM:(r)=>6+r*5, HANGAR:(r)=>14+r*11 };
 
 // ---------------------------------------------------------------- renderer
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:"high-performance"});
@@ -186,49 +199,99 @@ for(const r of plan.roads){
   cm.position.set(ew?(r.from+r.to)/2:r.at,10.17,ew?r.at:(r.from+r.to)/2);scene.add(cm);
 }
 
-// --------------------------------------------- COMPOSITE BUILDINGS
-// Body + contrasting roof slab + parapet + rooftop plant. The silhouette
-// variety this creates is most of the stylised-city read; a single box is not.
+// --------------------------------------------- BUILDINGS
+// Two tiers, for 18,000 buildings at 60fps:
+//   * the downtown island gets full composite detail -- body, contrasting roof,
+//     parapet, rooftop plant, retail plinth, contact shadow. It is the hero.
+//   * every other settlement is drawn with InstancedMesh: ONE draw call for all
+//     bodies in the world and one for all roofs, with per-instance scale and
+//     colour. 90,000 individual meshes would not render; this does.
 const byClass={};
+const UNIT=new RoundedBoxGeometry(1,1,1,1,0.055);
+
+// --- tier 1: the downtown island, in full detail ---
 for(const p of plan.plots){
   const r=R(p.id),h=HEIGHT[p.className](r); if(h<=0) continue;
   const bw=Math.max(3,p.buildable.xMax-p.buildable.xMin);
   const bd=Math.max(3,p.buildable.zMax-p.buildable.zMin);
   const cx=(p.buildable.xMin+p.buildable.xMax)/2, cz=(p.buildable.zMin+p.buildable.zMax)/2;
   const tall=p.className==="TOWER"||p.className==="MIDRISE";
-
   const wall=new THREE.Color(pick(WALLS[p.className],p.id+"w"));
-  const bodyMat=new THREE.MeshStandardMaterial({
-    color:wall, roughness:tall?.42:.8, metalness:tall?.22:.03,
-    map:tall?bandTex.clone():null });
-  if(bodyMat.map){ bodyMat.map.needsUpdate=true; bodyMat.map.repeat.set(Math.max(1,bw/9), Math.max(1,h/9)); }
-
+  const bodyMat=new THREE.MeshStandardMaterial({color:wall,roughness:tall?.42:.8,metalness:tall?.22:.03,
+    map:tall?bandTex.clone():null});
+  if(bodyMat.map){bodyMat.map.needsUpdate=true;bodyMat.map.repeat.set(Math.max(1,bw/9),Math.max(1,h/9));}
   const body=new THREE.Mesh(new RoundedBoxGeometry(bw,h,bd,1,Math.min(1.2,bw*.03)),bodyMat);
-  body.position.set(cx,10+h/2,cz); body.castShadow=true; body.receiveShadow=true; scene.add(body);
-
-  // roof slab in a contrasting colour + parapet upstand
+  body.position.set(cx,10+h/2,cz);body.castShadow=true;body.receiveShadow=true;scene.add(body);
   const rc=pick(ROOFS[p.className],p.id+"r");
   const roof=new THREE.Mesh(new RoundedBoxGeometry(bw*1.03,1.6,bd*1.03,1,.35),M(rc,.85));
-  roof.position.set(cx,10+h+.8,cz); roof.castShadow=true; scene.add(roof);
+  roof.position.set(cx,10+h+.8,cz);roof.castShadow=true;scene.add(roof);
   const par=new THREE.Mesh(new RoundedBoxGeometry(bw*1.04,2.4,bd*1.04,1,.3),M(rc,.85));
-  par.position.set(cx,10+h+1.4,cz); scene.add(par);
-
-  // rooftop plant / penthouse, only on the tall ones
-  if(tall && r>0.25){
-    const pw=bw*(.28+R(p.id+"p")*.22), ph=3+R(p.id+"q")*7;
+  par.position.set(cx,10+h+1.4,cz);scene.add(par);
+  if(tall&&r>.25){const pw=bw*(.28+R(p.id+"p")*.22),ph=3+R(p.id+"q")*7;
     const box=new THREE.Mesh(new RoundedBoxGeometry(pw,ph,bd*.3,1,.3),M(rc,.8));
     box.position.set(cx+(R(p.id+"o")-.5)*bw*.25,10+h+2.6+ph/2,cz+(R(p.id+"t")-.5)*bd*.2);
-    box.castShadow=true; scene.add(box);
-  }
-  // ground-floor band: a darker plinth reads as retail and anchors the tower
-  if(tall){
-    const pl=new THREE.Mesh(new RoundedBoxGeometry(bw*1.06,7,bd*1.06,1,.4),M(new THREE.Color(rc).multiplyScalar(1.25),.8));
-    pl.position.set(cx,10+3.5,cz); pl.castShadow=true; pl.receiveShadow=true; scene.add(pl);
-  }
-  // contact shadow
+    box.castShadow=true;scene.add(box);}
+  if(tall){const pl=new THREE.Mesh(new RoundedBoxGeometry(bw*1.06,7,bd*1.06,1,.4),
+      M(new THREE.Color(rc).multiplyScalar(1.25),.8));
+    pl.position.set(cx,10+3.5,cz);pl.castShadow=true;pl.receiveShadow=true;scene.add(pl);}
   const blob=new THREE.Mesh(new THREE.PlaneGeometry(bw*2.1,bd*2.1),blobMat);
-  blob.rotation.x=-Math.PI/2; blob.position.set(cx,10.22,cz); scene.add(blob);
+  blob.rotation.x=-Math.PI/2;blob.position.set(cx,10.22,cz);scene.add(blob);
   byClass[p.className]=(byClass[p.className]||0)+1;
+}
+
+// --- tier 2: the rest of the world, instanced ---
+{
+  const rest=world.plots.filter(p=>p.settlement!=="downtown" && HEIGHT[p.className]);
+  const base={barrier:6,mainland:14,"north-key":8,"west-key":8,"harbour-isle":7,downtown:10};
+  const lmOf={}; for(const st of SETTLEMENTS) lmOf[st.id]=st.landmass;
+  const n=rest.length;
+  const bodies=new THREE.InstancedMesh(UNIT,new THREE.MeshStandardMaterial({roughness:.72,metalness:.04}),n);
+  const roofs =new THREE.InstancedMesh(UNIT,new THREE.MeshStandardMaterial({roughness:.8}),n);
+  bodies.castShadow=roofs.castShadow=true; bodies.receiveShadow=true;
+  const d=new THREE.Object3D();
+  rest.forEach((p,i)=>{
+    const r=R(p.id), h=HEIGHT[p.className](r);
+    const bw=Math.max(3,p.buildable.xMax-p.buildable.xMin);
+    const bd=Math.max(3,p.buildable.zMax-p.buildable.zMin);
+    const cx=(p.buildable.xMin+p.buildable.xMax)/2, cz=(p.buildable.zMin+p.buildable.zMax)/2;
+    const y=base[lmOf[p.settlement]]??10;
+    d.position.set(cx,y+h/2,cz); d.scale.set(bw,h,bd); d.rotation.y=0; d.updateMatrix();
+    bodies.setMatrixAt(i,d.matrix);
+    bodies.setColorAt(i,new THREE.Color(pick(WALLS[p.className]||WALLS.TOWNHOUSE,p.id+"w")));
+    d.position.set(cx,y+h+1.1,cz); d.scale.set(bw*1.05,2.2,bd*1.05); d.updateMatrix();
+    roofs.setMatrixAt(i,d.matrix);
+    roofs.setColorAt(i,new THREE.Color(pick(ROOFS[p.className]||ROOFS.TOWNHOUSE,p.id+"r")));
+    byClass[p.className]=(byClass[p.className]||0)+1;
+  });
+  bodies.instanceMatrix.needsUpdate=roofs.instanceMatrix.needsUpdate=true;
+  scene.add(bodies,roofs);
+  window.__instanced=n;
+}
+
+// --- highways across the whole world ---
+for(const hw of HIGHWAYS){
+  const row=ROADS[hw.class].row, len=hw.to-hw.from, ew=hw.axis==="ew";
+  const g=new THREE.PlaneGeometry(ew?len:row, ew?row:len); g.rotateX(-Math.PI/2);
+  const m=new THREE.Mesh(g,roadMat);
+  const y = (hw.at<-3400||hw.axis==="ns") ? 14.2 : (hw.at>1900?6.2:10.2);
+  m.position.set(ew?(hw.from+hw.to)/2:hw.at, y, ew?hw.at:(hw.from+hw.to)/2);
+  m.receiveShadow=true; scene.add(m);
+}
+// settlement street grids, drawn thin so the world reads as inhabited
+{
+  const g=new THREE.PlaneGeometry(1,1); g.rotateX(-Math.PI/2);
+  const sr=world.roads.filter(r=>r.settlement&&r.settlement!=="downtown");
+  const inst=new THREE.InstancedMesh(g,M(0x59616b,.95),sr.length);
+  const base={barrier:6,mainland:14,"north-key":8,"west-key":8,"harbour-isle":7};
+  const lmOf={}; for(const st of SETTLEMENTS) lmOf[st.id]=st.landmass;
+  const d=new THREE.Object3D();
+  sr.forEach((r,i)=>{
+    const row=ROADS[r.class].row, len=r.to-r.from, ew=r.axis==="ew";
+    const y=(base[lmOf[r.settlement]]??10)+0.14;
+    d.position.set(ew?(r.from+r.to)/2:r.at, y, ew?r.at:(r.from+r.to)/2);
+    d.scale.set(ew?len:row,1,ew?row:len); d.updateMatrix(); inst.setMatrixAt(i,d.matrix);
+  });
+  inst.instanceMatrix.needsUpdate=true; inst.receiveShadow=true; scene.add(inst);
 }
 
 // ---------------------------------------------------------------- trees
@@ -265,16 +328,7 @@ for(const p of plan.plots){
   scene.add(tI,cI); window.__trees=n;
 }
 
-// ---------------------------------------------------------------- suburbs, bridges, boats
-for(const s of SUBURBS){const b=s.bounds;
-  for(let x=b.xMin+40;x<b.xMax-40;x+=80)for(let z=b.zMin+40;z<b.zMax-40;z+=80){
-    const r=R(s.id+x+z); if(r<.25) continue;
-    const h=8+r*8, w=26+r*12, dp=22+r*10;
-    const wm=M(new THREE.Color(pick(WALLS.TOWNHOUSE,s.id+x+z)).multiplyScalar(.94),.88);
-    const m=new THREE.Mesh(new RoundedBoxGeometry(w,h,dp,1,.5),wm);
-    m.position.set(x+(r-.5)*22,14+h/2,z+(R("j"+x+z)-.5)*22);m.rotation.y=(r-.5)*.3;m.castShadow=true;scene.add(m);
-    const rf=new THREE.Mesh(new THREE.ConeGeometry(w*.78,6,4),M(pick(ROOFS.TOWNHOUSE,s.id+x+z+"r"),.85));
-    rf.position.set(m.position.x,14+h+3,m.position.z);rf.rotation.y=m.rotation.y+Math.PI/4;rf.castShadow=true;scene.add(rf);}}
+// ------------------------------------------------- causeways, boats
 for(const cw of CAUSEWAYS){
   const isBeach = cw.to==="barrier";
   const z0 = isBeach ? 620 : -760, z1 = isBeach ? 1980 : -3350;
@@ -301,7 +355,10 @@ for(const cw of CAUSEWAYS){
 let target=new THREE.Vector3(0,0,-60),dist=3200,az=0,pitch=.42;
 function apply(){camera.position.set(target.x+Math.sin(az)*Math.cos(pitch)*dist,target.y+Math.sin(pitch)*dist,target.z+Math.cos(az)*Math.cos(pitch)*dist);camera.lookAt(target);}
 const VIEWS={
- "Whole world":()=>{target.set(0,0,-1400);dist=26000;az=0;pitch=.62;},
+ "Whole world":()=>{target.set(0,0,-3000);dist=34000;az=0;pitch=.68;},
+ "Harbour City":()=>{target.set(-300,0,-4400);dist=4200;az=0;pitch=.34;},
+ "Port + airport":()=>{target.set(2000,0,-5000);dist=14000;az=0;pitch=.46;},
+ "Suburbs":()=>{target.set(4800,0,-5200);dist=7000;az=.2;pitch=.36;},
  "The city":()=>{target.set(0,0,-60);dist=3100;az=0;pitch=.42;},
  "From the sea":()=>{target.set(0,70,900);dist=3400;az=0;pitch=.11;},
  "Barrier island":()=>{target.set(0,40,2600);dist=6000;az=0;pitch=.24;},
@@ -322,7 +379,9 @@ addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updat
 
 let A=0;for(let i=0,j=coast.length-1;i<coast.length;j=i++)A+=(coast[j][0]+coast[i][0])*(coast[j][1]-coast[i][1]);
 document.getElementById("legend").innerHTML=
- `<div class="m">${(Math.abs(A/2)/1e6).toFixed(2)} km² island · ${plan.plots.length} buildings<br>${window.__trees} trees · ${plan.roads.length} roads</div>`;
+ `<div class="m">${WORLD.SIZE/1000} km world · ${world.plots.length.toLocaleString()} buildings<br>`+
+ `${world.settlements.length} settlements · ${world.masses.length} land masses<br>`+
+ `downtown island ${(Math.abs(A/2)/1e6).toFixed(2)} km² · ${window.__trees} trees</div>`;
 
 VIEWS["The city"]();apply();
 let t=0;(function loop(){requestAnimationFrame(loop);t+=.00035;wn.offset.set(t,t*.62);renderer.render(scene,camera);})();

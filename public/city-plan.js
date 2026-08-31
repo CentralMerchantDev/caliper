@@ -245,13 +245,16 @@ export function distanceToCoast(x, z, poly = _coastCache) {
   return isOnLand(x, z, poly) ? best : -best;
 }
 
-/** Every corner of a rectangle must be inland of the shoreline margin. */
-export function rectIsBuildable(xMin, xMax, zMin, zMax, margin = 0) {
+/**
+ * Every corner of a rectangle must be inland of the shoreline margin. Takes the
+ * polygon so each settlement clips to ITS OWN land mass, not the downtown island.
+ */
+export function rectIsBuildable(xMin, xMax, zMin, zMax, margin = 0, poly = _coastCache) {
   return (
-    distanceToCoast(xMin, zMin) > margin &&
-    distanceToCoast(xMax, zMin) > margin &&
-    distanceToCoast(xMin, zMax) > margin &&
-    distanceToCoast(xMax, zMax) > margin
+    distanceToCoast(xMin, zMin, poly) > margin &&
+    distanceToCoast(xMax, zMin, poly) > margin &&
+    distanceToCoast(xMin, zMax, poly) > margin &&
+    distanceToCoast(xMax, zMax, poly) > margin
   );
 }
 
@@ -300,6 +303,12 @@ export const PLOT_CLASSES = {
   TOWER:     { minW: 45,  maxW: 90,  minD: 45, maxD: 90,  maxHeight: 220 },
   CIVIC:     { minW: 60,  maxW: 180, minD: 50, maxD: 110, maxHeight:  70 },
   PARK:      { minW: 40,  maxW: 200, minD: 40, maxD: 130, maxHeight:   0 },
+  // --- beyond the downtown island ---
+  RESORT:    { minW: 34,  maxW: 78,  minD: 34, maxD: 70,  maxHeight:  70 },  // beach hotels
+  VILLA:     { minW: 18,  maxW: 34,  minD: 22, maxD: 40,  maxHeight:  14 },  // low coastal housing
+  WAREHOUSE: { minW: 55,  maxW: 150, minD: 40, maxD: 95,  maxHeight:  22 },  // port sheds
+  FARM:      { minW: 160, maxW: 460, minD: 120, maxD: 340, maxHeight:  11 }, // fields + barns
+  HANGAR:    { minW: 90,  maxW: 220, minD: 70, maxD: 150, maxHeight:  26 },  // airport
 };
 
 export const PLOT_RULES = {
@@ -517,6 +526,116 @@ export function subdivideBlock(block, className) {
 function defaultClassFor(districtId) {
   const d = DISTRICTS.find((x) => x.id === districtId);
   return (d && d.primary) || "MIDRISE";
+}
+
+// =============================================================================
+// THE REST OF THE WORLD
+//
+// One engine, driven by data, for every settlement outside the downtown island:
+// the resort strip on the barrier island, the mainland's towns and suburbs, the
+// working port, the airport, the farm belt, and the island villages. Each is a
+// rectangle of land, a road spacing, and a plot class -- so a new town is six
+// lines of data, not a new code path.
+// =============================================================================
+export const SETTLEMENTS = [
+  // --- barrier island: hotels facing the ocean, villas facing the lagoon ---
+  { id:"beach-resort",  name:"Ocean Resort Strip", landmass:"barrier",
+    bounds:{xMin:-7600,xMax:8000,zMin:2620,zMax:3180}, av:190, st:150, cls:"RESORT" },
+  { id:"beach-villas",  name:"Lagoon Villas", landmass:"barrier",
+    bounds:{xMin:-7600,xMax:8000,zMin:2140,zMax:2600}, av:150, st:120, cls:"VILLA" },
+
+  // --- mainland ---
+  { id:"harbour-city",  name:"Harbour City", landmass:"mainland",
+    bounds:{xMin:-2400,xMax:1800,zMin:-5600,zMax:-3560}, av:210, st:160, cls:"MIDRISE" },
+  { id:"harbour-core",  name:"Harbour City Core", landmass:"mainland",
+    bounds:{xMin:-1100,xMax:700,zMin:-4900,zMax:-3700}, av:210, st:160, cls:"TOWER" },
+  { id:"port",          name:"Working Port", landmass:"mainland",
+    bounds:{xMin:-6400,xMax:-2700,zMin:-4600,zMax:-3520}, av:300, st:220, cls:"WAREHOUSE" },
+  { id:"west-suburb",   name:"Westbrook", landmass:"mainland",
+    bounds:{xMin:-12800,xMax:-6800,zMin:-6200,zMax:-3620}, av:200, st:150, cls:"TOWNHOUSE" },
+  { id:"north-suburb",  name:"Northgate", landmass:"mainland",
+    bounds:{xMin:2200,xMax:7400,zMin:-6600,zMax:-3600}, av:200, st:150, cls:"TOWNHOUSE" },
+  { id:"hillside",      name:"Hillside", landmass:"mainland",
+    bounds:{xMin:-1400,xMax:4200,zMin:-8800,zMax:-6300}, av:230, st:170, cls:"VILLA" },
+  { id:"airport",       name:"International Airport", landmass:"mainland",
+    bounds:{xMin:8600,xMax:13200,zMin:-6600,zMax:-4400}, av:460, st:340, cls:"HANGAR" },
+  { id:"farmbelt",      name:"Farm Belt", landmass:"mainland",
+    bounds:{xMin:-18400,xMax:-13200,zMin:-9600,zMax:-5200}, av:620, st:480, cls:"FARM" },
+  { id:"east-farms",    name:"East Farms", landmass:"mainland",
+    bounds:{xMin:14000,xMax:18600,zMin:-9200,zMax:-5000}, av:620, st:480, cls:"FARM" },
+
+  // --- the keys ---
+  { id:"north-key-vlg", name:"North Key Village", landmass:"north-key",
+    bounds:{xMin:3500,xMax:5400,zMin:-1650,zMax:-650}, av:140, st:110, cls:"VILLA" },
+  { id:"west-key-vlg",  name:"West Key Village", landmass:"west-key",
+    bounds:{xMin:-6400,xMax:-4400,zMin:-1500,zMax:-550}, av:140, st:110, cls:"VILLA" },
+  { id:"harbour-isle-v",name:"Harbour Isle", landmass:"harbour-isle",
+    bounds:{xMin:-2700,xMax:-1350,zMin:-2350,zMax:-1650}, av:130, st:105, cls:"TERRACE" },
+];
+
+/** Highways and arterials tying the whole world together. */
+export const HIGHWAYS = [
+  { id:"coast-hwy",  axis:"ew", at:-3900,  from:-18000, to: 18000, class:"BOULEVARD" },
+  { id:"inland-hwy", axis:"ew", at:-6900,  from:-16000, to: 16000, class:"AVENUE"    },
+  { id:"west-spur",  axis:"ns", at:-9800,  from:-9200,  to:-3700,  class:"AVENUE"    },
+  { id:"north-spur", axis:"ns", at: 4800,  from:-9000,  to:-3700,  class:"AVENUE"    },
+  { id:"port-spur",  axis:"ns", at:-4500,  from:-6800,  to:-3600,  class:"AVENUE"    },
+  { id:"airport-rd", axis:"ns", at: 10800, from:-6800,  to:-3900,  class:"AVENUE"    },
+  { id:"beach-spine",axis:"ew", at: 2380,  from:-8000,  to:  8200, class:"AVENUE"    },
+];
+
+/** Build one settlement's roads, blocks and plots, clipped to its land mass. */
+export function generateSettlement(s, polyByLandmass) {
+  const poly = polyByLandmass[s.landmass];
+  const avHalf = ROADS.AVENUE.row / 2, stHalf = ROADS.STREET.row / 2;
+  const roads = [], blocks = [], plots = [];
+  const b = s.bounds;
+
+  for (let x = b.xMin; x <= b.xMax; x += s.av) {
+    roads.push({ id:`${s.id}-av${x}`, axis:"ns", class:"AVENUE", at:x, from:b.zMin, to:b.zMax, settlement:s.id });
+  }
+  for (let z = b.zMin; z <= b.zMax; z += s.st) {
+    roads.push({ id:`${s.id}-st${z}`, axis:"ew", class:"STREET", at:z, from:b.xMin, to:b.xMax, settlement:s.id });
+  }
+
+  for (let x = b.xMin; x < b.xMax - s.av * 0.5; x += s.av) {
+    for (let z = b.zMin; z < b.zMax - s.st * 0.5; z += s.st) {
+      const xMin = x + avHalf, xMax = x + s.av - avHalf;
+      const zMin = z + stHalf, zMax = z + s.st - stHalf;
+      if (xMax - xMin < 10 || zMax - zMin < 10) continue;
+      if (!rectIsBuildable(xMin, xMax, zMin, zMax, SHORE_MARGIN, poly)) continue;
+      const blk = { id:`${s.id}-b${x}-${z}`, districtId:s.id, settlement:s.id,
+                    xMin, xMax, zMin, zMax, width:xMax-xMin, depth:zMax-zMin };
+      blocks.push(blk);
+      plots.push(...subdivideBlock(blk, s.cls).map(p => ({ ...p, settlement:s.id })));
+    }
+  }
+  return { roads, blocks, plots };
+}
+
+/**
+ * THE WHOLE WORLD: the downtown island plus every other settlement, the
+ * highway network, and the land masses they sit on.
+ */
+export function generateWorld() {
+  const masses = landmassPolygons(16);
+  const polyBy = Object.fromEntries(masses.map(m => [m.id, m.polygon]));
+
+  const city = generateCityPlan();
+  const roads  = [...city.roads.map(r => ({ ...r, settlement:"downtown" })), ...HIGHWAYS];
+  const blocks = [...city.blocks.map(b => ({ ...b, settlement:"downtown" }))];
+  const plots  = [...city.plots.map(p => ({ ...p, settlement:"downtown" }))];
+
+  const settlements = [{ id:"downtown", name:"Downtown", landmass:"downtown",
+                         plots:city.plots.length, blocks:city.blocks.length }];
+  for (const s of SETTLEMENTS) {
+    const out = generateSettlement(s, polyBy);
+    roads.push(...out.roads); blocks.push(...out.blocks); plots.push(...out.plots);
+    settlements.push({ id:s.id, name:s.name, landmass:s.landmass,
+                       plots:out.plots.length, blocks:out.blocks.length, cls:s.cls });
+  }
+  return { world:WORLD, masses, roads, blocks, plots, settlements,
+           districts:DISTRICTS, causeways:CAUSEWAYS, highways:HIGHWAYS };
 }
 
 /** The whole plan: roads, blocks and plots, ready to draw or to edit. */
