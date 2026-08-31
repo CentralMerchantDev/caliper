@@ -28,7 +28,80 @@ Landed just before you started, tests green at 199 Node + tsc clean:
 
 ---
 
-## 1 — Overlapping controls. Mark sent a screenshot; this is the priority.
+## 0 — THE VISUAL TARGET. This is the main work of this run.
+
+Mark sent five references: one KitBash3D archviz render of a photoreal waterfront city, one Cities:
+Skylines shot, and three SimCity BuildIt shots.
+
+**Read this before starting, because the obvious interpretation is wrong.** The gap between our
+scene and the KitBash3D image is **not lighting**. Every tower in that render is individually
+modelled — balcony bands, mullion grids, expressed floor slabs, setbacks, rooftop mechanical plant,
+parapets, signage. Ours are `RoundedBoxGeometry` primitives. No HDRI, AO, SSGI or path tracer turns
+a box into that. **The detail is in the geometry.**
+
+KitBash3D is a commercial store and there is no CC0 kit at that quality. Do not go looking for one.
+
+### The split that makes this safe
+
+The pipeline only edits **placements, object types and surfaces**. The skyline behind them is set
+dressing and never needs to be pipeline-editable. So:
+
+- **The editable world stays fully procedural** — recipe-driven, verifiable, unchanged.
+- **The backdrop city may carry real façade detail**, because nothing has to reason about it.
+
+**If you import any external mesh, `NOT_YET_PRESENT` in `src/worldStructure.ts` must be corrected in
+the same commit.** It currently claims "no external glTF/FBX mesh imports". Shipping an import while
+that line stands makes the grounding stage tell visitors something false — that exact bug has
+already happened twice in this repo with textures and audio.
+
+### In priority order — highest visual return first
+
+**1. Façade detail as procedural rules.** Give the building generators: expressed floor slabs, a
+mullion/window grid, balcony bands on residential, a parapet and rooftop plant, ground-floor
+glazing distinct from the tower above. This is free, stays inside the recipe model, and is the
+single largest step toward the reference. **Do this before touching materials or post.**
+
+**2. Aerial perspective.** The far towers in the reference fade into atmospheric haze, and that one
+effect carries more of the realism than anything else in the frame. Our renderer has none, and
+there is a test asserting "no fog" as an invariant. **That invariant is wrong for this target —
+remove or invert it, and say in the commit that you did.** Use exponential height-based fog tuned so
+the near city stays crisp and the distant skyline and mountains recede. Overdone fog looks worse
+than none; tune it against the reference.
+
+**3. Real PBR materials.** CC0 sets from **ambientCG** (`ambientcg.com`) and **Poly Haven**:
+architectural glass with correct roughness and reflection, concrete, weathered metal, wet asphalt.
+Two of our four texture sets are still colour-only, which is why surfaces read flat.
+
+**4. Screen-space reflection.** The reference road is wet. Reflective ground is a large, cheap-looking
+win. `realism-effects` (github.com/0beqz/realism-effects, MIT) gives SSR and SSGI together.
+
+**5. Ambient occlusion.** `N8AO` (github.com/N8python/n8ao, MIT). We still have none, and it is the
+strongest single cue that objects sit in a scene rather than float above it.
+
+**6. Depth of field and proper AA.** `pmndrs/postprocessing` (Zlib) — SMAA (we currently render
+through a composer with *no* antialiasing at all), a real mip-chain bloom, and DOF. The reference
+holds the foreground sharp and lets the city fall off; that is half of why it reads as a photograph.
+
+**7. Cascaded shadow maps.** `three-csm` (MIT). One 2048 map over a 2400m world means the distant
+city casts nothing.
+
+### Honest scope
+
+**Say so if you disagree with the target.** Real-time browser rasterization tops out at excellent
+stylised realism — nearer the SimCity references than the archviz one, and for an
+architecture-trained candidate a clean, correct, well-lit city that runs live is a stronger artifact
+than a mediocre attempt at photoreal. If after items 1–3 the honest read is that further chasing
+hurts, stop and report that.
+
+Keep 60fps on integrated graphics, pixel ratio capped at 2, and keep the total texture payload
+modest — this loads on a phone. Verify licences and record them as was done for the HDRI.
+
+**Screenshot before and after from the same camera, and judge honestly.** If a change does not
+clearly improve the frame, revert it and say so.
+
+---
+
+## 1 — Overlapping controls. Mark sent a screenshot; fix these too.
 
 Confirmed overlaps in drive mode at desktop width:
 
