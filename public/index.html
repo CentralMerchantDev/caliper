@@ -587,6 +587,14 @@ html, body {
   font-weight: 700;
   border-color: var(--sky);
 }
+.nav-pad-hint {
+  font-size: 9px;
+  line-height: 1.35;
+  color: #cbd5e1;
+  margin: 2px 0 5px;
+  max-width: 150px;
+  text-align: center;
+}
 .nav-pad-grid {
   display: flex;
   flex-direction: column;
@@ -949,6 +957,9 @@ html, body {
     <span>🧭 NAVIGATION</span>
     <span id="nav-mode-indicator" style="color:#38bdf8;font-size:9px">ORBIT</span>
   </div>
+  <!-- Says what the controls are, in the place the controls are. Without this the
+       arrow pad looks like the only way to move and the keyboard is invisible. -->
+  <div class="nav-pad-hint" id="nav-pad-hint">Drag to orbit · scroll to zoom · arrows below</div>
   <!-- Eye-Level Person, Vehicle, Fly, & Orbit Mode Selectors -->
   <div class="nav-mode-selector">
     <button type="button" class="nav-mode-btn active" id="btn-mode-orbit" data-nav-mode="orbit" title="Orbital aerial camera view">🌐 Orbit</button>
@@ -1770,22 +1781,82 @@ $('#grid-toggle-btn')?.addEventListener('click', () => {
 });
 
 // Tactile Navigation Compass Pad Handlers
-$('#nav-rot-left')?.addEventListener('click', () => {
-  renderer3d.rotateCamera(0.28);
-  renderer3d.playClickSound();
+//
+// The pad is mode-aware. In orbit the arrows rotate and pitch the camera, as
+// before. In walk, drive and fly they drive the SAME movement the keyboard
+// does, by holding the matching key down for as long as the button is held.
+// There is one movement implementation, not two: a visitor with only a mouse or
+// only a touchscreen can go exactly as far as one using WASD.
+//
+// Before this, the arrows called rotateCamera/pitchCamera in every mode, and
+// only the orbit branch reads those values -- so on screen they did nothing at
+// all once you entered walk, drive or fly.
+const NAV_HOLD_KEYS = {
+  'nav-pitch-up': 'w',
+  'nav-pitch-down': 's',
+  'nav-rot-left': 'a',
+  'nav-rot-right': 'd',
+};
+const NAV_ORBIT_ACTIONS = {
+  'nav-rot-left': () => renderer3d.rotateCamera(0.28),
+  'nav-rot-right': () => renderer3d.rotateCamera(-0.28),
+  'nav-pitch-up': () => renderer3d.pitchCamera(-0.14),
+  'nav-pitch-down': () => renderer3d.pitchCamera(0.14),
+};
+
+// Exactly one pad key can be held at a time, and it is tracked here rather than
+// per-button so a pointer released anywhere still lets go of it. A hold that is
+// never released is a camera that never stops moving.
+let padHeldKey = null;
+function releasePadHold() {
+  if (padHeldKey) {
+    renderer3d.releaseNavKey(padHeldKey);
+    padHeldKey = null;
+  }
+}
+
+Object.keys(NAV_HOLD_KEYS).forEach((id) => {
+  const btn = $('#' + id);
+  if (!btn) return;
+  const key = NAV_HOLD_KEYS[id];
+
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (renderer3d.getNavigationMode() === 'orbit') {
+      NAV_ORBIT_ACTIONS[id]();
+      renderer3d.playClickSound();
+      return;
+    }
+    releasePadHold();
+    padHeldKey = key;
+    renderer3d.pressNavKey(key);
+    renderer3d.playClickSound();
+  });
+
+  // Keyboard parity: a focused arrow button responds to Enter/Space too.
+  btn.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    if (renderer3d.getNavigationMode() === 'orbit') {
+      NAV_ORBIT_ACTIONS[id]();
+      return;
+    }
+    if (padHeldKey !== key) { releasePadHold(); padHeldKey = key; renderer3d.pressNavKey(key); }
+  });
+  btn.addEventListener('keyup', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') releasePadHold();
+  });
+
+  btn.addEventListener('pointerleave', releasePadHold);
+  btn.addEventListener('blur', releasePadHold);
 });
-$('#nav-rot-right')?.addEventListener('click', () => {
-  renderer3d.rotateCamera(-0.28);
-  renderer3d.playClickSound();
-});
-$('#nav-pitch-up')?.addEventListener('click', () => {
-  renderer3d.pitchCamera(-0.14);
-  renderer3d.playClickSound();
-});
-$('#nav-pitch-down')?.addEventListener('click', () => {
-  renderer3d.pitchCamera(0.14);
-  renderer3d.playClickSound();
-});
+
+// A pointer lifted anywhere, a cancelled gesture, or the window losing focus all
+// have to end the hold. Only the pad's own key is cleared -- a key the visitor is
+// physically holding on the keyboard is none of this handler's business.
+window.addEventListener('pointerup', releasePadHold);
+window.addEventListener('pointercancel', releasePadHold);
+window.addEventListener('blur', releasePadHold);
 $('#nav-reset')?.addEventListener('click', () => {
   renderer3d.resetView();
   renderer3d.playClickSound();
@@ -1830,11 +1901,23 @@ const streetHudText = $('#street-hud-mode-text');
 const navModeIndicator = $('#nav-mode-indicator');
 const navModeButtons = document.querySelectorAll('.nav-mode-btn[data-nav-mode]');
 
+// What the controls actually are, stated where the controls are. Every mode lists
+// a mouse/touch route AND a keyboard route, because either alone leaves someone
+// stuck: the arrow pad looked like the only option and the keyboard was invisible.
+const NAV_PAD_HINTS = {
+  orbit: 'Drag to orbit · scroll to zoom · or use the arrows below',
+  walk: 'Hold the arrows below to walk · or W A S D · Shift to sprint · Esc to exit',
+  drive: 'Hold ▲ ▼ to accelerate and brake · ◀ ▶ to steer · or W A S D · Esc to exit',
+  fly: 'Hold the arrows below to fly · or W A S D · Q / E to climb and dive · Esc to exit',
+};
+
 function updateNavigationModeUI(mode) {
   navModeButtons.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.navMode === mode);
   });
   if (navModeIndicator) navModeIndicator.textContent = mode.toUpperCase();
+  const padHint = $('#nav-pad-hint');
+  if (padHint) padHint.textContent = NAV_PAD_HINTS[mode] || NAV_PAD_HINTS.orbit;
 
   if (mode === 'walk') {
     streetHud.style.display = 'flex';

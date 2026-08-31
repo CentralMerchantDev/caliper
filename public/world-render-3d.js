@@ -174,8 +174,72 @@ function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
+// How strongly the vendored Poly Haven HDRI lights and reflects off every PBR
+// surface. 1.0 means the environment contributes at its real measured energy;
+// anything lower is deliberate attenuation. This was 0.22, which threw away
+// roughly four fifths of the image-based lighting the HDRI was vendored for and
+// is the single largest lever on how real the scene looks. Tune HERE, not at
+// individual call sites, and re-check toneMappingExposure after changing it.
+const ENV_MAP_INTENSITY = 1.0;
+
+// Anisotropic filtering level applied to every texture. Set once from the real
+// renderer capabilities in the constructor; the fallback is a safe minimum for
+// the case where a texture is created before the renderer exists.
+let _maxAnisotropy = 4;
+
 function stdMat(opts) {
-  return new THREE.MeshStandardMaterial({ envMapIntensity: 0.22, ...opts });
+  return new THREE.MeshStandardMaterial({ envMapIntensity: ENV_MAP_INTENSITY, ...opts });
+}
+
+// -----------------------------------------------------------------------------
+// TERRAIN HEIGHT -- ONE source of truth.
+//
+// This is the exact elevation profile the terrain mesh is displaced by. It was
+// previously inline inside the mesh-building loop, which meant nothing else could
+// ask "how high is the ground here?" -- so walk and drive used a hardcoded camera
+// height and drove straight through hillsides into open air.
+//
+// Anything that needs to sit ON the ground must call this rather than assume a
+// height. Changing the landscape means changing this function, and the mesh and
+// every camera follow automatically.
+// -----------------------------------------------------------------------------
+function terrainHeightAt(x, z) {
+  let y = 0.0;
+  if (z > 22) {
+    // South: open ocean channel and seafloor shelf
+    const oceanDepth = Math.min(1, (z - 22) / 24);
+    y = -3.4 * oceanDepth;
+  } else if (z >= -28 && z <= 22 && Math.abs(x) <= 55) {
+    // Downtown main island tableland: graded flat
+    y = 0.0;
+  } else if (z > -65 && z < -28 && Math.abs(x) <= 120) {
+    // Sheltered inner harbour channel
+    const harbourEdge = Math.sin(((z - (-65)) / 37) * Math.PI);
+    y = -2.8 * Math.max(0.2, harbourEdge);
+  } else if (z <= -65) {
+    // Mainland coast rising into the alpine range
+    const inlandDist = (-z - 65);
+    if (inlandDist < 45) {
+      y = 0.8 + (inlandDist / 45) * 4.5;
+    } else {
+      const mountainProgress = Math.min(1, (inlandDist - 45) / 280);
+      const ridgeWave1 = Math.sin(x * 0.018) * 14.0;
+      const ridgeWave2 = Math.cos(x * 0.035 + z * 0.02) * 9.5;
+      const peakNoise = Math.sin(x * 0.008) * Math.cos(z * 0.012) * 18.0;
+      y = 5.3 + mountainProgress * 58.0 + ridgeWave1 + ridgeWave2 + peakNoise;
+    }
+  } else if (Math.abs(x) > 55 && z >= -65 && z <= 22) {
+    // East and west flanking coastline: cliffs and pocket coves
+    const coastDist = (Math.abs(x) - 55);
+    const cliffRise = Math.min(1, coastDist / 80);
+    const coveMod = Math.sin(z * 0.08) * 3.5;
+    y = cliffRise * 16.5 + coveMod;
+  }
+
+  // Gentle planetary curvature roll toward the horizon
+  const rDist = Math.hypot(x, z);
+  const curvatureDrop = Math.pow(rDist / 1200, 2) * 1.85;
+  return y - curvatureDrop;
 }
 
 const MATERIAL_TEXTURES = {
@@ -190,6 +254,9 @@ function attachTiledTexture(material, slot, materialKey, filename, isColorData, 
   _textureLoader.load(`./vendor/textures/${materialKey}/${filename}`, (t) => {
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     if (isColorData) t.colorSpace = THREE.SRGBColorSpace;
+    // Ground, road and path planes are seen at grazing angles from every camera
+    // this app uses. Without anisotropic filtering they blur to mush at distance.
+    t.anisotropy = _maxAnisotropy;
     t.repeat.set(repeatX, repeatY);
     material[slot] = t;
     if (slot === "roughnessMap") material.roughness = 1;
@@ -226,6 +293,7 @@ function makeAsphaltTexture() {
   }
   ctx.putImageData(imgData, 0, 0);
   const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = _maxAnisotropy;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -267,6 +335,7 @@ function makePavingStoneTexture() {
   ctx.putImageData(imgData, 0, 0);
 
   const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = _maxAnisotropy;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -302,6 +371,7 @@ function makeTravertineTexture() {
   ctx.putImageData(imgData, 0, 0);
 
   const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = _maxAnisotropy;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -326,6 +396,7 @@ function makeLimestoneTexture() {
   ctx.putImageData(imgData, 0, 0);
 
   const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = _maxAnisotropy;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -363,6 +434,7 @@ function makeWaterNormalTexture() {
   ctx.putImageData(imgData, 0, 0);
 
   const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = _maxAnisotropy;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(6, 6);
   return tex;
@@ -374,6 +446,7 @@ function makeSkyGradientTexture() {
   c.width = w;
   c.height = h;
   const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = _maxAnisotropy;
   tex.colorSpace = THREE.SRGBColorSpace;
   return { canvas: c, ctx: c.getContext("2d"), tex };
 }
@@ -400,6 +473,7 @@ function makeContactShadowTexture() {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
   const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = _maxAnisotropy;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.premultiplyAlpha = true;
   return tex;
@@ -422,6 +496,7 @@ function makeThoughtBubbleTexture() {
   ctx.textBaseline = "middle";
   ctx.fillText("💭", 64, 66);
   const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = _maxAnisotropy;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
@@ -462,6 +537,7 @@ function makeTextLabelTexture(text, bgColor = "rgba(15, 23, 42, 0.88)", textColo
   ctx.textBaseline = "middle";
   ctx.fillText(text, 128, 32);
   const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = _maxAnisotropy;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
@@ -853,6 +929,13 @@ class Renderer3D {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer = renderer;
 
+    // Read the real hardware limit once. Every texture created after this point
+    // picks it up; the module default covers anything built before the renderer.
+    try {
+      const maxAniso = renderer.capabilities.getMaxAnisotropy();
+      if (Number.isFinite(maxAniso) && maxAniso > 0) _maxAnisotropy = maxAniso;
+    } catch (_) { /* keep the safe default */ }
+
     const scene = new THREE.Scene();
     this._skyGradient = makeSkyGradientTexture();
     updateSkyGradient(this._skyGradient, SKY_DAY, SKY_DAY);
@@ -1186,50 +1269,11 @@ class Renderer3D {
     // 4. Northern Mainland City & Majestic Mountain Range (z < -65): Mainland coast rising from y = 1.5m to dramatic alpine peaks y = 45m to 92m.
     // 5. Flanking Coasts (East & West, |x| > 60): Rocky headland cliffs (y = 8m to 24m) interspersed with pocket coves.
     // =========================================================================
+    // The elevation profile itself lives in terrainHeightAt() at the top of this
+    // file so cameras and anything else that must sit on the ground can consult
+    // the same function the mesh is built from.
     for (let i = 0; i < terrainPos.count; i++) {
-      const x = terrainPos.getX(i), z = terrainPos.getZ(i);
-
-      let y = 0.0;
-      if (z > 22) {
-        // South: Open ocean channel and seafloor shelf
-        const oceanDepth = Math.min(1, (z - 22) / 24);
-        y = -3.4 * oceanDepth;
-      } else if (z >= -28 && z <= 22 && Math.abs(x) <= 55) {
-        // Downtown Main Island tableland: perfectly graded at y = 0.0m
-        y = 0.0;
-      } else if (z > -65 && z < -28 && Math.abs(x) <= 120) {
-        // Sheltered Inner Harbour channel separating Downtown Island from Mainland
-        const harbourEdge = Math.sin(((z - (-65)) / 37) * Math.PI);
-        y = -2.8 * Math.max(0.2, harbourEdge);
-      } else if (z <= -65) {
-        // Mainland Northern Coastal City & Majestic Alpine Mountain Range
-        const inlandDist = (-z - 65);
-        if (inlandDist < 45) {
-          // Mainland waterfront urban terrace
-          y = 0.8 + (inlandDist / 45) * 4.5;
-        } else {
-          // Dramatic Alpine Mountain Range with craggy peaks & ridges
-          const mountainProgress = Math.min(1, (inlandDist - 45) / 280);
-          const ridgeWave1 = Math.sin(x * 0.018) * 14.0;
-          const ridgeWave2 = Math.cos(x * 0.035 + z * 0.02) * 9.5;
-          const peakNoise = Math.sin(x * 0.008) * Math.cos(z * 0.012) * 18.0;
-          y = 5.3 + mountainProgress * 58.0 + ridgeWave1 + ridgeWave2 + peakNoise;
-        }
-      } else if (Math.abs(x) > 55 && z >= -65 && z <= 22) {
-        // East & West flanking coastlines: Rocky headland cliffs and pocket coves
-        const coastDist = (Math.abs(x) - 55);
-        const cliffRise = Math.min(1, coastDist / 80);
-        const coveMod = Math.sin(z * 0.08) * 3.5;
-        y = cliffRise * 16.5 + coveMod;
-      } else {
-        y = 0.0;
-      }
-
-      // Realistic planetary curvature: gentle horizon roll
-      const rDist = Math.hypot(x, z);
-      const curvatureDrop = Math.pow(rDist / 1200, 2) * 1.85;
-
-      terrainPos.setY(i, y - curvatureDrop);
+      terrainPos.setY(i, terrainHeightAt(terrainPos.getX(i), terrainPos.getZ(i)));
     }
     terrainGeo.computeVertexNormals();
 
@@ -4665,15 +4709,20 @@ class Renderer3D {
     for (const part of typeDef.recipe || []) {
       const geo = this._geometryForPart(part);
       const recolorable = overrideColor && !(part.metalness >= 0.3) && !part.emissive;
-      const mat = stdMat({
+      // three.js warns once per key that is PRESENT but undefined, so an optional
+      // recipe field must be omitted entirely rather than passed as undefined.
+      // Passing all four unconditionally produced hundreds of console warnings per
+      // build, which is noise that hides real errors.
+      const matOpts = {
         color: recolorable ? overrideColor : part.color,
         roughness: part.roughness ?? 0.7,
         metalness: part.metalness ?? 0,
-        emissive: part.emissive,
-        emissiveIntensity: part.emissiveIntensity,
-        transparent: part.transparent,
-        opacity: part.opacity,
-      });
+      };
+      if (part.emissive !== undefined) matOpts.emissive = part.emissive;
+      if (part.emissiveIntensity !== undefined) matOpts.emissiveIntensity = part.emissiveIntensity;
+      if (part.transparent !== undefined) matOpts.transparent = part.transparent;
+      if (part.opacity !== undefined) matOpts.opacity = part.opacity;
+      const mat = stdMat(matOpts);
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(...(part.position || [0, 0, 0]));
       if (part.rotation) mesh.rotation.set(...part.rotation);
@@ -5056,9 +5105,32 @@ class Renderer3D {
     return settings;
   }
 
+  // On-screen controls drive movement through the SAME key set the keyboard uses,
+  // so there is exactly one movement implementation. Press-and-hold from a mouse,
+  // a finger, or a physical key all land in _keysDown and are integrated identically.
+  pressNavKey(key) {
+    if (typeof key === "string" && key) this._keysDown.add(key.toLowerCase());
+  }
+
+  releaseNavKey(key) {
+    if (typeof key === "string" && key) this._keysDown.delete(key.toLowerCase());
+  }
+
+  // Anything holding a key must be able to let go of everything at once —
+  // losing a pointerup off the edge of a button would otherwise stick a key down.
+  releaseAllNavKeys() {
+    this._keysDown.clear();
+  }
+
+  getNavigationMode() {
+    return this._navigationMode;
+  }
+
   setNavigationMode(mode) {
     if (this._navigationMode === mode) return;
     this._navigationMode = mode; // 'orbit' | 'walk' | 'drive' | 'fly'
+    // Never carry a held key across a mode change.
+    this._keysDown.clear();
 
     if (this.canvas && typeof this.canvas.focus === 'function') {
       try { this.canvas.focus(); } catch (_) {}
@@ -6103,32 +6175,41 @@ class Renderer3D {
       this._streetPos.x = Math.max(-220, Math.min(220, this._streetPos.x));
       this._streetPos.z = Math.max(-140, Math.min(22.0, this._streetPos.z)); // Seawall guard at z = 22.0!
 
+      // Follow the terrain. Heights here used to be absolute constants, so walking
+      // or driving toward the coastal cliffs or the alpine range went straight
+      // through the hillside and out into open air.
+      const groundY = terrainHeightAt(this._streetPos.x, this._streetPos.z);
+
       if (isDrive) {
         // Third-person vehicle chase camera
         if (this._vehicleGroup) {
-          this._vehicleGroup.position.set(this._streetPos.x, 0.25, this._streetPos.z);
+          this._vehicleGroup.position.set(this._streetPos.x, groundY + 0.25, this._streetPos.z);
           this._vehicleGroup.rotation.y = this._streetAngle - Math.PI / 2;
         }
         const camOffsetDist = 6.5;
         const camHeight = 2.4;
-        this.camera.position.set(
-          this._streetPos.x - moveFwdX * camOffsetDist,
-          camHeight,
-          this._streetPos.z - moveFwdZ * camOffsetDist
-        );
+        // The chase camera sits behind the car, which is over different ground.
+        const camX = this._streetPos.x - moveFwdX * camOffsetDist;
+        const camZ = this._streetPos.z - moveFwdZ * camOffsetDist;
+        const camGroundY = terrainHeightAt(camX, camZ);
+        this.camera.position.set(camX, Math.max(groundY, camGroundY) + camHeight, camZ);
+        const aheadX = this._streetPos.x + moveFwdX * 8.0;
+        const aheadZ = this._streetPos.z + moveFwdZ * 8.0;
         const lookTarget = new THREE.Vector3(
-          this._streetPos.x + moveFwdX * 8.0,
-          1.5 + this._streetPitch * 4.0,
-          this._streetPos.z + moveFwdZ * 8.0
+          aheadX,
+          terrainHeightAt(aheadX, aheadZ) + 1.5 + this._streetPitch * 4.0,
+          aheadZ
         );
         this.camera.lookAt(lookTarget);
       } else {
-        // First-person walking camera at human eye height (1.75m)
-        this.camera.position.set(this._streetPos.x, 1.75, this._streetPos.z);
+        // First-person walking camera at human eye height (1.75m above the ground)
+        this.camera.position.set(this._streetPos.x, groundY + 1.75, this._streetPos.z);
+        const aheadX = this._streetPos.x + moveFwdX * 6.0;
+        const aheadZ = this._streetPos.z + moveFwdZ * 6.0;
         const lookTarget = new THREE.Vector3(
-          this._streetPos.x + moveFwdX * 6.0,
-          1.75 + this._streetPitch * 4.0,
-          this._streetPos.z + moveFwdZ * 6.0
+          aheadX,
+          terrainHeightAt(aheadX, aheadZ) + 1.75 + this._streetPitch * 4.0,
+          aheadZ
         );
         this.camera.lookAt(lookTarget);
       }
@@ -6156,7 +6237,10 @@ class Renderer3D {
 
       this._streetPos.x += (fwdX * forwardInput - rightX * strafeInput) * flySpeed * dt;
       this._streetPos.z += (fwdZ * forwardInput - rightZ * strafeInput) * flySpeed * dt;
-      this._streetPos.y = Math.max(1.8, Math.min(280, (this._streetPos.y || 25) + vertInput * flySpeed * dt));
+      // Floor the drone against the actual terrain, not an absolute 1.8m -- over
+      // the cliffs or the alpine range an absolute floor is underground.
+      const flyFloor = terrainHeightAt(this._streetPos.x, this._streetPos.z) + 2.0;
+      this._streetPos.y = Math.max(flyFloor, Math.min(280, (this._streetPos.y || 25) + vertInput * flySpeed * dt));
 
       this.camera.position.set(this._streetPos.x, this._streetPos.y, this._streetPos.z);
       const lookTarget = new THREE.Vector3(
@@ -6298,6 +6382,22 @@ export class WorldRenderer {
 
   setNavigationMode(mode) {
     if (this._impl.setNavigationMode) this._impl.setNavigationMode(mode);
+  }
+
+  getNavigationMode() {
+    return this._impl.getNavigationMode ? this._impl.getNavigationMode() : "orbit";
+  }
+
+  pressNavKey(key) {
+    if (this._impl.pressNavKey) this._impl.pressNavKey(key);
+  }
+
+  releaseNavKey(key) {
+    if (this._impl.releaseNavKey) this._impl.releaseNavKey(key);
+  }
+
+  releaseAllNavKeys() {
+    if (this._impl.releaseAllNavKeys) this._impl.releaseAllNavKeys();
   }
 
   enablePickCenter(onDone) {
