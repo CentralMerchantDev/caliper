@@ -28,6 +28,7 @@ import {
   offsetPolygon, COAST, splinePolygon, BRIDGES, signedArea2, LANDMASSES,
 } from "../public/city-plan.js";
 import { WORLD_SCALE } from "../public/world-scale.js";
+import { findSite } from "../public/land-use.js";
 
 // PROBE COORDINATES SCALE. JUDGEMENTS DO NOT.
 //
@@ -646,4 +647,43 @@ test("ids are stable names, not float noise", () => {
     .map((p: any) => p.id);
   assert.equal(offenders.length, 0,
     `ids carry unrounded coordinates: ${offenders.join(", ")}`);
+});
+
+// =============================================================================
+// LANDMARKS STAND ON GROUND
+//
+// The stadium, the central station and the cathedral were placed at literal
+// coordinates. A literal cannot look wrong -- it is just a number, equally
+// plausible over a hill or over the harbour. So for the whole life of the build
+// the stadium stood at -7.0 m and the cathedral at -4.1 m: both in the water,
+// both shipped, neither noticed.
+//
+// It survived the world being rescaled, too, because a wrong coordinate scales
+// to a proportionally wrong coordinate. Nothing about scaling exposes it. Only
+// asking the ground does.
+//
+// findSite() now requests a site instead of asserting one, and this test holds
+// the property that made the request necessary.
+// =============================================================================
+test("every landmark stands on ground that can carry it", () => {
+  const WANTED: [string, number, number, number, number][] = [
+    ["stadium", 1700, 250, 320, 250],
+    ["central station", -420, 60, 240, 120],
+    ["cathedral", -100, -40, 120, 60],
+  ];
+  for (const [name, dx, dz, w, d] of WANTED) {
+    const site = findSite(heightAt, { x: dx * WORLD_SCALE, z: dz * WORLD_SCALE }, { w, d });
+    assert.ok(site, `${name}: no legal site found -- the renderer builds nothing, which is correct, but the world has nowhere for it`);
+    // The whole footprint, not just the centre: a stadium with two stands on the
+    // beach passes a centre test.
+    const hw = w / 2, hd = d / 2;
+    for (const [x, z] of [
+      [site!.x, site!.z],
+      [site!.x - hw, site!.z - hd], [site!.x + hw, site!.z - hd],
+      [site!.x - hw, site!.z + hd], [site!.x + hw, site!.z + hd],
+    ]) {
+      assert.ok(heightAt(x, z) > 0.6,
+        `${name} footprint corner (${x.toFixed(0)}, ${z.toFixed(0)}) is at ${heightAt(x, z).toFixed(1)} m -- in the water`);
+    }
+  }
 });

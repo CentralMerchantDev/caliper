@@ -166,3 +166,71 @@ export function makeDemand({ cores = [], gateways = [], distToWater = null, nois
     return d < 0 ? 0 : d > 1 ? 1 : d;
   };
 }
+
+// =============================================================================
+// ASK THE LAND WHERE SOMETHING GOES
+//
+// Landmarks were placed at literal coordinates: the stadium at (1700, 250), the
+// cathedral at (-100, -40). A literal cannot be wrong in an obvious way -- it is
+// just a number, and it looks equally plausible whether the ground under it is a
+// hill or the harbour. So nobody noticed that in the shipped world the stadium
+// stood at -7.0 m and the cathedral at -4.1 m. Both were, and had always been,
+// in the water.
+//
+// That is not a scaling bug -- it survived the scaling perfectly, because a
+// wrong coordinate scales to a proportionally wrong coordinate. It is the cost
+// of asserting a position instead of requesting one.
+//
+// findSite() takes where you WANT a thing and returns the nearest place it can
+// actually go, searching outward in rings. It reports how far it had to move, so
+// a caller can tell the difference between "as drawn" and "nudged 300 m", and it
+// returns null rather than a guess when there is nowhere suitable -- which the
+// caller must then handle, instead of building over water.
+// =============================================================================
+
+/**
+ * The nearest point to `want` where a footprint of `w` x `d` metres is entirely
+ * on ground that satisfies `use`.
+ *
+ * @returns {{x, z, moved, h} | null}
+ */
+export function findSite(heightAt, want, opts = {}) {
+  const {
+    w = 0, d = 0,
+    radius = 1500,
+    step = 40,
+    use = USE.BUILDABLE,
+    reserved = null,
+  } = opts;
+
+  const fits = (cx, cz) => {
+    // Corners AND centre. A centre-only test is how a stadium ends up with two
+    // stands on the beach; corner-only misses a creek up the middle.
+    const hw = w / 2, hd = d / 2;
+    const pts = w || d
+      ? [[cx, cz], [cx - hw, cz - hd], [cx + hw, cz - hd], [cx - hw, cz + hd], [cx + hw, cz + hd],
+         [cx, cz - hd], [cx, cz + hd], [cx - hw, cz], [cx + hw, cz]]
+      : [[cx, cz]];
+    for (const [x, z] of pts) {
+      if (classifyAt(heightAt, x, z, reserved).use !== use) return false;
+    }
+    return true;
+  };
+
+  if (fits(want.x, want.z)) {
+    return { x: want.x, z: want.z, moved: 0, h: heightAt(want.x, want.z) };
+  }
+
+  // Ring search outward, so the first hit is the closest legal site rather than
+  // whichever direction happened to be tested first.
+  for (let r = step; r <= radius; r += step) {
+    const n = Math.max(8, Math.round((2 * Math.PI * r) / step));
+    for (let i = 0; i < n; i++) {
+      const a = (2 * Math.PI * i) / n;
+      const x = want.x + Math.cos(a) * r;
+      const z = want.z + Math.sin(a) * r;
+      if (fits(x, z)) return { x, z, moved: r, h: heightAt(x, z) };
+    }
+  }
+  return null;   // nowhere within radius: the caller must not build
+}

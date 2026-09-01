@@ -23,6 +23,7 @@ import { assessFootprint } from "./footprint.js";
 // `sm` is already used as a local variable in this file (a THREE.Mesh), so the
 // world-scale helper is imported under a name that cannot be shadowed.
 import { sm as wm } from "./world-scale.js";
+import { findSite } from "./land-use.js";
 import { createCollector, emitBuilding, HEIGHT, WALLS, ROOFS, rnd, pick } from "./buildings.js";
 
 // -----------------------------------------------------------------------------
@@ -1699,8 +1700,11 @@ function buildProps(api) {
     const conc = M(0xdcd6c8, 0.92), steel = M(0xc8ccd0, 0.5, 0.4);
 
     // --- the stadium, on the north-east of the island ---
-    {
-      const sx = wm(1700), sz = wm(250), gy = Math.max(2, heightAt(sx, sz));
+    stadium: {
+      const _st = findSite(heightAt, { x: wm(1700), z: wm(250) }, { w: 320, d: 250 });
+      // No legal site within range: build nothing rather than build it in the sea.
+      if (!_st) break stadium;
+      const sx = _st.x, sz = _st.z, gy = Math.max(2, heightAt(sx, sz));
       const RX = 150, RZ = 118, N = 28;
       for (let i = 0; i < N; i++) {
         const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
@@ -1718,8 +1722,11 @@ function buildProps(api) {
     }
 
     // --- the central station: a train shed with a clock tower ---
-    {
-      const sx = wm(-420), sz = wm(60), gy = Math.max(2, heightAt(sx, sz));
+    station: {
+      const _sn = findSite(heightAt, { x: wm(-420), z: wm(60) }, { w: 240, d: 120 });
+      // No legal site within range: build nothing rather than build it in the sea.
+      if (!_sn) break station;
+      const sx = _sn.x, sz = _sn.z, gy = Math.max(2, heightAt(sx, sz));
       const shed = new THREE.Mesh(new THREE.CylinderGeometry(46, 46, 210, 14, 1, false, 0, Math.PI), steel);
       shed.rotation.z = Math.PI / 2; shed.position.set(sx, gy + 4, sz);
       shed.castShadow = true; scene.add(shed);
@@ -1734,8 +1741,11 @@ function buildProps(api) {
     }
 
     // --- a cathedral on the civic square ---
-    {
-      const sx = wm(-100), sz = wm(-40), gy = Math.max(2, heightAt(sx, sz));
+    cathedral: {
+      const _cd = findSite(heightAt, { x: wm(-100), z: wm(-40) }, { w: 120, d: 60 });
+      // No legal site within range: build nothing rather than build it in the sea.
+      if (!_cd) break cathedral;
+      const sx = _cd.x, sz = _cd.z, gy = Math.max(2, heightAt(sx, sz));
       const nave = new THREE.Mesh(RB(34, 30, 110, 0.6), M(0xeee6d2, 0.9));
       nave.position.set(sx, gy + 15, sz); nave.castShadow = true; scene.add(nave);
       const roof = new THREE.Mesh(new THREE.CylinderGeometry(19, 19, 112, 10, 1, false, 0, Math.PI), M(0x5e7d6c, 0.85));
