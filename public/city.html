@@ -163,6 +163,24 @@ function apply() {
     target.y + Math.sin(pitch) * dist,
     target.z + Math.cos(az) * Math.cos(pitch) * dist
   );
+
+  // NEVER PUT THE CAMERA UNDERGROUND.
+  //
+  // The view presets set an absolute target height, which quietly assumes the
+  // ground is near sea level. Most of this city is not: downtown sits on a
+  // shelf about 44 m up. "Street level" targeted y = 12 there, so the camera
+  // ended up roughly 17 m INSIDE the hill, looking out through the terrain at
+  // open water -- the city apparently missing entirely. "The promenade" had
+  // 2.8 m of clearance and was one tweak from the same.
+  //
+  // Clamping here rather than correcting the two numbers, because the numbers
+  // were never the bug: any preset over raised ground, and any camera the user
+  // drives into a slope, has the same problem. Sampling the real terrain under
+  // the camera is the thing that cannot go stale.
+  const groundHere = W.heightAt(camera.position.x, camera.position.z);
+  const floor = Math.max(groundHere, 0) + 2.5;      // 2.5 m: roughly eye height
+  if (camera.position.y < floor) camera.position.y = floor;
+
   camera.lookAt(target);
   // The shadow frustum follows the view, so the 5 km it can cover is always the
   // 5 km you are looking at instead of always being over downtown.
@@ -230,7 +248,22 @@ const VIEWS = {
   "— ELSEWHERE —": null,
   "Farm belt":        () => set(-16000, 0, -6000, 6500, 0.25, 0.30),
 };
-function set(tx, ty, tz, d, a, p) { target.set(tx, ty, tz); dist = d; az = a; pitch = p; apply(); }
+// THE PRESETS ARE GROUND-RELATIVE.
+//
+// `ty` was an absolute world height, which assumes the ground is near sea
+// level. Most of this city is not -- downtown sits on a shelf about 44 m up --
+// so "Street level", written as ty = 12, aimed the camera 30 m INTO the hill
+// and showed open water where the city should be.
+//
+// Every ty in the table below is plainly an eye height or a building height
+// (12, 16, 18, 30, 60), i.e. it was always meant to be relative to the ground.
+// Making that true is the fix; the alternative was hand-correcting two numbers
+// and waiting for the third preset over raised ground to break.
+function set(tx, ty, tz, d, a, p) {
+  target.set(tx, ty + Math.max(0, W.heightAt(tx, tz)), tz);
+  dist = d; az = a; pitch = p;
+  apply();
+}
 
 const vb = document.getElementById("views");
 for (const [n, f] of Object.entries(VIEWS)) {

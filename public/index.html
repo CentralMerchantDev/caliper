@@ -1252,7 +1252,7 @@ body.inspecting-mobile #nav-compass-pad {
         </div>
       </div>
       <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#d1fae5">
-        <strong>Continuous Verification:</strong> 350 Node tests and 7 Cloudflare Worker integration tests, run against this repository. Counts are read from the test runner at the moment this line is edited, not from memory &mdash; and the last two audits both caught this number going stale, which is why it says so.
+        <strong>Continuous Verification:</strong> 344 Node tests and 9 Cloudflare Worker integration tests, run against this repository. Counts are read from the test runner at the moment this line is edited, not from memory &mdash; and the last two audits both caught this number going stale, which is why it says so.
       </div>
       <div id="budget-summary-box" class="mono" style="font-size:11.5px;color:var(--text-muted);padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px">
         Loading budget invariants…
@@ -3008,6 +3008,30 @@ function connect(url) {
     const b = stageBlock(log, 's-plan-gate', '⏸ Gate 1 — a human decides');
     const willBuild = d?.plan?.willBuild ?? 'Plan synthesized.';
     const criteria = Array.isArray(d?.plan?.criteria) ? d.plan.criteria.map(c => esc(c?.name || 'Clearance')).join(', ') : 'Spatial clearance';
+
+    // WHICH OF THESE CRITERIA COULD ACTUALLY FAIL?
+    //
+    // The pipeline now runs the plan's own acceptance criteria against the
+    // world UNCHANGED before parking here. Anything that passes was already
+    // true, so it cannot tell a change that worked from one that did nothing --
+    // and it would still have been counted in the "criteria 5/5" the run
+    // reports on the way to shipping. Measured at 33% of criteria on historical
+    // runs, which is a lot of yes that wasn't quite true.
+    //
+    // Shown, not acted on: a vacuous criterion makes a plan weak, not unsafe,
+    // and the person about to approve it is the right one to decide whether
+    // that matters.
+    const vacuous = Array.isArray(d?.vacuousCriteria) ? d.vacuousCriteria.filter(v => v && v.vacuous) : [];
+    const vacuousHtml = vacuous.length === 0 ? '' : `
+      <div style="margin:0 0 8px;padding:8px 10px;background:rgba(245,158,11,0.10);border-left:3px solid var(--accent);border-radius:0 6px 6px 0">
+        <strong style="color:var(--accent);font-size:11.5px">${vacuous.length} of ${d?.plan?.criteria?.length ?? '?'} acceptance criteria are already true</strong>
+        <p style="margin:4px 0 0;font-size:11px;color:#cbd5e1;line-height:1.5">
+          These would pass even if the change did nothing, so they cannot prove it worked:
+        </p>
+        <ul style="margin:4px 0 0;padding-left:16px;font-size:11px;color:#94a3b8;line-height:1.5">
+          ${vacuous.map(v => `<li>${esc(v.description)}</li>`).join('')}
+        </ul>
+      </div>`;
     
     // GROUNDING, SHOWN.
     //
@@ -3060,6 +3084,7 @@ function connect(url) {
     b.innerHTML = `
       <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
         ${groundingHtml}
+        ${vacuousHtml}
         ${!premisesHold ? `<p style="margin:0 0 6px;font-size:11px;color:#fbbf24">Auto-approve is held back for this one — it needs a person. Approving means you are overruling the grounding check above, deliberately.</p>` : ''}
         <p style="margin:0 0 6px"><strong>Will Build:</strong> ${esc(willBuild)}</p>
         <p style="margin:0 0 6px"><strong>Criteria:</strong> ${criteria}</p>

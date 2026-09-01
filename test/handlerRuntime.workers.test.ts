@@ -80,15 +80,17 @@ describe("request handlers run in workerd", () => {
     });
   });
 
-  it("returns a structured 429 envelope before starting a rate-limited run", async () => {
-    // This seeded the KV key and expected a 429 -- but SPEND_COUNTER is bound
-    // in the pool config, so claimPipelineRun takes the Durable Object branch
-    // and returns before KV is ever read. The test was exercising the dev-only
-    // fallback and the production limiter had no coverage at all.
+  it("refuses a CONCURRENT run once the in-flight limit is reached", async () => {
+    // Three runs opened and never completed -- their SSE streams stay open and
+    // hold their leases -- so the fourth is refused by the CONCURRENCY limiter.
     //
-    // Exhaust it the way a visitor does instead: the limit is 3, so make 3
-    // runs and check the 4th is refused.
-    const ip = "workerd-rate-limit-test";
+    // The first version of this test made these three requests and then
+    // asserted the per-IP DAILY message, which is a different limiter. It
+    // failed on the real runtime with "3 pipeline runs are already in flight
+    // (max 3)" -- the right refusal, the wrong assertion. Worth keeping as two
+    // tests, because they are two guarantees and a run that trips one should
+    // not be able to masquerade as the other.
+    const ip = "workerd-concurrency-test";
     for (let i = 0; i < 3; i++) {
       await SELF.fetch("https://example.test/change-run?request=add%20a%20lamp", { headers: { "cf-connecting-ip": ip } });
     }
@@ -96,7 +98,53 @@ describe("request handlers run in workerd", () => {
     expect(response.status).toBe(429);
     const body = await response.json<{ error: string; reason: string }>();
     expect(body.error).toBe("rate_limit_exceeded");
+    expect(body.reason).toMatch(/already in flight/);
+  });
+
+  it("refuses a 4th run from the same address on the same day", async () => {
+    // The PER-IP DAILY limiter, tested on its own. Claim three runs straight
+    // against the Durable Object -- the same store and key claimPipelineRun
+    // uses in production -- so no leases are held and the concurrency limiter
+    // cannot fire first and mask this.
+    //
+    // The original version of this test seeded a KV key instead. SPEND_COUNTER
+    // is bound in the pool config, so claimPipelineRun returns from the DO
+    // branch before KV is ever read: it was exercising the dev-only fallback,
+    // and the production limiter had no coverage at all.
+    const ip = "workerd-daily-limit-test";
+    const day = new Date().toISOString().slice(0, 10);
+    const stub = env.SPEND_COUNTER.get(env.SPEND_COUNTER.idFromName("global"));
+    for (let i = 0; i < 3; i++) {
+      await stub.fetch("https://do/claim-run", { method: "POST", body: JSON.stringify({ ip, day, limit: 3 }) });
+    }
+    const response = await SELF.fetch("https://example.test/change-run?request=add%20a%20lamp", { headers: { "cf-connecting-ip": ip } });
+    expect(response.status).toBe(429);
+    const body = await response.json<{ error: string; reason: string }>();
+    expect(body.error).toBe("rate_limit_exceeded");
     expect(body.reason).toMatch(/limit of 3 live pipeline runs/);
+  });
+
+  it("a run refused for concurrency does not cost the visitor one of their three", async () => {
+    // The claim is taken before the lease, so a concurrency refusal used to
+    // spend one of the visitor's daily runs and then tell them about a daily
+    // limit that was not the reason. It is refunded now; this checks the
+    // counter is where it started.
+    const ip = "workerd-refund-test";
+    const day = new Date().toISOString().slice(0, 10);
+    const stub = env.SPEND_COUNTER.get(env.SPEND_COUNTER.idFromName("global"));
+    const used = async () => {
+      const r = await stub.fetch("https://do/runs-used", { method: "POST", body: JSON.stringify({ ip, day }) });
+      return (await r.json<{ used: number }>()).used;
+    };
+    // fill the concurrency slots from OTHER addresses so this one is refused
+    // for concurrency rather than for its own daily count
+    for (let i = 0; i < 3; i++) {
+      await SELF.fetch("https://example.test/change-run?request=add%20a%20lamp", { headers: { "cf-connecting-ip": `filler-${i}` } });
+    }
+    const before = await used();
+    const response = await SELF.fetch("https://example.test/change-run?request=add%20a%20lamp", { headers: { "cf-connecting-ip": ip } });
+    expect(response.status).toBe(429);
+    expect(await used()).toBe(before);
   });
 
   it("rejects a missing override payload with a precise validation error", () => {

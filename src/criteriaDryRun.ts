@@ -1,150 +1,89 @@
-// NOT YET WIRED INTO THE PIPELINE -- stated here rather than left for a reader
-// to discover, because the header below reads like a description of something
-// that runs, and it isn't. The only importer is its own test.
+// =============================================================================
+// A CRITERION THAT CANNOT FAIL IS NOT EVIDENCE
 //
-// Wiring it needs executable BASELINE functions (see dryRunCriterion's
-// signature), which means loading the baseline into a sandbox -- one more
-// Dynamic Worker invocation per run, and a real change to groundAndPlan rather
-// than a one-line call. Until that happens, the consequence is honest and worth
-// knowing: a plan can propose criteria that are already true of the unmodified
-// world, they pass, and the run reports "criteria 5/5" for five checks that
-// could not have failed. `minCount` is now rejected below 1 in criteria.ts,
-// which removes the cheapest version of that, not the general case.
+// The verification stage reports "criteria 5/5" and the run ships. But a plan
+// proposes its own criteria, and nothing checked whether they could ever have
+// come out any other way. Measured against real historical runs during this
+// project's diagnostic work: 33% of criteria under the old schema were vacuous
+// -- already true of the unmodified world, testing nothing.
 //
-// The criteria dry-run validator: executed and measured against real
-// historical data during this project's diagnostic work (33% of criteria
-// under the OLD schema were vacuous -- already true on baseline, testing
-// nothing), but never actually committed to the codebase before tonight.
-// BUILD-WORLD.md says "keep" it; grounding against the actual repo found
-// it didn't exist yet to keep -- so this is that validator, built for
-// real, adapted to the new restricted criterion kinds (src/criteria.ts).
+// So "5/5" could mean five real assertions about new behaviour, or five checks
+// that would have passed if the model had done nothing at all, and the ledger
+// said the same either way. For a system whose whole claim is that it only says
+// yes when yes is true, that is the wrong thing not to know.
 //
-// What "vacuous" means changed with the schema. Under the old numeric
-// criteria, vacuous meant "the exact computed value already matches on
-// baseline." Under existence/structural criteria, it means the asserted
-// condition (a field exists, a type holds, a count is met) is ALREADY true
-// on the unmodified baseline -- so the criterion can never distinguish
-// "the change worked" from "nothing happened at all."
-import { ENTITY_TYPES, objectTypeKeysFor } from "./worldStructure";
+// HOW IT WORKS, AND WHY THIS VERSION EXISTS
+//
+// The previous implementation took the baseline's functions as JavaScript
+// values and called them. That cannot run in a Worker -- the baseline lives in
+// a sandbox isolate and there is no eval to get it out of a source string --
+// which is why that module sat here for weeks, imported by nothing but its own
+// test, while the hole it was written to close stayed open. It is quarantined
+// in _TO-DELETE/criteria-dry-run-in-process-version/ with the reasoning.
+//
+// This version asks the same question through the machinery that already
+// executes criteria in the sandbox: run them against the world UNCHANGED. A
+// criterion that passes when nothing has changed cannot distinguish "the change
+// worked" from "the change did nothing", so it is vacuous by definition -- no
+// new judgement, no second definition of "already true" to drift out of sync
+// with the first.
+//
+// Costs one sandbox probe per criterion. No model call, so no API spend.
+// =============================================================================
 import type { ProposedCriterion } from "./criteria";
+import type { ProbeRunner } from "./criteriaExecution";
+import { evaluateCriteria } from "./criteriaExecution";
 
-export type DryRunVerdict = { verdict: "valid"; reason: string } | { verdict: "invalid"; reason: string };
-
-function getField(obj: unknown, path: string): { present: boolean; value: unknown } {
-  let cur: unknown = obj;
-  for (const key of path.split(".")) {
-    if (cur === null || typeof cur !== "object") return { present: false, value: undefined };
-    const rec = cur as Record<string, unknown>;
-    if (!(key in rec)) return { present: false, value: undefined };
-    cur = rec[key];
-  }
-  return { present: cur !== undefined, value: cur };
-}
-
-function typeMatches(value: unknown, expected: string): boolean {
-  if (expected === "array") return Array.isArray(value);
-  if (expected === "object") return value !== null && typeof value === "object" && !Array.isArray(value);
-  return typeof value === expected;
-}
+export type CriterionVerdict = {
+  description: string;
+  /** True when the criterion already holds on the unmodified world. */
+  vacuous: boolean;
+  reason: string;
+};
 
 /**
- * Runs one criterion's EXISTENCE/STRUCTURAL condition against the baseline
- * source and classifies it. Baseline functions are passed in directly
- * (Record<string, Function>) -- callers get these from the sandbox or, for
- * local/dev use, a plain Node import of the baseline module (see
- * test/criteriaDryRun.test.ts for both).
+ * Which of these criteria are already true of the world as it stands?
+ *
+ * @param probeBaseline a runner bound to the CURRENT (unmodified) source
+ * @param baselineSource the same source, for the criterion kinds that read it
  */
-export function dryRunCriterion(criterion: ProposedCriterion, baselineFns: Record<string, (...args: unknown[]) => unknown>, candidateSource?: string): DryRunVerdict {
-  switch (criterion.kind) {
-    case "existence": {
-      const fn = baselineFns[criterion.fn];
-      if (typeof fn !== "function") {
-        // The function doesn't exist on baseline at all -- expected and
-        // fine when the plan is about to ADD it; that's what makes this a
-        // real assertion about new behaviour, not a defect. See
-        // criteria.ts's own note: unlike the old schema, this isn't
-        // rejected as malformed, because existence criteria exist
-        // specifically to describe things baseline doesn't have yet.
-        return { verdict: "valid", reason: `fn "${criterion.fn}" does not exist on baseline -- a real assertion about new behaviour` };
-      }
-      let result: unknown;
-      try {
-        result = fn(...criterion.args);
-      } catch (e) {
-        return { verdict: "invalid", reason: `malformed: throws when called against baseline (${String((e as Error)?.message ?? e)})` };
-      }
-      if (criterion.field === null) {
-        return { verdict: "invalid", reason: `fn "${criterion.fn}" already exists and is callable on baseline -- tests nothing` };
-      }
-      const { present } = getField(result, criterion.field);
-      return present
-        ? { verdict: "invalid", reason: `field "${criterion.field}" already present on baseline's result -- tests nothing` }
-        : { verdict: "valid", reason: `field "${criterion.field}" is absent on baseline -- a real assertion about new behaviour` };
-    }
-
-    case "structural": {
-      const fn = baselineFns[criterion.fn];
-      if (typeof fn !== "function") return { verdict: "valid", reason: `fn "${criterion.fn}" does not exist on baseline -- a real assertion about new behaviour` };
-      let result: unknown;
-      try {
-        result = fn(...criterion.args);
-      } catch (e) {
-        return { verdict: "invalid", reason: `malformed: throws when called against baseline (${String((e as Error)?.message ?? e)})` };
-      }
-      const { present, value } = getField(result, criterion.field);
-      if (criterion.check === "typeCheck") {
-        const holds = present && typeMatches(value, criterion.expectedType!);
-        return holds
-          ? { verdict: "invalid", reason: `field "${criterion.field}" already has type "${criterion.expectedType}" on baseline -- tests nothing` }
-          : { verdict: "valid", reason: `field "${criterion.field}" does not already have type "${criterion.expectedType}" on baseline -- a real assertion` };
-      }
-      // minCount
-      const count = Array.isArray(value) ? value.length : present ? 1 : 0;
-      const holds = count >= (criterion.minCount ?? 0);
-      return holds
-        ? { verdict: "invalid", reason: `field "${criterion.field}" already has count ${count} >= ${criterion.minCount} on baseline -- tests nothing` }
-        : { verdict: "valid", reason: `field "${criterion.field}" has count ${count} < ${criterion.minCount} on baseline -- a real assertion` };
-    }
-
-    case "non-regression": {
-      const fn = baselineFns[criterion.fn];
-      if (typeof fn !== "function") return { verdict: "invalid", reason: `malformed: fn "${criterion.fn}" does not exist on baseline -- a non-regression check needs baseline behaviour to compare against` };
-      try {
-        let actual: unknown = criterion.args[0];
-        const rest = criterion.args.slice(1);
-        const times = criterion.repeat && criterion.repeat > 0 ? criterion.repeat : 1;
-        for (let i = 0; i < times; i++) actual = fn(actual, ...rest);
-      } catch (e) {
-        return { verdict: "invalid", reason: `malformed: throws when called against baseline (${String((e as Error)?.message ?? e)})` };
-      }
-      return { verdict: "valid", reason: "runs cleanly against baseline -- its expected value will be computed by running baseline again at verification time, never model-supplied" };
-    }
-
-    case "render": {
-      // The comment below claimed this fix was applied here. It was not: this
-      // still used the frozen module-load OBJECT_TYPE_KEYS, so a dry run of a
-      // criterion naming a type the change had just ADDED would say it does not
-      // exist. Same defect as criteriaExecution's, one file over, with a
-      // comment asserting it had been handled.
-      // Same OBJECT_TYPE_KEYS fix as criteriaExecution.ts's render case --
-      // an outdoor type like "lampPost" used to read as "not known yet"
-      // here even when it already exists, since STATIONS alone never
-      // included outdoor props.
-      const known = [...objectTypeKeysFor(candidateSource), ...ENTITY_TYPES];
-      if (!known.includes(criterion.stationOrEntityKey)) {
-        // Not vacuous -- a render criterion about something that doesn't
-        // exist yet is exactly the expected shape for a plan adding a new
-        // station/entity. Flagged as informational, not rejected.
-        return { verdict: "valid", reason: `"${criterion.stationOrEntityKey}" is not a known station/entity yet -- a real assertion the renderer must support it after this change` };
-      }
-      return { verdict: "valid", reason: `"${criterion.stationOrEntityKey}" is an existing station/entity -- a legitimate render-regression check, not vacuous by construction` };
-    }
-  }
-}
-
-export function dryRunCriteria(
+export async function findVacuousCriteria(
   criteria: ProposedCriterion[],
-  baselineFns: Record<string, (...args: unknown[]) => unknown>,
-): { criterion: ProposedCriterion; verdict: DryRunVerdict }[] {
-  return criteria.map((criterion) => ({ criterion, verdict: dryRunCriterion(criterion, baselineFns) }));
+  probeBaseline: ProbeRunner,
+  baselineSource: string,
+): Promise<CriterionVerdict[]> {
+  if (criteria.length === 0) return [];
+
+  // Both probes are the baseline ON PURPOSE. evaluateCriteria's job is "does
+  // the candidate satisfy this?", so handing it the unmodified world as the
+  // candidate asks "does the world ALREADY satisfy this?" -- which is exactly
+  // the question, answered by the code that will later grade the real thing.
+  const results = await evaluateCriteria(criteria, probeBaseline, probeBaseline, baselineSource);
+
+  return criteria.map((criterion, i) => {
+    const r = results[i];
+    // An ERROR on the baseline is not vacuity. A criterion naming a function
+    // the change is about to ADD throws here, and that is the healthiest thing
+    // a criterion can do -- it is a real assertion about behaviour that does
+    // not exist yet. Only a PASS means "this was already true".
+    if (!r) return { description: criterion.description, vacuous: false, reason: "no verdict returned for this criterion" };
+    if (r.error) {
+      return {
+        description: criterion.description,
+        vacuous: false,
+        reason: `does not hold on the current world (${String(r.error).slice(0, 120)}) -- a real assertion about new behaviour`,
+      };
+    }
+    return r.pass
+      ? {
+          description: criterion.description,
+          vacuous: true,
+          reason: "already true of the world as it stands -- it cannot tell a change that worked from one that did nothing",
+        }
+      : {
+          description: criterion.description,
+          vacuous: false,
+          reason: "does not hold on the current world -- a real assertion about new behaviour",
+        };
+  });
 }

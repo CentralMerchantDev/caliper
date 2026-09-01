@@ -6,6 +6,7 @@ import { SIM_REGRESSION_SUITE } from "./simRegression";
 import { SIM_BASELINE_SOURCE } from "./simBaseline";
 import type { ProposedCriterion } from "./criteria";
 import { evaluateCriteria, type ProbeRunner } from "./criteriaExecution";
+import { findVacuousCriteria, type CriterionVerdict } from "./criteriaDryRun";
 import { worldIntegrityChecks } from "./worldEdit";
 import { groundRequest, formatGroundingForPlan, type GroundingResult } from "./grounding";
 import {
@@ -68,7 +69,7 @@ export type ChangeEvent =
   | { type: "planned"; plan: ChangePlan; model: string; inputTokens: number; outputTokens: number; costUsd: number; wallTimeMs: number }
   | { type: "question"; runId: string; question: string }
   | { type: "answered"; answer: string }
-  | { type: "plan-gate"; runId: string; plan: ChangePlan; grounding: GroundingResult; costEstimateUsd: number; budgetRemainingUsd: number }
+  | { type: "plan-gate"; runId: string; plan: ChangePlan; grounding: GroundingResult; costEstimateUsd: number; budgetRemainingUsd: number; vacuousCriteria: CriterionVerdict[] }
   | { type: "plan-gate-decided"; decision: "approve" | "reject" }
   | { type: "plan-gate-replied"; reply: string }
   | { type: "implementing" }
@@ -856,7 +857,30 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       onEvent({ type: "ledger", ledger });
       return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings: [], ledger });
     }
-    onEvent({ type: "plan-gate", runId, plan, grounding, costEstimateUsd: budget.spent, budgetRemainingUsd: Math.max(0, budget.ceilingUsd - budget.spent) });
+    // WHICH OF THESE CRITERIA COULD ACTUALLY FAIL?
+    //
+    // Run the plan's own acceptance criteria against the world UNCHANGED.
+    // Anything that passes here is vacuous: it was already true, so it cannot
+    // tell a change that worked from one that did nothing -- and it would still
+    // have been counted in the "criteria 5/5" the run reports on the way to
+    // shipping. Measured at 33% of criteria on historical runs.
+    //
+    // Surfaced at the gate rather than used to auto-reject, deliberately. A
+    // vacuous criterion makes a plan WEAK, not unsafe, and the person approving
+    // it is the right one to decide whether it is worth running. Telling them
+    // is the point; deciding for them is not.
+    //
+    // Costs one sandbox probe per criterion and no model call. If the sandbox
+    // is unavailable it reports nothing rather than blocking -- not knowing is
+    // not a reason to refuse a plan a human is about to read anyway.
+    let vacuousCriteria: CriterionVerdict[] = [];
+    try {
+      const probeBaseline = makeProbeRunner(env, currentSourceAtStart, `change-${runId}-dryrun`);
+      vacuousCriteria = await findVacuousCriteria(plan.criteria, probeBaseline, currentSourceAtStart);
+    } catch (e) {
+      console.warn("criteria dry run unavailable:", (e as Error)?.message ?? e);
+    }
+    onEvent({ type: "plan-gate", runId, plan, grounding, costEstimateUsd: budget.spent, budgetRemainingUsd: Math.max(0, budget.ceilingUsd - budget.spent), vacuousCriteria });
     const state: ChangeState = { runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, planGateReplyCount, runStartedAt, stage: "awaiting-plan-decision", plan, grounding };
     await saveState(env.SPEND_KV, state);
     onEvent({ type: "halted", runId, waitingOn: "plan-decision" });
