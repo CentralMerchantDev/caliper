@@ -19,6 +19,10 @@ import {
   generateWorld, generateCityPlan, landmassPolygons, offsetPolygon,
 } from "./city-plan.js";
 import { LandField, makeHeightAt, groundColor, fbm, cliffiness, SNOW_LINE, TREE_LINE, WATERWAYS, waterwaySurface } from "./terrain.js";
+import { assessFootprint } from "./footprint.js";
+// `sm` is already used as a local variable in this file (a THREE.Mesh), so the
+// world-scale helper is imported under a name that cannot be shadowed.
+import { sm as wm } from "./world-scale.js";
 import { createCollector, emitBuilding, HEIGHT, WALLS, ROOFS, rnd, pick } from "./buildings.js";
 
 // -----------------------------------------------------------------------------
@@ -50,9 +54,9 @@ export const LOOK = {
   // sat on the 200 m grid, where a cliff is narrower than one cell, so they came
   // out as flat plateaux. 50 m over 40 x 14 km costs about the same as 40 m over
   // the old box and resolves every peninsula.
-  coreX: 20000, coreZ0: -9000, coreZ1: 5000,
-  coreStep: 50,
-  outerStep: 250,
+  coreX: wm(20000), coreZ0: wm(-9000), coreZ1: wm(5000),
+  coreStep: wm(50),
+  outerStep: wm(250),
   seaLevel: 0,
 };
 
@@ -317,7 +321,7 @@ export function buildWorld(THREE, renderer, scene) {
   sun.shadow.mapSize.set(4096, 4096);
   sun.shadow.bias = -0.0006;
   sun.shadow.normalBias = 1.6;
-  const SH = 2600;
+  const SH = wm(2600);
   Object.assign(sun.shadow.camera, { left: -SH, right: SH, top: SH, bottom: -SH, near: 100, far: 16000 });
   sun.shadow.camera.updateProjectionMatrix();
   scene.add(sun, sun.target);
@@ -434,7 +438,7 @@ export function buildWorld(THREE, renderer, scene) {
   const hole = { x0: -LOOK.coreX, x1: LOOK.coreX, z0: LOOK.coreZ0, z1: LOOK.coreZ1 };
   let verts = 0;
   if (!SKIP.has("terrain")) {
-    verts = terrainMesh(-30000, 30000, -33000, 10000, LOOK.outerStep, hole, 0, false);
+    verts = terrainMesh(wm(-30000), wm(30000), wm(-33000), wm(10000), LOOK.outerStep, hole, 0, false);
     // The skirt only has to be as deep as the height difference a resolution change
     // can leave at the seam, which is metres, not hundreds. At 240 m it was a dark
     // wall standing in the water at the edge of the modelled core, clearly visible
@@ -594,7 +598,7 @@ export function buildWorld(THREE, renderer, scene) {
     const allRoads = [...world.roads];
     for (const r of allRoads) {
       const spec = ROADS[r.class]; if (!spec) continue;
-      const core = Math.abs(r.at) < 20000;
+      const core = Math.abs(r.at) < wm(20000);
       ribbon(r, spec.row / 2 - spec.footway, road, 0.9);
       if (spec.footway > 0) {
         ribbon(r, spec.row / 2, walk, 0.62);
@@ -632,7 +636,8 @@ export function buildWorld(THREE, renderer, scene) {
   const coll = createCollector();
   if (!SKIP.has("buildings")) {
     const byClass = {};
-    let placed = 0;
+    let placed = 0, refused = 0;
+    const refusedWhy = {};
     for (const p of world.plots) {
       const cls = p.className;
       if (!HEIGHT[cls] || cls === "PARK") continue;
@@ -641,11 +646,18 @@ export function buildWorld(THREE, renderer, scene) {
       const cx = (p.buildable.xMin + p.buildable.xMax) / 2;
       const cz = (p.buildable.zMin + p.buildable.zMax) / 2;
 
-      const g = heightAt(cx, cz);
-      if (g < 0.6) continue;                              // plot fell in the water
-      const h0 = heightAt(p.xMin, p.zMin), h1 = heightAt(p.xMax, p.zMin);
-      const h2 = heightAt(p.xMin, p.zMax), h3 = heightAt(p.xMax, p.zMax);
-      const gRange = Math.max(h0, h1, h2, h3) - Math.min(h0, h1, h2, h3);
+      // ASK THE GROUND, ACROSS THE WHOLE FOOTPRINT.
+      //
+      // This used to be one centre sample for "am I in the water" and four PLOT
+      // corners for "how uneven is it" -- two different rectangles, blind to
+      // anything between the corners, and a water test that only asked about the
+      // middle of the building. See footprint.js for what each of those let
+      // through. Now the buildable envelope is sampled on a grid and the ground
+      // decides whether this is a slab, a plinth, a terrace, or nothing at all.
+      const foot = assessFootprint(heightAt, p.buildable);
+      if (foot.verdict === "refuse") { refused++; refusedWhy[foot.reason] = (refusedWhy[foot.reason] || 0) + 1; continue; }
+      const g = foot.base;
+      const gRange = foot.range;
 
       const s = SETT.find((q) => q.id === (p.settlement || "downtown"));
       let central = 1;
@@ -659,12 +671,16 @@ export function buildWorld(THREE, renderer, scene) {
       if (cap) h = Math.min(h, cap);
       if (h < 4) h = 4;
 
-      if (emitBuilding(coll, cls, p.id, cx, cz, bw, bd, h, g, gRange)) {
+      if (emitBuilding(coll, cls, p.id, cx, cz, bw, bd, h, g, gRange, foot)) {
         placed++; byClass[cls] = (byClass[cls] || 0) + 1;
       }
     }
     stats.buildings = placed;
     stats.byClass = byClass;
+    // Reported, not swallowed. A plot that could not carry a building is a fact
+    // about the world worth being able to see.
+    stats.refused = refused;
+    stats.refusedWhy = refusedWhy;
   }
   stats.buildings = stats.buildings || 0;
 
@@ -775,7 +791,7 @@ export function buildWorld(THREE, renderer, scene) {
     // gives contiguous woodland with genuinely empty fields, at the same tree
     // count -- so it costs nothing and stops reading as static.
     for (let i = 0; i < 26000; i++) {
-      const x = -21000 + rnd("fx" + i) * 42000, z = -23000 + rnd("fz" + i) * 20500;
+      const x = wm(-21000) + rnd("fx" + i) * wm(42000), z = wm(-23000) + rnd("fz" + i) * wm(20500);
       const h = heightAt(x, z);
       if (h < 3 || h > TREE_LINE) continue;
       if (settAt(x, z)) continue;
@@ -797,7 +813,7 @@ export function buildWorld(THREE, renderer, scene) {
     }
     // the barrier island and the keys: palms and scrub
     for (let i = 0; i < 3200; i++) {
-      const x = -8400 + rnd("bx" + i) * 17000, z = 1800 + rnd("bz" + i) * 1700;
+      const x = wm(-8400) + rnd("bx" + i) * wm(17000), z = wm(1800) + rnd("bz" + i) * wm(1700);
       const h = heightAt(x, z);
       if (h < 1.5) continue;
       if (settAt(x, z) && rnd("bk" + i) > 0.18) continue;
@@ -1032,8 +1048,8 @@ function buildProps(api) {
     const cc = [0xd94f3d, 0x2f7fb5, 0xe0a53f, 0x3f9e6a, 0xb04a8a, 0xe8e4dc];
     const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(12, 2.6, 2.6), new THREE.MeshStandardMaterial({ roughness: 0.72 }), 2200);
     const d = new THREE.Object3D(), c = new THREE.Color(); let n = 0;
-    for (let x = -6800; x < -3500 && n < 2200; x += 16)
-      for (let z = -3150; z < -2320 && n < 2200; z += 4) {
+    for (let x = wm(-6800); x < wm(-3500) && n < 2200; x += 16)
+      for (let z = wm(-3150); z < wm(-2320) && n < 2200; z += 4) {
         if (rnd("ct" + x + z) < 0.42) continue;
         const g = heightAt(x, z); if (g < 1) continue;
         const stack = 1 + Math.floor(rnd("cs" + x + z) * 4);
@@ -1053,9 +1069,9 @@ function buildProps(api) {
     // because the mainland coast has a bay at this end and the shoreline is
     // hundreds of metres further north here than the constant assumed. Walk
     // north until the ground comes up, then stand just inland of it.
-    for (let x = -6600; x < -3600; x += 400) {
+    for (let x = wm(-6600); x < wm(-3600); x += wm(400)) {
       let quayZ = null;
-      for (let z = -2000; z > -3400; z -= 20) if (heightAt(x, z) > 1.5) { quayZ = z - 40; break; }
+      for (let z = wm(-2000); z > wm(-3400); z -= 20) if (heightAt(x, z) > 1.5) { quayZ = z - 40; break; }
       if (quayZ === null) continue;
       const g = new THREE.Group(), gy = Math.max(2, heightAt(x, quayZ));
       for (const dx of [-24, 24]) for (const dz of [-17, 17]) {
@@ -1133,9 +1149,9 @@ function buildProps(api) {
   // calls rather than one per tie.
   // ---------------------------------------------------------------------------
   {
-    const RAIL_Z = -3900;
+    const RAIL_Z = wm(-3900);
     const pts = [];
-    for (let x = -17000; x <= 17000; x += 60) {
+    for (let x = wm(-17000); x <= wm(17000); x += 60) {
       // follow the ground, and skip anything the line could not be built on
       const h = heightAt(x, RAIL_Z);
       if (h < 2 || h > 240) { pts.push(null); continue; }
@@ -1166,7 +1182,7 @@ function buildProps(api) {
       scene.add(new THREE.Mesh(g, railM));
     }
     // a few trains
-    for (const [tx, cars] of [[-9000, 7], [1200, 9], [9800, 6]]) {
+    for (const [tx, cars] of [[wm(-9000), 7], [wm(1200), 9], [wm(9800), 6]]) {
       const gy = Math.max(3, heightAt(tx, RAIL_Z)) + 1.9;
       for (let c = 0; c < cars; c++) {
         const cx = tx + c * 24;
@@ -1186,7 +1202,7 @@ function buildProps(api) {
   // model.
   // ---------------------------------------------------------------------------
   {
-    const CX = -7600, CZ = -5600;
+    const CX = wm(-7600), CZ = wm(-5600);
     const fair = M(0x74a84a, 0.95), rough = M(0x5c8a3c, 0.97);
     const sand = M(0xe6d8a8, 0.95), water = M(0x2f7d99, 0.2, 0.4);
     const gy = Math.max(3, heightAt(CX, CZ));
@@ -1220,37 +1236,42 @@ function buildProps(api) {
   // --- airport ---
   {
     const rwMat = M(0x3b4045, 0.95), mkMat = M(0xf2ead2, 0.8), apMat = M(0x555c63, 0.94);
-    const ay = Math.max(6, heightAt(12100, -4600));
-    for (const [rz, len] of [[-4300, 3400], [-4900, 2800]]) {
+    const ay = Math.max(6, heightAt(wm(12100), wm(-4600)));
+    // POSITION scales with the land; RUNWAY LENGTH does not. A 3,400 m runway is
+    // 3,400 m of tarmac because that is what a wide-body needs to get airborne --
+    // it is the clearest case in the world of a built dimension that has no
+    // business shrinking because the island did. Same reasoning as the golf
+    // course below: its centre moves, its fairways stay the length of fairways.
+    for (const [rz, len] of [[wm(-4300), 3400], [wm(-4900), 2800]]) {
       const r = new THREE.Mesh(new THREE.PlaneGeometry(len, 60), rwMat);
-      r.rotation.x = -Math.PI / 2; r.position.set(12100, ay + 0.5, rz); r.receiveShadow = true; scene.add(r);
+      r.rotation.x = -Math.PI / 2; r.position.set(wm(12100), ay + 0.5, rz); r.receiveShadow = true; scene.add(r);
       for (let x = -len / 2 + 90; x < len / 2 - 90; x += 140) {
         const m = new THREE.Mesh(new THREE.PlaneGeometry(70, 3), mkMat);
-        m.rotation.x = -Math.PI / 2; m.position.set(12100 + x, ay + 0.56, rz); scene.add(m);
+        m.rotation.x = -Math.PI / 2; m.position.set(wm(12100) + x, ay + 0.56, rz); scene.add(m);
       }
     }
     const taxi = new THREE.Mesh(new THREE.PlaneGeometry(3200, 26), apMat);
-    taxi.rotation.x = -Math.PI / 2; taxi.position.set(12100, ay + 0.48, -4600); scene.add(taxi);
+    taxi.rotation.x = -Math.PI / 2; taxi.position.set(wm(12100), ay + 0.48, wm(-4600)); scene.add(taxi);
     const apron = new THREE.Mesh(new THREE.PlaneGeometry(900, 420), apMat);
-    apron.rotation.x = -Math.PI / 2; apron.position.set(11400, ay + 0.46, -5150); apron.receiveShadow = true; scene.add(apron);
+    apron.rotation.x = -Math.PI / 2; apron.position.set(wm(11400), ay + 0.46, wm(-5150)); apron.receiveShadow = true; scene.add(apron);
     // the terminal: a pier with jetways, so the apron reads as an airport rather
     // than a car park with aeroplanes on it
     const term = new THREE.Mesh(RB(520, 16, 78, 1.4), M(0xe8ecef, 0.6, 0.15));
-    term.position.set(11400, ay + 8, -4880); term.castShadow = term.receiveShadow = true; scene.add(term);
+    term.position.set(wm(11400), ay + 8, wm(-4880)); term.castShadow = term.receiveShadow = true; scene.add(term);
     const troof = new THREE.Mesh(RB(540, 2.2, 92, 0.8), M(0xb9c2c8, 0.5, 0.3));
-    troof.position.set(11400, ay + 17, -4880); troof.castShadow = true; scene.add(troof);
+    troof.position.set(wm(11400), ay + 17, wm(-4880)); troof.castShadow = true; scene.add(troof);
     for (let i = 0; i < 6; i++) {
-      const jx = 11180 + i * 92;
+      const jx = wm(11180) + i * 92;
       const jet = new THREE.Mesh(RB(6, 4, 46, 0.6), M(0xd4d9dc, 0.6, 0.2));
       jet.position.set(jx, ay + 7, -4990); jet.castShadow = true; scene.add(jet);
     }
     // control tower
     const tw = new THREE.Mesh(new THREE.CylinderGeometry(5, 7, 42, 10), M(0xeae4d6, 0.8));
-    tw.position.set(11000, ay + 21, -4780); tw.castShadow = true; scene.add(tw);
+    tw.position.set(wm(11000), ay + 21, wm(-4780)); tw.castShadow = true; scene.add(tw);
     const cab = new THREE.Mesh(RB(15, 8, 15, 1.2), M(0x9fc4dd, 0.3, 0.4));
-    cab.position.set(11000, ay + 45, -4780); cab.castShadow = true; scene.add(cab);
+    cab.position.set(wm(11000), ay + 45, wm(-4780)); cab.castShadow = true; scene.add(cab);
     for (let i = 0; i < 16; i++) {
-      const x = 11000 + rnd("ap" + i) * 820, z = -5320 + Math.floor(rnd("aq" + i) * 3) * 110;
+      const x = wm(11000) + rnd("ap" + i) * wm(820), z = wm(-5320) + Math.floor(rnd("aq" + i) * 3) * 110;
       const body = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 42, 12), M(0xf8f8f6, 0.45, 0.25));
       body.rotation.z = Math.PI / 2; body.position.set(x, ay + 6, z); body.castShadow = true; scene.add(body);
       const wing = new THREE.Mesh(RB(9, 1.3, 40, 0.4), M(0xecebe7, 0.45, 0.25));
@@ -1264,7 +1285,8 @@ function buildProps(api) {
   {
     const crops = [0xc9b471, 0xa8bd66, 0xd9c98a, 0x8fae5c, 0xe0cf94, 0xbcae72, 0x9db85f];
     const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2);
-    const belts = [[-18400, -13600, -8600, -3600], [15400, 18600, -8400, -3400]];
+    const belts = [[-18400, -13600, -8600, -3600], [15400, 18600, -8400, -3400]]
+      .map((b) => b.map(wm));
     const cells = [];
     for (const [x0, x1, z0, z1] of belts)
       for (let x = x0; x < x1; x += 260) for (let z = z0; z < z1; z += 200) {
@@ -1391,7 +1413,8 @@ function buildProps(api) {
   // it from the camera maths instead would be a guess about projection, and
   // guessing about coordinates is what produced several wrong passes.
   if (typeof location !== "undefined" && new URLSearchParams(location.search).get("markers") === "1") {
-    const MARKS = [[-15000, 0], [15000, 0], [0, -8000], [0, 4000], [-15000, -8000], [15000, 4000]];
+    const MARKS = [[-15000, 0], [15000, 0], [0, -8000], [0, 4000], [-15000, -8000], [15000, 4000]]
+      .map(([x, z]) => [wm(x), wm(z)]);
     const mm = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
     for (const [mx, mz] of MARKS) {
       const pin = new THREE.Mesh(new THREE.BoxGeometry(420, 900, 420), mm);
@@ -1590,7 +1613,7 @@ function buildProps(api) {
     const hull = M(0xf7f4ec, 0.7), sail = M(0xffffff, 0.6);
     const cargo = M(0x2b4b63, 0.7);
     for (let i = 0; i < 320; i++) {
-      const x = -14000 + rnd("bx" + i) * 28000, z = -3200 + rnd("bz" + i) * 7200;
+      const x = wm(-14000) + rnd("bx" + i) * wm(28000), z = wm(-3200) + rnd("bz" + i) * wm(7200);
       if (heightAt(x, z) > -3) continue;
       const s = 0.8 + rnd("bs" + i) * 1.2;
       const b = new THREE.Mesh(RB(16 * s, 3 * s, 5 * s, 0.6), hull);
@@ -1601,7 +1624,7 @@ function buildProps(api) {
       }
     }
     for (let i = 0; i < 7; i++) {                       // container ships on the approach
-      const x = -9000 + rnd("sx" + i) * 12000, z = -2600 + rnd("sz" + i) * 900;
+      const x = wm(-9000) + rnd("sx" + i) * wm(12000), z = wm(-2600) + rnd("sz" + i) * wm(900);
       if (heightAt(x, z) > -6) continue;
       const b = new THREE.Mesh(RB(190, 16, 30, 1.5), cargo);
       b.position.set(x, 5, z); b.castShadow = true; scene.add(b);
@@ -1677,7 +1700,7 @@ function buildProps(api) {
 
     // --- the stadium, on the north-east of the island ---
     {
-      const sx = 1700, sz = 250, gy = Math.max(2, heightAt(sx, sz));
+      const sx = wm(1700), sz = wm(250), gy = Math.max(2, heightAt(sx, sz));
       const RX = 150, RZ = 118, N = 28;
       for (let i = 0; i < N; i++) {
         const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
@@ -1696,7 +1719,7 @@ function buildProps(api) {
 
     // --- the central station: a train shed with a clock tower ---
     {
-      const sx = -420, sz = 60, gy = Math.max(2, heightAt(sx, sz));
+      const sx = wm(-420), sz = wm(60), gy = Math.max(2, heightAt(sx, sz));
       const shed = new THREE.Mesh(new THREE.CylinderGeometry(46, 46, 210, 14, 1, false, 0, Math.PI), steel);
       shed.rotation.z = Math.PI / 2; shed.position.set(sx, gy + 4, sz);
       shed.castShadow = true; scene.add(shed);
@@ -1712,7 +1735,7 @@ function buildProps(api) {
 
     // --- a cathedral on the civic square ---
     {
-      const sx = -100, sz = -40, gy = Math.max(2, heightAt(sx, sz));
+      const sx = wm(-100), sz = wm(-40), gy = Math.max(2, heightAt(sx, sz));
       const nave = new THREE.Mesh(RB(34, 30, 110, 0.6), M(0xeee6d2, 0.9));
       nave.position.set(sx, gy + 15, sz); nave.castShadow = true; scene.add(nave);
       const roof = new THREE.Mesh(new THREE.CylinderGeometry(19, 19, 112, 10, 1, false, 0, Math.PI), M(0x5e7d6c, 0.85));
@@ -1729,7 +1752,7 @@ function buildProps(api) {
 
     // --- a broadcast mast on the hill behind the city ---
     {
-      const mx = -1400, mz = -6300, gy = heightAt(mx, mz);
+      const mx = wm(-1400), mz = wm(-6300), gy = heightAt(mx, mz);
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 6, 180, 6), steel);
       mast.position.set(mx, gy + 90, mz); mast.castShadow = true; scene.add(mast);
       const pod = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 14, 12), M(0xe8e2d4, 0.7));
@@ -1760,7 +1783,7 @@ function buildProps(api) {
     for (const p of world.plots) {
       if (p.className === "PARK" || !HEIGHT[p.className]) continue;
       const cx = (p.xMin + p.xMax) / 2, cz = (p.zMin + p.zMax) / 2;
-      if (Math.abs(cx) > 12000 || cz < -6500 || cz > 3600) continue;   // core only
+      if (Math.abs(cx) > wm(12000) || cz < wm(-6500) || cz > wm(3600)) continue;   // core only
       const h = heightAt(cx, cz); if (h < 0.8) continue;
       list.push([cx, h + 0.35, cz, (p.xMax - p.xMin) * 2.0, (p.zMax - p.zMin) * 2.0]);
     }
@@ -1795,7 +1818,7 @@ function buildProps(api) {
       const ew = r.axis === "ew";
       const from = Math.min(r.from, r.to), to = Math.max(r.from, r.to);
       // fewer cars on the far settlement grids, so the count stays sane
-      const near = Math.abs(r.at) < 14000;
+      const near = Math.abs(r.at) < wm(14000);
       // A car every 110 m is not traffic, it is punctuation: 25 vehicles spread
       // over the whole waterfront boulevard, which at any real viewing distance
       // reads as an empty road. City streets carry one every 15-25 m.
@@ -1848,7 +1871,7 @@ function buildProps(api) {
     const skin = [0xd94f3d, 0x2f7fb5, 0xf5f0e6, 0x3b4045, 0xe0a53f, 0x6f8f5c,
                   0xb85a8a, 0x4f7a6a, 0xe8e4dc, 0x8a6a4a];
     const list = [];
-    const CORE = (x, z) => Math.abs(x) < 6500 && z > -4200 && z < 3600;
+    const CORE = (x, z) => Math.abs(x) < wm(6500) && z > wm(-4200) && z < wm(3600);
     for (const r of world.roads) {
       const spec = ROADS[r.class]; if (!spec || spec.footway <= 0) continue;
       const ew = r.axis === "ew";

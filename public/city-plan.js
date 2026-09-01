@@ -943,12 +943,12 @@ export function generateRoads() {
   });
   // North-south avenues.
   for (let x = GRID.ORIGIN_X; x <= ISLAND.xMax; x += GRID.AVENUE_SPACING) {
-    roads.push({ id: `avenue-x${x}`, axis: "ns", class: "AVENUE", at: x, from: ISLAND.zMin, to: ISLAND.zMax });
+    roads.push({ id: `avenue-x${Math.round(x)}`, axis: "ns", class: "AVENUE", at: x, from: ISLAND.zMin, to: ISLAND.zMax });
   }
   // East-west streets, stopping short of the boulevard.
   const lastStreetZ = ISLAND.zMax - ROADS.BOULEVARD.row;
   for (let z = GRID.ORIGIN_Z; z < lastStreetZ; z += GRID.STREET_SPACING) {
-    roads.push({ id: `street-z${z}`, axis: "ew", class: "STREET", at: z, from: ISLAND.xMin, to: ISLAND.xMax });
+    roads.push({ id: `street-z${Math.round(z)}`, axis: "ew", class: "STREET", at: z, from: ISLAND.xMin, to: ISLAND.xMax });
   }
   return roads;
 }
@@ -978,7 +978,15 @@ export function generateBlocks() {
       const d = districtAt(cx, cz);
       if (!d) continue;
       blocks.push({
-        id: `block-${x}-${z}`, districtId: d.id,
+        // IDs ARE ADDRESSES, SO THEY ARE ROUNDED.
+        //
+        // These are built from coordinates, and coordinates stopped being whole
+        // numbers the moment the world was scaled -- producing ids like
+        // `block--83.79999999999995-1609.9`, which are ugly, fragile to any
+        // change in float arithmetic, and useless as something a person or a
+        // model can refer to. Blocks are hundreds of metres apart, so rounding
+        // to the metre cannot collide and gives a stable, readable name.
+        id: `block-${Math.round(x)}-${Math.round(z)}`, districtId: d.id,
         xMin, xMax, zMin, zMax,
         width: xMax - xMin, depth: zMax - zMin,
       });
@@ -1217,7 +1225,7 @@ export function generateRamps() {
       if (at < Math.min(f.from, f.to) + 120 || at > Math.max(f.from, f.to) - 120) continue;
       for (const side of [-1, 1]) {
         // the slip road, parallel to the freeway
-        out.push({ id:`ramp-${f.id}-${at}-${side > 0 ? "n" : "s"}`, axis:f.axis, class:"RAMP",
+        out.push({ id:`ramp-${f.id}-${Math.round(at)}-${side > 0 ? "n" : "s"}`, axis:f.axis, class:"RAMP",
                    at:f.at + side * OFF, from:at - LEN / 2, to:at + LEN / 2,
                    settlement:"freeway", ramp:true, rampFor:f.id });
         // The connector across to the surface street it feeds.
@@ -1228,7 +1236,7 @@ export function generateRamps() {
         // segments crossed no other road at all: a motorway with no way on or
         // off it. It now reaches far enough to actually meet the local grid,
         // which is both the fix and the point of a ramp.
-        out.push({ id:`ramp-${f.id}-${at}-${side > 0 ? "n" : "s"}-link`, axis:f.axis === "ew" ? "ns" : "ew", class:"RAMP",
+        out.push({ id:`ramp-${f.id}-${Math.round(at)}-${side > 0 ? "n" : "s"}-link`, axis:f.axis === "ew" ? "ns" : "ew", class:"RAMP",
                    at:at + LEN / 2, from:Math.min(f.at - side * 40, f.at + side * REACH), to:Math.max(f.at - side * 40, f.at + side * REACH),
                    settlement:"freeway", ramp:true, rampFor:f.id });
       }
@@ -1552,14 +1560,14 @@ export function generateSettlement(s, polyByLandmass, demandAt = null) {
   for (let x = b.xMin; x <= b.xMax; x += s.av, ai++) {
     const spacingUp = Math.max(1, Math.round(800 / s.av));       // ~800 m -> arterial
     const arterial = ai % spacingUp === 0;
-    roads.push({ id:`${s.id}-av${x}`, axis:"ns", class: arterial ? "BOULEVARD" : "AVENUE",
+    roads.push({ id:`${s.id}-av${Math.round(x)}`, axis:"ns", class: arterial ? "BOULEVARD" : "AVENUE",
                  at:x, from:b.zMin, to:b.zMax, settlement:s.id, arterial });
   }
   let si = 0;
   for (let z = b.zMin; z <= b.zMax; z += s.st, si++) {
     const spacingUp = Math.max(1, Math.round(800 / s.st));
     const arterial = si % spacingUp === 0;
-    roads.push({ id:`${s.id}-st${z}`, axis:"ew", class: arterial ? "AVENUE" : "STREET",
+    roads.push({ id:`${s.id}-st${Math.round(z)}`, axis:"ew", class: arterial ? "AVENUE" : "STREET",
                  at:z, from:b.xMin, to:b.xMax, settlement:s.id, arterial });
   }
   void nAv;
@@ -1578,7 +1586,7 @@ export function generateSettlement(s, polyByLandmass, demandAt = null) {
       if (s.exclude && xMax > s.exclude.xMin && xMin < s.exclude.xMax &&
           zMax > s.exclude.zMin && zMin < s.exclude.zMax) continue;
       if (hash01(`${s.id}|d|${x}|${z}`) > settlementDensity(s, (xMin + xMax) / 2, (zMin + zMax) / 2)) continue;
-      const blk = { id:`${s.id}-b${x}-${z}`, districtId:s.id, settlement:s.id,
+      const blk = { id:`${s.id}-b${Math.round(x)}-${Math.round(z)}`, districtId:s.id, settlement:s.id,
                     xMin, xMax, zMin, zMax, width:xMax-xMin, depth:zMax-zMin };
 
       // What kind of block this is, from the corridor/centre/fabric rule rather
@@ -1770,7 +1778,11 @@ export function generateBridgeApproaches(roads, heightAt) {
       // the deck ties into whatever grid is there. Clipped to land like any
       // other road, so it cannot run out to sea.
       approaches.push({
-        id: `landing-${br.id}-${end}`, axis: ew ? "ns" : "ew", class: br.class,
+        // Rounded, and tagged with WHICH path built it. Two separate paths emit a
+        // landing for the same bridge end; both used one id template, so two
+        // different roads shared a single address and the editable layer, which
+        // resolves by id, could not tell them apart.
+        id: `landing-${br.id}-${Math.round(end)}-reach`, axis: ew ? "ns" : "ew", class: br.class,
         // 1400 m, not 620: a landing has to actually reach the town's grid,
         // and on the outer islands the nearest street is further from the
         // shore than a short stub can span. Clipped to land, so on a narrow
@@ -1849,7 +1861,7 @@ export function generateBridgeApproaches(roads, heightAt) {
         // every other road, so it cannot run out to sea.
         const LANDING = 620;
         approaches.push({
-          id: `landing-${br.id}-${end}`, axis: ew ? "ns" : "ew", class: br.class,
+          id: `landing-${br.id}-${Math.round(end)}-cross`, axis: ew ? "ns" : "ew", class: br.class,
           at: end, from: at - LANDING, to: at + LANDING,
           settlement: "approach", approachFor: br.id, landing: true,
           joins: "(landing street)",
@@ -2348,7 +2360,17 @@ function connectStranded(roads, heightAt) {
       const t = Math.round(ew ? Math.max(gx(a[0]), gx(b[0])) : Math.max(gz(a[1]), gz(b[1])));
       if (t - f < 20) return;
       // overlap the ends by half a step so consecutive runs genuinely meet
-      pending.push({ id: `link-${n}-${pending.length}`, axis: ew ? "ew" : "ns", class: "AVENUE",
+      // ADDRESSED BY WHERE IT IS, NOT BY WHEN IT WAS MADE.
+      //
+      // This was `link-${n}-${pending.length}`, which is an ordinal within one
+      // component within one pass. connectStranded runs up to four passes to a
+      // fixed point, so the same pair of numbers came round again and two
+      // different roads ended up sharing the id `link-0-0`. A process-wide
+      // counter would fix the collision and break determinism instead -- the
+      // second generateWorld in a process would number everything differently.
+      // The coordinates are already rounded, already deterministic, and describe
+      // the road rather than its position in a queue.
+      pending.push({ id: `link-${n}-${at}-${f}-${t}`, axis: ew ? "ew" : "ns", class: "AVENUE",
                      at, from: f - STEP / 2, to: t + STEP / 2, settlement: "link", connector: true });
     };
 

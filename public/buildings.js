@@ -500,7 +500,7 @@ const ARCHETYPE = {
  * ground varies across the footprint -- on a slope the building gets a plinth
  * so it sits IN the hill rather than hovering over the downhill corner.
  */
-export function emitBuilding(o, cls, id, x, z, w, d, h, g, gRange = 0) {
+export function emitBuilding(o, cls, id, x, z, w, d, h, g, gRange = 0, foot = null) {
   const fn = ARCHETYPE[cls];
   if (!fn || h <= 0) return false;
   // Per-building spread ON TOP of the district's centrality curve. Centrality
@@ -512,8 +512,29 @@ export function emitBuilding(o, cls, id, x, z, w, d, h, g, gRange = 0) {
   // come out 2.96 m tall, and a terrace subtracts a 4.4 m shopfront band from
   // its own height.
   h = Math.max(MIN_HEIGHT[cls] || 4, h * (0.74 + rnd(id + "jit") * 0.62));
-  if (gRange > 0.9) {
-    const cut = gRange + 2;
+  // FOUNDATIONS THAT MATCH THE GROUND.
+  //
+  // This was one branch: over 0.9 m of range, wrap the base in a grey box. That
+  // is a wall, not a foundation, and it treated a gentle rise and a two-storey
+  // drop identically. footprint.js now classifies the ground and this builds
+  // what it asked for.
+  if (foot && foot.verdict === "terrace") {
+    // Stepped down the slope, so each retaining face stays about a storey
+    // instead of one wall as tall as the building.
+    const rise = foot.range / foot.steps;
+    for (let i = 0; i < foot.steps; i++) {
+      const frac = (i + 1) / foot.steps;
+      const y = foot.base + rise * i;
+      o.add("wall", x, y - rise / 2 + 0.4, z,
+            w * (1.04 - 0.06 * frac), rise + 1.6, d * (1.04 - 0.06 * frac), 0x9d9384);
+    }
+  } else if (foot && foot.verdict === "plinth") {
+    // Base carried down to the footprint's lowest point and cut into the uphill
+    // side, so nothing overhangs and the building sits IN the slope.
+    const cut = foot.cut + 2;
+    o.add("wall", x, g - cut / 2 + 0.4, z, w * 1.02, cut + 3, d * 1.02, 0x9d9384);
+  } else if (!foot && gRange > 0.9) {
+    const cut = gRange + 2;                       // legacy callers without an assessment
     o.add("wall", x, g - cut / 2 + 0.4, z, w * 1.02, cut + 3, d * 1.02, 0x9d9384);
   }
   fn(o, id, x, z, w, d, h, g);

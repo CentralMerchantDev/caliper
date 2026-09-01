@@ -28,9 +28,11 @@
 // else uses, so it cannot describe a world that is not there.
 // =============================================================================
 
+import { sm } from "./world-scale.js";
+
 /** Grid cell size in metres. Larger than the biggest plot, small enough that a
  *  cell holds a handful of them. Plots run from about 20 m to a few hundred. */
-const CELL = 400;
+const CELL = sm(400);
 
 /**
  * @param {{plots: any[], blocks?: any[], districts?: any[], settlements?: any[]}} world

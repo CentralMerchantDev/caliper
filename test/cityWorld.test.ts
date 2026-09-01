@@ -600,3 +600,50 @@ test("the embedded city summary is not stale", async () => {
   assert.equal(statedSettlements, realSettlements,
     `the summary tells the model there are ${statedSettlements} settlements; there are ${realSettlements}. Run: node scripts/gen-city-summary.mjs`);
 });
+
+// =============================================================================
+// EVERY OBJECT HAS ITS OWN ADDRESS
+//
+// The editable layer resolves objects BY ID: _reconcilePlacements adds and
+// removes meshes by id, the spatial index maps a point to a plot id, and the
+// change pipeline names what it is editing. All of that quietly assumes ids are
+// unique, and nothing checked.
+//
+// They were not. Scaling the world moved coordinates off whole metres, and ids
+// built from coordinates started carrying float noise -- `block--83.79999999999995`.
+// Worse, two separate code paths emitted bridge landings under one id template,
+// so two different roads shared a single address, and a `link-${n}-${i}` ordinal
+// repeated across the convergence passes of connectStranded.
+//
+// A duplicate id is not cosmetic here. It means an edit aimed at one object can
+// silently land on another, which is precisely the class of failure this whole
+// project exists to argue against.
+// =============================================================================
+test("every plot, block and road has a unique id", () => {
+  for (const [name, arr] of [
+    ["plots", overlapWorld.plots],
+    ["blocks", overlapWorld.blocks],
+    ["roads", overlapWorld.roads],
+  ] as [string, any[]][]) {
+    const seen = new Set<string>();
+    const dupes = new Set<string>();
+    for (const o of arr) {
+      if (seen.has(o.id)) dupes.add(o.id);
+      seen.add(o.id);
+    }
+    assert.equal(dupes.size, 0,
+      `${dupes.size} duplicate ${name} ids, e.g. ${[...dupes].slice(0, 3).join(", ")}`);
+  }
+});
+
+test("ids are stable names, not float noise", () => {
+  // An id a person or a model has to refer to cannot contain
+  // `-83.79999999999995`. Coordinates in ids are rounded to the metre, which
+  // cannot collide at block spacing and survives any change in float arithmetic.
+  const offenders = overlapWorld.plots
+    .filter((p: any) => /\.\d{3,}/.test(p.id))
+    .slice(0, 5)
+    .map((p: any) => p.id);
+  assert.equal(offenders.length, 0,
+    `ids carry unrounded coordinates: ${offenders.join(", ")}`);
+});
