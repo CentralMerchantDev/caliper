@@ -22,8 +22,9 @@
 // =============================================================================
 
 import { fbm, hash01, clamp, smoother } from "./noise.js";
-import { WORLD_SCALE } from "./world-scale.js";
+import { WORLD_SCALE, sm, sPoint, sFields, sBounds } from "./world-scale.js";
 import { roadAllowedAt, buildAllowedAt, driveableRun, slopeAt, SLOPE, makeDemand } from "./land-use.js";
+import { fitSettlements } from "./settlement-fit.js";
 
 // -----------------------------------------------------------------------------
 // 1. WORLD EXTENTS
@@ -338,7 +339,7 @@ export const BRIDGES = [
   // real archipelago that matters has more than one way on. Measured: 1,475 m
   // to the mainland's eastern arm at z 2050, the narrowest strait between them.
   { id: "redcliff-mainland-e", axis: "ew", x: 2050, a: 16425, b: 18050, type: "cable", class: "AVENUE" },
-];
+].map((b) => sFields(b, ["x", "a", "b"]));
 
 // Kept as an alias so nothing that imported the old name breaks.
 export const CAUSEWAYS = BRIDGES;
@@ -349,14 +350,14 @@ export const CAUSEWAYS = BRIDGES;
 // One source of truth for where land, water and city are. Every piece of
 // geometry derives its position from these; nothing carries its own z.
 // -----------------------------------------------------------------------------
-export const BANDS = {
+export const BANDS = sFields({
   OPEN_OCEAN_Z:      4800,   // deep water to the horizon
   OUTER_BAY_Z:       3400,   // outer bay, shipping, sailing
   HARBOUR_Z_MIN:   -2100,    // mainland shore / bay north edge
   MAINLAND_Z:      -2100,    // mainland shore, suburbs, then mountains
   MOUNTAIN_Z:     -14000,    // alpine range
   MAINLAND_X_HALF:  4800,    // mainland/coast width before open water
-};
+}, ["OPEN_OCEAN_Z", "OUTER_BAY_Z", "HARBOUR_Z_MIN", "MAINLAND_Z", "MOUNTAIN_Z", "MAINLAND_X_HALF"]);
 
 // =============================================================================
 // COASTLINE
@@ -380,7 +381,7 @@ export const BANDS = {
 //
 // Points run clockwise starting at the south-west. +z is seaward (south).
 // =============================================================================
-export const COAST = [
+const COAST_DESIGN = [
   // Downtown island, traced from the drawn layout. ISLAND, the district
   // fractions and the whole block grid derive from this, so the city plan
   // follows the drawing automatically rather than being re-fitted by hand.
@@ -397,6 +398,16 @@ export const COAST = [
   [-1548, 841], [-1113, 868], [-786, 841], [-378, 951],
   [31, 1033], [411, 867],
 ];
+
+/**
+ * The downtown island's outline in WORLD metres, for the plan and the renderer.
+ * landmassPolygonsDesign() deliberately uses COAST_DESIGN instead: it feeds
+ * LandField, which works in design space, and handing it a scaled polygon
+ * shrank the island by WORLD_SCALE twice -- the coast came out 37 m above the
+ * water because the height field and the outline no longer agreed on where the
+ * shore was.
+ */
+export const COAST = COAST_DESIGN.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]);
 
 /**
  * The island's own bounding box, DERIVED from the coastline.
@@ -423,20 +434,24 @@ export const ISLAND = coastBounds();
  * behind a breakwater that narrows its mouth. Declared here so the renderer, the
  * boat placement and any future edit all agree where it is.
  */
-export const MARINA = {
+export const MARINA = ((m) => ({
+  ...sFields(m, ["x", "z", "r"]),
+  mouth: sPoint(m.mouth),
+  breakwater: m.breakwater.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]),
+}))({
   x: 2020, z: 200,             // centre of the basin, in the east-shore inlet
   r: 220,                      // usable radius
   mouth: { x: 2300, z: 330 },  // where it opens to the sea
   breakwater: [
     [2680, 810], [2520, 620], [2400, 430],       // the arm that shelters it
   ],
-};
+});
 
 /**
  * THE HARBOUR. The working basin cut into the north shore: quays, cranes, the
  * ferry terminal. Declared so the renderer, the dredging and the plan all agree.
  */
-export const HARBOUR = { x: 820, z: -430, r: 560 };
+export const HARBOUR = sFields({ x: 820, z: -430, r: 560 }, ["x", "z", "r"]);
 
 /**
  * THE PLEASURE PIER and THE BOARDWALK.
@@ -454,7 +469,10 @@ export const HARBOUR = { x: 820, z: -430, r: 560 };
  * because picking barrier coordinates by eye is precisely how the island's
  * downtown ended up declared in the lagoon.
  */
-export const PIER = {
+export const PIER = ((q) => ({
+  ...sFields(q, ["x", "from", "to"]),
+  head: { ...q.head, z: q.head.z * WORLD_SCALE },
+}))({
   x: 500,             // the middle of the crescent's bow
   from: 4180,         // starts just behind the surf line, on the sand
   to: 4760,           // and walks 580 m out over the water
@@ -462,9 +480,12 @@ export const PIER = {
   // the pavilion at the seaward end -- the thing the pier is FOR
   head: { z: 4700, w: 78, d: 96 },
   pilings: { spacing: 22, radius: 1.5 },
-};
+});
 
-export const BOARDWALK = {
+export const BOARDWALK = ((b) => ({
+  ...b,
+  points: b.points.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]),
+}))({
   // Follows the ocean shore rather than cutting a straight line across it. Each
   // point is on the barrier's seaward edge, set back onto dry sand.
   width: 22,
@@ -473,7 +494,7 @@ export const BOARDWALK = {
     [-500, 4030], [500, 4055], [1500, 4005], [2500, 3930],
     [3500, 3755], [4300, 3520],
   ],
-};
+});
 
 /** Catmull-Rom through ANY closed set of control points. */
 export function splinePolygon(p, samplesPerSegment = 10) {
@@ -542,7 +563,7 @@ export function landmassPolygonsDesign(samplesPerSegment = 10) {
       const n = lm.coastCount || lm.points.length;
       polygon = [...splineOpen(lm.points.slice(0, n), samplesPerSegment), ...lm.points.slice(n).map((q) => q.slice())];
     } else {
-      polygon = splinePolygon(lm.id === "downtown" ? COAST : lm.points, samplesPerSegment);
+      polygon = splinePolygon(lm.id === "downtown" ? COAST_DESIGN : lm.points, samplesPerSegment);
     }
     // NORMALISE WINDING. The masses were authored by hand at different times and
     // wound both ways -- the barrier island ran opposite to the downtown island.
@@ -786,7 +807,7 @@ export const SUBURBS = [
   { id: "north-shore", name: "North Shore",  bounds: { xMin: -900, xMax: -200, zMin: -1500, zMax: -900 }, density: "low"  },
   { id: "hillside",    name: "Hillside Terraces", bounds: { xMin: -200, xMax: 600, zMin: -1700, zMax: -1000 }, density: "low" },
   { id: "east-point",  name: "East Point",   bounds: { xMin:  900, xMax: 1700, zMin: -1200, zMax: -500 }, density: "mid"  },
-];
+].map((b) => ({ ...b, bounds: sBounds(b.bounds) }));
 
 // (The real crossings are BRIDGES, declared with the land masses above. This is
 // where a second, older, unused declaration of the same name used to sit.)
@@ -1134,7 +1155,16 @@ export const SETTLEMENTS = [
   { id:"airport",       name:"International Airport", landmass:"mainland",
     bounds:{xMin:9800,xMax:14400,zMin:-5600,zMax:-3300}, av:460, st:340, cls:"HANGAR",
     core:0.9, edge:0.85 },
-];
+].map((st) => ({
+  ...st,
+  // POSITION scales with the land; av/st (avenue and street spacing) do NOT --
+  // they are built dimensions, so a smaller island gets the SAME streets closer
+  // together in relative terms, which is the whole point. The growth pass in
+  // fitSettlements() then expands these to fill the ground that is actually
+  // there, rather than trusting a rectangle drawn for a world 1.54x wider.
+  bounds: sBounds(st.bounds),
+  exclude: st.exclude ? sBounds(st.exclude) : undefined,
+}));
 
 /** Highways and arterials tying the whole world together. */
 // =============================================================================
@@ -1169,7 +1199,7 @@ export const FREEWAYS = [
   { id:"conn-e",    axis:"ns", at: 4600,  from:-5200,  to:-2300,  ramps:[-4600,-3400] },
   // the inland bypass, north of the coast road
   { id:"bypass",    axis:"ew", at:-5200,  from:-14000, to: 14000, ramps:[-10200,-6800,-2100,0,2100,5600,12000] },
-];
+].map((r) => ({ ...sFields(r, ["at", "from", "to"]), ramps: (r.ramps || []).map((v) => v * WORLD_SCALE) }));
 
 /**
  * Build the on and off ramps for every freeway.
@@ -1228,7 +1258,7 @@ export const HIGHWAYS = [
   { id:"beach-spine-w", axis:"ew", at: 1750, from:-7600, to:-4200, class:"BOULEVARD" },
   { id:"beach-spine-c", axis:"ew", at: 3450, from:-3400, to: 2600, class:"BOULEVARD" },
   { id:"beach-spine-e", axis:"ew", at: 2100, from: 4200, to: 7600, class:"BOULEVARD" },
-];
+].map((r) => sFields(r, ["at", "from", "to"]));
 
 /**
  * How likely a block at (x, z) is to be built at all.
@@ -1356,29 +1386,43 @@ function settlementCentres(s) {
 // around them and fans out lighter with distance). Build from those three and
 // the map stops being uniform without a single block being hand-placed.
 // =============================================================================
-let _demand = null;
+// Memoised PER HEIGHT FUNCTION, not globally.
+//
+// This was a bare module-level `_demand` that was computed once and never
+// invalidated, so a second generateWorld in the same process -- which is exactly
+// what the test suite does, and what rebuilding at a new WORLD_SCALE does --
+// silently reused a demand field measured against a different world. Keying on
+// the height function means a new world gets a new field and an unchanged one
+// still pays nothing.
+const _demandCache = new WeakMap();
 export function cityDemand(heightAt) {
-  if (_demand) return _demand;
+  const hit = _demandCache.get(heightAt);
+  if (hit) return hit;
 
-  const cores = [{ x: 900, z: 2300, weight: 1.0, radius: 3400 }];
+  // Positions and radii of influence are landform-scale and follow the world.
+  // The weights are dimensionless shares and deliberately do not.
+  const cores = [{ x: sm(900), z: sm(2300), weight: 1.0, radius: sm(3400) }];
   for (const st of SETTLEMENTS) {
     if (!/-core$/.test(st.id)) continue;
     cores.push({
       x: (st.bounds.xMin + st.bounds.xMax) / 2,
       z: (st.bounds.zMin + st.bounds.zMax) / 2,
       weight: st.cls === "TOWER" ? 0.86 : 0.7,
-      radius: 2200,
+      radius: sm(2200),
     });
   }
   const gateways = [];
   for (const b of BRIDGES) {
     const ew = b.axis === "ew";
-    for (const e of [b.a, b.b]) gateways.push({ x: ew ? e : b.x, z: ew ? b.x : e, weight: 0.62, radius: 1500 });
+    for (const e of [b.a, b.b]) gateways.push({ x: ew ? e : b.x, z: ew ? b.x : e, weight: 0.62, radius: sm(1500) });
   }
 
   // Distance to water, on a coarse cached grid. Doing it per plot would be
   // O(plots x coastline) and this is asked tens of thousands of times.
-  const CELL = 200, X0 = -24000, Z0 = -14000, NX = 240, NZ = 140;
+  // Same defect as cachedHeight: a fixed +/-24 km window on a world that is no
+  // longer that size. Scaled together so the waterfront premium is measured over
+  // the land that is actually there.
+  const CELL = sm(200), X0 = sm(-24000), Z0 = sm(-14000), NX = 240, NZ = 140;
   const wet = new Uint8Array(NX * NZ);
   for (let i = 0; i < NX; i++) for (let j = 0; j < NZ; j++) {
     wet[j * NX + i] = heightAt(X0 + i * CELL, Z0 + j * CELL) < 0 ? 1 : 0;
@@ -1396,8 +1440,12 @@ export function cityDemand(heightAt) {
     return 9 * CELL;
   };
 
-  _demand = makeDemand({ cores, gateways, distToWater, noise: (x, z) => fbm(x + 900, z - 400, 2200, 2) });
-  return _demand;
+  const demand = makeDemand({
+    cores, gateways, distToWater,
+    noise: (x, z) => fbm(x + sm(900), z - sm(400), sm(2200), 2),
+  });
+  _demandCache.set(heightAt, demand);
+  return demand;
 }
 
 /**
@@ -2374,8 +2422,19 @@ function connectStranded(roads, heightAt) {
  * the tests still use the exact function -- this is only for the generator's
  * own bulk queries.
  */
-function cachedHeight(heightAt, cell = 12) {
-  const X0 = -34000, Z0 = -38000, NX = 5700, NZ = 4200;
+function cachedHeight(heightAt, cell = sm(12)) {
+  // EXTENTS FOLLOW THE WORLD.
+  //
+  // These were literal design metres: a 5700 x 4200 grid over a fixed +/-34 km,
+  // i.e. 23.9 MILLION floats (96 MB) allocated on every world build. On a world
+  // that is no longer 48 km across, most of that was addressing open ocean that
+  // does not exist, while the part that does exist was quantised at a cell size
+  // chosen for a different sized world.
+  //
+  // Scaling origin and cell together keeps the same RELATIVE resolution and the
+  // same coverage, so the cache is correct at any WORLD_SCALE and the count of
+  // cells -- and therefore the memory -- does not change.
+  const X0 = sm(-34000), Z0 = sm(-38000), NX = 5700, NZ = 4200;
   const grid = new Float32Array(NX * NZ).fill(NaN);
   return function cachedHeightAt(x, z) {
     const i = ((x - X0) / cell) | 0, j = ((z - Z0) / cell) | 0;
@@ -2410,10 +2469,28 @@ export function generateWorld(rawHeightAt = null) {
                          plots:city.plots.length, blocks:city.blocks.length }];
   // The barrier's bands are generated from its own polygon rather than declared,
   // so they bend with the crescent instead of being laid across the lagoon.
-  const settlementList = [
+  const declared = [
     ...SETTLEMENTS.filter((s) => s.landmass !== "barrier"),
     ...barrierSettlements(polyBy.barrier),
   ];
+  // GROW INTO THE LAND RATHER THAN ASSERT A RECTANGLE OVER IT.
+  //
+  // The declared bounds put each settlement in the right PLACE. They cannot know
+  // how much room it has, because a table cannot see a coastline -- which is how
+  // `port` came to be laid over `coastal-4`, and how a third of the city ended
+  // up standing in the sea when the world got smaller.
+  //
+  // fitSettlements asks the ground instead: each settlement expands one strip at
+  // a time, and a strip is claimed only if it is genuinely buildable and no
+  // neighbour already holds it. Overlap and drowned ground stop being defects to
+  // detect and become outcomes that cannot occur.
+  //
+  // Skipped when there is no height function -- generateWorld() is called
+  // without one in places that only need the road and block topology, and
+  // growing against an absent terrain would be inventing land.
+  const fitted = heightAt ? fitSettlements(declared, heightAt) : null;
+  const settlementList = fitted ? fitted.settlements : declared;
+  const settlementFit = fitted ? fitted.stats : null;
   // the spine goes in with the highways, not as a settlement, because it is a
   // through route rather than something serving one place
   roads.push(...barrierSpine(polyBy.barrier));
@@ -2570,6 +2647,7 @@ export function generateWorld(rawHeightAt = null) {
            districts:DISTRICTS, bridges:BRIDGES, causeways:BRIDGES, highways:HIGHWAYS,
            unservedBridgeEnds: unserved,
            plotsDroppedForOverlap: plots.length - keptPlots.length,
+           settlementFit,
            /** Plots that MEANINGFULLY overlap another in the same settlement.
             *
             * The epsilon is not decoration. Adjacent plots share an edge, and

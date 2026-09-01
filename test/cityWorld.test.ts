@@ -27,6 +27,24 @@ import {
   generateWorld, generateCityPlan, landmassPolygons, PLOT_CLASSES, SETTLEMENTS,
   offsetPolygon, COAST, splinePolygon, BRIDGES, signedArea2, LANDMASSES,
 } from "../public/city-plan.js";
+import { WORLD_SCALE } from "../public/world-scale.js";
+
+// PROBE COORDINATES SCALE. JUDGEMENTS DO NOT.
+//
+// These tests were written against the 48 km world, so a probe at z = 7000 is
+// "the barrier island's ocean shore" only in design metres. Scaling the probe
+// keeps it pointing at the same PLACE. Scaling a depth or a length keeps it
+// measuring the same PHYSICAL fact about a world that is uniformly smaller --
+// a shelf 30 m down at 1.6 km out is the same shelf at 19.5 m and 1.04 km.
+//
+// What is deliberately NOT scaled anywhere below: the budgets and ratios that
+// encode a judgement rather than a measurement -- the 0.06 dry-land ratio, the
+// zero-tolerance overlap assertions, MAX_UNSERVED, the connectivity budgets.
+// If one of those goes red the world is wrong, and the fix is the world.
+const S = (v: number) => v * WORLD_SCALE;
+/** Areas scale with the square of a uniform scale. */
+const S2 = (v: number) => v * WORLD_SCALE * WORLD_SCALE;
+
 import { LandField, makeHeightAt, reliefAt, edgeFalloff, EDGE, BASINS, cliffiness, SNOW_LINE, TREE_LINE } from "../public/terrain.js";
 import { createCollector, emitBuilding, HEIGHT, ROOFS, WALLS, rnd } from "../public/buildings.js";
 
@@ -63,18 +81,18 @@ test("the sea bed shelves away from the shore instead of dropping off a cliff", 
   // Each time this number moves it is because the ISLAND grew, not because the
   // sea bed changed -- the test's assumption about where the shore is goes
   // stale, and the shelf property it actually guards still holds.
-  for (let z = 7000; z < 9600; z += 5) if (heightAt(x, z) <= 0) { shore = z; break; }
+  for (let z = S(7000); z < S(9600); z += S(5)) if (heightAt(x, z) <= 0) { shore = z; break; }
   assert.ok(shore !== null, "could not find the barrier island's ocean shore");
 
   const depths: number[] = [];
-  for (let z = (shore as number) + 25; z <= (shore as number) + 1600; z += 25) depths.push(heightAt(x, z));
+  for (let z = (shore as number) + S(25); z <= (shore as number) + S(1600); z += S(25)) depths.push(heightAt(x, z));
   assert.ok(depths.every((d) => d < 0), "this transect should be entirely offshore");
   for (let i = 1; i < depths.length; i++) {
-    assert.ok(depths[i] <= depths[i - 1] + 4, `sea bed rises going out to sea at sample ${i}`);
+    assert.ok(depths[i] <= depths[i - 1] + S(4), `sea bed rises going out to sea at sample ${i}`);
   }
   const first = Math.abs(depths[0]);
-  assert.ok(first < 9, `sea bed is ${first.toFixed(1)} m deep right at the beach -- that is a cliff, not a shelf`);
-  assert.ok(Math.abs(depths[depths.length - 1]) > 30, "the ocean never gets deep");
+  assert.ok(first < S(9), `sea bed is ${first.toFixed(1)} m deep right at the beach -- that is a cliff, not a shelf`);
+  assert.ok(Math.abs(depths[depths.length - 1]) > S(30), "the ocean never gets deep");
 });
 
 test("the lagoon is enclosed water, shallower than the open ocean", () => {
@@ -145,12 +163,12 @@ test("every land mass rises above the water across its MODELLED interior", () =>
   // point is that the islands have not merged into one continuous landmass.
   // (2500,-700) is the channel between Bayview and Fairlight, and 603 points in
   // the bay are deeper than 6 m, so there is real water on all sides.
-  assert.ok(heightAt(-2800, 0) < -3, "the channel between the islands is not water");
+  assert.ok(heightAt(S(-2800), S(0)) < S(-3), "the channel between the islands is not water");
   // (11000,100) became dry when the outer island grew east. (12000,400) is the
   // eastern approach channel between the barrier's tip and the mainland arm,
   // 35 m deep -- and 752 points in the bay are still deeper than 6 m.
-  assert.ok(heightAt(4600, -600) < -3, "the eastern approach is not water");
-  assert.ok(heightAt(0, 10500) < -3, "the open ocean is not water");   // past the outer island
+  assert.ok(heightAt(S(4600), S(-600)) < S(-3), "the eastern approach is not water");
+  assert.ok(heightAt(S(0), S(10500)) < S(-3), "the open ocean is not water");   // past the outer island
 });
 
 test("the harbour is one city wide, not two unrelated places", () => {
@@ -297,23 +315,23 @@ test("the world closes with ocean, not a cliff", () => {
   // continent-sized plane at y = 0 that read from altitude as a flat green table
   // with a vertical drop at its edge. The far edge has to become sea bed.
   // Just past the fade the ground must already be UNDER the water...
-  for (const [x, z] of [[0, EDGE.zFar - 2000],
-                        [EDGE.xHalf + 3000, -10000], [-EDGE.xHalf - 3000, -10000]]) {
+  for (const [x, z] of [[0, EDGE.zFar - S(2000)],
+                        [EDGE.xHalf + S(3000), S(-10000)], [-EDGE.xHalf - S(3000), S(-10000)]]) {
     const h = heightAt(x, z);
     assert.ok(h < 0, `world edge at (${x}, ${z}) is ${h.toFixed(0)} m -- it must be under water`);
   }
   // ...and well past it, properly deep, so nothing shoals back up at the rim.
-  for (const [x, z] of [[0, EDGE.zFar - 9000],
-                        [EDGE.xHalf + 9000, -10000], [-EDGE.xHalf - 9000, -10000]]) {
+  for (const [x, z] of [[0, EDGE.zFar - S(9000)],
+                        [EDGE.xHalf + S(9000), S(-10000)], [-EDGE.xHalf - S(9000), S(-10000)]]) {
     const h = heightAt(x, z);
-    assert.ok(h < -40, `${(x)},${(z)} is only ${h.toFixed(0)} m deep at the rim of the world`);
+    assert.ok(h < S(-40), `${(x)},${(z)} is only ${h.toFixed(0)} m deep at the rim of the world`);
   }
   // ...and it must get there gradually, not in one step
-  let prev = heightAt(0, EDGE.zFar + EDGE.fade + 3000);
-  assert.ok(prev > 50, "the land should still be well above water before the fade");
-  for (let z = EDGE.zFar + EDGE.fade; z >= EDGE.zFar - 500; z -= 500) {
+  let prev = heightAt(0, EDGE.zFar + EDGE.fade + S(3000));
+  assert.ok(prev > S(50), "the land should still be well above water before the fade");
+  for (let z = EDGE.zFar + EDGE.fade; z >= EDGE.zFar - S(500); z -= S(500)) {
     const h = heightAt(0, z);
-    assert.ok(h - prev < 40, `terrain jumps ${(h - prev).toFixed(0)} m at z=${z}`);
+    assert.ok(h - prev < S(40), `terrain jumps ${(h - prev).toFixed(0)} m at z=${z}`);
     prev = h;
   }
 });
@@ -422,17 +440,17 @@ test("the outer island is the largest thing in the world, and it bows", () => {
     assert.ok(barrierKm2 > areaOf(m.polygon),
       `${m.id} (${areaOf(m.polygon).toFixed(1)} km²) is bigger than the outer island (${barrierKm2.toFixed(1)} km²)`);
   }
-  assert.ok(barrierKm2 > 60, `the outer island is only ${barrierKm2.toFixed(1)} km²`);
+  assert.ok(barrierKm2 > S2(60), `the outer island is only ${barrierKm2.toFixed(1)} km²`);
 
   let x0 = Infinity, x1 = -Infinity;
   for (const [x] of (barrier as any).polygon) { if (x < x0) x0 = x; if (x > x1) x1 = x; }
-  assert.ok(x1 - x0 > 25000, `outer island is only ${((x1 - x0) / 1000).toFixed(1)} km long`);
+  assert.ok(x1 - x0 > S(25000), `outer island is only ${((x1 - x0) / 1000).toFixed(1)} km long`);
 
   // It spans the seaward edge for its whole length. The drawn shape does NOT
   // bow -- its ends run as far south as its middle -- so asserting a bow would
   // be asserting a shape the layout does not have.
-  for (const probe of [-12000, -6000, 0, 6000, 12000]) {
-    const here = (barrier as any).polygon.filter(([x]: number[]) => Math.abs(x - probe) < 2500);
+  for (const probe of [S(-12000), S(-6000), 0, S(6000), S(12000)]) {
+    const here = (barrier as any).polygon.filter(([x]: number[]) => Math.abs(x - probe) < S(2500));
     assert.ok(here.length > 0, `the outer island has no coast near x=${probe}`);
   }
 });
