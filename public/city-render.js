@@ -23,7 +23,8 @@ import { assessFootprint } from "./footprint.js";
 // `sm` is already used as a local variable in this file (a THREE.Mesh), so the
 // world-scale helper is imported under a name that cannot be shadowed.
 import { sm as wm } from "./world-scale.js";
-import { findSite } from "./land-use.js";
+import { findSite, findFlattestSite } from "./land-use.js";
+import { gradeRun, GRADE, ROAD_GRADE } from "./grade.js";
 import { createCollector, emitBuilding, HEIGHT, WALLS, ROOFS, rnd, pick } from "./buildings.js";
 
 // -----------------------------------------------------------------------------
@@ -580,19 +581,59 @@ export function buildWorld(THREE, renderer, scene) {
       return i0;
     }
 
+    // A ROAD IS A SURVEYED SURFACE, NOT A DRAPE.
+    //
+    // This used to read the terrain at every point and pin the ribbon to it:
+    // `const h = heightAt(x, z)`. That makes the carriageway follow fbm noise,
+    // including the micro-relief term whose entire job is to stop ground being
+    // flat -- so every street undulated, and the outer roads, sampled only every
+    // 110 m, came out as chains of faceted planes at random angles.
+    //
+    // A road built that way does not read as a road. It reads as differently
+    // coloured ground, which is exactly the long-standing complaint that the
+    // streets are not legible in the near field despite 385,000 road triangles.
+    //
+    // Real roads are graded: a surveyed vertical alignment with a bounded
+    // gradient, embankment where the ground falls away and cutting where it
+    // rises. gradeRun() produces that profile. The road now sits slightly above
+    // the hollows and slightly below the humps, which is not an error -- it is
+    // what every road on earth does.
+    //
+    // Profiles are cached per road: the carriageway, its two footways and its
+    // centreline markings must share ONE alignment, or the kerb saws through the
+    // tarmac.
+    const gradeCache = new Map();
+    function profileFor(r) {
+      let g = gradeCache.get(r.id);
+      if (g === undefined) {
+        // Per class: a motorway is driven through the landscape on embankment,
+        // a residential street follows the ground. The maxDev cap is what keeps
+        // a side street from quietly becoming a flyover.
+        const spec = ROAD_GRADE[r.class] || ROAD_GRADE.STREET;
+        g = gradeRun(heightAt, r, { step: 20, ...spec });
+        gradeCache.set(r.id, g);
+      }
+      return g;
+    }
+
     function ribbon(r, half, buf, lift) {
       const ew = r.axis === "ew";
       const from = Math.min(r.from, r.to), to = Math.max(r.from, r.to);
       const core = inCore(ew ? (from + to) / 2 : r.at, ew ? r.at : (from + to) / 2);
       const prof = r.bridge ? bridgeProfile.get(r.bridge) : null;
-      const step = prof ? 18 : core ? 26 : 110;
+      // Graded roads need a finer emit step than draped ones did: the whole point
+      // is a smooth alignment, and 110 m segments cannot express one.
+      const step = prof ? 18 : core ? 26 : 55;
+      const grade = prof ? null : profileFor(r);
       let prev = null;
       for (let t = from; t <= to + 1e-6; t += step) {
         const x = ew ? t : r.at, z = ew ? r.at : t;
         if (prof) { prev = strip(buf, x, z, ew, half, prof(z) + lift - 0.9, prev); continue; }
-        const h = heightAt(x, z);
-        if (h < 0.8) { prev = null; continue; }               // do not pave the sea
-        prev = strip(buf, x, z, ew, half, h + lift, prev);
+        // Still refuse to pave the sea -- tested against the NATURAL ground, since
+        // that is what is actually wet. A graded surface may legitimately sit a
+        // little above it.
+        if (heightAt(x, z) < 0.8) { prev = null; continue; }
+        prev = strip(buf, x, z, ew, half, grade.y(t) + lift, prev);
       }
     }
 
@@ -1202,8 +1243,13 @@ function buildProps(api) {
   // air and it is the sort of thing whose absence makes a model look like a
   // model.
   // ---------------------------------------------------------------------------
-  {
-    const CX = wm(-7600), CZ = wm(-5600);
+  golf: {
+    // A golf course needs 1.5 km of continuous ground that is not water, cliff or
+    // mountainside. Asked for, not asserted -- the rough radius is 760 m, so the
+    // footprint tested is the whole course.
+    const _gf = findSite(heightAt, { x: wm(-7600), z: wm(-5600) }, { w: 1520, d: 1520, radius: 3000, step: 120 });
+    if (!_gf) break golf;   // no room for a course: build none rather than one in the sea
+    const CX = _gf.x, CZ = _gf.z;
     const fair = M(0x74a84a, 0.95), rough = M(0x5c8a3c, 0.97);
     const sand = M(0xe6d8a8, 0.95), water = M(0x2f7d99, 0.2, 0.4);
     const gy = Math.max(3, heightAt(CX, CZ));
@@ -1235,44 +1281,133 @@ function buildProps(api) {
   }
 
   // --- airport ---
-  {
+  airport: {
     const rwMat = M(0x3b4045, 0.95), mkMat = M(0xf2ead2, 0.8), apMat = M(0x555c63, 0.94);
-    const ay = Math.max(6, heightAt(wm(12100), wm(-4600)));
-    // POSITION scales with the land; RUNWAY LENGTH does not. A 3,400 m runway is
-    // 3,400 m of tarmac because that is what a wide-body needs to get airborne --
-    // it is the clearest case in the world of a built dimension that has no
-    // business shrinking because the island did. Same reasoning as the golf
-    // course below: its centre moves, its fairways stay the length of fairways.
-    for (const [rz, len] of [[wm(-4300), 3400], [wm(-4900), 2800]]) {
+
+    // AN AIRPORT IS AN EARTHWORK, NOT A DECAL.
+    //
+    // `ay` was ONE height sample. Everything below -- a 3,400 m runway plane, a
+    // 3,200 m taxiway, a 900 x 420 apron -- was then drawn flat at that single
+    // height. Measured along the actual runway line, the ground varies by 42.3 m.
+    // So the runway was clipping into a hill at one end and floating over air at
+    // the other, by the height of a twelve-storey building.
+    //
+    // Relocating does not fix it. The flattest DRY 3.4 km run anywhere in this
+    // world varies by 11.3 m, and the flattest 3,600 x 1,400 AREA within 5 km
+    // still varies by 34 m -- and sits 4 km from the airport road and the airport
+    // settlement, so moving there would strand it. There is no site; the premise
+    // that a runway can be laid on undisturbed ground is simply false.
+    //
+    // Which is exactly what real airports discovered. They are enormous graded
+    // platforms: cut into the high side, built out on the low side, with
+    // embankments down to the surrounding land. Hong Kong, Madeira and Gibraltar
+    // are the dramatic cases; every airport does it.
+    //
+    // So the platform is now explicit. Its level is the MEAN of the ground it
+    // covers, so cut and fill roughly balance the way real earthworks are
+    // designed, and an embankment skirt carries it down to the terrain. The
+    // runway is honest tarmac on honest ground instead of a plane hanging in
+    // space.
+    // ONE AIRPORT, NOT TWELVE COORDINATES.
+    //
+    // Every part of this used to carry its own absolute position: runways,
+    // taxiway, apron, terminal, jetways, tower and sixteen aircraft, thirteen
+    // literals in all. Nothing tied them together, so nothing could move the
+    // airport -- and one of them (the jetway z) was still unscaled after the
+    // world shrank, sitting 1.7 km from the terminal it belonged to, because
+    // there was no relationship for anything to check.
+    //
+    // Now there is an ORIGIN, chosen by asking the land, and everything else is
+    // an offset from it in BUILT metres. The internal layout of an airport does
+    // not shrink because the island did: two runways are 600 m apart because
+    // that is the separation independent parallel approaches need.
+    const AP_W = 3600, AP_D = 1200;
+    const apSite = findFlattestSite(heightAt, { x: wm(12100), z: wm(-4750) },
+                                    { w: AP_W, d: AP_D, radius: 2500, step: 150, grade: 200 });
+    if (!apSite) break airport;
+    const AX = apSite.x, AZ = apSite.z;
+
+    // AN AIRPORT IS AN EARTHWORK, NOT A DECAL.
+    //
+    // `ay` was ONE height sample, and a 3,400 m runway plane was drawn flat at
+    // it over ground that varies by tens of metres -- clipping into a hill at one
+    // end and floating over air at the other. Relocation alone cannot fix that:
+    // the flattest dry 3.4 km run anywhere in this world varies by 11.3 m.
+    //
+    // Which is what real airports discovered. They are graded platforms: cut into
+    // the high side, built out on the low side, embankments down to the land
+    // around them. The level is the MEAN of the ground covered, so cut and fill
+    // roughly balance the way real earthworks are designed.
+    const ay = Math.max(6, apSite.mean);
+    stats.airportPlatform = {
+      level: +ay.toFixed(1), cut: +(apSite.max - ay).toFixed(1),
+      fill: +(ay - apSite.min).toFixed(1), range: +apSite.range.toFixed(1),
+      moved: Math.round(apSite.moved),
+    };
+
+    // the platform, and an embankment skirt carrying it down to the terrain
+    {
+      const pad = new THREE.Mesh(new THREE.PlaneGeometry(AP_W, AP_D), M(0x7c8b63, 0.97));
+      pad.rotation.x = -Math.PI / 2;
+      pad.position.set(AX, ay + 0.05, AZ);
+      pad.receiveShadow = true;
+      scene.add(pad);
+      const SK = 28;
+      for (const f of [{ fx: 0, fz: -1, len: AP_W, at: AP_D / 2 },
+                       { fx: 0, fz: 1, len: AP_W, at: AP_D / 2 },
+                       { fx: -1, fz: 0, len: AP_D, at: AP_W / 2 },
+                       { fx: 1, fz: 0, len: AP_D, at: AP_W / 2 }]) {
+        const g = new THREE.BufferGeometry();
+        const v = [];
+        const along = (t) => (f.fx === 0 ? [AX + t, AZ + f.fz * f.at] : [AX + f.fx * f.at, AZ + t]);
+        for (let i = 0; i < SK; i++) {
+          const [x0, z0] = along(-f.len / 2 + (f.len * i) / SK);
+          const [x1, z1] = along(-f.len / 2 + (f.len * (i + 1)) / SK);
+          const h0 = Math.min(ay, heightAt(x0, z0)) - 0.4;
+          const h1 = Math.min(ay, heightAt(x1, z1)) - 0.4;
+          v.push(x0, ay, z0, x1, ay, z1, x0, h0, z0);
+          v.push(x1, ay, z1, x1, h1, z1, x0, h0, z0);
+        }
+        g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+        g.computeVertexNormals();
+        const m = new THREE.Mesh(g, M(0x6f7d58, 0.98));
+        m.receiveShadow = true;
+        scene.add(m);
+      }
+    }
+
+    // Runway length is the clearest built dimension in the world: 3,400 m of
+    // tarmac is what a wide-body needs to get airborne, on any size of island.
+    for (const [dz, len] of [[450, 3400], [-150, 2800]]) {
       const r = new THREE.Mesh(new THREE.PlaneGeometry(len, 60), rwMat);
-      r.rotation.x = -Math.PI / 2; r.position.set(wm(12100), ay + 0.5, rz); r.receiveShadow = true; scene.add(r);
+      r.rotation.x = -Math.PI / 2; r.position.set(AX, ay + 0.5, AZ + dz); r.receiveShadow = true; scene.add(r);
       for (let x = -len / 2 + 90; x < len / 2 - 90; x += 140) {
         const m = new THREE.Mesh(new THREE.PlaneGeometry(70, 3), mkMat);
-        m.rotation.x = -Math.PI / 2; m.position.set(wm(12100) + x, ay + 0.56, rz); scene.add(m);
+        m.rotation.x = -Math.PI / 2; m.position.set(AX + x, ay + 0.56, AZ + dz); scene.add(m);
       }
     }
     const taxi = new THREE.Mesh(new THREE.PlaneGeometry(3200, 26), apMat);
-    taxi.rotation.x = -Math.PI / 2; taxi.position.set(wm(12100), ay + 0.48, wm(-4600)); scene.add(taxi);
+    taxi.rotation.x = -Math.PI / 2; taxi.position.set(AX, ay + 0.48, AZ + 150); scene.add(taxi);
     const apron = new THREE.Mesh(new THREE.PlaneGeometry(900, 420), apMat);
-    apron.rotation.x = -Math.PI / 2; apron.position.set(wm(11400), ay + 0.46, wm(-5150)); apron.receiveShadow = true; scene.add(apron);
+    apron.rotation.x = -Math.PI / 2; apron.position.set(AX - 700, ay + 0.46, AZ - 400); apron.receiveShadow = true; scene.add(apron);
     // the terminal: a pier with jetways, so the apron reads as an airport rather
     // than a car park with aeroplanes on it
     const term = new THREE.Mesh(RB(520, 16, 78, 1.4), M(0xe8ecef, 0.6, 0.15));
-    term.position.set(wm(11400), ay + 8, wm(-4880)); term.castShadow = term.receiveShadow = true; scene.add(term);
+    term.position.set(AX - 700, ay + 8, AZ - 130); term.castShadow = term.receiveShadow = true; scene.add(term);
     const troof = new THREE.Mesh(RB(540, 2.2, 92, 0.8), M(0xb9c2c8, 0.5, 0.3));
-    troof.position.set(wm(11400), ay + 17, wm(-4880)); troof.castShadow = true; scene.add(troof);
+    troof.position.set(AX - 700, ay + 17, AZ - 130); troof.castShadow = true; scene.add(troof);
     for (let i = 0; i < 6; i++) {
-      const jx = wm(11180) + i * 92;
       const jet = new THREE.Mesh(RB(6, 4, 46, 0.6), M(0xd4d9dc, 0.6, 0.2));
-      jet.position.set(jx, ay + 7, -4990); jet.castShadow = true; scene.add(jet);
+      jet.position.set(AX - 920 + i * 92, ay + 7, AZ - 240); jet.castShadow = true; scene.add(jet);
     }
     // control tower
     const tw = new THREE.Mesh(new THREE.CylinderGeometry(5, 7, 42, 10), M(0xeae4d6, 0.8));
-    tw.position.set(wm(11000), ay + 21, wm(-4780)); tw.castShadow = true; scene.add(tw);
+    tw.position.set(AX - 1100, ay + 21, AZ - 30); tw.castShadow = true; scene.add(tw);
     const cab = new THREE.Mesh(RB(15, 8, 15, 1.2), M(0x9fc4dd, 0.3, 0.4));
-    cab.position.set(wm(11000), ay + 45, wm(-4780)); cab.castShadow = true; scene.add(cab);
+    cab.position.set(AX - 1100, ay + 45, AZ - 30); cab.castShadow = true; scene.add(cab);
     for (let i = 0; i < 16; i++) {
-      const x = wm(11000) + rnd("ap" + i) * wm(820), z = wm(-5320) + Math.floor(rnd("aq" + i) * 3) * 110;
+      const x = AX - 1100 + rnd("ap" + i) * 820;
+      const z = AZ - 570 + Math.floor(rnd("aq" + i) * 3) * 110;
       const body = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 42, 12), M(0xf8f8f6, 0.45, 0.25));
       body.rotation.z = Math.PI / 2; body.position.set(x, ay + 6, z); body.castShadow = true; scene.add(body);
       const wing = new THREE.Mesh(RB(9, 1.3, 40, 0.4), M(0xecebe7, 0.45, 0.25));
@@ -1286,6 +1421,8 @@ function buildProps(api) {
   {
     const crops = [0xc9b471, 0xa8bd66, 0xd9c98a, 0x8fae5c, 0xe0cf94, 0xbcae72, 0x9db85f];
     const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2);
+    // Farm belts are checked cell by cell below (h < 3 is skipped), so the belt
+    // rectangle itself only has to land on the right part of the world.
     const belts = [[-18400, -13600, -8600, -3600], [15400, 18600, -8400, -3400]]
       .map((b) => b.map(wm));
     const cells = [];

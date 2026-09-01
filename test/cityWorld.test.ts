@@ -28,7 +28,7 @@ import {
   offsetPolygon, COAST, splinePolygon, BRIDGES, signedArea2, LANDMASSES,
 } from "../public/city-plan.js";
 import { WORLD_SCALE } from "../public/world-scale.js";
-import { findSite } from "../public/land-use.js";
+import { findSite, findFlattestSite } from "../public/land-use.js";
 
 // PROBE COORDINATES SCALE. JUDGEMENTS DO NOT.
 //
@@ -686,4 +686,67 @@ test("every landmark stands on ground that can carry it", () => {
         `${name} footprint corner (${x.toFixed(0)}, ${z.toFixed(0)}) is at ${heightAt(x, z).toFixed(1)} m -- in the water`);
     }
   }
+});
+
+// =============================================================================
+// THE BIG FEATURES STAND ON GROUND THAT EXISTS
+//
+// These are the things placed by `buildProps` at coordinates rather than by the
+// plan: the airport, the golf course, the railway, the container port. They are
+// the last holdouts of "assert a position" in the world, and they are the ones
+// most likely to be quietly wrong, because each is far too large for a single
+// height sample to describe and each had exactly one.
+//
+// The airport is the extreme case. It is a 3,400 m runway drawn as a FLAT PLANE
+// at one sampled height, over ground that varies by 42.3 m along that line -- a
+// twelve-storey discrepancy. Relocation cannot fix it: the flattest dry 3.4 km
+// run anywhere in this world varies by 11.3 m. Real airports answer this with
+// earthworks, and so does this one now. What is tested is therefore not "is it
+// flat" -- it is not, and cannot be -- but "is the platform an honest earthwork
+// on real ground".
+// =============================================================================
+test("the airport platform is a real earthwork on dry land", () => {
+  // Mirrors what buildProps does: one origin chosen by asking the land, the
+  // platform levelled at the MEAN of the ground it covers.
+  const site = findFlattestSite(heightAt, { x: 12100 * WORLD_SCALE, z: -4750 * WORLD_SCALE },
+                                { w: 3600, d: 1200, radius: 2500, step: 150, grade: 200 });
+  assert.ok(site, "no site for the airport at all");
+  const level = Math.max(6, site!.mean);
+
+  assert.ok(site!.min > 0.6,
+    `the airport platform reaches water: lowest point ${site!.min.toFixed(1)} m`);
+
+  // Cut and fill should roughly balance -- that is what levelling at the mean
+  // buys, and it is how real earthworks are designed. If either dominates, the
+  // platform is perched on one end of the ground rather than driven through it.
+  const cut = site!.max - level, fill = level - site!.min, range = site!.range;
+  assert.ok(cut <= range * 0.75, `platform is nearly all cut (${cut.toFixed(1)} m of ${range.toFixed(1)} m)`);
+  assert.ok(fill <= range * 0.75, `platform is nearly all fill (${fill.toFixed(1)} m of ${range.toFixed(1)} m)`);
+
+  // And the earthwork has to be buildable, not a mountain removal. 60 m of total
+  // relief across an airport is already a big civil project; past that the site
+  // is wrong, not the platform.
+  assert.ok(range < 60,
+    `the airport site needs ${range.toFixed(0)} m of earthworks -- that is a quarry, not a platform`);
+});
+
+test("the golf course has continuous ground to sit on", () => {
+  const site = findSite(heightAt, { x: -7600 * WORLD_SCALE, z: -5600 * WORLD_SCALE },
+                        { w: 1520, d: 1520, radius: 3000, step: 120 });
+  assert.ok(site, "no site for the golf course -- the renderer correctly builds none, but the world has nowhere for it");
+});
+
+test("the railway runs on land, not across the bay", () => {
+  // The line is a single z with trains drawn along it. It skips h < 2 per point,
+  // so it cannot draw over water -- but if most of the line is skipped there is
+  // no railway, only the illusion of one in the stats.
+  const RAIL_Z = -3900 * WORLD_SCALE;
+  let on = 0, total = 0;
+  for (let x = -17000 * WORLD_SCALE; x <= 17000 * WORLD_SCALE; x += 60) {
+    total++;
+    const h = heightAt(x, RAIL_Z);
+    if (h >= 2 && h <= 240) on++;
+  }
+  assert.ok(on / total > 0.6,
+    `only ${((100 * on) / total).toFixed(0)}% of the railway line is on buildable ground`);
 });

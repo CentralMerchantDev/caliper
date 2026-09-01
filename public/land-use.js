@@ -201,7 +201,33 @@ export function findSite(heightAt, want, opts = {}) {
     step = 40,
     use = USE.BUILDABLE,
     reserved = null,
+    // Maximum height variation tolerated across the footprint, in metres.
+    // Some things need level ground in a way that "not too steep" does not
+    // capture: a runway is a 3.4 km FLAT PLANE, and slope-per-metre can be
+    // gentle the whole way while the two ends still differ by 40 m.
+    maxRange = Infinity,
+    // Sampling interval for the flatness test. Corners alone cannot see a rise
+    // in the middle of a 3 km footprint.
+    grade = 120,
   } = opts;
+
+  /** Height variation across a footprint, sampled along both axes. */
+  const rangeAt = (cx, cz) => {
+    if (maxRange === Infinity || (!w && !d)) return 0;
+    let mn = Infinity, mx = -Infinity;
+    const nx = Math.max(2, Math.ceil(w / grade));
+    const nz = Math.max(2, Math.ceil(d / grade));
+    for (let i = 0; i <= nx; i++) {
+      for (let j = 0; j <= nz; j++) {
+        const x = cx - w / 2 + (w * i) / nx;
+        const z = cz - d / 2 + (d * j) / nz;
+        const h = heightAt(x, z);
+        if (h < mn) mn = h;
+        if (h > mx) mx = h;
+      }
+    }
+    return mx - mn;
+  };
 
   const fits = (cx, cz) => {
     // Corners AND centre. A centre-only test is how a stadium ends up with two
@@ -214,11 +240,11 @@ export function findSite(heightAt, want, opts = {}) {
     for (const [x, z] of pts) {
       if (classifyAt(heightAt, x, z, reserved).use !== use) return false;
     }
-    return true;
+    return rangeAt(cx, cz) <= maxRange;
   };
 
   if (fits(want.x, want.z)) {
-    return { x: want.x, z: want.z, moved: 0, h: heightAt(want.x, want.z) };
+    return { x: want.x, z: want.z, moved: 0, h: heightAt(want.x, want.z), range: rangeAt(want.x, want.z) };
   }
 
   // Ring search outward, so the first hit is the closest legal site rather than
@@ -229,8 +255,70 @@ export function findSite(heightAt, want, opts = {}) {
       const a = (2 * Math.PI * i) / n;
       const x = want.x + Math.cos(a) * r;
       const z = want.z + Math.sin(a) * r;
-      if (fits(x, z)) return { x, z, moved: r, h: heightAt(x, z) };
+      if (fits(x, z)) return { x, z, moved: r, h: heightAt(x, z), range: rangeAt(x, z) };
     }
   }
   return null;   // nowhere within radius: the caller must not build
+}
+
+
+/**
+ * The FLATTEST legal site within range, rather than the nearest.
+ *
+ * findSite() returns the first site that satisfies its constraints, which is
+ * right for a building that simply has to be on dry land. It is wrong for
+ * anything that needs level ground, because "first acceptable" and "best
+ * available" are different questions and there may be no acceptable site at all.
+ *
+ * Measured on this world: a 3.4 km runway needs a flat plane, and the flattest
+ * dry 3.4 km run ANYWHERE varies by 11.3 m. There is no site that satisfies a
+ * hard flatness constraint, so asking for one returns null and builds nothing --
+ * which is honest but leaves the world without an airport.
+ *
+ * Real airports answer this with earthworks: they are enormous graded platforms
+ * cut into and built out of the landscape. So this returns the best available
+ * site AND the height variation it will have to absorb, and the caller grades a
+ * platform to swallow it.
+ */
+export function findFlattestSite(heightAt, want, opts = {}) {
+  const { radius = 6000, step = 150, w = 0, d = 0, grade = 150, use = USE.BUILDABLE, reserved = null } = opts;
+  let best = null;
+
+  const consider = (x, z) => {
+    // every corner and edge must be legal ground before flatness matters
+    const hw = w / 2, hd = d / 2;
+    for (const [px, pz] of [[x, z], [x - hw, z - hd], [x + hw, z - hd],
+                            [x - hw, z + hd], [x + hw, z + hd],
+                            [x, z - hd], [x, z + hd], [x - hw, z], [x + hw, z]]) {
+      if (classifyAt(heightAt, px, pz, reserved).use !== use) return;
+    }
+    let mn = Infinity, mx = -Infinity, sum = 0, n = 0;
+    const nx = Math.max(2, Math.ceil(w / grade));
+    const nz = Math.max(2, Math.ceil(d / grade));
+    for (let i = 0; i <= nx; i++) {
+      for (let j = 0; j <= nz; j++) {
+        const px = x - hw + (w * i) / nx;
+        const pz = z - hd + (d * j) / nz;
+        const h = heightAt(px, pz);
+        if (h < mn) mn = h;
+        if (h > mx) mx = h;
+        sum += h; n++;
+      }
+    }
+    const range = mx - mn;
+    if (!best || range < best.range) {
+      best = { x, z, range, min: mn, max: mx, mean: sum / n,
+               moved: Math.hypot(x - want.x, z - want.z) };
+    }
+  };
+
+  consider(want.x, want.z);
+  for (let r = step; r <= radius; r += step) {
+    const n = Math.max(8, Math.round((2 * Math.PI * r) / step));
+    for (let i = 0; i < n; i++) {
+      const a = (2 * Math.PI * i) / n;
+      consider(want.x + Math.cos(a) * r, want.z + Math.sin(a) * r);
+    }
+  }
+  return best;
 }
