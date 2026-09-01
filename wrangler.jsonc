@@ -70,6 +70,7 @@
       "/spend",
       "/pipeline-budget",
       "/live-status",
+      "/recent-runs",
       "/world-edit-selftest",
       "/sim-selftest",
       "/world-source",

@@ -9,7 +9,9 @@
 <meta property="og:title" content="CALIPER — a system that only says yes when yes is true">
 <meta property="og:description" content="Does a verification loop substitute for model capability, and what does it cost? 387 measured cycles, a human gate, cross-vendor review, and a spend ceiling enforced in code.">
 <meta property="og:url" content="https://caliper.markfrasertoronto.workers.dev/">
-<meta name="twitter:card" content="summary_large_image">
+<!-- summary, not summary_large_image: there is no og:image, and a large-image
+     card with no image renders as a blank rectangle on every share. -->
+<meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="CALIPER — a system that only says yes when yes is true">
 <meta name="twitter:description" content="A change pipeline that refuses. 387 measured cycles, a human gate, cross-vendor review, spend capped in code.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231E293B'/%3E%3Ctext x='50' y='68' font-family='monospace' font-size='52' font-weight='700' fill='%2338BDF8' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
@@ -942,7 +944,19 @@ body.inspecting-mobile #nav-compass-pad {
 
 <!-- Full-Screen 3D Viewport -->
 <div id="viewport-container">
-  <canvas id="world-canvas" role="img" aria-label="Expansive Mediterranean coastal city simulation"></canvas>
+  <canvas id="world-canvas" role="img" aria-label="A 40 km procedural coastal city. Click a building to select it."></canvas>
+  <!-- SOMETHING TO LOOK AT WHILE THE WORLD IS BUILT.
+       generateWorld takes about 5 s and runs synchronously, so draw() returns
+       early and nothing paints. There was no spinner, no skeleton, no text: a
+       hiring engineer's first five seconds were a frozen page and an empty
+       viewport, which reads as broken rather than as busy.
+       Removed by the renderer the moment the first frame lands. -->
+  <div id="world-booting" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;z-index:40;pointer-events:none;background:linear-gradient(#0b1220,#0f172a)">
+    <div style="font-family:var(--mono);font-size:12px;color:var(--sky);letter-spacing:.08em">BUILDING THE CITY</div>
+    <div style="font-size:11.5px;color:var(--text-muted);max-width:340px;text-align:center;line-height:1.5">
+      40&nbsp;km of terrain, coastline, roads and buildings, generated from one plan. About five seconds.
+    </div>
+  </div>
   <canvas id="world-canvas-2d" style="display:none" role="img" aria-label="Plan view"></canvas>
 </div>
 
@@ -1020,7 +1034,7 @@ body.inspecting-mobile #nav-compass-pad {
     <button id="tour-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Put the panels away and fly the city. Press again, or Escape, to come back.">🏙 Tour</button>
     <button id="grid-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Toggle the 600 m spatial grid and world axes">📐 Grid</button>
     <button id="sound-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Toggle ambient audio">🎵 Audio</button>
-    <button id="drone-tour-btn" type="button" class="btn-pill" title="Cinematic camera flythrough with architectural narrative">🎬 Tour</button>
+    <button id="drone-tour-btn" type="button" class="btn-pill" title="Cinematic camera flythrough with architectural narrative">🎬 Flythrough</button>
     <button id="export-render-btn" type="button" class="btn-pill" title="Export High-Res Architectural Blueprint Screenshot with Title Block">📸 Export 4K</button>
     <button id="research-paper-trigger" type="button" class="btn-pill" title="Original Research Paper, Findings & Data Matrix">📖 Research & Write-Up</button>
     <button id="welcome-guide-trigger" type="button" class="btn-pill active" aria-pressed="true" title="Show or hide the overview card">ℹ️ Overview</button>
@@ -1054,8 +1068,8 @@ body.inspecting-mobile #nav-compass-pad {
     </div>
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">📐</div>
-      <strong style="color:#fff;font-size:12px;display:block">Spatial Clearance Grid</strong>
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Click <strong>📐 Grid</strong> to inspect coordinate snaps, parcel envelopes, and clearance buffers.</span>
+      <strong style="color:#fff;font-size:12px;display:block">Every point knows what it is</strong>
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Click any building: it resolves to a plot, its block, its district and its settlement — an address a change can be written against, and one the system can refuse.</span>
     </div>
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">📊</div>
@@ -1065,7 +1079,8 @@ body.inspecting-mobile #nav-compass-pad {
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">🌍</div>
       <strong style="color:#fff;font-size:12px;display:block">The Region</strong>
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">A 40&nbsp;km coastal region generated from one plan: terrain, coastline, 26 settlements, 39,000 buildings.
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">A 40&nbsp;km coastal region generated from one plan: terrain, coastline, <span id="city-stat-settlements">57</span> settlements,
+        <span id="city-stat-buildings">31,000</span> buildings.
         Press <strong>Tour</strong> in the bar above to put the panels away and fly it.</span>
     </div>
   </div>
@@ -1571,7 +1586,7 @@ body.inspecting-mobile #nav-compass-pad {
 </div>
 
 <script type="module">
-import { WorldRenderer } from "./world-render-3d.js";
+import { WorldRenderer, THREE } from "./world-render-3d.js";
 import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
 
 const $ = s => document.querySelector(s);
@@ -1643,18 +1658,26 @@ const TARGET_PARCELS = {
   workshop: { name: 'Maritime Design Atelier' },
   'dwelling-1': { name: 'Marina Villa North' },
   'dwelling-2': { name: 'Palm Terrace Villa' },
-  outdoors: { name: 'Entire Kingdom' },
+  outdoors: { name: 'The whole city' },
 };;
 
-function setTargetParcel(parcelId) {
+function setTargetParcel(parcelId, cityLabel) {
   currentTargetParcelId = parcelId || 'town';
-  const info = TARGET_PARCELS[currentTargetParcelId] || TARGET_PARCELS.town;
+  // A CITY PLOT IS NOT IN THE VILLAGE TABLE, AND SHOULD NOT BE.
+  //
+  // TARGET_PARCELS names the four editable village parcels. City plot ids
+  // (block-48-2516-p0) are not in it, so every city click fell through to
+  // `.town` and the target read "The Central Esplanade & Promenade" no matter
+  // what you clicked -- the inspector said one thing and the target said
+  // another, in the same gesture.
+  const info = TARGET_PARCELS[currentTargetParcelId];
+  const name = info ? info.name : (cityLabel || currentTargetParcelId);
   const labelEl = $('#target-parcel-name');
-  if (labelEl) labelEl.textContent = info.name;
+  if (labelEl) labelEl.textContent = name;
   const input = $('#bar-request-input');
   // A placeholder describing the SUBJECT is fine; one describing the CHANGE is
   // a suggestion in disguise, which is what these used to be.
-  if (input && !currentScope) input.placeholder = `Describe a change to ${info.name}`;
+  if (input && !currentScope) input.placeholder = `Describe a change to ${name}`;
 }
 
 const canvas3d = $('#world-canvas');
@@ -1720,7 +1743,7 @@ const renderer3d = new WorldRenderer(canvas3d, {
   city: true,
   reducedMotion,
   onInspect: (info) => {
-    setTargetParcel(info.parcelId);
+    setTargetParcel(info.parcelId, info.label);
     $('#inspect-parcel-id').textContent = (info.type || 'PARCEL').toUpperCase();
     $('#inspect-title').textContent = info.label || info.parcelId;
     $('#inspect-type').textContent = info.type || 'structure';
@@ -2320,14 +2343,26 @@ document.addEventListener('click', ev => {
   const el = $('#run-record-tally');
   if (!el) return;
   try {
-    const h = await fetch('/change-history').then(r => r.json());
+    const [h, recent] = await Promise.all([
+      fetch('/change-history').then(r => r.json()),
+      fetch('/recent-runs').then(r => r.json()).catch(() => ({})),
+    ]);
+    lastRuns = recent || {};
     const totals = h.totals || {};
     const n = Object.values(totals).reduce((a, b) => a + b, 0);
     const shipped = totals.shipped || 0;
     const failed = n - shipped;
-    // +1 for the fully captured run kept in public/recorded-run.json, which
-    // predates the changelog and is the one that can be replayed stage by stage.
-    el.textContent = ` — ${n + 1} so far, ${shipped + 1} shipped and ${failed} that did not.`;
+    // +1 for the fully captured run in public/recorded-run.json, which predates
+    // the changelog and is the only one with stage-by-stage replay data.
+    const total = n + 1, shippedTotal = shipped + 1;
+    el.textContent = total === 1
+      ? ' — one so far, and it shipped.'
+      : ` — ${total} so far, ${shippedTotal} shipped and ${failed} that did not.`;
+    // A refusal is the more interesting half of the claim, so say when one is
+    // available to look at rather than burying it.
+    if (lastRuns.refused) {
+      el.textContent += ' The most recent refusal is included.';
+    }
   } catch {
     el.textContent = ' — including the ones that failed.';
   }
@@ -2339,21 +2374,48 @@ document.addEventListener('click', ev => {
 // obvious way back. Escape works too -- a mode with no visible exit is a trap,
 // and this one covers the entire screen.
 (function tourMode() {
-  const PANELS = ['#welcome-mission-card', '#floating-status-card', '#director-dock', '#nav-compass-pad', '#inspect-card', '#street-hud'];
+  // These are IDs, and two of them were CLASS names -- '#inspect-card' and
+  // '#street-hud' matched nothing, so entering the tour with a building
+  // selected left the inspector up, and entering it from Walk/Drive/Fly left
+  // the street HUD up complete with its own exit button. Exactly the chrome the
+  // tour exists to remove.
+  const PANELS = ['#welcome-mission-card', '#floating-status-card', '#director-dock', '#nav-compass-pad', '#parcel-inspect-card', '#street-level-hud'];
   const btn = $('#tour-toggle-btn');
   const bar = document.querySelector('.top-bar-wrapper');
   let touring = false;
+  // RESTORE WHAT WAS THERE, NOT THE CASCADE.
+  //
+  // Exiting used to set display:'' , which hands control back to CSS rather
+  // than to what the visitor had. Two consequences, one of them permanent:
+  // a welcome card the visitor had closed came back, and .status-card -- which
+  // is display:none in CSS and only ever shown by an inline 'block' -- was
+  // hidden forever, with no control anywhere on the page to bring it back. That
+  // panel holds the only zero-spend entry point.
+  const priorDisplay = new Map();
   const setTour = (on) => {
     touring = on;
     for (const sel of PANELS) {
       const el = document.querySelector(sel);
-      if (el) el.style.display = on ? 'none' : '';
+      if (!el) continue;
+      if (on) {
+        if (!priorDisplay.has(sel)) priorDisplay.set(sel, el.style.display);
+        el.style.display = 'none';
+      } else {
+        el.style.display = priorDisplay.has(sel) ? priorDisplay.get(sel) : '';
+        priorDisplay.delete(sel);
+      }
     }
     // The bar stays -- it is the way back. Everything on it except the exit is
     // hidden, so the world is not framed by controls that do nothing here.
     if (bar) {
-      bar.querySelectorAll('.btn-pill, .btn-group, .clock-pill, .status-pill, a.btn-pill').forEach((el) => {
+      // Clusters and the brand badge too, or the bar becomes empty padded glass
+      // pills floating mid-screen framing a view they no longer control.
+      bar.querySelectorAll('.btn-pill, .btn-group, .clock-pill, .status-pill, a.btn-pill, .brand-badge, #grid-cell-coords').forEach((el) => {
         if (el !== btn && !btn.contains(el)) el.style.display = on ? 'none' : '';
+      });
+      bar.querySelectorAll('.top-bar-cluster').forEach((cl) => {
+        const anyVisible = [...cl.children].some((c) => c === btn || btn.contains(c) || c.style.display !== 'none');
+        cl.style.display = on && !anyVisible ? 'none' : '';
       });
     }
     if (btn) {
@@ -2367,7 +2429,10 @@ document.addEventListener('click', ev => {
   const exitHint = document.createElement('div');
   exitHint.className = 'glass';
   exitHint.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:20px;padding:8px 14px;border-radius:999px;font-size:11.5px;color:var(--text-muted);display:none;z-index:80;pointer-events:none';
-  exitHint.textContent = 'Touring the city — drag to orbit, W A S D to fly. Press Escape to come back.';
+  // In Orbit -- the default -- W/A/S/D PAN the look-at; they only fly in
+  // Walk/Drive/Fly. Saying "to fly" in the one sentence a touring visitor reads
+  // is a small lie in the middle of a page about not telling them.
+  exitHint.textContent = 'Touring the city — drag to orbit, scroll to zoom, W A S D to pan. Press Escape to come back.';
   document.body.appendChild(exitHint);
 
   btn?.addEventListener('click', () => setTour(!touring));
@@ -2378,6 +2443,30 @@ document.addEventListener('click', ev => {
 
 checkLiveStatus();
 reportDegradedRenderer(renderer3d);
+
+// THE COUNTS COME FROM THE BUILD, NOT FROM A COPYWRITER.
+//
+// This said "39,000 buildings". The real number is about 31,300 -- a 25%
+// overstatement, on the page whose headline is that it only says yes when yes
+// is true and whose hero card boasts about publishing a correction against its
+// own result. The renderer already reports exactly what it built, so the page
+// quotes that and cannot drift again.
+(function publishCityStats() {
+  const fill = () => {
+    const st = renderer3d._impl?._city?.stats;
+    const world = renderer3d._impl?._city?.world;
+    if (!st) return false;
+    const b = document.getElementById('city-stat-buildings');
+    const s2 = document.getElementById('city-stat-settlements');
+    if (b && st.buildings) b.textContent = st.buildings.toLocaleString('en');
+    if (s2 && world?.plots) s2.textContent = String(new Set(world.plots.map((p) => p.settlement)).size);
+    return true;
+  };
+  if (!fill()) {
+    const iv = setInterval(() => { if (fill()) clearInterval(iv); }, 500);
+    setTimeout(() => clearInterval(iv), 30000);
+  }
+})();
 
 const COMMANDS = [
   { label: '🏛️ Jump to The Central Esplanade & Promenade', action: () => renderer3d.focusDistrict('town') },
@@ -2693,9 +2782,13 @@ function finishPipelineTelemetry(success, message = null) {
 let currentRunId = null;
 let currentControlToken = null;
 let currentChangeRequest = '';
-// Was declared, never read, never assigned -- alongside a /live-status endpoint
-// the page never called. Both are now real: on load the page asks whether a run
-// can actually be started, and if not it says why and offers the recording.
+// Mirrors the kill-switch state. The real gate is the submit button's disabled
+// state (see checkLiveStatus); this is here for anything that needs to ask
+// without re-fetching.
+//
+// It used to carry a comment claiming it had been "made real". It had been made
+// ASSIGNED. Still-not-read is still dead, and a comment asserting otherwise is
+// worse than the dead code.
 let liveRunsEnabled = true;
 
 async function checkLiveStatus() {
@@ -2735,6 +2828,9 @@ async function checkLiveStatus() {
 // passed off as live would be the exact failure this project exists to refuse.
 // =============================================================================
 let recordedRun = null;
+/** The last run that shipped and the last that did not, from /recent-runs.
+ *  Real, and replaced by the next run of each kind. */
+let lastRuns = {};
 let replayTimers = [];
 
 function stopReplay() {
@@ -2861,6 +2957,25 @@ async function playRecordedRun() {
             '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;line-height:1.6">' +
             'Total ' + money(run.totalCostUsd) + '. That was a replay of a real run, so nothing was spent or changed just now. ' +
             'Your own request runs the same pipeline — and it can just as easily refuse.</p>');
+
+          // AND HERE IS ONE THAT DIDN'T SHIP.
+          //
+          // Showing only a success is what made the replay read as a staged
+          // demo. The most recent refusal is real, it is whatever the last one
+          // happened to be, and it will be a different one tomorrow.
+          if (lastRuns && lastRuns.refused) {
+            const r2 = lastRuns.refused;
+            const b2 = stageBlock(log, 'replay-refused', '⛔ And the most recent run that did NOT ship');
+            b2.classList.remove('active');
+            b2.insertAdjacentHTML('beforeend',
+              '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;line-height:1.6">' +
+              '<strong>' + esc(String(r2.capturedAt).slice(0, 10)) + '</strong> · ' + esc(r2.outcome) + '<br>' +
+              (r2.understoodIntent ? 'Understood as: \u201c' + esc(r2.understoodIntent) + '\u201d<br>' : '') +
+              esc(r2.reason || '') +
+              (r2.reviewFoundMaterial ? '<br>The reviewer raised ' + r2.reviewFoundMaterial + ' material finding(s) over ' + (r2.reviewRounds || 1) + ' round(s).' : '') +
+              (r2.reviewOscillated ? '<br>The reviewer and the author could not converge.' : '') +
+              '<br>Cost: ' + money(r2.totalCostUsd || 0) + '. Nothing shipped.</p>');
+          }
         }, 900));
       }
     }, delay));
@@ -3143,7 +3258,7 @@ function connect(url) {
         ${!premisesHold ? `<p style="margin:0 0 6px;font-size:11px;color:#fbbf24">Auto-approve is held back for this one — it needs a person. Approving means you are overruling the grounding check above, deliberately.</p>` : ''}
         <p style="margin:0 0 6px"><strong>Will Build:</strong> ${esc(willBuild)}</p>
         <p style="margin:0 0 6px"><strong>Criteria:</strong> ${criteria}</p>
-        ${costStr ? `<p style="margin:0 0 8px;font-family:var(--mono);color:var(--accent);font-size:11px">Est. Cost: $${costStr}</p>` : '<p style="margin:0 0 8px;font-family:var(--mono);color:var(--text-muted);font-size:11px">Est. cost: not reported by the coordinator</p>'}
+        ${costStr ? `<p style="margin:0 0 8px;font-family:var(--mono);color:var(--accent);font-size:11px">Spent so far: $${costStr}</p>` : '<p style="margin:0 0 8px;font-family:var(--mono);color:var(--text-muted);font-size:11px">Est. cost: not reported by the coordinator</p>'}
         <div style="display:flex;gap:8px;margin-top:6px">
           <button type="button" class="btn-pill btn-approve" style="background:var(--emerald);color:#fff;padding:6px 12px;font-weight:700">${!premisesHold ? '✓ Build it anyway' : '✓ Approve &amp; Build'}</button>
           <button type="button" class="btn-pill btn-reject" style="background:#ef4444;color:#fff;padding:6px 12px">✕ Reject</button>
@@ -3289,7 +3404,7 @@ function connect(url) {
         <p style="margin:0 0 6px"><strong>Reviewer:</strong> ${esc(reviewerName)}</p>
         <p style="margin:0 0 8px"><strong>Findings:</strong> ${esc(mat)}</p>
         <div style="display:flex;gap:8px;margin-top:6px">
-          <button type="button" class="btn-pill btn-approve" style="background:var(--emerald);color:#fff;padding:6px 12px;font-weight:700">✓ Ship Changes</button>
+          <button type="button" class="btn-pill btn-approve" style="background:var(--emerald);color:#fff;padding:6px 12px;font-weight:700">✓ Fix and re-review</button>
           <button type="button" class="btn-pill btn-reject" style="background:#ef4444;color:#fff;padding:6px 12px">✕ Reject</button>
         </div>
       </div>

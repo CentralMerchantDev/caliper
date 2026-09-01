@@ -12,6 +12,7 @@ import { groundRequest, formatGroundingForPlan, type GroundingResult } from "./g
 import {
   CONTROL_LIMITS,
   PipelineLimitError,
+  CircuitOpenError,
   assertUnderRunCeiling,
   assertUnderPipelineSpendCap,
   reconcilePipelineSpend,
@@ -25,7 +26,7 @@ import {
 
 // CALIPER v2 (BUILD-V2.md): the pipeline now modifies a working system
 // (src/simBaseline.ts) instead of generating a standalone artifact from
-// nothing (src/pipeline.ts, superseded but not yet deleted). Control layer,
+// nothing (src/pipeline.ts, since deleted). Control layer,
 // sandbox, cross-vendor reviewer, and cost experiment all carry over
 // unchanged; what's new is plan mode as a front gate, structured
 // (real, executable) acceptance criteria proposed in the plan, regression
@@ -190,7 +191,7 @@ export interface ChangeRecord {
  * that predate these two fields (read-time fallback, not a migration
  * step -- see handleChangeHistory in index.ts). Deliberately vague on
  * method: outcomes, not stage internals. */
-export function deriveHistoryReason(ledger: Pick<ChangeLedger, "outcome" | "fixApplied" | "fixHeld" | "reviewFoundMaterial">): string {
+export function deriveHistoryReason(ledger: Pick<ChangeLedger, "outcome" | "fixApplied" | "fixHeld" | "reviewFoundMaterial"> & { reviewOscillated?: boolean }): string {
   switch (ledger.outcome) {
     case "shipped":
       if (ledger.reviewFoundMaterial > 0 && ledger.fixApplied && ledger.fixHeld) return "It passed verification. A fix addressed what review found.";
@@ -198,6 +199,18 @@ export function deriveHistoryReason(ledger: Pick<ChangeLedger, "outcome" | "fixA
       return "It passed every check.";
     case "refused-plan":
       return "The plan was not approved.";
+    case "refused-review":
+      // THE LOOP'S OWN OUTCOME HAD NO SENTENCE.
+      //
+      // This case was missing, so every review refusal -- the one thing the
+      // whole cross-vendor loop exists to produce -- fell through to the
+      // default and was written to the public changelog as "Still in progress."
+      // A terminal outcome, recorded forever as unfinished.
+      return ledger.reviewOscillated
+        ? "The reviewer and the author could not agree, so nothing shipped."
+        : ledger.fixApplied
+          ? "Review found a material problem. A fix was attempted and the reviewer was still not satisfied."
+          : "Review found a material problem and it was not resolved.";
     case "refused-verification":
       return ledger.fixApplied ? "A fix was attempted. It still did not pass its checks." : "It did not pass its checks.";
     case "stopped":
@@ -216,8 +229,49 @@ export function deriveHistoryReason(ledger: Pick<ChangeLedger, "outcome" | "fixA
  * failure here is swallowed (matches checkStopped's own delete a few
  * lines up) -- a KV hiccup logging history must never turn an otherwise-
  * successful run into a failed response. */
+/**
+ * THE LAST ONE OF EACH, KEPT FOR REPLAY.
+ *
+ * The page could replay exactly one run: a static file captured on 29 Aug,
+ * which shipped. So the only end-to-end thing a visitor could watch was a
+ * success, and a visitor whose own run then failed had no way to tell whether
+ * failure was normal or whether the system was broken.
+ *
+ * Two slots, overwritten as runs happen: the last one that SHIPPED and the last
+ * one that DID NOT. They change over time on their own, they are real, and
+ * showing a refusal next to a success is the claim this project actually makes.
+ *
+ * Deliberately small: the visitor's raw text is never stored (same rule as the
+ * changelog -- plan.understoodIntent is the system-authored summary), and the
+ * ledger's stage costs are what the replay needs.
+ */
+async function recordReplayable(kv: KVNamespace, full: ChangeRecord): Promise<void> {
+  const shipped = full.ledger.outcome === "shipped";
+  // A halted or stopped run is not an ENDING, so it is not evidence of either.
+  if (!shipped && !["refused-plan", "refused-review", "refused-verification"].includes(full.ledger.outcome)) return;
+  const slot = shipped ? "replay/last-shipped" : "replay/last-refused";
+  const payload = {
+    capturedAt: new Date(full.completedAt).toISOString(),
+    outcome: full.ledger.outcome,
+    reason: full.reason,
+    understoodIntent: full.plan?.understoodIntent ?? null,
+    willBuild: full.plan?.willBuild ?? null,
+    stageCosts: full.ledger.stageCosts,
+    totalCostUsd: full.ledger.totalCostUsd,
+    totalWallTimeMs: full.ledger.totalWallTimeMs,
+    reviewFoundMaterial: full.ledger.reviewFoundMaterial,
+    reviewRounds: full.ledger.reviewRounds ?? null,
+    reviewOscillated: full.ledger.reviewOscillated ?? false,
+    fixApplied: full.ledger.fixApplied,
+    fixHeld: full.ledger.fixHeld,
+    findings: (full.findings ?? []).map((f) => ({ severity: f.severity, text: f.text })),
+  };
+  await kv.put(slot, JSON.stringify(payload)).catch(() => {});
+}
+
 async function recordTerminalRun(kv: KVNamespace, record: Omit<ChangeRecord, "completedAt" | "reason">): Promise<ChangeRecord> {
   const full: ChangeRecord = { ...record, completedAt: Date.now(), reason: deriveHistoryReason(record.ledger) };
+  await recordReplayable(kv, full);
   // The pipeline needs the visitor's raw request while a run is active and
   // returns it to that visitor, but the public changelog must never retain it.
   // History uses plan.understoodIntent, which is the system-authored summary.
@@ -498,6 +552,8 @@ function haltLedger(
   state: Pick<ChangeState, "stageCosts" | "budgetSpent" | "questionAsked" | "planGateReplyCount" | "runStartedAt">,
   waitingOn: "answer" | "plan-decision" | "review-decision" | "error-decision",
   pastGate1 = false,
+  foundMaterial = 0,
+  foundNits = 0,
 ): ChangeLedger {
   const outcome =
     waitingOn === "answer" ? "halted-awaiting-answer"
@@ -508,8 +564,8 @@ function haltLedger(
     outcome,
     totalCostUsd: state.budgetSpent,
     stageCosts: state.stageCosts,
-    reviewFoundMaterial: 0,
-    reviewFoundNits: 0,
+    reviewFoundMaterial: foundMaterial,
+    reviewFoundNits: foundNits,
     fixApplied: false,
     fixHeld: null,
     planGateReplyCount: state.planGateReplyCount,
@@ -712,6 +768,8 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   let verifyCriteria: TestResult[] | undefined;
   let verifyFatalError: string | undefined;
   let convergenceFixAttempts = 0;
+  /** How many times the reviewer saw the work. 1 means it never saw the fix. */
+  let reviewRounds = 0;
   let convergenceRejectionReason: string | undefined;
   let findings: ReviewFinding[] | undefined;
   // Also hoisted above the try for the same reason: read by the catch
@@ -1204,6 +1262,11 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     );
     stageCosts.push({ stage: "review", costUsd: review.costUsd, wallTimeMs: review.wallTimeMs });
     findings = parseFindings(review.text);
+    // The reviewer has now seen the work once. Left at 0, a run whose first
+    // review was clean reported that the reviewer never looked at it -- the
+    // opposite of what happened, in the field whose whole job is to say how
+    // many times it looked.
+    reviewRounds = 1;
     onEvent({ type: "reviewed", model: review.model, inputTokens: review.inputTokens, outputTokens: review.outputTokens, costUsd: review.costUsd, wallTimeMs: review.wallTimeMs, reviewText: review.text, findings });
   }
   // Same real safety net as the plan/grounding guard above: every branch
@@ -1212,6 +1275,19 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   if (!implCode || !verifyRegression || !verifyCriteria || !findings) throw new Error("internal error: implCode/verify results/findings not established before the review gate");
 
   const material = findings.filter((f) => f.severity === "MATERIAL").map((f) => f.text);
+  // WHAT THE REVIEW FOUND, KEPT SEPARATE FROM WHAT IS LEFT TO FIX.
+  //
+  // `material` is mutated in place by the loop below (it becomes the CURRENT
+  // round's outstanding set). The ledger and the retrospective then read it and
+  // reported the last round's count as though it were the total: three findings
+  // in round one plus one new one in round two was recorded as
+  // "reviewFoundMaterial: 1". The retrospective -- which writes the persistent
+  // lessons file -- was being trained on that number.
+  //
+  // The clean-exit path breaks BEFORE the mutation, so the common shipped case
+  // was right, which is why this survived four audits.
+  const materialFirstRound = [...material];
+  let allMaterialSeen = [...material];
   const nits = findings.filter((f) => f.severity === "NIT").map((f) => f.text);
 
   let finalCode = implCode;
@@ -1219,8 +1295,6 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   let fixHeld: boolean | null = null;
   let reviewGateDecision: "approve" | "reject" | "not-needed" = "not-needed";
   let reviewRejected = false;
-  /** How many times the reviewer saw the work. 1 means it never saw the fix. */
-  let reviewRounds = 0;
   /** Material findings still open when the loop stopped. Non-empty here means
    *  the run must REFUSE -- it cannot say the reviewer was satisfied. */
   let reviewUnresolved: string[] = [];
@@ -1229,6 +1303,8 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   let reviewAssessments: ReviewAssessment[] = [];
   /** Promises the plan made that the final QA pass found unmet. Empty on pass. */
   let qaGaps: string[] = [];
+  /** True when the QA CALL failed, as opposed to the QA pass finding a gap. */
+  let qaUnavailable = false;
 
   if (material.length > 0) {
     const decision = await checkDecision(env.SPEND_KV, `change/review-decision/${runId}`);
@@ -1250,7 +1326,11 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       };
       await saveState(env.SPEND_KV, state);
       onEvent({ type: "halted", runId, waitingOn: "review-decision" });
-      const ledger = haltLedger(state, "review-decision", true);
+      // The counts are real here: this halt is only reachable BECAUSE the
+      // review found something material. Emitting a ledger that says it found
+      // zero, in the same breath as the event listing the findings, was a
+      // contradiction inside one response.
+      const ledger = haltLedger(state, "review-decision", true, material.length, nits.length);
       onEvent({ type: "ledger", ledger });
       return { runId, changeRequest, plan, finalCode: null, findings, ledger, completedAt: 0, reason: "" };
     }
@@ -1331,8 +1411,24 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       let oscillated = false;
 
       while (true) {
+        // A STOP HAS TO BE HONOURED HERE TOO.
+        //
+        // There was no checkStopped anywhere in this loop, and the loop can
+        // spend two assessments, two fixes, a review and two full sandbox
+        // verifications. The comment further down still claimed a stop had
+        // "nowhere left to be honored" before the free ship write -- true of
+        // the old single-fix shape, false the moment this became a loop.
+        if (await checkStopped(env.SPEND_KV, runId)) {
+          await clearState(env.SPEND_KV, runId);
+          const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt, "approve");
+          onEvent({ type: "stopped" });
+          onEvent({ type: "ledger", ledger });
+          return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings, ledger });
+        }
+
         // ---- Claude judges the review before acting on it ----
         let assessment: ReviewAssessment | null = null;
+        inFlightStage = `assess review (round ${round})`;
         try {
           const stillPassingNow = [
             ...verifyRegression.filter((r) => r.pass).map((r) => describePassing("regression", r)),
@@ -1353,6 +1449,13 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
             }
           }
         } catch (e) {
+          // "Out of budget" is not "assessment unavailable".
+          //
+          // This caught everything and fell through to the fix call -- so the
+          // loop's response to a spend-cap or circuit-breaker throw was to
+          // attempt a MORE expensive call against the provider that had just
+          // failed. Those two have to keep travelling upward.
+          if (e instanceof PipelineLimitError || e instanceof CircuitOpenError) throw e;
           // An assessment that will not parse must not silently become
           // "nothing was wrong". Fall through and fix everything material.
           console.warn("review assessment unavailable, fixing all material findings:", (e as Error)?.message ?? e);
@@ -1433,7 +1536,18 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
 
         // ---- THE REVIEWER MUST SEE WHAT ITS FINDINGS CHANGED ----
         if (round >= CONTROL_LIMITS.MAX_REVIEW_ROUNDS) {
-          unresolved = toFix;
+          // AN OVERRULE THAT WAS NEVER RE-REVIEWED STILL BLOCKS.
+          //
+          // `toFix` is empty when the author judged every finding invalid. At
+          // the round cap that made `unresolved` empty and the run SHIPPED with
+          // the reviewer's findings outstanding and reviewUnresolvedCount: 0 --
+          // neither clean nor a refusal, which are the only two endings this
+          // loop claims to have.
+          //
+          // The author is allowed to overrule. It is not allowed to overrule on
+          // the last round and ship unexamined: the disagreement has to survive
+          // one more review to count, and there are no rounds left.
+          unresolved = toFix.length ? toFix : material.slice();
           break;
         }
         round++;
@@ -1477,6 +1591,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
           break;
         }
         previousMaterialKey = key;
+        for (const m of nextMaterial) if (!allMaterialSeen.includes(m)) allMaterialSeen.push(m);
         material.length = 0;
         material.push(...nextMaterial);
       }
@@ -1514,9 +1629,9 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // different questions, and this gate exists for the second one.
     outcome = "refused-review";
     reviewGateDecision = "reject";
-    refusalReason = material.length === 1
-      ? `the review found a material problem and it was rejected: ${material[0]}`
-      : `the review found ${material.length} material problems and they were rejected`;
+    refusalReason = materialFirstRound.length === 1
+      ? `the review found a material problem and it was rejected: ${materialFirstRound[0]}`
+      : `the review found ${materialFirstRound.length} material problems and they were rejected`;
     onEvent({ type: "refused", reason: refusalReason });
   } else if (reviewUnresolved.length > 0) {
     // THE REVIEWER WAS NEVER SATISFIED, SO THIS DOES NOT SHIP.
@@ -1577,12 +1692,15 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       stageCosts.push({ stage: "qa", costUsd: qa.costUsd, wallTimeMs: qa.wallTimeMs });
       onEvent({ type: "qa", passed: qa.passed, gaps: qa.gaps, model: qa.model, costUsd: qa.costUsd, wallTimeMs: qa.wallTimeMs });
       qaGaps = qa.passed ? [] : qa.gaps;
+      // A verdict line that never arrived is the call failing, not the change.
+      qaUnavailable = !qa.passed && !qa.text.trim();
       return !qa.passed;
     } catch (e) {
       // A QA pass that could not run is not a QA pass that passed. But it is
       // also not evidence the change is wrong, so it is reported as its own
       // thing rather than dressed up as a defect in the work.
-      qaGaps = [`the final QA pass could not run: ${String((e as Error)?.message ?? e)}`];
+      qaUnavailable = true;
+      qaGaps = [String((e as Error)?.message ?? e)];
       onEvent({ type: "qa", passed: false, gaps: qaGaps, model: REVIEW_MODEL, costUsd: 0, wallTimeMs: 0 });
       return true;
     }
@@ -1595,9 +1713,18 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // here. The gaps ARE the route: each one names a specific promise the
     // change does not keep, which is what a next attempt would have to close.
     outcome = "refused-verification";
-    refusalReason = qaGaps.length === 1
-      ? `the final check found this is not yet what was asked for: ${qaGaps[0]}`
-      : `the final check found ${qaGaps.length} things the change promised and did not deliver: ${qaGaps.join("; ")}`;
+    // "COULD NOT RUN" IS NOT "YOUR CHANGE IS WRONG".
+    //
+    // Every gap, including the two placeholders meaning the QA call itself
+    // failed, was wrapped in "the final check found this is not yet what was
+    // asked for" -- so a visitor whose QA call timed out was told their change
+    // was defective. The catch block's own comment states the correct rule and
+    // the message ignored it.
+    refusalReason = qaUnavailable
+      ? `the final check could not be completed (${qaGaps[0]}), so nothing shipped -- this is not a finding about the change itself`
+      : qaGaps.length === 1
+        ? `the final check found this is not yet what was asked for: ${qaGaps[0]}`
+        : `the final check found ${qaGaps.length} things the change promised and did not deliver: ${qaGaps.join("; ")}`;
     onEvent({ type: "refused", reason: refusalReason });
   } else {
     // Atomic Compare-and-Swap publication: serialized through Durable Object if available, fallback to KV only on infrastructure absence
@@ -1693,7 +1820,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   const { lesson, recurrenceCount } = await runRetrospectiveAndRecord(
     env, budget, stageCosts,
     `Change request: ${changeRequest}\nPlan: ${plan.willBuild}\n` +
-      `Reviewer found ${material.length} material issue(s): ${material.join("; ") || "none"}\n` +
+      `Reviewer found ${allMaterialSeen.length} material issue(s) across ${Math.max(1, reviewRounds)} round(s): ${allMaterialSeen.join("; ") || "none"}\n` +
       `Review rounds: ${reviewRounds}. Unresolved after the loop: ${reviewUnresolved.length}${reviewOscillated ? " (oscillated -- the same findings recurred)" : ""}.\n` +
       // The author's own judgement of the review is part of what there is to
       // learn from. A run where the author repeatedly overruled the reviewer
@@ -1713,8 +1840,10 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     outcome,
     totalCostUsd: budget.spent,
     stageCosts,
-    reviewFoundMaterial: material.length,
-    reviewFoundNits: nits.length,
+    // The TOTAL raised across every round, not whatever the last round left
+    // outstanding -- see materialFirstRound / allMaterialSeen above.
+    reviewFoundMaterial: allMaterialSeen.length,
+    reviewFoundNits: findings.filter((f) => f.severity === "NIT").length,
     fixApplied,
     fixHeld,
     planGateDecision: "approve",

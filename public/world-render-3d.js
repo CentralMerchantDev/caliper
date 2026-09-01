@@ -13,6 +13,13 @@
 // Day/Dusk/Night atmosphere cycle, and smooth orbital camera with district bookmarks.
 
 import * as THREE from "three";
+// RE-EXPORTED so index.html can build an offscreen renderer for the 4K export.
+// It was calling `new THREE.Vector2()` with THREE not imported there at all --
+// the vendored three is an ES module and sets no global -- so the export threw
+// ReferenceError on the first statement of every click, silently, with no file
+// and no error shown. Nothing caught it because the guard above it only checked
+// that the renderer existed.
+export { THREE };
 import { RoundedBoxGeometry } from "./vendor/three/addons/geometries/RoundedBoxGeometry.js";
 import { HDRLoader } from "./vendor/three/addons/loaders/HDRLoader.js";
 import { Sky } from "./vendor/three/addons/objects/Sky.js";
@@ -1128,6 +1135,28 @@ class Renderer3D {
       datum: { pos: new THREE.Vector3(12.0, 2.2, 18.5), dist: 22, delta: 0, pitch: 0.38, label: "The Datum AEC AI Pavilion (Mark Fraser, Applied AI)" },
     };
 
+    // THE SAME BOOKMARKS, AT CITY SCALE.
+    //
+    // The table above frames a four-house village: 22-85 m orbits around the
+    // origin. Downtown alone spans x -1470..1400, so every bookmark, Reset, the
+    // nav-pad home key, Clear target, seven command-palette entries and
+    // focusPreset -- which runs on EVERY Build submit -- put the camera inside
+    // the block geometry. The opening shot had already been fixed for this and
+    // the rest had not, so submitting a change request yanked the view into the
+    // ground.
+    //
+    // Coordinates are the real settlement centres, taken from the plan rather
+    // than guessed.
+    this._cityDistrictTargets = {
+      town:        { pos: new THREE.Vector3(0, 60, 200),      dist: 2600, delta: 0,     pitch: 0.34, label: "Downtown and the harbour" },
+      forge:       { pos: new THREE.Vector3(-6200, 30, -2700), dist: 2200, delta: 0.35, pitch: 0.32, label: "The port and container terminal" },
+      residential: { pos: new THREE.Vector3(-8400, 25, -5150), dist: 2400, delta: -0.55, pitch: 0.34, label: "The western coastal towns" },
+      docks:       { pos: new THREE.Vector3(1100, 20, 2400),  dist: 2000, delta: 0,     pitch: 0.30, label: "The marina and boardwalk" },
+      watchtower:  { pos: new THREE.Vector3(0, 300, -6000),   dist: 6500, delta: 0.4,   pitch: 0.42, label: "The coastal range behind the city" },
+      datum:       { pos: new THREE.Vector3(12100, 40, -4600), dist: 3000, delta: 0,    pitch: 0.33, label: "The airport" },
+    };
+    this._cityDefaultCamera = { lookAt: { x: 0, y: 60, z: 900 }, dist: 4200, delta: 0, pitch: 0.34 };
+
     this._diffSlateMat = stdMat({ color: 0x334155, roughness: 0.85, metalness: 0.1 });
     this._diffEmeraldMat = stdMat({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.9, roughness: 0.3 });
 
@@ -1177,12 +1206,11 @@ class Renderer3D {
     this._onNavModeChange = null;
 
     // Load saved default camera settings if present
-    this._defaultCameraSettings = {
-      lookAt: { x: 0, y: 5.0, z: -10.0 },
-      dist: 85,
-      delta: 0,
-      pitch: 0.32
-    };
+    // Reset must land somewhere you can see the city from. 85 m at the origin
+    // is inside downtown's block geometry.
+    this._defaultCameraSettings = this._cityMode
+      ? { lookAt: { x: 0, y: 60, z: 900 }, dist: 4200, delta: 0, pitch: 0.34 }
+      : { lookAt: { x: 0, y: 5.0, z: -10.0 }, dist: 85, delta: 0, pitch: 0.32 };
     try {
       const saved = localStorage.getItem('caliper_default_camera_view');
       if (saved) {
@@ -1512,6 +1540,12 @@ class Renderer3D {
     return city;
   }
 
+  /** The right bookmark table for the world actually on screen. Village
+   *  coordinates in a 40 km city put the camera inside a building. */
+  _targets() {
+    return this._cityMode ? this._cityDistrictTargets : this._districtTargets;
+  }
+
   _buildNeighbourhoodIfNeeded(world) {
     if (this._neighbourhoodBuilt) return;
     if (this._cityMode) {
@@ -1519,10 +1553,30 @@ class Renderer3D {
       // frame, so without this the city would be built dozens of times over.
       if (!this._cityBuildStarted) {
         this._cityBuildStarted = true;
-        this._buildCityBase(world).catch((e) => {
-          console.error("city base build failed:", e);
-          this._cityBuildError = String(e && e.message ? e.message : e);
-        });
+        this._buildCityBase(world)
+          .then(() => {
+            const boot = typeof document !== "undefined" && document.getElementById("world-booting");
+            if (boot) boot.remove();
+          })
+          .catch((e) => {
+            // A FAILED BUILD USED TO BE A BLACK RECTANGLE.
+            //
+            // _cityBuildError was written and never read: draw() returns early
+            // forever while _neighbourhoodBuilt is false, so the visitor got an
+            // empty canvas, a console error they will not open, and no message.
+            // That is the unlabelled degraded mode this file's own comment
+            // calls "the same lie", one screen over.
+            console.error("city base build failed:", e);
+            this._cityBuildError = String(e && e.message ? e.message : e);
+            const boot = typeof document !== "undefined" && document.getElementById("world-booting");
+            if (boot) {
+              boot.innerHTML =
+                '<div style="font-family:monospace;font-size:12px;color:#fbbf24;letter-spacing:.08em">THE CITY DID NOT BUILD</div>' +
+                '<div style="font-size:11.5px;color:#94a3b8;max-width:420px;text-align:center;line-height:1.5;margin-top:10px">' +
+                this._cityBuildError.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])) +
+                '<br><br>The change pipeline below still works — it does not depend on the render.</div>';
+            }
+          });
       }
       return;
     }
@@ -5404,6 +5458,10 @@ class Renderer3D {
       this._targetCamDist = this._camDist;
     };
 
+    // Alt-tab while holding W and the camera kept moving on return: keyup never
+    // fired because the window had lost focus.
+    window.addEventListener("blur", () => this._keysDown.clear());
+
     const onKeyDown = (e) => {
       if (e.key === "Escape") {
         if (this._isDroneTour) {
@@ -5416,6 +5474,27 @@ class Renderer3D {
         }
       }
 
+      // TYPING BEATS FLYING. THIS GUARD USED TO RUN LAST.
+      //
+      // _keysDown.add and preventDefault were above it, so in Walk / Drive /
+      // Fly the letters w a s d q e c and space could not be typed into the
+      // change-request box -- the app's primary input, in three of its four
+      // modes -- and typing drove the camera at the same time. The example
+      // request the placeholder suggests, "add a lamp post near the workshop",
+      // contains all four letters and three spaces.
+      //
+      // The dock stays visible in every nav mode, so the input is always
+      // focusable. Whoever has focus decides what a keystroke means.
+      const activeEl = document.activeElement;
+      const activeTag = activeEl?.tagName?.toLowerCase();
+      // `.modal` matched nothing -- the real classes are modal-backdrop and
+      // modal-card -- so W/A/S/D panned the camera behind an open dialog.
+      if (activeTag === "input" || activeTag === "textarea" || activeEl?.isContentEditable
+          || activeEl?.closest(".modal-backdrop") || activeEl?.closest(".modal-card")
+          || activeEl?.closest(".stage-log")) {
+        return;
+      }
+
       // Track key states for Street Mode (Walk / Drive / Fly)
       const k = e.key.toLowerCase();
       this._keysDown.add(k);
@@ -5423,12 +5502,6 @@ class Renderer3D {
       const navKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'q', 'e', ' ', 'c', 'shift'];
       if (this._navigationMode !== 'orbit' && (navKeys.includes(k) || navKeys.includes(e.key))) {
         e.preventDefault();
-      }
-
-      const activeEl = document.activeElement;
-      const activeTag = activeEl?.tagName?.toLowerCase();
-      if (activeTag === "input" || activeTag === "textarea" || activeEl?.isContentEditable || activeEl?.closest(".modal") || activeEl?.closest(".stage-log")) {
-        return;
       }
 
       // Handle hotkeys in orbit mode
@@ -5670,7 +5743,7 @@ class Renderer3D {
         const hitSprite = spriteHits[0].object;
         if (hitSprite.userData && hitSprite.userData.parcelId) {
           const parcelId = hitSprite.userData.parcelId;
-          if (this._districtTargets[parcelId]) {
+          if (this._targets()[parcelId]) {
             this.focusDistrict(parcelId);
             return;
           }
@@ -5701,6 +5774,43 @@ class Renderer3D {
           return;
         }
       }
+    }
+
+    // CITY MODE PICKS AGAINST THE SCENE, AND ANSWERS FROM THE INDEX.
+    //
+    // This raycast only ever tested `neighbourhoodGroup.children`. buildWorld
+    // adds every piece of city geometry straight to `scene`, so in city mode
+    // that group holds nothing but reconciled placements -- clicking any
+    // building, road, quay or park hit nothing and returned in silence, while
+    // the page advertised "click any district to set local spatial
+    // coordinates". The spatial index built to answer exactly this was
+    // assigned and never read.
+    //
+    // Hit the scene, take the world-space point, and ask the index what is
+    // there. The index gives a real address -- plot, block, district,
+    // settlement -- which is what a change request can actually be written
+    // against.
+    if (this._cityMode) {
+      const cityHits = this._raycaster.intersectObjects(this.scene.children, true);
+      if (cityHits.length === 0) return;
+      const pt = cityHits[0].point;
+      const addr = this._index ? this._index.addressAt(pt.x, pt.z) : null;
+      const where = this._index ? this._index.describeAt(pt.x, pt.z) : "somewhere in the city";
+      this._lastPickedPoint = { x: pt.x, z: pt.z };
+      if (this.onInspect) {
+        this.onInspect({
+          parcelId: addr && addr.plotId ? addr.plotId : "city",
+          label: addr && addr.onPlot
+            ? `${addr.className[0] + addr.className.slice(1).toLowerCase()} plot, ${String(addr.settlement || "").replace(/-/g, " ")}`
+            : "Open ground",
+          type: addr && addr.onPlot ? `${addr.className.toLowerCase()} · ${addr.districtId} district` : "street, park or open land",
+          occupants: where,
+          contents: addr && addr.onPlot
+            ? `Up to ${addr.maxHeight} m. Buildable envelope ${Math.round(addr.buildable.xMax - addr.buildable.xMin)} × ${Math.round(addr.buildable.zMax - addr.buildable.zMin)} m. Block ${addr.blockId}.`
+            : `At (${Math.round(pt.x)}, ${Math.round(pt.z)}) — ${addr && addr.nearestPlotId ? `nearest plot ${addr.nearestPlotId}, about ${addr.nearestDistance} m away` : "no plot nearby"}.`,
+        });
+      }
+      return;
     }
 
     const intersects = this._raycaster.intersectObjects(this.neighbourhoodGroup.children, true);
@@ -5825,7 +5935,7 @@ class Renderer3D {
 
   focusDistrict(districtName) {
     this.closeAllBuildingInteriors();
-    const d = this._districtTargets[districtName];
+    const d = this._targets()[districtName];
     if (d) {
       this.focusOn(d.pos, d.dist);
       this._startOrbitDelta = this._orbit.delta;
@@ -5851,7 +5961,7 @@ class Renderer3D {
   }
 
   focusParcel(parcelId) {
-    if (this._districtTargets[parcelId]) {
+    if (this._targets()[parcelId]) {
       this.closeAllBuildingInteriors();
       this.focusDistrict(parcelId);
       return;
@@ -5896,7 +6006,9 @@ class Renderer3D {
     if (this._navigationMode !== 'orbit') {
       this.setNavigationMode('orbit');
     }
-    const def = this._defaultCameraSettings || { lookAt: { x: 0, y: 5.0, z: -16.0 }, dist: 64, delta: 0, pitch: 0.38 };
+    // The saved default is a village view unless the visitor saved their own.
+    const def = this._defaultCameraSettings
+      || (this._cityMode ? this._cityDefaultCamera : { lookAt: { x: 0, y: 5.0, z: -16.0 }, dist: 64, delta: 0, pitch: 0.38 });
     this._startLookAt.copy(this._lookAt);
     this._targetLookAt.set(def.lookAt.x, def.lookAt.y, def.lookAt.z);
     this._startCamDist = this._camDist || def.dist;

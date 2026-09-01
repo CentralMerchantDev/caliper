@@ -71,7 +71,7 @@ const SECURITY_HEADERS: Record<string, string> = {
   // gone from script-src, and object-src/base-uri are locked down, which closes
   // the cheap injection routes without pretending the page is stricter than it
   // is.
-  "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; object-src 'none'; base-uri 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; frame-src 'self' https://datum.markfrasertoronto.workers.dev; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; frame-ancestors 'self';",
+  "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; frame-src 'self' https://datum.markfrasertoronto.workers.dev; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; frame-ancestors 'self';",
 };
 
 function json(data: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
@@ -778,6 +778,20 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 
     if (url.pathname === "/pipeline-budget") {
       return json(await getPipelineBudgetStatus(env.SPEND_COUNTER));
+    }
+
+    if (url.pathname === "/recent-runs") {
+      // The last run that shipped and the last that did not, whichever they
+      // currently are. Both real, both replaceable by the next run of that
+      // kind. Falls back to nothing rather than to a fabricated example.
+      const [shipped, refused] = await Promise.all([
+        env.SPEND_KV.get("replay/last-shipped"),
+        env.SPEND_KV.get("replay/last-refused"),
+      ]);
+      return json({
+        shipped: shipped ? JSON.parse(shipped) : null,
+        refused: refused ? JSON.parse(refused) : null,
+      });
     }
 
     if (url.pathname === "/live-status") {

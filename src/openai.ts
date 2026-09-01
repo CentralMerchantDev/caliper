@@ -14,6 +14,13 @@ import { STAGE_CALL_TIMEOUT_MS } from "./claude";
 // as the road not taken, still shown in the routing panel with the real
 // cost delta, per REBUILD-CONTROLS.md -- see docs/REBUILD-PROPOSAL.md §4.
 export const REVIEW_MODEL = "gpt-5.3-codex";
+// gpt-5.5 is the pricier alternative reviewer. Kept as a named constant so the
+// routing decision is visible in code rather than folded into a literal.
+//
+// Its previous comment claimed the model was "still shown in the routing panel
+// with the real cost delta". There is no such panel: grep for gpt-5.5 in
+// public/ returns nothing. A comment describing a feature that does not exist
+// is the same defect as a number that has gone stale.
 export const REVIEW_MODEL_ALTERNATIVE = "gpt-5.5";
 
 // Published per-1M-token USD pricing, verified against OpenAI's own pricing
@@ -139,6 +146,30 @@ export interface ReReviewContext {
   round: number;
 }
 
+/**
+ * The re-review preamble, extracted so it can be TESTED.
+ *
+ * It was inline, and the only test of it installed a fake fetch it never
+ * actually wired up, then early-returned when nothing was captured -- so five
+ * assertions never ran and the ReReviewContext argument could have been deleted
+ * with the suite still green. In a project arguing against green-when-not-true,
+ * that was the most quotable line in the repo.
+ *
+ * A pure function of its input is testable without a network at all.
+ */
+export function buildReReviewBlock(reReview: ReReviewContext | null): string {
+  if (!reReview) return "";
+  return (
+    `THIS IS REVIEW ROUND ${reReview.round}. The author has since changed the code in response to your findings.\n\n` +
+    `Findings you raised last round:\n${reReview.priorFindings.map((f) => `- ${f}`).join("\n") || "- (none)"}\n\n` +
+    `For EACH of those, state whether it is genuinely closed by the current code -- not whether the author says it is. ` +
+    `A finding that is still open is still [MATERIAL]. Then look for anything the fixes have newly introduced.\n\n` +
+    (reReview.acceptedByDesign.length
+      ? `ACCEPTED BY DESIGN -- do not raise these again. The author considered each and gave a reason:\n${reReview.acceptedByDesign.map((f) => `- ${f}`).join("\n")}\n\n`
+      : "")
+  );
+}
+
 export async function reviewArtifact(
   apiKey: string,
   model: string,
@@ -151,14 +182,7 @@ export async function reviewArtifact(
 ): Promise<ReviewResult> {
   const client = new OpenAI({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const start = Date.now();
-  const reReviewBlock = !reReview ? "" :
-    `THIS IS REVIEW ROUND ${reReview.round}. The author has since changed the code in response to your findings.\n\n` +
-    `Findings you raised last round:\n${reReview.priorFindings.map((f) => `- ${f}`).join("\n") || "- (none)"}\n\n` +
-    `For EACH of those, state whether it is genuinely closed by the current code -- not whether the author says it is. ` +
-    `A finding that is still open is still [MATERIAL]. Then look for anything the fixes have newly introduced.\n\n` +
-    (reReview.acceptedByDesign.length
-      ? `ACCEPTED BY DESIGN -- do not raise these again. The author considered each and gave a reason:\n${reReview.acceptedByDesign.map((f) => `- ${f}`).join("\n")}\n\n`
-      : "");
+  const reReviewBlock = buildReReviewBlock(reReview);
   const userContent =
     (priorLessons ? `Lessons recorded from previous runs -- apply any that are relevant here:\n${priorLessons}\n\n` : "") +
     reReviewBlock +

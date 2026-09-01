@@ -37,8 +37,8 @@ export const CONTROL_LIMITS = {
    * of the two paths' worst cases -- lowering it to the cheap path's
    * figure would silently truncate every legitimate source-edit run
    * partway through. Which one applies is decided the moment plan.
-   * implementationPath is known (see currentCeiling() in
-   * changePipeline.ts); before that (ground, plan), the SOURCE_EDIT
+   * implementationPath is known (the ceiling is chosen inline where
+   * plan.implementationPath becomes known in changePipeline.ts); before that (ground, plan), the SOURCE_EDIT
    * ceiling applies, since the path isn't known yet and ground+plan cost
    * the same either way.
    *

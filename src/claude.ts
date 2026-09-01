@@ -49,10 +49,33 @@ export async function createWithTruncationGuard(
 ): Promise<Anthropic.Message> {
   const params = withCachedSystem(paramsIn);
   const originalMaxTokens = params.max_tokens;
+  // A DISCARDED ATTEMPT WAS STILL BILLED.
+  //
+  // The truncated first attempt is thrown away and the second one's usage is
+  // what the caller reconciles against -- so a retried stage was charged twice
+  // and counted once. Every cap built on that number (the per-run ceiling, the
+  // daily/weekly/monthly caps) was soft by exactly the amount of the retries.
+  //
+  // For a project whose position is that a cap which can be raced is not a cap,
+  // a cap that does not count retries is the same claim.
+  let carriedInput = 0, carriedOutput = 0;
   for (let attempt = 1; attempt <= 2; attempt++) {
     const maxTokens = attempt === 1 ? originalMaxTokens : Math.min(originalMaxTokens * 2, 16000);
     const response = await client.messages.create({ ...params, max_tokens: maxTokens });
-    if (response.stop_reason !== "max_tokens") return response;
+    if (response.stop_reason !== "max_tokens") {
+      if ((carriedInput || carriedOutput) && response.usage) {
+        // Attribute the abandoned attempt's tokens to the response the caller
+        // will price, so the ledger reflects what the provider actually billed.
+        response.usage.input_tokens += carriedInput;
+        response.usage.output_tokens += carriedOutput;
+      }
+      return response;
+    }
+    // Defensive: a truncated response should always carry usage, but a missing
+    // one must not crash the guard -- losing the count is bad, throwing here
+    // would lose the whole run.
+    carriedInput += response.usage?.input_tokens ?? 0;
+    carriedOutput += response.usage?.output_tokens ?? 0;
     if (attempt === 2) throw new TruncatedResponseError(stage, maxTokens);
   }
   throw new Error("unreachable");

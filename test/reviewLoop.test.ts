@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 
 import { CONTROL_LIMITS } from "../src/controlLayer";
 import { REVIEW_ASSESSMENT_SCHEMA } from "../src/claude";
-import { reviewArtifact } from "../src/openai";
+import { buildReReviewBlock } from "../src/openai";
 
 test("the loop runs more than one review round", () => {
   assert.ok(CONTROL_LIMITS.MAX_REVIEW_ROUNDS >= 2,
@@ -51,30 +51,42 @@ test("the assessment must choose an approach, and replan is one of them", () => 
   assert.ok((REVIEW_ASSESSMENT_SCHEMA as any).required.includes("replanNotes"));
 });
 
-test("a re-review asks whether prior findings are GENUINELY closed", async () => {
-  // The re-review prompt is materially different from a first review: it names
-  // each prior finding and asks Codex to confirm it is closed by the code
-  // rather than closed by the author's claim. Asserted by capturing the
-  // request instead of trusting that the argument is used.
-  let captured = "";
-  const fakeFetch = async (_url: unknown, init: any) => {
-    captured = init?.body ?? "";
-    return new Response(JSON.stringify({
-      id: "x", model: "m", object: "response", output: [], usage: { input_tokens: 1, output_tokens: 1 },
-    }), { headers: { "content-type": "application/json" } });
-  };
-  await reviewArtifact(
-    "sk-test", "gpt-5.3-codex", "brief", "author prompt", "code", 100, "",
-    { priorFindings: ["the placement overlaps the workshop"], acceptedByDesign: ["the snap is deliberate -- author's reason: matches Revit"], round: 2 },
-  ).catch(() => { /* the fake response is not a valid review; only the request matters */ });
+test("a re-review asks whether prior findings are GENUINELY closed", () => {
+  // THIS TEST USED TO ASSERT NOTHING.
+  //
+  // It defined a fake fetch, never installed it, and then early-returned when
+  // nothing was captured -- with a comment congratulating itself for not
+  // asserting on nothing. Five assert.match calls never executed, the
+  // ReReviewContext argument could have been deleted with the suite still
+  // green, and it fired a real request at api.openai.com on every `npm test`.
+  //
+  // The prompt builder is a pure function now, so this needs no network and
+  // cannot silently pass.
+  const block = buildReReviewBlock({
+    priorFindings: ["the placement overlaps the workshop"],
+    acceptedByDesign: ["the snap is deliberate -- author's reason: matches Revit"],
+    round: 2,
+  });
 
-  // If the SDK could not be intercepted in this environment, skip rather than
-  // assert on nothing -- a green test that checked nothing is worse than none.
-  if (!captured) return;
-  assert.match(captured, /REVIEW ROUND 2/);
-  assert.match(captured, /genuinely closed/);
-  assert.match(captured, /the placement overlaps the workshop/);
-  assert.match(captured, /ACCEPTED BY DESIGN/);
-  assert.match(captured, /matches Revit/);
-  void fakeFetch;
+  assert.match(block, /REVIEW ROUND 2/);
+  assert.match(block, /genuinely closed by the current code/);
+  assert.match(block, /not whether the author says it is/);
+  assert.match(block, /the placement overlaps the workshop/);
+  assert.match(block, /ACCEPTED BY DESIGN -- do not raise these again/);
+  assert.match(block, /matches Revit/);
+  assert.match(block, /anything the fixes have newly introduced/);
+});
+
+test("a FIRST review carries none of the re-review framing", () => {
+  // Round one must not be told about prior findings it has not made, or it
+  // starts answering a question nobody asked.
+  assert.equal(buildReReviewBlock(null), "");
+});
+
+test("a re-review with no accepted-by-design findings omits that section entirely", () => {
+  // An empty "ACCEPTED BY DESIGN:" heading invites the reviewer to treat the
+  // absence as meaningful.
+  const block = buildReReviewBlock({ priorFindings: ["x"], acceptedByDesign: [], round: 2 });
+  assert.doesNotMatch(block, /ACCEPTED BY DESIGN/);
+  assert.match(block, /REVIEW ROUND 2/);
 });
