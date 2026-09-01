@@ -2,45 +2,79 @@
 
 Repo: `C:\Code\sandbox-spike` · Live: https://caliper.markfrasertoronto.workers.dev
 
-Read this before touching anything. The city is not decoration, and the
-constraints below are not style preferences — breaking them breaks the app.
+You built a lot of this. Then it changed underneath you, substantially, over
+several days while you were paused. **Do not start from what you remember.**
+
+---
+
+## FIRST: audit before you build anything
+
+Before writing a line, spend a pass finding out what is actually true now, and
+report what you find. Specifically:
+
+1. `git log --oneline -15` and read the commit messages. They are long on
+   purpose and they explain *why*, not just what.
+2. Run `npm test` (356 node + 9 worker tests). Confirm green before you touch
+   anything, so that anything red later is yours.
+3. Run `node scripts/shoot.mjs` and look at the contact sheet. Judge the render
+   yourself rather than trusting the priority list below.
+4. Read `public/city-render.js`'s `buildProps` against `public/land-use.js` and
+   tell us how much of it places geometry at hand-picked coordinates. (Answer
+   from a recent audit: most of it. The airport is a 3400 m runway placed on a
+   *single* height sample.) That is a real defect and you may find more.
+5. Say what you think is wrong that this brief does not mention. The last two
+   audits each found things four previous rounds had missed. Assume the same
+   applies to you and to this document.
+
+Then propose what you would do, in what order, before doing it.
 
 ---
 
 ## What this app is
 
 A change pipeline that only says yes when yes is true. A visitor types a change
-in plain English; it is grounded against real source, planned, **parked at a
+in plain English; it is grounded against the real source, planned, **parked at a
 human gate**, implemented, executed in an isolated sandbox, reviewed by a
-different vendor's model, re-reviewed after the fix, and then shipped **or
-refused**.
+different vendor's model, **re-reviewed after the fix until clean or a guardrail
+trips**, put through a final functional QA pass, and then shipped **or refused**.
 
 **The city is the ground that pipeline builds on.** It is the thing the coding
-agent edits. That is the whole point of it — it is not a showcase page, and it
-is not a backdrop. Anything that makes the city harder to edit programmatically
-is a regression even if it looks better.
+agent edits. It is not a showcase page and not a backdrop. Anything that makes
+the city harder to edit programmatically is a regression even if it looks
+better.
 
 ---
 
-## What changed recently (this is the catch-up)
+## What changed while you were away
 
 The city used to live on its own page at `/city.html` while the main app edited
-a four-house village. That is now reversed:
+a four-house village. That is now reversed, and a lot followed from it:
 
 - **The main page renders the 40 km city.** `public/index.html` constructs
-  `WorldRenderer` with `city: true`.
+  `WorldRenderer` with `city: true`. `_buildCityBase()` in
+  `public/world-render-3d.js` is the join.
 - **`city-render.js` is a scene BUILDER; `world-render-3d.js` is the SHELL.**
-  The shell owns the camera, navigation modes, picking, sound, and the ~25
-  methods the UI drives. Only the builder was ever village-specific, so the
-  shell now hosts the city. `_buildCityBase()` in `world-render-3d.js` is the
-  join.
-- **`/city.html` still exists** as a bare-camera view of the same builder. It is
-  useful for isolating render work from the app shell.
+  The shell owns camera, navigation, picking, sound and the ~25 methods the UI
+  drives. Only the builder was ever village-specific.
+- **`scene.environment` is `null` in city mode, gated at the HDRI loader.** An
+  environment map flattened 31,000 buildings to a bright average. If you want
+  IBL, tune the city's materials for it rather than switching it back on.
+- **A spatial index** (`public/spatial-index.js`) answers what any point belongs
+  to — plot, block, district, settlement. Clicking a building returns a real
+  address. It found a real defect on the day it was built: `port` had been laid
+  over `coastal-4`, two settlements on the same ground.
+- **Camera presets are ground-relative** and clamped above terrain. Downtown
+  sits on a shelf ~44 m up; absolute heights put the camera inside a hill.
+- **A boot screen** covers the ~5 s synchronous `generateWorld`, and reports the
+  error if the build throws instead of leaving a black canvas.
+- **Tour mode** is a top-bar toggle that hides the dashboard chrome. `/city.html`
+  still exists for isolating render work, but is not linked.
 
-Numbers as built: 31,264 buildings across 10 classes, 1,955 roads, 19 bridges,
-26 settlements, 5,713 lamps, 16,071 pieces of street furniture, 26,001 cars,
-20,846 people, 20,005 trees, a golf course, a stadium, a station, an airport,
-a container port, rivers and canals.
+Numbers, read from the build at runtime (the page used to claim 39,000 and was
+25% wrong): **31,158 buildings** across 10 classes, 31,308 plots, 1,955 roads,
+19 bridges, 57 settlements, 5,713 lamps, 16,071 pieces of street furniture,
+26,001 cars, 20,846 people, 20,005 trees, a golf course, stadium, station,
+airport, container port, rivers and canals.
 
 ---
 
@@ -95,7 +129,7 @@ and `maxHeight` rather than inventing new categories.
 
 ### 4. The tests
 
-`npm test` runs 354 node tests plus 9 Cloudflare Worker tests, and type-checks
+`npm test` runs 356 node tests plus 9 Cloudflare Worker tests, and type-checks
 first. Several assert real world invariants — buildings on dry land, no road
 mostly over water, no two land masses overlapping, every land mass reachable,
 plot classes inside their legal size range. If you change geometry and one goes
@@ -154,7 +188,7 @@ Anything that rewards looking closely.
 ## How to check your work
 
 ```powershell
-npm test                                   # 351 + 12, type-checks first
+npm test                                   # 356 + 9, type-checks first
 node scripts/shoot.mjs                     # full contact sheet to .shots/
 node scripts/shoot.mjs "Downtown close"    # one view
 ```
@@ -184,3 +218,64 @@ through the terrain at open water.
 - Comments in this codebase explain **why**, especially where something was
   wrong before. Keep that convention — several of the oddities you'll find are
   deliberate and the comment says so.
+
+---
+
+## Known defects we have NOT fixed — yours if you want them
+
+Found by audit, verified, deliberately left because they are render work:
+
+1. **`buildProps` bypasses the land registry almost entirely.** `city-render.js`
+   does not import `land-use.js`. The airport (runways, taxiway, apron,
+   terminal, tower, 16 aircraft) sits at literal coordinates around
+   `(12100, -4600)` on a **single** height sample — a 3400 m runway plane on one
+   sample will float or clip wherever the terrain moves. Container port, cranes,
+   farm belts, golf, marina, stadium, station and rail ties are the same
+   pattern, each with its own ad-hoc `heightAt(x,z) > k` test. The crane comment
+   openly concedes the previous hard-coded `z` "stood in open water" and fixes it
+   by marching north until the height is right — a private reimplementation of
+   what `classifyAt` already answers.
+
+2. **`distanceToCoast` is 1,700 ms of the ~5 s build** (`city-plan.js`), a linear
+   scan over the whole coastline polygon, called four times per candidate rect.
+   The file already uses a 400 m bucketing grid elsewhere; the same trick applies.
+   Cheap second win: it calls `isOnLand` unconditionally — for a non-negative
+   margin it can return early once `best <= margin`.
+
+3. **`plotsOverlappingWithinSettlement`** in `city-plan.js` is an O(n²)-per-bucket
+   diagnostic that runs on every page load and is read only by a Node test.
+
+4. **`generateCityPlan()` runs twice** — once in `city-render.js`, once inside
+   `generateWorld`. Only ~69 ms, but it means two independently generated objects
+   that a future change could desynchronise.
+
+5. **Small main-thread waste**: the world clock writes `textContent` every rAF
+   frame (~60/s for a string that changes every 6.25 s); `_musicInterval` and the
+   white-noise source are never cleared when audio is toggled off.
+
+6. **`terrain.js` duplicates `valueNoise`/`fbm`** from `noise.js`, which
+   `city-plan.js` and `buildings.js` import instead. Two implementations of one
+   primitive.
+
+7. **Mobile at 390 px**: the pipeline card and the overview card use the same
+   `top` and both render on load, so they overlap. The inspector makes it three.
+
+---
+
+## Ground rules
+
+- **Do not touch `src/`** — that is the pipeline. Render work is `public/`.
+- **Do not disable or loosen a test** to make a change pass. Several assert real
+  world invariants; if one goes red the world is wrong, not the test.
+- **Do not place objects at hand-picked coordinates that bypass `land-use.js`.**
+  Fixing the existing violations is welcome; adding more is not.
+- **Do not re-enable `scene.environment` in city mode** without retuning the
+  materials — there is a comment at the loader explaining what happened.
+- Keep the build deterministic. `generateWorld` is seeded and several tests
+  depend on it producing the same world twice.
+- Comments here explain **why**, especially where something was wrong before.
+  Keep that convention. Several oddities you will find are deliberate and the
+  comment says so — read it before "fixing" it.
+- If you disagree with something in this brief, say so with a reason. The last
+  four audit rounds each overturned something the previous round was confident
+  about.
