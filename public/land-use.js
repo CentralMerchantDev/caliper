@@ -1,3 +1,4 @@
+import { gradeRun } from "./grade.js";
 // =============================================================================
 // THE LAND REGISTRY
 //
@@ -443,8 +444,12 @@ export function findCorridor(heightAt, want, opts = {}) {
   const {
     axis = "ew", from, to,
     step = 60,
-    search = 1800,     // how far to shift the line looking for a better one
-    searchStep = 120,
+    search = 2400,     // how far to shift the line looking for a better one
+    searchStep = 160,
+    // The gradient the line must actually hold, and what may be spent to hold it.
+    maxGrade = 0.025,  // adhesion rail; see docs/CITY-PLANNING-SPEC.md §4.1
+    maxDev = 30,       // metres of embankment or cutting
+    gradeWindow = 900,
   } = opts;
 
   const ew = axis === "ew";
@@ -452,19 +457,57 @@ export function findCorridor(heightAt, want, opts = {}) {
 
   for (let off = 0; Math.abs(off) <= search; off = off <= 0 ? -off + searchStep : -off) {
     const at = (ew ? want.z : want.x) + off;
-    let on = 0, total = 0, min = Infinity, max = -Infinity;
+
+    // 1. is the line on land at all?
+    let on = 0, total = 0;
     for (let t = from; t <= to; t += step) {
       total++;
       const h = heightAt(ew ? t : at, ew ? at : t);
-      if (h < 2 || h > 240) continue;
-      on++;
-      if (h < min) min = h;
-      if (h > max) max = h;
+      if (h >= 2 && h <= 240) on++;
     }
-    const frac = total ? on / total : 0;
-    const cand = { at, axis, from, to, onLand: frac, range: max - min, moved: Math.abs(off) };
-    if (!best || frac > best.onLand + 0.02) best = cand;
-    if (best.onLand > 0.92) break;
+    const onLand = total ? on / total : 0;
+    if (onLand < 0.85) continue;
+
+    // 2. CAN A RAILWAY ACTUALLY BE BUILT ALONG IT?
+    //
+    // This is the question the first version of this function did not ask. It
+    // scored corridors purely on how much of the line was dry, picked the
+    // drawn one at 100% on land, and handed back a route whose graded profile
+    // still reached 11.2% -- four times the adhesion limit. A line can be
+    // entirely on land and still be unbuildable, because rail is limited by
+    // GRADIENT, not by wetness.
+    //
+    // Measured across this world, the difference between corridors is stark:
+    // a few hundred metres of lateral shift takes the achievable gradient from
+    // 11.2% to 2.5% at the same earthworks budget.
+    const g = gradeRun(heightAt, { axis, at, from, to },
+                       { step: 40, window: gradeWindow, maxGrade, maxDev });
+    let worst = 0, prev = null;
+    for (let t = from; t <= to; t += 40) {
+      const y = g.y(t);
+      if (prev !== null) {
+        const rise = Math.abs(y - prev) / 40;
+        if (rise > worst) worst = rise;
+      }
+      prev = y;
+    }
+
+    const cand = {
+      at, axis, from, to, onLand,
+      worstGrade: worst,
+      buildable: worst <= maxGrade * 1.02,   // small tolerance for sampling
+      maxFill: g.maxFill, maxCut: g.maxCut,
+      moved: Math.abs(off),
+    };
+
+    // Prefer a line that can actually hold the gradient; among those, the one
+    // closest to where it was drawn. Fall back to the least-bad if none can.
+    if (!best) best = cand;
+    else if (cand.buildable && !best.buildable) best = cand;
+    else if (cand.buildable === best.buildable) {
+      if (cand.buildable ? cand.moved < best.moved : cand.worstGrade < best.worstGrade) best = cand;
+    }
+    if (best.buildable && best.moved === 0) break;
   }
   return best;
 }

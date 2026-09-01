@@ -1212,14 +1212,40 @@ function buildProps(api) {
   // calls rather than one per tie.
   // ---------------------------------------------------------------------------
   {
-    const RAIL_Z = (SITE.railway || { at: wm(-3900) }).at;
+    // A RAILWAY IS THE LEAST FORGIVING SURFACE IN THE WORLD.
+    //
+    // This followed the raw ground -- `heightAt(x, RAIL_Z)` plus a fixed 0.9 m --
+    // which is the same drape defect the roads had, except worse. A road can
+    // climb 8%; an adhesion railway is done at about 2.5%, and the EU TSI caps
+    // even passenger-dedicated high-speed line at 3.5% with a 10 km moving
+    // average of 2.5%. A line pinned to fbm noise is not a railway, it is a
+    // rollercoaster. See docs/CITY-PLANNING-SPEC.md §4.1.
+    //
+    // Railways answer this with heavy earthworks -- embankment, cutting, viaduct --
+    // far more than roads do, because the gradient limit leaves them no choice.
+    // So the formation is graded at GRADE.RAIL with a generous deviation budget.
+    const _rw = SITE.railway;
+    const RAIL_Z = (_rw || { at: wm(-3900) }).at;
+    const RAIL_FROM = (_rw || { from: wm(-17000) }).from;
+    const RAIL_TO = (_rw || { to: wm(17000) }).to;
+    const railGrade = gradeRun(heightAt, { axis: "ew", at: RAIL_Z, from: RAIL_FROM, to: RAIL_TO },
+                               { step: 40, window: 900, maxGrade: GRADE.RAIL, maxDev: 30 });
+    // 30 m matches the budget findCorridor used to CHOOSE this line. A smaller
+    // budget here would silently build a different, steeper railway than the one
+    // the corridor search approved.
     const pts = [];
-    for (let x = wm(-17000); x <= wm(17000); x += 60) {
-      // follow the ground, and skip anything the line could not be built on
-      const h = heightAt(x, RAIL_Z);
-      if (h < 2 || h > 240) { pts.push(null); continue; }
-      pts.push([x, h + 0.9, RAIL_Z]);
+    for (let x = RAIL_FROM; x <= RAIL_TO; x += 60) {
+      // The formation is graded, but it still cannot cross open water or climb
+      // into the range -- tested against the NATURAL ground, which is what is
+      // actually wet.
+      const nat = heightAt(x, RAIL_Z);
+      if (nat < 2 || nat > 240) { pts.push(null); continue; }
+      pts.push([x, railGrade.y(x) + 0.9, RAIL_Z]);
     }
+    stats.railway = {
+      at: Math.round(RAIL_Z), lengthKm: +((RAIL_TO - RAIL_FROM) / 1000).toFixed(1),
+      maxFill: +railGrade.maxFill.toFixed(1), maxCut: +railGrade.maxCut.toFixed(1),
+    };
     const railM = M(0x6b6f74, 0.55, 0.55), tieM = M(0x4a4038, 0.95);
     const tieG = new THREE.BoxGeometry(3.2, 0.35, 0.42);
     const ties = [];
@@ -1244,9 +1270,11 @@ function buildProps(api) {
       g.setIndex(idx); g.computeVertexNormals();
       scene.add(new THREE.Mesh(g, railM));
     }
-    // a few trains
-    for (const [tx, cars] of [[wm(-9000), 7], [wm(1200), 9], [wm(9800), 6]]) {
-      const gy = Math.max(3, heightAt(tx, RAIL_Z)) + 1.9;
+    // Trains sit at fractions ALONG the line rather than at absolute positions,
+    // so they stay on their own railway wherever it ends up.
+    for (const [frac, cars] of [[0.23, 7], [0.53, 9], [0.79, 6]]) {
+      const tx = RAIL_FROM + (RAIL_TO - RAIL_FROM) * frac;
+      const gy = railGrade.y(tx) + 1.9;
       for (let c = 0; c < cars; c++) {
         const cx = tx + c * 24;
         const body = new THREE.Mesh(RB(21, 3.6, 3.1, 0.7), M(c === 0 ? 0xc4453a : 0xdfe3e6, 0.5, 0.2));

@@ -64,6 +64,7 @@ import { OutputPass } from "./vendor/three/addons/postprocessing/OutputPass.js";
 import { VignetteShader } from "./vendor/three/addons/shaders/VignetteShader.js";
 import { buildWorld, LOOK } from "./city-render.js";
 import { loadLiveWorld, buildLiveQuarter, QUARTER } from "./city-live-world.js";
+import { WORLD_SCALE } from "./world-scale.js";
 
 const Q = new URLSearchParams(location.search);
 const num = (k, d) => (Q.has(k) ? parseFloat(Q.get(k)) : d);
@@ -243,8 +244,8 @@ const VIEWS = {
   "The pier":         () => set(500, 18, 4420, 1750, 1.15, 0.16),
   "The boardwalk":    () => set(-500, 14, 3980, 900, 0.30, 0.10),
   "— THE LIVE QUARTER —": null,
-  "Cormorant Island": () => set(QUARTER.x, 12, QUARTER.z, 260, 0.55, 0.16),
-  "Cormorant air":    () => set(QUARTER.x, 0, QUARTER.z, 2400, 0.35, 0.30),
+  "Cormorant Island": () => set(QUARTER.x / WORLD_SCALE, 12, QUARTER.z / WORLD_SCALE, 260, 0.55, 0.16),
+  "Cormorant air":    () => set(QUARTER.x / WORLD_SCALE, 0, QUARTER.z / WORLD_SCALE, 2400, 0.35, 0.30),
   "— ELSEWHERE —": null,
   "Farm belt":        () => set(-16000, 0, -6000, 6500, 0.25, 0.30),
 };
@@ -259,9 +260,34 @@ const VIEWS = {
 // (12, 16, 18, 30, 60), i.e. it was always meant to be relative to the ground.
 // Making that true is the fix; the alternative was hand-correcting two numbers
 // and waiting for the third preset over raised ground to break.
+// BOOKMARKS ARE WRITTEN IN THE DRAWN WORLD, NOT THE BUILT ONE.
+//
+// All ~40 VIEWS below were measured in the original 48 km world. After the
+// rescale every one of them pointed somewhere else -- "The harbour" framed open
+// water, "Airport" framed the hillside the airport used to be on. Fixing them at
+// 40 call sites would have been 40 chances to miss one; set() is the single
+// place they all pass through.
+//
+// WHAT SCALES AND WHAT DOES NOT, and why it is not uniform:
+//
+//   tx, tz  POSITION on the land -- always scales. The place moved.
+//   ty, d   HEIGHT above ground and FRAMING DISTANCE. These scale only when the
+//           subject is the LANDSCAPE. Buildings did not shrink, so a street-level
+//           shot at 330 m still wants 330 m; a whole-world shot at 38 km wants
+//           0.65 of it, because there is 0.65 as much world to fit in frame.
+//
+// The 3 km threshold is where the subject stops being a building and starts
+// being terrain. It is a judgement, and it is in one place so it can be argued
+// with rather than hunted for.
+const LANDSCAPE_SHOT = 3000;
 function set(tx, ty, tz, d, a, p) {
-  target.set(tx, ty + Math.max(0, W.heightAt(tx, tz)), tz);
-  dist = d; az = a; pitch = p;
+  const K = WORLD_SCALE;
+  const x = tx * K, z = tz * K;
+  const landscape = d >= LANDSCAPE_SHOT;
+  const y = landscape ? ty * K : ty;
+  const dd = landscape ? d * K : d;
+  target.set(x, y + Math.max(0, W.heightAt(x, z)), z);
+  dist = dd; az = a; pitch = p;
   apply();
 }
 

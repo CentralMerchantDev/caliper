@@ -69,7 +69,13 @@ export const FEATURES = [
     id: "railway",
     name: "Coast Railway",
     want: () => ({ x: 0, z: w(-3900) }),
-    need: { kind: "corridor", axis: "ew", from: w(-17000), to: w(17000), search: 1800 },
+    // 2.5% is the adhesion limit; 30 m of embankment or cutting is what a real
+    // railway spends to hold it. A corridor that cannot hold the gradient is not
+    // a railway route, however dry it is.
+    need: {
+      kind: "corridor", axis: "ew", from: w(-17000), to: w(17000),
+      search: 2400, maxGrade: 0.025, maxDev: 30,
+    },
     limit: { onLand: 0.85 },
   },
   {

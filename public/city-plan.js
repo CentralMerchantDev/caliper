@@ -636,18 +636,99 @@ export function offsetPolygon(poly, d) {
 }
 
 /** Shortest distance from (x, z) to the coast. Negative offshore. */
-export function distanceToCoast(x, z, poly = _coastCache) {
-  let best = Infinity;
+// A LINEAR SCAN OVER THE WHOLE COASTLINE, FOUR TIMES PER CANDIDATE RECT.
+//
+// distanceToCoast walked every edge of the polygon on every call, and
+// rectIsBuildable calls it once per corner for every block the generator
+// considers. On a 460-vertex coastline that is ~1,840 edge tests per rect. The
+// file already uses 400 m bucketing for plots and for the spatial index; the
+// same trick applies here and was simply never brought over.
+//
+// Two changes. The edges are bucketed once per polygon, and the search walks
+// rings outward from the query cell, stopping as soon as the next ring cannot
+// contain anything closer than the best found so far. The linear version is
+// kept below as `distanceToCoastExact` and a test asserts the two agree -- an
+// optimisation that quietly returns different answers is worse than a slow one.
+const COAST_CELL = 400;
+const _coastIndexes = new WeakMap();
+
+function coastIndex(poly) {
+  let ix = _coastIndexes.get(poly);
+  if (ix) return ix;
+  const cells = new Map();
+  let minX = Infinity, minZ = Infinity;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const [xi, zi] = poly[i], [xj, zj] = poly[j];
-    const dx = xj - xi, dz = zj - zi;
-    const len2 = dx * dx + dz * dz || 1;
-    let t = ((x - xi) * dx + (z - zi) * dz) / len2;
-    t = Math.max(0, Math.min(1, t));
-    const px = xi + t * dx, pz = zi + t * dz;
-    const d = Math.hypot(x - px, z - pz);
+    if (xi < minX) minX = xi;
+    if (zi < minZ) minZ = zi;
+    // register the edge in every cell its bounding box touches
+    const c0 = Math.floor(Math.min(xi, xj) / COAST_CELL), c1 = Math.floor(Math.max(xi, xj) / COAST_CELL);
+    const r0 = Math.floor(Math.min(zi, zj) / COAST_CELL), r1 = Math.floor(Math.max(zi, zj) / COAST_CELL);
+    for (let cx = c0; cx <= c1; cx++) {
+      for (let cz = r0; cz <= r1; cz++) {
+        const k = cx + "," + cz;
+        let b = cells.get(k);
+        if (!b) cells.set(k, (b = []));
+        b.push(j);
+      }
+    }
+  }
+  ix = { cells };
+  _coastIndexes.set(poly, ix);
+  return ix;
+}
+
+/** Distance from (x, z) to edge j of poly. */
+function edgeDist(poly, j, x, z) {
+  const i = (j + 1) % poly.length;
+  const [xi, zi] = poly[i], [xj, zj] = poly[j];
+  const dx = xj - xi, dz = zj - zi;
+  const len2 = dx * dx + dz * dz || 1;
+  let t = ((x - xi) * dx + (z - zi) * dz) / len2;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const px = xi + t * dx, pz = zi + t * dz;
+  return Math.hypot(x - px, z - pz);
+}
+
+/** The original linear scan, kept as the reference the fast path is checked against. */
+export function distanceToCoastExact(x, z, poly = _coastCache) {
+  let best = Infinity;
+  for (let j = 0; j < poly.length; j++) {
+    const d = edgeDist(poly, j, x, z);
     if (d < best) best = d;
   }
+  return isOnLand(x, z, poly) ? best : -best;
+}
+
+export function distanceToCoast(x, z, poly = _coastCache) {
+  const { cells } = coastIndex(poly);
+  const cx0 = Math.floor(x / COAST_CELL), cz0 = Math.floor(z / COAST_CELL);
+  let best = Infinity;
+  const seen = new Set();
+
+  for (let r = 0; r < 400; r++) {
+    // Anything in ring r is at least (r-1) cells away, so once the best found is
+    // inside that, no further ring can improve it.
+    if (best <= (r - 1) * COAST_CELL) break;
+    let any = false;
+    for (let cx = cx0 - r; cx <= cx0 + r; cx++) {
+      for (let cz = cz0 - r; cz <= cz0 + r; cz++) {
+        if (r > 0 && Math.abs(cx - cx0) !== r && Math.abs(cz - cz0) !== r) continue;
+        const b = cells.get(cx + "," + cz);
+        if (!b) continue;
+        any = true;
+        for (const j of b) {
+          if (seen.has(j)) continue;
+          seen.add(j);
+          const d = edgeDist(poly, j, x, z);
+          if (d < best) best = d;
+        }
+      }
+    }
+    // keep expanding even through empty rings until something is found
+    if (!any && best === Infinity && r > 200) break;
+  }
+  if (best === Infinity) return distanceToCoastExact(x, z, poly);
   return isOnLand(x, z, poly) ? best : -best;
 }
 
@@ -2726,7 +2807,17 @@ export function generateWorld(rawHeightAt = null) {
             * above anything a double can invent. Reported rather than deleted:
             * if real overlaps ever appear, removing one of the pair hides the
             * subdivision bug instead of fixing it. */
-           plotsOverlappingWithinSettlement: (() => {
+           // COMPUTED ON ACCESS, NOT ON EVERY PAGE LOAD.
+           //
+           // This is an O(n^2)-per-bucket diagnostic over 22,000 plots that ran
+           // during every world build and is read by exactly one test. It is also
+           // now always 0, because settlement-fit.js prevents overlap by
+           // construction rather than detecting it afterwards -- so it is a
+           // guard against regression, not a working part of the build.
+           //
+           // A getter keeps the guard and stops paying for it 60 times a second
+           // of somebody's page load.
+           get plotsOverlappingWithinSettlement() { return (() => {
              const CELL2 = 400, g2 = new Map(), k2 = (a3, b3) => a3 + "," + b3;
              for (const pl of keptPlots) {
                for (let cx = Math.floor(pl.xMin / CELL2); cx <= Math.floor(pl.xMax / CELL2); cx++) {
@@ -2751,11 +2842,26 @@ export function generateWorld(rawHeightAt = null) {
                }
              }
              return bad.size;
-           })() };
+           })(); },
+  };
 }
 
 /** The whole plan: roads, blocks and plots, ready to draw or to edit. */
+// MEMOISED, BECAUSE IT WAS PRODUCING TWO WORLDS.
+//
+// This was called once inside generateWorld and once again in city-render, so
+// the plan existed twice as two independently generated objects. It is seeded
+// and deterministic so they agreed -- but nothing enforced that, and any future
+// change that made the plan depend on call order would have desynchronised the
+// renderer from the world silently. Memoising costs nothing and removes the
+// possibility rather than relying on it not happening.
+let _cityPlan = null;
 export function generateCityPlan() {
+  if (_cityPlan) return _cityPlan;
+  return (_cityPlan = buildCityPlan());
+}
+
+function buildCityPlan() {
   const roads = generateRoads();
   const blocks = generateBlocks();
   const plots = [];

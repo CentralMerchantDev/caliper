@@ -13,6 +13,8 @@
 // Day/Dusk/Night atmosphere cycle, and smooth orbital camera with district bookmarks.
 
 import * as THREE from "three";
+import { WORLD_SCALE } from "./world-scale.js";
+import { placeFeatures } from "./features.js";
 // RE-EXPORTED so index.html can build an offscreen renderer for the 4K export.
 // It was calling `new THREE.Vector2()` with THREE not imported there at all --
 // the vendored three is an ES module and sets no global -- so the export threw
@@ -1147,15 +1149,33 @@ class Renderer3D {
     //
     // Coordinates are the real settlement centres, taken from the plan rather
     // than guessed.
+    // DISTRICT TARGETS FOLLOW THE WORLD, AND THE TWO THAT CAN, FOLLOW THE FEATURE.
+    //
+    // These were written in the original 48 km world. After the rescale every one
+    // pointed somewhere else -- and `datum` was still aimed at (12100, -4600),
+    // the hillside the airport used to sit on before the flattest-site search
+    // moved it 600 m. A bookmark aimed at a feature should be derived FROM that
+    // feature, not from a copy of where it once was.
+    //
+    // Positions scale because the place moved. Framing distances scale only for
+    // the landscape shot (the range), because buildings did not shrink -- a 2.2 km
+    // shot of the port is framing cranes, not terrain.
+    // Scaled defaults here; the two feature-derived ones are refreshed by
+    // _refreshFeatureTargets() once the city -- and therefore heightAt -- exists.
+    // Resolving them in the constructor would run placeFeatures against a world
+    // that has not been built yet, silently get nothing, and fall back to the
+    // literal, which is the bug this change exists to remove.
+    const K = WORLD_SCALE;
+
     this._cityDistrictTargets = {
-      town:        { pos: new THREE.Vector3(0, 60, 200),      dist: 2600, delta: 0,     pitch: 0.34, label: "Downtown and the harbour" },
-      forge:       { pos: new THREE.Vector3(-6200, 30, -2700), dist: 2200, delta: 0.35, pitch: 0.32, label: "The port and container terminal" },
-      residential: { pos: new THREE.Vector3(-8400, 25, -5150), dist: 2400, delta: -0.55, pitch: 0.34, label: "The western coastal towns" },
-      docks:       { pos: new THREE.Vector3(1100, 20, 2400),  dist: 2000, delta: 0,     pitch: 0.30, label: "The marina and boardwalk" },
-      watchtower:  { pos: new THREE.Vector3(0, 300, -6000),   dist: 6500, delta: 0.4,   pitch: 0.42, label: "The coastal range behind the city" },
-      datum:       { pos: new THREE.Vector3(12100, 40, -4600), dist: 3000, delta: 0,    pitch: 0.33, label: "The airport" },
+      town:        { pos: new THREE.Vector3(0, 60, 200 * K),           dist: 2600,     delta: 0,     pitch: 0.34, label: "Downtown and the harbour" },
+      forge:       { pos: new THREE.Vector3(-6200 * K, 30, -2700 * K), dist: 2200,     delta: 0.35,  pitch: 0.32, label: "The port and container terminal" },
+      residential: { pos: new THREE.Vector3(-8400 * K, 25, -5150 * K), dist: 2400,     delta: -0.55, pitch: 0.34, label: "The western coastal towns" },
+      docks:       { pos: new THREE.Vector3(1100 * K, 20, 2400 * K),   dist: 2000,     delta: 0,     pitch: 0.30, label: "The marina and boardwalk" },
+      watchtower:  { pos: new THREE.Vector3(0, 300 * K, -6000 * K),    dist: 6500 * K, delta: 0.4,   pitch: 0.42, label: "The coastal range behind the city" },
+      datum:       { pos: new THREE.Vector3(12100 * K, 40, -4600 * K), dist: 3000,     delta: 0,     pitch: 0.33, label: "The airport" },
     };
-    this._cityDefaultCamera = { lookAt: { x: 0, y: 60, z: 900 }, dist: 4200, delta: 0, pitch: 0.34 };
+    this._cityDefaultCamera = { lookAt: { x: 0, y: 60, z: 900 * K }, dist: 4200 * K, delta: 0, pitch: 0.34 };
 
     this._diffSlateMat = stdMat({ color: 0x334155, roughness: 0.85, metalness: 0.1 });
     this._diffEmeraldMat = stdMat({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.9, roughness: 0.3 });
@@ -1171,9 +1191,11 @@ class Renderer3D {
     // read the coast and the bay, angled so the downtown towers have somewhere
     // to stand against.
     const openingLookAt = this._cityMode
-      ? new THREE.Vector3(0, 60, 900)
+      ? new THREE.Vector3(0, 60, 900 * WORLD_SCALE)
       : new THREE.Vector3(0, 4.0, 0.0);
-    const openingDist = this._cityMode ? 4200 : 180;
+    // The establishing shot frames the coast and the bay -- landscape, so it
+    // scales. The village shot frames four houses, which did not shrink.
+    const openingDist = this._cityMode ? 4200 * WORLD_SCALE : 180;
     this._targetLookAt = openingLookAt.clone();
     this._startLookAt = openingLookAt.clone();
     this._targetCamDist = openingDist;
@@ -1525,6 +1547,7 @@ class Renderer3D {
     this.sun = city.sun;                    // the shell's day/night code drives this
     this._skyMesh = city.sky;
     this._cityHeightAt = city.heightAt;
+    this._refreshFeatureTargets();
 
     // Placements are addressed in world metres here, not in village plot units,
     // so the centre offset is the origin.
@@ -1542,6 +1565,27 @@ class Renderer3D {
 
   /** The right bookmark table for the world actually on screen. Village
    *  coordinates in a 40 km city put the camera inside a building. */
+  /**
+   * Point the feature bookmarks at where their feature actually ended up.
+   *
+   * `datum` was aimed at (12100, -4600) -- the hillside the airport sat on
+   * before the flattest-site search moved it 600 m. A bookmark for a feature
+   * should be derived from that feature, not from a copy of where it once was,
+   * or it goes stale the moment the feature is placed properly.
+   */
+  _refreshFeatureTargets() {
+    if (!this._cityHeightAt || !this._cityDistrictTargets) return;
+    let sites;
+    try { sites = placeFeatures(this._cityHeightAt).sites; }
+    catch { return; }                       // a bad bookmark is not worth a crash
+    const aim = (key, site, y) => {
+      if (!site || !this._cityDistrictTargets[key]) return;
+      this._cityDistrictTargets[key].pos.set(site.x, y, site.z);
+    };
+    aim("datum", sites.airport, 40);
+    aim("forge", sites.containerPort, 30);
+  }
+
   _targets() {
     return this._cityMode ? this._cityDistrictTargets : this._districtTargets;
   }

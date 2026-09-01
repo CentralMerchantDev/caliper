@@ -25,10 +25,10 @@ import assert from "node:assert/strict";
 
 import {
   generateWorld, generateCityPlan, landmassPolygons, PLOT_CLASSES, SETTLEMENTS,
-  offsetPolygon, COAST, splinePolygon, BRIDGES, signedArea2, LANDMASSES,
-} from "../public/city-plan.js";
+  offsetPolygon, COAST, splinePolygon, BRIDGES, signedArea2, LANDMASSES, distanceToCoast, distanceToCoastExact, coastlinePolygon } from "../public/city-plan.js";
 import { WORLD_SCALE } from "../public/world-scale.js";
 import { findSite, findFlattestSite } from "../public/land-use.js";
+import { placeFeatures } from "../public/features.js";
 
 // PROBE COORDINATES SCALE. JUDGEMENTS DO NOT.
 //
@@ -799,4 +799,76 @@ test("the downtown grid actually has its little streets", () => {
   for (const r of little) {
     assert.equal(r.class, "LANE", `little street ${r.id} should be LANE class (10 m, ~Melbourne's 10.06 m)`);
   }
+});
+
+// =============================================================================
+// THE RAILWAY CAN ACTUALLY BE BUILT
+//
+// Rail is the least forgiving surface in the world. A road can climb 8%; an
+// adhesion railway is finished at about 2.5%, and even the EU TSI's most
+// permissive case -- new passenger-dedicated high-speed line -- caps at 3.5%
+// with a 10 km moving average of 2.5% (docs/CITY-PLANNING-SPEC.md §4.1).
+//
+// The line used to be drawn on raw terrain, the same drape defect the roads had,
+// except that on rail it is not a cosmetic problem: a formation pinned to fbm
+// noise reached 15.2%, which is a funicular, not a railway.
+//
+// Grading alone did not fix it either, and that is the interesting part. The
+// corridor search was scoring routes on how much of the line was DRY, so it
+// approved the drawn route at 100% on land -- whose graded profile still reached
+// 11.2%. A corridor can be entirely on land and still be unbuildable, because
+// rail is limited by gradient, not by wetness. Measured across this world, a few
+// hundred metres of lateral shift takes the achievable gradient from 11.2% to
+// 2.5% at the same earthworks budget.
+// =============================================================================
+test("the railway holds a gradient a train could actually climb", () => {
+  const { sites } = placeFeatures(heightAt);
+  const rail = sites.railway;
+  assert.ok(rail, "no railway corridor was found at all");
+
+  assert.ok(rail.buildable,
+    `the chosen corridor cannot hold the gradient: worst ${(100 * rail.worstGrade).toFixed(1)}%`);
+  assert.ok(rail.worstGrade <= 0.026,
+    `railway reaches ${(100 * rail.worstGrade).toFixed(1)}% -- the adhesion limit is about 2.5%`);
+
+  // And the earthworks that buys must stay in railway territory. Real lines are
+  // built on serious embankment and in deep cutting, but past roughly 40 m the
+  // honest answer is a viaduct or a tunnel, which this does not model.
+  assert.ok(rail.maxFill <= 40 && rail.maxCut <= 40,
+    `railway needs ${rail.maxFill.toFixed(0)} m of fill and ${rail.maxCut.toFixed(0)} m of cutting`);
+});
+
+// =============================================================================
+// THE FAST COAST DISTANCE IS THE SAME ANSWER, NOT A CLOSE ONE
+//
+// distanceToCoast walked every edge of the coastline on every call, and
+// rectIsBuildable calls it once per corner for every candidate block -- roughly
+// 1,840 edge tests per rectangle on a 460-vertex polygon. It is now bucketed on
+// the same 400 m grid the rest of the file already used, and searches outward by
+// ring, stopping once no further ring could hold anything closer.
+//
+// An optimisation that quietly returns slightly different answers is worse than
+// a slow one: block placement, shore margins and the buildable test all depend
+// on this, and a sub-metre drift would move buildings without anything failing.
+// So the original linear scan is kept as distanceToCoastExact and this asserts
+// the two are identical, not merely close.
+// =============================================================================
+test("the bucketed coast distance agrees exactly with the linear scan", () => {
+  const poly = coastlinePolygon(12);
+  let worst = 0;
+  let checked = 0;
+  for (let x = -3000; x <= 3000; x += 97) {
+    for (let z = -2000; z <= 3000; z += 89) {
+      const fast = distanceToCoast(x, z, poly);
+      const exact = distanceToCoastExact(x, z, poly);
+      const d = Math.abs(fast - exact);
+      if (d > worst) worst = d;
+      checked++;
+      // sign matters too: inland is positive, offshore negative
+      assert.equal(Math.sign(fast), Math.sign(exact),
+        `sign differs at (${x}, ${z}): ${fast} vs ${exact}`);
+    }
+  }
+  assert.ok(checked > 3000, `only ${checked} points checked`);
+  assert.equal(worst, 0, `bucketed and exact disagree by up to ${worst} m`);
 });
