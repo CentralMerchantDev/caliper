@@ -65,6 +65,8 @@ function monthKey(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
+import { SIM_BASELINE_SOURCE } from "./simBaseline";
+
 export class SpendCounterLogic {
   constructor(private storage: StorageLike) {}
 
@@ -84,6 +86,27 @@ export class SpendCounterLogic {
    * per-instance guarantee) -- this class just has no unnecessary await
    * between the check and the write that would create a gap for that
    * guarantee to matter around. */
+  /**
+   * Claim one of today's runs for an IP, atomically.
+   *
+   * The per-IP limit was a KV read, a compare, and a LATER write. That is
+   * exactly the race the spend cap was moved into this Durable Object to close
+   * -- "a cap that can be raced is not a cap" -- and the per-IP cap never got
+   * the same treatment: two concurrent requests both read the same count and
+   * both proceeded. KV's read caching made even sequential requests unreliable,
+   * so the documented "3 per day" was closer to "3 per cache window".
+   *
+   * Check and increment happen here in one call, with no interleaved await, on
+   * an object the runtime serialises. It can no longer be raced.
+   */
+  async claimRun(ip: string, day: string, limit: number): Promise<{ ok: boolean; used: number; limit: number }> {
+    const key = `ratelimit/${ip}/${day}`;
+    const used = ((await this.storage.get<number>(key)) ?? 0);
+    if (used >= limit) return { ok: false, used, limit };
+    await this.storage.put(key, used + 1);
+    return { ok: true, used: used + 1, limit };
+  }
+
   async reserve(estimateUsd: number, caps: SpendCaps): Promise<ReserveResult> {
     const status = await this.getAll();
     if (status.dailySpentUsd + estimateUsd > caps.dailyCapUsd) {
@@ -142,7 +165,23 @@ export class SpendCounterLogic {
     if (!active || active.leaseToken !== leaseToken) {
       return { ok: false, conflict: true, reason: "Active run lease expired or was revoked prior to publication" };
     }
-    const current = (await this.storage.get<string>("sim/current-source")) ?? expectedSource;
+    // NO `?? expectedSource` HERE.
+    //
+    // That fallback made the compare-and-swap compare a value against itself
+    // whenever the DO had no stored source -- first deploy, a DO reset, a
+    // namespace change. The CAS then ALWAYS passed, and because the run's
+    // starting source falls back to the frozen baseline when the DO is empty,
+    // a previously shipped world was silently reverted to the baseline while
+    // the run reported "shipped". A check that cannot fail is not a check.
+    //
+    // An absent stored source is now only acceptable when the caller also
+    // expected the baseline -- i.e. genuinely the first publish.
+    const stored = await this.storage.get<string>("sim/current-source");
+    if (stored === undefined || stored === null) {
+      await this.storage.put("sim/current-source", newSource);
+      return { ok: true };
+    }
+    const current = stored;
     if (current !== expectedSource) {
       return { ok: false, conflict: true, reason: "Concurrent source modification detected" };
     }
@@ -261,6 +300,10 @@ export class SpendCounterLogic {
 export async function handleSpendCounterRequest(logic: SpendCounterLogic, request: Request): Promise<Response> {
   const url = new URL(request.url);
   try {
+    if (url.pathname === "/claim-run" && request.method === "POST") {
+      const body = (await request.json()) as { ip: string; day: string; limit: number };
+      return Response.json(await logic.claimRun(body.ip, body.day, body.limit));
+    }
     if (url.pathname === "/reserve" && request.method === "POST") {
       const body = (await request.json()) as { estimateUsd: number; caps: SpendCaps };
       const result = await logic.reserve(body.estimateUsd, body.caps);

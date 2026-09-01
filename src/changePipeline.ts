@@ -6,6 +6,7 @@ import { SIM_REGRESSION_SUITE } from "./simRegression";
 import { SIM_BASELINE_SOURCE } from "./simBaseline";
 import type { ProposedCriterion } from "./criteria";
 import { evaluateCriteria, type ProbeRunner } from "./criteriaExecution";
+import { worldIntegrityChecks } from "./worldEdit";
 import { groundRequest, formatGroundingForPlan, type GroundingResult } from "./grounding";
 import {
   CONTROL_LIMITS,
@@ -104,12 +105,17 @@ export type ChangeEvent =
       // it four times in a row is pointless.
       errorKind: ErrorPermanence;
     }
-  | { type: "ledger"; ledger: ChangeLedger };
+  | { type: "ledger"; ledger: ChangeLedger }
+  // Shipped, but something adjacent went wrong that the visitor should know
+  // about -- currently only a stale read mirror. Deliberately NOT a refusal:
+  // the change really did commit, and saying otherwise would be its own lie.
+  | { type: "warning"; message: string };
 
 export interface ChangeLedger {
   outcome:
     | "shipped"
     | "refused-plan"
+    | "refused-review"
     | "refused-verification"
     | "stopped"
     | "halted-awaiting-answer"
@@ -571,7 +577,13 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         const res = await stub.fetch("https://spend-counter.internal/get-source");
         if (res.ok) {
           const data = (await res.json()) as { source: string | null };
-          authoritativeSource = data.source;
+          // A null source is not a failure: it is the coordinator saying, on
+          // the record, "nothing has been published yet" -- in which case the
+          // baseline IS the live world and grounding against it is true. That
+          // is a different thing from not being able to reach the coordinator
+          // (thrown above) or from an empty answer of unknown meaning (refused
+          // below), and collapsing the three was the original defect.
+          authoritativeSource = data.source ?? SIM_BASELINE_SOURCE;
         } else {
           throw new PipelineLimitError("concurrency", "Source coordinator unavailable to provide canonical baseline.");
         }
@@ -583,7 +595,28 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       authoritativeSource = (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
     }
   }
-  const currentSourceAtStart = existing?.currentSourceAtStart ?? authoritativeSource ?? SIM_BASELINE_SOURCE;
+  // NO THIRD FALLBACK.
+  //
+  // This ended `?? SIM_BASELINE_SOURCE`. Every branch above already either sets
+  // authoritativeSource or throws, so the fallback is unreachable in the
+  // deployed Worker -- but "unreachable" is a property of today's control flow,
+  // not a guarantee, and what it would do if it ever were reached is ground a
+  // run against the ORIGINAL world while telling the visitor it is grounding
+  // against the current one. Silently substituting a different world is the
+  // precise failure this pipeline exists to refuse, so it now refuses.
+  // `||`, not `??`, and deliberately: the branch above tests
+  // `!existing?.currentSourceAtStart`, which treats an EMPTY saved source as
+  // unset and goes and fetches the real one. Using `??` here would then hand
+  // that empty string back and discard what was just fetched -- the two checks
+  // have to agree about what "no source" means or the fetch is wasted.
+  const resolvedSource = existing?.currentSourceAtStart || authoritativeSource;
+  if (typeof resolvedSource !== "string" || resolvedSource.length === 0) {
+    throw new PipelineLimitError(
+      "concurrency",
+      "Could not establish which version of the world this run starts from. Refusing rather than grounding against a world that may not be the live one.",
+    );
+  }
+  const currentSourceAtStart: string = resolvedSource;
   let questionAsked = existing?.questionAsked ?? false;
   let planGateReplyCount = existing?.planGateReplyCount ?? 0;
   const priorLessons = (await loadInstructions(env.SPEND_KV)).map((l) => `- ${l}`).join("\n");
@@ -673,7 +706,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     inFlightStage = "ground+plan";
     lastClarification = clarification;
     onEvent({ type: "grounding" });
-    const groundResult = await callAnthropic(env, budget, WORST_CASE.ground, () => groundRequest(env.ANTHROPIC_API_KEY, changeRequest, GROUND_MODEL, CONTROL_LIMITS.TOKEN_CAPS.ground));
+    const groundResult = await callAnthropic(env, budget, WORST_CASE.ground, () => groundRequest(env.ANTHROPIC_API_KEY, changeRequest, GROUND_MODEL, CONTROL_LIMITS.TOKEN_CAPS.ground, currentSourceAtStart));
     stageCosts.push({ stage: `ground${label}`, costUsd: groundResult.costUsd, wallTimeMs: groundResult.wallTimeMs });
     onEvent({ type: "grounded", result: groundResult.result, model: groundResult.model, inputTokens: groundResult.inputTokens, outputTokens: groundResult.outputTokens, costUsd: groundResult.costUsd, wallTimeMs: groundResult.wallTimeMs });
 
@@ -779,6 +812,39 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     onEvent({ type: "ledger", ledger });
     return { runId, changeRequest, plan, finalCode: null, findings: [], ledger, completedAt: 0, reason: "" };
   }
+  // A FALSE PREMISE CANNOT BE WAVED THROUGH SILENTLY.
+  //
+  // The browser withholds auto-approve when grounding says a premise fails --
+  // but that was the ONLY place it was enforced, and it is client-side. Any
+  // other client, a stale tab, a script, or a replayed decision could post
+  // `approve` and a plan resting on something untrue would run end to end and
+  // ship. The check that carried the whole "we tell you when your request is
+  // built on something false" claim lived in a checkbox.
+  //
+  // A human may still overrule grounding -- that is what the gate is for --
+  // but it now has to be deliberate: the decision must carry an explicit
+  // acknowledgement, and an unacknowledged approval on a false premise is
+  // refused rather than obeyed.
+  if (planDecision === "approve" && grounding && grounding.premisesHold === false && !pastPlanGate) {
+    const acknowledged = await checkDecision(env.SPEND_KV, `change/plan-decision-ack/${runId}`);
+    if (acknowledged !== "approve") {
+      await clearState(env.SPEND_KV, runId);
+      const reason = grounding.falsePremises.length
+        ? `this rests on something that isn't true: ${grounding.falsePremises[0]}`
+        : "grounding found the request rests on a false premise";
+      const ledger: ChangeLedger = {
+        outcome: "refused-plan", totalCostUsd: budget.spent, stageCosts,
+        reviewFoundMaterial: 0, reviewFoundNits: 0, fixApplied: false, fixHeld: null,
+        planGateDecision: "reject", reviewGateDecision: "not-needed", questionAsked,
+        planGateReplyCount, totalWallTimeMs: Date.now() - runStartedAt,
+        retrospectiveLesson: null, lessonRecurrenceCount: 0,
+      };
+      onEvent({ type: "refused", reason });
+      onEvent({ type: "ledger", ledger });
+      return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings: [], ledger });
+    }
+  }
+
   if (!pastPlanGate) onEvent({ type: "plan-gate-decided", decision: planDecision });
 
   if (planDecision === "reject") {
@@ -879,7 +945,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
 
     inFlightStage = "verify";
     onEvent({ type: "verifying" });
-    const verify1 = await runVerification(env, implCode, plan.criteria, currentSourceAtStart, `change-${runId}-1`);
+    const verify1 = await runVerification(env, implCode, plan.criteria, currentSourceAtStart, `change-${runId}-1`, plan!.implementationPath === "data-edit");
     verifyRegression = verify1.regression.results;
     verifyCriteria = verify1.criteria.results;
     // validate-before-consume: a sandbox that failed to even load the code
@@ -944,7 +1010,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       onEvent({ type: "fixed", model: fix.model, inputTokens: fix.inputTokens, outputTokens: fix.outputTokens, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, code: implCode });
 
       onEvent({ type: "verifying" });
-      const reverify = await runVerification(env, implCode, plan.criteria, currentSourceAtStart, `change-${runId}-conv${convergenceFixAttempts}`);
+      const reverify = await runVerification(env, implCode, plan.criteria, currentSourceAtStart, `change-${runId}-conv${convergenceFixAttempts}`, plan!.implementationPath === "data-edit");
       verifyRegression = reverify.regression.results;
       verifyCriteria = reverify.criteria.results;
       verifyFatalError = reverify.regression.fatalError ?? reverify.criteria.fatalError;
@@ -1053,6 +1119,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   let fixApplied = false;
   let fixHeld: boolean | null = null;
   let reviewGateDecision: "approve" | "reject" | "not-needed" = "not-needed";
+  let reviewRejected = false;
 
   if (material.length > 0) {
     const decision = await checkDecision(env.SPEND_KV, `change/review-decision/${runId}`);
@@ -1089,6 +1156,24 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings, ledger });
     }
 
+    // REJECT IS A REFUSAL.
+    //
+    // This branch did not exist. `approve` ran a fix and ANYTHING ELSE fell
+    // through to the ship block -- so the button labelled "Reject", sitting
+    // next to one labelled "Ship Changes", SHIPPED THE CHANGE. The reviewer
+    // had found a material defect, a human had looked at it and said no, and
+    // the run published anyway and recorded the reason as "The review's
+    // findings were accepted as is."
+    //
+    // For a system whose whole claim is that it only says yes when yes is
+    // true, this was the worst bug available: the single place a human can
+    // say NO was wired to yes. Nothing caught it because ChangeLedger's
+    // outcome type could not even express a review refusal -- the shape of
+    // the data had no room for the thing the button promised.
+    if (decision === "reject") {
+      reviewRejected = true;
+    }
+
     if (decision === "approve") {
       inFlightStage = "fix (post-review)";
       onEvent({ type: "fixing" });
@@ -1117,7 +1202,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         onEvent({ type: "fixed", model: fix.model, inputTokens: fix.inputTokens, outputTokens: fix.outputTokens, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, code: finalCode });
 
         onEvent({ type: "verifying" });
-        const verify2 = await runVerification(env, finalCode, plan.criteria, currentSourceAtStart, `change-${runId}-2`);
+        const verify2 = await runVerification(env, finalCode, plan.criteria, currentSourceAtStart, `change-${runId}-2`, plan!.implementationPath === "data-edit");
         verifyRegression = verify2.regression.results;
         verifyCriteria = verify2.criteria.results;
         verifyFatalError = verify2.regression.fatalError ?? verify2.criteria.fatalError;
@@ -1156,7 +1241,17 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   // ---- Stage 5: Ship, or refuse to close (BUILD-V2.md) ----
   let outcome: ChangeLedger["outcome"];
   let refusalReason = "";
-  if (stillFailing) {
+  if (reviewRejected) {
+    // A human looked at a material finding and said no. That is a refusal
+    // even though verification passed -- verification and judgement are
+    // different questions, and this gate exists for the second one.
+    outcome = "refused-review";
+    reviewGateDecision = "reject";
+    refusalReason = material.length === 1
+      ? `the review found a material problem and it was rejected: ${material[0]}`
+      : `the review found ${material.length} material problems and they were rejected`;
+    onEvent({ type: "refused", reason: refusalReason });
+  } else if (stillFailing) {
     outcome = "refused-verification";
     refusalReason = verifyFatalError
       ? `verification could not run: ${verifyFatalError}`
@@ -1168,6 +1263,8 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // Atomic Compare-and-Swap publication: serialized through Durable Object if available, fallback to KV only on infrastructure absence
     let published = false;
     let casConflict = false;
+    let publishError: string | null = null;
+    let mirrorStale: string | null = null;
     let conflictReason: string | null = null;
     if (env.SPEND_COUNTER) {
       try {
@@ -1186,14 +1283,34 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         if (res.ok) {
           const data = (await res.json()) as { ok: boolean; conflict?: boolean; reason?: string };
           if (data.ok) {
+            // ORDER MATTERS. `published = true` used to be set BEFORE the mirror
+            // write, inside a catch that swallowed everything -- so if the KV
+            // put threw, the run still reported "shipped" while the mirror the
+            // browser reads from still held the old world. The visitor is told
+            // yes, reloads, and sees no change: the precise failure this system
+            // exists to refuse, produced by the system itself.
+            // The CAS has already committed by this point -- the coordinator's
+            // copy IS the new world. So the mirror write must not be able to
+            // turn a successful publish into a reported failure: it used to sit
+            // inside this try, and a KV error made the run tell the visitor
+            // "Changes were not committed" about a world that had in fact been
+            // committed, leaving the DO and the mirror permanently divergent.
+            // Mark it published first, then mirror, and report a mirror failure
+            // as what it is -- a stale mirror, not a failed ship.
             published = true;
-            await env.SPEND_KV.put("sim/current-source", finalCode);
+            try {
+              await env.SPEND_KV.put("sim/current-source", finalCode);
+            } catch (mirrorError) {
+              mirrorStale = String((mirrorError as Error)?.message ?? mirrorError);
+            }
           } else if (data.conflict) {
             casConflict = true;
             conflictReason = data.reason || null;
           }
         }
-      } catch {}
+      } catch (e) {
+        publishError = String((e as Error)?.message ?? e);
+      }
     }
 
     if (casConflict) {
@@ -1214,11 +1331,20 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       }
     } else if (published) {
       outcome = "shipped";
-      onEvent({ type: "shipped" });
+      if (mirrorStale) {
+        // Shipped, truthfully -- but say plainly that the copy the page reads
+        // from did not update, rather than let the visitor reload and wonder.
+        onEvent({ type: "shipped" });
+        onEvent({ type: "warning", message: `The change shipped, but the read mirror did not update (${mirrorStale}). The page may show the previous world until the mirror catches up.` });
+      } else {
+        onEvent({ type: "shipped" });
+      }
     } else {
       // DO was present but errored or unreachable: fail-closed
       outcome = "refused-verification";
-      refusalReason = "publication failed: coordinator unavailable. Changes were not committed.";
+      refusalReason = publishError
+        ? `publication failed: ${publishError}. Changes were not committed.`
+        : "publication failed: coordinator unavailable. Changes were not committed.";
       onEvent({ type: "refused", reason: refusalReason });
     }
   }
@@ -1413,14 +1539,33 @@ async function runVerification(
   criteria: ProposedCriterion[],
   baselineSource: string,
   isolateIdPrefix: string,
+  dataEditExpected = false,
 ): Promise<{ regression: Awaited<ReturnType<typeof runSimTests>>; criteria: { results: TestResult[]; wallTimeMs: number; fatalError?: string } }> {
   const start = Date.now();
   const regression = await runSimTests(env.LOADER, code, SIM_REGRESSION_SUITE, `${isolateIdPrefix}-regression`, SIM_VERIFY_CPU_MS);
+
+  // WORLD INTEGRITY. The nine sandbox cases exercise tick/chooseAction/
+  // applyAction and never read the world's data, so on their own they cannot
+  // tell a data edit that worked from one that did nothing. These checks look
+  // at the data, and they join the REGRESSION results deliberately:
+  // decideStillFailing fails on any failing regression entry, so a change that
+  // did not actually change anything, or that broke a reference, now cannot
+  // reach the reviewer or ship.
+  // Whether the SANDBOX actually ran has to be decided before the integrity
+  // rows are mixed in. decideStillFailing treats an empty regression array as
+  // "verification silently did not happen" -- but once these rows are appended
+  // the array can never be empty again, so that guard had quietly died and a
+  // run whose nine cases did not execute could report "7/7, it passed every
+  // check". Recording it here keeps the guard alive after the merge.
+  if (regression.results.length === 0 && !regression.fatalError) {
+    regression.fatalError = "the regression suite returned no results at all -- verification did not run";
+  }
+  regression.results = [...regression.results, ...worldIntegrityChecks(baselineSource, code, dataEditExpected)];
   if (criteria.length === 0) return { regression, criteria: { results: [], wallTimeMs: 0 } };
   try {
     const probeCandidate = makeProbeRunner(env, code, `${isolateIdPrefix}-criteria-candidate`);
     const probeBaseline = makeProbeRunner(env, baselineSource, `${isolateIdPrefix}-criteria-baseline`);
-    const results = await evaluateCriteria(criteria, probeCandidate, probeBaseline);
+    const results = await evaluateCriteria(criteria, probeCandidate, probeBaseline, code);
     return { regression, criteria: { results, wallTimeMs: Date.now() - start } };
   } catch (e) {
     // Same discipline as a sandbox fatalError: a criteria pass that never

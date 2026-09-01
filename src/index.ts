@@ -13,6 +13,8 @@ import {
   getPipelineBudgetStatus,
   checkInputGuard,
   assertUnderPipelineRateLimit,
+  claimPipelineRun,
+  pipelineAvailability,
   recordPipelineRateLimitHit,
   tryLeaseActiveRun,
   releaseActiveRun,
@@ -59,7 +61,18 @@ const SECURITY_HEADERS: Record<string, string> = {
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",
   "x-frame-options": "SAMEORIGIN",
-  "content-security-policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com data: blob:; frame-src 'self' https://datum.markfrasertoronto.workers.dev; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; frame-ancestors 'self';",
+  // CSP with an explicit script-src.
+  //
+  // There was no script-src, so scripts inherited default-src -- which includes
+  // 'unsafe-eval', data: and blob:. For a project whose pitch is verification
+  // before shipping, that is the first header a security-minded reader checks.
+  //
+  // 'unsafe-inline' stays: the page's own logic is inline and moving it out is
+  // a real refactor, not a header change. 'unsafe-eval', data: and blob: are
+  // gone from script-src, and object-src/base-uri are locked down, which closes
+  // the cheap injection routes without pretending the page is stricter than it
+  // is.
+  "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; object-src 'none'; base-uri 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; frame-src 'self' https://datum.markfrasertoronto.workers.dev; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; frame-ancestors 'self';",
 };
 
 function json(data: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
@@ -525,6 +538,11 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
 }
 
 async function handleChangeResume(env: Env, runId: string): Promise<Response> {
+  // The kill switch was checked inline in the /change-run branch only, so
+  // LIVE_RUN_ENABLED=false stopped new runs while every halted run in KV could
+  // still be resumed and keep spending -- for up to a week, the state TTL. A
+  // switch that disables some of the spending is not a kill switch.
+  if (!liveRunsEnabled(env)) return liveRunsDisabledResponse();
   const stateRaw = await env.SPEND_KV.get(`change/state/${runId}`);
   if (!stateRaw) return json({ error: `no halted run found for runId "${runId}" -- it may have already finished, or never existed` }, 404);
   const changeRequest = (JSON.parse(stateRaw) as { changeRequest: string }).changeRequest;
@@ -542,11 +560,27 @@ async function handleChangeResume(env: Env, runId: string): Promise<Response> {
  * still show up correctly -- the reason is derived at read time from the
  * same deriveHistoryReason the write path uses, so there is no separate
  * migration step for the backfill this was asked for. */
+/** Thrown when a caller passes the unlock code in the URL. See isAuthorizedSecret. */
+class QuerySecretRejected extends Error {
+  constructor() {
+    super("Pass the unlock code as `Authorization: Bearer <code>` or `X-Unlock-Code: <code>`. It is no longer accepted as ?k= because query strings are written to edge logs, browser history, and Referer headers.");
+  }
+}
+
 async function handleChangeHistory(env: Env): Promise<Response> {
-  const list = await env.SPEND_KV.list({ prefix: "changelog/" });
+  // KV list() is paginated at 1000 keys and this took page one and stopped, so
+  // the "complete" changelog silently truncated. Follow the cursor.
+  const keys: string[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 50; page++) {
+    const list = await env.SPEND_KV.list({ prefix: "changelog/", cursor });
+    for (const k of list.keys) keys.push(k.name);
+    if (list.list_complete) break;
+    cursor = list.cursor;
+  }
   const entries: { date: string; summary: string | null; outcome: string; reason: string }[] = [];
-  for (const key of list.keys) {
-    const raw = await env.SPEND_KV.get(key.name);
+  for (const name of keys) {
+    const raw = await env.SPEND_KV.get(name);
     if (!raw) continue;
     let record: ChangeRecord;
     try {
@@ -566,7 +600,18 @@ async function handleChangeHistory(env: Env): Promise<Response> {
   // Most recent first; entries with no known date (pre-dating completedAt)
   // sort last rather than first, so they don't masquerade as the newest.
   entries.sort((a, b) => (b.date || "0000-00-00").localeCompare(a.date || "0000-00-00"));
-  return json({ entries: entries.slice(0, 200) });
+  // A bare list of rows makes three failures look like the whole story and a
+  // hundred successes look like nothing. Say what the record actually is --
+  // including, plainly, when it is mostly failures.
+  const tally: Record<string, number> = {};
+  for (const e of entries) tally[e.outcome] = (tally[e.outcome] ?? 0) + 1;
+  return json({
+    note: entries.length === 0
+      ? "No public runs recorded yet. The recorded run on the main page shows the pipeline end to end."
+      : `${entries.length} public run(s) recorded, every one of them, including the ones that failed. This log is not filtered.`,
+    totals: tally,
+    entries: entries.slice(0, 200),
+  });
 }
 
 export default {
@@ -616,9 +661,16 @@ export default {
       }
       const xHeader = req.headers.get("x-unlock-code");
       if (xHeader && await timingSafeCompare(xHeader.trim(), env.UNLOCK_CODE)) return true;
-      // Fallback query secret supported with deprecation
-      const keyParam = urlObj.searchParams.get("k");
-      if (keyParam && await timingSafeCompare(keyParam, env.UNLOCK_CODE)) return true;
+      // ?k=<secret> USED TO BE ACCEPTED HERE AND NO LONGER IS.
+      //
+      // A secret in a query string is written to Cloudflare's request logs, to
+      // any intermediary's logs, to the browser's history, and to the Referer
+      // header of anything the page subsequently loads. The two header forms
+      // above are equivalent in convenience and none of that is true of them.
+      // Rejected explicitly, with a message, rather than quietly failing.
+      if (urlObj.searchParams.get("k")) {
+        throw new QuerySecretRejected();
+      }
       return false;
     }
 
@@ -666,7 +718,21 @@ export default {
     }
 
     if (url.pathname === "/live-status") {
-      return json({ enabled: liveRunsEnabled(env) });
+      // Reports WHY, not just whether -- see pipelineAvailability. Read-only:
+      // asking this question must never consume one of the visitor's runs.
+      const enabled = liveRunsEnabled(env);
+      const avail = await pipelineAvailability(env, clientIp(request));
+      return json({
+        enabled,
+        ok: enabled && avail.ok,
+        reason: !enabled ? "live-runs-off" : avail.reason,
+        detail: !enabled
+          ? "Live runs are switched off right now. The recorded run below shows the whole pipeline, free and unlimited."
+          : avail.detail,
+        runsUsed: avail.runsUsed,
+        runsLimit: avail.runsLimit,
+        dailyRemainingUsd: Number(avail.dailyRemainingUsd.toFixed(4)),
+      });
     }
 
     if (url.pathname === "/world-edit-selftest") {
@@ -687,6 +753,23 @@ export default {
 
     if (url.pathname === "/change-run") {
       if (!liveRunsEnabled(env)) return liveRunsDisabledResponse();
+      // DENIAL OF BUDGET.
+      //
+      // This is a GET that spends real money, and nothing checked where the
+      // request came from. Any third-party page could embed
+      // <img src="https://.../change-run?request=..."> and every visitor to it
+      // would silently start a run against our daily cap. A handful of views
+      // empties the day's budget and the public demo shows "budget used up"
+      // until midnight, repeatable daily, from a page we do not control.
+      //
+      // Sec-Fetch-Site is sent by every current browser and cannot be forged
+      // by page JavaScript. Absent (curl, an older client) is allowed through
+      // so the endpoint stays usable by hand; what is refused is a browser
+      // telling us plainly that another site caused this.
+      const fetchSite = request.headers.get("sec-fetch-site");
+      if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") {
+        return jsonError("cross_site_blocked", "change runs cannot be started from another site", 403);
+      }
       const request_ = url.searchParams.get("request");
       if (!request_) return json({ error: "pass ?request=<text>" }, 400);
       // The only path where a visitor controls raw input, so the only one
@@ -697,17 +780,24 @@ export default {
       // Only a fresh run counts against the per-IP daily limit -- resuming
       // an already-started run (/change-resume) isn't a second live run.
       // Constant-time comparison against configured secret only; no hardcoded bypass tokens.
-      const keyParam = url.searchParams.get("k");
-      const unlocked = !!env.UNLOCK_CODE && !!keyParam && (await timingSafeCompare(keyParam, env.UNLOCK_CODE));
+      // Same rule as isAuthorizedSecret: the code travels in a header, never in
+      // the URL, because a query string ends up in edge logs and browser
+      // history. This is the rate-limit bypass, so it is exactly the value an
+      // attacker most wants to harvest from a log.
+      const unlockHeader = request.headers.get("x-unlock-code")
+        ?? (request.headers.get("authorization")?.startsWith("Bearer ")
+          ? request.headers.get("authorization")!.slice(7).trim()
+          : null);
+      const unlocked = !!env.UNLOCK_CODE && !!unlockHeader && (await timingSafeCompare(unlockHeader, env.UNLOCK_CODE));
       const ip = clientIp(request);
       if (!unlocked) {
         try {
-          await assertUnderPipelineRateLimit(env.SPEND_KV, ip);
+          // one atomic claim, not a read-then-write
+          await claimPipelineRun(env, ip);
         } catch (e) {
           if (e instanceof PipelineLimitError) return jsonError("rate_limit_exceeded", e.message, 429);
           throw e;
         }
-        await recordPipelineRateLimitHit(env.SPEND_KV, ip);
       }
       return handleChangeRun(env, request_);
     }
@@ -715,13 +805,17 @@ export default {
     // Parse decision body: accept POST JSON body with query param fallback
     async function readDecisionPayload(req: Request, urlObj: URL): Promise<Record<string, unknown>> {
       const out: Record<string, unknown> = {};
+      // Query params are applied FIRST so that a signed POST body wins. They
+      // used to be applied last and silently overrode the body -- an attacker
+      // who could get a decision URL loaded could override the signed values
+      // with their own.
+      urlObj.searchParams.forEach((v, k) => { out[k] = v; });
       if (req.method === "POST" || req.method === "PUT") {
         try {
           const body = (await req.json()) as Record<string, unknown>;
           if (body && typeof body === "object") Object.assign(out, body);
         } catch {}
       }
-      urlObj.searchParams.forEach((v, k) => { out[k] = v; });
       return out;
     }
 
@@ -853,6 +947,11 @@ export default {
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const answer = typeof payload.answer === "string" ? payload.answer : null;
       if (!runId || answer === null) return json({ error: "pass runId & answer via POST body" }, 400);
+      // The input guard was applied on ?request= and nowhere else, so this
+      // path -- which is concatenated straight into the plan prompt -- took
+      // unbounded text with no length limit and no pattern checks at all.
+      const answerGuard = checkInputGuard(answer);
+      if (!answerGuard.ok) return jsonError("request_rejected", answerGuard.reason, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/answer/${runId}`, JSON.stringify({ answer }), { expirationTtl: 600 });
       const resumeTicket = await createResumeTicket(runId);
@@ -868,6 +967,9 @@ export default {
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const reply = typeof payload.reply === "string" ? payload.reply : (typeof payload.answer === "string" ? payload.answer : null);
       if (!runId || reply === null) return json({ error: "pass runId & reply via POST body" }, 400);
+      // Same hole as /change-answer: free text into the plan prompt, ungated.
+      const replyGuard = checkInputGuard(reply);
+      if (!replyGuard.ok) return jsonError("request_rejected", replyGuard.reason, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/plan-reply/${runId}`, JSON.stringify({ answer: reply }), { expirationTtl: 600 });
       const resumeTicket = await createResumeTicket(runId);
@@ -888,7 +990,20 @@ export default {
       // test would show lost updates under real concurrency; a Durable
       // Object's one-request-at-a-time-per-instance guarantee (Cloudflare's
       // platform behavior, not code this file writes) is what prevents it.
-      const n = Math.min(50, parseInt(url.searchParams.get("n") ?? "20", 10));
+      // A SELF-TEST THAT RAN NOTHING REPORTED PASS.
+      //
+      // parseInt("abc") is NaN; Math.min(50, NaN) is NaN; Array.from({length:
+      // NaN}) is []. So ?n=abc fired zero reservations and the endpoint replied
+      // "PASS -- every concurrent reservation was accounted for", because
+      // 0 === 0. Same for n=0 and n=-5. This endpoint is publicly linked as the
+      // proof that the spend cap cannot be raced, so a vacuous PASS from it is
+      // precisely the failure this project exists to refuse -- claiming a
+      // verification that never happened.
+      const nRaw = parseInt(url.searchParams.get("n") ?? "20", 10);
+      if (!Number.isFinite(nRaw) || nRaw < 1) {
+        return jsonError("bad_request", `n must be a positive integer (got ${JSON.stringify(url.searchParams.get("n"))})`, 400);
+      }
+      const n = Math.min(50, nRaw);
       const perCallUsd = 0.001;
       const testId = `selftest-${crypto.randomUUID()}`;
       const stub = env.SPEND_COUNTER.get(env.SPEND_COUNTER.idFromName(testId));
@@ -926,12 +1041,22 @@ export default {
         // Fallback strictly for test harness when SPEND_COUNTER binding is deliberately absent
         source = (await env.SPEND_KV.get("sim/current-source")) ?? SIM_BASELINE_SOURCE;
       }
+      // SAY WHICH WORLD THIS IS.
+      //
+      // Falling back to the baseline here is correct -- a null source means
+      // nothing has been published yet, so the baseline IS the live world --
+      // but doing it silently is not. city-live-world.js goes to real trouble
+      // to avoid substituting the baseline without saying so, and then this
+      // endpoint substituted it for them, invisibly. A header costs nothing
+      // and means the client can tell the difference.
+      const isBaseline = !source;
       if (!source) {
         source = SIM_BASELINE_SOURCE;
       }
       const trimmed = source.trim();
       return new Response(`${trimmed}\n\nexport { initialWorld, chooseAction, applyAction, tick };\n`, {
         headers: {
+          "x-world-source": isBaseline ? "baseline-nothing-published-yet" : "published",
           "content-type": "text/javascript; charset=utf-8",
           "cache-control": "no-store",
           "x-content-type-options": "nosniff",

@@ -2,9 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>CALIPER // Living Valley Simulation</title>
-<meta name="description" content="CALIPER: Autonomous edge spatial simulation engine featuring Mediterranean coastal architecture, in-loop verification, and deterministic state mutation.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>CALIPER — a system that only says yes when yes is true</title>
+<meta name="description" content="Does a verification loop substitute for model capability, and what does it cost? A pipeline that grounds a plain-English change request against real source, parks at a human gate, verifies in a sandbox, has a second vendor's model review it, and refuses when it cannot prove the change is good.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="CALIPER — a system that only says yes when yes is true">
+<meta property="og:description" content="Does a verification loop substitute for model capability, and what does it cost? 387 measured cycles, a human gate, cross-vendor review, and a spend ceiling enforced in code.">
+<meta property="og:url" content="https://caliper.markfrasertoronto.workers.dev/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="CALIPER — a system that only says yes when yes is true">
+<meta name="twitter:description" content="A change pipeline that refuses. 387 measured cycles, a human gate, cross-vendor review, spend capped in code.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231E293B'/%3E%3Ctext x='50' y='68' font-family='monospace' font-size='52' font-weight='700' fill='%2338BDF8' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -218,7 +225,13 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Same reason as .welcome-card: this panel is position:fixed and its own
+     measured height feeds --dock-h, which other panels position against.
+     Animating `all` animates the geometry everything else is tracking. */
+  transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              background 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              border-radius 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              padding 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
 }
 
@@ -315,7 +328,9 @@ html, body {
   box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
 }
 .dock-input::placeholder {
-  color: #64748b;
+  /* was #64748b, ~3.6:1 on this background -- and this placeholder is the only
+     instruction telling a visitor what to type */
+  color: #94a3b8;
 }
 
 .btn-build {
@@ -387,6 +402,13 @@ html, body {
 .step-item.done { color: var(--emerald); }
 
 .stage-log {
+  /* The card is height-capped (max-height: calc(100vh - 280px)) but this, its
+     only growing child, had no overflow rule -- so once a run produced more
+     than a few stages the rest was simply unreachable, including any button in
+     it. Scroll it. */
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   font-size: 13.5px;
   color: #cbd5e1;
   line-height: 1.45;
@@ -498,13 +520,34 @@ body.inspecting-mobile #nav-compass-pad {
   border-radius: 8px;
 }
 
+/* A VISIBLE FOCUS RING.
+   There was none anywhere in this file -- ~50 controls on dark glass relying on
+   the browser default, which is near-invisible against it. world.html already
+   had the correct rule; it simply never made it here. */
+:focus-visible {
+  outline: 2px solid var(--sky);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.dock-input:focus-visible {
+  outline: 2px solid var(--sky);
+  outline-offset: 1px;
+}
+
 /* Welcome / Mission Guide Card */
 .welcome-card {
   position: fixed;
-  top: 58px;
+  /* Was a hard-coded 58px. The top bar has flex-wrap and ~25 pills, so at
+     1440px it wraps to two or three rows and this card -- which has the higher
+     z-index -- drew straight over them. --topbar-bottom is already published by
+     watchPanelHeights and already consumed by .street-hud; the first thing
+     anyone reads was simply left out of the system that solves this. */
+  top: calc(var(--topbar-bottom, 58px) + 10px);
   left: 50%;
   transform: translateX(-50%);
   width: min(720px, calc(100vw - 24px));
+  max-height: calc(100vh - var(--topbar-bottom, 58px) - var(--dock-h, 190px) - 40px);
+  overflow-y: auto;
   z-index: 65;
   padding: 16px 20px;
   border-radius: 16px;
@@ -513,7 +556,17 @@ body.inspecting-mobile #nav-compass-pad {
   background: rgba(15, 23, 42, 0.92);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  transition: all 0.25s ease;
+  /* NOT `transition: all`.
+     `all` includes `top`, and this panel's `top` is derived from a live-measured
+     custom property (--topbar-bottom, republished by a ResizeObserver whenever
+     the top bar reflows). So every republish started a position animation, each
+     new measurement restarted it, and the card never actually arrived: it sat
+     at the value it had computed BEFORE the bar was measured -- 68px, i.e.
+     under a top bar that is 162px tall at 1440px wide -- while getComputedStyle
+     on a transition-free copy of the very same rule returned the correct 172px.
+     The overlap this rule was written to fix was being animated back into
+     existence. Transition only what should visibly animate. */
+  transition: opacity 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
 }
 .welcome-header {
   display: flex;
@@ -796,10 +849,39 @@ body.inspecting-mobile #nav-compass-pad {
     top: auto;
     left: 8px;
     right: auto;
-    transform: scale(0.70);
+    /* WAS scale(0.70), which is a 30% cut applied to controls that were
+       already at the 44px minimum's edge: .nav-btn 32px became 22px,
+       .zoom-btn 28 became 19.6, .nav-action-btn 24 became 16.8, and the
+       9px hint text became 6.3px. Scaling a whole panel is a convenient way
+       to make it fit and a reliable way to make it untappable. The panel is
+       narrowed instead, and the controls keep their real size. */
+    transform: none;
     transform-origin: bottom left;
     z-index: 75;
   }
+  /* Real sizes, since the panel is no longer scaled down. 44px is the
+     documented minimum tap target; these were 22, 19.6 and 16.8. */
+  .nav-pad .nav-btn { width: 44px; height: 44px; font-size: 15px; }
+  .nav-pad .zoom-btn { height: 40px; font-size: 13px; }
+  .nav-pad .nav-action-btn { height: 40px; font-size: 12px; padding: 0 10px; }
+  .nav-pad .nav-mode-btn { min-height: 40px; font-size: 12px; }
+  .nav-pad-hint { font-size: 11px; }
+  .nav-pad-title { font-size: 12px; }
+  .btn-pill { min-height: 34px; }
+
+  /* The rest of the touch targets, measured rather than guessed: every one of
+     these came back between 17px and 28px tall on a 390px viewport against a
+     44px guideline. Close buttons were the worst of them at 17-21px, which is
+     the control a visitor reaches for FIRST when a panel is in their way. */
+  .btn-group button { min-height: 36px; padding: 0 12px; }
+  .scope-pill { min-height: 34px; padding: 6px 12px; }
+  .inspect-close,
+  #welcome-close-btn,
+  #status-card-close,
+  #dock-toggle-btn { min-width: 40px; min-height: 40px; font-size: 17px; }
+  .gate-btn { min-height: 38px; }
+  #replay-open-btn { min-height: 38px; }
+  #target-deselect-btn { min-height: 34px; }
   .dock-header {
     display: flex;
     justify-content: space-between;
@@ -883,7 +965,7 @@ body.inspecting-mobile #nav-compass-pad {
     <button type="button" id="portfolio-btn" class="btn-pill active-emerald" title="View Mark Fraser Architectural & AI Portfolio">📁 Portfolio</button>
     <button type="button" id="resume-btn" class="btn-pill" title="View Professional Resume">📄 Resume</button>
     <button type="button" id="datum-btn" class="btn-pill" title="Open Datum AEC AI App Preview">📐 Datum App</button>
-    <a href="mailto:dev@centraldesigns.ca" class="btn-pill" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px" title="Direct Contact Mark Fraser (Applied AI & 18 Yrs AEC)">✉ Contact</a>
+    <a href="mailto:mark@fhinc.ca" class="btn-pill" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px" title="Direct Contact Mark Fraser (Applied AI & 18 Yrs AEC)">✉ Contact</a>
     <div class="clock-pill" id="world-clock-badge">
       ☀️ Day 1 · 12:00
     </div>
@@ -923,12 +1005,12 @@ body.inspecting-mobile #nav-compass-pad {
     </div>
 
     <!-- Utilities -->
-    <button id="grid-toggle-btn" type="button" class="btn-pill" title="Toggle Precision Spatial Grid (600m with XYZ World Axes)">📐 Grid</button>
-    <button id="sound-toggle-btn" type="button" class="btn-pill" title="Toggle Chill House Lounge Synthesizer & Ocean Acoustics">🎵 Lounge Audio</button>
+    <button id="grid-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Toggle the 600 m spatial grid and world axes">📐 Grid</button>
+    <button id="sound-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Toggle ambient audio">🎵 Audio</button>
     <button id="drone-tour-btn" type="button" class="btn-pill" title="Cinematic camera flythrough with architectural narrative">🎬 Tour</button>
     <button id="export-render-btn" type="button" class="btn-pill" title="Export High-Res Architectural Blueprint Screenshot with Title Block">📸 Export 4K</button>
     <button id="research-paper-trigger" type="button" class="btn-pill" title="Original Research Paper, Findings & Data Matrix">📖 Research & Write-Up</button>
-    <button id="welcome-guide-trigger" type="button" class="btn-pill active" title="Executive Project Overview & Architecture Guide">ℹ️ Executive Guide</button>
+    <button id="welcome-guide-trigger" type="button" class="btn-pill active" aria-pressed="true" title="Show or hide the overview card">ℹ️ Overview</button>
     <button id="cmd-k-trigger" type="button" class="btn-pill" title="Command Palette (Cmd+K)">⌘K</button>
   </div>
 </div>
@@ -942,20 +1024,20 @@ body.inspecting-mobile #nav-compass-pad {
     <div style="display:flex;align-items:center;gap:10px">
       <span style="font-size:24px">⚡</span>
       <div>
-        <h2 style="margin:0;font-size:16px;font-weight:800;color:#fff;letter-spacing:-0.02em">CALIPER · Autonomous Edge Spatial Engine</h2>
-        <span style="font-size:11px;color:var(--sky);font-weight:600">Deterministic Code Synthesis & Spatial Mutations on Cloudflare Workers V8 Isolates</span>
+        <h2 style="margin:0;font-size:16px;font-weight:800;color:#fff;letter-spacing:-0.02em">CALIPER — a system that only says yes when yes is true</h2>
+        <span style="font-size:11px;color:var(--sky);font-weight:600">Does a verification loop substitute for model capability, and what does it cost?</span>
       </div>
     </div>
     <button type="button" id="welcome-close-btn" class="inspect-close" title="Dismiss Guide" aria-label="Close Guide" style="position:static">✕</button>
   </div>
   <p style="margin:8px 0 10px;font-size:13px;color:#cbd5e1;line-height:1.5">
-    <strong>Executive Overview:</strong> CALIPER is an autonomous spatial simulation engine designed to intercept and repair LLM code and spatial generation slips. Built by <strong>Mark Fraser (Applied AI, Toronto)</strong>, it pairs lightweight models with in-loop verification and edge compute execution.
+    Type a change in plain English. It is grounded against the real source, planned, <strong>parked at a gate for you to approve</strong>, implemented, run in an isolated sandbox, and reviewed by a different vendor’s model — and it <strong>refuses</strong> when it cannot show the change is good. Built by <strong>Mark Fraser</strong>, Toronto.
   </p>
   <div class="welcome-steps-grid">
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">⚡</div>
-      <strong style="color:#fff;font-size:12px;display:block">Sub-15ms V8 Cold Starts</strong>
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Zero-AST sentinel state mutation executing directly within Cloudflare Workers isolates.</span>
+      <strong style="color:#fff;font-size:12px;display:block">It runs the model’s code in a real sandbox</strong>
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Cloudflare Dynamic Workers: each candidate is loaded into a fresh isolate and executed against the acceptance criteria. Nothing is judged by reading it.</span>
     </div>
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">📐</div>
@@ -964,8 +1046,14 @@ body.inspecting-mobile #nav-compass-pad {
     </div>
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">📊</div>
-      <strong style="color:#fff;font-size:12px;display:block">450-Cycle Cost Benchmark</strong>
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Haiku + verification matched Opus final accuracy at 36–41% the cost per correct result (modeled isolate execution).</span>
+      <strong style="color:#fff;font-size:12px;display:block">387 measured cycles — and one retracted headline</strong>
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">The cheap model reached the same <em>final pass rate</em> at 36–41% the cost per correct result. It does <strong>not</strong> show equal quality — capability was never stressed. I published that correction against my own result.</span>
+    </div>
+    <div class="welcome-step-item">
+      <div style="font-size:16px;margin-bottom:2px">🌍</div>
+      <strong style="color:#fff;font-size:12px;display:block">The Region</strong>
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">A 40&nbsp;km coastal region generated from one plan: terrain, coastline, 26 settlements, 39,000 buildings.
+        <a href="/city.html" style="color:var(--sky);font-weight:600;text-decoration:none">Open the city&nbsp;&rarr;</a></span>
     </div>
   </div>
 </div>
@@ -982,9 +1070,9 @@ body.inspecting-mobile #nav-compass-pad {
   <!-- Eye-Level Person, Vehicle, Fly, & Orbit Mode Selectors -->
   <div class="nav-mode-selector">
     <button type="button" class="nav-mode-btn active" id="btn-mode-orbit" data-nav-mode="orbit" title="Orbital aerial camera view">🌐 Orbit</button>
-    <button type="button" class="nav-mode-btn" id="btn-mode-walk" data-nav-mode="walk" title="Eye-level pedestrian walk mode (WASD + Shift to sprint)">🚶 Walk</button>
-    <button type="button" class="nav-mode-btn" id="btn-mode-drive" data-nav-mode="drive" title="Drive red sports car along the waterfront esplanade">🏎️ Drive</button>
-    <button type="button" class="nav-mode-btn" id="btn-mode-fly" data-nav-mode="fly" title="Free 3D flight drone spectator mode (WASD + Q/E to elevate)">🕊️ Fly</button>
+    <button type="button" class="nav-mode-btn" aria-pressed="false" id="btn-mode-walk" data-nav-mode="walk" title="Eye-level pedestrian walk mode (WASD + Shift to sprint)">🚶 Walk</button>
+    <button type="button" class="nav-mode-btn" aria-pressed="false" id="btn-mode-drive" data-nav-mode="drive" title="Drive red sports car along the waterfront esplanade">🏎️ Drive</button>
+    <button type="button" class="nav-mode-btn" aria-pressed="false" id="btn-mode-fly" data-nav-mode="fly" title="Free 3D flight drone spectator mode (WASD + Q/E to elevate)">🕊️ Fly</button>
   </div>
   <div class="nav-pad-grid">
     <button type="button" id="nav-pitch-up" class="nav-btn" title="Pitch Up / Look Up" aria-label="Pitch camera up">▲</button>
@@ -1020,13 +1108,14 @@ body.inspecting-mobile #nav-compass-pad {
     <button type="button" id="status-card-close" aria-label="Close status panel" title="Close status panel" style="background:none;border:none;color:#94a3b8;cursor:pointer">✕</button>
   </div>
   <div class="pipeline-steps">
-    <div class="step-item" id="step-1"><span>1. Queued</span></div>
-    <div class="step-item" id="step-2"><span>2. Bounds</span></div>
-    <div class="step-item" id="step-3"><span>3. Mutate</span></div>
-    <div class="step-item" id="step-4"><span>4. Rendered</span></div>
+    <div class="step-item" id="step-1"><span>1. Ground</span></div>
+    <div class="step-item" id="step-2"><span>2. Plan</span></div>
+    <div class="step-item" id="step-3"><span>3. Verify</span></div>
+    <div class="step-item" id="step-4"><span>4. Review</span></div>
   </div>
   <div id="stage-log" class="stage-log" role="status" aria-live="polite" aria-atomic="false">
-    <p style="margin:0;color:var(--text-muted);font-size:13px">Ready for construction requests. Use the director dock below.</p>
+    <p style="margin:0 0 8px;color:var(--text-muted);font-size:13px;line-height:1.5">Type a change below and it runs the stages above &mdash; grounded against the real source, <strong>parked at a gate for you</strong>, executed in a sandbox, reviewed by a second vendor&rsquo;s model.</p>
+    <button type="button" class="gate-btn" id="replay-open-btn" style="font-size:11.5px;padding:5px 10px">▶ Watch a recorded run (free)</button>
   </div>
 </div>
 
@@ -1059,8 +1148,8 @@ body.inspecting-mobile #nav-compass-pad {
 <div class="dock-wrapper glass" id="director-dock">
   <div class="dock-header">
     <div class="target-badge">
-      🎯 Target: <strong id="target-parcel-name">The Town Square & Market</strong>
-      <button type="button" id="target-deselect-btn" class="scope-pill" style="margin-left:4px">Entire Kingdom</button>
+      🎯 Target: <strong id="target-parcel-name">The Central Esplanade &amp; Promenade</strong>
+      <button type="button" id="target-deselect-btn" class="scope-pill" style="margin-left:4px" title="Clear the selected parcel and target the whole world">✕ Clear target</button>
     </div>
     <div style="display:flex;align-items:center;gap:6px">
       <div class="exec-feedback">⚡ Edge V8 Isolate</div>
@@ -1076,15 +1165,15 @@ body.inspecting-mobile #nav-compass-pad {
       <button type="button" class="scope-pill" data-cat="furnishing">🪑 Props</button>
       <button type="button" class="scope-pill" data-cat="routine">👥 Settlement</button>
     </div>
-    <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-muted);cursor:pointer;white-space:nowrap;user-select:none" title="Automatically approve Plan Gate and Review Gate for rapid unblocked construction">
-      <input type="checkbox" id="auto-approve-toggle" checked style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer">
-      Auto-approve gates
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-muted);cursor:pointer;white-space:nowrap;user-select:none" title="Skip gate 1 (the plan gate) for speed. Gate 2, the cross-vendor review, NEVER auto-approves, and a plan resting on a false premise is never auto-approved either.">
+      <input type="checkbox" id="auto-approve-toggle" style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer">
+      Skip gate 1 (faster)
     </label>
   </div>
 
   <!-- Input & Build Button Row -->
   <div class="dock-input-row">
-    <textarea id="bar-request-input" class="dock-input" maxlength="500" placeholder="Direct new construction, roads, expansion, or furnishing across the kingdom..."></textarea>
+    <textarea id="bar-request-input" class="dock-input" maxlength="500" placeholder="e.g. add a lamp post near the workshop"></textarea>
     <button id="bar-submit" class="btn-build" type="button">⚡ Build</button>
   </div>
 
@@ -1122,7 +1211,7 @@ body.inspecting-mobile #nav-compass-pad {
       <h4 style="margin:0 0 8px;color:var(--emerald);font-size:14.5px">Production System Invariants (Regression Guardrails)</h4>
       <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px">
         <li><strong>Rule 1 (Clearance & No Clipping):</strong> In-memory 2D footprint collision solver enforces minimum buffer clearance across all buildings and outdoor fixtures.</li>
-        <li><strong>Rule 2 (Boundary Containment):</strong> Placements must strictly satisfy parcel envelopes—out-of-bounds additions are rejected before mutation.</li>
+        <li><strong>Rule 2 (Boundary Containment):</strong> Placements must strictly satisfy parcel envelopes — out-of-bounds additions are rejected before mutation.</li>
         <li><strong>Rule 3 (Financial Spend Ceiling):</strong> Enforced via Cloudflare Durable Object atomic reservation locks against $2/day, $7/week, $20/month caps.</li>
         <li><strong>Rule 4 (AST-Free In-Memory Mutators):</strong> Code mutations bypass JavaScript eval, executing as direct verified graph operations.</li>
       </ul>
@@ -1154,7 +1243,7 @@ body.inspecting-mobile #nav-compass-pad {
         </div>
       </div>
       <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#d1fae5">
-        <strong>Continuous Verification:</strong> 184 Node test assertions and 9 Cloudflare Worker integration tests validate structural invariants and mutation contracts.
+        <strong>Continuous Verification:</strong> 243 Node tests and 6 Cloudflare Worker integration tests, run against this repository. Counts are from the test runner, not from memory.
       </div>
       <div id="budget-summary-box" class="mono" style="font-size:11.5px;color:var(--text-muted);padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px">
         Loading budget invariants…
@@ -1204,7 +1293,7 @@ body.inspecting-mobile #nav-compass-pad {
       </div>
     </div>
     <div style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:14px;font-size:13px;color:#94a3b8;line-height:1.5">
-      <strong>Engineering Rationale:</strong> All applications, codebases, and architectural design prototypes are presented directly inside the application environment without external data leakage or tracking.
+      <strong>Engineering Rationale:</strong> Everything here runs in this page or on my own Workers — no analytics, no trackers, no third-party embeds beyond the Google Fonts stylesheet in the document head.
     </div>
   </div>
 </div>
@@ -1226,7 +1315,7 @@ body.inspecting-mobile #nav-compass-pad {
     <div style="color:#cbd5e1;font-size:13.5px;line-height:1.6">
       <h3 style="margin:0 0 8px;color:#fff;font-size:16px">Executive Summary</h3>
       <p style="margin:0 0 16px">
-        Dual-discipline leader with 18 years in architectural & interior design, combined with modern applied AI engineering. Creator of CALIPER (deterministic edge isolate simulation engine) and Datum (AEC AI compliance platform). Expert in spatial computing, WebGL/Three.js, Cloudflare Workers V8 isolates, and LLM verification loops.
+        Eighteen years in architectural and interior design, now building applied-AI systems. Self-taught on the engineering side — AutoCAD, Revit, then software — which is why the work here is about knowing when a system is wrong rather than assuming it is right. Built CALIPER (this) and Datum (AI review of building drawings). Works in spatial computing, WebGL/Three.js, Cloudflare Workers, and verification loops around LLMs.
       </p>
       <h3 style="margin:0 0 8px;color:#fff;font-size:16px">Core Competencies</h3>
       <ul style="margin:0 0 16px;padding-left:20px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -1238,7 +1327,7 @@ body.inspecting-mobile #nav-compass-pad {
         <li>TypeScript, Node.js & Distributed KV/DO</li>
       </ul>
       <div style="padding:12px;background:rgba(16,185,129,0.12);border-radius:8px;border:1px solid rgba(16,185,129,0.3);color:#d1fae5;font-size:13px">
-        📄 Complete official PDF and references available on confidential request.
+        📄 Full PDF and references on request — <a href="mailto:mark@fhinc.ca" style="color:var(--sky)">mark@fhinc.ca</a>.
       </div>
     </div>
   </div>
@@ -1262,7 +1351,7 @@ body.inspecting-mobile #nav-compass-pad {
       <iframe src="https://datum.markfrasertoronto.workers.dev" title="Datum AEC App" style="width:100%;height:520px;border:1px solid rgba(255,255,255,0.15);border-radius:12px;background:#0f172a" sandbox="allow-scripts allow-same-origin"></iframe>
     </div>
     <div style="font-size:12px;color:#94a3b8">
-      Production deployment: <code>datum.markfrasertoronto.workers.dev</code> · Hosted on Cloudflare Workers edge network.
+      Open it directly: <a href="https://datum.markfrasertoronto.workers.dev" target="_blank" rel="noopener noreferrer" style="color:var(--sky);font-weight:600">datum.markfrasertoronto.workers.dev</a> — if the panel above is blank, your browser has blocked the embed.
     </div>
   </div>
 </div>
@@ -1289,11 +1378,26 @@ body.inspecting-mobile #nav-compass-pad {
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;margin-bottom:18px">
       <h3 style="margin:0 0 8px;font-size:16px;color:#f8fafc">The Finding: Cost Asymmetry via Verification</h3>
       <p style="margin:0 0 10px;font-size:13.5px;line-height:1.6;color:#cbd5e1">
-        A Cloudflare Worker that generates structured changes with an LLM, executes them against hidden tests inside an isolated sandbox, and — if a test fails — surfaces exact feedback to the model for an in-loop repair. Tested across <strong>32 single-function benchmark tasks (3 difficulty tiers + novel tier, 450 total cycles)</strong> and <strong>3 models</strong> (cheapest, mid, and frontier):
+        A Cloudflare Worker that generates structured changes with an LLM, executes them against hidden tests inside an isolated sandbox, and — if a test fails — surfaces exact feedback to the model for an in-loop repair. Tested across <strong>32 single-function benchmark tasks across three difficulty tiers — including a novel tier of seven specs I wrote myself, one of which deliberately contradicts a formula every model has memorised — over 387 stored cycles</strong> and <strong>3 models</strong> (cheapest, mid, and frontier):
       </p>
       <div style="padding:10px 14px;background:rgba(16,185,129,0.12);border-left:3px solid var(--emerald);border-radius:0 8px 8px 0;font-size:13px;color:#d1fae5;line-height:1.5">
-        <strong>The Benchmark Finding:</strong> Across this 32-task benchmark (450 cycles total), the cheapest model (<code>claude-haiku-4-5</code>) with one or two repair rounds matches the frontier model (<code>claude-opus-4-8</code>) final pass rate, at roughly <strong>36–41% of the cost per correct answer</strong> ($0.00345 vs $0.00908 per cycle). Cost figures reflect modeled execution: direct observed token consumption plus modeled Dynamic Worker edge isolate invocation (~$0.002/cycle).
+        <strong>The Benchmark Finding:</strong> Across this 32-task benchmark (387 stored cycles), the cheapest model (<code>claude-haiku-4-5</code>) with one or two repair rounds reaches the same <strong>final pass rate</strong> as the frontier model (<code>claude-opus-4-8</code>), at roughly <strong>36–41% of the cost per correct answer</strong> ($0.00345 vs $0.00908 per cycle).
+        <br><br>Cost figures are modelled: observed token spend plus a modelled <code>~$0.002/cycle</code> for the Dynamic Worker isolate. That modelled component is charged to <em>both</em> models equally, so it makes the gap look <em>smaller</em> than it is — strip it out and the ratio goes from 36% to about 20%. The number quoted above is the conservative one.
       </div>
+    </div>
+
+    <!-- The correction. This belongs ON the page, not only in the docs. -->
+    <div style="background:rgba(245,158,11,0.09);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:16px;margin-bottom:18px">
+      <h4 style="margin:0 0 8px;font-size:14px;color:var(--accent)">Correcting my own headline</h4>
+      <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#cbd5e1">
+        An earlier version of this write-up said the cheap model <em>matched the frontier model</em>. That was two claims welded together, and only one of them survives the data.
+      </p>
+      <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#cbd5e1">
+        17 of the 18 core tasks hit 100% final pass for <strong>every</strong> model on <strong>every</strong> repetition. When everything passes, the benchmark has stopped measuring: it shows the loop repairs slips cheaply, and it shows nothing at all about quality, because capability was never stressed. The cost claim holds. <strong>The quality-equivalence claim was untested, and I have withdrawn it.</strong>
+      </p>
+      <p style="margin:0;font-size:12.5px;line-height:1.55;color:#94a3b8">
+        The honest read: this measures <em>cost per correct answer on tasks a small model can already do</em>. Finding the ceiling needs a harder suite. That is the next experiment, not a footnote on this one.
+      </p>
     </div>
 
     <!-- Benchmark Matrix Table -->
@@ -1344,12 +1448,12 @@ body.inspecting-mobile #nav-compass-pad {
               <td style="padding:8px 6px;color:#fff">claude-haiku-4-5</td>
               <td style="padding:8px 6px">Core Tasks (3 reps)</td>
               <td style="padding:8px 6px">54</td>
-              <td style="padding:8px 6px">79.6%</td>
+              <td style="padding:8px 6px">79.6%<span title="This specific figure moved on resampling noise as much as anything else. Treat it as approximate." style="color:var(--accent);cursor:help">&nbsp;†</span></td>
               <td style="padding:8px 6px;color:var(--emerald)"><strong>100%</strong></td>
               <td style="padding:8px 6px">0.24</td>
               <td style="padding:8px 6px">$0.00282</td>
             </tr>
-            <tr>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
               <td style="padding:8px 6px;color:#fff">claude-sonnet-5</td>
               <td style="padding:8px 6px">Core Tasks (3 reps)</td>
               <td style="padding:8px 6px">54</td>
@@ -1357,6 +1461,15 @@ body.inspecting-mobile #nav-compass-pad {
               <td style="padding:8px 6px">98.1%</td>
               <td style="padding:8px 6px">0.09</td>
               <td style="padding:8px 6px">$0.00412</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 6px;color:#fff">claude-opus-4-8</td>
+              <td style="padding:8px 6px">Core Tasks (3 reps)</td>
+              <td style="padding:8px 6px">54</td>
+              <td style="padding:8px 6px">92.6%</td>
+              <td style="padding:8px 6px">98.1%</td>
+              <td style="padding:8px 6px">0.11</td>
+              <td style="padding:8px 6px">$0.00908</td>
             </tr>
           </tbody>
         </table>
@@ -1367,7 +1480,7 @@ body.inspecting-mobile #nav-compass-pad {
     <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;margin-bottom:18px">
       <h4 style="margin:0 0 6px;font-size:14px;color:var(--accent)">Spec Disagreement: Verification Fixes Slips, Not Intent</h4>
       <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.5">
-        On <code>camel-to-snake</code>, every model returned <code>parse_http_response</code>, while the test insisted on <code>parse_httpresponse</code>. A third repair attempt did not alter Sonnet or Opus's output. Verification loops reliably correct syntactic or edge-case slips; they cannot resolve genuine divergences of semantic intent.
+        On <code>camel-to-snake</code>, every model returned <code>parse_http_response</code>, while the test insisted on <code>parse_httpresponse</code>. A third repair attempt did not alter Sonnet’s or Opus’s output. Verification loops reliably correct syntactic or edge-case slips; they cannot resolve genuine divergences of semantic intent.
       </p>
     </div>
 
@@ -1376,12 +1489,12 @@ body.inspecting-mobile #nav-compass-pad {
       <h4 style="margin:0 0 8px;font-size:14px;color:var(--sky)">Deterministic Safety & Edge Isolate Guardrails</h4>
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:10px;font-size:12.5px;color:#cbd5e1">
         <div style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px">
-          <strong style="color:#fff;display:block">AST-Free Isolation</strong>
-          No runtime code evaluation. Cloned state mutation using schema-validated operations.
+          <strong style="color:#fff;display:block">Two paths, two guarantees</strong>
+          <strong>World edits</strong> never evaluate code: they are schema-validated ops spliced into sentinel-delimited data blocks, no <code>eval</code>, no AST. <strong>Benchmark cycles</strong> do the opposite on purpose — model-written code is executed in a fresh Cloudflare Dynamic Worker isolate, because judging code by reading it is the failure mode this project exists to avoid.
         </div>
         <div style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px">
           <strong style="color:#fff;display:block">Durable Spend Backstop</strong>
-          Atomic spend ledger ($2/day, $7/week, $20/month caps) enforced via Durable Object KV.
+          Atomic spend ledger ($2/day, $7/week, $20/month caps) held in a single SQLite-backed Durable Object, so every reservation is serialised through one place and compare-and-set cannot race.
         </div>
         <div style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:6px">
           <strong style="color:#fff;display:block">Multi-Model Cross-Review</strong>
@@ -1392,8 +1505,8 @@ body.inspecting-mobile #nav-compass-pad {
 
     <!-- Live Links & In-App Data Actions -->
     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1)">
-      <button type="button" class="btn-pill live-data-inapp" data-endpoint="/matrix-results" data-title="Raw Benchmark Matrix Results (32 Tasks)" style="font-size:12px">📊 Raw Matrix JSON</button>
-      <button type="button" class="btn-pill live-data-inapp" data-endpoint="/change-history" data-title="Live Pipeline Changelog Feed" style="font-size:12px">📜 Live Changelog Feed</button>
+      <button type="button" class="btn-pill live-data-inapp" data-endpoint="/matrix-results" data-title="Raw benchmark matrix — 32 tasks, 387 stored cycles" style="font-size:12px">📊 Raw Matrix JSON</button>
+      <button type="button" class="btn-pill live-data-inapp" data-endpoint="/change-history" data-title="Every public run, including the failures" style="font-size:12px" title="The unfiltered record of public pipeline runs. It includes runs that failed, because a filtered changelog would be the same lie this project exists to refuse.">📜 Run log (unfiltered)</button>
       <button type="button" class="btn-pill live-data-inapp" data-endpoint="/pipeline-budget" data-title="Spend Counter & Bucket Ledger" style="font-size:12px">💰 Spend Counter</button>
       <button type="button" class="btn-pill live-data-inapp" data-endpoint="/tasks" data-title="32 Benchmark Task Suites" style="font-size:12px">📋 32 Benchmark Tasks</button>
     </div>
@@ -1557,15 +1670,15 @@ const TARGET_SUGGESTIONS = {
     name: 'Palm Terrace Villa',
     placeholder: 'Direct private terrace additions, plunge pools, or sun loungers...',
     categories: {
-      architecture: 'Extend the stable roof overhang on House 2',
-      landscape: 'Place a stone water trough for horses near House 2',
-      furnishing: 'Add a wooden hay storage rack outside House 2',
-      routine: 'Set up stable maintenance equipment for Rowan'
+      architecture: 'Extend the terrace pergola over the seaward side of the villa',
+      landscape: 'Plant a row of cypress along the villa\'s western boundary',
+      furnishing: 'Add two shaded sun loungers beside the plunge pool',
+      routine: 'Have Rowan check the moorings each morning at first light'
     }
   },
   outdoors: {
     name: 'Entire Kingdom',
-    placeholder: 'Direct new construction, roads, expansion, or furnishing across the kingdom...',
+    placeholder: 'e.g. add a lamp post near the workshop',
     categories: {
       architecture: 'Build a stone archway gateway along the kingdom boundary road',
       landscape: 'Plant a grove of pine and oak trees along the riverbank',
@@ -1604,6 +1717,30 @@ const NPC_PROFILES = {
   watchtower: { name: 'Captain Valen', role: 'Coastal Beacon Officer', avatar: '🏰', thought: 'Amber navigation beacon is scanning the open ocean horizon.' },
   outdoors: { name: 'Coastal Citizen', role: 'City Resident', avatar: '👥', thought: 'A premier coastal bay metropolis with vibrant architectural life.' }
 };
+
+// If the 3D renderer downgraded to the flat plan, SAY SO -- see world-render-3d.js.
+// Silently showing a different view while the 3D toggle still reads "on" is the
+// same failure this project exists to refuse.
+function reportDegradedRenderer(r) {
+  if (!r || !r.degraded) return;
+  const log = $('#stage-log');
+  if (log) {
+    const d = document.createElement('div');
+    d.className = 'stage';
+    d.style.borderLeftColor = 'var(--accent)';
+    d.innerHTML = '<h4>Showing the flat plan, not the 3D city</h4>' +
+      '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;line-height:1.5">' + esc(r.degraded) + '</p>';
+    log.prepend(d);
+  }
+  const c = $('#world-canvas');
+  if (c) c.setAttribute('aria-label', 'Flat plan view of the city. The 3D view is unavailable in this browser.');
+  document.querySelectorAll('[data-view="3d"], #view-3d-btn').forEach(b => {
+    b.classList.remove('active');
+    b.setAttribute('aria-pressed', 'false');
+    b.disabled = true;
+    b.title = r.degraded;
+  });
+}
 
 const renderer3d = new WorldRenderer(canvas3d, {
   reducedMotion,
@@ -1803,7 +1940,7 @@ $('#export-render-btn')?.addEventListener('click', () => {
   ctx.fillStyle = '#94a3b8';
   ctx.font = '24px system-ui, sans-serif';
   ctx.fillText(`Architect: Mark Fraser (18 Yrs AEC & Applied AI) · ${new Date().toLocaleDateString()}`, tbX + 36, tbY + 152);
-  ctx.fillText('Zoning: OBC Part 9 Verified · Scale: 1:500 Metric · Native 4K UHD (3840x2160)', tbX + 36, tbY + 190);
+  ctx.fillText('Procedurally generated — not a surveyed drawing · Scale: 1:500 Metric · 4K UHD (3840x2160)', tbX + 36, tbY + 190);
 
   const link = document.createElement('a');
   link.download = `caliper-4k-${currentView}-mark-fraser-${Date.now()}.png`;
@@ -2143,6 +2280,37 @@ $('#inspect-focus-btn').addEventListener('click', () => {
 });
 
 $('#status-card-close').addEventListener('click', () => $('#floating-status-card').style.display = 'none');
+// The panel headed PIPELINE EXECUTION, with its four named stages, is the
+// clearest explanation of this system on the page -- and it was display:none
+// until a run began, i.e. visible only to someone who already understood it.
+$('#floating-status-card').style.display = 'block';
+document.addEventListener('click', ev => {
+  const t = ev.target;
+  if (t && (t.id === 'replay-open-btn' || t.id === 'replay-start-btn')) playRecordedRun();
+});
+// KEEP aria-pressed TRUE TO THE VISIBLE STATE.
+//
+// Several toggles signalled their state with background colour alone -- fine if
+// you can see it, invisible to a screen reader and to anyone who cannot
+// distinguish the two blues. Adding a static aria-pressed would have been
+// worse than nothing: an attribute that says "false" while the button is lit is
+// a confident wrong answer, which is the failure this whole project is about.
+//
+// So it is mirrored from the class that actually drives the styling, by
+// observation rather than by editing a dozen separate click handlers -- one
+// place to be right, and it cannot drift when a new toggle is added.
+(function mirrorPressedState() {
+  const watch = document.querySelectorAll('[aria-pressed]');
+  const sync = el => el.setAttribute('aria-pressed', el.classList.contains('active') ? 'true' : 'false');
+  const obs = new MutationObserver(muts => muts.forEach(m => sync(m.target)));
+  watch.forEach(el => {
+    sync(el);
+    obs.observe(el, { attributes: true, attributeFilter: ['class'] });
+  });
+})();
+
+checkLiveStatus();
+reportDegradedRenderer(renderer3d);
 
 const COMMANDS = [
   { label: '🏛️ Jump to The Central Esplanade & Promenade', action: () => renderer3d.focusDistrict('town') },
@@ -2156,7 +2324,6 @@ const COMMANDS = [
   { label: '🌅 Set Atmosphere to Dusk (Golden Hour)', action: () => setTimeOfDayToggle('dusk') },
   { label: '🌙 Set Atmosphere to Night', action: () => setTimeOfDayToggle('night') },
   { label: '🎬 Start Cinematic Drone Tour', action: () => renderer3d.startDroneTour() },
-  { label: '👁️ Toggle 3D Spatial Diff', action: () => $('#spatial-diff-btn').click() },
   { label: '📐 Toggle Precision Spatial Grid (Coordinates & Clearance)', action: () => $('#grid-toggle-btn').click() },
   { label: '↺ Reset Camera to Bay Overview', action: () => renderer3d.resetView() },
 ];
@@ -2370,7 +2537,8 @@ $('#world-play-pause').addEventListener('click', (e) => {
 });
 bootWorld();
 
-// Pipeline Telemetry with STRICT 15-SECOND TIMEOUT GUARD
+// Pipeline telemetry. The watchdog is 60s -- this comment said 15 for long
+// enough that it had stopped being a comment and started being a wrong answer.
 let pipelineTimer = null;
 let pipelineStartTime = 0;
 let pipelineTimeoutGuard = null;
@@ -2446,7 +2614,168 @@ function finishPipelineTelemetry(success, message = null) {
 let currentRunId = null;
 let currentControlToken = null;
 let currentChangeRequest = '';
+// Was declared, never read, never assigned -- alongside a /live-status endpoint
+// the page never called. Both are now real: on load the page asks whether a run
+// can actually be started, and if not it says why and offers the recording.
 let liveRunsEnabled = true;
+
+async function checkLiveStatus() {
+  try {
+    const st = await fetch('/live-status').then(r => r.json());
+    liveRunsEnabled = !!(st && st.ok);
+    if (st && st.ok === false && st.detail) {
+      const log = $('#stage-log');
+      if (log) {
+        const d = document.createElement('div');
+        d.className = 'stage';
+        d.style.borderLeftColor = 'var(--accent)';
+        d.innerHTML = '<h4>Live runs are not available right now</h4>' +
+          '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;line-height:1.5">' + esc(st.detail) + '</p>';
+        log.prepend(d);
+      }
+      const btn = $('#bar-submit');
+      if (btn) { btn.disabled = true; btn.title = st.detail; btn.style.opacity = '0.55'; }
+    }
+  } catch { /* unknown is not a block: leave the button live and let the run report */ }
+}
+
+// =============================================================================
+// THE RECORDED RUN
+//
+// A real pipeline run, captured 2026-08-29, replayed from public/recorded-run.json
+// with its actual token counts, actual costs and actual stage results.
+//
+// This exists because the live path can legitimately refuse to start: three runs
+// per visitor per day, $2/day total, both enforced in code. Before this, a
+// visitor who hit either cap -- or simply arrived late in the day -- had NO WAY
+// AT ALL to see what the pipeline does, on a page whose entire subject is what
+// the pipeline does. The recording was already in the repo, served, and
+// referenced by nothing.
+//
+// It is labelled as a recording everywhere it appears. An unlabelled replay
+// passed off as live would be the exact failure this project exists to refuse.
+// =============================================================================
+let recordedRun = null;
+let replayTimers = [];
+
+function stopReplay() {
+  replayTimers.forEach(t => clearTimeout(t));
+  replayTimers = [];
+}
+
+function offerRecordedRun(lead) {
+  const log = $('#stage-log');
+  if (!log || log.querySelector('#replay-offer')) return;
+  const d = document.createElement('div');
+  d.className = 'stage';
+  d.id = 'replay-offer';
+  d.innerHTML = '<h4>▶ Watch a recorded run instead</h4>' +
+    '<p style="margin:6px 0 8px;font-size:12px;color:#94a3b8;line-height:1.5">' +
+    (lead ? esc(lead) + ' ' : '') +
+    'A real run from 29 Aug 2026, replayed with its actual costs and results. Free, and it spends nothing.</p>' +
+    '<button type="button" class="gate-btn gate-approve" id="replay-start-btn">Play the recording</button>';
+  log.appendChild(d);
+  d.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  $('#replay-start-btn').addEventListener('click', () => playRecordedRun());
+}
+
+async function playRecordedRun() {
+  stopReplay();
+  if (activeEs) { activeEs.close(); activeEs = null; }
+  const log = $('#stage-log');
+  log.innerHTML = '';
+  const banner = document.createElement('div');
+  banner.className = 'stage';
+  banner.style.borderLeftColor = 'var(--accent)';
+  banner.innerHTML = '<h4>⏺ RECORDING — not a live run</h4>' +
+    '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8">Loading…</p>';
+  log.appendChild(banner);
+
+  try {
+    if (!recordedRun) {
+      const r = await fetch('/recorded-run.json');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      recordedRun = await r.json();
+    }
+  } catch (e) {
+    banner.querySelector('p').textContent = 'The recording could not be loaded (' + e.message + ').';
+    return;
+  }
+
+  const run = recordedRun;
+  const money = v => '$' + Number(v || 0).toFixed(4);
+  banner.querySelector('p').innerHTML =
+    'Captured <strong>' + esc(String(run.capturedAt).slice(0, 10)) + '</strong> · request: <em>“' + esc(run.changeRequest) + '”</em>' +
+    ' · total ' + money(run.totalCostUsd) + ' and ' + Math.round((run.totalWallTimeMs || 0) / 1000) + ' s in real life. Replayed here in about 12.';
+
+  const TITLES = {
+    ground: '1. Ground — is this true of the world?',
+    plan: '2. Plan — what exactly would change?',
+    gate1: '⏸ Gate 1 — a human decides',
+    implement: '3. Implement — write the change',
+    verify: '4. Verify — run it in a sandbox',
+    review: '5. Review — a different vendor’s model reads it',
+    gate2: '⏸ Gate 2 — ship, or refuse',
+  };
+
+  const stages = Array.isArray(run.stages) ? run.stages : [];
+  let delay = 700;
+  stages.forEach((st, i) => {
+    replayTimers.push(setTimeout(() => {
+      const prev = log.querySelector('.stage.active');
+      if (prev) prev.classList.remove('active');
+      const b = stageBlock(log, 'replay-' + i, TITLES[st.stage] || st.stage);
+      const bits = [];
+      if (st.costUsd != null) {
+        bits.push('cost ' + money(st.costUsd) +
+          (st.inputTokens != null ? ' · ' + st.inputTokens + ' in / ' + st.outputTokens + ' out tokens' : '') +
+          (st.wallTimeMs != null ? ' · ' + (st.wallTimeMs / 1000).toFixed(1) + ' s' : ''));
+      }
+      if (st.stage === 'ground' && st.result) {
+        bits.push(st.result.premisesHold
+          ? '✓ Every premise in the request holds against the real source.'
+          : '⚠ This request rests on something that is not true of the world.');
+      }
+      if (st.stage === 'plan' && st.result && st.result.understoodIntent) {
+        bits.push('Understood as: “' + st.result.understoodIntent + '”');
+      }
+      if (st.stage === 'gate1') bits.push('Decision: <strong>' + esc(st.decision) + '</strong> — the run stopped here until a person answered.');
+      if (st.stage === 'implement' && Array.isArray(st.ops)) bits.push(st.ops.length + ' schema-validated operation(s), spliced into the source. No eval.');
+      if (st.stage === 'verify') {
+        bits.push('Regression suite: <strong>' + st.regressionPassed + '/' + st.regressionTotal + '</strong> passed — these are the checks the model is not allowed to edit.');
+        bits.push('Acceptance criteria: <strong>' + st.criteriaPassed + '/' + st.criteriaTotal + '</strong> passed, executed in a fresh isolate.');
+      }
+      if (st.stage === 'review') {
+        const f = Array.isArray(st.findings) ? st.findings : [];
+        const mat = f.filter(x => x && x.severity === 'MATERIAL').length;
+        bits.push(f.length + ' finding(s): <strong>' + mat + ' material</strong>, ' + (f.length - mat) + ' minor.');
+        if (f[0] && f[0].text) bits.push('<em>“' + esc(String(f[0].text).slice(0, 180)) + '”</em>');
+      }
+      if (st.stage === 'gate2') {
+        bits.push(st.materialCount > 0
+          ? '<strong>' + st.materialCount + ' material finding(s)</strong> — this run would have parked for a human, and auto-approve is never offered here.'
+          : 'No material findings, so no second gate was needed. Had there been one, it would have stopped for a person: <strong>gate 2 never auto-approves</strong>.');
+      }
+      if (bits.length) {
+        b.insertAdjacentHTML('beforeend',
+          '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;line-height:1.6">' + bits.join('<br>') + '</p>');
+      }
+      if (i === stages.length - 1) {
+        replayTimers.push(setTimeout(() => {
+          b.classList.remove('active');
+          const end = stageBlock(log, 'replay-end',
+            run.outcome === 'shipped' ? '✓ Shipped — the change went live' : '⛔ Refused — ' + esc(run.outcome));
+          end.classList.remove('active');
+          end.insertAdjacentHTML('beforeend',
+            '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;line-height:1.6">' +
+            'Total ' + money(run.totalCostUsd) + '. This was a recording — nothing was spent and nothing changed just now. ' +
+            'Type your own request above to run it for real.</p>');
+        }, 900));
+      }
+    }, delay));
+    delay += st.stage === 'gate1' || st.stage === 'gate2' ? 2100 : 1500;
+  });
+}
 
 function stageBlock(log, id, title, extraClass) {
   const div = document.createElement('div');
@@ -2515,7 +2844,18 @@ async function submitGateDecision(decisionUrl, resumeUrl, cardEl, isReject = fal
 function startRun() {
   const input = $('#bar-request-input');
   const text = input.value.trim();
-  if (!text) return;
+  if (!text) {
+    // Was a bare `return`: the most likely first interaction on the page did
+    // nothing at all, with no hint that anything was expected.
+    input.focus();
+    input.style.borderColor = 'var(--accent)';
+    setTimeout(() => { input.style.borderColor = ''; }, 1400);
+    const hint = $('#stage-log');
+    if (hint) hint.innerHTML = '<div class="stage"><h4>Type what you want changed</h4>' +
+      '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8">For example: <em>add a lamp post near the workshop</em>. ' +
+      'Or press <strong>Watch a recorded run</strong> to see the whole pipeline without spending anything.</p></div>';
+    return;
+  }
   const log = $('#stage-log');
   log.innerHTML = '';
   currentRunId = null;
@@ -2613,9 +2953,38 @@ function connect(url) {
     const willBuild = d?.plan?.willBuild ?? 'Plan synthesized.';
     const criteria = Array.isArray(d?.plan?.criteria) ? d.plan.criteria.map(c => esc(c?.name || 'Clearance')).join(', ') : 'Spatial clearance';
     
-    const autoApprove = $('#auto-approve-toggle')?.checked ?? true;
+    // GROUNDING, SHOWN.
+    //
+    // The grounding stage checks the request's premises against the real world
+    // structure before anything is planned, and the plan-gate event has always
+    // carried its result. Nothing rendered it. So the one output whose entire
+    // job is to say "this rests on something that is not true" was computed,
+    // paid for, carried all the way to the gate -- and dropped on the floor.
+    const g = d?.grounding;
+    const premisesHold = g ? g.premisesHold !== false : true;
+    const falsePremises = Array.isArray(g?.falsePremises) ? g.falsePremises : [];
+    const alternatives = Array.isArray(g?.alternatives) ? g.alternatives : [];
+    const groundingHtml = !g ? '' : premisesHold
+      ? `<p style="margin:0 0 6px;font-size:11.5px;color:#86efac">✓ Grounding: every premise checked out against the current world.</p>`
+      : `<div style="margin:0 0 8px;padding:8px 10px;border-left:3px solid #f59e0b;background:rgba(245,158,11,.10);border-radius:0 6px 6px 0">
+           <p style="margin:0 0 4px;font-size:11.5px;color:#fbbf24;font-weight:700">⚠ This request rests on something that isn't true of the world</p>
+           <ul style="margin:0 0 ${alternatives.length ? '6px' : '0'};padding-left:16px;font-size:11.5px;color:#e2e8f0">
+             ${falsePremises.map(p2 => `<li>${esc(String(p2))}</li>`).join('')}
+           </ul>
+           ${alternatives.length ? `<p style="margin:0 0 2px;font-size:11px;color:#94a3b8">What it can support instead:</p>
+           <ul style="margin:0;padding-left:16px;font-size:11.5px;color:#cbd5e1">${alternatives.map(a => `<li>${esc(String(a))}</li>`).join('')}</ul>` : ''}
+         </div>`;
+
+    // AUTO-APPROVE IS FOR THE ORDINARY CASE ONLY.
+    //
+    // The claim this whole system makes is that it parks at a human gate. With
+    // auto-approve defaulted on, it did not -- and a plan whose own grounding
+    // said it was built on a false premise was auto-approved without anyone
+    // ever reading that. A convenience that silently approves exactly the case
+    // the gate exists for is not a convenience.
+    const autoApprove = ($('#auto-approve-toggle')?.checked ?? true) && premisesHold;
     if (autoApprove) {
-      b.innerHTML = `<h4>📋 Plan Auto-Approved</h4><p style="margin:0;font-size:12px">${esc(willBuild)}</p>`;
+      b.innerHTML = `<h4>📋 Plan Auto-Approved</h4>${groundingHtml}<p style="margin:0;font-size:12px">${esc(willBuild)}</p>`;
       b.classList.remove('active');
       submitGateDecision(
         `/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=true`,
@@ -2626,13 +2995,17 @@ function connect(url) {
     }
 
     const rawCost = Number(d?.costEstimateUsd);
-    const costStr = Number.isFinite(rawCost) ? rawCost.toFixed(4) : '0.0030';
+    // A hardcoded '0.0030' used to render here as `Est. Cost:` with nothing
+    // marking it as invented. Say we don't know instead.
+    const costStr = Number.isFinite(rawCost) ? rawCost.toFixed(4) : null;
 
     b.innerHTML = `
       <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
+        ${groundingHtml}
+        ${!premisesHold ? `<p style="margin:0 0 6px;font-size:11px;color:#fbbf24">Auto-approve is held back for this one — it needs a person.</p>` : ''}
         <p style="margin:0 0 6px"><strong>Will Build:</strong> ${esc(willBuild)}</p>
         <p style="margin:0 0 6px"><strong>Criteria:</strong> ${criteria}</p>
-        <p style="margin:0 0 8px;font-family:var(--mono);color:var(--accent);font-size:11px">Est. Cost: $${costStr}</p>
+        ${costStr ? `<p style="margin:0 0 8px;font-family:var(--mono);color:var(--accent);font-size:11px">Est. Cost: $${costStr}</p>` : '<p style="margin:0 0 8px;font-family:var(--mono);color:var(--text-muted);font-size:11px">Est. cost: not reported by the coordinator</p>'}
         <div style="display:flex;gap:8px;margin-top:6px">
           <button type="button" class="btn-pill btn-approve" style="background:var(--emerald);color:#fff;padding:6px 12px;font-weight:700">✓ Approve & Build</button>
           <button type="button" class="btn-pill btn-reject" style="background:#ef4444;color:#fff;padding:6px 12px">✕ Reject</button>
@@ -2702,17 +3075,19 @@ function connect(url) {
     const runId = d.runId || currentRunId;
     const b = stageBlock(log, 's-review-gate', '🔍 Gate 2: Cross-Model Audit');
     
-    const autoApprove = $('#auto-approve-toggle')?.checked ?? true;
-    if (autoApprove) {
-      b.innerHTML = `<h4>🔍 Review Auto-Approved</h4><p style="margin:0;font-size:12px">Audit cleared. Shipping to kingdom.</p>`;
-      b.classList.remove('active');
-      submitGateDecision(
-        `/change-review-decision?runId=${encodeURIComponent(runId)}&approve=true`,
-        `/change-resume?runId=${encodeURIComponent(runId)}`,
-        b
-      );
-      return;
-    }
+    // GATE 2 NEVER AUTO-APPROVES.
+    //
+    // This gate only OPENS when the cross-vendor reviewer found at least one
+    // MATERIAL defect -- that is the entire condition for reaching it. So the
+    // auto-approve path that used to be here shipped, by default, a change
+    // another model had just flagged, under the words "Audit cleared".
+    // The audit had not cleared. It had failed, and the UI said the opposite.
+    //
+    // Gate 1 already withholds auto-approve on a false premise for exactly this
+    // reason; Gate 2 was simply left out, which made it the same defect as
+    // "Reject shipped the change" moved to the client. A human looks at every
+    // material finding. There is no toggle for it, which is why there is no
+    // branch here.
 
     const reviewerName = d?.reviewerModel || 'OpenAI Codex (gpt-5.3-codex)';
     const mat = (d.materialFindings && d.materialFindings.length) ? d.materialFindings.join('; ') : 'No material defects found';
@@ -2821,7 +3196,7 @@ function connect(url) {
     if (activeEs !== es) return;
     finishPipelineTelemetry(true);
     renderer3d.playSuccessChime();
-    const b = stageBlock(log, 's-shipped', '✓ Shipped live to kingdom');
+    const b = stageBlock(log, 's-shipped', '✓ Shipped — the change is live');
     b.classList.remove('active');
     bootWorld();
     if (activeEs === es) {
@@ -2862,7 +3237,29 @@ function connect(url) {
         activeEs = null;
       }
       if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);
-      finishPipelineTelemetry(false, 'Pipeline connection interrupted. Resume from the active run rather than re-creating.');
+      // EventSource cannot read an HTTP error body, so a 429 (this visitor has
+      // used their three daily runs) and a 503 (the day's spend cap is spent)
+      // both arrive here as a bare `error` with no status. Reporting that as
+      // "connection interrupted" was FALSE, and it hid the two most interesting
+      // facts about the system: that it rate-limits and that it fails closed.
+      // So: ask the server what actually happened, and say that instead.
+      if (currentRunId) {
+        finishPipelineTelemetry(false, 'The connection dropped part-way through a run that had already started. Nothing was shipped.');
+      } else {
+        finishPipelineTelemetry(false, 'Checking why the run could not start…');
+        fetch('/live-status').then(r => r.json()).then(st => {
+          if (st && st.ok === false && st.detail) {
+            finishPipelineTelemetry(false, st.detail);
+            offerRecordedRun('This is the cap doing its job. Here is the full pipeline instead:');
+          } else {
+            finishPipelineTelemetry(false, 'The run could not be started. The recorded run below shows the full pipeline.');
+            offerRecordedRun();
+          }
+        }).catch(() => {
+          finishPipelineTelemetry(false, 'The run could not be started, and the status endpoint did not answer either.');
+          offerRecordedRun();
+        });
+      }
     }
   });
 }

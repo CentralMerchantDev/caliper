@@ -20,6 +20,10 @@
 // by reading" discipline as everything else in this project, applied to
 // the criteria themselves.
 
+/** The only functions a criterion may probe. Anything else is either a typo or
+ * an attempt to reach past the four the world actually exports. */
+export const SIM_CALLABLE_FNS = ["initialWorld", "tick", "chooseAction", "applyAction"];
+
 export type CriterionKind = "existence" | "structural" | "non-regression" | "render";
 
 export interface ExistenceCriterion {
@@ -155,6 +159,20 @@ export function validateProposedCriterion(raw: RawCriterion & Record<string, unk
   let args: unknown[] = [];
   if (raw.kind !== "render") {
     if (typeof raw.fn !== "string" || raw.fn.length === 0) return { valid: false, reason: `criterion "${raw.description}": fn is required for kind "${raw.kind}"` };
+    // fn IS SPLICED INTO GENERATED SOURCE, so it must be an identifier and
+    // nothing else. simSandbox builds the probe module by writing
+    // `__fns["<fn>"] = <fn>;` -- the second occurrence is bare code. A model
+    // that emitted `0; } catch(e){} __deepEqual = () => true; try {` produced
+    // a valid module in which every comparison returned true, so every probe
+    // passed and the criteria gate stopped meaning anything. Verified by
+    // executing it. The plan model's output is not trusted input, and this is
+    // the one place any of it reaches a code position.
+    if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(raw.fn)) {
+      return { valid: false, reason: `criterion "${raw.description}": fn "${raw.fn}" is not a plain identifier` };
+    }
+    if (!SIM_CALLABLE_FNS.includes(raw.fn)) {
+      return { valid: false, reason: `criterion "${raw.description}": fn "${raw.fn}" is not one of the world's callable functions (${SIM_CALLABLE_FNS.join(", ")})` };
+    }
     if (typeof raw.argsJson !== "string") return { valid: false, reason: `criterion "${raw.description}": argsJson is required for kind "${raw.kind}"` };
     try {
       args = JSON.parse(raw.argsJson);

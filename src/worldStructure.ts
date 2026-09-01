@@ -36,6 +36,62 @@ function loadBaselineWorld(): BaselineWorld {
 
 const BASELINE_WORLD = loadBaselineWorld();
 
+// -----------------------------------------------------------------------------
+// FACTS ABOUT A GIVEN WORLD -- not about the baseline.
+//
+// Everything below used to be a module-level constant computed once, at load,
+// from SIM_BASELINE_SOURCE. That is the ORIGINAL world, and the pipeline ships
+// changes to it: after the first shipped change, grounding was checking a
+// visitor's premises against a world that no longer existed, and the render
+// criterion was validating type keys against a registry that had since grown.
+// A system whose whole claim is that it only says yes when yes is true cannot
+// be reasoning about a stale copy of the thing it is reasoning about.
+//
+// So the facts are now DERIVED FROM A SOURCE that is passed in. The module-level
+// exports remain, bound to the baseline, because tests and the type registry
+// legitimately want the baseline -- but every pipeline stage passes the source
+// it is actually working on.
+// -----------------------------------------------------------------------------
+export interface WorldFacts {
+  stations: StationInfo[];
+  buildingTypes: string[];
+  buildingNames: string[];
+  outdoorObjectTypes: string[];
+  objectTypeKeys: string[];
+  surfaceTypes: string[];
+}
+
+export function worldFacts(source: string = SIM_BASELINE_SOURCE): WorldFacts {
+  const w = readWorldData(source) as BaselineWorld;
+  const entries = Object.entries(w.objectTypes);
+  return {
+    stations: entries
+      .filter((e): e is [string, BaselineObjectType & { station: { action: string; label: string } }] => e[1].station !== null)
+      .map(([key, t]) => ({ key, action: t.station.action, label: t.station.label })),
+    buildingTypes: [...new Set(w.buildings.map((b) => b.type))],
+    buildingNames: w.buildings.map((b) => `${b.label} (id: ${b.id}, type: ${b.type})`),
+    outdoorObjectTypes: entries.filter(([, t]) => t.station === null).map(([key]) => key),
+    objectTypeKeys: Object.keys(w.objectTypes),
+    surfaceTypes: Object.keys(w.surfaces),
+  };
+}
+
+/**
+ * The object-type keys of a specific source, falling back to the baseline's if
+ * the source cannot be parsed. Used by the render criterion, which must judge a
+ * candidate against the candidate's own registry -- judging it against the
+ * baseline's meant a criterion naming a type the change had just added failed,
+ * and one naming a type the change had just removed passed.
+ */
+export function objectTypeKeysFor(source: string | undefined): string[] {
+  // An ABSENT source legitimately means "no candidate yet" -- fall back to the
+  // baseline registry. A source that is present but does not parse is a
+  // different thing entirely: it means the world is broken, and answering from
+  // the baseline would judge a criterion against a world that is not there.
+  if (!source) return OBJECT_TYPE_KEYS;
+  return worldFacts(source).objectTypeKeys;
+}
+
 export interface StationInfo {
   key: string;
   action: string;
@@ -88,6 +144,19 @@ export const OBJECT_TYPE_KEYS = Object.keys(BASELINE_WORLD.objectTypes);
 // colours (used on a building's own sign post) once every building became
 // open-topped -- there is no roof plane left to colour.
 export const SURFACE_TYPES = Object.keys(BASELINE_WORLD.surfaces);
+
+function worldFieldsFor(f: WorldFacts): Record<string, string> {
+  return {
+    tick: WORLD_FIELDS.tick,
+    rngState: WORLD_FIELDS.rngState,
+    money: WORLD_FIELDS.money,
+    sims: WORLD_FIELDS.sims,
+    buildings: `array of { id, type: ${f.buildingTypes.join("|")}, label, plot: {x,y} } -- a container other things are placed inside or around`,
+    placements: WORLD_FIELDS.placements,
+    objectTypes: `object keyed by type name (${f.objectTypeKeys.join(", ")}), each { material, footprint: {w,d}, station: {action,label}|null } -- what the renderer needs to draw a placement of that type and, for stations, which sim action it provides. Adding a key here is how a genuinely new object type gets added.`,
+    surfaces: `object keyed by surface name (${f.surfaceTypes.join(", ")}), each { material: string, color: string (hex) } -- read directly by the renderer, changeable like any other world field`,
+  };
+}
 
 export const WORLD_FIELDS: Record<string, string> = {
   tick: "number -- world clock; hour is tick % 24, day is floor(tick / 24) + 1",
@@ -142,7 +211,25 @@ export const NOT_YET_PRESENT = [
  * fix: it states the cost tiers explicitly, in the same summary grounding
  * and planning both read, so a data append no longer has to be inferred as
  * cheap -- it's stated as cheap. */
-export function structureSummary(): string {
+export function structureSummary(source: string = SIM_BASELINE_SOURCE): string {
+  // Derived from the source PASSED IN, so this describes the world the run is
+  // actually working on rather than the one the process started with.
+  // NO SILENT FALLBACK.
+  //
+  // This used to catch a parse failure and quietly re-derive from the baseline,
+  // so if a shipped world stopped parsing, grounding carried on saying "current
+  // world structure (generated directly from the code)" about a world that no
+  // longer existed -- with no signal to the visitor, the ledger, or anyone
+  // reading the transcript. Since the pipeline ships model-authored source,
+  // that is a live path, not a theoretical one.
+  //
+  // Describing the wrong world confidently is the exact failure this project
+  // exists to refuse, so it now throws and the run halts instead.
+  const f: WorldFacts = worldFacts(source);
+  const BUILDING_TYPES = f.buildingTypes, BUILDING_NAMES = f.buildingNames;
+  const STATIONS = f.stations, OUTDOOR_OBJECT_TYPES = f.outdoorObjectTypes;
+  const OBJECT_TYPE_KEYS = f.objectTypeKeys, SURFACE_TYPES = f.surfaceTypes;
+  const WORLD_FIELDS = worldFieldsFor(f);
   return [
     `Entity types that exist: ${ENTITY_TYPES.join(", ")}.`,
     `The world is a neighbourhood: a plot of ground with ${BUILDING_TYPES.length} building types (${BUILDING_TYPES.join(", ")}) laid out on a grid, paths and open ground between them, and objects placed indoors or outdoors from a type registry.`,

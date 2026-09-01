@@ -12,7 +12,7 @@
 // condition (a field exists, a type holds, a count is met) is ALREADY true
 // on the unmodified baseline -- so the criterion can never distinguish
 // "the change worked" from "nothing happened at all."
-import { OBJECT_TYPE_KEYS, ENTITY_TYPES } from "./worldStructure";
+import { OBJECT_TYPE_KEYS, ENTITY_TYPES, objectTypeKeysFor } from "./worldStructure";
 import type { ProposedCriterion } from "./criteria";
 
 export type DryRunVerdict = { verdict: "valid"; reason: string } | { verdict: "invalid"; reason: string };
@@ -41,7 +41,7 @@ function typeMatches(value: unknown, expected: string): boolean {
  * local/dev use, a plain Node import of the baseline module (see
  * test/criteriaDryRun.test.ts for both).
  */
-export function dryRunCriterion(criterion: ProposedCriterion, baselineFns: Record<string, (...args: unknown[]) => unknown>): DryRunVerdict {
+export function dryRunCriterion(criterion: ProposedCriterion, baselineFns: Record<string, (...args: unknown[]) => unknown>, candidateSource?: string): DryRunVerdict {
   switch (criterion.kind) {
     case "existence": {
       const fn = baselineFns[criterion.fn];
@@ -108,11 +108,16 @@ export function dryRunCriterion(criterion: ProposedCriterion, baselineFns: Recor
     }
 
     case "render": {
+      // The comment below claimed this fix was applied here. It was not: this
+      // still used the frozen module-load OBJECT_TYPE_KEYS, so a dry run of a
+      // criterion naming a type the change had just ADDED would say it does not
+      // exist. Same defect as criteriaExecution's, one file over, with a
+      // comment asserting it had been handled.
       // Same OBJECT_TYPE_KEYS fix as criteriaExecution.ts's render case --
       // an outdoor type like "lampPost" used to read as "not known yet"
       // here even when it already exists, since STATIONS alone never
       // included outdoor props.
-      const known = [...OBJECT_TYPE_KEYS, ...ENTITY_TYPES];
+      const known = [...objectTypeKeysFor(candidateSource), ...ENTITY_TYPES];
       if (!known.includes(criterion.stationOrEntityKey)) {
         // Not vacuous -- a render criterion about something that doesn't
         // exist yet is exactly the expected shape for a plan adding a new

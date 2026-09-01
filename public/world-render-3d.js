@@ -6680,10 +6680,26 @@ function webglAvailable() {
 
 export class WorldRenderer {
   constructor(canvas, opts = {}) {
+    // SAY SO WHEN THE 3D VIEW IS NOT THE 3D VIEW.
+    //
+    // This downgraded to the 2D renderer in silence: the 3D toggle stayed
+    // .active with aria-pressed="true", the canvas kept its "3D city" label,
+    // and Walk / Drive / Fly / Cutaway / Tour simply did nothing. On a locked-
+    // down machine -- plausibly the reviewer's -- the entire first impression
+    // was a flat plan surrounded by inert controls, with no explanation. An
+    // unlabelled degraded mode presented as the real thing is the same lie
+    // this project exists to refuse, in a smaller box.
+    this.degraded = null;
     try {
-      this._impl = webglAvailable() ? new Renderer3D(canvas, opts) : new WorldRenderer2D(canvas, opts);
+      if (webglAvailable()) {
+        this._impl = new Renderer3D(canvas, opts);
+      } else {
+        this.degraded = "This browser has no WebGL, so the flat plan view is being shown instead of the 3D city. The camera modes are unavailable.";
+        this._impl = new WorldRenderer2D(canvas, opts);
+      }
     } catch (err) {
       console.warn("Renderer3D failed, falling back to WorldRenderer2D:", err);
+      this.degraded = "The 3D view failed to start (" + (err && err.message ? err.message : "unknown error") + "), so the flat plan view is being shown instead. The camera modes are unavailable.";
       this._impl = new WorldRenderer2D(canvas, opts);
     }
   }

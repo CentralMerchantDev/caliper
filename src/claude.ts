@@ -467,7 +467,7 @@ export async function generatePlan(
     // grounding reads, including its cheap-operations tiering -- sent here
     // too, not just relied on secondhand through grounding's note, so the
     // plan stage judges scope against the real tiers directly.
-    `Structure summary (generated directly from the code):\n${structureSummary()}\n\n` +
+    `Structure summary (generated directly from the code):\n${structureSummary(currentSource)}\n\n` +
     `Existing regression checks that must keep passing unless the request specifically asks to change ` +
     `that behavior:\n${regressionSummary}\n\n` +
     // Grounding (FINISH.md chunk 7) ran before this call and already

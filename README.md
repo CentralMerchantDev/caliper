@@ -13,17 +13,23 @@ cycle yourself.
 
 ## The pipeline
 
-The live page now leads with a second thing: a real brief → implement → verify → cross-model
-review → human gate → fix → ship pipeline, built to mirror a real cross-model build process
-(Claude authors, GPT-5.5 reviews independently, a human approves or rejects anything material)
-rather than diagram it. See [`docs/REBUILD-PROPOSAL.md`](docs/REBUILD-PROPOSAL.md) for the design
-and [`REBUILD.md`](REBUILD.md) / [`REBUILD-CONTROLS.md`](REBUILD-CONTROLS.md) for what was asked
-for. The five presets (a tuner, tic-tac-toe against a perfect opponent, a unit converter, a
-password-strength scorer, and a Game of Life stepper) each carry hand-authored, hidden-from-the-
-model acceptance criteria verified against physics, exhaustive search, published constants, or a
-stated rubric — the same ground-truth discipline as the 32-task experiment below, applied to a
-real interactive artifact instead of a bare function. A free-form option trades that hidden ground
-truth for a visitor's own prompt, disclosed as a weaker guarantee in the UI itself.
+The live page leads with a second thing: a change pipeline. A visitor types a change in plain
+English and it is **grounded** against the real source, **planned**, **parked at a human gate**,
+**implemented**, **verified** by executing it in a fresh Cloudflare Dynamic Worker isolate, and
+**reviewed** by a different vendor's model (Claude authors, `gpt-5.3-codex` reviews) before it
+ships — or is refused. It mirrors a real cross-model build process rather than diagramming one.
+See [`docs/REBUILD-PROPOSAL.md`](docs/REBUILD-PROPOSAL.md) for the design.
+
+Two things are worth stating plainly because they are what the project is actually about:
+
+- **Gate 2 never auto-approves.** If the reviewing model raises anything material, the run stops
+  for a person. There is no branch that skips it.
+- **Grounding refuses false premises.** If the request rests on something that is not true of the
+  world, the pipeline says so and offers alternatives instead of confidently building the wrong
+  thing.
+
+If the live path is unavailable — three runs per visitor per day, $2/day total, both enforced in
+code — the page replays a real recorded run instead, labelled as a recording.
 
 Every visitor-facing cost/rate limit is enforced in code and shown on the page, not just
 documented: a per-run cost ceiling, per-stage token caps, a per-IP daily limit on live runs, a

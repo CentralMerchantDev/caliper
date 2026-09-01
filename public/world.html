@@ -84,7 +84,25 @@ label.mono{font-family:var(--mono);font-size:11px;color:var(--muted);text-transf
 <script type="module">
 import { WorldRenderer } from "./world-render-3d.js";
 import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
-import { initialWorld, tick } from "./sim-baseline.generated.js";
+
+// THE LIVE WORLD, not the baseline.
+//
+// This page imported ./sim-baseline.generated.js directly, which is the
+// ORIGINAL world baked at build time. Every change the pipeline had ever
+// shipped was invisible here: the run said "shipped", the visitor opened this
+// page, and saw the world exactly as it was before. index.html has always done
+// this correctly; this page had simply never been updated to match.
+//
+// /world-source serves the authoritative current source from the coordinator.
+// The generated file stays as the fallback for when the worker is unreachable,
+// which is what it is actually good for.
+let initialWorld, tick;
+try {
+  ({ initialWorld, tick } = await import(`./world-source?t=${Date.now()}`));
+} catch (e) {
+  console.warn("world-source unavailable, falling back to the baked baseline:", e);
+  ({ initialWorld, tick } = await import("./sim-baseline.generated.js"));
+}
 
 // FINAL.md item 7: same toggle pattern as index.html -- both renderers
 // stay alive and fed every tick; only the visible one is drawn each
@@ -127,7 +145,12 @@ function logEvent(w) {
   const parts = w.sims.map((s) => `${s.id} ${s.lastAction}`).join(" · ");
   const div = document.createElement("div");
   div.className = "log-line";
-  div.innerHTML = `<b>t${w.tick}</b> (${String(hour).padStart(2, "0")}:00) ${parts} · $${w.money}`;
+  // s.id and s.lastAction come from the SHIPPED world source, which a model
+  // wrote -- so they are not ours and must not be parsed as markup. The bold
+  // tick is built as a real element and everything else goes in as text.
+  const b = document.createElement("b");
+  b.textContent = `t${w.tick}`;
+  div.append(b, document.createTextNode(` (${String(hour).padStart(2, "0")}:00) ${parts} · $${w.money}`));
   logEl.prepend(div);
   while (logEl.children.length > MAX_LOG) logEl.removeChild(logEl.lastChild);
 }

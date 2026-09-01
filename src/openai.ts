@@ -187,5 +187,35 @@ export function parseFindings(reviewText: string): ReviewFinding[] {
 export function reviewFollowedFormat(reviewText: string): boolean {
   const required = ["kitchen sink", "wrong abstraction", "optimistic path", "runaway refactor"];
   const lower = reviewText.toLowerCase();
-  return required.every((phrase) => lower.includes(phrase));
+  if (!required.every((phrase) => lower.includes(phrase))) return false;
+
+  // THE HEADERS ALONE ARE NOT ENOUGH.
+  //
+  // A reviewer that wrote "Optimistic Path: YES -- the lamp is placed inside
+  // the tavern wall" in prose, without tagging the line, parsed to ZERO
+  // findings. Zero findings means the review gate never opens, so the run
+  // shipped a defect the reviewer had actually spotted and reported. The
+  // verdict was there; only the tag was missing, and the tag was the only
+  // thing being read.
+  //
+  // So: if the reviewer answers YES to any of its four failure modes but
+  // tagged nothing, the response has not followed the format and must not be
+  // read as a clean pass. This is deliberately narrow -- it does not demand
+  // any particular phrasing for a clean review, only that a stated failure
+  // cannot be silently dropped.
+  // The heading may be bold, may use a dash, may put the verdict in brackets.
+  // The previous pattern demanded punctuation BEFORE the bold marker, so the
+  // most common markdown form -- "**Optimistic Path**: Yes" -- slipped through
+  // and the run shipped a defect the reviewer had named. Allow markers and
+  // separators in any order.
+  const claimsAFailure =
+    /(?:\*\*|__)?\s*(kitchen sink|wrong abstraction|optimistic path|runaway refactor)\s*(?:\*\*|__)?\s*[:\-\u2013\u2014(]{0,2}\s*(?:\*\*|__)?\s*yes\b/i
+      .test(reviewText);
+  const tagged = /\[(MATERIAL|NIT)\]/.test(reviewText);
+  // A single unrelated [NIT] used to set `tagged` and let a stated MATERIAL
+  // verdict through. If the reviewer says one of its four failure modes is YES,
+  // it has to have tagged something MATERIAL.
+  const taggedMaterial = /\[MATERIAL\]/.test(reviewText);
+  if (claimsAFailure && !taggedMaterial) return false;
+  return true;
 }

@@ -14,7 +14,7 @@
 // covered without a live sandbox; only the real runner needs one.
 import type { TestResult } from "./types";
 import type { ProposedCriterion } from "./criteria";
-import { OBJECT_TYPE_KEYS, ENTITY_TYPES } from "./worldStructure";
+import { ENTITY_TYPES, objectTypeKeysFor } from "./worldStructure";
 
 export interface ProbeResult {
   actual?: unknown;
@@ -72,7 +72,7 @@ const NOT_DEFINED_MARKER = "is not defined in this source";
  * genuinely wiring that is future work, noted honestly rather than faked
  * here).
  */
-export async function evaluateCriterion(criterion: ProposedCriterion, probeCandidate: ProbeRunner, probeBaseline: ProbeRunner): Promise<TestResult> {
+export async function evaluateCriterion(criterion: ProposedCriterion, probeCandidate: ProbeRunner, probeBaseline: ProbeRunner, candidateSource?: string): Promise<TestResult> {
   switch (criterion.kind) {
     case "existence": {
       const r = await probeCandidate(criterion.fn, criterion.args, null);
@@ -140,7 +140,12 @@ export async function evaluateCriterion(criterion: ProposedCriterion, probeCandi
       // together, derived from the same real registry, so this can't drift
       // from what the renderer actually supports the way two separately
       // maintained lists could.
-      const known = [...OBJECT_TYPE_KEYS, ...(ENTITY_TYPES as readonly string[])];
+      // ...and judged against the CANDIDATE's registry, not the baseline's.
+      // OBJECT_TYPE_KEYS is frozen at module load from the original world, so a
+      // criterion naming a type this very change had just added failed, and one
+      // naming a type it had just removed passed. Both are the check being
+      // wrong about the thing it is checking.
+      const known = [...objectTypeKeysFor(candidateSource), ...(ENTITY_TYPES as readonly string[])];
       const pass = known.includes(criterion.stationOrEntityKey);
       return {
         name: criterion.description + " (structural check only -- whether it actually draws without throwing is a client-side check, not run here)",
@@ -152,10 +157,10 @@ export async function evaluateCriterion(criterion: ProposedCriterion, probeCandi
   }
 }
 
-export async function evaluateCriteria(criteria: ProposedCriterion[], probeCandidate: ProbeRunner, probeBaseline: ProbeRunner): Promise<TestResult[]> {
+export async function evaluateCriteria(criteria: ProposedCriterion[], probeCandidate: ProbeRunner, probeBaseline: ProbeRunner, candidateSource?: string): Promise<TestResult[]> {
   const results: TestResult[] = [];
   for (const criterion of criteria) {
-    results.push(await evaluateCriterion(criterion, probeCandidate, probeBaseline));
+    results.push(await evaluateCriterion(criterion, probeCandidate, probeBaseline, candidateSource));
   }
   return results;
 }

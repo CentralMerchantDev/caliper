@@ -170,6 +170,84 @@ export function checkInputGuard(prompt: string): { ok: true } | { ok: false; rea
 
 // ---------- 3. Per-IP daily limit on LIVE runs ----------
 
+/**
+ * Claim one of today's runs for this IP, atomically, through the Durable Object.
+ *
+ * The KV version of this was read -> compare -> (later) write, which is the
+ * same race the spend cap was moved into a DO to close. It is kept below as
+ * the fallback for when SPEND_COUNTER is not bound (local dev), and is clearly
+ * labelled as raceable so nobody mistakes it for the real check.
+ */
+/**
+ * WHY can this visitor not start a run?
+ *
+ * A read-only sibling of claimPipelineRun that consumes nothing. It exists
+ * because EventSource cannot read an HTTP error body: when /change-run answers
+ * 429 or 503 the browser gets a bare `error` event with no status and no
+ * reason, and the page used to report that as "connection interrupted" -- which
+ * is not merely unhelpful, it is FALSE. The two real causes (this visitor has
+ * used their three runs, or the day's spend cap is exhausted) are both
+ * deliberate behaviour, and both are more interesting than the demo they block.
+ * So the client asks this endpoint what actually happened and says so.
+ */
+export async function pipelineAvailability(
+  env: { SPEND_COUNTER?: DurableObjectNamespace; SPEND_KV: KVNamespace },
+  ip: string,
+): Promise<{ ok: boolean; reason: string | null; detail: string | null; runsUsed: number; runsLimit: number; dailyRemainingUsd: number }> {
+  const runsLimit = CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP;
+  let runsUsed = 0;
+  try {
+    const raw = await env.SPEND_KV.get(`pipeline/ratelimit/${ip}/${dayKey()}`);
+    runsUsed = raw ? parseInt(raw, 10) || 0 : 0;
+  } catch { /* counter unavailable -- reported as 0, never as a block */ }
+
+  let dailyRemainingUsd: number = CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD;
+  if (env.SPEND_COUNTER) {
+    try {
+      const s = await getPipelineSpendStatus(env.SPEND_COUNTER);
+      dailyRemainingUsd = Math.max(0, CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD - s.dailySpentUsd);
+    } catch { /* same: unknown is not a block */ }
+  }
+
+  if (runsUsed >= runsLimit) {
+    return {
+      ok: false, reason: "per-ip-daily", runsUsed, runsLimit, dailyRemainingUsd,
+      detail: `You have used all ${runsLimit} live runs for today from this address. That cap is enforced in code, not by good intentions -- it is the same mechanism the write-up describes. The recorded run below shows the whole pipeline, free and unlimited.`,
+    };
+  }
+  if (dailyRemainingUsd < CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT) {
+    return {
+      ok: false, reason: "daily-cap", runsUsed, runsLimit, dailyRemainingUsd,
+      detail: `Today's spend cap is exhausted ($${CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD.toFixed(2)}/day, held in a Durable Object). The pipeline fails closed rather than overspending -- that is the intended behaviour, not an outage. The recorded run below shows the whole pipeline, free and unlimited.`,
+    };
+  }
+  return { ok: true, reason: null, detail: null, runsUsed, runsLimit, dailyRemainingUsd };
+}
+
+export async function claimPipelineRun(env: { SPEND_COUNTER?: DurableObjectNamespace; SPEND_KV: KVNamespace }, ip: string): Promise<void> {
+  const limit = CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP;
+  if (env.SPEND_COUNTER) {
+    const stub = env.SPEND_COUNTER.get(env.SPEND_COUNTER.idFromName("global"));
+    const res = await stub.fetch("https://do/claim-run", {
+      method: "POST",
+      body: JSON.stringify({ ip, day: dayKey(), limit }),
+    });
+    const out = (await res.json()) as { ok: boolean; used: number; limit: number };
+    if (!out.ok) {
+      throw new PipelineLimitError(
+        "per-ip-daily",
+        `You've hit the limit of ${limit} live pipeline runs per day for this demo. ` +
+          `Come back tomorrow, or watch a recorded run below -- recordings are free and unlimited.`,
+      );
+    }
+    return;
+  }
+  // fallback only: raceable, and only reachable without the DO binding
+  await assertUnderPipelineRateLimit(env.SPEND_KV, ip);
+  await recordPipelineRateLimitHit(env.SPEND_KV, ip);
+}
+
+/** RACEABLE. Kept for the no-Durable-Object fallback path only. */
 export async function assertUnderPipelineRateLimit(kv: KVNamespace, ip: string): Promise<void> {
   const key = `pipeline/ratelimit/${ip}/${dayKey()}`;
   const raw = await kv.get(key);

@@ -5,3 +5,11 @@ node_modules/
 *.log
 test/.built/
 PROCESS-ALIGNMENT.md
+
+# --- working artefacts, never part of the project ---------------------------
+# _TO-DELETE is a quarantine folder (nothing here is ever `rm`'d, it is moved
+# here for review). A single `git add -A` would otherwise publish a directory
+# literally named "_TO-DELETE" on a repo used for job applications.
+_TO-DELETE/
+.shots/
+restore_landmasses.py
