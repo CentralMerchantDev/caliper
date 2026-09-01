@@ -750,3 +750,53 @@ test("the railway runs on land, not across the bay", () => {
   assert.ok(on / total > 0.6,
     `only ${((100 * on) / total).toFixed(0)}% of the railway line is on buildable ground`);
 });
+
+// =============================================================================
+// WALKABLE BLOCKS OBEY A SOURCED CEILING
+//
+// ITE/CNU give a desirable block length of 61-122 m, an acceptable CEILING of
+// 183 m, and a maximum average intersection spacing of 201 m
+// (docs/CITY-PLANNING-SPEC.md §1.3).
+//
+// The downtown grid used to run at a 230 m avenue pitch, over both limits, with
+// a comment claiming "Melbourne Hoddle Grid calibration". The claim was half
+// right: Melbourne's blocks ARE 201 m, but Melbourne subdivides every one with a
+// ~10 m little street -- Little Collins, Little Bourke -- cutting it to about
+// 96 m deep. That subdivision is where its grain comes from and it was the part
+// that never got copied. A 201 m block without little streets is a superblock.
+//
+// The ceiling applies to WALKABLE fabric only. A farm field, a container yard
+// and a hangar apron are legitimately larger, and real cities are full of them --
+// so this test asserts the distinction rather than a blanket rule, which is what
+// makes it a planning rule instead of a lint.
+// =============================================================================
+test("no walkable block exceeds the ITE block-length ceiling", () => {
+  const CEILING = 183;
+  // Classes that are genuinely not pedestrian fabric.
+  const COARSE = new Set(["FARM", "WAREHOUSE", "HANGAR"]);
+  const offenders: string[] = [];
+
+  for (const b of overlapWorld.blocks as any[]) {
+    const st = (SETTLEMENTS as any[]).find((s) => s.id === b.settlement);
+    if (st && COARSE.has(st.cls)) continue;
+    const longest = Math.max(b.xMax - b.xMin, b.zMax - b.zMin);
+    if (longest > CEILING) {
+      offenders.push(`${b.id} (${b.settlement || "downtown"}) ${longest.toFixed(0)} m`);
+    }
+  }
+
+  assert.equal(offenders.length, 0,
+    `${offenders.length} walkable blocks over ${CEILING} m: ${offenders.slice(0, 5).join(", ")}`);
+});
+
+test("the downtown grid actually has its little streets", () => {
+  // Guard the mechanism, not just the outcome: if someone raises AVENUE_SPACING
+  // without the subdivision, the block test above would fail -- but if someone
+  // removes the little streets and lowers the pitch instead, it would pass while
+  // quietly losing the grain the ceiling exists to protect.
+  const little = (overlapWorld.roads as any[]).filter((r) => r.id.startsWith("little-"));
+  assert.ok(little.length > 0, "the avenue pitch exceeds the ceiling but no little streets were generated");
+  for (const r of little) {
+    assert.equal(r.class, "LANE", `little street ${r.id} should be LANE class (10 m, ~Melbourne's 10.06 m)`);
+  }
+});

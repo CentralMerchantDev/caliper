@@ -696,6 +696,37 @@ export const SHORE_MARGIN = 26;   // metres of foreshore kept clear of buildings
 export const GRID = {
   AVENUE_SPACING: 230,   // 200m block + 30m street, Melbourne Hoddle Grid calibration
   STREET_SPACING: 170,   // east-west roads
+
+  // THE CEILING THIS GRID WAS BREAKING, AND MELBOURNE'S ACTUAL ANSWER.
+  //
+  // ITE/CNU give a desirable block length of 61-122 m, an acceptable CEILING of
+  // 183 m, and a maximum average intersection spacing of 201 m. At a 230 m
+  // avenue pitch this grid exceeded both the ceiling and the spacing maximum --
+  // closer to Brasilia (400 m) than to the Melbourne it claims above.
+  //
+  // The claim was half right. Melbourne's blocks ARE 201 m. But Melbourne
+  // subdivides every one of them with a "little street" -- Little Collins,
+  // Little Bourke -- of about 10 m, which cuts the block to roughly 96 m deep.
+  // That subdivision is where its walkable grain comes from, and it was the part
+  // that did not get copied. A 201 m block without its little streets is not
+  // Melbourne, it is a superblock.
+  //
+  // So: any grid gap wider than the ceiling gets a little street down the middle.
+  // ROADS.LANE has a 10 m right-of-way, which is Melbourne's 10.06 m almost
+  // exactly. See docs/CITY-PLANNING-SPEC.md §1.3.
+  BLOCK_MAX: 183,        // ITE/CNU acceptable ceiling, metres
+  /** Grid lines in one direction, including any little street. */
+  edges(origin, limit, pitch, mainHalf, laneHalf) {
+    const out = [];
+    for (let v = origin; v <= limit; v += pitch) {
+      out.push({ at: v, half: mainHalf, little: false });
+      const mid = v + pitch / 2;
+      if (pitch > this.BLOCK_MAX && mid <= limit) {
+        out.push({ at: mid, half: laneHalf, little: true });
+      }
+    }
+    return out;
+  },
   // derived, so the grid always starts at the island's own corner
   get ORIGIN_X() { return ISLAND.xMin; },
   get ORIGIN_Z() { return ISLAND.zMin; },
@@ -941,9 +972,15 @@ export function generateRoads() {
     at: ISLAND.zMax - ROADS.BOULEVARD.row / 2,
     from: ISLAND.xMin, to: ISLAND.xMax,
   });
-  // North-south avenues.
-  for (let x = GRID.ORIGIN_X; x <= ISLAND.xMax; x += GRID.AVENUE_SPACING) {
-    roads.push({ id: `avenue-x${Math.round(x)}`, axis: "ns", class: "AVENUE", at: x, from: ISLAND.zMin, to: ISLAND.zMax });
+  // North-south avenues, and the little streets that keep the block under the
+  // 183 m ceiling. Melbourne's grain, not just Melbourne's dimension.
+  for (const e of GRID.edges(GRID.ORIGIN_X, ISLAND.xMax, GRID.AVENUE_SPACING,
+                             ROADS.AVENUE.row / 2, ROADS.LANE.row / 2)) {
+    roads.push({
+      id: `${e.little ? "little" : "avenue"}-x${Math.round(e.at)}`,
+      axis: "ns", class: e.little ? "LANE" : "AVENUE",
+      at: e.at, from: ISLAND.zMin, to: ISLAND.zMax,
+    });
   }
   // East-west streets, stopping short of the boulevard.
   const lastStreetZ = ISLAND.zMax - ROADS.BOULEVARD.row;
@@ -960,10 +997,16 @@ export function generateBlocks() {
   const stHalf = ROADS.STREET.row / 2;
   const lastStreetZ = ISLAND.zMax - ROADS.BOULEVARD.row;
 
-  for (let x = GRID.ORIGIN_X; x < ISLAND.xMax; x += GRID.AVENUE_SPACING) {
+  // Driven by the grid EDGES rather than by one pitch, so a little street
+  // genuinely splits the block it runs through instead of being drawn over it.
+  const xEdges = GRID.edges(GRID.ORIGIN_X, ISLAND.xMax, GRID.AVENUE_SPACING,
+                            avHalf, ROADS.LANE.row / 2);
+  for (let i = 0; i < xEdges.length - 1; i++) {
+    const e0 = xEdges[i], e1 = xEdges[i + 1];
     for (let z = GRID.ORIGIN_Z; z < lastStreetZ; z += GRID.STREET_SPACING) {
-      const xMin = x + avHalf;
-      const xMax = x + GRID.AVENUE_SPACING - avHalf;
+      const x = e0.at;
+      const xMin = e0.at + e0.half;
+      const xMax = e1.at - e1.half;
       const zMin = z + stHalf;
       // The last row runs up to the boulevard rather than to another street.
       const nextZ = z + GRID.STREET_SPACING;
@@ -2182,7 +2225,7 @@ function connectStranded(roads, heightAt) {
     let wet = 0;
     for (let t = lo; t <= hi; t += 25) {
       const x = axis === "ew" ? t : at, z = axis === "ew" ? at : t;
-      const a = roadAllowedAt(heightAt, x, z);
+      const a = roadAllowedAt(heightAt, x, z, null, "AVENUE");
       if (a.ok) { wet = 0; continue; }
       if (a.reason === "water") { wet += 25; if (wet > MAX_SPAN) return false; continue; }
       return false;                                  // cliff, beach or too steep
@@ -2236,7 +2279,7 @@ function connectStranded(roads, heightAt) {
     const RANGE = 90;          // 90 * 140 m = 12.6 km of search room
     const cost = (i, j) => {
       if (Math.abs(i) > RANGE || Math.abs(j) > RANGE) return Infinity;
-      const a = roadAllowedAt(heightAt, gx(i), gz(j));
+      const a = roadAllowedAt(heightAt, gx(i), gz(j), null, "AVENUE");
       if (a.ok) return 1;
       // A bridge is EXPENSIVE. At a cost of 9 the search happily swam: it found
       // routes that were mostly open water, because 9 was cheaper than going
@@ -2401,7 +2444,7 @@ function connectStranded(roads, heightAt) {
       let wet = 0, tot = 0, run = 0;
       for (let t = r.from; t <= r.to; t += 15) {
         tot++;
-        const a = roadAllowedAt(heightAt, ew ? t : r.at, ew ? r.at : t);
+        const a = roadAllowedAt(heightAt, ew ? t : r.at, ew ? r.at : t, null, r.class);
         if (a.ok) { run = 0; continue; }
         // An engineered road may CUT through a moderate bank -- that is what a
         // cutting and an embankment are, and refusing them left only 7 of 59

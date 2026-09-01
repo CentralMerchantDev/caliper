@@ -31,8 +31,39 @@ export const USE = {
 };
 
 /** Slope thresholds, as rise over run. */
+// ONE LIMIT FOR EVERY ROAD WAS WRONG, AND IT DISAGREED WITH THE ALIGNMENT.
+//
+// ROAD_MAX was a single 0.13 applied to freeways, arterials and back lanes
+// alike. Against AASHTO's actual table (see docs/CITY-PLANNING-SPEC.md §1.4)
+// that is roughly right for a local street, far too permissive for an arterial,
+// and three times too permissive for a freeway:
+//
+//     local residential      < 15%      (AASHTO, urban local streets)
+//     local commercial       <  8%
+//     urban arterial          5-11%     depending on terrain and design speed
+//     urban freeway           3-6%      (+1% in mountainous or constrained urban)
+//
+// It also disagreed with grade.js, which already varies the DESIGN gradient by
+// class. Placement said a freeway could climb 13%; its own alignment then tried
+// to hold 4% and had to spend its whole earthworks budget fighting ground it
+// should never have been put on.
+//
+// These two numbers are not the same thing and both are needed. ROAD_SLOPE_MAX
+// is the LEGAL CEILING -- may a road of this class exist on this ground at all.
+// ROAD_GRADE.maxGrade in grade.js is the DESIGN GRADIENT -- what the surveyed
+// alignment actually holds. Real road building draws exactly this distinction.
+export const ROAD_SLOPE_MAX = {
+  FREEWAY:   0.06,   // AASHTO urban freeway, mountainous, with the +1% allowance
+  RAMP:      0.08,
+  BOULEVARD: 0.09,   // urban arterial, rolling terrain
+  AVENUE:    0.11,   // urban arterial, mountainous
+  STREET:    0.15,   // AASHTO local residential ceiling
+  LANE:      0.15,
+  ALLEY:     0.15,
+};
+
 export const SLOPE = {
-  ROAD_MAX: 0.13,      // ~7.4 degrees. Steeper than most city streets climb.
+  ROAD_MAX: 0.13,      // fallback where a class is not given; see ROAD_SLOPE_MAX
   BUILD_MAX: 0.32,     // ~17.7 degrees. Terraced housing manages this.
   CLIFF: 0.62,         // ~32 degrees. Rock face; nothing goes here.
 };
@@ -81,11 +112,12 @@ export function classifyAt(heightAt, x, z, reserved = null) {
  * cross a beach -- the foreshore is public, and a street running onto sand is
  * the single most obviously wrong thing in a coastal city.
  */
-export function roadAllowedAt(heightAt, x, z, reserved = null) {
+export function roadAllowedAt(heightAt, x, z, reserved = null, cls = null) {
   const c = classifyAt(heightAt, x, z, reserved);
   if (c.use === USE.WATER || c.use === USE.BEACH) return { ok: false, reason: c.use, ...c };
   if (c.use === USE.CLIFF) return { ok: false, reason: "cliff", ...c };
-  if (c.slope > SLOPE.ROAD_MAX) return { ok: false, reason: "too steep", ...c };
+  const limit = (cls && ROAD_SLOPE_MAX[cls]) || SLOPE.ROAD_MAX;
+  if (c.slope > limit) return { ok: false, reason: "too steep", ...c };
   return { ok: true, ...c };
 }
 
@@ -104,7 +136,7 @@ export function buildAllowedAt(heightAt, x, z, reserved = null) {
  * longest driveable sub-run, so a caller can shorten a road instead of losing
  * it -- which is what a city does: the street stops at the foot of the hill.
  */
-export function driveableRun(heightAt, axis, at, from, to, reserved = null, step = 30) {
+export function driveableRun(heightAt, axis, at, from, to, reserved = null, step = 30, cls = null) {
   let bestFrom = null, bestTo = null, bestLen = 0;
   let runFrom = null, last = null;
   for (let t = from; t <= to + step * 0.5; t += step) {
