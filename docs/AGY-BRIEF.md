@@ -2,29 +2,32 @@
 
 Repo: `C:\Code\sandbox-spike` · Live: https://caliper.markfrasertoronto.workers.dev
 
-You built a lot of this. Then it changed underneath you, substantially, over
-several days while you were paused. **Do not start from what you remember.**
+You built a lot of this. Then it changed underneath you — **substantially, and
+again since the last version of this brief**. The world is now a different size.
+Do not start from what you remember, and do not fully trust this document either.
 
 ---
 
 ## FIRST: audit before you build anything
 
-Before writing a line, spend a pass finding out what is actually true now, and
-report what you find. Specifically:
+Before writing a line, spend a pass finding out what is actually true, and report
+what you find.
 
-1. `git log --oneline -15` and read the commit messages. They are long on
-   purpose and they explain *why*, not just what.
-2. Run `npm test` (358 node + 9 worker tests). Confirm green before you touch
-   anything, so that anything red later is yours.
+1. `git log --oneline -8` and read the messages. They are long on purpose and
+   they explain *why*. The four most recent are the world rescale and rebuild.
+2. Run `npm test` — **361 node tests + 9 Cloudflare Worker tests**. Confirm green
+   before you touch anything, so anything red later is yours.
 3. Run `node scripts/shoot.mjs` and look at the contact sheet. Judge the render
-   yourself rather than trusting the priority list below.
-4. Read `public/city-render.js`'s `buildProps` against `public/land-use.js` and
-   tell us how much of it places geometry at hand-picked coordinates. (Answer
-   from a recent audit: most of it. The airport is a 3400 m runway placed on a
-   *single* height sample.) That is a real defect and you may find more.
-5. Say what you think is wrong that this brief does not mention. The last two
-   audits each found things four previous rounds had missed. Assume the same
-   applies to you and to this document.
+   yourself rather than trusting the priority list below. **The camera bookmarks
+   have not been re-tuned for the new world scale** — if a view looks wrong, that
+   may be the bookmark, not the render. Say so.
+4. Read `public/world-scale.js` first, before any other file. One constant
+   decides how big the world is, and the rule about what scales and what does
+   not is the thing most likely to trip you.
+5. Say what you think is wrong that this brief does not mention. Every audit
+   round so far has found something the previous round missed — including, last
+   round, that the stadium had been standing in the water since the day it was
+   built. Assume the same applies to you and to this document.
 
 Then propose what you would do, in what order, before doing it.
 
@@ -40,41 +43,73 @@ trips**, put through a final functional QA pass, and then shipped **or refused**
 
 **The city is the ground that pipeline builds on.** It is the thing the coding
 agent edits. It is not a showcase page and not a backdrop. Anything that makes
-the city harder to edit programmatically is a regression even if it looks
-better.
+the city harder to edit programmatically is a regression even if it looks better.
 
 ---
 
-## What changed while you were away
+## THE BIG CHANGE: the world is 0.65 the size it was
 
-The city used to live on its own page at `/city.html` while the main app edited
-a four-house village. That is now reversed, and a lot followed from it:
+The city covered 2.96% of its island with buildings. Inside the settlements
+coverage was 21.9% — which is what a real dense city looks like, so the blocks
+were never too sparse. There was simply far more island than city: **86.5% of the
+land carried no settlement at all.** Filling it would have taken several hundred
+thousand more buildings. Shrinking the ground took one number.
 
-- **The main page renders the 40 km city.** `public/index.html` constructs
-  `WorldRenderer` with `city: true`. `_buildCityBase()` in
-  `public/world-render-3d.js` is the join.
-- **`city-render.js` is a scene BUILDER; `world-render-3d.js` is the SHELL.**
-  The shell owns camera, navigation, picking, sound and the ~25 methods the UI
-  drives. Only the builder was ever village-specific.
-- **`scene.environment` is `null` in city mode, gated at the HDRI loader.** An
-  environment map flattened 31,000 buildings to a bright average. If you want
-  IBL, tune the city's materials for it rather than switching it back on.
-- **A spatial index** (`public/spatial-index.js`) answers what any point belongs
-  to — plot, block, district, settlement. Clicking a building returns a real
-  address. It found a real defect on the day it was built: `port` had been laid
-  over `coastal-4`, two settlements on the same ground.
-- **Camera presets are ground-relative** and clamped above terrain. Downtown
-  sits on a shelf ~44 m up; absolute heights put the camera inside a hill.
-- **A boot screen** covers the ~5 s synchronous `generateWorld`, and reports the
-  error if the build throws instead of leaving a black canvas.
-- **Tour mode** is a top-bar toggle that hides the dashboard chrome. `/city.html`
-  still exists for isolating render work, but is not linked.
+```
+public/world-scale.js  ->  export const WORLD_SCALE = 0.65;
+```
 
-Numbers, read from the build at runtime (the page used to claim 39,000 and was
-25% wrong): **31,158 buildings** across 10 classes, 31,308 plots, 1,955 roads,
-19 bridges, 57 settlements, 5,713 lamps, 16,071 pieces of street furniture,
-26,001 cars, 20,846 people, 20,005 trees, a golf course, stadium, station,
-airport, container port, rivers and canals.
+|                       | before      | now        |
+| --------------------- | ----------- | ---------- |
+| land across           | 48.3 km     | **31.3 km** |
+| land area             | 1,301 km²   | **559 km²** |
+| settled land          | 13.5%       | **29.3%**   |
+| built coverage        | 2.96%       | **5.61%**   |
+| plots                 | 31,308      | **22,131**  |
+| buildings per km²     | 24.1        | **39.6**    |
+| `generateWorld`       | 4.6 s       | **2.8 s**   |
+
+### The rule you must hold in your head
+
+- **Landform metres scale.** Coastlines, terrain heights, hills, sea depths,
+  shore ramps, noise feature sizes, and the step sizes used to *walk* terrain.
+- **Built metres do not.** Building footprints and heights, road widths, plot
+  dimensions, setbacks, lamp spacing, cars, people. The runway is still 3,400 m
+  because that is what a wide-body needs. The golf course's centre moved; its
+  fairways are still the length of fairways.
+- **Dimensionless things never scale.** Slope ratios, density fractions.
+
+If you add a constant and cannot tell which group it is in: would a person in
+the world measure it against the landscape, or against a building?
+
+### How the terrain scaling works — do not "improve" this
+
+`terrain.js` is untouched internally and works in **design metres** (the original
+48 km world). One boundary at the bottom of the file converts:
+
+```
+heightAt_world(x, z) = heightAt_design(x / k, z / k) · k
+```
+
+Two guarantees that hand-scaling the constants could not give:
+
+1. The coastline is the y = 0 contour, so it comes out as **exactly** Mark's
+   traced pen strokes multiplied by k. Not re-derived, not re-noised.
+2. Slope is `(dH/dX)(1/k)(k) = dH/dX` — **identical**. Every threshold in
+   `land-use.js` stays valid untouched.
+
+It is verified as a **bit-exact no-op at `WORLD_SCALE = 1`**. If you change
+anything here, that property is the test: set it to 1 and the whole suite must
+pass with measurements identical to the original world.
+
+An earlier attempt hand-scaled ~28 landform constants instead. It had a real bug
+within the hour. Don't go back to that.
+
+**One deliberate exception:** the mountains are held at full drawn height
+(1,620 m ridge, 2,320 m summit) rather than scaled, so the range still reads as a
+range beside life-sized buildings. That makes its slopes 1/k steeper than drawn,
+which was measured rather than argued: settlement ground is still **96.6%
+buildable**, because the spine sits 6–10 km inland of anything built.
 
 ---
 
@@ -82,200 +117,172 @@ airport, container port, rivers and canals.
 
 ### 1. The editable layer
 
-`_reconcilePlacements(world)` in `world-render-3d.js` takes
-`world.placements` + `world.objectTypes` and adds or removes meshes **by id**,
-disposing GPU resources. That is what the pipeline's edits flow through. It is
-generic and it must stay generic.
+`_reconcilePlacements(world)` in `world-render-3d.js` adds and removes meshes
+**by id**, disposing GPU resources. That is what the pipeline's edits flow
+through. It is generic and must stay generic.
 
-- Do not couple it to the city's internals.
-- Do not rebuild the whole scene where an incremental update would do.
 - `placementToWorldXZ(plot, cx, cz, cityMode)` is the single answer to "where
-  does this go". In city mode `plot.x` / `plot.y` are **metres**. Keep one
-  function; two call sites will drift.
+  does this go". Keep one function; two call sites will drift.
+- **Ids are addresses.** Every plot, block and road id is unique and rounded to
+  the metre — there is a test. Do not build an id from an unrounded coordinate,
+  and do not build one from a loop ordinal (that produced two roads sharing
+  `link-0-0`, because the pass it counted within runs up to four times).
 
 ### 2. The land registry — `public/land-use.js`
 
 Every coordinate knows what it is: `WATER`, `BEACH`, `CLIFF`, `STEEP`,
-`RESERVED`, `BUILDABLE`, plus slope. Roads and buildings are placed through it
-(`roadAllowedAt`, `buildAllowedAt`, `driveableRun`).
+`RESERVED`, `BUILDABLE`, plus slope. Thresholds: road max 0.13, build max 0.32,
+cliff 0.62, beach below 2.2 m. **These did not change with the world scale and
+must not**, because uniform scaling preserves slope exactly.
 
-This is what stops a road running down a 40° hillside into the sea, and it is
-what will let the pipeline refuse "put a tower there" when the ground won't take
-it. **Do not place anything visual by hand-picked coordinate that bypasses it.**
-If you need somewhere to put a thing, ask the registry.
+`findSite(heightAt, want, {w, d})` is new: it takes where you want something and
+returns the nearest place it can actually stand, testing the whole footprint and
+reporting how far it moved. It returns `null` rather than a guess.
 
-Thresholds, if you need them: road max slope 0.13, build max 0.32, cliff 0.62,
-beach below 2.2 m.
+**Use it instead of writing a coordinate.** The stadium, station and cathedral
+were literals, and all three had been standing in water since the build began —
+the rescale could not reveal it, because a wrong coordinate scales to a
+proportionally wrong coordinate.
 
-### 3. The plan is data, and it is rich
+### 3. Settlements grow; they are not declared
 
-`generateWorld(heightAt)` in `city-plan.js` returns `plots`, `blocks`, `roads`,
-`districts`, `settlements`, `bridges`, `causeways`, `highways`. Every plot
-carries:
+`public/settlement-fit.js`. Each settlement starts at its scaled position and
+grows one strip at a time, claiming a strip only if it is genuinely buildable and
+no neighbour holds it. **No-overlap and no-water now hold by construction**, not
+by later detection.
 
-```js
-{ id: "block--2022-1156-p0", blockId, districtId, settlement,
-  className: "MIDRISE",           // 10 classes
-  xMin, xMax, zMin, zMax, width, depth, maxHeight,
-  buildable: { xMin, xMax, zMin, zMax },   // the envelope, inset from the plot
-  occupant: null }
-```
+Edge density is lifted in proportion to how enclosed a settlement turned out to
+be — a boundary against water, cliff or a neighbour is the densest ground in a
+real city, not the sparsest.
 
-Height distribution is real: FARM 11 m, VILLA 14, TERRACE 18, WAREHOUSE 22,
-TOWNHOUSE 24, HANGAR 26, MIDRISE 55, CIVIC/RESORT 70, TOWER 220.
+### 4. Buildings respond to the ground they stand on
 
-**The data is not the problem. The render is.** Use `className`, `districtId`
-and `maxHeight` rather than inventing new categories.
+`public/footprint.js` samples the buildable envelope on a grid and returns one of
+four verdicts:
 
-### 4. The tests
+| verdict | share | what it means |
+| --- | --- | --- |
+| `slab` | 56.9% | near-level, sits on the ground |
+| `plinth` | 36.7% | base drops to the lowest point, cut into the uphill side |
+| `terrace` | 5.0% | stepped down the slope, each face about a storey |
+| `refuse` | 1.3% | a cliff, or **any** part in water — nothing is built |
 
-`npm test` runs 358 node tests plus 9 Cloudflare Worker tests, and type-checks
-first. Several assert real world invariants — buildings on dry land, no road
-mostly over water, no two land masses overlapping, every land mass reachable,
-plot classes inside their legal size range. If you change geometry and one goes
-red, **the world is wrong, not the test**. Come back rather than adjusting the
-budget.
+The old code sampled the envelope centre plus the **plot** corners — two
+different rectangles — and only tested the centre for water. 128 buildings that
+passed that test would have stood partly in the sea or off a cliff.
+
+### 5. The tests
+
+`npm test` runs 361 node tests + 9 Worker tests, and type-checks first. Several
+assert real world invariants. **If you change geometry and one goes red, the
+world is wrong, not the test.**
+
+Probe *coordinates* scale with the world. Judgements do not — the 0.06 dry-land
+ratio, the zero-tolerance overlap assertions, `MAX_UNSERVED = 5`, and the
+connectivity budgets are deliberately unscaled. Do not touch those.
 
 ---
 
 ## What we want you to do
 
-The geography, layout and data are done. The render is what's behind. In rough
-priority:
+The geography, layout and data are done. **The render is what's behind.**
 
 ### 1. Facades
-
 Buildings are extruded slabs with horizontal stripe banding. No windows, no
-depth, no articulation, no footprint variation. At street level a wall is a
-flat striped plane. This is the single biggest thing making a genuinely large
-city read as a massing model.
-
-Vary by `className` — a TOWER and a TERRACE should not share a facade language.
+depth, no articulation. At street level a wall is a flat striped plane. This is
+the single biggest thing making a real city read as a massing model. Vary by
+`className` — a TOWER and a TERRACE should not share a facade language.
 
 ### 2. The ground between buildings
+Block interiors read as bright green grass. Carriageway, kerb, footway,
+crossings, driveways — the surface treatment that makes a block look inhabited
+rather than landscaped. **This matters more now**: the city is denser, so there
+is proportionally more street frontage in view.
 
-Block interiors read as bright green grass with buildings sitting on it. There
-are 385,000 road triangles but in the near field the streets do not read.
-Carriageway, kerb, footway, crossings, driveways, service lanes — the surface
-treatment that makes a block look inhabited rather than landscaped.
+### 3. Plinths and terraces are new geometry and currently crude
+37% of buildings now get a plinth and 5% get terraces, and they are grey boxes.
+On a denser, hillier-reading world these are visible everywhere. Retaining walls,
+steps, split levels, planting on the terraces — this is a real opportunity that
+did not exist before.
 
-### 3. Parks that look like parks
+### 4. Parks that look like parks
+Green rectangles. They need paths that go somewhere, ponds, planting beds,
+benches along the paths rather than scattered, trees in groups.
 
-Currently 22 parks that are green rectangles. They need paths that go somewhere,
-ponds, planting beds, benches placed along the paths rather than scattered,
-trees in groups, a bandstand or courts or a playground where the size allows.
-Small features at the scale a person would notice.
+### 5. Environment and light
+`scene.environment` is deliberately `null` in city mode — an HDRI flattened the
+buildings to a bright average. If you want IBL, tune the materials for it rather
+than switching it back on. Shadows are weak at distance.
 
-### 4. Environment and light
-
-`scene.environment` is deliberately `null` in city mode — an HDRI flattened
-31,000 buildings to a bright average, which is why it is gated at the loader in
-`world-render-3d.js`. If you want image-based lighting, tune the city's
-materials for it rather than switching it back on. Exposure is anchored to
-`LOOK.exposure` (0.78) in `city-render.js`; fog is `FogExp2` at 0.0000092, tuned
-so 20 km still reads.
-
-Shadows are weak at distance and the scene wants more directional contrast.
-
-### 5. Detail passes
-
-Street furniture exists in quantity but is uniform and evenly spaced. Cars sit
-on roads but do not respect lanes or direction. People are instanced but static.
-Anything that rewards looking closely.
+### 6. Detail passes
+Street furniture is uniform and evenly spaced. Cars do not respect lanes or
+direction. People are static.
 
 ---
 
 ## How to check your work
 
 ```powershell
-npm test                                   # 358 + 9, type-checks first
+npm test                                   # 361 + 9, type-checks first
 node scripts/shoot.mjs                     # full contact sheet to .shots/
 node scripts/shoot.mjs "Downtown close"    # one view
 ```
 
 `scripts/shoot.mjs` renders headlessly with SwiftShader and reads the WebGL
-canvas directly (`page.screenshot` never returns on a scene this size). Named
-views live in `VIEWS` in `public/city.html`.
+canvas directly (`page.screenshot` never returns on a scene this size).
 
-Camera presets are **ground-relative**: `set(tx, ty, tz, d, az, pitch)` adds the
-terrain height at `(tx, tz)` to `ty`, and `apply()` clamps the camera above the
-real ground. Absolute heights put the camera inside a hill — downtown sits on a
-shelf about 44 m up, and "Street level" written as `ty = 12` used to look out
-through the terrain at open water.
-
----
-
-## Ground rules
-
-- **Do not touch** `src/` — that is the pipeline. Render work is `public/`.
-- **Do not** disable a test to make a change pass.
-- **Do not** place objects at hand-picked coordinates that bypass `land-use.js`.
-- Keep the build deterministic. `generateWorld` is seeded and several tests
-  depend on it producing the same world twice.
-- `generateWorld` currently takes about 4.8 s synchronously on the main thread
-  before first paint. Don't make it worse; if you can move it to a worker or
-  precompute it, that is a genuine win.
-- Comments in this codebase explain **why**, especially where something was
-  wrong before. Keep that convention — several of the oddities you'll find are
-  deliberate and the comment says so.
+Camera presets are **ground-relative**: `set(tx, ty, tz, d, az, pitch)` adds
+terrain height at `(tx, tz)` to `ty`, and `apply()` clamps above real ground.
+**They have not been re-tuned since the rescale** — expect some to be framed
+wrongly and treat that as a finding, not a render defect.
 
 ---
 
 ## Known defects we have NOT fixed — yours if you want them
 
-Found by audit, verified, deliberately left because they are render work:
-
-1. **`buildProps` bypasses the land registry almost entirely.** `city-render.js`
-   does not import `land-use.js`. The airport (runways, taxiway, apron,
-   terminal, tower, 16 aircraft) sits at literal coordinates around
-   `(12100, -4600)` on a **single** height sample — a 3400 m runway plane on one
-   sample will float or clip wherever the terrain moves. Container port, cranes,
-   farm belts, golf, marina, stadium, station and rail ties are the same
-   pattern, each with its own ad-hoc `heightAt(x,z) > k` test. The crane comment
-   openly concedes the previous hard-coded `z` "stood in open water" and fixes it
-   by marching north until the height is right — a private reimplementation of
-   what `classifyAt` already answers.
-
-2. **`distanceToCoast` is 1,700 ms of the ~5 s build** (`city-plan.js`), a linear
-   scan over the whole coastline polygon, called four times per candidate rect.
-   The file already uses a 400 m bucketing grid elsewhere; the same trick applies.
-   Cheap second win: it calls `isOnLand` unconditionally — for a non-negative
-   margin it can return early once `best <= margin`.
-
-3. **`plotsOverlappingWithinSettlement`** in `city-plan.js` is an O(n²)-per-bucket
-   diagnostic that runs on every page load and is read only by a Node test.
-
+1. **`buildProps` still bypasses the land registry for most features.** The
+   airport, container port, cranes, farms, golf, marina, stadium apron, station
+   shed and rail ties are placed at scaled literals with ad-hoc
+   `heightAt(x,z) > k` tests. The three worst — stadium, station, cathedral —
+   now use `findSite`. **The rest are yours, and the pattern is established.**
+   The airport is a 3,400 m runway plane on a *single* height sample, and its
+   two ends currently differ by 32 m of terrain.
+2. **`distanceToCoast` is a linear scan** over the whole coastline polygon,
+   called four times per candidate rect. The file already uses a 400 m bucketing
+   grid elsewhere. Cheaper still: it calls `isOnLand` unconditionally.
+3. **`plotsOverlappingWithinSettlement`** is an O(n²)-per-bucket diagnostic that
+   runs on every page load and is read only by a test. It now always returns 0,
+   because overlap is prevented by construction.
 4. **`generateCityPlan()` runs twice** — once in `city-render.js`, once inside
-   `generateWorld`. Only ~69 ms, but it means two independently generated objects
-   that a future change could desynchronise.
-
-5. **Small main-thread waste**: the world clock writes `textContent` every rAF
-   frame (~60/s for a string that changes every 6.25 s); `_musicInterval` and the
-   white-noise source are never cleared when audio is toggled off.
-
-6. **`terrain.js` duplicates `valueNoise`/`fbm`** from `noise.js`, which
-   `city-plan.js` and `buildings.js` import instead. Two implementations of one
-   primitive.
-
+   `generateWorld`. Two independently generated objects that could desynchronise.
+5. **Main-thread waste**: the world clock writes `textContent` every rAF frame
+   for a string that changes every 6.25 s; `_musicInterval` and the white-noise
+   source are never cleared when audio is toggled off.
+6. **`terrain.js` duplicates `valueNoise`/`fbm`** from `noise.js`. Two
+   implementations of one primitive — and both must stay in step, because the
+   scale boundary assumes they agree.
 7. **Mobile at 390 px**: the pipeline card and the overview card use the same
    `top` and both render on load, so they overlap. The inspector makes it three.
+8. **`generateWorld` is 2.8 s synchronous** on the main thread before first
+   paint. Faster than before the rescale, but still a stall. Moving it to a
+   worker or precomputing it is a genuine win.
 
 ---
 
 ## Ground rules
 
 - **Do not touch `src/`** — that is the pipeline. Render work is `public/`.
-- **Do not disable or loosen a test** to make a change pass. Several assert real
-  world invariants; if one goes red the world is wrong, not the test.
-- **Do not place objects at hand-picked coordinates that bypass `land-use.js`.**
-  Fixing the existing violations is welcome; adding more is not.
-- **Do not re-enable `scene.environment` in city mode** without retuning the
-  materials — there is a comment at the loader explaining what happened.
-- Keep the build deterministic. `generateWorld` is seeded and several tests
-  depend on it producing the same world twice.
+- **Do not disable or loosen a test** to make a change pass.
+- **Do not place objects at hand-picked coordinates.** Use `findSite`. Fixing
+  the existing violations is welcome; adding more is not.
+- **Do not change `WORLD_SCALE` casually.** If you do, `k = 1` must remain a
+  bit-exact no-op — that is the property the whole scaling rests on.
+- **Do not re-enable `scene.environment`** in city mode without retuning the
+  materials.
+- Keep the build deterministic. `generateWorld` is seeded and tests depend on it
+  producing the same world twice.
 - Comments here explain **why**, especially where something was wrong before.
-  Keep that convention. Several oddities you will find are deliberate and the
-  comment says so — read it before "fixing" it.
-- If you disagree with something in this brief, say so with a reason. The last
-  four audit rounds each overturned something the previous round was confident
-  about.
+  Several oddities you will find are deliberate and the comment says so — read
+  it before "fixing" it.
+- If you disagree with something in this brief, say so with a reason. Every audit
+  round so far has overturned something the previous round was confident about.
