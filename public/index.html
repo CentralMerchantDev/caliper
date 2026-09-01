@@ -1601,116 +1601,39 @@ const money = n => '$' + Number(n).toFixed(4);
 
 // District target suggestion dictionary
 let currentTargetParcelId = 'town';
-const TARGET_SUGGESTIONS = {
-  town: {
-    name: 'The Central Esplanade & Promenade',
-    placeholder: 'Direct promenade extensions, date palms, bistro dining, or reflecting fountains...',
-    categories: {
-      architecture: 'Construct a cantilevered teak pergola over the waterfront promenade',
-      landscape: 'Plant royal date palms in modern white architectural planters',
-      furnishing: 'Add outdoor cafe bistro tables with blue sun parasols along the bay',
-      routine: 'Host morning espresso hours along the esplanade'
-    }
-  },
-  forge: {
-    name: 'The Maritime Innovation Atelier',
-    placeholder: 'Direct architectural studio expansions, glass curtain walls, or yacht drafting decks...',
-    categories: {
-      architecture: 'Add floor-to-ceiling glass curtain walls and black steel mullions',
-      landscape: 'Install architectural stone plinths and outdoor showcase lighting',
-      furnishing: 'Place teak drafting workbenches and yacht hull design scale models',
-      routine: 'Coordinate naval architecture and 3D drafting workflows'
-    }
-  },
-  residential: {
-    name: 'The Terraced Coastal Villas',
-    placeholder: 'Direct whitewashed villa additions, terracotta roofs, or rooftop sundecks...',
-    categories: {
-      architecture: 'Add glass balustrade balconies and rooftop sundecks to the villas',
-      landscape: 'Plant flowering bougainvillea and coastal succulents',
-      furnishing: 'Place teak sun loungers and low architectural outdoor sofas',
-      routine: 'Organize seaside sundeck relaxation and sunset gatherings'
-    }
-  },
-  docks: {
-    name: 'The Marina Boardwalk & Yacht Pier',
-    placeholder: 'Direct floating teak pontoon piers, yacht moorings, or dock lighting...',
-    categories: {
-      architecture: 'Extend the floating teak pontoon dock into the deep blue bay',
-      landscape: 'Install glowing marine power pedestals and safety cleats',
-      furnishing: 'Moor a luxury motor yacht and modern sailing catamaran at the pontoon',
-      routine: 'Coordinate regatta departures and catamaran sailing runs'
-    }
-  },
-  watchtower: {
-    name: 'The Ocean Headland & Beacon',
-    placeholder: 'Direct coastal beacon upgrades, glass observation decks, or solar canopies...',
-    categories: {
-      architecture: 'Build a cantilevered 360-degree glass observation platform on the beacon',
-      landscape: 'Grade Mediterranean stone pathways winding up the headland ridge',
-      furnishing: 'Install high-intensity amber navigation optics and solar canopies',
-      routine: 'Maintain ocean coastal watch and automated navigation beams'
-    }
-  },
-  shop: {
-    name: 'Waterfront Espresso & Boutique',
-    placeholder: 'Direct waterfront cafe seating, glass display cases, or espresso bars...',
-    categories: {
-      architecture: 'Install floor-to-ceiling glass pivot doors and azure striped awnings',
-      landscape: 'Place potted date palms and lavender planter boxes along the patio',
-      furnishing: 'Add 3 outdoor teak cafe tables overlooking the marina',
-      routine: 'Serve artisan flat whites and Mediterranean pastries for settlers'
-    }
-  },
-  workshop: {
-    name: 'Maritime Design Atelier',
-    placeholder: 'Direct atelier workbenches, 3D design consoles, or model drafting tables...',
-    categories: {
-      architecture: 'Build an outdoor teak canopy for maritime prototyping',
-      landscape: 'Install ground-recessed LED wash lighting along the plinth',
-      furnishing: 'Place a precision naval drafting table and model yacht stand',
-      routine: 'Conduct aerodynamic and hull hydrodynamics analysis'
-    }
-  },
-  'dwelling-1': {
-    name: 'Marina Villa North',
-    placeholder: 'Direct sundeck furnishings, glass balustrades, or pergola shades...',
-    categories: {
-      architecture: 'Install a cantilevered teak roof pergola and glass railings',
-      landscape: 'Plant white oleander and dwarf date palms along the foundation',
-      furnishing: 'Place a pair of teak chaise lounges and outdoor dining table',
-      routine: 'Host evening terrace aperitifs overlooking the harbour'
-    }
-  },
-  'dwelling-2': {
-    name: 'Palm Terrace Villa',
-    placeholder: 'Direct private terrace additions, plunge pools, or sun loungers...',
-    categories: {
-      architecture: 'Extend the terrace pergola over the seaward side of the villa',
-      landscape: 'Plant a row of cypress along the villa\'s western boundary',
-      furnishing: 'Add two shaded sun loungers beside the plunge pool',
-      routine: 'Have Rowan check the moorings each morning at first light'
-    }
-  },
-  outdoors: {
-    name: 'Entire Kingdom',
-    placeholder: 'e.g. add a lamp post near the workshop',
-    categories: {
-      architecture: 'Build a stone archway gateway along the kingdom boundary road',
-      landscape: 'Plant a grove of pine and oak trees along the riverbank',
-      furnishing: 'Place wrought-iron lampposts along the valley pathways',
-      routine: 'Arrange town festival gathering across all 5 districts'
-    }
-  }
-};
+// PARCEL NAMES ONLY.
+//
+// This used to carry, per parcel, a `placeholder` and four `categories` of
+// pre-written change requests -- "Extend the terrace pergola over the seaward
+// side of the villa" and so on -- which the scope pills wrote straight into the
+// input box.
+//
+// They are gone rather than merely unused. A visitor who opens the source of a
+// page claiming a model is doing the work, and finds a table of ready-made
+// requests in it, has learned something that is not true. Leaving dead prompts
+// in the file is the same claim as using them, just quieter.
+const TARGET_PARCELS = {
+  town: { name: 'The Central Esplanade & Promenade' },
+  forge: { name: 'The Maritime Innovation Atelier' },
+  residential: { name: 'The Terraced Coastal Villas' },
+  docks: { name: 'The Marina Boardwalk & Yacht Pier' },
+  watchtower: { name: 'The Ocean Headland & Beacon' },
+  shop: { name: 'Waterfront Espresso & Boutique' },
+  workshop: { name: 'Maritime Design Atelier' },
+  'dwelling-1': { name: 'Marina Villa North' },
+  'dwelling-2': { name: 'Palm Terrace Villa' },
+  outdoors: { name: 'Entire Kingdom' },
+};;
 
 function setTargetParcel(parcelId) {
   currentTargetParcelId = parcelId || 'town';
-  const info = TARGET_SUGGESTIONS[currentTargetParcelId] || TARGET_SUGGESTIONS.outdoors;
+  const info = TARGET_PARCELS[currentTargetParcelId] || TARGET_PARCELS.town;
   const labelEl = $('#target-parcel-name');
   if (labelEl) labelEl.textContent = info.name;
   const input = $('#bar-request-input');
-  if (input) input.placeholder = info.placeholder;
+  // A placeholder describing the SUBJECT is fine; one describing the CHANGE is
+  // a suggestion in disguise, which is what these used to be.
+  if (input && !currentScope) input.placeholder = `Describe a change to ${info.name}`;
 }
 
 const canvas3d = $('#world-canvas');
@@ -2287,19 +2210,44 @@ document.querySelectorAll('.live-data-inapp').forEach(btn => {
 $('#modal-live-data-close')?.addEventListener('click', () => hideAccessibleModal('#live-data-modal'));
 $('#live-data-modal')?.addEventListener('click', (e) => { if (e.target.id === 'live-data-modal') hideAccessibleModal('#live-data-modal'); });
 
+// SCOPE, NOT SCRIPT.
+//
+// These used to write a pre-written sentence straight into the input box --
+// "Extend the terrace pergola over the seaward side of the villa" and so on.
+// That is handing the visitor a task, and it makes the whole thing read as a
+// canned demo: the one impression this project cannot afford, because the claim
+// is that a model is genuinely doing the work.
+//
+// They are called SCOPE pills. So they scope: they narrow what part of the
+// world a request applies to, and the visitor writes their own request. The
+// scope is sent along with the text, so "add a bench" with Landscape selected
+// means something more specific than the words alone.
+let currentScope = null;
 document.querySelectorAll('.scope-pill[data-cat]').forEach(pill => {
   pill.addEventListener('click', (e) => {
     const cat = e.currentTarget.dataset.cat;
-    const activeTarget = TARGET_SUGGESTIONS[currentTargetParcelId] || TARGET_SUGGESTIONS.outdoors;
-    const suggestion = activeTarget.categories[cat] || activeTarget.placeholder;
+    const already = currentScope === cat;
+    currentScope = already ? null : cat;
+    document.querySelectorAll('.scope-pill[data-cat]').forEach(p2 => {
+      p2.classList.toggle('active', p2.dataset.cat === currentScope);
+    });
     const input = $('#bar-request-input');
     if (input) {
-      input.value = suggestion;
+      input.placeholder = currentScope
+        ? `Describe the ${SCOPE_LABELS[currentScope] || currentScope} change you want`
+        : 'e.g. add a lamp post near the workshop';
       input.focus();
     }
     renderer3d.playClickSound();
   });
 });
+
+const SCOPE_LABELS = {
+  architecture: 'building',
+  landscape: 'landscape',
+  furnishing: 'street furniture',
+  routine: 'settlement',
+};
 
 $('#inspect-close').addEventListener('click', () => {
   $('#parcel-inspect-card').style.display = 'none';
@@ -2930,7 +2878,13 @@ function startRun() {
     activeEs = null;
   }
 
-  connect(`/change-run?request=${encodeURIComponent(text)}`);
+  // The scope travels with the request, and it is VISIBLE in what gets sent --
+  // the visitor can read exactly what the model was asked, which is the whole
+  // difference between "scoped" and "secretly prompted".
+  const scoped = currentScope
+    ? `${text}\n\n(Scope: this change is about ${SCOPE_LABELS[currentScope] || currentScope}.)`
+    : text;
+  connect(`/change-run?request=${encodeURIComponent(scoped)}`);
 }
 $('#bar-submit').addEventListener('click', startRun);
 $('#bar-request-input').addEventListener('keydown', (e) => {
@@ -3167,6 +3121,54 @@ function connect(url) {
   });
 
   // Human Gate: Cross-Model Review (Atomically awaited)
+  // THE LOOP, VISIBLE.
+  //
+  // The point of this project is watching the loop work AND watching it fail.
+  // The page showed STAGES but not ROUNDS, so a second review looked like the
+  // first one happening again, and the most interesting moment -- the author
+  // reading the review and saying "no, and here is why" -- was computed, paid
+  // for, and never shown.
+  es.addEventListener('review-assessed', ev => {
+    if (activeEs !== es) return;
+    resetWatchdog();
+    const d = safeJson(ev.data);
+    if (!d) return;
+    const b = stageBlock(log, 's-assess-' + d.round, `⚖ Round ${d.round} — the author reads the review`);
+    b.classList.remove('active');
+    const overruled = (d.verdicts || []).filter(v => v && !v.valid);
+    const upheld = (d.verdicts || []).filter(v => v && v.valid);
+    const approachLabel = { patch: 'patch it', replan: 'replan around it', 'no-change': 'change nothing' }[d.approach] || d.approach;
+    b.insertAdjacentHTML('beforeend',
+      `<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;line-height:1.6">
+         Decision: <strong style="color:#e2e8f0">${esc(approachLabel)}</strong> — ${esc(d.reasoning || '')}
+         ${upheld.length ? `<br>✓ ${upheld.length} finding(s) accepted as real.` : ''}
+         ${overruled.length ? `<br>✗ ${overruled.length} overruled, with reasons:` : ''}
+       </p>` +
+      (overruled.length
+        ? `<ul style="margin:4px 0 0;padding-left:16px;font-size:11.5px;color:#94a3b8;line-height:1.55">
+             ${overruled.map(v => `<li><em>${esc(v.finding)}</em><br>${esc(v.reasoning)}</li>`).join('')}
+           </ul>`
+        : ''));
+  });
+
+  es.addEventListener('qa', ev => {
+    if (activeEs !== es) return;
+    resetWatchdog();
+    const d = safeJson(ev.data);
+    if (!d) return;
+    const b = stageBlock(log, 's-qa', d.passed
+      ? '✓ Final check — this is what was asked for'
+      : '⚠ Final check — this is not yet what was asked for');
+    b.classList.remove('active');
+    b.insertAdjacentHTML('beforeend',
+      d.passed
+        ? `<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;line-height:1.5">A last independent pass, asking a different question from the code review: does this actually deliver what the plan promised?</p>`
+        : `<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;line-height:1.5">The code is sound and every check passes — but these promises are not kept, so it is not shipping:</p>
+           <ul style="margin:4px 0 0;padding-left:16px;font-size:11.5px;color:#fbbf24;line-height:1.55">
+             ${(d.gaps || []).map(g => `<li>${esc(g)}</li>`).join('')}
+           </ul>`);
+  });
+
   es.addEventListener('review-gate', ev => {
     if (activeEs !== es) return;
     if (pipelineTimeoutGuard) clearTimeout(pipelineTimeoutGuard);

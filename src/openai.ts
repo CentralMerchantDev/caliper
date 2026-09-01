@@ -250,3 +250,96 @@ export function reviewFollowedFormat(reviewText: string): boolean {
   if (claimsAFailure && !taggedMaterial) return false;
   return true;
 }
+
+// ---------------------------------------------------------------------
+// THE PRE-MERGE QA PASS
+//
+// The last stage of the loop this is ported from (docs/workflow/
+// CROSS-MODEL-REVIEW.md in the sqft repo): after the iterative cycle reaches
+// clean and the gates are green, one final independent pass over the whole
+// change.
+//
+// It is deliberately a DIFFERENT question from the review. The review asks "is
+// this code sound". This asks "is this the thing that was asked for" -- does
+// the implementation match the plan's intent, are the stated criteria actually
+// met, is the account of what happened accurate. A change can survive every
+// code review and still not be what the visitor asked for, and nothing before
+// this stage was looking for that.
+//
+// The source doc is explicit about one trap, learned the hard way: keep the
+// criteria FUNCTIONAL, not mechanical. Counting files or lines false-fails on
+// legitimate fix commits from the review rounds, because the loop adds work the
+// plan never estimated.
+// ---------------------------------------------------------------------
+
+const QA_SYSTEM_PROMPT = `You are performing a final pre-ship QA pass on a change that has already passed code review and automated verification. You are NOT reviewing the code again -- that has been done.
+
+Answer one question: IS THIS THE THING THAT WAS ASKED FOR?
+
+Check, in order:
+1. Does the implementation do what the plan said it would build?
+2. Is each of the plan's acceptance criteria genuinely met by this change -- not merely claimed?
+3. Did the change stay inside what the plan said it would not touch?
+4. Is anything the plan promised simply missing?
+
+Judge FUNCTION, not mechanics. Do not count files, lines, or functions and do not fail a change for differing from an estimate -- the review rounds legitimately add work that no plan predicted. A change that achieves the intent by a different route than the plan described is a PASS; say so and note the difference.
+
+Reply with exactly one line starting "VERDICT: PASS" or "VERDICT: FAIL". If FAIL, follow it with one line per gap, each starting "[GAP] ", naming the specific promise that is not met. Do not invent gaps to look thorough -- a pass is a real and common outcome.`;
+
+export interface QaResult {
+  passed: boolean;
+  gaps: string[];
+  text: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  wallTimeMs: number;
+}
+
+export async function qaAgainstBrief(
+  apiKey: string,
+  model: string,
+  planSummary: string,
+  changeRequest: string,
+  finalCode: string,
+  verificationSummary: string,
+  maxTokens: number,
+): Promise<QaResult> {
+  const client = new OpenAI({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
+  const start = Date.now();
+  const response = await client.responses.create({
+    model,
+    max_output_tokens: maxTokens,
+    reasoning: { effort: "low" },
+    instructions: QA_SYSTEM_PROMPT,
+    input:
+      `What the visitor asked for:\n${changeRequest}\n\n` +
+      `The plan:\n${planSummary}\n\n` +
+      `Verification results:\n${verificationSummary}\n\n` +
+      `The change as it stands:\n${finalCode}`,
+  });
+  const wallTimeMs = Date.now() - start;
+  const text = (response.output_text ?? "").trim();
+
+  // FAIL CLOSED ON AN UNREADABLE VERDICT.
+  //
+  // The original loop exits 5 on output it cannot parse rather than assuming
+  // the best, and for the same reason: "we could not tell" must never be
+  // recorded as "it passed". A missing VERDICT line is a failed QA pass.
+  const passed = /^VERDICT:\s*PASS\b/im.test(text);
+  const failed = /^VERDICT:\s*FAIL\b/im.test(text);
+  const gaps = text.split("\n").filter((l) => /^\s*\[GAP\]/i.test(l)).map((l) => l.replace(/^\s*\[GAP\]\s*/i, "").trim());
+  const inputTokens = response.usage?.input_tokens ?? 0;
+  const outputTokens = response.usage?.output_tokens ?? 0;
+  return {
+    passed: passed && !failed,
+    gaps: passed && !failed ? [] : (gaps.length ? gaps : [text ? "the QA pass did not return a readable VERDICT line" : "the QA pass returned nothing"]),
+    text,
+    model,
+    inputTokens,
+    outputTokens,
+    costUsd: costUsd(model, inputTokens, outputTokens),
+    wallTimeMs,
+  };
+}

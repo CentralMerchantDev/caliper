@@ -1,6 +1,6 @@
 import type { SimTestCase, TestResult } from "./types";
 import { generatePlan, implementChange, fixChange, implementChangeAsEdit, fixChangeAsEdit, runRetrospective, assessReview, DEFAULT_MODEL, type ChangePlan, type ReviewAssessment, PRICING as ANTHROPIC_PRICING } from "./claude";
-import { reviewArtifact, parseFindings, REVIEW_MODEL, PRICING as OPENAI_PRICING, type ReviewFinding } from "./openai";
+import { reviewArtifact, qaAgainstBrief, parseFindings, REVIEW_MODEL, PRICING as OPENAI_PRICING, type ReviewFinding } from "./openai";
 import { runSimTests } from "./simSandbox";
 import { SIM_REGRESSION_SUITE } from "./simRegression";
 import { SIM_BASELINE_SOURCE } from "./simBaseline";
@@ -85,6 +85,8 @@ export type ChangeEvent =
    *  is the interesting part -- and because a disagreement nobody can see is
    *  indistinguishable from the author ignoring the review. */
   | { type: "review-assessed"; round: number; approach: "patch" | "replan" | "no-change"; reasoning: string; verdicts: { finding: string; valid: boolean; reasoning: string }[] }
+  /** The final functional check: is this the thing that was asked for? */
+  | { type: "qa"; passed: boolean; gaps: string[]; model: string; costUsd: number; wallTimeMs: number }
   | { type: "fixing" }
   | { type: "fixed"; model: string; inputTokens: number; outputTokens: number; costUsd: number; wallTimeMs: number; code: string }
   | { type: "reverified"; regression: TestResult[]; criteria: TestResult[]; regressionPassed: number; regressionTotal: number; criteriaPassed: number; criteriaTotal: number; fatalError?: string }
@@ -150,6 +152,20 @@ export interface ChangeLedger {
   totalWallTimeMs: number;
   retrospectiveLesson: string | null;
   lessonRecurrenceCount: number | null;
+  /** How many times the reviewer saw the work. 1 means it never saw the fix. */
+  reviewRounds?: number;
+  /** Findings the AUTHOR judged invalid, with a stated reason, out of the total
+   *  raised. This is the number that makes "error rates fall over time" a
+   *  measurable claim rather than a hopeful one: a reviewer that is mostly
+   *  overruled is mis-tuned, and an author that never overrules is deferring.
+   *  Neither is visible from the outcome alone. */
+  reviewFindingsOverruled?: number;
+  /** Material findings still open when the loop stopped. */
+  reviewUnresolvedCount?: number;
+  /** The same findings came back unchanged -- the two models were arguing. */
+  reviewOscillated?: boolean;
+  /** Promises the plan made that the final QA pass found unmet. */
+  qaGapCount?: number;
 }
 
 export interface ChangeRecord {
@@ -333,6 +349,7 @@ const WORST_CASE = {
   fix: (CONTROL_LIMITS.TOKEN_CAPS.fix / 1_000_000) * ANTHROPIC_PRICING[FIX_MODEL].output,
   retrospective: (RETROSPECTIVE_MAX_TOKENS / 1_000_000) * ANTHROPIC_PRICING[RETROSPECTIVE_MODEL].output,
   assess: (CONTROL_LIMITS.TOKEN_CAPS.assess / 1_000_000) * ANTHROPIC_PRICING[DEFAULT_MODEL].output,
+  qa: (CONTROL_LIMITS.TOKEN_CAPS.qa / 1_000_000) * OPENAI_PRICING[REVIEW_MODEL].output,
   // FOUNDATION-2 ("emit the change, not the file"): the data-edit path's
   // own, much smaller worst case -- same models as implement/fix, a
   // fraction of the token cap, since a WorldEdit is never a file.
@@ -1210,6 +1227,8 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   /** The same findings came back twice: the two models are arguing. */
   let reviewOscillated = false;
   let reviewAssessments: ReviewAssessment[] = [];
+  /** Promises the plan made that the final QA pass found unmet. Empty on pass. */
+  let qaGaps: string[] = [];
 
   if (material.length > 0) {
     const decision = await checkDecision(env.SPEND_KV, `change/review-decision/${runId}`);
@@ -1524,6 +1543,62 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         ? "the fix did not make regression and criteria checks fully pass"
         : "regression or criteria checks did not fully pass, and no fix was approved";
     onEvent({ type: "refused", reason: refusalReason });
+  } else if (await (async () => {
+    // ================================================================
+    // THE PRE-MERGE QA PASS -- the last stage of the ported loop.
+    //
+    // Everything above asked "is this code sound". This asks the different
+    // question: IS THIS THE THING THAT WAS ASKED FOR. A change can pass every
+    // regression case, satisfy every criterion, survive two rounds of
+    // cross-vendor review, and still not be what the visitor wanted -- and
+    // until this stage nothing was looking for that.
+    //
+    // Functional, not mechanical, per the source doc's own hard-won note:
+    // counting files or lines false-fails on the legitimate extra commits the
+    // review rounds produce.
+    // ================================================================
+    inFlightStage = "qa";
+    try {
+      const verificationSummary =
+        `Regression: ${verifyRegression.filter((r) => r.pass).length}/${verifyRegression.length} passed. ` +
+        `Criteria: ${verifyCriteria.filter((r) => r.pass).length}/${verifyCriteria.length} passed. ` +
+        `Review rounds: ${reviewRounds}. Fix applied: ${fixApplied}.`;
+      const qa = await callOpenAI(env, budget, WORST_CASE.qa, () =>
+        qaAgainstBrief(
+          env.OPENAI_API_KEY,
+          REVIEW_MODEL,
+          `Will build: ${plan!.willBuild}\nWill not touch: ${plan!.willNotTouch}\nCriteria:\n${plan!.criteria.map((c) => `- ${c.description}`).join("\n")}`,
+          changeRequest,
+          finalCode,
+          verificationSummary,
+          CONTROL_LIMITS.TOKEN_CAPS.qa,
+        ),
+      );
+      stageCosts.push({ stage: "qa", costUsd: qa.costUsd, wallTimeMs: qa.wallTimeMs });
+      onEvent({ type: "qa", passed: qa.passed, gaps: qa.gaps, model: qa.model, costUsd: qa.costUsd, wallTimeMs: qa.wallTimeMs });
+      qaGaps = qa.passed ? [] : qa.gaps;
+      return !qa.passed;
+    } catch (e) {
+      // A QA pass that could not run is not a QA pass that passed. But it is
+      // also not evidence the change is wrong, so it is reported as its own
+      // thing rather than dressed up as a defect in the work.
+      qaGaps = [`the final QA pass could not run: ${String((e as Error)?.message ?? e)}`];
+      onEvent({ type: "qa", passed: false, gaps: qaGaps, model: REVIEW_MODEL, costUsd: 0, wallTimeMs: 0 });
+      return true;
+    }
+  })()) {
+    // REFUSED, WITH A ROUTE FORWARD.
+    //
+    // A refusal that only says no is the thing this project's author does not
+    // accept from a person or a model -- grounding is already required to offer
+    // alternatives when it refuses a false premise, and the same rule belongs
+    // here. The gaps ARE the route: each one names a specific promise the
+    // change does not keep, which is what a next attempt would have to close.
+    outcome = "refused-verification";
+    refusalReason = qaGaps.length === 1
+      ? `the final check found this is not yet what was asked for: ${qaGaps[0]}`
+      : `the final check found ${qaGaps.length} things the change promised and did not deliver: ${qaGaps.join("; ")}`;
+    onEvent({ type: "refused", reason: refusalReason });
   } else {
     // Atomic Compare-and-Swap publication: serialized through Durable Object if available, fallback to KV only on infrastructure absence
     let published = false;
@@ -1649,6 +1724,11 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     totalWallTimeMs: Date.now() - runStartedAt,
     retrospectiveLesson: lesson,
     lessonRecurrenceCount: recurrenceCount,
+    reviewRounds,
+    reviewFindingsOverruled: reviewAssessments.reduce((acc, a2) => acc + a2.verdicts.filter((v) => !v.valid).length, 0),
+    reviewUnresolvedCount: reviewUnresolved.length,
+    reviewOscillated,
+    qaGapCount: qaGaps.length,
   };
   onEvent({ type: "ledger", ledger });
 

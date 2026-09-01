@@ -93,6 +93,7 @@ const WORST_CASE_STAGES = {
   fixEdit: 0.015,
   review: 0.035,
   assess: 0.0135,
+  qa: 0.0098,          // the final functional pass, one review-priced call
   retrospective: 0.0015,
 };
 
@@ -103,6 +104,7 @@ test("the source-edit ceiling covers every call the run is ALLOWED to make", () 
     WORST_CASE_STAGES.implement +
     WORST_CASE_STAGES.fix * CONTROL_LIMITS.MAX_FIX_ATTEMPTS +
     (WORST_CASE_STAGES.review + WORST_CASE_STAGES.assess + WORST_CASE_STAGES.fix) * CONTROL_LIMITS.MAX_REVIEW_ROUNDS +
+    WORST_CASE_STAGES.qa +
     WORST_CASE_STAGES.retrospective;
   assert.ok(
     CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT >= worst,
@@ -122,6 +124,7 @@ test("the data-edit ceiling is derived the same way, and is genuinely lower", ()
     WORST_CASE_STAGES.implementEdit +
     WORST_CASE_STAGES.fixEdit * CONTROL_LIMITS.MAX_FIX_ATTEMPTS +
     (WORST_CASE_STAGES.review + WORST_CASE_STAGES.assess + WORST_CASE_STAGES.fixEdit) * CONTROL_LIMITS.MAX_REVIEW_ROUNDS +
+    WORST_CASE_STAGES.qa +
     WORST_CASE_STAGES.retrospective;
   assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT >= worst,
     `ceiling ${CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT} is below the permitted worst case (${worst.toFixed(4)})`);

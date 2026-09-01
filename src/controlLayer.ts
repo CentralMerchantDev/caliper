@@ -60,13 +60,14 @@ export const CONTROL_LIMITS = {
    *     assess      $0.0135  (the author judging the review before acting)
    *     fix         $0.04
    *                 $0.177   for both rounds
+   *   qa            $0.0098  (the final functional pass -- is this what was asked for)
    *   retrospective $0.0015
    *                 -------
-   *                 $0.411   -> $0.42
+   *                 $0.421   -> $0.44
    *
    * DATA_EDIT worst case, same shape with the cheaper edit path:
    *   0.0025 + 0.04 + 0.0075 + (0.015 x 4) + ((0.035 + 0.0135 + 0.015) x 2)
-   *   + 0.0015 = $0.2385 -> $0.24
+   *   + 0.0098 + 0.0015 = $0.2483 -> $0.26
    *
    * I got this wrong by $0.05 writing it out by hand -- I forgot the assess
    * call -- and test/controlLayer.test.ts caught it by doing the sum instead of
@@ -78,8 +79,8 @@ export const CONTROL_LIMITS = {
    * not raise typical spend. It only stops an expensive-but-legitimate run
    * dying halfway. The daily cap is the budget; this is the seatbelt.
    */
-  PER_RUN_CEILING_USD_SOURCE_EDIT: 0.42,
-  PER_RUN_CEILING_USD_DATA_EDIT: 0.24,
+  PER_RUN_CEILING_USD_SOURCE_EDIT: 0.44,
+  PER_RUN_CEILING_USD_DATA_EDIT: 0.26,
   /** Cross-model review must never see code that's still failing its own
    * checks (FINAL.md item 1: "the reviewer reads a diff that has already
    * passed CI"). This bounds the implement -> verify -> fix loop that runs
@@ -110,7 +111,7 @@ export const CONTROL_LIMITS = {
    * a file -- even addObjectType's full geometry recipe fits comfortably
    * under 1500 tokens; sized with real headroom over that, not copied from
    * the full-file caps it replaces for the data-edit path. */
-  TOKEN_CAPS: { brief: 800, ground: 500, implement: 6000, review: 2500, fix: 4000, implementEdit: 1500, fixEdit: 1500, assess: 900 },
+  TOKEN_CAPS: { brief: 800, ground: 500, implement: 6000, review: 2500, fix: 4000, implementEdit: 1500, fixEdit: 1500, assess: 900, qa: 700 },
   /** UPGRADE.md section 0: 3 live runs/IP/day (up from 2, permanent, not a
    * temporary carve-out) -- 3 x the $0.23 (source-edit) worst case =~
    * $0.69/IP/day, still small next to the global daily cap below. This
@@ -128,9 +129,9 @@ export const CONTROL_LIMITS = {
    * It wants to be 5 -- enough to see a success, a refusal and a retry. But the
    * per-IP limit and the daily cap are not independent: at the worst-case
    * ceiling one address can cost DAILY_LIVE_RUNS_PER_IP x PER_RUN_CEILING, and
-   * at 5 that is $2.10 against a $2.00 daily cap. One visitor could close the
-   * site for everyone else, which is the exact failure this limit exists to
-   * prevent. At 4 it is $1.68 and cannot.
+   * at 5 that is over the $2.00 daily cap. One visitor could close the site for
+   * everyone else, which is the exact failure this limit exists to prevent. At
+   * 4 it is $1.76 and cannot.
    *
    * Raise the daily cap and this can go up. test/controlLayer.test.ts asserts
    * the relationship so the two cannot drift apart silently. */
