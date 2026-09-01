@@ -37,6 +37,10 @@ export const GRID_UNIT_Z = 4.5;
 
 export const CAMERA_MIN_DIST = 4.0;
 export const CAMERA_MAX_DIST = 3600.0;
+/** The village fits in 3.6 km. The city is 40 km across, so pulling back far
+ *  enough to see it needs an order of magnitude more reach -- otherwise the
+ *  wheel stops zooming out with most of the world still off-screen. */
+export const CAMERA_MAX_DIST_CITY = 46000.0;
 
 // Authoritative Master City Spatial Zoning and Setback Constants
 export const CITY_ZONING = {
@@ -115,6 +119,22 @@ function localForAction(action, objectTypes) {
 
 function plotToWorldXZ(plot, centerX, centerZ) {
   return { x: (plot.x - centerX) * GRID_UNIT_X, z: (plot.y - centerZ) * GRID_UNIT_Z };
+}
+
+/**
+ * Where does a placement actually go?
+ *
+ * The village addresses placements in GRID UNITS -- plot (1,2) means the
+ * second column, third row of a hand-laid grid, scaled by GRID_UNIT_X/Z. The
+ * city has no such grid: it is 40 km of generated ground and a placement has
+ * to land at a real coordinate.
+ *
+ * So in city mode plot.x/plot.y are METRES, used as-is. Keeping one function
+ * that answers "where is this" for both, rather than two call sites that drift.
+ */
+function placementToWorldXZ(plot, centerX, centerZ, cityMode) {
+  if (cityMode) return { x: plot.x, z: plot.y };
+  return plotToWorldXZ(plot, centerX, centerZ);
 }
 
 function stationLocalXZ(local, w, d) {
@@ -1036,8 +1056,11 @@ class AudioSynth {
 }
 
 class Renderer3D {
-  constructor(canvas, { reducedMotion = false, onInspect = null } = {}) {
+  constructor(canvas, { reducedMotion = false, onInspect = null, city = false } = {}) {
     this.canvas = canvas;
+    /** Build the 40 km city as the base scene instead of the four-house
+     *  village. See _buildCityBase. */
+    this._cityMode = !!city;
     this.reducedMotion = reducedMotion;
     this.onInspect = onInspect;
     this.prevWorld = null;
@@ -1111,11 +1134,22 @@ class Renderer3D {
     this._raycaster = new THREE.Raycaster();
     this._mouse = new THREE.Vector2();
 
-    this._targetLookAt = new THREE.Vector3(0, 4.0, 0.0);
-    this._startLookAt = new THREE.Vector3(0, 4.0, 0.0);
-    this._targetCamDist = 180;
-    this._startCamDist = 180;
-    this._camDist = 180;
+    // THE OPENING SHOT.
+    //
+    // 180 m looking at (0, 4, 0) frames a four-house village. In a 40 km city
+    // that is standing inside a building: the first render after the swap was a
+    // white wall. The city needs an establishing shot -- back far enough to
+    // read the coast and the bay, angled so the downtown towers have somewhere
+    // to stand against.
+    const openingLookAt = this._cityMode
+      ? new THREE.Vector3(0, 60, 900)
+      : new THREE.Vector3(0, 4.0, 0.0);
+    const openingDist = this._cityMode ? 4200 : 180;
+    this._targetLookAt = openingLookAt.clone();
+    this._startLookAt = openingLookAt.clone();
+    this._targetCamDist = openingDist;
+    this._startCamDist = openingDist;
+    this._camDist = openingDist;
     this._cameraAnimStartTime = 0;
     this._cameraAnimDuration = 650;
 
@@ -1238,7 +1272,11 @@ class Renderer3D {
         try {
           const envMap = pmrem.fromEquirectangular(texture).texture;
           this._hdrEnvMap = envMap;
-          this.scene.environment = envMap;
+          // Not in city mode. This loader is async, so clearing
+          // scene.environment when the city is built is not enough -- the HDRI
+          // lands afterwards and re-flattens 31,000 buildings that were tuned
+          // without one.
+          if (!this._cityMode) this.scene.environment = envMap;
         } finally {
           texture.dispose();
           pmrem.dispose();
@@ -1262,7 +1300,12 @@ class Renderer3D {
     scene.add(hemi);
     this.hemi = hemi;
 
-    const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 12000);
+    // A 12 km far plane clips a 40 km world, and a 0.1 m near plane at that range
+    // throws away depth precision (z-fighting across the whole city). City mode
+    // gets the same frustum city.html uses.
+    const camera = this._cityMode
+      ? new THREE.PerspectiveCamera(33, 1, 3, 120000)
+      : new THREE.PerspectiveCamera(35, 1, 0.1, 12000);
     this.camera = camera;
     this._lookAt = new THREE.Vector3(0, 4.0, 0.0);
 
@@ -1398,8 +1441,78 @@ class Renderer3D {
     return mesh;
   }
 
+  /**
+   * THE CITY IS THE GROUND THE PIPELINE BUILDS ON.
+   *
+   * This renderer is two things wired together: a scene BUILDER (a four-house
+   * village) and a shell -- camera, navigation modes, picking, sound, the ~25
+   * methods index.html drives. The shell is the valuable half and it is
+   * generic; only the builder was ever village-specific.
+   *
+   * city-render.js is the other half of the pair: a builder for a 40 km city
+   * with no shell of its own (city.html supplies a bare camera). So the two fit
+   * together exactly -- keep this shell, swap what it builds.
+   *
+   * What makes this cheap is that the EDITABLE layer is already separate from
+   * the base. _reconcilePlacements takes world.placements + world.objectTypes
+   * and adds or removes meshes by id, which is precisely what worldEdit.ts's
+   * ops produce, and it does not care what scene surrounds it. So the pipeline,
+   * its sentinel data blocks, its integrity checks and its gates all carry over
+   * unchanged: the city becomes the ground, and placements are what gets built
+   * on it.
+   */
+  async _buildCityBase(world) {
+    const { buildWorld } = await import("./city-render.js");
+
+    // The village's own sky, fog and lights would fight the city's. Take them
+    // out before the city installs its own rather than leaving two suns.
+    for (const obj of [this._skyMesh, this.ambient, this.hemi, this.sun, this.moonLight]) {
+      if (obj && obj.parent) obj.parent.remove(obj);
+    }
+    this.scene.background = null;
+
+    // The village lights its materials with a PMREM'd HDRI in scene.environment.
+    // The city's do not expect one -- its own build reports envLuminance 0 --
+    // so applying an environment map to 31,000 buildings raises every surface
+    // towards a flat bright average and the whole scene reads as washed out.
+    // That was the first render after the swap, and it was not fog and not the
+    // sun: both were ruled out by probing the live scene.
+    this.scene.environment = null;
+
+    const city = buildWorld(THREE, this.renderer, this.scene);
+    this._city = city;
+    this.sun = city.sun;                    // the shell's day/night code drives this
+    this._skyMesh = city.sky;
+    this._cityHeightAt = city.heightAt;
+
+    // Placements are addressed in world metres here, not in village plot units,
+    // so the centre offset is the origin.
+    this._plotCenter = { x: 0, z: 0 };
+    this._surfaces = world.surfaces || {};
+    this._objectTypes = world.objectTypes || {};
+    this._buildingsById = {};
+    this._buildingGroupsById = {};
+    this._buildingScaleById = {};
+    this._placementMeshesById = new Map();
+    this._neighbourhoodBuilt = true;
+    this._reconcilePlacements(world);
+    return city;
+  }
+
   _buildNeighbourhoodIfNeeded(world) {
     if (this._neighbourhoodBuilt) return;
+    if (this._cityMode) {
+      // Guard against re-entry: the build is async and draw() calls this every
+      // frame, so without this the city would be built dozens of times over.
+      if (!this._cityBuildStarted) {
+        this._cityBuildStarted = true;
+        this._buildCityBase(world).catch((e) => {
+          console.error("city base build failed:", e);
+          this._cityBuildError = String(e && e.message ? e.message : e);
+        });
+      }
+      return;
+    }
     const buildings = world.buildings || [];
     const placements = world.placements || [];
     this._surfaces = world.surfaces || {};
@@ -1433,7 +1546,7 @@ class Renderer3D {
       if (!typeDef) continue;
       const pColour = p.colour || (p.overrides && p.overrides.color);
       if (p.location === "outdoors") {
-        const pos = plotToWorldXZ(p.plot, centerX, centerZ);
+        const pos = placementToWorldXZ(p.plot, centerX, centerZ, this._cityMode);
         const mesh = this._buildPlacementInstance(typeDef, p, this.neighbourhoodGroup, pos.x, pos.z);
         this._placementMeshesById.set(p.id, { mesh, placement: p, location: p.location, type: p.type, x: pos.x, z: pos.z, colour: pColour });
       } else {
@@ -5224,7 +5337,7 @@ class Renderer3D {
         const [p1, p2] = Array.from(activePointers.values());
         const currentDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
         const ratio = initialPinchDist / Math.max(1, currentDist);
-        this._camDist = Math.max(CAMERA_MIN_DIST, Math.min(CAMERA_MAX_DIST, initialCamDist * ratio));
+        this._camDist = Math.max(CAMERA_MIN_DIST, Math.min(this._cityMode ? CAMERA_MAX_DIST_CITY : CAMERA_MAX_DIST, initialCamDist * ratio));
         this._targetCamDist = this._camDist;
         return;
       }
@@ -5274,7 +5387,7 @@ class Renderer3D {
     const onWheel = (e) => {
       e.preventDefault();
       const zoomFactor = e.deltaY > 0 ? 1.028 : 0.973;
-      this._camDist = Math.max(CAMERA_MIN_DIST, Math.min(CAMERA_MAX_DIST, (this._camDist || 48) * zoomFactor));
+      this._camDist = Math.max(CAMERA_MIN_DIST, Math.min(this._cityMode ? CAMERA_MAX_DIST_CITY : CAMERA_MAX_DIST, (this._camDist || 48) * zoomFactor));
       this._targetCamDist = this._camDist;
     };
 
@@ -5365,7 +5478,7 @@ class Renderer3D {
             break;
           case "-":
           case "_":
-            this._camDist = Math.min(CAMERA_MAX_DIST, (this._camDist || 48) * 1.08);
+            this._camDist = Math.min(this._cityMode ? CAMERA_MAX_DIST_CITY : CAMERA_MAX_DIST, (this._camDist || 48) * 1.08);
             this._targetCamDist = this._camDist;
             e.preventDefault();
             break;
@@ -5805,7 +5918,7 @@ class Renderer3D {
 
   zoomCamera(factor) {
     if (this._isDroneTour) this.stopDroneTour();
-    this._camDist = Math.max(CAMERA_MIN_DIST, Math.min(CAMERA_MAX_DIST, (this._camDist || 48) * factor));
+    this._camDist = Math.max(CAMERA_MIN_DIST, Math.min(this._cityMode ? CAMERA_MAX_DIST_CITY : CAMERA_MAX_DIST, (this._camDist || 48) * factor));
     this._targetCamDist = this._camDist;
   }
 
@@ -6214,18 +6327,31 @@ class Renderer3D {
     }
 
     // High clarity, wide dynamic range exposure (crisp model, no fog blowout)
-    this.renderer.toneMappingExposure = lerp(0.96, 0.76, nightAmt);
+    //
+    // In city mode this ramp is anchored to LOOK.exposure instead. 0.96 was
+    // picked against a village lit by its own small sky; over a 40 km scene
+    // with real aerial perspective it blows the haze out and the whole city
+    // reads as pale blue-grey -- which is exactly what the first render after
+    // the swap looked like. The city's own value is the one that was tuned
+    // against this scene, so it wins, and night still darkens by the same
+    // proportion.
+    const dayExposure = this._cityMode ? (this._city?.LOOK?.exposure ?? 0.78) : 0.96;
+    this.renderer.toneMappingExposure = lerp(dayExposure, dayExposure * 0.79, nightAmt);
     // NOTE: this runs every frame and OVERWRITES anything set at construction,
     // so it -- not any per-material envMapIntensity -- is the real daylight IBL
     // control. Day value verified by eye on the live scene; 0.85 enriches the
     // water and the lit forms without blowing out under ACES.
-    this.scene.environmentIntensity = lerp(0.85, 0.14, nightAmt);
+    if (!this._cityMode) this.scene.environmentIntensity = lerp(0.85, 0.14, nightAmt);
 
     const daySky = SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth);
     const sky = SKY_NIGHT.clone().lerp(daySky, sun.dayAmt);
     const horizon = sky.clone().lerp(SKY_HORIZON, lerp(0.35, 0.65, sun.dayAmt));
     updateSkyGradient(this._skyGradient, sky, horizon);
-    if (this.scene.fog) this.scene.fog.color.copy(horizon);
+    // The city tunes its own fog colour against its own sky (see LOOK.fogColor,
+    // which the comment there explains was fought over). Overwriting it every
+    // frame with the village's horizon tint is what turned the whole 40 km
+    // scene pale.
+    if (this.scene.fog && !this._cityMode) this.scene.fog.color.copy(horizon);
     this.audio.updateAmbient(nightAmt);
     this.audio.updateSpatialAcoustics(this.camera.position);
 

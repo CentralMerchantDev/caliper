@@ -1762,7 +1762,18 @@ function reportDegradedRenderer(r) {
   });
 }
 
+// THE CITY IS THE WORLD NOW.
+//
+// The main page used to show a four-house village while the 40 km city sat
+// behind a link. That is backwards: the city is the ground the change pipeline
+// builds on, and a showcase you cannot edit is not what this app is for.
+//
+// The pipeline is unaffected. Its edits are placements and object types, and
+// the renderer reconciles those by id against whatever base scene it has -- so
+// the ops, the sentinel data blocks, the integrity checks and both gates carry
+// over unchanged. The city replaces the ground, not the mechanism.
 const renderer3d = new WorldRenderer(canvas3d, {
+  city: true,
   reducedMotion,
   onInspect: (info) => {
     setTargetParcel(info.parcelId);
