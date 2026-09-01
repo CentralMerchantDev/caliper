@@ -14,7 +14,7 @@
 // on where the ground is.
 // =============================================================================
 
-import { LANDMASSES, landmassPolygons, WORLD } from "./city-plan.js";
+import { LANDMASSES, landmassPolygonsDesign, WORLD } from "./city-plan.js";
 
 // -----------------------------------------------------------------------------
 // Deterministic noise. Integer hash -> value noise -> fbm. No dependencies, no
@@ -64,12 +64,46 @@ const smoother = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 //      is the whole reason they read as scenery rather than as a wall.
 // =============================================================================
 
+// =============================================================================
+// DESIGN SPACE vs WORLD SPACE
+//
+// Everything below this line works in DESIGN metres -- the 48 km world these
+// numbers were calibrated in. Nothing in here knows the world got smaller, and
+// that is the point.
+//
+// The world is a uniform scale model of the design:
+//
+//     heightAt_world(x, z)  =  heightAt_design(x / k, z / k) * k
+//
+// which gives two guarantees that hand-scaling the constants could not:
+//
+//   1. The coastline is the y = 0 contour, so it comes out as EXACTLY the drawn
+//      outline multiplied by k. Mark's traced pen strokes survive intact; they
+//      are not re-derived, re-noised or approximated.
+//   2. Slope is dH/dx = (dH/dX)(1/k)(k) = dH/dX -- IDENTICAL. Every threshold in
+//      land-use.js (ROAD_MAX 0.13, BUILD_MAX 0.32, CLIFF 0.62) stays valid
+//      without being touched or re-argued.
+//
+// A first attempt scaled the ~28 landform constants by hand instead. It had a
+// real bug in it within the hour: rampFactor is a DIMENSIONLESS multiplier
+// derived from island dimensions, so measuring it off already-scaled polygons
+// shrank every beach by k^2 and quietly put island interiors under water. That
+// is the failure mode of hand-scaling -- twenty-eight chances to miss one, and
+// the ones you miss do not announce themselves. Here there is no constant to
+// miss, because no constant moves.
+//
+// The boundary is at the bottom of this file: a short block that converts each
+// public symbol into world space. Symbols nothing imports stay module-local
+// rather than being exported in an ambiguous space.
+// =============================================================================
+import { WORLD_SCALE, sm, toDesign, sFields } from "./world-scale.js";
+
 /** The alpine spine: a polyline, so the range is a range and not a scatter. */
-export const RANGE_SPINE = [
+const RANGE_SPINE = [
   [-21000, -16400], [-15000, -14300], [-9000, -13100], [-2500, -13500],
   [ 3500, -14600], [ 10000, -15900], [ 17000, -17400], [ 22000, -18600],
 ];
-export const RANGE = { width: 5000, height: 1620 };
+const RANGE = { width: 5000, height: 1620 };
 
 /**
  * Named summits on or just off the spine, so the skyline has peaks rather than
@@ -78,7 +112,7 @@ export const RANGE = { width: 5000, height: 1620 };
  * 2,500 m. An earlier pass SUMMED the ridge band and the summits and produced a
  * 4,040 m wall -- higher than anything in the Rockies -- so they blend by max.
  */
-export const PEAKS = [
+const PEAKS = [
   { x: -16800, z: -14700, h: 1980, r: 3000 },
   { x: -11200, z: -13500, h: 1740, r: 2600 },
   { x:  -5400, z: -13000, h: 2320, r: 3600 },   // the big one, on axis with downtown
@@ -95,7 +129,7 @@ export const PEAKS = [
  * 55-130 m over 1-2 km, enough to bend streets and give some blocks a view
  * without turning the grid into a staircase.
  */
-export const COAST_RIDGES = [
+const COAST_RIDGES = [
   { x: -12800, z: -3400, h: 96,  r: 1700 },
   { x:  -9200, z: -2900, h: 78,  r: 1400 },
   { x:  -5600, z: -3600, h: 124, r: 2000 },
@@ -108,7 +142,7 @@ export const COAST_RIDGES = [
 ];
 
 /** Close hills: the middle ground between the harbour and the mountains. */
-export const HILLS = [
+const HILLS = [
   { x: -1400, z: -6300, h: 215, r: 2600 },   // Hillside suburb sits on this
   { x:  1900, z: -6900, h: 190, r: 2200 },
   { x: -4600, z: -5600, h: 145, r: 1900 },
@@ -125,9 +159,9 @@ export const HILLS = [
  * a vertical drop, which is the single most artificial thing in a wide shot. Now
  * the coast just curves away and the ocean closes over it.
  */
-export const EDGE = { xHalf: 26500, zFar: -28000, fade: 7000, depth: 110, wobble: 1800 };
+const EDGE = { xHalf: 26500, zFar: -28000, fade: 7000, depth: 110, wobble: 1800 };
 
-export function edgeFalloff(x, z) {
+function edgeFalloff(x, z) {
   // Taking min(dx, dz) fades the land inside a RECTANGLE, and from altitude that
   // is exactly what you see: a green rectangle with square corners and dead
   // straight sides, sitting in the ocean. A cubic superellipse rounds the
@@ -141,8 +175,8 @@ export function edgeFalloff(x, z) {
   return smoother(clamp(1 - q, 0, 1));
 }
 
-export const SNOW_LINE = 1480;
-export const TREE_LINE = 980;
+const SNOW_LINE = 1480;
+const TREE_LINE = 980;
 
 // =============================================================================
 // SHORE PROFILE — cliffs and beaches
@@ -166,7 +200,7 @@ export const TREE_LINE = 980;
 // rock threshold in the ground-colour ramp.
 const BEACH_RAMP = 190;      // metres of gentle sand
 const CLIFF_RAMP = 90;       // metres of steep rock
-export const CLIFF_ZONES = [
+const CLIFF_ZONES = [
   { x: -16600, z:  5100, r: 4200 },   // Westhead
   { x:  17400, z:  3500, r: 3400 },   // Eastpoint
   { x: -21000, z:   400, r: 3600 },   // the exposed west shore
@@ -180,14 +214,14 @@ export const CLIFF_ZONES = [
  * of depth. Real basins are dredged and walled: flat bottom, hard edge. Any
  * water inside one of these is cut to its declared depth.
  */
-export const BASINS = [
+const BASINS = [
   { x: 2020, z: 200, r: 250, depth: 6.5 },      // the marina, in the east inlet
   { x: 820, z: -430, r: 600, depth: 12.0 },     // THE HARBOUR, dredged for ships
   { x: -5300, z: -2650, r: 620, depth: 13.0 },  // the container port berths
 ];
 
 /** 0 = sand, 1 = cliff. */
-export function cliffiness(x, z) {
+function cliffiness(x, z) {
   let c = 0;
   for (const q of CLIFF_ZONES) {
     const d = Math.hypot(x - q.x, z - q.z);
@@ -201,7 +235,7 @@ export function cliffiness(x, z) {
 }
 
 /** Metres over which the land climbs out of the water at this point. */
-export function shoreRampAt(x, z) {
+function shoreRampAt(x, z) {
   const c = cliffiness(x, z);
   return BEACH_RAMP + (CLIFF_RAMP - BEACH_RAMP) * c;
 }
@@ -221,7 +255,7 @@ export class LandField {
   constructor(samplesPerSegment = 16, cell = 420, maskCell = 40) {
     this.cell = cell;
     this.maskCell = maskCell;
-    this.masses = landmassPolygons(samplesPerSegment);
+    this.masses = landmassPolygonsDesign(samplesPerSegment);
 
     // --- world bounds, padded ---
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
@@ -428,7 +462,7 @@ function bumps(x, z, list) {
 }
 
 /** Everything above sea level, before the shoreline ramp is applied. */
-export function reliefAt(x, z, massKind) {
+function reliefAt(x, z, massKind) {
   // 1. the mass's own plateau
   let h = massKind === "mainland" ? 15 : massKind === "city" ? 16 : 7;
 
@@ -474,7 +508,23 @@ export function reliefAt(x, z, massKind) {
     }
     alpine = Math.max(alpine, bumps(x, z, PEAKS) * (0.74 + 0.26 * fbm(x, z, 1500, 3)));
 
-    h += Math.max(hill, swell, alpine);
+    // MOUNTAINS DO NOT SHRINK WITH THE WORLD.
+    //
+    // Everything else here is design-space relief that the boundary wrapper
+    // multiplies by WORLD_SCALE, so the land comes out as an exact smaller copy
+    // of itself. The range is the deliberate exception: dividing by WORLD_SCALE
+    // here cancels that multiply, so the peaks stand at their full drawn height
+    // (1,620 m ridge, 2,320 m on the big summit) above a world that is otherwise
+    // 0.65 the size.
+    //
+    // The cost is real and is stated rather than hidden: the range now rises the
+    // same height over a footprint 0.65 as wide, so its slopes are 1/WORLD_SCALE
+    // steeper than drawn. That is acceptable ONLY because the spine sits 6-10 km
+    // inland of every settlement -- it is scenery, not ground anything is built
+    // on. The hills and coastal ridges in the BUILT belt are left scaling
+    // normally, because slope there has to stay honest for roadAllowedAt and
+    // buildAllowedAt to mean anything.
+    h += Math.max(hill, swell, alpine / WORLD_SCALE);
     // alpine roughness, only where it is already high
     if (h > 420) h += (fbm(x, z, 700, 5) - 0.5) * Math.min(340, h * 0.30);
   }
@@ -503,7 +553,7 @@ export function reliefAt(x, z, massKind) {
 // trough so the banks slope instead of dropping vertically, and rivers WIDEN
 // toward their mouth the way real ones do.
 // =============================================================================
-export const WATERWAYS = [
+const WATERWAYS = [
   // --- mainland rivers, running down out of the range to the coast ---
   { id: "river-west",  kind: "river", halfWidth: 95, depth: 7,
     points: [[-11700, -9200], [-11500, -7400], [-11350, -5600], [-11250, -4200], [-11200, -3050]] },
@@ -541,7 +591,7 @@ function alongWaterway(x, z, pts) {
 }
 
 /** How much to subtract from the land height at (x,z) for rivers and canals. */
-export function waterwayCut(x, z) {
+function waterwayCut(x, z) {
   let cut = 0;
   for (const w of WATERWAYS) {
     const { dist, t } = alongWaterway(x, z, w.points);
@@ -566,7 +616,7 @@ export function waterwayCut(x, z) {
  * the one property a river surface must not get wrong, and sampling terrain
  * without enforcing it produces water flowing uphill wherever the noise dips.
  */
-export function waterwaySurface(w, heightAt, step = 90) {
+function waterwaySurface(w, heightAt, step = 90) {
   const pts = [];
   for (let i = 0; i < w.points.length - 1; i++) {
     const [ax, az] = w.points[i], [bx, bz] = w.points[i + 1];
@@ -601,7 +651,7 @@ export function waterwaySurface(w, heightAt, step = 90) {
   return out;
 }
 
-export function makeHeightAt(field) {
+function makeHeightAt(field) {
   return function heightAt(x, z) {
     const s = field.signed(x, z);
     const m = s.mass, d = s.d < 0 ? -s.d : s.d;
@@ -659,7 +709,7 @@ export function makeHeightAt(field) {
  * transitions are what make relief legible; a single green makes a mountain
  * look like a green tent.
  */
-export const GROUND_BANDS = [
+const GROUND_BANDS = [
   { upTo: -30,    color: 0x1d4763 },  // deep bed -- shows through the water as blue
   { upTo: -11,    color: 0x2f6f8c },  // shelf
   { upTo:  -3.5,  color: 0x63a8a8 },  // the turquoise band every warm coast has
@@ -707,7 +757,7 @@ function bandColor(h) {
   return B[B.length - 1].color;
 }
 
-export function groundColor(h, slope) {
+function groundColor(h, slope) {
   let c = bandColor(h);
   // steep ground sheds soil: show rock on anything sharper than about 32 degrees
   if (slope > 0.62 && h > 60) {
@@ -720,3 +770,68 @@ export function groundColor(h, slope) {
 }
 
 export const TERRAIN = { SHORE_RAMP, WORLD };
+
+
+// =============================================================================
+// THE BOUNDARY: design space in, world space out
+//
+// Everything above works in design metres. Everything that imports this file
+// works in world metres. This block is the only place the two meet, so there is
+// exactly one thing to get right rather than a constant-by-constant audit.
+//
+// LandField is deliberately NOT wrapped: it is built from the design-space
+// polygons and is only ever consumed through makeHeightAt, so its internal grid
+// constants (cell 420, maskCell 40, the 60 m exact-test band, MAX_D) stay
+// calibrated to the space they were chosen in.
+// =============================================================================
+
+/** The one height function. World metres in, world metres out. */
+function makeHeightAtWorld(field) {
+  const design = makeHeightAt(field);
+  if (WORLD_SCALE === 1) return design;   // exact no-op, so k=1 is provably identity
+  return function heightAt(x, z) {
+    return design(x / WORLD_SCALE, z / WORLD_SCALE) * WORLD_SCALE;
+  };
+}
+
+const cliffinessWorld = (x, z) => cliffiness(toDesign(x), toDesign(z));
+const edgeFalloffWorld = (x, z) => edgeFalloff(toDesign(x), toDesign(z));
+const reliefAtWorld = (x, z, massKind) => reliefAt(toDesign(x), toDesign(z), massKind) * WORLD_SCALE;
+
+const EDGE_WORLD = sFields(EDGE, ["xHalf", "zFar", "fade", "depth", "wobble"]);
+const BASINS_WORLD = BASINS.map((b) => sFields(b, ["x", "z", "r", "depth"]));
+const WATERWAYS_WORLD = WATERWAYS.map((w) => ({
+  ...w,
+  halfWidth: sm(w.halfWidth),
+  depth: sm(w.depth),
+  points: w.points.map(([x, z]) => [sm(x), sm(z)]),
+}));
+// Ground colour is keyed to height, and heights are now world heights, so the
+// band anchors move with them. Without this the snow line in the COLOUR ramp
+// would sit at a different altitude from SNOW_LINE itself.
+const GROUND_BANDS_WORLD = GROUND_BANDS.map((b) => ({ ...b, upTo: sm(b.upTo) }));
+function groundColorWorld(h, slope) {
+  return groundColor(toDesign(h), slope);   // slope is dimensionless and scale-invariant
+}
+
+/** Waterway surface geometry, in world metres. */
+function waterwaySurfaceWorld(w, heightAt, step = sm(90)) {
+  return waterwaySurface(w, heightAt, step);
+}
+
+export {
+  makeHeightAtWorld as makeHeightAt,
+  cliffinessWorld as cliffiness,
+  edgeFalloffWorld as edgeFalloff,
+  reliefAtWorld as reliefAt,
+  groundColorWorld as groundColor,
+  waterwaySurfaceWorld as waterwaySurface,
+  EDGE_WORLD as EDGE,
+  BASINS_WORLD as BASINS,
+  WATERWAYS_WORLD as WATERWAYS,
+  GROUND_BANDS_WORLD as GROUND_BANDS,
+  SNOW_LINE_WORLD as SNOW_LINE,
+  TREE_LINE_WORLD as TREE_LINE,
+};
+const SNOW_LINE_WORLD = sm(SNOW_LINE);
+const TREE_LINE_WORLD = sm(TREE_LINE);

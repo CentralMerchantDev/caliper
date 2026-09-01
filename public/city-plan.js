@@ -22,6 +22,7 @@
 // =============================================================================
 
 import { fbm, hash01, clamp, smoother } from "./noise.js";
+import { WORLD_SCALE } from "./world-scale.js";
 import { roadAllowedAt, buildAllowedAt, driveableRun, slopeAt, SLOPE, makeDemand } from "./land-use.js";
 
 // -----------------------------------------------------------------------------
@@ -524,7 +525,13 @@ export function splineOpen(p, samplesPerSegment = 10) {
 }
 
 /** Every land mass as a smoothed polygon, ready to draw or to test against. */
-export function landmassPolygons(samplesPerSegment = 10) {
+/**
+ * The drawn outlines, in DESIGN metres -- the space the pen strokes were traced
+ * into. Only LandField consumes this, because LandField's own grid constants
+ * (cell 420, maskCell 40, the 60 m exact-test band) were calibrated here too.
+ * Everything else wants landmassPolygons() below, which is these in world space.
+ */
+export function landmassPolygonsDesign(samplesPerSegment = 10) {
   return LANDMASSES.map((lm) => {
     // The mainland's SHORELINE is splined; its closing corners are not. A spline
     // through 30 km corners overshoots by hundreds of metres and swallowed the
@@ -2627,4 +2634,22 @@ export function generateCityPlan() {
     plots.push(...out);
   }
   return { world: WORLD, bands: BANDS, island: ISLAND, roads, blocks, plots, parks, districts: DISTRICTS, suburbs: SUBURBS, bridges: BRIDGES };
+}
+
+
+/**
+ * The drawn outlines in WORLD metres -- design multiplied by WORLD_SCALE.
+ *
+ * This is a pure multiply of Mark's traced coastline. The shape is not
+ * re-derived, re-noised or re-fitted; every vertex is the one he drew, moved
+ * proportionally inward. It matches the y = 0 contour of the world height
+ * function exactly, because that function is the same design terrain scaled by
+ * the same factor.
+ */
+export function landmassPolygons(samplesPerSegment = 10) {
+  if (WORLD_SCALE === 1) return landmassPolygonsDesign(samplesPerSegment);
+  return landmassPolygonsDesign(samplesPerSegment).map((m) => ({
+    ...m,
+    polygon: m.polygon.map(([x, z]) => [x * WORLD_SCALE, z * WORLD_SCALE]),
+  }));
 }
