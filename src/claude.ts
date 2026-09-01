@@ -937,3 +937,144 @@ export async function runRetrospective(apiKey: string, runSummary: string, maxTo
   const outputTokens = response.usage.output_tokens;
   return { lesson, model, inputTokens, outputTokens, costUsd: costUsd(model, inputTokens, outputTokens), wallTimeMs };
 }
+
+// ---------------------------------------------------------------------
+// ASSESSING THE REVIEW, BEFORE ACTING ON IT
+//
+// The pipeline used to take the reviewer's MATERIAL findings straight to the
+// fix stage. That treats a second model's opinion as ground truth, which is
+// exactly the deference this project exists to argue against -- the whole
+// point of a cross-vendor review is that neither model is presumed right.
+//
+// It also patched. A finding like "this breaks the invariant that placements
+// never overlap" sometimes cannot be patched at all: the approach was wrong
+// and needs re-planning around the constraint, in a way that does not break
+// the checks that are already passing. Patching such a finding produces a fix
+// that satisfies the reviewer and quietly breaks something else, and the
+// re-verify catches it as a failure with no explanation of why.
+//
+// So: read the findings, say which are actually valid and why, and decide
+// whether this is a patch or a re-plan. Disagreeing with the reviewer is an
+// allowed and expected answer -- but a disagreement has to be reasoned, and it
+// is recorded in the ledger either way, so "the model waved the review away"
+// is visible rather than hidden.
+// ---------------------------------------------------------------------
+
+export const REVIEW_ASSESSMENT_SCHEMA = {
+  type: "object",
+  properties: {
+    verdicts: {
+      type: "array",
+      description: "One entry per MATERIAL finding, in the order given.",
+      items: {
+        type: "object",
+        properties: {
+          finding: { type: "string", description: "The finding, quoted back so the pairing is unambiguous." },
+          valid: { type: "boolean", description: "Is this a real defect in the code as written?" },
+          reasoning: { type: "string", description: "Why, in one or two sentences, citing the code or the plan." },
+        },
+        required: ["finding", "valid", "reasoning"],
+        additionalProperties: false,
+      },
+    },
+    approach: {
+      anyOf: [{ type: "string", enum: ["patch", "replan", "no-change"] }],
+      description:
+        "patch: the valid findings can be fixed without changing the approach. " +
+        "replan: fixing them properly needs a different approach, because a direct patch would " +
+        "break something that currently passes or fight the existing design. " +
+        "no-change: no finding is valid and the code should stand.",
+    },
+    reasoning: { type: "string", description: "Why that approach, in two or three sentences." },
+    replanNotes: {
+      type: ["string", "null"],
+      description:
+        "When approach is replan: what the new approach must do differently, which existing " +
+        "behaviour it must not disturb, and which part of the current stack it has to work with. " +
+        "Null otherwise.",
+    },
+  },
+  required: ["verdicts", "approach", "reasoning", "replanNotes"],
+  additionalProperties: false,
+};
+
+const REVIEW_ASSESSMENT_SYSTEM_PROMPT =
+  "You wrote a change. A reviewer from a different vendor has raised findings it calls MATERIAL. " +
+  "Your job is NOT to comply -- it is to judge. For each finding, decide whether it is a real " +
+  "defect in the code as written, and say why with reference to the code or the plan. A reviewer " +
+  "can be wrong, can misread the intent, or can raise something already handled elsewhere; saying " +
+  "so with a reason is a correct answer and is expected. Deferring to a finding you cannot justify " +
+  "is not.\n\n" +
+  "Then choose an approach. Choose `patch` when the valid findings can be fixed without changing " +
+  "how the change works. Choose `replan` when a direct patch would break something that currently " +
+  "passes, or would fight the existing design -- in that case say in replanNotes what the new " +
+  "approach must do, what it must not disturb, and what it has to fit alongside. Choose " +
+  "`no-change` only when no finding is valid.\n\n" +
+  "Be specific. 'The reviewer is wrong' is not reasoning; 'the placement is inside the parcel " +
+  "envelope because addPlacement validates bounds before splicing' is.";
+
+export interface ReviewAssessment {
+  verdicts: { finding: string; valid: boolean; reasoning: string }[];
+  approach: "patch" | "replan" | "no-change";
+  reasoning: string;
+  replanNotes: string | null;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  wallTimeMs: number;
+}
+
+export async function assessReview(
+  apiKey: string,
+  plan: ChangePlan,
+  code: string,
+  materialFindings: string[],
+  stillPassing: string[],
+  maxTokens = 900,
+  model: string = DEFAULT_MODEL,
+  priorLessons = "",
+): Promise<ReviewAssessment> {
+  const client = new Anthropic({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
+  const start = Date.now();
+  const lessons = priorLessons ? `\n\nLessons from previous runs:\n${priorLessons}` : "";
+  const passing = stillPassing.length
+    ? `\n\nChecks that currently PASS and must not be broken by any fix:\n${stillPassing.map((p) => `- ${p}`).join("\n")}`
+    : "";
+  const response = await createWithTruncationGuard(client, "assessReview", {
+    model,
+    max_tokens: maxTokens,
+    thinking: { type: "disabled" },
+    system: REVIEW_ASSESSMENT_SYSTEM_PROMPT,
+    messages: [{
+      role: "user",
+      content:
+        `Plan:\nWill build: ${plan.willBuild}\nWill not touch: ${plan.willNotTouch}\n\n` +
+        `The code you wrote:\n${code}\n\n` +
+        `The reviewer's MATERIAL findings:\n${materialFindings.map((f) => `- ${f}`).join("\n")}` +
+        passing + lessons,
+    }],
+    output_config: { format: { type: "json_schema", schema: REVIEW_ASSESSMENT_SCHEMA } },
+  });
+  const wallTimeMs = Date.now() - start;
+  if (response.stop_reason === "refusal") throw new Error("Review assessment was refused by Claude's safety classifiers");
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") throw new Error(`No text content in review assessment (stop_reason: ${response.stop_reason})`);
+
+  let parsed: Omit<ReviewAssessment, "model" | "inputTokens" | "outputTokens" | "costUsd" | "wallTimeMs">;
+  try {
+    parsed = JSON.parse(textBlock.text);
+  } catch (e) {
+    throw new Error(`Failed to parse review assessment JSON: ${String(e)}`);
+  }
+  // FAIL CLOSED ON A MALFORMED ASSESSMENT. An unreadable verdict must not be
+  // read as "nothing was wrong" -- that would turn a parse failure into a
+  // silent approval, which is the shape of defect this pipeline exists to
+  // refuse.
+  if (!Array.isArray(parsed.verdicts) || !["patch", "replan", "no-change"].includes(parsed.approach)) {
+    throw new Error("Review assessment did not return a usable verdict set and approach");
+  }
+  const inputTokens = response.usage.input_tokens;
+  const outputTokens = response.usage.output_tokens;
+  return { ...parsed, model, inputTokens, outputTokens, costUsd: costUsd(model, inputTokens, outputTokens), wallTimeMs };
+}

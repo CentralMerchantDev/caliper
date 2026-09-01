@@ -44,11 +44,27 @@ function mockSpendCounterNamespace(initial: Record<string, number> = {}): Durabl
   return { idFromName: () => "global", get: () => stub } as unknown as DurableObjectNamespace;
 }
 
-test("re-derived numbers match FINISH.md section 5 exactly", () => {
+test("the published caps are the caps", () => {
+  // These numbers appear on the public page. If one moves here and not there,
+  // the site is stating a control it does not have -- so they are pinned, and
+  // moving one is a deliberate act with a test to update.
   assert.equal(CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD, 2.0);
   assert.equal(CONTROL_LIMITS.PIPELINE_WEEKLY_CAP_USD, 7.0);
   assert.equal(CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD, 20.0);
-  assert.equal(CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP, 3);
+  assert.equal(CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP, 4);
+});
+
+test("one visitor cannot drain the day on their own", () => {
+  // The per-IP limit and the daily cap are not independent: at the worst-case
+  // ceiling, DAILY_LIVE_RUNS_PER_IP x PER_RUN_CEILING is what a single address
+  // can cost. If that reaches the daily cap then one person can close the site
+  // for everyone else, which is the failure the per-IP limit exists to prevent.
+  const worstPerVisitor = CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP * CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT;
+  assert.ok(
+    worstPerVisitor < CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD,
+    `one visitor could spend $${worstPerVisitor.toFixed(2)} of the $${CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD.toFixed(2)} daily cap -- ` +
+      "lower DAILY_LIVE_RUNS_PER_IP or raise the cap",
+  );
 });
 
 // FOUNDATION-2 ("emit the change, not the file"): two ceilings now, not
@@ -58,12 +74,67 @@ test("re-derived numbers match FINISH.md section 5 exactly", () => {
 // still "tracks the real worst case, not the old $0.35 Opus-priced
 // ceiling" -- catches a regression back toward that, not a false positive
 // on either current, deliberate value.
-test("per-run ceiling (source-edit) tracks the current worst-case arithmetic (~$0.23), not the old $0.35", () => {
-  assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT <= 0.3);
+// THE CEILINGS ARE RE-DERIVED HERE, NOT RESTATED.
+//
+// These used to assert `<= 0.3` and `<= 0.15` against values of 0.23 and 0.14 --
+// enough slack that the ceiling could drift a long way and stay green. It did
+// drift: the arithmetic in the comment said "fix*2 (MAX_FIX_ATTEMPTS)" while
+// MAX_FIX_ATTEMPTS was 3, so a run using its third fix could hit the ceiling and
+// truncate, which a visitor reads as a bug rather than a limit.
+//
+// So the test now does the sum. Change a stage's token cap or a limit and this
+// fails with the number it should have been, instead of quietly tolerating it.
+const WORST_CASE_STAGES = {
+  ground: 0.0025,
+  plan: 0.04,
+  implement: 0.03,
+  implementEdit: 0.0075,
+  fix: 0.04,
+  fixEdit: 0.015,
+  review: 0.035,
+  assess: 0.0135,
+  retrospective: 0.0015,
+};
+
+test("the source-edit ceiling covers every call the run is ALLOWED to make", () => {
+  const worst =
+    WORST_CASE_STAGES.ground +
+    WORST_CASE_STAGES.plan +
+    WORST_CASE_STAGES.implement +
+    WORST_CASE_STAGES.fix * CONTROL_LIMITS.MAX_FIX_ATTEMPTS +
+    (WORST_CASE_STAGES.review + WORST_CASE_STAGES.assess + WORST_CASE_STAGES.fix) * CONTROL_LIMITS.MAX_REVIEW_ROUNDS +
+    WORST_CASE_STAGES.retrospective;
+  assert.ok(
+    CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT >= worst,
+    `ceiling ${CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT} is BELOW the worst case the limits permit (${worst.toFixed(4)}) -- ` +
+      "a legitimate run can be truncated mid-flight, which looks like a bug",
+  );
+  // and not wildly above it either: a ceiling with no relationship to the
+  // arithmetic is not a control, it is a number.
+  assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT <= worst * 1.5,
+    `ceiling ${CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT} is more than 50% above the worst case (${worst.toFixed(4)})`);
 });
-test("per-run ceiling (data-edit) tracks its own, lower worst-case arithmetic (~$0.14) -- genuinely cheaper than source-edit, not just relabeled", () => {
-  assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT <= 0.15);
-  assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT < CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT);
+
+test("the data-edit ceiling is derived the same way, and is genuinely lower", () => {
+  const worst =
+    WORST_CASE_STAGES.ground +
+    WORST_CASE_STAGES.plan +
+    WORST_CASE_STAGES.implementEdit +
+    WORST_CASE_STAGES.fixEdit * CONTROL_LIMITS.MAX_FIX_ATTEMPTS +
+    (WORST_CASE_STAGES.review + WORST_CASE_STAGES.assess + WORST_CASE_STAGES.fixEdit) * CONTROL_LIMITS.MAX_REVIEW_ROUNDS +
+    WORST_CASE_STAGES.retrospective;
+  assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT >= worst,
+    `ceiling ${CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT} is below the permitted worst case (${worst.toFixed(4)})`);
+  assert.ok(CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT < CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT,
+    "the cheap path must actually be cheaper, not just relabelled");
+});
+
+test("the reviewer sees the work more than once", () => {
+  // The loop's whole point. At 1 the reviewer never sees the code its own
+  // findings caused to change, and "reviewed by a different vendor's model"
+  // becomes a claim about the draft rather than about what shipped.
+  assert.ok(CONTROL_LIMITS.MAX_REVIEW_ROUNDS >= 2,
+    "MAX_REVIEW_ROUNDS < 2 means a fix can ship unreviewed");
 });
 
 // ---------------------------------------------------------------------
@@ -149,18 +220,22 @@ test("reconcile releasing a failed call's reservation (actual=0) never lets the 
 // ---------------------------------------------------------------------
 // Guardrail: the per-IP daily limit, re-derived to 3 (UPGRADE.md, up from 2).
 // ---------------------------------------------------------------------
-test("guardrail: a 4th live run for the same IP on the same day is refused (limit is now 3)", async () => {
+test("one run past the daily per-IP limit is refused, whatever the limit is set to", async () => {
+  // Derived from the constant rather than hard-coded, because the last time
+  // this was written as "a 4th run" the limit moved and the test name became a
+  // lie while the assertion still passed.
   const kv = mockKv();
-  await recordPipelineRateLimitHit(kv, "1.2.3.4");
-  await recordPipelineRateLimitHit(kv, "1.2.3.4");
-  await recordPipelineRateLimitHit(kv, "1.2.3.4");
+  for (let i = 0; i < CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP; i++) {
+    await recordPipelineRateLimitHit(kv, "1.2.3.4");
+  }
   await assert.rejects(() => assertUnderPipelineRateLimit(kv, "1.2.3.4"), (e: unknown) => e instanceof PipelineLimitError && e.kind === "per-ip-daily");
 });
 
-test("control: a 3rd run for the same IP on the same day is still allowed", async () => {
+test("control: the last run INSIDE the limit is still allowed", async () => {
   const kv = mockKv();
-  await recordPipelineRateLimitHit(kv, "5.6.7.8");
-  await recordPipelineRateLimitHit(kv, "5.6.7.8");
+  for (let i = 0; i < CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP - 1; i++) {
+    await recordPipelineRateLimitHit(kv, "5.6.7.8");
+  }
   await assert.doesNotReject(() => assertUnderPipelineRateLimit(kv, "5.6.7.8"));
 });
 

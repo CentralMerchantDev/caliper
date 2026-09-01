@@ -42,16 +42,44 @@ export const CONTROL_LIMITS = {
    * ceiling applies, since the path isn't known yet and ground+plan cost
    * the same either way.
    *
-   * SOURCE_EDIT worst case: ground $0.0025 + plan $0.04 + implement $0.03 +
-   * fix*2 (pre-review, MAX_FIX_ATTEMPTS) $0.08 + review $0.035 + fix $0.04
-   * (post-review) + retrospective $0.0015 = $0.229. $0.23 tracks that closely on purpose.
+   * THE OLD ARITHMETIC WAS SHORT, AND IT WAS SHORT BY A REAL FIX.
    *
-   * DATA_EDIT worst case: ground $0.0025 + plan $0.04 + implementEdit $0.0075 +
-   * fixEdit*2 (pre-review) $0.03 + review $0.035 + fixEdit $0.015 (post-review) +
-   * retrospective $0.0015 = $0.1315. $0.14 tracks that closely.
+   * It read "fix*2 (pre-review, MAX_FIX_ATTEMPTS)" while MAX_FIX_ATTEMPTS was
+   * already 3. So a run that legitimately used its third convergence fix could
+   * hit the ceiling and truncate -- which a visitor reads as a bug, not as a
+   * limit. The comment was the spec and the constant had moved out from under
+   * it, which is exactly the failure mode the pricing test now exists to stop.
+   *
+   * SOURCE_EDIT worst case, recounted against the constants below:
+   *   ground        $0.0025
+   *   plan          $0.04
+   *   implement     $0.03
+   *   fix x4        $0.16    (MAX_FIX_ATTEMPTS, pre-review convergence)
+   *   per review round, x MAX_REVIEW_ROUNDS (2):
+   *     review      $0.035
+   *     assess      $0.0135  (the author judging the review before acting)
+   *     fix         $0.04
+   *                 $0.177   for both rounds
+   *   retrospective $0.0015
+   *                 -------
+   *                 $0.411   -> $0.42
+   *
+   * DATA_EDIT worst case, same shape with the cheaper edit path:
+   *   0.0025 + 0.04 + 0.0075 + (0.015 x 4) + ((0.035 + 0.0135 + 0.015) x 2)
+   *   + 0.0015 = $0.2385 -> $0.24
+   *
+   * I got this wrong by $0.05 writing it out by hand -- I forgot the assess
+   * call -- and test/controlLayer.test.ts caught it by doing the sum instead of
+   * restating the answer. That is why the test derives rather than asserts a
+   * literal: a ceiling below the permitted worst case truncates real runs.
+   *
+   * NOTE: these are CEILINGS, not estimates. A real run costs about $0.06 --
+   * the recorded one on the page cost $0.0587 -- so raising the ceiling does
+   * not raise typical spend. It only stops an expensive-but-legitimate run
+   * dying halfway. The daily cap is the budget; this is the seatbelt.
    */
-  PER_RUN_CEILING_USD_SOURCE_EDIT: 0.23,
-  PER_RUN_CEILING_USD_DATA_EDIT: 0.14,
+  PER_RUN_CEILING_USD_SOURCE_EDIT: 0.42,
+  PER_RUN_CEILING_USD_DATA_EDIT: 0.24,
   /** Cross-model review must never see code that's still failing its own
    * checks (FINAL.md item 1: "the reviewer reads a diff that has already
    * passed CI"). This bounds the implement -> verify -> fix loop that runs
@@ -61,7 +89,18 @@ export const CONTROL_LIMITS = {
    * reasoning as MAX_CONCURRENT_PIPELINE_RUNS below: real convergence
    * usually takes 0 or 1 rounds; a demo doesn't need to try indefinitely,
    * and every extra round is itself a real, billed model call. */
-  MAX_FIX_ATTEMPTS: 3,
+  MAX_FIX_ATTEMPTS: 4,
+  /** How many times the cross-vendor reviewer may see the work.
+   *
+   * There was no second review at all: after the post-review fix the run
+   * re-verified and SHIPPED, so the reviewer never saw the code it caused to
+   * change. "A different vendor's model reviewed it" was true of the draft and
+   * not of the thing that shipped.
+   *
+   * Two rounds, then a refusal. Not unlimited: a reviewer and a fixer that
+   * disagree forever would burn the budget arguing, and "we could not converge"
+   * is a legitimate answer that this system is supposed to be willing to give. */
+  MAX_REVIEW_ROUNDS: 2,
   /** max_tokens per stage, sized from docs/REBUILD-PROPOSAL.md's measured
    * numbers -- the implement stage's first measurement hit a 3000-token cap
    * mid-artifact; this is deliberately larger. `ground` added for the new
@@ -71,7 +110,7 @@ export const CONTROL_LIMITS = {
    * a file -- even addObjectType's full geometry recipe fits comfortably
    * under 1500 tokens; sized with real headroom over that, not copied from
    * the full-file caps it replaces for the data-edit path. */
-  TOKEN_CAPS: { brief: 800, ground: 500, implement: 6000, review: 2500, fix: 4000, implementEdit: 1500, fixEdit: 1500 },
+  TOKEN_CAPS: { brief: 800, ground: 500, implement: 6000, review: 2500, fix: 4000, implementEdit: 1500, fixEdit: 1500, assess: 900 },
   /** UPGRADE.md section 0: 3 live runs/IP/day (up from 2, permanent, not a
    * temporary carve-out) -- 3 x the $0.23 (source-edit) worst case =~
    * $0.69/IP/day, still small next to the global daily cap below. This
@@ -84,7 +123,18 @@ export const CONTROL_LIMITS = {
    * those two stages was ever what made a run expensive. Left at 3,
    * unchanged; re-check this if plan or review's routing/token caps
    * change, since those are what would actually move the number. */
-  DAILY_LIVE_RUNS_PER_IP: 3,
+  /** FOUR, and the number is derived, not chosen.
+   *
+   * It wants to be 5 -- enough to see a success, a refusal and a retry. But the
+   * per-IP limit and the daily cap are not independent: at the worst-case
+   * ceiling one address can cost DAILY_LIVE_RUNS_PER_IP x PER_RUN_CEILING, and
+   * at 5 that is $2.10 against a $2.00 daily cap. One visitor could close the
+   * site for everyone else, which is the exact failure this limit exists to
+   * prevent. At 4 it is $1.68 and cannot.
+   *
+   * Raise the daily cap and this can go up. test/controlLayer.test.ts asserts
+   * the relationship so the two cannot drift apart silently. */
+  DAILY_LIVE_RUNS_PER_IP: 4,
   /** Global ceiling across BOTH vendors combined -- Anthropic and OpenAI
    * spend are separate budgets that both count toward this one number.
    * FINISH.md section 5: $2.00 daily / $7.00 weekly / $20.00 monthly --
@@ -95,7 +145,7 @@ export const CONTROL_LIMITS = {
   PIPELINE_MONTHLY_CAP_USD: 20.0,
   /** Small and deliberate -- bounds worst-case simultaneous spend burst; a
    * demo doesn't need real concurrency. */
-  MAX_CONCURRENT_PIPELINE_RUNS: 3,
+  MAX_CONCURRENT_PIPELINE_RUNS: 5,
   /** Consecutive failures from one provider before that provider's circuit
    * opens and calls stop hitting it. */
   CIRCUIT_FAILURE_THRESHOLD: 3,

@@ -1,5 +1,5 @@
 import type { SimTestCase, TestResult } from "./types";
-import { generatePlan, implementChange, fixChange, implementChangeAsEdit, fixChangeAsEdit, runRetrospective, DEFAULT_MODEL, type ChangePlan, PRICING as ANTHROPIC_PRICING } from "./claude";
+import { generatePlan, implementChange, fixChange, implementChangeAsEdit, fixChangeAsEdit, runRetrospective, assessReview, DEFAULT_MODEL, type ChangePlan, type ReviewAssessment, PRICING as ANTHROPIC_PRICING } from "./claude";
 import { reviewArtifact, parseFindings, REVIEW_MODEL, PRICING as OPENAI_PRICING, type ReviewFinding } from "./openai";
 import { runSimTests } from "./simSandbox";
 import { SIM_REGRESSION_SUITE } from "./simRegression";
@@ -80,6 +80,11 @@ export type ChangeEvent =
   | { type: "reviewed"; model: string; inputTokens: number; outputTokens: number; costUsd: number; wallTimeMs: number; reviewText: string; findings: ReviewFinding[] }
   | { type: "review-gate"; runId: string; materialFindings: string[]; nitFindings: string[] }
   | { type: "review-gate-decided"; decision: "approve" | "reject" }
+  /** Claude's own judgement of the reviewer's findings, before acting on them.
+   *  Surfaced because "the author disagreed with the reviewer, and here is why"
+   *  is the interesting part -- and because a disagreement nobody can see is
+   *  indistinguishable from the author ignoring the review. */
+  | { type: "review-assessed"; round: number; approach: "patch" | "replan" | "no-change"; reasoning: string; verdicts: { finding: string; valid: boolean; reasoning: string }[] }
   | { type: "fixing" }
   | { type: "fixed"; model: string; inputTokens: number; outputTokens: number; costUsd: number; wallTimeMs: number; code: string }
   | { type: "reverified"; regression: TestResult[]; criteria: TestResult[]; regressionPassed: number; regressionTotal: number; criteriaPassed: number; criteriaTotal: number; fatalError?: string }
@@ -327,6 +332,7 @@ const WORST_CASE = {
   review: (CONTROL_LIMITS.TOKEN_CAPS.review / 1_000_000) * OPENAI_PRICING[REVIEW_MODEL].output,
   fix: (CONTROL_LIMITS.TOKEN_CAPS.fix / 1_000_000) * ANTHROPIC_PRICING[FIX_MODEL].output,
   retrospective: (RETROSPECTIVE_MAX_TOKENS / 1_000_000) * ANTHROPIC_PRICING[RETROSPECTIVE_MODEL].output,
+  assess: (CONTROL_LIMITS.TOKEN_CAPS.assess / 1_000_000) * ANTHROPIC_PRICING[DEFAULT_MODEL].output,
   // FOUNDATION-2 ("emit the change, not the file"): the data-edit path's
   // own, much smaller worst case -- same models as implement/fix, a
   // fraction of the token cap, since a WorldEdit is never a file.
@@ -1196,6 +1202,14 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   let fixHeld: boolean | null = null;
   let reviewGateDecision: "approve" | "reject" | "not-needed" = "not-needed";
   let reviewRejected = false;
+  /** How many times the reviewer saw the work. 1 means it never saw the fix. */
+  let reviewRounds = 0;
+  /** Material findings still open when the loop stopped. Non-empty here means
+   *  the run must REFUSE -- it cannot say the reviewer was satisfied. */
+  let reviewUnresolved: string[] = [];
+  /** The same findings came back twice: the two models are arguing. */
+  let reviewOscillated = false;
+  let reviewAssessments: ReviewAssessment[] = [];
 
   if (material.length > 0) {
     const decision = await checkDecision(env.SPEND_KV, `change/review-decision/${runId}`);
@@ -1251,8 +1265,91 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     }
 
     if (decision === "approve") {
-      inFlightStage = "fix (post-review)";
-      onEvent({ type: "fixing" });
+      // ==================================================================
+      // THE REVIEW LOOP -- ported from the one this project's author has
+      // actually shipped two products with (.claude/skills/cross-model-review
+      // and docs/workflow/REVIEW-LOOP.md in the sqft repo), reduced to a
+      // single lane.
+      //
+      // What was here before was one fix and then a ship. The reviewer never
+      // saw the code its own findings had caused to change, so "reviewed by a
+      // different vendor's model" was true of the DRAFT and not of the thing
+      // that shipped. That is a claim about the wrong artefact.
+      //
+      // The real loop, and what each part is for:
+      //
+      //   round 1  Codex reviews. A HUMAN triages -- material vs nit vs
+      //            accepted-by-design. That gate is above this block and is
+      //            not automated, because "is this a real defect or a
+      //            deliberate decision" is judgment.
+      //
+      //   then     the mechanical middle, which IS automated because from
+      //            iteration two the question is only "did the fix close the
+      //            finding":
+      //              Claude ASSESSES the findings -- judges which are real,
+      //              in writing, and decides patch vs replan
+              //              -> fix -> verify -> Codex RE-reviews -> repeat
+      //
+      //   until    VERDICT clean, or a guardrail trips.
+      //
+      // Guardrails, all of which exist because the original loop needed them:
+      //   * accepted-by-design findings are fed into EVERY later review, or an
+      //     unsupervised loop dutifully "fixes" a deliberate decision, and then
+      //     re-flags it, and then fixes it again.
+      //   * an oscillation guard: the same material set recurring twice means
+      //     the two models are arguing, not converging. Stop and say so.
+      //   * a round cap. "We could not converge" is a legitimate answer this
+      //     system is supposed to be willing to give.
+      //
+      // It REFUSES rather than shipping if it cannot reach clean. That is the
+      // whole thesis: only say yes when yes is true.
+      // ==================================================================
+      let round = 1;
+      let previousMaterialKey = material.slice().sort().join("|");
+      const acceptedByDesign: string[] = [];
+      const assessments: ReviewAssessment[] = [];
+      let unresolved: string[] = [];
+      let oscillated = false;
+
+      while (true) {
+        // ---- Claude judges the review before acting on it ----
+        let assessment: ReviewAssessment | null = null;
+        try {
+          const stillPassingNow = [
+            ...verifyRegression.filter((r) => r.pass).map((r) => describePassing("regression", r)),
+            ...verifyCriteria.filter((r) => r.pass).map((r) => describePassing("criterion", r)),
+          ];
+          assessment = await callAnthropic(env, budget, WORST_CASE.assess, () =>
+            assessReview(env.ANTHROPIC_API_KEY, plan!, finalCode, material, stillPassingNow, CONTROL_LIMITS.TOKEN_CAPS.assess, DEFAULT_MODEL, priorLessons),
+          );
+          stageCosts.push({ stage: `assess review (round ${round})`, costUsd: assessment.costUsd, wallTimeMs: assessment.wallTimeMs });
+          assessments.push(assessment);
+          onEvent({ type: "review-assessed", round, approach: assessment.approach, reasoning: assessment.reasoning, verdicts: assessment.verdicts });
+          // A finding the author judged NOT valid, with a stated reason, is
+          // this loop's --wontfix entry. It is carried into every later review
+          // so the disagreement is recorded once instead of re-fought.
+          for (const v of assessment.verdicts) {
+            if (!v.valid && !acceptedByDesign.includes(v.finding)) {
+              acceptedByDesign.push(`${v.finding} -- author's reason: ${v.reasoning}`);
+            }
+          }
+        } catch (e) {
+          // An assessment that will not parse must not silently become
+          // "nothing was wrong". Fall through and fix everything material.
+          console.warn("review assessment unavailable, fixing all material findings:", (e as Error)?.message ?? e);
+        }
+
+        const toFix = assessment
+          ? material.filter((m) => !assessment!.verdicts.some((v) => v.finding === m && !v.valid))
+          : material;
+
+        if (assessment && assessment.approach === "no-change" && toFix.length === 0) {
+          // Every finding was judged invalid, with reasons. Nothing to change;
+          // the re-review below decides whether Codex accepts that.
+          unresolved = [];
+        } else {
+          inFlightStage = `fix (post-review round ${round})`;
+          onEvent({ type: "fixing" });
       const verificationFailures = [
         ...verifyRegression.filter((r) => !r.pass).map((r) => describeFailure("regression", r)),
         ...verifyCriteria.filter((r) => !r.pass).map((r) => describeFailure("criterion", r)),
@@ -1261,39 +1358,114 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         ...verifyRegression.filter((r) => r.pass).map((r) => describePassing("regression", r)),
         ...verifyCriteria.filter((r) => r.pass).map((r) => describePassing("criterion", r)),
       ];
-      const fix = plan!.implementationPath === "data-edit"
-        ? await callAnthropic(env, budget, WORST_CASE.fixEdit, () =>
-            fixChangeAsEdit(env.ANTHROPIC_API_KEY, plan!, finalCode, material, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fixEdit, verificationFailures, stillPassing, priorLessons),
-          )
-        : await callAnthropic(env, budget, WORST_CASE.fix, () =>
-            fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, finalCode, material, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
-          );
-      stageCosts.push({ stage: `fix (${plan!.implementationPath})`, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs });
-      if (fix.rejectionReason) {
-        verifyFatalError = fix.rejectionReason;
-        fixHeld = false;
-      } else {
-        finalCode = fix.code;
-        fixApplied = true;
-        onEvent({ type: "fixed", model: fix.model, inputTokens: fix.inputTokens, outputTokens: fix.outputTokens, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, code: finalCode });
+          // A replan is not a different call -- it is the same fix stage given
+          // the author's own instruction about what the new approach has to
+          // achieve and what it must not disturb. That instruction is what
+          // stops a patch satisfying the reviewer while quietly breaking a
+          // check that currently passes.
+          const replanDirective = assessment && assessment.approach === "replan" && assessment.replanNotes
+            ? [`RE-PLAN, do not patch. ${assessment.replanNotes}`]
+            : [];
+          const fixFindings = [...replanDirective, ...toFix];
 
-        onEvent({ type: "verifying" });
-        const verify2 = await runVerification(env, finalCode, plan.criteria, currentSourceAtStart, `change-${runId}-2`, plan!.implementationPath === "data-edit");
-        verifyRegression = verify2.regression.results;
-        verifyCriteria = verify2.criteria.results;
-        verifyFatalError = verify2.regression.fatalError ?? verify2.criteria.fatalError;
-        fixHeld = !verifyFatalError && verifyRegression.length > 0 && verifyRegression.every((r) => r.pass) && verifyCriteria.every((r) => r.pass);
-        onEvent({
-          type: "reverified",
-          regression: verifyRegression,
-          criteria: verifyCriteria,
-          regressionPassed: verifyRegression.filter((r) => r.pass).length,
-          regressionTotal: verifyRegression.length,
-          criteriaPassed: verifyCriteria.filter((r) => r.pass).length,
-          criteriaTotal: verifyCriteria.length,
-          fatalError: verifyFatalError,
-        });
+          const fix = plan!.implementationPath === "data-edit"
+            ? await callAnthropic(env, budget, WORST_CASE.fixEdit, () =>
+                fixChangeAsEdit(env.ANTHROPIC_API_KEY, plan!, finalCode, fixFindings, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fixEdit, verificationFailures, stillPassing, priorLessons),
+              )
+            : await callAnthropic(env, budget, WORST_CASE.fix, () =>
+                fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, finalCode, fixFindings, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
+              );
+          stageCosts.push({ stage: `fix (${plan!.implementationPath}, round ${round})`, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs });
+          if (fix.rejectionReason) {
+            verifyFatalError = fix.rejectionReason;
+            fixHeld = false;
+            unresolved = toFix;
+            break;
+          }
+          finalCode = fix.code;
+          fixApplied = true;
+          onEvent({ type: "fixed", model: fix.model, inputTokens: fix.inputTokens, outputTokens: fix.outputTokens, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, code: finalCode });
+
+          onEvent({ type: "verifying" });
+          const verify2 = await runVerification(env, finalCode, plan.criteria, currentSourceAtStart, `change-${runId}-r${round}`, plan!.implementationPath === "data-edit");
+          verifyRegression = verify2.regression.results;
+          verifyCriteria = verify2.criteria.results;
+          verifyFatalError = verify2.regression.fatalError ?? verify2.criteria.fatalError;
+          fixHeld = !verifyFatalError && verifyRegression.length > 0 && verifyRegression.every((r) => r.pass) && verifyCriteria.every((r) => r.pass);
+          onEvent({
+            type: "reverified",
+            regression: verifyRegression,
+            criteria: verifyCriteria,
+            regressionPassed: verifyRegression.filter((r) => r.pass).length,
+            regressionTotal: verifyRegression.length,
+            criteriaPassed: verifyCriteria.filter((r) => r.pass).length,
+            criteriaTotal: verifyCriteria.length,
+            fatalError: verifyFatalError,
+          });
+
+          // The static gate, same role as lint+tsc+test in the original loop:
+          // a fix that breaks verification does not get to go to the reviewer
+          // looking clean.
+          if (!fixHeld) {
+            unresolved = toFix;
+            break;
+          }
+        }
+
+        // ---- THE REVIEWER MUST SEE WHAT ITS FINDINGS CHANGED ----
+        if (round >= CONTROL_LIMITS.MAX_REVIEW_ROUNDS) {
+          unresolved = toFix;
+          break;
+        }
+        round++;
+        inFlightStage = `review (round ${round})`;
+        onEvent({ type: "reviewing" });
+        const reReview = await callOpenAI(env, budget, WORST_CASE.review, () =>
+          reviewArtifact(
+            env.OPENAI_API_KEY,
+            REVIEW_MODEL,
+            `Plan:\nWill build: ${plan!.willBuild}\nWill not touch: ${plan!.willNotTouch}\nCriteria:\n${plan!.criteria.map((c) => `- ${c.description}`).join("\n")}`,
+            `Change request: ${changeRequest}\n\nOriginal source:\n${currentSourceAtStart}`,
+            finalCode,
+            CONTROL_LIMITS.TOKEN_CAPS.review,
+            priorLessons,
+            { priorFindings: material, acceptedByDesign, round },
+          ),
+        );
+        stageCosts.push({ stage: `review (round ${round})`, costUsd: reReview.costUsd, wallTimeMs: reReview.wallTimeMs });
+        findings = parseFindings(reReview.text);
+        onEvent({ type: "reviewed", model: reReview.model, inputTokens: reReview.inputTokens, outputTokens: reReview.outputTokens, costUsd: reReview.costUsd, wallTimeMs: reReview.wallTimeMs, reviewText: reReview.text, findings });
+
+        const nextMaterial = findings
+          .filter((f) => f.severity === "MATERIAL")
+          .map((f) => f.text)
+          // Anything the author already justified in writing is not re-fought.
+          .filter((t) => !acceptedByDesign.some((a) => a.startsWith(t)));
+
+        if (nextMaterial.length === 0) {
+          unresolved = [];
+          break;                                   // VERDICT: CLEAN
+        }
+
+        // ---- OSCILLATION GUARD ----
+        // The same material set coming back means the reviewer and the author
+        // are arguing, not converging. Another round spends money to hear the
+        // same thing. Stop, and say that is what happened.
+        const key = nextMaterial.slice().sort().join("|");
+        if (key === previousMaterialKey) {
+          oscillated = true;
+          unresolved = nextMaterial;
+          break;
+        }
+        previousMaterialKey = key;
+        material.length = 0;
+        material.push(...nextMaterial);
       }
+
+      reviewRounds = round;
+      reviewUnresolved = unresolved;
+      reviewOscillated = oscillated;
+      reviewAssessments = assessments;
     }
   }
 
@@ -1326,6 +1498,23 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     refusalReason = material.length === 1
       ? `the review found a material problem and it was rejected: ${material[0]}`
       : `the review found ${material.length} material problems and they were rejected`;
+    onEvent({ type: "refused", reason: refusalReason });
+  } else if (reviewUnresolved.length > 0) {
+    // THE REVIEWER WAS NEVER SATISFIED, SO THIS DOES NOT SHIP.
+    //
+    // Verification passing is not the same as review passing, and this is the
+    // branch that used to be missing entirely: before the loop existed, a fix
+    // was made and shipped without the reviewer ever seeing it, so there was no
+    // state in which "Codex still objects" could even be represented.
+    //
+    // Oscillation is reported as itself rather than as a generic failure,
+    // because "the two models disagree and neither is moving" is a different
+    // thing from "the fix did not work", and a visitor watching this is
+    // entitled to know which one happened.
+    outcome = "refused-review";
+    refusalReason = reviewOscillated
+      ? `the reviewer and the author could not converge -- the same ${reviewUnresolved.length} finding(s) came back unchanged after a fix, so the run stopped rather than spending more to hear it again`
+      : `the reviewer still had ${reviewUnresolved.length} unresolved material finding(s) after ${reviewRounds} round(s), so nothing was shipped`;
     onEvent({ type: "refused", reason: refusalReason });
   } else if (stillFailing) {
     outcome = "refused-verification";
@@ -1430,6 +1619,16 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     env, budget, stageCosts,
     `Change request: ${changeRequest}\nPlan: ${plan.willBuild}\n` +
       `Reviewer found ${material.length} material issue(s): ${material.join("; ") || "none"}\n` +
+      `Review rounds: ${reviewRounds}. Unresolved after the loop: ${reviewUnresolved.length}${reviewOscillated ? " (oscillated -- the same findings recurred)" : ""}.\n` +
+      // The author's own judgement of the review is part of what there is to
+      // learn from. A run where the author repeatedly overruled the reviewer
+      // and was right teaches something different from one where it deferred
+      // and the fix failed -- and neither is visible from the outcome alone.
+      (reviewAssessments.length
+        ? `Author's assessment of the review: ${reviewAssessments
+            .map((a2, i) => `round ${i + 1}: ${a2.approach} -- ${a2.reasoning} (${a2.verdicts.filter((v) => !v.valid).length} of ${a2.verdicts.length} findings judged not valid)`)
+            .join("; ")}\n`
+        : "") +
       `Fix applied: ${fixApplied}. Fix held: ${fixHeld}.\n` +
       `Outcome: ${outcome}${refusalReason ? ` (${refusalReason})` : ""}.`,
   );

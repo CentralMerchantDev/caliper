@@ -117,6 +117,28 @@ export async function resolveReview(
   return { response, text };
 }
 
+/**
+ * A RE-REVIEW IS NOT A FRESH REVIEW.
+ *
+ * Modelled on the loop this project's author has actually built two products
+ * with (see cross-model-review, docs/workflow/REVIEW-LOOP.md): from iteration
+ * two onward the question changes. It is no longer "what is wrong with this" but
+ * "is each prior finding GENUINELY closed -- not merely claimed closed -- and
+ * did the fixes introduce anything new".
+ *
+ * `acceptedByDesign` is the same file that loop calls `--wontfix`, and it is
+ * passed into EVERY subsequent review for the same reason: an unsupervised loop
+ * will otherwise dutifully "fix" a deliberate decision, and then re-flag it, and
+ * then fix it again, forever. Here those entries come from the author model's
+ * own assessment of the findings -- a disagreement it had to justify in writing
+ * -- which turns an argument between two models into a recorded position.
+ */
+export interface ReReviewContext {
+  priorFindings: string[];
+  acceptedByDesign: string[];
+  round: number;
+}
+
 export async function reviewArtifact(
   apiKey: string,
   model: string,
@@ -125,11 +147,21 @@ export async function reviewArtifact(
   artifactHtml: string,
   maxTokens: number,
   priorLessons: string = "",
+  reReview: ReReviewContext | null = null,
 ): Promise<ReviewResult> {
   const client = new OpenAI({ apiKey, timeout: STAGE_CALL_TIMEOUT_MS });
   const start = Date.now();
+  const reReviewBlock = !reReview ? "" :
+    `THIS IS REVIEW ROUND ${reReview.round}. The author has since changed the code in response to your findings.\n\n` +
+    `Findings you raised last round:\n${reReview.priorFindings.map((f) => `- ${f}`).join("\n") || "- (none)"}\n\n` +
+    `For EACH of those, state whether it is genuinely closed by the current code -- not whether the author says it is. ` +
+    `A finding that is still open is still [MATERIAL]. Then look for anything the fixes have newly introduced.\n\n` +
+    (reReview.acceptedByDesign.length
+      ? `ACCEPTED BY DESIGN -- do not raise these again. The author considered each and gave a reason:\n${reReview.acceptedByDesign.map((f) => `- ${f}`).join("\n")}\n\n`
+      : "");
   const userContent =
     (priorLessons ? `Lessons recorded from previous runs -- apply any that are relevant here:\n${priorLessons}\n\n` : "") +
+    reReviewBlock +
     `Brief shown to the visitor (not the author model):\n${briefMarkdown}\n\n` +
     `Spec given to the author model:\n${authorPrompt}\n\n` +
     `Artifact:\n${artifactHtml}`;
