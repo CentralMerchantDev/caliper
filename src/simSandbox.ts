@@ -208,6 +208,27 @@ export async function runSimTests(
   isolateId: string,
   cpuMs = 1000,
 ): Promise<{ results: TestResult[]; fatalError?: string; wallTimeMs: number }> {
+  // NAME THE MISSING CAPABILITY.
+  //
+  // Nothing checked that the loader binding exists. Without it -- a Worker
+  // deployed with worker_loaders removed, or an account without the Workers
+  // Paid plan Dynamic Workers requires -- this got `undefined` and died several
+  // frames deep with "cannot read properties of undefined", surfacing to the
+  // visitor as an opaque stage error.
+  //
+  // The whole point of this project is that a system should say what is
+  // actually wrong. "The sandbox is not available on this deployment" is a fact
+  // a visitor can act on; a TypeError is not.
+  if (!loader || typeof loader.get !== "function") {
+    return {
+      results: [],
+      fatalError:
+        "the verification sandbox is not available on this deployment -- Dynamic Workers requires the Workers Paid plan, " +
+        "and nothing can be verified without it, so nothing will be shipped",
+      wallTimeMs: 0,
+    };
+  }
+
   const moduleSource = buildSimHarnessModule(sourceCode, tests);
   const start = Date.now();
   try {

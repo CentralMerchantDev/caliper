@@ -14,7 +14,7 @@ report what you find. Specifically:
 
 1. `git log --oneline -15` and read the commit messages. They are long on
    purpose and they explain *why*, not just what.
-2. Run `npm test` (356 node + 9 worker tests). Confirm green before you touch
+2. Run `npm test` (358 node + 9 worker tests). Confirm green before you touch
    anything, so that anything red later is yours.
 3. Run `node scripts/shoot.mjs` and look at the contact sheet. Judge the render
    yourself rather than trusting the priority list below.
@@ -129,7 +129,7 @@ and `maxHeight` rather than inventing new categories.
 
 ### 4. The tests
 
-`npm test` runs 356 node tests plus 9 Cloudflare Worker tests, and type-checks
+`npm test` runs 358 node tests plus 9 Cloudflare Worker tests, and type-checks
 first. Several assert real world invariants — buildings on dry land, no road
 mostly over water, no two land masses overlapping, every land mass reachable,
 plot classes inside their legal size range. If you change geometry and one goes
@@ -188,7 +188,7 @@ Anything that rewards looking closely.
 ## How to check your work
 
 ```powershell
-npm test                                   # 356 + 9, type-checks first
+npm test                                   # 358 + 9, type-checks first
 node scripts/shoot.mjs                     # full contact sheet to .shots/
 node scripts/shoot.mjs "Downtown close"    # one view
 ```

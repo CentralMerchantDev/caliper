@@ -308,3 +308,36 @@ for (const [name, src] of Object.entries(MUST_ALLOW)) {
       `FALSE POSITIVE -- ordinary code was rejected, which is how this check gets switched off:\n${src}`);
   });
 }
+
+// =============================================================================
+// A MISSING SANDBOX IS NAMED, NOT CRASHED THROUGH
+//
+// Nothing checked that the Worker Loader binding exists. A deployment without
+// it -- worker_loaders removed, or an account that has not got the Workers Paid
+// plan Dynamic Workers requires -- passed `undefined` into runSimTests and died
+// several frames deep with "cannot read properties of undefined", which reached
+// the visitor as an opaque stage error.
+//
+// This project's entire argument is that a system should say what is actually
+// wrong. "The sandbox is not available on this deployment" is something a
+// visitor can act on. A TypeError is not.
+//
+// And it must fail CLOSED: no sandbox means nothing can be verified, which
+// means nothing may ship.
+// =============================================================================
+test("a missing loader binding is reported as a fatal error, not a crash", async () => {
+  const { runSimTests } = await import("../src/simSandbox");
+  for (const absent of [undefined, null, {}, { get: "not a function" }]) {
+    const out = await runSimTests(absent as never, "export function tick(w){return w;}", [], "t");
+    assert.ok(out.fatalError, `a loader of ${JSON.stringify(absent)} must produce a fatalError, not throw`);
+    assert.match(out.fatalError, /sandbox is not available/i);
+    assert.deepEqual(out.results, [], "no results may be invented when nothing ran");
+  }
+});
+
+test("a fatal error from a missing sandbox stops the run", async () => {
+  // decideStillFailing is what turns "verification did not happen" into a
+  // refusal. An empty result set with a fatal error must never read as a pass.
+  const { decideStillFailing } = await import("../src/changePipeline");
+  assert.equal(decideStillFailing("the verification sandbox is not available on this deployment", [], []), true);
+});

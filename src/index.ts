@@ -798,14 +798,21 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       // Reports WHY, not just whether -- see pipelineAvailability. Read-only:
       // asking this question must never consume one of the visitor's runs.
       const enabled = liveRunsEnabled(env);
+      // A deployment without the loader binding cannot verify anything, so it
+      // cannot honestly run the pipeline at all. Say so at the top rather than
+      // letting someone start a run that is guaranteed to refuse.
+      const sandboxAvailable = !!env.LOADER && typeof (env.LOADER as { get?: unknown }).get === "function";
       const avail = await pipelineAvailability(env, clientIp(request));
       return json({
         enabled,
-        ok: enabled && avail.ok,
-        reason: !enabled ? "live-runs-off" : avail.reason,
-        detail: !enabled
-          ? "Live runs are switched off right now. The recorded run below shows the whole pipeline, free and unlimited."
-          : avail.detail,
+        sandboxAvailable,
+        ok: enabled && sandboxAvailable && avail.ok,
+        reason: !sandboxAvailable ? "sandbox-unavailable" : !enabled ? "live-runs-off" : avail.reason,
+        detail: !sandboxAvailable
+          ? "The verification sandbox is not available on this deployment, so no change can be checked -- and this system does not ship anything it has not checked. Previous real runs are below."
+          : !enabled
+            ? "Live runs are switched off right now. Previous real runs are below."
+            : avail.detail,
         runsUsed: avail.runsUsed,
         runsLimit: avail.runsLimit,
         dailyRemainingUsd: Number(avail.dailyRemainingUsd.toFixed(4)),
