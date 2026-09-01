@@ -84,12 +84,27 @@ export function buildSimHarnessModule(sourceCode: string, tests: SimTestCase[]):
 // The scanner that is supposed to reject that line is a separate defence and
 // has been fixed too, but a scanner is a filter and this is an invariant: the
 // judge must not be reachable from the dock. Snapshotting here costs nothing
-// and makes the whole class of attack impossible rather than merely detected.
+// and closes this route rather than merely detecting it. Narrowly: the bindings
+// the verdict travels through are captured above the splice and cannot be
+// reassigned. NOT a claim that a shared realm is safe -- the candidate runs
+// first, and anything not captured here is still reachable to it.
 // =============================================================================
 const __is = Object.is;
 const __keys = Object.keys;
 const __isArray = Array.isArray;
 const __hasOwn = Object.prototype.hasOwnProperty;
+// Capture EVERYTHING the verdict travels through, not just the comparator's
+// intrinsics. Two more were reachable after the first fix, both confirmed by
+// execution:
+//   Math.abs = () => 0;            -> every tolerance assertion passes
+//   JSON.stringify = () => '[...]' -> the results are replaced wholesale on the
+//                                     way out, whatever the tests actually did
+// The rule is not "protect __deepEqual". It is that nothing on the path from
+// running a test to reporting its result may be reachable by the code being
+// tested.
+const __abs = Math.abs;
+const __stringify = JSON.stringify;
+const __Response = Response;
 // (There was an Object.freeze here. It froze the function OBJECTS, which stops
 //  nothing: reassigning Object.is is a property write on Object, and in any
 //  case the comparators below read these const bindings and never touch
@@ -106,6 +121,12 @@ ${attachments}
 //     const _a = () => {}; __deepEqual = () => true;
 // and own the verdict exactly as before. Verified in a real ES module: it
 // returned true for __deepEqual(1, 2).
+//
+// This is defence in depth, not a proof. The candidate runs first, in the same
+// realm, and every intrinsic it can still reach is one more thing to have
+// captured. What is claimed here is narrow and true: the bindings the verdict
+// travels through are captured above the splice and cannot be reassigned. It
+// is not a claim that a shared realm is safe.
 //
 // A const declared BELOW the candidate is in the temporal dead zone while the
 // candidate runs, so an assignment to it throws instead of succeeding -- the
@@ -165,7 +186,7 @@ export default {
         const times = t.repeat && t.repeat > 0 ? t.repeat : 1;
         for (let i = 0; i < times; i++) actual = fn(actual, ...rest);
         const pass = typeof t.tolerance === "number"
-          ? typeof actual === "number" && Math.abs(actual - t.expected) <= t.tolerance
+          ? typeof actual === "number" && __abs(actual - t.expected) <= t.tolerance
           : t.partial
             ? __partialMatch(actual, t.expected)
             : __deepEqual(actual, t.expected);
@@ -174,7 +195,7 @@ export default {
         results.push({ name: t.name, pass: false, fn: t.fn, args: t.args, repeat: t.repeat, error: String((e && e.message) || e), stack: e && e.stack ? String(e.stack) : undefined });
       }
     }
-    return new Response(JSON.stringify(results), { headers: { "content-type": "application/json" } });
+    return new __Response(__stringify(results), { headers: { "content-type": "application/json" } });
   },
 };
 `;

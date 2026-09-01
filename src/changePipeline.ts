@@ -473,6 +473,7 @@ export interface ChangeEnv {
 function haltLedger(
   state: Pick<ChangeState, "stageCosts" | "budgetSpent" | "questionAsked" | "planGateReplyCount" | "runStartedAt">,
   waitingOn: "answer" | "plan-decision" | "review-decision" | "error-decision",
+  pastGate1 = false,
 ): ChangeLedger {
   const outcome =
     waitingOn === "answer" ? "halted-awaiting-answer"
@@ -488,7 +489,15 @@ function haltLedger(
     fixApplied: false,
     fixHeld: null,
     planGateReplyCount: state.planGateReplyCount,
-    planGateDecision: waitingOn === "answer" || waitingOn === "plan-decision" ? "pending" : "approve",
+    // Was `: "approve"` for everything else -- including waitingOn ===
+    // "error-decision", which is emitted for a stage error that can happen
+    // during grounding, before any human has seen Gate 1. That reported the
+    // plan gate approved for a gate nobody reached. Same defect the abandon
+    // branch had; this is its sibling, and fixing one and not the other is how
+    // it would have come back.
+    planGateDecision: waitingOn === "answer" || waitingOn === "plan-decision"
+      ? "pending"
+      : (pastGate1 ? "approve" : "not-reached"),
     reviewGateDecision: waitingOn === "review-decision" ? "pending" : "not-needed",
     questionAsked: state.questionAsked,
     totalWallTimeMs: Date.now() - state.runStartedAt,
@@ -1184,7 +1193,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       };
       await saveState(env.SPEND_KV, state);
       onEvent({ type: "halted", runId, waitingOn: "review-decision" });
-      const ledger = haltLedger(state, "review-decision");
+      const ledger = haltLedger(state, "review-decision", true);
       onEvent({ type: "ledger", ledger });
       return { runId, changeRequest, plan, finalCode: null, findings, ledger, completedAt: 0, reason: "" };
     }
@@ -1460,7 +1469,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     await saveState(env.SPEND_KV, state);
     onEvent({ type: "stage-error", runId, erroredAtStage: inFlightStage, errorMessage, costSoFarUsd: budget.spent, errorKind });
     onEvent({ type: "halted", runId, waitingOn: "error-decision" });
-    const ledger = haltLedger(state, "error-decision");
+    const ledger = haltLedger(state, "error-decision", pastGate1Approved);
     onEvent({ type: "ledger", ledger });
     return { runId, changeRequest, plan: state.plan ?? null, finalCode: state.implCode ?? null, findings: state.findings ?? [], ledger, completedAt: 0, reason: "" };
   }

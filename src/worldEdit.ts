@@ -172,6 +172,7 @@ export function parseRawWorldEdit(raw: { ops: unknown[] }): WorldEdit {
 }
 
 import JSON5 from "json5";
+import { parse } from "acorn";
 
 const DATA_BLOCKS = ["BUILDINGS", "OBJECT_TYPES", "PLACEMENTS", "SURFACES"] as const;
 
@@ -813,99 +814,12 @@ export interface IntegrityResult {
   actual?: unknown;
   error?: string;
 }
-
-/**
- * @param before  the source the run started from
- * @param after   the candidate source
- * @param dataEditExpected  true when the plan chose the data-edit path, where a
- *   world whose data is byte-identical means the edit did nothing
- */
-
-/**
- * Strip comments and string/template literals so a crude structural scan can
- * look at code shape without tripping over text that merely LOOKS like code.
- */
-function stripLiterals(src: string): string {
-  let out = "";
-  let i = 0;
-  const n = src.length;
-  while (i < n) {
-    const c = src[i], d = src[i + 1];
-    if (c === "/" && d === "/") { while (i < n && src[i] !== "\n") i++; continue; }
-    if (c === "/" && d === "*") { i += 2; while (i < n && !(src[i] === "*" && src[i + 1] === "/")) i++; i += 2; continue; }
-    if (c === '"' || c === "'" || c === "`") {
-      const q = c; i++;
-      while (i < n && src[i] !== q) { if (src[i] === "\\") i++; i++; }
-      i++; out += '""';
-      continue;
-    }
-    // REGEX LITERALS.
-    //
-    // A regex was passed through character by character, so
-    //     const RE = /[{]/;
-    // left an unmatched "{" in the stripped text. `depth` then never returned
-    // to zero, `atTop` was false for every line after it, and the rest of the
-    // file was treated as nested and never examined again -- one regex, and
-    // the whole scanner switched off silently. Verified with
-    // `const RE = /[{]/;` followed by a bare fetch(): reported clean.
-    //
-    // Distinguishing division from a regex needs the previous meaningful
-    // token: after a value (identifier, number, `)`, `]`) a slash is division;
-    // otherwise it opens a regex.
-    if (c === "/") {
-      // IS THIS A REGEX OR A DIVISION?
-      //
-      // It matters because a regex passed through raw can contain an unmatched
-      // brace -- `const RE = /[{]/;` -- and that unbalances the depth counter
-      // everything downstream relies on.
-      //
-      // The rule is the previous meaningful TOKEN, not the previous character.
-      // Two ways the character-only test was wrong, both constructed and
-      // confirmed:
-      //   * `return /[{]/.test(s)` -- `n` is a word character, so this was read
-      //     as division and the regex went through raw. The keyword list below
-      //     fixes it.
-      //   * `const x = "5" / 2;` -- strings have already become `""`, so the
-      //     previous character is a quote, which was NOT in the value set, so a
-      //     real division was read as a regex. It then ran to end of line,
-      //     swallowed the newline and ate the start of the next line with it.
-      let k = out.length - 1;
-      while (k >= 0 && /\s/.test(out[k])) k--;
-      const prev = k >= 0 ? out[k] : "";
-      let word = "";
-      for (let w = k; w >= 0 && /[A-Za-z_$]/.test(out[w]); w--) word = out[w] + word;
-      const KEYWORDS = new Set([
-        "return", "typeof", "instanceof", "in", "of", "new", "delete", "void",
-        "case", "do", "else", "yield", "await", "throw",
-      ]);
-      const isDivision = /[\w$)\]"]/.test(prev) && !KEYWORDS.has(word);
-      if (!isDivision) {
-        // Scan ahead for the closing slash. If the line ends first this is not
-        // a regex at all -- treat the slash as an ordinary character and do NOT
-        // consume the newline, which is what used to delete the next line's
-        // leading identifier along with it.
-        let j = i + 1, inClass = false, closed = false;
-        while (j < n) {
-          const ch = src[j];
-          if (ch === "\\") { j += 2; continue; }
-          if (ch === "[") inClass = true;
-          else if (ch === "]") inClass = false;
-          else if (ch === "/" && !inClass) { closed = true; break; }
-          else if (ch === "\n") break;
-          j++;
-        }
-        if (closed) {
-          i = j + 1;
-          while (i < n && /[a-z]/.test(src[i])) i++;   // flags
-          out += "/x/";
-          continue;
-        }
-      }
-    }
-    out += c; i++;
-  }
-  return out;
-}
+// stripLiterals lived here: a hand-rolled scanner that blanked strings,
+// comments and regexes so a brace counter could be trusted. It was the
+// foundation of four defeated versions of topLevelSideEffects -- most
+// memorably because it could not tell a regex from a division, so one
+// `const RE = /[{]/;` unbalanced the counter and switched the whole check off
+// in silence. acorn does this correctly and it is no longer needed.
 
 /**
  * Does this source contain any TOP-LEVEL executable statement?
@@ -923,141 +837,127 @@ function stripLiterals(src: string): string {
  * so it is refused rather than reasoned about.
  */
 export function topLevelSideEffects(source: string): string[] {
-  // SPLIT INTO STATEMENTS, NOT LINES.
+  // PARSED, NOT PATTERN-MATCHED.
   //
-  // Every version of this that scanned LINES was defeated by putting two
-  // statements on one, and every patch for that ("also look at the tail of a
-  // declaration line") fixed one prefix and left the others. Measured, not
-  // argued: a line-based pass caught
-  //     function tick(w){ return w; } Object.is = () => true;
-  // and missed the identical payload written
-  //     const _a = () => {}; Object.is = () => true;
-  // -- while ALSO rejecting an ordinary multi-line arrow, which is how a check
-  // like this ends up switched off.
+  // Four rounds of this check were written as a hand-rolled tokenizer, and an
+  // audit defeated every one of them -- each fix aimed at the single payload
+  // just demonstrated, each leaving the same idea spelled differently. The
+  // scoreboard, all reproduced by running the shipped code:
   //
-  // A line is not a unit of execution. A top-level statement is. So the source
-  // is split on semicolons and block ends at depth zero, and every resulting
-  // statement is classified on its own. Then "what else is on this line" stops
-  // being a question that can be answered wrongly.
-  const statements = topLevelStatements(stripLiterals(source));
-  const offenders: string[] = [];
-
-  for (const raw of statements) {
-    const stmt = raw.trim();
-    if (!stmt || stmt.startsWith("//") || stmt.startsWith("/*") || stmt.startsWith("*")) continue;
-
-    // `import` is deliberately absent from every allowed shape: the world is
-    // self-contained, and a top-level import is a remote code fetch.
-    if (/^import\b/.test(stmt)) { offenders.push(stmt.slice(0, 90)); continue; }
-
-    const isFn = /^(?:export\s+(?:default\s+)?)?(?:async\s+)?function\b/.test(stmt);
-    const isClass = /^(?:export\s+(?:default\s+)?)?class\b/.test(stmt);
-    const isBinding = /^(?:export\s+)?(?:const|let|var)\s/.test(stmt);
-    const isExportOnly = /^export\s*[{*]/.test(stmt);
-
-    if (isFn) continue;                        // a declaration defines, it does not run
-    if (isClass) {
-      // class static initialiser blocks DO run at definition time
-      if (/\bstatic\s*\{/.test(stmt)) offenders.push(stmt.slice(0, 90));
-      continue;
-    }
-    if (isExportOnly) continue;
-
-    if (!isBinding) { offenders.push(stmt.slice(0, 90)); continue; }   // a bare statement
-
-    // A binding is fine only if its initialiser cannot run anything.
-    const eq = stmt.indexOf("=");
-    if (eq === -1) continue;                   // `let x;` declares nothing executable
-    const rhs = stmt.slice(eq + 1);
-
-    // A FUNCTION EXPRESSION IS A DEFINITION, NOT A CALL. Its body runs when it
-    // is called, not at module load, so the body is not examined -- otherwise
-    //     const slug = (s) => s.replace(RE, "").trim();
-    // is rejected, and a check that rejects ordinary code gets removed.
-    //
-    // The discriminator is depth: in a real arrow the `=>` sits at depth zero,
-    //     (s) => s.replace(...)
-    // and in an IIFE it does not, because the wrapping paren is still open,
-    //     (() => { fetch(x); })()
-    if (isDefinitionInitialiser(rhs)) continue;
-
-    // Calls are not the only way an initialiser can do work:
-    //     var _y = (document.body.innerHTML = "<img src=x onerror=...>");
-    // is an ASSIGNMENT, contains no call, and defeated a call-only test. So an
-    // initialiser must neither invoke anything nor assign anything.
-    const calls = /[\w$)\]]\s*\(/.test(rhs);
-    const assigns = /(^|[^=!<>])=(?!=|>)/.test(rhs);
-    const reaches = /\b(document|window|globalThis|self|fetch|eval|Function|XMLHttpRequest|WebSocket|localStorage|import)\b/.test(rhs);
-    if (calls || assigns || reaches) offenders.push(stmt.slice(0, 90));
+  //   1. a declaration keyword was enough      -> `const _x = fetch(...)`
+  //   2. only the LINE PREFIX was examined     -> `function f(){} evil()`
+  //   3. the fix covered `function` and not    -> `const _a = () => {}; evil()`
+  //      `const`, and skipped the depth counter,
+  //      so ordinary multi-line arrows were REJECTED
+  //   4. splitting on statements missed commas -> `const a = () => {}, b = evil()`
+  //      and a regex after `)` still unbalanced the counter, and semicolon-free
+  //      source was never split at all
+  //
+  // Each round I fixed the instance and kept the approach. The approach was the
+  // bug: deciding what JavaScript DOES by looking at its characters is a
+  // parser, and a parser written by accident is one that is wrong in ways
+  // nobody has enumerated yet.
+  //
+  // So it parses now. acorn is 560 KB, has no dependencies, and bundles into a
+  // Worker. What runs at module load is exactly the top level of the Program
+  // body, which the AST states outright, and the rule below is a list of node
+  // types rather than a set of regexes hoping to approximate one. Ordinary code
+  // is no longer at risk of being rejected either -- an object literal whose
+  // values are arrows is obviously fine to a parser and was a false positive to
+  // every version of the tokenizer, including on this repo's own buildings.js.
+  let program: AcornProgram;
+  try {
+    program = parse(source, { ecmaVersion: 2022, sourceType: "module" }) as unknown as AcornProgram;
+  } catch (err) {
+    // Source that does not parse is not "clean". It cannot be shipped either
+    // way, and reporting it as having no side effects would be a yes that isn't
+    // true.
+    return [`source does not parse: ${String((err as Error)?.message ?? err).slice(0, 120)}`];
   }
 
+  const offenders: string[] = [];
+  const near = (node: { start: number; end: number }) =>
+    source.slice(node.start, Math.min(node.end, node.start + 90)).replace(/\s+/g, " ").trim();
+
+  /** Can evaluating this expression run anything at module load? */
+  const isInert = (node: AcornNode | null | undefined): boolean => {
+    if (!node) return true;                                   // `let x;`
+    switch (node.type) {
+      // A function is DEFINED here and CALLED later. Its body does not run at
+      // module load, so its body is not examined -- this is what every
+      // tokenizer version got wrong in one direction or the other.
+      case "ArrowFunctionExpression":
+      case "FunctionExpression":
+      case "ClassExpression":
+        return node.type !== "ClassExpression" || !hasStaticBlock(node);
+      case "Literal":
+      case "Identifier":
+        return true;
+      case "TemplateLiteral":
+        return (node.expressions ?? []).every(isInert);
+      case "ArrayExpression":
+        return (node.elements ?? []).every((e: AcornNode | null) => e === null || isInert(e));
+      case "ObjectExpression":
+        return (node.properties ?? []).every((prop: AcornNode) =>
+          prop.type === "Property" && !prop.computed && isInert(prop.value));
+      case "UnaryExpression":
+        return node.operator !== "delete" && isInert(node.argument);
+      case "BinaryExpression":
+        return isInert(node.left) && isInert(node.right);
+      case "ConditionalExpression":
+        return isInert(node.test) && isInert(node.consequent) && isInert(node.alternate);
+      default:
+        // CallExpression, NewExpression, AssignmentExpression, AwaitExpression,
+        // TaggedTemplateExpression, MemberExpression (a getter can run), and
+        // anything a future edition adds. Unknown means no.
+        return false;
+    }
+  };
+
+  const hasStaticBlock = (node: AcornNode): boolean =>
+    (node.body?.body ?? []).some((el: AcornNode) => el.type === "StaticBlock");
+
+  const checkStatement = (node: AcornNode): void => {
+    switch (node.type) {
+      case "FunctionDeclaration":
+      case "EmptyStatement":
+        return;
+      case "ClassDeclaration":
+        // A class static initialiser block runs at definition time.
+        if (hasStaticBlock(node)) offenders.push(near(node));
+        return;
+      case "VariableDeclaration":
+        // EVERY declarator, not just the first. `const a = () => {}, b = evil()`
+        // was clean for a whole round because the first one was a function.
+        for (const d of node.declarations ?? []) {
+          if (!isInert(d.init)) offenders.push(near(d));
+        }
+        return;
+      case "ExportNamedDeclaration":
+      case "ExportDefaultDeclaration":
+        if (node.declaration) checkStatement(node.declaration);
+        return;                                    // `export { a }` re-exports, runs nothing
+      case "ImportDeclaration":
+        // The world is self-contained; a top-level import is a remote fetch.
+        offenders.push(near(node));
+        return;
+      default:
+        offenders.push(near(node));                // expression statements, loops, await, labels
+    }
+  };
+
+  for (const node of program.body) checkStatement(node);
   return offenders;
 }
 
-/**
- * Is this initialiser a function DEFINITION (which does not run) rather than an
- * expression that does work? See the note at the call site for why depth is the
- * discriminator.
- */
-function isDefinitionInitialiser(rhs: string): boolean {
-  const r = rhs.trim().replace(/;+$/, "");
-  let d = 0;
-  for (let i = 0; i < r.length; i++) {
-    const ch = r[i];
-    if (ch === "(" || ch === "[" || ch === "{") d++;
-    else if (ch === ")" || ch === "]" || ch === "}") d--;
-    else if (ch === "=" && r[i + 1] === ">" && d === 0) return true;
-  }
-  if (!/^(?:async\s+)?function\b/.test(r)) return false;
-  // a function expression counts only if NOTHING follows its body, so
-  // `function(){}()` -- an IIFE -- is still rejected
-  d = 0;
-  for (let i = 0; i < r.length; i++) {
-    const ch = r[i];
-    if (ch === "{") d++;
-    else if (ch === "}") {
-      d--;
-      if (d === 0) return r.slice(i + 1).trim().length === 0;
-    }
-  }
-  return false;
-}
-
-/**
- * Split literal-stripped source into top-level statements.
- *
- * A statement ends at a depth-zero `;`, or at the `}` that closes a depth-zero
- * block (a function or class declaration, which needs no semicolon). Anything
- * nested is part of the statement that opened it, which is what makes a
- * multi-line function body invisible to the classifier above -- correctly, since
- * its contents do not run at module load.
- */
-function topLevelStatements(code: string): string[] {
-  const out: string[] = [];
-  let depth = 0, buf = "";
-  for (let i = 0; i < code.length; i++) {
-    const ch = code[i];
-    buf += ch;
-    if (ch === "(" || ch === "[" || ch === "{") depth++;
-    else if (ch === ")" || ch === "]" || ch === "}") {
-      depth--;
-      if (depth < 0) depth = 0;
-      if (depth === 0 && ch === "}") {
-        // `}` closes a declaration body only when the statement began as one;
-        // an object literal binding is closed by its own `;` instead, so let
-        // the semicolon case handle that and avoid splitting mid-statement.
-        const t = buf.trim();
-        if (/^(?:export\s+(?:default\s+)?)?(?:async\s+)?(?:function|class)\b/.test(t)) {
-          out.push(t); buf = "";
-        }
-      }
-    } else if (ch === ";" && depth === 0) {
-      out.push(buf.trim()); buf = "";
-    }
-  }
-  if (buf.trim()) out.push(buf.trim());
-  return out;
-}
+/** The slice of acorn's AST this file needs. acorn ships no types of its own. */
+type AcornNode = {
+  type: string;
+  start: number;
+  end: number;
+  [key: string]: unknown;
+} & Record<string, any>;
+type AcornProgram = { body: AcornNode[] };
 
 export function worldIntegrityChecks(before: string, after: string, dataEditExpected: boolean): IntegrityResult[] {
   const out: IntegrityResult[] = [];
