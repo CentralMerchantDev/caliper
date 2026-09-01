@@ -144,7 +144,7 @@ interview him.
 ## Facts worth having
 
 - Deploy: `npx wrangler deploy` from the repo root. Not `wrangler dev`.
-- Live selftest: `/sim-selftest` runs the real regression suite in the real sandbox.
+- Live selftest: `/sim-selftest` runs the real regression suite in the real sandbox. Authorized only now (`Authorization: Bearer <UNLOCK_CODE>`) -- it costs a Dynamic Worker invocation per request.
 - Spend caps: 3 live runs per IP per day; $2 daily, $7 weekly, $20 monthly across both vendors,
   atomic via a Durable Object because KV can be raced.
 - Per-run ceiling: $0.14 data-edit path, $0.23 source-edit path. Real runs land $0.04–0.08.

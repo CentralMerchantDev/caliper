@@ -127,7 +127,7 @@ the page's live-run feature is enforced the same way — see `src/rateLimit.ts`.
 
 Every generated function runs inside a Cloudflare Dynamic Worker — a fresh V8 isolate with no
 bindings and no network access. That isolation was checked by writing code that deliberately
-tries to escape it (`src/attacks.ts`, `GET /security-check` on the deployed Worker), run
+tries to escape it (`src/attacks.ts`, `GET /security-check` — authorized only, since it runs ten sandbox invocations and costs real CPU; pass `Authorization: Bearer <UNLOCK_CODE>`), run
 against the real production edge, not just read about in Cloudflare's docs:
 
 - Network access (`fetch()`) throws immediately.

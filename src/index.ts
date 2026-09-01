@@ -8,7 +8,7 @@ import type { GenerationResult, TestResult, Task } from "./types";
 import { SIM_BASELINE_SOURCE } from "./simBaseline";
 import { SIM_REGRESSION_SUITE } from "./simRegression";
 import { runSimTests } from "./simSandbox";
-import { runChangePipeline, loadInstructions, deriveHistoryReason, type ChangeEvent, type ChangeRecord } from "./changePipeline";
+import { runChangePipeline, loadInstructions, deriveHistoryReason, recordPlanDecision, type ChangeEvent, type ChangeRecord } from "./changePipeline";
 import {
   getPipelineBudgetStatus,
   checkInputGuard,
@@ -951,28 +951,12 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       const approve = payload.approve === true || payload.approve === "true";
       if (!runId) return json({ error: "pass runId & approve (boolean) via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
-      await env.SPEND_KV.put(`change/plan-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
-      // THE ACKNOWLEDGEMENT THE PIPELINE ASKS FOR HAS TO BE WRITABLE.
-      //
-      // changePipeline refuses an approval on a false premise unless
-      // `change/plan-decision-ack/<runId>` holds one -- and until now NOTHING
-      // in the repository wrote that key. So the visitor was shown a plan, told
-      // "it needs a person", clicked Approve, and the run terminated as
-      // refused-plan with planGateDecision "reject". The human said yes and the
-      // ledger recorded a no. On a project whose artefact is an honest ledger,
-      // that is the worst possible place to be wrong.
-      //
-      // It stays a SEPARATE, explicit field rather than being implied by
-      // `approve`, because the whole point is that overruling grounding must be
-      // deliberate: a stale tab or a replayed decision posts `approve`, not
-      // this.
-      if (approve && (payload.acknowledgeFalsePremise === true || payload.acknowledgeFalsePremise === "true")) {
-        await env.SPEND_KV.put(
-          `change/plan-decision-ack/${runId}`,
-          JSON.stringify({ approve: true }),
-          { expirationTtl: 600 },
-        );
-      }
+      await recordPlanDecision(
+        env.SPEND_KV,
+        runId,
+        approve,
+        payload.acknowledgeFalsePremise === true || payload.acknowledgeFalsePremise === "true",
+      );
       const resumeTicket = await createResumeTicket(runId);
       return json({ ok: true, resumeTicket });
     }

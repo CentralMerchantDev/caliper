@@ -90,15 +90,27 @@ const __is = Object.is;
 const __keys = Object.keys;
 const __isArray = Array.isArray;
 const __hasOwn = Object.prototype.hasOwnProperty;
-const __freeze = Object.freeze;
-__freeze(__is); __freeze(__keys); __freeze(__isArray);
+// (There was an Object.freeze here. It froze the function OBJECTS, which stops
+//  nothing: reassigning Object.is is a property write on Object, and in any
+//  case the comparators below read these const bindings and never touch
+//  Object.is again. It was reassurance, not a mechanism, so it is gone.)
 
 ${sourceCode}
 
 const __fns = {};
 ${attachments}
 
-function __deepEqual(a, b) {
+// A const, NOT a function declaration. A function declaration hoists into a mutable
+// module-scope binding, so capturing the intrinsics above only moved the target
+// one level out -- the candidate, spliced in below, could simply write
+//     const _a = () => {}; __deepEqual = () => true;
+// and own the verdict exactly as before. Verified in a real ES module: it
+// returned true for __deepEqual(1, 2).
+//
+// A const declared BELOW the candidate is in the temporal dead zone while the
+// candidate runs, so an assignment to it throws instead of succeeding -- the
+// same protection __fns already had, by accident rather than design.
+const __deepEqual = (a, b) => {
   if (__is(a, b)) return true;
   if (a === null || b === null || a === undefined || b === undefined) return false;
   if (typeof a !== typeof b) return false;
@@ -114,7 +126,7 @@ function __deepEqual(a, b) {
     return true;
   }
   return false;
-}
+};
 
 // Every key in "expected" must match in "actual" (recursively into nested
 // objects); extra keys "actual" has that "expected" doesn't mention are
@@ -122,7 +134,7 @@ function __deepEqual(a, b) {
 // are treated as a subset. Used for model-proposed plan criteria, which
 // often assert only the part of a return value that changed; the hand-
 // authored regression suite never uses this, only __deepEqual.
-function __partialMatch(actual, expected) {
+const __partialMatch = (actual, expected) => {
   if (expected === null || typeof expected !== "object" || __isArray(expected)) {
     return __deepEqual(actual, expected);
   }
@@ -131,7 +143,7 @@ function __partialMatch(actual, expected) {
     if (!__hasOwn.call(actual, k) || !__partialMatch(actual[k], expected[k])) return false;
   }
   return true;
-}
+};
 
 const __tests = ${testsLiteral};
 

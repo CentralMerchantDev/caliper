@@ -84,44 +84,61 @@ test("a criterion may only probe the four functions the world exports", () => {
 // and the run terminated as refused-plan with planGateDecision "reject". The
 // human said yes; the ledger said they said no.
 //
-// This pins the contract from the route's side, because that is where the fix
-// lives and where it would silently rot: the acknowledgement must be a separate
-// deliberate field, and a bare `approve` must NOT be enough to write it.
+// THE FIRST VERSION OF THIS TEST WAS A TAUTOLOGY. It re-typed the route's `if`
+// statement inside the test body and asserted against its own copy, so deleting
+// the route entirely would not have failed it -- in a test whose stated purpose
+// was to stop exactly that rotting. It drives the real handler now.
 // =============================================================================
+// src/index.ts imports `cloudflare:workers` and cannot be loaded under Node at
+// all, so the route's logic lives in changePipeline.recordPlanDecision -- next
+// to the checkDecision that reads these same keys -- and the route is a
+// four-argument call to it. This drives that function, so deleting or breaking
+// it fails here.
+import { recordPlanDecision } from "../src/changePipeline";
 
-function makeKV() {
+function memoryKV() {
   const store = new Map<string, string>();
   return {
     store,
     get: async (k: string) => store.get(k) ?? null,
     put: async (k: string, v: string) => { store.set(k, v); },
     delete: async (k: string) => { store.delete(k); },
-  };
+  } as unknown as KVNamespace & { store: Map<string, string> };
 }
 
 test("an explicit acknowledgement writes the key the pipeline reads", async () => {
-  const kv = makeKV();
-  const runId = "run-1";
-  const approve = true;
-  const payload: Record<string, unknown> = { runId, approve: true, acknowledgeFalsePremise: true };
-
-  // the route's logic, isolated
-  await kv.put(`change/plan-decision/${runId}`, JSON.stringify({ approve }));
-  if (approve && (payload.acknowledgeFalsePremise === true || payload.acknowledgeFalsePremise === "true")) {
-    await kv.put(`change/plan-decision-ack/${runId}`, JSON.stringify({ approve: true }));
-  }
-  assert.equal(await kv.get(`change/plan-decision-ack/${runId}`), JSON.stringify({ approve: true }),
-    "the pipeline reads change/plan-decision-ack/<runId>; if nothing writes it, every override is refused");
+  const kv = memoryKV();
+  await recordPlanDecision(kv, "ack-1", true, true);
+  assert.equal(
+    await kv.get("change/plan-decision-ack/ack-1"),
+    JSON.stringify({ approve: true }),
+    "the pipeline reads change/plan-decision-ack/<runId>; if nothing writes it, every human override is silently refused",
+  );
+  assert.equal(await kv.get("change/plan-decision/ack-1"), JSON.stringify({ approve: true }));
 });
 
 test("a bare approval does NOT acknowledge a false premise", async () => {
-  const kv = makeKV();
-  const runId = "run-2";
-  const payload: Record<string, unknown> = { runId, approve: true };  // no acknowledgement
-  await kv.put(`change/plan-decision/${runId}`, JSON.stringify({ approve: true }));
-  if (payload.acknowledgeFalsePremise === true || payload.acknowledgeFalsePremise === "true") {
-    await kv.put(`change/plan-decision-ack/${runId}`, JSON.stringify({ approve: true }));
-  }
-  assert.equal(await kv.get(`change/plan-decision-ack/${runId}`), null,
-    "overruling grounding must be deliberate -- a replayed or stale `approve` must not carry the override");
+  const kv = memoryKV();
+  await recordPlanDecision(kv, "ack-2", true, false);
+  assert.equal(
+    await kv.get("change/plan-decision-ack/ack-2"), null,
+    "overruling grounding must be deliberate -- a replayed or stale `approve` must not carry the override",
+  );
+  assert.equal(await kv.get("change/plan-decision/ack-2"), JSON.stringify({ approve: true }));
+});
+
+test("an acknowledgement attached to a REJECTION is not recorded as an approval", async () => {
+  const kv = memoryKV();
+  await recordPlanDecision(kv, "ack-3", false, true);
+  assert.equal(await kv.get("change/plan-decision-ack/ack-3"), null);
+  assert.equal(await kv.get("change/plan-decision/ack-3"), JSON.stringify({ approve: false }));
+});
+
+test("checkDecision reads back exactly what recordPlanDecision wrote", async () => {
+  // The two halves of the contract, exercised together -- the defect was that
+  // they had never met.
+  const { checkDecision } = await import("../src/changePipeline");
+  const kv = memoryKV();
+  await recordPlanDecision(kv, "ack-4", true, true);
+  assert.equal(await checkDecision(kv, "change/plan-decision-ack/ack-4"), "approve");
 });

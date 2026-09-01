@@ -358,6 +358,34 @@ async function clearState(kv: KVNamespace, runId: string): Promise<void> {
  * treated the same as "no decision yet". Malformed and absent are the same
  * case -- both mean "no real decision exists" -- so both now return null
  * and leave the run halted rather than crashing the request. */
+/**
+ * Record a plan-gate decision, and the acknowledgement that goes with it.
+ *
+ * Lives here, next to the checkDecision that READS these keys, rather than
+ * inline in the route, for two reasons. The writer and the reader now sit eight
+ * lines apart, which is how the original defect -- a key the pipeline required
+ * and nothing ever wrote -- stops being possible to introduce without noticing.
+ * And src/index.ts imports `cloudflare:workers`, so a test that drives the
+ * route cannot run under Node at all; the first version of that test worked
+ * around this by re-typing the route's `if` inside the test body, which meant
+ * deleting the route would not have failed it.
+ *
+ * The acknowledgement is a SEPARATE argument on purpose. Overruling grounding
+ * has to be deliberate: a stale tab or a replayed decision carries `approve`,
+ * not this.
+ */
+export async function recordPlanDecision(
+  kv: KVNamespace,
+  runId: string,
+  approve: boolean,
+  acknowledgeFalsePremise: boolean,
+): Promise<void> {
+  await kv.put(`change/plan-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
+  if (approve && acknowledgeFalsePremise) {
+    await kv.put(`change/plan-decision-ack/${runId}`, JSON.stringify({ approve: true }), { expirationTtl: 600 });
+  }
+}
+
 export async function checkDecision(kv: KVNamespace, key: string): Promise<"approve" | "reject" | null> {
   const raw = await kv.get(key);
   if (!raw) return null;
@@ -480,6 +508,7 @@ function buildAbandonedAfterErrorLedger(
   questionAsked: boolean,
   planGateReplyCount: number,
   runStartedAt: number,
+  planGateDecision: ChangeLedger["planGateDecision"] = "not-reached",
 ): ChangeLedger {
   return {
     outcome: "abandoned-after-error",
@@ -489,7 +518,12 @@ function buildAbandonedAfterErrorLedger(
     reviewFoundNits: 0,
     fixApplied: false,
     fixHeld: null,
-    planGateDecision: "not-reached",
+    // Passed in, not assumed. Hardcoding "not-reached" fixed the old wrong
+    // answer ("approve" for a gate nobody reached) by introducing the opposite
+    // wrong answer: a run that errored AFTER a human approved the plan, and was
+    // then abandoned, said the plan gate was never reached. The caller knows
+    // which it was.
+    planGateDecision,
     reviewGateDecision: "not-needed",
     questionAsked,
     planGateReplyCount,
@@ -667,7 +701,10 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     const decision = await checkDecision(env.SPEND_KV, `change/error-decision/${runId}`);
     if (decision === "reject") {
       await clearState(env.SPEND_KV, runId);
-      const ledger = buildAbandonedAfterErrorLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+      const ledger = buildAbandonedAfterErrorLedger(
+        stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt,
+        pastGate1Approved ? "approve" : "not-reached",
+      );
       onEvent({ type: "stopped" });
       onEvent({ type: "ledger", ledger });
       return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan: existing.plan ?? null, finalCode: null, findings: existing.findings ?? [], ledger });

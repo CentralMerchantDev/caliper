@@ -103,7 +103,7 @@ export async function evaluateCriterion(criterion: ProposedCriterion, probeCandi
         return { name: criterion.description, pass, fn: criterion.fn, args: criterion.args, actual: r.actual, expected: `field "${criterion.field}" has type "${criterion.expectedType}"` };
       }
       const count = Array.isArray(value) ? value.length : present ? 1 : 0;
-      const pass = count >= (criterion.minCount ?? 0);
+      const pass = count >= (criterion.minCount ?? 1)   // `?? 0` was vacuously true, and now contradicts criteria.ts's minCount >= 1 rule;
       return { name: criterion.description, pass, fn: criterion.fn, args: criterion.args, actual: r.actual, expected: `field "${criterion.field}" has count >= ${criterion.minCount}` };
     }
 

