@@ -65,7 +65,6 @@ function monthKey(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
-import { SIM_BASELINE_SOURCE } from "./simBaseline";
 
 export class SpendCounterLogic {
   constructor(private storage: StorageLike) {}
@@ -105,6 +104,40 @@ export class SpendCounterLogic {
     if (used >= limit) return { ok: false, used, limit };
     await this.storage.put(key, used + 1);
     return { ok: true, used: used + 1, limit };
+  }
+
+  /**
+   * Give a claimed run back.
+   *
+   * A visitor's three daily runs used to be spent BEFORE the concurrency lease
+   * was taken, so three people arriving at once burned a run each and got a 429
+   * whose message talked about a daily limit that was not the reason. A run
+   * that never started should not be charged to anyone.
+   *
+   * Floors at zero: refunding more than was claimed would be a way to earn
+   * runs, and this is reachable from a request path.
+   */
+  async refundRun(ip: string, day: string): Promise<{ used: number }> {
+    const key = `ratelimit/${ip}/${day}`;
+    const used = (await this.storage.get<number>(key)) ?? 0;
+    const next = used > 0 ? used - 1 : 0;
+    await this.storage.put(key, next);
+    return { used: next };
+  }
+
+  /**
+   * How many runs has this address used today? Reads, consumes nothing.
+   *
+   * Exists because /live-status was reporting the per-IP count from a KV key
+   * that the enforcement path -- claimRun, right above -- does not write. So
+   * the page always said "0 of 3 used" and "you can run this", right up until
+   * /change-run answered 429. The endpoint written specifically to stop the
+   * visitor being told something false was telling them something false.
+   *
+   * Same key, same day format, same object. One source of truth.
+   */
+  async runsUsed(ip: string, day: string): Promise<number> {
+    return (await this.storage.get<number>(`ratelimit/${ip}/${day}`)) ?? 0;
   }
 
   async reserve(estimateUsd: number, caps: SpendCaps): Promise<ReserveResult> {
@@ -300,6 +333,14 @@ export class SpendCounterLogic {
 export async function handleSpendCounterRequest(logic: SpendCounterLogic, request: Request): Promise<Response> {
   const url = new URL(request.url);
   try {
+    if (url.pathname === "/refund-run" && request.method === "POST") {
+      const { ip, day } = (await request.json()) as { ip: string; day: string };
+      return Response.json(await logic.refundRun(ip, day));
+    }
+    if (url.pathname === "/runs-used" && request.method === "POST") {
+      const { ip, day } = (await request.json()) as { ip: string; day: string };
+      return Response.json({ used: await logic.runsUsed(ip, day) });
+    }
     if (url.pathname === "/claim-run" && request.method === "POST") {
       const body = (await request.json()) as { ip: string; day: string; limit: number };
       return Response.json(await logic.claimRun(body.ip, body.day, body.limit));

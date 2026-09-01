@@ -9,8 +9,9 @@
     "tail": "wrangler tail",
     "cf-typegen": "wrangler types",
     "build": "wrangler deploy --dry-run",
-    "test": "node test/run.mjs && vitest run",
-    "test:e2e": "playwright test"
+    "test": "npm run typecheck && node test/run.mjs && vitest run",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

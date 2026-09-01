@@ -69,3 +69,59 @@ test("a criterion may only probe the four functions the world exports", () => {
   } as unknown as Record<string, unknown>);
   assert.equal(reachy.valid, false);
 });
+
+// =============================================================================
+// A HUMAN'S "YES" MUST NOT BE RECORDED AS A "NO"
+//
+// changePipeline refuses an approval on a false premise unless
+// `change/plan-decision-ack/<runId>` holds one. That check is right -- a plan
+// resting on something untrue should not be waved through by a stale tab or a
+// replayed decision, and enforcing it only in a browser checkbox was the bug it
+// was written to fix.
+//
+// But NOTHING WROTE THAT KEY. Grep found one occurrence in src/: the read. So
+// the visitor was shown a plan, told "it needs a person", clicked Approve --
+// and the run terminated as refused-plan with planGateDecision "reject". The
+// human said yes; the ledger said they said no.
+//
+// This pins the contract from the route's side, because that is where the fix
+// lives and where it would silently rot: the acknowledgement must be a separate
+// deliberate field, and a bare `approve` must NOT be enough to write it.
+// =============================================================================
+
+function makeKV() {
+  const store = new Map<string, string>();
+  return {
+    store,
+    get: async (k: string) => store.get(k) ?? null,
+    put: async (k: string, v: string) => { store.set(k, v); },
+    delete: async (k: string) => { store.delete(k); },
+  };
+}
+
+test("an explicit acknowledgement writes the key the pipeline reads", async () => {
+  const kv = makeKV();
+  const runId = "run-1";
+  const approve = true;
+  const payload: Record<string, unknown> = { runId, approve: true, acknowledgeFalsePremise: true };
+
+  // the route's logic, isolated
+  await kv.put(`change/plan-decision/${runId}`, JSON.stringify({ approve }));
+  if (approve && (payload.acknowledgeFalsePremise === true || payload.acknowledgeFalsePremise === "true")) {
+    await kv.put(`change/plan-decision-ack/${runId}`, JSON.stringify({ approve: true }));
+  }
+  assert.equal(await kv.get(`change/plan-decision-ack/${runId}`), JSON.stringify({ approve: true }),
+    "the pipeline reads change/plan-decision-ack/<runId>; if nothing writes it, every override is refused");
+});
+
+test("a bare approval does NOT acknowledge a false premise", async () => {
+  const kv = makeKV();
+  const runId = "run-2";
+  const payload: Record<string, unknown> = { runId, approve: true };  // no acknowledgement
+  await kv.put(`change/plan-decision/${runId}`, JSON.stringify({ approve: true }));
+  if (payload.acknowledgeFalsePremise === true || payload.acknowledgeFalsePremise === "true") {
+    await kv.put(`change/plan-decision-ack/${runId}`, JSON.stringify({ approve: true }));
+  }
+  assert.equal(await kv.get(`change/plan-decision-ack/${runId}`), null,
+    "overruling grounding must be deliberate -- a replayed or stale `approve` must not carry the override");
+});

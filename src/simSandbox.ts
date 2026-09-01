@@ -44,7 +44,13 @@ function toJsLiteral(value: unknown): string {
   throw new Error(`Cannot serialize a value of type ${typeof value} into the sim sandbox harness`);
 }
 
-function buildSimHarnessModule(sourceCode: string, tests: SimTestCase[]): string {
+/**
+ * Exported so the "comparators are captured before the candidate" invariant can
+ * be asserted against the module this actually builds, rather than against the
+ * text of this file. A test that greps source passes the moment someone
+ * reformats; a test that reads the generated module cannot.
+ */
+export function buildSimHarnessModule(sourceCode: string, tests: SimTestCase[]): string {
   const testsLiteral = toJsLiteral(tests);
   // Worker Loader modules are real ES modules, so top-level "function
   // tick(){}" declarations in the embedded source are module-scoped, not
@@ -61,22 +67,48 @@ function buildSimHarnessModule(sourceCode: string, tests: SimTestCase[]): string
     .map((name) => `try { __fns[${JSON.stringify(name)}] = ${name}; } catch (e) {}`)
     .join("\n");
   return `
+// =============================================================================
+// THE COMPARATORS ARE CAPTURED BEFORE THE CANDIDATE RUNS.
+//
+// The model's source is spliced in below, at module scope, and it executes
+// BEFORE __deepEqual is ever called. So anything it does to the intrinsics
+// __deepEqual depends on, it does to the judge:
+//
+//     function tick(w){ return w; } Object.is = () => true;
+//
+// -- one line, and every regression case and every acceptance criterion
+// compares equal. The suite reports 9/9 and 5/5, convergence is declared, and
+// the run ships. "A system that only says yes when yes is true" would be
+// saying yes because the thing under test told it to.
+//
+// The scanner that is supposed to reject that line is a separate defence and
+// has been fixed too, but a scanner is a filter and this is an invariant: the
+// judge must not be reachable from the dock. Snapshotting here costs nothing
+// and makes the whole class of attack impossible rather than merely detected.
+// =============================================================================
+const __is = Object.is;
+const __keys = Object.keys;
+const __isArray = Array.isArray;
+const __hasOwn = Object.prototype.hasOwnProperty;
+const __freeze = Object.freeze;
+__freeze(__is); __freeze(__keys); __freeze(__isArray);
+
 ${sourceCode}
 
 const __fns = {};
 ${attachments}
 
 function __deepEqual(a, b) {
-  if (Object.is(a, b)) return true;
+  if (__is(a, b)) return true;
   if (a === null || b === null || a === undefined || b === undefined) return false;
   if (typeof a !== typeof b) return false;
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  if (__isArray(a) || __isArray(b)) {
+    if (!__isArray(a) || !__isArray(b) || a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) if (!__deepEqual(a[i], b[i])) return false;
     return true;
   }
   if (typeof a === "object") {
-    const ak = Object.keys(a), bk = Object.keys(b);
+    const ak = __keys(a), bk = __keys(b);
     if (ak.length !== bk.length) return false;
     for (const k of ak) if (!__deepEqual(a[k], b[k])) return false;
     return true;
@@ -91,12 +123,12 @@ function __deepEqual(a, b) {
 // often assert only the part of a return value that changed; the hand-
 // authored regression suite never uses this, only __deepEqual.
 function __partialMatch(actual, expected) {
-  if (expected === null || typeof expected !== "object" || Array.isArray(expected)) {
+  if (expected === null || typeof expected !== "object" || __isArray(expected)) {
     return __deepEqual(actual, expected);
   }
-  if (actual === null || typeof actual !== "object" || Array.isArray(actual)) return false;
-  for (const k of Object.keys(expected)) {
-    if (!(k in actual) || !__partialMatch(actual[k], expected[k])) return false;
+  if (actual === null || typeof actual !== "object" || __isArray(actual)) return false;
+  for (const k of __keys(expected)) {
+    if (!__hasOwn.call(actual, k) || !__partialMatch(actual[k], expected[k])) return false;
   }
   return true;
 }

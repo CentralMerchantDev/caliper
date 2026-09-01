@@ -140,9 +140,6 @@ export class CircuitOpenError extends Error {
 function dayKey(): string {
   return new Date().toISOString().slice(0, 10);
 }
-function monthKey(): string {
-  return new Date().toISOString().slice(0, 7);
-}
 
 // ---------- 7. Input guard (free-form only) ----------
 
@@ -196,9 +193,29 @@ export async function pipelineAvailability(
 ): Promise<{ ok: boolean; reason: string | null; detail: string | null; runsUsed: number; runsLimit: number; dailyRemainingUsd: number }> {
   const runsLimit = CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP;
   let runsUsed = 0;
+  // READ THE COUNTER THAT IS ACTUALLY ENFORCED.
+  //
+  // This read KV at `pipeline/ratelimit/...`. claimPipelineRun, when the
+  // Durable Object is bound -- which it always is in production -- returns
+  // before ever touching KV and increments `ratelimit/...` in DO STORAGE
+  // instead. Different store, different key. So runsUsed was permanently 0,
+  // the per-IP branch below could never fire, and a visitor who had used all
+  // three runs got told "The run could not be started" -- the exact generic
+  // non-answer this function was written to replace.
+  //
+  // Mirror what the enforcer does: DO when it is there, KV only when it isn't.
   try {
-    const raw = await env.SPEND_KV.get(`pipeline/ratelimit/${ip}/${dayKey()}`);
-    runsUsed = raw ? parseInt(raw, 10) || 0 : 0;
+    if (env.SPEND_COUNTER) {
+      const stub = env.SPEND_COUNTER.get(env.SPEND_COUNTER.idFromName("global"));
+      const res = await stub.fetch("https://do/runs-used", {
+        method: "POST",
+        body: JSON.stringify({ ip, day: dayKey() }),
+      });
+      if (res.ok) runsUsed = ((await res.json()) as { used: number }).used ?? 0;
+    } else {
+      const raw = await env.SPEND_KV.get(`pipeline/ratelimit/${ip}/${dayKey()}`);
+      runsUsed = raw ? parseInt(raw, 10) || 0 : 0;
+    }
   } catch { /* counter unavailable -- reported as 0, never as a block */ }
 
   let dailyRemainingUsd: number = CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD;
@@ -215,13 +232,31 @@ export async function pipelineAvailability(
       detail: `You have used all ${runsLimit} live runs for today from this address. That cap is enforced in code, not by good intentions -- it is the same mechanism the write-up describes. The recorded run below shows the whole pipeline, free and unlimited.`,
     };
   }
-  if (dailyRemainingUsd < CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT) {
+  // Blocking as soon as the remaining budget is under a whole run's CEILING
+  // refused the last 7% of every day for runs the server would happily have
+  // started -- spend is enforced per model call, not per run, and the first
+  // call costs about $0.0025. A false "no" is still a wrong answer, so this
+  // blocks only when there is not enough left for the pipeline's first stage
+  // to be reserved at all.
+  if (dailyRemainingUsd < 0.01) {
     return {
       ok: false, reason: "daily-cap", runsUsed, runsLimit, dailyRemainingUsd,
       detail: `Today's spend cap is exhausted ($${CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD.toFixed(2)}/day, held in a Durable Object). The pipeline fails closed rather than overspending -- that is the intended behaviour, not an outage. The recorded run below shows the whole pipeline, free and unlimited.`,
     };
   }
   return { ok: true, reason: null, detail: null, runsUsed, runsLimit, dailyRemainingUsd };
+}
+
+/** Give back a claimed run that never actually started. See refundRun. */
+export async function refundPipelineRun(
+  env: { SPEND_COUNTER?: DurableObjectNamespace; SPEND_KV: KVNamespace },
+  ip: string,
+): Promise<void> {
+  if (!env.SPEND_COUNTER) return;
+  try {
+    const stub = env.SPEND_COUNTER.get(env.SPEND_COUNTER.idFromName("global"));
+    await stub.fetch("https://do/refund-run", { method: "POST", body: JSON.stringify({ ip, day: dayKey() }) });
+  } catch { /* a failed refund must never turn into a failed request */ }
 }
 
 export async function claimPipelineRun(env: { SPEND_COUNTER?: DurableObjectNamespace; SPEND_KV: KVNamespace }, ip: string): Promise<void> {

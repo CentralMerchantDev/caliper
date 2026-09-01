@@ -196,7 +196,14 @@ export function validateProposedCriterion(raw: RawCriterion & Record<string, unk
         }
       }
       if (raw.check === "minCount") {
-        if (typeof raw.minCount !== "number" || raw.minCount < 0) return { valid: false, reason: `criterion "${raw.description}": structural check "minCount" requires a non-negative minCount` };
+        // minCount 0 IS ALWAYS TRUE. It was accepted (`< 0`), so a plan could
+        // propose "the list has at least 0 entries", it would pass verification,
+        // and the run would report "criteria 5/5" for a check that cannot fail.
+        // A criterion that cannot fail is not evidence, and counting it as
+        // evidence is the failure this project is about.
+        if (typeof raw.minCount !== "number" || !Number.isFinite(raw.minCount) || raw.minCount < 1) {
+          return { valid: false, reason: `criterion "${raw.description}": structural check "minCount" requires minCount >= 1 -- "at least 0" is true of everything and tests nothing` };
+        }
       }
       return {
         valid: true,

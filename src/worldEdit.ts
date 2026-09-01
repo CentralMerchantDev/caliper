@@ -839,6 +839,42 @@ function stripLiterals(src: string): string {
       i++; out += '""';
       continue;
     }
+    // REGEX LITERALS.
+    //
+    // A regex was passed through character by character, so
+    //     const RE = /[{]/;
+    // left an unmatched "{" in the stripped text. `depth` then never returned
+    // to zero, `atTop` was false for every line after it, and the rest of the
+    // file was treated as nested and never examined again -- one regex, and
+    // the whole scanner switched off silently. Verified with
+    // `const RE = /[{]/;` followed by a bare fetch(): reported clean.
+    //
+    // Distinguishing division from a regex needs the previous meaningful
+    // token: after a value (identifier, number, `)`, `]`) a slash is division;
+    // otherwise it opens a regex.
+    if (c === "/") {
+      let k = out.length - 1;
+      while (k >= 0 && /\s/.test(out[k])) k--;
+      const prev = k >= 0 ? out[k] : "";
+      const isDivision = /[\w$)\]]/.test(prev);
+      if (!isDivision) {
+        i++;                                            // consume the opening /
+        let inClass = false;
+        while (i < n) {
+          const ch = src[i];
+          if (ch === "\\") { i += 2; continue; }
+          if (ch === "[") inClass = true;
+          else if (ch === "]") inClass = false;
+          else if (ch === "/" && !inClass) break;
+          else if (ch === "\n") break;                   // unterminated: bail out
+          i++;
+        }
+        i++;                                            // consume the closing /
+        while (i < n && /[a-z]/.test(src[i])) i++;      // flags
+        out += "/x/";
+        continue;
+      }
+    }
     out += c; i++;
   }
   return out;
@@ -884,6 +920,34 @@ export function topLevelSideEffects(source: string): string[] {
       const binding = /^(?:export\s+)?(?:const|let|var)\s/.test(line);
       const exportOnly = /^export\s*[{*]/.test(line);
 
+      // A DECLARATION DOES NOT MAKE THE REST OF THE LINE SAFE.
+      //
+      // This tested only the line's PREFIX, so everything after a complete
+      // declaration on the same line was never looked at:
+      //     function tick(w){ return w; } Object.is = () => true;
+      // matched `decl`, took the `else if` path, and was reported clean --
+      // while that trailing assignment, executing at module scope inside the
+      // verification harness, makes every comparison return true. Verified: it
+      // returned no offenders.
+      //
+      // So when a declaration closes on its own line, whatever follows it is
+      // re-examined as if it were its own line.
+      if (decl || exportOnly) {
+        let d = 0, cut = -1;
+        for (let ci = 0; ci < line.length; ci++) {
+          const ch = line[ci];
+          if (ch === "{" || ch === "(" || ch === "[") d++;
+          else if (ch === "}" || ch === ")" || ch === "]") {
+            d--;
+            if (d === 0 && ch === "}") { cut = ci + 1; break; }
+          }
+        }
+        if (cut > -1) {
+          const tail = line.slice(cut).replace(/^[\s;]+/, "");
+          if (tail.length > 0) offenders.push(tail.slice(0, 90));
+        }
+      }
+
       if (!decl && !binding && !exportOnly) {
         offenders.push(line.slice(0, 90));                    // a bare statement
       } else if (binding) {
@@ -894,6 +958,45 @@ export function topLevelSideEffects(source: string): string[] {
           //     var _y = (document.body.innerHTML = "<img src=x onerror=...>");
           // is an ASSIGNMENT, contains no call, and defeated a call-only test.
           // So an initialiser must neither invoke anything nor assign anything.
+          // A FUNCTION EXPRESSION IS A DEFINITION, NOT A CALL.
+          //
+          // `const slug = (s) => s.replace(RE, "").trim();` was flagged,
+          // because the call test looks at the whole right-hand side and sees
+          // .replace( and .trim( -- neither of which runs at module load; they
+          // run when someone calls slug. Rejecting ordinary code is not a safe
+          // default, it is how a check gets switched off.
+          //
+          // The discriminator is depth. In a real arrow the `=>` sits at depth
+          // zero:            (s) => s.replace(...)
+          // In an IIFE it does not, because the wrapping paren is still open:
+          //                  (() => { fetch(x); })()
+          // So: a depth-zero `=>`, or a leading `function` whose body is the
+          // entire right-hand side, is a definition and its body is not
+          // examined. Anything else is.
+          const isDefinition = (() => {
+            const r = rhs.trim().replace(/;+$/, "");
+            let d = 0;
+            for (let ci = 0; ci < r.length; ci++) {
+              const ch = r[ci];
+              if (ch === "(" || ch === "[" || ch === "{") d++;
+              else if (ch === ")" || ch === "]" || ch === "}") d--;
+              else if (ch === "=" && r[ci + 1] === ">" && d === 0) return true;
+            }
+            if (!/^(?:async\s+)?function\b/.test(r)) return false;
+            // a function expression counts only if nothing follows its body,
+            // so `function(){}()` -- an IIFE -- is still rejected
+            d = 0;
+            for (let ci = 0; ci < r.length; ci++) {
+              const ch = r[ci];
+              if (ch === "{") d++;
+              else if (ch === "}") {
+                d--;
+                if (d === 0) return r.slice(ci + 1).trim().length === 0;
+              }
+            }
+            return false;
+          })();
+          if (isDefinition) continue;
           const calls = /[\w$)\]]\s*\(/.test(rhs);
           const assigns = /(^|[^=!<>])=(?!=|>)/.test(rhs);      // '=' that is not ==, ===, !=, <=, >=, =>
           const reaches = /\b(document|window|globalThis|self|fetch|eval|Function|XMLHttpRequest|WebSocket|localStorage)\b/.test(rhs);

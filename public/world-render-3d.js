@@ -3389,7 +3389,7 @@ class Renderer3D {
         intents: {
           history: "This coastal settlement was founded in 1894 as a timber port before being re-zoned for cultural and civic masterplanning.",
           materials: "We specify local dolomitic limestone and marine-grade 316 stainless steel to withstand salt air corrosion.",
-          zoning: "All waterfront setbacks enforce a minimum 14-metre public access easement under OBC Part 9 civic guidelines."
+          zoning: "The generator keeps a 14-metre public strip along the waterfront. That is a rule in this generator, not a code check -- nothing here reads the Ontario Building Code."
         }
       },
       {
@@ -6458,7 +6458,7 @@ class Renderer3D {
           } else if (u < 0.40) {
             caption = "📍 2. Central Esplanade & Tram Corridor: Autonomous light-rail transit gliding along the palm-lined median.";
           } else if (u < 0.60) {
-            caption = "📍 3. Datum AEC AI Pavilion: Interactive Ontario Building Code Part 9 compliance solver with kinetic DNA helix.";
+            caption = "📍 3. Datum: a separate app that reviews building drawings against the Ontario Building Code. This pavilion is a marker for it, not a running copy of it.";
           } else if (u < 0.80) {
             caption = "📍 4. Marina & Luxury Waterfront: Sheltered inner yacht basin protected by curved granite breakwater arms.";
           } else {

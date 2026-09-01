@@ -386,8 +386,9 @@ html, body {
 
 .pipeline-steps {
   display: flex;
+  flex-wrap: wrap;          /* five stages now, not four -- Implement was missing */
   justify-content: space-between;
-  gap: 6px;
+  gap: 6px 8px;
   margin-bottom: 10px;
 }
 .step-item {
@@ -969,7 +970,11 @@ body.inspecting-mobile #nav-compass-pad {
     <div class="clock-pill" id="world-clock-badge">
       ☀️ Day 1 · 12:00
     </div>
-    <button type="button" id="world-play-pause" class="btn-pill" style="padding:4px 8px;font-size:11px" aria-pressed="true">⏸ Pause</button>
+    <!-- `active` matters: .btn-pill[aria-pressed="true"] is a styling selector, and
+     the aria mirror derives aria-pressed FROM this class. Without it the mirror
+     correctly reported "false" for a button labelled Pause, and un-highlighted
+     it on load. -->
+<button type="button" id="world-play-pause" class="btn-pill active" style="padding:4px 8px;font-size:11px" aria-pressed="true">⏸ Pause</button>
   </div>
 
   <!-- Center Cluster: Coastal District Bookmarks & Navigation -->
@@ -1069,7 +1074,7 @@ body.inspecting-mobile #nav-compass-pad {
   <div class="nav-pad-hint" id="nav-pad-hint">Drag to orbit · scroll to zoom · arrows below</div>
   <!-- Eye-Level Person, Vehicle, Fly, & Orbit Mode Selectors -->
   <div class="nav-mode-selector">
-    <button type="button" class="nav-mode-btn active" id="btn-mode-orbit" data-nav-mode="orbit" title="Orbital aerial camera view">🌐 Orbit</button>
+    <button type="button" class="nav-mode-btn active" aria-pressed="true" id="btn-mode-orbit" data-nav-mode="orbit" title="Orbital aerial camera view">🌐 Orbit</button>
     <button type="button" class="nav-mode-btn" aria-pressed="false" id="btn-mode-walk" data-nav-mode="walk" title="Eye-level pedestrian walk mode (WASD + Shift to sprint)">🚶 Walk</button>
     <button type="button" class="nav-mode-btn" aria-pressed="false" id="btn-mode-drive" data-nav-mode="drive" title="Drive red sports car along the waterfront esplanade">🏎️ Drive</button>
     <button type="button" class="nav-mode-btn" aria-pressed="false" id="btn-mode-fly" data-nav-mode="fly" title="Free 3D flight drone spectator mode (WASD + Q/E to elevate)">🕊️ Fly</button>
@@ -1110,13 +1115,17 @@ body.inspecting-mobile #nav-compass-pad {
   <div class="pipeline-steps">
     <div class="step-item" id="step-1"><span>1. Ground</span></div>
     <div class="step-item" id="step-2"><span>2. Plan</span></div>
-    <div class="step-item" id="step-3"><span>3. Verify</span></div>
-    <div class="step-item" id="step-4"><span>4. Review</span></div>
+    <div class="step-item" id="step-3"><span>3. Implement</span></div>
+    <div class="step-item" id="step-4"><span>4. Verify</span></div>
+    <div class="step-item" id="step-5"><span>5. Review</span></div>
   </div>
   <div id="stage-log" class="stage-log" role="status" aria-live="polite" aria-atomic="false">
     <p style="margin:0 0 8px;color:var(--text-muted);font-size:13px;line-height:1.5">Type a change below and it runs the stages above &mdash; grounded against the real source, <strong>parked at a gate for you</strong>, executed in a sandbox, reviewed by a second vendor&rsquo;s model.</p>
-    <button type="button" class="gate-btn" id="replay-open-btn" style="font-size:11.5px;padding:5px 10px">▶ Watch a recorded run (free)</button>
   </div>
+  <!-- OUTSIDE #stage-log deliberately. It lived inside, and both startRun and
+       playRecordedRun clear that element -- so the only zero-spend entry point
+       on the page deleted itself after the visitor's first interaction. -->
+  <button type="button" class="gate-btn" id="replay-open-btn" style="font-size:11.5px;padding:5px 10px;margin-top:8px">▶ Watch a recorded run (free)</button>
 </div>
 
 <!-- 3D Parcel / District Inspection Card -->
@@ -1213,7 +1222,7 @@ body.inspecting-mobile #nav-compass-pad {
         <li><strong>Rule 1 (Clearance & No Clipping):</strong> In-memory 2D footprint collision solver enforces minimum buffer clearance across all buildings and outdoor fixtures.</li>
         <li><strong>Rule 2 (Boundary Containment):</strong> Placements must strictly satisfy parcel envelopes — out-of-bounds additions are rejected before mutation.</li>
         <li><strong>Rule 3 (Financial Spend Ceiling):</strong> Enforced via Cloudflare Durable Object atomic reservation locks against $2/day, $7/week, $20/month caps.</li>
-        <li><strong>Rule 4 (AST-Free In-Memory Mutators):</strong> Code mutations bypass JavaScript eval, executing as direct verified graph operations.</li>
+        <li><strong>Rule 4 (world edits are data, not code):</strong> A world edit is a set of schema-validated operations spliced into sentinel-delimited data blocks — no <code>eval</code>, no AST. Benchmark cycles are the opposite on purpose: model-written code is executed in a fresh Cloudflare Dynamic Worker isolate, because judging code by reading it is the failure this project exists to avoid.</li>
       </ul>
     </div>
   </div>
@@ -1402,7 +1411,14 @@ body.inspecting-mobile #nav-compass-pad {
 
     <!-- Benchmark Matrix Table -->
     <div style="margin-bottom:20px">
-      <h3 style="margin:0 0 10px;font-size:16px;color:#fff">The Empirical 387-Cycle Capability Matrix</h3>
+      <h3 style="margin:0 0 4px;font-size:16px;color:#fff">The capability matrix</h3>
+      <p style="margin:0 0 10px;font-size:12px;color:#94a3b8;line-height:1.5">
+        The rows below are the <strong>hard tier and the core tasks</strong> &mdash; 225 of the 387 stored cycles. The
+        remainder are the novel tier (seven specs I wrote myself, one deliberately contradicting a formula every model
+        has memorised, to rule out recall) and repeat runs. The <em>n</em> column is the honest count for each row, so
+        it sums to 225, not 387 &mdash; said here rather than left for you to add up and mistrust.
+        <a href="/matrix-results" style="color:var(--sky);font-weight:600;text-decoration:none">Raw JSON&nbsp;&rarr;</a>
+      </p>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse;font-size:12.5px;text-align:left">
           <thead>
@@ -1734,7 +1750,11 @@ function reportDegradedRenderer(r) {
   }
   const c = $('#world-canvas');
   if (c) c.setAttribute('aria-label', 'Flat plan view of the city. The 3D view is unavailable in this browser.');
-  document.querySelectorAll('[data-view="3d"], #view-3d-btn').forEach(b => {
+  // These selectors matched NOTHING -- there is no data-view attribute in this
+  // file and no #view-3d-btn. So the banner appeared while the 3D toggle stayed
+  // lit, enabled and aria-pressed="true": the exact state this was written to
+  // clear. The real ids, checked against the markup this time.
+  document.querySelectorAll('#view-3d, #btn-mode-walk, #btn-mode-drive, #btn-mode-fly, #roof-cutaway, #drone-tour-btn').forEach(b => {
     b.classList.remove('active');
     b.setAttribute('aria-pressed', 'false');
     b.disabled = true;
@@ -2676,12 +2696,22 @@ function offerRecordedRun(lead) {
     '<button type="button" class="gate-btn gate-approve" id="replay-start-btn">Play the recording</button>';
   log.appendChild(d);
   d.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  $('#replay-start-btn').addEventListener('click', () => playRecordedRun());
+  // No listener here: a delegated document handler already covers both
+  // #replay-open-btn and #replay-start-btn. Binding again meant one click ran
+  // playRecordedRun twice -- two fetches, two sets of timers, duplicate DOM ids
+  // and a caption written into a node the second call had already detached.
 }
 
 async function playRecordedRun() {
   stopReplay();
   if (activeEs) { activeEs.close(); activeEs = null; }
+  // Tear the live run's clocks down too. Without this the 60s watchdog from an
+  // abandoned run fired mid-recording and appended "Pipeline watchdog limit
+  // reached" into it.
+  if (pipelineTimeoutGuard) { clearTimeout(pipelineTimeoutGuard); pipelineTimeoutGuard = null; }
+  if (pipelineTimer) { clearInterval(pipelineTimer); pipelineTimer = null; }
+  currentRunId = null;
+  currentControlToken = null;
   const log = $('#stage-log');
   log.innerHTML = '';
   const banner = document.createElement('div');
@@ -2737,10 +2767,10 @@ async function playRecordedRun() {
           : '⚠ This request rests on something that is not true of the world.');
       }
       if (st.stage === 'plan' && st.result && st.result.understoodIntent) {
-        bits.push('Understood as: “' + st.result.understoodIntent + '”');
+        bits.push('Understood as: “' + esc(st.result.understoodIntent) + '”');
       }
       if (st.stage === 'gate1') bits.push('Decision: <strong>' + esc(st.decision) + '</strong> — the run stopped here until a person answered.');
-      if (st.stage === 'implement' && Array.isArray(st.ops)) bits.push(st.ops.length + ' schema-validated operation(s), spliced into the source. No eval.');
+      if (st.stage === 'implement' && Array.isArray(st.ops)) bits.push(st.ops.length + ' schema-validated operation(s), spliced into the source — a world edit is data, not code.');
       if (st.stage === 'verify') {
         bits.push('Regression suite: <strong>' + st.regressionPassed + '/' + st.regressionTotal + '</strong> passed — these are the checks the model is not allowed to edit.');
         bits.push('Acceptance criteria: <strong>' + st.criteriaPassed + '/' + st.criteriaTotal + '</strong> passed, executed in a fresh isolate.');
@@ -2857,6 +2887,13 @@ function startRun() {
     return;
   }
   const log = $('#stage-log');
+  // STOP ANY REPLAY FIRST.
+  //
+  // Up to eight setTimeouts from a recording could still be pending here. They
+  // wrote "⏸ Gate 1 — a human decides" and "✓ Shipped" into the log of a LIVE
+  // run for the next eleven seconds -- an unlabelled replay presented as live,
+  // which is precisely the thing the recording is labelled everywhere to avoid.
+  stopReplay();
   log.innerHTML = '';
   currentRunId = null;
   currentControlToken = null;
@@ -2876,6 +2913,10 @@ $('#bar-submit').addEventListener('click', startRun);
 $('#bar-request-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
+    // The button is disabled when checkLiveStatus finds a hard block, but Enter
+    // called startRun unconditionally -- so the commonest way to submit walked
+    // straight past the block and landed back on the 429.
+    if ($('#bar-submit')?.disabled) { offerRecordedRun('Live runs are not available right now.'); return; }
     startRun();
   }
 });
@@ -2910,7 +2951,10 @@ function connect(url) {
     if (activeEs !== es) return;
     resetWatchdog();
     updatePipelineStep(2);
-    stageBlock(log, 's-ground', '1. Grounding Constraints');
+    // One vocabulary across the tracker, the live log and the replay. There
+    // were three, visible on screen simultaneously, disagreeing about which
+    // number each stage was. These are the replay's plain-English titles.
+    stageBlock(log, 's-ground', '1. Ground — is this true of the world?');
   });
 
   es.addEventListener('grounded', ev => {
@@ -2928,7 +2972,7 @@ function connect(url) {
     if (activeEs !== es) return;
     resetWatchdog();
     updatePipelineStep(2);
-    stageBlock(log, 's-plan', '2. Planning Spatial Ops');
+    stageBlock(log, 's-plan', '2. Plan — what exactly would change?');
   });
 
   es.addEventListener('planned', ev => {
@@ -2949,7 +2993,7 @@ function connect(url) {
     const d = safeJson(ev.data);
     if (!d) return;
     const runId = d.runId || currentRunId;
-    const b = stageBlock(log, 's-plan-gate', '📋 Gate 1: Plan Review');
+    const b = stageBlock(log, 's-plan-gate', '⏸ Gate 1 — a human decides');
     const willBuild = d?.plan?.willBuild ?? 'Plan synthesized.';
     const criteria = Array.isArray(d?.plan?.criteria) ? d.plan.criteria.map(c => esc(c?.name || 'Clearance')).join(', ') : 'Spatial clearance';
     
@@ -2982,7 +3026,9 @@ function connect(url) {
     // said it was built on a false premise was auto-approved without anyone
     // ever reading that. A convenience that silently approves exactly the case
     // the gate exists for is not a convenience.
-    const autoApprove = ($('#auto-approve-toggle')?.checked ?? true) && premisesHold;
+    // `?? true` meant: element missing -> skip the human gate. On a page arguing
+    // for fail-closed, the fallback pointed the wrong way.
+    const autoApprove = ($('#auto-approve-toggle')?.checked ?? false) && premisesHold;
     if (autoApprove) {
       b.innerHTML = `<h4>📋 Plan Auto-Approved</h4>${groundingHtml}<p style="margin:0;font-size:12px">${esc(willBuild)}</p>`;
       b.classList.remove('active');
@@ -3002,21 +3048,27 @@ function connect(url) {
     b.innerHTML = `
       <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
         ${groundingHtml}
-        ${!premisesHold ? `<p style="margin:0 0 6px;font-size:11px;color:#fbbf24">Auto-approve is held back for this one — it needs a person.</p>` : ''}
+        ${!premisesHold ? `<p style="margin:0 0 6px;font-size:11px;color:#fbbf24">Auto-approve is held back for this one — it needs a person. Approving means you are overruling the grounding check above, deliberately.</p>` : ''}
         <p style="margin:0 0 6px"><strong>Will Build:</strong> ${esc(willBuild)}</p>
         <p style="margin:0 0 6px"><strong>Criteria:</strong> ${criteria}</p>
         ${costStr ? `<p style="margin:0 0 8px;font-family:var(--mono);color:var(--accent);font-size:11px">Est. Cost: $${costStr}</p>` : '<p style="margin:0 0 8px;font-family:var(--mono);color:var(--text-muted);font-size:11px">Est. cost: not reported by the coordinator</p>'}
         <div style="display:flex;gap:8px;margin-top:6px">
-          <button type="button" class="btn-pill btn-approve" style="background:var(--emerald);color:#fff;padding:6px 12px;font-weight:700">✓ Approve & Build</button>
+          <button type="button" class="btn-pill btn-approve" style="background:var(--emerald);color:#fff;padding:6px 12px;font-weight:700">${!premisesHold ? '✓ Build it anyway' : '✓ Approve &amp; Build'}</button>
           <button type="button" class="btn-pill btn-reject" style="background:#ef4444;color:#fff;padding:6px 12px">✕ Reject</button>
         </div>
       </div>
     `;
     b.querySelector('.btn-approve')?.addEventListener('click', () => {
+      // When grounding says a premise is false the server requires an explicit
+      // acknowledgement on top of the approval, and refuses without it. Send it
+      // ONLY in that case -- an approval of a well-grounded plan should not
+      // carry an override it does not need.
       submitGateDecision(
         `/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=true`,
         `/change-resume?runId=${encodeURIComponent(runId)}`,
-        b
+        b,
+        false,
+        premisesHold ? null : { runId, approve: true, acknowledgeFalsePremise: true }
       );
     });
     b.querySelector('.btn-reject')?.addEventListener('click', () => {
@@ -3033,7 +3085,7 @@ function connect(url) {
     if (activeEs !== es) return;
     resetWatchdog();
     updatePipelineStep(3);
-    stageBlock(log, 's-impl', '3. Mutating Edge Graph');
+    stageBlock(log, 's-impl', '3. Implement — write the change');
   });
 
   es.addEventListener('implemented', () => {
@@ -3046,7 +3098,7 @@ function connect(url) {
   es.addEventListener('verifying', () => {
     if (activeEs !== es) return;
     resetWatchdog();
-    stageBlock(log, 's-verify', '4. Verifying Bounds');
+    stageBlock(log, 's-verify', '4. Verify — run it in a sandbox');
   });
 
   es.addEventListener('verified', ev => {
@@ -3073,7 +3125,7 @@ function connect(url) {
     const d = safeJson(ev.data);
     if (!d) return;
     const runId = d.runId || currentRunId;
-    const b = stageBlock(log, 's-review-gate', '🔍 Gate 2: Cross-Model Audit');
+    const b = stageBlock(log, 's-review-gate', '⏸ Gate 2 — ship, or refuse');
     
     // GATE 2 NEVER AUTO-APPROVES.
     //
@@ -3246,7 +3298,6 @@ function connect(url) {
       if (currentRunId) {
         finishPipelineTelemetry(false, 'The connection dropped part-way through a run that had already started. Nothing was shipped.');
       } else {
-        finishPipelineTelemetry(false, 'Checking why the run could not start…');
         fetch('/live-status').then(r => r.json()).then(st => {
           if (st && st.ok === false && st.detail) {
             finishPipelineTelemetry(false, st.detail);

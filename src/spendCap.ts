@@ -17,6 +17,18 @@ export class SpendCapExceededError extends Error {
 export async function assertUnderCap(kv: KVNamespace, capUsd: number, estimatedCostUsd: number): Promise<number> {
   const currentRaw = await kv.get(SPEND_KEY);
   const current = currentRaw ? parseFloat(currentRaw) : 0;
+  // FAIL CLOSED ON AN UNKNOWN CAP.
+  //
+  // capUsd comes from parseFloat(env.SPEND_CAP_USD). Unset or malformed gives
+  // NaN, and `current + est > NaN` is FALSE -- so a missing configuration value
+  // silently switched the spend cap off entirely, in a file whose own docblock
+  // says the cap is "enforced in code, not just documented". Same for a
+  // corrupted counter in KV.
+  //
+  // Not knowing how much has been spent is a reason to stop, not to continue.
+  if (!Number.isFinite(capUsd) || !Number.isFinite(current)) {
+    throw new SpendCapExceededError(Number.isFinite(current) ? current : 0, Number.isFinite(capUsd) ? capUsd : 0);
+  }
   if (current + estimatedCostUsd > capUsd) {
     throw new SpendCapExceededError(current, capUsd);
   }

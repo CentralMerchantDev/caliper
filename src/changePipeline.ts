@@ -129,7 +129,12 @@ export interface ChangeLedger {
   reviewFoundNits: number;
   fixApplied: boolean;
   fixHeld: boolean | null;
-  planGateDecision: "approve" | "reject" | "pending";
+  /** "not-reached" is a real answer and a necessary one: a run stopped at the
+   * question gate, or abandoned after an error before any plan existed, has no
+   * plan-gate decision to report. Both used to record "approve" -- so the
+   * changelog said a human approved a plan gate that never happened, in the
+   * one artefact this project asks to be believed. */
+  planGateDecision: "approve" | "reject" | "pending" | "not-reached";
   reviewGateDecision: "approve" | "reject" | "pending" | "not-needed";
   questionAsked: boolean;
   /** How many times the visitor replied in free text at Gate 1 instead of
@@ -406,6 +411,7 @@ function buildStoppedLedger(
   questionAsked: boolean,
   planGateReplyCount: number,
   runStartedAt: number,
+  planGateDecision: ChangeLedger["planGateDecision"] = "not-reached",
 ): ChangeLedger {
   return {
     outcome: "stopped",
@@ -415,7 +421,7 @@ function buildStoppedLedger(
     reviewFoundNits: 0,
     fixApplied: false,
     fixHeld: null,
-    planGateDecision: "approve",
+    planGateDecision,
     reviewGateDecision: "not-needed",
     questionAsked,
     planGateReplyCount,
@@ -483,7 +489,7 @@ function buildAbandonedAfterErrorLedger(
     reviewFoundNits: 0,
     fixApplied: false,
     fixHeld: null,
-    planGateDecision: "approve",
+    planGateDecision: "not-reached",
     reviewGateDecision: "not-needed",
     questionAsked,
     planGateReplyCount,
@@ -880,7 +886,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   // Gate 1 (before any of that starts) is honored instead of ignored.
   if (await checkStopped(env.SPEND_KV, runId)) {
     await clearState(env.SPEND_KV, runId);
-    const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+    const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt, "approve");
     onEvent({ type: "stopped" });
     onEvent({ type: "ledger", ledger });
     return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings: [], ledger });
@@ -975,7 +981,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     ) {
       if (await checkStopped(env.SPEND_KV, runId)) {
         await clearState(env.SPEND_KV, runId);
-        const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+        const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt, "approve");
         onEvent({ type: "stopped" });
         onEvent({ type: "ledger", ledger });
         return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings: [], ledger });
@@ -1084,7 +1090,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // this was the one stretch with no checkpoint at all.
     if (await checkStopped(env.SPEND_KV, runId)) {
       await clearState(env.SPEND_KV, runId);
-      const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+      const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt, "approve");
       onEvent({ type: "stopped" });
       onEvent({ type: "ledger", ledger });
       return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings: [], ledger });
@@ -1129,7 +1135,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       // stop signal.
       if (await checkStopped(env.SPEND_KV, runId)) {
         await clearState(env.SPEND_KV, runId);
-        const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+        const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt, "approve");
         onEvent({ type: "stopped" });
         onEvent({ type: "ledger", ledger });
         return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings, ledger });
@@ -1150,7 +1156,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
 
     if (decision === "approve" && (await checkStopped(env.SPEND_KV, runId))) {
       await clearState(env.SPEND_KV, runId);
-      const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+      const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt, "approve");
       onEvent({ type: "stopped" });
       onEvent({ type: "ledger", ledger });
       return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings, ledger });
@@ -1230,7 +1236,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   // the run unless it's nearly done."
   if (await checkStopped(env.SPEND_KV, runId)) {
     await clearState(env.SPEND_KV, runId);
-    const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt);
+    const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt, "approve");
     onEvent({ type: "stopped" });
     onEvent({ type: "ledger", ledger });
     return await recordTerminalRun(env.SPEND_KV, { runId, changeRequest, plan, finalCode: null, findings, ledger });

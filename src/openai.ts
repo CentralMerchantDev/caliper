@@ -211,8 +211,7 @@ export function reviewFollowedFormat(reviewText: string): boolean {
   const claimsAFailure =
     /(?:\*\*|__)?\s*(kitchen sink|wrong abstraction|optimistic path|runaway refactor)\s*(?:\*\*|__)?\s*[:\-\u2013\u2014(]{0,2}\s*(?:\*\*|__)?\s*yes\b/i
       .test(reviewText);
-  const tagged = /\[(MATERIAL|NIT)\]/.test(reviewText);
-  // A single unrelated [NIT] used to set `tagged` and let a stated MATERIAL
+  // A single unrelated [NIT] used to set a `tagged` flag and let a stated MATERIAL
   // verdict through. If the reviewer says one of its four failure modes is YES,
   // it has to have tagged something MATERIAL.
   const taggedMaterial = /\[MATERIAL\]/.test(reviewText);

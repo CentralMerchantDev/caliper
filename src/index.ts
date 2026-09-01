@@ -12,10 +12,9 @@ import { runChangePipeline, loadInstructions, deriveHistoryReason, type ChangeEv
 import {
   getPipelineBudgetStatus,
   checkInputGuard,
-  assertUnderPipelineRateLimit,
   claimPipelineRun,
+  refundPipelineRun,
   pipelineAvailability,
-  recordPipelineRateLimitHit,
   tryLeaseActiveRun,
   releaseActiveRun,
   PipelineLimitError,
@@ -442,7 +441,7 @@ function randomRunId(): string {
 // handful of unanswered gates exhaust MAX_CONCURRENT_PIPELINE_RUNS and
 // lock out every other visitor for days. The limit bounds simultaneous
 // real API spend, which only happens while a call is actively executing.
-async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: string): Promise<Response> {
+async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: string, ctx?: ExecutionContext): Promise<Response> {
   const runId = existingRunId ?? randomRunId();
   let leaseToken: string | null = null;
   try {
@@ -499,7 +498,7 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
     }
   }, 15_000);
 
-  (async () => {
+  const pipelineTask = (async () => {
     try {
       send("runId", { runId, controlToken });
       const onEvent = (e: ChangeEvent) => {
@@ -524,6 +523,18 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
     }
   })();
 
+  // KEEP THE RUN ALIVE IF THE VISITOR LEAVES.
+  //
+  // The pipeline runs in a floating promise attached to this SSE stream. Close
+  // the tab mid-run and the runtime is entitled to cancel the request context:
+  // the catch block that writes the resumable `errored` checkpoint never
+  // executes, and the concurrency lease is never released. A paid run
+  // evaporates with no record -- exactly the loss the checkpointing was built
+  // to prevent. waitUntil is the standard way to say "this work outlives the
+  // response", and it should have been here from the start.
+  if (ctx) ctx.waitUntil(pipelineTask);
+
+
   return new Response(readable, {
     headers: {
       "content-type": "text/event-stream",
@@ -537,7 +548,7 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
   });
 }
 
-async function handleChangeResume(env: Env, runId: string): Promise<Response> {
+async function handleChangeResume(env: Env, runId: string, ctx?: ExecutionContext): Promise<Response> {
   // The kill switch was checked inline in the /change-run branch only, so
   // LIVE_RUN_ENABLED=false stopped new runs while every halted run in KV could
   // still be resumed and keep spending -- for up to a week, the state TTL. A
@@ -546,7 +557,7 @@ async function handleChangeResume(env: Env, runId: string): Promise<Response> {
   const stateRaw = await env.SPEND_KV.get(`change/state/${runId}`);
   if (!stateRaw) return json({ error: `no halted run found for runId "${runId}" -- it may have already finished, or never existed` }, 404);
   const changeRequest = (JSON.parse(stateRaw) as { changeRequest: string }).changeRequest;
-  return handleChangeRun(env, changeRequest, runId);
+  return handleChangeRun(env, changeRequest, runId, ctx);
 }
 
 /** POLISH.md item 1: a run history, real runs only. Reads every completed
@@ -579,8 +590,11 @@ async function handleChangeHistory(env: Env): Promise<Response> {
     cursor = list.cursor;
   }
   const entries: { date: string; summary: string | null; outcome: string; reason: string }[] = [];
-  for (const name of keys) {
-    const raw = await env.SPEND_KV.get(name);
+  // In parallel. handleMatrixResults fixed exactly this and left a comment
+  // about the 74 seconds it used to take; the same loop here was never
+  // changed, and it is the one a visitor actually clicks.
+  const raws = await Promise.all(keys.map((name) => env.SPEND_KV.get(name)));
+  for (const raw of raws) {
     if (!raw) continue;
     let record: ChangeRecord;
     try {
@@ -608,14 +622,52 @@ async function handleChangeHistory(env: Env): Promise<Response> {
   return json({
     note: entries.length === 0
       ? "No public runs recorded yet. The recorded run on the main page shows the pipeline end to end."
-      : `${entries.length} public run(s) recorded, every one of them, including the ones that failed. This log is not filtered.`,
+      : `${entries.length} public run(s) recorded, every one of them, including the ones that failed. This log is not filtered.` +
+        (entries.length > 200 ? ` The 200 most recent are returned below.` : ""),
     totals: tally,
     entries: entries.slice(0, 200),
   });
 }
 
+/**
+ * THE WORKER HAD NO TOP-LEVEL CATCH.
+ *
+ * Any throw that escaped a route -- QuerySecretRejected, an unguarded
+ * JSON.parse on a malformed stored record, a null deref in a history entry --
+ * left the runtime to answer with a bare, unstyled 500 and no body. The
+ * carefully written message on QuerySecretRejected ("pass the unlock code as a
+ * header, not ?k=, because query strings are written to edge logs") was
+ * delivered to nobody but `wrangler tail`.
+ *
+ * A page arguing that a system should say what happened cannot answer "500".
+ * Routes live in handleRequest; this wraps it, maps the errors it recognises to
+ * real status codes with real explanations, and gives everything else a
+ * generic 500 body that does not leak internals.
+ */
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    try {
+      return await handleRequest(request, env, ctx);
+    } catch (err) {
+      if (err instanceof QuerySecretRejected) {
+        return jsonError("query_secret_rejected", err.message, 400);
+      }
+      if (err instanceof PipelineLimitError) {
+        return jsonError(err.kind, err.message, 429);
+      }
+      // Deliberately generic to the caller, specific to the log: an error
+      // message is a fine place to leak a KV key name or a stack.
+      console.error("unhandled error in fetch:", err);
+      return jsonError(
+        "internal_error",
+        "Something failed on the server and was not handled. Nothing was shipped and nothing was charged.",
+        500,
+      );
+    }
+  },
+};
+
+async function handleRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/api") {
@@ -704,6 +756,17 @@ export default {
     }
 
     if (url.pathname === "/security-check") {
+      // AUTH REQUIRED. This runs all five sandbox-escape probes twice, cold and
+      // warm -- ten Dynamic Worker invocations including memory-balloon and
+      // deep-recursion at cpuMs 10000 -- and runRawScriptInSandbox
+      // deliberately has NO wall-clock abort (see sandbox.ts, which explains
+      // why). So one anonymous GET could hold this Worker for tens of seconds,
+      // and a loop of them is a self-funded denial of service billed to me.
+      // The results are interesting; paying an unbounded stranger to recompute
+      // them on demand is not.
+      if (!(await isAuthorizedSecret(request, url))) {
+        return jsonError("unauthorized", "This endpoint executes sandbox probes and costs real CPU. Authorize with an Authorization: Bearer header.", 403);
+      }
       return handleSecurityCheck(env);
     }
 
@@ -799,7 +862,15 @@ export default {
           throw e;
         }
       }
-      return handleChangeRun(env, request_);
+      // If the run cannot actually start -- concurrency, say -- give the claim
+      // back. It was being spent before the lease was even attempted, so three
+      // visitors arriving together burned a run each and were told about a
+      // daily limit that was not the reason they were refused.
+      const started = await handleChangeRun(env, request_, undefined, ctx);
+      if (!unlocked && started.status === 429) {
+        await refundPipelineRun(env, ip);
+      }
+      return started;
     }
 
     // Parse decision body: accept POST JSON body with query param fallback
@@ -837,7 +908,7 @@ export default {
       return data.ticket;
     }
 
-    async function verifyResumeAuth(req: Request, runId: string, payload: Record<string, unknown>): Promise<boolean> {
+    async function verifyResumeAuth(_req: Request, runId: string, payload: Record<string, unknown>): Promise<boolean> {
       const ticket = (typeof payload.ticket === "string" ? payload.ticket : null) ||
         (typeof payload.resumeTicket === "string" ? payload.resumeTicket : null);
       if (!ticket) {
@@ -881,6 +952,27 @@ export default {
       if (!runId) return json({ error: "pass runId & approve (boolean) via POST body" }, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/plan-decision/${runId}`, JSON.stringify({ approve }), { expirationTtl: 600 });
+      // THE ACKNOWLEDGEMENT THE PIPELINE ASKS FOR HAS TO BE WRITABLE.
+      //
+      // changePipeline refuses an approval on a false premise unless
+      // `change/plan-decision-ack/<runId>` holds one -- and until now NOTHING
+      // in the repository wrote that key. So the visitor was shown a plan, told
+      // "it needs a person", clicked Approve, and the run terminated as
+      // refused-plan with planGateDecision "reject". The human said yes and the
+      // ledger recorded a no. On a project whose artefact is an honest ledger,
+      // that is the worst possible place to be wrong.
+      //
+      // It stays a SEPARATE, explicit field rather than being implied by
+      // `approve`, because the whole point is that overruling grounding must be
+      // deliberate: a stale tab or a replayed decision posts `approve`, not
+      // this.
+      if (approve && (payload.acknowledgeFalsePremise === true || payload.acknowledgeFalsePremise === "true")) {
+        await env.SPEND_KV.put(
+          `change/plan-decision-ack/${runId}`,
+          JSON.stringify({ approve: true }),
+          { expirationTtl: 600 },
+        );
+      }
       const resumeTicket = await createResumeTicket(runId);
       return json({ ok: true, resumeTicket });
     }
@@ -934,7 +1026,7 @@ export default {
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       if (!runId) return json({ error: "pass ?runId=<id>" }, 400);
       if (!(await verifyResumeAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid or already-consumed resume ticket" }, 403);
-      return handleChangeResume(env, runId);
+      return handleChangeResume(env, runId, ctx);
     }
 
     if (url.pathname === "/change-history") {
@@ -981,6 +1073,12 @@ export default {
     }
 
     if (url.pathname === "/spend-counter-selftest") {
+      // AUTH REQUIRED. Up to 50 Durable Object writes per request, and it used
+      // to mint a BRAND NEW DO instance per call whose storage was never
+      // deleted -- unbounded durable storage growth from an anonymous GET.
+      if (!(await isAuthorizedSecret(request, url))) {
+        return jsonError("unauthorized", "This endpoint performs Durable Object writes. Authorize with an Authorization: Bearer header.", 403);
+      }
       // Free, real concurrency proof for the atomic spend counter (FINISH.md
       // section 5) -- fires N reserve() calls concurrently (Promise.all,
       // not sequential awaits) against a throwaway-named DO instance
@@ -1005,7 +1103,13 @@ export default {
       }
       const n = Math.min(50, nRaw);
       const perCallUsd = 0.001;
-      const testId = `selftest-${crypto.randomUUID()}`;
+      // ONE reusable instance, not a new one per call. This was
+      // `selftest-${crypto.randomUUID()}`, which minted a fresh Durable Object
+      // on every request and never deleted its storage -- so repeated calls
+      // grew durable storage without bound. The test is about lost updates
+      // under concurrency, which a single dedicated instance demonstrates
+      // exactly as well.
+      const testId = "selftest-fixed";
       const stub = env.SPEND_COUNTER.get(env.SPEND_COUNTER.idFromName(testId));
       const caps = { dailyCapUsd: 1000, weeklyCapUsd: 1000, monthlyCapUsd: 1000 }; // effectively unbounded -- this test is about lost updates, not cap enforcement
       const results = await Promise.all(
@@ -1067,6 +1171,10 @@ export default {
     }
 
     if (url.pathname === "/sim-selftest") {
+      // AUTH REQUIRED: one Dynamic Worker invocation per request.
+      if (!(await isAuthorizedSecret(request, url))) {
+        return jsonError("unauthorized", "This endpoint runs the regression suite in a sandbox and costs real CPU. Authorize with an Authorization: Bearer header.", 403);
+      }
       let source: string | null = null;
       if (env.SPEND_COUNTER) {
         try {
@@ -1093,5 +1201,4 @@ export default {
     }
 
     return json({ error: "not found" }, 404);
-  },
-};
+}

@@ -63,9 +63,19 @@ export const STAGE_CALL_TIMEOUT_MS = 85_000;
 // these three.
 export const MODELS = ["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-4-8"];
 
-// Per-MTok USD pricing. Claude Sonnet 5 is running introductory pricing
-// through 2026-08-31 ($2/$10 instead of the standard $3/$15) -- update that
-// row once the window closes. Everything else in this file is price-agnostic.
+// Per-MTok USD pricing, checked against Anthropic's published pricing page on
+// 2026-09-01. Everything else in this file is price-agnostic.
+//
+// The Sonnet 5 row used to carry a note saying $2/$10 was introductory "through
+// 2026-08-31" and would rise to $3/$15 -- and a reviewer reading that on 1 Sep
+// would reasonably conclude every cost figure on the site was 50% low and
+// "fix" it. It is not: Anthropic cancelled that increase and made $2/$10 the
+// standard price. The note was the risk, not the number.
+//
+// A comment is not a mechanism. If these ever do move, what catches it is
+// test/pricingIsCurrent.test.ts asserting these exact values, so a change has
+// to be deliberate and dated rather than noticed by someone reading a stale
+// aside months later.
 export const PRICING: Record<string, { input: number; output: number }> = {
   "claude-sonnet-5": { input: 2.0, output: 10.0 },
   "claude-haiku-4-5": { input: 1.0, output: 5.0 },

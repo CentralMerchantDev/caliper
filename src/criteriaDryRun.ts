@@ -1,3 +1,16 @@
+// NOT YET WIRED INTO THE PIPELINE -- stated here rather than left for a reader
+// to discover, because the header below reads like a description of something
+// that runs, and it isn't. The only importer is its own test.
+//
+// Wiring it needs executable BASELINE functions (see dryRunCriterion's
+// signature), which means loading the baseline into a sandbox -- one more
+// Dynamic Worker invocation per run, and a real change to groundAndPlan rather
+// than a one-line call. Until that happens, the consequence is honest and worth
+// knowing: a plan can propose criteria that are already true of the unmodified
+// world, they pass, and the run reports "criteria 5/5" for five checks that
+// could not have failed. `minCount` is now rejected below 1 in criteria.ts,
+// which removes the cheapest version of that, not the general case.
+//
 // The criteria dry-run validator: executed and measured against real
 // historical data during this project's diagnostic work (33% of criteria
 // under the OLD schema were vacuous -- already true on baseline, testing
@@ -12,7 +25,7 @@
 // condition (a field exists, a type holds, a count is met) is ALREADY true
 // on the unmodified baseline -- so the criterion can never distinguish
 // "the change worked" from "nothing happened at all."
-import { OBJECT_TYPE_KEYS, ENTITY_TYPES, objectTypeKeysFor } from "./worldStructure";
+import { ENTITY_TYPES, objectTypeKeysFor } from "./worldStructure";
 import type { ProposedCriterion } from "./criteria";
 
 export type DryRunVerdict = { verdict: "valid"; reason: string } | { verdict: "invalid"; reason: string };
