@@ -95,7 +95,7 @@ and `maxHeight` rather than inventing new categories.
 
 ### 4. The tests
 
-`npm test` runs 351 node tests plus 12 Cloudflare Worker tests, and type-checks
+`npm test` runs 354 node tests plus 9 Cloudflare Worker tests, and type-checks
 first. Several assert real world invariants — buildings on dry land, no road
 mostly over water, no two land masses overlapping, every land mass reachable,
 plot classes inside their legal size range. If you change geometry and one goes

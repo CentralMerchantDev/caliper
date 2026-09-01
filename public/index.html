@@ -1010,6 +1010,14 @@ body.inspecting-mobile #nav-compass-pad {
     </div>
 
     <!-- Utilities -->
+    <!-- TOUR IS A VIEW, NOT A PAGE.
+         There was a link here to /city.html. When the city lived on its own
+         page that made sense; now the city IS this page, so the link took you
+         somewhere you could look at the same world and do none of the things
+         the app is for. Worse, it read as "the city is over there", when the
+         city is the thing the pipeline builds on and it is right here.
+         So: hide the chrome, keep the world, and keep the way back visible. -->
+    <button id="tour-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Put the panels away and fly the city. Press again, or Escape, to come back.">🏙 Tour</button>
     <button id="grid-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Toggle the 600 m spatial grid and world axes">📐 Grid</button>
     <button id="sound-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Toggle ambient audio">🎵 Audio</button>
     <button id="drone-tour-btn" type="button" class="btn-pill" title="Cinematic camera flythrough with architectural narrative">🎬 Tour</button>
@@ -1058,7 +1066,7 @@ body.inspecting-mobile #nav-compass-pad {
       <div style="font-size:16px;margin-bottom:2px">🌍</div>
       <strong style="color:#fff;font-size:12px;display:block">The Region</strong>
       <span style="font-size:11px;color:#94a3b8;line-height:1.35">A 40&nbsp;km coastal region generated from one plan: terrain, coastline, 26 settlements, 39,000 buildings.
-        <a href="/city.html" style="color:var(--sky);font-weight:600;text-decoration:none">Open the city&nbsp;&rarr;</a></span>
+        Press <strong>Tour</strong> in the bar above to put the panels away and fly it.</span>
     </div>
   </div>
 </div>
@@ -1125,7 +1133,20 @@ body.inspecting-mobile #nav-compass-pad {
   <!-- OUTSIDE #stage-log deliberately. It lived inside, and both startRun and
        playRecordedRun clear that element -- so the only zero-spend entry point
        on the page deleted itself after the visitor's first interaction. -->
-  <button type="button" class="gate-btn" id="replay-open-btn" style="font-size:11.5px;padding:5px 10px;margin-top:8px">▶ Watch a recorded run (free)</button>
+  <!-- SECONDARY, AND HONEST ABOUT WHAT IT IS.
+       This was a primary button reading "Watch a recorded run (free)", above the
+       input. Three things were wrong with it. "Recorded" reads as STAGED, so a
+       visitor discounts everything else on the page. "(free)" implies the real
+       thing is rationed and this is the consolation prize. And its prominence
+       made it look like the intended action rather than evidence -- so a visitor
+       whose own run then failed would reasonably conclude that only the canned
+       ones work and none of it is real.
+       These are REAL RUNS. Saying so is both more honest and more convincing,
+       and the failures sit next to the success on purpose: "it refuses when it
+       should" is the claim, not an embarrassment to be hidden. -->
+  <p style="margin:8px 0 0;font-size:11.5px;color:var(--text-muted);line-height:1.5">
+    <a href="#" id="replay-open-btn" style="color:var(--sky);text-decoration:none;font-weight:600">Previous runs on record</a><span id="run-record-tally"></span>
+  </p>
 </div>
 
 <!-- 3D Parcel / District Inspection Card -->
@@ -1252,7 +1273,7 @@ body.inspecting-mobile #nav-compass-pad {
         </div>
       </div>
       <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#d1fae5">
-        <strong>Continuous Verification:</strong> 351 Node tests and 12 Cloudflare Worker integration tests, run against this repository. Counts are read from the test runner at the moment this line is edited, not from memory &mdash; and the last two audits both caught this number going stale, which is why it says so.
+        <strong>Continuous Verification:</strong> 354 Node tests and 9 Cloudflare Worker integration tests, run against this repository. Counts are read from the test runner at the moment this line is edited, not from memory &mdash; and the last two audits both caught this number going stale, which is why it says so.
       </div>
       <div id="budget-summary-box" class="mono" style="font-size:11.5px;color:var(--text-muted);padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px">
         Loading budget invariants…
@@ -2288,6 +2309,73 @@ document.addEventListener('click', ev => {
   });
 })();
 
+// THE RECORD, INCLUDING THE FAILURES.
+//
+// A single "watch a recording" button invites the worst reading available: that
+// the demo is staged and the visitor's own run is decoration. Showing the real
+// tally -- and showing that most runs on record FAILED -- does the opposite. It
+// is the claim the whole project makes ("it refuses when it should"), stated as
+// a fact about its own history rather than as a promise.
+(async function showRunRecord() {
+  const el = $('#run-record-tally');
+  if (!el) return;
+  try {
+    const h = await fetch('/change-history').then(r => r.json());
+    const totals = h.totals || {};
+    const n = Object.values(totals).reduce((a, b) => a + b, 0);
+    const shipped = totals.shipped || 0;
+    const failed = n - shipped;
+    // +1 for the fully captured run kept in public/recorded-run.json, which
+    // predates the changelog and is the one that can be replayed stage by stage.
+    el.textContent = ` — ${n + 1} so far, ${shipped + 1} shipped and ${failed} that did not.`;
+  } catch {
+    el.textContent = ' — including the ones that failed.';
+  }
+})();
+
+// TOUR MODE.
+//
+// Hides the dashboard chrome so the city can be looked at, and leaves one
+// obvious way back. Escape works too -- a mode with no visible exit is a trap,
+// and this one covers the entire screen.
+(function tourMode() {
+  const PANELS = ['#welcome-mission-card', '#floating-status-card', '#director-dock', '#nav-compass-pad', '#inspect-card', '#street-hud'];
+  const btn = $('#tour-toggle-btn');
+  const bar = document.querySelector('.top-bar-wrapper');
+  let touring = false;
+  const setTour = (on) => {
+    touring = on;
+    for (const sel of PANELS) {
+      const el = document.querySelector(sel);
+      if (el) el.style.display = on ? 'none' : '';
+    }
+    // The bar stays -- it is the way back. Everything on it except the exit is
+    // hidden, so the world is not framed by controls that do nothing here.
+    if (bar) {
+      bar.querySelectorAll('.btn-pill, .btn-group, .clock-pill, .status-pill, a.btn-pill').forEach((el) => {
+        if (el !== btn && !btn.contains(el)) el.style.display = on ? 'none' : '';
+      });
+    }
+    if (btn) {
+      btn.textContent = on ? '← Back to the dashboard' : '🏙 Tour';
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', String(on));
+    }
+    if (exitHint) exitHint.style.display = on ? 'block' : 'none';
+    renderer3d.playClickSound();
+  };
+  const exitHint = document.createElement('div');
+  exitHint.className = 'glass';
+  exitHint.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:20px;padding:8px 14px;border-radius:999px;font-size:11.5px;color:var(--text-muted);display:none;z-index:80;pointer-events:none';
+  exitHint.textContent = 'Touring the city — drag to orbit, W A S D to fly. Press Escape to come back.';
+  document.body.appendChild(exitHint);
+
+  btn?.addEventListener('click', () => setTour(!touring));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && touring) setTour(false);
+  });
+})();
+
 checkLiveStatus();
 reportDegradedRenderer(renderer3d);
 
@@ -2660,11 +2748,11 @@ function offerRecordedRun(lead) {
   const d = document.createElement('div');
   d.className = 'stage';
   d.id = 'replay-offer';
-  d.innerHTML = '<h4>▶ Watch a recorded run instead</h4>' +
+  d.innerHTML = '<h4>See a previous run instead</h4>' +
     '<p style="margin:6px 0 8px;font-size:12px;color:#94a3b8;line-height:1.5">' +
     (lead ? esc(lead) + ' ' : '') +
-    'A real run from 29 Aug 2026, replayed with its actual costs and results. Free, and it spends nothing.</p>' +
-    '<button type="button" class="gate-btn gate-approve" id="replay-start-btn">Play the recording</button>';
+    'A real run from 29 Aug 2026, replayed with its actual costs and results.</p>' +
+    '<button type="button" class="gate-btn gate-approve" id="replay-start-btn">Replay it</button>';
   log.appendChild(d);
   d.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   // No listener here: a delegated document handler already covers both
@@ -2688,7 +2776,7 @@ async function playRecordedRun() {
   const banner = document.createElement('div');
   banner.className = 'stage';
   banner.style.borderLeftColor = 'var(--accent)';
-  banner.innerHTML = '<h4>⏺ RECORDING — not a live run</h4>' +
+  banner.innerHTML = '<h4>A real run, replayed</h4>' +
     '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8">Loading…</p>';
   log.appendChild(banner);
 
@@ -2706,8 +2794,10 @@ async function playRecordedRun() {
   const run = recordedRun;
   const money = v => '$' + Number(v || 0).toFixed(4);
   banner.querySelector('p').innerHTML =
-    'Captured <strong>' + esc(String(run.capturedAt).slice(0, 10)) + '</strong> · request: <em>“' + esc(run.changeRequest) + '”</em>' +
-    ' · total ' + money(run.totalCostUsd) + ' and ' + Math.round((run.totalWallTimeMs || 0) / 1000) + ' s in real life. Replayed here in about 12.';
+    'This actually happened on <strong>' + esc(String(run.capturedAt).slice(0, 10)) + '</strong>. Somebody typed ' +
+    '<em>“' + esc(run.changeRequest) + '”</em> and the pipeline ran it end to end: ' +
+    money(run.totalCostUsd) + ', ' + Math.round((run.totalWallTimeMs || 0) / 1000) + ' s. ' +
+    'The stages below are that run&rsquo;s real results played back at speed — not a script.';
 
   const TITLES = {
     ground: '1. Ground — is this true of the world?',
@@ -2769,8 +2859,8 @@ async function playRecordedRun() {
           end.classList.remove('active');
           end.insertAdjacentHTML('beforeend',
             '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;line-height:1.6">' +
-            'Total ' + money(run.totalCostUsd) + '. This was a recording — nothing was spent and nothing changed just now. ' +
-            'Type your own request above to run it for real.</p>');
+            'Total ' + money(run.totalCostUsd) + '. That was a replay of a real run, so nothing was spent or changed just now. ' +
+            'Your own request runs the same pipeline — and it can just as easily refuse.</p>');
         }, 900));
       }
     }, delay));
@@ -2854,7 +2944,7 @@ function startRun() {
     const hint = $('#stage-log');
     if (hint) hint.innerHTML = '<div class="stage"><h4>Type what you want changed</h4>' +
       '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8">For example: <em>add a lamp post near the workshop</em>. ' +
-      'Or press <strong>Watch a recorded run</strong> to see the whole pipeline without spending anything.</p></div>';
+      'Or see <strong>previous runs on record</strong> below — real ones, including the ones that failed.</p></div>';
     return;
   }
   const log = $('#stage-log');
@@ -3354,7 +3444,7 @@ function connect(url) {
             finishPipelineTelemetry(false, st.detail);
             offerRecordedRun('This is the cap doing its job. Here is the full pipeline instead:');
           } else {
-            finishPipelineTelemetry(false, 'The run could not be started. The recorded run below shows the full pipeline.');
+            finishPipelineTelemetry(false, 'The run could not be started. A previous real run is below.');
             offerRecordedRun();
           }
         }).catch(() => {

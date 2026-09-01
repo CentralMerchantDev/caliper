@@ -47,10 +47,36 @@ test("structureSummary is deterministic and mentions every NOT_YET_PRESENT item 
 // that used to assert the opposite; the fact changed, so the test that
 // checks the fact must change with it -- this is not the sim's regression
 // suite, which stays untouched.
-test("structureSummary reports a real neighbourhood, not a single room", () => {
+test("structureSummary describes the city the visitor sees, AND what can be changed", () => {
+  // This used to assert the word "neighbourhood", which was true of a
+  // four-house village and became a lie the moment the main page started
+  // rendering a 40 km city. Grounding reads this verbatim, so a request like
+  // "add a bench near the tower" was checked against a world containing no
+  // tower and refused as a false premise -- correctly, by a model that had been
+  // told the wrong thing.
+  //
+  // The two halves are the point, and they are different: the CITY is the
+  // ground, the REGISTRY is what can be placed on it. A summary with only one
+  // of them either blinds the model to the world or invites it to try to move
+  // roads.
   const summary = structureSummary();
-  assert.match(summary, /neighbourhood/);
+
+  // the city half
+  assert.match(summary, /THE WORLD YOU ARE LOOKING AT/);
+  assert.match(summary, /coastal region/);
+  assert.match(summary, /building plots in \d+ settlements/);
+  assert.match(summary, /Settlements, with what is in each/);
+
+  // the editable half
+  assert.match(summary, /WHAT A CHANGE CAN ADD OR ALTER/);
   assert.match(summary, /Tavern \(id: shop, type: shop\)/);
   assert.match(summary, /"The tavern" means.*"shop"/);
   assert.doesNotMatch(summary, /no second location/);
+
+  // and the city must come FIRST -- context before the thing being changed
+  assert.ok(
+    summary.indexOf("THE WORLD YOU ARE LOOKING AT") < summary.indexOf("WHAT A CHANGE CAN ADD OR ALTER"),
+    "the world has to be described before the change that acts on it",
+  );
 });
+

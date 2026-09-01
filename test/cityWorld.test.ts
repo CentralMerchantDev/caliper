@@ -553,3 +553,32 @@ test("plots within a settlement do not meaningfully overlap either", () => {
   assert.equal((overlapWorld as any).plotsOverlappingWithinSettlement, 0,
     "plots inside one settlement are overlapping by more than a centimetre -- a subdivision defect");
 });
+
+// =============================================================================
+// THE EMBEDDED CITY SUMMARY MUST DESCRIBE THIS CITY
+//
+// grounding and planning read structureSummary() verbatim, and it now leads
+// with a description of the city. That description is generated at build time,
+// because generateWorld takes ~4.8 s and pulls in the whole terrain stack --
+// far too slow to run per request.
+//
+// The cost of precomputing is that it can go stale, and a confident description
+// of a world that is not there is the precise failure structureSummary's own
+// no-silent-fallback rule exists to prevent. So it is checked against the plan
+// that actually generates, here, where a world already exists.
+// =============================================================================
+test("the embedded city summary is not stale", async () => {
+  const { CITY_SUMMARY } = await import("../src/citySummary.generated.ts");
+  const m = CITY_SUMMARY.match(/([\d,]+) building plots in (\d+) settlements/);
+  assert.ok(m, "the summary must state its plot and settlement counts");
+
+  const statedPlots = Number(m[1].replace(/,/g, ""));
+  const statedSettlements = Number(m[2]);
+  const realPlots = overlapWorld.plots.length;
+  const realSettlements = new Set((overlapWorld.plots as any[]).map((p) => p.settlement)).size;
+
+  assert.equal(statedPlots, realPlots,
+    `the summary tells the model there are ${statedPlots} plots; there are ${realPlots}. Run: node scripts/gen-city-summary.mjs`);
+  assert.equal(statedSettlements, realSettlements,
+    `the summary tells the model there are ${statedSettlements} settlements; there are ${realSettlements}. Run: node scripts/gen-city-summary.mjs`);
+});

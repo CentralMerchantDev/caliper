@@ -15,6 +15,7 @@
 // with it automatically, on the next load -- not on the next person who
 // remembers to update two files in the same commit.
 import { SIM_BASELINE_SOURCE } from "./simBaseline";
+import { CITY_SUMMARY } from "./citySummary.generated";
 import { readWorldData } from "./worldEdit";
 
 interface BaselineObjectType {
@@ -226,13 +227,28 @@ export function structureSummary(source: string = SIM_BASELINE_SOURCE): string {
   // Describing the wrong world confidently is the exact failure this project
   // exists to refuse, so it now throws and the run halts instead.
   const f: WorldFacts = worldFacts(source);
-  const BUILDING_TYPES = f.buildingTypes, BUILDING_NAMES = f.buildingNames;
+  const BUILDING_NAMES = f.buildingNames;
   const STATIONS = f.stations, OUTDOOR_OBJECT_TYPES = f.outdoorObjectTypes;
   const OBJECT_TYPE_KEYS = f.objectTypeKeys, SURFACE_TYPES = f.surfaceTypes;
   const WORLD_FIELDS = worldFieldsFor(f);
   return [
+    // THE CITY THE VISITOR IS ACTUALLY LOOKING AT.
+    //
+    // Everything below this describes the EDITABLE REGISTRY -- the object types
+    // and placements a change can add or alter. That is correct and it was, on
+    // its own, badly misleading: it said "the world is a neighbourhood" with
+    // four buildings while the visitor was looking at 31,308 plots across 26
+    // settlements. A request like "add a bench near the tower" was checked
+    // against a world containing no tower and refused as a false premise --
+    // correctly, by a model that had been told the wrong thing.
+    //
+    // So the city comes first, as context, and the registry follows as the
+    // thing that can be changed. The two are different and saying so is the
+    // point: the city is the ground, placements are what gets built on it.
+    `THE WORLD YOU ARE LOOKING AT\n${CITY_SUMMARY}`,
+    "",
+    `WHAT A CHANGE CAN ADD OR ALTER. The city above is the ground; the registry below is what can be placed on it and edited. A change adds or modifies objects from this registry (${f.buildingTypes.length} building types: ${f.buildingTypes.join(", ")}) -- it does not move roads or re-zone plots.`,
     `Entity types that exist: ${ENTITY_TYPES.join(", ")}.`,
-    `The world is a neighbourhood: a plot of ground with ${BUILDING_TYPES.length} building types (${BUILDING_TYPES.join(", ")}) laid out on a grid, paths and open ground between them, and objects placed indoors or outdoors from a type registry.`,
     `Named buildings: ${BUILDING_NAMES.join(", ")}. "The tavern" means the building whose id and type are "shop"; use "shop" as the location id in placement data.`,
     `World state fields: ${Object.entries(WORLD_FIELDS)
       .map(([k, v]) => `${k} (${v})`)
