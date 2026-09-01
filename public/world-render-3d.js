@@ -844,8 +844,30 @@ class AudioSynth {
         this.ambientGain.gain.setTargetAtTime(0.025, this.ctx.currentTime, 0.1);
       }
     } else {
+      // TURNING IT OFF USED TO ONLY TURN IT DOWN.
+      //
+      // This ramped the gain to zero and stopped there. The looping white-noise
+      // buffer source kept generating samples through the lowpass filter, and
+      // _musicInterval kept firing every few seconds to schedule notes into a
+      // gain node set to silence. The audio graph ran at full cost forever,
+      // producing nothing, on a page that also builds a 22,000-plot city.
+      //
+      // Fade first so it does not cut, then actually stop: clear the scheduler,
+      // and suspend the context, which halts the whole graph rather than leaving
+      // it running inaudibly. resume() on the way back in restores it.
       if (this.ambientGain && this.ctx) {
         this.ambientGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1);
+      }
+      if (this._musicInterval) {
+        clearInterval(this._musicInterval);
+        this._musicInterval = null;
+      }
+      if (this.ctx && this.ctx.state === "running") {
+        const ctx = this.ctx;
+        // 400 ms covers the 0.1 s time-constant fade with room to spare
+        setTimeout(() => {
+          if (!this.enabled && ctx.state === "running") ctx.suspend().catch(() => {});
+        }, 400);
       }
     }
     return this.enabled;

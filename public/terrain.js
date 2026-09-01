@@ -20,30 +20,13 @@ import { LANDMASSES, landmassPolygonsDesign, WORLD } from "./city-plan.js";
 // Deterministic noise. Integer hash -> value noise -> fbm. No dependencies, no
 // seeding ceremony, and identical in Node and the browser.
 // -----------------------------------------------------------------------------
-function hash2(i, j) {
-  let h = Math.imul(i, 374761393) + Math.imul(j, 668265263);
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
-}
+
 const fade = (t) => t * t * (3 - 2 * t);
 
-export function valueNoise(x, y) {
-  const i = Math.floor(x), j = Math.floor(y);
-  const fx = fade(x - i), fy = fade(y - j);
-  const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
-  return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
-}
+
 
 /** Fractal noise in world metres. `scale` is the size of the largest feature. */
-export function fbm(x, z, scale, octaves = 4, gain = 0.5, lac = 2.03) {
-  let amp = 1, freq = 1 / scale, sum = 0, norm = 0;
-  for (let o = 0; o < octaves; o++) {
-    sum += amp * valueNoise(x * freq, z * freq);
-    norm += amp;
-    amp *= gain; freq *= lac;
-  }
-  return sum / norm;                                   // 0..1
-}
+
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const smooth = (t) => t * t * (3 - 2 * t);
@@ -97,6 +80,19 @@ const smoother = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 // rather than being exported in an ambiguous space.
 // =============================================================================
 import { WORLD_SCALE, sm, toDesign, sFields } from "./world-scale.js";
+// THE DUPLICATE IS GONE.
+//
+// This file carried its own byte-identical copies of hash2, valueNoise and fbm.
+// The comment in noise.js explains why they were separated -- city-plan.js needs
+// the same noise, and city-plan importing terrain.js would have been a cycle --
+// but the conclusion drawn here was to keep a COPY, which is the one option that
+// guarantees the two can drift apart.
+//
+// noise.js imports nothing at all, so terrain.js importing it is not a cycle and
+// never was. Two implementations of one primitive is worse than either, and it
+// matters more now than it did: the design/world scale boundary assumes the
+// terrain and the plan agree exactly about what noise a coordinate produces.
+import { hash2, valueNoise, fbm } from "./noise.js";
 
 /** The alpine spine: a polyline, so the range is a range and not a scatter. */
 const RANGE_SPINE = [
@@ -834,6 +830,9 @@ function waterwaySurfaceWorld(w, heightAt, step = sm(90)) {
 }
 
 export {
+  // Re-exported so existing consumers (city-render imports fbm from here) keep
+  // working. Same functions, one implementation, from noise.js.
+  hash2, valueNoise, fbm,
   makeHeightAtWorld as makeHeightAt,
   cliffinessWorld as cliffiness,
   edgeFalloffWorld as edgeFalloff,

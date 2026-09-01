@@ -834,7 +834,17 @@ body.inspecting-mobile #nav-compass-pad {
      watchPanelHeights) -- the top bar stacks 3 clusters in a column at this
      width, so a fixed 54px undershoots the moment it wraps to more rows
      than assumed. */
-  .status-card, .inspect-card {
+  /* THEY WERE GIVEN THE SAME TOP, SO THEY LANDED ON EACH OTHER.
+     Both cards are position:fixed and both were anchored to the same measured
+     edge, so whenever both were visible -- which is the state the page loads in --
+     the second sat exactly on top of the first, and opening the inspector made
+     it three. Anchoring alone cannot solve this: the cards do not know about
+     each other.
+     So the status card keeps the anchor, and the inspect card is pushed down by
+     the status card's REAL measured height (--statuscard-h, published by
+     watchPanelHeights alongside the others). When the status card is hidden its
+     height is 0 and the inspector rises to the same place it used to sit. */
+  .status-card {
     top: calc(var(--topbar-bottom, 54px) + 10px) !important;
     bottom: auto !important;
     left: 8px !important;
@@ -843,6 +853,16 @@ body.inspecting-mobile #nav-compass-pad {
     max-height: 220px;
     overflow-y: auto;
     z-index: 95;
+  }
+  .inspect-card {
+    top: calc(var(--topbar-bottom, 54px) + 10px + var(--statuscard-h, 0px)) !important;
+    bottom: auto !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 96;
   }
   /* On compact mobile screens, lower the nav-pad scale and tuck it above the
      bottom dock -- clearance tracks the dock's REAL height (--dock-h) so it
@@ -1623,16 +1643,36 @@ const money = n => '$' + Number(n).toFixed(4);
     if (!el) return;
     root.setProperty(prop, `${Math.ceil(el.getBoundingClientRect().bottom)}px`);
   };
+  // The status card is measured too, so the inspect card can stack below it
+  // instead of on it. A hidden element measures 0, which is exactly the offset
+  // wanted when it is not there -- no visibility flag to keep in sync.
+  const statusCard = document.querySelector('.status-card');
+  const publishStackHeight = (el, prop) => {
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const visible = r.height > 0 && getComputedStyle(el).display !== 'none';
+    root.setProperty(prop, visible ? `${Math.ceil(r.height) + 10}px` : '0px');
+  };
   const ro = new ResizeObserver((entries) => {
     for (const entry of entries) {
       if (entry.target === dock) publishHeight(dock, '--dock-h');
       else if (entry.target === topBar) publishBottomEdge(topBar, '--topbar-bottom');
+      else if (entry.target === statusCard) publishStackHeight(statusCard, '--statuscard-h');
     }
   });
   ro.observe(dock);
   ro.observe(topBar);
+  if (statusCard) ro.observe(statusCard);
   publishHeight(dock, '--dock-h');
   publishBottomEdge(topBar, '--topbar-bottom');
+  publishStackHeight(statusCard, '--statuscard-h');
+  // display:none does not fire ResizeObserver, so a card being shown or hidden
+  // has to be observed separately or the stack goes stale the first time the
+  // status card is dismissed.
+  if (statusCard && typeof MutationObserver !== 'undefined') {
+    new MutationObserver(() => publishStackHeight(statusCard, '--statuscard-h'))
+      .observe(statusCard, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+  }
 })();
 
 // District target suggestion dictionary
@@ -2646,14 +2686,25 @@ function startTickLoop(tickFn) {
   if (tickLoopRunning) return;
   tickLoopRunning = true;
   let start = performance.now();
+  let lastClockLabel = null;
   function frame(now) {
     const t = Math.min(1, (now - start) / TICK_MS);
     lastT = t;
     (currentView === '3d' ? renderer3d : renderer2d).draw(t);
     if (world) {
+      // WRITTEN WHEN IT CHANGES, NOT SIXTY TIMES A SECOND.
+      //
+      // This ran inside the rAF loop, so it built a template string and touched
+      // the DOM on every frame -- about 60 times a second -- for a label that
+      // changes once every 6.25 seconds. Every write is a style invalidation on
+      // the element, in the same frame budget the 3D scene is drawing in.
       const hour = world.tick % 24;
       const dayNum = Math.floor(world.tick / 24) + 1;
-      $('#world-clock-badge').textContent = `Day ${dayNum} · ${String(hour).padStart(2, '0')}:00`;
+      const label = `Day ${dayNum} · ${String(hour).padStart(2, '0')}:00`;
+      if (label !== lastClockLabel) {
+        lastClockLabel = label;
+        $('#world-clock-badge').textContent = label;
+      }
     }
     if (playing && t >= 1 && currentTickFn) {
       world = currentTickFn(world);
