@@ -492,3 +492,64 @@ test("relief is deterministic", () => {
     assert.equal(ha(x, z), hb(x, z), `two LandFields disagree at ${x},${z}`);
   }
 });
+
+// =============================================================================
+// ONE PIECE OF GROUND, ONE PLOT
+//
+// Settlements are laid out independently and their BOUNDS may overlap -- an
+// island's core sits inside its shore ring by design. Their PLOTS may not: two
+// plots on the same ground means two buildings intersecting.
+//
+// `port` was laid over `coastal-4` and `cormorant-isle-shore` over `coastal-0`.
+// Nothing caught it: the existing tests check that land masses do not overlap
+// and that placements do not overlap, and nothing checked plot against plot.
+//
+// It surfaced the moment "which plot is at this point" became answerable --
+// 35 plot centres answered with a different plot's id, which is only possible
+// if they share ground.
+//
+// A NOTE ON THE EPSILON, because getting this wrong cost an hour: adjacent
+// plots share an edge, and `xMin + i*w + w` is not bit-identical to
+// `xMin + (i+1)*w`. An exact comparison reports 4,024 overlapping pairs whose
+// largest intersection is 3.6 picometres, and I reported that as "26% of the
+// city overlaps" before checking the magnitude. A centimetre is far below
+// anything that matters and far above anything a double invents.
+// =============================================================================
+const overlapWorld = generateWorld(makeHeightAt(new LandField(16)));
+
+test("no plot sits on ground another settlement has already claimed", () => {
+  const EPS = 0.01;
+  const CELL = 400;
+  const grid = new Map<string, any[]>();
+  for (const p of overlapWorld.plots as any[]) {
+    for (let cx = Math.floor(p.xMin / CELL); cx <= Math.floor(p.xMax / CELL); cx++) {
+      for (let cz = Math.floor(p.zMin / CELL); cz <= Math.floor(p.zMax / CELL); cz++) {
+        const k = `${cx},${cz}`;
+        let b = grid.get(k);
+        if (!b) grid.set(k, (b = []));
+        b.push(p);
+      }
+    }
+  }
+  const clashes: string[] = [];
+  for (const [, bucket] of grid) {
+    for (let i = 0; i < bucket.length; i++) {
+      for (let j = i + 1; j < bucket.length; j++) {
+        const a = bucket[i], b = bucket[j];
+        if (a.settlement === b.settlement) continue;
+        if (a.xMax - b.xMin <= EPS || b.xMax - a.xMin <= EPS) continue;
+        if (a.zMax - b.zMin <= EPS || b.zMax - a.zMin <= EPS) continue;
+        clashes.push(`${a.id} (${a.settlement}) over ${b.id} (${b.settlement})`);
+      }
+    }
+  }
+  assert.deepEqual(clashes.slice(0, 5), [],
+    `${clashes.length} plot(s) share ground across settlements -- buildings on them intersect`);
+});
+
+test("plots within a settlement do not meaningfully overlap either", () => {
+  // Reported by generateWorld rather than recomputed, so the number the world
+  // publishes about itself is the number under test.
+  assert.equal((overlapWorld as any).plotsOverlappingWithinSettlement, 0,
+    "plots inside one settlement are overlapping by more than a centimetre -- a subdivision defect");
+});

@@ -2491,9 +2491,117 @@ export function generateWorld(rawHeightAt = null) {
     });
   }
 
-  return { world:WORLD, masses, roads: out, blocks, plots, settlements,
+  // ONE PIECE OF GROUND, ONE PLOT.
+  //
+  // Settlements are laid out independently and their bounds can overlap -- an
+  // island's core and its shore ring are meant to, and that is fine as long as
+  // the PLOTS do not collide. Two of them did: `port` was laid over `coastal-4`
+  // and `cormorant-isle-shore` over `coastal-0`, putting 593 plots on ground
+  // another settlement had already claimed. Buildings on those plots intersect
+  // each other in 3D.
+  //
+  // Nothing caught it. The existing tests check that land masses do not overlap
+  // and that placements do not overlap, but nothing checked plot against plot,
+  // so a settlement could be built straight through another one.
+  //
+  // Found by building the spatial index: the moment "which plot is at this
+  // point" became answerable, 35 plot centres answered with a DIFFERENT plot's
+  // id, which is only possible if they share ground.
+  //
+  // Resolved at plot level rather than by moving settlement bounds, so the
+  // legitimate core/shore pairs are untouched -- they only lose a plot where
+  // one genuinely collides. First plot wins, and the order is deterministic, so
+  // the world stays reproducible.
+  const keptPlots = [];
+  {
+    const CELL = 400;
+    const grid = new Map();
+    const key = (cx, cz) => cx + "," + cz;
+    for (const pl of plots) {
+      const c0 = Math.floor(pl.xMin / CELL), c1 = Math.floor(pl.xMax / CELL);
+      const r0 = Math.floor(pl.zMin / CELL), r1 = Math.floor(pl.zMax / CELL);
+      let clash = false;
+      for (let cx = c0; cx <= c1 && !clash; cx++) {
+        for (let cz = r0; cz <= r1 && !clash; cz++) {
+          const bucket = grid.get(key(cx, cz));
+          if (!bucket) continue;
+          for (const other of bucket) {
+            // ONLY ACROSS SETTLEMENTS.
+            //
+            // The first version of this dropped ANY overlapping plot and took
+            // 4,087 of them -- 13% of the city -- to fix 99. Measuring what was
+            // actually being deleted showed 3,988 were same-block siblings from
+            // subdivideBlock, which is a separate question (reported below, not
+            // silently resolved by deletion).
+            //
+            // The defect this fixes is one settlement laid over another. Two
+            // plots in the same settlement overlapping is a subdivision issue
+            // and deleting one does not fix it, it just hides it.
+            if (other.settlement === pl.settlement) continue;
+            // touching edges is not overlapping -- adjacent plots share a line
+            if (pl.xMax <= other.xMin || pl.xMin >= other.xMax) continue;
+            if (pl.zMax <= other.zMin || pl.zMin >= other.zMax) continue;
+            clash = true;
+            break;
+          }
+        }
+      }
+      if (clash) continue;
+      keptPlots.push(pl);
+      for (let cx = c0; cx <= c1; cx++) {
+        for (let cz = r0; cz <= r1; cz++) {
+          const k = key(cx, cz);
+          let bucket = grid.get(k);
+          if (!bucket) grid.set(k, (bucket = []));
+          bucket.push(pl);
+        }
+      }
+    }
+  }
+
+  return { world:WORLD, masses, roads: out, blocks, plots: keptPlots, settlements,
            districts:DISTRICTS, bridges:BRIDGES, causeways:BRIDGES, highways:HIGHWAYS,
-           unservedBridgeEnds: unserved };
+           unservedBridgeEnds: unserved,
+           plotsDroppedForOverlap: plots.length - keptPlots.length,
+           /** Plots that MEANINGFULLY overlap another in the same settlement.
+            *
+            * The epsilon is not decoration. Adjacent plots share an edge, and
+            * `xMin + i*w + w` differs from `xMin + (i+1)*w` in the last bits of
+            * a double -- so an exact test reports 4,024 "overlapping" pairs
+            * whose largest intersection is 3.6 PICOMETRES. Measuring without a
+            * tolerance turned floating-point dust into a 26%-of-the-city alarm,
+            * which I raised before checking the magnitude.
+            *
+            * A centimetre is well below anything that matters here and well
+            * above anything a double can invent. Reported rather than deleted:
+            * if real overlaps ever appear, removing one of the pair hides the
+            * subdivision bug instead of fixing it. */
+           plotsOverlappingWithinSettlement: (() => {
+             const CELL2 = 400, g2 = new Map(), k2 = (a3, b3) => a3 + "," + b3;
+             for (const pl of keptPlots) {
+               for (let cx = Math.floor(pl.xMin / CELL2); cx <= Math.floor(pl.xMax / CELL2); cx++) {
+                 for (let cz = Math.floor(pl.zMin / CELL2); cz <= Math.floor(pl.zMax / CELL2); cz++) {
+                   const kk = k2(cx, cz);
+                   let bk = g2.get(kk);
+                   if (!bk) g2.set(kk, (bk = []));
+                   bk.push(pl);
+                 }
+               }
+             }
+             const bad = new Set();
+             for (const [, bucket] of g2) {
+               for (let i = 0; i < bucket.length; i++) {
+                 for (let j = i + 1; j < bucket.length; j++) {
+                   const a4 = bucket[i], b4 = bucket[j];
+                   const EPS = 0.01;                  // 1 cm
+                   if (a4.xMax - b4.xMin <= EPS || b4.xMax - a4.xMin <= EPS) continue;
+                   if (a4.zMax - b4.zMin <= EPS || b4.zMax - a4.zMin <= EPS) continue;
+                   bad.add(a4.id); bad.add(b4.id);
+                 }
+               }
+             }
+             return bad.size;
+           })() };
 }
 
 /** The whole plan: roads, blocks and plots, ready to draw or to edit. */

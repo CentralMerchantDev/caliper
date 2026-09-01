@@ -14,11 +14,40 @@ import { WORLD_EDIT_SCHEMA, parseRawWorldEdit, runValidatedWorldEdit, type World
  * here the hard way -- twice, in two different call sites -- before this
  * existed as one shared guard instead of ad hoc per-callsite handling.
  */
+/**
+ * CACHE THE SYSTEM PROMPT.
+ *
+ * Every stage sends its system prompt on every call, unchanged, for the life of
+ * the project -- 150 to 870 tokens depending on the stage. A cache read costs
+ * 10% of the input rate, so this is free money with no behaviour change: the
+ * model sees exactly the same bytes either way.
+ *
+ * Applied here, in the one funnel every Claude call goes through, rather than
+ * at nine call sites that would drift.
+ *
+ * WHAT THIS DOES NOT DO, and it is the bigger prize: the world source is ~5,700
+ * tokens and is re-sent to plan, implement, fix and review -- the recorded run
+ * on the page spent 27,398 input tokens across four calls. Capturing THAT needs
+ * the source moved to the front of each prompt so it forms a cacheable prefix,
+ * which changes what the model reads and can change what it writes. That is a
+ * behaviour-affecting change and belongs in a reviewed run, not a quiet edit.
+ */
+function withCachedSystem(
+  params: Anthropic.MessageCreateParamsNonStreaming,
+): Anthropic.MessageCreateParamsNonStreaming {
+  if (typeof params.system !== "string" || params.system.length < 2000) return params;
+  return {
+    ...params,
+    system: [{ type: "text", text: params.system, cache_control: { type: "ephemeral" } }],
+  };
+}
+
 export async function createWithTruncationGuard(
   client: Anthropic,
   stage: string,
-  params: Anthropic.MessageCreateParamsNonStreaming,
+  paramsIn: Anthropic.MessageCreateParamsNonStreaming,
 ): Promise<Anthropic.Message> {
+  const params = withCachedSystem(paramsIn);
   const originalMaxTokens = params.max_tokens;
   for (let attempt = 1; attempt <= 2; attempt++) {
     const maxTokens = attempt === 1 ? originalMaxTokens : Math.min(originalMaxTokens * 2, 16000);

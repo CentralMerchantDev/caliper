@@ -1481,6 +1481,19 @@ class Renderer3D {
 
     const city = buildWorld(THREE, this.renderer, this.scene);
     this._city = city;
+
+    // WHAT IS AT THIS POINT, AND WHAT IS IT PART OF.
+    //
+    // Without this a click reports a coordinate, which is useless to everyone:
+    // the visitor cannot name what they selected and the pipeline cannot act on
+    // it. With it, a point resolves to a plot, its block, its district and its
+    // settlement -- an address a change request can be written against and that
+    // grounding can check a claim against.
+    //
+    // Built from the same generated plan the geometry came from, so it cannot
+    // describe a world that is not on screen.
+    const { buildSpatialIndex } = await import("./spatial-index.js");
+    this._index = buildSpatialIndex(city.world);
     this.sun = city.sun;                    // the shell's day/night code drives this
     this._skyMesh = city.sky;
     this._cityHeightAt = city.heightAt;
