@@ -217,7 +217,21 @@ const CLIFF_ZONES = [
 const BASINS = [
   { x: 2020, z: 200, r: 250, depth: 6.5 },      // the marina, in the east inlet
   { x: 820, z: -430, r: 600, depth: 12.0 },     // THE HARBOUR, dredged for ships
-  { x: -5300, z: -2650, r: 620, depth: 13.0 },  // the container port berths
+  // MOVED ONTO WATER, WHERE A BASIN CAN EXIST.
+  //
+  // This was declared at (-5300, -2650), which is 40 m up a HILLSIDE. Dredging
+  // only cuts water -- makeHeightAt consults BASINS in the `m < 0` branch -- so a
+  // basin on land does nothing at all, and the container port has been standing
+  // on a hill with an inert basin under it and no water to berth in.
+  //
+  // Nothing caught it because the port's own code never asked. It marched north
+  // from a hard-coded z until the ground came up and called that the quay; the
+  // comment there concedes the previous hard-coded z "stood in open water" and
+  // fixes it by searching, which is the same question asked privately and worse.
+  //
+  // Found by searching for water with buildable land behind it: 542 m south, the
+  // shore of the same inlet, 100% buildable ground behind for the stacks.
+  { x: -5077, z: -1846, r: 620, depth: 13.0 },  // the container port berths
 ];
 
 /** 0 = sand, 1 = cliff. */

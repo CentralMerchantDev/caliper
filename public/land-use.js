@@ -322,3 +322,117 @@ export function findFlattestSite(heightAt, want, opts = {}) {
   }
   return best;
 }
+
+/**
+ * A QUAY: a run of shoreline where land meets water deep enough to berth in.
+ *
+ * The container port was six literals -- a stack area, a crane line, and a quay
+ * found by marching north from a hard-coded z until the ground came up. The
+ * comment on the crane loop openly concedes the previous hard-coded z "stood in
+ * open water" and fixes it by searching, which is a private, worse
+ * reimplementation of the question this answers properly.
+ *
+ * A port is not defined by its coordinates. It is defined by needing a straight
+ * edge of dry land with navigable water against it, and that is what this looks
+ * for: it walks candidate shorelines and returns the best run, or null.
+ *
+ * @returns {{x, z, along, landSide, depth, length} | null}
+ *          `along` is the axis the quay edge runs along; `landSide` is +1 or -1,
+ *          the direction from the quay into dry land.
+ */
+export function findQuay(heightAt, want, opts = {}) {
+  const {
+    length = 600,      // metres of berth needed
+    minDepth = 8,      // metres of water a ship needs alongside
+    reach = 120,       // how far out to look for that depth
+    radius = 2500,
+    step = 80,
+    along = "ew",      // the quay edge runs east-west
+  } = opts;
+
+  const ew = along === "ew";
+  let best = null;
+
+  const score = (cx, cz) => {
+    // For each landSide, test whether the whole run has dry land on one side and
+    // deep water within reach on the other.
+    for (const side of [1, -1]) {
+      let ok = 0, total = 0, deepest = 0;
+      for (let t = -length / 2; t <= length / 2; t += step) {
+        total++;
+        const x = ew ? cx + t : cx;
+        const z = ew ? cz : cz + t;
+        // dry, buildable land just inland
+        const lx = ew ? x : x + side * 40;
+        const lz = ew ? z + side * 40 : z;
+        if (classifyAt(heightAt, lx, lz).use !== USE.BUILDABLE) continue;
+        // navigable water just outside
+        let depth = 0;
+        for (let r = 30; r <= reach; r += 20) {
+          const wx = ew ? x : x - side * r;
+          const wz = ew ? z - side * r : z;
+          const h = heightAt(wx, wz);
+          if (h < -depth) depth = -h;
+        }
+        if (depth < minDepth) continue;
+        ok++;
+        if (depth > deepest) deepest = depth;
+      }
+      const frac = total ? ok / total : 0;
+      if (frac < 0.8) continue;
+      const dist = Math.hypot(cx - want.x, cz - want.z);
+      const cand = { x: cx, z: cz, along, landSide: side, depth: deepest, length, frac, moved: dist };
+      if (!best || dist < best.moved) best = cand;
+    }
+  };
+
+  score(want.x, want.z);
+  for (let r = step; r <= radius && !best; r += step) {
+    const n = Math.max(8, Math.round((2 * Math.PI * r) / step));
+    for (let i = 0; i < n; i++) {
+      const a = (2 * Math.PI * i) / n;
+      score(want.x + Math.cos(a) * r, want.z + Math.sin(a) * r);
+    }
+  }
+  return best;
+}
+
+/**
+ * A CORRIDOR: a long run whose graded profile stays within a gradient limit.
+ *
+ * The railway is a single z with trains drawn along it and a per-point `h < 2`
+ * skip. That cannot tell the difference between a railway and a dotted line of
+ * disconnected fragments, and rail is the least forgiving surface in the world --
+ * 2.5% is already a hard climb for adhesion.
+ *
+ * Returns the best parallel offset from `want`, and what it costs.
+ */
+export function findCorridor(heightAt, want, opts = {}) {
+  const {
+    axis = "ew", from, to,
+    step = 60,
+    search = 1800,     // how far to shift the line looking for a better one
+    searchStep = 120,
+  } = opts;
+
+  const ew = axis === "ew";
+  let best = null;
+
+  for (let off = 0; Math.abs(off) <= search; off = off <= 0 ? -off + searchStep : -off) {
+    const at = (ew ? want.z : want.x) + off;
+    let on = 0, total = 0, min = Infinity, max = -Infinity;
+    for (let t = from; t <= to; t += step) {
+      total++;
+      const h = heightAt(ew ? t : at, ew ? at : t);
+      if (h < 2 || h > 240) continue;
+      on++;
+      if (h < min) min = h;
+      if (h > max) max = h;
+    }
+    const frac = total ? on / total : 0;
+    const cand = { at, axis, from, to, onLand: frac, range: max - min, moved: Math.abs(off) };
+    if (!best || frac > best.onLand + 0.02) best = cand;
+    if (best.onLand > 0.92) break;
+  }
+  return best;
+}

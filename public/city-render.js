@@ -23,7 +23,7 @@ import { assessFootprint } from "./footprint.js";
 // `sm` is already used as a local variable in this file (a THREE.Mesh), so the
 // world-scale helper is imported under a name that cannot be shadowed.
 import { sm as wm } from "./world-scale.js";
-import { findSite, findFlattestSite } from "./land-use.js";
+import { placeFeatures } from "./features.js";
 import { gradeRun, GRADE, ROAD_GRADE } from "./grade.js";
 import { createCollector, emitBuilding, HEIGHT, WALLS, ROOFS, rnd, pick } from "./buildings.js";
 
@@ -946,6 +946,18 @@ export function buildWorld(THREE, renderer, scene) {
 // coastal city.
 // =============================================================================
 function buildProps(api) {
+  // WHERE EVERYTHING GOES, DECIDED ONCE, BY ASKING THE LAND.
+  //
+  // Every large feature below used to carry its own coordinate. See features.js
+  // for what that cost. Placement now happens in one pass against the land
+  // registry, before a single mesh is made, and anything that cannot be placed
+  // is absent from SITE -- so the geometry below simply does not run, rather
+  // than running over water.
+  const { sites: SITE, report: siteReport } = placeFeatures(api.heightAt || heightAt);
+  // Reported, not swallowed. If the world has nowhere for a container port, that
+  // is a fact about the world and should be visible, not silently absent.
+  stats.featurePlacement = siteReport;
+  stats.featuresUnplaced = siteReport.filter((r) => !r.placed).map((r) => r.id);
   const { THREE, scene, heightAt, masses, stats, world, plan, settAt } = api;
   const M = (c, r = 0.85, m = 0) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
   const RB = (w, h, d, r = 0.3) => new RoundedBoxGeometry(w, h, d, 1, r);
@@ -1086,12 +1098,18 @@ function buildProps(api) {
   }
 
   // --- container port: the most recognisable silhouette in any working harbour
-  {
+  port: {
     const cc = [0xd94f3d, 0x2f7fb5, 0xe0a53f, 0x3f9e6a, 0xb04a8a, 0xe8e4dc];
     const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(12, 2.6, 2.6), new THREE.MeshStandardMaterial({ roughness: 0.72 }), 2200);
     const d = new THREE.Object3D(), c = new THREE.Color(); let n = 0;
-    for (let x = wm(-6800); x < wm(-3500) && n < 2200; x += 16)
-      for (let z = wm(-3150); z < wm(-2320) && n < 2200; z += 4) {
+    // The stack yard sits BEHIND the quay, on the land side of it, because that
+    // is the only place a container yard can be. It used to be a literal
+    // rectangle 40 m up a hillside with no water anywhere near it.
+    const _q = SITE.containerPort;
+    if (!_q) break port;
+    const _qs = _q.landSide;
+    for (let x = _q.x - 900; x < _q.x + 900 && n < 2200; x += 16)
+      for (let z = _q.z + _qs * 70; _qs > 0 ? z < _q.z + _qs * 560 : z > _q.z + _qs * 560; z += _qs * 4) {
         if (rnd("ct" + x + z) < 0.42) continue;
         const g = heightAt(x, z); if (g < 1) continue;
         const stack = 1 + Math.floor(rnd("cs" + x + z) * 4);
@@ -1111,9 +1129,12 @@ function buildProps(api) {
     // because the mainland coast has a bay at this end and the shoreline is
     // hundreds of metres further north here than the constant assumed. Walk
     // north until the ground comes up, then stand just inland of it.
-    for (let x = wm(-6600); x < wm(-3600); x += wm(400)) {
+    for (let x = _q.x - 800; x < _q.x + 800; x += 400) {
       let quayZ = null;
-      for (let z = wm(-2000); z > wm(-3400); z -= 20) if (heightAt(x, z) > 1.5) { quayZ = z - 40; break; }
+      // The quay line is known now, so this no longer marches until the ground
+      // comes up -- a search whose own comment admitted the coordinate it
+      // replaced "stood in open water".
+      quayZ = _q.z + _qs * 30;
       if (quayZ === null) continue;
       const g = new THREE.Group(), gy = Math.max(2, heightAt(x, quayZ));
       for (const dx of [-24, 24]) for (const dz of [-17, 17]) {
@@ -1191,7 +1212,7 @@ function buildProps(api) {
   // calls rather than one per tie.
   // ---------------------------------------------------------------------------
   {
-    const RAIL_Z = wm(-3900);
+    const RAIL_Z = (SITE.railway || { at: wm(-3900) }).at;
     const pts = [];
     for (let x = wm(-17000); x <= wm(17000); x += 60) {
       // follow the ground, and skip anything the line could not be built on
@@ -1247,7 +1268,7 @@ function buildProps(api) {
     // A golf course needs 1.5 km of continuous ground that is not water, cliff or
     // mountainside. Asked for, not asserted -- the rough radius is 760 m, so the
     // footprint tested is the whole course.
-    const _gf = findSite(heightAt, { x: wm(-7600), z: wm(-5600) }, { w: 1520, d: 1520, radius: 3000, step: 120 });
+    const _gf = SITE.golf;
     if (!_gf) break golf;   // no room for a course: build none rather than one in the sea
     const CX = _gf.x, CZ = _gf.z;
     const fair = M(0x74a84a, 0.95), rough = M(0x5c8a3c, 0.97);
@@ -1322,9 +1343,8 @@ function buildProps(api) {
     // not shrink because the island did: two runways are 600 m apart because
     // that is the separation independent parallel approaches need.
     const AP_W = 3600, AP_D = 1200;
-    const apSite = findFlattestSite(heightAt, { x: wm(12100), z: wm(-4750) },
-                                    { w: AP_W, d: AP_D, radius: 2500, step: 150, grade: 200 });
-    if (!apSite) break airport;
+    const apSite = SITE.airport;
+    if (!apSite) break airport;   // nowhere to grade a platform: build no airport
     const AX = apSite.x, AZ = apSite.z;
 
     // AN AIRPORT IS AN EARTHWORK, NOT A DECAL.
@@ -1423,8 +1443,13 @@ function buildProps(api) {
     const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2);
     // Farm belts are checked cell by cell below (h < 3 is skipped), so the belt
     // rectangle itself only has to land on the right part of the world.
-    const belts = [[-18400, -13600, -8600, -3600], [15400, 18600, -8400, -3400]]
-      .map((b) => b.map(wm));
+    // Belts are centred on their resolved sites rather than being two literal
+    // rectangles. Each cell is still tested individually below.
+    const belts = [];
+    for (const [id, bw, bd] of [["farmWest", 2400, 2400], ["farmEast", 1600, 2400]]) {
+      const f = SITE[id];
+      if (f) belts.push([f.x - bw / 2, f.x + bw / 2, f.z - bd / 2, f.z + bd / 2]);
+    }
     const cells = [];
     for (const [x0, x1, z0, z1] of belts)
       for (let x = x0; x < x1; x += 260) for (let z = z0; z < z1; z += 200) {
@@ -1838,7 +1863,7 @@ function buildProps(api) {
 
     // --- the stadium, on the north-east of the island ---
     stadium: {
-      const _st = findSite(heightAt, { x: wm(1700), z: wm(250) }, { w: 320, d: 250 });
+      const _st = SITE.stadium;
       // No legal site within range: build nothing rather than build it in the sea.
       if (!_st) break stadium;
       const sx = _st.x, sz = _st.z, gy = Math.max(2, heightAt(sx, sz));
@@ -1860,7 +1885,7 @@ function buildProps(api) {
 
     // --- the central station: a train shed with a clock tower ---
     station: {
-      const _sn = findSite(heightAt, { x: wm(-420), z: wm(60) }, { w: 240, d: 120 });
+      const _sn = SITE.station;
       // No legal site within range: build nothing rather than build it in the sea.
       if (!_sn) break station;
       const sx = _sn.x, sz = _sn.z, gy = Math.max(2, heightAt(sx, sz));
@@ -1879,7 +1904,7 @@ function buildProps(api) {
 
     // --- a cathedral on the civic square ---
     cathedral: {
-      const _cd = findSite(heightAt, { x: wm(-100), z: wm(-40) }, { w: 120, d: 60 });
+      const _cd = SITE.cathedral;
       // No legal site within range: build nothing rather than build it in the sea.
       if (!_cd) break cathedral;
       const sx = _cd.x, sz = _cd.z, gy = Math.max(2, heightAt(sx, sz));
@@ -1899,7 +1924,7 @@ function buildProps(api) {
 
     // --- a broadcast mast on the hill behind the city ---
     {
-      const mx = wm(-1400), mz = wm(-6300), gy = heightAt(mx, mz);
+      const mx = (SITE.mast || { x: wm(-1400) }).x, mz = (SITE.mast || { z: wm(-6300) }).z, gy = heightAt(mx, mz);
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 6, 180, 6), steel);
       mast.position.set(mx, gy + 90, mz); mast.castShadow = true; scene.add(mast);
       const pod = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 14, 12), M(0xe8e2d4, 0.7));
