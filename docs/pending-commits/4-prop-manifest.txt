@@ -1,0 +1,85 @@
+A bench was a call, not a thing, so nothing could ask how big a bench is
+
+Mark, on being told the props carry no footprint: "it should though -- how else
+will you be able to change it, place it, or build it?" He is right, and the
+reason it was absent is worth writing down because it is the same fusion this
+project has already paid to undo twice.
+
+A bench existed only as this:
+
+    put(new THREE.BoxGeometry(1.8, 0.45, 0.55), M(0xa9835a, 0.85), spots.bench, ...)
+
+There was no bench anywhere in the world. There was a call. Its dimensions were
+arguments to a constructor, on the same line as its colour and its placement
+list, so the only code that knew how big a bench is was the code drawing one.
+Placement worked because placement and geometry were the same statement -- which
+is exactly how the stadium came to stand at -7.0 m in the water, and how 389
+plots came to sit inside feature footprints.
+
+MEASURED FIRST, inside the real renderer, not re-derived:
+
+    lamps placed                                 2,407
+    street furniture placed                     11,135
+    lamps standing INSIDE a bin or a bench          27
+    closest pair of centres                       0.05 m
+
+Two loops walk the same footways -- lamps every 52 m from +24, furniture every
+55 m from +30 -- with an across-offset differing by |footway x 0.45 - 1.4|,
+which on a 4 m footway is 0.40 m. A bench is 1.8 m wide. Neither loop can see
+the other because there is nothing to see.
+
+27 is small, and saying so matters more than the number does: it is ONE PAIR of
+systems. Trees, 26,001 cars, parasols, containers and boats are each placed by
+their own loop and none of them can ask the question either. Nobody knows the
+total, because nothing in the renderer has ever been able to look. There are
+zero registry calls in city-render.js.
+
+A first attempt at this measurement was thrown away and is in
+_TO-DELETE/probe-rederived-too-much/. It re-derived settAt from the plan rather
+than using the renderer's, matched no settlements, and reported "0 furniture, 0
+collisions" -- a clean bill of health produced by measuring nothing. A probe
+that finds no problem because it found no data is the same defect as a test that
+passes while the control is broken.
+
+WHAT THIS ADDS
+
+public/prop-manifest.js: what each prop IS and what it OCCUPIES, in metres.
+The same cut features.js already made for the big things -- a feature states
+what it needs and the land answers; a prop states what it is and something else
+decides where it goes.
+
+GROUND FOOTPRINT IS NOT VISUAL EXTENT, and the lamp is why that needs two
+fields rather than one. Its post is 0.6 m across where it meets the pavement;
+its head is 1.6 m wide, 9.1 m up. A bench under that head is what real streets
+are made of. A bench through the post is not. `foot` is what is occupied at
+ground level and is what the registry reserves; `sweep` is how far the thing
+reaches at height. Collapsing them would forbid a bench under every lamp.
+
+Per-instance props -- trees, cars, people, parasols -- are declared `sized`
+rather than given an invented average, and propFootprint REFUSES to place one
+without a size. The dangerous version returns a zero-area rectangle, reserves
+nothing, and reads as success.
+
+Rotation swaps the axes. Benches and shelters face the road, so a 1.8 x 0.55
+bench on a north-south street occupies 0.55 x 1.8 of ground, and a footprint
+ignoring that would be wrong on half of every city.
+
+Every entry records the constructor it was read from, so that when the geometry
+changes and the manifest does not, the drift is findable rather than merely
+present.
+
+VERIFIED BY MUTATION, since a green suite is not evidence a control exists:
+
+  bench widened in city-render.js, manifest untouched  -> geometry-agreement fails
+  propFootprint ignores `rotated`                      -> axis-swap fails
+  sized prop reserves nothing instead of throwing      -> per-instance refusal fails
+  lamp `sweep` collapsed into `foot`                   -> overhang distinction fails
+
+Each broken on purpose, confirmed red, reverted.
+
+NOT DONE, AND NOT IMPLIED TO BE. Nothing yet CONSULTS this manifest -- the
+placement loops still run as they did, and those 27 lamps are still inside those
+benches. This is the declaration layer only. Wiring placement to query the
+registry is the next commit, and it is the one that changes the picture.
+
+486/486 node tests, tsc --noEmit clean.

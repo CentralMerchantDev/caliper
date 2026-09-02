@@ -1,0 +1,33 @@
+The land was a mask over nothing, and cliffs were the grass colour darkened
+
+Mark's diagnosis was exact: "you have it as a map over nothing but it needs
+depth and a core just like the earth has." Three separate things made that true.
+
+The outer mesh -- most of the modelled world by area -- was built with
+skirtDepth 0, the argument that means "emit no side wall at all". So beyond the
+detail tile the world had no underside: a surface with an open edge and nothing
+behind it. It now goes to bedrock like everything else.
+
+Where a skirt did exist it was two vertices per column, top and bottom, coloured
+by darkening the surface colour. A two-vertex wall can only ever render a
+gradient, so every cliff and cut was a smear of the grass above it -- which is
+precisely why nothing read as having a material. It is now one vertex per
+stratum boundary against a shared depth table, so a cut shows topsoil, subsoil,
+clay and gravel, weathered rock and bedrock, and the bands stay horizontal while
+the ground above them is not.
+
+BEDROCK_Y is -175, chosen to meet the abyss plane rather than to look right, so
+the base closes instead of hovering above it.
+
+The first version of the skirt builder pushed only the stratum boundaries that
+fit inside each column, and its failure is worth recording because it is the
+kind this project exists to refuse. Measured on a 12-column sample from -174.5 m
+to 2150 m, the per-column counts came out 2,3,6,6,6..., the index loop took its
+stride from the first column as 2, and every index it generated stayed IN
+BOUNDS. No crash, no error -- just a wall drawn from the wrong vertices, in
+silence. Clamping each boundary to its own column's depth keeps the stride
+constant and degenerates the quads that do not fit, and the stride is now
+asserted where it is assumed rather than trusted.
+
+Cost is ~10,300 vertices across both meshes, most of it the outer skirt that
+previously did not exist.

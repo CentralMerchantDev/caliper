@@ -1,0 +1,139 @@
+Land turned to water because the depth buffer could not tell them apart
+
+Mark: "the land doesn't stay land as you move, the pixels change, nothing seems
+fixed in place ... the edges of them get blurred or change to something else
+like land to water." Two independent causes, both arithmetic, both now measured
+rather than guessed at.
+
+ONE: DEPTH PRECISION.
+
+A 24-bit fixed-point depth buffer spends its precision near the camera, and how
+badly is set by the near:far ratio:
+
+    dz = z^2 * (far - near) / (far * near * 2^24)
+
+  world camera (near 3, far 120000)    1 km 0.020 m   10 km  1.987 m   26 km 13.431 m
+  city  camera (near 0.1, far 12000)   1 km 0.596 m   10 km 59.604 m
+
+Roads are drawn 0.9 m above the terrain, so from about 7 km out on the world
+camera -- and from roughly one kilometre on the city camera, inside the city it
+exists to show -- the buffer genuinely cannot separate a road from the ground it
+sits on, and which one draws is decided by rounding, per pixel, changing as the
+camera moves.
+
+The same number explains the coastline directly: at 13.4 m of resolution, the
+sea plane at y=0 and any land within 13 m of sea level are the same depth. The
+water drew over the land. "Land to water" was literal.
+
+Both renderers now request logarithmicDepthBuffer, which spreads precision over
+the whole range: 7 mm at 10 km on the world camera, 285x better, 741x at the far
+edge. Raising `near` would also work on paper (near=30 gives 0.199 m at 10 km)
+but clips anything within 30 m of the camera, which breaks the ground-level
+flythrough. The cost of the log buffer is the early-Z optimisation.
+
+Verified by rendering, not by reasoning: scripts/shoot.mjs through SwiftShader,
+before and after, same view. Before, the whole landmass sits under a blue-grey
+film with water bleeding across it; after, the land is opaque and the coast is a
+line. Zero console errors, so bloom, the vignette and GradeShader all survive --
+which was the open question, and the answer is that the only hand-written shader
+in public/ is a full-screen ShaderPass that never touches scene depth.
+
+TWO: THE BEACH WAS NEVER SAMPLED.
+
+The entire beach lives in a 3.8 m window of height -- tide strip to -0.6, dry
+sand to +1.6, dune grass to +3.2. The outer terrain mesh samples every 162.5 m.
+On any ordinary coastal slope no vertex ever lands inside that window:
+consecutive samples come out at something like -20 m and +25 m, so the band
+table is asked for shelf blue and coastal green and never once for sand. The GPU
+then interpolates between those two across the whole triangle.
+
+So the blur was not a soft edge. It was a beach that did not exist, replaced by
+a 162 m gradient from sea colour to grass colour -- and it moved with the camera
+because which vertices got sampled changed.
+
+The band table is now evaluated against the INTERPOLATED height in the fragment
+shader, so the beach lands exactly where the surface crosses sea level, at
+screen resolution, whatever the vertex spacing. The GLSL is COMPILED FROM THE
+SAME EXPORTED GROUND_BANDS the CPU path uses -- a colour table maintained in two
+languages is a drift defect with a delay fuse, and this file has paid for that
+before. Sequential mixes are exactly equivalent to bandColor's find-then-blend:
+below a band's window its t is 0 and the mix is a no-op, above it t is 1 and the
+colour is replaced outright.
+
+Stock MeshStandardMaterial patched via onBeforeCompile rather than replaced by a
+ShaderMaterial, so it keeps three.js lighting, shadows, tone mapping and the
+logarithmic depth chunks the change above depends on.
+
+Two new attributes carry what the shader cannot know: the noise multipliers, so
+a per-pixel beach has the same grain as the ground around it instead of reading
+as a flat painted stripe; and a weight that refuses sand on cliffed shore and
+through built ground, which are the same judgements the vertex colour already
+makes, expressed as a weight rather than a blend.
+
+Rendered result: every island now carries a continuous sand rim of consistent
+width. In the previous shot they had no beach at all.
+
+THE GUARD.
+
+Removing logarithmicDepthBuffer does not throw, does not fail to compile, and
+changes nothing in a screenshot taken near the camera -- it only makes distant
+geometry flicker again, which reads as "the graphics are a bit off" and took a
+long time to trace the first time. test/rendererStatic.test.ts now counts
+WebGLRenderer constructions against the flag, so a second renderer cannot appear
+without one. Mutation-verified: dropped from each file in turn, the test goes
+red both times.
+
+THREE: THE SEA DID NOT KNOW HOW DEEP IT WAS.
+
+Mark, on the same problem from the other side: "should the land be a solid mass
+that goes to the core like the earth, and the water sit on top of that ... this
+will allow for the water to lap up on the beach like real waves."
+
+The base was already there and is worth stating plainly, because it is easy to
+assume otherwise: the sea bed is not a separate object, it is the terrain
+surface continuing below zero, walled to bedrock at -175 and floored by the
+abyss plane. The ocean genuinely sits in a basin. What was missing is that the
+WATER had no idea any of it was there -- one flat PlaneGeometry four worlds
+wide, constant 0.62 opacity, a tiled normal map, and no knowledge of where the
+shore was. It could not shallow toward a beach, clear over sand, or put foam on
+a waterline. The precomputed surf ribbon is the workaround for that, and it is
+geometry offset from a polygon, resolution-bound exactly like the old beach.
+
+Filling the land with triangles is not what fixes this and would cost millions
+of them nobody can see. What fixes it is the same move that fixed the beach: the
+sea now samples the height field as a texture and reads its own depth per pixel,
+which drives shallow-water colour, transparency that clears toward the sand, and
+a foam band that sits on the true waterline and breathes across it.
+
+512 x 512, chosen by measurement: 256 gives 152 m texels, 512 gives 76 m, 1024
+gives 38 m. 512 is the first resolution FINER than the 162 m land mesh beneath
+it, so the water is never the coarser of the two.
+
+The cost, and what was done about it. In plain Node the bake is 477 ms. In the
+real renderer it took generateWorld from 5,568 ms to 8,156 ms -- 2.6 s, five
+times the Node figure, which is exactly why the Node figure was not treated as
+the answer. Earlier work cut this build from 6.02 s to 2.36 s and handing a
+fifth of that back for something invisible in the first frame is a bad trade, so
+the bake is deferred. But deferring a 2.6 s block only moves it to where it
+reads as the page hanging for no reason, so it is also SLICED: 32 rows per idle
+callback. Measured back at 6,327 ms, and the sea starts flat and gains its depth
+response a beat later. A depth map that never arrives is a flat sea, not a
+broken one.
+
+Verified by rendering both ways. The deferred path produces a frame identical to
+before, which is the point -- first paint is untouched. Forcing the bake inline
+produces turquoise shallows around every shore, water that clears over the sand,
+and a swash line following the coast.
+
+WHAT IS NOT FIXED. The foreground sea still shows the tiling seams of its normal
+map, which is a separate defect and predates all of this. And the swash animates
+the foam band's width rather than moving actual water up the sand -- it reads as
+a tide line breathing, not as a breaking wave. Both are honest gaps, written
+down rather than implied away.
+
+470/470 node tests, 12/12 worker tests, tsc --noEmit clean.
+
+One note on the guard: rendererStatic.test.ts flagged requestIdleCallback as an
+undefined name, and it was right to -- it did not know the global. Adding it to
+the list is not a loosening; the check is for names that exist nowhere, and that
+one exists. It is used behind a typeof guard because Safari lacked it for years.

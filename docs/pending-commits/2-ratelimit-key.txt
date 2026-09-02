@@ -1,0 +1,59 @@
+The rate-limit key was spelled in three places and only one was updated
+
+Found by running the Cloudflare Worker suite, which had not been running at all:
+its Linux workerd binary was missing from this machine, so `npm test` reported
+the Node half and refused the rest. Two of its twelve tests were failing.
+
+THE PRODUCT DEFECT.
+
+The per-visitor rate limit is stored at `ratelimit/<visitor>/<day>`, and that
+string was written out by hand in three methods of SpendCounterLogic. When the
+address was replaced with a salted hash for retention reasons, exactly one of
+the three was updated -- claimRun, the enforcer. Both readers kept building the
+key from the raw address, so they addressed a key nothing has ever written.
+Neither threw. Neither logged. They returned plausible numbers:
+
+  * runsUsed returned 0 for every visitor, always. That is the number
+    /live-status quotes back to them, so the page said "2 of 2 runs left" right
+    up until /change-run answered 429. That is the SECOND time this exact
+    defect has shipped here -- the endpoint written specifically to stop the
+    visitor being told something false was telling them something false again.
+
+  * refundRun decremented a key that did not exist. A run refused for
+    concurrency was therefore never actually given back, and the write PUT THE
+    PLAINTEXT ADDRESS BACK INTO STORAGE -- reintroducing the retention that the
+    hashing was added to remove.
+
+Fixed structurally rather than three times over: rateLimitKey() is now the one
+place the key is spelled. A key derived in three places is a defect waiting for
+its fourth caller.
+
+Verified by mutation, since a green suite is not evidence a control exists.
+Reverting each site to the raw address independently:
+
+  claimRun   -> per-IP count test fails
+  refundRun  -> per-IP count test AND "refused for concurrency does not cost the
+                visitor one of their runs" both fail
+  runsUsed   -> per-IP count test fails
+
+THE TWO TESTS.
+
+Both were failing for reasons of their own, and both were asserting things they
+could not reach.
+
+"reports the per-IP count" drove /change-run and then read /live-status.
+/change-run answers 200 with an SSE stream, fetch resolves when the HEADERS
+arrive, and the run is claimed inside the body. Measured: with the body never
+pulled, the claim had not landed 6.8 s later. It was asserting a side effect it
+never waited for. It now drives the enforcer directly and asks over HTTP, which
+crosses every join the defect lives in with nothing racing, and covers the
+refund path too.
+
+"refuses a CONCURRENT run" opened MAX_CONCURRENT_PIPELINE_RUNS runs from ONE
+address. The concurrency cap is global; the daily cap is per address; and
+DAILY_LIVE_RUNS_PER_IP is 2 against MAX_CONCURRENT_PIPELINE_RUNS of 5. One
+address can hold at most 2 leases and can never reach 5, so the third request
+was refused by the daily limiter -- the right refusal, the wrong limiter, for
+the second time in that one test. It now takes leases directly until the
+coordinator itself reports the pool full, then checks that a fresh address with
+a clean daily allowance is refused for concurrency and nothing else.
