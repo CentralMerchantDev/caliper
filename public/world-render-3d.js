@@ -1715,12 +1715,42 @@ class Renderer3D {
       // frame, so without this the city would be built dozens of times over.
       if (!this._cityBuildStarted) {
         this._cityBuildStarted = true;
+
+        // A WATCHDOG, BECAUSE A PROMISE THAT NEVER SETTLES HAS NO CATCH.
+        //
+        // The resolve path removes the boot panel and the reject path rewrites
+        // it honestly. Neither fires if _buildCityBase simply never finishes --
+        // which is plausible on the mobile GPU a first-time visitor is most
+        // likely to be holding. In that case the opaque full-screen panel says
+        // "BUILDING THE CITY" forever.
+        //
+        // That is the unlabelled degraded mode this file's own comment two
+        // blocks down calls "the same lie": a permanent claim that work is in
+        // progress, with nothing behind it. Twenty seconds is well past the
+        // 2.4 s the build actually takes.
+        const bootWatchdog = setTimeout(() => {
+          if (this._neighbourhoodBuilt || this._cityBuildError) return;
+          const boot = typeof document !== "undefined" && document.getElementById("world-booting");
+          if (!boot) return;
+          boot.innerHTML =
+            '<div style="font-family:monospace;font-size:12px;color:#fbbf24;letter-spacing:.08em">THE 3D VIEW IS TAKING LONGER THAN EXPECTED</div>' +
+            '<div style="font-size:11.5px;color:#94a3b8;max-width:420px;text-align:center;line-height:1.5;margin-top:10px">' +
+            'It normally builds in about two seconds. This device may not have the graphics support for it.' +
+            '<br><br>The change pipeline below still works — it does not depend on the render.</div>' +
+            '<button id="boot-dismiss" style="margin-top:14px;pointer-events:auto;background:rgba(255,255,255,0.08);color:#e2e8f0;border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:7px 14px;font-size:11.5px;cursor:pointer">Dismiss</button>';
+          boot.style.pointerEvents = "auto";
+          const btn = boot.querySelector("#boot-dismiss");
+          if (btn) btn.addEventListener("click", () => boot.remove());
+        }, 20000);
+
         this._buildCityBase(world)
           .then(() => {
+            clearTimeout(bootWatchdog);
             const boot = typeof document !== "undefined" && document.getElementById("world-booting");
             if (boot) boot.remove();
           })
           .catch((e) => {
+            clearTimeout(bootWatchdog);
             // A FAILED BUILD USED TO BE A BLACK RECTANGLE.
             //
             // _cityBuildError was written and never read: draw() returns early

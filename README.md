@@ -28,7 +28,7 @@ Two things are worth stating plainly because they are what the project is actual
   world, the pipeline says so and offers alternatives instead of confidently building the wrong
   thing.
 
-If the live path is unavailable — three runs per visitor per day, $2/day total, both enforced in
+If the live path is unavailable — a small number of runs per visitor per day, $2/day total, both enforced in
 code — the page replays a real recorded run instead, labelled as a recording.
 
 Every visitor-facing cost/rate limit is enforced in code and shown on the page, not just

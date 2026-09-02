@@ -29,7 +29,14 @@
 <style>
 :root {
   --bg-deep: #0b0f19;
-  --panel-bg: rgba(15, 23, 42, 0.82);
+  /* 0.82 -> 0.92. Computed over the live canvas, not on paper: the panels are
+     backdrop-blurred glass floating over a 3D sky whose day colours are
+     #38bdf8 and #bae6fd. Composited against the horizon band, --text-muted
+     (#94a3b8) landed at 4.36:1 -- below AA -- and that colour carries the
+     status pill, the clock and the run-record line, at 11px, over exactly the
+     part of the sky the default camera frames. At 0.92 the worst case (a pure
+     white backdrop, harsher than any real sky) is 5.60:1. Still reads as glass. */
+  --panel-bg: rgba(15, 23, 42, 0.92);
   --panel-border: rgba(255, 255, 255, 0.16);
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
@@ -1023,7 +1030,7 @@ body.inspecting-mobile #nav-compass-pad {
   <!-- Left Cluster: Portfolio Identity, Mark Fraser Hub & Clock -->
   <div class="top-bar-cluster glass">
     <div class="brand-badge">
-      👑 CALIPER · <span class="kingdom">Mark Fraser</span>
+      CALIPER · <span class="kingdom">Mark Fraser</span>
     </div>
     <div class="status-pill">
       <span class="pulse-dot"></span> Edge V8 Isolate
@@ -1213,8 +1220,20 @@ body.inspecting-mobile #nav-compass-pad {
        These are REAL RUNS. Saying so is both more honest and more convincing,
        and the failures sit next to the success on purpose: "it refuses when it
        should" is the claim, not an embarrassment to be hidden. -->
+  <!-- THE REFUSAL, ON FIRST PAINT.
+       The thesis is "it refuses when it cannot show the change is good", and
+       until now the only place a visitor could SEE that was: find an 11.5px
+       link, click it, watch eleven seconds of a run that SHIPPED, and then --
+       at about second 25 of a 30-second visit, and only if a KV read returned
+       something -- the refusal appended to the bottom.
+       So the claim was on the first screen and the evidence was past the end of
+       the visit. Every LLM demo on the internet leads with a success. Leading
+       with a real, dated, costed refusal that the visitor did not trigger and
+       did not pay for is the one thing here a weekend project does not do.
+       Rendered from the same /recent-runs data the tally already fetches. -->
+  <div id="last-refusal" style="display:none;margin:10px 0 0;padding:9px 11px;background:rgba(248,113,113,0.07);border-left:3px solid #f87171;border-radius:0 8px 8px 0"></div>
   <p style="margin:8px 0 0;font-size:11.5px;color:var(--text-muted);line-height:1.5">
-    <a href="#" id="replay-open-btn" style="color:var(--sky);text-decoration:none;font-weight:600">Previous runs on record</a><span id="run-record-tally"></span>
+    <a href="#" id="replay-open-btn" style="color:var(--sky);text-decoration:none;font-weight:600">Replay a full run, stage by stage</a><span id="run-record-tally"></span>
   </p>
 </div>
 
@@ -1266,7 +1285,7 @@ body.inspecting-mobile #nav-compass-pad {
     </div>
     <label style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-muted);cursor:pointer;white-space:nowrap;user-select:none" title="Skip gate 1 (the plan gate) for speed. Gate 2, the cross-vendor review, NEVER auto-approves, and a plan resting on a false premise is never auto-approved either.">
       <input type="checkbox" id="auto-approve-toggle" style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer">
-      Skip gate 1 (faster)
+      Skip gate 1 for speed — gate 2 never auto-approves
     </label>
   </div>
 
@@ -1304,8 +1323,8 @@ body.inspecting-mobile #nav-compass-pad {
       <h4 style="margin:0 0 8px;color:var(--sky);font-size:14.5px">Autonomous Change Pipeline</h4>
       <ul style="margin:0 0 16px;padding-left:20px;display:flex;flex-direction:column;gap:8px">
         <li><strong>🎯 1. Target Spatial Scope:</strong> Click any district, villa, atelier, or marina dock in 3D to set local spatial coordinates.</li>
-        <li><strong>✍️ 2. Autonomous Op Synthesis:</strong> Natural-language requests are converted into structured, schema-bounded state mutation ops.</li>
-        <li><strong>⚡ 3. Edge Validation:</strong> Spatial containment and footprint collision clearances are verified inside Cloudflare Workers isolates.</li>
+        <li><strong>✍️ 2. Plan:</strong> the request becomes a typed list of edits, each one checked against a schema before anything is applied.</li>
+        <li><strong>⚡ 3. Verify:</strong> the edit is applied to a copy of the world in a Workers isolate and checked for overlap and out-of-bounds placement. A check that did not run is never read as a pass.</li>
       </ul>
       <h4 style="margin:0 0 8px;color:var(--emerald);font-size:14.5px">Production System Invariants (Regression Guardrails)</h4>
       <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px">
@@ -1330,7 +1349,7 @@ body.inspecting-mobile #nav-compass-pad {
     </div>
     <div style="color:#cbd5e1;font-size:13.5px;line-height:1.55">
       <p style="margin:0 0 12px">
-        CALIPER pairs structured LLM synthesis with <strong>schema-bounded state mutations</strong>, in-memory 2D footprint collision verification, and isolated execution inside Cloudflare Workers isolates.
+        The model never writes code that touches the world. It writes a list of edits; they are validated against a schema, applied to a copy, and the copy is checked before anything is kept.
       </p>
       <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px;margin-bottom:12px">
         <!-- THIS DESCRIBED A PIPELINE THAT DOES NOT EXIST.
@@ -1953,7 +1972,14 @@ $('#view-plan').addEventListener('click', () => { currentView = 'plan'; localSto
 applyViewToggle();
 
 $('#drone-tour-btn').addEventListener('click', () => {
-  renderer3d.startDroneTour();
+  // A 22-SECOND TRAP. This called startDroneTour() unconditionally, so clicking
+  // the shiniest button on the page gave a first-time visitor 22 letterboxed
+  // seconds -- 73% of a 30-second visit -- and BOTH obvious exits did nothing:
+  // clicking the button again restarted the tour, and Escape was bound only to
+  // modals and Tour mode, never to this. The only way out was to drag the
+  // camera, which is not obvious while the view is flying itself.
+  if (renderer3d._isDroneTour) renderer3d.stopDroneTour();
+  else renderer3d.startDroneTour();
   renderer3d.playClickSound();
 });
 
@@ -2504,7 +2530,16 @@ document.addEventListener('click', ev => {
     // A refusal is the more interesting half of the claim, so say when one is
     // available to look at rather than burying it.
     if (lastRuns.refused) {
-      el.textContent += ' The most recent refusal is included.';
+      const box = document.getElementById('last-refusal');
+      if (box) {
+        box.innerHTML =
+          '<div style="font-family:var(--mono);font-size:10.5px;color:#f87171;letter-spacing:.06em;margin-bottom:5px">' +
+          'THE MOST RECENT RUN THAT DID NOT SHIP</div>' +
+          refusalHtml(lastRuns.refused) +
+          '<p style="margin:6px 0 0;font-size:11px;color:var(--text-muted);line-height:1.5">' +
+          'This is whichever refusal happened last. It will be a different one tomorrow.</p>';
+        box.style.display = 'block';
+      }
     }
   } catch {
     el.textContent = ' — including the ones that failed.';
@@ -2651,7 +2686,7 @@ const COMMANDS = [
   { label: '☀️ Set Atmosphere to Day', action: () => setTimeOfDayToggle('day') },
   { label: '🌅 Set Atmosphere to Dusk (Golden Hour)', action: () => setTimeOfDayToggle('dusk') },
   { label: '🌙 Set Atmosphere to Night', action: () => setTimeOfDayToggle('night') },
-  { label: '🎬 Start Cinematic Drone Tour', action: () => renderer3d.startDroneTour() },
+  { label: '🎬 Start Cinematic Drone Tour', action: () => (renderer3d._isDroneTour ? renderer3d.stopDroneTour() : renderer3d.startDroneTour()) },
   { label: '📐 Toggle Precision Spatial Grid (Coordinates & Clearance)', action: () => $('#grid-toggle-btn').click() },
   { label: '↺ Reset Camera to Bay Overview', action: () => renderer3d.resetView() },
 ];
@@ -2709,6 +2744,10 @@ window.addEventListener('keydown', (e) => {
       closeCmdPalette();
     } else if (activeModal) {
       hideAccessibleModal();
+    } else if (renderer3d && renderer3d._isDroneTour) {
+      // Escape reached modals and Tour mode but never the drone tour, which is
+      // the one full-screen state a visitor is most likely to want out of.
+      renderer3d.stopDroneTour();
     }
     return;
   }
@@ -3171,23 +3210,33 @@ async function playRecordedRun() {
           // demo. The most recent refusal is real, it is whatever the last one
           // happened to be, and it will be a different one tomorrow.
           if (lastRuns && lastRuns.refused) {
-            const r2 = lastRuns.refused;
             const b2 = stageBlock(log, 'replay-refused', '⛔ And the most recent run that did NOT ship');
             b2.classList.remove('active');
-            b2.insertAdjacentHTML('beforeend',
-              '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;line-height:1.6">' +
-              '<strong>' + esc(String(r2.capturedAt).slice(0, 10)) + '</strong> · ' + esc(r2.outcome) + '<br>' +
-              (r2.understoodIntent ? 'Understood as: \u201c' + esc(r2.understoodIntent) + '\u201d<br>' : '') +
-              esc(r2.reason || '') +
-              (r2.reviewFoundMaterial ? '<br>The reviewer raised ' + r2.reviewFoundMaterial + ' material finding(s) over ' + (r2.reviewRounds || 1) + ' round(s).' : '') +
-              (r2.reviewOscillated ? '<br>The reviewer and the author could not converge.' : '') +
-              '<br>Cost: ' + money(r2.totalCostUsd || 0) + '. Nothing shipped.</p>');
+            b2.insertAdjacentHTML('beforeend', refusalHtml(lastRuns.refused));
           }
         }, 900));
       }
     }, delay));
     delay += st.stage === 'gate1' || st.stage === 'gate2' ? 2100 : 1500;
   });
+}
+
+/**
+ * A real refusal, described plainly. Used on the first screen and in the replay.
+ *
+ * Extracted because it existed ONLY inside the replay's tail, which is why the
+ * page's central claim was invisible to anyone who did not click a footnote and
+ * then wait eleven seconds.
+ */
+function refusalHtml(r2) {
+  if (!r2) return '';
+  return '<p style="margin:0;font-size:12px;color:#cbd5e1;line-height:1.6">' +
+    '<strong style="color:#f87171">' + esc(String(r2.capturedAt).slice(0, 10)) + '</strong> · ' + esc(r2.outcome) + '<br>' +
+    (r2.understoodIntent ? 'Understood as: \u201c' + esc(r2.understoodIntent) + '\u201d<br>' : '') +
+    esc(r2.reason || '') +
+    (r2.reviewFoundMaterial ? '<br>The reviewer raised ' + Number(r2.reviewFoundMaterial) + ' material finding(s) over ' + Number(r2.reviewRounds || 1) + ' round(s).' : '') +
+    (r2.reviewOscillated ? '<br>The reviewer and the author could not converge.' : '') +
+    '<br>Cost: ' + money(r2.totalCostUsd || 0) + '. Nothing shipped.</p>';
 }
 
 function stageBlock(log, id, title, extraClass) {
