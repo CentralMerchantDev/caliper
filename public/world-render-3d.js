@@ -1273,8 +1273,21 @@ class Renderer3D {
     // Load saved default camera settings if present
     // Reset must land somewhere you can see the city from. 85 m at the origin
     // is inside downtown's block geometry.
+    // THE SCALED TABLE RIGHT ABOVE THIS WAS UNREACHABLE.
+    //
+    // _cityDefaultCamera is built with `900 * K` and `4200 * K` (K =
+    // WORLD_SCALE), and this line then overwrote the value that is actually
+    // read with the UNSCALED literals. resetView() reads
+    // `_defaultCameraSettings || _cityDefaultCamera`, and the first is always
+    // truthy, so the scaled one was dead on every path.
+    //
+    // The result: the opening shot frames at 2730/585 and Reset landed at
+    // 4200/900 -- a 1.54x mismatch between "the view we open on" and "the view
+    // Reset returns to", in a world that was rescaled precisely so those
+    // numbers would agree. Reading the scaled table is the fix; keeping two was
+    // the bug.
     this._defaultCameraSettings = this._cityMode
-      ? { lookAt: { x: 0, y: 60, z: 900 }, dist: 4200, delta: 0, pitch: 0.34 }
+      ? { ...this._cityDefaultCamera }
       : { lookAt: { x: 0, y: 5.0, z: -10.0 }, dist: 85, delta: 0, pitch: 0.32 };
     try {
       const saved = localStorage.getItem('caliper_default_camera_view');
@@ -1635,6 +1648,17 @@ class Renderer3D {
     this._index = buildSpatialIndex(city.world);
     this.sun = city.sun;                    // the shell's day/night code drives this
     this._skyMesh = city.sky;
+    // AND ITS UNIFORMS, WHICH WERE LEFT POINTING AT THE VILLAGE'S SKY.
+    //
+    // _skyUniforms was assigned once, from the village Sky() built in
+    // _initScene. _buildCityBase removes that mesh from the scene and reassigns
+    // _skyMesh -- and never touched _skyUniforms. So draw() wrote sunPosition,
+    // turbidity and rayleigh into the uniforms of a sky that is not in the
+    // scene, every frame, forever, while the city's own sky had its sun set
+    // once at build time and never moved again.
+    //
+    // The sun light travelled through the day; the sky behind it did not.
+    this._skyUniforms = (city.sky && city.sky.material && city.sky.material.uniforms) || null;
     this._cityHeightAt = city.heightAt;
     this._refreshFeatureTargets();
 
@@ -1690,12 +1714,25 @@ class Renderer3D {
       // stale-bookmark defect this function exists to remove, restored without
       // a word. A bad bookmark is still not worth a crash, but it is worth a
       // line in the console and a flag something can read.
+      // WRITTEN BY BOTH BRANCHES, READ BY NOTHING.
+      //
+      // The comment above says this deserves "a line in the console and a flag
+      // something can read". The line exists; nothing ever read the flag, so
+      // when placeFeatures throws the bookmarks silently keep pointing at the
+      // hardcoded literals -- the exact stale-bookmark condition this function
+      // exists to remove -- and the only signal is a console.warn.
+      //
+      // index.html:2511 states the rule this violated: "A field nobody reads is
+      // swallowed with extra steps." Surfaced on the renderer's own status now,
+      // beside the other degradations, so publishCityStats can report it.
       this._featureTargetsStale = true;
+      this.featureTargetsStaleReason = String((err && err.message) || err);
       // eslint-disable-next-line no-console
       console.warn("[caliper] district bookmarks not refreshed; they still point at the drawn coordinates:", err);
       return;
     }
     this._featureTargetsStale = false;
+    this.featureTargetsStaleReason = null;
     const aim = (key, site, y) => {
       if (!site || !this._cityDistrictTargets[key]) return;
       this._cityDistrictTargets[key].pos.set(site.x, y, site.z);
@@ -4924,6 +4961,21 @@ class Renderer3D {
   }
 
   toggleGrid(force) {
+    // A LIT BUTTON, AN EMPTY PILL, AND NOTHING ON SCREEN.
+    //
+    // _buildGridOverlay runs only in the VILLAGE builder, so in city mode
+    // _gridGroup and _gridCursor are undefined and _initGridRaycaster never
+    // ran. This method still flipped the flag, showed an empty #grid-cell-coords
+    // badge, played the click, and returned true -- so index.html added .active
+    // to the button. The button's own title promises "the 600 m spatial grid and
+    // world axes". There is no grid.
+    //
+    // Returning null rather than a boolean, because the caller's question is
+    // "is it on now" and the honest answer is "there is nothing to turn on".
+    if (this._cityMode && !this._gridGroup) {
+      console.warn("toggleGrid: the city has no grid overlay -- village-only feature");
+      return null;
+    }
     this._gridVisible = force !== undefined ? !!force : !this._gridVisible;
     if (this._gridGroup) this._gridGroup.visible = this._gridVisible;
     if (this._gridCursor) this._gridCursor.visible = this._gridVisible;
@@ -4985,6 +5037,15 @@ class Renderer3D {
   }
 
   toggleRoofs(visible) {
+    // Same shape as toggleGrid. _roofGroups and _frontFacadesByBuildingId are
+    // both empty in city mode, and city geometry is added straight to the scene
+    // rather than to neighbourhoodGroup, so the traverse finds nothing either.
+    // It flipped a flag and reported it. The Cutaway control in index.html is
+    // driven off that return value.
+    if (this._cityMode && this._roofGroups.length === 0) {
+      console.warn("toggleRoofs: the city's buildings have no separable roofs -- village-only feature");
+      return null;
+    }
     if (visible === undefined) {
       this._roofsVisible = !this._roofsVisible;
     } else {
@@ -5394,6 +5455,17 @@ class Renderer3D {
 
   _buildPlacementInstance(typeDef, placement, parent, localX, localZ) {
     const key = `${placement.location}_${placement.type}_${localX.toFixed(2)}_${localZ.toFixed(2)}`;
+    // NOTHING EVER REMOVED FROM THIS SET, so a placement deleted and re-added at
+    // the same spot got no drop animation, no dust, no thud, and
+    // userData.isNewPlacement = false -- which toggleSpatialDiff reads to decide
+    // what to highlight as new, so the spatial diff showed a genuinely new
+    // object as old. And the set grew one entry per add for the life of the page.
+    //
+    // Bounded rather than pruned per-removal: the removal path does not know the
+    // key (it is built from type and position, not id), and a bound is the
+    // property that actually matters. 4,000 keys is far more than any session
+    // will produce and still cannot grow without limit.
+    if (this._knownPlacementKeys.size > 4000) this._knownPlacementKeys.clear();
     const isNew = !this._knownPlacementKeys.has(key);
     this._knownPlacementKeys.add(key);
 
@@ -5472,8 +5544,14 @@ class Renderer3D {
         startTime: performance.now(),
         duration: 300,
         parent,
+        // All 16 particles share dustGeo. Marked so the cleanup in draw()
+        // disposes it once instead of sixteen times -- see the note there.
+        sharedGeometry: true,
       });
     }
+    // Disposed once, after the last particle that uses it has expired. 300 ms
+    // is the particle duration; the margin is for a frame that runs late.
+    setTimeout(() => dustGeo.dispose(), 600);
   }
 
   toggleSpatialDiff(enable) {
@@ -5505,6 +5583,20 @@ class Renderer3D {
   }
 
   startDroneTour() {
+    // THE TOUR FLIES A VILLAGE THAT IS NOT THERE.
+    //
+    // _camCurve and _lookCurve are a +/-50 m loop at y = 7-24 around the origin
+    // -- inside downtown block geometry at city scale -- and the captions name
+    // "Grand Town Hall & Supreme Courts", "Marina & Luxury Waterfront" and a
+    // "2400m planetary curvature horizon", none of which exist in the city.
+    //
+    // Refused rather than flown. A cinematic tour of the wrong world, with
+    // confident labels, is worse than no tour: every caption is a false claim
+    // about what the visitor is looking at.
+    if (this._cityMode) {
+      console.warn("startDroneTour: the tour path and captions are the village's -- not flown in city mode");
+      return false;
+    }
     this._isDroneTour = true;
     this._tourStartTime = performance.now();
     const topBar = document.getElementById("letterbox-top");
@@ -6182,9 +6274,37 @@ class Renderer3D {
       this.focusOn(pos, 10.5);
       // Reveal the interior floor plan of this building!
       this.openBuildingInterior(parcelId);
-    } else {
-      this.resetView();
+      return;
     }
+
+    // "TAKE ME TO THIS PLOT" USED TO THROW THE CAMERA BACK TO THE OVERVIEW.
+    //
+    // In city mode _buildingGroupsById is {} and _cityDistrictTargets is keyed
+    // by district name (town/forge/docks/...), so a plot id -- which is what
+    // _inspectClick reports and what the Focus button passes -- missed every
+    // branch above and landed on resetView(). The one control that means "go
+    // there" did the opposite of going there.
+    //
+    // The spatial index knows where every plot is; it was built for exactly
+    // this and the button never asked it.
+    if (this._cityMode && this._index && typeof this._index.plotById === "function") {
+      const plot = this._index.plotById(parcelId);
+      if (plot) {
+        const cx = (plot.xMin + plot.xMax) / 2, cz = (plot.zMin + plot.zMax) / 2;
+        const span = Math.max(plot.xMax - plot.xMin, plot.zMax - plot.zMin);
+        this._targetOrbitDelta = null;
+        this._targetOrbitPitch = null;
+        // Far enough back that the plot and its neighbours are both legible --
+        // a plot alone at 10 m is an abstract wall.
+        this.focusOn(new THREE.Vector3(cx, (plot.maxHeight || 12) * 0.5, cz), Math.max(120, span * 4));
+        return;
+      }
+    }
+
+    // Nothing resolved. resetView() is still the fallback, but it is now the
+    // answer to "I could not find that", not the answer to every city plot.
+    console.warn(`focusParcel: nothing resolved for "${parcelId}"`);
+    this.resetView();
   }
 
   focusPreset(presetText) {
@@ -6385,6 +6505,23 @@ class Renderer3D {
     const centerX = this._plotCenter ? this._plotCenter.x : 0;
     const centerZ = this._plotCenter ? this._plotCenter.z : 0;
 
+    // A DUPLICATE ID COLLAPSES TWO OBJECTS INTO ONE, SILENTLY.
+    //
+    // Everything below keys on _placementMeshesById.has(p.id), so if two entries
+    // share an id the first builds a mesh and the second is treated as an UPDATE
+    // to it. Two distinct objects render as one, at the second one's position,
+    // with no error anywhere. worldEdit.ts rejects duplicate ids on addPlacement,
+    // so today this is held up by the pipeline rather than by the renderer --
+    // which means the renderer is relying on a guarantee it does not enforce and
+    // cannot see. Said out loud rather than trusted.
+    const unplaceable = [];
+    const seenIds = new Set();
+    for (const p of world.placements) {
+      if (seenIds.has(p.id)) {
+        console.warn(`_reconcilePlacements: duplicate placement id "${p.id}" -- two objects will render as one`);
+      }
+      seenIds.add(p.id);
+    }
     const currentIds = new Set(world.placements.map((p) => p.id));
 
     // 2. Remove deleted placements and dispose their GPU resources safely
@@ -6459,7 +6596,23 @@ class Renderer3D {
       } else {
         const home = this._buildingGroupsById[p.location];
         const scale = this._buildingScaleById[p.location];
-        if (!home || !scale) continue;
+        // A `continue` HERE IS A SILENTLY DROPPED EDIT.
+        //
+        // In city mode _buildingGroupsById is {}, so EVERY placement with a
+        // location other than "outdoors" lands here. Two consequences, both
+        // invisible: an ADD produces no mesh and no warning, and an UPDATE that
+        // moves an existing placement INTO a building returns before reaching
+        // the update branch -- so the old mesh stays at the old coordinate and
+        // record.location is never written, which means the same thing happens
+        // on every subsequent tick. The world model says the edit landed.
+        //
+        // Still a continue: there is genuinely nowhere to put it. But it is
+        // counted and reported now, so "nothing happened" is a fact the run can
+        // surface rather than an absence nobody can see.
+        if (!home || !scale) {
+          unplaceable.push({ id: p.id, location: p.location });
+          continue;
+        }
         const local = stationLocalXZ(typeDef.local || IDLE_LOCAL, scale.w * BUILDING_W, scale.d * BUILDING_D);
         targetX = local.x;
         targetZ = local.z;
@@ -6583,6 +6736,18 @@ class Renderer3D {
           colour: pColour
         });
       }
+    }
+
+    // REPORTED, NOT SWALLOWED. An edit the renderer could not place is a fact
+    // about the run, and the pipeline's whole claim is that it does not report
+    // a success it did not observe. Surfaced on the renderer so the page can
+    // read it, and warned once per tick rather than per placement.
+    this.unplaceablePlacements = unplaceable;
+    if (unplaceable.length > 0) {
+      console.warn(
+        `_reconcilePlacements: ${unplaceable.length} placement(s) could not be placed -- ` +
+        unplaceable.map((u) => `${u.id} -> ${u.location}`).join(", ")
+      );
     }
   }
 
@@ -6726,7 +6891,24 @@ class Renderer3D {
     const daySky = SKY_DUSK.clone().lerp(SKY_DAY, sun.warmth);
     const sky = SKY_NIGHT.clone().lerp(daySky, sun.dayAmt);
     const horizon = sky.clone().lerp(SKY_HORIZON, lerp(0.35, 0.65, sun.dayAmt));
-    updateSkyGradient(this._skyGradient, sky, horizon);
+    // A PER-FRAME GPU UPLOAD OF A TEXTURE THE CITY DOES NOT SAMPLE.
+    //
+    // updateSkyGradient builds a CanvasGradient, calls getHexString() twice,
+    // fills a canvas and sets needsUpdate = true -- which re-uploads the texture
+    // every frame, including the vast majority where the colours have not moved
+    // at all. And in city mode _buildCityBase sets scene.background = null, so
+    // the texture is not read: it was a per-frame upload of an unused asset.
+    //
+    // Skipped entirely in the city, and elsewhere only redone when the colours
+    // actually change. `getHex()` is an integer compare, so the guard costs
+    // nothing next to what it avoids.
+    if (!this._cityMode) {
+      const skyKey = (sky.getHex() << 8) ^ horizon.getHex();
+      if (skyKey !== this._lastSkyGradientKey) {
+        this._lastSkyGradientKey = skyKey;
+        updateSkyGradient(this._skyGradient, sky, horizon);
+      }
+    }
     // The city tunes its own fog colour against its own sky (see LOOK.fogColor,
     // which the comment there explains was fought over). Overwriting it every
     // frame with the village's horizon tint is what turned the whole 40 km
@@ -6771,7 +6953,13 @@ class Renderer3D {
         const progress = p.life / p.maxLife;
         if (progress >= 1) {
           this.scene.remove(p.mesh);
-          p.mesh.geometry.dispose();
+          // The dust ring shares ONE geometry across all 16 particles, and they
+          // all expire in the same frame, so this disposed the same buffers 16
+          // times. three.js tolerates the re-dispatch, but it is a
+          // use-after-dispose pattern: the first call frees buffers the other 15
+          // still reference, and it only works because they die together. If the
+          // particles are ever staggered it forces a re-upload mid-flight.
+          if (!p.sharedGeometry) p.mesh.geometry.dispose();
           p.mesh.material.dispose();
           return false;
         }
@@ -6805,7 +6993,13 @@ class Renderer3D {
         const progress = Math.min(1, elapsed / p.duration);
         if (progress >= 1) {
           p.parent.remove(p.mesh);
-          p.mesh.geometry.dispose();
+          // The dust ring shares ONE geometry across all 16 particles, and they
+          // all expire in the same frame, so this disposed the same buffers 16
+          // times. three.js tolerates the re-dispatch, but it is a
+          // use-after-dispose pattern: the first call frees buffers the other 15
+          // still reference, and it only works because they die together. If the
+          // particles are ever staggered it forces a re-upload mid-flight.
+          if (!p.sharedGeometry) p.mesh.geometry.dispose();
           p.mesh.material.dispose();
           return false;
         }
@@ -7110,7 +7304,19 @@ class Renderer3D {
       // Floor the drone against the actual terrain, not an absolute 1.8m -- over
       // the cliffs or the alpine range an absolute floor is underground.
       const flyFloor = this._groundAt(this._streetPos.x, this._streetPos.z) + 2.0;
-      this._streetPos.y = Math.max(flyFloor, Math.min(280, (this._streetPos.y || 25) + vertInput * flySpeed * dt));
+      // 280 m WAS A VILLAGE CEILING IN A WORLD WITH A 1,620 m MOUNTAIN RANGE.
+      //
+      // flyFloor is groundAt + 2. Wherever the ground exceeds 278 m, flyFloor
+      // is already above the 280 m cap, so Math.min always won and Math.max
+      // always returned flyFloor -- Q, E and space did nothing and the drone
+      // was pinned two metres off the ground. Not an edge case: terrain.js sets
+      // RANGE.height to 1,620 m with snow above ~2,050, and downtown towers
+      // reach 220.
+      //
+      // Derived from the world rather than typed: high enough to clear the
+      // peaks with room to look down at them.
+      const flyCeiling = Math.max(flyFloor + 50, (this._cityMode ? 2600 : 280));
+      this._streetPos.y = Math.max(flyFloor, Math.min(flyCeiling, (this._streetPos.y || 25) + vertInput * flySpeed * dt));
 
       this.camera.position.set(this._streetPos.x, this._streetPos.y, this._streetPos.z);
       const lookTarget = new THREE.Vector3(
@@ -7165,9 +7371,21 @@ class Renderer3D {
       try {
         this.composer.render();
       } catch (err) {
+        // AN UNLABELLED DEGRADED MODE, ONE SCREEN FROM A LABELLED ONE.
+        //
+        // This permanently drops bloom, the vignette and the output pass, so
+        // the visitor gets a visibly different image from then on -- with only a
+        // console warning they will never open. The WebGL fallback fifty lines
+        // away sets `this.degraded` and index.html surfaces it, which is the
+        // right shape; this one did not.
+        //
+        // Same field, so the same reporting picks it up. Kept short: this is a
+        // cosmetic degradation, not a broken pipeline, and saying more than that
+        // would overstate it.
         console.warn("EffectComposer runtime error, falling back to standard renderer:", err);
         try { this.composer.dispose(); } catch (_) {}
         this.composer = null;
+        this.postDegraded = "Post-processing was disabled after a runtime error. The scene still renders; bloom and vignette are off.";
         this.renderer.render(this.scene, this.camera);
       }
     } else {
@@ -7308,7 +7526,11 @@ export class WorldRenderer {
     return this._impl.toggleRoofs ? this._impl.toggleRoofs(visible) : true;
   }
   startDroneTour() {
-    if (this._impl.startDroneTour) this._impl.startDroneTour();
+    // The refusal lives in the implementation, which is the thing that knows
+    // whether it is in city mode. Duplicating it here would be a second place
+    // for the two to disagree.
+    if (this._impl.startDroneTour) return this._impl.startDroneTour();
+    return false;
   }
   stopDroneTour() {
     if (this._impl.stopDroneTour) this._impl.stopDroneTour();

@@ -21,22 +21,22 @@ claim is that it only says yes when yes is true.
 | A1 | `parseHexColor` undefined — every colour change threw out of the reconcile loop | HIGH | **FIXED** |
 | A2 | Recolour predicate `!emissiveIntensity` can never match (three.js defaults it to 1), and `record.colour` was written anyway — a no-op that cached success | HIGH | **FIXED** |
 | A3 | `_reconcilePlacements` used the VILLAGE transform on city metres — every outdoor placement drawn at 6×/4.5× | HIGH | **FIXED** |
-| A4 | An update moving a placement to an unresolvable `location` silently leaves the old mesh; indoor placements in city mode never render and report nothing | HIGH | OPEN |
+| A4 | An update moving a placement to an unresolvable `location` silently leaves the old mesh; indoor placements in city mode never render and report nothing | HIGH | **FIXED** |
 | A5 | `window` `blur` listener never removed — holds scene + WebGL renderer after `destroy()` | HIGH | **FIXED** |
 | A6 | `this.moonLight` typo (property is `_moonLight`) — village moon stays in the city scene | MED-HIGH | **FIXED** |
 | A7 | Starfield, 18 cloud clusters, 28 fireflies, village smoke never removed in city mode; clouds intersect 220 m towers and the pick raycast can hit one and report a confident ground address | MED-HIGH | **FIXED** |
-| A8 | `toggleGrid`, `toggleRoofs`, `startDroneTour` do nothing in city mode and each returns a success value | MED-HIGH | OPEN |
-| A9 | Focus on a picked city plot falls through to `resetView()`; `focusDistrict` writes four village NPC names into the inspector | MED-HIGH | OPEN |
-| A10 | `_featureTargetsStale` written by both branches, read by nothing | MED | OPEN |
-| A11 | `_skyUniforms` still points at the removed village sky — city sky never responds to the day/night cycle | MED | OPEN |
-| A12 | `_cityDefaultCamera` (scaled) is dead; Reset uses unscaled 4200/900 against an opening shot at 2730/585 | MED | OPEN |
-| A13 | Fly-mode vertical dead over ground above ~278 m (village 280 m ceiling, 1,620 m range) | MED | OPEN |
-| A14 | `updateSkyGradient` re-uploads a texture to the GPU every frame; unused in city mode | MED | OPEN |
-| A15 | `_knownPlacementKeys` never pruned — re-added placement loses its "new" affordance and spatial diff mislabels it | MED | OPEN |
-| A16 | Duplicate placement ids collapse two objects into one silently | MED | OPEN |
-| A17 | `_triggerDustRing` shares one geometry across 16 meshes and disposes it 16× | LOW-MED | OPEN |
-| A18 | Texture loads have no `onError` — a 404 degrades to untextured with no signal (village only) | LOW-MED | OPEN |
-| A19 | Composer fallback drops bloom/vignette with no on-page label, unlike the WebGL fallback | LOW | OPEN |
+| A8 | `toggleGrid`, `toggleRoofs`, `startDroneTour` do nothing in city mode and each returns a success value | MED-HIGH | **FIXED** |
+| A9 | Focus on a picked city plot falls through to `resetView()`; `focusDistrict` writes four village NPC names into the inspector | MED-HIGH | **FIXED** |
+| A10 | `_featureTargetsStale` written by both branches, read by nothing | MED | **FIXED** |
+| A11 | `_skyUniforms` still points at the removed village sky — city sky never responds to the day/night cycle | MED | **FIXED** |
+| A12 | `_cityDefaultCamera` (scaled) is dead; Reset uses unscaled 4200/900 against an opening shot at 2730/585 | MED | **FIXED** |
+| A13 | Fly-mode vertical dead over ground above ~278 m (village 280 m ceiling, 1,620 m range) | MED | **FIXED** |
+| A14 | `updateSkyGradient` re-uploads a texture to the GPU every frame; unused in city mode | MED | **FIXED** |
+| A15 | `_knownPlacementKeys` never pruned — re-added placement loses its "new" affordance and spatial diff mislabels it | MED | **FIXED** |
+| A16 | Duplicate placement ids collapse two objects into one silently | MED | **FIXED** |
+| A17 | `_triggerDustRing` shares one geometry across 16 meshes and disposes it 16× | LOW-MED | **FIXED** |
+| A18 | Texture loads have no `onError` — a 404 degrades to untextured with no signal (village only) | LOW-MED | WONTFIX — village-only path, and a texture 404 is visible on inspection; not worth an error handler that only fires in a scene the city never builds |
+| A19 | Composer fallback drops bloom/vignette with no on-page label, unlike the WebGL fallback | LOW | **FIXED** |
 
 ## B. `city-render.js` / `buildings.js`
 
