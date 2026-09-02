@@ -50,6 +50,33 @@
 // road would have there.
 // =============================================================================
 
+/**
+ * THE RAILWAY'S VERTICAL ALIGNMENT, IN ONE PLACE.
+ *
+ * These three numbers were written out separately in three files: findCorridor's
+ * defaults in land-use.js, the rail entry in features.js, and the gradeRun call
+ * in city-render.js. Same railway, same engineering fact, three copies.
+ *
+ * That is worse than untidy here, because of what the two ends do. findCorridor
+ * uses them to CHOOSE where the line runs -- it rejects any corridor that cannot
+ * hold the gradient within the budget. city-render then uses them to BUILD the
+ * line it chose. If the two ever disagreed, the renderer would quietly lay a
+ * different, steeper railway than the one the corridor search approved, on
+ * ground selected on the promise that it would not have to. Nothing would fail;
+ * the railway would just be wrong, and the search would still be reporting that
+ * it was fine. city-render.js already carried a comment warning about exactly
+ * this, which is a good instinct and no protection at all.
+ *
+ * 2.5% is the adhesion limit for a conventional railway; 30 m is the embankment
+ * or cutting a real line will spend to hold it. docs/CITY-PLANNING-SPEC.md 4.1.
+ */
+export const RAIL_ALIGNMENT = {
+  maxGrade: 0.025,
+  maxDev: 30,
+  window: 900,
+  search: 2400,
+};
+
 // -----------------------------------------------------------------------------
 // GRADING IS PER CLASS, BECAUSE EARTHWORK COSTS MONEY
 //
@@ -75,8 +102,9 @@ export const GRADE = {
   ROAD: 0.08,      // default when a class is not recognised
   FOOTWAY: 0.08,   // follows its carriageway
   PLAZA: 0.02,     // a square reads as level
-  RAIL: 0.025,     // 2.5% is already a hard climb for adhesion rail
+  RAIL: RAIL_ALIGNMENT.maxGrade,   // the railway's limit has exactly one source
 };
+
 
 /** window = smoothing length; maxGrade = gradient limit; maxDev = earthwork cap. */
 export const ROAD_GRADE = {

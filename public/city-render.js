@@ -24,7 +24,7 @@ import { assessFootprint } from "./footprint.js";
 // world-scale helper is imported under a name that cannot be shadowed.
 import { sm as wm } from "./world-scale.js";
 import { placeFeatures, FEATURES } from "./features.js";
-import { gradeRun, GRADE, ROAD_GRADE } from "./grade.js";
+import { gradeRun, GRADE, ROAD_GRADE, RAIL_ALIGNMENT } from "./grade.js";
 import { createCollector, emitBuilding, HEIGHT, rnd } from "./buildings.js";
 
 // -----------------------------------------------------------------------------
@@ -1238,7 +1238,8 @@ function buildProps(api) {
     const RAIL_FROM = _rw.from;
     const RAIL_TO = _rw.to;
     const railGrade = gradeRun(heightAt, { axis: "ew", at: RAIL_Z, from: RAIL_FROM, to: RAIL_TO },
-                               { step: 40, window: 900, maxGrade: GRADE.RAIL, maxDev: 30 });
+                               { step: 40, window: RAIL_ALIGNMENT.window,
+                                 maxGrade: RAIL_ALIGNMENT.maxGrade, maxDev: RAIL_ALIGNMENT.maxDev });
     // 30 m matches the budget findCorridor used to CHOOSE this line. A smaller
     // budget here would silently build a different, steeper railway than the one
     // the corridor search approved.

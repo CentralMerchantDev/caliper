@@ -25,12 +25,13 @@ import assert from "node:assert/strict";
 
 import {
   generateWorld, generateCityPlan, landmassPolygons, PLOT_CLASSES, SETTLEMENTS,
-  offsetPolygon, COAST, splinePolygon, BRIDGES, signedArea2, LANDMASSES, distanceToCoast, distanceToCoastExact, coastlinePolygon } from "../public/city-plan.js";
+  offsetPolygon, COAST, splinePolygon, BRIDGES, signedArea2, LANDMASSES, distanceToCoast, distanceToCoastExact, coastlinePolygon, classForSettlementBlock } from "../public/city-plan.js";
 import { WORLD_SCALE } from "../public/world-scale.js";
 import { findSite, findFlattestSite, ROAD_SLOPE_MAX } from "../public/land-use.js";
 import { placeFeatures, FEATURES } from "../public/features.js";
 import { assessFootprint } from "../public/footprint.js";
 import { buildSpatialIndex } from "../public/spatial-index.js";
+import { DENSITY_BANDS } from "../public/zoning.js";
 import { gradeRun, ROAD_GRADE } from "../public/grade.js";
 
 // PROBE COORDINATES SCALE. JUDGEMENTS DO NOT.
@@ -1372,4 +1373,83 @@ test("the waterways are actually somewhere — the check is not vacuous", () => 
     }
   }
   assert.ok(found > 50, `waterwayAt found only ${found} points — it is not detecting the rivers`);
+});
+
+// ---------------------------------------------------------------------------
+// 3.6 -- ONE DEMAND FIELD, ONE TABLE OF THRESHOLDS
+//
+// `DEMAND_FOR` in city-plan.js and `DENSITY_BANDS` in zoning.js read the SAME
+// demand field and disagreed. DENSITY_BANDS was fitted to that field's real
+// distribution; DEMAND_FOR was typed by hand and sat far above it. The rung that
+// mattered was the bottom one: VILLA at 0.16 against a calibrated 0.004 put
+// 43.2% of blocks (7,144 of 16,541) BELOW the lowest rung the ladder could
+// reach, so for nearly half the city the demand model never ran -- those blocks
+// fell through to the patchy fallback, or became FARM.
+//
+// Deriving one table from the other took the plot count from 16,541 to 19,481.
+// This test is what stops them drifting apart again, and it drives the SHIPPED
+// function rather than comparing two constants: tables that agree only on paper
+// are worth nothing.
+// ---------------------------------------------------------------------------
+test("the block density ladder uses the calibrated bands, not a second opinion", () => {
+  // A settlement whose mix admits the whole ladder, so nothing is filtered out
+  // for reasons unrelated to demand.
+  const s = { id: "probe", cls: "TOWER" } as any;
+  const at = (d: number) => {
+    // Blocks far apart, so the PARK jitter and the density jitter cannot make
+    // two probes at the same demand disagree for hash reasons.
+    const blk = { xMin: 0, xMax: 100, zMin: 0, zMax: 100 };
+    return classForSettlementBlock(s, blk, [], [], () => d);
+  };
+
+  // 1. THE BOTTOM RUNG. This is the whole defect: above roughly 0.01 the model
+  //    goes silent for the outer coast and the islands, which is most of the
+  //    world's low-demand ground.
+  const lowest = Math.min(...DENSITY_BANDS.map((b) => b.above));
+  assert.ok(
+    lowest < 0.01,
+    `lowest density rung is ${lowest}; above ~0.01 it silences the demand model for ` +
+    `the outer coast and islands, which is the defect this test exists for`
+  );
+
+  // 2. RUNG FOR RUNG, above the open-space threshold. Below 0.13 the shipped
+  //    model may legitimately return PARK -- low demand on good ground is a
+  //    park, not the smallest possible house -- so those rungs are checked
+  //    differently in step 3 rather than being asserted away here.
+  const OPEN_SPACE_BELOW = 0.13;
+  const admitted = new Set(["TOWER", "MIDRISE", "TOWNHOUSE"]);
+  let checked = 0;
+  for (const b of DENSITY_BANDS) {
+    if (!admitted.has(b.cls)) continue;
+    if (b.above + 0.02 < OPEN_SPACE_BELOW) continue;
+    const got = at(b.above + 0.02);
+    assert.equal(
+      got, b.cls,
+      `demand just above the ${b.cls} band (${b.above}) yielded ${got} -- ` +
+      `the two threshold tables have drifted apart again`
+    );
+    checked++;
+  }
+  assert.ok(checked >= 2, `only ${checked} bands were exercised; this test has stopped testing`);
+
+  // 3. THE LOW RUNGS MUST NOT OVER-BUILD. Below the open-space threshold the
+  //    answer may be PARK or the band's own class, but it must never be DENSER
+  //    than the band allows -- over-building the quiet edges is exactly what a
+  //    drifted, too-high table produces.
+  const rank = ["TOWER", "MIDRISE", "TERRACE", "TOWNHOUSE", "VILLA", "FARM"];
+  for (const b of DENSITY_BANDS) {
+    if (b.above >= OPEN_SPACE_BELOW) continue;
+    const got = at(b.above + 0.002);
+    if (got === "PARK") continue;
+    const gi = rank.indexOf(got), bi = rank.indexOf(b.cls);
+    assert.ok(
+      gi < 0 || gi >= bi,
+      `demand ${(b.above + 0.002).toFixed(3)} sits in the ${b.cls} band but yielded the ` +
+      `denser ${got} -- the ladder is over-building low-demand ground`
+    );
+  }
+
+  // 3. AND THE LADDER MUST ACTUALLY BITE. Top demand is the densest admitted
+  //    class, not a fallback pick.
+  assert.equal(at(0.99), "TOWER", "peak demand should reach the top of the ladder");
 });

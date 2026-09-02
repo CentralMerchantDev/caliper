@@ -35,7 +35,8 @@
 // two, which is why a placement bug could only be found by looking at a picture.
 // =============================================================================
 
-import { findSite, findFlattestSite, findQuay, findCorridor } from "./land-use.js";
+import { findSite, findFlattestSite, findQuay, findCorridor, MIN_CORRIDOR_ON_LAND } from "./land-use.js";
+import { RAIL_ALIGNMENT } from "./grade.js";
 import { WORLD_SCALE } from "./world-scale.js";
 
 /** Design-space coordinate to world. Manifests are written in the drawn world. */
@@ -102,9 +103,9 @@ export const FEATURES = [
     // a railway route, however dry it is.
     need: {
       kind: "corridor", axis: "ew", from: w(-17000), to: w(17000),
-      search: 2400, maxGrade: 0.025, maxDev: 30,
+      search: RAIL_ALIGNMENT.search, maxGrade: RAIL_ALIGNMENT.maxGrade, maxDev: RAIL_ALIGNMENT.maxDev,
     },
-    limit: { onLand: 0.85 },
+    limit: { onLand: MIN_CORRIDOR_ON_LAND },
   },
   {
     id: "golf",

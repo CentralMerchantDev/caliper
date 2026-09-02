@@ -29,19 +29,31 @@
 // else uses, so it cannot describe a world that is not there.
 // =============================================================================
 
-import { sm } from "./world-scale.js";
-
 /**
- * Grid cell size in metres.
+ * Grid cell size in metres, for any bucket grid laid over PLOTS.
  *
- * It is NOT larger than the biggest plot, and an earlier version of this comment
- * said it was: CELL is sm(400) = 260 m at k=0.65 while the largest plot is 392 m
- * across, and the gap widens as the scale falls because CELL scales and plot
- * sizes do not. That is harmless only because a plot is registered in EVERY cell
- * its bounding box touches -- which is the property the edge test now guards,
- * and the one thing here that must not be "optimised" to centre-cell registration.
+ * IT USED TO SCALE, AND IT SHOULD NOT. This was `sm(400)`, and the comment here
+ * recorded the consequence without drawing the conclusion: at k = 0.65 the cell
+ * is 260 m while the largest plot is 392 m across, "and the gap widens as the
+ * scale falls because CELL scales and plot sizes do not."
+ *
+ * That last clause is the whole argument. A bucket grid over plots is sized
+ * AGAINST PLOTS, and plots are built objects -- world-scale.js's rule is
+ * explicit that built metres do not scale. Scaling this one made the grid finer
+ * relative to its contents at every scale below 1, which is not a tuning
+ * preference, it is the cell drifting away from the thing it buckets.
+ *
+ * It stays true that a plot is registered in EVERY cell its bounding box
+ * touches, and that is still the property the edge test guards -- it is what
+ * makes the index correct rather than merely lucky, and it must not be
+ * "optimised" to centre-cell registration whatever the cell size.
+ *
+ * Exported because city-plan.js lays two more grids over the same plots (the
+ * de-overlap pass and the overlap guard) and all three were writing their own
+ * 400. Three copies of one number is how they stop agreeing.
  */
-const CELL = sm(400);
+export const PLOT_BUCKET = 400;
+const CELL = PLOT_BUCKET;
 
 /**
  * @param {{plots: any[], blocks?: any[], districts?: any[], settlements?: any[]}} world

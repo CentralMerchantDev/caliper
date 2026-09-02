@@ -1,4 +1,4 @@
-import { gradeRun } from "./grade.js";
+import { gradeRun, RAIL_ALIGNMENT } from "./grade.js";
 // =============================================================================
 // THE LAND REGISTRY
 //
@@ -465,15 +465,30 @@ export function findQuay(heightAt, want, opts = {}) {
  *
  * So: reject what is wet, then choose on earthworks.
  */
+/**
+ * How much of a corridor must stand on land before it is a route at all.
+ *
+ * This was written as a bare 0.85 here and again as `limit: { onLand: 0.85 }`
+ * in features.js -- the search's own floor and the manifest's stated
+ * requirement, two copies of the same threshold, and the manifest's copy is
+ * what the failure message quotes back at you. Raise one and the other keeps
+ * approving corridors it now says it rejects.
+ */
+export const MIN_CORRIDOR_ON_LAND = 0.85;
+
 export function findCorridor(heightAt, want, opts = {}) {
   const {
     axis = "ew", from, to,
     step = 60,
     search = 2400,
     searchStep = 160,
-    maxGrade = 0.025,   // adhesion rail; docs/CITY-PLANNING-SPEC.md §4.1
-    maxDev = 30,        // metres of embankment or cutting the budget allows
-    gradeWindow = 900,
+    // One source for the railway's vertical alignment -- see grade.js.
+    // These were three separate copies; the corridor search CHOOSES a line on
+    // them and the renderer BUILDS on them, so a disagreement lays a steeper
+    // railway than the search approved, silently.
+    maxGrade = RAIL_ALIGNMENT.maxGrade,
+    maxDev = RAIL_ALIGNMENT.maxDev,
+    gradeWindow = RAIL_ALIGNMENT.window,
   } = opts;
 
   const ew = axis === "ew";
@@ -489,7 +504,7 @@ export function findCorridor(heightAt, want, opts = {}) {
       if (h >= 2 && h <= 240) on++;
     }
     const onLand = total ? on / total : 0;
-    if (onLand < 0.85) continue;
+    if (onLand < MIN_CORRIDOR_ON_LAND) continue;
 
     const g = gradeRun(heightAt, { axis, at, from, to },
                        { step: 40, window: gradeWindow, maxGrade, maxDev });
