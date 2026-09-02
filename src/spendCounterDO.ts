@@ -32,6 +32,7 @@
 // a virtual module the Workers runtime provides and plain Node cannot
 // resolve, so any file that imports it can never be loaded by a plain
 // Node test run. SpendCounterLogic has no such import -- it takes a plain
+import { SIM_BASELINE_SOURCE } from "./simBaseline";
 // {get, put} storage interface -- so its atomicity-relevant logic is fully
 // testable in Node (test/spendCounterDO.test.ts), including firing real
 // concurrent reserve() calls via Promise.all.
@@ -211,6 +212,25 @@ export class SpendCounterLogic {
     // expected the baseline -- i.e. genuinely the first publish.
     const stored = await this.storage.get<string>("sim/current-source");
     if (stored === undefined || stored === null) {
+      // ...AND NOW THE CODE ACTUALLY DOES WHAT THE COMMENT ABOVE SAYS.
+      //
+      // The paragraph above states the rule -- "an absent stored source is only
+      // acceptable when the caller also expected the baseline" -- and then this
+      // branch published unconditionally without ever reading expectedSource. An
+      // audit called publishSource with a source that had never been the
+      // baseline, against empty storage, and got `{ ok: true }`.
+      //
+      // That is the same defect the comment describes fixing, one layer down: a
+      // check that cannot fail is not a check. If storage is empty, the only
+      // honest expectation is the frozen baseline, because that is exactly what
+      // the run's starting source falls back to when the DO is empty.
+      if (expectedSource !== SIM_BASELINE_SOURCE) {
+        return {
+          ok: false,
+          conflict: true,
+          reason: "No stored source, but the run did not start from the baseline -- refusing to publish over an unknown state",
+        };
+      }
       await this.storage.put("sim/current-source", newSource);
       return { ok: true };
     }

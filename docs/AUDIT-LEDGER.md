@@ -79,10 +79,10 @@ whether anything noticed. Working tree verified byte-identical afterwards.
 | --- | --- | --- | --- | --- |
 | 2.1 | **The review loop's clean verdict can be manufactured.** `acceptedByDesign` is populated from the AUTHOR model's own verdicts, then unconditionally deleted from the reviewer's later findings *before* the clean check and *before* the oscillation guard. A model that declares a finding invalid ships with the reviewer still objecting. | **CRITICAL** | **FIXED** | Decision extracted as `assessReviewRound()` — pure, exported, testable. The overruled finding is no longer deleted: it is SPLIT out as `contested`. If the reviewer, having been shown the justification, raises it again, that is `overrule-rejected` and the run does not ship. 6 tests; restoring the old filter fails 2 of them. |
 | 2.2 | **Every spend estimate prices output tokens only.** `WORST_CASE.*` omits input tokens; `costUsd()` charges both. Real source-edit worst case $0.642 vs a $0.44 ceiling. Two stages' input cost alone exceeds their whole reservation. | **CRITICAL** | **FIXED** | `INPUT_CAP` added and both halves priced via `priceBoth`. Ceilings re-derived $0.44→$0.72 and $0.26→$0.49. The test now reads the real `SPEND_WORST_CASE` instead of its own copy. Mutation: removing the input term fails the ceiling test. **It immediately found a second defect** — 4 runs/IP × $0.72 = $2.88 of a $2.00 cap, so the per-IP limit dropped to 2. |
-| 2.3 | Five retry sites spend real money that is never counted (openai ×2, grounding, claude ×2). The fix exists in exactly one of six places with the same shape. | high | OPEN | Forced the grounding parse retry: 2 HTTP calls, exactly half the spend recorded. |
+| 2.3 | Five retry sites spend real money that is never counted (openai ×2, grounding, claude ×2). The fix exists in exactly one of six places with the same shape. | high | **FIXED** | All five sites carry the discarded attempt's usage forward, matching `createWithTruncationGuard` which already did it in one of six places. openai ×2, grounding ×1, claude ×2. |
 | 2.4 | **9 of 14 gates can be deleted with all 380 tests still green** — oscillation guard, round cap, fix-attempt cap, per-run ceiling, Gate 2 reject flag, unresolved-blocks-ship, the QA pass, circuit breaker, per-IP limit, concurrency limit. `reviewLoop.test.ts` never touches the loop body. | high | OPEN | Each mutation applied to real source, full suite, reverted. |
-| 2.5 | The CAS's empty-storage branch ignores `expectedSource`, and its comment says it does not. | high | OPEN | `publishSource` with a source that was never the baseline returns `{ok:true}` against empty storage. |
-| 2.6 | A payload inside an exported function body defeats every server-side check: `topLevelSideEffects` only inspects module load, and the regression suite has no DOM so the guard branch is dead there and live in every visitor's browser. | high | OPEN | Injected a `document`-gated beacon into `tick()`: side effects `[]`, integrity all pass, 0 of 9 regressions fail. |
+| 2.5 | The CAS's empty-storage branch ignores `expectedSource`, and its comment says it does not. | high | **FIXED** | The empty-storage branch now requires `expectedSource === SIM_BASELINE_SOURCE`, which is what its own comment always said. Test. **Also found an existing test that was accidentally exercising this branch** — it published the literal string `"baseline"` against empty storage while meaning to test the CAS match; now seeded. |
+| 2.6 | A payload inside an exported function body defeats every server-side check: `topLevelSideEffects` only inspects module load, and the regression suite has no DOM so the guard branch is dead there and live in every visitor's browser. | high | **FIXED** | `browserOnlyReferences()` walks the whole AST for DOM/network/eval globals at any depth, with local-binding shadowing handled. The audit's exact payload is refused and names document/navigator/globalThis. Verified it does NOT false-positive: ordinary simulation code and the real shipped world both pass. 4 tests. |
 | 2.7 | `/security-check` executes the warm run and then ignores it (`judge(cold)` only). `attacks.ts` probes a harness shape the pipeline never uses; `network-egress` accepts any error as "held". | med | OPEN | |
 | 2.8 | Gate 1's free-text reply loop is unbounded and outside the ceiling arithmetic — each reply re-runs ground + plan. | med | OPEN | 12 replies → 13 ground + 13 plan calls, no cap. |
 | 2.9 | Lease bookkeeping disagrees with itself: DO grants 600 s, `ACTIVE_RUN_LEASE_TTL_SEC` is 330; `maxConcurrent` default 3 vs published 5. A *transient* renewal blip sets `leaseLost`, which skips release and leaks the slot for 600 s. | med | OPEN | |
@@ -125,3 +125,25 @@ plots/blocks/roads identical); the WeakMap caches do not collide; `nearestPlot`'
 ring exit IS sound, unlike `LandField`'s; `slopeAt`'s fixed 24 m baseline costs
 0.6% on cliff counts; scale breakage below 0.65 is honest and named by the suite
 everywhere except 3.9.
+
+
+---
+
+## Decision — the spend estimates are parked until they can be measured
+
+**Mark, this session:** *"I am not sure that the way we are checking them is real,
+and until we actually try and run them I am not sure we will. Let's not worry
+about it just yet — we can come back to it once we can test it for real, but I
+don't want to do that until we are sure it is done and ready, which it isn't
+yet."*
+
+So: the arithmetic bug is fixed (input tokens are priced, the test reads the real
+table, the ceilings cover what the limits permit). What is NOT settled is whether
+`INPUT_CAP` — the reconstructed prompt sizes — reflects what a real run actually
+sends. Those numbers are derived from the call sites, not observed.
+
+**Revisit when:** live runs exist and their real token counts can be read back
+from `stageCosts`. Then `INPUT_CAP` becomes a measurement rather than an
+estimate, and `DAILY_LIVE_RUNS_PER_IP` and the caps can be set from evidence.
+
+Until then no further tuning: a second guess is not better than the first.

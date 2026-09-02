@@ -84,8 +84,24 @@ export async function resolveReview(
   // API, not a guess), so this whole function moved off `choices[0]` onto
   // the Responses API's own shape (output_text, incomplete_details, a
   // differently-named usage field).
+  // A DISCARDED ATTEMPT WAS STILL BILLED.
+  //
+  // Both retries below reassign `response`, so the abandoned attempt's usage
+  // vanished and the caller recorded half the real spend. claude.ts's
+  // createWithTruncationGuard already carries tokens forward and says why -- "a
+  // cap that does not count retries is the same claim" -- and that fix was
+  // applied in exactly one of six places with this shape. An audit forced the
+  // grounding parse retry and measured 2 HTTP calls against exactly half the
+  // spend recorded.
+  let carriedIn = 0, carriedOut = 0;
+  const carry = (r: typeof response) => {
+    carriedIn += (r as any)?.usage?.input_tokens ?? 0;
+    carriedOut += (r as any)?.usage?.output_tokens ?? 0;
+  };
+
   if (response.incomplete_details?.reason === "max_output_tokens") {
     const retryTokens = Math.min(maxTokens * 2, 8000);
+    carry(response);
     response = await attempt(retryTokens, userContent);
     if (response.incomplete_details?.reason === "max_output_tokens") throw new TruncatedResponseError("reviewArtifact", retryTokens);
   }
@@ -113,12 +129,20 @@ export async function resolveReview(
   // never silently trusted either way.
   if (!reviewFollowedFormat(text)) {
     const retryContent = `${userContent}\n\nYour previous response did not follow the required structure -- it must explicitly address all 4 named failure modes (Kitchen Sink, Wrong Abstraction, Optimistic Path, Runaway Refactor) by name, each with an explicit yes/no. Redo the review in the required format.`;
+    carry(response);
     response = await attempt(maxTokens, retryContent);
     const retryText = response.output_text ?? "";
     if (!reviewFollowedFormat(retryText)) {
       throw new Error("Review response did not follow the required structure (missing the 4 named failure modes) twice in a row -- treated as a failure, not a clean review.");
     }
     text = retryText;
+  }
+
+  // Fold the abandoned attempts into what the caller sees, so the cost recorded
+  // is the cost incurred rather than the cost of the last try.
+  if ((carriedIn || carriedOut) && (response as any).usage) {
+    (response as any).usage.input_tokens = ((response as any).usage.input_tokens ?? 0) + carriedIn;
+    (response as any).usage.output_tokens = ((response as any).usage.output_tokens ?? 0) + carriedOut;
   }
 
   return { response, text };

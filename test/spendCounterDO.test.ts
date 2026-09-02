@@ -166,7 +166,14 @@ test("publishSource: rejects publication when lease is mismatched or expired", a
   assert.equal(expiredRes.ok, false);
   assert.equal(expiredRes.conflict, true);
 
-  // Valid credentials and matching expectedSource succeeds atomically
+  // Valid credentials and matching expectedSource succeeds atomically.
+  //
+  // The store is seeded first, deliberately. This assertion is about the CAS
+  // MATCHING -- lease valid, expected source equals stored source -- and with an
+  // empty store it was silently exercising the first-publish branch instead,
+  // which used to accept anything. Seeding it makes the test test what its name
+  // says, and the empty-storage branch has its own test in controlLayer.test.ts.
+  await store.put("sim/current-source", "baseline");
   const successRes = await logic.publishSource("baseline", "shipped-code", "run-abc", lease.leaseToken!);
   assert.equal(successRes.ok, true);
   const current = await logic.getSource();

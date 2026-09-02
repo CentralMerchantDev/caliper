@@ -836,6 +836,93 @@ export interface IntegrityResult {
  * is therefore both unnecessary and the exact shape an injected payload takes,
  * so it is refused rather than reasoned about.
  */
+/**
+ * REFERENCES TO A BROWSER, ANYWHERE IN THE MODULE.
+ *
+ * topLevelSideEffects deliberately does not look inside function bodies -- a
+ * function is defined at module load and called later, so its body is not a
+ * module-load side effect. That is correct for the question it asks, and it
+ * leaves a hole for a different one.
+ *
+ * The world's exported functions are imported AND CALLED by the public pages. A
+ * payload does not need to run at module load; it only needs to be in tick().
+ * An audit put this inside the body:
+ *
+ *     if (typeof document !== "undefined" && !globalThis.__done) {
+ *       globalThis.__done = 1; document.title = "PWNED";
+ *       navigator.sendBeacon("/collect", document.cookie);
+ *     }
+ *
+ * and every server-side check passed: topLevelSideEffects returned [], the
+ * integrity checks passed, and 0 of 9 regressions failed -- because the sandbox
+ * runs in a Worker isolate with no DOM, so the guard branch is dead there and
+ * live in every visitor's browser. The tests cannot see it by construction.
+ *
+ * So this is a static question, not a runtime one. The world is a pure
+ * simulation of needs, money and time. It has no legitimate reason to mention a
+ * document, a network, or a way to build new code from a string -- at any depth.
+ * Naming them is the finding.
+ */
+const BROWSER_AND_ESCAPE_GLOBALS = new Set([
+  // the DOM and the page
+  "document", "window", "navigator", "location", "history", "screen", "parent", "top", "opener",
+  "localStorage", "sessionStorage", "indexedDB", "caches", "crypto",
+  // anything that leaves the machine
+  "fetch", "XMLHttpRequest", "WebSocket", "EventSource", "sendBeacon", "importScripts",
+  // anything that turns data into code
+  "eval", "Function", "WebAssembly",
+  // the escape hatches out of a module
+  "globalThis", "self", "process", "require",
+]);
+
+export function browserOnlyReferences(source: string): string[] {
+  let program: AcornProgram;
+  try {
+    program = parse(source, { ecmaVersion: 2022, sourceType: "module" }) as unknown as AcornProgram;
+  } catch (err) {
+    return [`source does not parse: ${String((err as Error)?.message ?? err).slice(0, 120)}`];
+  }
+
+  const found = new Map<string, string>();
+  const near = (node: { start: number; end: number }) =>
+    source.slice(node.start, Math.min(node.end, node.start + 90)).replace(/\s+/g, " ").trim();
+
+  // Names the module itself binds are not the globals we are looking for.
+  const bound = new Set<string>();
+  const collectBindings = (node: any) => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "VariableDeclarator" && node.id?.type === "Identifier") bound.add(node.id.name);
+    if ((node.type === "FunctionDeclaration" || node.type === "FunctionExpression"
+      || node.type === "ArrowFunctionExpression") && node.id?.type === "Identifier") bound.add(node.id.name);
+    for (const p of node.params ?? []) if (p?.type === "Identifier") bound.add(p.name);
+    for (const k of Object.keys(node)) {
+      const v = (node as any)[k];
+      if (Array.isArray(v)) v.forEach(collectBindings);
+      else if (v && typeof v === "object" && typeof v.type === "string") collectBindings(v);
+    }
+  };
+  collectBindings(program);
+
+  const walk = (node: any, parent: any) => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "Identifier" && BROWSER_AND_ESCAPE_GLOBALS.has(node.name) && !bound.has(node.name)) {
+      // `x.document` is a property, not the global; `document.x` is the global.
+      const isProperty = parent?.type === "MemberExpression" && parent.property === node && !parent.computed;
+      const isKey = parent?.type === "Property" && parent.key === node && !parent.computed;
+      if (!isProperty && !isKey) found.set(node.name, near(parent ?? node));
+    }
+    for (const k of Object.keys(node)) {
+      if (k === "start" || k === "end" || k === "loc") continue;
+      const v = (node as any)[k];
+      if (Array.isArray(v)) v.forEach((c) => walk(c, node));
+      else if (v && typeof v === "object" && typeof v.type === "string") walk(v, node);
+    }
+  };
+  walk(program, null);
+
+  return [...found.entries()].map(([name, ctx]) => `${name} referenced: ${ctx}`);
+}
+
 export function topLevelSideEffects(source: string): string[] {
   // PARSED, NOT PATTERN-MATCHED.
   //
@@ -985,7 +1072,11 @@ export function worldIntegrityChecks(before: string, after: string, dataEditExpe
   // The strongest check available for the fact that this text becomes a
   // <script type=module> in a visitor's browser. A world is declarations; a
   // payload is a statement.
-  const sideEffects = topLevelSideEffects(after);
+  // Two different questions, both asked. topLevelSideEffects covers what runs
+  // when the module loads; browserOnlyReferences covers what a function body
+  // could do when the VISITOR'S BROWSER calls it, which the sandbox cannot see
+  // because it has no DOM.
+  const sideEffects = [...topLevelSideEffects(after), ...browserOnlyReferences(after)];
   out.push({
     name: "the world runs nothing at module load",
     pass: sideEffects.length === 0,

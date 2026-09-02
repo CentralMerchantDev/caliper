@@ -254,3 +254,44 @@ test("control: a different IP is unaffected by another IP's hits", async () => {
   await recordPipelineRateLimitHit(kv, "1.1.1.1");
   await assert.doesNotReject(() => assertUnderPipelineRateLimit(kv, "2.2.2.2"));
 });
+
+// =============================================================================
+// THE COMPARE-AND-SWAP'S EMPTY BRANCH IGNORED WHAT IT WAS COMPARING
+//
+// publishSource's comment states the rule plainly: "an absent stored source is
+// only acceptable when the caller also expected the baseline -- i.e. genuinely
+// the first publish." The branch then published unconditionally, without ever
+// reading expectedSource. An audit called it with a source that had never been
+// the baseline, against empty storage, and got { ok: true }.
+//
+// That is the same defect the surrounding comment describes fixing, one layer
+// down. A check that cannot fail is not a check.
+// =============================================================================
+test("publishing against empty storage requires having started from the baseline", async () => {
+  const { SpendCounterLogic } = await import("../src/spendCounterDO.js");
+  const { SIM_BASELINE_SOURCE } = await import("../src/simBaseline.js");
+
+  const store = new Map<string, unknown>();
+  const storage = {
+    get: async (k: string) => store.get(k),
+    put: async (k: string, v: unknown) => { store.set(k, v); },
+    delete: async (k: string) => { store.delete(k); },
+    list: async () => new Map(),
+  };
+  const mk = () => new (SpendCounterLogic as any)(storage);
+
+  // A lease has to exist for publishSource to get as far as the CAS.
+  const lease = await mk().leaseRun("run-1", 5, 600);
+  assert.ok(lease.ok, "could not take a lease");
+
+  const bogus = await mk().publishSource(
+    "A WORLD THAT WAS NEVER THE BASELINE", "whatever the run produced", "run-1", lease.leaseToken);
+  assert.equal(bogus.ok, false,
+    "empty storage plus a non-baseline expectation must not publish -- that overwrites an unknown state");
+  assert.equal(bogus.conflict, true);
+
+  // The genuine first publish still works.
+  const first = await mk().publishSource(
+    SIM_BASELINE_SOURCE, "the first shipped world", "run-1", lease.leaseToken);
+  assert.equal(first.ok, true, "a real first publish, from the baseline, must still be allowed");
+});

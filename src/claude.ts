@@ -579,7 +579,17 @@ export async function generatePlan(
       rejected.map((r) => `- ${JSON.stringify(r.raw)}: ${r.reason}`).join("\n") +
       `\n\nRe-emit the full criteria list, replacing only the rejected ones with valid existence/structural/` +
       `non-regression/render criteria (or omit them if the underlying claim can't be expressed that way). Keep every criterion that wasn't listed as rejected.`;
+    // The discarded attempt was still billed -- see createWithTruncationGuard
+    // above, which already carries tokens forward and says why: a cap that
+    // does not count retries is the same claim it exists to refute. That fix
+    // was applied in one of six places with this exact shape.
+    const _discIn = (response as any)?.usage?.input_tokens ?? 0;
+    const _discOut = (response as any)?.usage?.output_tokens ?? 0;
     ({ response, raw } = await attempt(correction));
+    if ((response as any)?.usage) {
+      (response as any).usage.input_tokens = ((response as any).usage.input_tokens ?? 0) + _discIn;
+      (response as any).usage.output_tokens = ((response as any).usage.output_tokens ?? 0) + _discOut;
+    }
     const retryResult = validateProposedCriteria(raw.criteria);
     accepted = retryResult.accepted;
     rejected = retryResult.rejected;
@@ -820,7 +830,17 @@ export async function implementChangeAsEdit(
     const correction =
       `${baseContent}\n\nYour previous edit was invalid: ${result.reason}\n\n` +
       `Re-emit a corrected ops array, referencing only real type keys, placement ids, and surface keys from the current world shown above.`;
+    // The discarded attempt was still billed -- see createWithTruncationGuard
+    // above, which already carries tokens forward and says why: a cap that
+    // does not count retries is the same claim it exists to refute. That fix
+    // was applied in one of six places with this exact shape.
+    const _discIn = (response as any)?.usage?.input_tokens ?? 0;
+    const _discOut = (response as any)?.usage?.output_tokens ?? 0;
     ({ response, result } = await attempt(correction));
+    if ((response as any)?.usage) {
+      (response as any).usage.input_tokens = ((response as any).usage.input_tokens ?? 0) + _discIn;
+      (response as any).usage.output_tokens = ((response as any).usage.output_tokens ?? 0) + _discOut;
+    }
     if (!result.ok) throw new Error(`implementChangeAsEdit: world edit invalid twice in a row -- treated as a failure, not content: ${result.reason}`);
   }
   const inputTokens = response.usage.input_tokens;

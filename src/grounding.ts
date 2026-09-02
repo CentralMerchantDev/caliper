@@ -217,7 +217,15 @@ export async function groundRequest(apiKey: string, changeRequest: string, model
       `${initialContent}\n\nYour previous response was invalid (${String(e)}). If you are halting ` +
       "(premisesHold: false), you MUST name at least one concrete alternative the current structure " +
       "supports -- never an empty alternatives list. Redo the response, valid this time.";
+    // The discarded attempt was still billed. See the note in openai.ts: this
+    // is the fifth of six sites with the same shape, and the fix existed in one.
+    const discardedIn = response.usage?.input_tokens ?? 0;
+    const discardedOut = response.usage?.output_tokens ?? 0;
     ({ response, textBlock } = await attempt(correction));
+    if (response.usage) {
+      response.usage.input_tokens = (response.usage.input_tokens ?? 0) + discardedIn;
+      response.usage.output_tokens = (response.usage.output_tokens ?? 0) + discardedOut;
+    }
     try {
       result = parseGroundingResponse(JSON.parse(textBlock.text));
     } catch (e2) {
