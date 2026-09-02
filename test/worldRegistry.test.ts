@@ -70,6 +70,49 @@ test("rock and a reservation are the same kind of refusal for anything trying to
   assert.equal(inStadium.kind, "feature");
 });
 
+test("open water is its own kind, solid, wherever the column is underwater", () => {
+  const heightAt = (x: number, z: number) => (x < 0 ? -20 : 50);   // sea to the west, land to the east
+  const reg = createWorldRegistry(heightAt);
+  const inTheSea = reg.whatIsAt(-100, -5, 0, 0);       // above the seabed (-20), below sea level (0)
+  assert.equal(inTheSea.kind, "water");
+  assert.equal(inTheSea.solid, true);
+  const onTheSeabed = reg.whatIsAt(-100, -25, 0, 0);   // below the seabed -- rock, not water
+  assert.equal(onTheSeabed.kind, "rock");
+  const aboveTheSea = reg.whatIsAt(-100, 5, 0, 0);     // above sea level -- open air over water
+  assert.equal(aboveTheSea.kind, "free");
+  const onDryLand = reg.whatIsAt(100, 60, 0, 0);       // dry column (surface 50): open air above it, never water
+  assert.equal(onDryLand.kind, "free");
+});
+
+test("a bridge (or anything else) can reserve a volume above open water -- water does not shadow a reservation", () => {
+  const heightAt = (x: number, z: number) => -20;   // open sea everywhere
+  const reg = createWorldRegistry(heightAt);
+  reg.reserve({ kind: "bridge", id: "span", xMin: -20, xMax: 20, zMin: -500, zMax: 500, yMin: 5, yMax: 15 });
+  assert.equal(reg.whatIsAt(0, -5, 0, 0).kind, "water", "under the deck is still open water");
+  assert.equal(reg.whatIsAt(0, 10, 0, 0).kind, "bridge", "at deck height, the bridge answers instead");
+});
+
+test("soft occupancy still blocks overlapsReserved and findFree by default -- solid is informational, not a bypass", () => {
+  const reg = createWorldRegistry();
+  reg.reserve({ kind: "field", id: "west-farm", xMin: -160, xMax: 160, zMin: -125, zMax: 125, solid: false });
+  const at = reg.whatIsAt(0, 0, 0, 0);
+  assert.equal(at.kind, "field");
+  assert.equal(at.solid, false, "the field is recorded as soft...");
+  assert.ok(
+    reg.overlapsReserved(-10, 10, -10, 10, 0),
+    "...but a caller that has not released it still gets refused, the same as hard ground"
+  );
+  assert.equal(reg.findFree(50, 50, { x: 0, z: 0 }, { radius: 100, step: 20 }), null);
+});
+
+test("the only way onto soft ground is to release() it first, exactly like hard ground", () => {
+  const reg = createWorldRegistry();
+  reg.reserve({ kind: "field", id: "west-farm", xMin: -160, xMax: 160, zMin: -125, zMax: 125, solid: false });
+  assert.ok(reg.overlapsReserved(0, 10, 0, 10, 0));
+  reg.release("west-farm");
+  assert.equal(reg.overlapsReserved(0, 10, 0, 10, 0), null);
+});
+
 test("a reservation only exists within its since/until window", () => {
   const reg = createWorldRegistry();
   reg.reserve({ kind: "feature", id: "temp", xMin: -10, xMax: 10, zMin: -10, zMax: 10, since: 5, until: 10 });

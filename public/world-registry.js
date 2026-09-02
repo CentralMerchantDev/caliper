@@ -38,6 +38,20 @@
 // Treating everything below the terrain surface as solid rock -- occupied by
 // the earth itself, at every time -- means a query into a hillside and a query
 // into a reserved footprint are refused by the exact same check, not two.
+// The open sea gets the same treatment for the same reason: it is not a
+// special case, it is just another derived answer, `heightAt(x, z) < 0` away.
+//
+// WHY SOFT OCCUPANCY IS NOT "IGNORE IT"
+//
+// A park and a stadium are both things that are there. The difference is not
+// whether they block automatic placement -- both do, so a road generator does
+// not grow a street through a wheat field for the same reason it does not
+// grow one through a stadium. The difference is what it takes to build on top
+// of them afterward: a stadium is not meant to be removed by anything this
+// codebase does; a field is, by a caller that looks at `solid: false`, decides
+// that is fine, and calls release() before reserving something new. "Soft"
+// describes what a caller may choose to do about it, not what it does to a
+// blind search.
 // =============================================================================
 
 /**
@@ -45,7 +59,11 @@
  * @property {string} kind    "feature" | "plot" | "road" | "rock" | "free" | ...
  * @property {string|null} id
  * @property {string|null} owner
- * @property {boolean} solid  can a new volume be reserved inside this one?
+ * @property {boolean} solid  hard occupancy (true: a road, a building, rock,
+ *   water -- normally permanent) vs soft (false: a park, a field -- removable
+ *   by a caller that explicitly release()s it first). Both block
+ *   overlapsReserved()/findFree() equally; `solid` is what a caller reads to
+ *   decide whether removing what is there is a reasonable thing to offer.
  * @property {number} since   world time this occupant starts existing, inclusive
  * @property {number} until   world time this occupant stops existing, exclusive
  */
@@ -55,6 +73,19 @@ const FREE = Object.freeze({ kind: "free", id: null, owner: null, solid: false, 
 
 /** The answer for a point below the terrain surface. Rock is solid at every time -- the ground does not un-build itself. */
 const ROCK = Object.freeze({ kind: "rock", id: null, owner: null, solid: true, since: -Infinity, until: Infinity });
+
+/**
+ * The answer for a point in the open sea -- at or above the seabed, at or
+ * below sea level, wherever the column beneath it is underwater at all.
+ *
+ * Like ROCK, this is a derived rule rather than a reservation: the sea is
+ * everywhere `heightAt(x, z) < 0`, which is most of the world's area, and
+ * enumerating that as discrete rectangles would mean maintaining a second
+ * copy of the coastline. It is solid for the same reason rock is -- nothing
+ * gets to silently reserve a volume inside open water; a marina or a bridge
+ * has to say so explicitly, which is exactly what registering them does.
+ */
+const WATER = Object.freeze({ kind: "water", id: null, owner: null, solid: true, since: -Infinity, until: Infinity });
 
 /**
  * @param {(x: number, z: number) => number} [heightAt]
@@ -106,7 +137,15 @@ export function createWorldRegistry(heightAt = null) {
    * matching "whoever claimed this ground first owns the conflict".
    */
   function whatIsAt(x, y, z, t = 0) {
-    if (heightAt && y < heightAt(x, z)) return ROCK;
+    if (heightAt) {
+      const surface = heightAt(x, z);
+      if (y < surface) return ROCK;
+      // Underwater column: the seabed is below sea level and this point is at
+      // or below the surface (y <= 0) but not below the seabed (caught above).
+      // A dry column (surface >= 0) never reaches this -- y < surface already
+      // returned ROCK for anything below it, and surface itself is dry ground.
+      if (surface < 0 && y <= 0) return WATER;
+    }
     for (const e of entries) {
       if (t < e.since || t >= e.until) continue;
       if (x < e.xMin || x > e.xMax || z < e.zMin || z > e.zMax) continue;
@@ -130,10 +169,23 @@ export function createWorldRegistry(heightAt = null) {
     return null;
   }
 
-  /** Does this rectangle touch any solid reservation at time t? Returns the first one found, or null. */
+  /**
+   * Does this rectangle touch a reservation at time t? Returns the first one
+   * found, or null.
+   *
+   * `solid` on an entry is NOT a filter here -- both hard occupants (a road,
+   * a building, a stadium) and soft ones (a park, a wheat field) block by
+   * default. That is the point of "soft": a field is buildable only if the
+   * caller SAYS it may replace it, not merely because nothing asked. This
+   * used to skip `solid: false` entries unconditionally, which would have
+   * made every park and field invisible to automatic plot generation the
+   * moment one was registered -- silently reintroducing the exact bug this
+   * file exists to prevent, just for softer ground. The one and only way to
+   * build on reserved ground, hard or soft, is release() it first: an
+   * explicit act by a caller who has looked at what is there and decided.
+   */
   function overlapsReserved(xMin, xMax, zMin, zMax, t = 0) {
     for (const e of entries) {
-      if (!e.solid) continue;
       if (t < e.since || t >= e.until) continue;
       if (xMax < e.xMin || xMin > e.xMax || zMax < e.zMin || zMin > e.zMax) continue;
       return e;
