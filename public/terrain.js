@@ -21,16 +21,12 @@ import { landmassPolygonsDesign, WORLD } from "./city-plan.js";
 // seeding ceremony, and identical in Node and the browser.
 // -----------------------------------------------------------------------------
 
-const fade = (t) => t * t * (3 - 2 * t);
 
 
 
 /** Fractal noise in world metres. `scale` is the size of the largest feature. */
 
 
-const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const smooth = (t) => t * t * (3 - 2 * t);
-const smoother = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 
 // =============================================================================
 // RELIEF DATA
@@ -92,7 +88,10 @@ import { WORLD_SCALE, sm, toDesign, sFields } from "./world-scale.js";
 // never was. Two implementations of one primitive is worse than either, and it
 // matters more now than it did: the design/world scale boundary assumes the
 // terrain and the plan agree exactly about what noise a coordinate produces.
-import { hash2, valueNoise, fbm } from "./noise.js";
+// clamp/smooth/smoother were byte-identical re-declarations of noise.js's, in a
+// file that already imports from it -- the same duplication the header above
+// says was removed. Imported now.
+import { hash2, valueNoise, fbm, clamp, smooth, smoother } from "./noise.js";
 
 /** The alpine spine: a polyline, so the range is a range and not a scatter. */
 const RANGE_SPINE = [
@@ -615,6 +614,37 @@ function alongWaterway(x, z, pts) {
 }
 
 /** How much to subtract from the land height at (x,z) for rivers and canals. */
+/**
+ * IS THIS POINT IN A RIVER OR CANAL?
+ *
+ * The rivers were never water and three comments said they were: "boats float on
+ * them", "the plot generator will not build in them", "roads are clipped at
+ * their banks". None of it was true. The cut is depth + 2.2 m -- about 11 m --
+ * against ground 27 to 105 m above sea level, so the trough never reaches y = 0.
+ * classifyAt tests height against SEA LEVEL, so it calls every river point
+ * buildable. Sampled at 25 m along each centreline: 0 of 164, 0 of 196, 0 of 182
+ * and 0 of 166 points below sea level. Deleting waterwayCut entirely changed the
+ * plot count by ZERO. Only the three canals, which run at the coast, are water.
+ *
+ * The mistake was expecting an elevation test to answer a question about
+ * waterways. A river 400 m up a hillside is still a river; it is just not below
+ * sea level, and no amount of deepening the cut will make it so without carving
+ * a gorge to the seabed.
+ *
+ * So this asks the question directly. It is geometry, not elevation: a point is
+ * in a waterway if it is within the trough, which is exactly what waterwayCut
+ * already computes and then throws away.
+ */
+export function waterwayAt(x, z) {
+  const dx = toDesign(x), dz = toDesign(z);
+  for (const w of WATERWAYS) {
+    const { dist, t } = alongWaterway(dx, dz, w.points);
+    const hw = w.kind === "river" ? w.halfWidth * (0.45 + 0.55 * t) : w.halfWidth;
+    if (dist <= hw) return true;      // in the water itself, not the banks
+  }
+  return false;
+}
+
 function waterwayCut(x, z) {
   let cut = 0;
   for (const w of WATERWAYS) {
@@ -718,10 +748,12 @@ function makeHeightAt(field) {
     const f = edgeFalloff(x, z);
     const landH = (reliefAt(x, z, kind) * ramp + cliffLift) * f - (1 - f) * EDGE.depth;
 
-    // Rivers and canals are cut OUT of the land here, not painted over it. That
-    // means everything downstream agrees they are water: the plot generator
-    // will not build in them, roads are clipped at their banks, the shore
-    // treatment finds their edges, and boats float. A waterway drawn as a blue
+    // Rivers and canals are cut OUT of the land here, not painted over it -- but
+    // the cut alone does NOT make them water to anything downstream, and an
+    // earlier version of this comment claimed it did. The trough is about 11 m
+    // against ground tens of metres above sea level, and classifyAt tests height
+    // against sea level, so every river point read as buildable. Use
+    // waterwayAt() for "is this water"; the cut is only the shape of the valley. A waterway drawn as a blue
     // ribbon on top of solid ground is a lie the rest of the system cannot see.
     const cut = waterwayCut(x, z);
     return cut > 0 ? landH - cut : landH;

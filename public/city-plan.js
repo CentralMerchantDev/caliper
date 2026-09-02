@@ -2659,13 +2659,28 @@ export function generateWorld(rawHeightAt = null) {
   // blindly -- where the rules and the author agree, nothing changes, and where
   // they disagree the disagreement is worth being able to see.
   let zoningChanges = [];
-  let zoningAnchors = { missing: [], hasIndustry: false };
+  // A world built with no height function never runs zoning, so "nothing is
+  // missing" is not a finding about the world -- it is the absence of the check.
+  // Reporting the same shape as a fully-anchored world was the one genuinely
+  // silent path left in the generator.
+  let zoningAnchors = { missing: [], hasIndustry: false, evaluated: false };
   if (heightAt && demandAt) {
-    const { sites } = placeFeatures(heightAt);
+    // RESOLVE AGAINST THE EXACT HEIGHT, NOT THE CACHE WRAPPER.
+    //
+    // `heightAt` here is a freshly-created cachedHeight() wrapper, so
+    // placeFeatures' WeakMap memo -- keyed on the height function -- was
+    // GUARANTEED to miss on this call, every time. Measured cold cost 2,135 ms,
+    // not the "roughly 700 ms" its own comment claims.
+    //
+    // Passing the raw function fixes both halves: the memo hits for the
+    // renderer's later call, and the world resolves features against the same
+    // exact height the renderer uses rather than a 7.8 m-quantised copy. They
+    // agreed to 0.0 m today, but nothing enforced it.
+    const { sites } = placeFeatures(rawHeightAt || heightAt);
     const zoneAt = makeZoning({ heightAt, demandAt, sites });
     // Surfaced, not swallowed: a world with no port has no industrial land, and
     // that is a fact about the world rather than a detail of the zoning pass.
-    zoningAnchors = { missing: zoneAt.missingAnchors, hasIndustry: zoneAt.hasIndustry };
+    zoningAnchors = { missing: zoneAt.missingAnchors, hasIndustry: zoneAt.hasIndustry, evaluated: true };
     settlementList = settlementList.map((st) => {
       const derived = zoneCharacter(zoneAt, st.bounds);
       if (derived && derived !== st.cls) {

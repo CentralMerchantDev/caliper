@@ -67,7 +67,15 @@ export const STEP = {
  * @param {{xMin,xMax,zMin,zMax}} env  the BUILDABLE envelope -- not the plot
  * @returns {{verdict, base, min, max, range, cut, steps, wet, reason}}
  */
-export function assessFootprint(heightAt, env) {
+/**
+ * @param {Function} heightAt   world-space height
+ * @param {object}   env        the buildable envelope
+ * @param {Function} [waterwayAt]  optional: is this point in a river or canal?
+ *        Rivers run well above sea level, so a height test cannot see them --
+ *        every river point classified as buildable and buildings could stand in
+ *        the water. This is the question asked directly.
+ */
+export function assessFootprint(heightAt, env, waterwayAt = null) {
   const w = env.xMax - env.xMin;
   const d = env.zMax - env.zMin;
 
@@ -96,6 +104,23 @@ export function assessFootprint(heightAt, env) {
   // ANY part of the footprint in the water is a refusal. Not a majority, not the
   // centre -- any. A building half in the sea is not a building that is mostly
   // fine.
+  // A river is water even 400 m up a hillside. The height test above cannot see
+  // that, because it compares against sea level.
+  if (waterwayAt) {
+    for (let i = 0; i < nx; i++) {
+      for (let j = 0; j < nz; j++) {
+        const x = env.xMin + (w * i) / (nx - 1);
+        const z = env.zMin + (d * j) / (nz - 1);
+        if (waterwayAt(x, z)) {
+          return {
+            verdict: "refuse", reason: "in a waterway",
+            base: mean, min, max, range, cut: 0, steps: 0, wet,
+          };
+        }
+      }
+    }
+  }
+
   if (wet > 0) {
     return {
       verdict: "refuse", reason: wet === count ? "underwater" : "partly in water",

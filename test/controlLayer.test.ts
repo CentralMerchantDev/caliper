@@ -8,7 +8,7 @@ import { SPEND_WORST_CASE } from "../src/changePipeline.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { CONTROL_LIMITS, assertUnderPipelineSpendCap, reconcilePipelineSpend, assertUnderPipelineRateLimit, recordPipelineRateLimitHit, PipelineLimitError, classifyErrorPermanence } from "../src/controlLayer.ts";
+import { CONTROL_LIMITS, assertUnderPipelineSpendCap, reconcilePipelineSpend, assertUnderPipelineRateLimit, recordPipelineRateLimitHit, PipelineLimitError, classifyErrorPermanence, assertUnderRunCeiling, claimPipelineRun } from "../src/controlLayer.ts";
 import { SpendCounterLogic, handleSpendCounterRequest, type StorageLike } from "../src/spendCounterDO.ts";
 
 function mockKv(initial: Record<string, string> = {}): KVNamespace {
@@ -294,4 +294,81 @@ test("publishing against empty storage requires having started from the baseline
   const first = await mk().publishSource(
     SIM_BASELINE_SOURCE, "the first shipped world", "run-1", lease.leaseToken);
   assert.equal(first.ok, true, "a real first publish, from the baseline, must still be allowed");
+});
+
+// =============================================================================
+// THE GATES THAT COULD BE DELETED WITH THE SUITE STILL GREEN
+//
+// An audit removed nine of fourteen guardrails one at a time — the per-run
+// ceiling, the per-IP daily limit, the concurrency limit, the circuit breaker
+// among them — and all 380 tests kept passing. A guardrail nothing checks is a
+// comment with a keyword in front of it.
+//
+// These cover the ones that are directly callable. The rest live inline in the
+// pipeline loop and need the same treatment assessReviewRound got — extracted so
+// they can be called — which is recorded in the ledger rather than done here,
+// because extracting a decision is a change to the decision's shape and wants
+// its own pass.
+// =============================================================================
+
+test("the per-run ceiling actually stops a run", () => {
+  const ceiling = 0.50;
+  // Under it: allowed.
+  assert.doesNotThrow(() => assertUnderRunCeiling(0.10, 0.20, ceiling));
+  // The step that would cross it: refused, BEFORE the money is spent.
+  assert.throws(() => assertUnderRunCeiling(0.45, 0.20, ceiling), /ceiling|budget|exceed/i,
+    "a stage whose estimate crosses the ceiling must be refused before it runs");
+  // Exactly at the line is not over it.
+  assert.doesNotThrow(() => assertUnderRunCeiling(0.30, 0.20, ceiling));
+});
+
+test("the per-IP daily limit actually refuses the run after it", async () => {
+  const store = new Map<string, string>();
+  const kv = {
+    get: async (k: string) => store.get(k) ?? null,
+    put: async (k: string, v: string) => { store.set(k, v); },
+    delete: async (k: string) => { store.delete(k); },
+    list: async () => ({ keys: [] }),
+  } as unknown as KVNamespace;
+
+  const limit = CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP;
+  assert.ok(limit >= 1, "a limit of zero would make this test meaningless");
+
+  // Exactly the allowance goes through.
+  for (let i = 0; i < limit; i++) {
+    await assert.doesNotReject(claimPipelineRun({ SPEND_KV: kv }, "1.2.3.4"),
+      `run ${i + 1} of ${limit} should be allowed`);
+  }
+  // The next one does not.
+  await assert.rejects(claimPipelineRun({ SPEND_KV: kv }, "1.2.3.4"), /limit|daily|runs/i,
+    `run ${limit + 1} must be refused — this is the limit that stops one visitor draining the day`);
+
+  // And it is PER IP, not global.
+  await assert.doesNotReject(claimPipelineRun({ SPEND_KV: kv }, "5.6.7.8"),
+    "a different address must not be blocked by someone else's usage");
+});
+
+test("the concurrency limit refuses the run past the cap, and releases", async () => {
+  const { SpendCounterLogic } = await import("../src/spendCounterDO.js");
+  const store = new Map<string, unknown>();
+  const storage = {
+    get: async (k: string) => store.get(k),
+    put: async (k: string, v: unknown) => { store.set(k, v); },
+    delete: async (k: string) => { store.delete(k); },
+    list: async () => new Map(),
+  };
+  const max = 3;
+  const tokens: string[] = [];
+  for (let i = 0; i < max; i++) {
+    const r = await new (SpendCounterLogic as any)(storage).leaseRun(`run-${i}`, max, 600);
+    assert.equal(r.ok, true, `lease ${i + 1} of ${max} should be granted`);
+    tokens.push(r.leaseToken);
+  }
+  const over = await new (SpendCounterLogic as any)(storage).leaseRun("run-over", max, 600);
+  assert.equal(over.ok, false, "the lease past the concurrency cap must be refused");
+
+  // Releasing one frees exactly one slot.
+  await new (SpendCounterLogic as any)(storage).releaseRun("run-0", tokens[0]);
+  const after = await new (SpendCounterLogic as any)(storage).leaseRun("run-new", max, 600);
+  assert.equal(after.ok, true, "a released slot must become available again");
 });

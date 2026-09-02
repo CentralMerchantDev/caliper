@@ -18,7 +18,7 @@ import {
   WORLD, ROADS, BRIDGES, MARINA, PIER, BOARDWALK, SETTLEMENTS, PLOT_CLASSES,
   generateWorld, generateCityPlan, landmassPolygons, offsetPolygon,
 } from "./city-plan.js";
-import { LandField, makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, WATERWAYS, waterwaySurface } from "./terrain.js";
+import { LandField, makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, WATERWAYS, waterwaySurface , waterwayAt } from "./terrain.js";
 import { assessFootprint } from "./footprint.js";
 // `sm` is already used as a local variable in this file (a THREE.Mesh), so the
 // world-scale helper is imported under a name that cannot be shadowed.
@@ -696,7 +696,7 @@ export function buildWorld(THREE, renderer, scene) {
       // middle of the building. See footprint.js for what each of those let
       // through. Now the buildable envelope is sampled on a grid and the ground
       // decides whether this is a slab, a plinth, a terrace, or nothing at all.
-      const foot = assessFootprint(heightAt, p.buildable);
+      const foot = assessFootprint(heightAt, p.buildable, waterwayAt);
       if (foot.verdict === "refuse") { refused++; refusedWhy[foot.reason] = (refusedWhy[foot.reason] || 0) + 1; continue; }
       const g = foot.base;
       const gRange = foot.range;

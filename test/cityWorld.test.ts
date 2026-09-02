@@ -49,7 +49,7 @@ const S = (v: number) => v * WORLD_SCALE;
 /** Areas scale with the square of a uniform scale. */
 const S2 = (v: number) => v * WORLD_SCALE * WORLD_SCALE;
 
-import { LandField, makeHeightAt, reliefAt, edgeFalloff, EDGE, BASINS, cliffiness, SNOW_LINE, TREE_LINE } from "../public/terrain.js";
+import { LandField, makeHeightAt, reliefAt, edgeFalloff, EDGE, BASINS, cliffiness, SNOW_LINE, TREE_LINE, waterwayAt } from "../public/terrain.js";
 import { createCollector, emitBuilding, HEIGHT, ROOFS, WALLS, rnd } from "../public/buildings.js";
 
 const field = new LandField(16);
@@ -1321,4 +1321,55 @@ test("the index describes the world it was built from", () => {
   assert.equal(ix.stats.plots, (overlapWorld.plots as any[]).length,
     "the index and the world disagree about how many plots exist");
   assert.ok(ix.stats.cells > 0, "no cells were built");
+});
+
+// =============================================================================
+// A RIVER IS WATER EVEN 400 M UP A HILLSIDE
+//
+// Three comments claimed the rivers were water: "boats float on them", "the plot
+// generator will not build in them", "roads are clipped at their banks". None of
+// it was true. The cut is depth + 2.2 m — about 11 m — against ground 27 to
+// 105 m above sea level, so the trough never reaches y = 0, and classifyAt tests
+// height against SEA LEVEL. Sampled along each centreline: 0 of 164, 0 of 196,
+// 0 of 182 and 0 of 166 points below sea level. Deleting waterwayCut entirely
+// changed the plot count by zero.
+//
+// The mistake was expecting an elevation test to answer a question about
+// waterways. No amount of deepening the cut fixes it without carving a gorge to
+// the seabed. So the question is asked directly instead.
+// =============================================================================
+test("no building stands in a river or a canal", () => {
+  let inWater = 0;
+  const offenders: string[] = [];
+  for (const p of overlapWorld.plots as any[]) {
+    if (p.className === "PARK") continue;
+    const f = assessFootprint(heightAt, p.buildable, waterwayAt);
+    if (f.verdict !== "refuse") {
+      // it will be built — so no part of it may be in a waterway
+      const e = p.buildable;
+      for (const [x, z] of [
+        [(e.xMin + e.xMax) / 2, (e.zMin + e.zMax) / 2],
+        [e.xMin, e.zMin], [e.xMax, e.zMax],
+      ]) {
+        if (waterwayAt(x, z)) {
+          inWater++;
+          if (offenders.length < 3) offenders.push(p.id);
+          break;
+        }
+      }
+    }
+  }
+  assert.equal(inWater, 0,
+    `${inWater} buildings would stand in a waterway: ${offenders.join(", ")}`);
+});
+
+test("the waterways are actually somewhere — the check is not vacuous", () => {
+  // A predicate that always returns false would pass the test above trivially.
+  let found = 0;
+  for (let x = -12000; x <= 12000; x += 120) {
+    for (let z = -9000; z <= 3000; z += 120) {
+      if (waterwayAt(x, z)) found++;
+    }
+  }
+  assert.ok(found > 50, `waterwayAt found only ${found} points — it is not detecting the rivers`);
 });
