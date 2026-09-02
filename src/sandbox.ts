@@ -56,6 +56,41 @@ function toJsLiteral(value: unknown): string {
 // visitor-influenced). `__deepEqual`/`__judge` implement the extended
 // TestCase kinds (tolerance, acceptedAny) alongside plain equality.
 const TEST_HELPERS_JS = `
+// =============================================================================
+// THE SAME HARDENING simSandbox.ts HAS, WHICH THIS HARNESS DID NOT.
+//
+// simSandbox.ts documents at length why the judge must not be reachable from
+// the dock, and captures its intrinsics above the splice point. That reasoning
+// applies here identically and was never applied here. Two working forgeries,
+// both demonstrated against this exact template:
+//
+//   * __deepEqual began with a call to the LIVE Object.is, so reassigning
+//     Object.is to () => true made every hidden test compare equal -- it
+//     reported 3/3 on a solve() that returns undefined.
+//
+//   * __runTests / __judge / __deepEqual are hoisted FUNCTION DECLARATIONS,
+//     which are mutable bindings, spliced AFTER the model's code. And the
+//     model's output is interpolated as a raw function body, so it can close
+//     the function and reach module top level:
+//         } Object.is = () => true; function __pad(){
+//
+// This matters even though /run and /matrix-run are auth-gated now, because
+// /matrix-results is NOT, and the page links it as the project's raw results.
+// Forged cells would be published as evidence.
+const __is = Object.is;
+const __keys = Object.keys;
+const __isArray = Array.isArray;
+const __abs = Math.abs;
+const __stringify = JSON.stringify;
+const __push = Function.prototype.call.bind(Array.prototype.push);
+const __create = Object.create;
+/** A record with no prototype, so no candidate-defined toJSON can rewrite it. */
+function __record(obj) {
+  const out = __create(null);
+  for (const k of __keys(obj)) out[k] = obj[k];
+  return out;
+}
+
 function __genArgs(t) {
   if (!t.gen) return t.args;
   if (t.gen.kind === "sine") {
@@ -67,16 +102,16 @@ function __genArgs(t) {
   return t.args;
 }
 function __deepEqual(a, b) {
-  if (Object.is(a, b)) return true;
+  if (__is(a, b)) return true;
   if (a === null || b === null || a === undefined || b === undefined) return false;
   if (typeof a !== typeof b) return false;
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  if (__isArray(a) || __isArray(b)) {
+    if (!__isArray(a) || !__isArray(b) || a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) if (!__deepEqual(a[i], b[i])) return false;
     return true;
   }
   if (typeof a === "object") {
-    const ak = Object.keys(a), bk = Object.keys(b);
+    const ak = __keys(a), bk = __keys(b);
     if (ak.length !== bk.length) return false;
     for (const k of ak) if (!__deepEqual(a[k], b[k])) return false;
     return true;
@@ -96,20 +131,20 @@ async function __runTests(tests, fn) {
       const args = __genArgs(t);
       const actual = fn(...args);
       if (t.throws) {
-        results.push({ name: t.name, pass: false, error: "expected the call to throw, but it returned " + JSON.stringify(actual) });
+        __push(results, __record({ name: t.name, pass: false, error: "expected the call to throw, but it returned " + __stringify(actual) }));
       } else {
-        results.push({ name: t.name, pass: __judge(t, actual), actual, expected: t.expected });
+        __push(results, __record({ name: t.name, pass: __judge(t, actual), actual, expected: t.expected }));
       }
     } catch (e) {
-      if (t.throws) results.push({ name: t.name, pass: true });
-      else results.push({ name: t.name, pass: false, error: String((e && e.message) || e) });
+      if (t.throws) __push(results, __record({ name: t.name, pass: true }));
+      else __push(results, __record({ name: t.name, pass: false, error: String((e && e.message) || e) }));
     }
   }
   return results;
 }
 `;
 
-function buildHarnessModule(code: string, task: Task): string {
+export function buildHarnessModule(code: string, task: Task): string {
   const testsLiteral = toJsLiteral(
     task.hiddenTests.map((t) => ({
       name: t.name,
@@ -127,17 +162,26 @@ function buildHarnessModule(code: string, task: Task): string {
   // bindings (env: {}), no network (globalOutbound: null), CPU-capped.
   // `code` is model-generated and untrusted -- it only gets to define the
   // body of one function, called by name from the harness below it.
+  // HELPERS FIRST, CANDIDATE SECOND.
+  //
+  // The candidate was spliced ABOVE the helpers, so every capture happened
+  // after the model's code had already run at module scope -- which is the one
+  // ordering that makes capturing pointless. simSandbox.ts gets this right and
+  // says so; this file did the opposite. The model can still close its function
+  // and reach module top level (it is a raw body interpolation, and validating
+  // that is a separate problem), but by then __is, __push and the rest are
+  // already bound to the real intrinsics.
   return `
+${TEST_HELPERS_JS}
 function ${task.functionName}(${task.paramNames.join(", ")}) {
 ${code}
 }
-${TEST_HELPERS_JS}
 const __tests = ${testsLiteral};
 
 export default {
   async fetch() {
     const results = await __runTests(__tests, ${task.functionName});
-    return new Response(JSON.stringify(results), { headers: { "content-type": "application/json" } });
+    return new Response(__stringify(results), { headers: { "content-type": "application/json" } });
   },
 };
 `;
@@ -251,7 +295,7 @@ export default {
     // throwing (per docs/REBUILD-PROPOSAL.md, verification degrades to
     // execution plus review with no independently-authored ground truth).
     results.push({ name: "artifact script executes without throwing", pass: __scriptError === null, error: __scriptError || undefined });
-    return new Response(JSON.stringify(results), { headers: { "content-type": "application/json" } });
+    return new Response(__stringify(results), { headers: { "content-type": "application/json" } });
     `
         : ""
     }
@@ -264,7 +308,7 @@ export default {
           ? "artifact script threw before defining it: " + __scriptError
           : "window." + ${JSON.stringify(task.functionName)} + " is not a function after the script ran",
       });
-      return new Response(JSON.stringify(results), { headers: { "content-type": "application/json" } });
+      return new Response(__stringify(results), { headers: { "content-type": "application/json" } });
     }
     results.push({ name: "exposes " + ${JSON.stringify(task.functionName)} + " on window", pass: true });
     results.push(...(await __runTests(__tests, fn)));
@@ -281,7 +325,7 @@ export default {
     `
         : ""
     }
-    return new Response(JSON.stringify(results), { headers: { "content-type": "application/json" } });
+    return new Response(__stringify(results), { headers: { "content-type": "application/json" } });
   },
 };
 `;

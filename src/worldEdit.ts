@@ -886,6 +886,14 @@ const BROWSER_AND_ESCAPE_GLOBALS = new Set([
   "eval", "Function", "WebAssembly",
   // the escape hatches out of a module
   "globalThis", "self", "process", "require",
+  // FOUR MORE, ADDED AFTER A SECURITY AUDIT DEMONSTRATED THEM WORKING.
+  //
+  // `frames` is a live alias for `window` -- `frames.document.title = "x"` and
+  // `frames.fetch(...)` both work and neither named anything on this list.
+  // `open` navigates. `postMessage` and `close` are the same class of omission:
+  // the list was assembled by thinking of the obvious names, which is exactly
+  // how the non-obvious ones stay off it.
+  "frames", "open", "postMessage", "close", "alert",
 ]);
 
 export function browserOnlyReferences(source: string): string[] {
@@ -900,38 +908,146 @@ export function browserOnlyReferences(source: string): string[] {
   const near = (node: { start: number; end: number }) =>
     source.slice(node.start, Math.min(node.end, node.start + 90)).replace(/\s+/g, " ").trim();
 
-  // Names the module itself binds are not the globals we are looking for.
-  const bound = new Set<string>();
-  const collectBindings = (node: any) => {
+  // WHICH BINDINGS SHADOW A GLOBAL, AND WHERE.
+  //
+  // THE FLAT SET WAS THE BUG. This collected bindings from the WHOLE program
+  // into one set with no notion of scope, and the walk then suppressed any
+  // reference to a name in that set ANYWHERE. So one dead function whitelisted
+  // every global on the list:
+  //
+  //     function __unused(document, fetch, navigator, localStorage) {}
+  //     function tick(w){ document.title = "PWNED"; return w; }
+  //
+  // The parameters bind only inside __unused; the reference inside tick()
+  // reaches the real global, verified in a browser. The exact payload this
+  // scanner's docblock says it exists to stop, re-enabled by one line.
+  //
+  // The first fix was to collect only MODULE-LEVEL bindings. That closed the
+  // bypass and broke a legitimate case the suite already guarded -- a parameter
+  // named `document`, used inside its own function, is not the DOM, and
+  // refusing it is a false positive on honest code.
+  //
+  // Both are real. A name is the global only where nothing shadows it, which is
+  // a scope question, so this tracks scopes rather than choosing which of the
+  // two properties to give up. Function scopes only: `var` and parameters are
+  // function-scoped, and a block-level `const document` shadowing within a
+  // block is close enough to a function for this purpose that treating it as
+  // function-wide only ever over-suppresses within code that already declared
+  // the name deliberately.
+  type Scope = { names: Set<string>; parent: Scope | null };
+  const rootScope: Scope = { names: new Set(), parent: null };
+
+  const declaredNames = (node: any, out: Set<string>) => {
     if (!node || typeof node !== "object") return;
-    if (node.type === "VariableDeclarator" && node.id?.type === "Identifier") bound.add(node.id.name);
-    if ((node.type === "FunctionDeclaration" || node.type === "FunctionExpression"
-      || node.type === "ArrowFunctionExpression") && node.id?.type === "Identifier") bound.add(node.id.name);
-    for (const p of node.params ?? []) if (p?.type === "Identifier") bound.add(p.name);
-    for (const k of Object.keys(node)) {
-      const v = (node as any)[k];
-      if (Array.isArray(v)) v.forEach(collectBindings);
-      else if (v && typeof v === "object" && typeof v.type === "string") collectBindings(v);
+    switch (node.type) {
+      case "Identifier": out.add(node.name); return;
+      case "ObjectPattern":
+        for (const pr of node.properties ?? []) declaredNames(pr.type === "RestElement" ? pr.argument : pr.value, out);
+        return;
+      case "ArrayPattern":
+        for (const el of node.elements ?? []) declaredNames(el, out);
+        return;
+      case "AssignmentPattern": declaredNames(node.left, out); return;
+      case "RestElement": declaredNames(node.argument, out); return;
+      default: return;
     }
   };
-  collectBindings(program);
 
-  const walk = (node: any, parent: any) => {
+  /** Every name bound inside this function body, not descending into nested ones. */
+  const collectScopeNames = (node: any, out: Set<string>, isRoot: boolean) => {
     if (!node || typeof node !== "object") return;
-    if (node.type === "Identifier" && BROWSER_AND_ESCAPE_GLOBALS.has(node.name) && !bound.has(node.name)) {
+    if (!isRoot && (node.type === "FunctionDeclaration" || node.type === "FunctionExpression"
+      || node.type === "ArrowFunctionExpression")) {
+      // A nested function's own NAME belongs to this scope; its body does not.
+      if (node.id?.type === "Identifier") out.add(node.id.name);
+      return;
+    }
+    if (node.type === "VariableDeclarator") declaredNames(node.id, out);
+    if (node.type === "ClassDeclaration" && node.id?.type === "Identifier") out.add(node.id.name);
+    if (node.type === "ImportDeclaration") {
+      for (const sp of node.specifiers ?? []) if (sp.local?.type === "Identifier") out.add(sp.local.name);
+    }
+    for (const k of Object.keys(node)) {
+      if (k === "start" || k === "end" || k === "loc") continue;
+      const v = (node as any)[k];
+      if (Array.isArray(v)) v.forEach((c) => collectScopeNames(c, out, false));
+      else if (v && typeof v === "object" && typeof v.type === "string") collectScopeNames(v, out, false);
+    }
+  };
+
+  collectScopeNames(program, rootScope.names, true);
+
+  const isShadowed = (name: string, scope: Scope | null): boolean => {
+    for (let s = scope; s; s = s.parent) if (s.names.has(name)) return true;
+    return false;
+  };
+
+  const walk = (node: any, parent: any, scope: Scope) => {
+    if (!node || typeof node !== "object") return;
+
+    // Entering a function creates a scope holding its params and its own body's
+    // declarations. This is what makes `(document) => document.length` legal
+    // while `function __unused(document){}` next to a separate `tick()` that
+    // uses `document` is not.
+    if (node.type === "FunctionDeclaration" || node.type === "FunctionExpression"
+      || node.type === "ArrowFunctionExpression") {
+      const names = new Set<string>();
+      for (const prm of node.params ?? []) declaredNames(prm, names);
+      if (node.body?.type === "BlockStatement") {
+        for (const st of node.body.body) collectScopeNames(st, names, false);
+      }
+      scope = { names, parent: scope };
+    }
+
+    if (node.type === "Identifier" && BROWSER_AND_ESCAPE_GLOBALS.has(node.name) && !isShadowed(node.name, scope)) {
       // `x.document` is a property, not the global; `document.x` is the global.
       const isProperty = parent?.type === "MemberExpression" && parent.property === node && !parent.computed;
       const isKey = parent?.type === "Property" && parent.key === node && !parent.computed;
       if (!isProperty && !isKey) found.set(node.name, near(parent ?? node));
     }
+
+    // `[].constructor.constructor` IS `Function`, AND NAMED NOTHING.
+    //
+    // `.constructor` is a non-computed member property, so the branch above
+    // deliberately skips it -- correctly, for `foo.document`. But chaining it
+    // twice off any value reaches the Function constructor without writing the
+    // identifier `Function` anywhere, and the string form
+    // `[]["constructor"]["constructor"]` produces Literals, not Identifiers, so
+    // there is nothing for an identifier scan to see at all.
+    //
+    // CSP without 'unsafe-eval' blocks this at runtime in the browser, which is
+    // why it is not rated higher -- but a check that relies on a header it does
+    // not control is relying on someone else's correctness.
+    if (node.type === "MemberExpression") {
+      const propName = node.computed
+        ? (node.property?.type === "Literal" ? String(node.property.value) : null)
+        : (node.property?.type === "Identifier" ? node.property.name : null);
+      if (propName === "constructor") {
+        const objIsConstructorAccess =
+          node.object?.type === "MemberExpression" &&
+          (node.object.computed
+            ? node.object.property?.type === "Literal" && node.object.property.value === "constructor"
+            : node.object.property?.type === "Identifier" && node.object.property.name === "constructor");
+        if (objIsConstructorAccess) {
+          found.set("constructor.constructor", near(node));
+        }
+      }
+    }
+
+    // `import()` AT ANY DEPTH. topLevelSideEffects rejects an ImportDeclaration
+    // at the top level; an ImportExpression inside a function body was examined
+    // by neither check, and it is a direct route to loading arbitrary code.
+    if (node.type === "ImportExpression") {
+      found.set("import()", near(node));
+    }
     for (const k of Object.keys(node)) {
       if (k === "start" || k === "end" || k === "loc") continue;
       const v = (node as any)[k];
-      if (Array.isArray(v)) v.forEach((c) => walk(c, node));
-      else if (v && typeof v === "object" && typeof v.type === "string") walk(v, node);
+      if (Array.isArray(v)) v.forEach((c) => walk(c, node, scope));
+      else if (v && typeof v === "object" && typeof v.type === "string") walk(v, node, scope);
     }
   };
-  walk(program, null);
+  walk(program, null, rootScope);
 
   return [...found.entries()].map(([name, ctx]) => `${name} referenced: ${ctx}`);
 }

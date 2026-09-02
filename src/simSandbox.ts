@@ -105,6 +105,36 @@ const __hasOwn = Object.prototype.hasOwnProperty;
 const __abs = Math.abs;
 const __stringify = JSON.stringify;
 const __Response = Response;
+// AND THE RECORDER ITSELF, WHICH THE RULE ABOVE NAMES AND THE CODE MISSED.
+//
+// "Nothing on the path from running a test to reporting its result may be
+// reachable by the code being tested" -- and then the results were collected
+// with \`results.push(...)\` and serialised with JSON.stringify, both of which
+// walk the prototype chain the candidate can write to. Two working forgeries,
+// both verified by execution against this exact harness:
+//
+//   Array.prototype.push = function (x) { if (x && "pass" in x) x.pass = true;
+//                                         return P.apply(this, arguments); };
+//     -> 9/9, on a tick() that returns its argument unchanged
+//
+//   Object.defineProperty(Object.prototype, "toJSON", { value() { ... } })
+//     -> the entries are rewritten on the way out through __stringify
+//
+// Neither needs a top-level statement: the first tick() call happens before the
+// first push, so both fit inside a function body where topLevelSideEffects and
+// browserOnlyReferences do not look.
+//
+// Captured push, and a null-prototype record so there is no inherited toJSON to
+// define. \`Object.create\` is captured for the same reason as everything else.
+const __push = Function.prototype.call.bind(Array.prototype.push);
+const __create = Object.create;
+const __defineProperty = Object.defineProperty;
+/** A record with no prototype, so nothing the candidate defines can reach it. */
+function __record(obj) {
+  const out = __create(null);
+  for (const k of __keys(obj)) out[k] = obj[k];
+  return out;
+}
 // (There was an Object.freeze here. It froze the function OBJECTS, which stops
 //  nothing: reassigning Object.is is a property write on Object, and in any
 //  case the comparators below read these const bindings and never touch
@@ -190,9 +220,9 @@ export default {
           : t.partial
             ? __partialMatch(actual, t.expected)
             : __deepEqual(actual, t.expected);
-        results.push({ name: t.name, pass, fn: t.fn, args: t.args, repeat: t.repeat, actual, expected: t.expected });
+        __push(results, __record({ name: t.name, pass, fn: t.fn, args: t.args, repeat: t.repeat, actual, expected: t.expected }));
       } catch (e) {
-        results.push({ name: t.name, pass: false, fn: t.fn, args: t.args, repeat: t.repeat, error: String((e && e.message) || e), stack: e && e.stack ? String(e.stack) : undefined });
+        __push(results, __record({ name: t.name, pass: false, fn: t.fn, args: t.args, repeat: t.repeat, error: String((e && e.message) || e), stack: e && e.stack ? String(e.stack) : undefined }));
       }
     }
     return new __Response(__stringify(results), { headers: { "content-type": "application/json" } });

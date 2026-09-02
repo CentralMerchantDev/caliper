@@ -38,6 +38,7 @@ import assert from "node:assert/strict";
 import { topLevelSideEffects } from "../src/worldEdit";
 import { buildSimHarnessModule } from "../src/simSandbox";
 import { SIM_BASELINE_SOURCE } from "../src/simBaseline";
+import { SIM_REGRESSION_SUITE } from "../src/simRegression";
 
 const ATTACKS: Record<string, string> = {
   "a complete declaration does not exempt the rest of its line":
@@ -340,4 +341,128 @@ test("a fatal error from a missing sandbox stops the run", async () => {
   // refusal. An empty result set with a fatal error must never read as a pass.
   const { decideStillFailing } = await import("../src/changePipeline");
   assert.equal(decideStillFailing("the verification sandbox is not available on this deployment", [], []), true);
+});
+
+// =============================================================================
+// THE RECORDER IS ON THE PATH TOO, AND IT WAS NOT CAPTURED
+//
+// The rule this file states is: "nothing on the path from running a test to
+// reporting its result may be reachable by the code being tested." The harness
+// captured Object.is, Object.keys, Array.isArray, hasOwnProperty, Math.abs,
+// JSON.stringify and Response -- and then collected the verdicts with
+// `results.push(...)` and serialised them with JSON.stringify, both of which
+// walk a prototype chain the candidate can write to.
+//
+// Two working forgeries, found by a security audit and reproduced here. Neither
+// needs a top-level statement, which is why topLevelSideEffects and
+// browserOnlyReferences never saw them: the first tick() call happens before
+// the first push, so the whole payload fits inside a function body.
+//
+// These run the REAL harness against the REAL nine-case regression suite, so
+// they cannot pass by describing the fix instead of exercising it.
+// =============================================================================
+
+/**
+ * Run a candidate through the real harness and return its results array.
+ *
+ * THE RESTORE IS NOT TIDINESS, IT IS THE TEST BEING VALID.
+ *
+ * In production each run gets a fresh Workers isolate, so a candidate's
+ * prototype writes die with it. Here every harness is imported into ONE Node
+ * realm, so without this the first forgery's `Array.prototype.push` is still in
+ * place when the second harness captures it -- and the second test then reports
+ * a forgery that "succeeded" against a capture that was already poisoned before
+ * the module existed.
+ *
+ * That is a real property worth naming rather than working around silently: the
+ * capture is only as good as the moment it happens, and what makes it good in
+ * production is that the moment is inside a fresh isolate. These tests have to
+ * simulate that boundary because they do not get one.
+ */
+async function runHarness(source: string): Promise<any[]> {
+  const savedPush = Array.prototype.push;
+  const savedToJSON = Object.getOwnPropertyDescriptor(Object.prototype, "toJSON");
+  const savedIs = Object.is;
+  const savedStringify = JSON.stringify;
+  try {
+    const mod = buildSimHarnessModule(source, SIM_REGRESSION_SUITE);
+    const url = "data:text/javascript;base64," + Buffer.from(mod, "utf8").toString("base64");
+    const loaded = await import(url);
+    const res = await loaded.default.fetch(new Request("http://harness/"));
+    return await res.json();
+  } finally {
+    Array.prototype.push = savedPush;
+    if (savedToJSON) Object.defineProperty(Object.prototype, "toJSON", savedToJSON);
+    else delete (Object.prototype as any).toJSON;
+    Object.is = savedIs;
+    JSON.stringify = savedStringify;
+  }
+}
+
+const INERT_SIM = `
+function chooseAction(){ return "nope"; }
+function applyAction(w){ return w; }
+`;
+
+test("a candidate cannot forge its verdict by replacing Array.prototype.push", async () => {
+  // tick() returns the world unchanged, so every one of the nine cases MUST
+  // fail. The payload rewrites each record as it is pushed.
+  const results = await runHarness(`
+function tick(w){
+  const P = Array.prototype.push;
+  Array.prototype.push = function(x){
+    if (x && typeof x === "object" && "pass" in x) x.pass = true;
+    return P.apply(this, arguments);
+  };
+  return w;
+}
+${INERT_SIM}
+export { tick, chooseAction, applyAction };
+`);
+  const passed = results.filter((r) => r.pass).length;
+  assert.notEqual(
+    passed, results.length,
+    `a sim whose tick() does nothing reported ${passed}/${results.length} passing. ` +
+    `The recorder is reachable from the code being tested, which is the one thing ` +
+    `this harness exists to prevent.`
+  );
+  assert.equal(passed, 0, `expected every case to fail on an inert tick(); ${passed} passed`);
+});
+
+test("a candidate cannot forge its verdict by defining Object.prototype.toJSON", async () => {
+  // Same inert sim, rewriting the records on the way out through JSON.stringify
+  // instead of on the way in.
+  const results = await runHarness(`
+function tick(w){
+  Object.defineProperty(Object.prototype, "toJSON", { configurable: true, value() {
+    if (this && typeof this === "object" && "pass" in this) {
+      const c = { ...this }; c.pass = true; delete c.error; return c;
+    }
+    return this;
+  }});
+  return w;
+}
+${INERT_SIM}
+export { tick, chooseAction, applyAction };
+`);
+  const passed = results.filter((r) => r.pass).length;
+  assert.notEqual(
+    passed, results.length,
+    `a sim whose tick() does nothing reported ${passed}/${results.length} passing via ` +
+    `Object.prototype.toJSON — the results were rewritten on the way out.`
+  );
+  assert.equal(passed, 0, `expected every case to fail on an inert tick(); ${passed} passed`);
+});
+
+test("the real baseline still passes all nine, so the capture did not break the harness", async () => {
+  // The control. A hardening change that also stops the correct answer from
+  // passing is not a fix, and this is the assertion that would catch it.
+  const results = await runHarness(SIM_BASELINE_SOURCE);
+  const passed = results.filter((r) => r.pass).length;
+  assert.equal(
+    passed, results.length,
+    `the shipped baseline now fails ${results.length - passed} of ${results.length} cases — ` +
+    `the recorder hardening broke the harness itself`
+  );
+  assert.ok(results.length >= 9, `only ${results.length} regression cases ran`);
 });
