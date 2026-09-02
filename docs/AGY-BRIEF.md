@@ -99,9 +99,12 @@ Two guarantees that hand-scaling the constants could not give:
 2. Slope is `(dH/dX)(1/k)(k) = dH/dX` — **identical**. Every threshold in
    `land-use.js` stays valid untouched.
 
-It is verified as a **bit-exact no-op at `WORLD_SCALE = 1`**. If you change
-anything here, that property is the test: set it to 1 and the whole suite must
-pass with measurements identical to the original world.
+It is verified as a **bit-exact identity at `WORLD_SCALE = 1`** — a height query
+returns the design value unchanged. If you change the boundary, that is the test.
+**But do not expect a green suite at k = 1.** Tests written since legitimately
+encode facts about the 0.65 world (the embedded summary states its exact plot
+count; the industry test depends on where the port resolves). Those are correct
+tests failing on a world they were not written for.
 
 An earlier attempt hand-scaled ~28 landform constants instead. It had a real bug
 within the hour. Don't go back to that.
@@ -155,8 +158,10 @@ proportionally wrong coordinate.
 
 `public/settlement-fit.js`. Each settlement starts at its scaled position and
 grows one strip at a time, claiming a strip only if it is genuinely buildable and
-no neighbour holds it. **No-overlap and no-water now hold by construction**, not
-by later detection.
+no neighbour holds it. **No settlement overlaps another and none is mostly on water** — those hold by
+construction. Plot-level placement is NOT guaranteed by it: `minBuildable` is
+0.72, so 108 plots are still dropped downstream and 56 reach the renderer with a
+wet centre, where `footprint.js` refuses them. Two layers, not one.
 
 Edge density is lifted in proportion to how enclosed a settlement turned out to
 be — a boundary against water, cliff or a neighbour is the densest ground in a
@@ -191,10 +196,10 @@ four verdicts:
 
 | verdict | share | what it means |
 | --- | --- | --- |
-| `slab` | 56.9% | near-level, sits on the ground |
-| `plinth` | 36.7% | base drops to the lowest point, cut into the uphill side |
-| `terrace` | 5.0% | stepped down the slope, each face about a storey |
-| `refuse` | 1.3% | a cliff, or **any** part in water — nothing is built |
+| `slab` | 67.0% | near-level, sits on the ground |
+| `plinth` | 29.1% | base drops to the lowest point, cut into the uphill side |
+| `terrace` | 2.3% | stepped down the slope, each face about a storey |
+| `refuse` | 1.6% | a cliff, or **any** part in water — nothing is built |
 
 The old code sampled the envelope centre plus the **plot** corners — two
 different rectangles — and only tested the centre for water. 128 buildings that
@@ -229,7 +234,7 @@ rather than landscaped. **This matters more now**: the city is denser, so there
 is proportionally more street frontage in view.
 
 ### 3. Plinths and terraces are new geometry and currently crude
-37% of buildings now get a plinth and 5% get terraces, and they are grey boxes.
+29% of buildings get a plinth and 2% get terraces, and they are grey boxes.
 On a denser, hillier-reading world these are visible everywhere. Retaining walls,
 steps, split levels, planting on the terraces — this is a real opportunity that
 did not exist before.

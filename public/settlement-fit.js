@@ -37,15 +37,23 @@
 // entire object of shrinking the world. Coverage rises until the land runs out
 // rather than until a number in a table runs out.
 //
-// TWO PROPERTIES THIS GUARANTEES BY CONSTRUCTION
+// WHAT THIS GUARANTEES, AND WHAT IT DOES NOT
 //
-//   1. No settlement overlaps another. Not "was checked and found not to" --
-//      cannot, because an overlapping strip is never accepted in the first
-//      place. The de-overlap pass downstream should now find nothing to do.
-//   2. No settlement covers water or cliff. Same reason.
+// GUARANTEED, at the settlement level: no two settlement RECTANGLES overlap, and
+// no settlement rectangle is mostly on water or cliff. Those hold by
+// construction -- an overlapping or unbuildable strip is never accepted -- and a
+// guarantee that holds by construction cannot regress quietly.
 //
-// A guarantee that holds by construction is worth more than the same guarantee
-// asserted by a test afterwards, because it cannot regress quietly.
+// NOT guaranteed, at the plot level, and the earlier version of this comment
+// overstated it. `minBuildable` is 0.72, so an accepted strip may be up to 28%
+// water, cliff or steep ground, and individual plots inside it can still land
+// badly. Measured: 108 plots are still dropped by the downstream de-overlap
+// pass, and 56 (0.34%) have their envelope centre under water at the point they
+// reach the renderer -- where footprint.js refuses them.
+//
+// So the layers are: this prevents settlement-scale mistakes, and footprint.js
+// catches plot-scale ones. Claiming the first eliminates the second is how the
+// second stops being taken seriously.
 // =============================================================================
 
 import { classifyAt, USE } from "./land-use.js";

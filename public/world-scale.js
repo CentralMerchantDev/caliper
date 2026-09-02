@@ -58,9 +58,22 @@
 // =============================================================================
 
 /**
- * The single scale factor. 1 reproduces the original 48 km world exactly, so
- * setting it to 1 is a genuine no-op and any test that fails at 1 is failing for
- * a reason unrelated to scale.
+ * The single scale factor.
+ *
+ * WHAT "k = 1 IS A NO-OP" DOES AND DOES NOT MEAN. It was proven, and it is still
+ * true, for the thing it was proven about: the TERRAIN SCALING BOUNDARY at the
+ * bottom of terrain.js is an exact identity at 1, so a height query returns the
+ * design value unchanged.
+ *
+ * It is NOT true that the whole suite passes at 1, and this comment used to
+ * imply it did. Tests written since then legitimately encode facts about the
+ * 0.65 world -- the embedded city summary states its exact plot count, and the
+ * industry-clustering test depends on where the port resolves, which is a
+ * different place at a different scale. Those are correct tests failing on a
+ * world they were not written for, not scaling bugs.
+ *
+ * So: if you change the boundary in terrain.js, k = 1 must still return design
+ * heights unchanged. Do not expect a green suite from it.
  */
 export const WORLD_SCALE = 0.65;
 
