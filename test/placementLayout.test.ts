@@ -236,22 +236,26 @@ test("guardrail: the tram-clearance check actually fails when the tram is put ba
   );
 });
 
-test("3D visual invariants: crisp architectural lighting, tight shadow bias, and glulam trusses", async () => {
-  const fs = await import("node:fs");
-  const code = fs.readFileSync("public/world-render-3d.js", "utf-8");
-  // Directional sun initial base intensity calibrated to 2.15 (governed dynamically between 0.02 and 1.45 at runtime)
-  assert.match(code, /DirectionalLight\(0xfffaed,\s*2\.15\)/, "sun must have crisp 2.15 base intensity");
-  // Tight PCFSoft shadow bias
-  assert.match(code, /sun\.shadow\.bias\s*=\s*-0\.00018/, "sun shadow bias must be -0.00018");
-  // Bloom is retained at minimal strength without fog blowout
-  assert.match(code, /UnrealBloomPass\(.*,\s*0\.02,\s*0\.12,\s*0\.99\)/, "bloom must be tight (0.02, 0.12, 0.99)");
-  // Design Studio features authentic triangulated glulam timber trusses
-  assert.match(code, /Triangulated Warren \/ Pratt timber truss assemblies/, "studio must feature glulam trusses");
-  assert.match(code, /bottomChord/, "studio must have bottom chord");
-  assert.match(code, /topChord/, "studio must have top chord");
-  // Dedicated procedural stone texture systems
-  assert.match(code, /function makeTravertineTexture\(\)/, "must implement procedural travertine texture generator");
-  assert.match(code, /function makeLimestoneTexture\(\)/, "must implement procedural limestone texture generator");
-  assert.match(code, /map:\s*travertineTex/, "travertine texture must be attached to civic steps/podium");
-  assert.match(code, /map:\s*limestoneTex/, "limestone texture must be attached to civic colonnade");
+test("the tuned render values are what they are meant to be", async () => {
+  // THIS USED TO MATCH THIS FILE'S OWN SOURCE TEXT.
+  //
+  // Eleven regexes against world-render-3d.js as a string, including one that
+  // matched a COMMENT ("Triangulated Warren / Pratt timber truss assemblies").
+  // Those fail on a reformat and pass on any behavioural change that keeps the
+  // spelling — the opposite of what a test is for, and contradicted by this
+  // file's own argument a hundred lines above that a test checking a string is
+  // not checking the property.
+  //
+  // The three numeric ones are now named constants, so this reads the value.
+  const { RENDER_TUNING } = await import("../public/world-render-3d.js");
+  assert.equal(RENDER_TUNING.SUN_INTENSITY, 2.15, "sun base intensity");
+  assert.equal(RENDER_TUNING.SHADOW_BIAS, -0.00018, "shadow bias must stay tight for PCFSoft");
+  assert.deepEqual(RENDER_TUNING.BLOOM, { strength: 0.02, radius: 0.12, threshold: 0.99 },
+    "bloom must stay minimal or fog blows out");
+
+  // The rest of the old assertions checked that named helpers and geometry
+  // exist. That is a real property, but a source-text match is not how to check
+  // it, and there is no headless WebGL here to check it behaviourally. Rather
+  // than keep a test that cannot fail for the right reason, it is recorded as a
+  // gap in docs/AUDIT-LEDGER.md (finding 1.14) and dropped.
 });

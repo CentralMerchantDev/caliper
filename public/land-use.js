@@ -386,13 +386,24 @@ export function findQuay(heightAt, want, opts = {}) {
     reach = 120,       // how far out to look for that depth
     radius = 2500,
     step = 80,
-    along = "ew",      // the quay edge runs east-west
+    // BOTH ORIENTATIONS, BECAUSE A COASTLINE HAS NO PREFERRED AXIS.
+    //
+    // This took `along` as an option and defaulted it to "ew". No caller ever
+    // passed it, so every `ew ? ... : ...` branch below was unreachable and a
+    // north-south shoreline would have returned null -- a port that could not be
+    // built on half the coast, with the code to build it sitting right there
+    // untested.
+    //
+    // It now tries both and keeps whichever finds a berth, so the dead branch is
+    // live and the quay follows the coast rather than the axis it was written on.
+    along = null,
   } = opts;
 
-  const ew = along === "ew";
   let best = null;
+  const orientations = along ? [along] : ["ew", "ns"];
 
-  const score = (cx, cz) => {
+  const score = (cx, cz, along) => {
+    const ew = along === "ew";
     // For each landSide, test whether the whole run has dry land on one side and
     // deep water within reach on the other.
     for (const side of [1, -1]) {
@@ -425,12 +436,12 @@ export function findQuay(heightAt, want, opts = {}) {
     }
   };
 
-  score(want.x, want.z);
+  for (const o of orientations) score(want.x, want.z, o);
   for (let r = step; r <= radius && !best; r += step) {
     const n = Math.max(8, Math.round((2 * Math.PI * r) / step));
     for (let i = 0; i < n; i++) {
       const a = (2 * Math.PI * i) / n;
-      score(want.x + Math.cos(a) * r, want.z + Math.sin(a) * r);
+      for (const o of orientations) score(want.x + Math.cos(a) * r, want.z + Math.sin(a) * r, o);
     }
   }
   return best;

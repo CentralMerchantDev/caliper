@@ -14,6 +14,27 @@
 
 import * as THREE from "three";
 import { WORLD_SCALE } from "./world-scale.js";
+import { WORLD } from "./city-plan.js";
+
+/**
+ * TUNED VALUES, NAMED SO A TEST CAN READ THEM.
+ *
+ * These three were guarded by regexes matching this file's own SOURCE TEXT --
+ * `assert.match(code, /DirectionalLight\(0xfffaed,\s*2\.15\)/)` and so on,
+ * alongside one that matched a COMMENT. Those assertions fail on a reformat and
+ * pass on any behavioural change that keeps the spelling, which is the opposite
+ * of what a test is for. This file's own comment elsewhere makes the argument:
+ * a test that checks a string is not checking the property.
+ *
+ * The values could not be asserted directly because they were inline literals,
+ * so they are named here. The test now reads the value.
+ */
+export const RENDER_TUNING = {
+  SUN_COLOR: 0xfffaed,
+  SUN_INTENSITY: 2.15,      // base; governed 0.02-1.45 at runtime
+  SHADOW_BIAS: -0.00018,    // tight, for PCFSoft
+  BLOOM: { strength: 0.02, radius: 0.12, threshold: 0.99 },
+};
 import { placeFeatures } from "./features.js";
 // RE-EXPORTED so index.html can build an offscreen renderer for the 4K export.
 // It was calling `new THREE.Vector2()` with THREE not imported there at all --
@@ -1388,7 +1409,8 @@ class Renderer3D {
       composer.addPass(renderPass);
       const w = typeof window !== 'undefined' ? window.innerWidth : 1280;
       const h = typeof window !== 'undefined' ? window.innerHeight : 800;
-      const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h), 0.02, 0.12, 0.99);
+      const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h),
+        RENDER_TUNING.BLOOM.strength, RENDER_TUNING.BLOOM.radius, RENDER_TUNING.BLOOM.threshold);
       composer.addPass(bloomPass);
       const vignettePass = new ShaderPass(VignetteShader);
       vignettePass.uniforms["offset"].value = 1.45;
@@ -1405,7 +1427,7 @@ class Renderer3D {
     }
 
     // High-definition crisp architectural sunlight
-    const sun = new THREE.DirectionalLight(0xfffaed, 2.15);
+    const sun = new THREE.DirectionalLight(RENDER_TUNING.SUN_COLOR, RENDER_TUNING.SUN_INTENSITY);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.near = 1;
@@ -1414,7 +1436,7 @@ class Renderer3D {
     sun.shadow.camera.right = 90;
     sun.shadow.camera.top = 90;
     sun.shadow.camera.bottom = -90;
-    sun.shadow.bias = -0.00018;
+    sun.shadow.bias = RENDER_TUNING.SHADOW_BIAS;
     sun.shadow.normalBias = 0.018;
     scene.add(sun);
     scene.add(sun.target);
@@ -1595,6 +1617,21 @@ class Renderer3D {
    * should be derived from that feature, not from a copy of where it once was,
    * or it goes stale the moment the feature is placed properly.
    */
+  /**
+   * The ground under the street camera.
+   *
+   * There were five separate calls to terrainHeightAt() in the walk/drive/fly
+   * path -- the VILLAGE elevation profile, which has no relationship to
+   * city.heightAt. In city mode that meant walking on terrain that is not the
+   * terrain being drawn. Fixing one call site and leaving four is how they drift
+   * apart again, so there is one function now.
+   */
+  _groundAt(x, z) {
+    return this._cityMode && this._cityHeightAt
+      ? this._cityHeightAt(x, z)
+      : terrainHeightAt(x, z);
+  }
+
   _refreshFeatureTargets() {
     if (!this._cityHeightAt || !this._cityDistrictTargets) return;
     let sites;
@@ -6839,14 +6876,32 @@ class Renderer3D {
       this._streetPos.x += moveFwdX * this._streetSpeed * dt;
       this._streetPos.z += moveFwdZ * this._streetSpeed * dt;
 
-      // Restrict street bounds across the expansive urban terrain and waterfront
-      this._streetPos.x = Math.max(-220, Math.min(220, this._streetPos.x));
-      this._streetPos.z = Math.max(-140, Math.min(22.0, this._streetPos.z)); // Seawall guard at z = 22.0!
+      // THE BOX AND THE GROUND WERE BOTH THE VILLAGE'S.
+      //
+      // These bounds -- x +/-220, z -140..22, with a "seawall guard" at z = 22 --
+      // describe the four-house village this renderer was originally written for.
+      // In city mode they confine walking and driving to a 440 x 160 m box at the
+      // origin, which is about two blocks of a 31 km world, and the seawall they
+      // guard is 20 km from most of the city.
+      //
+      // In city mode the bound is the modelled world itself, and the ground is
+      // the CITY's height function. terrainHeightAt() below is the village
+      // profile and has no relationship to city.heightAt -- so street mode was
+      // also walking on terrain that is not the terrain being drawn.
+      const _cityBound = this._cityMode ? WORLD.SIZE / 2 : null;
+      if (_cityBound !== null) {
+        this._streetPos.x = Math.max(-_cityBound, Math.min(_cityBound, this._streetPos.x));
+        this._streetPos.z = Math.max(-_cityBound, Math.min(_cityBound, this._streetPos.z));
+      } else {
+        this._streetPos.x = Math.max(-220, Math.min(220, this._streetPos.x));
+        this._streetPos.z = Math.max(-140, Math.min(22.0, this._streetPos.z)); // village seawall
+      }
 
       // Follow the terrain. Heights here used to be absolute constants, so walking
       // or driving toward the coastal cliffs or the alpine range went straight
       // through the hillside and out into open air.
-      const groundY = terrainHeightAt(this._streetPos.x, this._streetPos.z);
+      // The city's own ground in city mode; the village profile otherwise.
+      const groundY = this._groundAt(this._streetPos.x, this._streetPos.z);
 
       if (isDrive) {
         // Third-person vehicle chase camera
@@ -6859,13 +6914,13 @@ class Renderer3D {
         // The chase camera sits behind the car, which is over different ground.
         const camX = this._streetPos.x - moveFwdX * camOffsetDist;
         const camZ = this._streetPos.z - moveFwdZ * camOffsetDist;
-        const camGroundY = terrainHeightAt(camX, camZ);
+        const camGroundY = this._groundAt(camX, camZ);
         this.camera.position.set(camX, Math.max(groundY, camGroundY) + camHeight, camZ);
         const aheadX = this._streetPos.x + moveFwdX * 8.0;
         const aheadZ = this._streetPos.z + moveFwdZ * 8.0;
         const lookTarget = new THREE.Vector3(
           aheadX,
-          terrainHeightAt(aheadX, aheadZ) + 1.5 + this._streetPitch * 4.0,
+          this._groundAt(aheadX, aheadZ) + 1.5 + this._streetPitch * 4.0,
           aheadZ
         );
         this.camera.lookAt(lookTarget);
@@ -6876,7 +6931,7 @@ class Renderer3D {
         const aheadZ = this._streetPos.z + moveFwdZ * 6.0;
         const lookTarget = new THREE.Vector3(
           aheadX,
-          terrainHeightAt(aheadX, aheadZ) + 1.75 + this._streetPitch * 4.0,
+          this._groundAt(aheadX, aheadZ) + 1.75 + this._streetPitch * 4.0,
           aheadZ
         );
         this.camera.lookAt(lookTarget);
@@ -6907,7 +6962,7 @@ class Renderer3D {
       this._streetPos.z += (fwdZ * forwardInput - rightZ * strafeInput) * flySpeed * dt;
       // Floor the drone against the actual terrain, not an absolute 1.8m -- over
       // the cliffs or the alpine range an absolute floor is underground.
-      const flyFloor = terrainHeightAt(this._streetPos.x, this._streetPos.z) + 2.0;
+      const flyFloor = this._groundAt(this._streetPos.x, this._streetPos.z) + 2.0;
       this._streetPos.y = Math.max(flyFloor, Math.min(280, (this._streetPos.y || 25) + vertInput * flySpeed * dt));
 
       this.camera.position.set(this._streetPos.x, this._streetPos.y, this._streetPos.z);

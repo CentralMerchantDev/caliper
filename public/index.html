@@ -1100,6 +1100,7 @@ body.inspecting-mobile #nav-compass-pad {
       <div style="font-size:16px;margin-bottom:2px">🌍</div>
       <strong style="color:#fff;font-size:12px;display:block">The Region</strong>
       <span style="font-size:11px;color:#94a3b8;line-height:1.35">A 40&nbsp;km coastal region generated from one plan: terrain, coastline, <span id="city-stat-settlements">57</span> settlements,
+    <div id="city-build-notes" class="mono" style="display:none;margin-top:6px;font-size:11px;color:#f0b429;line-height:1.4" role="status"></div>
         <span id="city-stat-buildings">31,000</span> buildings.
         Press <strong>Tour</strong> in the bar above to put the panels away and fly it.</span>
     </div>
@@ -2500,6 +2501,35 @@ reportDegradedRenderer(renderer3d);
     const s2 = document.getElementById('city-stat-settlements');
     if (b && st.buildings) b.textContent = st.buildings.toLocaleString('en');
     if (s2 && world?.plots) s2.textContent = String(new Set(world.plots.map((p) => p.settlement)).size);
+
+    // REPORTED MEANS READ BY SOMETHING.
+    //
+    // stats.featuresUnplaced, stats.refusedWhy, world.zoningAnchors and
+    // world.settlementFit were all written with comments saying they were
+    // "reported, not swallowed" — and then read by nothing on this page. A field
+    // nobody reads is swallowed with extra steps.
+    //
+    // These are quiet by design: on a healthy world every list is empty and
+    // nothing appears. They speak up when the world could not build something,
+    // which is exactly when a visitor deserves to be told rather than shown a
+    // city with a hole in it.
+    const notes = [];
+    if (st.featuresUnplaced?.length) {
+      notes.push(`could not place: ${st.featuresUnplaced.join(', ')}`);
+    }
+    if (world?.zoningAnchors?.missing?.length) {
+      notes.push(`no ${world.zoningAnchors.missing.join(' or ')} — the land uses anchored to it are absent`);
+    }
+    const refused = st.refusedWhy ? Object.entries(st.refusedWhy) : [];
+    if (refused.length) {
+      const total = refused.reduce((a2, [, c]) => a2 + c, 0);
+      notes.push(`${total} plots refused a building (${refused.map(([k, c]) => `${c} ${k}`).join(', ')})`);
+    }
+    const el = document.getElementById('city-build-notes');
+    if (el) {
+      el.textContent = notes.join(' · ');
+      el.style.display = notes.length ? '' : 'none';
+    }
     return true;
   };
   if (!fill()) {
