@@ -964,7 +964,7 @@ body.inspecting-mobile #nav-compass-pad {
 
 <!-- Full-Screen 3D Viewport -->
 <div id="viewport-container">
-  <canvas id="world-canvas" role="img" aria-label="A 31 km procedural coastal city. Click a building to select it."></canvas>
+  <canvas id="world-canvas" role="img" aria-label="A 26 km procedural coastal city. Click a building to select it."></canvas>
   <!-- SOMETHING TO LOOK AT WHILE THE WORLD IS BUILT.
        generateWorld takes about 5 s and runs synchronously, so draw() returns
        early and nothing paints. There was no spinner, no skeleton, no text: a
@@ -980,7 +980,7 @@ body.inspecting-mobile #nav-compass-pad {
            mesh building, which needs a GPU and cannot be measured in the test
            environment, so any specific number here would be a guess presented
            as a measurement. A few seconds is what is actually known. -->
-      40&nbsp;km of terrain, coastline, roads and buildings, generated from one plan. This takes a few seconds.
+      26&nbsp;km of terrain, coastline, roads and buildings, generated from one plan. This takes a few seconds.
     </div>
   </div>
   <canvas id="world-canvas-2d" style="display:none" role="img" aria-label="Plan view"></canvas>
@@ -1105,9 +1105,9 @@ body.inspecting-mobile #nav-compass-pad {
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">🌍</div>
       <strong style="color:#fff;font-size:12px;display:block">The Region</strong>
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">A 40&nbsp;km coastal region generated from one plan: terrain, coastline, <span id="city-stat-settlements">57</span> settlements,
+      <span style="font-size:11px;color:#94a3b8;line-height:1.35">A 26&nbsp;km coastal region generated from one plan: terrain, coastline, <span id="city-stat-settlements">54</span> settlements,
     <div id="city-build-notes" class="mono" style="display:none;margin-top:6px;font-size:11px;color:#f0b429;line-height:1.4" role="status"></div>
-        <span id="city-stat-buildings">31,000</span> buildings.
+        <span id="city-stat-buildings">19,105</span> buildings.
         Press <strong>Tour</strong> in the bar above to put the panels away and fly it.</span>
     </div>
   </div>
@@ -1306,16 +1306,23 @@ body.inspecting-mobile #nav-compass-pad {
         CALIPER pairs structured LLM synthesis with <strong>schema-bounded state mutations</strong>, in-memory 2D footprint collision verification, and isolated execution inside Cloudflare Workers isolates.
       </p>
       <div style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px;margin-bottom:12px">
-        <div style="font-family:var(--mono);font-size:11px;color:var(--sky);margin-bottom:6px">FOUR-STAGE PIPELINE SPECIFICATION</div>
+        <!-- THIS DESCRIBED A PIPELINE THAT DOES NOT EXIST.
+             It claimed four stages, two of which -- "Solve" and "Mutate" -- are
+             not stages of anything: grep src/changePipeline.ts and the events
+             are ground, plan, implement, verify, review, qa. And it OMITTED
+             Verify and Review, which are the two the entire thesis rests on.
+             The page's own tracker twenty lines away lists five. -->
+        <div style="font-family:var(--mono);font-size:11px;color:var(--sky);margin-bottom:6px">FIVE-STAGE PIPELINE, TWO HUMAN GATES</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
-          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>1. Ground:</strong> Validates real-world prerequisites & formal schemas</div>
-          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>2. Plan:</strong> Emits strictly typed JSON patches adhering to zoning rules</div>
-          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>3. Solve:</strong> In-memory 2D footprint collision and clearance engine</div>
-          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>4. Mutate:</strong> Cloned state graph mutation inside Workers isolate</div>
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>1. Ground:</strong> Checks the request's premises against the real world structure, and refuses ones that rest on something untrue</div>
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>2. Plan:</strong> Emits a typed edit plus its own executable acceptance criteria &mdash; then <em>Gate&nbsp;1</em>, where a person approves, rejects, or replies</div>
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>3. Implement:</strong> Applies schema-bounded ops to a cloned state graph inside a Workers isolate</div>
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px"><strong>4. Verify:</strong> Runs the regression suite and the plan's criteria in the sandbox; a suite that did not run is never read as a pass</div>
+          <div style="background:rgba(255,255,255,0.04);padding:8px;border-radius:6px;grid-column:1/-1"><strong>5. Review:</strong> A different vendor's model reads the diff cold. Material findings go to a fix loop and then <em>Gate&nbsp;2</em>, which never auto-approves</div>
         </div>
       </div>
       <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#d1fae5">
-        <strong>Continuous Verification:</strong> 379 Node tests and 9 Cloudflare Worker integration tests, run against this repository. Counts are read from the test runner at the moment this line is edited, not from memory &mdash; and the last two audits both caught this number going stale, which is why it says so.
+        <strong>Continuous Verification:</strong> <span id="claim-node-tests">421</span> Node tests and <span id="claim-worker-tests">9</span> Cloudflare Worker integration tests, run against this repository. This sentence has now gone stale three times in a row while claiming it was read from the runner, so it is no longer trusted to a human: <code>test/publicClaims.test.ts</code> counts the suite and fails if these numbers drift.
       </div>
       <div id="budget-summary-box" class="mono" style="font-size:11.5px;color:var(--text-muted);padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px">
         Loading budget invariants…

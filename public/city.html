@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CALIPER — the city</title>
-<meta name="description" content="A 31 km procedural coastal city: terrain, coastline, 55 settlements, roads that obey slope and shoreline, and 22,000 buildings, all generated from one plan.">
+<meta name="description" content="A 26 km procedural coastal city: terrain, coastline, 54 settlements, roads that obey slope and shoreline, and 19,105 buildings, all generated from one plan.">
 <style>
   html,body{margin:0;height:100%;background:#0b1016;overflow:hidden;
             font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
@@ -65,6 +65,7 @@ import { VignetteShader } from "./vendor/three/addons/shaders/VignetteShader.js"
 import { buildWorld, LOOK } from "./city-render.js";
 import { loadLiveWorld, buildLiveQuarter, QUARTER } from "./city-live-world.js";
 import { WORLD_SCALE } from "./world-scale.js";
+import { WORLD as PLAN_WORLD } from "./city-plan.js";
 
 const Q = new URLSearchParams(location.search);
 const num = (k, d) => (Q.has(k) ? parseFloat(Q.get(k)) : d);
@@ -367,7 +368,18 @@ document.getElementById("legend").innerHTML =
   `${N(s.parts)} parts · ${N(s.trees)} trees · ${N(s.cars)} vehicles<br>` +
   `terrain ${Math.round((s.terrainVerts || 0) / 1000)}k verts · roads ${Math.round((s.roadTris || 0) / 1000)}k tris<br>` +
   `built in ${s.buildMs} ms</div>`;
-function WORLDKM() { return 40; }
+// A LITERAL WEARING A FUNCTION CALL'S COSTUME.
+//
+// Every other figure on that legend line -- buildings, parts, trees, cars,
+// vertices, triangles, build time -- is read from the real build. This one
+// looked like it was too, and returned a hardcoded 40 that was wrong by 14 km:
+// the world is 26 km at WORLD_SCALE = 0.65, which plan.WORLD.SIZE has known all
+// along.
+//
+// Deriving it is the fix, but the shape of the bug is the lesson. A function
+// that computes nothing is harder to notice than a bare 40 would have been,
+// because it reads as though someone already thought about it.
+function WORLDKM() { return Math.round(PLAN_WORLD.SIZE / 1000); }
 
 // ------------------------------------------------------- the live quarter
 // Drawn after the city because it depends on a fetch. Everything on Cormorant
