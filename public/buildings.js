@@ -18,6 +18,10 @@
 // =============================================================================
 
 import { fbm, clamp } from "./noise.js";
+// city-plan.js does not import this module, so there is no cycle. The class
+// height ceilings live there because they are a property of the PLAN, and this
+// module has to honour them rather than keep a second copy that can drift.
+import { PLOT_CLASSES } from "./city-plan.js";
 
 /** Deterministic 0..1 from any string. Same hash the plan generator uses. */
 export function rnd(s) {
@@ -512,6 +516,21 @@ export function emitBuilding(o, cls, id, x, z, w, d, h, g, gRange = 0, foot = nu
   // come out 2.96 m tall, and a terrace subtracts a 4.4 m shopfront band from
   // its own height.
   h = Math.max(MIN_HEIGHT[cls] || 4, h * (0.74 + rnd(id + "jit") * 0.62));
+  // AND CLAMPED TO THE CLASS CEILING AFTER THE JITTER TOO.
+  //
+  // city-render.js applies PLOT_CLASSES[cls].maxHeight and then hands the result
+  // here, where this line multiplies it by up to 1.36. So the cap was enforced,
+  // then broken, in that order. Measured over the world: 1,362 of 19,105 placed
+  // buildings finished above their own class limit, worst 1.358x -- a terrace at
+  // 24.4 m against an 18 m cap.
+  //
+  // That matters beyond the look of it. The cap is published in the city summary
+  // the pipeline is grounded on ("terrace up to 18 m, ... tower up to 220 m"),
+  // so a plan reasoning about what will fit was reading a constraint the
+  // renderer did not keep. The floor is applied first and the ceiling last,
+  // because a minimum that a ceiling can undo is not a minimum.
+  const ceil = PLOT_CLASSES[cls] && PLOT_CLASSES[cls].maxHeight;
+  if (ceil) h = Math.min(h, ceil);
   // FOUNDATIONS THAT MATCH THE GROUND.
   //
   // This was one branch: over 0.9 m of range, wrap the base in a grey box. That
@@ -519,14 +538,32 @@ export function emitBuilding(o, cls, id, x, z, w, d, h, g, gRange = 0, foot = nu
   // drop identically. footprint.js now classifies the ground and this builds
   // what it asked for.
   if (foot && foot.verdict === "terrace") {
-    // Stepped down the slope, so each retaining face stays about a storey
-    // instead of one wall as tall as the building.
+    // THE TERRACE USED TO BURY THE BUILDING IT WAS HOLDING UP.
+    //
+    // The steps were all centred on the same x, z at roughly full plot width,
+    // so they were not steps down a slope -- they were concentric boxes stacked
+    // vertically, each one 2-4% WIDER than the building. The stack's top landed
+    // at base + rise*(steps-1) + 1.2 while the building body was placed at
+    // `g`, which is foot.base: the LOWEST sample.
+    //
+    // Measured over the real world: 367 plots get this verdict, and on 54 of
+    // them the grey retaining stack stood taller than the whole building, worst
+    // ratio 1.80x. On the rest it rose above the ground floor. From outside, a
+    // terraced house on a slope read as a concrete block with a roof on it.
+    //
+    // Two changes. The steps now DESCEND from the building's own base rather
+    // than climbing past it, which is what a retaining structure does -- it
+    // holds the ground below the pad, not the air above it. And each step is
+    // inset rather than proportionally wider, so the building sits on the stack
+    // instead of inside it. The body is raised to the pad in city-render.js,
+    // where `g` is chosen.
     const rise = foot.range / foot.steps;
+    const pad = foot.base + foot.range;          // the finished floor level
     for (let i = 0; i < foot.steps; i++) {
-      const frac = (i + 1) / foot.steps;
-      const y = foot.base + rise * i;
-      o.add("wall", x, y - rise / 2 + 0.4, z,
-            w * (1.04 - 0.06 * frac), rise + 1.6, d * (1.04 - 0.06 * frac), 0x9d9384);
+      const frac = i / Math.max(1, foot.steps - 1);   // 0 at the pad, 1 at the toe
+      const top = pad - rise * i;
+      o.add("wall", x, top - rise / 2 - 0.2, z,
+            w * (0.98 - 0.04 * frac), rise + 0.8, d * (0.98 - 0.04 * frac), 0x9d9384);
     }
   } else if (foot && foot.verdict === "plinth") {
     // Base carried down to the footprint's lowest point and cut into the uphill

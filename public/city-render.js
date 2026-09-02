@@ -15,7 +15,7 @@
 import { Sky } from "./vendor/three/addons/objects/Sky.js";
 import { RoundedBoxGeometry } from "./vendor/three/addons/geometries/RoundedBoxGeometry.js";
 import {
-  WORLD, ROADS, BRIDGES, MARINA, PIER, BOARDWALK, SETTLEMENTS, PLOT_CLASSES,
+  WORLD, ROADS, BRIDGES, MARINA, PIER, BOARDWALK, PLOT_CLASSES,
   generateWorld, generateCityPlan, landmassPolygons, offsetPolygon,
 } from "./city-plan.js";
 import { LandField, makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, WATERWAYS, waterwaySurface , waterwayAt } from "./terrain.js";
@@ -218,16 +218,75 @@ export function buildWorld(THREE, renderer, scene) {
   const masses = landmassPolygons(16);
 
   // --- settlement lookup, used for urban ground tint and centrality ---
-  const SETT = [
-    { id: "downtown", b: { xMin: -1470, xMax: 1400, zMin: -720, zMax: 575 }, cx: 0, cz: 40, r: 1500 },
-    ...SETTLEMENTS.map((s) => ({
-      id: s.id, b: s.bounds,
-      cx: (s.bounds.xMin + s.bounds.xMax) / 2, cz: (s.bounds.zMin + s.bounds.zMax) / 2,
-      r: Math.max(s.bounds.xMax - s.bounds.xMin, s.bounds.zMax - s.bounds.zMin) / 2,
-    })),
-  ];
+  //
+  // DERIVED FROM THE PLOTS, BECAUSE THE TABLE DESCRIBED A CITY THAT MOVED.
+  //
+  // This was a hardcoded `downtown` rectangle plus SETTLEMENTS.map(). Both parts
+  // were wrong, and each was wrong in a way the other hid:
+  //
+  //   * The downtown literal was { z: -720..575 }. Measured from the plots that
+  //     actually carry settlement === "downtown": z 629..2547. The ranges do not
+  //     OVERLAP -- the literal ends 54 m before the real downtown begins. So
+  //     settAt() returned null for every downtown plot (no urban ground tint, no
+  //     street furniture anywhere in the city centre), and the centrality curve
+  //     was measured from a circle 1.6 km away. 80 of the world's 82 TOWER plots
+  //     are downtown, and every one of them was height-scaled to ~46% -- the
+  //     floor value, i.e. the number for "outside the settlement entirely."
+  //     The comment on that curve says "tallest at a settlement's centre... a
+  //     peak with shoulders is a city." That was not happening.
+  //
+  //   * SETTLEMENTS is 26 entries. The world has 54 settlements with plots in
+  //     them, because fitSettlements grows the beach strips at generation time.
+  //     The 28 missing ones hold 10,282 plots -- 53% of the world, the entire
+  //     ocean frontage. For all of them SETT.find() missed, `central` stayed at
+  //     its initialiser of 1 (no taper at all, every plot at full height), and
+  //     the barrier-island planting pass, which skips ground inside a
+  //     settlement, planted palms through beachfront buildings.
+  //
+  // Aggregating the plots is O(n) once and cannot drift: a settlement's extent
+  // IS the extent of its plots. There is no table left to go stale.
+  const SETT_BY_ID = new Map();
+  for (const p of world.plots) {
+    const id = p.settlement;
+    if (!id) continue;
+    let e = SETT_BY_ID.get(id);
+    if (!e) SETT_BY_ID.set(id, (e = { id, b: { xMin: Infinity, xMax: -Infinity, zMin: Infinity, zMax: -Infinity } }));
+    if (p.xMin < e.b.xMin) e.b.xMin = p.xMin;
+    if (p.xMax > e.b.xMax) e.b.xMax = p.xMax;
+    if (p.zMin < e.b.zMin) e.b.zMin = p.zMin;
+    if (p.zMax > e.b.zMax) e.b.zMax = p.zMax;
+  }
+  const SETT = [...SETT_BY_ID.values()];
+  for (const s of SETT) {
+    s.cx = (s.b.xMin + s.b.xMax) / 2;
+    s.cz = (s.b.zMin + s.b.zMax) / 2;
+    s.r = Math.max(s.b.xMax - s.b.xMin, s.b.zMax - s.b.zMin) / 2;
+  }
+  stats.settlementsTracked = SETT.length;
+
+  // A UNIFORM GRID OVER THE SETTLEMENTS, because settAt() was a linear scan of
+  // the whole list run once per plot -- 19,481 times over 54 entries, and it
+  // MISSED on the 10,282 that were absent, so those paid the full scan every
+  // time to be told nothing.
+  const SCELL = 500;
+  const settGrid = new Map();
+  const skey = (cx, cz) => cx * 4096 + cz;
+  for (const s of SETT) {
+    for (let cx = Math.floor(s.b.xMin / SCELL); cx <= Math.floor(s.b.xMax / SCELL); cx++) {
+      for (let cz = Math.floor(s.b.zMin / SCELL); cz <= Math.floor(s.b.zMax / SCELL); cz++) {
+        const k = skey(cx, cz);
+        let bucket = settGrid.get(k);
+        if (!bucket) settGrid.set(k, (bucket = []));
+        bucket.push(s);
+      }
+    }
+  }
   const settAt = (x, z) => {
-    for (const s of SETT) if (x >= s.b.xMin && x <= s.b.xMax && z >= s.b.zMin && z <= s.b.zMax) return s;
+    const bucket = settGrid.get(skey(Math.floor(x / SCELL), Math.floor(z / SCELL)));
+    if (!bucket) return null;
+    for (const s of bucket) {
+      if (x >= s.b.xMin && x <= s.b.xMax && z >= s.b.zMin && z <= s.b.zMax) return s;
+    }
     return null;
   };
 
@@ -628,7 +687,22 @@ export function buildWorld(THREE, renderer, scene) {
       let prev = null;
       for (let t = from; t <= to + 1e-6; t += step) {
         const x = ew ? t : r.at, z = ew ? r.at : t;
-        if (prof) { prev = strip(buf, x, z, ew, half, prof(z) + lift - 0.9, prev); continue; }
+        // prof(t), NOT prof(z). bridgeProfile is parameterised by the
+        // ALONG-SPAN coordinate -- its own H() is `ew ? heightAt(t, br.x) :
+        // heightAt(br.x, t)` and its z0/z1 come from br.a/br.b. For an
+        // east-west bridge the along-span coordinate is x, which is `t` here;
+        // `z` is the road's constant cross-axis position.
+        //
+        // So all 7 east-west crossings were drawn as a FLAT ribbon at one
+        // height, computed from a coordinate that is not on the span -- while
+        // the soffit, parapets, piers and arch beneath them were built
+        // correctly with the real profile. The deck no longer met its own
+        // structure at any point, or the road grid at either end.
+        //
+        // `t` is the along-span parameter for both axes, which is why the
+        // north-south bridges looked right: prof(z) happened to equal prof(t)
+        // for them, and the bug was invisible on 12 of 19 crossings.
+        if (prof) { prev = strip(buf, x, z, ew, half, prof(t) + lift - 0.9, prev); continue; }
         // Still refuse to pave the sea -- tested against the NATURAL ground, since
         // that is what is actually wet. A graded surface may legitimately sit a
         // little above it.
@@ -676,10 +750,14 @@ export function buildWorld(THREE, renderer, scene) {
   // a city, and it is the difference you read from ten kilometres away.
   // ---------------------------------------------------------------------------
   const coll = createCollector();
+  // Filled by the building pass, consumed by the contact-shadow pass in
+  // buildProps. One shadow per building that exists, at the base it stands on.
+  const placedBuildings = [];
   if (!SKIP.has("buildings")) {
     const byClass = {};
     let placed = 0, refused = 0;
     const refusedWhy = {};
+    const unknownSettlements = new Set();
     for (const p of world.plots) {
       const cls = p.className;
       if (!HEIGHT[cls] || cls === "PARK") continue;
@@ -698,10 +776,22 @@ export function buildWorld(THREE, renderer, scene) {
       // decides whether this is a slab, a plinth, a terrace, or nothing at all.
       const foot = assessFootprint(heightAt, p.buildable, waterwayAt);
       if (foot.verdict === "refuse") { refused++; refusedWhy[foot.reason] = (refusedWhy[foot.reason] || 0) + 1; continue; }
-      const g = foot.base;
+      // A TERRACED BUILDING STANDS ON THE PAD, NOT AT THE TOE.
+      //
+      // `foot.base` is the LOWEST sample under the footprint, which is the right
+      // answer for a slab (mean ground) and a plinth (base carried down so the
+      // downhill side meets its own foundation). For a terrace it is the bottom
+      // of the cut, and putting the body there sank it below its own retaining
+      // steps -- see buildings.js, where the stack now descends from the pad.
+      const g = foot.verdict === "terrace" ? foot.base + foot.range : foot.base;
       const gRange = foot.range;
 
-      const s = SETT.find((q) => q.id === (p.settlement || "downtown"));
+      // A Map lookup, not a linear scan of 54 entries per plot. See SETT above.
+      // The `|| "downtown"` fallback is gone with it: every plot carries a real
+      // settlement id, and defaulting an unknown one to downtown silently gave
+      // it downtown's centrality curve instead of admitting it was unrecognised.
+      const s = SETT_BY_ID.get(p.settlement) || null;
+      if (!s && p.settlement) unknownSettlements.add(p.settlement);
       let central = 1;
       if (s) {
         const dd = Math.hypot(cx - s.cx, cz - s.cz) / (s.r || 1);
@@ -715,6 +805,11 @@ export function buildWorld(THREE, renderer, scene) {
 
       if (emitBuilding(coll, cls, p.id, cx, cz, bw, bd, h, g, gRange, foot)) {
         placed++; byClass[cls] = (byClass[cls] || 0) + 1;
+        // What was BUILT, and where its base actually landed. The contact
+        // shadow pass used to re-derive this from world.plots and a fresh
+        // heightAt sample at the PLOT centre -- a different rectangle, a
+        // different height, and no knowledge of which plots were refused.
+        placedBuildings.push([cx, cz, g, bw, bd]);
       }
     }
     stats.buildings = placed;
@@ -723,6 +818,10 @@ export function buildWorld(THREE, renderer, scene) {
     // about the world worth being able to see.
     stats.refused = refused;
     stats.refusedWhy = refusedWhy;
+    // A settlement id on a plot that SETT does not know is the exact condition
+    // that hid 10,282 plots: they got no centrality curve and no ground tint,
+    // and nothing said so. Reported now rather than defaulted to downtown.
+    stats.unknownSettlements = [...unknownSettlements];
   }
   stats.buildings = stats.buildings || 0;
 
@@ -932,7 +1031,7 @@ export function buildWorld(THREE, renderer, scene) {
   }
   stats.trees = stats.trees || 0;
 
-  const api = { scene, field, heightAt, plan, world, masses, stats, sun, sunDir: sunPos.clone(), sky, sea, wn, LOOK, THREE, renderer, settAt, SETT, bridgeSpans };
+  const api = { scene, field, heightAt, plan, world, masses, stats, sun, sunDir: sunPos.clone(), sky, sea, wn, LOOK, THREE, renderer, settAt, SETT, SETT_BY_ID, bridgeSpans, placedBuildings };
   if (!SKIP.has("props")) buildProps(api);
   stats.buildMs = Math.round(performance.now() - t0);
   return api;
@@ -2015,13 +2114,27 @@ function buildProps(api) {
     g2.fillStyle = grd; g2.fillRect(0, 0, N, N);
     const tex = new THREE.CanvasTexture(c);
     const quad = new THREE.PlaneGeometry(1, 1); quad.rotateX(-Math.PI / 2);
+    // ONE SHADOW PER BUILDING THAT EXISTS, AT THE BASE IT STANDS ON.
+    //
+    // This used to walk world.plots and take a fresh heightAt at the PLOT
+    // centre. Three things went wrong with that, all measured:
+    //
+    //   * 205 shadows were drawn under plots the building pass had REFUSED --
+    //     a soft dark ellipse on bare ground where the code had correctly
+    //     declined to build, because it was in the water or on a cliff.
+    //   * 867 more sat over a metre from the base the building actually uses,
+    //     worst 13.1 m: a blob floating in the air beside a plinthed building,
+    //     or buried under it. The plot centre is not the buildable envelope's
+    //     centre, and heightAt is not foot.base.
+    //   * stats.contactShadows reported the total as though each corresponded
+    //     to a building.
+    //
+    // placedBuildings is written by the building pass at the moment a building
+    // is actually emitted, so it cannot disagree with what is standing there.
     const list = [];
-    for (const p of world.plots) {
-      if (p.className === "PARK" || !HEIGHT[p.className]) continue;
-      const cx = (p.xMin + p.xMax) / 2, cz = (p.zMin + p.zMax) / 2;
+    for (const [cx, cz, base, bw, bd] of api.placedBuildings) {
       if (Math.abs(cx) > wm(12000) || cz < wm(-6500) || cz > wm(3600)) continue;   // core only
-      const h = heightAt(cx, cz); if (h < 0.8) continue;
-      list.push([cx, h + 0.35, cz, (p.xMax - p.xMin) * 2.0, (p.zMax - p.zMin) * 2.0]);
+      list.push([cx, base + 0.35, cz, bw * 2.0, bd * 2.0]);
     }
     const inst = new THREE.InstancedMesh(quad,
       new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0.85 }),
@@ -2067,7 +2180,9 @@ function buildProps(api) {
         const off = side * (spec.row / 2 - spec.footway - 2.4);
         const x = ew ? t : r.at + off, z = ew ? r.at + off : t;
         let y;
-        if (prof) y = prof(ew ? r.at : t) + 1.6;
+        // Same along-span bug, inverted: this fed r.at (constant) for EW and
+        // t for NS. Every car on an east-west bridge sat at one wrong height.
+        if (prof) y = prof(t) + 1.6;
         else { const h = heightAt(x, z); if (h < 1) continue; y = h + 1.7; }
         list.push([x, y, z, ew ? 0 : Math.PI / 2, rnd("vt" + r.id + t)]);
         if (list.length > 26000) break;
