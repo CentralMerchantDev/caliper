@@ -70,7 +70,7 @@ export type ChangeEvent =
   | { type: "planned"; plan: ChangePlan; model: string; inputTokens: number; outputTokens: number; costUsd: number; wallTimeMs: number }
   | { type: "question"; runId: string; question: string }
   | { type: "answered"; answer: string }
-  | { type: "plan-gate"; runId: string; plan: ChangePlan; grounding: GroundingResult; costEstimateUsd: number; budgetRemainingUsd: number; vacuousCriteria: CriterionVerdict[] }
+  | { type: "plan-gate"; runId: string; plan: ChangePlan; grounding: GroundingResult; costEstimateUsd: number; budgetRemainingUsd: number; vacuousCriteria: CriterionVerdict[]; criteriaDryRunError: string | null }
   | { type: "plan-gate-decided"; decision: "approve" | "reject" }
   | { type: "plan-gate-replied"; reply: string }
   | { type: "implementing" }
@@ -1172,14 +1172,26 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // Costs one sandbox probe per criterion and no model call. If the sandbox
     // is unavailable it reports nothing rather than blocking -- not knowing is
     // not a reason to refuse a plan a human is about to read anyway.
+    //
+    // BUT "NOTHING" AND "NOTHING WRONG" WERE THE SAME VALUE. The catch below
+    // left `vacuousCriteria` as [], which is exactly what a clean dry run
+    // produces. So a sandbox outage rendered as "no vacuous criteria found" at
+    // the gate -- an unchecked plan presented as a checked one, to the human
+    // whose judgement this whole design defers to. That is silence read as a
+    // pass, in the one place this project exists to prevent it.
+    //
+    // The failure is now carried alongside the verdicts, so the gate can say
+    // "could not check" instead of implying "checked, all real".
     let vacuousCriteria: CriterionVerdict[] = [];
+    let criteriaDryRunError: string | null = null;
     try {
       const probeBaseline = makeProbeRunner(env, currentSourceAtStart, `change-${runId}-dryrun`);
       vacuousCriteria = await findVacuousCriteria(plan.criteria, probeBaseline, currentSourceAtStart);
     } catch (e) {
-      console.warn("criteria dry run unavailable:", (e as Error)?.message ?? e);
+      criteriaDryRunError = String((e as Error)?.message ?? e).slice(0, 200);
+      console.warn("criteria dry run unavailable:", criteriaDryRunError);
     }
-    onEvent({ type: "plan-gate", runId, plan, grounding, costEstimateUsd: budget.spent, budgetRemainingUsd: Math.max(0, budget.ceilingUsd - budget.spent), vacuousCriteria });
+    onEvent({ type: "plan-gate", runId, plan, grounding, costEstimateUsd: budget.spent, budgetRemainingUsd: Math.max(0, budget.ceilingUsd - budget.spent), vacuousCriteria, criteriaDryRunError });
     const state: ChangeState = { runId, changeRequest, currentSourceAtStart, budgetSpent: budget.spent, stageCosts, questionAsked, planGateReplyCount, runStartedAt, stage: "awaiting-plan-decision", plan, grounding };
     await saveState(env.SPEND_KV, state);
     onEvent({ type: "halted", runId, waitingOn: "plan-decision" });
@@ -1508,6 +1520,20 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   let allMaterialSeen = [...material];
   const nits = findings.filter((f) => f.severity === "NIT").map((f) => f.text);
 
+  // NITS ARE COUNTED THE SAME WAY MATERIAL IS, AND THEY WERE NOT.
+  //
+  // The bug above was fixed for MATERIAL only: `reviewFoundMaterial` became a
+  // running total across rounds while `reviewFoundNits` kept reading the LAST
+  // round's findings array. So the ledger carried two adjacent fields, named
+  // alike and formatted alike, where one was a total and the other a snapshot.
+  //
+  // Nothing crashes. It is worse than that: a reader comparing "3 material, 1
+  // nit" has no way to know the two numbers cover different spans, and the
+  // retrospective that writes the persistent lessons file reads both. A count
+  // that is wrong in a knowable way is worse than one that is missing, because
+  // the missing one gets checked.
+  let allNitsSeen = [...nits];
+
   let finalCode = implCode;
   let fixApplied = false;
   let fixHeld: boolean | null = null;
@@ -1812,6 +1838,10 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         }
         previousMaterialKey = verdict.key;
         for (const m of nextMaterial) if (!allMaterialSeen.includes(m)) allMaterialSeen.push(m);
+        // Same span as material, for the reason argued at allNitsSeen.
+        for (const f of findings) {
+          if (f.severity === "NIT" && !allNitsSeen.includes(f.text)) allNitsSeen.push(f.text);
+        }
         material.length = 0;
         material.push(...nextMaterial);
       }
@@ -2066,7 +2096,9 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // The TOTAL raised across every round, not whatever the last round left
     // outstanding -- see materialFirstRound / allMaterialSeen above.
     reviewFoundMaterial: allMaterialSeen.length,
-    reviewFoundNits: findings.filter((f) => f.severity === "NIT").length,
+    // The TOTAL, over the same rounds as reviewFoundMaterial. This read the last
+    // round's findings while the field beside it was a running total.
+    reviewFoundNits: allNitsSeen.length,
     fixApplied,
     fixHeld,
     planGateDecision: "approve",

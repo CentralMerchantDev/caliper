@@ -3276,6 +3276,25 @@ function connect(url) {
     // and the person about to approve it is the right one to decide whether
     // that matters.
     const vacuous = Array.isArray(d?.vacuousCriteria) ? d.vacuousCriteria.filter(v => v && v.vacuous) : [];
+
+    // "COULD NOT CHECK" IS NOT "NOTHING TO REPORT".
+    //
+    // A dry-run failure used to arrive here as an empty array -- byte for byte
+    // what a clean result looks like -- so a sandbox outage rendered as no
+    // warning at all. The person approving would have read the absence of a
+    // banner as "the criteria were checked and they are real". Saying so
+    // plainly is the whole point of surfacing this rather than auto-rejecting.
+    const dryRunError = typeof d?.criteriaDryRunError === 'string' ? d.criteriaDryRunError : null;
+    const dryRunFailedHtml = !dryRunError ? '' : `
+      <div style="margin:0 0 8px;padding:8px 10px;background:rgba(148,163,184,0.10);border-left:3px solid #94a3b8;border-radius:0 6px 6px 0">
+        <strong style="color:#cbd5e1;font-size:11.5px">The acceptance criteria could not be checked</strong>
+        <p style="margin:4px 0 0;font-size:11px;color:#94a3b8;line-height:1.5">
+          The dry run that finds criteria which are already true did not complete
+          (${esc(dryRunError)}). This is not a clean result — it is an unknown one,
+          so treat the criteria below as unverified.
+        </p>
+      </div>`;
+
     const vacuousHtml = vacuous.length === 0 ? '' : `
       <div style="margin:0 0 8px;padding:8px 10px;background:rgba(245,158,11,0.10);border-left:3px solid var(--accent);border-radius:0 6px 6px 0">
         <strong style="color:var(--accent);font-size:11.5px">${vacuous.length} of ${d?.plan?.criteria?.length ?? '?'} acceptance criteria are already true</strong>
@@ -3338,6 +3357,7 @@ function connect(url) {
     b.innerHTML = `
       <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
         ${groundingHtml}
+        ${dryRunFailedHtml}
         ${vacuousHtml}
         ${!premisesHold ? `<p style="margin:0 0 6px;font-size:11px;color:#fbbf24">Auto-approve is held back for this one — it needs a person. Approving means you are overruling the grounding check above, deliberately.</p>` : ''}
         <p style="margin:0 0 6px"><strong>Will Build:</strong> ${esc(willBuild)}</p>

@@ -270,9 +270,26 @@ export function checkInputGuard(prompt: string): { ok: true } | { ok: false; rea
 export async function pipelineAvailability(
   env: { SPEND_COUNTER?: DurableObjectNamespace; SPEND_KV: KVNamespace },
   ip: string,
-): Promise<{ ok: boolean; reason: string | null; detail: string | null; runsUsed: number; runsLimit: number; dailyRemainingUsd: number }> {
+): Promise<{ ok: boolean; reason: string | null; detail: string | null; runsUsed: number; runsLimit: number; dailyRemainingUsd: number; countersRead: boolean }> {
   const runsLimit = CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP;
   let runsUsed = 0;
+  // FAILING OPEN IS RIGHT HERE. REPORTING A NUMBER WE DID NOT READ IS NOT.
+  //
+  // This function is advisory: it exists to tell a visitor WHY a run cannot
+  // start, and the actual enforcement is claimPipelineRun, an atomic claim on
+  // the run path that throws PipelineLimitError independently of anything
+  // decided here. So a counter outage must never block -- that part is correct
+  // and deliberate.
+  //
+  // But both catches below leave runsUsed at 0 and dailyRemainingUsd at the
+  // full cap, and those values then render as "3 of 3 runs left today". That is
+  // a specific factual claim about the visitor's remaining quota, made from a
+  // read that failed. Harmless to the cap, which still bites when they click
+  // -- and exactly the class of statement this project is about not making.
+  //
+  // countersRead says whether these numbers came from a counter or from a
+  // fallback, so a caller can decline to quote them.
+  let countersRead = true;
   // READ THE COUNTER THAT IS ACTUALLY ENFORCED.
   //
   // This read KV at `pipeline/ratelimit/...`. claimPipelineRun, when the
@@ -296,19 +313,19 @@ export async function pipelineAvailability(
       const raw = await env.SPEND_KV.get(`pipeline/ratelimit/${ip}/${dayKey()}`);
       runsUsed = raw ? parseInt(raw, 10) || 0 : 0;
     }
-  } catch { /* counter unavailable -- reported as 0, never as a block */ }
+  } catch { countersRead = false; /* unavailable -- never a block, but no longer reported as a fact */ }
 
   let dailyRemainingUsd: number = CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD;
   if (env.SPEND_COUNTER) {
     try {
       const s = await getPipelineSpendStatus(env.SPEND_COUNTER);
       dailyRemainingUsd = Math.max(0, CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD - s.dailySpentUsd);
-    } catch { /* same: unknown is not a block */ }
+    } catch { countersRead = false; /* same: unknown is not a block, and not a number either */ }
   }
 
   if (runsUsed >= runsLimit) {
     return {
-      ok: false, reason: "per-ip-daily", runsUsed, runsLimit, dailyRemainingUsd,
+      ok: false, reason: "per-ip-daily", runsUsed, runsLimit, dailyRemainingUsd, countersRead,
       detail: `You have used all ${runsLimit} live runs for today from this address. That cap is enforced in code, not by good intentions -- it is the same mechanism the write-up describes. The recorded run below shows the whole pipeline, free and unlimited.`,
     };
   }
@@ -320,11 +337,11 @@ export async function pipelineAvailability(
   // to be reserved at all.
   if (dailyRemainingUsd < 0.01) {
     return {
-      ok: false, reason: "daily-cap", runsUsed, runsLimit, dailyRemainingUsd,
+      ok: false, reason: "daily-cap", runsUsed, runsLimit, dailyRemainingUsd, countersRead,
       detail: `Today's spend cap is exhausted ($${CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD.toFixed(2)}/day, held in a Durable Object). The pipeline fails closed rather than overspending -- that is the intended behaviour, not an outage. The recorded run below shows the whole pipeline, free and unlimited.`,
     };
   }
-  return { ok: true, reason: null, detail: null, runsUsed, runsLimit, dailyRemainingUsd };
+  return { ok: true, reason: null, detail: null, runsUsed, runsLimit, dailyRemainingUsd, countersRead };
 }
 
 /** Give back a claimed run that never actually started. See refundRun. */

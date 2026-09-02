@@ -855,6 +855,11 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         runsUsed: avail.runsUsed,
         runsLimit: avail.runsLimit,
         dailyRemainingUsd: Number(avail.dailyRemainingUsd.toFixed(4)),
+        // False when a counter read failed, so the three numbers above are
+        // fallbacks rather than measurements. Failing open is deliberate --
+        // enforcement is claimPipelineRun on the run path, not this endpoint --
+        // but a quota quoted from a failed read is still a claim we cannot make.
+        countersRead: avail.countersRead,
       });
     }
 

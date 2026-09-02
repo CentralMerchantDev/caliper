@@ -8,7 +8,7 @@ import { SPEND_WORST_CASE } from "../src/changePipeline.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { CONTROL_LIMITS, assertUnderPipelineSpendCap, reconcilePipelineSpend, assertUnderPipelineRateLimit, recordPipelineRateLimitHit, PipelineLimitError, classifyErrorPermanence, assertUnderRunCeiling, claimPipelineRun } from "../src/controlLayer.ts";
+import { CONTROL_LIMITS, assertUnderPipelineSpendCap, reconcilePipelineSpend, assertUnderPipelineRateLimit, recordPipelineRateLimitHit, PipelineLimitError, classifyErrorPermanence, assertUnderRunCeiling, claimPipelineRun, pipelineAvailability } from "../src/controlLayer.ts";
 import { SpendCounterLogic, handleSpendCounterRequest, type StorageLike } from "../src/spendCounterDO.ts";
 
 function mockKv(initial: Record<string, string> = {}): KVNamespace {
@@ -413,4 +413,65 @@ test("releasing a lease frees exactly one slot, and only the holder may", async 
   await mk().releaseRun("run-a", a.leaseToken);
   assert.equal((await mk().leaseRun("run-c", MAX, 330)).ok, true,
     "the holder releasing must free exactly one slot");
+});
+
+// ---------------------------------------------------------------------------
+// 2.12 -- "COULD NOT READ THE COUNTER" IS NOT "YOU HAVE RUNS LEFT"
+//
+// pipelineAvailability is advisory. It tells a visitor WHY a run cannot start;
+// the enforcement is claimPipelineRun on the run path, which throws
+// independently of anything decided here. So failing open is correct and
+// deliberate, and this test does not change it.
+//
+// What it does check is that a fallback is not reported as a measurement. Both
+// catches left runsUsed at 0 and dailyRemainingUsd at the full cap, and those
+// render as "3 of 3 runs left today" -- a specific factual claim about the
+// visitor's quota, made from a read that failed.
+// ---------------------------------------------------------------------------
+function counterThatFails() {
+  return {
+    idFromName: () => ({}) as unknown,
+    get: () => ({ fetch: async () => { throw new Error("durable object unreachable"); } }),
+  } as unknown as DurableObjectNamespace;
+}
+function kvThatFails() {
+  return { get: async () => { throw new Error("kv unreachable"); } } as unknown as KVNamespace;
+}
+
+test("pipelineAvailability fails OPEN when its counters are unreadable", async () => {
+  const avail = await pipelineAvailability(
+    { SPEND_COUNTER: counterThatFails(), SPEND_KV: kvThatFails() },
+    "1.2.3.4",
+  );
+  // Failing open is the point: a counter outage must never block a visitor,
+  // because the real cap is claimed atomically on the run path anyway.
+  assert.equal(avail.ok, true, "an unreadable counter must not block a run — enforcement is elsewhere");
+  assert.equal(avail.reason, null);
+});
+
+test("pipelineAvailability says when its numbers are fallbacks rather than measurements", async () => {
+  const broken = await pipelineAvailability(
+    { SPEND_COUNTER: counterThatFails(), SPEND_KV: kvThatFails() },
+    "1.2.3.4",
+  );
+  assert.equal(
+    broken.countersRead, false,
+    "both counter reads threw, but the result claims the numbers were read — " +
+    "runsUsed 0 then renders as a full quota the visitor may not have"
+  );
+
+  // And it must not cry wolf: a working counter reports its numbers as real.
+  const workingCounter = {
+    idFromName: () => ({}) as unknown,
+    get: () => ({
+      fetch: async (url: string) =>
+        new Response(JSON.stringify(String(url).includes("runs-used") ? { used: 1 } : { dailySpentUsd: 0, weeklySpentUsd: 0, monthlySpentUsd: 0 })),
+    }),
+  } as unknown as DurableObjectNamespace;
+  const fine = await pipelineAvailability(
+    { SPEND_COUNTER: workingCounter, SPEND_KV: { get: async () => null } as unknown as KVNamespace },
+    "1.2.3.4",
+  );
+  assert.equal(fine.countersRead, true, "a healthy read is being reported as a fallback");
+  assert.equal(fine.runsUsed, 1, "the real count is not being carried through");
 });
