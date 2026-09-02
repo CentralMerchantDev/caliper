@@ -1737,30 +1737,64 @@ export function generateSettlement(s, polyByLandmass, demandAt = null) {
   // roughly every 800 m, a collector every 400, locals between -- and land use
   // follows that step. Promoting every fourth avenue to a BOULEVARD is what gives
   // the corridor logic below something to run along.
+  // THE HALF-WIDTH OF THE ROAD THAT IS ACTUALLY THERE.
+  //
+  // The block inset below used avHalf and stHalf -- fixed constants taken from
+  // AVENUE and STREET -- for EVERY road, while the loops here promote one road
+  // in every ~800 m to a wider class. So a block beside a promoted road was
+  // inset for a road narrower than the one built:
+  //
+  //   north-south  inset 14 m (AVENUE/2), BOULEVARD needs 22   -> 8 m overlap
+  //   east-west    inset  9 m (STREET/2), AVENUE needs 14      -> 5 m overlap
+  //
+  // 328 of 1,399 roads are promoted, so this was not an edge case; it was most
+  // of the arterial network. Nothing detected it for the life of the build,
+  // because a plot overlapping a road is invisible until someone asks the
+  // ground whether it is free. When the roads were finally registered into
+  // whatIsAt, `plotsDroppedForReservedGround` went from 406 to 6,190 -- 30% of
+  // the city refused, correctly, for standing in a carriageway.
+  //
+  // Recorded per position so the inset is derived from the road that exists
+  // rather than from the class it might have been.
+  const nsHalf = new Map(), ewHalf = new Map();
   const nAv = Math.max(1, Math.round(s.av ? (b.xMax - b.xMin) / s.av : 1));
   let ai = 0;
   for (let x = b.xMin; x <= b.xMax; x += s.av, ai++) {
     const spacingUp = Math.max(1, Math.round(800 / s.av));       // ~800 m -> arterial
     const arterial = ai % spacingUp === 0;
-    roads.push({ id:`${s.id}-av${Math.round(x)}`, axis:"ns", class: arterial ? "BOULEVARD" : "AVENUE",
+    const cls = arterial ? "BOULEVARD" : "AVENUE";
+    roads.push({ id:`${s.id}-av${Math.round(x)}`, axis:"ns", class: cls,
                  at:x, from:b.zMin, to:b.zMax, settlement:s.id, arterial });
+    nsHalf.set(x, ROADS[cls].row / 2);
   }
   let si = 0;
   for (let z = b.zMin; z <= b.zMax; z += s.st, si++) {
     const spacingUp = Math.max(1, Math.round(800 / s.st));
     const arterial = si % spacingUp === 0;
-    roads.push({ id:`${s.id}-st${Math.round(z)}`, axis:"ew", class: arterial ? "AVENUE" : "STREET",
+    const cls = arterial ? "AVENUE" : "STREET";
+    roads.push({ id:`${s.id}-st${Math.round(z)}`, axis:"ew", class: cls,
                  at:z, from:b.xMin, to:b.xMax, settlement:s.id, arterial });
+    ewHalf.set(z, ROADS[cls].row / 2);
   }
   void nAv;
+
+  // A miss cannot happen -- the block loop walks the same positions from the
+  // same origin by the same step, so the arithmetic is identical -- but if it
+  // ever does, erring WIDE loses a metre of garden and erring narrow puts a
+  // house in a road. Only one of those is worth risking.
+  const WIDEST_HALF = Math.max(ROADS.BOULEVARD.row, ROADS.AVENUE.row) / 2;
 
   const corridorRoads = roads.filter((r) => CORRIDOR_CLASSES.has(r.class));
   const centres = settlementCentres(s);
 
   for (let x = b.xMin; x < b.xMax - s.av * 0.5; x += s.av) {
     for (let z = b.zMin; z < b.zMax - s.st * 0.5; z += s.st) {
-      const xMin = x + avHalf, xMax = x + s.av - avHalf;
-      const zMin = z + stHalf, zMax = z + s.st - stHalf;
+      // Each edge is set back by the road ON THAT EDGE, which may be a promoted
+      // arterial and wider than its neighbours.
+      const xMin = x + (nsHalf.get(x) ?? WIDEST_HALF);
+      const xMax = x + s.av - (nsHalf.get(x + s.av) ?? WIDEST_HALF);
+      const zMin = z + (ewHalf.get(z) ?? WIDEST_HALF);
+      const zMax = z + s.st - (ewHalf.get(z + s.st) ?? WIDEST_HALF);
       if (xMax - xMin < 10 || zMax - zMin < 10) continue;
       if (!rectIsBuildable(xMin, xMax, zMin, zMax, SHORE_MARGIN, poly)) continue;
       // A settlement may carve a hole for another that sits inside it -- a town

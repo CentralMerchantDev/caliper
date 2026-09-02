@@ -129,10 +129,88 @@ export function createWorldRegistry(heightAt = null) {
     return entry;
   }
 
+  /**
+   * Erase a reservation as though it had never been made.
+   *
+   * For CORRECTING A MISTAKE -- something reserved that should not have been.
+   * Not for demolition: see close(). The distinction is the whole reason this
+   * registry carries a time range, and collapsing the two would mean the world
+   * could never answer "what was here before".
+   */
   function release(id) {
     for (let i = entries.length - 1; i >= 0; i--) {
       if (entries[i].id === id) entries.splice(i, 1);
     }
+  }
+
+  /**
+   * End something's life at time `t`. It stood here until then, and it did not
+   * afterwards.
+   *
+   * REMOVING A THING IS CLOSING ITS INTERVAL, NOT ERASING IT -- which is the
+   * claim docs/WORLD-RULES.md makes about time, and which nothing implemented
+   * until now. Every reservation has carried `since` and `until` since the file
+   * was written, but the only way to take something away was release(), which
+   * deletes the record. So the world could say what is here, and could have
+   * said what was here a year ago, and in practice could never say the second
+   * one about anything that had been removed. An unused dimension is cheap; a
+   * dimension that is carried and then quietly discarded is a false claim.
+   *
+   * Returns how many entries were closed, so a caller that expected to end one
+   * thing and ended none can tell.
+   *
+   * (This block documents close(), which is defined below reopen(). It sat
+   * immediately above reopen() with reopen's own docstring stacked under it, so
+   * close() read as undocumented and reopen() carried two -- in a file where
+   * the comments are the specification.)
+   */
+  /**
+   * Undo a close: ONE record did not stop existing after all.
+   *
+   * The symmetric partner of close(), and it exists for one reason: a MOVE is a
+   * close followed by a place, and when the new position is refused the old one
+   * has to come back exactly as it was.
+   *
+   * IT TAKES A `since`, AND THAT IS THE WHOLE FIX. The first version matched on
+   * `id` alone. An object that has been moved has SEVERAL records under one id
+   * -- one per place it has stood -- so reopening by id reopened the history
+   * too, and a hut that had moved once and was then refused a second move ended
+   * up standing in both places at once, forever:
+   *
+   *     after move 1   { x -3, since 0, until 5 }  { x 97, since 5, until Inf }
+   *     after refusal  { x -3, since 0, until Inf} { x 97, since 5, until Inf }
+   *
+   * That is the same corruption the previous implementation was written to
+   * prevent, arrived at by a different route -- and the test that caught the
+   * first version could not catch this one, because it only ever moved an
+   * object that had never moved before. (id, since) identifies one record.
+   */
+  function reopen(id, until = Infinity, since = undefined) {
+    let n = 0;
+    for (const e of entries) {
+      if (e.id !== id) continue;
+      if (since !== undefined && e.since !== since) continue;
+      e.until = until; n++;
+    }
+    return n;
+  }
+
+  function close(id, t = 0) {
+    let n = 0;
+    for (const e of entries) {
+      if (e.id !== id) continue;
+      if (t <= e.since) {
+        // Closing before it began would make an interval that is true at no
+        // time at all -- silently correct-looking and impossible to reason
+        // about later.
+        throw new Error(
+          `world-registry: close(${id}, ${t}) is at or before its since (${e.since}); ` +
+          `use release() to undo a reservation that should never have existed`,
+        );
+      }
+      if (t < e.until) { e.until = t; n++; }
+    }
+    return n;
   }
 
   /**
@@ -280,5 +358,5 @@ export function createWorldRegistry(heightAt = null) {
     return entries.map((e) => ({ ...e }));
   }
 
-  return { reserve, release, whatIsAt, occupiedAt, overlapsReserved, findFree, list };
+  return { reserve, release, close, reopen, whatIsAt, occupiedAt, overlapsReserved, findFree, list };
 }

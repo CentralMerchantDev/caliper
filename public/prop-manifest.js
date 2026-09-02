@@ -84,7 +84,13 @@ export const PROPS = {
 
   // --- lighting: city-render.js, the street lighting block -----------------
   lampPost: {
-    kind: "hard", h: 9.1, clear: 0.3,
+    // 9.35, NOT 9.1. The head is BoxGeometry(1.6, 0.5, 0.9) CENTRED at y+9.1,
+    // so it spans 8.85 to 9.35 and the top of the lamp is 9.35. 9.1 was the
+    // centre of the head read as if it were the top -- and `h` is what a
+    // placement writes as the object's yMax, so every lamp in the world claimed
+    // 25 cm less volume than it occupies. Nothing caught it because nothing
+    // checked `h` against anything at all.
+    kind: "hard", h: 9.35, clear: 0.3,
     foot: { w: 0.6, d: 0.6 },      // the post, where it meets the pavement
     sweep: { w: 1.6, d: 0.9 },     // the head, 9.1 m up -- may overhang
     from: "CylinderGeometry(0.22, 0.3, 9, 5) + head BoxGeometry(1.6, 0.5, 0.9) at y+9.1",

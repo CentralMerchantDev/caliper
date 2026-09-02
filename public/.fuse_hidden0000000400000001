@@ -32,7 +32,6 @@ import {
 } from "./city-plan.js";
 import { LandField, makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, GROUND_BANDS, WATERWAYS, waterwaySurface , waterwayAt } from "./terrain.js";
 import { assessFootprint } from "./footprint.js";
-import { propFootprint } from "./prop-manifest.js";
 // `sm` is already used as a local variable in this file (a THREE.Mesh), so the
 // world-scale helper is imported under a name that cannot be shadowed.
 import { sm as wm } from "./world-scale.js";
@@ -302,7 +301,6 @@ export function buildWorld(THREE, renderer, scene) {
     }
     return null;
   };
-
 
   // ---------------------------------------------------------------------------
   // SKY, SUN, ATMOSPHERE
@@ -704,26 +702,17 @@ varying vec3 vSeaWorld;`)
     seaMesh.material.needsUpdate = true;
     seaMesh.onBeforeRender = () => { uniforms.uTime.value = performance.now() * 0.001; };
 
-    // SLICED, BECAUSE DEFERRING A STALL IS NOT REMOVING IT.
-    //
-    // Measured in the headless renderer: baking all 262,144 samples in one go
-    // took generateWorld from 5,568 ms to 8,156 ms -- 2.6 s, against the 477 ms
-    // the same loop costs in plain Node. Moving that off the critical path stops
-    // it delaying first paint, but a 2.6 s block is still 2.6 s of frozen page,
-    // just later, where it reads as the world hanging for no reason. Rows are
-    // cheap to resume, so it goes 32 at a time and the browser keeps the frame.
-    const data = new Float32Array(WATER_TEX * WATER_TEX);
-    const ROWS_PER_SLICE = 32;
-    let row = 0;
-    const bakeSlice = () => {
-      const end = Math.min(WATER_TEX, row + ROWS_PER_SLICE);
-      for (; row < end; row++) {
-        const z = z0 + (z1 - z0) * (row / (WATER_TEX - 1));
+    // The bake itself, once the browser is otherwise idle. requestIdleCallback
+    // is not universal, so a timeout backs it up -- a missing depth map is a
+    // flat sea, not a broken one, which is the right way for this to fail.
+    const bake = () => {
+      const data = new Float32Array(WATER_TEX * WATER_TEX);
+      for (let j = 0; j < WATER_TEX; j++) {
+        const z = z0 + (z1 - z0) * (j / (WATER_TEX - 1));
         for (let i = 0; i < WATER_TEX; i++) {
-          data[row * WATER_TEX + i] = heightAt(x0 + (x1 - x0) * (i / (WATER_TEX - 1)), z);
+          data[j * WATER_TEX + i] = heightAt(x0 + (x1 - x0) * (i / (WATER_TEX - 1)), z);
         }
       }
-      if (row < WATER_TEX) return schedule();
       const tex = new THREE.DataTexture(data, WATER_TEX, WATER_TEX, THREE.RedFormat, THREE.FloatType);
       tex.minFilter = tex.magFilter = THREE.LinearFilter;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
@@ -731,14 +720,8 @@ varying vec3 vSeaWorld;`)
       uniforms.uDepthMap.value = tex;
       placeholder.dispose();
     };
-    // requestIdleCallback is not universal, so a timeout backs it up. A depth
-    // map that never arrives is a flat sea, not a broken one, which is the right
-    // way for this to fail.
-    function schedule() {
-      if (typeof requestIdleCallback === "function") requestIdleCallback(bakeSlice, { timeout: 200 });
-      else setTimeout(bakeSlice, 0);
-    }
-    schedule();
+    if (typeof requestIdleCallback === "function") requestIdleCallback(bake, { timeout: 3000 });
+    else setTimeout(bake, 0);
   }
 
   function terrainMesh(x0, x1, z0, z1, step, hole, skirtDepth, casts = true) {
@@ -1611,80 +1594,6 @@ varying vec3 vSeaWorld;`)
 // coastal city.
 // =============================================================================
 function buildProps(api) {
-  // ---------------------------------------------------------------------------
-  // ONE PIECE OF PAVEMENT, ONE OBJECT
-  //
-  // Measured before this existed: 27 lamp posts standing inside a bin or a
-  // bench, one pair 5 cm apart. Two loops walk the same footways -- lamps every
-  // 52 m from +24, furniture every 55 m from +30 -- and neither could see the
-  // other, because until prop-manifest.js there was nothing to see. A bench's
-  // size lived only as arguments to a BoxGeometry call.
-  //
-  // WHY THIS DOES NOT ASK registry.overlapsReserved.
-  //
-  // It looks like it should, and doing so would delete the entire street scene.
-  // generateWorld reserves each road across its FULL ROW WIDTH -- carriageway
-  // and footway together -- so a lamp at row/2 - 1.4 and a bench at
-  // row/2 - footway*0.45 are both, correctly, inside a road rectangle. A prop
-  // on a footway is not trespassing; it is standing where it belongs. The road
-  // reservation means "do not put a BUILDING here", and the registry has no way
-  // to say which of those two questions is being asked: overlapsReserved takes
-  // no kind filter. That is worth adding, and it is the world lane's file.
-  //
-  // So placement is decided prop-against-prop here, where the question actually
-  // is, and every placed prop is then RESERVED into the world registry so that
-  // whatIsAt knows it exists. Deciding and recording are two different jobs and
-  // conflating them is what produced the 27.
-  const PCELL = 12;
-  const propGrid = new Map();
-  const pkey = (i, j) => i * 8192 + j;
-  const propCells = (r) => {
-    const out = [];
-    for (let i = Math.floor(r.xMin / PCELL); i <= Math.floor(r.xMax / PCELL); i++) {
-      for (let j = Math.floor(r.zMin / PCELL); j <= Math.floor(r.zMax / PCELL); j++) out.push(pkey(i, j));
-    }
-    return out;
-  };
-  const propRefused = {};
-  // Filled where the lamps claim their ground, consumed where their meshes are
-  // built. One array, so the two cannot disagree about where a lamp is.
-  const lampPosts = [];
-
-  /**
-   * Claim ground for a prop, or refuse and say why.
-   *
-   * Returns false when the spot is taken. A refusal is a fact about the world
-   * worth counting, not something to swallow, so every one lands in stats --
-   * the same reasoning as `refusedWhy` for buildings.
-   */
-  function claimProp(id, x, z, opts = {}) {
-    const r = propFootprint(id, x, z, opts);
-    const cells = propCells(r);
-    for (const c of cells) {
-      for (const other of propGrid.get(c) || []) {
-        if (r.xMin < other.xMax && r.xMax > other.xMin && r.zMin < other.zMax && r.zMax > other.zMin) {
-          propRefused[id] = (propRefused[id] || 0) + 1;
-          return false;
-        }
-      }
-    }
-    for (const c of cells) {
-      let bucket = propGrid.get(c);
-      if (!bucket) propGrid.set(c, (bucket = []));
-      bucket.push(r);
-    }
-    // The world's own record, so `whatIsAt` can answer for a bench. Soft props
-    // are recorded too -- "know everything that is in the world" includes the
-    // things you are allowed to remove.
-    if (world.registry) {
-      world.registry.reserve({
-        kind: "prop", id: `${id}:${Math.round(x)}:${Math.round(z)}`, owner: id,
-        xMin: r.xMin, xMax: r.xMax, zMin: r.zMin, zMax: r.zMax,
-      });
-    }
-    return true;
-  }
-
   // THIS DESTRUCTURING USED TO SIT BELOW THE THREE LINES THAT FOLLOW IT, AND
   // buildProps THREW EVERY SINGLE TIME.
   //
@@ -1945,29 +1854,6 @@ function buildProps(api) {
   // two rows of massing. Instanced, so the whole lot is three draw calls.
   // ---------------------------------------------------------------------------
   {
-    // LAMPS CLAIM THEIR GROUND FIRST, AND THAT ORDER IS A DECISION.
-    //
-    // Whichever loop ran first used to win by accident, and furniture ran first
-    // purely because it appears earlier in this file. That would let a litter
-    // bin veto a streetlight, which is a silly thing for a city to believe. A
-    // lamp is infrastructure placed at a deliberate interval; a bin is
-    // decoration that can move a few metres or not exist. So the positions are
-    // computed here -- a pure function of the roads and the ground, the same
-    // loop the lighting block below runs -- and claimed before anything else
-    // touches a footway. The block below consumes this array rather than
-    // recomputing it, so the two cannot disagree about where the lamps are.
-    for (const r of api.plan.roads) {
-      if (!ROADS[r.class] || ROADS[r.class].row < 18) continue;
-      const ew = r.axis === "ew", spec = ROADS[r.class];
-      for (let t = r.from + 24; t < r.to - 24; t += 52) for (const side of [-1, 1]) {
-        const x = ew ? t : r.at + side * (spec.row / 2 - 1.4);
-        const z = ew ? r.at + side * (spec.row / 2 - 1.4) : t;
-        const h = heightAt(x, z); if (h < 1.2) continue;
-        if (!claimProp("lampPost", x, z)) continue;
-        lampPosts.push([x, h, z]);
-      }
-    }
-
     const spots = { bin: [], bench: [], shelter: [] };
     for (const r of world.roads) {
       const spec = ROADS[r.class];
@@ -1985,13 +1871,9 @@ function buildProps(api) {
           const g = heightAt(x, z);
           if (g < 1.2) continue;
           const k = rnd(`sf${r.id}${t}${side}`);
-          // Ask before standing here. The roll decides WHAT would go in this
-          // spot; the claim decides whether the spot is free. Keeping those two
-          // separate matters: rerolling on refusal would quietly change the mix
-          // of bins to benches wherever the city is crowded.
-          if (k < 0.30) { if (claimProp("bin", x, z)) spots.bin.push([x, g, z]); }
-          else if (k < 0.52) { if (claimProp("bench", x, z, { rotated: !ew })) spots.bench.push([x, g, z, ew]); }
-          else if (k < 0.57 && spec.row >= 40) { if (claimProp("busShelter", x, z, { rotated: !ew })) spots.shelter.push([x, g, z, ew]); }
+          if (k < 0.30) spots.bin.push([x, g, z]);
+          else if (k < 0.52) spots.bench.push([x, g, z, ew]);
+          else if (k < 0.57 && spec.row >= 40) spots.shelter.push([x, g, z, ew]);
         }
       }
     }
@@ -2012,10 +1894,6 @@ function buildProps(api) {
     const nBench = put(new THREE.BoxGeometry(1.8, 0.45, 0.55), M(0xa9835a, 0.85), spots.bench, 0.35, true);
     const nShel = put(new THREE.BoxGeometry(3.6, 2.5, 1.4), M(0x9fc4dd, 0.25, 0.4), spots.shelter, 1.25, true);
     stats.streetFurniture = nBin + nBench + nShel;
-    // Refusals are a fact about the world, reported rather than swallowed --
-    // the same reasoning as refusedWhy for buildings. An empty object here
-    // means nothing collided, which is a claim worth being able to check.
-    stats.propRefused = { ...propRefused };
   }
 
   // ---------------------------------------------------------------------------
@@ -3070,9 +2948,17 @@ function buildProps(api) {
 
   // --- street lighting along the downtown boulevards ---
   {
-    // Computed and claimed up in the street-furniture block, so a lamp holds its
-    // ground before anything decorative is offered the same square metre.
-    const posts = lampPosts;
+    const posts = [];
+    for (const r of api.plan.roads) {
+      if (ROADS[r.class].row < 18) continue;
+      const ew = r.axis === "ew", spec = ROADS[r.class];
+      for (let t = r.from + 24; t < r.to - 24; t += 52) for (const side of [-1, 1]) {
+        const x = ew ? t : r.at + side * (spec.row / 2 - 1.4);
+        const z = ew ? r.at + side * (spec.row / 2 - 1.4) : t;
+        const h = heightAt(x, z); if (h < 1.2) continue;
+        posts.push([x, h, z]);
+      }
+    }
     const pg = new THREE.CylinderGeometry(0.22, 0.3, 9, 5);
     const inst = new THREE.InstancedMesh(pg, M(0x4d545c, 0.6, 0.3), posts.length);
     const hg = new THREE.BoxGeometry(1.6, 0.5, 0.9);

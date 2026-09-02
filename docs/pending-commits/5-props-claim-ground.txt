@@ -1,0 +1,64 @@
+One piece of pavement, one object -- 27 lamps came out of the benches
+
+The manifest commit added the declarations and changed nothing on screen. This
+is the half that does. Placement now asks before standing somewhere, and the
+before/after was measured with the same instrumentation both times:
+
+    lamps standing inside a bin or a bench     27  ->  0
+    closest pair of centres                  0.05 m -> 2.001 m
+    refusals reported   lampPost 2, bin 19, bench 11, busShelter 1
+
+THE TRAP THAT WOULD HAVE DELETED THE STREET SCENE.
+
+The obvious implementation is to ask registry.overlapsReserved before placing,
+and it would have emptied every pavement in the city. generateWorld reserves
+each road across its FULL ROW WIDTH -- carriageway and footway together -- so a
+lamp at row/2 - 1.4 and a bench at row/2 - footway*0.45 are both, correctly,
+inside a road rectangle. A prop on a footway is not trespassing. It is standing
+where it belongs.
+
+The road reservation means "do not put a BUILDING here", and overlapsReserved
+takes no kind filter, so it cannot tell which question is being asked. Rather
+than reach into the world lane's file mid-run, placement is decided
+prop-against-prop here -- where the question actually is -- and every placed
+prop is then RESERVED into the world registry so whatIsAt knows it exists.
+Deciding and recording are two different jobs, and conflating them is what
+produced the 27 in the first place.
+
+A kind filter on overlapsReserved is still worth adding, and it belongs to the
+world lane. Written down rather than worked around silently.
+
+ORDER IS NOW A DECISION INSTEAD OF AN ACCIDENT.
+
+Whichever loop ran first used to win, and street furniture won only because it
+appears earlier in the file -- which let a litter bin veto a streetlight. The
+lamp positions are now computed and claimed before anything decorative is
+offered the same square metre. They are computed ONCE, in one array, consumed by
+the lighting block below rather than recomputed there, so the two cannot
+disagree about where a lamp is.
+
+The roll and the claim are also kept separate: the random roll decides WHAT
+would go in a spot, the claim decides whether the spot is free. Rerolling on
+refusal would quietly shift the mix of bins to benches wherever the city is
+crowded, which is a different world reported as the same one.
+
+TWO LAMPS REFUSED EACH OTHER. That is a real find, not noise: where two roads
+meet, both lay a post at the same corner. Nothing could see it before either.
+
+Refusals go into stats.propRefused rather than being swallowed -- the same
+reasoning as refusedWhy for buildings. An empty object is a claim that nothing
+collided, and a claim can be checked.
+
+CAUGHT BY THE SUITE, NOT BY LUCK. The first version put claimProp in buildWorld
+and called it from buildProps -- different top-level functions, so it was never
+in scope. It would have thrown on every page load, exactly like the buildProps
+TDZ bug did. test/rendererStatic.test.ts named the file and line before a
+browser ever saw it. That test has now paid for itself twice.
+
+486/486 node tests, tsc --noEmit clean, world renders with zero console errors.
+
+NOT DONE. Trees, cars, parasols, containers and boats still place through their
+own loops and still claim nothing -- they are declared `sized` in the manifest
+and need a footprint supplied at placement, which is the next pass. The 27 was
+one pair of systems; this fixes that pair and gives the others somewhere to
+report to.

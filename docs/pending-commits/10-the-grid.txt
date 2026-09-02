@@ -1,0 +1,89 @@
+The world is a grid of standard cells, and things dig into it
+
+Mark: models take up standard blocks, with smaller measurements inside them --
+quarters, eighths, sixteenths -- so each thing needs a set amount of space, a
+road takes N cells, and it goes together like building blocks. And the model
+carries the depth, so placing it makes the actual depth in the ground.
+
+WHY A GRID AT ALL
+
+Everything this project has got wrong, it got wrong in continuous metres. A
+bench at 1.8 m and a lamp at 0.6 m, placed by two loops with different step
+sizes, will eventually land 5 cm apart -- and nothing about that is detectable
+without measuring every pair, which is exactly how 27 lamp posts came to be
+standing inside benches. On a grid they either occupy the same cell or they do
+not, and that is a question with an exact answer.
+
+It also gives the asset lane something buildable to. "Make a straight road
+piece" is vague. "Make a straight road piece one cell long" is a spec.
+
+THE NUMBERS, AND WHY
+
+  CELL   8 m    one road module. Long enough that a kilometre of street is 125
+                pieces rather than a thousand, short enough to follow a
+                coastline without visible faceting, and it divides the block
+                figures already in WORLD-RULES -- a 120 m block is 15 cells
+                exactly.
+  DIVISIONS     full 8, half 4, quarter 2, eighth 1, sixteenth 0.5. Exact
+                binary fractions on purpose: halves and quarters of 8 are
+                representable exactly in floating point and thirds are not, and
+                a grid whose steps do not land on the same numbers twice cannot
+                be snapped to.
+  LEVEL  4 m    one storey, exactly half a cell. "Twenty storeys instead of ten"
+                is a change of one integer, not a re-model.
+
+THE GRID IS ARITHMETIC, NOT AN ARRAY
+
+At 8 m the 26 km world is 3,250 x 3,250 = 10.6 MILLION cells, and sixteen times
+that if subdivisions were materialised. Nothing here stores a cell. Every
+function is integer arithmetic on a coordinate, so the whole world is
+addressable at no cost and only the cells something actually occupies are ever
+recorded -- in the registry, which already held them.
+
+THE WHOLE WORLD, WITH PARTS LOCKED
+
+The grid covers all 26 km, not the built area. A locked region is PRESENT: it
+has coordinates, terrain and a place in the world, and refuses placement with a
+reason. Unopened land that simply did not exist would make the map end at the
+edge of the town, and opening more of it later would move everything already
+placed. "No open regions" and "no restriction" are deliberately kept as
+different states, because they are opposites and one is easy to produce by
+accident.
+
+THINGS DIG IN
+
+A model now carries `depth`, and placing it reserves the hole as well as the
+part that shows. Reserving only what is visible is how two basements end up
+sharing one hole while both look correct from above. It is also what makes the
+strata load-bearing rather than decorative: a basement is dug through topsoil
+and subsoil into clay, and the world can now say so.
+
+THREE ARITHMETIC RULES THAT LOOK LIKE PEDANTRY AND ARE NOT
+
+  cellOf FLOORS, it does not truncate. Math.trunc puts -1 and +1 in the same
+  cell, and the world extends both ways from the origin -- the classic
+  off-by-one that only appears west and north of centre.
+
+  snap ROUNDS, it does not truncate. Truncating biases every placement in the
+  world half a step south-west, which over 26 km is a systematic drift nobody
+  notices until two things built to touch do not.
+
+  cellsFor CEILINGS. A 9 m thing does not fit in one 8 m cell, and rounding down
+  is the airport-apron bug in a single function: a thing declared to fit the
+  ground that was checked, then overhanging it.
+
+VERIFIED BY MUTATION
+
+  snap truncates instead of rounding      -> the snapping test fails
+  cellsFor floors instead of ceilings     -> the sizing test fails
+  cellOf truncates toward zero            -> 2 addressing tests fail
+  an empty open list unlocks the world    -> 3 tests fail
+  depth ignored, nothing digs in          -> the basement test fails
+
+Two of those had to be rerun. The first attempt at the last two used sed and the
+patterns did not apply, so the suite stayed green -- which is an INCONCLUSIVE
+result and was recorded as one, not as a pass. Redone with an exact-match
+replacement that asserts it applied, both fail as they should.
+
+541/541 node tests, tsc --noEmit clean. docs/WORLD-RULES.md section 3.2 updated.
+Nothing placed in the world, nothing stripped from it.

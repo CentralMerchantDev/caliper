@@ -1,0 +1,82 @@
+Place, move, remove -- and a move that is refused puts the thing back
+
+The land could be asked and the world could remember, and nothing connected
+them. This is that connection, and it is the only one: ask, and on a yes,
+record. Nothing else should reserve ground directly, for the same reason nothing
+should draw a bench by typing its size into a BoxGeometry call.
+
+WHY ASKING AND RECORDING HAVE TO BE ONE OPERATION
+
+Every defect this project has found is the same shape: two subsystems with
+private beliefs about the same ground, and nothing to reconcile them. A stadium
+at -7.0 m in the water. 389 plots inside feature footprints. 27 lamp posts
+inside benches. Two placement loops walking the same footway, neither able to
+see the other.
+
+The cure is not more checking. It is that checking and committing cannot be
+separated. If a caller can reserve without asking, or ask without reserving, the
+two drift apart again and nothing detects it.
+
+THREE VERBS
+
+  place(model, x, z)        ask, and on a yes, record
+  placeNear(model, near)    spiral outward, and report how far it had to move
+  remove(id, t)             close the interval
+  move(model, id, x, z)     remove, then place -- and restore on refusal
+
+placeNear reports `moved` because a thing that ends up 3 km from where it was
+wanted is a fact about the world, not a successful placement. The airport moved
+450 m, and that number is the difference between a considered decision and a
+coincidence.
+
+Refusals are counted by reason rather than swallowed. A run that placed 4,000
+things and refused 12,000 is worth being able to see, and the SHAPE of the
+refusals says which rule is doing the work -- which is how "in a waterway" and
+"cliff" counts first showed the plot generator fighting the terrain.
+
+TIME, ACTUALLY USED
+
+Every reservation has carried `since` and `until` since the registry was
+written, and the only way to take something away was release(), which deletes
+the record. So the world could say what is here, could in principle say what was
+here a year ago, and in practice could never say the second one about anything
+removed. An unused dimension is cheap; a dimension that is carried and then
+quietly discarded is a false claim.
+
+close(id, t) ends a thing's life at t. release(id) still exists and still
+erases, for correcting a reservation that should never have been made. Those are
+different acts and collapsing them would cost the fourth dimension entirely.
+Closing at or before something's `since` throws, because an interval true at no
+time at all looks correct in the data and cannot be reasoned about afterwards.
+
+A REFUSED MOVE PUTS THE THING BACK
+
+This is the property worth having in an editing tool. Without it, a failed move
+DELETES what it was moving -- and it happens precisely when the user is already
+being told no.
+
+The first implementation got it wrong in an instructive way. It closed the
+original, tried the new position, and on refusal re-reserved a copy of the old
+entry. That leaves the closed original in place AND adds a second record beside
+it, so the world believes the same hut stood in the same spot twice with
+different lifetimes, and every later query is answered by whichever comes first.
+Caught by a test asserting "exactly one record, not zero and not two" -- it left
+two. The registry now has reopen(), the symmetric partner of close(), and a
+refused move leaves no trace at all, including in the history.
+
+VERIFIED BY MUTATION
+
+  place() reserves even when the land said no  -> 5 tests fail
+  remove() erases instead of closing           -> 2 fail
+  a refused move does not restore              -> 1 fail
+  close() accepts a time before since          -> 1 fail
+
+WHAT THIS DELIBERATELY DOES NOT DO
+
+It does not decide where anything goes. place is told a position; placeNear
+searches from a preference. Neither invents a layout and neither knows what a
+city is. That is a layout engine, written in terms of these verbs and the model
+library, and it is the next thing.
+
+524/524 node tests, tsc --noEmit clean. Nothing placed in the world, nothing
+stripped from it.

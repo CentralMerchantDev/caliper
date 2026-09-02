@@ -145,9 +145,26 @@ const TERRAIN_REFUSES = {
     spec.support === "span" || spec.support === "float" || (spec.category === "vessel")
       ? null
       : "open water carries nothing that stands on the ground; this needs a bridge, a pier or a hull",
-  [SURFACE.ROCK]: () => "a cliff face carries nothing with a footprint",
+  // A CLIFF CARRIES NOTHING *WITH A FOOTPRINT* -- which is what WORLD-RULES says,
+  // and this ignored the qualifier. A spanning structure has no footprint on the
+  // ground it crosses, which is the entire point of one, so refusing it here
+  // meant a bridge could cross a bay and not a gorge. The water rule below
+  // already grants exactly this exception; the two now agree.
+  [SURFACE.ROCK]: (spec) =>
+    spec.support === "span" ? null : "a cliff face carries nothing with a footprint",
+  // A FORESHORE CARRIES NOTHING PERMANENT, and the first version asked the spec
+  // whether it was permanent -- a field no caller anywhere writes. So the rule
+  // was dead and its default was to ALLOW, while the water rule beside it
+  // defaults to refuse. Same table, opposite fail-direction, which is the worse
+  // kind of inconsistency because only one of them is visible in testing.
+  //
+  // Permanence is now derived from what the thing IS. A building or a structure
+  // on a beach is a sea wall waiting to happen; a person, a parasol or a boat
+  // pulled up on the sand is what a beach is for.
   [SURFACE.BEACH]: (spec) =>
-    spec.permanent ? "a foreshore carries nothing permanent" : null,
+    spec.permanent === false || !["building", "structure"].includes(spec.category)
+      ? null
+      : "a foreshore carries nothing permanent",
 };
 
 /**
@@ -227,13 +244,40 @@ export function bandAt(heightAboveGround) {
 // the total is capped -- and the cap is REPORTED rather than hidden, because a
 // check that silently coarsens is a check that silently stops working.
 // -----------------------------------------------------------------------------
-const MAX_SAMPLES_PER_AXIS = 21;
+const MAX_SAMPLES_PER_AXIS = 25;
+
+/**
+ * How far apart samples may be, in metres, before the check stops meaning
+ * anything.
+ *
+ * THE FIRST VERSION WAS ALWAYS 3x3, WHATEVER THE SIZE. Its step was
+ * `max(w/21, min(w,d)/2, 0.5)`, and for any square footprint the `min(w,d)/2`
+ * term dominates every time -- so a 1 m bollard and a 400 m building were both
+ * probed at exactly nine points. Measured:
+ *
+ *       1 x 1   ->  9 points, 0.5 m apart
+ *     120 x 120 ->  9 points,  60 m apart
+ *     400 x 400 ->  9 points, 200 m apart
+ *
+ * A 400 m footprint probed at nine points 200 m apart cannot see a river, a
+ * cliff or an entire reserved plot 150 m across sitting inside it. The cap only
+ * ever bound above an aspect ratio of about 10:1, so it never bound at all in
+ * practice.
+ *
+ * 4 m is chosen against the world, not for tidiness: it is narrower than the
+ * narrowest thing a footprint could straddle without noticing -- a LANE has a
+ * 10 m right of way and a river is wider still.
+ */
+const TARGET_SPACING = 4;
 
 function sampleGrid(x, z, w, d) {
-  const stepW = Math.max(w / MAX_SAMPLES_PER_AXIS, Math.min(w, d) / 2, 0.5);
-  const stepD = Math.max(d / MAX_SAMPLES_PER_AXIS, Math.min(w, d) / 2, 0.5);
-  const nx = Math.max(1, Math.round(w / stepW));
-  const nz = Math.max(1, Math.round(d / stepD));
+  // Never coarser than TARGET_SPACING, never more than MAX_SAMPLES_PER_AXIS
+  // probes, never finer than 0.5 m -- and always at least a 3x3, so every
+  // footprint is sampled at its centre as well as its corners.
+  const stepW = Math.max(w / MAX_SAMPLES_PER_AXIS, Math.min(TARGET_SPACING, w / 2), 0.5);
+  const stepD = Math.max(d / MAX_SAMPLES_PER_AXIS, Math.min(TARGET_SPACING, d / 2), 0.5);
+  const nx = Math.max(2, Math.round(w / stepW));
+  const nz = Math.max(2, Math.round(d / stepD));
   const out = [];
   for (let i = 0; i <= nx; i++) {
     for (let j = 0; j <= nz; j++) {
@@ -418,9 +462,19 @@ export function createGround({ heightAt, registry = null }) {
     //
     // Only checked when the thing is going ONTO something with an extent. On
     // open land there is no host to overflow.
-    if (registry && registry.occupiedAt) {
-      const host = registry.occupiedAt(x, z, t);
-      if (host && host.xMin !== undefined && SURFACE_KINDS.includes(host.kind)) {
+    if (registry && registry.overlapsReserved) {
+      // THE HOST IS FOUND BY THE WHOLE FOOTPRINT, NOT BY ITS CENTRE.
+      //
+      // This asked occupiedAt(x, z) -- one point. So a 200 m apron whose CENTRE
+      // fell just outside a plot matched no host at all, neither the too-big
+      // nor the overhang check ran, and it was accepted while overlapping that
+      // plot by 85 m. Which is the airport apron overhanging its own vetted
+      // platform, reproduced exactly by the check written to prevent it: the
+      // rule was right and the sampling was a single point.
+      const host = registry.overlapsReserved(
+        x - w / 2, x + w / 2, z - d / 2, z + d / 2, t, { onlyKinds: SURFACE_KINDS },
+      );
+      if (host && host.xMin !== undefined) {
         const hostW = host.xMax - host.xMin, hostD = host.zMax - host.zMin;
         if (w > hostW + 1e-6 || d > hostD + 1e-6) {
           return {
@@ -470,8 +524,19 @@ export function createGround({ heightAt, registry = null }) {
     // What remains are the kinds that physically occupy the volume: a building,
     // a feature, another prop.
     if (registry && registry.overlapsReserved) {
-      const yMin = opts.y !== undefined ? opts.y : hi;
-      const yMax = yMin + (spec.height || 0);
+      // THE VOLUME CHECKED MUST BE THE VOLUME RESERVED, INCLUDING THE HOLE.
+      //
+      // place() reserves from `surface - depth` upward, because a model carries
+      // the foundation, basement or sub-base it digs. This checked from the
+      // SURFACE upward and never read `depth`, so the decision volume and the
+      // recorded volume were different volumes -- and two basements could be
+      // dug into the same hole with both placements accepted, each looking
+      // correct from above. The reservation had been fixed and the check had
+      // not, which is the harder half to notice: the data was right and the
+      // question was wrong.
+      const surfaceY = opts.y !== undefined ? opts.y : hi;
+      const yMin = surfaceY - (spec.depth || 0);
+      const yMax = surfaceY + (spec.height || 0);
       const hit = registry.overlapsReserved(
         x - w / 2, x + w / 2, z - d / 2, z + d / 2, t,
         { yMin, yMax, ignoreKinds: SURFACE_KINDS },

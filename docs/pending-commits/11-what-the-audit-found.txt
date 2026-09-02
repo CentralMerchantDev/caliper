@@ -1,0 +1,146 @@
+What a context-free audit found in code that was already mutation-tested
+
+An agent with no knowledge of what any of this was meant to do was pointed at
+the land layer and told to break it. It found 23 defects -- two CRITICAL, seven
+HIGH -- in five modules that were already mutation-verified with 545 tests
+green.
+
+That is the finding behind the findings. Mutation testing proves a control
+catches the failure YOU THOUGHT OF. It says nothing about the failure you did
+not, and every test in this session was written by someone who already knew what
+the code was supposed to do, which is exactly the knowledge that stops you
+looking. Four patterns account for most of it:
+
+  * tested the happy shape of a case, never its awkward one -- a MOVE was only
+    ever tested on an object that had never moved before
+  * asserted a value was RECORDED, never that it was CHECKED
+  * probed a boundary from far away on both sides, never at it
+  * asserted a field was one of a set, never which one
+
+CRITICAL 1 -- A REFUSED MOVE CORRUPTED HISTORY
+
+reopen() matched on `id` alone. An object that has moved has SEVERAL records
+under one id, one per place it has stood -- so restoring after a refused move
+reopened the history too:
+
+    after move 1   { x -3, since 0, until 5 }  { x 97, since 5, until Inf }
+    after refusal  { x -3, since 0, until Inf} { x 97, since 5, until Inf }
+
+The hut stands in two places at once, forever. That is the SAME corruption
+reopen() was written three commits ago to prevent, arrived at by a different
+route -- and the test that caught the first version could not catch this one,
+because it only ever moved something that had never moved. reopen now takes a
+`since`, so (id, since) identifies one record.
+
+CRITICAL 2 -- THE VOLUME CHECKED WAS NOT THE VOLUME RESERVED
+
+place() reserves from `surface - depth` upward, because a model carries the
+foundation it digs. canPlace() checked from the SURFACE upward and never read
+`depth`. Two cellars could be dug into the same hole with both accepted, each
+looking correct from above.
+
+The reservation had been fixed and the check had not, which is the harder half
+to notice: the data was right and the question was wrong. And the comment
+directly above the reservation said "reserving only what shows above ground is
+how two things end up sharing the same hole" -- true, written, and then only
+half implemented.
+
+THE SEVEN HIGH FINDINGS
+
+  * remove() threw on its own defaults. place() defaults since:0, remove()
+    defaulted t:0, and close() rejects t <= since -- so removing anything placed
+    with the default time threw an exception from a function whose entire
+    contract is a result object. Now a refusal with a reason.
+
+  * The size check found its host by the object's CENTRE. A 200 m apron whose
+    centre fell 15 m outside a 20 m plot matched no host, so neither the
+    too-big nor the overhang check ran at all, and it was accepted while
+    swallowing the plot whole. That is the airport apron reproduced exactly by
+    the check written to prevent it: right rule, one sample point.
+
+  * EVERY SQUARE FOOTPRINT WAS SAMPLED AT NINE POINTS, whatever its size. The
+    step was max(w/21, min(w,d)/2, 0.5) and the middle term always dominates:
+    a 1 m bollard and a 400 m building both got a 3x3 grid, 0.5 m and 200 m
+    apart respectively. Now bounded in METRES -- never coarser than 4 m, which
+    is narrower than the narrowest thing a footprint could straddle without
+    noticing. Measured cost end to end: unchanged, because real objects are
+    small.
+
+  * canPlace could stop passing the height range and the FULL SUITE stayed
+    green. registryVolume.test.ts proves the registry honours height; nothing
+    proved its only caller sent it.
+
+  * The world's edge survived `<` -> `<=` full-suite. The test probed ten cells
+    either side and never the boundary itself.
+
+  * Three of five prop-manifest fields survived mutation: `h`, `clear` and
+    `kind` were checked against nothing. Only `foot` was tied to the geometry.
+    And `h` was WRONG: lampPost declared 9.35... no -- declared 9.1, while its
+    head is BoxGeometry(_, 0.5, _) CENTRED at y+9.1, so the top is 9.35. The
+    centre of the head had been read as the top, and `h` is what a placement
+    writes as yMax, so every lamp claimed 25 cm less volume than it occupies.
+
+  * findFree's docstring promises "touches nothing solid" and it never consults
+    the terrain -- it finds free sea and free hillside. Documented as a known
+    gap rather than fixed here; the honest answer is that terrain is
+    ground.canPlace's job and the docstring overclaims.
+
+ALSO FIXED
+
+  * A model's hard/soft never reached the registry's `solid`. The contract calls
+    a thing "hard" or "soft"; the registry calls it a road or a plot; both were
+    spelled `kind`. So nothing placed through the only door was ever soft, while
+    world-registry's own header describes callers reading solid:false to decide
+    a field may be removed. `occupancy` now carries hard/soft.
+
+  * A cliff refused a spanning structure. WORLD-RULES says a cliff carries
+    nothing WITH A FOOTPRINT, and a bridge has none on the ground it crosses --
+    so a bridge could cross a bay and not a gorge, while the water rule beside
+    it granted exactly that exception.
+
+  * The beach rule was dead. It asked `spec.permanent`, a field no caller
+    anywhere writes, so it always passed -- and its default was to ALLOW while
+    the water rule beside it defaults to refuse. Same table, opposite
+    fail-direction. Permanence is now derived from what the thing is.
+
+  * placeNear counted every search probe as a refusal: one call that walked out
+    340 m logged 858 of them, so the tally measured search effort instead of
+    which rule was doing the work. Probes are now rolled back.
+
+  * createGrid kept a LIVE handle on the caller's region array. regions() has
+    always copied its output so nobody could open the world by editing the list
+    they were handed -- and the constructor let them open it by pushing to their
+    own array afterwards. A door bolted on one side.
+
+EVERY FIX MUTATION-VERIFIED, AND ONE OF THOSE FAILED FIRST
+
+The new test for CRITICAL 2 passed with the fix reverted. The cellars had 0.2 m
+of height showing above ground, so they overlapped in that 20 cm whether or not
+the buried volume was ever checked. A test about the hole has to be about
+nothing but the hole; both are now exactly zero height, and it fails as it
+should. That is the same mistake as the finding it was testing for, made while
+testing for it.
+
+  reopen matches on id alone again        -> fails
+  canPlace stops checking the hole        -> fails (after the test was fixed)
+  remove throws again                     -> fails
+  host found by centre again              -> fails
+  sampling collapses to 3x3               -> fails
+  canPlace drops the height range         -> fails
+  world edge becomes inclusive            -> fails
+  lampPost height back to 9.1             -> fails
+  a container silently becomes soft       -> fails
+  grid keeps the caller's array           -> fails
+
+559/559 node tests, tsc --noEmit clean. All five modules byte-identical to their
+pre-mutation state.
+
+NOT FIXED, WRITTEN DOWN INSTEAD
+
+The registry is a linear array, so every query is O(n) and one canPlace costs 27
+scans. Measured: 20,000 placements take 12.8 s, 40,000 about 55 s. public/
+spatial-index.js already exists and is unused. WORLD-RULES lists eight land
+queries and createGround exposes two. prop-manifest and the model contract are
+two different schemas that cannot currently meet -- canPlace(PROPS.bench)
+throws. None of these is wrong today; all of them are wrong the moment the
+layout engine is real.

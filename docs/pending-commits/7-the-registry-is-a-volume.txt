@@ -1,0 +1,79 @@
+The registry held heights it never read, and could not tell two questions apart
+
+Two defects, both invisible on a green suite, because both answered a different
+question plausibly instead of answering the right one wrongly.
+
+ONE: HEIGHT WAS DISCARDED, AND THE DATA WAS ALREADY THERE.
+
+reserve() has taken yMin/yMax since it was written, and bridges are registered
+with real deck clearances -- arch 2-30 m, cable-stayed 2-55 m -- for the express
+purpose of leaving the water beneath them navigable. overlapsReserved then threw
+that away and answered in plan only. So a bridge blocked the channel it spans,
+and a lamp head at 9.1 m blocked the pavement beneath it.
+
+Nothing was missing. The height was recorded, carried, and then not read, which
+is the kind of defect that survives review: every line involved looks correct on
+its own.
+
+It also made a comment in ground.js untrue the moment it was written. canPlace
+passed { yMin, yMax } and described its occupancy check as volumetric; the
+registry silently ignored the sixth argument. A claim in a comment is a claim.
+
+Reservations that do not care about height still default to -Infinity..Infinity
+and are unaffected, so every existing caller behaves exactly as before. Touching
+is not overlapping, the same rule the plan axes already use: a deck resting
+exactly on a datum is not inside it.
+
+TWO: "MAY I BUILD A HOUSE HERE" AND "MAY I STAND HERE" GOT ONE ANSWER.
+
+Roads are reserved across their FULL right of way, footway included -- correctly,
+because a plot may not be laid over a pavement. But it means every lamp, bench,
+bin and parked car in the world is INSIDE a road's rectangle by construction.
+Asked without a filter, the registry refuses all of them and empties the street
+scene, and it looks like placement stopped working rather than like the wrong
+question was asked. That is not hypothetical: it is why the props commit decided
+placement prop-against-prop in the renderer instead of asking the registry, and
+the note there said this filter was what was missing.
+
+overlapsReserved and findFree now take ignoreKinds / onlyKinds. The land's
+canPlace ignores the kinds that DEFINE ground -- road, bridge, rail, waterway,
+park, farm, plot -- because its surface step has already decided whether this
+thing may stand on that kind of ground, and keeps the kinds that physically
+OCCUPY it. The ignore list is derived from the kind-to-surface map rather than
+typed out again: a kind that maps to a surface is, by definition, one that
+defines ground.
+
+findFree takes the same options and passes them through. A search for room that
+asks a different question from the placement check will confidently return
+somewhere that placement then refuses, and the caller cannot tell they disagreed.
+
+VERIFIED BY MUTATION
+
+  discard the height range again        -> 2 registry tests fail
+  remove the kind filters               -> 3 registry tests fail
+  canPlace stops passing ignoreKinds    -> 2 land tests fail
+  canPlace skips the surface step       -> 2 land tests fail
+
+THE THIRD ONE INITIALLY PASSED, AND THAT WAS THE MOST USEFUL RESULT HERE.
+
+Removing ignoreKinds from canPlace changed nothing, because every test in
+ground.test.ts built the land with NO registry -- so the occupancy branch never
+ran, and the single most important integration in the file was uncovered while
+the suite reported 12 green. The hole was not in the code; it was in the shape
+of the tests, which is the harder kind to see.
+
+Three tests now build the land WITH a registry and cover it end to end: a car
+may stand on a carriageway a road defines; another car already parked there
+refuses it by name; and a lamp is refused on a carriageway at the SURFACE step,
+for the ground it is on rather than by colliding with something. That last one
+is the rule stated plainly -- a lamp is not moved out of the road afterwards, it
+was never allowed there.
+
+One test in this commit was also wrong on its first writing: it asserted that a
+4 m boat passes under a deck whose underside is at 2 m. The registry was right
+and the expectation was nonsense, which is the more dangerous of the two --
+"fixing" the code to satisfy it would have opened every bridge in the world.
+The corrected version is annotated with why, because the next person to read it
+will have the same instinct.
+
+509/509 node tests, tsc --noEmit clean. Nothing placed, nothing stripped.

@@ -196,17 +196,55 @@ is sidewalk, verge and parking. The asset lane decomposes each class into those
 strips so the ground types in §2 fall out of the model rather than being painted
 on afterwards.
 
-### 3.2 The module length
+### 3.2 The grid
 
-**Roads are tiled from modules, so there is a module length: 8 m.**
+**The world is a grid of 8 m cells, and models are built to whole cells.**
 
-Every road piece is a whole number of modules long. 8 m divides cleanly into the
-block and spacing figures below, it is short enough to follow a curve without
-visible faceting, and it is long enough that a kilometre of street is 125
-instances rather than a thousand.
+This is the thing that makes the world assemble like building blocks rather than
+like a pile of coordinates. A road piece is one cell long; a house sits on a
+2 × 3; a bollard on a sixteenth. Placement snaps to it. Swap one model for
+another of the same cell size and it still fits.
 
-Everything that tiles — road, sidewalk, rail, quay, fence, sea wall — uses this
-module. Anything that does not tile does not need it.
+It also gives the asset lane something buildable to: *"make a straight road
+piece"* is vague, *"make a straight road piece one cell long"* is a spec.
+
+| | |
+|---|---|
+| **Cell** | 8 m — one road module, and it divides the block figures below (a 120 m block is exactly 15 cells) |
+| **Divisions** | full 8 m · half 4 · quarter 2 · eighth 1 · sixteenth 0.5 |
+| **Level** | 4 m — one storey, exactly half a cell. "Ten storeys instead of twenty" is a change of one integer, not a re-model |
+
+Divisions are exact binary fractions on purpose: halves and quarters of 8 are
+representable exactly in floating point, thirds are not, and a grid whose steps
+don't land on the same numbers twice cannot be snapped to.
+
+**Sizing always rounds up.** A 9 m thing does not fit in one 8 m cell. Rounding
+down is the airport-apron bug in one function — a thing declared to fit the
+ground that was checked, and then overhanging it.
+
+**The grid is arithmetic, never an array.** At 8 m the 26 km world is
+3,250 × 3,250 = **10.6 million cells**, and sixteen times that if subdivisions
+were materialised. Nothing stores a cell; every operation is integer arithmetic
+on a coordinate, so the whole world is addressable at no cost and only the cells
+something actually occupies are ever recorded.
+
+### 3.2.1 The whole world, with parts locked
+
+The grid covers the entire 26 km, not the built area. Regions that aren't open
+yet are **locked**, which is not the same as absent: a locked region has
+coordinates, terrain and a place in the world, and refuses placement with a
+reason. Land that simply didn't exist would make the map end at the edge of the
+town, and opening more later would move everything already placed.
+
+### 3.2.2 Things dig in
+
+A model carries the **depth** it occupies below the surface — a foundation, a
+basement, a road's sub-base, a bridge pier's footing — and that depth is
+reserved along with what shows above ground. Reserving only the visible part is
+how two basements end up sharing the same hole while both look correct from
+above. It's also what makes the strata in §1.2 load-bearing rather than
+decorative: a basement is dug through topsoil and subsoil into clay, and the
+world can say so.
 
 ### 3.3 Blocks and spacing
 
