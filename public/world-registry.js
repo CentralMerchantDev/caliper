@@ -187,7 +187,20 @@ export function createWorldRegistry(heightAt = null) {
   function overlapsReserved(xMin, xMax, zMin, zMax, t = 0) {
     for (const e of entries) {
       if (t < e.since || t >= e.until) continue;
-      if (xMax < e.xMin || xMin > e.xMax || zMax < e.zMin || zMin > e.zMax) continue;
+      // SHARING AN EDGE IS NOT OVERLAPPING -- <=/>=, not </>.
+      //
+      // A plot's own xMin is built as `roadCentre + roadWidth/2`: the block
+      // grid places it with its edge touching its own street's reserved
+      // half-width EXACTLY, on purpose, the same way city-plan.js's own
+      // plot-vs-plot de-overlap pass already treats a shared edge as legal
+      // ("touching edges is not overlapping -- adjacent plots share a line").
+      // The first version of this used inclusive </> here, which is right
+      // for a POINT query (whatIsAt: a point on the stadium's wall is still
+      // in the stadium) and wrong for this one: it made every plot in the
+      // city overlap its own street, and 18,894 of 19,092 plots vanished the
+      // moment roads were registered -- not because the roads were too wide,
+      // but because "touching" was being scored as a conflict.
+      if (xMax <= e.xMin || xMin >= e.xMax || zMax <= e.zMin || zMin >= e.zMax) continue;
       return e;
     }
     return null;

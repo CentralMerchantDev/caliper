@@ -29,6 +29,14 @@ import { makeZoning, zoneCharacter, CHARACTER_SPACING, DENSITY_BANDS } from "./z
 import { PLOT_BUCKET } from "./spatial-index.js";
 import { placeFeatures, FEATURES, footprintOf } from "./features.js";
 import { createWorldRegistry } from "./world-registry.js";
+// DESIGN-SPACE, LIKE THE FILE IT CAME FROM.
+//
+// waterways.js is the dependency-free module both this file and terrain.js
+// import from -- terrain.js already imports WORLD and landmassPolygonsDesign
+// FROM city-plan.js, so importing terrain.js's WATERWAYS_WORLD back here
+// would be a cycle. Scaling it locally with sm(), already imported above,
+// costs three lines and avoids that entirely.
+import { WATERWAYS as WATERWAYS_DESIGN } from "./waterways.js";
 
 // -----------------------------------------------------------------------------
 // 1. WORLD EXTENTS
@@ -2901,6 +2909,186 @@ export function generateWorld(rawHeightAt = null) {
     });
   }
 
+  // =============================================================================
+  // THE WORLD'S PERSISTENT STRUCTURE, REGISTERED.
+  //
+  // A feature's footprint was the first thing reserved -- the stadium is not
+  // supposed to have houses in it. But a stadium is 320 x 250 m out of a 26 km
+  // world; roads alone are 1,399 entries and the four mainland rivers run for
+  // kilometres, and none of it was in the registry. `whatIsAt` was answering
+  // "empty ground" in the middle of a boulevard, which is the same defect in a
+  // bigger coat: "you cannot put something on top of something already there"
+  // was only true for ten things in a world of thousands.
+  //
+  // Registered here, after `out` (the finished road network) exists and before
+  // plots are finalised, so the SAME "one piece of ground, one plot" pass below
+  // that already refuses a plot on another settlement's ground, or on a
+  // feature's, refuses one on a road or a river too -- one rule, extended, not
+  // a second one that has to agree with the first.
+  //
+  // NOT REGISTERED, ON PURPOSE: trees, street furniture, lamps, cars, people,
+  // shipping containers. ~55,000 objects, all of them MOVABLE -- a tree is not
+  // structure the way a road is; it is decoration that happens to have a
+  // position, and a future edit that wants to put a building where a tree
+  // stands should not need to ask the registry's permission to fell one. The
+  // omission is the same shape as choosing not to register every one of the
+  // 19,092 plots individually here either: spatial-index.js already answers
+  // "what plot is at this point" efficiently, and 19,092 more linear entries
+  // in a registry that is a flat array would slow every query in the world for
+  // an answer this file does not need. what this list registers is GROUND a
+  // caller cannot silently build through -- not everything that happens to be
+  // resting on it.
+  // =============================================================================
+  if (registry) {
+    // --- roads and bridges -----------------------------------------------------
+    //
+    // The railway corridor is already reserved above, as a FEATURE -- its
+    // footprint comes from the exact same `sites.railway` the renderer draws
+    // from, via footprintOf's "corridor" case, so this is not a second, looser
+    // copy of the alignment. It is not a road in `out`; nothing here duplicates
+    // it, and nothing here is needed to cover it.
+    //
+    // A bridge deck is not at grade, so it does not get the same infinite y
+    // range an ordinary road does -- a boat still has to be able to pass
+    // underneath, which is the reason bridges are in this task at all: they
+    // are the case that proves whatIsAt needs y, not just x/z. The clearance
+    // below is a documented APPROXIMATION of city-render.js's own ARCH_RISE
+    // constant (cable 44 m, arch 15 m, causeway 8 m, above the higher shore),
+    // wide enough to place "on the deck" vs "in the water below it" correctly
+    // without reimplementing the renderer's continuous per-metre profile,
+    // which a single rectangle cannot represent and this task does not need.
+    const BRIDGE_CLEARANCE = {
+      cable: { yMin: 2, yMax: 55 },
+      arch: { yMin: 2, yMax: 30 },
+      causeway: { yMin: 1, yMax: 15 },
+    };
+    const DEFAULT_BRIDGE_CLEARANCE = { yMin: 1, yMax: 20 };
+    for (const r of out) {
+      const spec = ROADS[r.class];
+      // Every class in `out` is a ROADS key today (checked by measurement, not
+      // assumed) -- this fallback exists so an unrecognised class reserves a
+      // plausible width instead of throwing mid-build or silently reserving
+      // a zero-width line that overlapsReserved would then never catch.
+      const half = (spec ? spec.row : 20) / 2;
+      const ew = r.axis === "ew";
+      const rFrom = Math.min(r.from, r.to), rTo = Math.max(r.from, r.to);
+      const xMin = ew ? rFrom : r.at - half, xMax = ew ? rTo : r.at + half;
+      const zMin = ew ? r.at - half : rFrom, zMax = ew ? r.at + half : rTo;
+      if (r.bridge) {
+        const clearance = BRIDGE_CLEARANCE[r.bridgeType] || DEFAULT_BRIDGE_CLEARANCE;
+        registry.reserve({
+          kind: "bridge", id: r.id, owner: r.bridge,
+          xMin, xMax, zMin, zMax, yMin: clearance.yMin, yMax: clearance.yMax,
+        });
+      } else {
+        registry.reserve({ kind: "road", id: r.id, owner: r.class, xMin, xMax, zMin, zMax });
+      }
+    }
+
+    // --- waterways ---------------------------------------------------------
+    //
+    // "The plot generator will not build in them" was a comment on this exact
+    // data, and it was false for the four rivers -- classifyAt tests elevation
+    // against sea level, and a river 400 m up a hillside never reaches y = 0,
+    // so height-based buildability calls every river point dry. waterwayAt()
+    // in terrain.js already answers this correctly, geometrically rather than
+    // by elevation; this reserves the same geometry as rectangles so it is
+    // also a `whatIsAt` answer, not only a point predicate.
+    //
+    // One rectangle per drawn segment (24 across all seven waterways), padded
+    // by the waterway's own half-width. A river WIDENS toward its mouth --
+    // waterwayAt scales that by how far along the polyline a point is -- and
+    // this uses the un-scaled (widest) half-width for every segment rather
+    // than reproducing that interpolation, which over-reserves slightly near
+    // the source and never under-reserves near the mouth. Safe in the
+    // direction that matters: a registry entry that is a little too generous
+    // costs a few extra plots; one that is too tight puts a building in a
+    // river.
+    for (const w of WATERWAYS_DESIGN) {
+      // Position scales with the world; the channel's own width does not --
+      // world-scale.js's rule, the same one PIER and BOARDWALK below already
+      // follow for their built dimensions.
+      const pad = sm(w.halfWidth);
+      const points = w.points.map(([x, z]) => [sm(x), sm(z)]);
+      for (let i = 0; i < points.length - 1; i++) {
+        const [x0, z0] = points[i], [x1, z1] = points[i + 1];
+        registry.reserve({
+          kind: "waterway", id: `${w.id}#${i}`, owner: w.id,
+          xMin: Math.min(x0, x1) - pad, xMax: Math.max(x0, x1) + pad,
+          zMin: Math.min(z0, z1) - pad, zMax: Math.max(z0, z1) + pad,
+        });
+      }
+    }
+    // The open sea plane itself is NOT registered here -- it is a derived rule
+    // in world-registry.js's whatIsAt, `heightAt(x, z) < 0`, for the same
+    // reason ROCK is derived rather than enumerated: it is most of the world's
+    // area, and a second, hand-maintained copy of the coastline is exactly
+    // the kind of duplicate source of truth this whole registry exists to
+    // remove. rectIsBuildable already keeps plot generation off the sea by
+    // the coastline-distance check it has always used; this registration pass
+    // does not need to repeat that to get the "plots drop again" effect --
+    // roads and rivers are the sources of that drop, not open water.
+
+    // --- pier and boardwalk -------------------------------------------------
+    //
+    // Both are declared once, above, and drawn by the renderer straight from
+    // those constants -- registering them here is reading the same data a
+    // third way, not inventing a fourth. The pier is two footprints: the deck
+    // that runs out over the water, and the head pavilion at its seaward end,
+    // which city-render.js centres on the SAME x as the deck (`hall.position
+    // .set(PIER.x, ..., PIER.head.z)`), so that is what this reserves too.
+    registry.reserve({
+      kind: "pier", id: "pier", owner: "pier",
+      xMin: PIER.x - PIER.width / 2, xMax: PIER.x + PIER.width / 2,
+      zMin: Math.min(PIER.from, PIER.to), zMax: Math.max(PIER.from, PIER.to),
+    });
+    registry.reserve({
+      kind: "pier", id: "pier-head", owner: "pier",
+      xMin: PIER.x - PIER.head.w / 2, xMax: PIER.x + PIER.head.w / 2,
+      zMin: PIER.head.z - PIER.head.d / 2, zMax: PIER.head.z + PIER.head.d / 2,
+    });
+    // The boardwalk follows the shore as a spline; the declared control points
+    // are close enough together (roughly 900-1,100 m apart) that the straight
+    // chord between consecutive points and the actual curved run city-render
+    // draws stay within the boardwalk's own width of each other, so a segment
+    // per control-point pair is enough without resampling the spline here.
+    for (let i = 0; i < BOARDWALK.points.length - 1; i++) {
+      const [x0, z0] = BOARDWALK.points[i], [x1, z1] = BOARDWALK.points[i + 1];
+      const pad = BOARDWALK.width / 2;
+      registry.reserve({
+        kind: "boardwalk", id: `boardwalk#${i}`, owner: "boardwalk",
+        xMin: Math.min(x0, x1) - pad, xMax: Math.max(x0, x1) + pad,
+        zMin: Math.min(z0, z1) - pad, zMax: Math.max(z0, z1) + pad,
+      });
+    }
+
+    // --- parks: soft occupancy, registered before plots are finalised -------
+    //
+    // A park block never produces a plot itself -- subdivideBlock is never
+    // called for one, in either buildCityPlan or generateSettlement -- so
+    // registering it cannot self-collide with a plot that came from it. What
+    // it catches is the other settlement's plot laid over THIS one's park,
+    // the same cross-boundary overlap the de-overlap pass below already
+    // fixes for plot-vs-plot. solid: false, because a park is not a stadium:
+    // a caller that wants to build there may, by calling release() first, but
+    // nothing does that today, so today a park still refuses exactly like
+    // hard ground -- see the solid-is-informational note in world-registry.js.
+    let parkId = 0;
+    for (const b of city.parks || []) {
+      registry.reserve({
+        kind: "park", id: `park-${parkId++}`, owner: "downtown",
+        xMin: b.xMin, xMax: b.xMax, zMin: b.zMin, zMax: b.zMax, solid: false,
+      });
+    }
+    for (const b of blocks) {
+      if (b.kind !== "park") continue;
+      registry.reserve({
+        kind: "park", id: `park-${parkId++}`, owner: b.settlement,
+        xMin: b.xMin, xMax: b.xMax, zMin: b.zMin, zMax: b.zMax, solid: false,
+      });
+    }
+  }
+
   // ONE PIECE OF GROUND, ONE PLOT.
   //
   // Settlements are laid out independently and their bounds can overlap -- an
@@ -2979,6 +3167,30 @@ export function generateWorld(rawHeightAt = null) {
           bucket.push(pl);
         }
       }
+    }
+  }
+
+  // --- fields: farm-class plots, registered AFTER keptPlots is final --------
+  //
+  // A field is a plot -- ordinary settlement ground zoned FARM by zoning.js --
+  // not a separate structure with its own footprint, which is why this waits
+  // until `keptPlots` is the finished list rather than running in the block
+  // above with roads and parks. Registering it earlier, before the "one piece
+  // of ground, one plot" pass runs on the very same plots, would have every
+  // farm plot find ITS OWN just-reserved footprint and refuse itself.
+  //
+  // solid: false and nothing gates on it here -- keptPlots already stands,
+  // this only makes the 254 of them a `whatIsAt` can name as farmland rather
+  // than an ordinary plot, so a future edit can be told "there is a wheat
+  // field here, it can be removed" instead of the flat refusal a plot with no
+  // distinguishing kind would get.
+  if (registry) {
+    for (const p of keptPlots) {
+      if (p.className !== "FARM") continue;
+      registry.reserve({
+        kind: "field", id: `field-${p.id}`, owner: p.settlement,
+        xMin: p.xMin, xMax: p.xMax, zMin: p.zMin, zMax: p.zMax, solid: false,
+      });
     }
   }
 

@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { landmassPolygonsDesign, WORLD } from "./city-plan.js";
+import { WATERWAYS } from "./waterways.js";
 
 // -----------------------------------------------------------------------------
 // Deterministic noise. Integer hash -> value noise -> fbm. No dependencies, no
@@ -616,26 +617,15 @@ function reliefAt(x, z, massKind) {
 // Each is a polyline with a half-width and a depth. The carve is a smooth
 // trough so the banks slope instead of dropping vertically, and rivers WIDEN
 // toward their mouth the way real ones do.
+//
+// THE MANIFEST ITSELF LIVES IN waterways.js, NOT HERE -- see the import at
+// the top of the file. city-plan.js needs this same geometry to register a
+// waterway's footprint in the world registry, and this file already imports
+// WORLD and landmassPolygonsDesign FROM city-plan.js -- so defining WATERWAYS
+// here and having city-plan.js import it back would be a cycle, live-bindings
+// waiting on each other's module evaluation to finish. A dependency-free
+// module both files import from is the fix.
 // =============================================================================
-const WATERWAYS = [
-  // --- mainland rivers, running down out of the range to the coast ---
-  { id: "river-west",  kind: "river", halfWidth: 95, depth: 7,
-    points: [[-11700, -9200], [-11500, -7400], [-11350, -5600], [-11250, -4200], [-11200, -3050]] },
-  { id: "river-mid",   kind: "river", halfWidth: 120, depth: 9,
-    points: [[-5400, -10400], [-5500, -8200], [-5700, -6200], [-5800, -4400], [-5900, -3000]] },
-  { id: "river-east",  kind: "river", halfWidth: 85, depth: 6,
-    points: [[900, -9800], [800, -7600], [700, -5600], [640, -4000], [600, -2980]] },
-  { id: "river-far-e", kind: "river", halfWidth: 70, depth: 5,
-    points: [[11800, -8600], [11600, -6600], [11500, -4800], [11400, -3400], [11400, -2380]] },
-
-  // --- island canals: narrow, straight-ish, cut for boats ------------------
-  { id: "canal-kingsley", kind: "canal", halfWidth: 34, depth: 4,
-    points: [[-6900, -900], [-6100, -600], [-5200, -420], [-4300, -350]] },
-  { id: "canal-fairlight", kind: "canal", halfWidth: 30, depth: 4,
-    points: [[3500, -600], [4400, -420], [5300, -380], [6200, -500]] },
-  { id: "canal-cormorant", kind: "canal", halfWidth: 28, depth: 3.5,
-    points: [[-14600, -900], [-13800, -700], [-13000, -620]] },
-];
 
 // THE POLYLINE IS A CONSTANT. IT WAS BEING RE-MEASURED ON EVERY QUERY.
 //
