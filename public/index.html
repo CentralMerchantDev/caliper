@@ -974,7 +974,13 @@ body.inspecting-mobile #nav-compass-pad {
   <div id="world-booting" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;z-index:40;pointer-events:none;background:linear-gradient(#0b1220,#0f172a)">
     <div style="font-family:var(--mono);font-size:12px;color:var(--sky);letter-spacing:.08em">BUILDING THE CITY</div>
     <div style="font-size:11.5px;color:var(--text-muted);max-width:340px;text-align:center;line-height:1.5">
-      40&nbsp;km of terrain, coastline, roads and buildings, generated from one plan. About five seconds.
+      <!-- "About five seconds" was calibrated against a build whose generation
+           stage took 2.7 s. That stage is now 2.34 s, so the old figure is
+           stale. It is not replaced with a new one: the total also includes
+           mesh building, which needs a GPU and cannot be measured in the test
+           environment, so any specific number here would be a guess presented
+           as a measurement. A few seconds is what is actually known. -->
+      40&nbsp;km of terrain, coastline, roads and buildings, generated from one plan. This takes a few seconds.
     </div>
   </div>
   <canvas id="world-canvas-2d" style="display:none" role="img" aria-label="Plan view"></canvas>

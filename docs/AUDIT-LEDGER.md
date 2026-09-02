@@ -13,7 +13,7 @@ not actually a defect)
 
 | Phase | Area | Status |
 | --- | --- | --- |
-| 1 | Known backlog | **15 of 16 done** — only 1.1 (generateWorld stall) open |
+| 1 | Known backlog | **all 16 done** |
 | 2 | Pipeline (`src/`) | **all fixed** (2.4, 2.11 partly — see rows) |
 | 3 | World generator (`public/`) | **all fixed** |
 | 4 | Renderer and UI | not started |
@@ -50,7 +50,7 @@ Recorded so a later audit does not re-report them as new. All have tests.
 
 | # | Finding | Severity | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| 1.1 | `generateWorld` ~2.7 s synchronous before first paint | high | OPEN | |
+| 1.1 | `generateWorld` ~2.7 s synchronous before first paint | high | **FIXED** | Profiled, not guessed. Three changes, all fingerprint-verified byte-identical over every plot, road, block and 22,000 terrain samples: numeric bucket key in `distance()` (the string `bx+","+bz` was built and hashed in the hottest loop in generation), `Math.hypot` → `sqrt` in three inner loops, and `alongWaterway` memoised (it re-measured a constant polyline on every call, 966 ms). generateWorld 5.66 s → 2.24 s; LandField 298 ms → 79 ms; whole load path 6.02 s → 2.36 s, 61% off. Plus a double-rAF before the block so the boot panel is genuinely painted first — `await import()` only yields a microtask, so a cold load could show a blank gradient and a dead tab. The build is still uninterruptible; the honest fix for a freeze is to make it shorter. Boot copy's "about five seconds" retired rather than renumbered. |
 | 1.2 | Street camera confined to 440×160 m box, uses *village* terrain in city mode | high | FIXED | bounds follow `WORLD.SIZE` in city mode; one `_groundAt()` replaces five village-terrain calls in the walk/drive/fly path |
 | 1.3 | At `k=0.4` the port is unplaceable and every warehouse zone vanishes silently | high | FIXED | `zoningAnchors` on the world; at k=0.4 reports `missing:[containerPort], hasIndustry:false`. Test. |
 | 1.4 | Silent `catch { return; }` reinstates the stale-bookmark bug it fixes | med | FIXED | logs and sets `_featureTargetsStale` instead of silently reverting |

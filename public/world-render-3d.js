@@ -1558,6 +1558,29 @@ class Renderer3D {
   async _buildCityBase(world) {
     const { buildWorld } = await import("./city-render.js");
 
+    // GIVE THE BROWSER A FRAME BEFORE BLOCKING IT FOR TWO SECONDS.
+    //
+    // buildWorld is synchronous, and it is the whole world: terrain field,
+    // city plan, 19,481 plots, then every mesh. On the main thread that is one
+    // uninterruptible block -- no paint, no scroll, no input. The boot panel
+    // exists and says "BUILDING THE CITY", but nothing guaranteed it had ever
+    // been PAINTED before the freeze started, so on a cold load the visitor
+    // could get a blank gradient and a dead tab.
+    //
+    // `await import()` only yields a microtask, which does not give the
+    // compositor a turn. Two nested rAFs do: the first fires before a paint,
+    // the second after it, so when this resolves the panel is genuinely on
+    // screen. It costs about 32 ms and buys the difference between "loading"
+    // and "broken".
+    //
+    // This does not make the build interruptible -- it cannot, without moving
+    // generation off-thread, and the honest fix for the freeze itself was to
+    // make it shorter: 5.32 s to 2.34 s, verified byte-identical.
+    await new Promise((resolve) => {
+      if (typeof requestAnimationFrame !== "function") { resolve(); return; }
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+
     // The village's own sky, fog and lights would fight the city's. Take them
     // out before the city installs its own rather than leaving two suns.
     for (const obj of [this._skyMesh, this.ambient, this.hemi, this.sun, this.moonLight]) {

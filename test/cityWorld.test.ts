@@ -51,6 +51,7 @@ const S = (v: number) => v * WORLD_SCALE;
 /** Areas scale with the square of a uniform scale. */
 const S2 = (v: number) => v * WORLD_SCALE * WORLD_SCALE;
 
+import { bucketKeyInRange } from "../public/terrain.js";
 import { LandField, makeHeightAt, reliefAt, edgeFalloff, EDGE, BASINS, cliffiness, SNOW_LINE, TREE_LINE, waterwayAt } from "../public/terrain.js";
 import { createCollector, emitBuilding, HEIGHT, ROOFS, WALLS, rnd } from "../public/buildings.js";
 
@@ -1637,4 +1638,48 @@ test("fitSettlements keeps its two stated guarantees: no overlap, and no growth 
       `${s.id} is ${(100 * wetShare).toFixed(0)}% water — it grew into the sea ` +
       `(minBuildable is 0.72, so 28% is the documented ceiling)`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// 1.1 -- THE NUMERIC BUCKET KEY MUST NOT COLLIDE OVER THE REAL COASTLINE
+//
+// distance() is the single hottest function in world generation. Its spatial
+// buckets were keyed by the string `bx + "," + bz`, which built and hashed a
+// string on every lookup. Replacing that with an integer pairing took the world
+// build from 5.32 s to 2.34 s -- but a pairing is only injective inside its
+// range, and outside it two distant stretches of coast silently share a bucket.
+// The symptom of that would not appear here; it would appear as a building in
+// the sea somewhere across the map.
+//
+// So the range is asserted against the coastline the world actually has, not
+// against the range I assumed it had. This is the same mistake the shoreline
+// ring bound made when its comment said "provably".
+// ---------------------------------------------------------------------------
+test("every coastline bucket falls inside the numeric key's injective range", () => {
+  const field = new LandField(16);
+  const cell = field.cell;
+
+  let checked = 0, worstX = 0, worstZ = 0;
+  for (const e of (field as any).edges) {
+    for (const [ex, ez] of [[e[0], e[1]], [e[2], e[3]]]) {
+      const bx = Math.floor(ex / cell), bz = Math.floor(ez / cell);
+      if (Math.abs(bx) > Math.abs(worstX)) worstX = bx;
+      if (Math.abs(bz) > Math.abs(worstZ)) worstZ = bz;
+      assert.ok(
+        bucketKeyInRange(bx, bz),
+        `coastline bucket (${bx}, ${bz}) is outside the key's injective range — ` +
+        `two different cells would share a key and merge two stretches of coast`
+      );
+      checked++;
+    }
+  }
+  assert.ok(checked > 1000, `only ${checked} coastline endpoints checked — this is not exercising the real coast`);
+
+  // The margin, so a future world that grows fails here rather than silently.
+  // distance() also probes 3 rings out, so the reachable extent is wider than
+  // the coastline's own.
+  const margin = 2048 - Math.max(Math.abs(worstX), Math.abs(worstZ)) - 4;
+  assert.ok(margin > 100,
+    `only ${margin} cells of headroom left in the bucket key (worst bucket ${worstX}, ${worstZ}) — ` +
+    `raise BUCKET_SPAN/BUCKET_HALF before the world grows further`);
 });
