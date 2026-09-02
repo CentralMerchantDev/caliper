@@ -30,7 +30,7 @@ import {
   WORLD, ROADS, BRIDGES, MARINA, PIER, BOARDWALK, PLOT_CLASSES,
   generateWorld, generateCityPlan, landmassPolygons, offsetPolygon,
 } from "./city-plan.js";
-import { LandField, makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, WATERWAYS, waterwaySurface , waterwayAt } from "./terrain.js";
+import { LandField, makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, GROUND_BANDS, WATERWAYS, waterwaySurface , waterwayAt } from "./terrain.js";
 import { assessFootprint } from "./footprint.js";
 // `sm` is already used as a local variable in this file (a THREE.Mesh), so the
 // world-scale helper is imported under a name that cannot be shadowed.
@@ -521,6 +521,224 @@ function half(h) {
     return _strataColor.setHex(STRATA[STRATA.length - 1].color);
   }
 
+  // ===========================================================================
+  // THE COASTLINE IS DECIDED PER PIXEL, NOT PER VERTEX
+  //
+  // Mark: "the edges of them get blurred or change to something else, like land
+  // to water." The depth-buffer fix stopped the sea DRAWING OVER the land. This
+  // is the other half, and it is a sampling problem.
+  //
+  // The whole beach lives in a 3.8 m window of height: the tide strip ends at
+  // -0.6, dry sand at +1.6, dune grass at +3.2 (design metres). The outer
+  // terrain mesh samples every 162.5 m. On any ordinary coastal slope no vertex
+  // ever LANDS in that window -- consecutive samples come out at something like
+  // -20 m and +25 m -- so bandColor is asked for the shelf blue and the coastal
+  // green and never once for sand. The GPU then interpolates between those two
+  // across the whole triangle. That is the blur: not a soft edge, but a beach
+  // that was never sampled, replaced by a 162 m gradient from sea colour to
+  // grass colour. It moves as the camera moves because which vertices get
+  // sampled changes.
+  //
+  // Evaluating the band table against the INTERPOLATED height, in the fragment
+  // shader, puts the beach exactly where the surface actually crosses sea level
+  // at whatever resolution the screen has -- independent of vertex spacing.
+  //
+  // THE TABLE IS NOT RETYPED IN GLSL. It is compiled from the same exported
+  // GROUND_BANDS the CPU path uses, because a colour table maintained in two
+  // languages is a drift defect with a delay fuse, and this file has already
+  // paid for that lesson more than once.
+  //
+  // Sequential mixes are EXACTLY equivalent to bandColor's find-the-band-then-
+  // blend: below a band's window its t is 0 and the mix is a no-op, above it t
+  // is 1 and the colour is replaced outright, so applying every band in order
+  // lands on the same value the loop would have returned.
+  const SHORE_GLSL = (() => {
+    const hex = (c) => `vec3(${(((c >> 16) & 255) / 255).toFixed(4)},${(((c >> 8) & 255) / 255).toFixed(4)},${((c & 255) / 255).toFixed(4)})`;
+    let body = `  vec3 c = ${hex(GROUND_BANDS[0].color)};\n`;
+    for (let i = 1; i < GROUND_BANDS.length; i++) {
+      const lo = GROUND_BANDS[i - 1], hi = GROUND_BANDS[i];
+      const span = (hi.upTo - lo.upTo) * 0.75;
+      body += `  { float t = clamp((h - ${lo.upTo.toFixed(4)}) / ${span.toFixed(6)}, 0.0, 1.0);\n` +
+              `    c = mix(c, ${hex(hi.color)}, t * t * (3.0 - 2.0 * t)); }\n`;
+    }
+    return `vec3 caliperBand(float h) {\n${body}  return c;\n}\n`;
+  })();
+
+  // How much of the per-fragment answer to trust, by height. Full authority at
+  // the waterline, handing back to the vertex colour well before the bands stop
+  // mattering, so there is no seam where the two meet. In WORLD metres, since
+  // GROUND_BANDS is already the world-scaled table.
+  const SHORE_BAND_M = wm(6);
+  const SHORE_FADE_M = wm(14);
+
+  /**
+   * Teach a terrain material to resolve its own shoreline.
+   *
+   * Stock MeshStandardMaterial, patched at compile time rather than replaced by
+   * a ShaderMaterial, so it keeps three.js's lighting, shadows, tone mapping and
+   * -- importantly, given the depth work -- the logarithmic depth chunks.
+   */
+  function withPerPixelShoreline(material) {
+    material.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", `#include <common>
+attribute vec3 aMod;
+attribute float aShoreOK;
+varying vec3 vMod;
+varying float vShoreOK;
+varying float vGroundH;`)
+        .replace("#include <begin_vertex>", `#include <begin_vertex>
+vMod = aMod;
+vShoreOK = aShoreOK;
+vGroundH = (modelMatrix * vec4(position, 1.0)).y;`);
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace("#include <common>", `#include <common>
+varying vec3 vMod;
+varying float vShoreOK;
+varying float vGroundH;
+${SHORE_GLSL}`)
+        // AFTER color_fragment, not before: that chunk is what multiplies the
+        // vertex colour in, so replacing the result here is replacing the thing
+        // that is actually wrong.
+        .replace("#include <color_fragment>", `#include <color_fragment>
+{
+  float w = (1.0 - smoothstep(${SHORE_BAND_M.toFixed(3)}, ${SHORE_FADE_M.toFixed(3)}, abs(vGroundH))) * vShoreOK;
+  diffuseColor.rgb = mix(diffuseColor.rgb, caliperBand(vGroundH) * vMod, w);
+}`);
+    };
+    return material;
+  }
+
+  // ===========================================================================
+  // THE SEA KNOWS HOW DEEP IT IS
+  //
+  // Mark: "the water [should] lap up on the beach like real waves ... and
+  // provide a depth and base to the ocean and other waterways like in real
+  // life." The base already exists -- the sea bed is the terrain surface
+  // continuing below zero, walled to bedrock and floored by the abyss plane, so
+  // the ocean genuinely sits in a basin. What was missing is that the WATER had
+  // no idea any of that was there.
+  //
+  // It was one flat PlaneGeometry, four worlds wide, with a constant opacity of
+  // 0.62 and a tiled normal map. A single sheet of blue laid over everything.
+  // It could not shallow toward a beach, could not clear over sand, and could
+  // not put foam on a shoreline, because nothing in it knew where the shoreline
+  // was. The precomputed surf ribbon below is the workaround for that, and it
+  // is geometry offset from a polygon -- resolution-bound in exactly the way
+  // the vertex-coloured beach was.
+  //
+  // So the sea gets the height field as a texture and reads its own depth per
+  // pixel, which is the same move that fixed the beach.
+  //
+  // WHY 512, AND WHY LATE. Measured on this machine: 256^2 costs 276 ms for
+  // 152 m texels, 512^2 costs 477 ms for 76 m, 1024^2 costs 1786 ms for 38 m.
+  // 512 is the first resolution FINER THAN THE LAND under it -- the outer
+  // terrain mesh steps 162 m -- so the water is never the coarser of the two.
+  // But 477 ms is a fifth of a generateWorld that earlier work deliberately cut
+  // from 6.02 s to 2.36 s, and paying that before first paint would give back a
+  // meaningful part of that win for something nobody sees in the first frame.
+  // So the bake is deferred: the sea starts as it always did and gains its
+  // depth response a beat later, off the critical path.
+  const WATER_TEX = 512;
+  function giveWaterItsDepth(seaMesh) {
+    const x0 = wm(-30000), x1 = wm(30000), z0 = wm(-33000), z1 = wm(10000);
+    // One texel of "deep everywhere" until the real bake lands, so the shader is
+    // valid from the first frame and the swap is invisible.
+    const placeholder = new THREE.DataTexture(new Float32Array([-1000]), 1, 1, THREE.RedFormat, THREE.FloatType);
+    placeholder.needsUpdate = true;
+
+    const uniforms = {
+      uDepthMap: { value: placeholder },
+      // x0, z0 and the reciprocal spans, so the shader does two multiplies
+      // rather than two divides per fragment.
+      uExtent: { value: new THREE.Vector4(x0, z0, 1 / (x1 - x0), 1 / (z1 - z0)) },
+      uTime: { value: 0 },
+      uSeaLevel: { value: LOOK.seaLevel },
+    };
+
+    seaMesh.material.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", `#include <common>
+varying vec3 vSeaWorld;`)
+        .replace("#include <begin_vertex>", `#include <begin_vertex>
+vSeaWorld = (modelMatrix * vec4(position, 1.0)).xyz;`);
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace("#include <common>", `#include <common>
+uniform sampler2D uDepthMap;
+uniform vec4 uExtent;
+uniform float uTime;
+uniform float uSeaLevel;
+varying vec3 vSeaWorld;`)
+        .replace("#include <color_fragment>", `#include <color_fragment>
+{
+  vec2 uv = vec2((vSeaWorld.x - uExtent.x) * uExtent.z, (vSeaWorld.z - uExtent.y) * uExtent.w);
+  // Outside the modelled world there is no sea bed, and clamping the sample
+  // would smear the edge texel across the open ocean. Treat it as deep water
+  // instead, which is what it is.
+  float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+  float bed = mix(-1000.0, texture2D(uDepthMap, uv).r, inside);
+  float depth = max(0.0, uSeaLevel - bed);
+
+  // Shallow water is not thinner blue, it is a different colour: sand and
+  // turquoise from below, less of the deep column above. Both cues, together,
+  // are what makes depth read at all.
+  float shallow = 1.0 - smoothstep(0.0, ${wm(14).toFixed(2)}, depth);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.78, 0.74), shallow * 0.55);
+  diffuseColor.a = mix(diffuseColor.a, 0.12, shallow * shallow);
+
+  // THE WAVES. A foam band that sits on the true waterline at whatever
+  // resolution the screen has, and breathes in and out across it the way a
+  // tide line does -- so the edge of the water moves against the sand instead
+  // of the sand ending at a fixed painted line.
+  float swash = ${wm(3.0).toFixed(3)} * (0.55 + 0.45 * sin(uTime * 0.6 + vSeaWorld.x * ${(0.9 / wm(100)).toFixed(6)} + vSeaWorld.z * ${(0.7 / wm(100)).toFixed(6)}));
+  float foam = (1.0 - smoothstep(0.0, swash, depth)) * inside;
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.96, 0.97), foam * 0.85);
+  diffuseColor.a = max(diffuseColor.a, foam * 0.8);
+}`);
+    };
+    seaMesh.material.needsUpdate = true;
+    seaMesh.onBeforeRender = () => { uniforms.uTime.value = performance.now() * 0.001; };
+
+    // SLICED, BECAUSE DEFERRING A STALL IS NOT REMOVING IT.
+    //
+    // Measured in the headless renderer: baking all 262,144 samples in one go
+    // took generateWorld from 5,568 ms to 8,156 ms -- 2.6 s, against the 477 ms
+    // the same loop costs in plain Node. Moving that off the critical path stops
+    // it delaying first paint, but a 2.6 s block is still 2.6 s of frozen page,
+    // just later, where it reads as the world hanging for no reason. Rows are
+    // cheap to resume, so it goes 32 at a time and the browser keeps the frame.
+    const data = new Float32Array(WATER_TEX * WATER_TEX);
+    const ROWS_PER_SLICE = 32;
+    let row = 0;
+    const bakeSlice = () => {
+      const end = Math.min(WATER_TEX, row + ROWS_PER_SLICE);
+      for (; row < end; row++) {
+        const z = z0 + (z1 - z0) * (row / (WATER_TEX - 1));
+        for (let i = 0; i < WATER_TEX; i++) {
+          data[row * WATER_TEX + i] = heightAt(x0 + (x1 - x0) * (i / (WATER_TEX - 1)), z);
+        }
+      }
+      if (row < WATER_TEX) return schedule();
+      const tex = new THREE.DataTexture(data, WATER_TEX, WATER_TEX, THREE.RedFormat, THREE.FloatType);
+      tex.minFilter = tex.magFilter = THREE.LinearFilter;
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.needsUpdate = true;
+      uniforms.uDepthMap.value = tex;
+      placeholder.dispose();
+    };
+    // requestIdleCallback is not universal, so a timeout backs it up. A depth
+    // map that never arrives is a flat sea, not a broken one, which is the right
+    // way for this to fail.
+    function schedule() {
+      if (typeof requestIdleCallback === "function") requestIdleCallback(bakeSlice, { timeout: 200 });
+      else setTimeout(bakeSlice, 0);
+    }
+    schedule();
+  }
+
   function terrainMesh(x0, x1, z0, z1, step, hole, skirtDepth, casts = true) {
     const nx = Math.round((x1 - x0) / step), nz = Math.round((z1 - z0) / step);
     const W = nx + 1, H = nz + 1;
@@ -529,6 +747,15 @@ function half(h) {
 
     const pos = new Float32Array(W * H * 3);
     const col = new Float32Array(W * H * 3);
+    // The two things the fragment shader needs in order to redo the shoreline
+    // itself: the noise multipliers that were folded into the vertex colour
+    // (so a per-pixel beach carries the same grain as the ground around it and
+    // does not read as a flat painted stripe), and whether this vertex is
+    // allowed to be beach at all. Cliffed shore is rock and built ground is
+    // built, at any resolution -- those are decided from data the CPU has and
+    // the shader does not.
+    const mod = new Float32Array(W * H * 3);
+    const shoreOK = new Float32Array(W * H);
     const c = new THREE.Color();
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
       const k = j * W + i, x = x0 + i * step, z = z0 + j * step, h = hs[k];
@@ -540,13 +767,22 @@ function half(h) {
       // A sea cliff is bare rock whether or not the mesh happens to resolve the
       // slope: the shore profile already knows this stretch is cliffed, so use
       // that rather than inferring it from a gradient the grid may have smoothed.
+      let cliffAmt = 0;
       if (h > 0 && h < 110) {
         const cf = cliffiness(x, z);
-        if (cf > 0.35) c.lerp(new THREE.Color(0x8b8378), Math.min(0.8, (cf - 0.35) * 1.7));
+        if (cf > 0.35) {
+          cliffAmt = Math.min(0.8, (cf - 0.35) * 1.7);
+          c.lerp(new THREE.Color(0x8b8378), cliffAmt);
+        }
       }
       // built ground reads as ground, not lawn
       const s = h > 0 ? settAt(x, z) : null;
       if (s) c.lerp(new THREE.Color(0xc3b9a6), 0.5);
+      // Sand is refused wherever the CPU already knows better. Both of these
+      // are the SAME judgements the vertex colour above just made, expressed as
+      // a weight rather than a blend -- so the shader cannot paint a beach onto
+      // a sea cliff or through a waterfront street.
+      shoreOK[k] = (1 - cliffAmt) * (s ? 0 : 1);
       // Two scales of variation. One fine (soil, mown grass, scrub) and one
       // broad, so a ten-kilometre hillside is not one flat green: real land
       // reads as patches of pasture, woodland and bare ground at 500 m across.
@@ -555,6 +791,11 @@ function half(h) {
       col[k * 3] = c.r * n * warm;
       col[k * 3 + 1] = c.g * n;
       col[k * 3 + 2] = c.b * n * (1.94 - warm);
+      // The multipliers on their own, so the fragment can apply the identical
+      // grain to a colour it computes itself.
+      mod[k * 3] = n * warm;
+      mod[k * 3 + 1] = n;
+      mod[k * 3 + 2] = n * (1.94 - warm);
     }
 
     const idx = [];
@@ -570,10 +811,12 @@ function half(h) {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    g.setAttribute("aMod", new THREE.BufferAttribute(mod, 3));
+    g.setAttribute("aShoreOK", new THREE.BufferAttribute(shoreOK, 1));
     g.setIndex(idx);
     g.computeVertexNormals();
 
-    let mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0 }));
+    let mesh = new THREE.Mesh(g, withPerPixelShoreline(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0 })));
     mesh.receiveShadow = true;
     // The COARSE grid does not cast. At 200 m a triangle is far bigger than any
     // shadow-map texel it lands in, so it self-shadows: the sea bed showed hard
@@ -743,6 +986,7 @@ function half(h) {
   if (!SKIP.has("water")) {
     sea.rotation.x = -Math.PI / 2; sea.position.y = LOOK.seaLevel; sea.renderOrder = 2;
     scene.add(sea);
+    giveWaterItsDepth(sea);
   }
 
   // Surf: a ribbon hugging every shoreline, faded across its width.

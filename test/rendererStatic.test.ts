@@ -91,6 +91,10 @@ const GLOBALS = new Set([
   // browser
   "window", "document", "navigator", "location", "history", "screen",
   "performance", "requestAnimationFrame", "cancelAnimationFrame",
+  // Real global, and deliberately used behind a typeof guard because Safari
+  // did not ship it for years. Listing it is not a loosening -- the check is
+  // for names that do not exist anywhere, and this one does.
+  "requestIdleCallback", "cancelIdleCallback",
   "setTimeout", "clearTimeout", "setInterval", "clearInterval",
   "fetch", "Request", "Response", "Headers", "FormData", "Blob", "File",
   "FileReader", "Image", "ImageData", "Audio", "AudioContext",
@@ -429,5 +433,58 @@ test("no renderer module reads a const or let before it is declared", () => {
     `This is how buildProps shipped: it read 'stats' one line above the const that ` +
     `declares it, threw ReferenceError on every call, and took the entire world ` +
     `build down with it on every page load.`
+  );
+});
+
+test("every WebGLRenderer asks for a logarithmic depth buffer", () => {
+  // A ONE-WORD DELETION HERE LOOKS LIKE NOTHING AND UNDOES THE WHOLE FIX.
+  //
+  // Removing this option does not throw, does not fail to compile, and does not
+  // change a single pixel in a screenshot taken near the camera. It only makes
+  // distant geometry start flickering again -- which reads as "the graphics are
+  // a bit off", the exact complaint that took a long time to trace to its cause
+  // the first time. So it is pinned.
+  //
+  // The default 24-bit fixed-point depth buffer spends its precision near the
+  // camera, governed by the near:far ratio:
+  //
+  //     dz = z^2 * (far - near) / (far * near * 2^24)
+  //
+  // Measured for the two cameras this project builds, against roads that are
+  // drawn 0.9 m above the terrain:
+  //
+  //   world camera (near 3, far 120000)
+  //      1 km   0.020 m      10 km   1.987 m      26 km  13.431 m
+  //   city camera (near 0.1, far 12000)
+  //      1 km   0.596 m      10 km  59.604 m
+  //
+  // The city camera cannot resolve 0.6 m at one kilometre, so inside the city
+  // it is built to show, roads and ground were the same depth to the buffer and
+  // which one drew was decided by rounding -- per pixel, per frame, changing as
+  // the camera moved. A logarithmic buffer spreads precision across the range
+  // (7 mm at 10 km on the world camera, 285x better) and costs the early-Z
+  // optimisation, which is the honest trade.
+  const files = ["world-render-3d.js", "city.html"];
+  const failures: string[] = [];
+  for (const file of files) {
+    const src = readFileSync(join(PUBLIC, file), "utf8");
+    // Count constructions, not occurrences of the flag: a file could gain a
+    // second renderer that quietly lacks it while the first still has it.
+    const constructions = (src.match(/new THREE\.WebGLRenderer\(/g) || []).length;
+    const flagged = (src.match(/logarithmicDepthBuffer:\s*true/g) || []).length;
+    if (constructions === 0) {
+      failures.push(`${file}: constructs no WebGLRenderer at all — has the renderer moved?`);
+    } else if (flagged < constructions) {
+      failures.push(
+        `${file}: ${constructions} WebGLRenderer(s) but only ${flagged} ask for ` +
+        `logarithmicDepthBuffer: true`
+      );
+    }
+  }
+  assert.deepEqual(
+    failures, [],
+    `a renderer is back on the default depth buffer:\n  ${failures.join("\n  ")}\n\n` +
+    `At the city camera's near:far ratio that is 0.6 m of depth resolution at ` +
+    `1 km, against roads drawn 0.9 m above the ground they sit on.`
   );
 });

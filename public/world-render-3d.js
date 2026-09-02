@@ -1306,7 +1306,14 @@ class Renderer3D {
   }
 
   _initScene() {
-    const renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: "high-performance" });
+    // logarithmicDepthBuffer: see the long note at the renderer in city.html for
+    // the arithmetic. It applies HERE MORE SHARPLY, because this file builds two
+    // cameras and the tighter one is the worse offender: the world camera is
+    // 3 : 120000 (40,000 : 1), but the city camera below is 0.1 : 12000, which
+    // is 120,000 : 1 and cannot resolve 0.6 m at a single kilometre -- inside
+    // the city it is meant to show. Roads sit 0.9 m above the terrain, so they
+    // were fighting the ground almost everywhere in that view.
+    const renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: "high-performance", logarithmicDepthBuffer: true });
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.95;
     renderer.outputColorSpace = THREE.SRGBColorSpace;

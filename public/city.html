@@ -80,6 +80,41 @@ const num = (k, d) => (Q.has(k) ? parseFloat(Q.get(k)) : d);
 
 // ---------------------------------------------------------------- renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance",
+  // THE DEPTH BUFFER COULD NOT RESOLVE A ROAD FROM THE GROUND IT SITS ON.
+  //
+  // Mark: "the land doesn't stay land as you move, the pixels change, nothing
+  // seems fixed in place." That is not a texture or a lighting problem, it is
+  // arithmetic. A 24-bit fixed-point depth buffer spends its precision near the
+  // camera, and how badly is set by the near:far ratio -- here 3 : 120000, or
+  // 40,000 : 1. The resolvable depth difference works out to:
+  //
+  //     dz = z^2 * (far - near) / (far * near * 2^24)
+  //
+  //     at  1 km   0.020 m
+  //     at  5 km   0.497 m
+  //     at 10 km   1.987 m
+  //     at 26 km  13.431 m   (the far edge of the world)
+  //
+  // Roads are drawn 0.9 m above the terrain. So from about 7 km out the buffer
+  // genuinely cannot tell the road from the ground, and which one wins is
+  // decided by rounding -- per pixel, changing as the camera moves. Every
+  // symptom follows from that one number: surfaces swapping, edges crawling,
+  // the coastline appearing to shift between land and water.
+  //
+  // A logarithmic buffer distributes precision across the whole range instead
+  // of hoarding it at the near plane, which is the right answer for a world
+  // that is 26 km wide and still wants a 3 m near plane for ground-level
+  // flythrough. Raising `near` would also work arithmetically -- near=30 gives
+  // 0.199 m at 10 km -- but it clips anything within 30 m of the camera, which
+  // breaks the flythrough this world exists to be seen from.
+  //
+  // Safe against the post chain, checked rather than assumed: there is no
+  // ShaderMaterial anywhere in public/. The only hand-written shader is
+  // GradeShader below, and it is a full-screen ShaderPass that never touches
+  // scene depth, so the logdepthbuf chunks do not apply to it. Every scene
+  // object uses stock three.js materials, which include those chunks
+  // automatically. Nothing here samples a depth texture.
+  logarithmicDepthBuffer: true,
   // headless capture reads the canvas back directly, which needs the buffer kept
   preserveDrawingBuffer: num("pdb", 0) > 0 });
 renderer.setPixelRatio(Math.min(devicePixelRatio, num("dpr", 2)));
