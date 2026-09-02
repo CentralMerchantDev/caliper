@@ -27,11 +27,12 @@ import {
   generateWorld, generateCityPlan, landmassPolygons, PLOT_CLASSES, SETTLEMENTS,
   offsetPolygon, COAST, splinePolygon, BRIDGES, signedArea2, LANDMASSES, distanceToCoast, distanceToCoastExact, coastlinePolygon, classForSettlementBlock } from "../public/city-plan.js";
 import { WORLD_SCALE } from "../public/world-scale.js";
-import { findSite, findFlattestSite, ROAD_SLOPE_MAX } from "../public/land-use.js";
+import { findSite, findFlattestSite, ROAD_SLOPE_MAX, roadAllowedAt, findQuay, MIN_CORRIDOR_ON_LAND } from "../public/land-use.js";
 import { placeFeatures, FEATURES } from "../public/features.js";
 import { assessFootprint } from "../public/footprint.js";
 import { buildSpatialIndex } from "../public/spatial-index.js";
-import { DENSITY_BANDS } from "../public/zoning.js";
+import { DENSITY_BANDS, makeZoning } from "../public/zoning.js";
+import { fitSettlements } from "../public/settlement-fit.js";
 import { gradeRun, ROAD_GRADE } from "../public/grade.js";
 
 // PROBE COORDINATES SCALE. JUDGEMENTS DO NOT.
@@ -1107,13 +1108,41 @@ test("a ridge between the corners is seen", () => {
   assert.notEqual(f.verdict, "slab", "a 30 m step across the footprint is not level ground");
 });
 
-test("the four verdicts follow the ground, and a cliff is refused", () => {
-  const at = (drop: number) => (x: number) => 10 + (x / 40) * drop;
-  const v = (drop: number) => assessFootprint(at(drop), { xMin: -20, xMax: 20, zMin: -20, zMax: 20 }).verdict;
-  assert.equal(v(0), "slab", "level ground should be a slab");
-  assert.equal(v(3), "plinth", "a 3 m fall across the footprint wants a plinth");
-  assert.equal(v(10), "terrace", "a 10 m fall wants terracing");
-  assert.equal(v(40), "refuse", "a 40 m fall is a cliff and nothing should be built");
+// THIS TEST USED TO PASS WITHOUT EVER REACHING THE CLIFF BRANCH.
+//
+// The fixture was `10 + (x / 40) * drop` over x in [-20, 20], so at drop = 40 the
+// ground ran from -10 m to +30 m. -10 is below sea level, so the WATER branch
+// returned first with reason "partly in water" -- and because both refusals
+// carry the same verdict string, asserting `verdict === "refuse"` could not tell
+// them apart. The cliff branch could have been deleted and this still passed.
+//
+// Two changes: the fixture is lifted clear of the sea so the cliff branch is the
+// one that fires, and every case asserts the REASON, which is the only thing
+// that distinguishes one refusal from another.
+test("the four verdicts follow the ground, and a cliff is refused as a cliff", () => {
+  // Base 100 m, so nothing in this fixture is anywhere near water.
+  const at = (drop: number) => (x: number) => 100 + (x / 40) * drop;
+  const f = (drop: number) => assessFootprint(at(drop), { xMin: -20, xMax: 20, zMin: -20, zMax: 20 });
+
+  assert.equal(f(0).verdict, "slab", "level ground should be a slab");
+  assert.equal(f(3).verdict, "plinth", "a 3 m fall across the footprint wants a plinth");
+  assert.equal(f(10).verdict, "terrace", "a 10 m fall wants terracing");
+
+  const cliff = f(40);
+  assert.equal(cliff.verdict, "refuse", "a 40 m fall is a cliff and nothing should be built");
+  assert.equal(
+    cliff.reason, "cliff",
+    `refused for "${cliff.reason}", not "cliff" — the fixture is reaching a different ` +
+    `branch than the one this test is named for, which is how it passed while the ` +
+    `cliff check did nothing`
+  );
+  assert.equal(cliff.wet, 0, "the cliff fixture must be entirely dry, or it is testing the water branch");
+
+  // And the WATER refusal is a genuinely different answer, not the same one by
+  // another name — the distinction the old assertion could not see.
+  const inSea = assessFootprint((x: number) => -5 + (x / 40) * 2, { xMin: -20, xMax: 20, zMin: -20, zMax: 20 });
+  assert.equal(inSea.verdict, "refuse");
+  assert.match(inSea.reason, /water/, `sea-level ground refused for "${inSea.reason}"`);
 });
 
 test("a plinth carries the base down to the lowest corner, so nothing overhangs", () => {
@@ -1157,9 +1186,22 @@ test("every road holds the gradient its class specifies", () => {
     if (Math.abs(r.to - r.from) < 200) continue;
     checked++;
     const g = gradeRun(heightAt, r, { step: 20, ...spec });
-    if (!g.holdsGrade) {
+
+    // MEASURE, DO NOT ASK. This used to read `if (!g.holdsGrade)` — the verdict
+    // that gradeRun computed about its own output. A mutation that pinned
+    // holdsGrade to true would have satisfied this test completely while every
+    // road in the world exceeded its limit, which is the exact failure mode the
+    // test exists to catch. Compare the measured gradient against the spec, and
+    // check the flag separately against the same measurement.
+    if (g.worstGrade > spec.maxGrade * 1.001) {
       offenders.push(`${r.id} (${r.class}) reaches ${(100 * g.worstGrade).toFixed(2)}% against a ${(100 * spec.maxGrade).toFixed(0)}% limit`);
     }
+    assert.equal(
+      g.holdsGrade, g.worstGrade <= spec.maxGrade * 1.001,
+      `${r.id}: holdsGrade says ${g.holdsGrade} but the measured gradient is ` +
+      `${(100 * g.worstGrade).toFixed(2)}% against a ${(100 * spec.maxGrade).toFixed(2)}% limit ` +
+      `— the flag and the number disagree`
+    );
   }
 
   assert.ok(checked > 500, `only ${checked} roads checked`);
@@ -1452,4 +1494,147 @@ test("the block density ladder uses the calibrated bands, not a second opinion",
   // 3. AND THE LADDER MUST ACTUALLY BITE. Top demand is the densest admitted
   //    class, not a fallback pick.
   assert.equal(at(0.99), "TOWER", "peak demand should reach the top of the ladder");
+});
+
+// =============================================================================
+// 3.8 -- FIVE BEHAVIOURS WITH NO TEST AT ALL
+//
+// The audit tried to break each of these and the suite stayed green at 386/386,
+// because there was nothing to break: they had no coverage, which is a harder
+// failure than a weak assertion and looks identical from the outside.
+//
+// Each test below was written by mutating the real code first and checking the
+// test caught it, rather than by reading the code and describing it back.
+// =============================================================================
+
+test("roadAllowedAt applies the per-class slope ceiling, not one number for every road", () => {
+  // A constant gradient, so `slope` is known and the only variable is the class.
+  const at = (g: number) => (x: number) => 100 + x * g;
+
+  // 10% ground: legal for a STREET (0.15), illegal for a FREEWAY (0.06).
+  const ground = at(0.10);
+  const street = roadAllowedAt(ground, 0, 0, null, "STREET");
+  const freeway = roadAllowedAt(ground, 0, 0, null, "FREEWAY");
+
+  assert.equal(street.ok, true,
+    `10% ground refused for a STREET, whose ceiling is ${ROAD_SLOPE_MAX.STREET}`);
+  assert.equal(freeway.ok, false,
+    `10% ground accepted for a FREEWAY, whose ceiling is ${ROAD_SLOPE_MAX.FREEWAY} — ` +
+    `the class ceiling is being ignored`);
+  assert.equal(freeway.reason, "too steep");
+
+  // And the ceiling must actually differ by class, or the test above passes for
+  // the wrong reason.
+  assert.ok(ROAD_SLOPE_MAX.FREEWAY < ROAD_SLOPE_MAX.STREET,
+    "a freeway must not be allowed on steeper ground than a residential street");
+});
+
+test("a quay is found on a north-south shore, not only an east-west one", () => {
+  // THE DEAD BRANCH. findQuay took `along` and defaulted it to "ew"; no caller
+  // ever passed it, so every north-south branch was unreachable and half the
+  // coast could not carry a port. It tries both orientations now — and nothing
+  // tested that, so the fix was as untested as the bug.
+  //
+  // A shore running north-south: water to the west of x = 0, land to the east.
+  const nsShore = (x: number, _z: number) => (x < 0 ? -20 : (x - 0) * 0.02 + 1);
+  const quay = findQuay(nsShore, { x: 0, z: 0 }, { length: 400, minDepth: 8, radius: 2000, step: 60 });
+
+  assert.ok(quay, "no berth found on a north-south shoreline — the second orientation is dead again");
+  assert.equal(quay.along, "ns",
+    `the berth came back on the ${quay.along} axis for a north-south shore`);
+
+  // And the east-west branch still works, so "tries both" is not "tries ns".
+  const ewShore = (_x: number, z: number) => (z < 0 ? -20 : z * 0.02 + 1);
+  const ewQuay = findQuay(ewShore, { x: 0, z: 0 }, { length: 400, minDepth: 8, radius: 2000, step: 60 });
+  assert.ok(ewQuay, "no berth found on an east-west shoreline");
+  assert.equal(ewQuay.along, "ew", `east-west shore produced a ${ewQuay.along} berth`);
+});
+
+test("makeZoning reports a missing anchor instead of silently dropping the zone", () => {
+  // Losing industry when the port is gone is correct. Losing it silently is the
+  // defect, and the reporter that exists to prevent it had no test.
+  const flat = () => 40;
+  const withNothing = makeZoning({ heightAt: flat, demandAt: () => 0.5, sites: {} });
+
+  assert.ok(Array.isArray(withNothing.missingAnchors), "missingAnchors is not being reported at all");
+  for (const anchor of ["containerPort", "airport", "railway"]) {
+    assert.ok(
+      withNothing.missingAnchors.includes(anchor),
+      `${anchor} is absent but not reported — it would vanish from the world silently`
+    );
+  }
+  assert.equal(withNothing.hasIndustry, false, "no port, so there is no industry to claim");
+
+  // And it must not cry wolf: an anchor that IS present is not reported missing.
+  const withPort = makeZoning({
+    heightAt: flat, demandAt: () => 0.5,
+    sites: { containerPort: { x: 0, z: 0 } },
+  });
+  assert.ok(!withPort.missingAnchors.includes("containerPort"),
+    "a port that exists is being reported as missing");
+  assert.equal(withPort.hasIndustry, true);
+});
+
+test("fitSettlements keeps its two stated guarantees: no overlap, and no growth into bad ground", () => {
+  // BOTH GUARANTEES WERE UNTESTED. The module's header calls them "by
+  // construction", which is a claim about the code and not evidence about the
+  // output — and "by construction" is exactly the kind of assurance that stops
+  // being true the first time someone edits the loop.
+  //
+  // An island: dry inside a radius, sea outside. Two settlements placed close
+  // enough that unchecked growth would run them into each other and into water.
+  const island = (x: number, z: number) => {
+    const r = Math.hypot(x, z);
+    return r < 3000 ? 40 : -15;
+  };
+  const list = [
+    { id: "a", cls: "TOWNHOUSE", edge: 0.06, bounds: { xMin: -1400, xMax: -600, zMin: -400, zMax: 400 } },
+    { id: "b", cls: "TOWNHOUSE", edge: 0.06, bounds: { xMin: 600, xMax: 1400, zMin: -400, zMax: 400 } },
+  ];
+  // maxGrowth IS RAISED DELIBERATELY, AND THE FIRST VERSION OF THIS TEST WAS
+  // WORTHLESS WITHOUT IT. At the default 4.0 the area cap halted growth at 4.2x
+  // with rejectedLand = 0 and rejectedNeighbour = 0 — neither guard ever ran,
+  // so the test passed by describing a loop that had stopped for an unrelated
+  // reason. Both mutations below survived it. Lifting the cap makes the land and
+  // the neighbour the binding constraints, which is what is under test.
+  const { settlements, stats } = fitSettlements(list as any, island, { step: 60, sample: 45, maxGrowth: 100 });
+
+  assert.ok(stats.growth > 1.05, `settlements barely grew (x${stats.growth.toFixed(2)}); this is not exercising the loop`);
+
+  // AND THE GUARDS MUST HAVE ACTUALLY FIRED. Asserting only on the outcome lets
+  // a deleted check pass whenever the fixture never needed it — which is exactly
+  // how this test failed to notice both mutations the first time.
+  assert.ok(stats.rejectedNeighbour > 0,
+    `the neighbour check never rejected a strip (${stats.rejectedNeighbour}); ` +
+    `this fixture is not exercising it, so guarantee 1 below proves nothing`);
+  assert.ok(stats.rejectedLand > 0,
+    `the buildable check never rejected a strip (${stats.rejectedLand}); ` +
+    `this fixture is not exercising it, so guarantee 2 below proves nothing`);
+
+  // GUARANTEE 1: no two settlement rectangles overlap.
+  for (let i = 0; i < settlements.length; i++) {
+    for (let j = i + 1; j < settlements.length; j++) {
+      const a = settlements[i].bounds, b = settlements[j].bounds;
+      const over = a.xMin < b.xMax && a.xMax > b.xMin && a.zMin < b.zMax && a.zMax > b.zMin;
+      assert.ok(!over,
+        `${settlements[i].id} and ${settlements[j].id} overlap — the neighbour check is not holding`);
+    }
+  }
+
+  // GUARANTEE 2: no settlement grew substantially into water. Sampled on a grid,
+  // because corner-sampling is how a settlement ends up straddling a coast.
+  for (const s of settlements) {
+    const b = s.bounds;
+    let wet = 0, total = 0;
+    for (let x = b.xMin; x <= b.xMax; x += 60) {
+      for (let z = b.zMin; z <= b.zMax; z += 60) {
+        total++;
+        if (island(x, z) <= 0) wet++;
+      }
+    }
+    const wetShare = wet / total;
+    assert.ok(wetShare < 0.28,
+      `${s.id} is ${(100 * wetShare).toFixed(0)}% water — it grew into the sea ` +
+      `(minBuildable is 0.72, so 28% is the documented ceiling)`);
+  }
 });
