@@ -39,6 +39,29 @@
 // The character becomes a consequence. Move the port and the warehouses follow
 // it, because they were never anywhere else: they were always "next to the port".
 //
+// ============================ READ THIS FIRST ================================
+// THIS IS A LAYOUT HINT, NOT A PLANNING CODE. IT MUST NEVER GATE AN EDIT.
+//
+// The city exists to be edited by an AI coding agent. If zoning became a rule
+// the agent had to satisfy, two bad things follow immediately: the game gets
+// boring, because "put a tower on the beach" comes back refused for a policy
+// reason rather than a physical one; and every interesting request turns into a
+// constraint the agent has to work around rather than a change it can make.
+//
+// So this runs ONCE, at world generation, to decide what the initial city looks
+// like. Nothing downstream consults it. Verified: zoning.js is imported only by
+// city-plan.js and the tests -- src/ (the pipeline) and the edit path in
+// world-render-3d.js never reference it.
+//
+// Refusals in this project are about PHYSICAL reality: that ground is
+// underwater, that slope is a cliff, that footprint has no dry corner. Those
+// come from land-use.js and footprint.js and they are worth refusing over,
+// because they produce a building standing in the sea. "The zoning says
+// residential" is not in that category and must not be added to it.
+//
+// If you find yourself importing this file into the pipeline, stop.
+// =============================================================================
+//
 // This module imports no renderer and no terrain internals. It is a pure
 // function of position and the resolved feature sites, so it can be tested
 // without building a world.
@@ -80,6 +103,34 @@ export const DENSITY_BANDS = [
   { above: 0.06, cls: "TOWNHOUSE" },
   { above: 0.004, cls: "VILLA" },
 ];
+
+// STREET SPACING FOLLOWS THE CHARACTER, BECAUSE THE BLOCK IS THE CHARACTER.
+//
+// This was the defect the zoning change introduced and the block test failed to
+// catch. Deriving the character without deriving the SPACING left settlements
+// whose content was re-zoned VILLA still laid out on the 420 m block grid their
+// declared FARM character had given them -- 141 walkable blocks over the ITE
+// 183 m ceiling, the worst at 432 m, while the test reported zero because it was
+// reading the declared class the derivation had superseded.
+//
+// A block IS the character. Farm parcels are big because fields are big; a
+// terrace street is close-grained because terraces are. So the two are derived
+// together, from one place, and the walkable classes are all set inside the
+// ceiling by construction rather than checked against it afterwards.
+// (docs/CITY-PLANNING-SPEC.md §1.3: desirable 61-122 m, ceiling 183 m.)
+export const CHARACTER_SPACING = {
+  TOWER:     { av: 150, st: 110 },   // dense core, finest grain
+  MIDRISE:   { av: 155, st: 115 },
+  TERRACE:   { av: 165, st: 120 },
+  TOWNHOUSE: { av: 175, st: 130 },
+  VILLA:     { av: 180, st: 140 },
+  RESORT:    { av: 180, st: 145 },
+  // Not pedestrian fabric. A container yard and a field are legitimately coarse,
+  // and the block test exempts exactly these three for that reason.
+  WAREHOUSE: { av: 300, st: 220 },
+  FARM:      { av: 420, st: 330 },
+  HANGAR:    { av: 460, st: 340 },
+};
 
 /** How far the working land behind a quay reaches inland, in metres. */
 export const PORT_BACKUP_DEPTH = 550;   // PIANC-derived median; spec §2.2

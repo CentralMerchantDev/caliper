@@ -1211,7 +1211,7 @@ function buildProps(api) {
   // Built as instanced sleepers and two continuous rails so it costs two draw
   // calls rather than one per tie.
   // ---------------------------------------------------------------------------
-  {
+  railway: {
     // A RAILWAY IS THE LEAST FORGIVING SURFACE IN THE WORLD.
     //
     // This followed the raw ground -- `heightAt(x, RAIL_Z)` plus a fixed 0.9 m --
@@ -1224,10 +1224,19 @@ function buildProps(api) {
     // Railways answer this with heavy earthworks -- embankment, cutting, viaduct --
     // far more than roads do, because the gradient limit leaves them no choice.
     // So the formation is graded at GRADE.RAIL with a generous deviation budget.
+    // THE ONE FEATURE THAT STILL FELL BACK TO ITS LITERAL.
+    //
+    // This read `SITE.railway || { at: wm(-3900) }`. Every other feature breaks
+    // out when placement fails -- port, golf, airport, stadium -- and the rule is
+    // stated at the top of buildProps: anything that cannot be placed is absent
+    // from SITE, so its geometry does not run. The railway alone would instead
+    // draw itself on the un-vetted drawn-world coordinate: the exact 15.2%
+    // drape the corridor search exists to prevent, restored without a word.
     const _rw = SITE.railway;
-    const RAIL_Z = (_rw || { at: wm(-3900) }).at;
-    const RAIL_FROM = (_rw || { from: wm(-17000) }).from;
-    const RAIL_TO = (_rw || { to: wm(17000) }).to;
+    if (!_rw) break railway;   // no buildable corridor: build no railway
+    const RAIL_Z = _rw.at;
+    const RAIL_FROM = _rw.from;
+    const RAIL_TO = _rw.to;
     const railGrade = gradeRun(heightAt, { axis: "ew", at: RAIL_Z, from: RAIL_FROM, to: RAIL_TO },
                                { step: 40, window: 900, maxGrade: GRADE.RAIL, maxDev: 30 });
     // 30 m matches the budget findCorridor used to CHOOSE this line. A smaller

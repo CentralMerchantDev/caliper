@@ -8,7 +8,7 @@ has the detail; this is what you need before you deploy.
 Run from `C:\Code\sandbox-spike` — I can't deploy from the sandbox:
 
 ```
-npm test          # 350 node tests + 7 worker tests, and it type-checks first now
+npm test          # 379 node tests + 7 worker tests, and it type-checks first now
 npx wrangler deploy
 ```
 

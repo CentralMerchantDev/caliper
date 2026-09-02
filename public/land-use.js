@@ -244,9 +244,21 @@ export function findSite(heightAt, want, opts = {}) {
     grade = 120,
   } = opts;
 
-  /** Height variation across a footprint, sampled along both axes. */
+  /**
+   * Height variation across a footprint, sampled along both axes.
+   *
+   * This used to short-circuit to 0 whenever maxRange was Infinity -- which is
+   * the default and which no caller ever overrode -- and the result was then
+   * RETURNED AS `range`, as though it had been measured. Every feature reported
+   * range: 0. Golf actually spans 108 m of relief, farmWest 70.6 m. The number
+   * the module published about its own placement was a constant.
+   *
+   * Now it is always measured. The maxRange short-circuit only skips the
+   * CONSTRAINT, never the measurement, because a caller that does not constrain
+   * flatness still deserves to be told what it got.
+   */
   const rangeAt = (cx, cz) => {
-    if (maxRange === Infinity || (!w && !d)) return 0;
+    if (!w && !d) return 0;
     let mn = Infinity, mx = -Infinity;
     const nx = Math.max(2, Math.ceil(w / grade));
     const nz = Math.max(2, Math.ceil(d / grade));
@@ -431,24 +443,31 @@ export function findQuay(heightAt, want, opts = {}) {
 }
 
 /**
- * A CORRIDOR: a long run whose graded profile stays within a gradient limit.
+ * A CORRIDOR: a long run a railway could actually be built along.
  *
- * The railway is a single z with trains drawn along it and a per-point `h < 2`
- * skip. That cannot tell the difference between a railway and a dotted line of
- * disconnected fragments, and rail is the least forgiving surface in the world --
- * 2.5% is already a hard climb for adhesion.
+ * The first version of this scored candidate routes on how much of the line was
+ * DRY. It approved the drawn route at 100% on land and handed back a profile
+ * that still reached 11.2% -- four times the adhesion limit. A line can be
+ * entirely on land and completely unbuildable, because rail is limited by
+ * GRADIENT, not by wetness.
  *
- * Returns the best parallel offset from `want`, and what it costs.
+ * The second version scored on the achievable gradient. That was right at the
+ * time and is now redundant: gradeRun finishes on its gradient pass, so every
+ * corridor holds the limit. What differs between them is what holding it COSTS.
+ * A route needing 41 m of cutting and one needing 27 m are both buildable and
+ * are not equally good -- the earthworks bill is the entire reason real
+ * alignments are surveyed rather than drawn straight.
+ *
+ * So: reject what is wet, then choose on earthworks.
  */
 export function findCorridor(heightAt, want, opts = {}) {
   const {
     axis = "ew", from, to,
     step = 60,
-    search = 2400,     // how far to shift the line looking for a better one
+    search = 2400,
     searchStep = 160,
-    // The gradient the line must actually hold, and what may be spent to hold it.
-    maxGrade = 0.025,  // adhesion rail; see docs/CITY-PLANNING-SPEC.md §4.1
-    maxDev = 30,       // metres of embankment or cutting
+    maxGrade = 0.025,   // adhesion rail; docs/CITY-PLANNING-SPEC.md §4.1
+    maxDev = 30,        // metres of embankment or cutting the budget allows
     gradeWindow = 900,
   } = opts;
 
@@ -458,7 +477,6 @@ export function findCorridor(heightAt, want, opts = {}) {
   for (let off = 0; Math.abs(off) <= search; off = off <= 0 ? -off + searchStep : -off) {
     const at = (ew ? want.z : want.x) + off;
 
-    // 1. is the line on land at all?
     let on = 0, total = 0;
     for (let t = from; t <= to; t += step) {
       total++;
@@ -468,46 +486,30 @@ export function findCorridor(heightAt, want, opts = {}) {
     const onLand = total ? on / total : 0;
     if (onLand < 0.85) continue;
 
-    // 2. CAN A RAILWAY ACTUALLY BE BUILT ALONG IT?
-    //
-    // This is the question the first version of this function did not ask. It
-    // scored corridors purely on how much of the line was dry, picked the
-    // drawn one at 100% on land, and handed back a route whose graded profile
-    // still reached 11.2% -- four times the adhesion limit. A line can be
-    // entirely on land and still be unbuildable, because rail is limited by
-    // GRADIENT, not by wetness.
-    //
-    // Measured across this world, the difference between corridors is stark:
-    // a few hundred metres of lateral shift takes the achievable gradient from
-    // 11.2% to 2.5% at the same earthworks budget.
     const g = gradeRun(heightAt, { axis, at, from, to },
                        { step: 40, window: gradeWindow, maxGrade, maxDev });
-    let worst = 0, prev = null;
-    for (let t = from; t <= to; t += 40) {
-      const y = g.y(t);
-      if (prev !== null) {
-        const rise = Math.abs(y - prev) / 40;
-        if (rise > worst) worst = rise;
-      }
-      prev = y;
-    }
+    const earthworks = Math.max(g.maxFill, g.maxCut);
 
     const cand = {
       at, axis, from, to, onLand,
-      worstGrade: worst,
-      buildable: worst <= maxGrade * 1.02,   // small tolerance for sampling
-      maxFill: g.maxFill, maxCut: g.maxCut,
+      worstGrade: g.worstGrade,
+      holdsGrade: g.holdsGrade,
+      // A 35% overrun on the budget is still a railway. Past that it is a
+      // viaduct or a tunnel, which this does not model, so it is not "buildable".
+      buildable: g.holdsGrade && earthworks <= maxDev * 1.35,
+      maxFill: g.maxFill, maxCut: g.maxCut, earthworks,
       moved: Math.abs(off),
     };
 
-    // Prefer a line that can actually hold the gradient; among those, the one
-    // closest to where it was drawn. Fall back to the least-bad if none can.
     if (!best) best = cand;
     else if (cand.buildable && !best.buildable) best = cand;
     else if (cand.buildable === best.buildable) {
-      if (cand.buildable ? cand.moved < best.moved : cand.worstGrade < best.worstGrade) best = cand;
+      // Among buildable routes prefer the cheaper one, and break ties toward
+      // where it was drawn. Among unbuildable ones, the least bad.
+      const better = cand.earthworks < best.earthworks - 0.5
+        || (Math.abs(cand.earthworks - best.earthworks) <= 0.5 && cand.moved < best.moved);
+      if (better) best = cand;
     }
-    if (best.buildable && best.moved === 0) break;
   }
   return best;
 }

@@ -141,10 +141,25 @@ export function gradeRun(heightAt, run, opts = {}) {
   // constraint it enforces.
   const ds = (to - from) / (n - 1);
   const maxStep = Math.abs(maxGrade * ds);
-  for (let pass = 0; pass < 4; pass++) {
-    // gradient, forward then backward -- one direction alone only fixes the way
-    // it travels, so a descent that is too steep looks right going out and wrong
-    // coming back
+
+  // TWO CONSTRAINTS THAT FIGHT, AND WHICHEVER RAN LAST USED TO WIN.
+  //
+  // The gradient clamp pushes the surface away from the ground; the earthworks
+  // clamp pushes it back, which reintroduces the steep step the gradient clamp
+  // just removed. The first version alternated them and then RETURNED AFTER THE
+  // EARTHWORKS PASS whenever it had not settled by the round cap -- so the
+  // function advertised a bounded gradient and delivered whatever the deviation
+  // clamp left behind. Measured across every non-bridge road: 222 of 1,615 over
+  // their own class limit, including a freeway at 13.55% against a 4% design
+  // gradient and a 6% legal ceiling.
+  //
+  // Two changes. The loop always ENDS on the gradient pass, because gradient is
+  // the physical constraint -- a vehicle cannot climb a road that is too steep,
+  // whereas an over-budget embankment is only expensive. And convergence is
+  // measured and REPORTED rather than assumed: where the two cannot both be
+  // satisfied, the caller is told, instead of being handed a profile that
+  // quietly breaks the limit it asked for.
+  const applyGradient = () => {
     for (let i = 1; i < n; i++) {
       const d = smooth[i] - smooth[i - 1];
       if (d > maxStep) smooth[i] = smooth[i - 1] + maxStep;
@@ -155,15 +170,40 @@ export function gradeRun(heightAt, run, opts = {}) {
       if (d > maxStep) smooth[i] = smooth[i + 1] + maxStep;
       else if (d < -maxStep) smooth[i] = smooth[i + 1] - maxStep;
     }
-    if (maxDev === Infinity) break;
-    // earthworks budget
+  };
+  const applyBudget = () => {
+    if (maxDev === Infinity) return false;
     let over = false;
     for (let i = 0; i < n; i++) {
       const d = smooth[i] - raw[i];
       if (d > maxDev) { smooth[i] = raw[i] + maxDev; over = true; }
       else if (d < -maxDev) { smooth[i] = raw[i] - maxDev; over = true; }
     }
-    if (!over) break;
+    return over;
+  };
+
+  let budgetBinding = false;
+  for (let pass = 0; pass < 12; pass++) {
+    applyGradient();
+    budgetBinding = applyBudget();
+    if (!budgetBinding) break;
+  }
+  // ALWAYS finish on the gradient, so the profile that is returned satisfies the
+  // limit the caller named even when the earthworks budget could not be met.
+  applyGradient();
+
+  // What the profile actually achieves, measured rather than asserted.
+  let worstGrade = 0;
+  for (let i = 1; i < n; i++) {
+    const g = Math.abs(smooth[i] - smooth[i - 1]) / Math.abs(ds || 1);
+    if (g > worstGrade) worstGrade = g;
+  }
+  let overBudget = 0;
+  if (maxDev !== Infinity) {
+    for (let i = 0; i < n; i++) {
+      const d = Math.abs(smooth[i] - raw[i]) - maxDev;
+      if (d > overBudget) overBudget = d;
+    }
   }
 
   // --- 4. how much earthwork this implies, for whoever draws the kerb ---
@@ -178,6 +218,12 @@ export function gradeRun(heightAt, run, opts = {}) {
     samples: n,
     maxFill,
     maxCut,
+    /** The gradient this profile actually holds. Measured, not assumed. */
+    worstGrade,
+    /** True when the profile satisfies the gradient it was asked for. */
+    holdsGrade: worstGrade <= maxGrade * 1.001,
+    /** Metres by which the earthworks budget had to be exceeded, if any. */
+    overBudget,
     /** Graded surface height at distance t along the run, linearly interpolated. */
     y(t) {
       const u = ((t - from) / (to - from)) * (n - 1);

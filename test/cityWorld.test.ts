@@ -27,8 +27,10 @@ import {
   generateWorld, generateCityPlan, landmassPolygons, PLOT_CLASSES, SETTLEMENTS,
   offsetPolygon, COAST, splinePolygon, BRIDGES, signedArea2, LANDMASSES, distanceToCoast, distanceToCoastExact, coastlinePolygon } from "../public/city-plan.js";
 import { WORLD_SCALE } from "../public/world-scale.js";
-import { findSite, findFlattestSite } from "../public/land-use.js";
+import { findSite, findFlattestSite, ROAD_SLOPE_MAX } from "../public/land-use.js";
 import { placeFeatures } from "../public/features.js";
+import { assessFootprint } from "../public/footprint.js";
+import { gradeRun, ROAD_GRADE } from "../public/grade.js";
 
 // PROBE COORDINATES SCALE. JUDGEMENTS DO NOT.
 //
@@ -772,21 +774,50 @@ test("the railway runs on land, not across the bay", () => {
 // =============================================================================
 test("no walkable block exceeds the ITE block-length ceiling", () => {
   const CEILING = 183;
-  // Classes that are genuinely not pedestrian fabric.
   const COARSE = new Set(["FARM", "WAREHOUSE", "HANGAR"]);
-  const offenders: string[] = [];
 
+  // READ THE DERIVED CHARACTER, NOT THE DECLARED ONE.
+  //
+  // This test used to look the exemption up in the static SETTLEMENTS table --
+  // `SETTLEMENTS.find(s => s.id === b.settlement).cls`. A later commit made the
+  // character DERIVED, and generateWorld overwrites it for 48 of 55 settlements.
+  // So the test was reading a field its own codebase had superseded: coastal-0
+  // is declared FARM (exempt) but derived VILLA, and 23 walkable 392 m blocks --
+  // more than twice the ceiling -- were being silently excused while the test
+  // reported zero offenders.
+  //
+  // world.settlements carries the derived cls. That is the one to ask.
+  const character: Record<string, string> = {};
+  for (const s of overlapWorld.settlements as any[]) if (s.cls) character[s.id] = s.cls;
+
+  const offenders: string[] = [];
   for (const b of overlapWorld.blocks as any[]) {
-    const st = (SETTLEMENTS as any[]).find((s) => s.id === b.settlement);
-    if (st && COARSE.has(st.cls)) continue;
+    const c = character[b.settlement];
+    if (!c || COARSE.has(c)) continue;
     const longest = Math.max(b.xMax - b.xMin, b.zMax - b.zMin);
     if (longest > CEILING) {
-      offenders.push(`${b.id} (${b.settlement || "downtown"}) ${longest.toFixed(0)} m`);
+      offenders.push(`${b.id} (${c}) ${longest.toFixed(0)} m`);
     }
   }
-
   assert.equal(offenders.length, 0,
     `${offenders.length} walkable blocks over ${CEILING} m: ${offenders.slice(0, 5).join(", ")}`);
+});
+
+test("street spacing is derived with the character, not left behind by it", () => {
+  // The defect the test above was hiding: deriving the character without
+  // deriving the SPACING left re-zoned settlements on their old block grid --
+  // villas laid out on 420 m farm parcels. The two must come from one place.
+  const walkable = (overlapWorld.settlements as any[])
+    .filter((s) => s.cls && !["FARM", "WAREHOUSE", "HANGAR"].includes(s.cls));
+  assert.ok(walkable.length > 10, `only ${walkable.length} walkable settlements`);
+  for (const s of walkable) {
+    const blocks = (overlapWorld.blocks as any[]).filter((b) => b.settlement === s.id);
+    for (const b of blocks) {
+      const longest = Math.max(b.xMax - b.xMin, b.zMax - b.zMin);
+      assert.ok(longest <= 183,
+        `${s.id} is zoned ${s.cls} but carries a ${longest.toFixed(0)} m block -- its spacing did not follow its character`);
+    }
+  }
 });
 
 test("the downtown grid actually has its little streets", () => {
@@ -951,4 +982,161 @@ test("the density mix is a city's shape, not a monoculture", () => {
     `low-rise fabric is ${(100 * lowRise).toFixed(0)}% -- expected the majority but not the whole city`);
   assert.ok(Object.keys(mix).length >= 6,
     `only ${Object.keys(mix).length} plot classes in the whole world`);
+});
+
+// =============================================================================
+// ZONING IS A LAYOUT HINT AND MUST NEVER BECOME A GATE
+//
+// The city exists to be edited by an AI coding agent. If zoning became a rule an
+// edit had to satisfy, "put a tower on the beach" would come back refused for a
+// policy reason rather than a physical one — which makes the thing boring and
+// turns every interesting request into a constraint to work around.
+//
+// Refusals here are about physical reality: underwater, cliff, no dry corner.
+// Those produce a building standing in the sea and are worth refusing over.
+// "The zoning says residential" is not in that category.
+//
+// This test guards the boundary structurally rather than by intention, because
+// intention is what erodes.
+// =============================================================================
+test("zoning is confined to world generation and never reaches the edit path", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  // The suite is bundled to ESM, where __dirname does not exist. cwd is the repo
+  // root when run through test/run.mjs.
+  const root = process.cwd();
+
+  const offenders: string[] = [];
+  const scan = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".built" || entry.name === ".git") continue;
+        scan(full);
+        continue;
+      }
+      if (!/\.(ts|js|mjs)$/.test(entry.name)) continue;
+      const rel = path.relative(root, full);
+      // Generation and tests may import it. Nothing else may.
+      if (rel.includes("city-plan") || rel.startsWith("test") || rel.includes("zoning")) continue;
+      const src = fs.readFileSync(full, "utf8");
+      if (/from\s+["'][^"']*zoning\.js["']/.test(src)) offenders.push(rel);
+    }
+  };
+  scan(path.join(root, "src"));
+  scan(path.join(root, "public"));
+
+  assert.deepEqual(offenders, [],
+    `zoning.js is imported outside world generation: ${offenders.join(", ")}. It is a layout hint, not a planning code — it must not gate an edit.`);
+});
+
+// =============================================================================
+// FOOTPRINTS: THE MODULE THAT HAD NO TEST
+//
+// An independent audit deleted both refusal branches in footprint.js — the
+// verdict its own header calls "the point of the whole module" — and the suite
+// stayed at 371 passing. Nothing imported it. So the module that decides whether
+// a building may stand somewhere was, by the standard this project applies to
+// everything else, unverified.
+//
+// These cover the three defects the module was written to fix, each stated as a
+// property rather than a snapshot.
+// =============================================================================
+test("a footprint with any part in water is refused, not averaged", () => {
+  // The old code asked whether the CENTRE was dry. A building with its centre on
+  // the beach and its seaward half in the sea passed that test.
+  const flatDry = () => 10;
+  const halfWet = (x: number) => (x < 0 ? -5 : 10);
+
+  const dry = assessFootprint(flatDry, { xMin: -20, xMax: 20, zMin: -20, zMax: 20 });
+  assert.notEqual(dry.verdict, "refuse", "level dry ground should not be refused");
+
+  const wet = assessFootprint(halfWet, { xMin: -20, xMax: 20, zMin: -20, zMax: 20 });
+  assert.equal(wet.verdict, "refuse", "half the footprint is in the sea");
+  assert.match(wet.reason!, /water/);
+  // and the centre of that footprint is dry, which is exactly how it used to pass
+  assert.ok(halfWet(0) > 0.6, "guard: the centre really is dry, so a centre-only test would pass this");
+});
+
+test("a ridge between the corners is seen", () => {
+  // Four corner samples cannot see anything between them. This footprint has
+  // four level corners and a wall up the middle.
+  const ridge = (x: number) => (Math.abs(x) < 5 ? 40 : 10);
+  const f = assessFootprint(ridge, { xMin: -20, xMax: 20, zMin: -20, zMax: 20 });
+  assert.ok(f.range > 20, `range came back ${f.range.toFixed(1)} m — the ridge was missed`);
+  assert.notEqual(f.verdict, "slab", "a 30 m step across the footprint is not level ground");
+});
+
+test("the four verdicts follow the ground, and a cliff is refused", () => {
+  const at = (drop: number) => (x: number) => 10 + (x / 40) * drop;
+  const v = (drop: number) => assessFootprint(at(drop), { xMin: -20, xMax: 20, zMin: -20, zMax: 20 }).verdict;
+  assert.equal(v(0), "slab", "level ground should be a slab");
+  assert.equal(v(3), "plinth", "a 3 m fall across the footprint wants a plinth");
+  assert.equal(v(10), "terrace", "a 10 m fall wants terracing");
+  assert.equal(v(40), "refuse", "a 40 m fall is a cliff and nothing should be built");
+});
+
+test("a plinth carries the base down to the lowest corner, so nothing overhangs", () => {
+  // The whole point of the plinth: the downhill side must meet its own
+  // foundation rather than hanging in the air.
+  const slope = (x: number) => 10 + (x / 40) * 4;
+  const f = assessFootprint(slope, { xMin: -20, xMax: 20, zMin: -20, zMax: 20 });
+  assert.equal(f.verdict, "plinth");
+  assert.ok(Math.abs(f.base - f.min) < 1e-9,
+    `base is ${f.base.toFixed(2)} but the lowest ground is ${f.min.toFixed(2)} — the downhill side would hang`);
+  assert.ok(f.cut > 0, "a plinth on a slope has to cut into the uphill side");
+});
+
+// =============================================================================
+// ROADS HOLD THE GRADIENT THEY CLAIM
+//
+// gradeRun advertises a bounded gradient per class. It did not deliver one: the
+// loop alternated a gradient clamp and an earthworks clamp and RETURNED AFTER
+// THE EARTHWORKS PASS whenever the two had not settled, which reintroduces the
+// steep step the gradient clamp had just removed. Measured across every
+// non-bridge road: 222 of 1,615 over their own class limit, including a freeway
+// at 13.55% against a 4% design gradient and a 6% legal ceiling.
+//
+// Nothing caught it, because road grading had no test at all. An audit replaced
+// the entire smoothing-and-clamping stage with a raw drape and the suite stayed
+// green.
+//
+// This asserts the property against every real road in the world rather than a
+// synthetic one, because the failure only appears where the two constraints
+// genuinely conflict — which is the terrain the generator produces and not
+// something a hand-made fixture would reproduce.
+// =============================================================================
+test("every road holds the gradient its class specifies", () => {
+  const offenders: string[] = [];
+  let checked = 0;
+
+  for (const r of overlapWorld.roads as any[]) {
+    if (r.bridge) continue;
+    const spec = (ROAD_GRADE as any)[r.class];
+    if (!spec) continue;
+    if (Math.abs(r.to - r.from) < 200) continue;
+    checked++;
+    const g = gradeRun(heightAt, r, { step: 20, ...spec });
+    if (!g.holdsGrade) {
+      offenders.push(`${r.id} (${r.class}) reaches ${(100 * g.worstGrade).toFixed(2)}% against a ${(100 * spec.maxGrade).toFixed(0)}% limit`);
+    }
+  }
+
+  assert.ok(checked > 500, `only ${checked} roads checked`);
+  assert.equal(offenders.length, 0,
+    `${offenders.length} of ${checked} roads exceed their class gradient: ${offenders.slice(0, 3).join("; ")}`);
+});
+
+test("a road's legal ceiling and its design gradient do not contradict each other", () => {
+  // ROAD_SLOPE_MAX is what land-use.js will allow a road of this class to be
+  // PLACED on. ROAD_GRADE.maxGrade is what the surveyed alignment then holds.
+  // Different questions — but a design gradient steeper than the legal ceiling
+  // would entitle the alignment to build something placement would have refused.
+  for (const cls of Object.keys(ROAD_GRADE as any)) {
+    const design = (ROAD_GRADE as any)[cls].maxGrade;
+    const ceiling = (ROAD_SLOPE_MAX as any)[cls];
+    if (ceiling === undefined) continue;
+    assert.ok(design <= ceiling,
+      `${cls}: design gradient ${(100 * design).toFixed(0)}% exceeds its legal ceiling ${(100 * ceiling).toFixed(0)}%`);
+  }
 });

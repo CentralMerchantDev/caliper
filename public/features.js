@@ -132,7 +132,29 @@ export const FEATURES = [
  *   cannot be placed is a fact about the world worth being able to see, not
  *   something to swallow.
  */
+// MEMOISED PER HEIGHT FUNCTION.
+//
+// This is called three times on every page load -- once inside generateWorld to
+// derive zoning, once in buildProps to place geometry, once in world-render-3d
+// to aim the district bookmarks -- at roughly 700 ms each. That is 2.1 s of the
+// 3.3 s the world takes before first paint, spent computing the same answer
+// three times.
+//
+// generateCityPlan was memoised for exactly this reason and placeFeatures was
+// not. Keyed on the height function rather than globally, for the same reason
+// cityDemand is: a different world must get a different answer, and the test
+// suite builds several in one process.
+const _placementCache = new WeakMap();
+
 export function placeFeatures(heightAt) {
+  const hit = _placementCache.get(heightAt);
+  if (hit) return hit;
+  const out = computePlacements(heightAt);
+  _placementCache.set(heightAt, out);
+  return out;
+}
+
+function computePlacements(heightAt) {
   const sites = {};
   const report = [];
 

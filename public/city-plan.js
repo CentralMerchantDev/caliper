@@ -25,7 +25,7 @@ import { fbm, hash01, clamp, smoother } from "./noise.js";
 import { WORLD_SCALE, sm, sPoint, sFields, sBounds } from "./world-scale.js";
 import { roadAllowedAt, buildAllowedAt, driveableRun, slopeAt, SLOPE, makeDemand } from "./land-use.js";
 import { fitSettlements } from "./settlement-fit.js";
-import { makeZoning, zoneCharacter } from "./zoning.js";
+import { makeZoning, zoneCharacter, CHARACTER_SPACING } from "./zoning.js";
 import { placeFeatures } from "./features.js";
 
 // -----------------------------------------------------------------------------
@@ -1934,7 +1934,7 @@ export function generateBridgeApproaches(roads, heightAt) {
       if (best) {
         if (best.along <= 25) continue;         // already meets a street: nothing to build
         approaches.push({
-          id: `approach-${br.id}-${end}`, axis: br.axis || "ns", class: br.class,
+          id: `approach-${br.id}-${Math.round(end)}`, axis: br.axis || "ns", class: br.class,
           at, from: Math.min(end, best.road.at), to: Math.max(end, best.road.at),
           settlement: "approach", approachFor: br.id, joins: best.road.id,
         });
@@ -1997,13 +1997,13 @@ export function generateBridgeApproaches(roads, heightAt) {
 
       // leg 1: inland along the bridge's own axis, so it still leaves the deck straight
       approaches.push({
-        id: `approach-${br.id}-${end}`, axis: br.axis || "ns", class: br.class,
+        id: `approach-${br.id}-${Math.round(end)}`, axis: br.axis || "ns", class: br.class,
         at, from: Math.min(end, alt.t), to: Math.max(end, alt.t),
         settlement: "approach", approachFor: br.id, joins: `${alt.road.id} (via dog-leg)`,
       });
       // leg 2: the turn, across to the road that is actually there
       approaches.push({
-        id: `approach-${br.id}-${end}-leg`, axis: ew ? "ns" : "ew", class: br.class,
+        id: `approach-${br.id}-${Math.round(end)}-leg`, axis: ew ? "ns" : "ew", class: br.class,
         at: alt.t, from: Math.min(at, alt.road.at), to: Math.max(at, alt.road.at),
         settlement: "approach", approachFor: br.id, joins: alt.road.id,
       });
@@ -2663,7 +2663,18 @@ export function generateWorld(rawHeightAt = null) {
       if (derived && derived !== st.cls) {
         zoningChanges.push({ id: st.id, was: st.cls, now: derived });
       }
-      return derived ? { ...st, cls: derived, declaredCls: st.cls } : st;
+      if (!derived) return st;
+      // The spacing comes with the character. Deriving one without the other is
+      // what left re-zoned settlements on their old block grid -- villas laid out
+      // on 420 m farm parcels, over the ITE ceiling, invisible because the block
+      // test was reading the class that had just been superseded.
+      const sp = CHARACTER_SPACING[derived];
+      return {
+        ...st, cls: derived, declaredCls: st.cls,
+        av: sp ? sp.av : st.av,
+        st: sp ? sp.st : st.st,
+        declaredAv: st.av, declaredSt: st.st,
+      };
     });
   }
   // the spine goes in with the highways, not as a settlement, because it is a

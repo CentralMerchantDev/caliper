@@ -15,7 +15,7 @@ what you find.
 
 1. `git log --oneline -14` and read the messages. They are long on purpose and
    they explain *why*. The four most recent are the world rescale and rebuild.
-2. Run `npm test` — **371 node tests across 26 files, + 9 Cloudflare Worker tests**. Confirm green
+2. Run `npm test` — **379 node tests across 26 files, + 9 Cloudflare Worker tests**. Confirm green
    before you touch anything, so anything red later is yours.
 3. Run `node scripts/shoot.mjs` and look at the contact sheet. Judge the render
    yourself rather than trusting the priority list below. The camera bookmarks HAVE been
@@ -252,7 +252,7 @@ direction. People are static.
 ## How to check your work
 
 ```powershell
-npm test                                   # 371 + 9, type-checks first
+npm test                                   # 379 + 9, type-checks first
 node scripts/shoot.mjs                     # full contact sheet to .shots/
 node scripts/shoot.mjs "Downtown close"    # one view
 ```
