@@ -36,11 +36,21 @@
 // Not one slope threshold has to be touched or re-justified. The world becomes a
 // smaller copy of itself rather than a distorted one.
 //
-// The visible consequence, stated plainly: the range drops from 1,620 m to
-// 1,053 m at 0.65, and the snow line scales with it so the peaks still hold snow
-// in the same relative band. That is a Cape Breton coastal range rather than a
-// Rockies one. It is deliberate, and it is this constant away from being
-// something else.
+// THIS PARAGRAPH USED TO CONTRADICT terrain.js OUTRIGHT.
+//
+// It said "the range drops from 1,620 m to 1,053 m at 0.65, and the snow line
+// scales with it so the peaks still hold snow in the same relative band." Both
+// halves were wrong, and they were wrong in opposite directions.
+//
+// terrain.js deliberately divides the alpine term by WORLD_SCALE so the
+// mountains do NOT shrink -- that exception is documented at the point it is
+// made. Measured: peak 2,188 m at k=1 and 2,152 m at k=0.65, a 1.6% drop, not
+// 35%. But SNOW_LINE does scale (1,480 -> 962 m), so the snow band moves from
+// 68% of peak height down to 45% -- more snow, not "the same relative band".
+//
+// So: mountains keep their drawn height by design; the snow line drops with the
+// world and puts snow lower on them. If that reads wrong on a contact sheet, the
+// fix is to stop scaling SNOW_LINE, not to scale the mountains.
 //
 // -----------------------------------------------------------------------------
 // WHAT SCALES AND WHAT DOES NOT -- the rule this whole change rests on

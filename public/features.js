@@ -78,7 +78,20 @@ export const FEATURES = [
     id: "containerPort",
     name: "Container Terminal",
     want: () => ({ x: w(-5077), z: w(-1846) }),
-    need: { kind: "quay", length: 500, minDepth: 8, reach: 180, radius: 1500 },
+    // THE DEPTH REQUIREMENT HAS TO SCALE WITH THE BASINS IT IS MEASURED AGAINST.
+    //
+    // 8 m is a ship's draught, which is a BUILT dimension and does not scale --
+    // that reasoning is right in isolation and wrong here. Basin depths ARE
+    // landform metres and do scale, so the two drifted apart as the world
+    // shrank: at k=0.65 the port basin dredges to 8.45 m and clears an 8 m
+    // requirement by 0.45 m. At k=0.5 the basin is 6.50 m and the port -- and
+    // with it every WAREHOUSE plot in the world -- simply vanishes.
+    //
+    // The port sat 0.84 m of dredge depth from disappearing, and nothing said so
+    // because both numbers looked individually correct. A requirement compared
+    // against a scaled quantity has to be scaled the same way, or it is not the
+    // same question at two scales.
+    need: { kind: "quay", length: 500, minDepth: 8 * WORLD_SCALE, reach: 180, radius: 1500 },
   },
   {
     id: "railway",

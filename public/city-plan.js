@@ -2838,7 +2838,21 @@ export function generateWorld(rawHeightAt = null) {
   }
 
   return { world:WORLD, masses, roads: out, blocks, plots: keptPlots, settlements,
-           districts:DISTRICTS, bridges:BRIDGES, causeways:BRIDGES, highways:HIGHWAYS,
+           // COPIES, NOT THE MODULE'S OWN ARRAYS.
+           //
+           // These handed the caller the live module singletons: world.districts
+           // WAS DISTRICTS, and world.bridges and world.causeways were literally
+           // the same array object. Mutating one world was visible in every world
+           // built afterwards in that process -- and these are the objects the
+           // edit path in world-render-3d.js is handed, so a change applied to
+           // the world could reach back into the generator's own tables.
+           //
+           // Shallow copies of the arrays and of each entry. Determinism by VALUE
+           // always held; this closes the leak by REFERENCE.
+           districts: DISTRICTS.map((d) => ({ ...d })),
+           bridges: BRIDGES.map((b) => ({ ...b })),
+           causeways: BRIDGES.map((b) => ({ ...b })),
+           highways: HIGHWAYS.map((h) => ({ ...h })),
            unservedBridgeEnds: unserved,
            plotsDroppedForOverlap: plots.length - keptPlots.length,
            settlementFit,

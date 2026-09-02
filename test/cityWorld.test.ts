@@ -30,6 +30,7 @@ import { WORLD_SCALE } from "../public/world-scale.js";
 import { findSite, findFlattestSite, ROAD_SLOPE_MAX } from "../public/land-use.js";
 import { placeFeatures, FEATURES } from "../public/features.js";
 import { assessFootprint } from "../public/footprint.js";
+import { buildSpatialIndex } from "../public/spatial-index.js";
 import { gradeRun, ROAD_GRADE } from "../public/grade.js";
 
 // PROBE COORDINATES SCALE. JUDGEMENTS DO NOT.
@@ -1206,4 +1207,118 @@ test("the world states which zoning anchors it is missing", () => {
   // And the consequence is real: industry only exists because the port does.
   const industrial = (overlapWorld.plots as any[]).filter((p) => p.className === "WAREHOUSE");
   assert.ok(industrial.length > 0, "no industrial land in a world that reports having a port");
+});
+
+// =============================================================================
+// THE SHORE DISTANCE IS EXACT, NOT NEARLY
+//
+// LandField.distance() searches outward by ring and stopped when
+// `best < (ring + 1) * cell`, commented "provably the nearest". It is not: a
+// query point sits somewhere inside its own cell, so an edge in ring r can be
+// anywhere from (r-1) to (r+1) cells away, and that bound stops while a nearer
+// edge can still exist further out.
+//
+// It matters because everything downstream is built on this number. The shore
+// ramp uses it to lift land out of the water, and signed() uses a 60 m threshold
+// to decide whether to fall back to an exact point-in-polygon test "so the sand
+// meets the sea exactly where the plan says it does". An audit measured height
+// errors up to 37.4 m and seven points landing on the WRONG SIDE of the
+// coastline.
+//
+// This brute-forces against every coastline edge. Slow by design — correctness
+// of the height field is worth a few seconds.
+// =============================================================================
+test("LandField.distance agrees exactly with a brute-force search", () => {
+  const f = new LandField(16);
+  let worst = 0;
+  let wrong = 0;
+  let checked = 0;
+
+  for (let x = -20000; x <= 20000; x += 1100) {
+    for (let z = -20000; z <= 12000; z += 1100) {
+      const got = f.distance(x, z);
+      let exact = Infinity;
+      for (const e of (f as any).edges) {
+        const [x0, z0, x1, z1] = e;
+        const dx = x1 - x0, dz = z1 - z0;
+        const l2 = dx * dx + dz * dz || 1;
+        let t = ((x - x0) * dx + (z - z0) * dz) / l2;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const d = Math.hypot(x - (x0 + t * dx), z - (z0 + t * dz));
+        if (d < exact) exact = d;
+      }
+      exact = Math.min(exact, (f as any).MAX_D);
+      checked++;
+      const err = Math.abs(got - exact);
+      if (err > 1e-6) { wrong++; if (err > worst) worst = err; }
+    }
+  }
+
+  assert.ok(checked > 800, `only ${checked} points checked`);
+  assert.equal(wrong, 0,
+    `${wrong} of ${checked} shore distances are wrong, worst by ${worst.toFixed(1)} m — the ring bound is unsound again`);
+});
+
+// =============================================================================
+// THE SPATIAL INDEX — THE MODULE WITH NO TESTS AT ALL
+//
+// buildSpatialIndex produces the address a visitor sees when they click a
+// building, and the address string fed to grounding. Nothing imported it from a
+// test. An audit ran three mutations and the suite stayed at 386 passing:
+//
+//   * plotAt returning null unconditionally
+//   * plots registered in their CENTRE CELL ONLY — the exact defect the file's
+//     own comment says it avoids ("queries near a plot's edge silently find
+//     nothing")
+//   * the cell size reduced tenfold
+//
+// These cover the properties the module exists to provide.
+// =============================================================================
+test("every plot can be found from a point inside it", () => {
+  const ix = buildSpatialIndex(overlapWorld);
+  let hit = 0, n = 0;
+  for (const p of (overlapWorld.plots as any[]).slice(0, 3000)) {
+    const found = ix.plotAt((p.xMin + p.xMax) / 2, (p.zMin + p.zMax) / 2);
+    n++;
+    if (found && found.id === p.id) hit++;
+  }
+  assert.ok(n > 2000, `only ${n} plots probed`);
+  assert.equal(hit, n, `${n - hit} of ${n} plots could not be found from their own centre`);
+});
+
+test("a point near a plot's EDGE still finds it", () => {
+  // The centre-cell-only bug passes a centre test and fails this one. A plot
+  // that straddles a cell boundary must be registered in every cell it touches.
+  const ix = buildSpatialIndex(overlapWorld);
+  let hit = 0, n = 0;
+  for (const p of (overlapWorld.plots as any[]).slice(0, 3000)) {
+    // just inside each corner
+    for (const [x, z] of [
+      [p.xMin + 0.05, p.zMin + 0.05],
+      [p.xMax - 0.05, p.zMax - 0.05],
+    ]) {
+      const found = ix.plotAt(x, z);
+      n++;
+      if (found && found.id === p.id) hit++;
+    }
+  }
+  assert.ok(n > 4000, `only ${n} edge probes`);
+  assert.equal(hit, n, `${n - hit} of ${n} edge probes missed their own plot`);
+});
+
+test("a point on no plot gets an honest answer, not a wrong one", () => {
+  const ix = buildSpatialIndex(overlapWorld);
+  // Far out to sea: no plot, and the index should say so rather than guessing.
+  const a = ix.addressAt(0, 24000 * WORLD_SCALE);
+  assert.equal(a.onPlot, false);
+  assert.equal(a.plotId, null);
+  // describeAt must still return something a person can read
+  assert.equal(typeof ix.describeAt(0, 24000 * WORLD_SCALE), "string");
+});
+
+test("the index describes the world it was built from", () => {
+  const ix = buildSpatialIndex(overlapWorld);
+  assert.equal(ix.stats.plots, (overlapWorld.plots as any[]).length,
+    "the index and the world disagree about how many plots exist");
+  assert.ok(ix.stats.cells > 0, "no cells were built");
 });

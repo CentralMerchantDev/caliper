@@ -149,7 +149,8 @@ export function gradeRun(heightAt, run, opts = {}) {
   // just removed. The first version alternated them and then RETURNED AFTER THE
   // EARTHWORKS PASS whenever it had not settled by the round cap -- so the
   // function advertised a bounded gradient and delivered whatever the deviation
-  // clamp left behind. Measured across every non-bridge road: 222 of 1,615 over
+  // clamp left behind. Measured across every non-bridge road: 222 of the roads (1,380 non-bridge roads today; the count has moved as the
+// generator changed, so treat the ratio as the finding rather than the totals) over
   // their own class limit, including a freeway at 13.55% against a 4% design
   // gradient and a 6% legal ceiling.
   //

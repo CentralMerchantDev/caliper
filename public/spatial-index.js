@@ -19,8 +19,9 @@
 //
 // The plan already carries the hierarchy: every plot has a blockId, districtId
 // and settlement. What was missing was the reverse -- point to plot -- because
-// nothing had built an index over 31,414 rectangles. A linear scan is 31,414
-// comparisons per query and the renderer would do it on every mouse move.
+// nothing had built an index over the world's plots. A linear scan is one
+// comparison per plot per query -- 16,541 of them -- and the renderer would do
+// that on every mouse move.
 //
 // So: a uniform grid. Plots are small relative to the world, so bucketing them
 // by cell and searching only the cell under the query turns the scan into a
@@ -30,8 +31,16 @@
 
 import { sm } from "./world-scale.js";
 
-/** Grid cell size in metres. Larger than the biggest plot, small enough that a
- *  cell holds a handful of them. Plots run from about 20 m to a few hundred. */
+/**
+ * Grid cell size in metres.
+ *
+ * It is NOT larger than the biggest plot, and an earlier version of this comment
+ * said it was: CELL is sm(400) = 260 m at k=0.65 while the largest plot is 392 m
+ * across, and the gap widens as the scale falls because CELL scales and plot
+ * sizes do not. That is harmless only because a plot is registered in EVERY cell
+ * its bounding box touches -- which is the property the edge test now guards,
+ * and the one thing here that must not be "optimised" to centre-cell registration.
+ */
 const CELL = sm(400);
 
 /**

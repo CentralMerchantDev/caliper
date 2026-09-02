@@ -82,16 +82,24 @@ import { FEATURES } from "./features.js";
 // farms, and a tower district became a resort. Guessing thresholds for a field
 // whose distribution you have not looked at is how that happens.
 //
-// Measured across the 18,775 plots that are actually built on:
+// RE-MEASURED. The figures below were taken before several later changes to the
+// generator (little streets, character-derived spacing, the airport footprint)
+// and every percentile had drifted 8-67% high against a plot count that no
+// longer existed. Measured now, across the 16,541 plots actually built on:
 //
-//     p40 0.082   p50 0.157   p60 0.202   p75 0.377
-//     p85 0.503   p92 0.591   p97 0.698   p99.5 0.860
+//     p40 0.137   p50 0.191   p60 0.255   p75 0.445
+//     p85 0.536   p92 0.613   p97 0.723   p99.5 0.882
+//
+// The bands below were calibrated against the OLD distribution, so they now sit
+// lower in the current one than the percentages claimed. That is recorded rather
+// than silently re-tuned: re-fitting them changes the look of the whole city and
+// is a decision, not a correction.
 //
 // So these bands are set from percentiles, to give the shape a real city has --
 // a small dense core, a broad middle, and a low-rise majority:
 //
-//     TOWER      top ~1%     MIDRISE  top ~10%
-//     TERRACE    top ~35%    TOWNHOUSE top ~70%
+//     intended:  TOWER top ~1%   MIDRISE ~10%   TERRACE ~35%   TOWNHOUSE ~70%
+//     actual now: TOWER    1.4%   MIDRISE  12.4%  TERRACE  40.6%  TOWNHOUSE 74.5%
 //
 // Note the bottom 40% of built ground sits at essentially zero demand. That is
 // the outer coast and the islands, and it is why the lowest band has to be near
