@@ -1103,7 +1103,10 @@ body.inspecting-mobile #nav-compass-pad {
 </div>
 
 <!-- Floating Snapped Grid Coordinates Badge -->
-<div id="grid-cell-coords" class="mono glass" style="display:none;position:fixed;bottom:140px;left:50%;transform:translateX(-50%);z-index:900;padding:6px 14px;border-radius:20px;font-size:12px;color:#fff;border:1px solid rgba(56,189,248,0.4);background:rgba(11,15,25,0.85);backdrop-filter:blur(8px);pointer-events:none"></div>
+<!-- z-index 190, not 900. Modals sit at 200; at 900 this badge drew OVER any
+     open dialog. pointer-events:none means it obscured rather than blocked,
+     which is the harder version to notice. -->
+<div id="grid-cell-coords" class="mono glass" style="display:none;position:fixed;bottom:140px;left:50%;transform:translateX(-50%);z-index:190;padding:6px 14px;border-radius:20px;font-size:12px;color:#fff;border:1px solid rgba(56,189,248,0.4);background:rgba(11,15,25,0.85);backdrop-filter:blur(8px);pointer-events:none"></div>
 
 <!-- Executive Orientation & Architecture Overview Card -->
 <div id="welcome-mission-card" class="welcome-card glass" role="region" aria-label="Executive Project Overview">
@@ -1139,10 +1142,15 @@ body.inspecting-mobile #nav-compass-pad {
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">🌍</div>
       <strong style="color:#fff;font-size:12px;display:block">The Region</strong>
+      <!-- #city-build-notes was a block-level <div> INSIDE this <span>, spliced
+           between "settlements," and "19,105 buildings" -- so when the world DID
+           have something to report (unplaced features, refused plots, a stale
+           bookmark) the warning rendered as a line break in the middle of a
+           sentence. Moved below the sentence it annotates. -->
       <span style="font-size:11px;color:#94a3b8;line-height:1.35">A 26&nbsp;km coastal region generated from one plan: terrain, coastline, <span id="city-stat-settlements">54</span> settlements,
-    <div id="city-build-notes" class="mono" style="display:none;margin-top:6px;font-size:11px;color:#f0b429;line-height:1.4" role="status"></div>
         <span id="city-stat-buildings">19,105</span> buildings.
         Press <strong>Tour</strong> in the bar above to put the panels away and fly it.</span>
+      <div id="city-build-notes" class="mono" style="display:none;margin-top:6px;font-size:11px;color:#f0b429;line-height:1.4" role="status"></div>
     </div>
   </div>
 </div>
@@ -1918,9 +1926,12 @@ window.__worldRenderer = renderer3d;
 const renderer2d = new WorldRenderer2D(canvas2d, { reducedMotion });
 
 // Roof toggle handlers
-let roofsVisible = true;
+// ASSIGNED AND NEVER READ. setRoofView is the single source of truth for this
+// state and reads the renderer's own answer, so a second copy here can only
+// disagree with it. Left as a comment rather than a variable: deleting the
+// assignment too would lose the one place that records what the default is.
+// Default: roofs on.
 function setRoofView(exterior) {
-  roofsVisible = exterior;
   $('#roof-exterior').setAttribute('aria-pressed', String(exterior));
   $('#roof-exterior').classList.toggle('active', exterior);
   $('#roof-cutaway').setAttribute('aria-pressed', String(!exterior));
@@ -2674,7 +2685,14 @@ document.addEventListener('click', ev => {
     if (bar) {
       // Clusters and the brand badge too, or the bar becomes empty padded glass
       // pills floating mid-screen framing a view they no longer control.
-      bar.querySelectorAll('.btn-pill, .btn-group, .clock-pill, .status-pill, a.btn-pill, .brand-badge, #grid-cell-coords').forEach((el) => {
+      // #grid-cell-coords IS NOT INSIDE .top-bar-wrapper, so this descendant
+      // query never matched it and Tour mode never hid the badge -- the same
+      // dead-selector class this file flags twice elsewhere. Queried from the
+      // document, where it actually lives.
+      const tourHidden = [...bar.querySelectorAll('.btn-pill, .btn-group, .clock-pill, .status-pill, a.btn-pill, .brand-badge')];
+      const gridBadge = document.getElementById('grid-cell-coords');
+      if (gridBadge) tourHidden.push(gridBadge);
+      tourHidden.forEach((el) => {
         if (el !== btn && !btn.contains(el)) el.style.display = on ? 'none' : '';
       });
       bar.querySelectorAll('.top-bar-cluster').forEach((cl) => {
@@ -3110,7 +3128,11 @@ function clearActivePipelineStep() {
 // Live Run Wiring
 let currentRunId = null;
 let currentControlToken = null;
-let currentChangeRequest = '';
+// Read by nothing. Kept because the assignment below is the only record of
+// what the visitor asked for at the moment the run started, and the ledger
+// rendering has wanted it more than once -- but named honestly rather than
+// left looking like state something depends on.
+let lastSubmittedRequestForDebug = '';
 // Mirrors the kill-switch state. The real gate is the submit button's disabled
 // state (see checkLiveStatus); this is here for anything that needs to ask
 // without re-fetching.
@@ -3118,12 +3140,16 @@ let currentChangeRequest = '';
 // It used to carry a comment claiming it had been "made real". It had been made
 // ASSIGNED. Still-not-read is still dead, and a comment asserting otherwise is
 // worse than the dead code.
-let liveRunsEnabled = true;
+// ALSO ASSIGNED AND NEVER READ, with a comment saying it was "here for anything
+// that needs to ask without re-fetching". Nothing asked, in either direction.
+// checkLiveStatus is the only reader of live status and it re-fetches, which is
+// the correct behaviour for a value that can change between page load and click.
+let liveRunsEnabledUnused = true;
 
 async function checkLiveStatus() {
   try {
     const st = await fetch('/live-status').then(r => r.json());
-    liveRunsEnabled = !!(st && st.ok);
+    liveRunsEnabledUnused = !!(st && st.ok);
     if (st && st.ok === false && st.detail) {
       const log = $('#stage-log');
       if (log) {
@@ -3283,7 +3309,10 @@ async function playRecordedRun() {
         replayTimers.push(setTimeout(() => {
           b.classList.remove('active');
           const end = stageBlock(log, 'replay-end',
-            run.outcome === 'shipped' ? '✓ Shipped — the change went live' : '⛔ Refused — ' + esc(run.outcome));
+            // NOT esc() HERE. stageBlock escapes its title, so pre-escaping
+            // produced &amp;amp; for any & in an outcome. Two escapes is not
+            // twice as safe, it is visibly wrong output.
+            run.outcome === 'shipped' ? '✓ Shipped — the change went live' : '⛔ Refused — ' + String(run.outcome));
           end.classList.remove('active');
           end.insertAdjacentHTML('beforeend',
             '<p style="margin:6px 0 0;font-size:12px;color:#94a3b8;line-height:1.6">' +
@@ -3451,7 +3480,7 @@ function startRun() {
   log.innerHTML = '';
   currentRunId = null;
   currentControlToken = null;
-  currentChangeRequest = text;
+  lastSubmittedRequestForDebug = text;
   startPipelineTelemetry();
   renderer3d.focusPreset(text);
   renderer3d.playClickSound();
@@ -3510,7 +3539,17 @@ function connect(url) {
   es.addEventListener('grounding', () => {
     if (activeEs !== es) return;
     resetWatchdog();
-    updatePipelineStep(2);
+    // THE TRACKER SAID "GROUND: DONE" WHILE GROUNDING WAS STILL RUNNING.
+    //
+    // changePipeline emits `grounding` BEFORE the ground call and `grounded`
+    // after it, and this handler marked step 1 done and step 2 active on the
+    // START event. The semantics were mixed across the file too -- `grounding`
+    // (a start) advanced to 2, `implementing` (a start) to 3, but `verified`
+    // (an END) to 4. Three handlers, two conventions.
+    //
+    // One rule now: a *-ing event marks its OWN step active, a *-ed event
+    // advances past it. So grounding marks step 1 running, not finished.
+    updatePipelineStep(1);
     // One vocabulary across the tracker, the live log and the replay. There
     // were three, visible on screen simultaneously, disagreeing about which
     // number each stage was. These are the replay's plain-English titles.
@@ -3522,6 +3561,8 @@ function connect(url) {
     resetWatchdog();
     const d = safeJson(ev.data);
     if (!d) return;
+    // The *-ed event is what advances the tracker. See the note on `grounding`.
+    updatePipelineStep(2);
     const b = stageBlock(log, 's-ground-done', 'Grounded');
     b.classList.remove('active');
     const reasoning = d?.result?.reasoning ?? (typeof d?.reasoning === 'string' ? d.reasoning : 'Grounded prerequisites verified.');
@@ -3951,7 +3992,8 @@ function connect(url) {
     const d = safeJson(ev.data);
     if (!d) return;
     const runId = d.runId || currentRunId;
-    const b = stageBlock(log, 's-stage-error', `⚠️ Stage Error: ${esc(d.erroredAtStage)}`);
+    // stageBlock escapes the title; escaping here too double-escapes it.
+    const b = stageBlock(log, 's-stage-error', `⚠️ Stage Error: ${String(d.erroredAtStage)}`);
     setStageBody(b, `
       <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
         <p style="margin:0 0 6px;color:#f87171">${esc(d.errorMessage)}</p>

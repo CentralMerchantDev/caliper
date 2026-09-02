@@ -8,6 +8,11 @@ in Node.
 
 Status values: FIXED / WONTFIX (with reason) / OPEN.
 
+**Final state: all 61 findings closed.** 59 fixed, 1 WONTFIX with a stated
+reason (A18), 1 claim-corrected rather than built (B14 — the ~700 loose prop
+meshes are real and recorded as Undone rather than restated as a rounder
+number).
+
 **Ordering principle for the fixes:** anything that produces a FALSE CLAIM or a
 FALSE SUCCESS outranks anything that is merely waste, because this project's one
 claim is that it only says yes when yes is true.
@@ -48,18 +53,18 @@ claim is that it only says yes when yes is true.
 | B4 | The hardcoded `downtown` entry in `SETT` describes ground downtown is not on (measured z [599,2571] vs literal [-720,575]) — 80 of 82 TOWER plots height-scaled to ~46%, no street furniture downtown | HIGH | **FIXED** |
 | B5 | 28 `beach-*` settlements (10,282 plots, 53% of the world) are absent from `SETT` — no centrality taper, no ground tint, palms planted through buildings | HIGH | **FIXED** |
 | B6 | `terrace` foundation stacks concentric boxes wider than the building and puts the body at the LOWEST step — 367 plots, grey stack taller than the building on 54 | HIGH | **FIXED** |
-| B7 | `gradeRun` reports `maxFill`/`maxCut`/`overBudget`; nothing builds the earthworks and nothing reads the measurement. 167 roads over their own budget, worst 44.6 m of fill — tarmac in mid-air. Railway *publishes* the figures and draws no formation. | HIGH | OPEN |
+| B7 | `gradeRun` reports `maxFill`/`maxCut`/`overBudget`; nothing builds the earthworks and nothing reads the measurement. 167 roads over their own budget, worst 44.6 m of fill — tarmac in mid-air. Railway *publishes* the figures and draws no formation. | HIGH | **FIXED** |
 | B8 | Golf course: one height sample, 1,520 m disc drawn flat — the airport's documented defect, unfixed, on a bigger footprint. Site carries `range: 107.59` and it is ignored. | HIGH | **FIXED** |
 | B9 | Airport apron overhangs the vetted platform by 110 m; one aircraft row sits 70 m beyond it | MED | **FIXED** |
 | B10 | 2 of 4 airport embankment skirts wound inside-out — invisible with `FrontSide` | MED | **FIXED** |
 | B11 | `PLOT_CLASSES.maxHeight` applied, then multiplied by up to 1.36× — 1,362 buildings exceed their own class cap | MED | **FIXED** |
 | B12 | Contact shadows drawn for 205 refused plots and 867 at >1 m from the real base; 90 garden trees on refused plots | MED | **FIXED** |
-| B13 | Boardwalk, container yard, park lawns, marina, pier all still draped or flat-sampled; `GRADE.PLAZA`/`FOOTWAY` imported and unused | MED | OPEN |
-| B14 | ~700 loose meshes against a header claiming "about thirty draw calls" and "nothing is a loose Mesh"; `M()` allocates a fresh material per call | MED | OPEN |
+| B13 | Boardwalk, container yard, park lawns, marina, pier all still draped or flat-sampled; `GRADE.PLAZA`/`FOOTWAY` imported and unused | MED | **FIXED** |
+| B14 | ~700 loose meshes against a header claiming "about thirty draw calls" and "nothing is a loose Mesh"; `M()` allocates a fresh material per call | MED | CLAIM-CORRECTED — the header no longer claims 'nothing is a loose Mesh'. The ~700 props are still not instanced; that is real work with a real payoff and is recorded as Undone rather than half-done |
 | B15 | Stale measured numbers in comments (185k vertices → 266,774; 64k parts → 87,546; core step 40 m → 32.5 m; pier 580 m → 377 m) | MED | **FIXED** |
 | B16 | `PIER` half-scaled: length scales, width/pavilion/piling spacing do not. Same shape for `MARINA.r`. | MED | **FIXED** |
 | B17 | Per-build waste: `occupied()` linear scan of 1,374 plots per candidate; `SETT.find()` per plot; trees sample terrain twice; unused instance capacity; dead `core` computation | MED | **FIXED** |
-| B18 | Dead code + a false guarantee in a comment (`wm` IS shadowed at line 558); unreachable `quayZ` guard; empty conditional; mast literal fallback | LOW | OPEN |
+| B18 | Dead code + a false guarantee in a comment (`wm` IS shadowed at line 558); unreachable `quayZ` guard; empty conditional; mast literal fallback | LOW | **FIXED** |
 
 ## C. `index.html` / `city.html`
 
@@ -78,17 +83,17 @@ claim is that it only says yes when yes is true.
 | C11 | All four live gate cards `innerHTML`-overwrite their own heading before paint; the replay keeps its titles, so the recording looks more complete than a real run | HIGH | **FIXED** |
 | C12 | A failed gate decision uses `innerHTML +=`, re-parsing the card and destroying the Approve/Reject listeners — enabled buttons that do nothing | HIGH | **FIXED** |
 | C13 | "Edge V8 Isolate Active" asserted from `/pipeline-budget`, which says nothing about the sandbox; `/live-status` computes `sandboxAvailable` and the client discards it | MED | **FIXED** |
-| C14 | Stage tracker off by one during grounding; start/end semantics mixed across handlers | MED | OPEN |
+| C14 | Stage tracker off by one during grounding; start/end semantics mixed across handlers | MED | **FIXED** |
 | C15 | A refused run leaves a stage lit as still running | MED | **FIXED** |
 | C16 | Mobile: status card lands exactly on the welcome card; the overlap suite cannot catch it (selector omitted + `dismissOverlays` closes it first) | MED | **FIXED** |
 | C17 | `city.html`: `#tip` and `#home` pinned to the same corner | MED | **FIXED** |
 | C18 | `city.html`: `#livequarter` has no position rule — renders over `#hud` | MED | **FIXED** |
 | C19 | The three most important text inputs have no accessible name | MED | **FIXED** |
 | C20 | Pipeline stage state is colour-only with no live region | MED | **FIXED** |
-| C21 | Dead tour-mode selector; `#grid-cell-coords` at `z-index:900` draws over modals | LOW | OPEN |
-| C22 | Three variables assigned and never read | LOW | OPEN |
-| C23 | `#city-build-notes` is a `<div>` inside a `<span>`, mid-sentence | LOW | OPEN |
-| C24 | Double-escaped stage titles | LOW | OPEN |
+| C21 | Dead tour-mode selector; `#grid-cell-coords` at `z-index:900` draws over modals | LOW | **FIXED** |
+| C22 | Three variables assigned and never read | LOW | **FIXED** |
+| C23 | `#city-build-notes` is a `<div>` inside a `<span>`, mid-sentence | LOW | **FIXED** |
+| C24 | Double-escaped stage titles | LOW | **FIXED** |
 
 ## Checked and CORRECT (recorded so they are not re-litigated)
 

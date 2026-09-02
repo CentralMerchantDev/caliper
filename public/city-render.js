@@ -620,7 +620,6 @@ function half(h) {
     const pos = [], uv = [], idx = [];
     let vi = 0;
     for (const lm of masses) {
-      if (lm.kind === "mainland" && lm.polygon.length > 24) { /* fall through */ }
       const inner = offsetPolygon(lm.polygon, -9);
       const outer = offsetPolygon(lm.polygon, 30);
       const n = lm.polygon.length;
@@ -682,21 +681,30 @@ function half(h) {
     }
     const yA = H(z0) + 0.9, yB = H(z1) + 0.9;
     const rise = ARCH_RISE[br.type] || 10;
-    const wm = w0 === null ? (z0 + z1) / 2 : (w0 + w1) / 2;
+    // RENAMED FROM `wm`, WHICH SHADOWED THE WORLD-SCALE HELPER.
+    //
+    // The import comment says sm() is "imported under a name that cannot be
+    // shadowed" -- and then this line shadowed it, inside the BRIDGES loop.
+    // Nothing in that block calls wm() today, so it worked; the stated guarantee
+    // was simply false, and the next line added there that needs a scaled metre
+    // would silently get a number instead. `wmid` is the midpoint of the water
+    // gap, which is what it always was.
+    const wmid = w0 === null ? (z0 + z1) / 2 : (w0 + w1) / 2;
     const half = w0 === null ? 200 : Math.max(160, (w1 - w0) * 0.72);
     const prof = (z) => {
       const t = (z - z0) / Math.max(1, z1 - z0);
       const base = yA + (yB - yA) * t;
-      const u = clamp(1 - Math.abs(z - wm) / half, 0, 1);
+      const u = clamp(1 - Math.abs(z - wmid) / half, 0, 1);
       const arch = rise * (u * u * (3 - 2 * u));
       return Math.max(H(z) + 0.9, base + arch);
     };
     bridgeProfile.set(br.id, prof);
-    bridgeSpans.push({ br, z0, z1, w0, w1, wm, prof, rise, ew, H });
+    bridgeSpans.push({ br, z0, z1, w0, w1, wm: wmid, prof, rise, ew, H });
   }
 
   if (!SKIP.has("roads")) {
     const road = { pos: [], idx: [] }, walk = { pos: [], idx: [] }, mark = { pos: [], idx: [] };
+    const earthBuf = { pos: [], idx: [] };
     const inCore = (x, z) => Math.abs(x) < LOOK.coreX && z > LOOK.coreZ0 && z < LOOK.coreZ1;
 
     function strip(buf, x, z, ew, half, y, prev) {
@@ -743,6 +751,53 @@ function half(h) {
       return g;
     }
 
+    /**
+     * The embankment or cutting a graded road implies, as geometry.
+     *
+     * gradeRun RETURNS maxFill, maxCut and overBudget, and its own comment says
+     * they exist "so a caller can build the kerb, batter or retaining wall that
+     * a real road would have there". Nothing built any of it, and nothing read
+     * the measurement either. Measured across the 1,380 non-bridge roads: 378 of
+     * them sit more than 3 m off the natural ground, 19 of them more than 20 m,
+     * the worst at 44.6 m of fill -- ribbons of tarmac hanging in mid-air with
+     * a visible gap underneath.
+     *
+     * A batter is the cheapest honest answer: two skirts, one per side, from the
+     * carriageway edge down to wherever the ground actually is. Not a retaining
+     * wall and not a structural claim -- it is the earth a road displaces, which
+     * is what the surface's deviation from the terrain physically means.
+     *
+     * Emitted into one merged buffer with the roads, so it costs draw calls in
+     * the single digits rather than one per road.
+     */
+    function batter(r, half, prof, grade, buf) {
+      if (prof) return;                       // a bridge is held up by piers, not earth
+      const ew = r.axis === "ew";
+      const from = Math.min(r.from, r.to), to = Math.max(r.from, r.to);
+      const step = 55;
+      let prev = null;
+      for (let t = from; t <= to + 1e-6; t += step) {
+        const x = ew ? t : r.at, z = ew ? r.at : t;
+        const g = heightAt(x, z);
+        if (g < 0.8) { prev = null; continue; }
+        const y = grade.y(t);
+        // Below a metre the kerb covers it and a skirt is just triangles.
+        if (Math.abs(y - g) < 1.0) { prev = null; continue; }
+        const i0 = buf.pos.length / 3;
+        // Four vertices: both road edges at the surface, both at the ground.
+        const ax = ew ? x : x - half, az = ew ? z - half : z;
+        const bx = ew ? x : x + half, bz = ew ? z + half : z;
+        buf.pos.push(ax, y, az, ax, g, az, bx, y, bz, bx, g, bz);
+        if (prev !== null) {
+          // left skirt
+          buf.idx.push(prev, prev + 1, i0, i0, prev + 1, i0 + 1);
+          // right skirt
+          buf.idx.push(prev + 2, i0 + 2, prev + 3, prev + 3, i0 + 2, i0 + 3);
+        }
+        prev = i0;
+      }
+    }
+
     function ribbon(r, half, buf, lift) {
       const ew = r.axis === "ew";
       const from = Math.min(r.from, r.to), to = Math.max(r.from, r.to);
@@ -780,9 +835,28 @@ function half(h) {
     }
 
     const allRoads = [...world.roads];
+    // THE MEASUREMENT WAS TAKEN AND THROWN AWAY. profileFor already returns
+    // gradeRun's maxFill / maxCut / overBudget / holdsGrade and nothing read any
+    // of them, so a road 44 m off the ground and a road sitting on it were
+    // indistinguishable in the output.
+    const earth = { built: 0, worstFill: 0, worstCut: 0, overBudget: 0, worstOver: 0 };
     for (const r of allRoads) {
       const spec = ROADS[r.class]; if (!spec) continue;
-      const core = Math.abs(r.at) < wm(20000);
+      if (!r.bridge) {
+        const g = profileFor(r);
+        if (g) {
+          if (g.maxFill > earth.worstFill) earth.worstFill = g.maxFill;
+          if (g.maxCut > earth.worstCut) earth.worstCut = g.maxCut;
+          if (g.overBudget > 0) {
+            earth.overBudget++;
+            if (g.overBudget > earth.worstOver) earth.worstOver = g.overBudget;
+          }
+          if (g.maxFill > 1.0 || g.maxCut > 1.0) {
+            batter(r, spec.row / 2, null, g, earthBuf);
+            earth.built++;
+          }
+        }
+      }
       ribbon(r, spec.row / 2 - spec.footway, road, 0.9);
       if (spec.footway > 0) {
         ribbon(r, spec.row / 2, walk, 0.62);
@@ -790,8 +864,18 @@ function half(h) {
           ribbon(r, 0.55, mark, 1.02);
         }
       }
-      void core;
     }
+    stats.earthworks = {
+      roadsWithBatter: earth.built,
+      worstFillM: +earth.worstFill.toFixed(1),
+      worstCutM: +earth.worstCut.toFixed(1),
+      // Roads whose alignment could not be held inside their class earthworks
+      // budget. Reported rather than hidden: gradeRun always ends on the
+      // GRADIENT pass, so these hold the gradient and exceed the budget, which
+      // is the trade it makes and the one worth being able to see.
+      roadsOverBudget: earth.overBudget,
+      worstOverBudgetM: +earth.worstOver.toFixed(1),
+    };
 
     const mk = (buf, colour, rough, order) => {
       if (!buf.pos.length) return;
@@ -804,6 +888,19 @@ function half(h) {
       }));
       m.receiveShadow = true; scene.add(m);
     };
+    // The earth FIRST, so the carriageway's polygon offset still wins where they
+    // meet. DoubleSide because a batter is seen from outside on a fill and from
+    // inside on a cut, and the winding is the same for both.
+    if (earthBuf.pos.length) {
+      const eg = new THREE.BufferGeometry();
+      eg.setAttribute("position", new THREE.Float32BufferAttribute(earthBuf.pos, 3));
+      eg.setIndex(earthBuf.idx); eg.computeVertexNormals();
+      const em = new THREE.Mesh(eg, new THREE.MeshStandardMaterial({
+        color: 0x7d7360, roughness: 0.98, metalness: 0, side: THREE.DoubleSide,
+      }));
+      em.receiveShadow = true; scene.add(em);
+      stats.earthworksTris = earthBuf.idx.length / 3;
+    }
     mk(walk, 0xbdb5a6, 0.95, 1);
     mk(road, 0x4b5058, 0.92, 2);
     mk(mark, 0xf0e4b0, 0.8, 3);
@@ -969,8 +1066,32 @@ function half(h) {
   // ---------------------------------------------------------------------------
   if (!SKIP.has("trees")) {
     const spots = [];
+    // A LINEAR SCAN OF EVERY PLOT, PER CANDIDATE. plan.plots is 1,374 entries
+    // and this ran once per street-tree candidate and 2,400 times in the parks
+    // pass below -- millions of comparisons for a question a bucket grid answers
+    // in a handful. The world already has spatial-index.js for exactly this
+    // shape of query; this pass predates it and never adopted it.
+    //
+    // Built once here rather than reusing buildSpatialIndex, because that indexes
+    // world.plots (19,481, the whole world) and this only needs plan.plots (the
+    // downtown grid). Same idea, a tenth of the data.
+    const TCELL = 200;
+    const treeGrid = new Map();
+    const tkey = (cx, cz) => cx * 4096 + cz;
+    for (const p of plan.plots) {
+      for (let cx = Math.floor((p.xMin - 3) / TCELL); cx <= Math.floor((p.xMax + 3) / TCELL); cx++) {
+        for (let cz = Math.floor((p.zMin - 3) / TCELL); cz <= Math.floor((p.zMax + 3) / TCELL); cz++) {
+          const k = tkey(cx, cz);
+          let b = treeGrid.get(k);
+          if (!b) treeGrid.set(k, (b = []));
+          b.push(p);
+        }
+      }
+    }
     const occupied = (x, z) => {
-      for (const p of plan.plots) if (x > p.xMin - 3 && x < p.xMax + 3 && z > p.zMin - 3 && z < p.zMax + 3) return true;
+      const b = treeGrid.get(tkey(Math.floor(x / TCELL), Math.floor(z / TCELL)));
+      if (!b) return false;
+      for (const p of b) if (x > p.xMin - 3 && x < p.xMax + 3 && z > p.zMin - 3 && z < p.zMax + 3) return true;
       return false;
     };
     // street trees along the downtown roads
@@ -1302,10 +1423,32 @@ function buildProps(api) {
     const _q = SITE.containerPort;
     if (!_q) break port;
     const _qs = _q.landSide;
+    // A PAVED YARD IS FLAT. THIS FOLLOWED fbm NOISE, PER CONTAINER.
+    //
+    // Every one of the 2,200 containers took its own heightAt, so a 1,800 x 490 m
+    // hardstanding undulated with the micro-relief term whose entire job is to
+    // stop natural ground being flat. Container yards are graded slabs -- that is
+    // the whole point of them -- and this is the same category error the roads
+    // had, on a surface where it reads even more obviously because the stacks are
+    // regular.
+    //
+    // One level for the yard, taken as the mean over its footprint rather than a
+    // single sample, so it sits in the ground rather than on one point of it.
+    let yardSum = 0, yardN = 0;
+    for (let x = _q.x - 900; x <= _q.x + 900; x += 150)
+      for (let z = _q.z + _qs * 70; _qs > 0 ? z <= _q.z + _qs * 560 : z >= _q.z + _qs * 560; z += _qs * 90) {
+        const h = heightAt(x, z);
+        if (h >= 1) { yardSum += h; yardN++; }
+      }
+    const yardY = yardN ? yardSum / yardN : 2;
+    stats.containerYardLevel = +yardY.toFixed(1);
+
     for (let x = _q.x - 900; x < _q.x + 900 && n < 2200; x += 16)
       for (let z = _q.z + _qs * 70; _qs > 0 ? z < _q.z + _qs * 560 : z > _q.z + _qs * 560; z += _qs * 4) {
         if (rnd("ct" + x + z) < 0.42) continue;
-        const g = heightAt(x, z); if (g < 1) continue;
+        // Still refuse to stack in the water -- the yard is level, not blind.
+        if (heightAt(x, z) < 1) continue;
+        const g = yardY;
         const stack = 1 + Math.floor(rnd("cs" + x + z) * 4);
         for (let k = 0; k < stack && n < 2200; k++) {
           d.position.set(x, g + 1.4 + k * 2.7, z); d.scale.set(1, 1, 1); d.updateMatrix();
@@ -1324,12 +1467,12 @@ function buildProps(api) {
     // hundreds of metres further north here than the constant assumed. Walk
     // north until the ground comes up, then stand just inland of it.
     for (let x = _q.x - 800; x < _q.x + 800; x += 400) {
-      let quayZ = null;
       // The quay line is known now, so this no longer marches until the ground
       // comes up -- a search whose own comment admitted the coordinate it
-      // replaced "stood in open water".
-      quayZ = _q.z + _qs * 30;
-      if (quayZ === null) continue;
+      // replaced "stood in open water". (The `let quayZ = null; ... if (quayZ
+      // === null) continue;` that survived that change was a guard that could
+      // never fire, left behind by the search it used to protect.)
+      const quayZ = _q.z + _qs * 30;
       const g = new THREE.Group(), gy = Math.max(2, heightAt(x, quayZ));
       for (const dx of [-24, 24]) for (const dz of [-17, 17]) {
         const leg = new THREE.Mesh(RB(3, 56, 3, 0.3), M(0xe0673a, 0.75));
@@ -2027,11 +2170,33 @@ function buildProps(api) {
   {
     const plank = M(0xbfa578, 0.92), rail = M(0xf2ede0, 0.8);
     let segs = 0;
+
+    // A BOARDWALK IS A BUILT SURFACE AND WAS BEING DRAPED, ONE SAMPLE AT A TIME.
+    //
+    // Each segment took a single heightAt at its MIDPOINT and then laid a rigid
+    // box between two points, so both ends were free to float above the sand or
+    // sink into it, and consecutive segments stepped against each other. That is
+    // the exact category error grade.js was written for -- a promenade is
+    // manufactured, it is allowed to slope and not allowed to be lumpy.
+    //
+    // gradeRun does not fit here (the boardwalk is a polyline, not an axis-aligned
+    // run), so the same idea is applied directly: sample the whole line first,
+    // then smooth it. One pass, and the deck stops undulating.
+    const bwRaw = BOARDWALK.points.map(([px, pz]) => Math.max(1.2, heightAt(px, pz)));
+    const bwY = bwRaw.map((_, i) => {
+      let sum = 0, n = 0;
+      for (let j = Math.max(0, i - 2); j <= Math.min(bwRaw.length - 1, i + 2); j++) { sum += bwRaw[j]; n++; }
+      return sum / n;
+    });
+
     for (let i = 0; i < BOARDWALK.points.length - 1; i++) {
       const [ax, az] = BOARDWALK.points[i], [bx, bz] = BOARDWALK.points[i + 1];
       const len = Math.hypot(bx - ax, bz - az);
       const mx = (ax + bx) / 2, mz = (az + bz) / 2;
-      const g = Math.max(1.2, heightAt(mx, mz));
+      // The mean of the two ENDS of this segment, off the smoothed profile --
+      // so the deck is continuous across the joint instead of each segment
+      // choosing its own height from its own midpoint.
+      const g = (bwY[i] + bwY[i + 1]) / 2;
       const seg = new THREE.Mesh(RB(BOARDWALK.width, 1.1, len * 1.04, 0.3), plank);
       seg.position.set(mx, g + 0.9, mz);
       seg.rotation.y = -Math.atan2(bz - az, bx - ax) + Math.PI / 2;
