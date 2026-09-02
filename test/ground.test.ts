@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 
 import { createGround, SURFACE, STRATA, AIR_BANDS, BEDROCK_Y, strataAt, bandAt } from "../public/ground.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
+import { createWorldRegistry } from "../public/world-registry.js";
 
 const heightAt = makeHeightAt(new LandField());
 const land = createGround({ heightAt });
@@ -29,6 +30,31 @@ function findGround(pred: (x: number, z: number) => boolean, label: string): [nu
     }
   }
   throw new Error(`no ${label} found anywhere in the search window — the world has changed shape`);
+}
+
+/**
+ * Ground that is open and flat for `r` metres around, so a test about SIZE is
+ * not accidentally answered by a cliff at the edge of the footprint. The first
+ * version of the sizing tests picked the first dry point in the search and got
+ * a mountainside, where a 30 m tower is refused for the terrain under its
+ * corner rather than for being too big for its plot -- a pass for the wrong
+ * reason, which is worse than a failure.
+ */
+function findClearGround(r: number): [number, number] {
+  for (let x = -8000; x <= 8000; x += 80) {
+    for (let z = -8000; z <= 8000; z += 80) {
+      if (heightAt(x, z) < 5) continue;
+      let clear = true;
+      for (let dx = -r; dx <= r && clear; dx += r / 2) {
+        for (let dz = -r; dz <= r && clear; dz += r / 2) {
+          if (land.surfaceAt(x + dx, z + dz) !== SURFACE.OPEN) clear = false;
+          if (Math.abs(heightAt(x + dx, z + dz) - heightAt(x, z)) > 3) clear = false;
+        }
+      }
+      if (clear) return [x, z];
+    }
+  }
+  throw new Error(`no open ground clear for ${r} m anywhere — the world has changed shape`);
 }
 
 test("the land refuses to exist without a height function", () => {
@@ -114,12 +140,43 @@ test("a bench may stand on open ground", () => {
   assert.ok(r.samples > 1, "a footprint checked at a single point is not checked");
 });
 
-test("a bench may not stand in the sea, and is told that it is the sea", () => {
+test("a bench may not stand in the sea, and the LAND is what refuses it", () => {
+  // Refused at the terrain step, not by a surface permission. This is the
+  // distinction the model turns on: the land does not assign what may be here,
+  // it rules out the few things it genuinely knows are impossible. Open water
+  // carries nothing that stands on the ground.
   const [x, z] = findGround((x, z) => heightAt(x, z) < -20, "deep water");
   const r = land.canPlace(BENCH, x, z);
   assert.equal(r.ok, false);
-  assert.equal(r.reason, "surface");
-  assert.match(r.detail!, /water/, `refusal should name the surface, got: ${r.detail}`);
+  assert.equal(r.reason, "terrain", `the land should refuse this, not a surface rule: ${r.detail}`);
+  assert.match(r.detail!, /water/, `refusal should name the water, got: ${r.detail}`);
+});
+
+test("but a bridge crosses the same water, because it carries itself", () => {
+  // The pair. If the water rule were absolute the world could have no bridges,
+  // no piers and no boats; if it were absent a bench would float. `support`
+  // is what separates them, and it has to be checked rather than assumed.
+  const [x, z] = findGround((x, z) => heightAt(x, z) < -20, "deep water");
+  const SPAN = { footprint: { w: 12, d: 40 }, height: 6, clearance: 0, support: "span", maxRange: 1e9 };
+  const r = land.canPlace(SPAN, x, z);
+  assert.equal(r.ok, true, `a spanning structure must be able to cross water: ${r.reason} — ${r.detail}`);
+
+  const HULL = { footprint: { w: 4, d: 12 }, height: 3, clearance: 0, category: "vessel", maxRange: 1e9 };
+  assert.equal(land.canPlace(HULL, x, z).ok, true, "a boat belongs on water");
+});
+
+test("unbuilt land accepts anything, because the land does not assign what may be there", () => {
+  // The entry that makes the world buildable. If OPEN carried a permission list
+  // instead of null, every new kind of object would need the land amended
+  // before it could be placed anywhere at all.
+  const [x, z] = findGround(
+    (x, z) => heightAt(x, z) > 5 && land.surfaceAt(x, z) === SURFACE.OPEN,
+    "open ground",
+  );
+  for (const category of ["building", "vehicle", "furniture", "vegetation", "structure", "pedestrian"]) {
+    const r = land.canPlace({ footprint: { w: 2, d: 2 }, height: 2, clearance: 0, category, maxRange: 1e9 }, x, z);
+    assert.equal(r.ok, true, `open land refused a ${category}: ${r.reason} — ${r.detail}`);
+  }
 });
 
 test("a wide flat thing is refused on ground that moves under it, with the number", () => {
@@ -177,6 +234,127 @@ test("clearance is real ground, not decoration", () => {
 test("a footprint with no size is refused outright rather than silently accepted", () => {
   assert.throws(() => land.canPlace({ footprint: { w: 0, d: 5 } } as any, 0, 0), /footprint/);
   assert.throws(() => land.canPlace({} as any, 0, 0), /footprint/);
+});
+
+// ---------------------------------------------------------------------------
+// canPlace against a REGISTRY. Everything above builds the land with no
+// registry, so the occupancy branch never runs -- which left the most important
+// integration in this file untested, and a mutation removing the kind filter
+// passed a green suite. That is the defect these exist for.
+// ---------------------------------------------------------------------------
+
+test("a thing may stand on the ground a road defines, without the road itself refusing it", () => {
+  // THE BUG: roads are reserved across their FULL right of way, so anything on
+  // a carriageway or a pavement is inside a road's rectangle by construction.
+  // If canPlace asks the unfiltered occupancy question, every vehicle and every
+  // piece of street furniture in the world is refused -- and it looks like
+  // placement broke rather than like the wrong question was asked.
+  const reg = createWorldRegistry(heightAt);
+  const [x, z] = findGround((x, z) => heightAt(x, z) > 5, "dry ground");
+
+  reg.reserve({ kind: "road", id: "test-st", owner: "STREET", xMin: x - 9, xMax: x + 9, zMin: z - 200, zMax: z + 200 });
+  const withRoad = createGround({ heightAt, registry: reg });
+
+  // Surface check must agree this is now carriageway.
+  assert.equal(withRoad.surfaceAt(x, z), SURFACE.CARRIAGEWAY, "a registered road should define its ground");
+
+  const CAR = { footprint: { w: 4.4, d: 1.9 }, height: 1.5, clearance: 0, standsOn: [SURFACE.CARRIAGEWAY], maxRange: 5 };
+  const r = withRoad.canPlace(CAR, x, z);
+  assert.equal(r.ok, true, `a car must be placeable on a carriageway: ${r.reason} — ${r.detail}`);
+});
+
+test("but something already standing there does refuse it", () => {
+  // The pair to the test above. If canPlace ignored everything, both would pass
+  // and neither would mean anything.
+  const reg = createWorldRegistry(heightAt);
+  const [x, z] = findGround((x, z) => heightAt(x, z) > 5, "dry ground");
+
+  reg.reserve({ kind: "road", id: "test-st", owner: "STREET", xMin: x - 9, xMax: x + 9, zMin: z - 200, zMax: z + 200 });
+  reg.reserve({ kind: "prop", id: "parked-car", owner: "car", xMin: x - 3, xMax: x + 3, zMin: z - 2, zMax: z + 2 });
+  const withRoad = createGround({ heightAt, registry: reg });
+
+  const CAR = { footprint: { w: 4.4, d: 1.9 }, height: 1.5, clearance: 0, standsOn: [SURFACE.CARRIAGEWAY], maxRange: 5 };
+  const r = withRoad.canPlace(CAR, x, z);
+  assert.equal(r.ok, false, "a car must not be placed inside another car");
+  assert.equal(r.reason, "occupied");
+  assert.match(r.detail!, /parked-car/, `the refusal should name what is in the way, got: ${r.detail}`);
+});
+
+test("a lamp is refused on a carriageway because a carriageway is not what it stands on", () => {
+  // The rule Mark asked for, end to end: not "moved out of the road afterwards"
+  // but never allowed there, and refused at the SURFACE step rather than by
+  // colliding with something.
+  const reg = createWorldRegistry(heightAt);
+  const [x, z] = findGround((x, z) => heightAt(x, z) > 5, "dry ground");
+  reg.reserve({ kind: "road", id: "test-st", owner: "STREET", xMin: x - 9, xMax: x + 9, zMin: z - 200, zMax: z + 200 });
+  const withRoad = createGround({ heightAt, registry: reg });
+
+  const LAMP = { footprint: { w: 0.6, d: 0.6 }, height: 9.1, clearance: 0.3, standsOn: [SURFACE.SIDEWALK, SURFACE.VERGE], maxRange: 5 };
+  const r = withRoad.canPlace(LAMP, x, z);
+  assert.equal(r.ok, false, "a lamp post must not stand in a carriageway");
+  assert.equal(r.reason, "surface", `it should be refused for the ground it is on, not by a collision: ${r.detail}`);
+  assert.match(r.detail!, /carriageway/);
+});
+
+test("a sidewalk carries people and lamps but not cars, and the same ground as carriageway does the opposite", () => {
+  // THE RULE TRAVELS WITH THE OBJECT, NOT WITH THE EARTH. Same square metre,
+  // two different things built on it, opposite answers. If this passed with
+  // only one of the two surfaces the model would be back to the land assigning
+  // permissions, which is what it is not supposed to do.
+  const [x, z] = findGround((x, z) => heightAt(x, z) > 5, "dry ground");
+  const LAMP = { footprint: { w: 0.6, d: 0.6 }, height: 9.1, clearance: 0, category: "lamp", maxRange: 1e9 };
+  const CAR = { footprint: { w: 4.4, d: 1.9 }, height: 1.5, clearance: 0, category: "vehicle", maxRange: 1e9 };
+
+  const walk = createWorldRegistry(heightAt);
+  walk.reserve({ kind: "road", id: "w", surface: SURFACE.SIDEWALK, xMin: x - 50, xMax: x + 50, zMin: z - 50, zMax: z + 50 });
+  const onWalk = createGround({ heightAt, registry: walk });
+  assert.equal(onWalk.canPlace(LAMP, x, z).ok, true, "a sidewalk carries a lamp");
+  const carOnWalk = onWalk.canPlace(CAR, x, z);
+  assert.equal(carOnWalk.ok, false, "a sidewalk does not carry a car");
+  assert.equal(carOnWalk.reason, "not-accepted");
+
+  const road = createWorldRegistry(heightAt);
+  road.reserve({ kind: "road", id: "c", surface: SURFACE.CARRIAGEWAY, xMin: x - 50, xMax: x + 50, zMin: z - 50, zMax: z + 50 });
+  const onRoad = createGround({ heightAt, registry: road });
+  assert.equal(onRoad.canPlace(CAR, x, z).ok, true, "a carriageway carries a car");
+  const lampOnRoad = onRoad.canPlace(LAMP, x, z);
+  assert.equal(lampOnRoad.ok, false, "a carriageway does not carry a lamp");
+  assert.equal(lampOnRoad.reason, "not-accepted");
+});
+
+test("a house-sized plot will not take a tower", () => {
+  // Size is not a detail of placement, it is most of it. This is the check that
+  // was missing everywhere in this project's history: the stadium in the water,
+  // the airport apron overhanging its own platform by 110 m, the block set back
+  // for a narrower road than the one built. All one question nobody asked.
+  const [x, z] = findClearGround(40);
+  const reg = createWorldRegistry(heightAt);
+  reg.reserve({ kind: "plot", id: "small-lot", xMin: x - 6, xMax: x + 6, zMin: z - 9, zMax: z + 9 });
+  const withPlot = createGround({ heightAt, registry: reg });
+
+  const HOUSE = { footprint: { w: 8, d: 12 }, height: 7, clearance: 0, category: "building", maxRange: 1e9 };
+  const TOWER = { footprint: { w: 30, d: 30 }, height: 90, clearance: 0, category: "building", maxRange: 1e9 };
+
+  assert.equal(withPlot.canPlace(HOUSE, x, z).ok, true, "a 12 x 18 m lot takes an 8 x 12 m house");
+  const big = withPlot.canPlace(TOWER, x, z);
+  assert.equal(big.ok, false, "a 12 x 18 m lot must not take a 30 x 30 m tower");
+  assert.equal(big.reason, "too-big");
+  assert.match(big.detail!, /needs 30\.0 x 30\.0 m/, `the refusal should quote both sizes, got: ${big.detail}`);
+});
+
+test("something that fits is still refused where it would hang over the edge", () => {
+  // Fitting and being positioned are different questions, and answering only
+  // the first is how an apron ends up 110 m beyond the ground that was vetted.
+  const [x, z] = findClearGround(40);
+  const reg = createWorldRegistry(heightAt);
+  reg.reserve({ kind: "plot", id: "lot", xMin: x - 10, xMax: x + 10, zMin: z - 10, zMax: z + 10 });
+  const withPlot = createGround({ heightAt, registry: reg });
+  const SHED = { footprint: { w: 16, d: 16 }, height: 3, clearance: 0, category: "building", maxRange: 1e9 };
+
+  assert.equal(withPlot.canPlace(SHED, x, z).ok, true, "centred, a 16 m shed fits a 20 m lot");
+  const shoved = withPlot.canPlace(SHED, x + 6, z);
+  assert.equal(shoved.ok, false, "pushed 6 m off centre it hangs over the edge");
+  assert.equal(shoved.reason, "overhangs");
 });
 
 test("rotation swaps the footprint's axes", () => {

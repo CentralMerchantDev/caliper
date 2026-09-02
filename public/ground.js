@@ -28,9 +28,14 @@
 //
 // It does not place anything, know what a city is, or contain a single
 // coordinate of anything built. Those belong to a layout engine that runs on
-// top of this, with models from the asset lane. The land does not know a road
-// from a runway; it knows that some ground is CARRIAGEWAY and that a lamp may
-// not stand on it.
+// top of this, with models from the asset lane.
+//
+// AND IT DOES NOT DECIDE WHAT THE WORLD IS FOR. The land holds no zoning and no
+// plan. Any dry ground could become a road, a house, a park, or stay empty. What
+// the land does is refuse the few things it genuinely knows are impossible --
+// open water will not carry something that stands on the ground -- and then
+// report what has been built, so that the thing already there can say what it
+// will carry. The rule travels with the object, not with the earth.
 // =============================================================================
 
 import { classifyAt, slopeAt, USE } from "./land-use.js";
@@ -80,6 +85,84 @@ const KIND_SURFACE = {
   farm: SURFACE.FARM,
   plot: SURFACE.PLOT,
 };
+
+// -----------------------------------------------------------------------------
+// THE LAND FORBIDS. IT DOES NOT ASSIGN.
+//
+// THIS IS A CORRECTION TO HOW THIS FILE WAS FIRST WRITTEN, AND THE DIFFERENCE
+// MATTERS MORE THAN IT LOOKS.
+//
+// The first version treated a ground type as a permission: this square metre IS
+// carriageway, therefore only a car may be here. That reads as strict and is
+// actually the wrong shape, because it makes the land decide the city. Any dry
+// ground could become a road, a house, a park or nothing; the land has no
+// opinion about which, and a world whose ground is pre-assigned cannot be built
+// in by anyone.
+//
+// So the land only ever says NO, and only about the things it genuinely knows:
+// open water will not carry a road (it will carry a bridge), a cliff will not
+// carry anything with a footprint, a beach carries nothing permanent. Those are
+// facts about the terrain, not zoning.
+//
+// Everything else is decided by WHAT IS ALREADY THERE. A sidewalk is not a
+// permission the land granted; it is a thing somebody built, and having been
+// built it accepts people, lamps, hydrants and signs, and refuses cars. Put a
+// carriageway on the same ground instead and the same ground now accepts cars
+// and refuses lamps. The rule travels with the object, not with the earth.
+// -----------------------------------------------------------------------------
+
+/**
+ * What each surface will carry, once it exists.
+ *
+ * OPEN accepts anything, because unbuilt land is exactly that: unassigned. This
+ * is the entry that makes the world buildable rather than a fixed plan.
+ */
+export const ACCEPTS = {
+  [SURFACE.OPEN]: null,                    // null = anything; the land has no opinion
+  [SURFACE.CARRIAGEWAY]: ["vehicle", "rail-vehicle", "marking"],
+  [SURFACE.SIDEWALK]: ["pedestrian", "furniture", "lamp", "sign", "vegetation"],
+  [SURFACE.VERGE]: ["vegetation", "lamp", "sign", "furniture"],
+  [SURFACE.PARKING]: ["vehicle"],
+  [SURFACE.TRACK]: ["rail-vehicle"],
+  [SURFACE.PLOT]: ["building", "furniture", "vegetation", "structure"],
+  [SURFACE.PARK]: ["pedestrian", "furniture", "vegetation", "structure", "lamp", "sign"],
+  [SURFACE.FARM]: ["structure", "vegetation"],
+  [SURFACE.BEACH]: ["pedestrian", "furniture", "vegetation"],
+  [SURFACE.WATER]: ["vessel"],
+  [SURFACE.ROCK]: [],                      // nothing stands on a cliff face
+};
+
+/**
+ * Terrain refusals: the short list of things the LAND itself rules out, and what
+ * would satisfy it instead.
+ *
+ * `support` is how a thing carries itself. Ordinary things say "ground" and need
+ * ground under them. A bridge, a pier or a jetty says "span" and may cross water
+ * -- which is the whole reason a road cannot go over a bay but a bridge can.
+ */
+const TERRAIN_REFUSES = {
+  [SURFACE.WATER]: (spec) =>
+    spec.support === "span" || spec.support === "float" || (spec.category === "vessel")
+      ? null
+      : "open water carries nothing that stands on the ground; this needs a bridge, a pier or a hull",
+  [SURFACE.ROCK]: () => "a cliff face carries nothing with a footprint",
+  [SURFACE.BEACH]: (spec) =>
+    spec.permanent ? "a foreshore carries nothing permanent" : null,
+};
+
+/**
+ * The kinds that DEFINE ground rather than OCCUPY it.
+ *
+ * A road, a park, a plot: these say what the ground here IS. They are answered
+ * by the surface check, which decides whether a given thing may stand on that
+ * kind of ground at all. They must not be answered a second time by the
+ * occupancy check, because every prop on a pavement is inside a road's
+ * rectangle by construction and would be refused.
+ *
+ * Derived from KIND_SURFACE rather than typed out again -- a kind that maps to
+ * a surface is, by definition, one that defines ground.
+ */
+const SURFACE_KINDS = Object.keys(KIND_SURFACE);
 
 // -----------------------------------------------------------------------------
 // THE VOLUME
@@ -263,7 +346,53 @@ export function createGround({ heightAt, registry = null }) {
     const pts = sampleGrid(x, z, w, d);
     let lo = Infinity, hi = -Infinity;
 
-    // 1. SURFACE
+    // 1. DOES THE LAND ITSELF FORBID IT?
+    //
+    // The short list of things the terrain genuinely rules out. Not zoning --
+    // open water will not carry something that stands on the ground, a cliff
+    // face will not carry a footprint. Everything else the land permits, and
+    // the question moves on to what has been built here.
+    for (const [px, pz] of pts) {
+      const s = surfaceAt(px, pz, t);
+      const rule = TERRAIN_REFUSES[s];
+      if (rule) {
+        const why = rule(spec);
+        if (why) {
+          return {
+            ok: false, reason: "terrain",
+            detail: `${why} — ${s} at (${px.toFixed(1)}, ${pz.toFixed(1)})`,
+            ground: heightAt(x, z), range: 0, samples: pts.length,
+          };
+        }
+      }
+    }
+
+    // 2. DOES WHAT IS ALREADY HERE ACCEPT IT?
+    //
+    // The rule travels with the object, not with the earth. A sidewalk carries
+    // people, lamps, hydrants and signs and refuses cars; put a carriageway on
+    // the same ground and it carries cars and refuses lamps. Unbuilt land
+    // (OPEN) accepts anything, which is what makes the world buildable rather
+    // than a fixed plan.
+    if (spec.category) {
+      for (const [px, pz] of pts) {
+        const s = surfaceAt(px, pz, t);
+        const list = ACCEPTS[s];
+        if (list === null || list === undefined) continue;   // null = anything
+        if (!list.includes(spec.category)) {
+          return {
+            ok: false, reason: "not-accepted",
+            detail: list.length
+              ? `${s} carries ${list.join(", ")} — not a ${spec.category}`
+              : `${s} carries nothing`,
+            ground: heightAt(x, z), range: 0, samples: pts.length,
+          };
+        }
+      }
+    }
+
+    // Kept for callers that genuinely want to name the ground they need rather
+    // than describe themselves. Both routes end at the same answer.
     if (spec.standsOn && spec.standsOn.length) {
       const allowed = new Set(spec.standsOn);
       for (const [px, pz] of pts) {
@@ -278,7 +407,40 @@ export function createGround({ heightAt, registry = null }) {
       }
     }
 
-    // 2. FIT -- how much the ground moves under it
+    // 3. DOES IT FIT IN THE SPACE IT IS BEING PUT ON?
+    //
+    // "A parcel too small will not take a road; a house-sized plot will not take
+    // a tower." Size is not a detail of placement, it is most of it -- and it is
+    // the check that was missing everywhere in this project's history. The
+    // stadium in the water, the airport apron overhanging its own platform by
+    // 110 m, and the block set back for a narrower road than the one built are
+    // all one question nobody asked: is there actually room.
+    //
+    // Only checked when the thing is going ONTO something with an extent. On
+    // open land there is no host to overflow.
+    if (registry && registry.occupiedAt) {
+      const host = registry.occupiedAt(x, z, t);
+      if (host && host.xMin !== undefined && SURFACE_KINDS.includes(host.kind)) {
+        const hostW = host.xMax - host.xMin, hostD = host.zMax - host.zMin;
+        if (w > hostW + 1e-6 || d > hostD + 1e-6) {
+          return {
+            ok: false, reason: "too-big",
+            detail: `needs ${w.toFixed(1)} x ${d.toFixed(1)} m; ${host.kind} ${host.id} is ${hostW.toFixed(1)} x ${hostD.toFixed(1)} m`,
+            ground: heightAt(x, z), range: 0, samples: pts.length,
+          };
+        }
+        if (x - w / 2 < host.xMin - 1e-6 || x + w / 2 > host.xMax + 1e-6 ||
+            z - d / 2 < host.zMin - 1e-6 || z + d / 2 > host.zMax + 1e-6) {
+          return {
+            ok: false, reason: "overhangs",
+            detail: `fits ${host.kind} ${host.id} but not at this position — it would hang over the edge`,
+            ground: heightAt(x, z), range: 0, samples: pts.length,
+          };
+        }
+      }
+    }
+
+    // 4. FIT -- how much the ground moves under it
     for (const [px, pz] of pts) {
       const h = heightAt(px, pz);
       if (h < lo) lo = h;
@@ -295,12 +457,24 @@ export function createGround({ heightAt, registry = null }) {
       };
     }
 
-    // 3. OCCUPANCY -- and only the part of the volume this thing actually fills
+    // 5. OCCUPANCY -- and only the part of the volume this thing actually fills
+    //
+    // IGNORING THE SURFACE-DEFINING KINDS IS NOT A LOOPHOLE, IT IS THE WHOLE
+    // DISTINCTION. A road is reserved across its full right of way, footway
+    // included, so a lamp on a pavement is legitimately inside a road's
+    // rectangle. Step 1 has already decided whether this thing may stand on
+    // that ground. Asking again here, without the filter, refuses every lamp
+    // and every bench in the city -- and looks like placement has broken rather
+    // than like the wrong question was asked.
+    //
+    // What remains are the kinds that physically occupy the volume: a building,
+    // a feature, another prop.
     if (registry && registry.overlapsReserved) {
       const yMin = opts.y !== undefined ? opts.y : hi;
       const yMax = yMin + (spec.height || 0);
       const hit = registry.overlapsReserved(
-        x - w / 2, x + w / 2, z - d / 2, z + d / 2, t, { yMin, yMax },
+        x - w / 2, x + w / 2, z - d / 2, z + d / 2, t,
+        { yMin, yMax, ignoreKinds: SURFACE_KINDS },
       );
       if (hit) {
         return {

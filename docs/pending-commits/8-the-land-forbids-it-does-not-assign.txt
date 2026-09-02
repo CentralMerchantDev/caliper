@@ -1,0 +1,83 @@
+The land forbids; it does not assign
+
+A correction to the model, made on Mark's reading of it, and the difference
+matters more than it looks.
+
+WHAT WAS WRONG
+
+The first version treated a ground type as a permission: this square metre IS
+carriageway, therefore only a car may be here. That reads as strict and is
+actually the wrong shape, because it makes the land decide the city. Any dry
+ground could become a road, a house, a park or nothing. The land has no opinion
+about which -- and a world whose ground is pre-assigned cannot be built in by
+anyone, which matters rather a lot for something that is going to have a build
+mode.
+
+WHAT IT IS NOW
+
+The land only ever says NO, and only about what it genuinely knows: open water
+will not carry something that stands on the ground, a cliff face carries nothing
+with a footprint, a foreshore carries nothing permanent. Those are facts about
+terrain, not zoning.
+
+Everything else is decided by WHAT IS ALREADY THERE. A sidewalk is not a
+permission the land granted; it is a thing somebody built, and having been built
+it accepts people, lamps, hydrants and signs and refuses cars. Put a carriageway
+on the same ground instead and it accepts cars and refuses lamps. Same square
+metre, opposite answers. The rule travels with the object, not with the earth.
+
+OPEN ground accepts ANYTHING, and that entry is the one that makes the world
+buildable. If unbuilt land carried a permission list, every new kind of object
+would need the land amended before it could be placed anywhere at all.
+
+AND SIZE DECIDES
+
+"A parcel too small will not take a road; a house-sized plot will not take a
+tower." canPlace now measures the thing against the host it is going onto, and
+refuses two different ways: `too-big` when it will not fit at all, `overhangs`
+when it fits but not at this position.
+
+That second one is not pedantry. It is the airport apron that overhung its own
+vetted platform by 110 m with a whole row of aircraft standing beyond it --
+fitting and being positioned are different questions, and answering only the
+first is how that happened. Together with the stadium at -7.0 m in the water,
+389 plots inside feature footprints, and 328 promoted arterials whose blocks
+were set back for a narrower road than the one built, that is four
+different-looking bugs and one question nobody asked: is there actually room.
+
+canPlace is now five checks in order -- terrain, acceptance, size, fit, occupancy
+-- and each refuses with its own reason and a number.
+
+A REAL DEFECT FOUND ON THE WAY
+
+reserve() has always looked like it accepted a `surface`, and never stored one.
+whatIsAt did not return it either. So a caller could reserve a strip as SIDEWALK
+and it would silently come back as CARRIAGEWAY through the kind fallback -- which
+is exactly how "on the road" and "on the pavement" became the same fact in the
+first place. Found because a test asserted a lamp belongs on a sidewalk and got
+told a carriageway carries no lamps. Now stored and returned, which is also the
+mechanism the road kit needs to decompose a right-of-way into strips.
+
+VERIFIED BY MUTATION
+
+  OPEN carries a permission list instead of anything  -> the buildability test fails
+  skip the acceptance check                           -> sidewalk/carriageway fails
+  skip the sizing check                               -> too-big and overhangs fail
+  water refuses everything, bridges included          -> the bridge test fails
+
+Every refusal is paired with a case that must succeed: a bench is refused on
+water and a bridge crosses it; a lamp is refused on a carriageway and accepted
+on a sidewalk; a tower is refused on a house lot and a house is accepted.
+Without the pairs, a canPlace that always answered the same way would satisfy
+half of these.
+
+TWO OF MY OWN TESTS WERE WRONG FIRST
+
+The sizing tests picked the first dry point in the search and got a mountainside,
+where a 30 m tower is refused for the terrain under its corner rather than for
+being too big for its plot. That is a pass for the wrong reason, which is worse
+than a failure because it looks like evidence. They now search for ground that is
+open and flat for 40 m around, so the test about size is answered by size.
+
+docs/WORLD-RULES.md section 2 is rewritten to match. Nothing is placed by any of
+this and nothing is stripped. 514/514 node tests, tsc --noEmit clean.

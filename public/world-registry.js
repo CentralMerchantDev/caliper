@@ -111,12 +111,20 @@ export function createWorldRegistry(heightAt = null) {
     xMin, xMax, zMin, zMax,
     yMin = -Infinity, yMax = Infinity,
     solid = true,
+    // WHAT THIS GROUND IS, when the kind alone does not say it.
+    //
+    // A road is not one surface: a boulevard is a carriageway with a verge, a
+    // sidewalk and parking either side, and those carry different things -- a
+    // lamp belongs on one and a car on another. Without this the only thing a
+    // caller could say was "road", every strip of it degraded to CARRIAGEWAY,
+    // and "on the road" and "on the pavement" were the same fact again.
+    surface = null,
     since = 0, until = Infinity,
   }) {
     if (!(xMax >= xMin) || !(zMax >= zMin)) {
       throw new Error(`world-registry: reserve(${kind}/${id}) has an inverted or NaN footprint`);
     }
-    const entry = { kind, id, owner, xMin, xMax, zMin, zMax, yMin, yMax, solid, since, until };
+    const entry = { kind, id, owner, xMin, xMax, zMin, zMax, yMin, yMax, solid, surface, since, until };
     entries.push(entry);
     return entry;
   }
@@ -150,7 +158,7 @@ export function createWorldRegistry(heightAt = null) {
       if (t < e.since || t >= e.until) continue;
       if (x < e.xMin || x > e.xMax || z < e.zMin || z > e.zMax) continue;
       if (y < e.yMin || y > e.yMax) continue;
-      return { kind: e.kind, id: e.id, owner: e.owner, solid: e.solid, since: e.since, until: e.until };
+      return { kind: e.kind, id: e.id, owner: e.owner, solid: e.solid, surface: e.surface, since: e.since, until: e.until };
     }
     return FREE;
   }
@@ -184,9 +192,34 @@ export function createWorldRegistry(heightAt = null) {
    * build on reserved ground, hard or soft, is release() it first: an
    * explicit act by a caller who has looked at what is there and decided.
    */
-  function overlapsReserved(xMin, xMax, zMin, zMax, t = 0) {
+  function overlapsReserved(xMin, xMax, zMin, zMax, t = 0, opts = {}) {
+    const {
+      yMin = -Infinity, yMax = Infinity,
+      ignoreKinds = null, onlyKinds = null,
+    } = opts;
+    const ignore = ignoreKinds ? new Set(ignoreKinds) : null;
+    const only = onlyKinds ? new Set(onlyKinds) : null;
+
     for (const e of entries) {
       if (t < e.since || t >= e.until) continue;
+      // WHICH QUESTION IS BEING ASKED.
+      //
+      // "May I build a house here?" and "may I stand here?" are different, and
+      // this used to be unable to tell them apart -- there was no filter, so a
+      // caller got one answer covering both. That is not a missing feature, it
+      // is a wrong answer waiting: roads are reserved across their FULL right
+      // of way, footway included, so a lamp on a pavement is legitimately
+      // INSIDE a road's rectangle. Asked without a filter, this refuses every
+      // lamp and every bench in the city and empties the street scene, while
+      // looking like the placement code had simply stopped working.
+      //
+      // So the caller says what it is asking about. The land's canPlace ignores
+      // the kinds that merely DEFINE ground (road, park, plot) because its
+      // surface check has already governed whether that ground may be stood on,
+      // and keeps the kinds that physically OCCUPY it (a building, a feature,
+      // another prop).
+      if (only && !only.has(e.kind)) continue;
+      if (ignore && ignore.has(e.kind)) continue;
       // SHARING AN EDGE IS NOT OVERLAPPING -- <=/>=, not </>.
       //
       // A plot's own xMin is built as `roadCentre + roadWidth/2`: the block
@@ -201,6 +234,19 @@ export function createWorldRegistry(heightAt = null) {
       // moment roads were registered -- not because the roads were too wide,
       // but because "touching" was being scored as a conflict.
       if (xMax <= e.xMin || xMin >= e.xMax || zMax <= e.zMin || zMin >= e.zMax) continue;
+      // HEIGHT WAS BEING IGNORED, AND THE ENTRIES ALREADY CARRIED IT.
+      //
+      // reserve() has taken yMin/yMax since it was written, and bridges are
+      // registered with a real deck clearance -- arch 2-30 m, cable 2-55 m --
+      // for the express purpose of leaving the water beneath them navigable.
+      // This test then discarded that and answered in plan only, so a bridge
+      // blocked the channel it spans, and a lamp head at 9 m blocked the
+      // pavement under it. Every reservation that does not care about height
+      // still defaults to -Infinity..Infinity and is unaffected.
+      //
+      // Same touching rule as the plan axes: a deck resting exactly on a datum
+      // is not inside it.
+      if (yMax <= e.yMin || yMin >= e.yMax) continue;
       return e;
     }
     return null;
@@ -212,8 +258,11 @@ export function createWorldRegistry(heightAt = null) {
    * the shape "find me room for this" always takes -- try where you want,
    * then spiral out.
    */
-  function findFree(w, d, near, { radius = 1500, step = 40, t = 0 } = {}) {
-    const fits = (cx, cz) => !overlapsReserved(cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2, t);
+  function findFree(w, d, near, { radius = 1500, step = 40, t = 0, ...opts } = {}) {
+    // Passes the height range and kind filters straight through: a search for
+    // room that asks a different question from the caller's own placement check
+    // will confidently return somewhere that placement then refuses.
+    const fits = (cx, cz) => !overlapsReserved(cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2, t, opts);
     if (fits(near.x, near.z)) return { x: near.x, z: near.z, moved: 0 };
     for (let r = step; r <= radius; r += step) {
       const n = Math.max(8, Math.round((2 * Math.PI * r) / step));
