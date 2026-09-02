@@ -10,8 +10,9 @@
 // setbacks, crowns, pitched and hipped roofs, chimneys, colonnades, sawtooth
 // shed roofs, silos, rooftop plant. Silhouette is what makes a stylised city
 // legible, and it is nearly free: everything is emitted into a handful of
-// buckets and drawn as InstancedMesh, so 60,000 parts cost about a dozen draw
-// calls.
+// buckets and drawn as InstancedMesh, so 88,062 parts cost 14 draw calls. (The
+// "60,000" here was stale; the "about a dozen" was right, and is the half of
+// this claim that actually matters.)
 //
 // This module is pure data-in, parts-out. It never touches the scene graph, so
 // it can be tested in Node without a GPU.

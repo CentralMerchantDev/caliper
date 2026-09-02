@@ -7,9 +7,21 @@
 // PLAN, and whatever it says appears here without the renderer needing to know
 // what changed.
 //
-// Performance budget: about thirty draw calls for a 40 km world with ~20,000
-// buildings, ~64,000 building parts, 185,000 terrain vertices and 800 km of
-// road. Everything repeated is instanced or merged; nothing is a loose Mesh.
+// SCALE, MEASURED. A 26 km world with 19,194 buildings in 88,062 parts across 14
+// instanced buckets, 266,774 terrain vertices, and roads whose triangle count is
+// reported in stats.roadTris rather than restated here.
+//
+// The previous version of this paragraph said "40 km", "~64,000 building parts"
+// and "185,000 terrain vertices", and claimed "about thirty draw calls ...
+// nothing is a loose Mesh". Every figure was stale and the last clause was
+// simply untrue: an audit counted roughly 700 loose meshes -- 132 boats and 70
+// sails each with their own geometry because the scale varies per boat, 48
+// aircraft parts, 28 stadium bays, 24 crane members, 22 train cars.
+//
+// The instanced core IS about a dozen draw calls, and that is the part worth
+// claiming. The props are not instanced and saying otherwise was the kind of
+// round number that sounds measured because it is round. Recorded as a real
+// gap in docs/PHASE-4-FINDINGS.md (B14) rather than quietly restated.
 // =============================================================================
 
 import { Sky } from "./vendor/three/addons/objects/Sky.js";
@@ -350,6 +362,40 @@ export function buildWorld(THREE, renderer, scene) {
     t.colorSpace = THREE.SRGBColorSpace;
     return t;
   }
+/**
+ * Average luminance of one texel of a render target, whatever its type.
+ *
+ * The caller needs one question answered -- "does this environment map carry
+ * any light" -- and the only reason this is more than four lines is that
+ * gl.readPixels demands a typed-array view matching the texture's type, and a
+ * PMREM target is half-float.
+ */
+function readTargetLuminance(THREE, renderer, rt) {
+  const type = rt.texture && rt.texture.type;
+
+  if (type === THREE.HalfFloatType) {
+    const buf = new Uint16Array(4);
+    renderer.readRenderTargetPixels(rt, 4, 4, 1, 1, buf);
+    return half(buf[0]) + half(buf[1]) + half(buf[2]);
+  }
+  if (type === THREE.FloatType) {
+    const buf = new Float32Array(4);
+    renderer.readRenderTargetPixels(rt, 4, 4, 1, 1, buf);
+    return buf[0] + buf[1] + buf[2];
+  }
+  const buf = new Uint8Array(4);
+  renderer.readRenderTargetPixels(rt, 4, 4, 1, 1, buf);
+  return (buf[0] + buf[1] + buf[2]) / 255;
+}
+
+/** IEEE 754 half-precision to a JS number. */
+function half(h) {
+  const s = (h & 0x8000) >> 15, e = (h & 0x7c00) >> 10, f = h & 0x03ff;
+  if (e === 0) return (s ? -1 : 1) * Math.pow(2, -14) * (f / 1024);
+  if (e === 0x1f) return f ? NaN : (s ? -Infinity : Infinity);
+  return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + f / 1024);
+}
+
   if (!SKIP.has("env")) {
     try {
       const pmrem = new THREE.PMREMGenerator(renderer);
@@ -358,11 +404,27 @@ export function buildWorld(THREE, renderer, scene) {
       // GUARD: an environment map is a multiplier. If it is black, everything is
       // black, and nothing else in the scene looks wrong while you hunt for it.
       // Verify it carries light before trusting it.
+      // THE GUARD COULD NEVER PASS, SO THE MAP WAS ALWAYS DISCARDED.
+      //
+      // A PMREM render target is HalfFloatType. readRenderTargetPixels hands the
+      // texture type straight to gl.readPixels, and WebGL2 requires a Uint16Array
+      // view for HALF_FLOAT -- a Float32Array raises INVALID_OPERATION and leaves
+      // the buffer at zeros. So `lum` was 0, `ok` was false, and scene.environment
+      // was never set, no matter how good the map was.
+      //
+      // world-render-3d.js records the symptom and draws the wrong conclusion
+      // from it: "The city's do not expect one -- its own build reports
+      // envLuminance 0". That zero is a property of the READ-BACK, not of the
+      // map, and it has been standing in as evidence about the city for as long
+      // as it has been there. Glass and water reflect nothing, while the comment
+      // above says they reflect the actual sky.
+      //
+      // Read as half-float and decode. If the runtime cannot do that either,
+      // fall back to an unsigned-byte copy rather than refusing outright, and
+      // only give up when neither works.
       let ok = true;
       try {
-        const buf = new Float32Array(4);
-        renderer.readRenderTargetPixels(rt, 4, 4, 1, 1, buf);
-        const lum = buf[0] + buf[1] + buf[2];
+        const lum = readTargetLuminance(THREE, renderer, rt);
         ok = Number.isFinite(lum) && lum > 0.02;
         stats.envLuminance = Number.isFinite(lum) ? +lum.toFixed(4) : "NaN";
       } catch (e) {
@@ -370,6 +432,10 @@ export function buildWorld(THREE, renderer, scene) {
         ok = false;
       }
       if (ok) { scene.environment = rt.texture; scene.environmentIntensity = 0.6; }
+      // rt WAS LEAKED ON THE FAILURE PATH. src and pmrem were disposed either
+      // way; the render target and its whole mip chain were not, so a rejected
+      // env map left a GPU texture set behind on every build.
+      else rt.dispose();
       src.dispose(); pmrem.dispose();
     } catch (e) {
       stats.envError = String(e && e.message).slice(0, 80);
@@ -401,7 +467,9 @@ export function buildWorld(THREE, renderer, scene) {
   // ---------------------------------------------------------------------------
   // TERRAIN
   //
-  // Two resolutions: 40 m over the modelled core and 200 m for the rest of the
+  // Two resolutions: 32.5 m over the modelled core and 162.5 m for the rest of the
+  // (the comment said 40 and 200 -- those are the DESIGN-space values; the steps
+  // are wm()-scaled, so what the mesh actually uses is k times each)
   // 40 km, with a hole in the coarse grid so they do not overlap. The core grid
   // carries a downward skirt at its border, which hides the hairline crack a
   // resolution change always leaves.
@@ -1083,6 +1151,9 @@ function buildProps(api) {
   stats.featurePlacement = siteReport;
   stats.featuresUnplaced = siteReport.filter((r) => !r.placed).map((r) => r.id);
   const M = (c, r = 0.85, m = 0) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
+  /** Same, but visible from both sides -- for hand-wound strips where getting
+   *  every face's winding right is more fragile than just not depending on it. */
+  const M2 = (c, r = 0.85, m = 0) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m, side: THREE.DoubleSide });
   const RB = (w, h, d, r = 0.3) => new RoundedBoxGeometry(w, h, d, 1, r);
 
   // ---------------------------------------------------------------------------
@@ -1434,7 +1505,35 @@ function buildProps(api) {
     const CX = _gf.x, CZ = _gf.z;
     const fair = M(0x74a84a, 0.95), rough = M(0x5c8a3c, 0.97);
     const sand = M(0xe6d8a8, 0.95), water = M(0x2f7d99, 0.2, 0.4);
-    const gy = Math.max(3, heightAt(CX, CZ));
+    // ONE HEIGHT SAMPLE FOR A 1,520 m DISC -- THE AIRPORT'S DOCUMENTED DEFECT.
+    //
+    // The airport comment sixty lines below says exactly why this is wrong:
+    // "`ay` was ONE height sample ... clipping into a hill at one end and
+    // floating over air at the other." The golf course does the same thing on a
+    // larger footprint, and its own site object ALREADY CARRIES the answer:
+    // findSite measured `range: 107.6 m` of relief across this ground and handed
+    // it over. Nothing read it.
+    //
+    // FEATURES.golf has no `limit`, so placeFeatures reported placed: true,
+    // moved: 0 for a site with 108 m of relief -- a true statement about a
+    // constraint nobody set.
+    //
+    // Graded rather than sampled: the mean over the footprint, so the course
+    // sits IN the ground rather than on one point of it, and the residual is
+    // reported so a reader can see how much earth this implies.
+    let gySum = 0, gyN = 0, gyLo = Infinity, gyHi = -Infinity;
+    for (let a = 0; a < 8; a++) {
+      for (const rr of [0, 260, 520, 760]) {
+        const px = CX + Math.cos((a / 8) * Math.PI * 2) * rr;
+        const pz = CZ + Math.sin((a / 8) * Math.PI * 2) * rr;
+        const h = heightAt(px, pz);
+        gySum += h; gyN++;
+        if (h < gyLo) gyLo = h;
+        if (h > gyHi) gyHi = h;
+      }
+    }
+    const gy = Math.max(3, gySum / gyN);
+    stats.golf = { base: +gy.toFixed(1), relief: +(gyHi - gyLo).toFixed(1), cut: +(gyHi - gy).toFixed(1), fill: +(gy - gyLo).toFixed(1) };
     // the rough: one big soft footprint
     const base = new THREE.Mesh(new THREE.CircleGeometry(760, 22), rough);
     base.rotation.x = -Math.PI / 2; base.position.set(CX, gy + 0.35, CZ); base.receiveShadow = true; scene.add(base);
@@ -1553,7 +1652,21 @@ function buildProps(api) {
         }
         g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
         g.computeVertexNormals();
-        const m = new THREE.Mesh(g, M(0x6f7d58, 0.98));
+        // TWO OF THE FOUR SKIRTS WERE WOUND INSIDE-OUT AND DID NOT RENDER.
+        //
+        // `along` always advances t in +x for the two z-faces and +z for the two
+        // x-faces, with a fixed winding order -- so the fz:-1 and fx:+1 faces get
+        // outward normals and the fz:+1 and fx:-1 faces get inward ones. With
+        // the default FrontSide material the north and west skirts were
+        // invisible from outside, and the platform showed an open edge with
+        // terrain visible under it on two of its four sides.
+        //
+        // DoubleSide rather than reversing t for two of the four: the winding
+        // here is derived from a shared `along` helper, so fixing it by hand
+        // means two special cases that the next edit to that helper can quietly
+        // undo. Not depending on the winding is the more durable answer for a
+        // strip that is only ever seen from outside anyway.
+        const m = new THREE.Mesh(g, M2(0x6f7d58, 0.98));
         m.receiveShadow = true;
         scene.add(m);
       }

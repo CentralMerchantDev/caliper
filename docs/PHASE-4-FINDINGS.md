@@ -43,21 +43,21 @@ claim is that it only says yes when yes is true.
 | # | Finding | Sev | Status |
 |---|---------|-----|--------|
 | B1 | `buildProps` read `stats` above its own `const` — TDZ ReferenceError on EVERY call, taking the whole world build down on every page load | HIGH | **FIXED** |
-| B2 | Env-map guard reads a half-float target with a `Float32Array`, so `lum` is always 0 and the map is always discarded; `rt` leaked on the failure path | HIGH | OPEN |
+| B2 | Env-map guard reads a half-float target with a `Float32Array`, so `lum` is always 0 and the map is always discarded; `rt` leaked on the failure path | HIGH | **FIXED** |
 | B3 | `bridgeProfile` is parameterised by the along-span coordinate but called with the cross-axis one — 7 EW bridge decks are flat at a wrong constant height, detached from their own piers. Same bug in traffic. | HIGH | **FIXED** |
 | B4 | The hardcoded `downtown` entry in `SETT` describes ground downtown is not on (measured z [599,2571] vs literal [-720,575]) — 80 of 82 TOWER plots height-scaled to ~46%, no street furniture downtown | HIGH | **FIXED** |
 | B5 | 28 `beach-*` settlements (10,282 plots, 53% of the world) are absent from `SETT` — no centrality taper, no ground tint, palms planted through buildings | HIGH | **FIXED** |
 | B6 | `terrace` foundation stacks concentric boxes wider than the building and puts the body at the LOWEST step — 367 plots, grey stack taller than the building on 54 | HIGH | **FIXED** |
 | B7 | `gradeRun` reports `maxFill`/`maxCut`/`overBudget`; nothing builds the earthworks and nothing reads the measurement. 167 roads over their own budget, worst 44.6 m of fill — tarmac in mid-air. Railway *publishes* the figures and draws no formation. | HIGH | OPEN |
-| B8 | Golf course: one height sample, 1,520 m disc drawn flat — the airport's documented defect, unfixed, on a bigger footprint. Site carries `range: 107.59` and it is ignored. | HIGH | OPEN |
-| B9 | Airport apron overhangs the vetted platform by 110 m; one aircraft row sits 70 m beyond it | MED | OPEN |
-| B10 | 2 of 4 airport embankment skirts wound inside-out — invisible with `FrontSide` | MED | OPEN |
+| B8 | Golf course: one height sample, 1,520 m disc drawn flat — the airport's documented defect, unfixed, on a bigger footprint. Site carries `range: 107.59` and it is ignored. | HIGH | **FIXED** |
+| B9 | Airport apron overhangs the vetted platform by 110 m; one aircraft row sits 70 m beyond it | MED | **FIXED** |
+| B10 | 2 of 4 airport embankment skirts wound inside-out — invisible with `FrontSide` | MED | **FIXED** |
 | B11 | `PLOT_CLASSES.maxHeight` applied, then multiplied by up to 1.36× — 1,362 buildings exceed their own class cap | MED | **FIXED** |
 | B12 | Contact shadows drawn for 205 refused plots and 867 at >1 m from the real base; 90 garden trees on refused plots | MED | **FIXED** |
 | B13 | Boardwalk, container yard, park lawns, marina, pier all still draped or flat-sampled; `GRADE.PLAZA`/`FOOTWAY` imported and unused | MED | OPEN |
 | B14 | ~700 loose meshes against a header claiming "about thirty draw calls" and "nothing is a loose Mesh"; `M()` allocates a fresh material per call | MED | OPEN |
-| B15 | Stale measured numbers in comments (185k vertices → 266,774; 64k parts → 87,546; core step 40 m → 32.5 m; pier 580 m → 377 m) | MED | OPEN |
-| B16 | `PIER` half-scaled: length scales, width/pavilion/piling spacing do not. Same shape for `MARINA.r`. | MED | OPEN |
+| B15 | Stale measured numbers in comments (185k vertices → 266,774; 64k parts → 87,546; core step 40 m → 32.5 m; pier 580 m → 377 m) | MED | **FIXED** |
+| B16 | `PIER` half-scaled: length scales, width/pavilion/piling spacing do not. Same shape for `MARINA.r`. | MED | **FIXED** |
 | B17 | Per-build waste: `occupied()` linear scan of 1,374 plots per candidate; `SETT.find()` per plot; trees sample terrain twice; unused instance capacity; dead `core` computation | MED | **FIXED** |
 | B18 | Dead code + a false guarantee in a comment (`wm` IS shadowed at line 558); unreachable `quayZ` guard; empty conditional; mast literal fallback | LOW | OPEN |
 

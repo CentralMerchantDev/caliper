@@ -72,7 +72,14 @@ export const FEATURES = [
     // Widening the search to 4 km finds a 25 m site, but 3.9 km away, which
     // strands it from the airport highway and its own settlement. Near and
     // expensive beats far and cheap for a thing the rest of the city connects to.
-    need: { kind: "flattest", w: 3500, d: 1000, radius: 2500, step: 150, grade: 200 },
+    // 1200, NOT 1000 -- THE COMMENT ABOVE DID THE ARITHMETIC AND THE NUMBER
+    // IGNORED IT. It states "z runs from the aircraft stands at -570 to the far
+    // runway at +480, so 1,050. 3500 x 1000 covers it." 1,000 does not cover
+    // 1,050. The platform was sized 50 m short of the extent computed one line
+    // earlier, and the earthworks limit was then evaluated on the undersized
+    // rectangle -- so the apron overhung the vetted ground by 110 m and a whole
+    // row of aircraft stood 70 m beyond it, on terrain nothing had checked.
+    need: { kind: "flattest", w: 3500, d: 1200, radius: 2500, step: 150, grade: 200 },
     limit: { range: 60 },   // past this it is a quarry, not a platform
   },
   {

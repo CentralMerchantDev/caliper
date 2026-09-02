@@ -477,16 +477,26 @@ export const HARBOUR = sFields({ x: 820, z: -430, r: 560 }, ["x", "z", "r"]);
  * downtown ended up declared in the lagoon.
  */
 export const PIER = ((q) => ({
-  ...sFields(q, ["x", "from", "to"]),
+  // HALF-SCALED, WHICH IS THE ONE THING world-scale.js SAYS NOT TO DO.
+  //
+  // `from`/`to` were scaled and `width`, `head.w`, `head.d` and
+  // `pilings.spacing` were not -- so one object was measured on both sides of
+  // the rule. The pier's length went 580 m -> 377 m while its 96 m pavilion
+  // stayed 96 m, which took the pavilion from 16% of the pier to 25% of it, and
+  // the piling count from 26 bays to 17.
+  //
+  // A pier is a BUILT object. world-scale.js is explicit: built metres do not
+  // scale. So none of it scales now -- including the x position and the head's
+  // z, which place it against the SHORE and therefore have to follow the
+  // landform. That is the one part that legitimately scales, and it is the only
+  // part that still does.
+  ...q,
+  x: q.x * WORLD_SCALE,
   head: { ...q.head, z: q.head.z * WORLD_SCALE },
+  from: q.from * WORLD_SCALE,
+  to: q.from * WORLD_SCALE + (q.to - q.from),
 }))({
-  x: 500,             // the middle of the crescent's bow
-  from: 4180,         // starts just behind the surf line, on the sand
-  to: 4760,           // and walks 580 m out over the water
-  width: 26,
-  // the pavilion at the seaward end -- the thing the pier is FOR
-  head: { z: 4700, w: 78, d: 96 },
-  pilings: { spacing: 22, radius: 1.5 },
+  x: 500, from: 4180, to: 4760, width: 26, head: { z: 4700, w: 78, d: 96 }, pilings: { spacing: 22, radius: 1.5 },
 });
 
 export const BOARDWALK = ((b) => ({
