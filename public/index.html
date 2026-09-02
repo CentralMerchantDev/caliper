@@ -244,6 +244,23 @@ html, body {
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
 }
 
+/* THE NAV PAD COLLAPSES, THE SAME WAY THE DOCK DOES.
+   Collapsed it keeps only its title row -- which carries the mode indicator and
+   the toggle -- so the visitor can still see what camera mode they are in and
+   get the controls back with one tap. A collapse that hides its own handle is a
+   trap, which is what the flythrough was. */
+.nav-pad.nav-pad-collapsed .nav-pad-hint,
+.nav-pad.nav-pad-collapsed .nav-mode-selector,
+.nav-pad.nav-pad-collapsed .nav-pad-grid,
+.nav-pad.nav-pad-collapsed .nav-pad-actions {
+  display: none;
+}
+.nav-pad.nav-pad-collapsed {
+  padding-bottom: 6px;
+}
+.nav-pad .nav-pad-title { display: flex; align-items: center; gap: 8px; }
+#nav-pad-toggle:focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; border-radius: 4px; }
+
 .dock-wrapper.dock-minimized {
   padding: 8px 14px;
   gap: 0;
@@ -872,10 +889,17 @@ body.inspecting-mobile #nav-compass-pad {
     right: 8px !important;
     width: auto !important;
     transform: none !important;
-    max-height: 44vh;
+    /* 44vh was 371px of a 844px viewport for the SECOND panel down. Together
+       with the top bar, the status card, the nav pad and the dock that came to
+       over 1,100px of chrome in an 844px screen. 30vh with a scroll keeps the
+       heading and the first step visible, which is what the card is for on a
+       phone -- the full four-step walkthrough is a desktop affordance. */
+    max-height: 30vh;
     overflow-y: auto;
     z-index: 96;
   }
+  /* The steps wrap into a readable column rather than four squeezed cells. */
+  .welcome-card .welcome-steps-grid { grid-template-columns: 1fr !important; gap: 6px !important; }
   /* Below the welcome card, using its measured height the same way the inspect
      card already uses the status card's. */
   .status-card {
@@ -1160,6 +1184,16 @@ body.inspecting-mobile #nav-compass-pad {
   <div class="nav-pad-title">
     <span>🧭 NAVIGATION</span>
     <span id="nav-mode-indicator" style="color:#38bdf8;font-size:9px">ORBIT</span>
+    <!-- THE NAV PAD HAD NO WAY TO GET OUT OF THE WAY.
+         The dock has had #dock-toggle-btn since it was built; this panel never
+         got one, and on a 390x844 phone the two of them plus the top bar, the
+         welcome card and the status card add up to over 1,100px of chrome in an
+         844px viewport. The canvas -- the thing the page is about -- was
+         functionally invisible, and nothing could be dismissed.
+         Both collapse now, and both start collapsed on a phone. -->
+    <button type="button" id="nav-pad-toggle" title="Collapse / expand the navigation pad"
+            aria-label="Collapse the navigation pad" aria-expanded="true"
+            style="margin-left:auto;background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px">▾</button>
   </div>
   <!-- Says what the controls are, in the place the controls are. Without this the
        arrow pad looks like the only way to move and the keyboard is invisible. -->
@@ -1986,14 +2020,63 @@ $('#target-deselect-btn')?.addEventListener('click', () => {
   renderer3d.playClickSound();
 });
 
+// BOTH PANELS COLLAPSE, AND ON A PHONE BOTH START COLLAPSED.
+//
+// Measured from the CSS on a 390 x 844 viewport: top bar ~54px, welcome card up
+// to 44vh (371px), status card up to 220px, nav pad ~300px, dock ~180px. That is
+// over 1,100px of chrome in an 844px viewport, so the canvas -- the entire point
+// of the page -- was behind panels, and only one of them could be dismissed.
+//
+// Desktop keeps both open: there is room, and the controls are the interface.
+const isNarrow = () => (typeof matchMedia === 'function') && matchMedia('(max-width: 768px)').matches;
+
 let dockMinimized = false;
-$('#dock-toggle-btn')?.addEventListener('click', () => {
-  dockMinimized = !dockMinimized;
+function setDockMinimized(next) {
+  dockMinimized = next;
   $('#director-dock')?.classList.toggle('dock-minimized', dockMinimized);
   const btn = $('#dock-toggle-btn');
-  if (btn) btn.textContent = dockMinimized ? '▴' : '▾';
+  if (btn) {
+    btn.textContent = dockMinimized ? '▴' : '▾';
+    btn.setAttribute('aria-expanded', String(!dockMinimized));
+    btn.setAttribute('aria-label', dockMinimized ? 'Expand the change dock' : 'Collapse the change dock');
+  }
+}
+$('#dock-toggle-btn')?.addEventListener('click', () => {
+  setDockMinimized(!dockMinimized);
   renderer3d.playClickSound();
 });
+
+let navPadCollapsed = false;
+function setNavPadCollapsed(next) {
+  navPadCollapsed = next;
+  $('#nav-compass-pad')?.classList.toggle('nav-pad-collapsed', navPadCollapsed);
+  const btn = $('#nav-pad-toggle');
+  if (btn) {
+    btn.textContent = navPadCollapsed ? '▴' : '▾';
+    btn.setAttribute('aria-expanded', String(!navPadCollapsed));
+    btn.setAttribute('aria-label', navPadCollapsed ? 'Expand the navigation pad' : 'Collapse the navigation pad');
+  }
+}
+$('#nav-pad-toggle')?.addEventListener('click', () => {
+  setNavPadCollapsed(!navPadCollapsed);
+  renderer3d.playClickSound();
+});
+
+// Collapsed by default on a phone, and the choice is remembered -- a visitor who
+// opens the dock to type a change should not have it shut again on the next load.
+(function initPanelCollapse() {
+  const saved = localStorage.getItem('caliper-panels-collapsed');
+  const startCollapsed = saved === null ? isNarrow() : saved === 'true';
+  setDockMinimized(startCollapsed);
+  setNavPadCollapsed(startCollapsed);
+  for (const id of ['#dock-toggle-btn', '#nav-pad-toggle']) {
+    $(id)?.addEventListener('click', () => {
+      // Remember whichever state the two are now in. They are toggled
+      // independently, so "collapsed" means both are.
+      localStorage.setItem('caliper-panels-collapsed', String(dockMinimized && navPadCollapsed));
+    });
+  }
+})();
 
 // View mode 2D / 3D
 let currentView = localStorage.getItem('caliper-view') === 'plan' ? 'plan' : '3d';
