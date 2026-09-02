@@ -70,7 +70,7 @@ Collector continuity: typically 1.6–3.2 km in length.
 **No standard figure exists for freeway-to-freeway spacing.** [unsourced] Do not
 invent one.
 
-### 1.3 Blocks — and the mistake this world currently makes
+### 1.3 Blocks — and the mistake this world was making
 
 **Recommended:**
 
@@ -104,7 +104,7 @@ invent one.
 | Paris, Melbourne, Hong Kong | 150 m |
 | Modernist (Brasília, Ville Contemporaine) | 400 m |
 
-> ### ⚠️ WHAT THIS WORLD GETS WRONG
+> ### ✅ FIXED — was: the grid claimed Melbourne and built Brasília
 >
 > `GRID.AVENUE_SPACING = 230`, `STREET_SPACING = 170`, commented "Melbourne
 > Hoddle Grid calibration".
@@ -118,9 +118,13 @@ invent one.
 > maximum average intersection spacing (201 m). It is closer to Brasília than to
 > Melbourne.
 >
-> **Fix:** either drop the pitch to 120–170 m, or keep 230 m and add the little
-> streets. The second is more faithful to the stated intent and produces a more
-> interesting city.
+> **Fixed** by adding the little streets — the second option, as more faithful to
+> the stated intent. 19 of them, LANE class, whose 10 m right-of-way is
+> Melbourne's 10.06 m almost exactly. The block generator now runs off grid
+> *edges* rather than a single pitch, so a little street genuinely splits the
+> block it passes through. Zero walkable blocks now exceed the ceiling; the 214
+> that still do are all FARM, WAREHOUSE or HANGAR, which are legitimately not
+> pedestrian fabric.
 
 **A genuine counter-finding, worth keeping as a knob rather than a rule:**
 Sevtsuk & Kalvo measured pedestrian accessibility against block length and found
@@ -161,17 +165,23 @@ makes San Francisco legal). Cross slope ≤ 2.1%.
 **Carriageway cross-slope / camber:** 1.5–2% normal crown; 1.5–3% urban
 arterial. Superelevation 4–12%, capped 6–8% where ice and snow occur.
 
-> ### ⚠️ WHAT THIS WORLD GETS WRONG
+> ### ✅ FIXED — was: one slope limit for every class
 >
 > `SLOPE.ROAD_MAX = 0.13` is a **single global limit applied to every class**.
 > Against the table above it is roughly right for a local street, far too
 > permissive for an arterial (8%), and three times too permissive for a freeway
 > (4%).
 >
-> The grading table in `grade.js` already varies by class (FREEWAY 0.04,
-> AVENUE 0.07, STREET 0.09) and happens to land close to the standards. But
-> *placement* still uses the single 0.13, so the two disagree: a road can be
-> placed on ground its own alignment then has to fight.
+> The grading table in `grade.js` already varied by class (FREEWAY 0.04,
+> AVENUE 0.07, STREET 0.09) and happened to land close to the standards. But
+> *placement* used the single 0.13, so the two disagreed: a road could be placed
+> on ground its own alignment then had to fight.
+>
+> **Fixed** with `ROAD_SLOPE_MAX` per class. The two numbers are now explicitly
+> different things and both are needed: `ROAD_SLOPE_MAX` is the legal ceiling —
+> may a road of this class exist on this ground — and `ROAD_GRADE.maxGrade` is
+> the design gradient the surveyed alignment actually holds. Real road building
+> draws exactly that distinction.
 
 ### 1.5 Vertical curves
 
@@ -483,3 +493,32 @@ noise-tolerant land, and is *repelled* from the city by the four envelopes in
 And one attribution: **Jane Jacobs gives no number.** *Death and Life* Ch. 9 is
 entirely qualitative; the "800-foot" figure attributed to her is commentators
 describing the Manhattan grid she was reacting to.
+
+
+---
+
+## 8. Applied to this world — what changed, and what it cost
+
+Everything in §1–§7 is the standard. This section is what happened when the world
+was measured against it.
+
+| Finding | Outcome |
+| --- | --- |
+| Downtown grid at 230 m, over ITE's 183 m ceiling | Little streets added; zero walkable blocks now over the ceiling |
+| One slope limit (0.13) for every road class | `ROAD_SLOPE_MAX` per class; placement and alignment now agree |
+| Railway draped on terrain, reaching **15.2%** | Graded and re-routed; holds **2.5%**, the adhesion limit |
+| Corridor search scored "is it dry", not "can it hold a gradient" | Now grades every candidate; the line moved 160 m and became buildable |
+| Container port basin declared 40 m up a hillside | Moved 542 m onto water; dredges to −8.8 m, quay resolves at 8.8 m alongside |
+| Airport runway a flat plane on **one** height sample over 42 m of relief | Graded platform, cut/fill balanced at the mean, embankment skirt |
+| Stadium and cathedral standing in water since the build began | `findSite` moved them 360 m and 200 m onto land |
+| Land use declared per settlement, unconnected to the ground | Derived in `zoning.js` from port, rail, core, water and slope |
+
+**One honest note on the zoning.** The first version of those rules was *worse*
+than the hand-typed values it replaced: invented thresholds turned towns into
+farms and an island tower district into a resort. They were re-derived from the
+measured demand distribution across the 18,775 built plots. A rule only beats a
+guess once it has been calibrated against something real — which is the same
+lesson as everything else in this document.
+
+Resulting mix, against a real low-rise coastal city: VILLA 49%, TERRACE 24%,
+TOWNHOUSE 14%, MIDRISE 8.5%, FARM 2%, WAREHOUSE 0.9%, HANGAR 0.5%, TOWER 0.4%.

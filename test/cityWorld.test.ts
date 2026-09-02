@@ -872,3 +872,83 @@ test("the bucketed coast distance agrees exactly with the linear scan", () => {
   assert.ok(checked > 3000, `only ${checked} points checked`);
   assert.equal(worst, 0, `bucketed and exact disagree by up to ${worst} m`);
 });
+
+// =============================================================================
+// LAND USE IS A CONSEQUENCE OF POSITION, NOT A DECLARATION
+//
+// Every settlement used to declare its own character in a table with no
+// connection to the ground: `cls: "WAREHOUSE"` for the port, `cls: "FARM"` for
+// the outer coast. Nothing tied the port being industrial to there BEING a port
+// there -- the two facts agreed only because someone typed them to agree. This
+// build moved the port 542 m, and the warehouses would have stayed behind.
+//
+// zoning.js derives the character instead, from the port, the freight line, the
+// core, the water and the slope. What is tested here is not the aesthetic
+// outcome but the RELATIONSHIPS -- that industry is where industry has to be,
+// which is the thing a table could not guarantee and a rule can.
+//
+// Worth recording that the first version of these rules was WORSE than the
+// hand-typed values: guessed thresholds turned towns into farms and an island
+// tower district into a resort. They were re-derived from the measured demand
+// distribution afterwards. A rule is only better than a guess once it has been
+// calibrated against something real.
+// =============================================================================
+test("industry clusters at a transport node, not at random", () => {
+  const { sites } = placeFeatures(heightAt);
+  const port = sites.containerPort;
+  const airport = sites.airport;
+  const rail = sites.railway;
+  assert.ok(port && airport, "no port or airport, so this cannot be tested");
+
+  const industrial = (overlapWorld.plots as any[]).filter((p) => p.className === "WAREHOUSE");
+  assert.ok(industrial.length > 20, `only ${industrial.length} industrial plots`);
+
+  // The first version of this test asserted every warehouse was within 4 km of
+  // the PORT, and it failed -- correctly. The distant ones are at the airport,
+  // where SETTLEMENT_MIX.HANGAR legitimately places warehousing, because an
+  // airport has freight sheds and cargo terminals. The world was right and the
+  // test's premise was wrong.
+  //
+  // The real planning relationship is broader and worth stating properly:
+  // industry clusters at a TRANSPORT NODE, because what it needs is not the sea
+  // specifically but the ability to move volume. Port, airport, or the freight
+  // line that serves them.
+  const strays = industrial.filter((p) => {
+    const cx = (p.xMin + p.xMax) / 2, cz = (p.zMin + p.zMax) / 2;
+    const nearPort = Math.hypot(cx - port.x, cz - port.z) < 4000;
+    const nearAir = Math.hypot(cx - airport.x, cz - airport.z) < 4000;
+    const nearRail = rail ? Math.abs(cz - rail.at) < 1200 : false;
+    return !nearPort && !nearAir && !nearRail;
+  });
+  assert.equal(strays.length, 0,
+    `${strays.length} of ${industrial.length} warehouses are not near any transport node`);
+});
+
+test("hangars exist only at the airport", () => {
+  const { sites } = placeFeatures(heightAt);
+  const ap = sites.airport;
+  assert.ok(ap, "no airport");
+  const hangars = (overlapWorld.plots as any[]).filter((p) => p.className === "HANGAR");
+  for (const p of hangars) {
+    const cx = (p.xMin + p.xMax) / 2, cz = (p.zMin + p.zMax) / 2;
+    assert.ok(Math.hypot(cx - ap.x, cz - ap.z) < 4000,
+      `a hangar at (${cx.toFixed(0)}, ${cz.toFixed(0)}) is nowhere near the airport`);
+  }
+});
+
+test("the density mix is a city's shape, not a monoculture", () => {
+  const mix: Record<string, number> = {};
+  for (const p of overlapWorld.plots as any[]) mix[p.className] = (mix[p.className] || 0) + 1;
+  const total = (overlapWorld.plots as any[]).length;
+  const share = (k: string) => (mix[k] || 0) / total;
+
+  // A real city is mostly low-rise with a small dense core. Neither extreme is
+  // a city: all towers is a fantasy, all villas is a suburb.
+  assert.ok(share("TOWER") < 0.05, `${(100 * share("TOWER")).toFixed(1)}% towers is not a city`);
+  assert.ok(share("TOWER") > 0, "a city with no towers at all has lost its core");
+  const lowRise = share("VILLA") + share("TOWNHOUSE") + share("TERRACE");
+  assert.ok(lowRise > 0.5 && lowRise < 0.95,
+    `low-rise fabric is ${(100 * lowRise).toFixed(0)}% -- expected the majority but not the whole city`);
+  assert.ok(Object.keys(mix).length >= 6,
+    `only ${Object.keys(mix).length} plot classes in the whole world`);
+});

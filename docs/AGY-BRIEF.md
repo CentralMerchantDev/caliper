@@ -13,14 +13,15 @@ Do not start from what you remember, and do not fully trust this document either
 Before writing a line, spend a pass finding out what is actually true, and report
 what you find.
 
-1. `git log --oneline -8` and read the messages. They are long on purpose and
+1. `git log --oneline -14` and read the messages. They are long on purpose and
    they explain *why*. The four most recent are the world rescale and rebuild.
-2. Run `npm test` — **361 node tests + 9 Cloudflare Worker tests**. Confirm green
+2. Run `npm test` — **371 node tests across 26 files, + 9 Cloudflare Worker tests**. Confirm green
    before you touch anything, so anything red later is yours.
 3. Run `node scripts/shoot.mjs` and look at the contact sheet. Judge the render
-   yourself rather than trusting the priority list below. **The camera bookmarks
-   have not been re-tuned for the new world scale** — if a view looks wrong, that
-   may be the bookmark, not the render. Say so.
+   yourself rather than trusting the priority list below. The camera bookmarks HAVE been
+   re-tuned for the new scale, but only arithmetically — nobody has looked at all
+   46 of them rendered. If a view is badly framed, say so; that is a finding, not
+   a render defect.
 4. Read `public/world-scale.js` first, before any other file. One constant
    decides how big the world is, and the rule about what scales and what does
    not is the thing most likely to trip you.
@@ -65,9 +66,9 @@ public/world-scale.js  ->  export const WORLD_SCALE = 0.65;
 | land area             | 1,301 km²   | **559 km²** |
 | settled land          | 13.5%       | **29.3%**   |
 | built coverage        | 2.96%       | **5.61%**   |
-| plots                 | 31,308      | **22,131**  |
+| plots                 | 31,308      | **21,096**  |
 | buildings per km²     | 24.1        | **39.6**    |
-| `generateWorld`       | 4.6 s       | **2.8 s**   |
+| `generateWorld`       | 4.6 s       | **3.3 s**   |
 
 ### The rule you must hold in your head
 
@@ -135,6 +136,12 @@ Every coordinate knows what it is: `WATER`, `BEACH`, `CLIFF`, `STEEP`,
 cliff 0.62, beach below 2.2 m. **These did not change with the world scale and
 must not**, because uniform scaling preserves slope exactly.
 
+Road gradient is now **per class** (`ROAD_SLOPE_MAX`): freeway 6%, arterial
+9–11%, local street 15%, from AASHTO. That is the LEGAL CEILING. It is a
+different thing from `ROAD_GRADE.maxGrade` in `grade.js`, which is the DESIGN
+gradient the surveyed alignment holds. Both are needed and they are not the same
+number — see docs/CITY-PLANNING-SPEC.md §1.4.
+
 `findSite(heightAt, want, {w, d})` is new: it takes where you want something and
 returns the nearest place it can actually stand, testing the whole footprint and
 reporting how far it moved. It returns `null` rather than a guess.
@@ -155,7 +162,29 @@ Edge density is lifted in proportion to how enclosed a settlement turned out to
 be — a boundary against water, cliff or a neighbour is the densest ground in a
 real city, not the sparsest.
 
-### 4. Buildings respond to the ground they stand on
+### 4. Land use is derived, not declared
+
+`public/zoning.js`. A settlement no longer states its own character. The
+character is derived from the port, the freight line, the core, the water and the
+slope — so moving the port moves the warehouses, because they were never anywhere
+except "next to the port".
+
+Honest note: the first version of these rules was **worse** than the hand-typed
+values it replaced. Guessed thresholds turned towns into farms and an island
+tower district into a resort. They were re-derived from the measured demand
+distribution across the built plots. If you change a band, measure first.
+
+Resulting mix: VILLA 49%, TERRACE 24%, TOWNHOUSE 14%, MIDRISE 8.5%, FARM 2%,
+WAREHOUSE 0.9%, HANGAR 0.5%, TOWER 0.4%.
+
+### 5. Built surfaces are graded, not draped
+
+`public/grade.js`. Roads, and the railway, are surveyed alignments with a bounded
+gradient and an earthworks budget, per class. Draping a road on fbm noise is why
+the streets were never legible despite 385,000 road triangles. **Do not "simplify"
+this back to `heightAt(x, z)`.**
+
+### 6. Buildings respond to the ground they stand on
 
 `public/footprint.js` samples the buildable envelope on a grid and returns one of
 four verdicts:
@@ -223,7 +252,7 @@ direction. People are static.
 ## How to check your work
 
 ```powershell
-npm test                                   # 361 + 9, type-checks first
+npm test                                   # 371 + 9, type-checks first
 node scripts/shoot.mjs                     # full contact sheet to .shots/
 node scripts/shoot.mjs "Downtown close"    # one view
 ```
@@ -240,32 +269,32 @@ wrongly and treat that as a finding, not a render defect.
 
 ## Known defects we have NOT fixed — yours if you want them
 
-1. **`buildProps` still bypasses the land registry for most features.** The
-   airport, container port, cranes, farms, golf, marina, stadium apron, station
-   shed and rail ties are placed at scaled literals with ad-hoc
-   `heightAt(x,z) > k` tests. The three worst — stadium, station, cathedral —
-   now use `findSite`. **The rest are yours, and the pattern is established.**
-   The airport is a 3,400 m runway plane on a *single* height sample, and its
-   two ends currently differ by 32 m of terrain.
-2. **`distanceToCoast` is a linear scan** over the whole coastline polygon,
-   called four times per candidate rect. The file already uses a 400 m bucketing
-   grid elsewhere. Cheaper still: it calls `isOnLand` unconditionally.
-3. **`plotsOverlappingWithinSettlement`** is an O(n²)-per-bucket diagnostic that
-   runs on every page load and is read only by a test. It now always returns 0,
-   because overlap is prevented by construction.
-4. **`generateCityPlan()` runs twice** — once in `city-render.js`, once inside
-   `generateWorld`. Two independently generated objects that could desynchronise.
-5. **Main-thread waste**: the world clock writes `textContent` every rAF frame
-   for a string that changes every 6.25 s; `_musicInterval` and the white-noise
-   source are never cleared when audio is toggled off.
-6. **`terrain.js` duplicates `valueNoise`/`fbm`** from `noise.js`. Two
-   implementations of one primitive — and both must stay in step, because the
-   scale boundary assumes they agree.
-7. **Mobile at 390 px**: the pipeline card and the overview card use the same
-   `top` and both render on load, so they overlap. The inspector makes it three.
-8. **`generateWorld` is 2.8 s synchronous** on the main thread before first
-   paint. Faster than before the rescale, but still a stall. Moving it to a
-   worker or precomputing it is a genuine win.
+1. ~~`buildProps` bypasses the land registry~~ **FIXED.** Placement is now a
+   manifest (`features.js`): every large feature states what ground it NEEDS and
+   the land answers. The airport sits on a graded platform, the port on a
+   resolved quay, the railway on a corridor that can actually hold 2.5%. What
+   remains in `buildProps` are LOD culling bounds ("how far out do we draw
+   detail"), which are not placements.
+2. ~~`distanceToCoast` is a linear scan~~ **FIXED.** Bucketed on the same 400 m
+   grid, ring search with early exit. `distanceToCoastExact` is kept and a test
+   asserts the two agree exactly, sign included.
+3. ~~`plotsOverlappingWithinSettlement` runs on every page load~~ **FIXED.** Now
+   a getter, so the one test that reads it pays for it.
+4. ~~`generateCityPlan()` runs twice~~ **FIXED.** Memoised, so the plan cannot
+   exist as two independently generated objects.
+5. ~~Main-thread waste~~ **FIXED.** The clock writes only on change. Audio now
+   fades, clears its scheduler and suspends the context — it used to ramp the
+   gain to zero and leave the whole graph running.
+6. ~~`terrain.js` duplicates `valueNoise`/`fbm`~~ **FIXED.** noise.js imports
+   nothing, so there was never a cycle. One implementation now.
+7. ~~Mobile card overlap at 390 px~~ **FIXED.** The inspect card stacks below
+   the status card's real measured height.
+8. **`generateWorld` is ~3.3 s synchronous** on the main thread before first
+   paint — still the largest remaining stall, and still worth moving to a worker
+   or precomputing. **This one is genuinely open.**
+
+9. **Camera bookmarks have been re-tuned** for the new scale, but only
+   arithmetically — nobody has looked at all 46 of them rendered. Judge them.
 
 ---
 

@@ -25,6 +25,8 @@ import { fbm, hash01, clamp, smoother } from "./noise.js";
 import { WORLD_SCALE, sm, sPoint, sFields, sBounds } from "./world-scale.js";
 import { roadAllowedAt, buildAllowedAt, driveableRun, slopeAt, SLOPE, makeDemand } from "./land-use.js";
 import { fitSettlements } from "./settlement-fit.js";
+import { makeZoning, zoneCharacter } from "./zoning.js";
+import { placeFeatures } from "./features.js";
 
 // -----------------------------------------------------------------------------
 // 1. WORLD EXTENTS
@@ -2635,8 +2637,35 @@ export function generateWorld(rawHeightAt = null) {
   // without one in places that only need the road and block topology, and
   // growing against an absent terrain would be inventing land.
   const fitted = heightAt ? fitSettlements(declared, heightAt) : null;
-  const settlementList = fitted ? fitted.settlements : declared;
+  let settlementList = fitted ? fitted.settlements : declared;
   const settlementFit = fitted ? fitted.stats : null;
+
+  // WHAT A PLACE IS, DERIVED FROM WHERE IT IS.
+  //
+  // Each settlement used to declare its own character -- cls: "WAREHOUSE",
+  // cls: "FARM" -- in a table with no connection to the ground. Nothing tied
+  // `port` being WAREHOUSE to there actually being a port there; the two facts
+  // agreed only because someone typed them to agree. This build moved the port
+  // 542 m (its basin was on a hillside) and the warehouses would have stayed
+  // exactly where they were.
+  //
+  // zoning.js asks the same question of every settlement instead: given the
+  // port, the freight line, the core, the water and the slope, what would be
+  // built here? The declared value is kept as a FALLBACK, not overwritten
+  // blindly -- where the rules and the author agree, nothing changes, and where
+  // they disagree the disagreement is worth being able to see.
+  let zoningChanges = [];
+  if (heightAt && demandAt) {
+    const { sites } = placeFeatures(heightAt);
+    const zoneAt = makeZoning({ heightAt, demandAt, sites });
+    settlementList = settlementList.map((st) => {
+      const derived = zoneCharacter(zoneAt, st.bounds);
+      if (derived && derived !== st.cls) {
+        zoningChanges.push({ id: st.id, was: st.cls, now: derived });
+      }
+      return derived ? { ...st, cls: derived, declaredCls: st.cls } : st;
+    });
+  }
   // the spine goes in with the highways, not as a settlement, because it is a
   // through route rather than something serving one place
   roads.push(...barrierSpine(polyBy.barrier));
@@ -2794,6 +2823,7 @@ export function generateWorld(rawHeightAt = null) {
            unservedBridgeEnds: unserved,
            plotsDroppedForOverlap: plots.length - keptPlots.length,
            settlementFit,
+           zoningChanges,
            /** Plots that MEANINGFULLY overlap another in the same settlement.
             *
             * The epsilon is not decoration. Adjacent plots share an edge, and
