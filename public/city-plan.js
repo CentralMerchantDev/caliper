@@ -27,7 +27,8 @@ import { roadAllowedAt, makeDemand } from "./land-use.js";
 import { fitSettlements } from "./settlement-fit.js";
 import { makeZoning, zoneCharacter, CHARACTER_SPACING, DENSITY_BANDS } from "./zoning.js";
 import { PLOT_BUCKET } from "./spatial-index.js";
-import { placeFeatures } from "./features.js";
+import { placeFeatures, FEATURES, footprintOf } from "./features.js";
+import { createWorldRegistry } from "./world-registry.js";
 
 // -----------------------------------------------------------------------------
 // 1. WORLD EXTENTS
@@ -2756,6 +2757,22 @@ export function generateWorld(rawHeightAt = null) {
   // Reporting the same shape as a fully-anchored world was the one genuinely
   // silent path left in the generator.
   let zoningAnchors = { missing: [], hasIndustry: false, evaluated: false };
+  // THE STADIUM HAD HOUSES IN IT.
+  //
+  // Not because anything placed them there -- placeFeatures() asks the land and
+  // gets the right answer -- but because nothing told the plot generator that
+  // ground was taken. Two subsystems, two private beliefs about the same
+  // rectangle, and nothing to reconcile them. `registry` is that reconciliation:
+  // every feature reserves its footprint here BEFORE plots are grown, and the
+  // final plot pass below refuses any plot on ground already reserved -- the
+  // same "one piece of ground, one plot" rule the settlement/settlement overlap
+  // guard already enforces, extended to cover feature/plot overlap too.
+  //
+  // null when there is no heightAt: a structure-only build (generateWorld()
+  // called with no terrain) has nothing to ask the land, so it reserves nothing
+  // and refuses nothing -- consistent with placeFeatures and zoning being
+  // skipped in exactly the same case, a few lines below.
+  let registry = null;
   if (heightAt && demandAt) {
     // RESOLVE AGAINST THE EXACT HEIGHT, NOT THE CACHE WRAPPER.
     //
@@ -2769,6 +2786,14 @@ export function generateWorld(rawHeightAt = null) {
     // exact height the renderer uses rather than a 7.8 m-quantised copy. They
     // agreed to 0.0 m today, but nothing enforced it.
     const { sites } = placeFeatures(rawHeightAt || heightAt);
+    registry = createWorldRegistry(rawHeightAt || heightAt);
+    for (const f of FEATURES) {
+      const site = sites[f.id];
+      if (!site) continue;   // failed to place: nothing to reserve, same as before
+      for (const fp of footprintOf(f, site)) {
+        registry.reserve({ kind: "feature", id: f.id, owner: f.name, ...fp });
+      }
+    }
     const zoneAt = makeZoning({ heightAt, demandAt, sites });
     // Surfaced, not swallowed: a world with no port has no industrial land, and
     // that is a fact about the world rather than a detail of the zoning pass.
@@ -2898,12 +2923,24 @@ export function generateWorld(rawHeightAt = null) {
   // one genuinely collides. First plot wins, and the order is deterministic, so
   // the world stays reproducible.
   const keptPlots = [];
+  // PLOTS REFUSE RESERVED GROUND, THE SAME WAY THEY REFUSE EACH OTHER.
+  //
+  // This is the other half of "one piece of ground, one plot": a plot cannot
+  // share ground with another settlement's plot, and by the same rule it
+  // cannot share ground with a feature's reserved footprint. Checked in the
+  // same pass rather than a separate one, so there is exactly one place a
+  // plot can be rejected from the world, not two that have to agree.
+  let droppedForReservedGround = 0;
   {
     // One number for every bucket grid over plots -- see spatial-index.js.
     const CELL = PLOT_BUCKET;
     const grid = new Map();
     const key = (cx, cz) => cx + "," + cz;
     for (const pl of plots) {
+      if (registry && registry.overlapsReserved(pl.xMin, pl.xMax, pl.zMin, pl.zMax)) {
+        droppedForReservedGround++;
+        continue;
+      }
       const c0 = Math.floor(pl.xMin / CELL), c1 = Math.floor(pl.xMax / CELL);
       const r0 = Math.floor(pl.zMin / CELL), r1 = Math.floor(pl.zMax / CELL);
       let clash = false;
@@ -2946,6 +2983,13 @@ export function generateWorld(rawHeightAt = null) {
   }
 
   return { world:WORLD, masses, roads: out, blocks, plots: keptPlots, settlements,
+           // THE SINGLE SOURCE OF TRUTH FOR "WHAT IS AT THIS POINT".
+           //
+           // null when built with no heightAt, matching every other
+           // terrain-derived field above -- a structure-only build has nothing
+           // to ask the land and so has nothing to register.
+           registry,
+           plotsDroppedForReservedGround: droppedForReservedGround,
            // COPIES, NOT THE MODULE'S OWN ARRAYS.
            //
            // These handed the caller the live module singletons: world.districts
