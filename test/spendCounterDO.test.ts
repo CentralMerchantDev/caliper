@@ -180,8 +180,20 @@ test("publishSource: rejects publication when lease is mismatched or expired", a
   assert.equal(current, "shipped-code");
 });
 
-test("navigation: supports orbit, walk, drive, and fly modes with proper height invariants", async () => {
-  // Test actual WorldRenderer contract and mode state invariants
+test("an explicit backing store survives a resize, so an offscreen render is not silently downscaled", async () => {
+  // RENAMED, BECAUSE THE OLD NAME WAS A DIFFERENT TEST'S NAME.
+  //
+  // This was called "navigation: supports orbit, walk, drive, and fly modes with
+  // proper height invariants" and its body never referenced orbit, walk, drive,
+  // fly, or any height. It constructed a renderer, asserted explicitWidth === 800
+  // three times (the same three assertions, duplicated verbatim), and guarded the
+  // only interesting call behind `if (typeof renderer._resize === "function")`.
+  //
+  // A test-suite audit deleted the entire explicit-backing-store branch of
+  // _resize() and the suite stayed green — because the guard skipped it and the
+  // assertions read a field the constructor had just been handed.
+  //
+  // What it now tests is the property that branch exists for.
   const { WorldRenderer: WorldRenderer2D } = await import("../public/world-render.js");
   const mockCanvas = {
     getContext: () => ({
@@ -198,41 +210,43 @@ test("navigation: supports orbit, walk, drive, and fly modes with proper height 
     width: 800,
     height: 600,
   };
+  // A canvas whose LAYOUT is a different size from its requested backing store.
+  // Without the explicit branch, _resize derives the backing store from the
+  // bounding rect and the 800x600 request is lost.
+  mockCanvas.getBoundingClientRect = () => ({ width: 123, height: 45 } as any);
   const renderer = new WorldRenderer2D(mockCanvas as any, { width: 800, height: 600 });
-  assert.ok(renderer);
-  assert.equal(renderer.explicitWidth, 800);
-  assert.equal(renderer.explicitHeight, 600);
 
-  assert.ok(renderer);
-  assert.equal(renderer.explicitWidth, 800);
-  assert.equal(renderer.explicitHeight, 600);
+  // Not guarded. _resize is the thing under test; if it is missing, that is a
+  // failure, not a reason to skip.
+  assert.equal(typeof (renderer as any)._resize, "function", "_resize is gone — the backing-store contract has no implementation");
+  (renderer as any)._resize();
 
-  // Invariant tests: verify canvas resize does NOT reset explicitWidth/Height
-  if (typeof (renderer as any)._resize === 'function') {
-    (renderer as any)._resize();
-    assert.equal(renderer.explicitWidth, 800);
-    assert.equal(renderer.explicitHeight, 600);
-  }
+  assert.equal(
+    mockCanvas.width, 800,
+    `the canvas backing store is ${mockCanvas.width}px after a resize, not the 800 ` +
+    `that was asked for. Layout is 123px wide here on purpose: without the explicit ` +
+    `branch, _resize follows the bounding rect and an offscreen render comes out ` +
+    `at screen resolution.`
+  );
+  assert.equal(mockCanvas.height, 600);
+  assert.equal((renderer as any).dpr, 1, "an explicit backing store must not be scaled by devicePixelRatio again");
 
   if (renderer.destroy) renderer.destroy();
 });
 
-test("interaction: right-click context menu listener strictly blocks browser contextmenu", async () => {
-  // Test actual preventDefault logic on interaction canvas elements
-  let defaultPrevented = false;
-  const mockEvt = {
-    type: 'contextmenu',
-    defaultPrevented: false,
-    preventDefault() {
-      this.defaultPrevented = true;
-      defaultPrevented = true;
-    }
-  };
-  const preventMenu = (e: { preventDefault: () => void }) => e.preventDefault();
-  preventMenu(mockEvt);
-  assert.equal(defaultPrevented, true);
-  assert.equal(mockEvt.defaultPrevented, true);
-});
+// REMOVED: "interaction: right-click context menu listener strictly blocks
+// browser contextmenu".
+//
+// It defined its own handler inside the test body, called it on its own mock
+// event, and asserted the mock recorded a preventDefault. It touched no product
+// code at all: an audit deleted all five real `contextmenu` registrations — three
+// in index.html, two in world-render-3d.js — and it stayed green.
+//
+// It is not replaced. Those registrations live in browser code this runner
+// cannot execute, and the honest options were a source-text regex (which this
+// project treats as not-a-test elsewhere) or nothing. Nothing is better than
+// coverage-shaped nothing, and the deletion is recorded here so the absence is
+// visible rather than silent.
 
 test("export: 4K UHD blueprint rasterization preserves 3840x2160 native dimensions and rejects collapse", async () => {
   const { WorldRenderer: WorldRenderer2D } = await import("../public/world-render.js");
@@ -253,23 +267,24 @@ test("export: 4K UHD blueprint rasterization preserves 3840x2160 native dimensio
     height: 2160,
   };
 
+  // The canvas starts at the WRONG size, so the assertions below cannot be
+  // satisfied by the literals in the fixture. The old version declared
+  // `width: 3840` and then asserted `canvas4k.width === 3840` — arithmetic on
+  // its own object — and even divided it by its own height to check 16:9.
+  canvas4k.width = 1;
+  canvas4k.height = 1;
+
   const renderer4k = new WorldRenderer2D(canvas4k as any, { width: 3840, height: 2160 });
-  assert.equal(renderer4k.explicitWidth, 3840);
-  assert.equal(renderer4k.explicitHeight, 2160);
+  assert.equal(typeof (renderer4k as any)._resize, "function", "_resize is gone");
+  (renderer4k as any)._resize();
 
-  // Even if layout is 0x0, backing store must remain strictly 3840x2160 UHD
-  if (typeof (renderer4k as any)._resize === 'function') {
-    (renderer4k as any)._resize();
-    assert.equal(renderer4k.explicitWidth, 3840);
-    assert.equal(renderer4k.explicitHeight, 2160);
-    assert.equal(canvas4k.width, 3840);
-    assert.equal(canvas4k.height, 2160);
-  }
-
-  if (renderer4k.destroy) renderer4k.destroy();
-  assert.equal(canvas4k.width, 3840);
+  assert.equal(
+    canvas4k.width, 3840,
+    `the export canvas is ${canvas4k.width}px wide. Its layout rect is 0x0 (it is ` +
+    `detached), so without the explicit-backing-store branch the export falls back ` +
+    `to a default and a "4K" render is not 4K.`
+  );
   assert.equal(canvas4k.height, 2160);
-  assert.equal(canvas4k.width / canvas4k.height, 16 / 9);
   if (renderer4k.destroy) renderer4k.destroy();
 });
 

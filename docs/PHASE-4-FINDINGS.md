@@ -44,21 +44,21 @@ claim is that it only says yes when yes is true.
 |---|---------|-----|--------|
 | B1 | `buildProps` read `stats` above its own `const` — TDZ ReferenceError on EVERY call, taking the whole world build down on every page load | HIGH | **FIXED** |
 | B2 | Env-map guard reads a half-float target with a `Float32Array`, so `lum` is always 0 and the map is always discarded; `rt` leaked on the failure path | HIGH | OPEN |
-| B3 | `bridgeProfile` is parameterised by the along-span coordinate but called with the cross-axis one — 7 EW bridge decks are flat at a wrong constant height, detached from their own piers. Same bug in traffic. | HIGH | OPEN |
-| B4 | The hardcoded `downtown` entry in `SETT` describes ground downtown is not on (measured z [599,2571] vs literal [-720,575]) — 80 of 82 TOWER plots height-scaled to ~46%, no street furniture downtown | HIGH | OPEN |
-| B5 | 28 `beach-*` settlements (10,282 plots, 53% of the world) are absent from `SETT` — no centrality taper, no ground tint, palms planted through buildings | HIGH | OPEN |
-| B6 | `terrace` foundation stacks concentric boxes wider than the building and puts the body at the LOWEST step — 367 plots, grey stack taller than the building on 54 | HIGH | OPEN |
+| B3 | `bridgeProfile` is parameterised by the along-span coordinate but called with the cross-axis one — 7 EW bridge decks are flat at a wrong constant height, detached from their own piers. Same bug in traffic. | HIGH | **FIXED** |
+| B4 | The hardcoded `downtown` entry in `SETT` describes ground downtown is not on (measured z [599,2571] vs literal [-720,575]) — 80 of 82 TOWER plots height-scaled to ~46%, no street furniture downtown | HIGH | **FIXED** |
+| B5 | 28 `beach-*` settlements (10,282 plots, 53% of the world) are absent from `SETT` — no centrality taper, no ground tint, palms planted through buildings | HIGH | **FIXED** |
+| B6 | `terrace` foundation stacks concentric boxes wider than the building and puts the body at the LOWEST step — 367 plots, grey stack taller than the building on 54 | HIGH | **FIXED** |
 | B7 | `gradeRun` reports `maxFill`/`maxCut`/`overBudget`; nothing builds the earthworks and nothing reads the measurement. 167 roads over their own budget, worst 44.6 m of fill — tarmac in mid-air. Railway *publishes* the figures and draws no formation. | HIGH | OPEN |
 | B8 | Golf course: one height sample, 1,520 m disc drawn flat — the airport's documented defect, unfixed, on a bigger footprint. Site carries `range: 107.59` and it is ignored. | HIGH | OPEN |
 | B9 | Airport apron overhangs the vetted platform by 110 m; one aircraft row sits 70 m beyond it | MED | OPEN |
 | B10 | 2 of 4 airport embankment skirts wound inside-out — invisible with `FrontSide` | MED | OPEN |
-| B11 | `PLOT_CLASSES.maxHeight` applied, then multiplied by up to 1.36× — 1,362 buildings exceed their own class cap | MED | OPEN |
-| B12 | Contact shadows drawn for 205 refused plots and 867 at >1 m from the real base; 90 garden trees on refused plots | MED | OPEN |
+| B11 | `PLOT_CLASSES.maxHeight` applied, then multiplied by up to 1.36× — 1,362 buildings exceed their own class cap | MED | **FIXED** |
+| B12 | Contact shadows drawn for 205 refused plots and 867 at >1 m from the real base; 90 garden trees on refused plots | MED | **FIXED** |
 | B13 | Boardwalk, container yard, park lawns, marina, pier all still draped or flat-sampled; `GRADE.PLAZA`/`FOOTWAY` imported and unused | MED | OPEN |
 | B14 | ~700 loose meshes against a header claiming "about thirty draw calls" and "nothing is a loose Mesh"; `M()` allocates a fresh material per call | MED | OPEN |
 | B15 | Stale measured numbers in comments (185k vertices → 266,774; 64k parts → 87,546; core step 40 m → 32.5 m; pier 580 m → 377 m) | MED | OPEN |
 | B16 | `PIER` half-scaled: length scales, width/pavilion/piling spacing do not. Same shape for `MARINA.r`. | MED | OPEN |
-| B17 | Per-build waste: `occupied()` linear scan of 1,374 plots per candidate; `SETT.find()` per plot; trees sample terrain twice; unused instance capacity; dead `core` computation | MED | OPEN |
+| B17 | Per-build waste: `occupied()` linear scan of 1,374 plots per candidate; `SETT.find()` per plot; trees sample terrain twice; unused instance capacity; dead `core` computation | MED | **FIXED** |
 | B18 | Dead code + a false guarantee in a comment (`wm` IS shadowed at line 558); unreachable `quayZ` guard; empty conditional; mast literal fallback | LOW | OPEN |
 
 ## C. `index.html` / `city.html`
@@ -100,3 +100,30 @@ claim is that it only says yes when yes is true.
 - `src/citySummary.generated.ts` is current, not stale.
 - Modal focus management (inert, focus restore, Tab trap) works.
 - No LOD system exists in `world-render-3d.js`, so there is no stale LOD distance.
+
+
+---
+
+## Phase 5 — the suite as a system (added after the UMAA reordering)
+
+Audited with one question per file: would deleting the feature it covers make it
+fail? For six files the answer was no. Full findings and the surviving mutation
+for each are in the commit history; the closed ones:
+
+| Finding | Status |
+|---|---|
+| The review round cap and fix-attempt cap could both be deleted with the suite green | **FIXED** — extracted as `reviewRoundsExhausted` / `shouldKeepFixing` and driven |
+| `BUDGET = 2` stranded settlements against an actual of 0 — absorbed two real regressions | **FIXED** — 0 |
+| `MAX_UNSERVED = 5` bridge ends against an actual of 0 — absorbed four | **FIXED** — 0 |
+| An assertion that reduced to `x === x`, run 60 times | **FIXED** — checks the anchor property it was reaching for |
+| `test/attacks.test.ts` was 0 bytes and counted as coverage | **FIXED** — real coverage written; empty original quarantined; empty test files now fail the suite |
+| The whole 2D renderer could be deleted (`assert.doesNotThrow` on `draw()`) | **FIXED** — the mock context counts operations |
+| A `contextmenu` test that called its own handler on its own mock | **REMOVED** — recorded in place, not replaced: the real registrations are browser code this runner cannot execute |
+| Two renderer tests asserting on their own object literals | **FIXED** — driven against `_resize` with a fixture that cannot satisfy them by construction |
+| The `$2` cap check was a substring match `$20/month` satisfied | **FIXED** — word boundary, visible copy only, plus a check that no OTHER `$N/day` appears |
+| The Worker test count used the static method the same file argues is wrong — 9 for a file that runs 12 | **FIXED** — counts `it.each` rows; page corrected to 12 |
+
+Still open, recorded rather than fixed: the loose one-sided sanity thresholds
+(20×–90× headroom on several `cityWorld` bounds), the `evidence-forwarding`
+source-text regex, and the 25% slack in the staleness floor. All are LOW and none
+of them reports coverage that does not exist — they are weak, not false.

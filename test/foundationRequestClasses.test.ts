@@ -77,18 +77,34 @@ test("control: the real 9-case regression suite passes against the real, unmodif
 // correctness check (there is no pixel output to inspect here) -- a
 // does-this-throw check, the same bar FOUNDATION.md item 5 asks for.
 // ---------------------------------------------------------------------
+// THE STUBS RECORD NOW, BECAUSE A NO-OP STUB CANNOT TELL DRAWING FROM NOT.
+//
+// A test-suite audit replaced world-render.js's entire draw() with
+// `draw(t) { return; }` and all 432 tests passed. This file's header claims each
+// request class is proven "by a test that ... checks the renderer draws it", and
+// the check was assert.doesNotThrow -- which a function that does nothing
+// satisfies perfectly.
+//
+// Counting the calls turns "did not throw" into "actually drew", which is the
+// claim the header was already making.
 function makeMockCanvas() {
+  const calls: Record<string, number> = {};
+  const count = (name: string) => { calls[name] = (calls[name] ?? 0) + 1; };
   const ctx = {
     fillStyle: "", strokeStyle: "", lineWidth: 1, font: "", textAlign: "left", textBaseline: "alphabetic", globalAlpha: 1,
-    clearRect() {}, fillRect() {}, fillText() {},
-    beginPath() {}, moveTo() {}, lineTo() {}, arcTo() {}, closePath() {}, arc() {}, ellipse() {},
-    fill() {}, stroke() {}, save() {}, restore() {}, clip() {}, setLineDash() {},
+    clearRect() { count("clearRect"); }, fillRect() { count("fillRect"); }, fillText() { count("fillText"); },
+    beginPath() { count("beginPath"); }, moveTo() { count("moveTo"); }, lineTo() { count("lineTo"); },
+    arcTo() { count("arcTo"); }, closePath() { count("closePath"); }, arc() { count("arc"); }, ellipse() { count("ellipse"); },
+    fill() { count("fill"); }, stroke() { count("stroke"); }, save() { count("save"); }, restore() { count("restore"); },
+    clip() { count("clip"); }, setLineDash() { count("setLineDash"); },
+    __calls: calls,
   };
   const canvas: any = {
     width: 800, height: 600,
     style: {},
     getContext: () => ctx,
     getBoundingClientRect: () => ({ width: 800, height: 600 }),
+    __calls: calls,
   };
   return canvas;
 }
@@ -97,10 +113,25 @@ function makeMockCanvas() {
 (globalThis as any).ResizeObserver = (globalThis as any).ResizeObserver ?? class { observe() {} disconnect() {} };
 
 function assertRendererDrawsWithoutThrowing(world: any) {
-  const renderer = new WorldRenderer(makeMockCanvas(), { reducedMotion: true });
+  const canvas = makeMockCanvas();
+  const renderer = new WorldRenderer(canvas, { reducedMotion: true });
   renderer.pushTick(world);
   renderer.pushTick(world);
   assert.doesNotThrow(() => renderer.draw(1));
+
+  // AND IT HAS TO HAVE DRAWN SOMETHING. `draw(t) { return; }` passes the line
+  // above and fails this one, which is the difference between the check this
+  // file's header describes and the check it was making.
+  const calls = (canvas as any).__calls as Record<string, number>;
+  const total = Object.values(calls).reduce((a, b) => a + b, 0);
+  assert.ok(
+    total > 50,
+    `draw() issued ${total} canvas operations for a whole world. A renderer that ` +
+    `returns immediately issues 0 and satisfies doesNotThrow — which is how the ` +
+    `entire 2D renderer could be deleted with this suite green.`
+  );
+  assert.ok((calls.fillRect ?? 0) > 0 || (calls.fill ?? 0) > 0,
+    "nothing was filled — the world was walked but nothing was painted");
 }
 
 // ---------------------------------------------------------------------
