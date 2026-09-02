@@ -1,4 +1,4 @@
-import { assessReviewRound, checkReplyBudget, resolvePlanGate, MAX_PLAN_REPLIES } from "../src/changePipeline.js";
+import { assessReviewRound, checkReplyBudget, resolvePlanGate, shouldKeepFixing, reviewRoundsExhausted, MAX_PLAN_REPLIES } from "../src/changePipeline.js";
 // =============================================================================
 // THE REVIEWER MUST SEE WHAT ITS FINDINGS CHANGED
 //
@@ -311,4 +311,74 @@ test("the plan gate still does the things it is for", async () => {
     repliesUsed: MAX_PLAN_REPLIES,
   });
   assert.equal(resumed.budgetSpent, true, "the count must survive a resume, or the cap resets on every reconnect");
+});
+
+// ---------------------------------------------------------------------------
+// THE CAPS THEMSELVES, DRIVEN — NOT THE CONSTANTS THEY READ
+//
+// A test-suite audit deleted both caps and the whole suite stayed green:
+//
+//     src/changePipeline.ts  `convergenceFixAttempts < MAX_FIX_ATTEMPTS` → `< 1e9`
+//     src/changePipeline.ts  `round >= MAX_REVIEW_ROUNDS`                → `false`
+//
+// 432/432 either way. The tests that claimed to cover them asserted on the
+// CONSTANTS — "MAX_REVIEW_ROUNDS is between 2 and 4" — which stays true whether
+// or not anything reads them. A constant is not a control; the comparison is,
+// and a comparison can only be tested by driving it.
+//
+// This is the third time this file has had to learn the same thing, which is
+// why the caps are now extracted rather than inline.
+// ---------------------------------------------------------------------------
+const FAILING = [{ name: "x", pass: false }] as any[];
+const PASSING = [{ name: "x", pass: true }] as any[];
+
+test("the fix loop stops at MAX_FIX_ATTEMPTS, however long the failure persists", () => {
+  const base = { fatalError: undefined, regression: FAILING, criteria: PASSING };
+
+  // It must keep going while there are attempts left...
+  let ran = 0;
+  for (let used = 0; used < 50; used++) {
+    if (!shouldKeepFixing({ ...base, attemptsUsed: used })) break;
+    ran++;
+  }
+  assert.equal(
+    ran, CONTROL_LIMITS.MAX_FIX_ATTEMPTS,
+    `the loop ran ${ran} times against a cap of ${CONTROL_LIMITS.MAX_FIX_ATTEMPTS}. ` +
+    `Each pass is a paid fix call, and an unbounded one is what the audit produced ` +
+    `by changing one comparison.`
+  );
+
+  // ...and stop at the cap exactly, not one past it.
+  assert.equal(shouldKeepFixing({ ...base, attemptsUsed: CONTROL_LIMITS.MAX_FIX_ATTEMPTS }), false);
+  assert.equal(shouldKeepFixing({ ...base, attemptsUsed: CONTROL_LIMITS.MAX_FIX_ATTEMPTS - 1 }), true);
+});
+
+test("the fix loop does not run at all when there is nothing failing, or when nothing ran", () => {
+  // Controls. A cap test that only proves "it stops" would pass on a loop that
+  // never starts, which is a different bug wearing the same result.
+  assert.equal(
+    shouldKeepFixing({ fatalError: undefined, regression: PASSING, criteria: PASSING, attemptsUsed: 0 }),
+    false, "a passing verification started a fix loop"
+  );
+  assert.equal(
+    shouldKeepFixing({ fatalError: "the sandbox did not load the module", regression: [], criteria: [], attemptsUsed: 0 }),
+    false,
+    "a FATAL verification error started a fix loop. There is no failure to fix — " +
+    "verification did not run, which is an unknown, and fixing an unknown is guessing."
+  );
+});
+
+test("the review loop's round cap is a comparison, not a comment", () => {
+  assert.equal(reviewRoundsExhausted(0), false, "the review loop refused to run its first round");
+  assert.equal(reviewRoundsExhausted(CONTROL_LIMITS.MAX_REVIEW_ROUNDS - 1), false,
+    "the loop stopped one round early");
+  assert.equal(reviewRoundsExhausted(CONTROL_LIMITS.MAX_REVIEW_ROUNDS), true,
+    `round ${CONTROL_LIMITS.MAX_REVIEW_ROUNDS} was allowed past the cap — every extra round ` +
+    `is a review, an assess and a fix, all paid for`);
+  assert.equal(reviewRoundsExhausted(CONTROL_LIMITS.MAX_REVIEW_ROUNDS + 7), true);
+
+  // And it must genuinely permit more than one round, or the "loop" is a single
+  // pass and the page's claim about convergence is decoration.
+  assert.ok(CONTROL_LIMITS.MAX_REVIEW_ROUNDS >= 2,
+    "the reviewer must see the work more than once for this to be a loop at all");
 });

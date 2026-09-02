@@ -39,7 +39,18 @@ import { LandField, makeHeightAt } from "../public/terrain.js";
  * same: derive them. That is Pass 3 (the city layout rebuild), where this goes
  * to 0 and stays there. Recording the number honestly is the point; a test that
  * quietly passed here would be the exact failure this project exists to refuse. */
-const MAX_UNSERVED = 5;
+// THE ALLOWANCE WAS 5 AND THE ACTUAL IS 0.
+//
+// The comment above records it honestly as a growing debt -- "3 -> 4 -> 5 across
+// the geography rebuild ... Recording the number honestly is the point" -- and
+// that WAS the right instinct at the time. It stopped being right when the debt
+// was paid: measured now, 0 of 38 bridge ends are unserved.
+//
+// A test-suite audit skipped landing-street construction for five bridge ends,
+// producing four genuinely unserved ends, and this test stayed green. An
+// allowance that outlives its debt does not record honesty, it absorbs
+// regressions -- which is the opposite of what the comment set out to do.
+const MAX_UNSERVED = 0;
 
 const heightAt = makeHeightAt(new LandField(16));
 const world = generateWorld(heightAt);
@@ -115,6 +126,17 @@ test("generateWorld reports its own unserved ends rather than hiding them", () =
   // to refuse to ship a broken world needs this list to exist.
   const reported = (world as any).unservedBridgeEnds;
   assert.ok(Array.isArray(reported), "generateWorld must return unservedBridgeEnds");
+  // THE COMPARISON BELOW IS `0 === 0` IN A HEALTHY WORLD, SO IT PROVED NOTHING.
+  //
+  // An audit replaced the whole computation with a literal `[]`, making the
+  // reporting dead code, and this test stayed green — because both sides were
+  // empty either way. A self-report can only be tested against a world that has
+  // something to report, so the field is checked for SHAPE here and driven
+  // against a deliberately broken world below.
+  for (const entry of reported) {
+    assert.equal(typeof entry, "string",
+      `unservedBridgeEnds carries ${typeof entry}; the renderer and the page both read it as an id`);
+  }
   assert.equal(reported.length, joinedEnds().missing.length,
     "the world's own report must agree with an independent measurement of it");
 });
@@ -136,7 +158,22 @@ test("every approach is collinear with the bridge it serves, or is its turn", ()
     // be asserted to be.
     if (r.landing) {
       assert.notEqual((r.axis === "ew"), ew, `${r.id} is a landing and must cross the deck's axis`);
-      assert.equal(r.at, ew ? br.a === r.at ? br.a : r.at : r.at, `${r.id} must sit at the anchor`);
+      // THIS ASSERTION WAS LITERALLY `x === x`.
+      //
+      // It read `assert.equal(r.at, ew ? br.a === r.at ? br.a : r.at : r.at)`.
+      // Every branch of that ternary reduces to `r.at`, so it compared the value
+      // to itself, sixty times, and could not fail. An audit moved every landing
+      // 5 km from its anchor and this assertion stayed green.
+      //
+      // The property it was reaching for: a landing sits at one END of the deck,
+      // which is br.a or br.b. Written so the ternary cannot collapse.
+      const anchors = [br.a, br.b];
+      assert.ok(
+        anchors.some((a) => Math.abs(r.at - a) < 1e-6),
+        `${r.id} sits at ${r.at}, which is neither end of its bridge (${br.a}, ${br.b}). ` +
+        `A landing is the street the deck arrives on; if it is not at an end, the ` +
+        `bridge arrives at nothing.`
+      );
     } else if (isLeg) {
       assert.notEqual((r.axis === "ew"), ew, `${r.id} is a turn and must cross the deck's axis`);
     } else {

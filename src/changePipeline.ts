@@ -868,6 +868,47 @@ export type ReviewRoundVerdict =
   | { kind: "oscillating"; nextMaterial: string[]; contested: string[]; unresolved: string[]; key: string }
   | { kind: "continue"; nextMaterial: string[]; contested: string[]; unresolved: string[]; key: string };
 
+/**
+ * May the convergence fix loop run again?
+ *
+ * EXTRACTED BECAUSE THE CAP COULD BE DELETED WITH THE SUITE GREEN. A test-suite
+ * audit changed `convergenceFixAttempts < MAX_FIX_ATTEMPTS` to `< 1e9` and all
+ * 432 tests passed. The tests that claim to cover this assert on the CONSTANT
+ * -- `MAX_FIX_ATTEMPTS is between 2 and 4` -- which is true whether or not
+ * anything reads it.
+ *
+ * That is the exact failure reviewLoop.test.ts's own header describes: "an
+ * independent audit deleted the oscillation guard, the round cap, the
+ * fix-attempt cap ... and all 380 tests stayed green." It was written about a
+ * previous round of this and was still true for these two.
+ *
+ * A constant is not a control. The control is the comparison, and a comparison
+ * can only be tested by driving it.
+ */
+export function shouldKeepFixing(state: {
+  fatalError: string | undefined;
+  regression: TestResult[];
+  criteria: TestResult[];
+  attemptsUsed: number;
+}): boolean {
+  // A fatal error is not something a fix attempt can help with: verification did
+  // not run, so there is no failure to fix, only an unknown.
+  if (state.fatalError) return false;
+  if (!decideStillFailing(state.fatalError, state.regression, state.criteria)) return false;
+  return state.attemptsUsed < CONTROL_LIMITS.MAX_FIX_ATTEMPTS;
+}
+
+/**
+ * Has the review loop used its rounds?
+ *
+ * Same reasoning as shouldKeepFixing: `round >= MAX_REVIEW_ROUNDS` was inline,
+ * and replacing it with `false` -- an unbounded review loop, every round paying
+ * for a review, an assess and a fix -- passed the whole suite.
+ */
+export function reviewRoundsExhausted(round: number): boolean {
+  return round >= CONTROL_LIMITS.MAX_REVIEW_ROUNDS;
+}
+
 export function assessReviewRound(
   findings: { severity: string; text: string }[],
   acceptedByDesign: string[],
@@ -1355,11 +1396,12 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // patch its own output blind -- there's no code to point the fix at
     // yet, only a load failure -- so it skips the convergence loop and
     // refuses immediately, same as before.
-    while (
-      !verifyFatalError &&
-      decideStillFailing(verifyFatalError, verifyRegression, verifyCriteria) &&
-      convergenceFixAttempts < CONTROL_LIMITS.MAX_FIX_ATTEMPTS
-    ) {
+    while (shouldKeepFixing({
+      fatalError: verifyFatalError,
+      regression: verifyRegression,
+      criteria: verifyCriteria,
+      attemptsUsed: convergenceFixAttempts,
+    })) {
       if (await checkStopped(env.SPEND_KV, runId)) {
         await clearState(env.SPEND_KV, runId);
         const ledger = buildStoppedLedger(stageCosts, budget, questionAsked, planGateReplyCount, runStartedAt, "approve");
@@ -1781,7 +1823,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         }
 
         // ---- THE REVIEWER MUST SEE WHAT ITS FINDINGS CHANGED ----
-        if (round >= CONTROL_LIMITS.MAX_REVIEW_ROUNDS) {
+        if (reviewRoundsExhausted(round)) {
           // AN OVERRULE THAT WAS NEVER RE-REVIEWED STILL BLOCKS.
           //
           // `toFix` is empty when the author judged every finding invalid. At

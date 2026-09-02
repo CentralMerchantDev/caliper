@@ -184,10 +184,42 @@ test("the test counts on the page are the test counts", () => {
   // a strict lower bound, so a generated number below it proves the artefact
   // predates tests that now exist -- which would let the page and the artefact
   // go stale together, agreeing with each other and with nothing else.
+  // COUNTING `it(` MISSED THE it.each ROWS, AND THE PAGE WAS WRONG BY THREE.
+  //
+  // The Node half of this test reads a runtime count from a generated artefact,
+  // with a comment explaining at length that a static count "would have failed
+  // against a page that was telling the truth." The Worker half then did
+  // exactly the static count it argues against — and got 9 for a file that runs
+  // 12, because one `it.each([...])` with three rows counts as one call site
+  // and three tests.
+  //
+  // The Worker suite runs under vitest/workerd and cannot be executed by this
+  // runner, so a runtime artefact is not available for it. Counting the rows is
+  // the best available approximation, and it is now an approximation of the
+  // right thing.
+  const countTests = (src: string): number => {
+    const plain = (src.match(/^\s*(?:test|it)\(/gm) || []).length;
+    let rows = 0;
+    for (const block of src.matchAll(/^[ \t]*(?:test|it)\.each\(\[([\s\S]*?)\]\)/gm)) {
+      rows += (block[1].match(/^[ \t]*\[/gm) || []).length;
+    }
+    return plain + rows;
+  };
+
   const testDir = join(ROOT, "test");
   let staticFloor = 0, workerCount = 0;
   for (const f of readdirSync(testDir).filter((f) => f.endsWith(".test.ts"))) {
-    const n = (readFileSync(join(testDir, f), "utf8").match(/^\s*(?:test|it)\(/gm) || []).length;
+    const src = readFileSync(join(testDir, f), "utf8");
+    // A ZERO-BYTE TEST FILE IS NOT COVERAGE. Two of them sat in the suite,
+    // building cleanly, contributing nothing, and counted in the file total.
+    if (src.trim().length === 0) {
+      assert.fail(
+        `test/${f} is empty. An empty test file builds cleanly, contributes zero ` +
+        `tests, and is still counted in the suite's file count — coverage that ` +
+        `exists only as a filename.`
+      );
+    }
+    const n = countTests(src);
     if (f.includes(".workers.")) workerCount += n; else staticFloor += n;
   }
   assert.ok(
@@ -212,13 +244,39 @@ test("the spend caps and limits on the page are the ones in the code", () => {
   const weekly = CONTROL_LIMITS.PIPELINE_WEEKLY_CAP_USD;
   const monthly = CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD;
 
+  // SUBSTRING MATCHING MADE THIS CHECK MEANINGLESS. `INDEX.includes("$2")` is
+  // satisfied by "$20/month", so the daily cap was "verified" by the monthly
+  // one -- and an audit demonstrated the page advertising $999/day with all
+  // three assertions still passing.
+  //
+  // Two fixes. A word boundary, so $2 does not match inside $20. And
+  // visibleCopy(), so a number inside a script comment cannot satisfy a claim
+  // about what the page SAYS -- the km sweep in this same file already learned
+  // that lesson and this assertion did not get it.
+  const copy = visibleCopy(INDEX);
   for (const [label, value] of [["daily", daily], ["weekly", weekly], ["monthly", monthly]] as const) {
     const money = `$${value}`;
+    const pattern = new RegExp(`\\$${String(value).replace(".", "\\.")}(?![0-9.])`);
     assert.ok(
-      INDEX.includes(money) || INDEX.includes(`$${value.toFixed(2)}`),
-      `the ${label} cap is ${money} in CONTROL_LIMITS and does not appear on the page`
+      pattern.test(copy),
+      `the ${label} cap is ${money} in CONTROL_LIMITS and does not appear as a distinct ` +
+      `figure in the page's visible copy. (A bare includes() here was satisfied by ` +
+      `"$20/month" standing in for "$2/day".)`
     );
   }
+
+  // AND THE PAGE MUST NOT STATE A CAP THAT IS NOT ONE OF THESE. The check above
+  // only proves the real numbers appear; it says nothing about a fourth,
+  // invented one sitting beside them.
+  const permitted = new Set([daily, weekly, monthly].map((v) => v.toFixed(2)));
+  const perDay = [...copy.matchAll(/\$([0-9]+(?:\.[0-9]+)?)\s*\/\s*day/g)].map((m) => Number(m[1]));
+  for (const claimed of perDay) {
+    assert.equal(
+      claimed.toFixed(2), daily.toFixed(2),
+      `the page advertises a $${claimed}/day cap; CONTROL_LIMITS says $${daily}`
+    );
+  }
+  assert.ok(permitted.size === 3, "the three caps are no longer distinct — this check needs rethinking");
 
   // The free-text input's maxlength must be the server's limit, or the page
   // accepts something the server will refuse -- a rejection the visitor cannot

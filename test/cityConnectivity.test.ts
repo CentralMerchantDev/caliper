@@ -94,9 +94,25 @@ test("every inhabited place is on the same road network", () => {
   // The last two are Redcliff (a small outer island whose only link is one
   // crossing) and one eastern mainland band. Neither is a road problem -- they
   // need another crossing, which is a layout decision rather than a bug.
-  const BUDGET = 2;
+  // THE BUDGET WAS 2 AND THE ACTUAL IS 0, SO IT ABSORBED TWO REAL REGRESSIONS.
+  //
+  // A test-suite audit deleted both crossings to Redcliff Island from BRIDGES,
+  // stranding a genuinely inhabited settlement — and this test, named "every
+  // inhabited place is on the same road network", stayed green.
+  //
+  // The comment justifying 2 ("both are understood -- Redcliff ... and one
+  // eastern mainland band") described a world that no longer exists: the
+  // geography rebuild connected them, and nobody came back to close the budget.
+  // A debt that has been paid is not a debt, and leaving the allowance in place
+  // is how a test stops noticing the thing it is named for.
+  //
+  // Zero, with the number stated in the failure message rather than a budget, so
+  // a future regression names itself instead of fitting inside an allowance.
+  const BUDGET = 0;
   assert.ok(stranded.length <= BUDGET,
-    `${stranded.length} settlement(s) cannot be driven to (budget ${BUDGET}): ${stranded.join(", ")}`);
+    `${stranded.length} settlement(s) cannot be driven to: ${stranded.join(", ")}. ` +
+    `The budget here is 0 on purpose — it was 2 for a debt that has since been ` +
+    `paid, and while it stood this test absorbed two stranded settlements silently.`);
 });
 
 test("every land mass with a town on it is on the network", () => {
