@@ -59,14 +59,46 @@ describe("request handlers run in workerd", () => {
     // said "0 of 3 used" right up until /change-run answered 429, which is the
     // precise failure /live-status exists to prevent.
     //
-    // Drive it through the REAL path: consume a run, then ask.
+    // IT CAME BACK. The key was later changed to a salted hash of the address
+    // for retention reasons, and only claimRun -- the writer -- was updated.
+    // runsUsed kept reading `ratelimit/<raw ip>/<day>`, a key nothing writes,
+    // so /live-status went back to reporting 0 for everyone. Same defect, one
+    // refactor later, which is why this test is worth more than the fix was.
+    //
+    // The first version of this test drove /change-run and then read
+    // /live-status. That could not work: /change-run answers 200 with an SSE
+    // stream, `fetch` resolves when the HEADERS arrive, and the run is claimed
+    // inside the body. Measured: with the body never pulled, the claim had not
+    // landed 6.8 s later. The test was asserting a side effect it never waited
+    // for -- so it failed even when the code was right, and would have passed
+    // for the wrong reason if the timing had gone the other way.
+    //
+    // Drive the ENFORCER directly and ask over HTTP. That crosses every join
+    // the defect lives in -- claimRun's key, the DO route, pipelineAvailability,
+    // runsUsed's key -- with nothing racing.
     const ip = "workerd-live-status-agreement";
-    const before = await SELF.fetch("https://example.test/live-status", { headers: { "cf-connecting-ip": ip } });
-    const b0 = await before.json<{ runsUsed: number }>();
-    await SELF.fetch("https://example.test/change-run?request=add%20a%20lamp", { headers: { "cf-connecting-ip": ip } });
+    const day = new Date().toISOString().slice(0, 10);
+    const stub = env.SPEND_COUNTER.get(env.SPEND_COUNTER.idFromName("global"));
+
+    const zero = await SELF.fetch("https://example.test/live-status", { headers: { "cf-connecting-ip": ip } });
+    expect((await zero.json<{ runsUsed: number }>()).runsUsed).toBe(0);
+
+    await stub.fetch("https://do/claim-run", {
+      method: "POST",
+      body: JSON.stringify({ ip, day, limit: CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP }),
+    });
+
     const after = await SELF.fetch("https://example.test/live-status", { headers: { "cf-connecting-ip": ip } });
-    const b1 = await after.json<{ runsUsed: number }>();
-    expect(b1.runsUsed).toBeGreaterThan(b0.runsUsed);
+    const b1 = await after.json<{ runsUsed: number; countersRead: boolean }>();
+    expect(b1.countersRead).toBe(true);
+    expect(b1.runsUsed).toBe(1);
+
+    // And the refund path, which derived the same key a third time and so was
+    // broken the same way -- silently, since decrementing a key that does not
+    // exist floors at 0 and returns a plausible number.
+    await stub.fetch("https://do/refund-run", { method: "POST", body: JSON.stringify({ ip, day }) });
+    const back = await SELF.fetch("https://example.test/live-status", { headers: { "cf-connecting-ip": ip } });
+    expect((await back.json<{ runsUsed: number }>()).runsUsed).toBe(0);
   });
 
   it("keeps the live path fail-closed when the flag is absent or malformed", () => {
@@ -140,10 +172,45 @@ describe("request handlers run in workerd", () => {
     // (max 3)" -- the right refusal, the wrong assertion. Worth keeping as two
     // tests, because they are two guarantees and a run that trips one should
     // not be able to masquerade as the other.
-    const ip = "workerd-concurrency-test";
-    for (let i = 0; i < CONTROL_LIMITS.MAX_CONCURRENT_PIPELINE_RUNS; i++) {
-      await SELF.fetch("https://example.test/change-run?request=add%20a%20lamp", { headers: { "cf-connecting-ip": ip } });
+    // AND THE SECOND VERSION ASSERTED SOMETHING ARITHMETICALLY IMPOSSIBLE.
+    //
+    // It opened MAX_CONCURRENT_PIPELINE_RUNS runs from ONE address. But the
+    // concurrency cap is GLOBAL -- leaseRun counts every active lease, whoever
+    // holds it -- while the daily cap is per address, and DAILY_LIVE_RUNS_PER_IP
+    // is 2 against MAX_CONCURRENT_PIPELINE_RUNS of 5. One address can hold at
+    // most 2 leases, so it can never reach 5, and the third request is refused
+    // by the DAILY limiter. That is what happened: the assertion wanted
+    // /already in flight/ and got "You've hit the limit of 2 live pipeline
+    // runs per day". The right refusal, the wrong limiter -- for the second
+    // time in this one test, which is the tell that the test was never able to
+    // reach the control it names.
+    //
+    // Take the leases directly, one per run id, the way the daily test claims
+    // runs directly. Then a FRESH address -- with a clean daily allowance, so
+    // the daily limiter provably cannot be what fires -- must be refused for
+    // concurrency and nothing else.
+    // FILL UNTIL FULL, DO NOT ASSUME EMPTY. Earlier tests in this file open
+    // runs whose leases are still held here -- that is stated at the daily-limit
+    // test above and it is just as true in this direction. Taking exactly
+    // MAX_CONCURRENT leases and asserting each one succeeds failed on the fifth,
+    // because four were already out. Fill until the coordinator itself says the
+    // pool is full, which is the condition this test actually needs and the only
+    // one that does not depend on what ran before it.
+    const stub = env.SPEND_COUNTER.get(env.SPEND_COUNTER.idFromName("global"));
+    let full = false;
+    for (let i = 0; i <= CONTROL_LIMITS.MAX_CONCURRENT_PIPELINE_RUNS && !full; i++) {
+      const lease = await stub.fetch("https://do/lease-run", {
+        method: "POST",
+        body: JSON.stringify({ runId: `workerd-concurrency-filler-${i}` }),
+      });
+      const body = await lease.json<{ ok: boolean; reason?: string }>();
+      if (!body.ok) {
+        expect(body.reason).toMatch(/already in flight/);
+        full = true;
+      }
     }
+    expect(full, "the lease pool never filled, so this test never reached the control it names").toBe(true);
+    const ip = "workerd-concurrency-test";
     const response = await SELF.fetch("https://example.test/change-run?request=add%20a%20lamp", { headers: { "cf-connecting-ip": ip } });
     expect(response.status).toBe(429);
     const body = await response.json<{ error: string; reason: string }>();

@@ -147,7 +147,7 @@ export class SpendCounterLogic {
     // And old days are pruned as they are encountered, which is the cheapest
     // correct place: it happens on the write path, needs no alarm, and cannot
     // drift out of step with the retention the comment claims.
-    const key = `ratelimit/${await hashIp(ip)}/${day}`;
+    const key = await this.rateLimitKey(ip, day);
     const used = ((await this.storage.get<number>(key)) ?? 0);
     if (used >= limit) return { ok: false, used, limit };
     await this.storage.put(key, used + 1);
@@ -189,7 +189,7 @@ export class SpendCounterLogic {
    * runs, and this is reachable from a request path.
    */
   async refundRun(ip: string, day: string): Promise<{ used: number }> {
-    const key = `ratelimit/${ip}/${day}`;
+    const key = await this.rateLimitKey(ip, day);
     const used = (await this.storage.get<number>(key)) ?? 0;
     const next = used > 0 ? used - 1 : 0;
     await this.storage.put(key, next);
@@ -208,7 +208,34 @@ export class SpendCounterLogic {
    * Same key, same day format, same object. One source of truth.
    */
   async runsUsed(ip: string, day: string): Promise<number> {
-    return (await this.storage.get<number>(`ratelimit/${ip}/${day}`)) ?? 0;
+    return (await this.storage.get<number>(await this.rateLimitKey(ip, day))) ?? 0;
+  }
+
+  /**
+   * The one place a rate-limit key is spelled.
+   *
+   * THIS IS A STRUCTURAL FIX, NOT A TYPO FIX.
+   *
+   * The key used to be written out by hand in three methods. When the address
+   * was replaced with a salted hash for retention reasons, exactly one of the
+   * three was updated -- claimRun, the enforcer -- and the two readers kept
+   * building `ratelimit/<raw ip>/<day>`. Neither failed. Neither threw. They
+   * addressed a key nothing had ever written, so:
+   *
+   *   * runsUsed returned 0 for every visitor forever, which is the number
+   *     /live-status quotes back to them. The endpoint written specifically to
+   *     stop the visitor being told something false went back to telling them
+   *     something false -- the SECOND time this exact defect has appeared here.
+   *   * refundRun decremented a key that did not exist, so a run refused for
+   *     concurrency was never actually given back, and the write PUT THE
+   *     PLAINTEXT ADDRESS BACK INTO STORAGE -- reintroducing the retention the
+   *     hashing was added to remove.
+   *
+   * A key derived in three places is a defect waiting for its fourth caller.
+   * Derived in one, the drift is not something you have to remember to avoid.
+   */
+  private async rateLimitKey(ip: string, day: string): Promise<string> {
+    return `ratelimit/${await hashIp(ip)}/${day}`;
   }
 
   async reserve(estimateUsd: number, caps: SpendCaps): Promise<ReserveResult> {
