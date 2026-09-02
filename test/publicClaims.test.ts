@@ -166,7 +166,7 @@ test("the test counts on the page are the test counts", () => {
   // only mechanism in this project that has ever kept a number honest.
   const generated = JSON.parse(
     readFileSync(join(ROOT, "test", "testCount.generated.json"), "utf8"),
-  ) as { nodeTests: number; workerTestFiles: string[] };
+  ) as { nodeTests: number; workerTests: number; workerFail: number; workerTestFiles: string[] };
 
   const claimedNode = Number(spanText(INDEX, "claim-node-tests")?.replace(/,/g, ""));
   const claimedWorker = Number(spanText(INDEX, "claim-worker-tests")?.replace(/,/g, ""));
@@ -193,10 +193,22 @@ test("the test counts on the page are the test counts", () => {
   // 12, because one `it.each([...])` with three rows counts as one call site
   // and three tests.
   //
-  // The Worker suite runs under vitest/workerd and cannot be executed by this
-  // runner, so a runtime artefact is not available for it. Counting the rows is
-  // the best available approximation, and it is now an approximation of the
-  // right thing.
+  // AND THEN THE APPROXIMATION WAS RETIRED, BECAUSE IT STOPPED BEING NECESSARY.
+  //
+  // The paragraph above used to end: "The Worker suite runs under vitest/workerd
+  // and cannot be executed by this runner, so a runtime artefact is not
+  // available for it." True when written, and it quietly stopped being true --
+  // gen-test-count.mjs now invokes vitest as well and records workerTests and
+  // workerFail from its summary. The reason for the weaker check had expired
+  // while the weaker check stayed.
+  //
+  // That mattered: with nothing running them, two of the twelve Worker tests
+  // were failing beneath a page that says they are "run against this
+  // repository", and this file -- the file whose entire job is to stop the page
+  // claiming what has not been measured -- was counting their call sites.
+  //
+  // So the Worker half now reads the runner, exactly like the Node half, and the
+  // row count is kept only as a lower bound.
   const countTests = (src: string): number => {
     const plain = (src.match(/^\s*(?:test|it)\(/gm) || []).length;
     let rows = 0;
@@ -229,9 +241,32 @@ test("the test counts on the page are the test counts", () => {
     `Run: node scripts/gen-test-count.mjs`
   );
 
+  assert.ok(
+    generated.workerTests >= workerCount,
+    `testCount.generated.json records ${generated.workerTests} Worker tests but the ` +
+    `source contains at least ${workerCount} call sites — the artefact is stale. ` +
+    `Run: node scripts/gen-test-count.mjs`
+  );
+
   assert.equal(
-    claimedWorker, workerCount,
-    `the page claims ${claimedWorker} Worker tests; test/*.workers.test.ts contains ${workerCount}`
+    claimedWorker, generated.workerTests,
+    `the page claims ${claimedWorker} Worker tests; the last recorded vitest run ` +
+    `measured ${generated.workerTests}. Update #claim-worker-tests in ` +
+    `public/index.html, or run \`node scripts/gen-test-count.mjs\`.`
+  );
+
+  // THE PAGE SAYS THESE ARE "RUN AGAINST THIS REPOSITORY". THAT IS A CLAIM
+  // ABOUT EXECUTION, AND IT IS THE ONE THAT WAS FALSE.
+  //
+  // The count was pinned and the RESULT was not, so twelve Worker tests could be
+  // -- and were -- recorded as run while two of them failed. A reader of that
+  // green box takes it to mean the suite is passing. Either it is, or the
+  // sentence should not be there.
+  assert.equal(
+    generated.workerFail, 0,
+    `the page presents the Worker suite as run against this repository, but the ` +
+    `last recorded run had ${generated.workerFail} failure(s). Fix them, or ` +
+    `change what the page says.`
   );
 });
 

@@ -38,8 +38,12 @@ try {
   }
 }
 
+// node:test's summary line is prefixed "# " under the tap reporter and "ℹ "
+// under the spec reporter -- which one runs is Node-version-dependent, not
+// something this script controls, so both are accepted rather than pinning
+// to whichever one happened to be running when this was last touched.
 const num = (label) => {
-  const m = out.match(new RegExp(`^# ${label} (\\d+)$`, "m"));
+  const m = out.match(new RegExp(`^(?:#|\\u2139) ${label} (\\d+)$`, "m"));
   return m ? Number(m[1]) : null;
 };
 
@@ -54,9 +58,41 @@ if (tests === null || pass === null || fail === null) {
   process.exit(1);
 }
 
-// The 9 Cloudflare Worker tests run under vitest against workerd, not under this
-// runner, so they are counted separately and by hand-checked file inspection.
-const workerFiles = ["handlerRuntime.workers.test.ts"];
+// THE WORKER SUITE WAS EXEMPTED FROM THE RULE THIS FILE EXISTS TO ENFORCE.
+//
+// This said: "The 9 Cloudflare Worker tests run under vitest against workerd,
+// not under this runner, so they are counted separately and by hand-checked
+// file inspection." Every word of that is the practice this script was written
+// to replace, and it went wrong in exactly the predicted way -- the comment
+// said 9, the page said 12, and the page was right by luck rather than by
+// measurement. Meanwhile the page's sentence reads "run against this
+// repository", which is a claim about EXECUTION, and nothing here executed
+// them. Two of the twelve were failing while that sentence was live.
+//
+// vitest runs under a different runner, which is a reason to invoke it
+// differently, not a reason to take its numbers on trust.
+let vout = "";
+try {
+  vout = execFileSync(process.execPath, [join(ROOT, "node_modules", "vitest", "vitest.mjs"), "run"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+    env: process.env,
+  });
+} catch (e) {
+  vout = String(e.stdout || "") + String(e.stderr || "");
+}
+// vitest colours its summary, so strip the escapes before matching.
+const vplain = vout.replace(/\[[0-9;]*m/g, "");
+const vline = vplain.match(/^\s*Tests\s+(.*?)\((\d+)\)\s*$/m);
+if (!vline) {
+  console.error("could not read vitest's '  Tests ... (N)' summary line.");
+  console.error("Refusing to write a worker count that was not measured.");
+  process.exit(1);
+}
+const workerTests = Number(vline[2]);
+const workerFail = Number((vline[1].match(/(\d+)\s+failed/) || [, 0])[1]);
+const workerFiles = [...vplain.matchAll(/^\s*[✓×❯]\s+(\S+\.workers\.test\.ts)\s/gm)].map((m) => m[1].replace(/^test\//, ""));
 
 const payload = {
   _comment:
@@ -67,10 +103,15 @@ const payload = {
   nodePass: pass,
   nodeFail: fail,
   nodeTestFiles: filesMatch ? Number(filesMatch[1]) : null,
+  workerTests,
+  workerFail,
   workerTestFiles: workerFiles,
   generatedAt: new Date().toISOString().slice(0, 10),
 };
 
 const target = join(ROOT, "test", "testCount.generated.json");
 writeFileSync(target, JSON.stringify(payload, null, 2) + "\n");
-console.log(`wrote test/testCount.generated.json: ${tests} tests, ${pass} pass, ${fail} fail`);
+console.log(
+  `wrote test/testCount.generated.json: ${tests} node tests (${fail} fail), ` +
+    `${workerTests} worker tests (${workerFail} fail)`,
+);

@@ -20,12 +20,14 @@
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const P = path.join(ROOT, "public");
-const plan = await import(path.join(P, "city-plan.js"));
-const terrain = await import(path.join(P, "terrain.js"));
+// pathToFileURL, not a raw path: a bare Windows path ("C:\...") is not a
+// scheme dynamic import() accepts, so this script could not run on Windows.
+const plan = await import(pathToFileURL(path.join(P, "city-plan.js")).href);
+const terrain = await import(pathToFileURL(path.join(P, "terrain.js")).href);
 
 const heightAt = terrain.makeHeightAt(new terrain.LandField(16));
 const world = plan.generateWorld(heightAt);
