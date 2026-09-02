@@ -1,0 +1,90 @@
+The land, as something that can be asked
+
+First piece of the rebuild. Not a city, not a layout, not one coordinate of
+anything built -- the ground that models get laid onto, and the rules for what
+may stand on it. docs/WORLD-RULES.md is the specification; public/ground.js is
+its implementation.
+
+WHY THE LAND HAS TO ANSWER
+
+Every object in this world decided for itself where it could stand, inside the
+same statement that drew it. A lamp went every 52 m down both sides of every
+road because that loop said so; a bench went on the same footway because a
+different loop said so; neither could see the other, because neither was asking
+anything. Measured: 27 lamp posts standing inside bins and benches, one pair
+5 cm apart. Before that, a stadium at -7.0 m in the water, 389 plots inside
+feature footprints, and 328 promoted arterials with blocks set back for a
+narrower road than the one built.
+
+Every one of those is the same shape of defect. Placement and geometry were one
+statement, so there was no moment at which anything could ask "is this ground
+free?" -- and a question nobody can ask has no wrong answer, which is why none
+of it ever looked broken.
+
+WHAT IT PROVIDES
+
+  surfaceAt(x, z, t)   the ground type: WATER BEACH ROCK CARRIAGEWAY SIDEWALK
+                       VERGE PARKING TRACK PLOT PARK FARM OPEN
+  columnAt(x, z, t)    one vertical line through the world: ground height,
+                       slope, water depth, the solid below as real thicknesses
+                       down to bedrock, and what occupies it
+  canPlace(spec, x, z) may this stand here -- and if not, WHY NOT
+
+A ROAD IS NOT ONE SURFACE, and that is the rule that answers "a lamp cannot
+stand in the middle of a road". A boulevard is a carriageway with a verge, a
+sidewalk and parking on each side; those are different ground with different
+rules. A lamp declares it stands on SIDEWALK and VERGE, and a carriageway is
+neither -- so it is not moved out of the road afterwards, it was never allowed
+there. Treating a right-of-way as one slab is what made "on the road" and "on
+the pavement" the same fact, and therefore uncheckable.
+
+THE WORLD IS A VOLUME
+
+Strata move here from city-render.js, where they were literals. The only thing
+that knew what the ground was made of was the code drawing a picture of it, and
+a foundation, a basement, a cutting and a tunnel are all dug into that. The
+renderer is one consumer of it, not its owner.
+
+Air is addressable too, in bands from pedestrian to sky, because a bridge deck
+holds air at 2-55 m while the water beneath stays navigable, and a lamp head
+occupies air a bench may stand under. A world that only reserves footprints can
+express neither, and will either forbid the bench or allow a post through it.
+
+"NO" IS NOT AN ANSWER
+
+canPlace refuses with a reason and a number: which surface it hit and where, or
+how far the ground moves across the footprint against what limit, or what is
+already there. A caller that cannot tell "in a river" from "too steep" can do
+nothing about either, and a refusal nobody can read gets deleted the first time
+it is inconvenient.
+
+The three checks are deliberately separate and ordered -- surface, then fit,
+then occupancy. Conflating them is how objects end up inside each other. Asking
+the occupancy question when you meant the surface one empties an entire street,
+because a bench on a pavement is legitimately INSIDE a road's rectangle.
+
+Footprints are sampled across their whole area, not at their centre, with the
+step adapting to the object and the total capped -- and the cap is reported in
+`samples` rather than hidden, because a check that silently coarsens is a check
+that silently stops working.
+
+VERIFIED BY MUTATION
+
+  sample only the footprint's centre       -> 5 tests fail, incl. the one for it
+  ignore standsOn                          -> the sea test fails
+  ignore clearance                         -> the clearance test fails
+  ignore rotation on both axes             -> the rotation test fails
+  put STRATA out of depth order            -> 2 tests fail
+
+The rotation mutation had to be redone. The first attempt disabled rotation on
+one axis only, so the footprint still changed shape and the suite stayed green.
+That is an INCONCLUSIVE result, not a pass, and recording it as a pass would
+have been the exact failure this project exists to refuse.
+
+Every refusal test is paired with a case that must SUCCEED, because a canPlace
+that always answers ok:true satisfies any test that only asks whether it ran,
+and one that always answers ok:false satisfies any test that only checks
+refusals. Both are useless and both look fine on a green suite.
+
+Nothing is placed by this and nothing is stripped yet. 500/500 node tests,
+tsc --noEmit clean.
