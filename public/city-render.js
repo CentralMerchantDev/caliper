@@ -474,6 +474,53 @@ function half(h) {
   // carries a downward skirt at its border, which hides the hairline crack a
   // resolution change always leaves.
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // THE GROUND IS A SOLID, NOT A SHEET
+  //
+  // Until now the world was `heightAt(x, z) -> y`: one number per column, drawn
+  // as a single surface with nothing behind it. The OUTER mesh was built with
+  // `skirtDepth = 0`, so over most of the modelled area the land had no underside
+  // at all -- and a flat plane at y = -175 was added to stop you seeing sky
+  // through the ocean where the grid ended. That plane is the tell. It is a lid
+  // over an absence.
+  //
+  // A sheet cannot be cut into, cannot have a cliff face with a body behind it,
+  // and reads as a map rather than a place from any angle but straight down. The
+  // road batters added earlier drop from the carriageway to the surface -- and
+  // the surface was the only thing there, so a cutting had nothing to cut INTO.
+  //
+  // BEDROCK_Y is where the solid stops. It matches the abyss plane so the two
+  // meet: the terrain's walls run from its edge down to the ocean floor, and the
+  // world closes itself instead of being closed for it.
+  const BEDROCK_Y = -175;
+
+  /**
+   * What you see in a cut face, by depth below the local surface.
+   *
+   * This is the difference between "a solid" and "the earth". A cliff, a road
+   * cutting, a quarry and the world's own edge all show the same layers in the
+   * same order, so the ground reads as something that was there before the city
+   * was -- which is exactly what a heightfield cannot express.
+   *
+   * Depths are shallow on purpose: at 26 km across, a 2 m topsoil band is
+   * sub-pixel from the air and clearly legible from a street. The point is that
+   * it is CORRECT when you get close, not that it is visible from orbit.
+   */
+  const STRATA = [
+    { to: 2,    color: 0x6b5a41 },   // topsoil -- dark, organic
+    { to: 8,    color: 0x8a7355 },   // subsoil
+    { to: 25,   color: 0xa08a63 },   // clay and gravel
+    { to: 70,   color: 0x8b8378 },   // weathered rock -- the same grey as a sea cliff
+    { to: Infinity, color: 0x5f5a55 }, // bedrock
+  ];
+  const _strataColor = new THREE.Color();
+  function strataAt(depth) {
+    for (const layer of STRATA) {
+      if (depth <= layer.to) return _strataColor.setHex(layer.color);
+    }
+    return _strataColor.setHex(STRATA[STRATA.length - 1].color);
+  }
+
   function terrainMesh(x0, x1, z0, z1, step, hole, skirtDepth, casts = true) {
     const nx = Math.round((x1 - x0) / step), nz = Math.round((z1 - z0) / step);
     const W = nx + 1, H = nz + 1;
@@ -536,23 +583,99 @@ function half(h) {
     scene.add(mesh);
 
     if (skirtDepth) {                                   // border skirt
+      // THE SKIRT IS THE ONLY PLACE THE WORLD'S THICKNESS IS VISIBLE, AND IT WAS
+      // A DARKENED COPY OF THE GRASS.
+      //
+      // It pushed `col * 0.7` down the wall -- so the cut face of the earth was
+      // green, just dimmer. That is what makes a cliff read as painted on: the
+      // side of the land looked like the top of the land in shadow, because that
+      // is literally what it was.
+      //
+      // It is now the strata. And "bedrock" as a skirt depth means the wall runs
+      // all the way down to BEDROCK_Y rather than a fixed distance, which is what
+      // closes the world at its outer edge -- the case that was passed 0 and
+      // therefore drew nothing at all.
+      const toBedrock = skirtDepth === "bedrock";
+
+      // ONE VERTEX PER STRATUM BOUNDARY, not two per column.
+      //
+      // A two-vertex wall can only ever show a GRADIENT from the surface colour
+      // to the deepest layer -- which is a smear, not geology. Emitting a vertex
+      // wherever a stratum changes gives real bands, and the bands stay
+      // horizontal while the ground above them is not, which is what makes it
+      // read as layers the land was built from rather than paint on its side.
+      //
+      // The depths are shared with strataAt, so the geometry and the colour
+      // cannot disagree about where a layer ends.
+      const bandDepths = STRATA.map((s) => s.to).filter((d) => Number.isFinite(d));
       const sp = [], sc = [];
+      let perColumn = 0;
+
       const push = (i, j) => {
         const k = j * W + i;
-        sp.push(pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]);
-        sp.push(pos[k * 3], pos[k * 3 + 1] - skirtDepth, pos[k * 3 + 2]);
-        sc.push(col[k * 3], col[k * 3 + 1], col[k * 3 + 2], col[k * 3] * 0.7, col[k * 3 + 1] * 0.7, col[k * 3 + 2] * 0.7);
+        const topY = pos[k * 3 + 1];
+        const botY = toBedrock ? BEDROCK_Y : topY - skirtDepth;
+        const total = Math.max(0.01, topY - botY);
+
+        // EVERY COLUMN EMITS THE SAME NUMBER OF VERTICES.
+        //
+        // The obvious version pushes only the boundaries that FIT inside this
+        // column's wall. I wrote that version first, and its failure is worse
+        // than it sounds. A short column -- deep sea bed, close to BEDROCK_Y --
+        // then emits fewer vertices than a tall one, while the index arithmetic
+        // below uses a single stride for all of them. Measured on a 12-column
+        // sample spanning -174.5 m to 2150 m: counts came out 2,3,6,6,6..., the
+        // stride was taken from the first column as 2, and every index stayed
+        // IN BOUNDS. So there is no crash and no error. The strip simply reads
+        // the wrong vertices from that point on and draws a wrong wall in
+        // silence -- which is the failure this whole project exists to refuse.
+        //
+        // Clamping each boundary to the column's own depth keeps the count
+        // constant. Where a layer does not fit, its vertex coincides with the one
+        // below and the quad between them is degenerate -- zero area, drawn as
+        // nothing, and the strip stays aligned.
+        const depths = [0];
+        for (const d of bandDepths) depths.push(Math.min(d, total));
+        depths.push(total);
+
+        // The stride is an ASSUMPTION the index loop makes. Check it here rather
+        // than trust it, because the way it breaks is invisible.
+        if (perColumn && perColumn !== depths.length) {
+          throw new Error(`skirt stride changed: ${perColumn} -> ${depths.length}`);
+        }
+
+        for (let di = 0; di < depths.length; di++) {
+          const d = depths[di];
+          sp.push(pos[k * 3], topY - d, pos[k * 3 + 2]);
+          if (di === 0) {
+            // The top edge keeps the surface colour, so the join to the ground
+            // above is seamless rather than a visible seam of soil.
+            sc.push(col[k * 3], col[k * 3 + 1], col[k * 3 + 2]);
+          } else {
+            const s = strataAt(d);
+            sc.push(s.r, s.g, s.b);
+          }
+        }
+        perColumn = depths.length;
       };
+
       const ring = [];
       for (let i = 0; i < W; i++) ring.push([i, 0]);
       for (let j = 1; j < H; j++) ring.push([W - 1, j]);
       for (let i = W - 2; i >= 0; i--) ring.push([i, H - 1]);
       for (let j = H - 2; j >= 1; j--) ring.push([0, j]);
       for (const [i, j] of ring) push(i, j);
+
+      // Quads between consecutive columns, one row per band. perColumn is the
+      // same for every column because the band list is the same -- a column
+      // shorter than a boundary simply has that boundary clamped to its bottom,
+      // which degenerates that quad rather than misaligning the strip.
       const si = [];
       for (let n = 0; n + 1 < ring.length; n++) {
-        const a = n * 2, b = a + 1, cc = a + 2, dd = a + 3;
-        si.push(a, b, cc, cc, b, dd);
+        const a = n * perColumn, b = (n + 1) * perColumn;
+        for (let r = 0; r + 1 < perColumn; r++) {
+          si.push(a + r, a + r + 1, b + r, b + r, a + r + 1, b + r + 1);
+        }
       }
       const sg = new THREE.BufferGeometry();
       sg.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
@@ -567,7 +690,15 @@ function half(h) {
   const hole = { x0: -LOOK.coreX, x1: LOOK.coreX, z0: LOOK.coreZ0, z1: LOOK.coreZ1 };
   let verts = 0;
   if (!SKIP.has("terrain")) {
-    verts = terrainMesh(wm(-30000), wm(30000), wm(-33000), wm(10000), LOOK.outerStep, hole, 0, false);
+    // "bedrock", NOT 0. This argument was 0, which meant the outer mesh -- most
+    // of the modelled world -- was built with NO SKIRT AT ALL: a surface with no
+    // underside, over nothing, with a flat plane at y = -175 added later to stop
+    // you seeing sky through the ocean where the grid ended.
+    //
+    // The wall now runs from the terrain edge down to BEDROCK_Y, which is that
+    // same -175, so the two meet and the world closes itself instead of being
+    // covered over.
+    verts = terrainMesh(wm(-30000), wm(30000), wm(-33000), wm(10000), LOOK.outerStep, hole, "bedrock", false);
     // The skirt only has to be as deep as the height difference a resolution change
     // can leave at the seam, which is metres, not hundreds. At 240 m it was a dark
     // wall standing in the water at the edge of the modelled core, clearly visible
