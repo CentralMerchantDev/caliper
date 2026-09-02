@@ -67,17 +67,17 @@
 export const PROPS = {
   // --- street furniture: city-render.js, the STREET FURNITURE block ---------
   bin: {
-    kind: "hard", h: 1.0, clear: 0.25,
+    kind: "hard", cat: "furniture", h: 1.0, clear: 0.25,
     foot: { w: 0.64, d: 0.64 },
     from: "CylinderGeometry(0.32, 0.28, 1.0, 6) -- widest radius 0.32",
   },
   bench: {
-    kind: "hard", h: 0.45, clear: 0.4,
+    kind: "hard", cat: "furniture", h: 0.45, clear: 0.4,
     foot: { w: 1.8, d: 0.55 },
     from: "BoxGeometry(1.8, 0.45, 0.55)",
   },
   busShelter: {
-    kind: "hard", h: 2.5, clear: 0.5,
+    kind: "hard", cat: "furniture", h: 2.5, clear: 0.5,
     foot: { w: 3.6, d: 1.4 },
     from: "BoxGeometry(3.6, 2.5, 1.4)",
   },
@@ -90,7 +90,7 @@ export const PROPS = {
     // placement writes as the object's yMax, so every lamp in the world claimed
     // 25 cm less volume than it occupies. Nothing caught it because nothing
     // checked `h` against anything at all.
-    kind: "hard", h: 9.35, clear: 0.3,
+    kind: "hard", cat: "lamp", h: 9.35, clear: 0.3,
     foot: { w: 0.6, d: 0.6 },      // the post, where it meets the pavement
     sweep: { w: 1.6, d: 0.9 },     // the head, 9.1 m up -- may overhang
     from: "CylinderGeometry(0.22, 0.3, 9, 5) + head BoxGeometry(1.6, 0.5, 0.9) at y+9.1",
@@ -98,17 +98,17 @@ export const PROPS = {
 
   // --- port ----------------------------------------------------------------
   container: {
-    kind: "hard", h: 2.6, clear: 0.1,
+    kind: "hard", cat: "structure", h: 2.6, clear: 0.1,
     foot: { w: 12, d: 2.6 },
     from: "BoxGeometry(12, 2.6, 2.6)",
   },
   mooring: {
-    kind: "hard", h: 1.0, clear: 0.3,
+    kind: "hard", cat: "structure", h: 1.0, clear: 0.3,
     foot: { w: 0.56, d: 0.56 },
     from: "CylinderGeometry(0.22, 0.28, 1, 5) -- widest radius 0.28",
   },
   beacon: {
-    kind: "hard", h: 9.0, clear: 1.0,
+    kind: "hard", cat: "structure", h: 9.0, clear: 1.0,
     foot: { w: 4.0, d: 4.0 },
     from: "CylinderGeometry(1.4, 2.0, 9, 8) -- widest radius 2.0",
   },
@@ -118,29 +118,29 @@ export const PROPS = {
     // SOFT on purpose. A sleeper is not an obstruction to build around, it is
     // part of a corridor that is reserved as a whole by features.js. Marking it
     // hard would have every tie in a 22 km railway fight its own track.
-    kind: "soft", h: 0.35, clear: 0,
+    kind: "soft", cat: "structure", h: 0.35, clear: 0,
     foot: { w: 3.2, d: 0.42 },
     from: "BoxGeometry(3.2, 0.35, 0.42)",
   },
 
   // --- scaled per instance: no fixed size, and saying so is the honest answer -
   tree: {
-    kind: "soft", sized: true, clear: 0.5,
+    kind: "soft", cat: "vegetation", sized: true, clear: 0.5,
     from: "trunk CylinderGeometry(0.45, 0.8, 6, 4), canopy Sphere(1)/Cone(1, 2.4) scaled per instance",
   },
   car: {
-    kind: "hard", sized: true, clear: 0.2,
+    kind: "hard", cat: "vehicle", sized: true, clear: 0.2,
     from: "collector buckets -- unit primitives scaled at emit time",
   },
   person: {
     // Soft, and deliberately so: a person is not an obstruction to planning
     // permission. They are in the manifest because "know everything that is in
     // the world" includes them, not because anything must build around them.
-    kind: "soft", sized: true, clear: 0,
+    kind: "soft", cat: "pedestrian", sized: true, clear: 0,
     from: "collector buckets -- unit primitives scaled at emit time",
   },
   parasol: {
-    kind: "soft", sized: true, clear: 0.3,
+    kind: "soft", cat: "furniture", sized: true, clear: 0.3,
     from: "collector buckets -- unit primitives scaled at emit time",
   },
 };
@@ -174,6 +174,53 @@ export function propFootprint(id, x, z, opts = {}) {
   const w = (opts.rotated ? foot.d : foot.w) + pad * 2;
   const d = (opts.rotated ? foot.w : foot.d) + pad * 2;
   return { xMin: x - w / 2, xMax: x + w / 2, zMin: z - d / 2, zMax: z + d / 2 };
+}
+
+/**
+ * A prop, in the form the land layer speaks.
+ *
+ * THIS FILE AND THE MODEL CONTRACT WERE TWO SCHEMAS THAT COULD NOT MEET, and
+ * nothing noticed because nothing ever joined them. The manifest says
+ * { kind, h, clear, foot }; ground.canPlace wants { footprint, height,
+ * clearance, category } -- so canPlace(PROPS.bench) threw "needs a footprint
+ * with a real width and depth". Every prop in the world was undeclarable to the
+ * only thing that can place it, while both files described the same benches.
+ *
+ * The manifest keeps its terse authoring form, because it is a table someone
+ * reads and edits against geometry. This translates it, in one place, so there
+ * is still exactly one number for a bench's width.
+ *
+ * `kind` in the manifest is HARD/SOFT. `kind` in the registry is
+ * road/plot/feature. They are different vocabularies that were both called
+ * kind; here the first becomes `occupancy` and the second becomes "prop".
+ *
+ * @param {string} id
+ * @param {object} [opts] { foot } -- required for `sized` props, which have no
+ *   size of their own and must be given one at placement.
+ */
+export function modelFor(id, opts = {}) {
+  const p = PROPS[id];
+  if (!p) throw new Error(`unknown prop "${id}" -- add it to PROPS before placing it`);
+
+  const foot = p.sized ? opts.foot : p.foot;
+  if (!foot) {
+    throw new Error(
+      `prop "${id}" is scaled per instance, so its footprint must be supplied ` +
+      `at placement. Passing no size would silently reserve nothing.`,
+    );
+  }
+  if (!p.cat) throw new Error(`prop "${id}" declares no category, so no surface can say whether it accepts one`);
+
+  return {
+    id,
+    kind: "prop",
+    category: p.cat,
+    occupancy: p.kind,
+    footprint: { w: foot.w, d: foot.d },
+    height: p.sized ? (opts.height || 0) : p.h,
+    clearance: p.clear || 0,
+    sweep: p.sweep || null,
+  };
 }
 
 /** Every prop that blocks ground. Soft props are placeable-over and excluded. */

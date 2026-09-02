@@ -39,6 +39,7 @@
 // =============================================================================
 
 import { classifyAt, slopeAt, USE } from "./land-use.js";
+import { waterwayAt } from "./terrain.js";
 import { WORLD_SCALE } from "./world-scale.js";
 
 // -----------------------------------------------------------------------------
@@ -553,5 +554,103 @@ export function createGround({ heightAt, registry = null }) {
     return { ok: true, reason: null, detail: null, ground: hi, range, samples: pts.length };
   }
 
-  return { surfaceAt, columnAt, canPlace, strataAt, bandAt, SURFACE };
+  // ---------------------------------------------------------------------------
+  // THE REST OF THE INTERFACE WORLD-RULES §1.1 PROMISES
+  //
+  // That section calls its eight queries "the whole interface between the land
+  // and anything that wants to stand on it", and this object exposed two of
+  // them. The others existed as facts the land plainly knew and had no way to
+  // be asked -- so every caller either reached around the land to terrain.js
+  // directly, which is how two subsystems end up with private beliefs about the
+  // same ground, or did without.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * What the ground is MADE OF here, as opposed to what is built on it.
+   *
+   * Distinct from surfaceAt on purpose: a car park and a lawn are different
+   * surfaces and the same soil, and a foundation cares about the second.
+   */
+  function materialAt(x, z) {
+    const h = heightAt(x, z);
+    if (h < 0) return "seabed";
+    const s = surfaceAt(x, z);
+    if (s === SURFACE.ROCK) return "rock";
+    if (s === SURFACE.BEACH) return "sand";
+    return strataAt(0).name;   // topsoil, from the one strata table
+  }
+
+  /**
+   * Water here, or null.
+   *
+   * Returns the KIND as well as the depth, because "2 m of water" means
+   * something different in a canal and in the open sea -- one is dredged and
+   * bounded, the other is not.
+   */
+  function waterAt(x, z) {
+    const way = waterwayAt(x, z);
+    if (way) {
+      const h = heightAt(x, z);
+      return { kind: way.kind || "river", depth: Math.max(0, (way.surface !== undefined ? way.surface : 0) - h), id: way.id || null };
+    }
+    const h = heightAt(x, z);
+    if (h < 0) return { kind: "sea", depth: -h, id: null };
+    return null;
+  }
+
+  /**
+   * What occupies a point, at a height, at a time.
+   *
+   * Delegated to the registry rather than reimplemented -- there is one answer
+   * to this question in the world and it lives there. Without a registry the
+   * land can still speak for the earth itself, which is the honest answer for a
+   * world where nothing has been built.
+   */
+  function whatIsAt(x, y, z, t = 0) {
+    if (registry && registry.whatIsAt) return registry.whatIsAt(x, y, z, t);
+    const h = heightAt(x, z);
+    if (y < h) return { kind: "rock", id: null, owner: null, solid: true, since: -Infinity, until: Infinity };
+    if (h < 0 && y <= 0) return { kind: "water", id: null, owner: null, solid: true, since: -Infinity, until: Infinity };
+    return { kind: "free", id: null, owner: null, solid: false, since: -Infinity, until: Infinity };
+  }
+
+  /**
+   * Somewhere this will fit, or nothing.
+   *
+   * The same spiral as findSite and findFree, and deliberately the SAME shape of
+   * answer: where, and how far it had to move. A search that reports only a
+   * position hides the difference between "exactly where you asked" and "3 km
+   * away, which is somewhere else entirely".
+   *
+   * It asks canPlace, so it cannot disagree with the placement that follows --
+   * a search using its own looser rules will confidently return ground that
+   * placement then refuses, and the caller cannot tell the two disagreed.
+   */
+  function findGround(spec, near, { radius = 1500, step: ringStep = 20, t = 0, rotated = false } = {}) {
+    const here = canPlace(spec, near.x, near.z, { t, rotated });
+    if (here.ok) return { x: near.x, z: near.z, moved: 0 };
+    for (let r = ringStep; r <= radius; r += ringStep) {
+      const n = Math.max(8, Math.round((2 * Math.PI * r) / ringStep));
+      for (let i = 0; i < n; i++) {
+        const a = (2 * Math.PI * i) / n;
+        const x = near.x + Math.cos(a) * r, z = near.z + Math.sin(a) * r;
+        if (canPlace(spec, x, z, { t, rotated }).ok) return { x, z, moved: r };
+      }
+    }
+    return null;
+  }
+
+  return {
+    // WORLD-RULES §1.1, all eight
+    heightAt,
+    slopeAt: (x, z) => slopeAt(heightAt, x, z),
+    materialAt,
+    waterAt,
+    surfaceAt,
+    whatIsAt,
+    canPlace,
+    findGround,
+    // and the volume
+    columnAt, strataAt, bandAt, SURFACE,
+  };
 }

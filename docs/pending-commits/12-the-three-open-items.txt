@@ -1,0 +1,104 @@
+The three things the audit left open
+
+THE SCHEMAS COULD NOT MEET
+
+prop-manifest said { kind, h, clear, foot }. ground.canPlace wants
+{ footprint, height, clearance, category }. So canPlace(PROPS.bench) threw
+"needs a footprint with a real width and depth" -- every prop in the world was
+undeclarable to the only thing that can place it, while both files described the
+same benches. Nothing noticed because nothing had ever joined them.
+
+modelFor(id) translates, in one place, so a bench's width is still written down
+once. The manifest keeps its terse authoring form because it is a table a person
+reads against geometry.
+
+`kind` was two vocabularies wearing one name: hard/soft in the contract,
+road/plot/feature in the registry. A model declaring kind:"soft" was recorded
+with a registry kind of "soft" -- not a registry class at all -- and `solid`
+defaulted to true regardless, so NOTHING placed through the only door was ever
+soft, while world-registry's own header describes callers reading solid:false to
+decide a field may be removed. `occupancy` now carries hard/soft.
+
+Every prop also gained a category, because a surface cannot say whether it
+accepts something that will not say what it is.
+
+THE LAND ANSWERED TWO OF ITS EIGHT QUESTIONS
+
+WORLD-RULES section 1.1 calls its eight queries "the whole interface between the
+land and anything that wants to stand on it", and createGround exposed
+surfaceAt and canPlace. The rest were facts the land plainly knew and had no way
+to be asked, so a caller either reached around it to terrain.js -- which is how
+two subsystems end up with private beliefs about the same ground -- or did
+without.
+
+heightAt, slopeAt, materialAt, waterAt, whatIsAt and findGround now exist.
+
+materialAt is deliberately not surfaceAt: a car park and a lawn are different
+surfaces and the same soil, and a foundation cares about the second. waterAt
+returns the KIND as well as the depth, because 2 m of water means something
+different in a canal and in the open sea. findGround asks canPlace rather than
+inventing its own rules, so a search cannot return ground the placement then
+refuses -- and there is a test that whatever it returns, canPlace accepts.
+
+THE REGISTRY WAS A LINEAR SCAN
+
+Every query examined every entry, and a query that finds NOTHING has to examine
+all of them to know it. Misses are the common case: a layout engine asks "is
+this free?" far more often than "what is here?", and canPlace issues three
+surfaceAt passes over its samples, so one placement of a 16-sample footprint was
+48 full scans of the world.
+
+Measured, 5,000 queries that miss:
+
+                 before      after
+     1,000        3 us       1 us
+     5,000       17 us       0 us
+    20,000       85 us       0 us
+    40,000      276 us       0 us
+
+A 400 m bucket grid, the same cell spatial-index.js already uses over plots --
+that one is built for plots specifically and cannot hold arbitrary
+reservations, which is why this is in the registry rather than a call to it.
+
+AND THE FIRST VERSION MADE THE HITS THREE TIMES SLOWER
+
+Indexing fixed the misses and quietly cost the hits: 4 us to 19 us, because the
+dedupe Set, the candidate array and the sort were built on every query including
+the overwhelmingly common one that touches a single bucket and matches its first
+entry. Measuring only the case you set out to improve is how a change gets
+reported as a win while being a loss for most callers.
+
+A single-bucket query needs none of that machinery -- entries are pushed into
+each bucket in serial order, so the bucket's own array is already ordered
+correctly. Returning an ARRAY rather than a generator was worth another 5 us on
+a path that runs tens of times per placement. Final: hits ~1 us, down from ~4.
+
+THE TRAP IN INDEXING, AND WHAT GUARDS IT
+
+An index that is fast and subtly wrong is worse than a slow correct one, and the
+wrongness appears as one query in a thousand. The registry documents "whoever
+claimed this ground first owns the conflict"; bucketing answers by whichever
+bucket was visited first, so the same world would answer differently depending
+on which way a query rectangle was drawn.
+
+So the test compares the registry against a BRUTE-FORCE SCAN of the same data
+over 3,000 queries -- not against expectations someone typed -- with deliberately
+mixed data: small things, long thin roads, and a few 900 m entries that straddle
+many buckets, because uniform test data hides bucket bugs.
+
+Entries too large to index are held aside and scanned. If that path were
+dropped the biggest things in the world would become invisible, and the biggest
+things are the ones it matters most not to build inside.
+
+VERIFIED BY MUTATION
+
+  index drops the insertion-order guarantee   -> 3 tests fail
+  release stops un-indexing                   -> 1
+  sprawling entries dropped instead of scanned-> 1
+  fast path forgets to check for sprawling    -> 1
+  occupancy stops reaching the registry       -> 1
+  modelFor invents a height                   -> 1
+  findGround uses looser rules than canPlace  -> 1
+
+571/571 node tests, tsc --noEmit clean, all four modules byte-identical to their
+pre-mutation state. Nothing placed in the world, nothing stripped from it.

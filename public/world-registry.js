@@ -97,6 +97,133 @@ export function createWorldRegistry(heightAt = null) {
   /** @type {Array<Occupant & {xMin:number,xMax:number,zMin:number,zMax:number,yMin:number,yMax:number}>} */
   const entries = [];
 
+  // ---------------------------------------------------------------------------
+  // A BUCKET GRID OVER THE RESERVATIONS
+  //
+  // Every query was a scan of the whole array, and a query that finds NOTHING
+  // has to examine every entry to know it. Measured on this machine, 5,000
+  // queries that miss:
+  //
+  //       1,000 entries      3 us per query
+  //       5,000 entries     17 us
+  //      20,000 entries     85 us
+  //      40,000 entries    276 us
+  //
+  // A clean linear curve, and misses are the common case: a layout engine asks
+  // "is this free?" far more often than it asks "what is here?". canPlace issues
+  // three surfaceAt passes over its sample points, so one placement of a 16-
+  // sample footprint was 48 full scans of the world.
+  //
+  // The world is 26 km and the things in it are metres across, so bucketing by
+  // position turns a scan into a handful of comparisons. Same reasoning, and the
+  // same 400 m cell, as spatial-index.js already uses over plots -- that one is
+  // built for plots specifically and cannot hold arbitrary reservations, which
+  // is why this is here rather than a call to it.
+  const BUCKET = 400;
+  /** @type {Map<number, Array<object>>} */
+  const buckets = new Map();
+  // Anything so large that indexing it would cost more than scanning it. A
+  // reservation spanning the whole world would otherwise be inserted into
+  // thousands of buckets, and be found in all of them.
+  const sprawling = [];
+  const MAX_BUCKETS_PER_ENTRY = 400;
+  const bkey = (i, j) => i * 65536 + j;
+
+  function bucketRange(e) {
+    return {
+      i0: Math.floor(e.xMin / BUCKET), i1: Math.floor(e.xMax / BUCKET),
+      j0: Math.floor(e.zMin / BUCKET), j1: Math.floor(e.zMax / BUCKET),
+    };
+  }
+
+  function index(e) {
+    const { i0, i1, j0, j1 } = bucketRange(e);
+    if ((i1 - i0 + 1) * (j1 - j0 + 1) > MAX_BUCKETS_PER_ENTRY) { sprawling.push(e); return; }
+    for (let i = i0; i <= i1; i++) {
+      for (let j = j0; j <= j1; j++) {
+        const k = bkey(i, j);
+        let b = buckets.get(k);
+        if (!b) buckets.set(k, (b = []));
+        b.push(e);
+      }
+    }
+  }
+
+  function unindex(e) {
+    const at = sprawling.indexOf(e);
+    if (at >= 0) { sprawling.splice(at, 1); return; }
+    const { i0, i1, j0, j1 } = bucketRange(e);
+    for (let i = i0; i <= i1; i++) {
+      for (let j = j0; j <= j1; j++) {
+        const b = buckets.get(bkey(i, j));
+        if (!b) continue;
+        const n = b.indexOf(e);
+        if (n >= 0) b.splice(n, 1);
+      }
+    }
+  }
+
+  /**
+   * Every entry that could possibly overlap this rectangle, in the order they
+   * were reserved.
+   *
+   * ORDER IS PRESERVED DELIBERATELY. whatIsAt documents "whoever claimed this
+   * ground first owns the conflict", and bucketing would otherwise answer by
+   * whichever bucket happened to be visited first -- a different answer for the
+   * same world depending on which way the query rectangle was drawn. Each entry
+   * carries the serial it was reserved with, and candidates are walked in that
+   * order rather than sorted, so the cost stays linear in the CANDIDATES rather
+   * than in the world.
+   */
+  function candidates(xMin, xMax, zMin, zMax) {
+    const i0 = Math.floor(xMin / BUCKET), i1 = Math.floor(xMax / BUCKET);
+    const j0 = Math.floor(zMin / BUCKET), j1 = Math.floor(zMax / BUCKET);
+    if ((i1 - i0 + 1) * (j1 - j0 + 1) > MAX_BUCKETS_PER_ENTRY) {
+      // A query bigger than the index is worth: scan everything, which is what
+      // used to happen for every query and is still correct.
+      return entries;
+    }
+    // THE FAST PATH, AND IT IS NOT AN OPTIMISATION -- IT IS UNDOING A REGRESSION.
+    //
+    // Indexing fixed the misses (276 us -> 1 us at 40,000) and made the HITS
+    // three times slower: 6 us -> 19 us. The dedupe Set, the candidate array and
+    // the sort were being built on every query, including the overwhelmingly
+    // common one that touches a single bucket and matches its first entry.
+    // Measuring only the case you set out to improve is how a change gets
+    // reported as a win while being a loss for most callers.
+    //
+    // A single bucket needs none of that machinery: entries are pushed into each
+    // bucket in serial order, so the bucket's own array is already correctly
+    // ordered. Only a multi-bucket query can see the same entry twice or out of
+    // order, and only then is the bookkeeping worth its cost.
+    if (i0 === i1 && j0 === j1 && sprawling.length === 0) {
+      // The bucket's own array, not a copy of it. Returning an ARRAY rather than
+      // a generator is worth measuring: the generator version cost 7 us per hit
+      // against a 4 us baseline purely in iterator machinery, on a path that
+      // runs tens of times per placement.
+      return buckets.get(bkey(i0, j0)) || EMPTY;
+    }
+    const seen = new Set();
+    const found = [];
+    for (let i = i0; i <= i1; i++) {
+      for (let j = j0; j <= j1; j++) {
+        for (const e of buckets.get(bkey(i, j)) || []) {
+          if (seen.has(e._n)) continue;
+          seen.add(e._n);
+          found.push(e);
+        }
+      }
+    }
+    for (const e of sprawling) if (!seen.has(e._n)) { seen.add(e._n); found.push(e); }
+    found.sort((a, b) => a._n - b._n);
+    return found;
+  }
+
+  /** Shared, so a miss does not allocate. */
+  const EMPTY = [];
+
+  let serial = 0;
+
   /**
    * Claim a volume. Nothing checks for a clash here on purpose: reserving is
    * the act of an authority (a feature manifest, a plan generator) that has
@@ -124,8 +251,9 @@ export function createWorldRegistry(heightAt = null) {
     if (!(xMax >= xMin) || !(zMax >= zMin)) {
       throw new Error(`world-registry: reserve(${kind}/${id}) has an inverted or NaN footprint`);
     }
-    const entry = { kind, id, owner, xMin, xMax, zMin, zMax, yMin, yMax, solid, surface, since, until };
+    const entry = { kind, id, owner, xMin, xMax, zMin, zMax, yMin, yMax, solid, surface, since, until, _n: serial++ };
     entries.push(entry);
+    index(entry);
     return entry;
   }
 
@@ -139,7 +267,7 @@ export function createWorldRegistry(heightAt = null) {
    */
   function release(id) {
     for (let i = entries.length - 1; i >= 0; i--) {
-      if (entries[i].id === id) entries.splice(i, 1);
+      if (entries[i].id === id) { unindex(entries[i]); entries.splice(i, 1); }
     }
   }
 
@@ -232,7 +360,7 @@ export function createWorldRegistry(heightAt = null) {
       // returned ROCK for anything below it, and surface itself is dry ground.
       if (surface < 0 && y <= 0) return WATER;
     }
-    for (const e of entries) {
+    for (const e of candidates(x, x, z, z)) {
       if (t < e.since || t >= e.until) continue;
       if (x < e.xMin || x > e.xMax || z < e.zMin || z > e.zMax) continue;
       if (y < e.yMin || y > e.yMax) continue;
@@ -247,7 +375,7 @@ export function createWorldRegistry(heightAt = null) {
    * query, so it is offered directly rather than making every caller pass a y.
    */
   function occupiedAt(x, z, t = 0) {
-    for (const e of entries) {
+    for (const e of candidates(x, x, z, z)) {
       if (t < e.since || t >= e.until) continue;
       if (x < e.xMin || x > e.xMax || z < e.zMin || z > e.zMax) continue;
       return e;
@@ -278,7 +406,7 @@ export function createWorldRegistry(heightAt = null) {
     const ignore = ignoreKinds ? new Set(ignoreKinds) : null;
     const only = onlyKinds ? new Set(onlyKinds) : null;
 
-    for (const e of entries) {
+    for (const e of candidates(xMin, xMax, zMin, zMax)) {
       if (t < e.since || t >= e.until) continue;
       // WHICH QUESTION IS BEING ASKED.
       //
