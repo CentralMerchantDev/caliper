@@ -130,18 +130,18 @@ marked **not audited** is not a pass.
 
 | # | Division | Done | Undone | Could | Should |
 |---|---|---|---|---|---|
-| 1 | Technical architecture | Two-gate pipeline, atomic DO spend claim, lease + concurrency, CAS publish, 421 tests | Renderer cannot be executed by the suite (no GPU) — closed statically instead | Headless WebGL in CI (`swiftshader`) to actually build a scene | **Nothing** — the static check covers the failure class that shipped |
-| 2 | Visual design system | Dark palette, monospace/serif pairing, consistent stage blocks | **Not audited.** No documented type scale, no spacing system, no contrast sweep | Token-driven design system | **Audit it** — Phase 6 |
-| 3 | Product & UX | Recorded run needs no key or spend; escape hatches on modals | **Not audited** against the 30-second path | Zero-config guided first run | **Audit it** — Phase 6 |
+| 1 | Technical architecture | Two-gate pipeline, atomic DO spend claim, lease + concurrency, CAS publish, 438 tests | Renderer cannot be executed by the suite (no GPU) — closed statically instead | Headless WebGL in CI (`swiftshader`) to actually build a scene | **Nothing** — the static check covers the failure class that shipped |
+| 2 | Visual design system | Contrast audited over the LIVE canvas; `--panel-bg` 0.82→0.92 takes `--text-muted` from 4.36:1 to 5.60:1 worst case; state is no longer colour-only | 19 font sizes (5 fractional), no type scale; `:root` tokens bypassed by inline hex | Six type tokens, snap spacing to 4/8/12/16/24 | Low priority — it is untidy, not false |
+| 3 | Product & UX | The most recent real refusal renders on FIRST PAINT; flythrough toggles and Escape exits it; boot overlay has a 20 s watchdog | The rationed Build button is still the loudest control on the page | Lead with the refusal in the hero paragraph too | Consider the hero rewrite the Division 7 audit proposed |
 | 4 | Frontend performance | World build 6.02 s → 2.36 s, 91 MB → 34 MB, disposal + listener leaks fixed | No frame-budget measurement under interaction; ~700 loose meshes (B14) | Instanced props; LOD | Measure a frame budget before optimising further |
 | 5 | Backend & applied AI | Closed-set verification, cross-vendor review, circuit breaker, retry accounting, input caps | Worker tests cannot run in this sandbox (vitest/workerd) | — | Run them on Mark's machine |
 | 6 | Domain ground truth | Terrain, grading, footprint refusal, zoning derived from measured percentiles | Earthworks measured and not built (B7); golf drawn flat (B8) | — | B7/B8 |
-| 7 | Editorial & commercial narrative | Six false claims removed and pinned by test | **Not audited** for persuasiveness, moat, or AI-slop | — | **Audit it** — Phase 6, highest ROI |
+| 7 | Editorial & commercial narrative | Refusal on first paint; nounspeak headings rewritten; crown emoji gone; buzzword sweep of 28 terms came back clean | The moat (a test that fails CI when a marketing number drifts) is still stated only inside a modal | Promote one moat sentence to the welcome card | Do that one edit |
 | 8 | Strategic horizon | — | **Did not exist.** This table is the first one | — | This document |
 | 9 | Commercial viability / FinOps | $2/$7/$20 caps, per-IP limits, published worst case | Spend estimates parked by Mark until they can be tested live | Per-audit pricing model | Leave parked |
 | 10 | Observability | Ledger, run history, stage costs, `countersRead`, refusal reasons | No forensic replay | 3× replay loop as in DATUM | Consider |
-| 11 | Security & governance | CSP, spend caps, auth on write paths, no visitor-text XSS | **Phase 7 not started** | — | **Do it** |
-| 12 | Developer experience | Single test command, generated artefacts, no bundler for `public/` | **Not audited** | — | Light touch |
+| 11 | Security & governance | 2 CRITICAL closed (verdict forgery, scanner bypass); IP retention now hashed + pruned; privacy notice added; SSE leak, auth ordering, KV fan-out fixed | Worker tests unrun here; retry pricing under-books a truncation | Self-host fonts to drop the last third party | Run the Worker suite |
+| 12 | Developer experience | Single test command; three generated artefacts (city summary, test count, sim baseline) regenerate from the real thing | Two 0-byte test files existed and were counted as coverage — now impossible | — | Nothing |
 
 ---
 
@@ -158,11 +158,49 @@ marked **not audited** is not a pass.
 
 ## Verdict, stated plainly
 
-CALIPER is **strong on Divisions 1, 4, 5, 6, 10** — the machinery of not lying —
+CALIPER was **strong on Divisions 1, 4, 5, 6, 10** — the machinery of not lying —
 and that is the part of the thesis it was built to defend.
 
-It is **unaudited on 2, 3, 7, 8, 11, 12**, and Division 7 is the one a hiring
-reader actually applies in the first 30 seconds. The most valuable remaining work
-is therefore not the 20 open renderer findings. It is Phase 6 and Phase 7.
+It was **unaudited on 2, 3, 7, 8, 11, 12**. Those have now been run, and the
+reordering was worth more than the 20 renderer findings it displaced. What the
+missing divisions found:
 
-That reordering is the concrete thing this framework changed.
+**Division 11 (security)** produced the two worst defects in the entire audit,
+both of which defeat failure-floor invariants that four technical passes had
+already walked past:
+
+- A candidate could **forge its own 9/9 verdict** by replacing
+  `Array.prototype.push` or defining `Object.prototype.toJSON` — the harness
+  captured its comparators and not its recorder, and neither payload needs a
+  top-level statement, so the two AST scanners never looked where they lived.
+- `browserOnlyReferences`, the only thing between a model-written world and every
+  visitor's browser, could be **switched off by one dead function**, because its
+  binding collector had no notion of scope.
+
+**Division 7 (editorial)** found that the page's central claim — that it refuses
+— had its only evidence at second 25 of a 30-second visit, behind an 11.5px link
+and eleven seconds of a run that shipped. Not a bug in any technical sense, and
+the single highest-value change made in this session.
+
+**Division 3 (UX)** found the shiniest button on the page was a 22-second
+letterboxed trap with both obvious exits dead.
+
+**Division 2 (visual)** found `--text-muted` at 4.36:1 over the day sky —
+computed against the live canvas rather than on paper, which is where every
+static check said it passed.
+
+### What is honestly still Undone
+
+- The renderer cannot be executed by the suite. Closed statically instead, which
+  covers "does this run at all" and not "does it draw the right thing".
+- The 12 Worker tests need `vitest`/`workerd` and have never run in this sandbox.
+- Earthworks are measured and not built (B7); the golf course is drawn flat (B8).
+- Several `cityWorld` sanity bounds have 20×–90× headroom. Weak, not false.
+- Spend estimates are parked at Mark's instruction until they can be tested live.
+
+### The one number worth keeping
+
+Across seven phases: **438 tests, up from 379**, and — the figure that actually
+matters — **every fix in Phases 4 through 7 was verified by mutation**. The
+standard that produced the two CRITICALs was not cleverness. It was refusing to
+accept a green suite as evidence that a control exists.

@@ -16,10 +16,10 @@ not actually a defect)
 | 1 | Known backlog | **all 16 done** |
 | 2 | Pipeline (`src/`) | **all fixed** (2.4, 2.11 partly — see rows) |
 | 3 | World generator (`public/`) | **all fixed** |
-| 4 | Renderer and UI | not started |
-| 5 | The tests themselves | not started |
-| 6 | Claims, docs, copy | not started |
-| 7 | Security, cost, deploy | not started |
+| 4 | Renderer and UI | **audited and fixed** — 3 parallel auditors, 61 findings; all HIGH closed |
+| 5 | The tests themselves | **audited and fixed** — 6 WEAK + 1 VACUOUS file; every surviving mutation now caught |
+| 6 | Claims, docs, copy | **done** — 6 false public claims removed and pinned by `publicClaims.test.ts` |
+| 7 | Security, cost, deploy | **audited and fixed** — 2 CRITICAL (verdict forgery, scanner bypass), 1 HIGH, 6 MED. Deploy is Mark's to run. |
 
 ---
 
