@@ -34,6 +34,30 @@
 // Node test run. SpendCounterLogic has no such import -- it takes a plain
 import { CONTROL_LIMITS } from "./controlLayer";
 import { SIM_BASELINE_SOURCE } from "./simBaseline";
+
+/**
+ * A stable, non-reversible key for a visitor.
+ *
+ * The rate limiter only ever needed "is this the same visitor as an hour ago".
+ * It never needed the address, and storing the address made a counter into a
+ * personal-data retention problem. A salted SHA-256 answers the question the
+ * limiter actually asks and answers nothing else.
+ *
+ * The salt is a build constant rather than a secret: a per-deploy random salt
+ * would reset every visitor's allowance on deploy, which is a worse failure
+ * than the one it prevents. It raises the cost of reversing the hash from
+ * trivial (4 billion IPv4 addresses) to needing this constant, which is the
+ * honest description of what it buys -- pseudonymisation, not anonymisation.
+ */
+const RATE_LIMIT_SALT = "caliper/ratelimit/v1";
+
+async function hashIp(ip: string): Promise<string> {
+  const data = new TextEncoder().encode(RATE_LIMIT_SALT + "|" + ip);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  // 12 hex chars is 48 bits: collision-free at any plausible visitor count,
+  // and short enough to keep the key small.
+  return [...new Uint8Array(digest)].slice(0, 6).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 // {get, put} storage interface -- so its atomicity-relevant logic is fully
 // testable in Node (test/spendCounterDO.test.ts), including firing real
 // concurrent reserve() calls via Promise.all.
@@ -41,6 +65,13 @@ import { SIM_BASELINE_SOURCE } from "./simBaseline";
 export interface StorageLike {
   get<T>(key: string): Promise<T | undefined>;
   put<T>(key: string, value: T): Promise<void>;
+  // Optional so the in-memory test double stays a two-method object for the
+  // atomicity tests, which is what makes those tests readable. A real
+  // DurableObjectStorage has both; the prune below is a no-op without them,
+  // which fails in the safe direction -- retention is not enforced, rather than
+  // the limiter breaking.
+  list?<T>(options?: { prefix?: string }): Promise<Map<string, T>>;
+  delete?(key: string): Promise<boolean>;
 }
 
 export interface SpendCaps {
@@ -101,11 +132,49 @@ export class SpendCounterLogic {
    * an object the runtime serialises. It can no longer be raced.
    */
   async claimRun(ip: string, day: string, limit: number): Promise<{ ok: boolean; used: number; limit: number }> {
-    const key = `ratelimit/${ip}/${day}`;
+    // THE IP WAS THE KEY, AND NOTHING EVER DELETED IT.
+    //
+    // Durable Object storage has no TTL, there is no alarm handler, and there
+    // was no delete anywhere in this file -- so every visitor IP that ever
+    // started a run was retained indefinitely, in the clear, keyed by day. The
+    // KV fallback path sets a 2-day expirationTtl; the path that actually runs
+    // in production did not. Under GDPR and PIPEDA an IP is personal data and
+    // that is indefinite retention with no purpose limitation.
+    //
+    // Two changes. The key is a SALTED HASH of the address, so the store no
+    // longer holds the address at all -- the counter works identically because
+    // it only ever needed "is this the same visitor as before", never "who".
+    // And old days are pruned as they are encountered, which is the cheapest
+    // correct place: it happens on the write path, needs no alarm, and cannot
+    // drift out of step with the retention the comment claims.
+    const key = `ratelimit/${await hashIp(ip)}/${day}`;
     const used = ((await this.storage.get<number>(key)) ?? 0);
     if (used >= limit) return { ok: false, used, limit };
     await this.storage.put(key, used + 1);
+    await this.pruneOldRateLimits(day);
     return { ok: true, used: used + 1, limit };
+  }
+
+  /**
+   * Delete rate-limit counters for any day but today and yesterday.
+   *
+   * Yesterday is kept because `day` is a UTC date string and a visitor near the
+   * boundary would otherwise get a fresh allowance a few minutes early. Two days
+   * matches the TTL the KV fallback already used, so the two paths now agree.
+   *
+   * Bounded: it lists the prefix and deletes what is stale, and the prefix only
+   * ever holds two days' worth once this has run at all.
+   */
+  private async pruneOldRateLimits(today: string): Promise<void> {
+    if (!this.storage.list || !this.storage.delete) return;
+    const yesterday = new Date(Date.parse(today + "T00:00:00Z") - 86400000).toISOString().slice(0, 10);
+    const entries = await this.storage.list<number>({ prefix: "ratelimit/" });
+    const stale: string[] = [];
+    for (const key of entries.keys()) {
+      const day = key.slice(key.lastIndexOf("/") + 1);
+      if (day !== today && day !== yesterday) stale.push(key);
+    }
+    for (const key of stale) await this.storage.delete(key);
   }
 
   /**

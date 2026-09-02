@@ -1368,7 +1368,30 @@ body.inspecting-mobile #nav-compass-pad {
         </div>
       </div>
       <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#d1fae5">
-        <strong>Continuous Verification:</strong> <span id="claim-node-tests">429</span> Node tests and <span id="claim-worker-tests">9</span> Cloudflare Worker integration tests, run against this repository. This sentence has now gone stale three times in a row while claiming it was read from the runner, so it is no longer trusted to a human: <code>test/publicClaims.test.ts</code> counts the suite and fails if these numbers drift.
+        <strong>Continuous Verification:</strong> <span id="claim-node-tests">432</span> Node tests and <span id="claim-worker-tests">9</span> Cloudflare Worker integration tests, run against this repository. This sentence has now gone stale three times in a row while claiming it was read from the runner, so it is no longer trusted to a human: <code>test/publicClaims.test.ts</code> counts the suite and fails if these numbers drift.
+      </div>
+      <!-- WHAT THIS SITE DOES WITH WHAT YOU TYPE.
+           There was no privacy notice of any kind, on a public demo that sends
+           visitor free text to two US model vendors, keeps it in KV for a week
+           so a halted run can be resumed, and counts runs per address. None of
+           that is unusual and none of it was disclosed, which is the part that
+           does not sit well next to "only says yes when yes is true". -->
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:11px 13px;margin-bottom:12px">
+        <div style="font-family:var(--mono);font-size:10.5px;color:var(--text-muted);letter-spacing:.06em;margin-bottom:6px">WHAT HAPPENS TO WHAT YOU TYPE</div>
+        <p style="margin:0;font-size:11.5px;color:#cbd5e1;line-height:1.6">
+          Your request is sent to Anthropic and OpenAI, who run the models this
+          pipeline uses. It is held for up to seven days so a run parked at a gate
+          can be resumed, then it expires. It is never shown to another visitor:
+          the public run history stores the model's <em>understanding</em> of a
+          request, not the text you wrote.
+          <br><br>
+          Runs are counted per visitor. That counter is keyed by a salted hash of
+          your address rather than the address itself, and is deleted after two
+          days. Nothing else is stored, and there are no analytics or trackers on
+          this page.
+          <br><br>
+          Do not type anything confidential into a public demo — including this one.
+        </p>
       </div>
       <div id="budget-summary-box" class="mono" style="font-size:11.5px;color:var(--text-muted);padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px">
         Loading budget invariants…

@@ -273,3 +273,97 @@ test("export: 4K UHD blueprint rasterization preserves 3840x2160 native dimensio
   if (renderer4k.destroy) renderer4k.destroy();
 });
 
+
+// =============================================================================
+// THE RATE LIMITER KEPT EVERY VISITOR'S IP FOREVER
+//
+// Durable Object storage has no TTL, there was no alarm handler, and there was
+// no delete anywhere in spendCounterDO.ts. So `ratelimit/<ip>/<day>` accumulated
+// one key per address per day, in the clear, permanently. The KV fallback path
+// set a 2-day expirationTtl; the path that actually runs in production did not.
+//
+// Under GDPR and PIPEDA an IP is personal data, so that was indefinite retention
+// of personal data with no stated purpose and no purge path — on a public demo
+// with no privacy notice.
+// =============================================================================
+
+/** A storage double with list/delete, so the prune path is actually exercised. */
+function makePrunableStorage() {
+  const map = new Map<string, unknown>();
+  return {
+    map,
+    get: async <T,>(k: string) => map.get(k) as T | undefined,
+    put: async <T,>(k: string, v: T) => { map.set(k, v); },
+    list: async <T,>(opts?: { prefix?: string }) => {
+      const out = new Map<string, T>();
+      for (const [k, v] of map) if (!opts?.prefix || k.startsWith(opts.prefix)) out.set(k, v as T);
+      return out;
+    },
+    delete: async (k: string) => map.delete(k),
+  };
+}
+
+test("the rate-limit key does not contain the visitor's address", async () => {
+  const storage = makePrunableStorage();
+  const logic = new SpendCounterLogic(storage as unknown as StorageLike, CAPS);
+  const ip = "203.0.113.47";
+  await logic.claimRun(ip, "2026-09-02", 5);
+
+  const keys = [...storage.map.keys()].filter((k) => k.startsWith("ratelimit/"));
+  assert.equal(keys.length, 1, `expected one counter, got ${JSON.stringify(keys)}`);
+  assert.ok(
+    !keys[0].includes(ip),
+    `the stored key is "${keys[0]}" and contains the visitor's IP verbatim. ` +
+    `The limiter only ever needs "is this the same visitor as before" — it never ` +
+    `needs the address.`
+  );
+  // And it must still be STABLE, or the limit does not limit anything.
+  await logic.claimRun(ip, "2026-09-02", 5);
+  const after = [...storage.map.keys()].filter((k) => k.startsWith("ratelimit/"));
+  assert.equal(after.length, 1, "the same visitor produced two different counters — the hash is not stable");
+  assert.equal(await storage.get<number>(after[0]), 2, "the second claim did not increment the first counter");
+});
+
+test("counters older than two days are pruned, so retention is bounded", async () => {
+  const storage = makePrunableStorage();
+  const logic = new SpendCounterLogic(storage as unknown as StorageLike, CAPS);
+
+  // Seeded directly rather than via claimRun, because claimRun prunes on every
+  // write -- so building history through it prunes as it builds. (The first
+  // version of this test did exactly that and failed on its own setup, which is
+  // the prune working and the test not knowing it.)
+  await storage.put("ratelimit/aaaaaaaaaaaa/2026-08-20", 1);
+  await storage.put("ratelimit/aaaaaaaaaaaa/2026-08-31", 1);
+  await storage.put("ratelimit/aaaaaaaaaaaa/2026-09-01", 1);
+  assert.equal([...storage.map.keys()].filter((k) => k.startsWith("ratelimit/")).length, 3);
+
+  // A claim today prunes anything that is neither today nor yesterday.
+  await logic.claimRun("198.51.100.9", "2026-09-02", 5);
+  const days = [...new Set([...storage.map.keys()]
+    .filter((k) => k.startsWith("ratelimit/"))
+    .map((k) => k.slice(k.lastIndexOf("/") + 1)))].sort();
+
+  assert.deepEqual(
+    days, ["2026-09-01", "2026-09-02"],
+    `retention is not bounded — kept ${JSON.stringify(days)}. Yesterday is kept on ` +
+    `purpose (the day string is UTC, so a visitor near the boundary would otherwise ` +
+    `get a fresh allowance a few minutes early); anything older is personal data ` +
+    `with no remaining purpose.`
+  );
+});
+
+test("a storage without list/delete still limits, it just cannot prune", async () => {
+  // The in-memory double used by the atomicity tests is deliberately a two-method
+  // object. The prune must degrade rather than throw: failing to enforce
+  // retention is bad, breaking the rate limiter is worse.
+  const map = new Map<string, unknown>();
+  const minimal = {
+    get: async <T,>(k: string) => map.get(k) as T | undefined,
+    put: async <T,>(k: string, v: T) => { map.set(k, v); },
+  };
+  const logic = new SpendCounterLogic(minimal as unknown as StorageLike, CAPS);
+  const a = await logic.claimRun("192.0.2.1", "2026-09-02", 2);
+  const b = await logic.claimRun("192.0.2.1", "2026-09-02", 2);
+  const c = await logic.claimRun("192.0.2.1", "2026-09-02", 2);
+  assert.deepEqual([a.ok, b.ok, c.ok], [true, true, false], "the limit stopped working without list/delete");
+});

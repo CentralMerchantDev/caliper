@@ -96,8 +96,31 @@ export const CONTROL_LIMITS = {
   // stage hits its token cap and every fix attempt is used -- but the ceiling has
   // to cover what is ALLOWED, not what is likely, or it truncates a legitimate
   // run mid-flight and that looks like a bug rather than a limit.
-  PER_RUN_CEILING_USD_SOURCE_EDIT: 0.72,
-  PER_RUN_CEILING_USD_DATA_EDIT: 0.49,
+  //
+  // RE-DERIVED AGAIN, AFTER MAX_PLAN_REPLIES WAS ADDED AND THIS WAS NOT.
+  //
+  // Capping the Gate 1 reply loop at 4 was the right fix for an unbounded loop.
+  // What it also did -- and what I did not do the arithmetic for at the time --
+  // is raise the worst case this ceiling has to cover, because every reply
+  // re-grounds AND re-plans: 4 x (ground + plan) = $0.2660 on top of $0.7073.
+  //
+  // So the ceiling sat at $0.72 against a permitted $0.9733, and a run that used
+  // the replies the system explicitly offers it would have been truncated
+  // mid-flight. That is the exact failure the comment above names, introduced by
+  // the commit that fixed a different one.
+  //
+  // The test derived `worst` honestly and still missed it, because the
+  // derivation was written before the reply loop existed and nobody added the
+  // term. A test that derives instead of asserting a literal is much better than
+  // one that does not -- it is not the same as one that derives EVERYTHING.
+  //
+  // TIGHT ON PURPOSE, AND WORTH SAYING: at $0.99 the invariant that one visitor
+  // cannot exhaust the daily cap (DAILY_LIVE_RUNS_PER_IP x ceiling < $2.00)
+  // holds at $1.98. There is 1% of headroom. Anything that adds another paid
+  // stage, or raises MAX_PLAN_REPLIES again, breaks it -- and the test will say
+  // so rather than letting the two limits quietly contradict each other.
+  PER_RUN_CEILING_USD_SOURCE_EDIT: 0.99,
+  PER_RUN_CEILING_USD_DATA_EDIT: 0.76,
   /** Cross-model review must never see code that's still failing its own
    * checks (FINAL.md item 1: "the reviewer reads a diff that has already
    * passed CI"). This bounds the implement -> verify -> fix loop that runs

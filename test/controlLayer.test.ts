@@ -1,4 +1,4 @@
-import { SPEND_WORST_CASE } from "../src/changePipeline.js";
+import { SPEND_WORST_CASE, MAX_PLAN_REPLIES } from "../src/changePipeline.js";
 // FINISH.md section 5: re-derived caps (daily $2/weekly $7/monthly $20,
 // per-run ceiling ~$0.15, 2 live runs/IP/day) -- verified by forcing each
 // one, not by reading the numbers. Rate-limit tests use a minimal in-memory
@@ -111,7 +111,12 @@ test("the source-edit ceiling covers every call the run is ALLOWED to make", () 
     WORST_CASE_STAGES.fix * CONTROL_LIMITS.MAX_FIX_ATTEMPTS +
     (WORST_CASE_STAGES.review + WORST_CASE_STAGES.assess + WORST_CASE_STAGES.fix) * CONTROL_LIMITS.MAX_REVIEW_ROUNDS +
     WORST_CASE_STAGES.qa +
-    WORST_CASE_STAGES.retrospective;
+    WORST_CASE_STAGES.retrospective +
+    // THE TERM THAT WAS MISSING. Each Gate 1 reply re-grounds and re-plans, and
+    // MAX_PLAN_REPLIES permits four of them. This derivation predated the reply
+    // cap and nobody added the term, so it kept deriving a worst case the limits
+    // no longer described -- and passed against a ceiling that was $0.25 short.
+    (WORST_CASE_STAGES.ground + WORST_CASE_STAGES.plan) * MAX_PLAN_REPLIES;
   assert.ok(
     CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT >= worst,
     `ceiling ${CONTROL_LIMITS.PER_RUN_CEILING_USD_SOURCE_EDIT} is BELOW the worst case the limits permit (${worst.toFixed(4)}) -- ` +

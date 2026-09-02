@@ -548,7 +548,24 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
       }
       send("done", { runId });
     } catch (e) {
-      send("error", { message: String((e as Error)?.message ?? e) });
+      // THE 500 HANDLER SAYS WHY, AND THIS PATH DID THE OPPOSITE.
+      //
+      // Elsewhere in this file an unexpected exception returns a generic 500
+      // because "an error message is a fine place to leak a KV key name or a
+      // stack". This wrote the raw exception text to the visitor over SSE --
+      // the same internals, the same visitor, one route apart.
+      //
+      // PipelineLimitError and its siblings are DESIGNED to be read by a human
+      // ("you have used all 2 live runs for today"), so those are still sent in
+      // full. Anything else is logged and summarised.
+      const err = e as Error;
+      const isExplained = err instanceof PipelineLimitError || (err as any)?.name === "CircuitOpenError";
+      if (isExplained) {
+        send("error", { message: String(err?.message ?? err) });
+      } else {
+        console.error("change-run failed:", err?.stack ?? err);
+        send("error", { message: "The run stopped on an unexpected error. It has been logged, and nothing was shipped." });
+      }
     } finally {
       clearInterval(heartbeatTimer);
       // Release unless a SUCCESSOR owns the slot. If we merely could not reach
@@ -617,14 +634,37 @@ class QuerySecretRejected extends Error {
   }
 }
 
+/**
+ * How many changelog records an anonymous request may cause to be read.
+ *
+ * THE FAN-OUT WAS UNBOUNDED, AND THE ENDPOINT IS PUBLIC. It followed the list
+ * cursor for up to 50 pages of 1,000 keys and then did
+ * `Promise.all(keys.map(get))` -- up to 50,000 concurrent KV reads per
+ * anonymous GET, to render at most 200 rows. Changelog entries are written with
+ * no expirationTtl, so the key count only ever grows: billed reads scale with
+ * an attacker's request rate, and past the Workers subrequest limit the
+ * endpoint starts throwing rather than degrading.
+ *
+ * 1,000 is one list page and comfortably more than the 200 rows returned.
+ */
+const CHANGE_HISTORY_MAX_RECORDS = 1000;
+
 async function handleChangeHistory(env: Env): Promise<Response> {
   // KV list() is paginated at 1000 keys and this took page one and stopped, so
-  // the "complete" changelog silently truncated. Follow the cursor.
+  // the "complete" changelog silently truncated. Follow the cursor -- but only
+  // as far as CHANGE_HISTORY_MAX_RECORDS, and say so when it bites rather than
+  // presenting a window as the whole record.
   const keys: string[] = [];
   let cursor: string | undefined;
+  let truncated = false;
   for (let page = 0; page < 50; page++) {
     const list = await env.SPEND_KV.list({ prefix: "changelog/", cursor });
     for (const k of list.keys) keys.push(k.name);
+    if (keys.length >= CHANGE_HISTORY_MAX_RECORDS) {
+      truncated = !list.list_complete || keys.length > CHANGE_HISTORY_MAX_RECORDS;
+      keys.length = CHANGE_HISTORY_MAX_RECORDS;
+      break;
+    }
     if (list.list_complete) break;
     cursor = list.cursor;
   }
@@ -661,8 +701,14 @@ async function handleChangeHistory(env: Env): Promise<Response> {
   return json({
     note: entries.length === 0
       ? "No public runs recorded yet. The recorded run on the main page shows the pipeline end to end."
-      : `${entries.length} public run(s) recorded, every one of them, including the ones that failed. This log is not filtered.` +
+      // "every one of them" has to stop being said the moment the read is
+      // capped, or the note becomes the same class of false claim this project
+      // spent an audit removing from the rest of the page.
+      : (truncated
+          ? `The ${entries.length} most recent public runs, including the ones that failed. This log is not filtered, but it is capped at ${CHANGE_HISTORY_MAX_RECORDS} records per request, so the totals below cover that window rather than all time.`
+          : `${entries.length} public run(s) recorded, every one of them, including the ones that failed. This log is not filtered.`) +
         (entries.length > 200 ? ` The 200 most recent are returned below.` : ""),
+    totalsCoverAllRuns: !truncated,
     totals: tally,
     entries: entries.slice(0, 200),
   });
@@ -1091,9 +1137,12 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       // The input guard was applied on ?request= and nowhere else, so this
       // path -- which is concatenated straight into the plan prompt -- took
       // unbounded text with no length limit and no pattern checks at all.
+      // AUTH FIRST. The guard ran before the token check, so an unauthenticated
+      // caller could probe the guard's rules by watching 400 vs 403 -- a free
+      // oracle for what the input filter rejects, from outside the run.
+      if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       const answerGuard = checkInputGuard(answer);
       if (!answerGuard.ok) return jsonError("request_rejected", answerGuard.reason, 400);
-      if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       await env.SPEND_KV.put(`change/answer/${runId}`, JSON.stringify({ answer }), { expirationTtl: 600 });
       const resumeTicket = await createResumeTicket(runId);
       return json({ ok: true, resumeTicket });
@@ -1108,10 +1157,12 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       const runId = typeof payload.runId === "string" ? payload.runId : null;
       const reply = typeof payload.reply === "string" ? payload.reply : (typeof payload.answer === "string" ? payload.answer : null);
       if (!runId || reply === null) return json({ error: "pass runId & reply via POST body" }, 400);
+      // Auth first, for the same reason as /change-answer: a guard that answers
+      // before the token check is an oracle for its own rules.
+      if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
       // Same hole as /change-answer: free text into the plan prompt, ungated.
       const replyGuard = checkInputGuard(reply);
       if (!replyGuard.ok) return jsonError("request_rejected", replyGuard.reason, 400);
-      if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
 
       // The cap on this loop lives in the pipeline, on `planGateReplyCount`
       // -- the counter that persists with the run state and survives a resume.
