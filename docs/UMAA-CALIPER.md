@@ -133,9 +133,9 @@ marked **not audited** is not a pass.
 | 1 | Technical architecture | Two-gate pipeline, atomic DO spend claim, lease + concurrency, CAS publish, 438 tests | Renderer cannot be executed by the suite (no GPU) — closed statically instead | Headless WebGL in CI (`swiftshader`) to actually build a scene | **Nothing** — the static check covers the failure class that shipped |
 | 2 | Visual design system | Contrast audited over the LIVE canvas; `--panel-bg` 0.82→0.92 takes `--text-muted` from 4.36:1 to 5.60:1 worst case; state is no longer colour-only | 19 font sizes (5 fractional), no type scale; `:root` tokens bypassed by inline hex | Six type tokens, snap spacing to 4/8/12/16/24 | Low priority — it is untidy, not false |
 | 3 | Product & UX | The most recent real refusal renders on FIRST PAINT; flythrough toggles and Escape exits it; boot overlay has a 20 s watchdog | The rationed Build button is still the loudest control on the page | Lead with the refusal in the hero paragraph too | Consider the hero rewrite the Division 7 audit proposed |
-| 4 | Frontend performance | World build 6.02 s → 2.36 s, 91 MB → 34 MB, disposal + listener leaks fixed | No frame-budget measurement under interaction; ~700 loose meshes (B14) | Instanced props; LOD | Measure a frame budget before optimising further |
+| 4 | Frontend performance | World build 6.02 s → 2.36 s, 91 MB → 34 MB, disposal + listener leaks fixed; per-frame GPU texture upload removed; tree occupancy O(n)→bucket grid | ~700 loose prop meshes are still not instanced — the header no longer claims otherwise | Instance the boats, aircraft, cranes and stadium bays | Measure a frame budget first; the claim is honest now either way |
 | 5 | Backend & applied AI | Closed-set verification, cross-vendor review, circuit breaker, retry accounting, input caps | Worker tests cannot run in this sandbox (vitest/workerd) | — | Run them on Mark's machine |
-| 6 | Domain ground truth | Terrain, grading, footprint refusal, zoning derived from measured percentiles | Earthworks measured and not built (B7); golf drawn flat (B8) | — | B7/B8 |
+| 6 | Domain ground truth | Terrain, grading, footprint refusal, zoning from measured percentiles; **earthworks now built** (1,086 roads carry a batter); golf and container yard graded; boardwalk smoothed | 154 roads hold their gradient by exceeding their earthworks budget — reported, not hidden | Retaining walls where the batter is steep | Nothing |
 | 7 | Editorial & commercial narrative | Refusal on first paint; nounspeak headings rewritten; crown emoji gone; buzzword sweep of 28 terms came back clean | The moat (a test that fails CI when a marketing number drifts) is still stated only inside a modal | Promote one moat sentence to the welcome card | Do that one edit |
 | 8 | Strategic horizon | — | **Did not exist.** This table is the first one | — | This document |
 | 9 | Commercial viability / FinOps | $2/$7/$20 caps, per-IP limits, published worst case | Spend estimates parked by Mark until they can be tested live | Per-audit pricing model | Leave parked |
@@ -191,12 +191,28 @@ static check said it passed.
 
 ### What is honestly still Undone
 
-- The renderer cannot be executed by the suite. Closed statically instead, which
-  covers "does this run at all" and not "does it draw the right thing".
-- The 12 Worker tests need `vitest`/`workerd` and have never run in this sandbox.
-- Earthworks are measured and not built (B7); the golf course is drawn flat (B8).
-- Several `cityWorld` sanity bounds have 20×–90× headroom. Weak, not false.
-- Spend estimates are parked at Mark's instruction until they can be tested live.
+All 61 audit findings are closed — 59 fixed, one WONTFIX with a stated reason,
+one claim-corrected rather than built. What remains is not a backlog of defects;
+it is the set of things this project has decided not to do yet, named so that
+none of them reads as an oversight:
+
+- **The renderer cannot be executed by the suite.** Closed statically instead,
+  which answers "does this run at all" and not "does it draw the right thing".
+  Headless WebGL in CI would close it properly.
+- **The 12 Worker tests need `vitest`/`workerd`** and have never run in this
+  sandbox. They are real — their comments record three genuine defects they
+  caught — but the 438 headline does not include them.
+- **~700 prop meshes are not instanced.** Boats, aircraft, cranes, stadium bays.
+  Real work with a real payoff; the header no longer claims otherwise.
+- **154 roads hold their gradient by exceeding their earthworks budget**, worst
+  by 38.6 m. `gradeRun` always finishes on the gradient pass, which is the right
+  trade — and it is now reported rather than computed and dropped.
+- **Several `cityWorld` sanity bounds carry 20×–90× headroom.** Weak, not false.
+- **The retry-truncation path under-books its reservation** by up to $0.108 on a
+  `fix` call. Bounded, and parked with the rest of the spend estimates at Mark's
+  instruction until they can be tested against a live run.
+- **Google Fonts is the only remaining third party.** Self-hosting it would drop
+  the last external origin from the CSP.
 
 ### The one number worth keeping
 
