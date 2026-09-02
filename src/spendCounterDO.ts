@@ -32,6 +32,7 @@
 // a virtual module the Workers runtime provides and plain Node cannot
 // resolve, so any file that imports it can never be loaded by a plain
 // Node test run. SpendCounterLogic has no such import -- it takes a plain
+import { CONTROL_LIMITS } from "./controlLayer";
 import { SIM_BASELINE_SOURCE } from "./simBaseline";
 // {get, put} storage interface -- so its atomicity-relevant logic is fully
 // testable in Node (test/spendCounterDO.test.ts), including firing real
@@ -256,7 +257,16 @@ export class SpendCounterLogic {
    * auto-prunes stale leases whose lease duration expired,
    * and issues a unique cryptographic leaseToken to prevent ABA release races.
    */
-  async leaseRun(runId: string, maxConcurrent = 3, ttlSec = 600): Promise<{ ok: boolean; leaseToken?: string; expiresAt?: number; reason?: string }> {
+  /**
+   * Defaults that disagreed with the rest of the system.
+   *
+   * ttlSec defaulted to 600 while CONTROL_LIMITS.ACTIVE_RUN_LEASE_TTL_SEC is
+   * 330, and maxConcurrent to 3 while /pipeline-budget publishes 5. Harmless
+   * only because every caller happens to pass both -- which is exactly the kind
+   * of "harmless" that stops being true when someone adds a caller.
+   * Left as required parameters instead, so a new caller has to say.
+   */
+  async leaseRun(runId: string, maxConcurrent: number, ttlSec: number): Promise<{ ok: boolean; leaseToken?: string; expiresAt?: number; reason?: string }> {
     const now = Date.now();
     const rawLeases = (await this.storage.get<Array<{ runId: string; leaseToken: string; expiresAt: number }>>("pipeline/active-leases")) ?? [];
     // Prune expired leases
@@ -389,7 +399,15 @@ export async function handleSpendCounterRequest(logic: SpendCounterLogic, reques
     }
     if (url.pathname === "/lease-run" && request.method === "POST") {
       const body = (await request.json()) as { runId: string; maxConcurrent?: number };
-      const result = await logic.leaseRun(body.runId, body.maxConcurrent);
+      // The PUBLISHED values, supplied at the boundary rather than defaulted
+      // silently inside the DO. The old defaults (3 concurrent, 600 s) disagreed
+      // with what /pipeline-budget states (5) and with ACTIVE_RUN_LEASE_TTL_SEC
+      // (330) -- three numbers for two facts.
+      const result = await logic.leaseRun(
+        body.runId,
+        body.maxConcurrent ?? CONTROL_LIMITS.MAX_CONCURRENT_PIPELINE_RUNS,
+        CONTROL_LIMITS.ACTIVE_RUN_LEASE_TTL_SEC,
+      );
       return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
     }
     if (url.pathname === "/renew-lease" && request.method === "POST") {

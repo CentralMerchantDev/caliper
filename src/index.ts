@@ -387,7 +387,13 @@ async function handleSecurityCheck(env: Env): Promise<Response> {
     const isolateId = `attack-${probe.id}`;
     const cold = await runRawScriptInSandbox(env.LOADER, probe.code, { cpuMs: probe.cpuMs, isolateId });
     const warm = await runRawScriptInSandbox(env.LOADER, probe.code, { cpuMs: probe.cpuMs, isolateId });
-    const held = probe.judge(cold);
+    // THE WARM RUN WAS EXECUTED AND THEN IGNORED.
+  //
+  // `judge(cold)` only. The warm run costs the same CPU this endpoint is
+  // auth-gated for, and it is the one that tests isolate REUSE -- whether state
+  // carries between invocations, which is the more interesting failure. Both are
+  // judged now, and a probe only counts as held if it held BOTH times.
+  const held = probe.judge(cold) && probe.judge(warm);
     // Categorizes what the calling (parent) Worker actually experiences:
     // - "isolate-killed-before-response": entrypoint.fetch() itself threw/rejected --
     //   the child never got to run its own try/catch, but the parent still gets
@@ -463,7 +469,23 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
   const encoder = new TextEncoder();
   const send = (event: string, data: unknown) => writer.write(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)).catch(() => {});
 
+  // Three consecutive misses at a 15 s heartbeat is 45 s of a lease that lasts
+  // minutes -- long enough to be a real outage, short enough to abort before it
+  // expires underneath us.
+  const MAX_RENEWAL_FAILURES = 3;
+  let renewalFailures = 0;
   let leaseLost = false;
+  // WHY the lease was lost, which decides whether the slot is ours to release.
+  //
+  // These were one flag, and the finally block below skipped releaseActiveRun
+  // whenever it was set. But it is set for two completely different reasons:
+  //   * the DO said `renewed: false` -- a SUCCESSOR owns the slot now, and
+  //     releasing would take it away from them. Correct not to release.
+  //   * an HTTP error or a network blip -- we simply could not ASK. The lease
+  //     is still ours, and not releasing leaks a concurrency slot for the full
+  //     lease TTL. At MAX_CONCURRENT_PIPELINE_RUNS that is a self-inflicted
+  //     lockout caused by one dropped request.
+  let leaseSuperseded = false;
   let leaseAbortError: string | null = null;
 
   // Periodic heartbeat & lease renewal: extends active lease every 15s while actively executing
@@ -481,19 +503,32 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
         if (res.ok) {
           const data = (await res.json()) as { ok: boolean; renewed: boolean };
           if (!data.renewed) {
+            // Genuinely gone: someone else holds the slot.
             leaseLost = true;
+            leaseSuperseded = true;
             leaseAbortError = "Run lease expired or concurrency slot was acquired by a successor";
             clearInterval(heartbeatTimer);
+          } else {
+            renewalFailures = 0;
           }
         } else {
-          leaseLost = true;
-          leaseAbortError = `Lease renewal failed: HTTP ${res.status}`;
-          clearInterval(heartbeatTimer);
+          // TRANSIENT. One dropped request should not kill a run that is
+          // otherwise healthy -- the heartbeat fires every 15 s and the lease
+          // lasts minutes, so there is room to try again.
+          renewalFailures++;
+          if (renewalFailures >= MAX_RENEWAL_FAILURES) {
+            leaseLost = true;
+            leaseAbortError = `Lease renewal failed ${renewalFailures}x: HTTP ${res.status}`;
+            clearInterval(heartbeatTimer);
+          }
         }
       } catch (err) {
-        leaseLost = true;
-        leaseAbortError = `Lease coordinator error: ${String((err as Error)?.message ?? err)}`;
-        clearInterval(heartbeatTimer);
+        renewalFailures++;
+        if (renewalFailures >= MAX_RENEWAL_FAILURES) {
+          leaseLost = true;
+          leaseAbortError = `Lease coordinator unreachable ${renewalFailures}x: ${String((err as Error)?.message ?? err)}`;
+          clearInterval(heartbeatTimer);
+        }
       }
     }
   }, 15_000);
@@ -516,8 +551,12 @@ async function handleChangeRun(env: Env, changeRequest: string, existingRunId?: 
       send("error", { message: String((e as Error)?.message ?? e) });
     } finally {
       clearInterval(heartbeatTimer);
-      if (!leaseLost) {
-        await releaseActiveRun(env.SPEND_KV, runId, env.SPEND_COUNTER, leaseToken ?? undefined);
+      // Release unless a SUCCESSOR owns the slot. If we merely could not reach
+      // the coordinator, the lease is still ours and holding it would lock the
+      // slot out for its full TTL over a dropped request.
+      if (!leaseSuperseded) {
+        await releaseActiveRun(env.SPEND_KV, runId, env.SPEND_COUNTER, leaseToken ?? undefined)
+          .catch(() => {});
       }
       await writer.close().catch(() => {});
     }

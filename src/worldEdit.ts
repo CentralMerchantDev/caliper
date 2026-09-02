@@ -673,7 +673,20 @@ export function validateWorldEdit(world: LiveWorld, edit: WorldEdit): { valid: t
         if (!surfaceKeys.has(op.surfaceKey)) return { valid: false, reason: `op[${i}] setSurfaceField: surface "${op.surfaceKey}" does not exist -- known surfaces: ${[...surfaceKeys].join(", ")}` };
         if (op.field !== "material" && op.field !== "color") return { valid: false, reason: `op[${i}] setSurfaceField: field must be "material" or "color"` };
         if (op.field === "color" && !HEX_COLOR.test(op.value)) return { valid: false, reason: `op[${i}] setSurfaceField: value must be a "#hex" string when field is "color"` };
-        if (op.field === "material" && !op.value) return { valid: false, reason: `op[${i}] setSurfaceField: value is empty` };
+        // A 500,000-CHARACTER MATERIAL WAS ACCEPTED.
+      //
+      // The only check here was that the value existed. An audit set a material
+      // to half a megabyte: accepted, and it grew the world source by 504,634
+      // characters -- which is then re-sent as INPUT to plan, implement, fix,
+      // review and QA on every subsequent run (~125k tokens each), served at
+      // /world-source, and written to DO storage, which caps values at 128 KiB
+      // so the publish would fail closed only AFTER the spend.
+      //
+      // A material name is a word. 120 characters is generous for one.
+      if (op.field === "material" && typeof op.value === "string" && op.value.length > 120) {
+        return { valid: false, reason: `REFUSED -- material value is ${op.value.length} characters; a material name is a word, not a document` };
+      }
+      if (op.field === "material" && !op.value) return { valid: false, reason: `op[${i}] setSurfaceField: value is empty` };
         break;
       }
       default:

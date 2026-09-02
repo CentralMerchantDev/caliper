@@ -21,7 +21,7 @@ export const REVIEW_MODEL = "gpt-5.3-codex";
 // with the real cost delta". There is no such panel: grep for gpt-5.5 in
 // public/ returns nothing. A comment describing a feature that does not exist
 // is the same defect as a number that has gone stale.
-export const REVIEW_MODEL_ALTERNATIVE = "gpt-5.5";
+
 
 // Published per-1M-token USD pricing, verified against OpenAI's own pricing
 // page rather than trained-in knowledge (this model postdates training data

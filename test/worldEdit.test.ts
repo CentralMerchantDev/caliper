@@ -526,3 +526,23 @@ test("the shipped world source itself passes both checks", () => {
   assert.deepEqual(browserOnlyReferences(SIM_BASELINE_SOURCE), [],
     "the baseline world must not reference a browser — if it does, this check cannot ship");
 });
+
+test("a material value the size of a document is refused", () => {
+  // An audit set a material to 500,000 characters. It was accepted, and grew the
+  // world source by 504,634 chars — which is then re-sent as INPUT to plan,
+  // implement, fix, review and QA on every later run, served at /world-source,
+  // and written to DO storage, which caps at 128 KiB. The publish would have
+  // failed closed, but only after the spend.
+  const world = loadWorld(SIM_BASELINE_SOURCE);
+
+  const huge: WorldEdit = { ops: [{ op: "setSurfaceField", surfaceKey: "ground", field: "material", value: "x".repeat(500_000) }] };
+  const v = validateWorldEdit(world, huge);
+  assert.equal(v.valid, false, "half a megabyte is not a material name");
+  if (!v.valid) assert.match(v.reason, /characters|material/i);
+
+  // An ordinary material name must still be accepted — a check that refuses
+  // honest input is worse than no check.
+  const ok: WorldEdit = { ops: [{ op: "setSurfaceField", surfaceKey: "ground", field: "material", value: "cobblestone" }] };
+  const v2 = validateWorldEdit(world, ok);
+  assert.equal(v2.valid, true, `an ordinary material name must be accepted, got: ${(v2 as any).reason}`);
+});

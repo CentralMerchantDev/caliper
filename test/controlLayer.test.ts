@@ -372,3 +372,45 @@ test("the concurrency limit refuses the run past the cap, and releases", async (
   const after = await new (SpendCounterLogic as any)(storage).leaseRun("run-new", max, 600);
   assert.equal(after.ok, true, "a released slot must become available again");
 });
+
+// =============================================================================
+// A DROPPED REQUEST MUST NOT LOCK A CONCURRENCY SLOT FOR TEN MINUTES
+//
+// `leaseLost` was one flag set for two unrelated reasons: the coordinator saying
+// a SUCCESSOR now owns the slot, and simply failing to reach the coordinator.
+// The finally block skipped releaseActiveRun whenever it was set — correct for
+// the first case, and for the second it leaked the slot for the full lease TTL.
+// At MAX_CONCURRENT_PIPELINE_RUNS that is a self-inflicted lockout caused by one
+// network blip.
+//
+// This covers the DO side of it: a released lease frees exactly one slot, and a
+// lease that was superseded is not something the loser can release out from
+// under the winner.
+// =============================================================================
+test("releasing a lease frees exactly one slot, and only the holder may", async () => {
+  const { SpendCounterLogic } = await import("../src/spendCounterDO.js");
+  const store = new Map<string, unknown>();
+  const storage = {
+    get: async (k: string) => store.get(k),
+    put: async (k: string, v: unknown) => { store.set(k, v); },
+    delete: async (k: string) => { store.delete(k); },
+    list: async () => new Map(),
+  };
+  const mk = () => new (SpendCounterLogic as any)(storage);
+  const MAX = 2;
+
+  const a = await mk().leaseRun("run-a", MAX, 330);
+  const b = await mk().leaseRun("run-b", MAX, 330);
+  assert.ok(a.ok && b.ok, "both leases within the cap should be granted");
+  assert.equal((await mk().leaseRun("run-c", MAX, 330)).ok, false, "past the cap must refuse");
+
+  // A wrong token must not release someone else's slot.
+  await mk().releaseRun("run-a", "not-the-right-token");
+  assert.equal((await mk().leaseRun("run-c", MAX, 330)).ok, false,
+    "a mismatched token must not free a slot");
+
+  // The real holder can.
+  await mk().releaseRun("run-a", a.leaseToken);
+  assert.equal((await mk().leaseRun("run-c", MAX, 330)).ok, true,
+    "the holder releasing must free exactly one slot");
+});
