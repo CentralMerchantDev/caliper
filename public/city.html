@@ -21,7 +21,14 @@
        border-radius:8px;padding:7px 13px;font-size:11.5px;cursor:pointer;min-width:158px;text-align:left}
   #views button:hover{background:rgba(255,255,255,.15)}
   #views .sep{opacity:.4;font-size:10px;letter-spacing:.12em;padding:7px 4px 2px}
-  #tip{left:16px;bottom:14px;padding:8px 13px;font-size:11px;color:#b6b0a4}
+  /* #tip and #home were BOTH left:16px;bottom:14px, so the home link painted
+     directly over the only line documenting the controls. Stacked now. */
+  #tip{left:16px;bottom:56px;padding:8px 13px;font-size:11px;color:#b6b0a4}
+  /* #livequarter had no position rule at all: .panel sets position:fixed with
+     no offsets, so with top/left/right/bottom all auto it rendered at its
+     static position -- which, because every panel before it is out of flow, is
+     the top-left of the body, on top of #hud. */
+  #livequarter{left:16px;top:auto;bottom:104px;padding:10px 14px;font-size:11.5px;max-width:262px}
   #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
         background:#0b1016;color:#e8e2d6;font-size:13px;letter-spacing:.12em;z-index:9}
 </style>
@@ -46,6 +53,7 @@
        262px HUD, overlapping each other on a 390px screen. */
     #hud{max-width:calc(100vw - 32px);font-size:11px;padding:9px 12px}
     #views{right:8px;top:auto;bottom:56px;max-height:38vh;padding:6px}
+    #livequarter{bottom:auto;top:auto;position:static;margin:8px;max-width:calc(100vw - 32px)}
     #views button{min-width:112px;font-size:11px;padding:9px 10px}
     #tip{display:none}
     #home{font-size:11px;padding:8px 11px}
@@ -86,7 +94,25 @@ document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(num("fov", 33), innerWidth / innerHeight, 3, 120000);
 
-const W = buildWorld(THREE, renderer, scene);
+// A THROW HERE USED TO READ AS "SLOW". buildWorld is called unguarded, and the
+// most recent thing that went wrong in this project was buildProps throwing on
+// every single page load -- which surfaced as #load sitting at "BUILDING THE
+// WORLD…" indefinitely, indistinguishable from a large scene taking its time.
+// Nothing on the page said otherwise and nothing in the suite could have.
+let W;
+try {
+  W = buildWorld(THREE, renderer, scene);
+} catch (err) {
+  const el = document.getElementById("load");
+  if (el) {
+    el.style.display = "flex";
+    el.style.padding = "0 24px";
+    el.style.textAlign = "center";
+    el.textContent = "The city could not be built: " + (err && err.message ? err.message : String(err));
+  }
+  console.error("buildWorld failed:", err);
+  throw err;
+}
 window.__world = W;
 // Shadow map size is a knob because a 4096 map is 16 M texels, which a GPU
 // shrugs off and a software rasteriser does not.
@@ -344,13 +370,27 @@ addEventListener("touchcancel", dropTouch, { passive: true });
 // A ~3.6 M triangle scene on a phone or a throttled laptop can lose its GL
 // context, and the page had no handler: the canvas simply went black with no
 // explanation and no way to recover.
+//
+// AND THE FIRST VERSION OF THIS HANDLER COULD NEVER FIRE USEFULLY. It wrote
+// into #load, which the last line of boot removes from the document
+// unconditionally. After that `getElementById("load")` is null, the `if (el)`
+// guard silently does nothing, and the case this exists to explain -- a canvas
+// that goes black with no explanation -- happens exactly as before. A guard
+// that turns a broken path into a quiet one is worse than no guard: it looks
+// handled in review.
+//
+// It builds its own panel now, so it does not depend on an element another part
+// of the file is entitled to delete.
 renderer.domElement.addEventListener("webglcontextlost", (e) => {
   e.preventDefault();
-  const el = document.getElementById("load");
-  if (el) {
-    el.style.display = "block";
-    el.textContent = "The graphics context was lost — this scene is large. Reload to rebuild the city.";
+  let el = document.getElementById("load");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "load";
+    document.body.appendChild(el);
   }
+  el.style.display = "flex";
+  el.textContent = "The graphics context was lost — this scene is large. Reload to rebuild the city.";
 }, false);
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();

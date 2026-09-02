@@ -401,6 +401,11 @@ html, body {
   align-items: center;
   gap: 4px;
 }
+/* State was colour ONLY: .active and .done differed by hue and weight and by
+   nothing a screen reader or a colour-blind visitor could perceive. The
+   ::after marker below adds a text token to each state. */
+.step-item.active::after { content: " — running"; font-size: 10px; opacity: 0.85; }
+.step-item.done::after { content: " — done"; font-size: 10px; opacity: 0.7; }
 .step-item.active { color: var(--sky); font-weight: 700; }
 .step-item.done { color: var(--emerald); }
 
@@ -844,8 +849,30 @@ body.inspecting-mobile #nav-compass-pad {
      the status card's REAL measured height (--statuscard-h, published by
      watchPanelHeights alongside the others). When the status card is hidden its
      height is 0 and the inspector rises to the same place it used to sit. */
-  .status-card {
+  /* THE WELCOME CARD AND THE STATUS CARD LANDED ON THE SAME PIXEL.
+     Both are anchored to `--topbar-bottom + 10px`, both span the width, and
+     both are visible on load -- so on a phone the status card covered the first
+     thing a visitor reads. The desktop rule for .welcome-card survives into
+     this media block because nothing here overrode it.
+
+     The overlap suite could not have caught it twice over: PANEL_SELECTORS in
+     e2e/panelOverlap.spec.ts omits #welcome-mission-card entirely, and
+     dismissOverlays() clicks every ✕ -- including the welcome card's own close
+     button -- before any assertion runs. Both are fixed alongside this. */
+  .welcome-card {
     top: calc(var(--topbar-bottom, 54px) + 10px) !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    transform: none !important;
+    max-height: 44vh;
+    overflow-y: auto;
+    z-index: 96;
+  }
+  /* Below the welcome card, using its measured height the same way the inspect
+     card already uses the status card's. */
+  .status-card {
+    top: calc(var(--topbar-bottom, 54px) + var(--welcomecard-h, 0px) + 18px) !important;
     bottom: auto !important;
     left: 8px !important;
     right: 8px !important;
@@ -1162,7 +1189,7 @@ body.inspecting-mobile #nav-compass-pad {
     <span id="pipeline-timer" class="mono" style="font-size:11px;color:var(--text-muted)">Elapsed: 0.0s</span>
     <button type="button" id="status-card-close" aria-label="Close status panel" title="Close status panel" style="background:none;border:none;color:#94a3b8;cursor:pointer">✕</button>
   </div>
-  <div class="pipeline-steps">
+  <div class="pipeline-steps" role="list" aria-live="polite" aria-label="Pipeline progress">
     <div class="step-item" id="step-1"><span>1. Ground</span></div>
     <div class="step-item" id="step-2"><span>2. Plan</span></div>
     <div class="step-item" id="step-3"><span>3. Implement</span></div>
@@ -1245,7 +1272,7 @@ body.inspecting-mobile #nav-compass-pad {
 
   <!-- Input & Build Button Row -->
   <div class="dock-input-row">
-    <textarea id="bar-request-input" class="dock-input" maxlength="500" placeholder="e.g. add a lamp post near the workshop"></textarea>
+    <textarea id="bar-request-input" class="dock-input" maxlength="500" aria-label="Describe the change you want made to the city" placeholder="e.g. add a lamp post near the workshop"></textarea>
     <button id="bar-submit" class="btn-build" type="button">⚡ Build</button>
   </div>
 
@@ -1259,7 +1286,7 @@ body.inspecting-mobile #nav-compass-pad {
   <div class="modal-card glass" style="max-width:560px;padding:16px">
     <div style="display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.12)">
       <span style="font-size:18px">🔍</span>
-      <input type="text" id="cmd-search-input" style="flex:1;background:transparent;border:none;outline:none;color:#fff;font-size:16px;font-family:inherit" placeholder="Type a command or bookmark... (e.g. Forge, Docks, Night, Tour)">
+      <input type="text" id="cmd-search-input" aria-label="Search commands and bookmarks" style="flex:1;background:transparent;border:none;outline:none;color:#fff;font-size:16px;font-family:inherit" placeholder="Type a command or bookmark... (e.g. Forge, Docks, Night, Tour)">
       <kbd class="mono" style="font-size:11px;background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;color:#94a3b8">ESC</kbd>
     </div>
     <ul id="cmd-items-list" style="list-style:none;margin:8px 0 0;padding:0;max-height:340px;overflow-y:auto"></ul>
@@ -1661,6 +1688,10 @@ const money = n => '$' + Number(n).toFixed(4);
   // instead of on it. A hidden element measures 0, which is exactly the offset
   // wanted when it is not there -- no visibility flag to keep in sync.
   const statusCard = document.querySelector('.status-card');
+  // Measured for the same reason the status card is: on mobile the status card
+  // now stacks below it, so its real height has to be published or the stack
+  // goes stale the moment the welcome card is dismissed.
+  const welcomeCard = document.querySelector('.welcome-card');
   const publishStackHeight = (el, prop) => {
     if (!el) return;
     const r = el.getBoundingClientRect();
@@ -1672,20 +1703,33 @@ const money = n => '$' + Number(n).toFixed(4);
       if (entry.target === dock) publishHeight(dock, '--dock-h');
       else if (entry.target === topBar) publishBottomEdge(topBar, '--topbar-bottom');
       else if (entry.target === statusCard) publishStackHeight(statusCard, '--statuscard-h');
+      else if (entry.target === welcomeCard) publishStackHeight(welcomeCard, '--welcomecard-h');
     }
   });
   ro.observe(dock);
   ro.observe(topBar);
   if (statusCard) ro.observe(statusCard);
+  if (welcomeCard) ro.observe(welcomeCard);
   publishHeight(dock, '--dock-h');
   publishBottomEdge(topBar, '--topbar-bottom');
   publishStackHeight(statusCard, '--statuscard-h');
+  publishStackHeight(welcomeCard, '--welcomecard-h');
   // display:none does not fire ResizeObserver, so a card being shown or hidden
   // has to be observed separately or the stack goes stale the first time the
   // status card is dismissed.
-  if (statusCard && typeof MutationObserver !== 'undefined') {
-    new MutationObserver(() => publishStackHeight(statusCard, '--statuscard-h'))
-      .observe(statusCard, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+  if (typeof MutationObserver !== 'undefined') {
+    if (statusCard) {
+      new MutationObserver(() => publishStackHeight(statusCard, '--statuscard-h'))
+        .observe(statusCard, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+    }
+    // The welcome card is dismissed with display:none, which is exactly the
+    // case the comment above describes -- and on mobile the status card is now
+    // stacked below it, so without this the status card stays pushed down by
+    // the height of a card that is no longer on screen.
+    if (welcomeCard) {
+      new MutationObserver(() => publishStackHeight(welcomeCard, '--welcomecard-h'))
+        .observe(welcomeCard, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+    }
   }
 })();
 
@@ -1760,6 +1804,20 @@ const NPC_PROFILES = {
 // same failure this project exists to refuse.
 function reportDegradedRenderer(r) {
   if (!r || !r.degraded) return;
+
+  // TAKE THE BOOT PANEL DOWN. It is position:fixed, inset:0, z-index:40, with
+  // an OPAQUE gradient background, and the only two places that remove it are
+  // inside Renderer3D's build path. On the no-WebGL path that build never runs
+  // -- the renderer swaps itself for WorldRenderer2D -- so the panel stayed up
+  // permanently, reading "BUILDING THE CITY" over a flat plan that had already
+  // finished drawing.
+  //
+  // The banner below was therefore correct and invisible: it announced "showing
+  // the flat plan" from behind a full-screen panel claiming the city was still
+  // being built. A visitor with no WebGL saw a dark rectangle and a promise.
+  const boot = document.getElementById('world-booting');
+  if (boot) boot.remove();
+
   const log = $('#stage-log');
   if (log) {
     const d = document.createElement('div');
@@ -2254,9 +2312,40 @@ $('#village-guide-modal')?.addEventListener('click', (e) => { if (e.target.id ==
 
 $('#arch-drawer-trigger')?.addEventListener('click', (e) => {
   showAccessibleModal('#arch-drawer-modal', e.currentTarget);
-  fetch('/pipeline-budget').then(r => r.json()).then(b => {
-    $('#budget-summary-box').innerHTML = `Today spend: ${money(b.dailySpentUsd)} / ${money(b.dailyCapUsd)} · Edge V8 Isolate Active`;
-  }).catch(() => {});
+  // "EDGE V8 ISOLATE ACTIVE" WAS ASSERTED BY AN ENDPOINT THAT KNOWS NOTHING
+  // ABOUT THE ISOLATE. /pipeline-budget reads the spend Durable Object; it says
+  // nothing about whether the sandbox binding exists. /live-status DOES compute
+  // `sandboxAvailable` from the real LOADER binding -- and the client was
+  // already fetching it and throwing that field away. So a deployment with no
+  // sandbox, which cannot verify anything and therefore cannot honestly run the
+  // pipeline at all, still reported the isolate "Active".
+  //
+  // And the .catch(() => {}) meant a failed budget fetch left the box reading
+  // "Loading budget invariants…" forever, with nothing logged. Silence again.
+  Promise.all([
+    fetch('/pipeline-budget').then(r => r.json()).catch(() => null),
+    fetch('/live-status').then(r => r.json()).catch(() => null),
+  ]).then(([b, st]) => {
+    const box = $('#budget-summary-box');
+    if (!box) return;
+    if (!b) {
+      box.textContent = 'The budget endpoint did not answer. That is not "no spend" — it is not knowing.';
+      box.style.color = '#fbbf24';
+      return;
+    }
+    // Say what was measured, and say when it was not. `countersRead` is false
+    // when a counter read threw, in which case the figures are fallbacks.
+    const spend = `Today spend: ${money(b.dailySpentUsd)} / ${money(b.dailyCapUsd)}`;
+    let isolate;
+    if (!st) isolate = 'sandbox status unknown (status endpoint did not answer)';
+    else if (st.sandboxAvailable === true) isolate = 'Edge V8 isolate bound';
+    else if (st.sandboxAvailable === false) isolate = 'NO SANDBOX ON THIS DEPLOYMENT — nothing can be verified here';
+    else isolate = 'sandbox status not reported';
+    const caveat = st && st.countersRead === false
+      ? ' · counters unreadable, figures are fallbacks' : '';
+    box.textContent = `${spend} · ${isolate}${caveat}`;
+    if (st && st.sandboxAvailable === false) box.style.color = '#f87171';
+  });
 });
 $('#arch-modal-close')?.addEventListener('click', () => hideAccessibleModal('#arch-drawer-modal'));
 $('#arch-drawer-modal')?.addEventListener('click', (e) => { if (e.target.id === 'arch-drawer-modal') hideAccessibleModal('#arch-drawer-modal'); });
@@ -2862,6 +2951,19 @@ function finishPipelineTelemetry(success, message = null) {
     // marker moved from step 4 to step 5 instead of going away.
     updatePipelineStep(STEP_COUNT + 1);
   } else {
+    // THE FAILURE BRANCH LEFT A STAGE LIT AS STILL RUNNING.
+    //
+    // The success branch above was fixed for exactly this -- a shipped run used
+    // to end with "5. Review" still `.active`, as though it were mid-flight --
+    // and the reasoning in its comment applies identically here. It was not
+    // applied here. So after a refusal or an error the tracker kept one step
+    // glowing indefinitely, which reads as "still working" to anyone who does
+    // not scroll down to the error block.
+    //
+    // A run that ended did not leave a stage running. Clearing the active
+    // marker without marking the remaining steps done is the honest state: it
+    // stopped here, and it did not get further.
+    clearActivePipelineStep();
     const logEl = $('#stage-log');
     if (logEl) {
       const err = document.createElement('div');
@@ -2870,6 +2972,14 @@ function finishPipelineTelemetry(success, message = null) {
       logEl.appendChild(err);
     }
   }
+}
+
+/**
+ * Stop showing any stage as in-progress, without claiming the rest were done.
+ * Used when a run ends early -- refused, errored or stopped.
+ */
+function clearActivePipelineStep() {
+  document.querySelectorAll('.step-item.active').forEach(el => el.classList.remove('active'));
 }
 
 // Live Run Wiring
@@ -3084,10 +3194,31 @@ function stageBlock(log, id, title, extraClass) {
   const div = document.createElement('div');
   div.className = 'stage active' + (extraClass ? ' ' + extraClass : '');
   div.id = id;
-  div.innerHTML = `<h4>${esc(title)}</h4>`;
+  // THE HEADING AND THE BODY ARE SEPARATE NODES NOW, because four callers used
+  // to write `b.innerHTML = ...` straight after this and delete the title they
+  // had just asked for. The two that mattered most were "⏸ Gate 1 — a human
+  // decides" and "⏸ Gate 2 — ship, or refuse" -- the page's central claim,
+  // erased before paint -- and "⚠️ Stage Error: <stage>", which is the only
+  // place the visitor learns WHICH stage failed.
+  //
+  // The recorded replay uses insertAdjacentHTML and kept its titles, so the
+  // recording looked more complete than a live run. That is the wrong way round
+  // for a page whose whole point is watching the real thing happen.
+  div.innerHTML = `<h4>${esc(title)}</h4><div class="stage-body"></div>`;
   log.appendChild(div);
   div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   return div;
+}
+
+/**
+ * Replace a stage block's body, leaving its heading intact.
+ * Falls back to the block itself if the body node is missing, so this can never
+ * silently drop content it was asked to render.
+ */
+function setStageBody(block, html) {
+  const body = block.querySelector('.stage-body');
+  (body || block).innerHTML = html;
+  return body || block;
 }
 
 async function submitGateDecision(decisionUrl, resumeUrl, cardEl, isReject = false, postBody = null) {
@@ -3139,8 +3270,23 @@ async function submitGateDecision(decisionUrl, resumeUrl, cardEl, isReject = fal
     const finalResumeUrl = resumeUrl.includes('?') ? `${resumeUrl}${ticketParam}` : `${resumeUrl}?${ticketParam.slice(1)}`;
     connect(finalResumeUrl);
   } catch (err) {
+    // `innerHTML +=` RE-PARSES THE WHOLE CARD AND DESTROYS ITS LISTENERS.
+    //
+    // Reading innerHTML and writing it back replaces every child node with a
+    // fresh one. The Approve and Reject handlers were attached with
+    // addEventListener on the OLD nodes, so they went with them -- and the line
+    // above had just re-enabled the buttons.
+    //
+    // The visitor was left looking at an error, two enabled buttons, and no way
+    // to act: clicking either did nothing at all, with the run parked at a gate
+    // it could no longer be released from. A dead control that looks live is
+    // worse than a disabled one, because it costs the person several tries
+    // before they conclude the page is broken.
+    //
+    // insertAdjacentHTML appends without touching the existing nodes.
     btns.forEach(b => b.disabled = false);
-    cardEl.innerHTML += `<p style="margin:6px 0 0;color:#f87171;font-size:11.5px">⚠️ ${esc(err.message)}</p>`;
+    cardEl.insertAdjacentHTML('beforeend',
+      `<p style="margin:6px 0 0;color:#f87171;font-size:11.5px">⚠️ ${esc(err.message)}</p>`);
   }
 }
 
@@ -3352,7 +3498,14 @@ function connect(url) {
     // for fail-closed, the fallback pointed the wrong way.
     const autoApprove = ($('#auto-approve-toggle')?.checked ?? false) && premisesHold;
     if (autoApprove) {
-      b.innerHTML = `<h4>📋 Plan Auto-Approved</h4>${groundingHtml}<p style="margin:0;font-size:12px">${esc(willBuild)}</p>`;
+      // This branch used to re-include its own <h4>, because the caller below
+      // was about to delete the one stageBlock made. Now that stageBlock keeps
+      // its heading in a node of its own, re-adding it here would show two.
+      // The heading changes though -- the gate did not happen -- so it is
+      // retitled rather than duplicated.
+      const h = b.querySelector('h4');
+      if (h) h.textContent = '📋 Plan Auto-Approved';
+      setStageBody(b, `${groundingHtml}<p style="margin:0;font-size:12px">${esc(willBuild)}</p>`);
       b.classList.remove('active');
       submitGateDecision(
         `/change-plan-decision?runId=${encodeURIComponent(runId)}&approve=true`,
@@ -3367,7 +3520,7 @@ function connect(url) {
     // marking it as invented. Say we don't know instead.
     const costStr = Number.isFinite(rawCost) ? rawCost.toFixed(4) : null;
 
-    b.innerHTML = `
+    setStageBody(b, `
       <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
         ${groundingHtml}
         ${dryRunFailedHtml}
@@ -3381,7 +3534,7 @@ function connect(url) {
           <button type="button" class="btn-pill btn-reject" style="background:#ef4444;color:#fff;padding:6px 12px">✕ Reject</button>
         </div>
       </div>
-    `;
+    `);
     b.querySelector('.btn-approve')?.addEventListener('click', () => {
       // When grounding says a premise is false the server requires an explicit
       // acknowledgement on top of the approval, and refuses without it. Send it
@@ -3430,16 +3583,69 @@ function connect(url) {
     resetWatchdog();
     updatePipelineStep(4);            // 4. Verify
     const d = safeJson(ev.data);
+
+    // "VERIFICATION DID NOT RUN" IS NOT "VERIFIED".
+    //
+    // changePipeline.ts sends `fatalError` on this event, and its comment says
+    // exactly why: "a sandbox that failed to even load the code is not
+    // '0 failures' -- it's 'verification didn't run'. Found the hard way: an
+    // HTML-wrapped implementation failed to load as a module, and with no check
+    // here that silently read as a clean pass."
+    //
+    // The server fixed that. The client never read the field. simSandbox.ts
+    // returns `{ results: [], fatalError }` on every fatal path, so `t === 0`
+    // and this rendered the bare word "Verified" -- the same defect, one process
+    // boundary away, on the stage the whole thesis rests on.
+    const fatal = d && typeof d.fatalError === 'string' && d.fatalError ? d.fatalError : null;
     let countStr = 'Verified';
-    if (d) {
+    let failedToRun = false;
+    if (fatal) {
+      countStr = 'Verification did not run';
+      failedToRun = true;
+    } else if (d) {
       const p = typeof d.passed === 'number' ? d.passed : (Number(d.regressionPassed || 0) + Number(d.criteriaPassed || 0));
       const t = typeof d.total === 'number' ? d.total : (Number(d.regressionTotal || 0) + Number(d.criteriaTotal || 0));
       if (t > 0) {
         countStr = `Verified ${p}/${t} Invariants`;
+      } else {
+        // No fatalError, but nothing was checked either. Say so rather than
+        // letting an empty result borrow the word "Verified".
+        countStr = 'Verified — but nothing was checked';
+        failedToRun = true;
       }
     }
     const b = stageBlock(log, 's-verify-done', countStr);
     b.classList.remove('active');
+    if (failedToRun) {
+      b.style.borderLeft = '3px solid #f59e0b';
+      b.insertAdjacentHTML('beforeend',
+        `<p style="margin:6px 0 0;font-size:11.5px;color:#fbbf24;line-height:1.5">` +
+        (fatal
+          ? `The sandbox did not complete this run: ${esc(fatal)}. That is not a clean pass — it is an unknown one, and nothing should ship on it.`
+          : `The suite reported no cases at all. That is not a clean pass — it is an unknown one.`) +
+        `</p>`);
+    }
+  });
+
+  // THE READ MIRROR CAN LAG A SHIP, AND THE PAGE SAID NOTHING.
+  //
+  // changePipeline.ts emits a `warning` when a change shipped but the mirror
+  // the page reads from did not update: "The page may show the previous world
+  // until the mirror catches up." src/index.ts forwards every event verbatim.
+  // There was no listener, so the message was discarded and the run rendered
+  // "✓ Shipped — the change is live" — then re-imported /world-source, which is
+  // the stale mirror the warning was about. A visitor looking for their change
+  // and not finding it would conclude the system had lied to them, correctly.
+  es.addEventListener('warning', ev => {
+    if (activeEs !== es) return;
+    resetWatchdog();
+    const d = safeJson(ev.data);
+    const msg = d && typeof d.message === 'string' ? d.message : 'The run reported a warning with no message.';
+    const b = stageBlock(log, 's-warning', '⚠️ Warning');
+    b.classList.remove('active');
+    b.style.borderLeft = '3px solid #f59e0b';
+    b.insertAdjacentHTML('beforeend',
+      `<p style="margin:6px 0 0;font-size:11.5px;color:#fbbf24;line-height:1.5">${esc(msg)}</p>`);
   });
 
   // Human Gate: Cross-Model Review (Atomically awaited)
@@ -3450,6 +3656,67 @@ function connect(url) {
   // first one happening again, and the most interesting moment -- the author
   // reading the review and saying "no, and here is why" -- was computed, paid
   // for, and never shown.
+  // ON A CLEAN RUN, THE CROSS-VENDOR REVIEW WAS INVISIBLE.
+  //
+  // This is the stage the page sells hardest -- a different vendor's model
+  // reading the diff cold -- and it had no listener at all. `reviewing` and
+  // `reviewed` were emitted, carrying the model name, the cost and the findings,
+  // and dropped on the floor. `review-gate` only fires when there ARE material
+  // findings, so a run the reviewer passed showed NOTHING for it: no block, no
+  // reviewer name, no "0 findings", no cost. Step 5 went green anyway, via the
+  // blanket updatePipelineStep at the end.
+  //
+  // So the better the run went, the less evidence the page showed that the most
+  // expensive check in the pipeline had happened. The same was true of
+  // `fixing`/`fixed` -- the in-loop repair the write-up is entirely about.
+  es.addEventListener('reviewing', () => {
+    if (activeEs !== es) return;
+    resetWatchdog();
+    updatePipelineStep(5);
+    stageBlock(log, 's-review', '🔍 Cross-vendor review — a different model reads the diff cold');
+  });
+  es.addEventListener('reviewed', ev => {
+    if (activeEs !== es) return;
+    resetWatchdog();
+    const d = safeJson(ev.data);
+    const findings = d && Array.isArray(d.findings) ? d.findings : [];
+    const material = findings.filter(f => f && f.severity === 'MATERIAL').length;
+    const nits = findings.filter(f => f && f.severity === 'NIT').length;
+    const model = d && d.model ? String(d.model) : 'the reviewer';
+    const cost = d && typeof d.costUsd === 'number' ? ` · $${d.costUsd.toFixed(4)}` : '';
+    const verdict = material === 0
+      ? (nits === 0 ? 'found nothing' : `found ${nits} nit${nits === 1 ? '' : 's'}, nothing material`)
+      : `found ${material} material issue${material === 1 ? '' : 's'}`;
+    const b = stageBlock(log, 's-review-done', `🔍 ${esc(model)} ${verdict}${cost}`);
+    b.classList.remove('active');
+  });
+  es.addEventListener('fixing', () => {
+    if (activeEs !== es) return;
+    resetWatchdog();
+    stageBlock(log, 's-fixing', '🔧 Fixing what the review found');
+  });
+  es.addEventListener('fixed', ev => {
+    if (activeEs !== es) return;
+    resetWatchdog();
+    const d = safeJson(ev.data);
+    const b = stageBlock(log, 's-fixed', '🔧 Fix applied — re-verifying');
+    b.classList.remove('active');
+    if (d && d.costUsd) {
+      b.insertAdjacentHTML('beforeend',
+        `<p style="margin:4px 0 0;font-size:11px;color:var(--text-muted)">$${Number(d.costUsd).toFixed(4)}</p>`);
+    }
+  });
+  // A STOPPED RUN LEFT THE PAGE HANGING FOR SIXTY SECONDS. `stopped` is emitted
+  // from seven places and had no listener, so the only thing that eventually
+  // told the visitor anything was the watchdog reporting a timeout — which is a
+  // different and wrong explanation for what happened.
+  es.addEventListener('stopped', () => {
+    if (activeEs !== es) return;
+    const b = stageBlock(log, 's-stopped', '⏹ Stopped — this run was cancelled');
+    b.classList.remove('active');
+    finishPipelineTelemetry(false, 'stopped');
+  });
+
   es.addEventListener('review-assessed', ev => {
     if (activeEs !== es) return;
     resetWatchdog();
@@ -3516,7 +3783,7 @@ function connect(url) {
 
     const reviewerName = d?.reviewerModel || 'OpenAI Codex (gpt-5.3-codex)';
     const mat = (d.materialFindings && d.materialFindings.length) ? d.materialFindings.join('; ') : 'No material defects found';
-    b.innerHTML = `
+    setStageBody(b, `
       <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
         <p style="margin:0 0 6px"><strong>Reviewer:</strong> ${esc(reviewerName)}</p>
         <p style="margin:0 0 8px"><strong>Findings:</strong> ${esc(mat)}</p>
@@ -3525,7 +3792,7 @@ function connect(url) {
           <button type="button" class="btn-pill btn-reject" style="background:#ef4444;color:#fff;padding:6px 12px">✕ Reject</button>
         </div>
       </div>
-    `;
+    `);
     b.querySelector('.btn-approve')?.addEventListener('click', () => {
       submitGateDecision(
         `/change-review-decision?runId=${encodeURIComponent(runId)}&approve=true`,
@@ -3550,7 +3817,7 @@ function connect(url) {
     if (!d) return;
     const runId = d.runId || currentRunId;
     const b = stageBlock(log, 's-stage-error', `⚠️ Stage Error: ${esc(d.erroredAtStage)}`);
-    b.innerHTML = `
+    setStageBody(b, `
       <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
         <p style="margin:0 0 6px;color:#f87171">${esc(d.errorMessage)}</p>
         <div style="display:flex;gap:8px;margin-top:6px">
@@ -3558,7 +3825,7 @@ function connect(url) {
           <button type="button" class="btn-pill btn-abandon" style="background:#64748b;color:#fff;padding:6px 12px">🛑 Abandon</button>
         </div>
       </div>
-    `;
+    `);
     b.querySelector('.btn-retry')?.addEventListener('click', () => {
       submitGateDecision(
         `/change-error-decision?runId=${encodeURIComponent(runId)}&approve=true`,
@@ -3583,15 +3850,15 @@ function connect(url) {
     if (!d) return;
     const runId = d.runId || currentRunId;
     const b = stageBlock(log, 's-question', '💬 Clarification Requested');
-    b.innerHTML = `
+    setStageBody(b, `
       <div style="font-size:12.5px;color:#e2e8f0;line-height:1.4">
         <p style="margin:0 0 8px;font-weight:600">${esc(d.question || 'Please specify details for construction:')}</p>
         <div style="display:flex;gap:8px;margin-top:6px">
-          <input type="text" id="gate-question-input" class="mono" style="flex:1;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:6px 10px;color:#fff;font-size:12px" placeholder="e.g. outdoors by the promenade">
+          <input type="text" id="gate-question-input" class="mono" aria-label="Your answer to the pipeline's question" style="flex:1;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:6px 10px;color:#fff;font-size:12px" placeholder="e.g. outdoors by the promenade">
           <button type="button" class="btn-pill btn-reply" style="background:var(--emerald);color:#fff;padding:6px 14px;font-weight:700">Submit</button>
         </div>
       </div>
-    `;
+    `);
     const doReply = () => {
       const val = b.querySelector('#gate-question-input')?.value.trim();
       if (!val) return;

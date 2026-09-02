@@ -19,6 +19,12 @@ const PANEL_SELECTORS: Record<string, string> = {
   streetHud: "#street-level-hud",
   inspectCard: "#parcel-inspect-card",
   statusCard: "#floating-status-card",
+  // OMITTED, AND THE PAIR IT WOULD HAVE CAUGHT SHIPPED. The welcome card and
+  // the status card were anchored to the same `--topbar-bottom + 10px` on
+  // mobile, both full width, both visible on load -- so the status card covered
+  // the first thing a visitor reads. This suite could not see it, because the
+  // most important panel on the page was not in the list.
+  welcomeCard: "#welcome-mission-card",
   dock: "#director-dock",
 };
 
@@ -68,12 +74,26 @@ test("guardrail: the overlap check actually fires on a planted collision, not ju
   expect(findOverlaps({ a, c: cClear })).toEqual([]);
 });
 
+// THIS USED TO CLOSE THE PANEL IT WAS SUPPOSED TO BE TESTING.
+//
+// It clicked every element whose text is "✕", which includes the welcome card's
+// own close button. So the card was gone before a single assertion ran, and the
+// suite could not have caught it overlapping anything -- a check that removes
+// its own subject and then reports no problem.
+//
+// Panels under test are exempt now. Everything else still gets dismissed,
+// because the point of this helper is to clear incidental overlays, not to
+// clear the thing being measured.
+const KEEP_OPEN = new Set(["welcome-close-btn"]);
+
 async function dismissOverlays(page: Page) {
-  await page.evaluate(() => {
+  await page.evaluate((keep) => {
     document.querySelectorAll("*").forEach((el) => {
+      if (keep.includes(el.id)) return;
+      if (el.closest("#welcome-mission-card")) return;
       if (el.textContent && el.textContent.trim() === "✕") (el as HTMLElement).click();
     });
-  });
+  }, [...KEEP_OPEN]);
 }
 
 // The district/NPC inspect card and the pipeline status card are both

@@ -65,26 +65,26 @@ claim is that it only says yes when yes is true.
 
 | # | Finding | Sev | Status |
 |---|---------|-----|--------|
-| C1 | The world is 26 km. The page says 40 km twice and 31 km once. | HIGH | OPEN |
-| C2 | `WORLDKM()` returns a hardcoded 40 — a literal wearing a function call's costume | HIGH | OPEN |
-| C3 | Hardcoded 57 settlements (real 54) and 31,000 buildings (unreachable — max is 19,481, one per plot). These stand as the final answer on the no-WebGL path. | HIGH | OPEN |
-| C4 | "379 Node tests" — real number 416. Third consecutive staleness of a sentence that boasts about not going stale. | HIGH | OPEN |
-| C5 | Architecture modal describes a four-stage pipeline with "Solve" and "Mutate" stages that do not exist, and omits Verify and Review — the two the thesis rests on | HIGH | OPEN |
-| C6 | `verified` renders the bare word "Verified" when `fatalError` means verification did not run — the exact defect the server fixed, moved to the client | HIGH | OPEN |
-| C7 | The `warning` event ("shipped, but the read mirror did not update") has no client listener — renders as "✓ Shipped — the change is live" | HIGH | OPEN |
-| C8 | On a clean run the cross-vendor review is invisible: `reviewing`/`reviewed`/`fixing`/`fixed`/`stopped` have no listeners | HIGH | OPEN |
-| C9 | No-WebGL path leaves the opaque "BUILDING THE CITY" panel over the viewport permanently | HIGH | OPEN |
-| C10 | `city.html` context-loss handler writes into `#load`, which is unconditionally removed at boot — the black canvas it exists to explain still happens | HIGH | OPEN |
-| C11 | All four live gate cards `innerHTML`-overwrite their own heading before paint; the replay keeps its titles, so the recording looks more complete than a real run | HIGH | OPEN |
-| C12 | A failed gate decision uses `innerHTML +=`, re-parsing the card and destroying the Approve/Reject listeners — enabled buttons that do nothing | HIGH | OPEN |
-| C13 | "Edge V8 Isolate Active" asserted from `/pipeline-budget`, which says nothing about the sandbox; `/live-status` computes `sandboxAvailable` and the client discards it | MED | OPEN |
+| C1 | The world is 26 km. The page says 40 km twice and 31 km once. | HIGH | **FIXED** |
+| C2 | `WORLDKM()` returns a hardcoded 40 — a literal wearing a function call's costume | HIGH | **FIXED** |
+| C3 | Hardcoded 57 settlements (real 54) and 31,000 buildings (unreachable — max is 19,481, one per plot). These stand as the final answer on the no-WebGL path. | HIGH | **FIXED** |
+| C4 | "379 Node tests" — real number 416. Third consecutive staleness of a sentence that boasts about not going stale. | HIGH | **FIXED** |
+| C5 | Architecture modal describes a four-stage pipeline with "Solve" and "Mutate" stages that do not exist, and omits Verify and Review — the two the thesis rests on | HIGH | **FIXED** |
+| C6 | `verified` renders the bare word "Verified" when `fatalError` means verification did not run — the exact defect the server fixed, moved to the client | HIGH | **FIXED** |
+| C7 | The `warning` event ("shipped, but the read mirror did not update") has no client listener — renders as "✓ Shipped — the change is live" | HIGH | **FIXED** |
+| C8 | On a clean run the cross-vendor review is invisible: `reviewing`/`reviewed`/`fixing`/`fixed`/`stopped` have no listeners | HIGH | **FIXED** |
+| C9 | No-WebGL path leaves the opaque "BUILDING THE CITY" panel over the viewport permanently | HIGH | **FIXED** |
+| C10 | `city.html` context-loss handler writes into `#load`, which is unconditionally removed at boot — the black canvas it exists to explain still happens | HIGH | **FIXED** |
+| C11 | All four live gate cards `innerHTML`-overwrite their own heading before paint; the replay keeps its titles, so the recording looks more complete than a real run | HIGH | **FIXED** |
+| C12 | A failed gate decision uses `innerHTML +=`, re-parsing the card and destroying the Approve/Reject listeners — enabled buttons that do nothing | HIGH | **FIXED** |
+| C13 | "Edge V8 Isolate Active" asserted from `/pipeline-budget`, which says nothing about the sandbox; `/live-status` computes `sandboxAvailable` and the client discards it | MED | **FIXED** |
 | C14 | Stage tracker off by one during grounding; start/end semantics mixed across handlers | MED | OPEN |
-| C15 | A refused run leaves a stage lit as still running | MED | OPEN |
-| C16 | Mobile: status card lands exactly on the welcome card; the overlap suite cannot catch it (selector omitted + `dismissOverlays` closes it first) | MED | OPEN |
-| C17 | `city.html`: `#tip` and `#home` pinned to the same corner | MED | OPEN |
-| C18 | `city.html`: `#livequarter` has no position rule — renders over `#hud` | MED | OPEN |
-| C19 | The three most important text inputs have no accessible name | MED | OPEN |
-| C20 | Pipeline stage state is colour-only with no live region | MED | OPEN |
+| C15 | A refused run leaves a stage lit as still running | MED | **FIXED** |
+| C16 | Mobile: status card lands exactly on the welcome card; the overlap suite cannot catch it (selector omitted + `dismissOverlays` closes it first) | MED | **FIXED** |
+| C17 | `city.html`: `#tip` and `#home` pinned to the same corner | MED | **FIXED** |
+| C18 | `city.html`: `#livequarter` has no position rule — renders over `#hud` | MED | **FIXED** |
+| C19 | The three most important text inputs have no accessible name | MED | **FIXED** |
+| C20 | Pipeline stage state is colour-only with no live region | MED | **FIXED** |
 | C21 | Dead tour-mode selector; `#grid-cell-coords` at `z-index:900` draws over modals | LOW | OPEN |
 | C22 | Three variables assigned and never read | LOW | OPEN |
 | C23 | `#city-build-notes` is a `<div>` inside a `<span>`, mid-sentence | LOW | OPEN |
