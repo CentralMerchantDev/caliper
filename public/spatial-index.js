@@ -20,7 +20,7 @@
 // The plan already carries the hierarchy: every plot has a blockId, districtId
 // and settlement. What was missing was the reverse -- point to plot -- because
 // nothing had built an index over the world's plots. A linear scan is one
-// comparison per plot per query -- 16,541 of them -- and the renderer would do
+// comparison per plot per query -- 19,481 of them -- and the renderer would do
 // that on every mouse move.
 //
 // So: a uniform grid. Plots are small relative to the world, so bucketing them

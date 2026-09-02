@@ -82,29 +82,38 @@ import { FEATURES } from "./features.js";
 // farms, and a tower district became a resort. Guessing thresholds for a field
 // whose distribution you have not looked at is how that happens.
 //
-// RE-MEASURED. The figures below were taken before several later changes to the
-// generator (little streets, character-derived spacing, the airport footprint)
-// and every percentile had drifted 8-67% high against a plot count that no
-// longer existed. Measured now, across the 16,541 plots actually built on:
+// RE-MEASURED, TWICE, AND THE SECOND TIME IS WHY THIS PARAGRAPH IS WORDED LIKE
+// THIS. The first set of figures was taken before several later changes to the
+// generator and every percentile had drifted 8-67% high against a plot count
+// that no longer existed. They were corrected. Then unifying DEMAND_FOR with
+// these bands (finding 3.6) moved the plot count again, 16,541 -> 19,481, and
+// the corrected figures went stale in the same commit that corrected them.
 //
-//     p40 0.137   p50 0.191   p60 0.255   p75 0.445
-//     p85 0.536   p92 0.613   p97 0.723   p99.5 0.882
+// So the lesson is not "re-measure" -- it is that a comment quoting a measured
+// number is a claim with an expiry date, and any change to what the generator
+// builds expires it. Measured against the CURRENT world, 19,481 built plots:
 //
-// The bands below were calibrated against the OLD distribution, so they now sit
-// lower in the current one than the percentages claimed. That is recorded rather
-// than silently re-tuned: re-fitting them changes the look of the whole city and
-// is a decision, not a correction.
+//     p40 0.137   p50 0.188   p60 0.232   p75 0.382
+//     p85 0.492   p92 0.575   p97 0.702   p99.5 0.869
+//
+// The bands below were calibrated against an EARLIER distribution, so they sit
+// slightly lower in the current one than the percentages once claimed. Recorded
+// rather than silently re-tuned: re-fitting them changes the look of the whole
+// city and is a decision, not a correction.
 //
 // So these bands are set from percentiles, to give the shape a real city has --
 // a small dense core, a broad middle, and a low-rise majority:
 //
-//     intended:  TOWER top ~1%   MIDRISE ~10%   TERRACE ~35%   TOWNHOUSE ~70%
-//     actual now: TOWER    1.4%   MIDRISE  12.4%  TERRACE  40.6%  TOWNHOUSE 74.5%
+//     intended:   TOWER top ~1%   MIDRISE ~10%   TERRACE ~35%   TOWNHOUSE ~70%
+//     actual now: TOWER    1.2%   MIDRISE  9.0%  TERRACE  38.0%  TOWNHOUSE 75.5%
 //
-// Note the bottom 40% of built ground sits at essentially zero demand. That is
-// the outer coast and the islands, and it is why the lowest band has to be near
-// zero: set it at 0.08 and every genuine village outside the bay reads as
-// farmland.
+// Which is close enough to the intent to leave alone, and measured rather than
+// asserted either way.
+//
+// Note the bottom 14.7% of built ground sits at essentially zero demand (below
+// 0.01). That is the outer coast and the islands, and it is why the lowest band
+// has to be near zero: set it at 0.08 and every genuine village outside the bay
+// reads as farmland.
 export const DENSITY_BANDS = [
   { above: 0.80, cls: "TOWER" },
   { above: 0.56, cls: "MIDRISE" },

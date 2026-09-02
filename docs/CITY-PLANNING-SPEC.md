@@ -516,7 +516,7 @@ was measured against it.
 **One honest note on the zoning.** The first version of those rules was *worse*
 than the hand-typed values it replaced: invented thresholds turned towns into
 farms and an island tower district into a resort. They were re-derived from the
-measured demand distribution across the 18,775 built plots. A rule only beats a
+measured demand distribution across the 19,481 built plots. A rule only beats a
 guess once it has been calibrated against something real — which is the same
 lesson as everything else in this document.
 
