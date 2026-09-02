@@ -686,6 +686,75 @@ async function runRetrospectiveAndRecord(
  * checks once for that decision and either continues from exactly there or
  * halts again, unchanged. Never polls, never times out into proceeding.
  */
+/**
+ * THE DECISION A REVIEW ROUND MAKES, AS A PURE FUNCTION.
+ *
+ * This lived inline in the loop, which is why the loop had no test: an audit
+ * deleted the oscillation guard, the round cap, the fix-attempt cap and the
+ * unresolved-blocks-ship check one at a time, and all 380 tests stayed green.
+ * A decision that cannot be called cannot be checked.
+ *
+ * IT ALSO HAD A HOLE, AND IT WAS THE BIGGEST DEFECT IN THE PROJECT.
+ *
+ * The old code filtered every finding the AUTHOR had declared invalid out of the
+ * reviewer's later output, before the clean check and before the oscillation
+ * guard:
+ *
+ *     .filter((t) => !acceptedByDesign.some((a) => a.startsWith(t)))
+ *
+ * The comment said "anything the author already justified in writing is not
+ * re-fought". The effect was that the reviewer became structurally incapable of
+ * re-raising it. An audit drove the real pipeline: the reviewer raised the same
+ * MATERIAL finding in rounds 1 and 2, the author returned `valid: false`, and the
+ * run SHIPPED with `unresolved: 0` and no fix ever applied.
+ *
+ * That falsified the headline claim. The round-cap branch in the loop states the
+ * intent correctly -- "the disagreement has to survive one more review to count"
+ * -- and the filter is precisely what stopped it surviving.
+ *
+ * So the overrule is still allowed, and it still gets its chance: the reviewer is
+ * SHOWN the justification (it is passed in as acceptedByDesign). If it accepts,
+ * the finding does not come back and the run is clean. If it raises the same
+ * finding again having been told why the author disagrees, that is the reviewer
+ * rejecting the justification, and it counts. Two models disagreeing after both
+ * have been heard is exactly what a human gate is for.
+ */
+export type ReviewRoundVerdict =
+  | { kind: "clean"; nextMaterial: string[]; contested: string[]; unresolved: string[]; key: string }
+  | { kind: "overrule-rejected"; nextMaterial: string[]; contested: string[]; unresolved: string[]; key: string }
+  | { kind: "oscillating"; nextMaterial: string[]; contested: string[]; unresolved: string[]; key: string }
+  | { kind: "continue"; nextMaterial: string[]; contested: string[]; unresolved: string[]; key: string };
+
+export function assessReviewRound(
+  findings: { severity: string; text: string }[],
+  acceptedByDesign: string[],
+  previousMaterialKey: string | null,
+): ReviewRoundVerdict {
+  const allMaterial = findings.filter((f) => f.severity === "MATERIAL").map((f) => f.text);
+  const wasOverruled = (t: string) => acceptedByDesign.some((a) => a.startsWith(t));
+
+  // Split rather than filter. The contested set is not noise to be dropped, it
+  // is the disagreement, and dropping it is what let a run ship with the
+  // reviewer still objecting.
+  const contested = allMaterial.filter(wasOverruled);
+  const nextMaterial = allMaterial.filter((t) => !wasOverruled(t));
+
+  // The key includes the contested findings, so an argument that is purely about
+  // an overrule can still be detected as oscillation rather than looping unseen.
+  const key = allMaterial.slice().sort().join("|");
+
+  if (nextMaterial.length === 0 && contested.length === 0) {
+    return { kind: "clean", nextMaterial, contested, unresolved: [], key };
+  }
+  if (nextMaterial.length === 0) {
+    return { kind: "overrule-rejected", nextMaterial, contested, unresolved: contested, key };
+  }
+  if (key === previousMaterialKey) {
+    return { kind: "oscillating", nextMaterial, contested, unresolved: nextMaterial.concat(contested), key };
+  }
+  return { kind: "continue", nextMaterial, contested, unresolved: [], key };
+}
+
 export async function runChangePipeline(env: ChangeEnv, runId: string, changeRequest: string, onEvent: (e: ChangeEvent) => void, leaseToken?: string | null): Promise<ChangeRecord> {
   const existing = await loadState(env.SPEND_KV, runId);
   const budget: CallBudget = {
@@ -1299,6 +1368,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
    *  the run must REFUSE -- it cannot say the reviewer was satisfied. */
   let reviewUnresolved: string[] = [];
   /** The same findings came back twice: the two models are arguing. */
+  let reviewOverruleRejected = false;
   let reviewOscillated = false;
   let reviewAssessments: ReviewAssessment[] = [];
   /** Promises the plan made that the final QA pass found unmet. Empty on pass. */
@@ -1408,6 +1478,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       const acceptedByDesign: string[] = [];
       const assessments: ReviewAssessment[] = [];
       let unresolved: string[] = [];
+      let overruleRejected = false;
       let oscillated = false;
 
       while (true) {
@@ -1569,28 +1640,28 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         findings = parseFindings(reReview.text);
         onEvent({ type: "reviewed", model: reReview.model, inputTokens: reReview.inputTokens, outputTokens: reReview.outputTokens, costUsd: reReview.costUsd, wallTimeMs: reReview.wallTimeMs, reviewText: reReview.text, findings });
 
-        const nextMaterial = findings
-          .filter((f) => f.severity === "MATERIAL")
-          .map((f) => f.text)
-          // Anything the author already justified in writing is not re-fought.
-          .filter((t) => !acceptedByDesign.some((a) => a.startsWith(t)));
+        const verdict = assessReviewRound(findings, acceptedByDesign, previousMaterialKey);
+        const nextMaterial = verdict.nextMaterial;
 
-        if (nextMaterial.length === 0) {
+        if (verdict.kind === "clean") {
           unresolved = [];
           break;                                   // VERDICT: CLEAN
         }
-
-        // ---- OSCILLATION GUARD ----
-        // The same material set coming back means the reviewer and the author
-        // are arguing, not converging. Another round spends money to hear the
-        // same thing. Stop, and say that is what happened.
-        const key = nextMaterial.slice().sort().join("|");
-        if (key === previousMaterialKey) {
-          oscillated = true;
-          unresolved = nextMaterial;
+        if (verdict.kind === "overrule-rejected") {
+          // The author overruled, the reviewer was SHOWN that justification, and
+          // raised the finding anyway. That is the disagreement surviving a
+          // review, which is the exact condition the round-cap branch above says
+          // must count. It does not ship.
+          overruleRejected = true;
+          unresolved = verdict.contested;
           break;
         }
-        previousMaterialKey = key;
+        if (verdict.kind === "oscillating") {
+          oscillated = true;
+          unresolved = verdict.unresolved;
+          break;
+        }
+        previousMaterialKey = verdict.key;
         for (const m of nextMaterial) if (!allMaterialSeen.includes(m)) allMaterialSeen.push(m);
         material.length = 0;
         material.push(...nextMaterial);
@@ -1599,6 +1670,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
       reviewRounds = round;
       reviewUnresolved = unresolved;
       reviewOscillated = oscillated;
+      reviewOverruleRejected = overruleRejected;
       reviewAssessments = assessments;
     }
   }
@@ -1821,7 +1893,9 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     env, budget, stageCosts,
     `Change request: ${changeRequest}\nPlan: ${plan.willBuild}\n` +
       `Reviewer found ${allMaterialSeen.length} material issue(s) across ${Math.max(1, reviewRounds)} round(s): ${allMaterialSeen.join("; ") || "none"}\n` +
-      `Review rounds: ${reviewRounds}. Unresolved after the loop: ${reviewUnresolved.length}${reviewOscillated ? " (oscillated -- the same findings recurred)" : ""}.\n` +
+      `Review rounds: ${reviewRounds}. Unresolved after the loop: ${reviewUnresolved.length}` +
+      `${reviewOscillated ? " (oscillated -- the same findings recurred)" : ""}` +
+      `${reviewOverruleRejected ? " (the author overruled a finding and the reviewer, shown that justification, raised it again)" : ""}.\n` +
       // The author's own judgement of the review is part of what there is to
       // learn from. A run where the author repeatedly overruled the reviewer
       // and was right teaches something different from one where it deferred
