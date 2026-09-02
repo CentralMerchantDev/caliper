@@ -242,3 +242,84 @@ function computePlacements(heightAt) {
 
   return { sites, report };
 }
+
+// =============================================================================
+// THE FOOTPRINT, AS A RECTANGLE THE WORLD REGISTRY CAN RESERVE
+//
+// placeFeatures() answers WHERE a feature is; this answers how much ground
+// that costs. Both are needed to fix "the stadium has houses in it" -- the
+// site alone is a point, and reserving a point reserves nothing.
+//
+// This has to switch on `need.kind` because the four search functions in
+// land-use.js return four different shapes. `site` and `flattest` hand back a
+// centre point and already carry `w`/`d` on the manifest, so the footprint is
+// a rectangle around that centre. `quay` and `corridor` do not have a `w`/`d`
+// to read -- a quay is a run of shoreline, a corridor is a line -- so their
+// footprint is derived from what the search itself measured (`length`,
+// `from`/`to`) plus one committed width, documented at its own constant below.
+// =============================================================================
+
+/**
+ * How far inland of the quay edge is reserved as port ground -- the stack
+ * yard and crane apron a container terminal needs behind its berth. There is
+ * no separate manifest field for this, so it borrows `need.reach`: the same
+ * distance the quay search already uses to look for deep water is, on the
+ * land side, a reasonable stand-in for how far back the port's own ground
+ * extends. Both describe "how far this feature's business reaches from the
+ * water's edge."
+ */
+const PORT_INLAND_DEFAULT = 180;
+
+/**
+ * Half-width of the ground a railway corridor holds for itself -- formation,
+ * ballast shoulder and the embankment or cutting batter on each side. Real
+ * standard-gauge right-of-way is narrower than this; RAIL_ALIGNMENT already
+ * budgets up to 30 m of embankment/cutting depth (`maxDev`) to hold its
+ * gradient, and a cutting that deep needs roughly as much again in batter
+ * width, so 30 m half-width is the conservative reservation, not the visual
+ * track width city-render.js draws.
+ */
+export const RAIL_CORRIDOR_HALF_WIDTH = 30;
+
+/**
+ * The footprint(s) a resolved site occupies, in world metres.
+ *
+ * @param {typeof FEATURES[number]} feature
+ * @param {object} site  `sites[feature.id]` from placeFeatures()
+ * @returns {Array<{xMin:number,xMax:number,zMin:number,zMax:number}>}
+ *          Almost always one rectangle. An empty array means "this feature's
+ *          site shape is not one this function knows how to bound" -- it is
+ *          never silently zero-sized, which would reserve nothing and look
+ *          exactly like success.
+ */
+export function footprintOf(feature, site) {
+  const n = feature.need || {};
+
+  if (n.kind === "site" || n.kind === "flattest") {
+    const hw = n.w / 2, hd = n.d / 2;
+    return [{ xMin: site.x - hw, xMax: site.x + hw, zMin: site.z - hd, zMax: site.z + hd }];
+  }
+
+  if (n.kind === "quay") {
+    const hl = n.length / 2;
+    const inland = n.reach || PORT_INLAND_DEFAULT;
+    if (site.along === "ew") {
+      const zLo = site.landSide > 0 ? site.z : site.z - inland;
+      const zHi = site.landSide > 0 ? site.z + inland : site.z;
+      return [{ xMin: site.x - hl, xMax: site.x + hl, zMin: zLo, zMax: zHi }];
+    }
+    const xLo = site.landSide > 0 ? site.x : site.x - inland;
+    const xHi = site.landSide > 0 ? site.x + inland : site.x;
+    return [{ xMin: xLo, xMax: xHi, zMin: site.z - hl, zMax: site.z + hl }];
+  }
+
+  if (n.kind === "corridor") {
+    const hw = RAIL_CORRIDOR_HALF_WIDTH;
+    if (site.axis === "ew") {
+      return [{ xMin: site.from, xMax: site.to, zMin: site.at - hw, zMax: site.at + hw }];
+    }
+    return [{ xMin: site.at - hw, xMax: site.at + hw, zMin: site.from, zMax: site.to }];
+  }
+
+  return [];
+}
