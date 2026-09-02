@@ -11,9 +11,15 @@
 // ground takes one number. The buildings keep their real size; the land they
 // stand on gets smaller, so the same city covers far more of it.
 //
-//   settled share = 13.5% / WORLD_SCALE^2
+//   settled share ~= 13.5% / WORLD_SCALE^2, as an upper bound
 //
 //   0.65 -> 32.0%    0.60 -> 37.5%    0.55 -> 44.6%    0.50 -> 54.0%
+//
+// MEASURED at 0.65: 29.2%, not 32.0%. The formula assumes settlements keep their
+// full area when the land shrinks, and they do not -- fitSettlements grows them
+// against real ground, so some are stopped by water, cliff or a neighbour before
+// they reach the size the arithmetic assumes. Treat the table as the ceiling the
+// scale makes available, not the outcome.
 //
 // -----------------------------------------------------------------------------
 // WHY THE SCALE IS UNIFORM, AND NOT JUST HORIZONTAL

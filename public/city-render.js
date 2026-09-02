@@ -15,17 +15,17 @@
 import { Sky } from "./vendor/three/addons/objects/Sky.js";
 import { RoundedBoxGeometry } from "./vendor/three/addons/geometries/RoundedBoxGeometry.js";
 import {
-  WORLD, ROADS, HIGHWAYS, BRIDGES, MARINA, PIER, BOARDWALK, SETTLEMENTS, PLOT_CLASSES,
+  WORLD, ROADS, BRIDGES, MARINA, PIER, BOARDWALK, SETTLEMENTS, PLOT_CLASSES,
   generateWorld, generateCityPlan, landmassPolygons, offsetPolygon,
 } from "./city-plan.js";
-import { LandField, makeHeightAt, groundColor, fbm, cliffiness, SNOW_LINE, TREE_LINE, WATERWAYS, waterwaySurface } from "./terrain.js";
+import { LandField, makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, WATERWAYS, waterwaySurface } from "./terrain.js";
 import { assessFootprint } from "./footprint.js";
 // `sm` is already used as a local variable in this file (a THREE.Mesh), so the
 // world-scale helper is imported under a name that cannot be shadowed.
 import { sm as wm } from "./world-scale.js";
-import { placeFeatures } from "./features.js";
+import { placeFeatures, FEATURES } from "./features.js";
 import { gradeRun, GRADE, ROAD_GRADE } from "./grade.js";
-import { createCollector, emitBuilding, HEIGHT, WALLS, ROOFS, rnd, pick } from "./buildings.js";
+import { createCollector, emitBuilding, HEIGHT, rnd } from "./buildings.js";
 
 // -----------------------------------------------------------------------------
 // Tunables. Collected here because these are the numbers that get argued about.
@@ -1379,7 +1379,9 @@ function buildProps(api) {
     // an offset from it in BUILT metres. The internal layout of an airport does
     // not shrink because the island did: two runways are 600 m apart because
     // that is the separation independent parallel approaches need.
-    const AP_W = 3600, AP_D = 1200;
+    // Read from the manifest so the platform drawn is the platform that was vetted.
+    const _apSpec = FEATURES.find((f) => f.id === "airport").need;
+    const AP_W = _apSpec.w, AP_D = _apSpec.d;
     const apSite = SITE.airport;
     if (!apSite) break airport;   // nowhere to grade a platform: build no airport
     const AX = apSite.x, AZ = apSite.z;

@@ -67,7 +67,8 @@
 // without building a world.
 // =============================================================================
 
-import { classifyAt, USE, slopeAt } from "./land-use.js";
+import { classifyAt, USE } from "./land-use.js";
+import { FEATURES } from "./features.js";
 
 /**
  * Thresholds on the demand field, which already encodes distance to the core,
@@ -132,6 +133,13 @@ export const CHARACTER_SPACING = {
   HANGAR:    { av: 460, st: 340 },
 };
 
+/**
+ * The airport footprint, imported from the manifest rather than restated.
+ * Kept as a named fallback so zoning still works if a caller passes a site
+ * object without dimensions.
+ */
+const AIRPORT_FOOTPRINT = (FEATURES.find((f) => f.id === "airport") || { need: { w: 3500, d: 1000 } }).need;
+
 /** How far the working land behind a quay reaches inland, in metres. */
 export const PORT_BACKUP_DEPTH = 550;   // PIANC-derived median; spec §2.2
 
@@ -150,18 +158,43 @@ export function makeZoning({ heightAt, demandAt, sites = {} }) {
   const airport = sites.airport || null;
   const rail = sites.railway || null;
 
+  // A MISSING ANCHOR SILENTLY REMOVED A WHOLE LAND USE.
+  //
+  // distToPort returns Infinity when there is no port, so the WAREHOUSE and
+  // rail-industry branches simply never fire and the world comes out with no
+  // industrial zone anywhere -- and nothing anywhere says so. Verified at
+  // WORLD_SCALE = 0.4, where the port becomes unplaceable: every warehouse zone
+  // disappeared and the build reported success.
+  //
+  // Industry is anchored to infrastructure by design, so losing the anchor
+  // losing the zone is correct behaviour. Losing it SILENTLY is not. The
+  // absence is recorded and surfaced on the world object.
+  const missingAnchors = [];
+  if (!port) missingAnchors.push("containerPort");
+  if (!airport) missingAnchors.push("airport");
+  if (!rail) missingAnchors.push("railway");
+
   /** Metres from the working port, or Infinity if there is no port. */
   const distToPort = (x, z) => (port ? Math.hypot(x - port.x, z - port.z) : Infinity);
 
-  return function zoneAt(x, z) {
+  const zoneAt = function zoneAt(x, z) {
     // ---- 1. SPECIAL-PURPOSE LAND, which outranks everything ----
     //
     // An airport is not a dense district that happens to be near a runway. It is
     // a use that excludes all others inside its fence, and it is derived from
     // the platform that was actually graded, not from a remembered coordinate.
     if (airport) {
+      // ONE DECLARATION OF THE FENCE.
+      //
+      // This was `dx < 2200 && dz < 900` while features.js declared the
+      // footprint as 3500 x 1000 -- the same object described by two different
+      // pairs of numbers in two files, with nothing to keep them in step. The
+      // fence is derived from the manifest footprint now, widened a little
+      // because the operational area extends past the graded platform.
       const dx = Math.abs(x - airport.x), dz = Math.abs(z - airport.z);
-      if (dx < 2200 && dz < 900) return "HANGAR";
+      const fw = (airport.w ?? AIRPORT_FOOTPRINT.w) / 2 + 400;
+      const fd = (airport.d ?? AIRPORT_FOOTPRINT.d) / 2 + 300;
+      if (dx < fw && dz < fd) return "HANGAR";
     }
 
     // ---- 2. THE PORT, AND THE LAND THAT SERVES IT ----
@@ -234,6 +267,11 @@ export function makeZoning({ heightAt, demandAt, sites = {} }) {
     }
     return band;
   };
+
+  // What the caller needs to know about the answers it is about to get.
+  zoneAt.missingAnchors = missingAnchors;
+  zoneAt.hasIndustry = !!port;
+  return zoneAt;
 }
 
 /**

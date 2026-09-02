@@ -23,7 +23,7 @@
 
 import { fbm, hash01, clamp, smoother } from "./noise.js";
 import { WORLD_SCALE, sm, sPoint, sFields, sBounds } from "./world-scale.js";
-import { roadAllowedAt, buildAllowedAt, driveableRun, slopeAt, SLOPE, makeDemand } from "./land-use.js";
+import { roadAllowedAt, makeDemand } from "./land-use.js";
 import { fitSettlements } from "./settlement-fit.js";
 import { makeZoning, zoneCharacter, CHARACTER_SPACING } from "./zoning.js";
 import { placeFeatures } from "./features.js";
@@ -36,7 +36,11 @@ import { placeFeatures } from "./features.js";
 // now larger than that entire previous world.
 // -----------------------------------------------------------------------------
 export const WORLD = {
-  SIZE: 40000,         // 40 km square. The previous 9.6 km world was smaller
+  // SCALES WITH THE WORLD, because it is a landform extent.
+  // This was a bare 40000 that stayed 40 km however small the world became, so
+  // the renderer's outer terrain mesh, the scatter regions bounded by it and the
+  // page copy quoting it all described a world that no longer existed.
+  SIZE: 40000 * WORLD_SCALE,   // the modelled square; 26 km at k = 0.65
   HORIZON: 52000,      // than Biscayne Bay is WIDE (13 km) -- a square of a
 };                     // world, not a world.
 
@@ -2655,9 +2659,13 @@ export function generateWorld(rawHeightAt = null) {
   // blindly -- where the rules and the author agree, nothing changes, and where
   // they disagree the disagreement is worth being able to see.
   let zoningChanges = [];
+  let zoningAnchors = { missing: [], hasIndustry: false };
   if (heightAt && demandAt) {
     const { sites } = placeFeatures(heightAt);
     const zoneAt = makeZoning({ heightAt, demandAt, sites });
+    // Surfaced, not swallowed: a world with no port has no industrial land, and
+    // that is a fact about the world rather than a detail of the zoning pass.
+    zoningAnchors = { missing: zoneAt.missingAnchors, hasIndustry: zoneAt.hasIndustry };
     settlementList = settlementList.map((st) => {
       const derived = zoneCharacter(zoneAt, st.bounds);
       if (derived && derived !== st.cls) {
@@ -2835,6 +2843,7 @@ export function generateWorld(rawHeightAt = null) {
            plotsDroppedForOverlap: plots.length - keptPlots.length,
            settlementFit,
            zoningChanges,
+           zoningAnchors,
            /** Plots that MEANINGFULLY overlap another in the same settlement.
             *
             * The epsilon is not decoration. Adjacent plots share an edge, and

@@ -14,7 +14,7 @@
 // on where the ground is.
 // =============================================================================
 
-import { LANDMASSES, landmassPolygonsDesign, WORLD } from "./city-plan.js";
+import { landmassPolygonsDesign, WORLD } from "./city-plan.js";
 
 // -----------------------------------------------------------------------------
 // Deterministic noise. Integer hash -> value noise -> fbm. No dependencies, no

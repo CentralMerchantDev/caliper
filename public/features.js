@@ -56,7 +56,22 @@ export const FEATURES = [
     // No site in this world is flat enough for a runway -- the flattest dry
     // 3.4 km run anywhere varies by 11.3 m. Real airports answer that with
     // earthworks, so this asks for the FLATTEST available and grades a platform.
-    need: { kind: "flattest", w: 3600, d: 1200, radius: 2500, step: 150, grade: 200 },
+    // THE FOOTPRINT IS THE AIRPORT'S REAL EXTENT, NOT A PADDED GUESS.
+    //
+    // This was 3600 x 1200, which was my rounding rather than the airport's
+    // measurement. Its actual extent, from the offsets buildProps draws at:
+    // runways span 3,400 m, and z runs from the aircraft stands at -570 to the
+    // far runway at +480, so 1,050. 3500 x 1000 covers it.
+    //
+    // The padding was not free. Once findFlattestSite began vetting every
+    // sampled point rather than nine, the padded rectangle could only be placed
+    // on ground needing 65 m of earthworks -- over the limit, so no airport at
+    // all. The real footprint places dry at 52 m, 450 m from where it was drawn.
+    //
+    // Widening the search to 4 km finds a 25 m site, but 3.9 km away, which
+    // strands it from the airport highway and its own settlement. Near and
+    // expensive beats far and cheap for a thing the rest of the city connects to.
+    need: { kind: "flattest", w: 3500, d: 1000, radius: 2500, step: 150, grade: 200 },
     limit: { range: 60 },   // past this it is a quarry, not a platform
   },
   {

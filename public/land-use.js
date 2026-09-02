@@ -129,32 +129,19 @@ export function buildAllowedAt(heightAt, x, z, reserved = null) {
   return { ok: false, reason: c.use, ...c };
 }
 
-/**
- * Would a road along this line be driveable end to end?
+/*
+ * driveableRun() was here. It walked a run and returned the longest contiguous
+ * stretch a road could legally occupy -- a good idea that nothing ever called.
+ * clipRoadToLand in city-plan.js reimplements the same notion with its own step
+ * and minimum-run constants, which is the duplication driveableRun would have
+ * prevented if it had been wired in.
  *
- * Checks the whole run rather than its ends, because the ends are exactly where
- * a road is most likely to be fine while the middle climbs a bank. Returns the
- * longest driveable sub-run, so a caller can shorten a road instead of losing
- * it -- which is what a city does: the street stops at the foot of the hill.
+ * Deleted rather than kept, for a specific reason: it took a `cls` argument and
+ * then called roadAllowedAt WITHOUT it, so it would silently have applied the
+ * 0.13 global fallback instead of the per-class ceiling its caller asked for.
+ * Dead code that would be wrong if revived is worse than no code.
  */
-export function driveableRun(heightAt, axis, at, from, to, reserved = null, step = 30, cls = null) {
-  let bestFrom = null, bestTo = null, bestLen = 0;
-  let runFrom = null, last = null;
-  for (let t = from; t <= to + step * 0.5; t += step) {
-    const tt = Math.min(t, to);
-    const x = axis === "ew" ? tt : at;
-    const z = axis === "ew" ? at : tt;
-    const ok = roadAllowedAt(heightAt, x, z, reserved).ok;
-    if (ok && runFrom === null) runFrom = tt;
-    if (!ok && runFrom !== null) {
-      if (last - runFrom > bestLen) { bestLen = last - runFrom; bestFrom = runFrom; bestTo = last; }
-      runFrom = null;
-    }
-    if (ok) last = tt;
-  }
-  if (runFrom !== null && last - runFrom > bestLen) { bestLen = last - runFrom; bestFrom = runFrom; bestTo = last; }
-  return bestLen > 0 ? { from: bestFrom, to: bestTo, length: bestLen } : null;
-}
+
 
 // =============================================================================
 // DEMAND
@@ -330,13 +317,19 @@ export function findFlattestSite(heightAt, want, opts = {}) {
   let best = null;
 
   const consider = (x, z) => {
-    // every corner and edge must be legal ground before flatness matters
+    // NINE POINTS CANNOT SEE INSIDE A 3.6 KM FOOTPRINT.
+    //
+    // This tested the centre, four corners and four edge midpoints, then measured
+    // flatness on a separate grid. For a building that is fine. For an airport
+    // platform 3,600 x 1,200 m it is not: the nine points passed while a proper
+    // sample of the same rectangle found 8 points below the waterline and 92 on
+    // beach. The platform had water in it and neither the search nor the test
+    // could see it.
+    //
+    // Legality is now checked on the SAME grid the flatness measurement walks,
+    // so every point that contributes to the answer has also been vetted. One
+    // pass, no second sampling density to drift out of step with the first.
     const hw = w / 2, hd = d / 2;
-    for (const [px, pz] of [[x, z], [x - hw, z - hd], [x + hw, z - hd],
-                            [x - hw, z + hd], [x + hw, z + hd],
-                            [x, z - hd], [x, z + hd], [x - hw, z], [x + hw, z]]) {
-      if (classifyAt(heightAt, px, pz, reserved).use !== use) return;
-    }
     let mn = Infinity, mx = -Infinity, sum = 0, n = 0;
     const nx = Math.max(2, Math.ceil(w / grade));
     const nz = Math.max(2, Math.ceil(d / grade));
@@ -344,6 +337,7 @@ export function findFlattestSite(heightAt, want, opts = {}) {
       for (let j = 0; j <= nz; j++) {
         const px = x - hw + (w * i) / nx;
         const pz = z - hd + (d * j) / nz;
+        if (classifyAt(heightAt, px, pz, reserved).use !== use) return;
         const h = heightAt(px, pz);
         if (h < mn) mn = h;
         if (h > mx) mx = h;

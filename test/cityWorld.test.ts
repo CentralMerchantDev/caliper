@@ -28,7 +28,7 @@ import {
   offsetPolygon, COAST, splinePolygon, BRIDGES, signedArea2, LANDMASSES, distanceToCoast, distanceToCoastExact, coastlinePolygon } from "../public/city-plan.js";
 import { WORLD_SCALE } from "../public/world-scale.js";
 import { findSite, findFlattestSite, ROAD_SLOPE_MAX } from "../public/land-use.js";
-import { placeFeatures } from "../public/features.js";
+import { placeFeatures, FEATURES } from "../public/features.js";
 import { assessFootprint } from "../public/footprint.js";
 import { gradeRun, ROAD_GRADE } from "../public/grade.js";
 
@@ -710,13 +710,39 @@ test("every landmark stands on ground that can carry it", () => {
 test("the airport platform is a real earthwork on dry land", () => {
   // Mirrors what buildProps does: one origin chosen by asking the land, the
   // platform levelled at the MEAN of the ground it covers.
-  const site = findFlattestSite(heightAt, { x: 12100 * WORLD_SCALE, z: -4750 * WORLD_SCALE },
-                                { w: 3600, d: 1200, radius: 2500, step: 150, grade: 200 });
+  // READ THE MANIFEST, DO NOT RE-TYPE IT.
+  //
+  // This used to re-declare the airport's want and need as literals. Editing
+  // features.js would leave the test green against its own private copy -- the
+  // drift the brief warns about, sitting in the test suite.
+  const spec = (FEATURES as any[]).find((f) => f.id === "airport");
+  assert.ok(spec, "no airport in the manifest");
+  const site = findFlattestSite(heightAt, spec.want(), spec.need);
   assert.ok(site, "no site for the airport at all");
   const level = Math.max(6, site!.mean);
 
-  assert.ok(site!.min > 0.6,
-    `the airport platform reaches water: lowest point ${site!.min.toFixed(1)} m`);
+  // SAMPLE THE PLATFORM PROPERLY.
+  //
+  // site.min comes from findFlattestSite's own grid, which at grade: 200 is 18x6
+  // = 108 points over 4.3 km2. That is far too coarse to notice a creek, and it
+  // passed at 1.86 m while a 181x61 sample of the same rectangle found a minimum
+  // of -0.21 m, 8 water samples and 92 beach samples. The platform had water in
+  // it and both the search and the test were blind to it.
+  const { w: AW, d: AD } = spec.need;
+  let min = Infinity, wet = 0, total = 0;
+  for (let i = 0; i <= 180; i++) {
+    for (let j = 0; j <= 60; j++) {
+      const x = site!.x - AW / 2 + (AW * i) / 180;
+      const z = site!.z - AD / 2 + (AD * j) / 60;
+      const h = heightAt(x, z);
+      total++;
+      if (h < min) min = h;
+      if (h < 0.6) wet++;
+    }
+  }
+  assert.ok(total > 10000, `only ${total} platform samples`);
+  assert.equal(wet, 0,
+    `${wet} of ${total} points inside the airport platform are at or below the waterline (lowest ${min.toFixed(2)} m)`);
 
   // Cut and fill should roughly balance -- that is what levelling at the mean
   // buys, and it is how real earthworks are designed. If either dominates, the
@@ -742,15 +768,27 @@ test("the railway runs on land, not across the bay", () => {
   // The line is a single z with trains drawn along it. It skips h < 2 per point,
   // so it cannot draw over water -- but if most of the line is skipped there is
   // no railway, only the illusion of one in the stats.
-  const RAIL_Z = -3900 * WORLD_SCALE;
+  // PROBE THE LINE THE RAILWAY IS ACTUALLY ON.
+  //
+  // This hardcoded -3900 * WORLD_SCALE = -2535. The corridor search resolves the
+  // line to -2695, having moved it 160 m to find a route that can hold 2.5%. So
+  // the test was measuring ground the railway does not touch, and would have
+  // passed byte-identically if findCorridor and the whole railway feature had
+  // been deleted.
+  const rail = placeFeatures(heightAt).sites.railway;
+  assert.ok(rail, "no railway corridor resolved");
+  const RAIL_Z = rail.at;
   let on = 0, total = 0;
-  for (let x = -17000 * WORLD_SCALE; x <= 17000 * WORLD_SCALE; x += 60) {
+  for (let x = rail.from; x <= rail.to; x += 60) {
     total++;
     const h = heightAt(x, RAIL_Z);
     if (h >= 2 && h <= 240) on++;
   }
-  assert.ok(on / total > 0.6,
-    `only ${((100 * on) / total).toFixed(0)}% of the railway line is on buildable ground`);
+  // One threshold, not two. features.js requires 0.85 to accept the corridor at
+  // all; a laxer number here would let a route the manifest rejected pass.
+  const REQUIRED = (FEATURES as any[]).find((f) => f.id === "railway").limit.onLand;
+  assert.ok(on / total >= REQUIRED,
+    `only ${((100 * on) / total).toFixed(0)}% of the railway line is on buildable ground, manifest requires ${100 * REQUIRED}%`);
 });
 
 // =============================================================================
@@ -1139,4 +1177,33 @@ test("a road's legal ceiling and its design gradient do not contradict each othe
     assert.ok(design <= ceiling,
       `${cls}: design gradient ${(100 * design).toFixed(0)}% exceeds its legal ceiling ${(100 * ceiling).toFixed(0)}%`);
   }
+});
+
+// =============================================================================
+// LOSING AN ANCHOR LOSES A LAND USE — LOUDLY
+//
+// Industry is anchored to infrastructure on purpose: warehousing exists behind
+// the quay and along the freight line because that is where it exists in a real
+// city. So a world with no port genuinely has no industrial land, and that is
+// correct.
+//
+// What was wrong is that it happened in silence. distToPort returns Infinity
+// with no port, the WAREHOUSE branches never fire, and the build reports
+// success. Verified at WORLD_SCALE = 0.4, where the port is unplaceable: every
+// warehouse zone vanished and nothing said so.
+// =============================================================================
+test("the world states which zoning anchors it is missing", () => {
+  const anchors = (overlapWorld as any).zoningAnchors;
+  assert.ok(anchors, "the world does not report its zoning anchors at all");
+  assert.ok(Array.isArray(anchors.missing), "missing anchors should be a list");
+
+  // At the shipped scale everything places, so the list is empty and industry
+  // exists. If that ever stops being true, this says which anchor went.
+  assert.deepEqual(anchors.missing, [],
+    `zoning anchors missing: ${anchors.missing.join(", ")} — the land uses they carry will be absent`);
+  assert.equal(anchors.hasIndustry, true);
+
+  // And the consequence is real: industry only exists because the port does.
+  const industrial = (overlapWorld.plots as any[]).filter((p) => p.className === "WAREHOUSE");
+  assert.ok(industrial.length > 0, "no industrial land in a world that reports having a port");
 });

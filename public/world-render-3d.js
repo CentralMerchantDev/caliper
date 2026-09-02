@@ -1598,8 +1598,22 @@ class Renderer3D {
   _refreshFeatureTargets() {
     if (!this._cityHeightAt || !this._cityDistrictTargets) return;
     let sites;
-    try { sites = placeFeatures(this._cityHeightAt).sites; }
-    catch { return; }                       // a bad bookmark is not worth a crash
+    try {
+      sites = placeFeatures(this._cityHeightAt).sites;
+    } catch (err) {
+      // SAY SO RATHER THAN SILENTLY REVERTING.
+      //
+      // This was a bare `catch { return; }`. On any throw it left `datum` and
+      // `forge` pointing at the hardcoded literals -- which is precisely the
+      // stale-bookmark defect this function exists to remove, restored without
+      // a word. A bad bookmark is still not worth a crash, but it is worth a
+      // line in the console and a flag something can read.
+      this._featureTargetsStale = true;
+      // eslint-disable-next-line no-console
+      console.warn("[caliper] district bookmarks not refreshed; they still point at the drawn coordinates:", err);
+      return;
+    }
+    this._featureTargetsStale = false;
     const aim = (key, site, y) => {
       if (!site || !this._cityDistrictTargets[key]) return;
       this._cityDistrictTargets[key].pos.set(site.x, y, site.z);
