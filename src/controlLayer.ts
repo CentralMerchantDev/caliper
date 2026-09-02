@@ -79,8 +79,25 @@ export const CONTROL_LIMITS = {
    * not raise typical spend. It only stops an expensive-but-legitimate run
    * dying halfway. The daily cap is the budget; this is the seatbelt.
    */
-  PER_RUN_CEILING_USD_SOURCE_EDIT: 0.44,
-  PER_RUN_CEILING_USD_DATA_EDIT: 0.26,
+  // RE-DERIVED ONCE INPUT TOKENS WERE PRICED.
+  //
+  // Every stage estimate used to price OUTPUT tokens only, while costUsd()
+  // charges both halves. The ceiling was therefore covering about two thirds of
+  // the transaction, and its own comment argued that a short ceiling "is exactly
+  // the failure mode the pricing test now exists to stop" -- while the test kept
+  // a private copy of the same output-only numbers and so could not see it.
+  //
+  // With input priced, the worst case the limits PERMIT is $0.7073 for a
+  // source edit and $0.4838 for a data edit. These cover them.
+  //
+  // Worth stating plainly, because it is a product consequence and not just a
+  // number: at a $0.72 worst case the $2 daily cap permits about two
+  // worst-case runs. A typical run is far cheaper -- the worst case assumes every
+  // stage hits its token cap and every fix attempt is used -- but the ceiling has
+  // to cover what is ALLOWED, not what is likely, or it truncates a legitimate
+  // run mid-flight and that looks like a bug rather than a limit.
+  PER_RUN_CEILING_USD_SOURCE_EDIT: 0.72,
+  PER_RUN_CEILING_USD_DATA_EDIT: 0.49,
   /** Cross-model review must never see code that's still failing its own
    * checks (FINAL.md item 1: "the reviewer reads a diff that has already
    * passed CI"). This bounds the implement -> verify -> fix loop that runs
@@ -135,7 +152,19 @@ export const CONTROL_LIMITS = {
    *
    * Raise the daily cap and this can go up. test/controlLayer.test.ts asserts
    * the relationship so the two cannot drift apart silently. */
-  DAILY_LIVE_RUNS_PER_IP: 4,
+  // LOWERED, BECAUSE THE ARITHMETIC IT RESTS ON WAS WRONG.
+  //
+  // This was 4, justified against a "$0.23 source-edit worst case" that priced
+  // output tokens only. With input priced the worst case is $0.7073, so four
+  // runs is $2.88 against a $2.00 daily cap -- one visitor could drain the day
+  // and then some. The suite says so now rather than the comment asserting it.
+  //
+  // Two runs is $1.44, which still leaves one visitor taking most of the day.
+  // The honest options are fewer runs or a bigger cap, and the cap is Mark's
+  // call once real per-run costs are observed rather than bounded. Two for now,
+  // because a limit that is wrong in the permissive direction is the one that
+  // costs money.
+  DAILY_LIVE_RUNS_PER_IP: 2,
   /** Global ceiling across BOTH vendors combined -- Anthropic and OpenAI
    * spend are separate budgets that both count toward this one number.
    * FINISH.md section 5: $2.00 daily / $7.00 weekly / $20.00 monthly --

@@ -395,21 +395,73 @@ const RETROSPECTIVE_MAX_TOKENS = 300;
 // (see CONTROL_LIMITS.PER_RUN_CEILING_USD_DATA_EDIT/_SOURCE_EDIT's own
 // comment for the arithmetic); pricing every stage at Opus rates is why
 // it used to have to be $0.35.
-const WORST_CASE = {
-  ground: (CONTROL_LIMITS.TOKEN_CAPS.ground / 1_000_000) * ANTHROPIC_PRICING[GROUND_MODEL].output,
-  plan: (PLAN_MAX_TOKENS / 1_000_000) * ANTHROPIC_PRICING[DEFAULT_MODEL].output,
-  implement: (CONTROL_LIMITS.TOKEN_CAPS.implement / 1_000_000) * ANTHROPIC_PRICING[IMPLEMENT_MODEL].output,
-  review: (CONTROL_LIMITS.TOKEN_CAPS.review / 1_000_000) * OPENAI_PRICING[REVIEW_MODEL].output,
-  fix: (CONTROL_LIMITS.TOKEN_CAPS.fix / 1_000_000) * ANTHROPIC_PRICING[FIX_MODEL].output,
-  retrospective: (RETROSPECTIVE_MAX_TOKENS / 1_000_000) * ANTHROPIC_PRICING[RETROSPECTIVE_MODEL].output,
-  assess: (CONTROL_LIMITS.TOKEN_CAPS.assess / 1_000_000) * ANTHROPIC_PRICING[DEFAULT_MODEL].output,
-  qa: (CONTROL_LIMITS.TOKEN_CAPS.qa / 1_000_000) * OPENAI_PRICING[REVIEW_MODEL].output,
-  // FOUNDATION-2 ("emit the change, not the file"): the data-edit path's
-  // own, much smaller worst case -- same models as implement/fix, a
-  // fraction of the token cap, since a WorldEdit is never a file.
-  implementEdit: (CONTROL_LIMITS.TOKEN_CAPS.implementEdit / 1_000_000) * ANTHROPIC_PRICING[IMPLEMENT_MODEL].output,
-  fixEdit: (CONTROL_LIMITS.TOKEN_CAPS.fixEdit / 1_000_000) * ANTHROPIC_PRICING[FIX_MODEL].output,
+// INPUT TOKENS COST MONEY TOO, AND THIS PRICED ONLY OUTPUT.
+//
+// Every entry here was `(TOKEN_CAP / 1e6) * PRICING[model].output`. costUsd()
+// charges `input * price.input + output * price.output`. So every reservation
+// this system made was for half of the transaction, and an audit measured the
+// consequences:
+//
+//   * the real source-edit worst case is ~$0.64 against a $0.44 ceiling
+//   * for `ground` and `qa`, the INPUT cost alone exceeds the entire reservation
+//   * the daily cap can be raced past $2.00 using the real Durable Object logic,
+//     because each reservation under-books and the reconciliation then charges
+//     the true amount
+//
+// spendCounterDO.ts argues at length that "a cap that can be raced is not a
+// cap". The DO closed the race; the estimate reopened the hole from the other
+// side. An under-booked reservation is a cap that cannot hold.
+//
+// INPUT_CAP is the largest prompt each stage can send, derived rather than
+// guessed. The world source (simBaseline.ts, ~5.7k tokens) is the dominant term
+// and is sent to plan, implement, review, fix and qa; grounding sends the city
+// summary (~1.9k) plus the request; the retrospective sends a transcript.
+// Rounded up, because a reservation that is short is the defect being fixed.
+const INPUT_CAP = {
+  ground: 4_000,        // city summary + world structure + the request
+  plan: 10_000,         // summary + full source + request + criteria scaffolding
+  implement: 12_000,    // plan + full source + grounding
+  review: 12_000,       // plan + original source + candidate source
+  fix: 14_000,          // all of the above plus the findings and prior lessons
+  assess: 6_000,        // findings + candidate diff
+  qa: 10_000,           // brief + final source
+  retrospective: 8_000, // the run transcript
+  implementEdit: 9_000, // no full file, but still summary + plan
+  fixEdit: 10_000,
 };
+
+/** Both halves of the transaction, the way costUsd() actually bills. */
+const priceBoth = (
+  pricing: Record<string, { input: number; output: number }>,
+  model: string,
+  inTok: number,
+  outTok: number,
+) => (inTok / 1_000_000) * pricing[model].input + (outTok / 1_000_000) * pricing[model].output;
+
+const WORST_CASE = {
+  ground: priceBoth(ANTHROPIC_PRICING, GROUND_MODEL, INPUT_CAP.ground, CONTROL_LIMITS.TOKEN_CAPS.ground),
+  plan: priceBoth(ANTHROPIC_PRICING, DEFAULT_MODEL, INPUT_CAP.plan, PLAN_MAX_TOKENS),
+  implement: priceBoth(ANTHROPIC_PRICING, IMPLEMENT_MODEL, INPUT_CAP.implement, CONTROL_LIMITS.TOKEN_CAPS.implement),
+  review: priceBoth(OPENAI_PRICING, REVIEW_MODEL, INPUT_CAP.review, CONTROL_LIMITS.TOKEN_CAPS.review),
+  fix: priceBoth(ANTHROPIC_PRICING, FIX_MODEL, INPUT_CAP.fix, CONTROL_LIMITS.TOKEN_CAPS.fix),
+  retrospective: priceBoth(ANTHROPIC_PRICING, RETROSPECTIVE_MODEL, INPUT_CAP.retrospective, RETROSPECTIVE_MAX_TOKENS),
+  assess: priceBoth(ANTHROPIC_PRICING, DEFAULT_MODEL, INPUT_CAP.assess, CONTROL_LIMITS.TOKEN_CAPS.assess),
+  qa: priceBoth(OPENAI_PRICING, REVIEW_MODEL, INPUT_CAP.qa, CONTROL_LIMITS.TOKEN_CAPS.qa),
+  // FOUNDATION-2 ("emit the change, not the file"): the data-edit path's own,
+  // much smaller worst case -- same models as implement/fix, a fraction of the
+  // token cap, since a WorldEdit is never a file.
+  implementEdit: priceBoth(ANTHROPIC_PRICING, IMPLEMENT_MODEL, INPUT_CAP.implementEdit, CONTROL_LIMITS.TOKEN_CAPS.implementEdit),
+  fixEdit: priceBoth(ANTHROPIC_PRICING, FIX_MODEL, INPUT_CAP.fixEdit, CONTROL_LIMITS.TOKEN_CAPS.fixEdit),
+};
+
+/**
+ * Exported so the pricing test can read the REAL table instead of re-deriving
+ * it from its own copy. The old test kept a private `WORST_CASE_STAGES` with the
+ * same output-only numbers in it, which is why it could not catch this: it was
+ * checking its own arithmetic against itself.
+ */
+export const SPEND_WORST_CASE = WORST_CASE;
+export const SPEND_INPUT_CAP = INPUT_CAP;
 
 function stateKey(runId: string): string {
   return `change/state/${runId}`;

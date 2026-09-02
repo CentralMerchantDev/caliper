@@ -1,3 +1,4 @@
+import { SPEND_WORST_CASE } from "../src/changePipeline.js";
 // FINISH.md section 5: re-derived caps (daily $2/weekly $7/monthly $20,
 // per-run ceiling ~$0.15, 2 live runs/IP/day) -- verified by forcing each
 // one, not by reading the numbers. Rate-limit tests use a minimal in-memory
@@ -51,7 +52,10 @@ test("the published caps are the caps", () => {
   assert.equal(CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD, 2.0);
   assert.equal(CONTROL_LIMITS.PIPELINE_WEEKLY_CAP_USD, 7.0);
   assert.equal(CONTROL_LIMITS.PIPELINE_MONTHLY_CAP_USD, 20.0);
-  assert.equal(CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP, 4);
+  // Lowered from 4 when input tokens were finally priced: 4 x $0.7073 is $2.88
+  // against a $2.00 daily cap, so one visitor could have drained the day. The
+  // test below is what caught it.
+  assert.equal(CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP, 2);
 });
 
 test("one visitor cannot drain the day on their own", () => {
@@ -84,19 +88,21 @@ test("one visitor cannot drain the day on their own", () => {
 //
 // So the test now does the sum. Change a stage's token cap or a limit and this
 // fails with the number it should have been, instead of quietly tolerating it.
-const WORST_CASE_STAGES = {
-  ground: 0.0025,
-  plan: 0.04,
-  implement: 0.03,
-  implementEdit: 0.0075,
-  fix: 0.04,
-  fixEdit: 0.015,
-  review: 0.035,
-  assess: 0.0135,
-  qa: 0.0098,          // the final functional pass, one review-priced call
-  retrospective: 0.0015,
-};
-
+// THE TEST USED TO KEEP ITS OWN COPY OF THE NUMBERS IT WAS CHECKING.
+//
+// This was a private table:
+//
+//     const WORST_CASE_STAGES = { ground: 0.0025, plan: 0.04, ... };
+//
+// containing the same output-only figures as the real WORST_CASE in
+// changePipeline.ts. So when an audit found that every one of those figures
+// omitted INPUT tokens -- which costUsd() charges -- this test could not notice.
+// It was verifying its own arithmetic against itself, and deleting the ceiling
+// check entirely left the suite green.
+//
+// It reads the real table now. If the pricing, the token caps or the input
+// estimates change, this moves with them.
+const WORST_CASE_STAGES = SPEND_WORST_CASE;
 test("the source-edit ceiling covers every call the run is ALLOWED to make", () => {
   const worst =
     WORST_CASE_STAGES.ground +

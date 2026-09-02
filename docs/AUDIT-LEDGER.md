@@ -15,7 +15,7 @@ not actually a defect)
 | --- | --- | --- |
 | 1 | Known backlog | **15 of 16 done** — only 1.1 (generateWorld stall) open |
 | 2 | Pipeline (`src/`) | AUDITED — 12 findings, 2 CRITICAL, all open |
-| 3 | World generator (`public/`) | not started |
+| 3 | World generator (`public/`) | AUDITED — 13 findings, 5 high, all open |
 | 4 | Renderer and UI | not started |
 | 5 | The tests themselves | not started |
 | 6 | Claims, docs, copy | not started |
@@ -96,3 +96,32 @@ snapshot in `simSandbox.ts` is real; `topLevelSideEffects` genuinely catches
 module-load payloads (disabling it fails 5 tests); a no-op data edit is caught;
 the oscillation guard works for findings that are *not* overruled; resume from
 the review gate re-pays for nothing.
+
+---
+
+## Phase 3 — the world generator (`public/`)
+
+Fresh agent, no knowledge of intent. Baseline 386/386. Working tree verified
+untouched.
+
+| # | Finding | Severity | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| 3.1 | **The four rivers are not water.** Every claim about them is false — "boats float on them", "the plot generator will not build in them", "roads are clipped at their banks". Max cut is depth+2.2 ≈ 11.2 m against ground 27–105 m up, so the trough never reaches y=0. | high | OPEN | Sampled each centreline at 25 m: **0 of 164/196/182/166 points below sea level**; classifyAt calls them buildable. Deleting `waterwayCut` entirely changes plot count by ZERO and the suite stays green. Only the three canals are water. |
+| 3.2 | **`LandField.distance()`'s early exit is unsound** — `best < (ring+1)*cell` should be `best <= ring*cell`. The comment claims "provably the nearest". | high | OPEN | Brute force against 8,179 edges at 376,896 points: 16,779 overestimates, worst **+364.5 m**; 9.9% wrong inside the shore-ramp band; 411 points that should use the exact fallback skip it. Height error up to **37.4 m**, and **7 points flip land/water**. |
+| 3.3 | **All industry vanishes below k≈0.57** because basin depth SCALES and `findQuay`'s `minDepth: 8` (a ship's draught) does not. The port sits 0.84 m of dredge from disappearing. | high | OPEN | k=0.5 → basin 6.50 m, findQuay@8 NULL, findQuay@8·k placed. Breakage is honest but the trigger is an unnoticed constant pair. |
+| 3.4 | **`generateWorld` returns module singletons.** `world.districts === DISTRICTS`; `world.bridges === world.causeways` (same array); downtown plots share `buildable` objects with the plan singleton — and those are the objects the edit path is handed. | high | OPEN | Mutating world 1 is visible in world 2. Determinism by VALUE holds; the leak is by REFERENCE. |
+| 3.5 | **`spatial-index.js` has zero test coverage.** It produces the address string fed to grounding. | high | OPEN | `plotAt` → always null: 386 pass. Centre-cell-only registration (the exact bug its comment says it avoids): 386 pass. CELL/10: 386 pass. |
+| 3.6 | Two threshold tables over the same demand field disagree — `DENSITY_BANDS` (calibrated) vs `DEMAND_FOR` (not). `DEMAND_FOR.FARM = 0.0` always matches, so FARM/MIDRISE settlements never reach their corridor/centre logic; RESORT is absent from the ladder entirely (6 plots of 16,541). The derived character is largely inert. | med | OPEN | 459/459 and 63/63 blocks take the demand path. |
+| 3.7 | **Stale measured claims, several of them mine.** zoning percentiles all high by 8–67% and quoted against 18,775 plots when there are 16,541; spatial-index "31,414 rectangles"; "CELL larger than the biggest plot" (260 m vs a 392 m plot); settlement-fit "56 wet centres" (39); grade "1,615 roads" (1,382). **And `world-scale.js` contradicts `terrain.js` outright** on the mountains. | med | OPEN | Each re-measured. |
+| 3.8 | Tests that do not test: the cliff refusal (its fixture actually triggers the WATER branch — `reason` is "partly in water"), the anchors reporter, the airport fence, `holdsGrade`, `rangeAt`, quay orientations, `roadAllowedAt` slope, and BOTH settlement-fit "guarantees". | med | OPEN | Every mutation survives at 386/386. |
+| 3.9 | `generateWorld()` with no height function reports `zoningAnchors: {missing: [], hasIndustry: false}` — zoning never ran, so the array whose purpose is to make an absent anchor visible looks identical to a fully-anchored world. The one genuinely silent path. | med | OPEN | |
+| 3.10 | 91.4 MB allocated eagerly per `generateWorld` (`.fill(NaN)` over 5700×4200), and the comment reads as though the scaling change fixed it. | med | OPEN | Measured `arrayBuffers` delta. |
+| 3.11 | The `placeFeatures` memo **cannot fire for the call that matters** — `generateWorld` always passes a fresh `cachedHeight` wrapper. Cold cost 2,135 ms, not the "roughly 700 ms" claimed. Also resolves features against the 7.8 m-quantised height while the renderer uses the exact one. | med | OPEN | |
+| 3.12 | Constant pairs in different files describing one thing: `onLand 0.85` ×2, `maxGrade 0.025` ×3, `maxDev 30` ×2, plot-bucket CELL ×3 with two conventions, `DRY_ENOUGH 0.6` vs `BEACH_ABOVE 2.2` (37 plots in the disputed band), `WORLD.SIZE` scales but `WORLD.HORIZON` does not. | low | OPEN | |
+| 3.13 | `terrain.js` still carries `clamp`/`smooth`/`smoother` duplicated from `noise.js` — the file whose own comment says "THE DUPLICATE IS GONE" — plus an unused `const fade`. | low | OPEN | |
+
+**Verified sound:** determinism by value holds across three builds (sha256 of
+plots/blocks/roads identical); the WeakMap caches do not collide; `nearestPlot`'s
+ring exit IS sound, unlike `LandField`'s; `slopeAt`'s fixed 24 m baseline costs
+0.6% on cliff counts; scale breakage below 0.65 is honest and named by the suite
+everywhere except 3.9.

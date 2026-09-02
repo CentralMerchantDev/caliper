@@ -2898,8 +2898,11 @@ async function checkLiveStatus() {
 // A real pipeline run, captured 2026-08-29, replayed from public/recorded-run.json
 // with its actual token counts, actual costs and actual stage results.
 //
-// This exists because the live path can legitimately refuse to start: three runs
-// per visitor per day, $2/day total, both enforced in code. Before this, a
+// This exists because the live path can legitimately refuse to start: a small
+// number of runs per visitor per day and $2/day total, both enforced in code.
+// (The exact per-visitor number is CONTROL_LIMITS.DAILY_LIVE_RUNS_PER_IP and has
+// moved twice; stating it here in prose is how it went stale saying "three" while
+// the code said four. The live status endpoint reports the real one.) Before this, a
 // visitor who hit either cap -- or simply arrived late in the day -- had NO WAY
 // AT ALL to see what the pipeline does, on a page whose entire subject is what
 // the pipeline does. The recording was already in the repo, served, and
