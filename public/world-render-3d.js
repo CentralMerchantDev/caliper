@@ -1583,9 +1583,31 @@ class Renderer3D {
 
     // The village's own sky, fog and lights would fight the city's. Take them
     // out before the city installs its own rather than leaving two suns.
-    for (const obj of [this._skyMesh, this.ambient, this.hemi, this.sun, this.moonLight]) {
+    // `this.moonLight` DOES NOT EXIST -- the property is `_moonLight` (assigned
+    // in _initScene, read in draw()). The `if (obj && ...)` guard below turned
+    // that typo into a silent skip, so the village's moon stayed in the city
+    // scene and draw() kept driving its intensity every frame: the city's night
+    // lit by a light the city was never tuned against, which is exactly the
+    // "two suns" this loop exists to prevent.
+    //
+    // The village's other atmosphere goes too. The starfield, the 18 cloud
+    // clusters and the 28 fireflies were never in this list at all, and their
+    // extents are the village's: clouds sit at y = 160-250 and wrap at +/-850 m,
+    // while downtown towers reach 220 m -- so they intersect the skyline, and
+    // the city pick raycasts the whole scene, so a ray can hit a cloud and the
+    // inspector then reports a confident plot address for the ground beneath it.
+    for (const obj of [this._skyMesh, this.ambient, this.hemi, this.sun, this._moonLight,
+                       this._moonMesh, this._starsMesh, this._cloudsGroup]) {
       if (obj && obj.parent) obj.parent.remove(obj);
     }
+    // The fireflies are individual meshes, not a group, so they need their own
+    // pass. They orbit +/-30 m of the village origin, which in the city is a
+    // swarm of glowing dots inside downtown.
+    for (const f of this._fireflies || []) {
+      if (f.mesh && f.mesh.parent) f.mesh.parent.remove(f.mesh);
+      if (f.mesh) { f.mesh.geometry?.dispose?.(); f.mesh.material?.dispose?.(); }
+    }
+    this._fireflies = [];
     this.scene.background = null;
 
     // The village lights its materials with a PMREM'd HDRI in scene.environment.
@@ -4780,7 +4802,10 @@ class Renderer3D {
             if (!occupied && world && world.placements) {
               for (const p of world.placements) {
                 if (p.location === "outdoors" && p.plot) {
-                  const pos = plotToWorldXZ(p.plot, centerX, centerZ);
+                  // Same village-transform bug as the reconcile path: occupancy
+                  // was tested at 6x/4.5x the real coordinate, so the build grid
+                  // reported free cells as taken and taken cells as free.
+                  const pos = placementToWorldXZ(p.plot, centerX, centerZ, this._cityMode);
                   const typeDef = this._objectTypes?.[p.type];
                   const halfW = (typeDef?.footprint?.w || 1.4) / 2;
                   const halfD = (typeDef?.footprint?.d || 1.2) / 2;
@@ -5600,7 +5625,13 @@ class Renderer3D {
 
     // Alt-tab while holding W and the camera kept moving on return: keyup never
     // fired because the window had lost focus.
-    window.addEventListener("blur", () => this._keysDown.clear());
+    // NAMED, SO IT CAN BE REMOVED. It was an inline arrow, so nothing held a
+    // reference to it and _unbindOrbit -- which removes the other eight
+    // listeners -- could not. The closure captures `this`, which reaches the
+    // scene, every building in the city and the WebGL renderer, so after
+    // destroy() the whole thing stayed alive off `window`, once per renderer.
+    const onBlur = () => this._keysDown.clear();
+    window.addEventListener("blur", onBlur);
 
     const onKeyDown = (e) => {
       if (e.key === "Escape") {
@@ -5736,6 +5767,7 @@ class Renderer3D {
       canvas.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
     };
   }
 
@@ -6374,7 +6406,23 @@ class Renderer3D {
       let targetX = 0, targetZ = 0, targetParent = null;
 
       if (p.location === "outdoors") {
-        const pos = plotToWorldXZ(p.plot, centerX, centerZ);
+        // THE VILLAGE TRANSFORM, APPLIED TO CITY METRES.
+        //
+        // plotToWorldXZ multiplies by GRID_UNIT_X = 6.0 and GRID_UNIT_Z = 4.5,
+        // because in the village a plot is a grid cell. In the city a placement
+        // is addressed in METRES, and this function is what placementToWorldXZ
+        // exists to branch on -- its own comment says so, and the village init
+        // path at line 1756 uses it correctly. This call site did not.
+        //
+        // _buildCityBase sets _plotCenter to the origin, which removes the
+        // OFFSET but not the MULTIPLY, so the bug survived looking handled: a
+        // placement requested at (544, 1585) was drawn at (3264, 7132.5), 5.7 km
+        // away, in the water.
+        //
+        // And it is a false success in the strict sense. validateOutdoorLayout
+        // checks the metre coordinate, the integrity check passes, the ledger
+        // says the edit landed -- and the renderer draws somewhere else.
+        const pos = placementToWorldXZ(p.plot, centerX, centerZ, this._cityMode);
         targetX = pos.x;
         targetZ = pos.z;
         targetParent = this.neighbourhoodGroup;
@@ -6445,14 +6493,51 @@ class Renderer3D {
 
         // Defect 3: Handle color override addition, change, OR restoration of default archetype color
         if (pColour !== record.colour) {
+          // TWO BUGS IN ONE BRANCH, AND THE SECOND ONE RECORDED SUCCESS.
+          //
+          // 1. `parseHexColor` did not exist. Not declared, not imported, not a
+          //    global -- this file is an ES module, so there was no scope for it
+          //    to come from. Every colour change on an existing placement threw
+          //    ReferenceError out of the reconcile loop, so every placement
+          //    AFTER it in the same tick was never added, moved or removed.
+          //    THREE.Color.set already accepts "#rrggbb" and a number, so the
+          //    function was never needed.
+          //
+          // 2. The traverse predicate could not match anything. Every placement
+          //    part is a MeshStandardMaterial (see stdMat), and three.js
+          //    defaults `emissiveIntensity` to 1 -- verified against the bundled
+          //    build. So `!obj.material.emissiveIntensity` was `!1`, false, for
+          //    every mesh in the group, and the loop recoloured nothing.
+          //
+          //    Then `record.colour = pColour` ran anyway, caching the belief
+          //    that the colour had been applied, so it would never retry. Had
+          //    bug 1 been fixed alone, a colour edit would have reported success
+          //    and changed nothing -- which is worse than the crash.
+          //
+          // The intent was "recolour the body, not the lit windows". The test
+          // for that is a non-black EMISSIVE, not a non-zero intensity: an
+          // intensity of 1 over an emissive of 0x000000 is not a glowing part.
+          // The contact shadow is excluded by isMeshBasicMaterial, which is what
+          // was actually doing that job -- `userData.shadowMesh` is never set
+          // anywhere in this file, so that clause was dead.
           const defaultColor = typeDef.recipe?.[0]?.color ?? PALETTE.accent;
-          const targetColorHex = pColour ? parseHexColor(pColour) : parseHexColor(defaultColor);
+          const target = pColour || defaultColor;
+          let repainted = 0;
           record.mesh.traverse((obj) => {
-            if (obj.material && obj.material.color && !obj.material.isMeshBasicMaterial && (obj.material.metalness || 0) < 0.5 && !obj.material.emissiveIntensity && obj !== record.mesh.userData?.shadowMesh) {
-              obj.material.color.set(targetColorHex);
-            }
+            const m = obj.material;
+            if (!m || !m.color || m.isMeshBasicMaterial) return;
+            if ((m.metalness || 0) >= 0.5) return;
+            if (m.emissive && m.emissive.getHex() !== 0) return;   // a lit window stays lit
+            m.color.set(target);
+            repainted++;
           });
-          record.colour = pColour;
+          // Only record the colour as applied if something actually took it.
+          // Caching a change that did not happen is how bug 2 stayed invisible.
+          if (repainted > 0) {
+            record.colour = pColour;
+          } else {
+            console.warn(`placement ${p.id}: no material accepted colour ${target}`);
+          }
         }
         record.placement = p;
       } else {
@@ -6624,8 +6709,17 @@ class Renderer3D {
       this._diffEmeraldMat.emissiveIntensity = 0.7 + Math.sin(performance.now() / 200) * 0.35;
     }
 
-    // Smoke particles update
-    if (!this.reducedMotion && this._neighbourhoodBuilt) {
+    // Smoke particles update.
+    //
+    // GATED ON VILLAGE MODE, because the emitters are village geometry.
+    // _smokeEmitters is two hard-coded chimney positions at (+/-4.2, 2.5,
+    // -/+4.2) -- metres from the village origin. In the city that is a point in
+    // the middle of downtown at knee height, so this spawned smoke puffs
+    // hanging in mid-air at the world origin forever, allocating and disposing
+    // a SphereGeometry and a material about 13 times a second for the life of
+    // the page. Nothing pointed at it; it was gated only on _neighbourhoodBuilt,
+    // which the city build also sets.
+    if (!this.reducedMotion && this._neighbourhoodBuilt && !this._cityMode) {
       const nowSec = performance.now() / 1000;
       if (this._smokeParticles.length < 32 && Math.random() < 0.4) {
         const emitterPos = this._smokeEmitters[Math.floor(Math.random() * this._smokeEmitters.length)];

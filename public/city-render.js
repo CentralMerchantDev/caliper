@@ -946,6 +946,31 @@ export function buildWorld(THREE, renderer, scene) {
 // coastal city.
 // =============================================================================
 function buildProps(api) {
+  // THIS DESTRUCTURING USED TO SIT BELOW THE THREE LINES THAT FOLLOW IT, AND
+  // buildProps THREW EVERY SINGLE TIME.
+  //
+  // `stats` is declared here, by const. The feature-placement lines below read
+  // it. When they came first, they read it inside its temporal dead zone:
+  //
+  //     ReferenceError: Cannot access 'stats' before initialization
+  //
+  // Nothing catches buildProps. buildWorld calls it unguarded, and both callers
+  // -- city.html:88 and world-render-3d.js's _buildCityBase -- call buildWorld
+  // unguarded too. So this threw out of the entire world build, every load.
+  // Bridges, the port, railway, airport, golf, marina, pier, boardwalk, parks,
+  // landmarks, traffic, people, lamps and contact shadows: none of it existed,
+  // and `stats.buildMs` was never assigned so even the console line that would
+  // have hinted at it never ran.
+  //
+  // It got here by insertion: a later commit added the placeFeatures block
+  // ABOVE the destructuring rather than below it. The order is the whole bug,
+  // and nothing caught it because no test builds the scene -- three.js needs a
+  // GPU, so the renderer is the one part of this project the suite cannot
+  // execute. That is a real gap and it is recorded in the ledger, not papered
+  // over: the fix here is ordering, and the protection is the module-order
+  // check added alongside it.
+  const { THREE, scene, heightAt, masses, stats, world, plan, settAt } = api;
+
   // WHERE EVERYTHING GOES, DECIDED ONCE, BY ASKING THE LAND.
   //
   // Every large feature below used to carry its own coordinate. See features.js
@@ -953,12 +978,11 @@ function buildProps(api) {
   // registry, before a single mesh is made, and anything that cannot be placed
   // is absent from SITE -- so the geometry below simply does not run, rather
   // than running over water.
-  const { sites: SITE, report: siteReport } = placeFeatures(api.heightAt || heightAt);
+  const { sites: SITE, report: siteReport } = placeFeatures(heightAt);
   // Reported, not swallowed. If the world has nowhere for a container port, that
   // is a fact about the world and should be visible, not silently absent.
   stats.featurePlacement = siteReport;
   stats.featuresUnplaced = siteReport.filter((r) => !r.placed).map((r) => r.id);
-  const { THREE, scene, heightAt, masses, stats, world, plan, settAt } = api;
   const M = (c, r = 0.85, m = 0) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
   const RB = (w, h, d, r = 0.3) => new RoundedBoxGeometry(w, h, d, 1, r);
 
