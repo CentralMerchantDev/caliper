@@ -8,7 +8,7 @@ import type { GenerationResult, TestResult, Task } from "./types";
 import { SIM_BASELINE_SOURCE } from "./simBaseline";
 import { SIM_REGRESSION_SUITE } from "./simRegression";
 import { runSimTests } from "./simSandbox";
-import { runChangePipeline, loadInstructions, deriveHistoryReason, recordPlanDecision, type ChangeEvent, type ChangeRecord } from "./changePipeline";
+import { runChangePipeline, loadInstructions, deriveHistoryReason, recordPlanDecision, MAX_PLAN_REPLIES, type ChangeEvent, type ChangeRecord } from "./changePipeline";
 import {
   getPipelineBudgetStatus,
   checkInputGuard,
@@ -725,7 +725,7 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
           "GET /change-run?request=<text>": "CALIPER v2 (BUILD-V2.md): plan -> implement -> verify -> review -> ship, one call per stage-boundary",
           "GET /change-resume?runId=<id>&ticket=<single-use-ticket>": "continue an authenticated halted change run via short-lived single-use resume ticket issued by decision endpoints",
           "POST /change-plan-decision": "approve/reject at Gate 1 (JSON body: { runId, approve: boolean, controlToken })",
-          "POST /change-plan-reply": "the third Gate 1 action -- reply in free text instead of approve/reject; re-grounds and re-plans (JSON body: { runId, reply: string, controlToken })",
+          "POST /change-plan-reply": `the third Gate 1 action -- reply in free text instead of approve/reject; re-grounds and re-plans, capped at ${MAX_PLAN_REPLIES} replies per run because each one costs a ground + plan the ceiling did not book (JSON body: { runId, reply: string, controlToken })`,
           "POST /change-review-decision": "resolve the review gate (JSON body: { runId, approve: boolean, controlToken })",
           "POST /change-error-decision": "resolve a stage-error halt -- true retries the failed stage, false abandons the run (JSON body: { runId, approve: boolean, controlToken })",
           "POST /change-answer": "answer a plan-mode clarifying question (JSON body: { runId, answer: string, controlToken })",
@@ -1107,9 +1107,14 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       const replyGuard = checkInputGuard(reply);
       if (!replyGuard.ok) return jsonError("request_rejected", replyGuard.reason, 400);
       if (!(await verifyRunAuth(request, runId, payload))) return json({ error: "Unauthorized: invalid control token for run" }, 403);
+
+      // The cap on this loop lives in the pipeline, on `planGateReplyCount`
+      // -- the counter that persists with the run state and survives a resume.
+      // A second tally here would be a second source of truth for one fact.
+      // See checkReplyBudget / MAX_PLAN_REPLIES in changePipeline.ts.
       await env.SPEND_KV.put(`change/plan-reply/${runId}`, JSON.stringify({ answer: reply }), { expirationTtl: 600 });
       const resumeTicket = await createResumeTicket(runId);
-      return json({ ok: true, resumeTicket });
+      return json({ ok: true, resumeTicket, repliesAllowed: MAX_PLAN_REPLIES });
     }
 
     if (url.pathname === "/change-instructions") {

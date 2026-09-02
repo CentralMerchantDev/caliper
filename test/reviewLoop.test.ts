@@ -1,4 +1,4 @@
-import { assessReviewRound } from "../src/changePipeline.js";
+import { assessReviewRound, checkReplyBudget, resolvePlanGate, MAX_PLAN_REPLIES } from "../src/changePipeline.js";
 // =============================================================================
 // THE REVIEWER MUST SEE WHAT ITS FINDINGS CHANGED
 //
@@ -173,4 +173,142 @@ test("an argument purely about an overrule is detectable as oscillation", () => 
   const v2 = assessReviewRound([M(t)], [t + " — accepted by design"], v1.key);
   assert.equal(v2.kind, "overrule-rejected");
   assert.equal(v2.key, v1.key, "the key must not change just because the author overruled");
+});
+
+// ---------------------------------------------------------------------------
+// 2.8 -- GATE 1's REPLY LOOP WAS OUTSIDE THE CEILING ARITHMETIC
+//
+// Gate 1 offers approve, reject, and reply. A reply re-grounds and re-plans; the
+// per-run ceiling books ONE ground and ONE plan. So twelve replies meant
+// thirteen of each against a reservation for one, and the endpoint stored the
+// reply, minted a resume ticket, and counted nothing.
+//
+// It is authenticated, so this was never an open door. But SPEND_WORST_CASE is
+// published on /pipeline-budget as what a run can cost, and an unbounded loop
+// inside it makes that number a guess rather than a bound.
+// ---------------------------------------------------------------------------
+test("the Gate 1 reply loop is bounded, and an unreadable counter does not grant replies", () => {
+  // A fresh run may reply.
+  const first = checkReplyBudget(null);
+  assert.equal(first.allowed, true, "a run's first clarification reply must be allowed");
+  assert.equal(first.used, 0);
+  assert.equal(first.remaining, MAX_PLAN_REPLIES);
+
+  // It may keep replying up to the cap...
+  for (let used = 0; used < MAX_PLAN_REPLIES; used++) {
+    const b = checkReplyBudget(String(used));
+    assert.equal(b.allowed, true, `reply ${used + 1} of ${MAX_PLAN_REPLIES} was refused`);
+    assert.equal(b.remaining, MAX_PLAN_REPLIES - used);
+  }
+
+  // ...and not past it. This is the whole finding.
+  const spent = checkReplyBudget(String(MAX_PLAN_REPLIES));
+  assert.equal(spent.allowed, false,
+    `a run was allowed a ${MAX_PLAN_REPLIES + 1}th reply — each one costs a ground ` +
+    `and a plan that the per-run ceiling never booked`);
+  assert.equal(spent.remaining, 0);
+
+  // A counter that has somehow run past the cap stays refused rather than
+  // wrapping, and reports the cap rather than the impossible number.
+  const overrun = checkReplyBudget("999");
+  assert.equal(overrun.allowed, false, "an over-run counter must not wrap around into permission");
+  assert.equal(overrun.used, MAX_PLAN_REPLIES);
+
+  // GARBAGE IS NOT PERMISSION, AND IT IS NOT A LOCKOUT EITHER. Anything
+  // unparseable counts as zero used: a counter that cannot be read is not
+  // evidence that nothing was spent, but it is also not a reason to strand a
+  // legitimate first reply.
+  for (const junk of ["", "abc", "-3", "NaN", "1e9999"]) {
+    const b = checkReplyBudget(junk);
+    assert.equal(b.allowed, true, `"${junk}" stranded the run`);
+    assert.ok(b.used >= 0 && b.used <= MAX_PLAN_REPLIES,
+      `"${junk}" produced a nonsense used count of ${b.used}`);
+  }
+
+  // And the cap must be a real bound, not Infinity wearing a constant's name.
+  assert.ok(Number.isInteger(MAX_PLAN_REPLIES) && MAX_PLAN_REPLIES > 0 && MAX_PLAN_REPLIES < 20,
+    `MAX_PLAN_REPLIES is ${MAX_PLAN_REPLIES}, which is not a usable bound`);
+});
+
+// THE HELPER WAS TESTED. THE LOOP WAS NOT.
+//
+// The test above proves checkReplyBudget returns the right verdicts. It does
+// NOT prove the pipeline asks it — and when the enforcement was first written
+// inline in the plan gate, deleting it failed nothing. A correct helper beside
+// an unguarded loop is precisely finding 3.8, so it got the same treatment:
+// the loop is the unit under test, driven with a reply permanently available,
+// which is the exact condition that made it unbounded.
+test("the plan gate stops re-planning once the reply budget is spent", async () => {
+  const replanned: number[] = [];
+
+  // A HARD STOP, SO A BROKEN CAP FAILS INSTEAD OF HANGING. Removing the cap
+  // makes this loop genuinely infinite under these stubs — a decision never
+  // arrives and a reply always does — and a test suite that hangs reports
+  // nothing at all. Throwing well past the cap turns that into a named failure.
+  const RUNAWAY = MAX_PLAN_REPLIES * 4;
+  const gate = await resolvePlanGate({
+    readDecision: async () => null,           // the operator never decides...
+    readReply: async () => "please clarify",  // ...and a reply is always waiting
+    onReply: async (_reply, n) => {
+      replanned.push(n);
+      if (replanned.length > RUNAWAY) {
+        throw new Error(
+          `the plan gate re-planned ${replanned.length} times with no cap in sight — ` +
+          `the reply loop is unbounded, and each pass is a ground and a plan`
+        );
+      }
+    },
+  });
+
+  assert.equal(
+    replanned.length, MAX_PLAN_REPLIES,
+    `the gate re-planned ${replanned.length} times against a cap of ${MAX_PLAN_REPLIES} — ` +
+    `each pass is a ground AND a plan that the per-run ceiling never booked`
+  );
+  assert.equal(gate.decision, null, "no decision was ever given, so none may be reported");
+  assert.equal(gate.budgetSpent, true, "the caller must be told the budget ran out, not just handed a null");
+  assert.deepEqual(replanned, [1, 2, 3, 4].slice(0, MAX_PLAN_REPLIES), "reply numbering is off");
+});
+
+test("the plan gate still does the things it is for", async () => {
+  // A real decision wins immediately and costs no replan.
+  const approved = await resolvePlanGate({
+    readDecision: async () => "approve",
+    readReply: async () => "should never be read",
+    onReply: async () => { assert.fail("a decision was available; nothing should have been re-planned"); },
+  });
+  assert.equal(approved.decision, "approve");
+  assert.equal(approved.repliesUsed, 0);
+  assert.equal(approved.budgetSpent, false);
+
+  // Neither a decision nor a reply is a halt, not a budget failure — the caller
+  // treats those differently and must not be told the wrong one.
+  const quiet = await resolvePlanGate({
+    readDecision: async () => null,
+    readReply: async () => null,
+    onReply: async () => { assert.fail("there was no reply to act on"); },
+  });
+  assert.equal(quiet.decision, null);
+  assert.equal(quiet.budgetSpent, false, "silence is not a spent budget");
+
+  // A reply, then a decision: one replan, then it proceeds.
+  let decision: "approve" | null = null;
+  let replans = 0;
+  const converged = await resolvePlanGate({
+    readDecision: async () => decision,
+    readReply: async () => (replans === 0 ? "one clarification" : null),
+    onReply: async () => { replans++; decision = "approve"; },
+  });
+  assert.equal(converged.decision, "approve");
+  assert.equal(converged.repliesUsed, 1, "one reply was made, so one must be recorded");
+  assert.equal(replans, 1);
+
+  // A run resuming with its budget already spent does not get a fresh allowance.
+  const resumed = await resolvePlanGate({
+    readDecision: async () => null,
+    readReply: async () => "another go",
+    onReply: async () => { assert.fail("this run had already used its replies"); },
+    repliesUsed: MAX_PLAN_REPLIES,
+  });
+  assert.equal(resumed.budgetSpent, true, "the count must survive a resume, or the cap resets on every reconnect");
 });

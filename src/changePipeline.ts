@@ -412,6 +412,97 @@ const RETROSPECTIVE_MAX_TOKENS = 300;
 // cap". The DO closed the race; the estimate reopened the hole from the other
 // side. An under-booked reservation is a cap that cannot hold.
 //
+/**
+ * How many free-text replies one run may make at Gate 1.
+ *
+ * THE CEILING ARITHMETIC DID NOT KNOW THIS LOOP EXISTED. Gate 1 offers three
+ * actions -- approve, reject, and reply -- and a reply re-grounds and re-plans.
+ * The per-run ceiling is computed over ONE pass through the stages, so twelve
+ * replies means thirteen ground calls and thirteen plan calls against a
+ * reservation that booked one of each. The endpoint stored the reply, minted a
+ * resume ticket, and counted nothing.
+ *
+ * It is authenticated, so this is not an open door -- but SPEND_WORST_CASE is
+ * published on /pipeline-budget as what a run can cost, and an unbounded loop
+ * inside it makes that number a guess. A cap that can be looped is not a cap,
+ * which is the same argument spendCounterDO.ts makes about races.
+ *
+ * Four is chosen to be useful rather than generous: a clarification exchange
+ * that has not converged in four rounds is not going to, and rejecting and
+ * restarting is both cheaper and clearer than a fifth reply.
+ */
+export const MAX_PLAN_REPLIES = 4;
+
+/**
+ * May this run make another Gate 1 reply?
+ *
+ * Pulled out as a pure function for the same reason `assessReviewRound` was:
+ * a gate that only exists inline inside a request handler can only be tested by
+ * standing up a Worker, and the one gate in this project that was never tested
+ * that way is the one that turned out to be wrong.
+ *
+ * `raw` is the KV value, so it is a string, or null on the first reply, or
+ * garbage if something else ever writes that key. Anything not a positive
+ * integer counts as zero used rather than as permission — a counter that cannot
+ * be read is not evidence that nothing has been spent, but it is also not a
+ * reason to strand a legitimate first reply.
+ */
+/**
+ * Run the Gate 1 decision loop to a conclusion.
+ *
+ * EXTRACTED BECAUSE A TEST ON THE HELPER IS NOT A TEST ON THE WIRING. The cap
+ * below was first enforced inline in the pipeline with `checkReplyBudget`
+ * covered by its own unit test -- and deleting the enforcement from the loop
+ * failed nothing. The helper was proven correct while the loop that was
+ * supposed to call it went unchecked, which is the same defect as the eight
+ * tests in finding 3.8 and deserved the same fix rather than a note.
+ *
+ * So the loop itself is the unit now. The readers are injected, which lets a
+ * test hold a reply permanently available -- the exact condition that made the
+ * loop unbounded -- without a Worker, a network call, or a spend.
+ *
+ * Returns the decision, or null when the loop ends without one (no reply and no
+ * decision, or the reply budget is spent), in which case the caller halts.
+ */
+export async function resolvePlanGate(opts: {
+  readDecision: () => Promise<"approve" | "reject" | null>;
+  readReply: () => Promise<string | null>;
+  onReply: (reply: string, replyNumber: number) => Promise<void>;
+  repliesUsed?: number;
+}): Promise<{ decision: "approve" | "reject" | null; repliesUsed: number; budgetSpent: boolean }> {
+  let used = opts.repliesUsed ?? 0;
+  for (;;) {
+    const decision = await opts.readDecision();
+    if (decision !== null) return { decision, repliesUsed: used, budgetSpent: false };
+
+    const reply = await opts.readReply();
+    if (reply === null) return { decision: null, repliesUsed: used, budgetSpent: false };
+
+    // THE COUNT EXISTED. THE CAP DID NOT. `planGateReplyCount` was incremented,
+    // carried through the state, written into the ledger and reported -- and
+    // never compared against anything. Each pass re-grounds and re-plans, and
+    // the per-run ceiling books ONE ground and ONE plan, so twelve replies meant
+    // thirteen of each against a reservation for one.
+    if (!checkReplyBudget(String(used)).allowed) {
+      return { decision: null, repliesUsed: used, budgetSpent: true };
+    }
+
+    used++;
+    await opts.onReply(reply, used);
+  }
+}
+
+export function checkReplyBudget(raw: string | null): { allowed: boolean; used: number; remaining: number } {
+  const parsed = Number.parseInt(raw ?? "0", 10);
+  const used = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
+  const capped = Math.min(used, MAX_PLAN_REPLIES);
+  return {
+    allowed: capped < MAX_PLAN_REPLIES,
+    used: capped,
+    remaining: Math.max(0, MAX_PLAN_REPLIES - capped),
+  };
+}
+
 // INPUT_CAP is the largest prompt each stage can send, derived rather than
 // guessed. The world source (simBaseline.ts, ~5.7k tokens) is the dominant term
 // and is sent to plan, implement, review, fix and qa; grounding sends the city
@@ -1037,16 +1128,22 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
   // skip this gate entirely once we know we're past it.
   let planDecision: "approve" | "reject" | null = pastPlanGate ? "approve" : null;
   if (!pastPlanGate) {
-    while (true) {
-      planDecision = await checkDecision(env.SPEND_KV, `change/plan-decision/${runId}`);
-      if (planDecision !== null) break;
-      const reply = await checkAnswer(env.SPEND_KV, `change/plan-reply/${runId}`);
-      if (reply === null) break; // neither a decision nor a reply -- halt below
-      planGateReplyCount++;
-      onEvent({ type: "plan-gate-replied", reply });
-      ({ grounding, plan } = await groundAndPlan(reply, ` (re-ground + re-plan after Gate 1 reply #${planGateReplyCount})`));
-      // loop back around: check for a decision on THIS new plan, or another reply
-    }
+    // The loop lives in resolvePlanGate so it can be tested with a reply held
+    // permanently available -- the condition that made it unbounded. Enforced on
+    // `planGateReplyCount`, which persists with the run state and survives a
+    // resume; a second tally in the route would be a second source of truth for
+    // one fact, which is the defect 3.12 was about.
+    const gate = await resolvePlanGate({
+      readDecision: () => checkDecision(env.SPEND_KV, `change/plan-decision/${runId}`),
+      readReply: () => checkAnswer(env.SPEND_KV, `change/plan-reply/${runId}`),
+      repliesUsed: planGateReplyCount,
+      onReply: async (reply, replyNumber) => {
+        onEvent({ type: "plan-gate-replied", reply });
+        ({ grounding, plan } = await groundAndPlan(reply, ` (re-ground + re-plan after Gate 1 reply #${replyNumber})`));
+      },
+    });
+    planDecision = gate.decision;
+    planGateReplyCount = gate.repliesUsed;
   }
 
   if (planDecision === null) {
