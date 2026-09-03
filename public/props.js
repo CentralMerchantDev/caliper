@@ -158,22 +158,42 @@ export function tree(species = "broadleaf", age = "mature") {
               parts.push(frond);
             }
           } else if (species === "cypress") {
-            // 4 tight overlapping spiral tiers
-            for (let i = 0; i < 4; i++) {
-              const r = (crownW / 2) * (1 - i * 0.22);
-              const th = (h - trunkH) * 0.32;
+            // 5 tight alternating offset tiers for jagged silhouette
+            for (let i = 0; i < 5; i++) {
+              const r = (crownW / 2) * (1 - i * 0.16);
+              const th = (h - trunkH) * 0.28;
               const cone = new T.ConeGeometry(r, th, 6);
-              cone.translate(0, trunkH + i * (th * 0.65) + th / 2, 0);
+              cone.rotateY((i * Math.PI) / 6);
+              cone.translate(0, trunkH + i * (th * 0.58) + th / 2, 0);
               parts.push(cone);
             }
+          } else if (species === "bush-flowering") {
+            // Dense flowering bush with blossom nodes
+            const c1 = new T.SphereGeometry(crownW * 0.35, 6, 4);
+            c1.translate(0, h * 0.5, 0);
+            const c2 = new T.SphereGeometry(crownW * 0.28, 5, 4);
+            c2.translate(crownW * 0.22, h * 0.45, crownW * 0.15);
+            const c3 = new T.SphereGeometry(crownW * 0.28, 5, 4);
+            c3.translate(-crownW * 0.22, h * 0.45, -crownW * 0.15);
+            parts.push(c1, c2, c3);
+            for (let i = 0; i < 6; i++) {
+              const ang = (i * Math.PI * 2) / 6;
+              const fl = new T.BoxGeometry(crownW * 0.08, crownW * 0.08, crownW * 0.08);
+              fl.translate(Math.cos(ang) * (crownW * 0.32), h * 0.65 + Math.sin(i) * 0.1, Math.sin(ang) * (crownW * 0.32));
+              parts.push(fl);
+            }
           } else {
-            // Conifer: 4 stepped tiers with skirt overhang
+            // Conifer: 4 stepped tiers with jagged needle skirt overhangs
             for (let i = 0; i < 4; i++) {
-              const r = (crownW / 2) * (1 - i * 0.22);
-              const th = (h - trunkH) * 0.35;
+              const r = (crownW / 2) * (0.90 - i * 0.18);
+              const th = (h - trunkH) * 0.34;
               const cone = new T.ConeGeometry(r, th, 6);
-              cone.translate(0, trunkH + i * (th * 0.55) + th / 2, 0);
-              parts.push(cone);
+              cone.rotateY((i * Math.PI) / 4);
+              cone.translate(0, trunkH + i * (th * 0.56) + th / 2, 0);
+              const skirt = new T.ConeGeometry(r * 1.06, th * 0.18, 6);
+              skirt.rotateY((i * Math.PI) / 4 + 0.2);
+              skirt.translate(0, trunkH + i * (th * 0.56) + th * 0.12, 0);
+              parts.push(cone, skirt);
             }
           }
           return mergeGeometries(parts, T);
@@ -303,10 +323,10 @@ export function person(build = "adult", pose = "standing", palette = "casual") {
 export function vehicle(vehicleClass = "car", variant = "sedan") {
   const specs = {
     car: { w: 1.9, d: 4.4, h: 1.45, tris: 120 },
-    van: { w: 2.1, d: 5.4, h: 2.2, tris: 120 },
-    bus: { w: 2.6, d: 12.0, h: 3.2, tris: 120 },
-    truck: { w: 2.5, d: 8.5, h: 3.4, tris: 132 },
-    artic: { w: 2.6, d: 16.5, h: 4.0, tris: 144 },
+    van: { w: 2.1, d: 5.4, h: 2.2, tris: 144 },
+    bus: { w: 2.6, d: 12.0, h: 3.2, tris: 240 },
+    truck: { w: 2.5, d: 8.5, h: 3.4, tris: 180 },
+    artic: { w: 2.6, d: 16.5, h: 4.0, tris: 192 },
     taxi: { w: 1.9, d: 4.5, h: 1.5, tris: 132 },
     emergency: { w: 2.2, d: 6.2, h: 2.6, tris: 132 },
     bicycle: { w: 0.55, d: 1.75, h: 1.05, tris: 88 },
@@ -387,12 +407,37 @@ export function vehicle(vehicleClass = "car", variant = "sedan") {
               const bar = new T.BoxGeometry(sp.w * 0.7, 0.12, 0.25);
               bar.translate(0, sp.h + 0.06, -sp.d * 0.05);
               parts.push(bar);
+            } else if (vehicleClass === "van") {
+              // Rear cargo door seam & handle
+              const seam = new T.BoxGeometry(0.04, sp.h * 0.45, 0.04);
+              seam.translate(0, lowerH + 0.18 + (sp.h * 0.45) / 2, -sp.d / 2);
+              const handle = new T.BoxGeometry(0.10, 0.04, 0.05);
+              handle.translate(0.12, lowerH + 0.18 + (sp.h * 0.45) * 0.45, -sp.d / 2);
+              parts.push(seam, handle);
+            } else if (vehicleClass === "bus") {
+              // 4 Window Pillars on each side
+              for (const sx of [-sp.w * 0.45, sp.w * 0.45]) {
+                for (let i = 0; i < 4; i++) {
+                  const z = -sp.d * 0.35 + i * (sp.d * 0.22);
+                  const pillar = new T.BoxGeometry(0.05, cabinH * 0.82, 0.15);
+                  pillar.translate(sx, lowerH + 0.18 + cabinH / 2, z);
+                  parts.push(pillar);
+                }
+              }
             } else if (vehicleClass === "truck" || vehicleClass === "artic") {
               const cargoL = sp.d * (vehicleClass === "artic" ? 0.65 : 0.52);
               const cargoH = sp.h * 0.52;
               const cargo = new T.BoxGeometry(sp.w * 0.96, cargoH, cargoL);
               cargo.translate(0, lowerH + 0.18 + cargoH / 2, -sp.d * 0.18);
               parts.push(cargo);
+              // Side Mirrors (Silhouette identifier)
+              for (const sx of [-sp.w * 0.48, sp.w * 0.48]) {
+                const mirror = new T.BoxGeometry(0.06, 0.26, 0.16);
+                mirror.translate(sx, lowerH + 0.18 + cabinH * 0.65, sp.d * 0.38);
+                const arm = new T.BoxGeometry(0.10, 0.04, 0.04);
+                arm.translate(sx > 0 ? sx - 0.05 : sx + 0.05, lowerH + 0.18 + cabinH * 0.65, sp.d * 0.38);
+                parts.push(mirror, arm);
+              }
             }
           }
           return mergeGeometries(parts, T);
@@ -488,6 +533,25 @@ export function vessel(vesselClass = "yacht") {
             const b2 = new T.BoxGeometry(sp.w * 0.85, 0.08, 0.35);
             b2.translate(0, hullH + 0.04, sp.d * 0.2);
             parts.push(b1, b2);
+          } else if (vesselClass === "tug") {
+            const cabinH = sp.h * 0.45;
+            const cabin = new T.BoxGeometry(sp.w * 0.68, cabinH, sp.d * 0.38);
+            cabin.translate(0, hullH + cabinH / 2, -sp.d * 0.05);
+            const stack = new T.CylinderGeometry(0.4, 0.45, 1.8, 6);
+            stack.translate(0, hullH + cabinH + 0.9, -sp.d * 0.16);
+            const bowFender = new T.CylinderGeometry(0.65, 0.65, sp.w * 0.72, 6);
+            bowFender.rotateZ(Math.PI / 2);
+            bowFender.translate(0, hullH * 0.85, sp.d / 2 - 0.1);
+            parts.push(cabin, stack, bowFender);
+            for (const sx of [-sp.w / 2 + 0.08, sp.w / 2 - 0.08]) {
+              for (let i = 0; i < 3; i++) {
+                const z = -sp.d * 0.25 + i * (sp.d * 0.25);
+                const sideTyre = new T.CylinderGeometry(0.32, 0.32, 0.18, 6);
+                sideTyre.rotateX(Math.PI / 2);
+                sideTyre.translate(sx, hullH * 0.8, z);
+                parts.push(sideTyre);
+              }
+            }
           } else {
             const cabin = new T.BoxGeometry(sp.w * 0.65, sp.h * 0.4, sp.d * 0.4);
             cabin.translate(0, hullH + sp.h * 0.2, -sp.d * 0.1);
@@ -524,10 +588,10 @@ export function vessel(vesselClass = "yacht") {
  */
 export function aircraft(aircraftClass = "light-single") {
   const specs = {
-    "light-single": { w: 10.8, d: 8.2, h: 2.7, tris: 88 },
-    "airliner-twin": { w: 34.0, d: 37.5, h: 11.8, tris: 132 },
-    "regional-jet": { w: 26.0, d: 29.5, h: 8.2, tris: 112 },
-    helicopter: { w: 12.0, d: 13.5, h: 3.8, tris: 88 },
+    "light-single": { w: 10.8, d: 8.2, h: 2.7, tris: 160 },
+    "airliner-twin": { w: 34.0, d: 37.5, h: 11.8, tris: 144 },
+    "regional-jet": { w: 26.0, d: 29.5, h: 8.2, tris: 160 },
+    helicopter: { w: 12.0, d: 13.5, h: 3.8, tris: 96 },
   };
   const sp = specs[aircraftClass] || specs["light-single"];
 
@@ -578,14 +642,56 @@ export function aircraft(aircraftClass = "light-single") {
             const rotor = new T.BoxGeometry(sp.w * 0.90, 0.04, sp.w * 0.08);
             rotor.translate(0, sp.h * 0.85, sp.d * 0.12);
             parts.push(cabin, boom, rotor);
+          } else if (aircraftClass === "regional-jet") {
+            const fuse = new T.CylinderGeometry(sp.w * 0.055, sp.w * 0.055, sp.d * 0.90, 8);
+            fuse.rotateX(Math.PI / 2);
+            fuse.translate(0, sp.h * 0.35, 0);
+            parts.push(fuse);
+            const wingL = new T.BoxGeometry(sp.w * 0.44, sp.h * 0.04, sp.d * 0.14);
+            wingL.rotateY(-0.30);
+            wingL.translate(-sp.w * 0.24, sp.h * 0.32, -sp.d * 0.04);
+            const wingletL = new T.BoxGeometry(0.08, sp.h * 0.20, sp.d * 0.08);
+            wingletL.translate(-sp.w * 0.44, sp.h * 0.40, -sp.d * 0.08);
+            const wingR = new T.BoxGeometry(sp.w * 0.44, sp.h * 0.04, sp.d * 0.14);
+            wingR.rotateY(0.30);
+            wingR.translate(sp.w * 0.24, sp.h * 0.32, -sp.d * 0.04);
+            const wingletR = new T.BoxGeometry(0.08, sp.h * 0.20, sp.d * 0.08);
+            wingletR.translate(sp.w * 0.44, sp.h * 0.40, -sp.d * 0.08);
+            parts.push(wingL, wingletL, wingR, wingletR);
+            for (const sx of [-sp.w * 0.09, sp.w * 0.09]) {
+              const nacelle = new T.CylinderGeometry(sp.w * 0.032, sp.w * 0.028, sp.d * 0.14, 6);
+              nacelle.rotateX(Math.PI / 2);
+              nacelle.translate(sx, sp.h * 0.42, -sp.d * 0.25);
+              parts.push(nacelle);
+            }
+            const fin = new T.BoxGeometry(sp.w * 0.015, sp.h * 0.44, sp.d * 0.18);
+            fin.rotateX(0.35);
+            fin.translate(0, sp.h * 0.58, -sp.d * 0.38);
+            const tBar = new T.BoxGeometry(sp.w * 0.26, sp.h * 0.03, sp.d * 0.10);
+            tBar.translate(0, sp.h * 0.78, -sp.d * 0.42);
+            parts.push(fin, tBar);
           } else {
+            // Light Single Cessna with Propeller and Tricycle Landing Gear
             const fuse = new T.BoxGeometry(sp.w * 0.12, sp.h * 0.38, sp.d * 0.92);
-            fuse.translate(0, sp.h * 0.4, 0);
+            fuse.translate(0, sp.h * 0.45, 0);
             const wings = new T.BoxGeometry(sp.w, sp.h * 0.06, sp.d * 0.22);
-            wings.translate(0, sp.h * 0.4, 0);
+            wings.translate(0, sp.h * 0.52, 0);
             const prop = new T.BoxGeometry(sp.w * 0.22, sp.h * 0.42, 0.05);
-            prop.translate(0, sp.h * 0.4, sp.d * 0.47);
-            parts.push(fuse, wings, prop);
+            prop.translate(0, sp.h * 0.45, sp.d * 0.47);
+            const noseStrut = new T.CylinderGeometry(0.03, 0.03, 0.45, 4);
+            noseStrut.translate(0, 0.225, sp.d * 0.35);
+            const noseWheel = new T.CylinderGeometry(0.12, 0.12, 0.06, 6);
+            noseWheel.rotateZ(Math.PI / 2);
+            noseWheel.translate(0, 0.12, sp.d * 0.35);
+            parts.push(fuse, wings, prop, noseStrut, noseWheel);
+            for (const sx of [-sp.w * 0.18, sp.w * 0.18]) {
+              const mainStrut = new T.CylinderGeometry(0.03, 0.03, 0.52, 4);
+              mainStrut.translate(sx, 0.26, -sp.d * 0.05);
+              const mainWheel = new T.CylinderGeometry(0.14, 0.14, 0.08, 6);
+              mainWheel.rotateZ(Math.PI / 2);
+              mainWheel.translate(sx, 0.14, -sp.d * 0.05);
+              parts.push(mainStrut, mainWheel);
+            }
           }
           return mergeGeometries(parts, T);
         },
@@ -816,7 +922,7 @@ boundary.variants = {
  * @param {"manhole"|"grate"} kind
  */
 export function groundFurniture(kind = "manhole") {
-  const mKey = kind === "grate" ? "drain-grating" : "manhole";
+  const mKey = kind === "grate" ? "drain-grating" : (kind === "tactile" || kind === "paving-tactile") ? "paving-tactile" : "manhole";
   const m = MODELS[mKey];
   if (!m) throw new Error(`groundFurniture: unknown kind '${kind}'`);
   return {
@@ -827,6 +933,7 @@ export function groundFurniture(kind = "manhole") {
 groundFurniture.variants = {
   manhole: ["standard"],
   grate: ["standard"],
+  tactile: ["standard"],
 };
 
 export const MODELS = {
@@ -1633,11 +1740,17 @@ export const MODELS = {
     standsOn: ["carriageway", "sidewalk", "parking", "open"],
     lod: [
       {
-        level: 0, tris: 40,
+        level: 0, tris: 96,
         createGeometry: (T = THREE) => {
-          const cover = new T.CylinderGeometry(0.36, 0.36, 0.04, 10);
-          cover.translate(0, 0.02, 0);
-          return cover;
+          const parts = [];
+          const rim = new T.CylinderGeometry(0.36, 0.36, 0.04, 10);
+          rim.translate(0, 0.02, 0);
+          const inner = new T.CylinderGeometry(0.28, 0.28, 0.045, 8);
+          inner.translate(0, 0.0225, 0);
+          const notch = new T.BoxGeometry(0.04, 0.05, 0.06);
+          notch.translate(0.22, 0.025, 0);
+          parts.push(rim, inner, notch);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1669,11 +1782,20 @@ export const MODELS = {
     standsOn: ["carriageway", "parking", "open"],
     lod: [
       {
-        level: 0, tris: 12,
+        level: 0, tris: 76,
         createGeometry: (T = THREE) => {
+          const parts = [];
           const frame = new T.BoxGeometry(0.58, 0.04, 0.38);
           frame.translate(0, 0.02, 0);
-          return frame;
+          const sump = new T.BoxGeometry(0.50, 0.015, 0.30);
+          sump.translate(0, 0.0075, 0);
+          parts.push(frame, sump);
+          for (let i = 0; i < 4; i++) {
+            const bar = new T.BoxGeometry(0.035, 0.045, 0.32);
+            bar.translate(-0.16 + i * 0.11, 0.0225, 0);
+            parts.push(bar);
+          }
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1690,6 +1812,53 @@ export const MODELS = {
           const b = new T.BoxGeometry(0.6, 0.04, 0.4);
           b.translate(0, 0.02, 0);
           return b;
+        },
+      },
+    ],
+  },
+
+  "paving-tactile": {
+    id: "paving-tactile",
+    kind: "hard",
+    footprint: { w: 0.75, d: 0.75 },
+    height: 0.05,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "carriageway", "open"],
+    lod: [
+      {
+        level: 0, tris: 280,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const slab = new T.BoxGeometry(0.75, 0.03, 0.75);
+          slab.translate(0, 0.015, 0);
+          parts.push(slab);
+          for (let x = 0; x < 4; x++) {
+            for (let z = 0; z < 4; z++) {
+              const px = -0.26 + x * 0.17;
+              const pz = -0.26 + z * 0.17;
+              const dot = new T.CylinderGeometry(0.025, 0.025, 0.02, 4);
+              dot.translate(px, 0.04, pz);
+              parts.push(dot);
+            }
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1, tris: 12,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(0.75, 0.04, 0.75);
+          slab.translate(0, 0.02, 0);
+          return slab;
+        },
+      },
+      {
+        level: 2, tris: 12,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(0.75, 0.04, 0.75);
+          slab.translate(0, 0.02, 0);
+          return slab;
         },
       },
     ],
@@ -2506,18 +2675,26 @@ export const MODELS = {
     clearance: 0.5,
     origin: "base-centre",
     standsOn: ["open"],
-    height: 3.2,
-    clearance: 0.5,
-    origin: "base-centre",
-    standsOn: ["open"],
     lod: [
       {
-        level: 0, tris: 12,
+        level: 0, tris: 120,
         createGeometry: (T = THREE) => {
-          const panel = new T.BoxGeometry(12.0, 3.4, 0.15);
-          panel.rotateX(-0.55);
-          panel.translate(0, 1.5, 0);
-          return panel;
+          const parts = [];
+          for (let i = 0; i < 4; i++) {
+            const x = -5.4 + i * 3.6;
+            const post = new T.BoxGeometry(0.12, 3.0, 0.14);
+            post.rotateX(-0.32);
+            post.translate(x, 1.5, 0);
+            parts.push(post);
+          }
+          for (let i = 0; i < 5; i++) {
+            const y = 0.5 + i * 0.52;
+            const slat = new T.BoxGeometry(12.0, 0.32, 0.04);
+            slat.rotateX(-0.55);
+            slat.translate(0, y, (y / 3.2) * 0.8 - 0.4);
+            parts.push(slat);
+          }
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -2637,11 +2814,17 @@ export const MODELS = {
     standsOn: ["open", "water"],
     lod: [
       {
-        level: 0, tris: 12,
+        level: 0, tris: 48,
         createGeometry: (T = THREE) => {
-          const wall = new T.BoxGeometry(8.0, 4.0, 2.4);
-          wall.translate(0, 2.0, 0);
-          return wall;
+          const parts = [];
+          const wall = new T.BoxGeometry(8.0, 3.8, 2.0);
+          wall.translate(0, 1.9, -0.2);
+          const coping = new T.BoxGeometry(8.0, 0.2, 2.4);
+          coping.translate(0, 3.9, 0);
+          const bollard = new T.CylinderGeometry(0.2, 0.2, 0.45, 6);
+          bollard.translate(0, 4.0, 0.6);
+          parts.push(wall, coping, bollard);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -3206,6 +3389,464 @@ export const MODELS = {
       },
     ],
   },
+
+  "water-tower-roof": {
+    id: "water-tower-roof",
+    kind: "hard",
+    footprint: { w: 3.2, d: 3.2 },
+    height: 4.2,
+    clearance: 0.2,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0, tris: 128,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          for (const sx of [-1.1, 1.1]) {
+            for (const sz of [-1.1, 1.1]) {
+              const leg = new T.CylinderGeometry(0.06, 0.08, 1.9, 4);
+              leg.translate(sx, 0.95, sz);
+              parts.push(leg);
+            }
+          }
+          const brace = new T.BoxGeometry(2.4, 0.08, 2.4);
+          brace.translate(0, 1.85, 0);
+          const vat = new T.CylinderGeometry(1.3, 1.3, 1.5, 8);
+          vat.translate(0, 2.65, 0);
+          const cap = new T.ConeGeometry(1.4, 0.6, 8);
+          cap.translate(0, 3.7, 0);
+          parts.push(brace, vat, cap);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1, tris: 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.0, 4.0, 3.0);
+          b.translate(0, 2.0, 0);
+          return b;
+        },
+      },
+      {
+        level: 2, tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.0, 4.0, 3.0);
+          b.translate(0, 2.0, 0);
+          return b;
+        },
+      },
+    ],
+  },
+
+  "elevator-overrun": {
+    id: "elevator-overrun",
+    kind: "hard",
+    footprint: { w: 3.8, d: 4.2 },
+    sweep: { w: 4.0, d: 4.4 },
+    height: 3.2,
+    clearance: 0.1,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0, tris: 48,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const box = new T.BoxGeometry(3.8, 2.9, 4.2);
+          box.translate(0, 1.45, 0);
+          const parapet = new T.BoxGeometry(3.95, 0.18, 4.35);
+          parapet.translate(0, 2.99, 0);
+          const vent = new T.BoxGeometry(1.2, 0.8, 0.12);
+          vent.translate(0, 1.8, 2.15);
+          parts.push(box, parapet, vent);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1, tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.8, 3.2, 4.2);
+          b.translate(0, 1.6, 0);
+          return b;
+        },
+      },
+      {
+        level: 2, tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.8, 3.2, 4.2);
+          b.translate(0, 1.6, 0);
+          return b;
+        },
+      },
+    ],
+  },
+
+  "kiosk-newspaper": {
+    id: "kiosk-newspaper",
+    kind: "hard",
+    footprint: { w: 2.4, d: 2.4 },
+    sweep: { w: 2.7, d: 2.7 },
+    height: 2.8,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "open"],
+    lod: [
+      {
+        level: 0, tris: 64,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const body = new T.CylinderGeometry(1.05, 1.05, 2.2, 6);
+          body.translate(0, 1.1, 0);
+          const roof = new T.ConeGeometry(1.3, 0.55, 6);
+          roof.translate(0, 2.475, 0);
+          const counter = new T.BoxGeometry(1.2, 0.1, 0.4);
+          counter.translate(0, 1.0, 1.05);
+          parts.push(body, roof, counter);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1, tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(2.2, 2.8, 2.2);
+          b.translate(0, 1.4, 0);
+          return b;
+        },
+      },
+      {
+        level: 2, tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(2.2, 2.8, 2.2);
+          b.translate(0, 1.4, 0);
+          return b;
+        },
+      },
+    ],
+  },
+
+  "public-toilet": {
+    id: "public-toilet",
+    kind: "hard",
+    footprint: { w: 1.8, d: 2.2 },
+    height: 2.6,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "park", "open"],
+    lod: [
+      {
+        level: 0, tris: 72,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const pod = new T.CylinderGeometry(0.85, 0.85, 2.4, 8);
+          pod.translate(0, 1.2, 0);
+          const roof = new T.CylinderGeometry(0.92, 0.92, 0.15, 8);
+          roof.translate(0, 2.475, 0);
+          const seam = new T.BoxGeometry(0.04, 2.0, 0.08);
+          seam.translate(0, 1.0, 0.84);
+          parts.push(pod, roof, seam);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1, tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.8, 2.6, 2.2);
+          b.translate(0, 1.3, 0);
+          return b;
+        },
+      },
+      {
+        level: 2, tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.8, 2.6, 2.2);
+          b.translate(0, 1.3, 0);
+          return b;
+        },
+      },
+    ],
+  },
+
+  "fire-escape": {
+    id: "fire-escape",
+    kind: "hard",
+    footprint: { w: 2.4, d: 1.2 },
+    sweep: { w: 2.5, d: 1.4 },
+    height: 4.8,
+    clearance: 0.1,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0, tris: 72,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const plat1 = new T.BoxGeometry(2.4, 0.08, 1.2);
+          plat1.translate(0, 0.1, 0);
+          const plat2 = new T.BoxGeometry(2.4, 0.08, 1.2);
+          plat2.translate(0, 2.4, 0);
+          const stair = new T.BoxGeometry(1.0, 0.06, 1.6);
+          stair.rotateX(0.65);
+          stair.translate(-0.5, 1.25, 0);
+          parts.push(plat1, plat2, stair);
+          for (const side of [-1.15, 1.15]) {
+            const rail = new T.CylinderGeometry(0.03, 0.03, 4.6, 4);
+            rail.translate(side, 2.3, 0.55);
+            parts.push(rail);
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1, tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(2.4, 4.8, 1.2);
+          b.translate(0, 2.4, 0);
+          return b;
+        },
+      },
+      {
+        level: 2, tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(2.4, 4.8, 1.2);
+          b.translate(0, 2.4, 0);
+          return b;
+        },
+      },
+    ],
+  },
+
+  "wall-retaining": {
+    id: "wall-retaining",
+    kind: "hard",
+    footprint: { w: 2.4, d: 0.8 },
+    height: 2.2,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["plot", "verge", "open"],
+    lod: [
+      {
+        level: 0, tris: 48,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const base = new T.BoxGeometry(2.4, 1.1, 0.8);
+          base.translate(0, 0.55, 0);
+          const top = new T.BoxGeometry(2.4, 1.02, 0.55);
+          top.translate(0, 1.61, -0.125);
+          const rail = new T.BoxGeometry(2.4, 0.08, 0.06);
+          rail.translate(0, 2.16, -0.35);
+          parts.push(base, top, rail);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1, tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(2.4, 2.2, 0.8);
+          b.translate(0, 1.1, 0);
+          return b;
+        },
+      },
+      {
+        level: 2, tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(2.4, 2.2, 0.8);
+          b.translate(0, 1.1, 0);
+          return b;
+        },
+      },
+    ],
+  },
+
+  "bush-flowering": {
+    id: "bush-flowering",
+    kind: "soft",
+    footprint: { w: 2.2, d: 2.2 },
+    height: 1.4,
+    clearance: 0.2,
+    origin: "base-centre",
+    standsOn: ["park", "verge", "sidewalk", "plot", "open"],
+    lod: [
+      {
+        level: 0, tris: 160,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const c1 = new T.SphereGeometry(0.65, 6, 4);
+          c1.translate(0, 0.7, 0);
+          const c2 = new T.SphereGeometry(0.52, 5, 4);
+          c2.translate(0.45, 0.6, 0.3);
+          const c3 = new T.SphereGeometry(0.52, 5, 4);
+          c3.translate(-0.45, 0.6, -0.3);
+          parts.push(c1, c2, c3);
+          for (let i = 0; i < 6; i++) {
+            const ang = (i * Math.PI * 2) / 6;
+            const fl = new T.BoxGeometry(0.18, 0.18, 0.18);
+            fl.translate(Math.cos(ang) * 0.65, 0.85 + Math.sin(i) * 0.15, Math.sin(ang) * 0.65);
+            parts.push(fl);
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1, tris: 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(2.0, 1.4, 2.0);
+          b.translate(0, 0.7, 0);
+          return b;
+        },
+      },
+      {
+        level: 2, tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(2.0, 1.4, 2.0);
+          b.translate(0, 0.7, 0);
+          return b;
+        },
+      },
+    ],
+  },
+
+  "dry-dock": {
+    id: "dry-dock",
+    kind: "hard",
+    footprint: { w: 24.0, d: 85.0 },
+    height: 8.0,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["waterway", "open"],
+    lod: [
+      {
+        level: 0, tris: 96,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const floor = new T.BoxGeometry(24.0, 1.0, 85.0);
+          floor.translate(0, 0.5, 0);
+          for (const sx of [-9.5, 9.5]) {
+            const wall1 = new T.BoxGeometry(5.0, 3.5, 85.0);
+            wall1.translate(sx, 2.75, 0);
+            const wall2 = new T.BoxGeometry(3.0, 3.5, 85.0);
+            wall2.translate(sx > 0 ? sx + 1.0 : sx - 1.0, 6.25, 0);
+            parts.push(wall1, wall2);
+          }
+          const headWall = new T.BoxGeometry(24.0, 7.0, 6.0);
+          headWall.translate(0, 4.5, -39.5);
+          const gate = new T.BoxGeometry(15.0, 6.5, 3.5);
+          gate.translate(0, 4.25, 40.75);
+          parts.push(floor, headWall, gate);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1, tris: 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(24.0, 8.0, 85.0);
+          b.translate(0, 4.0, 0);
+          return b;
+        },
+      },
+      {
+        level: 2, tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(24.0, 8.0, 85.0);
+          b.translate(0, 4.0, 0);
+          return b;
+        },
+      },
+    ],
+  },
+
+  "buoy-navigation": {
+    id: "buoy-navigation",
+    kind: "hard",
+    footprint: { w: 1.6, d: 1.6 },
+    height: 3.2,
+    clearance: 0.2,
+    origin: "base-centre",
+    standsOn: ["waterway", "open"],
+    lod: [
+      {
+        level: 0, tris: 84,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const floatBody = new T.CylinderGeometry(0.75, 0.45, 1.2, 6);
+          floatBody.translate(0, 0.6, 0);
+          const mast = new T.CylinderGeometry(0.06, 0.08, 1.6, 4);
+          mast.translate(0, 2.0, 0);
+          const cage = new T.CylinderGeometry(0.35, 0.25, 0.5, 5);
+          cage.translate(0, 2.8, 0);
+          parts.push(floatBody, mast, cage);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1, tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.6, 3.2, 1.6);
+          b.translate(0, 1.6, 0);
+          return b;
+        },
+      },
+      {
+        level: 2, tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.6, 3.2, 1.6);
+          b.translate(0, 1.6, 0);
+          return b;
+        },
+      },
+    ],
+  },
+
+  "radar-tower": {
+    id: "radar-tower",
+    kind: "hard",
+    footprint: { w: 4.5, d: 4.5 },
+    height: 14.0,
+    clearance: 0.5,
+    origin: "base-centre",
+    standsOn: ["apron", "open", "plot"],
+    lod: [
+      {
+        level: 0, tris: 160,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          for (const sx of [-1.5, 1.5]) {
+            for (const sz of [-1.5, 1.5]) {
+              const leg = new T.CylinderGeometry(0.08, 0.15, 11.0, 4);
+              leg.translate(sx * 0.6, 5.5, sz * 0.6);
+              parts.push(leg);
+            }
+          }
+          const deck = new T.BoxGeometry(2.8, 0.25, 2.8);
+          deck.translate(0, 11.0, 0);
+          const pedestal = new T.CylinderGeometry(0.35, 0.45, 1.2, 6);
+          pedestal.translate(0, 11.7, 0);
+          const dish = new T.SphereGeometry(1.6, 8, 4, 0, Math.PI, 0, Math.PI * 0.45);
+          dish.rotateX(Math.PI * 0.55);
+          dish.translate(0, 13.2, 0);
+          parts.push(deck, pedestal, dish);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1, tris: 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(4.0, 14.0, 4.0);
+          b.translate(0, 7.0, 0);
+          return b;
+        },
+      },
+      {
+        level: 2, tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(4.0, 14.0, 4.0);
+          b.translate(0, 7.0, 0);
+          return b;
+        },
+      },
+    ],
+  },
+
 };
 
 // Add default family instances to MODELS registry

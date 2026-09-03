@@ -451,6 +451,40 @@
     opacity: 1;
     transform: translateY(0);
   }
+  .stat-badge.cost {
+    background: rgba(210, 153, 34, 0.15);
+    color: #e3b341;
+    border-color: rgba(210, 153, 34, 0.4);
+    font-weight: 700;
+  }
+  .sort-select {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+  }
+  .sort-select:focus {
+    border-color: var(--accent-blue);
+  }
+  .card-budget {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+  .cost-tag {
+    color: #e3b341;
+    font-weight: 600;
+  }
 </style>
 <script type="importmap">
 {"imports":{"three":"./vendor/three/three.module.min.js"}}
@@ -465,6 +499,7 @@
       <span class="brand-tagline">3D Asset Catalog with Studio Lighting & Per-Item Auto-Framing</span>
     </div>
     <div class="stats-badges" id="stats-badges">
+      <span class="stat-badge cost" id="stat-cost">-- World Tris</span>
       <span class="stat-badge built" id="stat-built">-- Built</span>
       <span class="stat-badge gen" id="stat-gen">-- Generators</span>
       <span class="stat-badge planned" id="stat-planned">-- Planned Gaps</span>
@@ -476,6 +511,12 @@
       <svg class="search-icon" viewBox="0 0 16 16"><path d="M11.5 7a4.499 4.499 0 1 1-8.998 0A4.499 4.499 0 0 1 11.5 7zm-.82 4.74a6 6 0 1 0-1.06 1.06l3.04 3.04a.75.75 0 1 0 1.06-1.06l-3.04-3.04z"></path></svg>
       <input type="text" class="search-input" id="search-input" placeholder="Search models, categories, generators...">
     </div>
+    <select id="sort-select" class="sort-select">
+      <option value="cost">Sort: World Cost (Count × LOD0)</option>
+      <option value="count">Sort: Instance Count</option>
+      <option value="tris">Sort: LOD0 Triangles</option>
+      <option value="name">Sort: Model Name (A–Z)</option>
+    </select>
     <div class="filter-pills" id="category-filters">
       <button class="filter-btn active" data-cat="all">All</button>
       <button class="filter-btn" data-cat="roof">Roof Clutter</button>
@@ -762,6 +803,17 @@ function resolveModel(reg) {
 
   // Check direct MODELS
   if (MODELS[reg.id]) return MODELS[reg.id];
+  if (reg.id === "bush-flowering" && MODELS["bush-flowering"]) return MODELS["bush-flowering"];
+  if (reg.id === "paving-tactile" && MODELS["paving-tactile"]) return MODELS["paving-tactile"];
+  if (reg.id === "water-tower-roof" && MODELS["water-tower-roof"]) return MODELS["water-tower-roof"];
+  if (reg.id === "elevator-overrun" && MODELS["elevator-overrun"]) return MODELS["elevator-overrun"];
+  if (reg.id === "kiosk-newspaper" && MODELS["kiosk-newspaper"]) return MODELS["kiosk-newspaper"];
+  if (reg.id === "public-toilet" && MODELS["public-toilet"]) return MODELS["public-toilet"];
+  if (reg.id === "fire-escape" && MODELS["fire-escape"]) return MODELS["fire-escape"];
+  if (reg.id === "wall-retaining" && MODELS["wall-retaining"]) return MODELS["wall-retaining"];
+  if (reg.id === "dry-dock" && MODELS["dry-dock"]) return MODELS["dry-dock"];
+  if (reg.id === "buoy-navigation" && MODELS["buoy-navigation"]) return MODELS["buoy-navigation"];
+  if (reg.id === "radar-tower" && MODELS["radar-tower"]) return MODELS["radar-tower"];
 
   // Try generator families
   if (reg.category === "roof") {
@@ -977,11 +1029,46 @@ const observer = new IntersectionObserver((entries) => {
   }
 }, { rootMargin: "150px" });
 
+// Calculate World Triangle Total Cost
+let totalWorldTris = 0;
+for (const item of libraryItems) {
+  const lod0Tris = item.model.lod && item.model.lod[0] ? item.model.lod[0].tris : 0;
+  totalWorldTris += (item.registry.count || 0) * lod0Tris;
+}
+
+const costBadge = document.getElementById("stat-cost");
+if (costBadge) costBadge.textContent = `${totalWorldTris.toLocaleString()} World Tris`;
+
+let currentSort = "cost";
+
+function sortLibraryItems() {
+  if (currentSort === "cost") {
+    libraryItems.sort((a, b) => {
+      const costA = (a.registry.count || 0) * (a.model.lod[0]?.tris || 0);
+      const costB = (b.registry.count || 0) * (b.model.lod[0]?.tris || 0);
+      return costB - costA;
+    });
+  } else if (currentSort === "count") {
+    libraryItems.sort((a, b) => (b.registry.count || 0) - (a.registry.count || 0));
+  } else if (currentSort === "tris") {
+    libraryItems.sort((a, b) => (b.model.lod[0]?.tris || 0) - (a.model.lod[0]?.tris || 0));
+  } else if (currentSort === "name") {
+    libraryItems.sort((a, b) => a.registry.id.localeCompare(b.registry.id));
+  }
+}
+
 function buildCards() {
   grid.innerHTML = "";
+  sortLibraryItems();
+
   libraryItems.forEach((item, idx) => {
     const reg = item.registry;
     const m = item.model;
+    const lod0 = m.lod[0]?.tris || 0;
+    const lod1 = m.lod[1]?.tris || 0;
+    const lod2 = m.lod[2]?.tris || 0;
+    const totalCost = (reg.count || 0) * lod0;
+
     const card = document.createElement("div");
     card.className = "card";
     card.dataset.index = idx;
@@ -1009,6 +1096,10 @@ function buildCards() {
           <span>${reg.seenAs}</span>
         </div>
         <div class="card-note">${reg.note || reg.generator || ""}</div>
+        <div class="card-budget">
+          <span>LOD: ${lod0} / ${lod1} / ${lod2} tris</span>
+          <span class="cost-tag">${totalCost.toLocaleString()} tris</span>
+        </div>
       </div>
       <div class="card-actions">
         <button class="btn btn-inspect" data-action="inspect">Inspect 3D</button>
@@ -1031,6 +1122,14 @@ function buildCards() {
   });
 }
 buildCards();
+
+const sortSelect = document.getElementById("sort-select");
+if (sortSelect) {
+  sortSelect.addEventListener("change", (e) => {
+    currentSort = e.target.value;
+    buildCards();
+  });
+}
 
 // --- Target Dispatch Hook (Brief 6 Task 3) ---
 function dispatchTargetEvent(reg) {

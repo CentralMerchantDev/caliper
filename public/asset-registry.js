@@ -29,8 +29,8 @@ export const ASSET_REGISTRY = [
   { id: "satellite-dish", category: "roof", status: "generator", source: "code", seenAs: "mid", count: 6400, generator: "roofClutter('dish', size)", note: "Parabolic satellite transceivers" },
   { id: "solar-panel", category: "roof", status: "generator", source: "code", seenAs: "far", count: 9800, generator: "roofClutter('solar', size)", note: "Photovoltaic panel arrays" },
   { id: "ac-unit", category: "roof", status: "generator", source: "code", seenAs: "close", count: 14000, generator: "roofClutter('ac', size)", note: "Wall and rooftop split condensing units" },
-  { id: "water-tower-roof", category: "roof", status: "planned", source: "code", seenAs: "far", count: 850, note: "Rooftop wooden/steel water storage tanks" },
-  { id: "elevator-overrun", category: "roof", status: "planned", source: "code", seenAs: "far", count: 3200, note: "Lift motor room roof structures" },
+  { id: "water-tower-roof", category: "roof", status: "built", source: "code", seenAs: "far", count: 850, note: "Rooftop wooden/steel water storage tanks" },
+  { id: "elevator-overrun", category: "roof", status: "built", source: "code", seenAs: "far", count: 3200, note: "Lift motor room roof structures" },
 
   // --- 2. STREET FURNITURE & CIVIC DETAILS ---
   { id: "bench-slat", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 2400, generator: "streetFurniture('bench', 'slat')", note: "Standard slatted public bench" },
@@ -58,8 +58,8 @@ export const ASSET_REGISTRY = [
   { id: "bike-rack", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 1100, generator: "streetFurniture('bike-rack', 'hoop')", note: "Inverted-U bicycle parking hoop" },
   { id: "cafe-table", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 850, generator: "streetFurniture('cafe-table', 'round')", note: "Sidewalk cafe table and chairs" },
   { id: "parasol", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 700, generator: "streetFurniture('parasol', 'hex')", note: "Outdoor dining parasol" },
-  { id: "kiosk-newspaper", category: "furniture", status: "planned", source: "code", seenAs: "close", count: 120, note: "Street newspaper and tobacco kiosk" },
-  { id: "public-toilet", category: "furniture", status: "planned", source: "code", seenAs: "close", count: 80, note: "Automated public convenience pod" },
+  { id: "kiosk-newspaper", category: "furniture", status: "built", source: "code", seenAs: "close", count: 120, note: "Street newspaper and tobacco kiosk" },
+  { id: "public-toilet", category: "furniture", status: "built", source: "code", seenAs: "close", count: 80, note: "Automated public convenience pod" },
 
   // --- 3. GROUND DETAILS ---
   { id: "manhole", category: "ground", status: "generator", source: "code", seenAs: "close", count: 7800, generator: "groundFurniture('manhole')", note: "Cast iron drainage manhole cover" },
@@ -71,7 +71,7 @@ export const ASSET_REGISTRY = [
   { id: "shopfront", category: "facade", status: "generator", source: "code", seenAs: "close", count: 2800, generator: "facade('shopfront', width)", note: "Glazed ground-floor commercial shopfront" },
   { id: "shutters", category: "facade", status: "generator", source: "code", seenAs: "mid", count: 8900, generator: "facade('shutters', width)", note: "External window louvre shutters" },
   { id: "balcony", category: "facade", status: "generator", source: "code", seenAs: "mid", count: 6400, generator: "facade('balcony', width)", note: "Cantilevered apartment balcony with balustrade" },
-  { id: "fire-escape", category: "facade", status: "planned", source: "code", seenAs: "mid", count: 450, note: "External steel fire escape stairs" },
+  { id: "fire-escape", category: "facade", status: "built", source: "code", seenAs: "mid", count: 450, note: "External steel fire escape stairs" },
 
   // --- 5. BOUNDARIES & WALLS ---
   { id: "fence-iron", category: "boundary", status: "generator", source: "code", seenAs: "close", count: 4800, generator: "boundary('fence-iron', length)", note: "Spear-topped wrought iron railing" },
@@ -79,14 +79,14 @@ export const ASSET_REGISTRY = [
   { id: "gate-iron", category: "boundary", status: "generator", source: "code", seenAs: "close", count: 1800, generator: "boundary('gate-iron', length)", note: "Double swing garden gate" },
   { id: "hedge", category: "boundary", status: "generator", source: "code", seenAs: "mid", count: 8400, generator: "boundary('hedge', length)", note: "Formal trimmed evergreen hedge" },
   { id: "wall-garden", category: "boundary", status: "generator", source: "code", seenAs: "close", count: 5600, generator: "boundary('wall-garden', length)", note: "Coursed brick boundary wall" },
-  { id: "wall-retaining", category: "boundary", status: "planned", source: "code", seenAs: "mid", count: 1200, note: "Concrete gravity retaining wall" },
+  { id: "wall-retaining", category: "boundary", status: "built", source: "code", seenAs: "mid", count: 1200, note: "Concrete gravity retaining wall" },
 
   // --- 6. VEGETATION (4 Species x 3 Ages) ---
   { id: "tree-broadleaf", category: "vegetation", status: "generator", source: "code", seenAs: "mid", count: 14000, generator: "tree('broadleaf', age)", note: "Deciduous shade tree" },
   { id: "tree-conifer", category: "vegetation", status: "generator", source: "code", seenAs: "mid", count: 9000, generator: "tree('conifer', age)", note: "Pine and evergreen conifer" },
   { id: "tree-palm", category: "vegetation", status: "generator", source: "code", seenAs: "mid", count: 4200, generator: "tree('palm', age)", note: "Coastal date palm" },
   { id: "tree-cypress", category: "vegetation", status: "generator", source: "code", seenAs: "mid", count: 3600, generator: "tree('cypress', age)", note: "Columnar Mediterranean cypress" },
-  { id: "bush-flowering", category: "vegetation", status: "planned", source: "code", seenAs: "close", count: 5000, note: "Park shrubbery and flower beds" },
+  { id: "bush-flowering", category: "vegetation", status: "built", source: "code", seenAs: "close", count: 5000, note: "Park shrubbery and flower beds" },
 
   // --- 7. PEOPLE (3 Builds x 3 Poses) ---
   { id: "person-adult", category: "people", status: "generator", source: "code", seenAs: "close", count: 4800, generator: "person('adult', pose, style)", note: "Pedestrian adult resident" },
@@ -114,7 +114,8 @@ export const ASSET_REGISTRY = [
   { id: "jetty", category: "maritime", status: "built", source: "code", seenAs: "mid", count: 95, note: "Timber pile landing jetty" },
   { id: "mooring", category: "maritime", status: "built", source: "code", seenAs: "close", count: 420, note: "Harbour cast mooring bollard" },
   { id: "beacon", category: "maritime", status: "built", source: "code", seenAs: "far", count: 24, note: "Harbour navigational light beacon" },
-  { id: "buoy-navigation", category: "maritime", status: "planned", source: "code", seenAs: "mid", count: 40, note: "Channel marker floating buoy" },
+  { id: "buoy-navigation", category: "maritime", status: "built", source: "code", seenAs: "mid", count: 40, note: "Channel marker floating buoy" },
+  { id: "dry-dock", category: "maritime", status: "built", source: "code", seenAs: "far", count: 6, note: "Masonry graving dock basin with caisson gate" },
 
   // --- 10. AIRPORT SET & AVIATION ---
   { id: "runway-module", category: "airport", status: "built", source: "code", seenAs: "far", count: 64, note: "45m runway segment with centerline markings" },
@@ -124,7 +125,7 @@ export const ASSET_REGISTRY = [
   { id: "blast-fence", category: "airport", status: "built", source: "code", seenAs: "mid", count: 45, note: "Jet blast deflector screen" },
   { id: "approach-lighting", category: "airport", status: "built", source: "code", seenAs: "far", count: 32, note: "Elevated ALS approach lighting stanchions" },
   { id: "windsock", category: "airport", status: "built", source: "code", seenAs: "close", count: 12, note: "Airfield windsock" },
-  { id: "radar-tower", category: "airport", status: "planned", source: "code", seenAs: "far", count: 4, note: "Rotating airport surveillance radar" },
+  { id: "radar-tower", category: "airport", status: "built", source: "code", seenAs: "far", count: 4, note: "Rotating airport surveillance radar" },
   { id: "aircraft-light-single", category: "aviation", status: "generator", source: "code", seenAs: "mid", count: 40, generator: "aircraft('light-single')", note: "Single-engine Cessna propeller aircraft" },
   { id: "aircraft-airliner-twin", category: "aviation", status: "generator", source: "code", seenAs: "far", count: 25, generator: "aircraft('airliner-twin')", note: "Narrow-body twin-jet passenger airliner" },
   { id: "aircraft-regional-jet", category: "aviation", status: "generator", source: "code", seenAs: "far", count: 18, generator: "aircraft('regional-jet')", note: "Regional commuter airliner" },

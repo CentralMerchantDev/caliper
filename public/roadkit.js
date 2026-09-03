@@ -207,7 +207,8 @@ export function mergeGeometries(geometries, T = THREE) {
 }
 
 export function straight(roadClass = "STREET", modules = 1) {
-  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.STREET;
+  const stdKey = typeof roadClass === "string" ? roadClass.toUpperCase() : "STREET";
+  const std = ROAD_STANDARDS[stdKey] || ROAD_STANDARDS.STREET;
   const lengthM = modules * MODULE_M;
   const halfL = lengthM / 2;
   const widthM = std.row;
@@ -269,7 +270,8 @@ export function straight(roadClass = "STREET", modules = 1) {
 }
 
 export function curve(roadClass = "STREET", radiusM = 32, angleDeg = 90) {
-  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.STREET;
+  const stdKey = typeof roadClass === "string" ? roadClass.toUpperCase() : "STREET";
+  const std = ROAD_STANDARDS[stdKey] || ROAD_STANDARDS.STREET;
   const angleRad = (angleDeg * Math.PI) / 180;
   const widthM = std.row;
   const outerR = radiusM + widthM / 2;
