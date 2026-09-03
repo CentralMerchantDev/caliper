@@ -50,6 +50,7 @@ import { EffectComposer } from "./vendor/three/addons/postprocessing/EffectCompo
 import { RenderPass } from "./vendor/three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "./vendor/three/addons/postprocessing/UnrealBloomPass.js";
 import { ShaderPass } from "./vendor/three/addons/postprocessing/ShaderPass.js";
+import { makeGradeShader } from "./colour-grade.js";
 import { VignetteShader } from "./vendor/three/addons/shaders/VignetteShader.js";
 import { OutputPass } from "./vendor/three/addons/postprocessing/OutputPass.js";
 import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
@@ -1274,7 +1275,21 @@ class Renderer3D {
     this._cameraAnimStartTime = 0;
     this._cameraAnimDuration = 650;
 
-    this._overrideHour = null;
+    // 12, NOT null, because the toolbar says so.
+    //
+    // #tod-day ships with class="active" aria-pressed="true" in the markup, so
+    // from the first paint the interface claims the world is set to Day. This
+    // was null, meaning nothing was overridden and the hour free-ran on sim
+    // time -- so the control asserted a state the world had never been in, and
+    // drifted further from it every minute the tab stayed open. Mark's own
+    // screenshot caught it: the Day button lit, the clock reading 05:00, and a
+    // city washed grey-green by a sun barely over the horizon. He read it as
+    // fog. It was five in the morning.
+    //
+    // The default now matches what the interface says it is. The day counter
+    // still advances; the LIGHT holds where the visitor was told it is until
+    // they choose otherwise.
+    this._overrideHour = 12;
     this._currentHour = 12;
     this._dropAnimItems = [];
     this._knownPlacementKeys = new Set();
@@ -1459,6 +1474,12 @@ class Renderer3D {
       const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h),
         RENDER_TUNING.BLOOM.strength, RENDER_TUNING.BLOOM.radius, RENDER_TUNING.BLOOM.threshold);
       composer.addPass(bloomPass);
+      // THE GRADE. Its absence here is why the deployed page looked washed out
+      // while every screenshot of city.html looked like a place: saturation,
+      // the contrast S-curve, the warm/cool split and -- most visibly -- the
+      // highlight roll-off that stops the horizon blowing to white. Same shader
+      // as city.html, from one file, so the two cannot drift apart again.
+      composer.addPass(new ShaderPass(makeGradeShader()));
       const vignettePass = new ShaderPass(VignetteShader);
       vignettePass.uniforms["offset"].value = 1.45;
       vignettePass.uniforms["darkness"].value = 0.45;
@@ -1693,6 +1714,21 @@ class Renderer3D {
     //
     // The sun light travelled through the day; the sky behind it did not.
     this._skyUniforms = (city.sky && city.sky.material && city.sky.material.uniforms) || null;
+
+    // THE OTHER HALF OF THE SWAP.
+    //
+    // The block above removes the village's starfield, cloud group, moon mesh
+    // and moon light because they are sized for a village. Nothing ever put a
+    // city-sized replacement back -- while draw() went on positioning the moon,
+    // fading the stars and drifting the clouds every frame, against objects that
+    // were no longer in the scene. Every guard passed, every update landed on an
+    // orphan, and the sky was empty.
+    //
+    // The replacement is BUILT BY city-render.js, alongside the sun and the fog,
+    // and handed over here. It is not built in this file: city.html does not
+    // construct WorldRenderer, so a sky created here would be invisible to
+    // scripts/shoot.mjs -- the only tool that can photograph this world.
+    this._citySky = city.citySky || null;
     this._cityHeightAt = city.heightAt;
     this._refreshFeatureTargets();
 
@@ -6005,6 +6041,21 @@ class Renderer3D {
    * focused the far side of.
    */
   _showPivotMarker(p) {
+    // NOT VERIFIED IN A REAL FRAME, AND SAYING SO RATHER THAN GUESSING.
+    //
+    // This was briefly disabled on the strength of a headless render in which
+    // the marker drew as an orange band across the whole view and every focus
+    // resolved to world (0,0,0). Both were artefacts of the harness, not of this
+    // code: index.html's animation loop never advanced there, so the camera was
+    // still at the origin with _camDist reading 2730. A raycast from a camera
+    // that was never positioned starts inside the terrain and returns the origin
+    // at distance zero for every hit -- which is exactly what was measured.
+    //
+    // scripts/shoot.mjs renders city.html, which is built for headless capture
+    // (__ready, __renderOnce). index.html is not, and until it grows the same
+    // hooks this marker cannot be photographed here. So its appearance -- the
+    // ring scale, the pin height, whether depthTest:false reads well against a
+    // building -- is UNCHECKED, and the cap below is reasoning, not measurement.
     if (!this._pivotMarker) {
       const mat = new THREE.MeshBasicMaterial({
         color: 0xb0560c, transparent: true, opacity: 0.92,
@@ -6013,8 +6064,11 @@ class Renderer3D {
       const g = new THREE.Group();
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 1.0, 36), mat);
       ring.rotation.x = -Math.PI / 2;
-      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6), mat);
-      pin.position.y = 1.3;
+      // The pin carries the marker when the ring is edge-on, which at a low
+      // camera pitch is most of the time. It was 2.6 m against a ring that grew
+      // to 55 m across -- invisible next to it. Now it is the taller feature.
+      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 9, 6), mat);
+      pin.position.y = 4.5;
       g.add(ring); g.add(pin);
       g.renderOrder = 998;
       this._pivotMarker = g;
@@ -6026,10 +6080,26 @@ class Renderer3D {
     this._updatePivotMarkerScale();
   }
 
+  /**
+   * Keep the marker READABLE, which is not the same as keeping it proportional.
+   *
+   * The first version scaled by 2% of the orbit range with no ceiling. Seen in a
+   * real frame at 2,730 m that is a ring roughly 55 m across, and a flat ring on
+   * the ground at a shallow camera pitch is not a ring -- it is a line. The
+   * marker drew as an orange stripe across the whole width of the beach. It was
+   * doing exactly what it was told and it was useless, and no stubbed test could
+   * have shown that.
+   *
+   * The fix is the CAP, not the measurement. An attempt to scale by the camera's
+   * distance to the marker instead pinned it to the minimum in every frame:
+   * camera.position sits near the origin here, so that distance is not the orbit
+   * range and measuring it was wrong. _camDist is the authoritative range and it
+   * always was; what it lacked was a ceiling. Past roughly 12 m across, a ground
+   * ring stops being a marker and starts being scenery.
+   */
   _updatePivotMarkerScale() {
     if (!this._pivotMarker || !this._pivotMarker.visible) return;
-    // ~2% of the orbit distance keeps the ring a constant size on screen.
-    const s = Math.max(0.5, (this._camDist || 48) * 0.02);
+    const s = Math.min(6, Math.max(0.5, (this._camDist || 48) * 0.02));
     this._pivotMarker.scale.setScalar(s);
   }
 
@@ -6557,6 +6627,11 @@ class Renderer3D {
       this._gridRafId = null;
     }
 
+    if (this._citySky) {
+      this._citySky.dispose();
+      this._citySky = null;
+    }
+
     if (this._pmremGenerator) {
       this._pmremGenerator.dispose();
       this._pmremGenerator = null;
@@ -6971,6 +7046,17 @@ class Renderer3D {
 
     const dayHemi = lerp(0.35, 0.55, Math.min(1, sun.elevation));
     this.hemi.intensity = lerp(0.08, dayHemi, sun.dayAmt);
+
+    // The city's own sky, driven by the sun vector and darkness already computed
+    // above rather than by a second clock that could drift out of step with it.
+    if (this._citySky) {
+      this._citySky.update(
+        { x: sx, y: sy, z: sz },
+        nightAmt,
+        deltaSec,
+        this._lookAt,
+      );
+    }
 
     // Update Celestial Moon & Night Sky Stars
     if (this._moonMesh && this._moonLight) {

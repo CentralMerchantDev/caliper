@@ -1,0 +1,69 @@
+Size against available space, and what you would have to clear
+
+Mark, stating the rule the layer exists to enforce:
+
+  "Once the initial city is laid out, the only thing that dictates what can go
+   on land is the size of the block compared to the space available. If the
+   condo is 10 x 10 and the space is 6 x 6 you can't put the condo -- unless you
+   clear more space for it."
+
+The first clause the layer already enforced. The second it could not express,
+and the second is the one a builder needs.
+
+WHAT WAS WRONG
+
+An occupancy refusal named the FIRST thing it hit and nothing else:
+
+    "building shed-north is already here"
+
+Which is true, useless, and slightly misleading -- it implies removing that one
+shed would do. Two sheds 6 m apart leave a 6 x 6 hole; a 10 x 10 condo is
+blocked by both, and a builder told about one of them clears it, tries again,
+and is told about the other. Worse, the refusal said nothing about whether
+either could be removed at all, so there was no way to tell "move that shed"
+from "that is a hillside".
+
+WHAT IT SAYS NOW
+
+    10.0 x 10.0 m needed; building shed-north, building shed-south are in the
+    way -- clear them and this fits
+
+and carries `blockedBy: [{ id, kind, owner, clearable }]` so a caller can offer
+the action rather than parse the sentence.
+
+`clearable` is the honest part. Rock and open water are listed as blockers --
+they genuinely are -- and are never offered as clearable, because they are not
+things somebody put there. Telling a builder to clear a hillside is worse than
+telling them no.
+
+registry.allOverlapping() is overlapsReserved without the early return: same
+filters, same terrain rules, same insertion order, it just does not stop at the
+first match. overlapsReserved answers "is this free", which is the right
+question for placement and the wrong one for someone who has just been told no.
+
+AND THE SECOND CLAUSE IS ACTUALLY EXERCISED
+
+The test does not stop at the refusal. It closes both sheds and places the condo
+in the space they leave, because "clear them and this fits" is a claim and a
+claim that is never tested is decoration.
+
+VERIFIED BY MUTATION
+
+  refusal names only the first blocker again  -> fails
+  allOverlapping stops at the first match     -> fails
+  rock is offered as clearable                -> fails (after the test was fixed)
+
+THE THIRD ONE SURVIVED FIRST, AND FOR AN INSTRUCTIVE REASON
+
+The rock test used the mountain peak, where the SURFACE is already rock -- so
+the placement was refused at the terrain step, `blockedBy` was undefined, and
+the assertion sat inside `if (blockedBy)` and never ran at all. A conditional
+assertion is a test that can silently not execute, which is a new entry in a
+familiar pattern: it is the fourth test this session that passed for a reason
+other than the one stated.
+
+Rewritten to bury a footprint 60 m under FLAT OPEN ground, so the terrain step
+passes and rock arrives as an occupancy blocker -- the path actually being
+tested. It now fails as it should.
+
+584/584 node tests, tsc --noEmit clean. Page claim regenerated and repinned.

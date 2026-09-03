@@ -1,0 +1,106 @@
+One bar, not three -- and a stacking context that would have hidden the menus
+
+Mark, on the interface:
+
+  "The main view seems very cluttered and unorganized... it is not that what is
+   there shouldn't be there, it is that it is just not well laid out or
+   displayed. I also like the colors of Datum more than I do for what we have
+   in Caliper."
+
+Both halves taken literally: nothing removed, everything regrouped, and the
+palette moved to DATUM's.
+
+WHAT CHANGED IN THE BAR
+
+Three stacked clusters holding 24 always-visible pills became one centred bar
+holding eight affordances: the brand, the isolate status, five menus -- Mark
+Fraser, How it works, Places, View, More -- and then the clock, pause and the
+command palette. A toolbar that shows everything ranks nothing.
+
+The buttons inside each panel are the ORIGINAL ELEMENTS, moved rather than
+re-created, and every id is preserved. That matters more than it sounds: the
+page binds ~29 listeners by id from an inline module, so a rebuilt button is a
+dead button. The header was assembled by extracting each control's exact markup
+from the old header and reassembling it, with an assertion that the id set
+before and after is identical -- 29 in, 29 out, none added, none dropped.
+Behaviour is unchanged by construction, not by hoping.
+
+THE PALETTE, AND TWO PLACES IT WAS UNREADABLE
+
+DATUM's tokens went in at :root and 55 literals in the stylesheet were
+repointed. That was not enough, and the render showed why twice.
+
+First, the overview card -- the first thing a visitor reads -- went cream while
+its SIXTEEN INLINE colour literals stayed dark-theme. Every heading was #fff on
+#FEFCF6. White text on a white card, on the panel that explains the project.
+
+Second, and this one was measured rather than eyeballed:
+
+    active pill, --accent-soft #F6E4CF on the amber tint   1.03 : 1
+    active-emerald pill, #6ee7b7 on the emerald tint       1.21 : 1
+
+1.03:1 is not "low contrast", it is invisible. Both colours were chosen for a
+dark background and simply kept when the surface became paper. Now #8A4309 at
+6.01:1 and --emerald at 4.76:1, both AA at these sizes.
+
+THE BUG THAT WOULD HAVE SHIPPED
+
+.top-bar-wrapper carried z-index: 50. A positioned element with a z-index opens
+a STACKING CONTEXT, so each menu panel's z-index: 210 was ranked only against
+its siblings inside the bar -- it could not climb past the overview card at 65.
+
+The panels opened. They reported themselves visible. getBoundingClientRect gave
+them real width and height. And they were painted underneath the card, which
+swallowed every click on them.
+
+Read as pixels, this looks fine: the screenshot shows an open menu. It is only
+wrong if you try to USE it. So the regroup is not defended by a screenshot.
+
+scripts/check-topbar.mjs DRIVES THE REAL PAGE
+
+Every control present exactly once; every menu closed on load; every menu opens,
+shows visible items, and closes on Escape; opening one closes the others;
+clicking the world closes them; a menu item still runs its own handler; and each
+trigger keeps a text label. The item check is PAIRED -- press Overview, the card
+goes; press it again, the card comes back -- because a control that only works
+once is a control the user then has to hunt for.
+
+Mutation-verified, each mutation confirmed as landed before the result was read:
+
+  exclusivity removed (2nd menu no longer closes 1st)  -> caught
+  outside-click listener removed                       -> caught
+  Escape handler removed                               -> caught
+  z-index put back to 50                               -> caught
+  one control deleted from the bar                     -> caught
+
+5 of 5. None survived.
+
+AND CHECK 6 LIED TO ME FIRST, TWICE
+
+Its first version pressed Grid and asserted on aria-pressed. That could never
+have passed: the grid handler toggles a CLASS, and it calls into the renderer,
+which this harness stubs. Switching to Overview did not fix it either -- it
+still reported no change, because the STUB ITSELF was wrong. It exported neither
+WorldRenderer nor THREE, which index.html imports, so the page's module threw on
+load and NOT ONE handler was bound. The harness was measuring a dead page and
+would have reported that as a defect in the menus.
+
+The stub now satisfies the real imports, and a page error is an assertion
+failure rather than something swallowed -- because a silent load failure is
+exactly what made the check lie.
+
+That is the fifth test this session to pass, or fail, for a reason other than
+the one stated. Same pattern every time: a case built by someone who already
+knew what the answer was supposed to be.
+
+584/584 node tests, tsc --noEmit clean, top-bar check green.
+
+NOT DONE, AND NOT IMPLIED AWAY
+
+  * The bottom-right still stacks two panels (pipeline execution above the
+    target/build panel). Mark named the main view; this commit did the top.
+  * The nine UMAA readiness conditions still stand at four of nine closed.
+    F1/C2, F2, F5/C5, F8 and F22 are open and unchanged by this work.
+  * scripts/_shoot-ui.mjs, _geom.mjs and _open.mjs are scratch. Copies are in
+    _TO-DELETE/scratch-ui-scripts-2026-09-02/; the originals could not be moved
+    from the sandbox and need doing from Mark's terminal. Nothing was deleted.

@@ -162,8 +162,22 @@ const TERRAIN_REFUSES = {
   // Permanence is now derived from what the thing IS. A building or a structure
   // on a beach is a sea wall waiting to happen; a person, a parasol or a boat
   // pulled up on the sand is what a beach is for.
+  // AND THE FAIL-DIRECTION IS NOW THE SAME AS ITS NEIGHBOURS'.
+  //
+  // The paragraph above criticises the previous version for asking about a field
+  // no caller writes, so the rule was dead and its default was to ALLOW while
+  // the water rule beside it defaults to refuse. The replacement asked for
+  // `spec.category` -- also optional, and omitted by every spec in ground.test.js.
+  // Measured on one beach point with one 6 x 6 x 8 m model:
+  //
+  //     { ..., category: "building" }  -> refused, "carries nothing permanent"
+  //     { ... }                        -> ok: true
+  //
+  // The same inconsistency, one field later, in the paragraph criticising it.
+  // So an UNSTATED category is now treated as permanent: a thing that will not
+  // say what it is does not get the benefit of the doubt on a foreshore.
   [SURFACE.BEACH]: (spec) =>
-    spec.permanent === false || !["building", "structure"].includes(spec.category)
+    spec.permanent === false || ["pedestrian", "furniture", "vegetation", "vessel"].includes(spec.category)
       ? null
       : "a foreshore carries nothing permanent",
 };
@@ -181,6 +195,35 @@ const TERRAIN_REFUSES = {
  * a surface is, by definition, one that defines ground.
  */
 const SURFACE_KINDS = Object.keys(KIND_SURFACE);
+
+/**
+ * The kinds that are PARCELS — bounded ground with an edge that means something.
+ *
+ * A plot, a farm, a park: you build WITHIN one, and hanging over its edge is
+ * trespass. A road, a railway, a bridge, a river: you travel ALONG one, and its
+ * edge in the direction of travel is an artefact of how it was chunked, not a
+ * boundary.
+ *
+ * THIS DISTINCTION IS THE FIX FOR A COLLISION THAT MADE THE LAYER REFUSE ITS
+ * OWN PRIMARY OUTPUT. WORLD-RULES §3.2 says a road piece is one cell — 8 m. The
+ * size check refused anything larger than its host and anything crossing a
+ * host's edge. Both were individually correct, and together, on a road laid out
+ * exactly as the specification mandates:
+ *
+ *   a 12 m bus      -> "too-big: needs 2.5 x 12.0 m; road st-1 is 18.0 x 8.0 m"
+ *   a 4.4 m car,
+ *     centred in a piece  -> ok
+ *     over a piece JOIN    -> "overhangs: fits road st-0 but not at this position"
+ *
+ * Every bus, tram, lorry and articulated vehicle unplaceable, and roughly half
+ * of all cars, because the road was built the way the grid says to build it.
+ * Register the identical road as one 320 m strip and both are accepted — so the
+ * land's answer to "may this vehicle stand on this road" depended on how the
+ * road had been chunked.
+ *
+ * A vehicle is not too big for a road because the road was cut into 8 m pieces.
+ */
+const PARCEL_KINDS = ["plot", "farm", "park"];
 
 // -----------------------------------------------------------------------------
 // THE VOLUME
@@ -389,7 +432,25 @@ export function createGround({ heightAt, registry = null }) {
     const d = (rotated ? f.w : f.d) + pad;
 
     const pts = sampleGrid(x, z, w, d);
+
+    // THE GROUND IS MEASURED ONCE, BEFORE ANY CHECK NEEDS IT.
+    //
+    // These used to be accumulated in the FIT step, three checks later, while
+    // the size check above already read `hi` to build its height range. `hi` was
+    // still -Infinity there, so the range was (-Infinity, -Infinity), the host
+    // query matched nothing, and a 30 m tower was accepted onto a 12 x 18 m
+    // house lot. Caught within a minute because the sizing tests are PAIRED --
+    // the bus that must place and the tower that must not — and only one of the
+    // pair moved. An unpaired test would have called it a fix.
+    //
+    // Computing them here removes the ordering hazard rather than fixing this
+    // instance of it: no later step can read a value that has not been taken.
     let lo = Infinity, hi = -Infinity;
+    for (const [px, pz] of pts) {
+      const h = heightAt(px, pz);
+      if (h < lo) lo = h;
+      if (h > hi) hi = h;
+    }
 
     // 1. DOES THE LAND ITSELF FORBID IT?
     //
@@ -423,7 +484,27 @@ export function createGround({ heightAt, registry = null }) {
       for (const [px, pz] of pts) {
         const s = surfaceAt(px, pz, t);
         const list = ACCEPTS[s];
-        if (list === null || list === undefined) continue;   // null = anything
+        // null MEANS ANYTHING. undefined MEANS NOBODY KNOWS, AND THOSE ARE NOT
+        // THE SAME ANSWER.
+        //
+        // They were treated identically, so an unrecognised surface permitted
+        // everything. `reserve({ surface })` takes a free-form string, and one
+        // transposed letter produced the most permissive ground in the world:
+        //
+        //     reserve({ surface: "sidwalk" })
+        //     canPlace vehicle/lamp/building/vessel -> all true
+        //
+        // ACCEPTS["sidwalk"] is undefined, and so is TERRAIN_REFUSES["sidwalk"],
+        // so neither table fired. In a module whose header argues that a silent
+        // fallback is the defect this project keeps finding.
+        if (list === null) continue;                          // null = anything
+        if (list === undefined) {
+          return {
+            ok: false, reason: "unknown-surface",
+            detail: `"${s}" is not a ground type this world knows, so nothing may be placed on it`,
+            ground: heightAt(x, z), range: 0, samples: pts.length,
+          };
+        }
         if (!list.includes(spec.category)) {
           return {
             ok: false, reason: "not-accepted",
@@ -463,7 +544,17 @@ export function createGround({ heightAt, registry = null }) {
     //
     // Only checked when the thing is going ONTO something with an extent. On
     // open land there is no host to overflow.
+    //
+    // THE HOST QUERY TAKES A HEIGHT RANGE, and it did not. Twelve lines below,
+    // the occupancy check passes one and has a test defending it; this one did
+    // not, so a bench standing under a bridge deck 30 m overhead was refused
+    // "overhangs" — by a structure it could walk under. The registry gained
+    // height ranges precisely because "a bridge blocked the channel it spans";
+    // only half of canPlace was updated.
     if (registry && registry.overlapsReserved) {
+      const hostY = opts.y !== undefined ? opts.y : hi;
+      const yMin = hostY - (spec.depth || 0);
+      const yMax = hostY + (spec.height || 0);
       // THE HOST IS FOUND BY THE WHOLE FOOTPRINT, NOT BY ITS CENTRE.
       //
       // This asked occupiedAt(x, z) -- one point. So a 200 m apron whose CENTRE
@@ -473,7 +564,10 @@ export function createGround({ heightAt, registry = null }) {
       // platform, reproduced exactly by the check written to prevent it: the
       // rule was right and the sampling was a single point.
       const host = registry.overlapsReserved(
-        x - w / 2, x + w / 2, z - d / 2, z + d / 2, t, { onlyKinds: SURFACE_KINDS },
+        x - w / 2, x + w / 2, z - d / 2, z + d / 2, t,
+        // PARCELS only. A road's edge in the direction of travel is an artefact
+        // of chunking; a plot's edge is a boundary. See PARCEL_KINDS.
+        { onlyKinds: PARCEL_KINDS, yMin, yMax },
       );
       if (host && host.xMin !== undefined) {
         const hostW = host.xMax - host.xMin, hostD = host.zMax - host.zMin;
@@ -495,12 +589,7 @@ export function createGround({ heightAt, registry = null }) {
       }
     }
 
-    // 4. FIT -- how much the ground moves under it
-    for (const [px, pz] of pts) {
-      const h = heightAt(px, pz);
-      if (h < lo) lo = h;
-      if (h > hi) hi = h;
-    }
+    // 4. FIT -- how much the ground moves under it. Measured above; judged here.
     const range = hi - lo;
     // Landform metres, so this scales with the world; the footprint does not.
     const maxRange = spec.maxRange !== undefined ? spec.maxRange : 2 * WORLD_SCALE;
@@ -543,9 +632,41 @@ export function createGround({ heightAt, registry = null }) {
         { yMin, yMax, ignoreKinds: SURFACE_KINDS },
       );
       if (hit) {
+        // WHAT IS IN THE WAY, AND WHETHER IT CAN BE CLEARED.
+        //
+        // "If the condo is 10 x 10 and the space is 6 x 6 you cannot put the
+        // condo -- unless you clear more space for it." A refusal that names
+        // only the first obstruction, and says nothing about whether it can be
+        // removed, is unusable by a builder: it is the difference between "no"
+        // and "no, and here is what to do about it".
+        //
+        // Rock and open water are listed too, and are NOT clearable. That is
+        // the honest answer -- you do not demolish a hillside by asking.
+        const blockers = registry.allOverlapping
+          ? registry.allOverlapping(
+              x - w / 2, x + w / 2, z - d / 2, z + d / 2, t,
+              { yMin, yMax, ignoreKinds: SURFACE_KINDS },
+            )
+          : [hit];
+        const blockedBy = blockers.map((b) => ({
+          id: b.id, kind: b.kind, owner: b.owner || null,
+          // Terrain is not a thing somebody put there, so it cannot be taken
+          // away. Everything else was placed and can be un-placed.
+          clearable: b.kind !== "rock" && b.kind !== "water",
+        }));
+        const names = blockedBy.slice(0, 3).map((b) => `${b.kind}${b.id ? " " + b.id : ""}`).join(", ");
+        const more = blockedBy.length > 3 ? ` and ${blockedBy.length - 3} more` : "";
+        const clearable = blockedBy.filter((b) => b.clearable).length;
         return {
           ok: false, reason: "occupied",
-          detail: typeof hit === "object" && hit.id ? `${hit.kind || "something"} ${hit.id} is already here` : "something is already here",
+          detail:
+            `${w.toFixed(1)} x ${d.toFixed(1)} m needed; ${names}${more} ${blockedBy.length === 1 ? "is" : "are"} in the way` +
+            (clearable === blockedBy.length
+              ? ` — clear ${clearable === 1 ? "it" : "them"} and this fits`
+              : clearable > 0
+                ? ` — ${clearable} could be cleared, the rest cannot`
+                : " — none of it can be cleared"),
+          blockedBy,
           ground: hi, range, samples: pts.length,
         };
       }

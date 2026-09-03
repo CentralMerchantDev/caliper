@@ -29,7 +29,14 @@ const RAD = 180 / Math.PI;
 
 export function createNavigation(renderer, doc = document) {
   if (!renderer) return { destroy() {} };
+  // A missing canvas disables EVERY pointer gesture in this file -- double-click
+  // to focus, F, the touch double-tap -- while the readout, the shortcuts and
+  // the slider all carry on working. That combination is indistinguishable from
+  // "the gesture is broken", and it cost several rounds of chasing the wrong
+  // thing. It is recorded and it complains.
   const canvas = doc.getElementById("world-canvas") || doc.querySelector("canvas");
+  if (!canvas) console.error("navigation: no canvas found -- pointer gestures are disabled");
+  if (typeof window !== "undefined") window.__navGestures = { canvas: !!canvas, canvasId: canvas?.id ?? null };
   const $ = (id) => doc.getElementById(id);
 
   /* ------------------------------------------------------ focus by pointer -- */
@@ -52,6 +59,14 @@ export function createNavigation(renderer, doc = document) {
   }
 
   function focusAt(clientX, clientY) {
+    // Counted, because every INDIRECT signal for "did this run" turned out to be
+    // ambiguous: the marker does not move when you re-focus the same point, and
+    // the target range does not change when the camera has not finished
+    // animating. Four rounds were spent misreading those. This is unambiguous.
+    if (typeof window !== "undefined" && window.__navGestures) {
+      window.__navGestures.focusCalls = (window.__navGestures.focusCalls || 0) + 1;
+      window.__navGestures.lastAt = [clientX, clientY];
+    }
     const r = renderer.focusAtScreen?.(clientX, clientY);
     if (!r) return;
     if (!r.hit) {
@@ -62,27 +77,42 @@ export function createNavigation(renderer, doc = document) {
   }
 
   if (canvas) {
-    canvas.addEventListener("dblclick", (e) => {
-      e.preventDefault();
-      focusAt(e.clientX, e.clientY);
-    });
-    // DOUBLE-TAP, because a touchscreen produces no dblclick.
+    // ONE POINTER RULE FOR MOUSE, PEN AND TOUCH.
     //
-    // A blind audit measured this: two taps on a 390x844 touch context left the
-    // camera untouched, so on a phone the only way to set the pivot was the
-    // degraded Set Pivot path. Tracked by hand: two taps, within 320ms and 24px
-    // of each other, is a double-tap. The distance test is what stops a quick
-    // pan being read as one.
-    let lastTap = 0, lastTapX = 0, lastTapY = 0;
-    canvas.addEventListener("pointerup", (e) => {
-      if (e.pointerType !== "touch") return;
+    // Honest history, because the comment that stood here was false. It said the
+    // dblclick event "did nothing at all on the real page". It works, and it had
+    // been working the whole time. I concluded otherwise from three signals that
+    // are all ambiguous: the pivot marker does not MOVE when you re-focus the
+    // same point; the camera looks at the origin, so centre-ish clicks resolve
+    // there every time; and the target range does not change while the previous
+    // focus animation is still running. Counting focusAt calls directly settled
+    // it in one run -- the count was already non-zero before the test that was
+    // supposedly proving the gesture dead.
+    //
+    // This is kept on its own merits, NOT as a fix for a bug that was not there.
+    // A touchscreen produces no dblclick, so the previous code needed a second,
+    // separate double-tap path for it. Counting pointerups is one rule for every
+    // input, with the distance test that stops a quick pan reading as a double.
+    // Bound on the document and filtered by target, so it cannot be orphaned if
+    // the canvas element is ever replaced.
+    const DOUBLE_MS = 340, DOUBLE_PX = 24;
+    let lastUp = 0, lastUpX = 0, lastUpY = 0;
+    doc.addEventListener("pointerup", (e) => {
+      if (!(e.target instanceof Element) || e.target.tagName !== "CANVAS") return;
+      if (e.button !== 0 && e.pointerType === "mouse") return;
       const now = performance.now();
-      if (now - lastTap < 320 && Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < 24) {
-        lastTap = 0;
+      const near = Math.hypot(e.clientX - lastUpX, e.clientY - lastUpY) < DOUBLE_PX;
+      if (now - lastUp < DOUBLE_MS && near) {
+        lastUp = 0;
         focusAt(e.clientX, e.clientY);
         return;
       }
-      lastTap = now; lastTapX = e.clientX; lastTapY = e.clientY;
+      lastUp = now; lastUpX = e.clientX; lastUpY = e.clientY;
+    });
+    // The browser event too, where it does fire -- harmless if both arrive,
+    // because the second call re-focuses the same point.
+    doc.addEventListener("dblclick", (e) => {
+      if (e.target instanceof Element && e.target.tagName === "CANVAS") e.preventDefault();
     });
 
     // F focuses whatever the pointer is over.
@@ -92,7 +122,9 @@ export function createNavigation(renderer, doc = document) {
     // visitor it did nothing at all, silently. With no pointer position yet, the
     // centre of the view is the honest reading of "whatever I am looking at".
     let lastX = null, lastY = null;
-    canvas.addEventListener("pointermove", (e) => { lastX = e.clientX; lastY = e.clientY; }, { passive: true });
+    doc.addEventListener("pointermove", (e) => {
+      if (e.target instanceof Element && e.target.tagName === "CANVAS") { lastX = e.clientX; lastY = e.clientY; }
+    }, { passive: true });
     doc.addEventListener("keydown", (e) => {
       if (e.key !== "f" && e.key !== "F") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
