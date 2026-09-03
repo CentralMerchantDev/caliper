@@ -116,29 +116,65 @@ export function tree(species = "broadleaf", age = "mature") {
     lod: [
       {
         level: 0,
-        tris: 80, createGeometry: (T = THREE) => { const trunkH = h * 0.38;
+        tris: 160,
+        createGeometry: (T = THREE) => {
+          const trunkH = h * 0.38;
           const trunk = new T.CylinderGeometry(trunkR * 0.75, trunkR, trunkH, 6);
           trunk.translate(0, trunkH / 2, 0);
           const parts = [trunk];
 
-          if (species === "conifer" || species === "cypress") {
-            const tiers = 3;
-            for (let i = 0; i < tiers; i++) {
-              const r = (crownW / 2) * (1 - i * 0.25);
-              const th = (h - trunkH) * 0.45;
+          if (species === "broadleaf") {
+            // Bifurcating branch boughs
+            const b1 = new T.CylinderGeometry(trunkR * 0.4, trunkR * 0.6, h * 0.25, 4);
+            b1.rotateZ(0.35);
+            b1.translate(crownW * 0.15, trunkH + h * 0.1, 0);
+            const b2 = new T.CylinderGeometry(trunkR * 0.4, trunkR * 0.6, h * 0.25, 4);
+            b2.rotateZ(-0.35);
+            b2.translate(-crownW * 0.15, trunkH + h * 0.1, 0);
+            parts.push(b1, b2);
+            // 3 Overlapping foliage clumps
+            const c1 = new T.SphereGeometry(crownW * 0.35, 6, 4);
+            c1.translate(0, trunkH + crownW * 0.45, 0);
+            const c2 = new T.SphereGeometry(crownW * 0.26, 5, 4);
+            c2.translate(crownW * 0.22, trunkH + crownW * 0.28, crownW * 0.1);
+            const c3 = new T.SphereGeometry(crownW * 0.26, 5, 4);
+            c3.translate(-crownW * 0.22, trunkH + crownW * 0.28, -crownW * 0.1);
+            parts.push(c1, c2, c3);
+          } else if (species === "palm") {
+            // Segmented trunk + 6 arching fronds
+            const t2 = new T.CylinderGeometry(trunkR * 0.6, trunkR * 0.75, h * 0.35, 6);
+            t2.translate(0, trunkH + h * 0.16, 0);
+            parts.push(t2);
+            for (let i = 0; i < 6; i++) {
+              const ang = (i * Math.PI * 2) / 6;
+              const frond = new T.BoxGeometry(crownW * 0.36, 0.05, 0.32);
+              frond.rotateZ(-0.35);
+              frond.rotateY(ang);
+              frond.translate(
+                Math.cos(ang) * (crownW * 0.18),
+                h * 0.88,
+                Math.sin(ang) * (crownW * 0.18)
+              );
+              parts.push(frond);
+            }
+          } else if (species === "cypress") {
+            // 4 tight overlapping spiral tiers
+            for (let i = 0; i < 4; i++) {
+              const r = (crownW / 2) * (1 - i * 0.22);
+              const th = (h - trunkH) * 0.32;
               const cone = new T.ConeGeometry(r, th, 6);
-              cone.translate(0, trunkH + (i * th * 0.6) + th / 2, 0);
+              cone.translate(0, trunkH + i * (th * 0.65) + th / 2, 0);
               parts.push(cone);
             }
-          } else if (species === "palm") {
-            const crownH = h - trunkH;
-            const top = new T.ConeGeometry(crownW / 2, crownH * 0.6, 7);
-            top.translate(0, trunkH + crownH * 0.3, 0);
-            parts.push(top);
           } else {
-            const crown = new T.SphereGeometry(crownW / 2, 7, 5);
-            crown.translate(0, trunkH + (crownW / 2) * 0.8, 0);
-            parts.push(crown);
+            // Conifer: 4 stepped tiers with skirt overhang
+            for (let i = 0; i < 4; i++) {
+              const r = (crownW / 2) * (1 - i * 0.22);
+              const th = (h - trunkH) * 0.35;
+              const cone = new T.ConeGeometry(r, th, 6);
+              cone.translate(0, trunkH + i * (th * 0.55) + th / 2, 0);
+              parts.push(cone);
+            }
           }
           return mergeGeometries(parts, T);
         },
@@ -176,7 +212,8 @@ export function person(build = "adult", pose = "standing", palette = "casual") {
   const heightScale = build === "child" ? 0.65 : build === "tall" ? 1.1 : 1.0;
   const h = (pose === "sitting" ? 1.15 : 1.78) * heightScale;
   const footW = 0.45 * heightScale;
-  const footD = (pose === "sitting" ? 0.65 : 0.45) * heightScale;
+  const footD = (pose === "sitting" ? 0.75 : 0.45) * heightScale;
+  const headR = build === "child" ? 0.16 * heightScale : 0.12 * heightScale;
 
   return {
     id: `person-${build}-${pose}-${palette}`,
@@ -194,23 +231,46 @@ export function person(build = "adult", pose = "standing", palette = "casual") {
     lod: [
       {
         level: 0,
-        tris: 66, createGeometry: (T = THREE) => { const parts = []; if (pose === 'sitting') {
-            const seatLegs = new T.BoxGeometry(0.3 * heightScale, 0.45 * heightScale, 0.4 * heightScale);
-            seatLegs.translate(0, 0.225 * heightScale, 0.1 * heightScale);
-            const torso = new T.BoxGeometry(0.32 * heightScale, 0.55 * heightScale, 0.22 * heightScale);
-            torso.translate(0, 0.725 * heightScale, -0.05 * heightScale);
-            const head = new T.SphereGeometry(0.12 * heightScale, 5, 4);
-            head.translate(0, 1.05 * heightScale, -0.05 * heightScale);
-            parts.push(seatLegs, torso, head);
+        tris: 108,
+        createGeometry: (T = THREE) => {
+          const parts = []; // Head with distinct child vs adult cranial ratio
+          const head = new T.SphereGeometry(headR, 6, 4);
+          head.translate(0, h - headR, pose === "sitting" ? -0.08 * heightScale : 0);
+          parts.push(head);
+
+          // Torso
+          const torsoH = h * 0.38;
+          const torsoW = (build === "child" ? 0.24 : 0.32) * heightScale;
+          const torso = new T.BoxGeometry(torsoW, torsoH, 0.18 * heightScale);
+          torso.translate(0, h * 0.55, pose === "sitting" ? -0.08 * heightScale : 0);
+          parts.push(torso);
+
+          if (pose === "sitting") {
+            const thigh = new T.BoxGeometry(torsoW * 0.9, 0.14 * heightScale, 0.36 * heightScale);
+            thigh.translate(0, h * 0.38, 0.08 * heightScale);
+            const shin = new T.BoxGeometry(torsoW * 0.85, 0.38 * heightScale, 0.14 * heightScale);
+            shin.translate(0, 0.19 * heightScale, 0.22 * heightScale);
+            const arms = new T.BoxGeometry(torsoW * 1.3, 0.30 * heightScale, 0.12 * heightScale);
+            arms.translate(0, h * 0.46, 0.05 * heightScale);
+            parts.push(thigh, shin, arms);
           } else {
-            const bodyH = h * 0.62;
-            const body = new T.CylinderGeometry(0.16 * heightScale, 0.14 * heightScale, bodyH, 6);
-            body.translate(0, bodyH / 2 + 0.3 * heightScale, 0);
-            const legs = new T.BoxGeometry(0.24 * heightScale, 0.6 * heightScale, 0.18 * heightScale);
-            legs.translate(0, 0.3 * heightScale, 0);
-            const head = new T.SphereGeometry(0.13 * heightScale, 5, 4);
-            head.translate(0, h - 0.14 * heightScale, 0);
-            parts.push(body, legs, head);
+            // Separated arms with natural shoulder offset
+            const armW = 0.08 * heightScale;
+            const armH = h * 0.34;
+            const leftArm = new T.CylinderGeometry(armW * 0.4, armW * 0.5, armH, 4);
+            leftArm.translate(-torsoW / 2 - armW * 0.6, h * 0.52, pose === "walking" ? -0.06 : 0);
+            const rightArm = new T.CylinderGeometry(armW * 0.4, armW * 0.5, armH, 4);
+            rightArm.translate(torsoW / 2 + armW * 0.6, h * 0.52, pose === "walking" ? 0.06 : 0);
+            parts.push(leftArm, rightArm);
+
+            // Separated legs with stride stance
+            const legW = 0.10 * heightScale;
+            const legH = h * 0.42;
+            const leftLeg = new T.BoxGeometry(legW, legH, legW * 1.2);
+            leftLeg.translate(-torsoW * 0.25, legH / 2, pose === "walking" ? 0.08 : 0);
+            const rightLeg = new T.BoxGeometry(legW, legH, legW * 1.2);
+            rightLeg.translate(torsoW * 0.25, legH / 2, pose === "walking" ? -0.08 : 0);
+            parts.push(leftLeg, rightLeg);
           }
           return mergeGeometries(parts, T);
         },
@@ -242,13 +302,13 @@ export function person(build = "adult", pose = "standing", palette = "casual") {
  */
 export function vehicle(vehicleClass = "car", variant = "sedan") {
   const specs = {
-    car: { w: 1.9, d: 4.4, h: 1.45, tris: 68 },
-    van: { w: 2.1, d: 5.4, h: 2.2, tris: 56 },
-    bus: { w: 2.6, d: 12.0, h: 3.2, tris: 72 },
-    truck: { w: 2.5, d: 8.5, h: 3.4, tris: 64 },
-    artic: { w: 2.6, d: 16.5, h: 4.0, tris: 88 },
-    taxi: { w: 1.9, d: 4.5, h: 1.5, tris: 72 },
-    emergency: { w: 2.2, d: 6.2, h: 2.6, tris: 76 },
+    car: { w: 1.9, d: 4.4, h: 1.45, tris: 120 },
+    van: { w: 2.1, d: 5.4, h: 2.2, tris: 120 },
+    bus: { w: 2.6, d: 12.0, h: 3.2, tris: 120 },
+    truck: { w: 2.5, d: 8.5, h: 3.4, tris: 132 },
+    artic: { w: 2.6, d: 16.5, h: 4.0, tris: 144 },
+    taxi: { w: 1.9, d: 4.5, h: 1.5, tris: 132 },
+    emergency: { w: 2.2, d: 6.2, h: 2.6, tris: 132 },
     bicycle: { w: 0.55, d: 1.75, h: 1.05, tris: 88 },
     motorcycle: { w: 0.8, d: 2.2, h: 1.25, tris: 88 },
   };
@@ -291,16 +351,49 @@ export function vehicle(vehicleClass = "car", variant = "sedan") {
             bars.translate(0, sp.h * 0.92, sp.d * 0.25);
             parts.push(wRear, wFront, frame, bars);
           } else {
-            const lowerH = sp.h * 0.45;
+            // Lower chassis with bumper shelves
+            const lowerH = sp.h * 0.42;
             const lower = new T.BoxGeometry(sp.w, lowerH, sp.d);
-            lower.translate(0, lowerH / 2 + 0.15, 0);
+            lower.translate(0, lowerH / 2 + 0.18, 0);
             parts.push(lower);
 
-            const cabinH = sp.h * 0.5;
-            const cabinL = sp.d * (vehicleClass === "bus" ? 0.92 : vehicleClass === "van" ? 0.75 : 0.55);
-            const cabin = new T.BoxGeometry(sp.w * 0.92, cabinH, cabinL);
-            cabin.translate(0, lowerH + cabinH / 2 + 0.1, vehicleClass === "bus" ? 0 : -sp.d * 0.08);
+            // Cabin with windscreen rake
+            const cabinH = sp.h * 0.48;
+            const cabinL = sp.d * (vehicleClass === "bus" ? 0.94 : vehicleClass === "van" ? 0.75 : vehicleClass === "truck" || vehicleClass === "artic" ? 0.38 : 0.55);
+            const cabin = new T.BoxGeometry(sp.w * 0.90, cabinH, cabinL);
+            cabin.translate(0, lowerH + 0.18 + cabinH / 2, vehicleClass === "truck" || vehicleClass === "artic" ? sp.d * 0.28 : vehicleClass === "bus" ? 0 : -sp.d * 0.08);
             parts.push(cabin);
+
+            // 4 Inset Cylindrical Wheels
+            const wheelR = sp.h * 0.22;
+            const wheelThick = sp.w * 0.12;
+            const wheelTrack = (sp.w - wheelThick) / 2;
+            const wheelBase = sp.d * 0.32;
+            for (const sx of [-wheelTrack, wheelTrack]) {
+              for (const sz of [-wheelBase, wheelBase]) {
+                const w = new T.CylinderGeometry(wheelR, wheelR, wheelThick, 6);
+                w.rotateZ(Math.PI / 2);
+                w.translate(sx, wheelR, sz);
+                parts.push(w);
+              }
+            }
+
+            // Distinct Class Identifiers
+            if (vehicleClass === "taxi") {
+              const sign = new T.BoxGeometry(0.45, 0.14, 0.2);
+              sign.translate(0, sp.h + 0.07, -sp.d * 0.08);
+              parts.push(sign);
+            } else if (vehicleClass === "emergency") {
+              const bar = new T.BoxGeometry(sp.w * 0.7, 0.12, 0.25);
+              bar.translate(0, sp.h + 0.06, -sp.d * 0.05);
+              parts.push(bar);
+            } else if (vehicleClass === "truck" || vehicleClass === "artic") {
+              const cargoL = sp.d * (vehicleClass === "artic" ? 0.65 : 0.52);
+              const cargoH = sp.h * 0.52;
+              const cargo = new T.BoxGeometry(sp.w * 0.96, cargoH, cargoL);
+              cargo.translate(0, lowerH + 0.18 + cargoH / 2, -sp.d * 0.18);
+              parts.push(cargo);
+            }
           }
           return mergeGeometries(parts, T);
         },
@@ -333,12 +426,12 @@ export function vehicle(vehicleClass = "car", variant = "sedan") {
  */
 export function vessel(vesselClass = "yacht") {
   const specs = {
-    rowboat: { w: 1.4, d: 3.8, h: 0.9, tris: 32 },
-    sailboat: { w: 3.0, d: 9.2, h: 11.5, sweepW: 3.2, tris: 54 },
+    rowboat: { w: 1.4, d: 3.8, h: 0.9, tris: 48 },
+    sailboat: { w: 3.0, d: 9.2, h: 11.5, sweepW: 3.2, tris: 68 },
     yacht: { w: 3.6, d: 14.5, h: 4.8, tris: 68 },
     ferry: { w: 8.5, d: 32.0, h: 7.5, tris: 84 },
-    "container-ship": { w: 18.0, d: 85.0, h: 16.0, tris: 120 },
-    tug: { w: 4.8, d: 16.0, h: 5.5, tris: 62 },
+    "container-ship": { w: 18.0, d: 85.0, h: 16.0, tris: 144 },
+    tug: { w: 4.8, d: 16.0, h: 5.5, tris: 64 },
   };
   const sp = specs[vesselClass] || specs.yacht;
 
@@ -358,18 +451,46 @@ export function vessel(vesselClass = "yacht") {
         level: 0,
         tris: sp.tris,
         createGeometry: (T = THREE) => {
-          const hullH = sp.h * 0.4;
+          const parts = [];
+          const hullH = sp.h * 0.35;
           const hull = new T.BoxGeometry(sp.w, hullH, sp.d);
           hull.translate(0, hullH / 2, 0);
-          const parts = [hull];
+          parts.push(hull);
+
           if (vesselClass === "sailboat") {
-            const mast = new T.CylinderGeometry(0.08, 0.12, sp.h * 0.75, 5);
-            mast.translate(0, sp.h * 0.55, 0);
-            parts.push(mast);
+            const mast = new T.CylinderGeometry(0.08, 0.12, sp.h * 0.82, 5);
+            mast.translate(0, sp.h * 0.44, sp.d * 0.08);
+            const boom = new T.BoxGeometry(0.08, 0.08, sp.d * 0.55);
+            boom.translate(0, hullH + 0.35, -sp.d * 0.18);
+            const sail = new T.ConeGeometry(sp.d * 0.24, sp.h * 0.58, 3);
+            sail.scale(0.04, 1, 1);
+            sail.translate(0, hullH + (sp.h * 0.58) / 2 + 0.35, -sp.d * 0.15);
+            parts.push(mast, boom, sail);
+          } else if (vesselClass === "container-ship") {
+            const bridgeH = sp.h * 0.52;
+            const bridge = new T.BoxGeometry(sp.w * 0.75, bridgeH, sp.d * 0.14);
+            bridge.translate(0, hullH + bridgeH / 2, -sp.d * 0.36);
+            const funnel = new T.CylinderGeometry(1.2, 1.4, 4.2, 6);
+            funnel.translate(0, hullH + bridgeH + 2.1, -sp.d * 0.34);
+            parts.push(bridge, funnel);
+            for (let r = 0; r < 3; r++) {
+              for (let c = 0; c < 2; c++) {
+                const cz = -sp.d * 0.16 + r * (sp.d * 0.18);
+                const cx = (c === 0 ? -sp.w * 0.22 : sp.w * 0.22);
+                const cont = new T.BoxGeometry(sp.w * 0.38, sp.h * 0.26, sp.d * 0.15);
+                cont.translate(cx, hullH + (sp.h * 0.26) / 2, cz);
+                parts.push(cont);
+              }
+            }
+          } else if (vesselClass === "rowboat") {
+            const b1 = new T.BoxGeometry(sp.w * 0.85, 0.08, 0.35);
+            b1.translate(0, hullH + 0.04, -sp.d * 0.2);
+            const b2 = new T.BoxGeometry(sp.w * 0.85, 0.08, 0.35);
+            b2.translate(0, hullH + 0.04, sp.d * 0.2);
+            parts.push(b1, b2);
           } else {
-            const cabinH = sp.h * 0.5;
-            const cabin = new T.BoxGeometry(sp.w * 0.75, cabinH, sp.d * 0.45);
-            cabin.translate(0, hullH + cabinH / 2, -sp.d * 0.1);
+            const cabin = new T.BoxGeometry(sp.w * 0.65, sp.h * 0.4, sp.d * 0.4);
+            cabin.translate(0, hullH + sp.h * 0.2, -sp.d * 0.1);
             parts.push(cabin);
           }
           return mergeGeometries(parts, T);
@@ -403,10 +524,10 @@ export function vessel(vesselClass = "yacht") {
  */
 export function aircraft(aircraftClass = "light-single") {
   const specs = {
-    "light-single": { w: 10.8, d: 8.2, h: 2.7, tris: 62 },
-    "airliner-twin": { w: 34.0, d: 37.5, h: 11.8, tris: 110 },
-    "regional-jet": { w: 26.0, d: 29.5, h: 8.2, tris: 88 },
-    helicopter: { w: 12.0, d: 13.5, h: 3.8, tris: 74 },
+    "light-single": { w: 10.8, d: 8.2, h: 2.7, tris: 88 },
+    "airliner-twin": { w: 34.0, d: 37.5, h: 11.8, tris: 132 },
+    "regional-jet": { w: 26.0, d: 29.5, h: 8.2, tris: 112 },
+    helicopter: { w: 12.0, d: 13.5, h: 3.8, tris: 88 },
   };
   const sp = specs[aircraftClass] || specs["light-single"];
 
@@ -425,14 +546,48 @@ export function aircraft(aircraftClass = "light-single") {
         level: 0,
         tris: sp.tris,
         createGeometry: (T = THREE) => {
-          const fuseW = sp.w * 0.14;
-          const fuseH = sp.h * 0.35;
-          const fuse = new T.BoxGeometry(fuseW, fuseH, sp.d);
-          fuse.translate(0, sp.h * 0.45, 0);
-          const wingW = sp.w;
-          const wing = new T.BoxGeometry(wingW, 0.25, sp.d * 0.22);
-          wing.translate(0, sp.h * 0.45, 0);
-          return mergeGeometries([fuse, wing], T);
+          const parts = [];
+          if (aircraftClass === "airliner-twin") {
+            const fuse = new T.CylinderGeometry(sp.w * 0.055, sp.w * 0.055, sp.d * 0.90, 8);
+            fuse.rotateX(Math.PI / 2);
+            fuse.translate(0, sp.h * 0.38, 0);
+            parts.push(fuse);
+            const wingL = new T.BoxGeometry(sp.w * 0.44, sp.h * 0.04, sp.d * 0.14);
+            wingL.rotateY(-0.32);
+            wingL.translate(-sp.w * 0.24, sp.h * 0.35, -sp.d * 0.04);
+            const wingR = new T.BoxGeometry(sp.w * 0.44, sp.h * 0.04, sp.d * 0.14);
+            wingR.rotateY(0.32);
+            wingR.translate(sp.w * 0.24, sp.h * 0.35, -sp.d * 0.04);
+            parts.push(wingL, wingR);
+            for (const sx of [-sp.w * 0.16, sp.w * 0.16]) {
+              const eng = new T.CylinderGeometry(sp.w * 0.035, sp.w * 0.03, sp.d * 0.12, 6);
+              eng.rotateX(Math.PI / 2);
+              eng.translate(sx, sp.h * 0.24, sp.d * 0.02);
+              parts.push(eng);
+            }
+            const fin = new T.BoxGeometry(sp.w * 0.015, sp.h * 0.42, sp.d * 0.18);
+            fin.rotateX(0.35);
+            fin.translate(0, sp.h * 0.62, -sp.d * 0.38);
+            parts.push(fin);
+          } else if (aircraftClass === "helicopter") {
+            const cabin = new T.BoxGeometry(sp.w * 0.28, sp.h * 0.52, sp.d * 0.45);
+            cabin.translate(0, sp.h * 0.45, sp.d * 0.12);
+            const boom = new T.CylinderGeometry(sp.w * 0.03, sp.w * 0.04, sp.d * 0.52, 5);
+            boom.rotateX(Math.PI / 2);
+            boom.translate(0, sp.h * 0.55, -sp.d * 0.22);
+            const rotor = new T.BoxGeometry(sp.w * 0.90, 0.04, sp.w * 0.08);
+            rotor.translate(0, sp.h * 0.85, sp.d * 0.12);
+            parts.push(cabin, boom, rotor);
+          } else {
+            const fuse = new T.BoxGeometry(sp.w * 0.12, sp.h * 0.38, sp.d * 0.92);
+            fuse.translate(0, sp.h * 0.4, 0);
+            const wings = new T.BoxGeometry(sp.w, sp.h * 0.06, sp.d * 0.22);
+            wings.translate(0, sp.h * 0.4, 0);
+            const prop = new T.BoxGeometry(sp.w * 0.22, sp.h * 0.42, 0.05);
+            prop.translate(0, sp.h * 0.4, sp.d * 0.47);
+            parts.push(fuse, wings, prop);
+          }
+          return mergeGeometries(parts, T);
         },
       },
       {

@@ -64,7 +64,7 @@ export const ASSET_REGISTRY = [
   // --- 3. GROUND DETAILS ---
   { id: "manhole", category: "ground", status: "generator", source: "code", seenAs: "close", count: 7800, generator: "groundFurniture('manhole')", note: "Cast iron drainage manhole cover" },
   { id: "drain-grating", category: "ground", status: "generator", source: "code", seenAs: "close", count: 9200, generator: "groundFurniture('grate')", note: "Gutter stormwater drainage grating" },
-  { id: "paving-tactile", category: "ground", status: "planned", source: "code", seenAs: "close", count: 4500, note: "Pedestrian blister paving crossing slabs" },
+  { id: "paving-tactile", category: "ground", status: "built", source: "code", seenAs: "close", count: 4500, generator: "groundFurniture('tactile')", note: "Pedestrian blister paving crossing slabs" },
 
   // --- 4. FACADE ELEMENTS ---
   { id: "awning", category: "facade", status: "generator", source: "code", seenAs: "close", count: 3200, generator: "facade('awning', width)", note: "Fabric retail shop awning" },

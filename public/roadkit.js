@@ -570,7 +570,7 @@ export function levelCrossing(roadClass = "STREET") {
     lod: [
       {
         level: 0,
-        tris: 76,
+        tris: 120,
         createGeometry: (T = THREE) => {
           const parts = [];
           const deck = new T.BoxGeometry(widthM, 0.25, lengthM);
@@ -579,10 +579,21 @@ export function levelCrossing(roadClass = "STREET") {
           const rails = new T.BoxGeometry(widthM, 0.1, 1.435);
           rails.translate(0, 0.28, 0);
           parts.push(rails);
+          // 2 Stanchion Masts + Red-and-White Striped Barrier Arms
           for (const sx of [-widthM / 2 + 1.5, widthM / 2 - 1.5]) {
             const mast = new T.CylinderGeometry(0.12, 0.15, 3.8, 6);
             mast.translate(sx, 1.9, -halfL + 2);
-            parts.push(mast);
+            // Crossbuck warning sign board
+            const cross1 = new T.BoxGeometry(1.2, 0.15, 0.05);
+            cross1.rotateZ(0.78);
+            cross1.translate(sx, 3.4, -halfL + 2.1);
+            const cross2 = new T.BoxGeometry(1.2, 0.15, 0.05);
+            cross2.rotateZ(-0.78);
+            cross2.translate(sx, 3.4, -halfL + 2.1);
+            // Barrier Boom Arm
+            const arm = new T.BoxGeometry(widthM * 0.45, 0.12, 0.08);
+            arm.translate(sx > 0 ? sx - (widthM * 0.22) : sx + (widthM * 0.22), 1.1, -halfL + 2.15);
+            parts.push(mast, cross1, cross2, arm);
           }
           return mergeGeometries(parts, T);
         },

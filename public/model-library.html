@@ -778,7 +778,7 @@ function resolveModel(reg) {
     try { return boundary(reg.id, 2.4); } catch(e){}
   }
   if (reg.category === "ground") {
-    try { return groundFurniture(reg.id === "drain-grating" ? "grate" : "manhole"); } catch(e){}
+    try { return groundFurniture(reg.id === "drain-grating" ? "grate" : reg.id === "paving-tactile" ? "tactile" : "manhole"); } catch(e){}
   }
   if (reg.category === "vegetation") {
     const sp = reg.id.replace("tree-", "");
