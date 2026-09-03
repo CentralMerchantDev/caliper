@@ -503,15 +503,31 @@ function resort(o, s, x, z, w, d, h, g) {
  *   - opera: tiered performing arts hall with curved shell and soaring fly tower
  *   - courthouse: palace of justice with monumental rusticated base and pediment
  */
+/**
+ * The 12 CIVIC Landmark Typologies:
+ *   1. capitol: city hall / parliament with portico, drum, dome and lantern
+ *   2. cathedral: cruciform basilica, nave, transepts, crossing lantern, twin western towers
+ *   3. station: grand rail terminus with colossal arched barrel shed and campanile clock tower
+ *   4. library: national museum / library with peristyle colonnade, rotunda and corner pavilions
+ *   5. opera: performing arts hall with tiered curved shell and soaring fly tower
+ *   6. courthouse: palace of justice with monumental rusticated base, hexastyle portico and pediment
+ *   7. hospital: municipal medical center with emergency ramp, ward blocks, rooftop helipad
+ *   8. university: collegiate hall with quadrangle cloisters and crenellated clock tower
+ *   9. theatre: civic playhouse with marquee entrance, auditorium block, stage fly tower
+ *  10. art-gallery: modern sculpture pavilion with cantilevered galleries and sawtooth skylights
+ *  11. market-hall: historic covered market with triple arcades and raised glazed clerestory
+ *  12. stadium: municipal arena with tiered oval bowl and cantilevered canopy roof
+ */
+export const CIVIC_TYPOLOGIES = [
+  "capitol", "cathedral", "station", "library", "opera", "courthouse",
+  "hospital", "university", "theatre", "art-gallery", "market-hall", "stadium"
+];
+
 function civic(o, s, x, z, w, d, h, g) {
   const wall = pickLocal(WALLS.CIVIC, s + "w", x, z), roof = pickLocal(ROOFS.CIVIC, s + "r", x, z, 1400);
   const rTyp = rnd(s + "typ");
-
-  const typ = rTyp < 0.22 ? "cathedral"
-            : rTyp < 0.42 ? "station"
-            : rTyp < 0.62 ? "capitol"
-            : rTyp < 0.78 ? "library"
-            : rTyp < 0.90 ? "opera" : "courthouse";
+  const typIdx = Math.floor(rTyp * CIVIC_TYPOLOGIES.length) % CIVIC_TYPOLOGIES.length;
+  const typ = CIVIC_TYPOLOGIES[typIdx];
 
   // Stepped monumental stylobate approach
   o.add("wall", x, g + 1.2, z, w * 1.08, 2.4, d * 1.08, 0xdcd4c2);
@@ -520,16 +536,12 @@ function civic(o, s, x, z, w, d, h, g) {
     // Cruciform basilica: Latin cross nave running length/depth, transepts, twin towers
     const naveW = w * 0.44, naveD = d * 0.88;
     const bodyH = pos(h * 0.75, 14);
-    // Main nave
     o.add("wall", x, g + 2.4 + bodyH / 2, z, naveW, bodyH, naveD, wall);
     o.add("barrel", x, g + 2.4 + bodyH, z, naveW * 1.02, bodyH * 0.4, naveD * 1.01, roof);
-    // Transept wings
     const transW = w * 0.92, transD = d * 0.32;
     o.add("wall", x, g + 2.4 + bodyH * 0.42, z, transW, bodyH * 0.84, transD, wall);
     o.add("pitch", x, g + 2.4 + bodyH * 0.84, z, transW * 1.02, bodyH * 0.32, transD * 1.02, roof);
-    // Crossing flèche / lantern
     o.add("pyr", x, g + 2.4 + bodyH * 1.25 + 7, z, 4.2, 14, 4.2, roof);
-    // Twin western towers at the entrance (z + d * 0.38)
     const tW = w * 0.22, tD = d * 0.22;
     const towerH = bodyH * 1.35;
     for (const side of [-1, 1]) {
@@ -543,21 +555,17 @@ function civic(o, s, x, z, w, d, h, g) {
     // Grand rail terminus: arched barrel concourse shed + headhouse + clock tower
     const headD = d * 0.32;
     const headH = pos(h * 0.68, 12);
-    // Monumental front headhouse
     o.add("wall", x, g + 2.4 + headH / 2, z + d / 2 - headD / 2, w * 0.96, headH, headD, wall);
     o.add("roof", x, g + 2.4 + headH + 0.8, z + d / 2 - headD / 2, w * 0.98, 1.6, headD * 1.04, roof);
-    // Portico arches / colonnade across entrance
     const cols = Math.max(4, Math.min(10, Math.round(w / 12)));
     for (let i = 0; i < cols; i++) {
       const cx = x + (-0.5 + (i + 0.5) / cols) * w * 0.88;
       o.add("cyl", cx, g + 2.4 + (headH * 0.6) / 2, z + d / 2 + 1.2, 2.2, headH * 0.6, 2.2, 0xf6f1e4);
     }
-    // Colossal arched barrel train shed concourse at rear
     const shedD = d * 0.62;
     const shedH = pos(h * 0.72, 14);
     o.add("wall", x, g + 2.4 + shedH * 0.25, z - d / 2 + shedD / 2, w * 0.86, shedH * 0.5, shedD, 0xb8c2c8);
     o.add("barrel", x, g + 2.4 + shedH * 0.5, z - d / 2 + shedD / 2, w * 0.90, shedH * 0.75, shedD * 1.01, roof);
-    // Campanile clock tower at front corner
     const cW = Math.min(12, w * 0.16);
     const cH = headH + 20;
     const cX = x - w * 0.42;
@@ -568,22 +576,18 @@ function civic(o, s, x, z, w, d, h, g) {
   } else if (typ === "capitol") {
     // City Hall / Capitol: central rotunda with monumental dome, portico, side pavilion wings
     const bodyH = pos(h * 0.65, 12);
-    // Symmetrical wings
     const wingW = w * 0.36, wingD = d * 0.82;
     for (const side of [-1, 1]) {
       const wx = x + side * (w / 2 - wingW / 2);
       o.add("wall", wx, g + 2.4 + bodyH / 2, z, wingW, bodyH, wingD, wall);
       o.add("hip", wx, g + 2.4 + bodyH, z, wingW * 1.06, wingW * 0.24, wingD * 1.06, roof);
     }
-    // Central core block
     const coreW = w * 0.38, coreD = d * 0.88;
     o.add("wall", x, g + 2.4 + (bodyH + 3) / 2, z, coreW, bodyH + 3, coreD, wall);
-    // Grand front portico with pediment
     o.add("pitch", x, g + 2.4 + bodyH + 3.2, z + coreD / 2 - 2, coreW * 0.92, 5.5, 4.5, roof);
     for (const px of [-coreW * 0.32, -coreW * 0.11, coreW * 0.11, coreW * 0.32]) {
       o.add("cyl", x + px, g + 2.4 + (bodyH + 2) / 2, z + coreD / 2, 1.8, bodyH + 2, 1.8, 0xf6f1e4);
     }
-    // Monumental drum + dome + lantern
     const drumR = coreW * 0.32;
     const drumH = 6;
     o.add("cyl", x, g + 2.4 + bodyH + 3 + drumH / 2, z, drumR * 2, drumH, drumR * 2, wall);
@@ -595,17 +599,14 @@ function civic(o, s, x, z, w, d, h, g) {
     const bodyH = pos(h * 0.62, 11);
     o.add("wall", x, g + 2.4 + bodyH / 2, z, w * 0.96, bodyH, d * 0.86, wall);
     o.add("roof", x, g + 2.4 + bodyH + 0.8, z, w * 0.98, 1.6, d * 0.88, roof);
-    // Monumental peristyle colonnade across front
     const cols = Math.max(6, Math.min(14, Math.round(w / 8)));
     for (let i = 0; i < cols; i++) {
       const cx = x + (-0.5 + (i + 0.5) / cols) * w * 0.86;
       o.add("cyl", cx, g + 2.4 + (bodyH * 0.72) / 2, z + d * 0.44, 1.8, bodyH * 0.72, 1.8, 0xf6f1e4);
     }
     o.add("roof", x, g + 2.4 + bodyH * 0.72 + 1.2, z + d * 0.44, w * 0.90, 1.4, 4.0, roof);
-    // Central rotunda dome
     const rotR = Math.min(w, d) * 0.28;
     o.add("dome", x, g + 2.4 + bodyH + 1.6, z, rotR * 2, rotR * 0.8, rotR * 2, roof);
-    // Projecting corner pavilions
     for (const sx of [-1, 1]) {
       const px = x + sx * (w * 0.44);
       o.add("wall", px, g + 2.4 + (bodyH + 4) / 2, z, w * 0.16, bodyH + 4, d * 0.88, wall);
@@ -614,34 +615,117 @@ function civic(o, s, x, z, w, d, h, g) {
   } else if (typ === "opera") {
     // Grand Opera / Concert Hall: tiered sculpted massing with auditorium shell & fly tower
     const bodyH = pos(h * 0.64, 12);
-    // Cantilevered glass foyer podium
     o.add(glassBucket(h), x, g + 2.4 + 4, z + d * 0.25, w * 0.92, 8, d * 0.46, wall);
     o.add("roof", x, g + 2.4 + 8.4, z + d * 0.25, w * 0.96, 1.2, d * 0.50, roof);
-    // Main auditorium hall
     const hallW = w * 0.72, hallD = d * 0.60;
     o.add("wall", x, g + 2.4 + bodyH / 2, z - d * 0.05, hallW, bodyH, hallD, wall);
     o.add("barrel", x, g + 2.4 + bodyH, z - d * 0.05, hallW * 1.02, bodyH * 0.4, hallD * 1.01, roof);
-    // Soaring stage fly tower at rear
     const flyW = hallW * 0.75, flyD = d * 0.28;
     const flyH = bodyH + 14;
     o.add("wall", x, g + 2.4 + flyH / 2, z - d * 0.34, flyW, flyH, flyD, wall);
     o.add("roof", x, g + 2.4 + flyH + 0.8, z - d * 0.34, flyW * 1.04, 1.6, flyD * 1.04, roof);
-  } else {
+  } else if (typ === "courthouse") {
     // Courthouse / Palace of Justice: rusticated base, monumental portico, pediment, symmetric wings
     const bodyH = pos(h * 0.66, 12);
     o.add("wall", x, g + 2.4 + bodyH / 2, z, w * 0.92, bodyH, d * 0.84, wall);
     o.add("roof", x, g + 2.4 + bodyH + 0.8, z, w * 0.94, 1.6, d * 0.86, roof);
-    // Colonnaded hexastyle portico with triangular pediment
     const portW = w * 0.48, portD = d * 0.20;
     o.add("pitch", x, g + 2.4 + bodyH + 1.6, z + d * 0.38, portW * 1.04, 5.0, portD * 1.1, roof);
     for (const px of [-portW * 0.38, -portW * 0.22, -portW * 0.07, portW * 0.07, portW * 0.22, portW * 0.38]) {
       o.add("cyl", x + px, g + 2.4 + (bodyH * 0.78) / 2, z + d * 0.42, 1.6, bodyH * 0.78, 1.6, 0xf6f1e4);
     }
-    // Symmetrical flanking pavilions with mansards
     for (const sx of [-1, 1]) {
       const px = x + sx * (w * 0.38);
       o.add("wall", px, g + 2.4 + (bodyH + 2) / 2, z, w * 0.22, bodyH + 2, d * 0.86, wall);
       o.add("hip", px, g + 2.4 + bodyH + 2, z, w * 0.24, 3.5, d * 0.90, roof);
+    }
+  } else if (typ === "hospital") {
+    // General Hospital: podium, emergency ambulance ramp, paired ward towers, rooftop helipad
+    const podH = 6.0;
+    o.add("wall", x, g + 2.4 + podH / 2, z, w * 0.96, podH, d * 0.90, wall);
+    o.add("roof", x, g + 2.4 + podH + 0.4, z, w * 0.98, 0.8, d * 0.92, roof);
+    // Paired ward blocks
+    const wardW = w * 0.38, wardD = d * 0.75, wardH = pos(h * 0.78, 16);
+    for (const side of [-1, 1]) {
+      const wx = x + side * (w * 0.26);
+      o.add("wall", wx, g + 2.4 + podH + wardH / 2, z, wardW, wardH, wardD, wall);
+      o.add("roof", wx, g + 2.4 + podH + wardH + 0.6, z, wardW * 1.02, 1.2, wardD * 1.02, roof);
+    }
+    // Rooftop Helipad on east tower
+    const hx = x + w * 0.26, hy = g + 2.4 + podH + wardH + 1.2;
+    o.add("cyl", hx, hy + 0.4, z, 14, 0.8, 14, 0x4a5568);
+    o.add("cyl", hx, hy + 0.85, z, 12, 0.1, 12, 0xe2e8f0);
+  } else if (typ === "university") {
+    // University Main Hall: quadrangle cloisters, central gothic clock tower, gabled hall wings
+    const bodyH = pos(h * 0.60, 12);
+    // Quadrangle wings around central courtyard
+    const wingW = w * 0.22, wingD = d * 0.88;
+    for (const side of [-1, 1]) {
+      const wx = x + side * (w / 2 - wingW / 2);
+      o.add("wall", wx, g + 2.4 + bodyH / 2, z, wingW, bodyH, wingD, wall);
+      o.add("pitch", wx, g + 2.4 + bodyH, z, wingW * 1.04, wingW * 0.45, wingD * 1.01, roof);
+    }
+    // Front and rear cloisters
+    o.add("wall", x, g + 2.4 + bodyH * 0.45, z + d * 0.38, w * 0.6, bodyH * 0.9, d * 0.18, wall);
+    o.add("pitch", x, g + 2.4 + bodyH * 0.9, z + d * 0.38, w * 0.62, 4.0, d * 0.2, roof);
+    // Central Collegiate Gothic Tower
+    const towW = Math.min(16, w * 0.28), towH = bodyH + 22;
+    o.add("wall", x, g + 2.4 + towH / 2, z + d * 0.38, towW, towH, towW, wall);
+    o.add("roof", x, g + 2.4 + towH + 0.8, z + d * 0.38, towW * 1.08, 1.6, towW * 1.08, roof);
+    // Crenellations
+    for (const cx of [-towW * 0.4, towW * 0.4]) {
+      for (const cz of [-towW * 0.4, towW * 0.4]) {
+        o.add("pyr", x + cx, g + 2.4 + towH + 1.6 + 3, z + d * 0.38 + cz, 2.4, 6, 2.4, roof);
+      }
+    }
+  } else if (typ === "theatre") {
+    // Civic Playhouse / Theatre: decorative marquee canopy, auditorium block, stage house
+    const bodyH = pos(h * 0.62, 12);
+    o.add("wall", x, g + 2.4 + bodyH / 2, z, w * 0.88, bodyH, d * 0.84, wall);
+    o.add("hip", x, g + 2.4 + bodyH, z, w * 0.92, 4.0, d * 0.88, roof);
+    // Cantilevered illuminated entrance marquee
+    o.add("roof", x, g + 2.4 + 4.5, z + d * 0.46, w * 0.65, 0.8, 6.0, 0xd97706);
+    // Tall rear stage fly tower
+    const flyW = w * 0.58, flyD = d * 0.32, flyH = bodyH + 12;
+    o.add("wall", x, g + 2.4 + flyH / 2, z - d * 0.28, flyW, flyH, flyD, wall);
+    o.add("roof", x, g + 2.4 + flyH + 0.6, z - d * 0.28, flyW * 1.04, 1.2, flyD * 1.04, roof);
+  } else if (typ === "art-gallery") {
+    // Modern Art Gallery: stepped cantilevered modernist blocks, north-light sawtooth skylights
+    const bodyH = pos(h * 0.55, 10);
+    o.add("wall", x, g + 2.4 + bodyH / 2, z, w * 0.92, bodyH, d * 0.88, 0xf1f5f9);
+    // Upper cantilevered gallery block rotated/shifted
+    const upW = w * 0.78, upD = d * 0.72, upH = bodyH * 0.65;
+    o.add("wall", x + w * 0.08, g + 2.4 + bodyH + upH / 2, z - d * 0.06, upW, upH, upD, 0xe2e8f0);
+    // Sawtooth skylight roofs
+    const bays = 4;
+    const bd = upD / bays;
+    for (let i = 0; i < bays; i++) {
+      o.add("pitch", x + w * 0.08, g + 2.4 + bodyH + upH, z - d * 0.06 + (-0.5 + (i + 0.5) / bays) * upD, upW * 0.96, bd * 0.6, bd * 0.9, roof);
+    }
+  } else if (typ === "market-hall") {
+    // Historic Covered Market: triple longitudinal brick/iron arcades with raised clerestory
+    const bodyH = pos(h * 0.58, 10);
+    // Main hall
+    o.add("wall", x, g + 2.4 + bodyH / 2, z, w * 0.94, bodyH, d * 0.92, wall);
+    o.add("pitch", x, g + 2.4 + bodyH, z, w * 0.96, w * 0.25, d * 0.94, roof);
+    // Raised central clerestory lantern ridge
+    const clerW = w * 0.38, clerH = 4.0;
+    o.add(glassBucket(h), x, g + 2.4 + bodyH + w * 0.25 + clerH / 2, z, clerW, clerH, d * 0.88, wall);
+    o.add("pitch", x, g + 2.4 + bodyH + w * 0.25 + clerH, z, clerW * 1.05, 2.5, d * 0.90, roof);
+  } else {
+    // Stadium / Municipal Arena: monumental oval bowl with cantilevered roof canopy
+    const bowlH = pos(h * 0.70, 14);
+    o.add("cyl", x, g + 2.4 + bowlH / 2, z, w * 0.95, bowlH, d * 0.95, 0x94a3b8);
+    // Cantilevered oval canopy roof with open pitch center
+    o.add("cyl", x, g + 2.4 + bowlH + 2.0, z, w * 1.02, 3.0, d * 1.02, roof);
+    // Four corner pylon floodlight masts
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const px = x + sx * (w * 0.46);
+        const pz = z + sz * (d * 0.46);
+        o.add("cyl", px, g + 2.4 + (bowlH + 20) / 2, pz, 2.4, bowlH + 20, 2.4, 0x64748b);
+        o.add("roof", px, g + 2.4 + bowlH + 20 + 1, pz, 6.0, 1.5, 6.0, 0xf8fafc);
+      }
     }
   }
 }

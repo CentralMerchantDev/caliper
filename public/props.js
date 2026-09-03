@@ -446,6 +446,219 @@ export function aircraft(aircraftClass = "light-single") {
 // STATIC PROPS REGISTRY (Manifest Backed, Roof Clutter, Street & Airport)
 // -----------------------------------------------------------------------------
 
+
+// =============================================================================
+// THE FIVE PARAMETERISED GENERATOR FAMILIES (Brief 5)
+// =============================================================================
+
+/**
+ * 1. ROOF CLUTTER GENERATOR
+ * Highest value in the library (18,758 roofs - city skyline silhouette).
+ * @param {"plant"|"chimney"|"aerial"|"dish"|"solar"|"ac"} kind
+ * @param {"small"|"medium"|"large"} size
+ */
+export function roofClutter(kind = "plant", size = "medium") {
+  const scale = size === "small" ? 0.7 : size === "large" ? 1.4 : 1.0;
+  const idMap = {
+    plant: "roof-plant",
+    chimney: "chimney",
+    aerial: "aerial",
+    dish: "satellite-dish",
+    solar: "solar-panel",
+    ac: "ac-unit",
+  };
+  const baseId = idMap[kind] || "roof-plant";
+  const baseModel = MODELS[baseId];
+  if (!baseModel) throw new Error(`roofClutter: unknown kind '${kind}'`);
+
+  const footW = +(baseModel.footprint.w * scale).toFixed(2);
+  const footD = +(baseModel.footprint.d * scale).toFixed(2);
+  const h = +(baseModel.height * scale).toFixed(2);
+  const sweep = baseModel.sweep
+    ? { w: +(baseModel.sweep.w * scale).toFixed(2), d: +(baseModel.sweep.d * scale).toFixed(2) }
+    : { w: footW, d: footD };
+
+  return {
+    id: `roof-${kind}-${size}`,
+    kind: baseModel.kind || "hard",
+    footprint: { w: footW, d: footD },
+    sweep,
+    height: h,
+    clearance: +(baseModel.clearance * scale).toFixed(2),
+    origin: "base-centre",
+    standsOn: baseModel.standsOn,
+    lod: baseModel.lod.map((l) => ({
+      level: l.level,
+      tris: l.tris,
+      createGeometry: (T = THREE) => {
+        const g = l.createGeometry(T);
+        g.scale(scale, scale, scale);
+        return g;
+      },
+    })),
+  };
+}
+roofClutter.variants = {
+  plant: ["small", "medium", "large"],
+  chimney: ["small", "medium", "large"],
+  aerial: ["small", "medium", "large"],
+  dish: ["small", "medium", "large"],
+  solar: ["small", "medium", "large"],
+  ac: ["small", "medium", "large"],
+};
+
+/**
+ * 2. STREET FURNITURE GENERATOR
+ * @param {string} kind
+ * @param {string} variant
+ */
+export function streetFurniture(kind = "bench", variant = "slat") {
+  let modelKey = "bench-slat";
+  if (kind === "bench") modelKey = variant === "backless" ? "bench-backless" : "bench-slat";
+  else if (kind === "bin") modelKey = variant === "post" ? "bin-post" : "bin-round";
+  else if (kind === "lamp") modelKey = variant === "pedestrian" ? "lamp-pedestrian" : "lamp-street";
+  else if (kind === "shelter") modelKey = "bus-shelter";
+  else if (kind === "traffic-light") modelKey = "traffic-light";
+  else if (kind === "sign") modelKey = variant === "warning" ? "sign-warning" : variant === "wayfinding" ? "sign-wayfinding" : "sign";
+  else if (kind === "cabinet") modelKey = variant === "power" ? "utility-cabinet-power" : "utility-cabinet-telecom";
+  else if (kind === "mailbox") modelKey = "mailbox";
+  else if (kind === "hydrant") modelKey = "hydrant";
+  else if (kind === "bollard") modelKey = "bollard";
+  else if (kind === "planter") modelKey = "planter";
+  else if (kind === "bike-rack") modelKey = "bike-rack";
+  else if (kind === "cafe-table") modelKey = "cafe-table";
+  else if (kind === "parasol") modelKey = "parasol";
+  else if (kind === "market-stall") modelKey = "market-stall";
+  else if (kind === "playground") modelKey = variant === "swings" ? "playground-swings" : "playground-slide";
+  else if (kind === "civic") modelKey = variant === "statue" ? "statue" : variant === "flagpole" ? "flagpole" : "fountain";
+
+  const m = MODELS[modelKey];
+  if (!m) throw new Error(`streetFurniture: unknown kind '${kind}', variant '${variant}'`);
+  return {
+    ...m,
+    id: `street-${kind}-${variant}`,
+  };
+}
+streetFurniture.variants = {
+  bench: ["slat", "backless"],
+  bin: ["round", "post"],
+  lamp: ["street", "pedestrian"],
+  shelter: ["standard"],
+  "traffic-light": ["standard"],
+  sign: ["warning", "wayfinding"],
+  cabinet: ["telecom", "power"],
+  mailbox: ["standard"],
+  hydrant: ["standard"],
+  bollard: ["standard"],
+  planter: ["concrete"],
+  "bike-rack": ["hoop"],
+  "cafe-table": ["round"],
+  parasol: ["hex"],
+  "market-stall": ["canopy"],
+  playground: ["slide", "swings"],
+  civic: ["fountain", "statue", "flagpole"],
+};
+
+/**
+ * 3. FACADE GENERATOR
+ * @param {"awning"|"shopfront"|"shutters"|"balcony"} kind
+ * @param {number} width
+ */
+export function facade(kind = "awning", width = 2.4) {
+  const baseMap = {
+    awning: "awning",
+    shopfront: "shopfront",
+    shutters: "shutters",
+    balcony: "balcony",
+  };
+  const baseKey = baseMap[kind] || "awning";
+  const m = MODELS[baseKey];
+  if (!m) throw new Error(`facade: unknown kind '${kind}'`);
+  const scaleW = width / m.footprint.w;
+
+  return {
+    id: `facade-${kind}-${width}m`,
+    kind: m.kind,
+    footprint: { w: width, d: m.footprint.d },
+    sweep: m.sweep ? { w: +(m.sweep.w * scaleW).toFixed(2), d: m.sweep.d } : { w: width, d: m.footprint.d },
+    height: m.height,
+    clearance: m.clearance,
+    origin: "base-centre",
+    standsOn: m.standsOn,
+    lod: m.lod.map((l) => ({
+      level: l.level,
+      tris: l.tris,
+      createGeometry: (T = THREE) => {
+        const g = l.createGeometry(T);
+        g.scale(scaleW, 1, 1);
+        return g;
+      },
+    })),
+  };
+}
+facade.variants = {
+  awning: [2.4, 3.6, 4.8],
+  shopfront: [3.6, 4.8, 7.2],
+  shutters: [1.0, 1.4, 1.8],
+  balcony: [2.0, 2.8, 4.0],
+};
+
+/**
+ * 4. BOUNDARY GENERATOR
+ * @param {"fence-iron"|"fence-picket"|"gate-iron"|"hedge"|"wall-garden"} kind
+ * @param {number} length
+ */
+export function boundary(kind = "fence-iron", length = 2.4) {
+  const m = MODELS[kind];
+  if (!m) throw new Error(`boundary: unknown kind '${kind}'`);
+  const scaleL = length / m.footprint.w;
+
+  return {
+    id: `boundary-${kind}-${length}m`,
+    kind: m.kind,
+    footprint: { w: length, d: m.footprint.d },
+    sweep: m.sweep ? { w: +(m.sweep.w * scaleL).toFixed(2), d: m.sweep.d } : { w: length, d: m.footprint.d },
+    height: m.height,
+    clearance: m.clearance,
+    origin: "base-centre",
+    standsOn: m.standsOn,
+    lod: m.lod.map((l) => ({
+      level: l.level,
+      tris: l.tris,
+      createGeometry: (T = THREE) => {
+        const g = l.createGeometry(T);
+        g.scale(scaleL, 1, 1);
+        return g;
+      },
+    })),
+  };
+}
+boundary.variants = {
+  "fence-iron": [1.2, 2.4, 4.8],
+  "fence-picket": [1.2, 2.4, 4.8],
+  "gate-iron": [1.6, 2.0, 3.2],
+  hedge: [1.2, 2.4, 4.8],
+  "wall-garden": [1.2, 2.4, 4.8],
+};
+
+/**
+ * 5. GROUND DETAILS GENERATOR
+ * @param {"manhole"|"grate"} kind
+ */
+export function groundFurniture(kind = "manhole") {
+  const mKey = kind === "grate" ? "drain-grating" : "manhole";
+  const m = MODELS[mKey];
+  if (!m) throw new Error(`groundFurniture: unknown kind '${kind}'`);
+  return {
+    ...m,
+    id: `ground-${kind}`,
+  };
+}
+groundFurniture.variants = {
+  manhole: ["standard"],
+  grate: ["standard"],
+};
+
 export const MODELS = {
   // --- BENCHES ---
   "bench-slat": {
