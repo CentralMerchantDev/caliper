@@ -11,7 +11,7 @@
 /**
  * @typedef {Object} AssetEntry
  * @property {string} id
- * @property {"roof"|"furniture"|"facade"|"boundary"|"ground"|"vegetation"|"people"|"vehicles"|"maritime"|"aviation"|"airport"|"roads"|"civic"} category
+ * @property {"roof"|"furniture"|"facade"|"boundary"|"ground"|"vegetation"|"people"|"vehicles"|"maritime"|"aviation"|"airport"|"roads"|"civic"|"buildings"} category
  * @property {"built"|"planned"|"generator"|"skipped"} status
  * @property {"code"|"import"} source
  * @property {"close"|"mid"|"far"} seenAs
@@ -156,6 +156,19 @@ export const ASSET_REGISTRY = [
   { id: "civic-art-gallery", category: "civic", status: "built", source: "code", seenAs: "far", count: 6, note: "Modern Art Pavilion: sculpted cantilevers, skylight roof sheds" },
   { id: "civic-market-hall", category: "civic", status: "built", source: "code", seenAs: "mid", count: 8, note: "Historic Market Hall: iron/brick arcades with raised clerestory" },
   { id: "civic-stadium", category: "civic", status: "built", source: "code", seenAs: "far", count: 2, note: "Municipal Stadium: tiered oval bowl with cantilevered canopy trusses" },
+
+  // --- 13. ORDINARY BUILDINGS (10 Parameterised Typologies - Section 2) ---
+  { id: "bld-villa", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 9500, generator: "bldVilla(seed)", note: "Detached 1-2 storey villa: gabled/hipped/mansard roof, porch, garage, bay, dormers, chimney" },
+  { id: "bld-terrace", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 4600, generator: "bldTerrace(seed)", note: "Repeating 2-3 storey terrace row: party-wall chimney stacks, stoops, lightwells, string courses" },
+  { id: "bld-townhouse", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 2700, generator: "bldTownhouse(seed)", note: "Urban 3-4 storey townhouse: grand stoop, projecting bay, cornice, rooftop pergola, outrigger" },
+  { id: "bld-midrise", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 1600, generator: "bldMidrise(seed)", note: "Commercial/residential 4-8 storey midrise: retail podium, setback tower, balconies, lift overrun" },
+  { id: "bld-tower", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 80, generator: "bldTower(seed)", note: "Downtown 12-40 storey skyscraper: podium, stepped/tapered/slab/crown profiles, mechanical penthouse" },
+  { id: "bld-shop", category: "buildings", status: "generator", source: "code", seenAs: "mid", count: 800, generator: "bldShop(seed)", note: "High street 1-3 storey shop: glazed shopfront, signage band, canvas awning, corner splay" },
+  { id: "bld-office", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 400, generator: "bldOffice(seed)", note: "Corporate 3-10 storey office: ribbon glazing spandrels, entrance canopy, service core, plant screen" },
+  { id: "bld-warehouse", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 250, generator: "bldWarehouse(seed)", note: "Industrial 1-storey logistics warehouse: sawtooth/barrel vault roof, 2-6 loading dock bays" },
+  { id: "bld-workshop", category: "buildings", status: "generator", source: "code", seenAs: "mid", count: 350, generator: "bldWorkshop(seed)", note: "Light industrial 1-2 storey workshop: yard wall, industrial exhaust flue, roller door" },
+  { id: "bld-apartment-walkup", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 600, generator: "bldApartmentWalkup(seed)", note: "Multi-family 3-4 storey walkup: central/dual stair cores, exterior balconies, garden terraces" },
+
 ];
 
 /**

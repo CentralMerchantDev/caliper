@@ -1,3 +1,16 @@
+import {
+  bldVilla,
+  bldTerrace,
+  bldTownhouse,
+  bldMidrise,
+  bldTower,
+  bldShop,
+  bldOffice,
+  bldWarehouse,
+  bldWorkshop,
+  bldApartmentWalkup,
+  building,
+} from "./buildings.js";
 // =============================================================================
 // CALIPER — PROP & MODEL LIBRARY
 //
@@ -937,6 +950,17 @@ groundFurniture.variants = {
 };
 
 export const MODELS = {
+  "bld-villa": bldVilla("default"),
+  "bld-terrace": bldTerrace("default"),
+  "bld-townhouse": bldTownhouse("default"),
+  "bld-midrise": bldMidrise("default"),
+  "bld-tower": bldTower("default"),
+  "bld-shop": bldShop("default"),
+  "bld-office": bldOffice("default"),
+  "bld-warehouse": bldWarehouse("default"),
+  "bld-workshop": bldWorkshop("default"),
+  "bld-apartment-walkup": bldApartmentWalkup("default"),
+
   // --- BENCHES ---
   "bench-slat": {
     id: "bench-slat",
@@ -4086,3 +4110,17 @@ if (typeof process !== "undefined" && process.argv && process.argv[1] && process
     process.exit(1);
   }
 }
+
+export {
+  bldVilla,
+  bldTerrace,
+  bldTownhouse,
+  bldMidrise,
+  bldTower,
+  bldShop,
+  bldOffice,
+  bldWarehouse,
+  bldWorkshop,
+  bldApartmentWalkup,
+  building,
+};

@@ -28,6 +28,7 @@ function fakeTHREE() {
     set(x: number, y: number, z: number) { this.x = x; this.y = y; this.z = z; return this; }
     copy(o: any) { this.x = o.x; this.y = o.y; this.z = o.z; return this; }
     normalize() { return this; }
+    setScalar(s: number) { this.x = s; this.y = s; this.z = s; return this; }
   }
   class Col {
     r = 0; g = 0; b = 0;
@@ -40,7 +41,7 @@ function fakeTHREE() {
     add(...c: any[]) { this.children.push(...c); return this; }
     removeFromParent() { return this; }
   }
-  const mat = () => ({ opacity: 0, color: new Col(), dispose() {} });
+  class Mat { opacity = 0; color = new Col(); dispose() {} }
   return {
     Vector3: V3, Color: Col, Group: Obj, Object3D: Obj,
     Mesh: class extends Obj { constructor(public geometry: any, public material: any) { super(); } },
@@ -55,7 +56,7 @@ function fakeTHREE() {
     // below is `grep -o "THREE\.[A-Za-z]*" sky.js | sort -u`, not a guess.
     BufferAttribute: class { constructor(public array: any, public itemSize: number) {} },
     Float32BufferAttribute: class { constructor(public array: any, public itemSize: number) {} },
-    MeshBasicMaterial: mat, PointsMaterial: mat, MeshStandardMaterial: mat,
+    MeshBasicMaterial: Mat, PointsMaterial: Mat, MeshStandardMaterial: Mat,
     CanvasTexture: class { wrapS = 0; wrapT = 0; colorSpace = ""; repeat = { set() {} }; dispose() {} },
     RepeatWrapping: 1000, BackSide: 1, AdditiveBlending: 2, SRGBColorSpace: "srgb",
   } as any;
