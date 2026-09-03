@@ -148,14 +148,53 @@ console.log(
 // The record still gets written, because nodeFail is a measurement and hiding it
 // would be worse. The PAGE does not, and the non-zero exit means a script run in
 // a chain stops there rather than carrying on to a deploy.
-if (fail > 0 || workerFail > 0) {
+// ...WITH ONE EXEMPTION, BECAUSE THE FIRST VERSION DEADLOCKED.
+//
+// The guard above was written, correctly, to stop a count being published from
+// a red run. Then the suite went red for exactly one reason -- the page said
+// 644 and the runner measured 645 -- and the only tool that can fix that is
+// this one, which now refused to run because the suite was red. The recovery
+// path for a stale count ran through a gate that a stale count held shut.
+//
+// So the guard distinguishes the two cases it could not tell apart before:
+//
+//   red for some OTHER reason   the claim would be false -> refuse, as before
+//   red ONLY because the page   the claim is stale, this script's whole job,
+//   disagrees with the runner   and updating it makes the suite green -> do it
+//
+// This is narrow on purpose. It matches ONE test by its exact name, and only
+// when it is the sole failure. An exemption is how a guard grows a hole, and
+// the way this one stays honest is that it cannot fire while anything else is
+// wrong -- if a second test is failing, the count stays unpublished.
+const COUNT_CLAIM_TEST = "the test counts on the page are the test counts";
+// "✖ failing tests:" is the SUMMARY HEADER, not a test. The first version of
+// this matched it too, so `every(name === COUNT_CLAIM_TEST)` was false on every
+// possible run and the exemption below could never fire -- a guard that cannot
+// trigger, which is the same defect as a test that cannot fail. Found by running
+// the regex against the runner's real output instead of assuming its shape.
+const failingNames = [...out.matchAll(/^(?:not ok \d+ - |✖ )(.+?)(?: \(\d|$)/gm)]
+  .map((m) => m[1].trim())
+  .filter((n) => n !== "failing tests:");
+const onlyTheCountClaim =
+  fail === 1 && workerFail === 0 &&
+  failingNames.length > 0 &&
+  failingNames.every((n) => n === COUNT_CLAIM_TEST);
+
+if ((fail > 0 || workerFail > 0) && !onlyTheCountClaim) {
   console.error(
     `\n### NOT updating public/index.html: ${fail} node and ${workerFail} worker tests FAILED.\n` +
     "### The count was recorded, because a failure is a measurement. The public\n" +
     "### claim was not, because it says the suite passes. Fix the suite, then\n" +
-    "### run this again.",
+    "### run this again.\n" +
+    (failingNames.length ? "### failing: " + failingNames.join("; ") + "\n" : ""),
   );
   process.exit(1);
+}
+if (onlyTheCountClaim) {
+  console.log(
+    `the only failure is "${COUNT_CLAIM_TEST}" -- that is the staleness this ` +
+    "script exists to fix, so the page is being updated and the suite should go green.",
+  );
 }
 
 const page = join(ROOT, "public", "index.html");

@@ -967,9 +967,9 @@ varying vec3 vSeaWorld;`)
     // 45, not "bedrock". A full-height skirt here is a 175 m vertical wall
     // standing in 62%-opacity water all round the modelled rectangle -- the
     // "long line in the ocean on the left side and right side". The APRON below
-    // now carries the ground on outward and overlaps this border by two of its
-    // own cells, so this skirt only has to close the resolution crack, which is
-    // metres. Same reasoning, same number, as the core seam thirty lines down.
+    // now carries the ground on outward, abutting this border exactly, so this
+    // skirt only has to close the resolution crack between a 162.5 m mesh and a
+    // 650 m one. Same reasoning, same number, as the core seam thirty lines down.
     const OUT = { x0: wm(-30000), x1: wm(30000), z0: wm(-33000), z1: wm(10000) };
     verts = terrainMesh(OUT.x0, OUT.x1, OUT.z0, OUT.z1, LOOK.outerStep, hole, 45, false);
 
@@ -982,11 +982,15 @@ varying vec3 vSeaWorld;`)
     // and the invariant.
     //
     // It is only sea bed, seen from kilometres up through translucent water, so
-    // it is tessellated at ten times the outer step: about 4,900 cells against
-    // the outer mesh's 41,000, which is noise next to a 3.6 M triangle scene.
-    // heightAt answers out here on its own -- roughly -122 m of gently noisy
-    // floor -- so this invents nothing, it only draws what the terrain function
-    // already said was there.
+    // it is tessellated coarsely. heightAt answers out here on its own --
+    // roughly -122 m of gently noisy floor -- so this invents nothing, it only
+    // draws what the terrain function already said was there. The step and the
+    // cost are stated once, below, where they are derived; an earlier version of
+    // this comment stated them here as well ("ten times the outer step, about
+    // 4,900 cells") and was left behind when the arithmetic changed the step to
+    // four times. Two comments, one commit, disagreeing 6x on the count. A blind
+    // audit found it, ranked it above every logic defect, and was right to:
+    // nobody reads code twice, and the first number is the one they believe.
     // THE APRON GRID ALIGNS EXACTLY TO THE RECTANGLE'S EDGES. This is arithmetic,
     // not a tolerance, and it is the difference between the apron abutting the
     // fine mesh and it either gapping or fighting with it.

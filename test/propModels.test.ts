@@ -139,11 +139,26 @@ test("geometry is built once and shared, not rebuilt per instance", () => {
 });
 
 test("an unknown prop is refused by name, not drawn as nothing", () => {
-  assert.throws(
-    () => propModel("wheelbarrow"),
-    /no model for prop "wheelbarrow"/,
-    "an id with no entry must say so rather than returning undefined",
-  );
+  // THE ASSERTION IS THAT IT NAMES THE ID, NOT THAT IT USES A PARTICULAR SENTENCE.
+  //
+  // The first version matched /no model for prop "wheelbarrow"/ -- the exact
+  // wording of the throw at the time. Then prop-models.js was rewritten to
+  // resolve through the library instead of a hand-written table, the message
+  // changed to name props.js, and this went red on a rewrite that had not broken
+  // anything it was guarding.
+  //
+  // That is a test coupled to prose. The behaviour worth defending is that an
+  // unknown id THROWS rather than returning undefined, and that the refusal says
+  // WHICH id -- because "cannot read property lod of undefined", three frames
+  // deep in an InstancedMesh call, is how this fails otherwise.
+  let thrown: Error | null = null;
+  try { propModel("wheelbarrow"); } catch (e) { thrown = e as Error; }
+
+  assert.ok(thrown, "an id with no model must throw rather than return undefined");
+  assert.match(thrown!.message, /wheelbarrow/, `the refusal must name the id it refused: "${thrown!.message}"`);
+  // Paired: a real id must NOT throw, or the test above passes for a module
+  // that refuses everything.
+  assert.doesNotThrow(() => propModel("bench"), "a real prop was refused");
 });
 
 test("a lower level of detail falls back down rather than vanishing", () => {
