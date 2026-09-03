@@ -34,6 +34,11 @@ import {
 import { LandField, makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, GROUND_BANDS, WATERWAYS, waterwaySurface , waterwayAt } from "./terrain.js";
 import { assessFootprint } from "./footprint.js";
 import { propFootprint } from "./prop-manifest.js";
+// The join to the asset lane's model library. prop-manifest decides what a prop
+// CLAIMS; this decides what it LOOKS LIKE, and prop-models.js is the table that
+// keeps the two agreeing. See its header for why the mapping is written out in
+// full rather than matched by name.
+import { propGeometry } from "./prop-models.js";
 // `sm` is already used as a local variable in this file (a THREE.Mesh), so the
 // world-scale helper is imported under a name that cannot be shadowed.
 import { sm as wm } from "./world-scale.js";
@@ -959,7 +964,59 @@ varying vec3 vSeaWorld;`)
     // The wall now runs from the terrain edge down to BEDROCK_Y, which is that
     // same -175, so the two meet and the world closes itself instead of being
     // covered over.
-    verts = terrainMesh(wm(-30000), wm(30000), wm(-33000), wm(10000), LOOK.outerStep, hole, "bedrock", false);
+    // 45, not "bedrock". A full-height skirt here is a 175 m vertical wall
+    // standing in 62%-opacity water all round the modelled rectangle -- the
+    // "long line in the ocean on the left side and right side". The APRON below
+    // now carries the ground on outward, abutting this border exactly, so this
+    // skirt only has to close the resolution crack between a 162.5 m mesh and a
+    // 650 m one. Same reasoning, same number, as the core seam thirty lines down.
+    const OUT = { x0: wm(-30000), x1: wm(30000), z0: wm(-33000), z1: wm(10000) };
+    verts = terrainMesh(OUT.x0, OUT.x1, OUT.z0, OUT.z1, LOOK.outerStep, hole, 45, false);
+
+    // -------------------------------------------------------------------------
+    // THE APRON -- ground out past the far edge of the water
+    //
+    // Without this the world is a rectangle of real ground floating inside a sea
+    // plane 2.7x wider than it, so the rectangle's edge is visible through the
+    // water as a tray. See WORLD.GROUND_SPAN in city-plan.js for the measurement
+    // and the invariant.
+    //
+    // It is only sea bed, seen from kilometres up through translucent water, so
+    // it is tessellated coarsely. heightAt answers out here on its own --
+    // roughly -122 m of gently noisy floor -- so this invents nothing, it only
+    // draws what the terrain function already said was there. The step and the
+    // cost are stated once, below, where they are derived; an earlier version of
+    // this comment stated them here as well ("ten times the outer step, about
+    // 4,900 cells") and was left behind when the arithmetic changed the step to
+    // four times. Two comments, one commit, disagreeing 6x on the count. A blind
+    // audit found it, ranked it above every logic defect, and was right to:
+    // nobody reads code twice, and the first number is the one they believe.
+    // THE APRON GRID ALIGNS EXACTLY TO THE RECTANGLE'S EDGES. This is arithmetic,
+    // not a tolerance, and it is the difference between the apron abutting the
+    // fine mesh and it either gapping or fighting with it.
+    //
+    // The first attempt inset the hole by two apron cells so the two meshes would
+    // OVERLAP, on the reasoning that an overlap is invisible where a gap is a
+    // hole in the world. Measured before committing to it: the highest ground
+    // inside that band is 63.2 m, at (-11600, 3350). So the overlap would have
+    // drawn 650 m-resolution land on top of 162.5 m-resolution land along the
+    // northern edge. Invisible was the wrong word.
+    //
+    //     rectangle spans  39,000 m in x  and  27,950 m in z
+    //     gcd(39000, 27950) = 650
+    //     650 = wm(1000) = LOOK.outerStep x 4
+    //     58,500 = WORLD.SIZE x GROUND_SPAN / 2 = 650 x 90
+    //
+    // With that step and that half-extent, all four edges land on apron grid
+    // lines: (19500 + 58500) / 650 = 120, (-19500 + 58500) / 650 = 60,
+    // (6500 + 58500) / 650 = 100, (-21450 + 58500) / 650 = 57. So the hole is
+    // cut to the rectangle exactly and the two meshes meet edge to edge.
+    //
+    // Cost: 180 x 180 cells less the hole, about 59,600 triangles -- 1.6% of the
+    // scene -- for the thing that made the world look like it was on a tray.
+    const apronHalf = WORLD.SIZE * WORLD.GROUND_SPAN / 2;
+    const apronStep = LOOK.outerStep * 4;
+    verts += terrainMesh(-apronHalf, apronHalf, -apronHalf, apronHalf, apronStep, OUT, "bedrock", false);
     // The skirt only has to be as deep as the height difference a resolution change
     // can leave at the seam, which is metres, not hundreds. At 240 m it was a dark
     // wall standing in the water at the edge of the modelled core, clearly visible
@@ -982,8 +1039,12 @@ varying vec3 vSeaWorld;`)
   // sky through the ocean -- which read as a flat table with a cliff at its edge
   // on every wide shot. Two triangles close the world.
   if (!SKIP.has("water")) {
+    // Now a backstop rather than the thing you are actually looking at: the
+    // apron carries real ground out to GROUND_SPAN, which is wider than the sea
+    // plane, so this is no longer visible THROUGH water anywhere. It stays
+    // because it costs two triangles and closes everything beyond the apron.
     const abyss = new THREE.Mesh(
-      new THREE.PlaneGeometry(WORLD.SIZE * 6, WORLD.SIZE * 6),
+      new THREE.PlaneGeometry(WORLD.SIZE * WORLD.ABYSS_SPAN, WORLD.SIZE * WORLD.ABYSS_SPAN),
       new THREE.MeshStandardMaterial({ color: 0x16334a, roughness: 1 })
     );
     abyss.rotation.x = -Math.PI / 2; abyss.position.y = -175; scene.add(abyss);
@@ -991,7 +1052,7 @@ varying vec3 vSeaWorld;`)
 
   const wn = waterNormalTexture(THREE);
   const sea = SKIP.has("water") ? { position: {} } : new THREE.Mesh(
-    new THREE.PlaneGeometry(WORLD.SIZE * 4, WORLD.SIZE * 4),
+    new THREE.PlaneGeometry(WORLD.SIZE * WORLD.SEA_SPAN, WORLD.SIZE * WORLD.SEA_SPAN),
     new THREE.MeshStandardMaterial({
       // Opacity is the whole depth cue: at 0.80 the modelled sea bed underneath
       // was invisible and the bay was one flat blue. At 0.62 the shelf, the
@@ -2024,9 +2085,32 @@ function buildProps(api) {
       scene.add(inst);
       return list.length;
     };
-    const nBin = put(new THREE.CylinderGeometry(0.32, 0.28, 1.0, 6), M(0x3f4a44, 0.7), spots.bin, 0.5, false);
-    const nBench = put(new THREE.BoxGeometry(1.8, 0.45, 0.55), M(0xa9835a, 0.85), spots.bench, 0.35, true);
-    const nShel = put(new THREE.BoxGeometry(3.6, 2.5, 1.4), M(0x9fc4dd, 0.25, 0.4), spots.shelter, 1.25, true);
+    // THE SAME STRING NOW CLAIMS THE GROUND AND DRAWS THE THING.
+    //
+    // Twenty lines up, claimProp("bin", ...) decides whether this square metre
+    // is free. Here, propGeometry("bin", ...) decides what stands on it. Until
+    // prop-models.js those were a manifest id and a hand-written primitive with
+    // nothing holding them together, and they had already drifted:
+    //
+    //   bin      CylinderGeometry(0.32, 0.28, 1.0, 6)   a six-sided tube
+    //   bench    BoxGeometry(1.8, 0.45, 0.55)           a box
+    //   shelter  BoxGeometry(3.6, 2.5, 1.4)             a box
+    //
+    // yOff was the tell. It lifted each primitive by half its own height to
+    // stand it on the ground -- 0.5 for a 1.0 m bin, 1.25 for a 2.5 m shelter,
+    // both exactly right. The bench got 0.35 for a 0.45 m box, which is half of
+    // 0.7, not half of 0.45: every bench in the downtown core stood 12.5 cm in
+    // the air. Nothing could see it, because the number that was wrong lived at
+    // a call site and the height it was meant to halve lived in a constructor
+    // argument on the same line.
+    //
+    // The library's origin is "base-centre" -- (0,0,0) is the centre of the
+    // footprint AT GROUND LEVEL -- so there is no lift to get wrong any more.
+    // yOff is 0 for all three, and that is not a tuning choice, it is what the
+    // model contract in docs/WORLD-RULES.md section 4 already says.
+    const nBin = put(propGeometry("bin", THREE), M(0x3f4a44, 0.7), spots.bin, 0, false);
+    const nBench = put(propGeometry("bench", THREE), M(0xa9835a, 0.85), spots.bench, 0, true);
+    const nShel = put(propGeometry("busShelter", THREE), M(0x9fc4dd, 0.25, 0.4), spots.shelter, 0, true);
     stats.streetFurniture = nBin + nBench + nShel;
     // Refusals are a fact about the world, reported rather than swallowed --
     // the same reasoning as refusedWhy for buildings. An empty object here
@@ -2776,11 +2860,28 @@ function buildProps(api) {
     };
     flat(lawns, lawn, 0); flat(paths, path, 1); flat(ponds, pond, 2);
     if (benches.length) {
-      const bg = RB(2.2, 0.5, 0.7, 0.15);
+      // THE FIRST THING IN THIS WORLD DRAWN FROM THE MODEL LIBRARY.
+      //
+      // It was RB(2.2, 0.5, 0.7, 0.15) -- a rounded box, 2.2 m long, standing in
+      // for a bench. The asset lane's bench-slat has legs, back posts, two seat
+      // planks and a back plank, and it is 1.8 x 0.6 m, which is what
+      // prop-manifest.js has claimed as a bench's ground all along.
+      //
+      // So the box was also the wrong size: 2.2 m of geometry over a 1.8 m
+      // claim, overhanging its own footprint by 20 cm at each end. That is the
+      // reason prop-models.js asserts the two agree rather than trusting them
+      // to -- see test/propModels.test.ts, which measures every static prop.
+      //
+      // y is left as the caller set it: the park pass positions benches at
+      // ground + 0.9 because the old box was centred on its own height. The
+      // library's origin is "base-centre" -- (0,0,0) is the CENTRE of the
+      // footprint at GROUND LEVEL -- so the lift has to come off, or every
+      // bench floats 90 cm above the grass.
+      const bg = propGeometry("bench", THREE, { lod: 0 });
       const im = new THREE.InstancedMesh(bg, M(0x9b7d55, 0.9), benches.length);
       const d2 = new THREE.Object3D();
       benches.forEach(([x, y, z], i) => {
-        d2.position.set(x, y, z); d2.rotation.set(0, rnd("bq" + i) * 3.14, 0); d2.scale.setScalar(1);
+        d2.position.set(x, y - 0.9, z); d2.rotation.set(0, rnd("bq" + i) * 3.14, 0); d2.scale.setScalar(1);
         d2.updateMatrix(); im.setMatrixAt(i, d2.matrix);
       });
       im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.computeBoundingSphere(); scene.add(im);

@@ -15,58 +15,30 @@
 // written down, shipped, and rendered for a week without a single check standing
 // between it and the deployed page.
 //
-// These tests are about the CURVE, not about the material existing. A test that
-// only asserted "the clouds have an opacity" would have passed throughout.
+// THE REAL THREE.JS, NOT A FAKE OF IT.
+//
+// The first two versions of this file hand-rolled a stub three.js, and both went
+// red inside the constructor without ever reaching a cloud: one carried
+// Float32BufferAttribute where sky.js uses BufferAttribute, the next built its
+// materials as arrow functions, which `new` refuses. Twelve red tests, zero of
+// them about the sky.
+//
+// That is the same error this whole project argues against -- testing a copy of
+// the thing instead of the thing -- and the repository already had the answer
+// sitting in scripts/variant-coverage.mjs, which imports the vendored three
+// directly in node. Geometry and materials need no GL context. So this imports
+// the real library, and the only thing stubbed is the 2D canvas the cloud
+// texture is painted on, because node genuinely has not got one.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import * as THREE from "../public/vendor/three/three.module.min.js";
 import { createCitySky } from "../public/sky.js";
 
-/** Enough of three.js for sky.js to build against, with no GPU and no canvas. */
-function fakeTHREE() {
-  class V3 {
-    x = 0; y = 0; z = 0;
-    set(x: number, y: number, z: number) { this.x = x; this.y = y; this.z = z; return this; }
-    copy(o: any) { this.x = o.x; this.y = o.y; this.z = o.z; return this; }
-    normalize() { return this; }
-    setScalar(s: number) { this.x = s; this.y = s; this.z = s; return this; }
-  }
-  class Col {
-    r = 0; g = 0; b = 0;
-    setRGB(r: number, g: number, b: number) { this.r = r; this.g = g; this.b = b; return this; }
-    copy(o: any) { this.r = o.r; this.g = o.g; this.b = o.b; return this; }
-  }
-  class Obj {
-    children: any[] = []; visible = true;
-    position = new V3(); rotation = new V3(); scale = new V3();
-    add(...c: any[]) { this.children.push(...c); return this; }
-    removeFromParent() { return this; }
-  }
-  class Mat { opacity = 0; color = new Col(); dispose() {} }
-  return {
-    Vector3: V3, Color: Col, Group: Obj, Object3D: Obj,
-    Mesh: class extends Obj { constructor(public geometry: any, public material: any) { super(); } },
-    Points: class extends Obj { constructor(public geometry: any, public material: any) { super(); } },
-    SphereGeometry: class { dispose() {} },
-    BufferGeometry: class {
-      setAttribute() { return this; } dispose() {}
-    },
-    // sky.js uses BufferAttribute, not Float32BufferAttribute. The first version
-    // of this fake carried the wrong one and every test in the file died in the
-    // constructor -- six red tests that said nothing about the clouds. The list
-    // below is `grep -o "THREE\.[A-Za-z]*" sky.js | sort -u`, not a guess.
-    BufferAttribute: class { constructor(public array: any, public itemSize: number) {} },
-    Float32BufferAttribute: class { constructor(public array: any, public itemSize: number) {} },
-    MeshBasicMaterial: Mat, PointsMaterial: Mat, MeshStandardMaterial: Mat,
-    CanvasTexture: class { wrapS = 0; wrapT = 0; colorSpace = ""; repeat = { set() {} }; dispose() {} },
-    RepeatWrapping: 1000, BackSide: 1, AdditiveBlending: 2, SRGBColorSpace: "srgb",
-  } as any;
-}
-
 /**
- * makeCloudTexture() draws its blobs on a real 2D canvas, which node has not
- * got. Only the six methods sky.js actually calls are stubbed -- listed from
- * `grep -o "\bg\.[a-zA-Z]*" sky.js`, so if the drawing code starts using a
- * seventh this stub fails loudly rather than quietly returning undefined.
+ * makeCloudTexture() paints its blobs on a real 2D canvas. Only the six calls
+ * sky.js actually makes are stubbed -- taken from
+ * `grep -o "\bg\.[a-zA-Z]*" public/sky.js` -- so if the drawing code starts
+ * using a seventh, this throws rather than quietly returning undefined.
  */
 function withCanvas<T>(fn: () => T): T {
   const had = "document" in globalThis;
@@ -76,7 +48,7 @@ function withCanvas<T>(fn: () => T): T {
       width: 0, height: 0,
       getContext: () => ({
         clearRect() {}, beginPath() {}, fill() {}, arc() {},
-        set fillStyle(_v: any) {},
+        fillStyle: null as any,
         createRadialGradient: () => ({ addColorStop() {} }),
       }),
     }),
@@ -86,13 +58,19 @@ function withCanvas<T>(fn: () => T): T {
 }
 
 function sky() {
-  return withCanvas(() => {
-    const T = fakeTHREE();
-    return createCitySky(T, new T.Group());
-  });
+  return withCanvas(() => createCitySky(THREE as any, new THREE.Group()));
 }
 
-const sun = { x: 0.3, y: 0.8, z: 0.5 };
+const sun = new THREE.Vector3(0.3, 0.8, 0.5);
+
+test("the harness itself works: a sky is built from the real three.js", () => {
+  // If this fails, every assertion below is about a constructor rather than
+  // about clouds -- which is exactly how the first two versions of this file
+  // wasted a run. It is checked first so the failure says so.
+  const s = sky();
+  assert.ok(s.cloudsLow && s.cloudsHigh, "no cloud decks were built");
+  assert.ok(s.cloudsLow.material, "the low deck has no material");
+});
 
 test("below both decks, the clouds are a ceiling and both are drawn", () => {
   const s = sky();
@@ -104,23 +82,24 @@ test("below both decks, the clouds are a ceiling and both are drawn", () => {
 
 test("at the orbit Mark was flying, NEITHER dome is drawn -- this is the crest", () => {
   const s = sky();
-  // 46 km range at 21 degrees of pitch is roughly 16.5 km up. Both decks are
-  // 3-6x below that.
+  // 46 km of range at 21 degrees of pitch is roughly 16.5 km up. Both decks --
+  // 2.6 km and 4.2 km -- are far below that.
   s.update(sun, 0, 0.016, { x: 0, z: 0 }, 16500);
   assert.equal(s.cloudsLow.visible, false, "the low deck was still drawn from above");
   assert.equal(s.cloudsHigh.visible, false, "the high deck was still drawn from above -- this is the crescent");
 });
 
-test("the decks fade INDEPENDENTLY -- one material could not do this", () => {
+test("the decks fade INDEPENDENTLY -- one shared material could not do this", () => {
   const s = sky();
   // 3.4 km: above the 2.6 km deck, below the 4.2 km one. This altitude is the
-  // reason each deck needs its own material; sharing one meant the low deck
-  // could not go while the high deck was still a real ceiling overhead.
+  // reason each deck needs its own material. Sharing one meant the low deck
+  // could not go while the high deck was still a real ceiling overhead, so
+  // crossing 2.6 km would have blinked the whole sky at once.
   s.update(sun, 0, 0.016, { x: 0, z: 0 }, 3400);
   assert.equal(s.cloudsHigh.visible, true, "the high deck is still overhead at 3.4 km and should still draw");
   assert.ok(
     s.cloudsLow.material.opacity < s.cloudsHigh.material.opacity,
-    `the low deck should be thinner than the high one at 3.4 km: ` +
+    "the low deck should be thinner than the high one at 3.4 km: " +
     `low ${s.cloudsLow.material.opacity}, high ${s.cloudsHigh.material.opacity}`,
   );
   assert.notEqual(s.cloudsLow.material, s.cloudsHigh.material, "the two decks share a material and cannot fade apart");
@@ -133,18 +112,18 @@ test("the fade is a climb, not a switch", () => {
     s.update(sun, 0, 0.016, { x: 0, z: 0 }, y);
     readings.push(s.cloudsHigh.material.opacity);
   }
-  // Monotone down, and it actually moves rather than sitting at one value until
-  // it drops -- a hard cutoff would pass a "goes to zero" test and still pop.
   for (let i = 1; i < readings.length; i++) {
     assert.ok(readings[i] <= readings[i - 1] + 1e-9, `opacity rose on the way up: ${readings.join(", ")}`);
   }
+  // Distinct values, not just "reaches zero": a hard cutoff would satisfy a
+  // monotone check and still pop visibly in flight.
   const distinct = new Set(readings.map((v) => v.toFixed(3))).size;
   assert.ok(distinct >= 4, `the fade has only ${distinct} distinct values -- that is a switch, not a fade: ${readings.join(", ")}`);
 });
 
 test("with NO camera altitude given, nothing changes -- the old behaviour is the fallback", () => {
-  // city-render.js calls update() with four arguments during world build. That
-  // call must not be silently blanked by a fifth parameter it does not pass.
+  // city-render.js calls update() with four arguments while building the world.
+  // That call must not be silently blanked by a fifth parameter it never passes.
   const s = sky();
   s.update(sun, 0, 0, null);
   assert.equal(s.cloudsLow.visible, true, "clouds vanished when no camera altitude was supplied");

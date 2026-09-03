@@ -52,7 +52,39 @@ export const WORLD = {
   // page copy quoting it all described a world that no longer existed.
   SIZE: 40000 * WORLD_SCALE,   // the modelled square; 26 km at k = 0.65
   HORIZON: 52000,      // than Biscayne Bay is WIDE (13 km) -- a square of a
-};                     // world, not a world.
+
+  // ===========================================================================
+  // THE GROUND MUST REACH FURTHER THAN THE WATER
+  //
+  // These three are multiples of SIZE, and their ORDER is the rule. They were
+  // three unrelated literals in city-render.js and the order was wrong:
+  //
+  //     sea plane        SIZE x 4   ->  +/- 52,000 m
+  //     abyss plane      SIZE x 6   ->  +/- 78,000 m
+  //     modelled ground             ->  +/- 19,500 m in x
+  //                                     -21,450 .. +6,500 m in z
+  //
+  // So the water was 2.7x wider than the ground in x and 8x in +z, and where the
+  // ground stopped it stopped with a 175 m vertical bedrock wall standing in
+  // water drawn at 62% opacity. From altitude that reads as a rectangular tray
+  // the world is sitting on, with two bright straight lines running off to
+  // either side -- reported as exactly that. The same file already records the
+  // identical defect being found and fixed on the CORE mesh's seam, where a
+  // 240 m skirt was "clearly visible through the transparent sea as a straight
+  // dark band across the bay". The outer mesh kept the full-height wall.
+  //
+  // heightAt(x, z) has no bounds check and answers everywhere -- far out it
+  // returns roughly -122 m of noisy sea bed -- so the ground does not need
+  // inventing beyond the modelled rectangle. It only needs tessellating, which
+  // GROUND_SPAN now does at a coarse step.
+  //
+  // GROUND_SPAN > SEA_SPAN is the invariant. test/worldExtent.test.ts asserts
+  // it, because a number that has to be larger than another number is exactly
+  // the kind of thing that goes quietly wrong in a re-tune.
+  SEA_SPAN: 4,
+  ABYSS_SPAN: 6,
+  GROUND_SPAN: 4.5,
+};
 
 // =============================================================================
 // LAND MASSES

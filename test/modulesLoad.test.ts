@@ -28,7 +28,7 @@ const FILES = [
   // bare `throw` at module scope in sky.js left the whole 605-test suite green,
   // because nothing imported it. That is the exact defect this file exists to
   // prevent, one module over.
-  "sky.js", "colour-grade.js", "terrain.js", "waterways.js",
+  "sky.js", "colour-grade.js", "terrain.js", "waterways.js", "prop-models.js",
 ];
 
 for (const name of FILES) {

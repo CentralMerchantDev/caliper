@@ -1494,11 +1494,6 @@ export const MODELS = {
     clearance: 0.2,
     origin: "base-centre",
     standsOn: ["plot", "open"],
-    sweep: { w: 1.2, d: 1.4 },
-    height: 1.4,
-    clearance: 0.2,
-    origin: "base-centre",
-    standsOn: ["plot", "open"],
     lod: [
       {
         level: 0, tris: 64,
@@ -2057,10 +2052,6 @@ export const MODELS = {
     clearance: 1.0,
     origin: "base-centre",
     standsOn: ["park", "open"],
-    height: 2.8,
-    clearance: 1.0,
-    origin: "base-centre",
-    standsOn: ["park", "open"],
     lod: [
       {
         level: 0, tris: 108,
@@ -2193,11 +2184,6 @@ export const MODELS = {
     id: "flagpole",
     kind: "hard",
     footprint: { w: 0.5, d: 0.5 },
-    sweep: { w: 3.4, d: 0.5 },
-    height: 9.5,
-    clearance: 0.3,
-    origin: "base-centre",
-    standsOn: ["plot", "park", "sidewalk", "open"],
     sweep: { w: 3.4, d: 0.5 },
     height: 9.5,
     clearance: 0.3,

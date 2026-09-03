@@ -162,50 +162,78 @@ export function createCitySky(THREE, scene, opts = {}) {
 
   /* --------------------------------------------------------------- clouds -- */
 
-  function deckVisibility(camAltitude, deckAltitude) {
-    if (camAltitude === undefined || Number.isNaN(camAltitude)) return 1;
-    if (camAltitude <= 0) return 1;
-    const start = deckAltitude * 0.45;
-    const end = deckAltitude * 1.65;
-    if (camAltitude <= start) return 1;
-    if (camAltitude >= end) return 0;
-    return Math.max(0, Math.min(1, 1 - (camAltitude - start) / (end - start)));
-  }
+
 
   const cloudTex = makeCloudTexture(THREE, { blobs: opts.cloudBlobs ?? 220 });
-  const cloudLowMat = new THREE.MeshBasicMaterial({
+  const newCloudMat = () => new THREE.MeshBasicMaterial({
     map: cloudTex, transparent: true, opacity: 0.0,
     depthWrite: false, side: THREE.BackSide, fog: false,
   });
-  const cloudHighMat = new THREE.MeshBasicMaterial({
-    map: cloudTex, transparent: true, opacity: 0.0,
-    depthWrite: false, side: THREE.BackSide, fog: false,
-  });
-
+  // BackSide on a sphere means the texture is on the INSIDE, so it reads as a
+  // ceiling from underneath at any position in a 26 km world. A plane would only
+  // look right from directly below its centre.
+  //
+  // A CEILING ONLY WORKS FROM UNDERNEATH, AND NOTHING ENFORCED THAT.
+  //
+  // Mark, from a 46 km orbit: "there are odd white crest shapes when I zoom out".
+  // He is looking at these two domes from ABOVE. A BackSide hemisphere seen from
+  // outside culls its near face and draws the inside of its far rim, which is
+  // exactly a white crescent hanging in the sky -- two domes, two crests. The
+  // comment directly above states the assumption ("from underneath") and every
+  // shot that judged this sky was taken at city level, so the assumption was
+  // never once tested against the view that breaks it.
+  //
+  // A cloud deck is a real altitude, so the honest fix is to treat it as one:
+  // full strength below the deck, gone above it. Each deck therefore needs its
+  // OWN material -- sharing one meant the low deck could not fade out while the
+  // high deck was still overhead, and you would have crossed 2.6 km and had the
+  // whole sky blink at once.
   const cloudGeo = new THREE.SphereGeometry(1, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5);
-  const cloudsLow = new THREE.Mesh(cloudGeo, cloudLowMat);
+  const lowMat = newCloudMat();
+  const highMat = newCloudMat();
+  const cloudsLow = new THREE.Mesh(cloudGeo, lowMat);
   cloudsLow.scale.set(CLOUD_LOW * 8, CLOUD_LOW, CLOUD_LOW * 8);
   cloudsLow.frustumCulled = false;
-  const cloudsHigh = new THREE.Mesh(cloudGeo, cloudHighMat);
+  const cloudsHigh = new THREE.Mesh(cloudGeo, highMat);
   cloudsHigh.scale.set(CLOUD_HIGH * 9, CLOUD_HIGH, CLOUD_HIGH * 9);
   cloudsHigh.rotation.y = 1.1;
   cloudsHigh.frustumCulled = false;
   group.add(cloudsLow, cloudsHigh);
 
+  /**
+   * How much of a deck at `deckY` is still legible from altitude `camY`.
+   *
+   * 1 well below the deck, 0 well above it, with the crossover spread over the
+   * deck's own height so it is a climb through weather rather than a switch.
+   * Exported (as `deckVisibility` below) so a test can assert the curve instead
+   * of asserting that a material exists.
+   */
+  const deckVisibility = (camY, deckY) => {
+    if (!Number.isFinite(camY)) return 1;      // no camera given: behave as before
+    const fadeFrom = deckY * 0.75;             // starts thinning just under the deck
+    const fadeTo = deckY * 1.45;               // fully gone above it
+    if (camY <= fadeFrom) return 1;
+    if (camY >= fadeTo) return 0;
+    return 1 - (camY - fadeFrom) / (fadeTo - fadeFrom);
+  };
+
   const sunDir = new THREE.Vector3();
 
   return {
-    group, stars, moon, cloudsLow, cloudsHigh,
-    deckVisibility,
+    group, stars, moon, cloudsLow, cloudsHigh, deckVisibility,
+    CLOUD_LOW, CLOUD_HIGH,
 
     /**
-     * @param sun         normalised sun direction (the same vector the sky shader gets)
-     * @param nightAmt    0 in full day, 1 at full night
-     * @param dt          seconds since the last frame
-     * @param centre      where the camera is looking, so the dome travels with it
-     * @param camAltitude camera altitude in world units
+     * @param sun      normalised sun direction (the same vector the sky shader gets)
+     * @param nightAmt 0 in full day, 1 at full night
+     * @param dt       seconds since the last frame
+     * @param centre   where the camera is looking, so the dome travels with it
+     * @param camY     camera altitude, so a deck you have climbed above stops
+     *                 being drawn as a crescent above the horizon
      */
-    update(sun, nightAmt, dt, centre, camAltitude) {
+    update(sun, nightAmt, dt, centre, camY) {
+      // The whole sky follows the view. In a 26 km world a dome fixed at the
+      // origin is behind you by the time you reach the far headland.
       if (centre) group.position.set(centre.x, 0, centre.z);
 
       starMat.opacity = Math.max(0, (nightAmt - 0.25) * 1.33);
@@ -223,32 +251,28 @@ export function createCitySky(THREE, scene, opts = {}) {
       moonMat.opacity = Math.max(0, (nightAmt - 0.15) * 1.2);
       moon.visible = moonMat.opacity > 0.01;
 
-      const baseCloudOpacity = 0.78 - nightAmt * 0.42;
-      const lowVis = deckVisibility(camAltitude, CLOUD_LOW);
-      const highVis = deckVisibility(camAltitude, CLOUD_HIGH);
-
-      cloudLowMat.opacity = baseCloudOpacity * lowVis;
-      cloudHighMat.opacity = baseCloudOpacity * highVis;
-
-      cloudsLow.visible = cloudLowMat.opacity > 0.01;
-      cloudsHigh.visible = cloudHighMat.opacity > 0.01;
-
+      // Clouds thin out at night rather than vanishing: an empty night sky over
+      // a lit city reads as a missing layer, not as clear weather.
+      const base = 0.78 - nightAmt * 0.42;
+      lowMat.opacity = base * deckVisibility(camY, CLOUD_LOW);
+      highMat.opacity = base * deckVisibility(camY, CLOUD_HIGH);
+      // visible=false, not merely opacity 0: a transparent BackSide dome at zero
+      // opacity is still sorted, still submitted, and still a draw call.
+      cloudsLow.visible = lowMat.opacity > 0.01;
+      cloudsHigh.visible = highMat.opacity > 0.01;
       cloudsLow.rotation.y += (dt || 0) * 0.0022;
       cloudsHigh.rotation.y -= (dt || 0) * 0.0013;
 
       const warm = 1 - nightAmt;
-      const cr = 0.62 + 0.38 * warm;
-      const cg = 0.64 + 0.34 * warm;
-      const cb = 0.70 + 0.30 * warm;
-      cloudLowMat.color.setRGB(cr, cg, cb);
-      cloudHighMat.color.setRGB(cr, cg, cb);
+      lowMat.color.setRGB(0.62 + 0.38 * warm, 0.64 + 0.34 * warm, 0.70 + 0.30 * warm);
+      highMat.color.copy(lowMat.color);
     },
 
     dispose() {
       group.removeFromParent();
       starGeo.dispose(); starMat.dispose();
       moon.geometry.dispose(); moonMat.dispose();
-      cloudGeo.dispose(); cloudLowMat.dispose(); cloudHighMat.dispose(); cloudTex.dispose();
+      cloudGeo.dispose(); lowMat.dispose(); highMat.dispose(); cloudTex.dispose();
     },
   };
 }

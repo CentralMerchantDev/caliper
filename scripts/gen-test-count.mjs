@@ -14,7 +14,7 @@
 //
 //   node scripts/gen-test-count.mjs
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -115,3 +115,116 @@ console.log(
   `wrote test/testCount.generated.json: ${tests} node tests (${fail} fail), ` +
     `${workerTests} worker tests (${workerFail} fail)`,
 );
+
+// =============================================================================
+// AND WRITE THE PAGE, WHICH IS THE HALF THAT KEPT GETTING FORGOTTEN
+//
+// This script recorded the measurement and stopped. The claim on the public page
+// -- the thing publicClaims.test.ts actually guards -- was left to a human, and
+// the failure message even says so: "Update #claim-node-tests in
+// public/index.html, or run gen-test-count.mjs". Running it did not update the
+// page, so it always took two steps and the second one was remembered by nobody.
+//
+// The result is a test that fails one run LATE, every time: you add tests, the
+// suite goes green against the old recorded count, you regenerate, and the NEXT
+// run is red for a reason that has nothing to do with what you were working on.
+// That happened three times in one afternoon, and index.html's own copy already
+// says this sentence "has now gone stale three times in a row while claiming it
+// was read from the runner".
+//
+// A number that is measured in one file and asserted in another needs exactly
+// one writer. This is it.
+// =============================================================================
+// A COUNT FROM A RED RUN IS NOT A VERIFICATION CLAIM.
+//
+// This script updated the page on a run that reported "(1 fail)", so the public
+// sentence "Continuous Verification: 644 Node tests ... run against this
+// repository" was published from a suite that was failing. The number was even
+// correct. That is not the point: the sentence claims the tests PASS, and a
+// script that writes it while they do not is manufacturing the exact kind of
+// green-looking evidence this project exists to argue against -- and it was
+// written, an hour earlier, to fix a different honesty defect in the same line.
+//
+// The record still gets written, because nodeFail is a measurement and hiding it
+// would be worse. The PAGE does not, and the non-zero exit means a script run in
+// a chain stops there rather than carrying on to a deploy.
+// ...WITH ONE EXEMPTION, BECAUSE THE FIRST VERSION DEADLOCKED.
+//
+// The guard above was written, correctly, to stop a count being published from
+// a red run. Then the suite went red for exactly one reason -- the page said
+// 644 and the runner measured 645 -- and the only tool that can fix that is
+// this one, which now refused to run because the suite was red. The recovery
+// path for a stale count ran through a gate that a stale count held shut.
+//
+// So the guard distinguishes the two cases it could not tell apart before:
+//
+//   red for some OTHER reason   the claim would be false -> refuse, as before
+//   red ONLY because the page   the claim is stale, this script's whole job,
+//   disagrees with the runner   and updating it makes the suite green -> do it
+//
+// This is narrow on purpose. It matches ONE test by its exact name, and only
+// when it is the sole failure. An exemption is how a guard grows a hole, and
+// the way this one stays honest is that it cannot fire while anything else is
+// wrong -- if a second test is failing, the count stays unpublished.
+const COUNT_CLAIM_TEST = "the test counts on the page are the test counts";
+// "✖ failing tests:" is the SUMMARY HEADER, not a test. The first version of
+// this matched it too, so `every(name === COUNT_CLAIM_TEST)` was false on every
+// possible run and the exemption below could never fire -- a guard that cannot
+// trigger, which is the same defect as a test that cannot fail. Found by running
+// the regex against the runner's real output instead of assuming its shape.
+const failingNames = [...out.matchAll(/^(?:not ok \d+ - |✖ )(.+?)(?: \(\d|$)/gm)]
+  .map((m) => m[1].trim())
+  .filter((n) => n !== "failing tests:");
+const onlyTheCountClaim =
+  fail === 1 && workerFail === 0 &&
+  failingNames.length > 0 &&
+  failingNames.every((n) => n === COUNT_CLAIM_TEST);
+
+if ((fail > 0 || workerFail > 0) && !onlyTheCountClaim) {
+  console.error(
+    `\n### NOT updating public/index.html: ${fail} node and ${workerFail} worker tests FAILED.\n` +
+    "### The count was recorded, because a failure is a measurement. The public\n" +
+    "### claim was not, because it says the suite passes. Fix the suite, then\n" +
+    "### run this again.\n" +
+    (failingNames.length ? "### failing: " + failingNames.join("; ") + "\n" : ""),
+  );
+  process.exit(1);
+}
+if (onlyTheCountClaim) {
+  console.log(
+    `the only failure is "${COUNT_CLAIM_TEST}" -- that is the staleness this ` +
+    "script exists to fix, so the page is being updated and the suite should go green.",
+  );
+}
+
+const page = join(ROOT, "public", "index.html");
+let html = readFileSync(page, "utf8");
+const before = html;
+const claims = [
+  ["claim-node-tests", tests],
+  ["claim-worker-tests", workerTests],
+];
+const missing = [];
+for (const [id, value] of claims) {
+  // Anchored on the id, and it must already contain a number -- so if the markup
+  // is restructured this reports it rather than silently writing nothing and
+  // leaving the page stale, which is the failure mode it exists to end.
+  const re = new RegExp(`(<span id="${id}">)\\d+(</span>)`);
+  if (!re.test(html)) { missing.push(id); continue; }
+  html = html.replace(re, `$1${value}$2`);
+}
+if (missing.length) {
+  console.error(
+    `\n### could not find ${missing.join(" or ")} in public/index.html.\n` +
+    "### The count was recorded but the PAGE was not updated, which is exactly\n" +
+    "### the stale claim publicClaims.test.ts will fail on. Fix the markup or\n" +
+    "### this script -- do not just edit the number by hand.",
+  );
+  process.exit(1);
+}
+if (html !== before) {
+  writeFileSync(page, html);
+  console.log(`updated public/index.html: ${tests} node tests, ${workerTests} worker tests`);
+} else {
+  console.log("public/index.html already agreed with the measurement");
+}
