@@ -1329,7 +1329,7 @@ class Renderer3D {
 
     this._initScene();
     // Masterplan cinematic perspective looking north towards downtown island, civic hall and mountain backdrop
-    this._orbit = { base: 0, delta: 0, pitch: 0.32, dragging: false, startX: 0, startY: 0, startDelta: 0, startPitch: 0.32 };
+    this._orbit = { base: 0, delta: 0, pitch: 0.32, dragging: false, panning: false, startX: 0, startY: 0, startDelta: 0, startPitch: 0.32, startLookAt: null };
 
     // Navigation & Street-Level Navigation Mode State
     this._navigationMode = 'orbit'; // 'orbit' | 'walk' | 'drive'
@@ -5969,6 +5969,10 @@ class Renderer3D {
 
     const onDown = (e) => {
       if (this._isDroneTour) this.stopDroneTour();
+      // Middle button otherwise starts the browser's autoscroll: the cursor
+      // turns into the four-way icon and the page scrolls instead of the world
+      // panning, which would make the new pan look broken rather than absent.
+      if (e.button === 1) e.preventDefault();
 
       // Check if user is in "Pick Center / Pivot" mode or holding Alt key
       if (this._pickCenterActive || e.altKey) {
@@ -5985,8 +5989,19 @@ class Renderer3D {
 
       if (activePointers.size === 1) {
         this._orbit.dragging = true;
+        // PAN. Mark: "I can't pan ... normally in most programs there is a way
+        // to pan like holding down the center wheel and moving the mouse."
+        // There was no pan at all -- orbit dragged, wheel zoomed, and the only
+        // way to move the point you were looking at was the arrow keys, which
+        // moved 2.4 m at a time in a 26 km world.
+        //
+        // Middle button is the convention everywhere (CAD, Blender, Maps), and
+        // shift+left is the fallback for anyone on a trackpad with no middle
+        // button. Both do the same thing so neither is a hidden feature.
+        this._orbit.panning = e.button === 1 || e.shiftKey;
         this._orbit.startX = e.clientX;
         this._orbit.startY = e.clientY;
+        this._orbit.startLookAt = this._lookAt.clone();
         clickStartX = e.clientX;
         clickStartY = e.clientY;
         this._orbit.startDelta = this._orbit.delta;
@@ -6023,6 +6038,25 @@ class Renderer3D {
           // In first/third person and fly modes, dragging looks around
           this._streetAngle = this._streetStartAngle - dx * 2.8;
           this._streetPitch = Math.max(-1.1, Math.min(1.1, this._streetStartPitch - dy * 2.0));
+        } else if (this._orbit.panning && this._orbit.startLookAt) {
+          // PAN, IN THE PLANE THE CAMERA IS LOOKING ACROSS.
+          //
+          // Screen-right and screen-forward derived from the current azimuth, so
+          // dragging right moves the world right whichever way you are facing --
+          // a pan that moves you north regardless of heading is the thing that
+          // makes people say a viewer feels "random".
+          //
+          // The distance is proportional to _camDist: one screen-width of drag
+          // moves you about one screen-width of world. Fixed-metre panning is
+          // exactly what made the arrow keys useless -- 2.4 m is a stride at
+          // street level and invisible from 46 km.
+          const az = this._orbit.base + this._orbit.delta;
+          const rightX = Math.cos(az), rightZ = -Math.sin(az);
+          const fwdX = -Math.sin(az), fwdZ = -Math.cos(az);
+          const reach = (this._camDist || 48) * 1.1;
+          this._lookAt.x = this._orbit.startLookAt.x - (dx * rightX + dy * fwdX) * reach;
+          this._lookAt.z = this._orbit.startLookAt.z - (dx * rightZ + dy * fwdZ) * reach;
+          this._targetLookAt.copy(this._lookAt);
         } else {
           // Standard orbit navigation
           this._orbit.delta = this._orbit.startDelta + dx * 2.2;
@@ -6042,6 +6076,7 @@ class Renderer3D {
       }
       if (activePointers.size === 0) {
         this._orbit.dragging = false;
+        this._orbit.panning = false;
         initialPinchDist = null;
       } else if (activePointers.size === 1) {
         const remaining = Array.from(activePointers.values())[0];
@@ -6142,7 +6177,19 @@ class Renderer3D {
 
       // Handle hotkeys in orbit mode
       if (this._navigationMode === 'orbit') {
-        const moveStep = 2.4;
+        // 2.4 METRES. IN A TWENTY-SIX KILOMETRE WORLD.
+        //
+        // Mark: "the arrows are not very effective and it just works rather
+        // poorly". They worked exactly as written -- they moved the look-at
+        // point 2.4 m per press, which is a stride. Crossing the world took ten
+        // thousand keypresses, and from a 46 km orbit a press changed nothing
+        // you could see, so the control read as broken rather than as slow.
+        //
+        // A step is now a fraction of how far away you are, the same principle
+        // the wheel zoom uses: about 4% of the view distance, so one press is a
+        // couple of metres at street level and roughly two kilometres from
+        // orbit, and it feels like the same control at both ends.
+        const moveStep = Math.max(1.5, (this._camDist || 48) * 0.04);
         const az = this._orbit.base + this._orbit.delta;
         const fwdX = -Math.sin(az);
         const fwdZ = -Math.cos(az);

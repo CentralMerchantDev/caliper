@@ -28,21 +28,47 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { WORLD } from "../public/city-plan.js";
 
-test("the ground reaches further than the water -- the tray, as an invariant", () => {
+// TWO OPPOSING FAILURES. THE FIRST VERSION OF THIS FILE ASSERTED ONLY ONE OF
+// THEM, AND THAT IS WHAT CAUSED THE OTHER.
+//
+//   A. water with no seabed under it -> the modelled rectangle reads as a tray
+//   B. seabed with no water over it  -> a ring of sea floor standing in the air
+//
+// The original test said "the ground reaches further than the water", which
+// prevents A and GUARANTEES B. It passed, the suite was green, and the world
+// shipped with a 6,500 m ring of bare sea floor and a hard edge all the way
+// round -- which Mark reported, correctly, as lines still being there.
+//
+// A test that names one side of a trade-off will hold the system against the
+// other side of it. Both directions are asserted now.
+
+test("no seabed is ever left standing in the air", () => {
   assert.ok(
-    WORLD.GROUND_SPAN > WORLD.SEA_SPAN,
-    `ground span ${WORLD.GROUND_SPAN} must exceed sea span ${WORLD.SEA_SPAN}, ` +
-    "or the sea plane ends where there is no sea bed under it and the modelled " +
-    "rectangle's edge is visible through the water as a tray.",
+    WORLD.SEA_SPAN >= WORLD.GROUND_SPAN,
+    `sea span ${WORLD.SEA_SPAN} must be at least ground span ${WORLD.GROUND_SPAN}. ` +
+    `Otherwise a ring of sea floor ${((WORLD.GROUND_SPAN - WORLD.SEA_SPAN) * WORLD.SIZE / 2).toFixed(0)} m ` +
+    "wide sits above the waterline, with a hard straight edge where the water stops.",
   );
 });
 
-test("and the abyss closes behind BOTH of them", () => {
-  // The abyss is a backstop now rather than something you look at through
-  // water, but it still has to be the outermost thing or there is a hole in the
-  // world past the apron.
-  assert.ok(WORLD.ABYSS_SPAN > WORLD.GROUND_SPAN, "the abyss plane must be wider than the ground");
-  assert.ok(WORLD.ABYSS_SPAN > WORLD.SEA_SPAN, "the abyss plane must be wider than the sea");
+test("and no water is ever left with nothing beneath it", () => {
+  assert.ok(
+    WORLD.ABYSS_SPAN >= WORLD.SEA_SPAN,
+    `abyss span ${WORLD.ABYSS_SPAN} must be at least sea span ${WORLD.SEA_SPAN}, ` +
+    "or you look through the water at the sky, which is the tray defect.",
+  );
+});
+
+test("and there is real modelled ground under the water, not just the abyss", () => {
+  // The apron is the thing that stopped the tray: a painted lid at -175 read as
+  // a lid, and real sea floor does not. If GROUND_SPAN ever collapsed back to
+  // the bare modelled rectangle this would still pass the two tests above and
+  // the original defect would be back.
+  assert.ok(
+    WORLD.GROUND_SPAN * WORLD.SIZE / 2 > 40000,
+    `modelled ground reaches only ${(WORLD.GROUND_SPAN * WORLD.SIZE / 2).toFixed(0)} m; ` +
+    "the sea bed has to be real out to a distance where it still reads, not painted",
+  );
 });
 
 test("the spans are multiples of the world, not fixed metres", () => {
@@ -87,14 +113,20 @@ test("the apron grid lands exactly on the modelled rectangle's edges", () => {
   }
 });
 
-test("the apron genuinely clears the water, with room to spare", () => {
-  // Not merely greater: greater by enough that the apron's own outer wall is
-  // well outside the drawn sea, rather than sitting a few metres past its edge
-  // where the join would still be in shot.
-  const clearance = (WORLD.GROUND_SPAN - WORLD.SEA_SPAN) * WORLD.SIZE / 2;
+test("the ground's own edge is far enough out to be under fog, not in shot", () => {
+  // The apron's outer wall drops from about -122 m to bedrock. That wall is
+  // fine -- every finite world has an edge -- provided it is far enough away
+  // and deep enough that nothing reads it. The old rectangle's edge was visible
+  // precisely because it was only 19.5 km out, where the sea bed is still
+  // legible through the water.
+  //
+  // This replaces an earlier assertion that the ground must clear the WATER by
+  // 5 km, which was the requirement that put bare sea floor in the air. What
+  // matters is the distance from the viewer, not the relationship to the sea.
+  const edge = WORLD.GROUND_SPAN * WORLD.SIZE / 2;
   assert.ok(
-    clearance > 5000,
-    `the ground clears the water's edge by only ${Math.round(clearance)} m; ` +
-    "the apron's outer wall needs to be well outside the sea, not just outside it",
+    edge > 50000,
+    `the ground's edge is ${Math.round(edge)} m from centre; at that range the ` +
+    "sea bed still reads through the water and the edge shows as a line",
   );
 });

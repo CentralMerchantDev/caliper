@@ -78,10 +78,39 @@ export const WORLD = {
   // inventing beyond the modelled rectangle. It only needs tessellating, which
   // GROUND_SPAN now does at a coarse step.
   //
-  // GROUND_SPAN > SEA_SPAN is the invariant. test/worldExtent.test.ts asserts
-  // it, because a number that has to be larger than another number is exactly
-  // the kind of thing that goes quietly wrong in a re-tune.
-  SEA_SPAN: 4,
+  // TWO FAILURE MODES, NOT ONE, AND FIXING THE FIRST CREATED THE SECOND.
+  //
+  //   A. WATER WITH NO SEABED UNDER IT. The original defect: ground stopped at
+  //      +/-19,500 m while the sea ran to +/-52,000, so past the ground you
+  //      looked through 62%-opacity water at a flat painted lid. That read as a
+  //      rectangular tray with the island sitting on it.
+  //
+  //   B. SEABED ABOVE WATER. What the fix for A then caused. The apron took the
+  //      ground out to +/-58,500 while the sea still stopped at +/-52,000,
+  //      leaving a 6,500 m ring of sea floor -- ground that sits at about
+  //      -122 m -- standing in open air, with a hard straight edge at exactly
+  //      52,000 m all the way round.
+  //
+  // Mark reported lines in the ocean before the apron and again after it. The
+  // second report was not the first defect surviving; it was this one, which I
+  // had just built, and the invariant I wrote (GROUND_SPAN > SEA_SPAN) is what
+  // guaranteed it. An invariant that names only one of two opposing failures
+  // will always drive you into the other.
+  //
+  // Both are avoided by the same arrangement: the WATER is the outermost thing
+  // at the surface, real modelled sea floor extends under all of it that reads
+  // at distance, and the abyss closes everything below. So:
+  //
+  //     SEA_SPAN >= GROUND_SPAN   no seabed is ever left standing in the air
+  //     ABYSS_SPAN >= SEA_SPAN    no water is ever left with nothing beneath it
+  //
+  // The ground's own outer edge is now UNDER water 58 km out, at -122 m, under
+  // fog -- which is where a world edge belongs. The apron is still doing its
+  // job: what made the old edge visible was that it was only 19 km out with the
+  // seabed plainly readable at that range, not the fact of having an edge.
+  //
+  // test/worldExtent.test.ts asserts both directions.
+  SEA_SPAN: 6,
   ABYSS_SPAN: 6,
   GROUND_SPAN: 4.5,
 
