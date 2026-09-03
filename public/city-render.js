@@ -34,6 +34,11 @@ import {
 import { LandField, makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, GROUND_BANDS, WATERWAYS, waterwaySurface , waterwayAt } from "./terrain.js";
 import { assessFootprint } from "./footprint.js";
 import { propFootprint } from "./prop-manifest.js";
+// The join to the asset lane's model library. prop-manifest decides what a prop
+// CLAIMS; this decides what it LOOKS LIKE, and prop-models.js is the table that
+// keeps the two agreeing. See its header for why the mapping is written out in
+// full rather than matched by name.
+import { propGeometry } from "./prop-models.js";
 // `sm` is already used as a local variable in this file (a THREE.Mesh), so the
 // world-scale helper is imported under a name that cannot be shadowed.
 import { sm as wm } from "./world-scale.js";
@@ -2828,11 +2833,28 @@ function buildProps(api) {
     };
     flat(lawns, lawn, 0); flat(paths, path, 1); flat(ponds, pond, 2);
     if (benches.length) {
-      const bg = RB(2.2, 0.5, 0.7, 0.15);
+      // THE FIRST THING IN THIS WORLD DRAWN FROM THE MODEL LIBRARY.
+      //
+      // It was RB(2.2, 0.5, 0.7, 0.15) -- a rounded box, 2.2 m long, standing in
+      // for a bench. The asset lane's bench-slat has legs, back posts, two seat
+      // planks and a back plank, and it is 1.8 x 0.6 m, which is what
+      // prop-manifest.js has claimed as a bench's ground all along.
+      //
+      // So the box was also the wrong size: 2.2 m of geometry over a 1.8 m
+      // claim, overhanging its own footprint by 20 cm at each end. That is the
+      // reason prop-models.js asserts the two agree rather than trusting them
+      // to -- see test/propModels.test.ts, which measures every static prop.
+      //
+      // y is left as the caller set it: the park pass positions benches at
+      // ground + 0.9 because the old box was centred on its own height. The
+      // library's origin is "base-centre" -- (0,0,0) is the CENTRE of the
+      // footprint at GROUND LEVEL -- so the lift has to come off, or every
+      // bench floats 90 cm above the grass.
+      const bg = propGeometry("bench", THREE, { lod: 0 });
       const im = new THREE.InstancedMesh(bg, M(0x9b7d55, 0.9), benches.length);
       const d2 = new THREE.Object3D();
       benches.forEach(([x, y, z], i) => {
-        d2.position.set(x, y, z); d2.rotation.set(0, rnd("bq" + i) * 3.14, 0); d2.scale.setScalar(1);
+        d2.position.set(x, y - 0.9, z); d2.rotation.set(0, rnd("bq" + i) * 3.14, 0); d2.scale.setScalar(1);
         d2.updateMatrix(); im.setMatrixAt(i, d2.matrix);
       });
       im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.computeBoundingSphere(); scene.add(im);
