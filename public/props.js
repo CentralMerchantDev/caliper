@@ -969,6 +969,31 @@ groundFurniture.variants = {
 };
 
 export const MODELS = {
+  "person-action-cyclist": personInAction("cyclist"),
+  "person-action-worker": personInAction("worker"),
+  "person-action-pram": personInAction("pram"),
+  "person-action-jogger": personInAction("jogger"),
+  "vehicle-service-refuse": vehicleService("refuse-truck"),
+  "vehicle-service-sweeper": vehicleService("sweeper"),
+  "vehicle-service-tow": vehicleService("tow-truck"),
+  "vehicle-service-tractor": vehicleService("tractor"),
+  "tree-street-avenue-summer": streetTreeSeasonal("summer", "avenue"),
+  "tree-street-avenue-winter": streetTreeSeasonal("winter", "avenue"),
+  "park-feature-bandstand": parkFeature("bandstand"),
+  "park-feature-duck-pond": parkFeature("duck-pond"),
+  "park-feature-sports-pitch": parkFeature("sports-pitch"),
+  "park-feature-tennis-court": parkFeature("tennis-court"),
+  "park-feature-gate": parkFeature("park-gate"),
+  "waterfront-crane": waterfrontModule("dockside-crane"),
+  "waterfront-beach-huts": waterfrontModule("beach-huts"),
+  "waterfront-slipway": waterfrontModule("slipway"),
+  "waterfront-lifeguard": waterfrontModule("lifeguard-tower"),
+  "industrial-pylon": industrialInfrastructure("pylon"),
+  "industrial-silo": industrialInfrastructure("silo"),
+  "industrial-tank-farm": industrialInfrastructure("tank-farm"),
+  "industrial-substation": industrialInfrastructure("substation"),
+  "industrial-pipe-rack": industrialInfrastructure("pipe-rack"),
+
   "road-intersection-4way": intersection4Way("STREET", "STREET"),
   "road-intersection-3way": intersection3Way("AVENUE", "STREET", 90),
   "road-roundabout-modern": roundaboutModern(1, "AVENUE", 4),
@@ -4164,3 +4189,532 @@ export {
   bldApartmentWalkup,
   building,
 };
+
+// =============================================================================
+// SECTION 4: THE REST OF THE CITY (PEOPLE IN ACTION, SERVICE VEHICLES,
+// SEASONAL TREES, PARKS, WATERFRONT, ROOFTOPS, NIGHT EMISSIVES, AND INDUSTRY)
+// =============================================================================
+
+export function personInAction(role = "cyclist", seed = "action-0") {
+  return {
+    id: `person-action-${role}`,
+    kind: "hard",
+    footprint: { w: role === "cyclist" ? 0.6 : role === "pram" ? 0.8 : 0.6, d: role === "cyclist" ? 1.8 : role === "pram" ? 1.4 : role === "jogger" ? 0.9 : 0.6 },
+    height: 1.8,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    lod: [
+      {
+        level: 0,
+        tris: 160,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          if (role === "cyclist") {
+            const w1 = new T.CylinderGeometry(0.32, 0.32, 0.05, 8);
+            w1.rotateZ(Math.PI / 2);
+            w1.translate(0, 0.32, -0.6);
+            const w2 = new T.CylinderGeometry(0.32, 0.32, 0.05, 8);
+            w2.rotateZ(Math.PI / 2);
+            w2.translate(0, 0.32, 0.6);
+            const rider = new T.BoxGeometry(0.35, 0.65, 0.35);
+            rider.rotateX(0.35);
+            rider.translate(0, 1.1, 0.0);
+            const head = new T.SphereGeometry(0.14, 8, 6);
+            head.translate(0, 1.5, 0.2);
+            parts.push(w1, w2, rider, head);
+          } else if (role === "worker") {
+            const body = new T.BoxGeometry(0.42, 0.65, 0.25);
+            body.translate(0, 1.05, 0);
+            const head = new T.SphereGeometry(0.14, 8, 6);
+            head.translate(0, 1.55, 0);
+            const hatBrim = new T.CylinderGeometry(0.18, 0.2, 0.06, 8);
+            hatBrim.translate(0, 1.62, 0);
+            const l1 = new T.BoxGeometry(0.15, 0.72, 0.16);
+            l1.translate(-0.11, 0.36, 0);
+            const l2 = new T.BoxGeometry(0.15, 0.72, 0.16);
+            l2.translate(0.11, 0.36, 0);
+            parts.push(body, head, hatBrim, l1, l2);
+          } else if (role === "pram") {
+            const bassinet = new T.BoxGeometry(0.5, 0.4, 0.85);
+            bassinet.translate(0, 0.65, 0.2);
+            const handle = new T.BoxGeometry(0.45, 0.05, 0.5);
+            handle.rotateX(-0.5);
+            handle.translate(0, 0.9, -0.05);
+            const body = new T.BoxGeometry(0.38, 0.65, 0.22);
+            body.translate(0, 1.1, -0.3);
+            const head = new T.SphereGeometry(0.13, 8, 6);
+            head.translate(0, 1.55, -0.3);
+            parts.push(bassinet, handle, body, head);
+          } else {
+            const body = new T.BoxGeometry(0.36, 0.62, 0.22);
+            body.rotateX(0.2);
+            body.translate(0, 1.1, 0);
+            const head = new T.SphereGeometry(0.13, 8, 6);
+            head.translate(0, 1.55, 0.1);
+            const l1 = new T.BoxGeometry(0.14, 0.7, 0.15);
+            l1.rotateX(0.4);
+            l1.translate(-0.1, 0.4, -0.15);
+            const l2 = new T.BoxGeometry(0.14, 0.7, 0.15);
+            l2.rotateX(-0.4);
+            l2.translate(0.1, 0.4, 0.15);
+            parts.push(body, head, l1, l2);
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const body = new T.BoxGeometry(0.4, 1.4, 0.4);
+          body.translate(0, 0.7, 0);
+          return body;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const body = new T.BoxGeometry(0.3, 1.2, 0.3);
+          body.translate(0, 0.6, 0);
+          return body;
+        },
+      },
+    ],
+  };
+}
+
+export function vehicleService(type = "refuse-truck") {
+  return {
+    id: `vehicle-service-${type}`,
+    kind: "hard",
+    footprint: { w: 2.6, d: type === "sweeper" ? 4.8 : type === "tractor" ? 4.2 : 8.5 },
+    height: type === "sweeper" ? 2.2 : type === "tractor" ? 2.6 : 3.4,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    lod: [
+      {
+        level: 0,
+        tris: 180,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          if (type === "refuse-truck") {
+            const cab = new T.BoxGeometry(2.4, 2.4, 2.2);
+            cab.translate(0, 1.6, 2.8);
+            const compactor = new T.BoxGeometry(2.5, 2.8, 5.6);
+            compactor.translate(0, 1.8, -1.2);
+            const lip = new T.BoxGeometry(2.2, 0.8, 0.6);
+            lip.translate(0, 0.9, -3.9);
+            parts.push(cab, compactor, lip);
+          } else if (type === "sweeper") {
+            const body = new T.BoxGeometry(2.0, 1.9, 4.4);
+            body.translate(0, 1.15, 0);
+            for (const sx of [-0.8, 0.8]) {
+              const brush = new T.CylinderGeometry(0.45, 0.45, 0.15, 8);
+              brush.translate(sx, 0.15, 1.8);
+              parts.push(brush);
+            }
+            parts.push(body);
+          } else if (type === "tow-truck") {
+            const cab = new T.BoxGeometry(2.3, 2.0, 2.2);
+            cab.translate(0, 1.4, 2.6);
+            const flatbed = new T.BoxGeometry(2.4, 0.4, 5.4);
+            flatbed.translate(0, 0.6, -1.2);
+            const boom = new T.BoxGeometry(0.3, 1.8, 0.3);
+            boom.rotateX(0.6);
+            boom.translate(0, 1.6, -0.8);
+            parts.push(cab, flatbed, boom);
+          } else {
+            const body = new T.BoxGeometry(1.6, 1.6, 2.4);
+            body.translate(0, 1.3, 0);
+            const cab = new T.BoxGeometry(1.4, 1.2, 1.2);
+            cab.translate(0, 2.0, -0.4);
+            const bucket = new T.BoxGeometry(1.8, 0.6, 0.6);
+            bucket.translate(0, 0.5, 1.8);
+            parts.push(body, cab, bucket);
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 32,
+        createGeometry: (T = THREE) => {
+          const h = type === "sweeper" ? 2.0 : type === "tractor" ? 2.4 : 3.0;
+          const len = type === "sweeper" ? 4.4 : type === "tractor" ? 3.8 : 7.5;
+          const b = new T.BoxGeometry(2.4, h, len);
+          b.translate(0, h / 2, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const h = type === "sweeper" ? 1.8 : type === "tractor" ? 2.2 : 2.8;
+          const len = type === "sweeper" ? 4.0 : type === "tractor" ? 3.5 : 7.0;
+          const b = new T.BoxGeometry(2.2, h, len);
+          b.translate(0, h / 2, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function streetTreeSeasonal(season = "summer", type = "avenue") {
+  return {
+    id: `tree-street-${type}-${season}`,
+    kind: "hard",
+    footprint: { w: type === "avenue" ? 4.2 : 2.8, d: type === "avenue" ? 4.2 : 2.8 },
+    height: type === "avenue" ? 9.5 : 6.5,
+    clearance: 3.5,
+    origin: "base-centre",
+    standsOn: ["open"],
+    lod: [
+      {
+        level: 0,
+        tris: 240,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const grate = new T.BoxGeometry(2.0, 0.05, 2.0);
+          grate.translate(0, 0.025, 0);
+          const guard = new T.CylinderGeometry(0.4, 0.4, 1.8, 8, 1, true);
+          guard.translate(0, 0.9, 0);
+          const trunkH = type === "avenue" ? 5.2 : 3.8;
+          const trunk = new T.CylinderGeometry(0.2, 0.28, trunkH, 8);
+          trunk.translate(0, trunkH / 2, 0);
+          parts.push(grate, guard, trunk);
+          if (season !== "winter") {
+            const cR = type === "avenue" ? 2.0 : 1.3;
+            const canopy = new T.SphereGeometry(cR, 10, 8);
+            canopy.translate(0, trunkH + cR * 0.8, 0);
+            parts.push(canopy);
+          } else {
+            for (let b = 0; b < 4; b++) {
+              const rad = (b * Math.PI) / 2;
+              const branch = new T.BoxGeometry(0.12, 1.6, 0.12);
+              branch.rotateZ(0.4);
+              branch.rotateY(rad);
+              branch.translate(Math.sin(rad) * 0.5, trunkH + 0.6, Math.cos(rad) * 0.5);
+              parts.push(branch);
+            }
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 32,
+        createGeometry: (T = THREE) => {
+          const t = new T.CylinderGeometry(0.3, 0.3, 7.0, 6);
+          t.translate(0, 3.5, 0);
+          return t;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const t = new T.BoxGeometry(1.5, 6.0, 1.5);
+          t.translate(0, 3.0, 0);
+          return t;
+        },
+      },
+    ],
+  };
+}
+
+export function parkFeature(feature = "bandstand") {
+  return {
+    id: `park-feature-${feature}`,
+    kind: "hard",
+    footprint: {
+      w: feature === "duck-pond" ? 24 : feature === "sports-pitch" ? 32 : feature === "tennis-court" ? 18 : feature === "park-gate" ? 10 : 16,
+      d: feature === "duck-pond" ? 24 : feature === "sports-pitch" ? 48 : feature === "tennis-court" ? 32 : feature === "park-gate" ? 4 : 16,
+    },
+    height: feature === "bandstand" ? 6.8 : feature === "park-gate" ? 4.4 : feature === "duck-pond" ? 0.35 : 3.2,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    lod: [
+      {
+        level: 0,
+        tris: 320,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          if (feature === "bandstand") {
+            const base = new T.CylinderGeometry(6.0, 6.4, 0.8, 8);
+            base.translate(0, 0.4, 0);
+            for (let i = 0; i < 8; i++) {
+              const rad = (i * Math.PI) / 4;
+              const col = new T.CylinderGeometry(0.12, 0.12, 3.8, 6);
+              col.translate(Math.sin(rad) * 5.2, 2.7, Math.cos(rad) * 5.2);
+              parts.push(col);
+            }
+            const roof = new T.ConeGeometry(6.6, 2.4, 8);
+            roof.translate(0, 5.5, 0);
+            parts.push(base, roof);
+          } else if (feature === "duck-pond") {
+            const rim = new T.CylinderGeometry(11.0, 11.0, 0.35, 24, 1, true);
+            rim.translate(0, 0.175, 0);
+            const water = new T.CylinderGeometry(10.8, 10.8, 0.05, 24);
+            water.translate(0, 0.1, 0);
+            parts.push(rim, water);
+          } else if (feature === "sports-pitch") {
+            const field = new T.BoxGeometry(32, 0.1, 48);
+            field.translate(0, 0.05, 0);
+            for (const gz of [-23, 23]) {
+              const goal = new T.BoxGeometry(6.0, 2.4, 0.15);
+              goal.translate(0, 1.25, gz);
+              parts.push(goal);
+            }
+            parts.push(field);
+          } else if (feature === "tennis-court") {
+            const court = new T.BoxGeometry(18, 0.1, 32);
+            court.translate(0, 0.05, 0);
+            const net = new T.BoxGeometry(12.8, 1.0, 0.1);
+            net.translate(0, 0.55, 0);
+            for (const sz of [-15.5, 15.5]) {
+              const fence = new T.BoxGeometry(17.8, 2.8, 0.1);
+              fence.translate(0, 1.45, sz);
+              parts.push(fence);
+            }
+            parts.push(court, net);
+          } else {
+            for (const sx of [-3.5, 3.5]) {
+              const pier = new T.BoxGeometry(1.2, 3.8, 1.2);
+              pier.translate(sx, 1.9, 0);
+              const finial = new T.SphereGeometry(0.3, 8, 6);
+              finial.translate(sx, 4.0, 0);
+              parts.push(pier, finial);
+            }
+            const gates = new T.BoxGeometry(5.8, 2.6, 0.15);
+            gates.translate(0, 1.3, 0);
+            parts.push(gates);
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 40,
+        createGeometry: (T = THREE) => {
+          const h = feature === "duck-pond" ? 0.35 : 1.0;
+          const bw = feature === "park-gate" ? 9.5 : feature === "sports-pitch" ? 30 : 12;
+          const bd = feature === "park-gate" ? 3.5 : feature === "sports-pitch" ? 44 : 12;
+          const b = new T.BoxGeometry(bw, h, bd);
+          b.translate(0, h / 2, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const h = feature === "duck-pond" ? 0.3 : 0.5;
+          const bw = feature === "park-gate" ? 9.0 : feature === "sports-pitch" ? 28 : 10;
+          const bd = feature === "park-gate" ? 3.0 : feature === "sports-pitch" ? 40 : 10;
+          const b = new T.BoxGeometry(bw, h, bd);
+          b.translate(0, h / 2, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function waterfrontModule(type = "dockside-crane") {
+  return {
+    id: `waterfront-${type}`,
+    kind: "hard",
+    footprint: {
+      w: type === "beach-huts" ? 16 : type === "dockside-crane" ? 10 : type === "slipway" ? 8 : 6,
+      d: type === "beach-huts" ? 4 : type === "dockside-crane" ? 10 : type === "slipway" ? 24 : 16,
+    },
+    sweep: type === "dockside-crane" ? { w: 10, d: 15 } : undefined,
+    height: type === "dockside-crane" ? 20.5 : type === "lifeguard-tower" ? 5.8 : 3.4,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open", "rock", "water"],
+    lod: [
+      {
+        level: 0,
+        tris: 180,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          if (type === "dockside-crane") {
+            for (const sx of [-3.8, 3.8]) {
+              const leg = new T.BoxGeometry(0.8, 8.0, 0.8);
+              leg.translate(sx, 4.0, 0);
+              parts.push(leg);
+            }
+            const cab = new T.BoxGeometry(4.0, 3.2, 4.0);
+            cab.translate(0, 9.6, 0);
+            const jib = new T.BoxGeometry(0.6, 12.0, 0.6);
+            jib.rotateX(-0.5);
+            jib.translate(0, 14.5, 3.5);
+            parts.push(cab, jib);
+          } else if (type === "beach-huts") {
+            for (let i = 0; i < 4; i++) {
+              const hx = -6.0 + i * 4.0;
+              const hut = new T.BoxGeometry(3.2, 2.2, 3.2);
+              hut.translate(hx, 1.1, 0);
+              const roof = new T.ConeGeometry(2.2, 1.0, 4);
+              roof.rotateY(Math.PI / 4);
+              roof.translate(hx, 2.7, 0);
+              parts.push(hut, roof);
+            }
+          } else if (type === "slipway") {
+            const ramp = new T.BoxGeometry(7.0, 2.0, 22.0);
+            ramp.translate(0, 1.0, 0);
+            const winch = new T.BoxGeometry(1.6, 1.4, 1.6);
+            winch.translate(0, 2.7, -9.5);
+            parts.push(ramp, winch);
+          } else {
+            for (const sx of [-1.5, 1.5]) {
+              for (const sz of [-1.5, 1.5]) {
+                const stilt = new T.CylinderGeometry(0.12, 0.12, 3.4, 6);
+                stilt.translate(sx, 1.7, sz);
+                parts.push(stilt);
+              }
+            }
+            const cabin = new T.BoxGeometry(3.6, 2.2, 3.6);
+            cabin.translate(0, 4.5, 0);
+            parts.push(cabin);
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 36,
+        createGeometry: (T = THREE) => {
+          const bw = type === "beach-huts" ? 15 : type === "dockside-crane" ? 9 : 6;
+          const bh = type === "dockside-crane" ? 18 : type === "lifeguard-tower" ? 5.2 : 3.0;
+          const bd = type === "beach-huts" ? 3.5 : type === "dockside-crane" ? 9 : 14;
+          const b = new T.BoxGeometry(bw, bh, bd);
+          b.translate(0, bh / 2, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const bw = type === "beach-huts" ? 14 : type === "dockside-crane" ? 8 : 5;
+          const bh = type === "dockside-crane" ? 16 : type === "lifeguard-tower" ? 4.8 : 2.6;
+          const bd = type === "beach-huts" ? 3.0 : type === "dockside-crane" ? 8 : 12;
+          const b = new T.BoxGeometry(bw, bh, bd);
+          b.translate(0, bh / 2, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function industrialInfrastructure(type = "pylon") {
+  return {
+    id: `industrial-${type}`,
+    kind: "hard",
+    footprint: {
+      w: type === "tank-farm" ? 28 : type === "cooling-tower" ? 24 : type === "pylon" ? 12 : type === "substation" ? 20 : 8,
+      d: type === "tank-farm" ? 28 : type === "cooling-tower" ? 24 : type === "pylon" ? 12 : type === "substation" ? 16 : 24,
+    },
+    height: type === "pylon" ? 34.0 : type === "cooling-tower" ? 28.0 : type === "silo" ? 18.0 : type === "substation" ? 4.5 : 8.5,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    lod: [
+      {
+        level: 0,
+        tris: 360,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          if (type === "pylon") {
+            const baseTower = new T.CylinderGeometry(1.2, 4.5, 26.0, 4);
+            baseTower.rotateY(Math.PI / 4);
+            baseTower.translate(0, 13.0, 0);
+            for (const [cy, cw] of [[20.0, 10.0], [25.0, 12.0], [30.0, 8.0]]) {
+              const arm = new T.BoxGeometry(cw, 0.6, 0.6);
+              arm.translate(0, cy, 0);
+              parts.push(arm);
+            }
+            parts.push(baseTower);
+          } else if (type === "silo") {
+            const cylinder = new T.CylinderGeometry(3.5, 3.5, 14.0, 16);
+            cylinder.translate(0, 7.0, 0);
+            const coneRoof = new T.ConeGeometry(3.6, 2.8, 16);
+            coneRoof.translate(0, 15.4, 0);
+            parts.push(cylinder, coneRoof);
+          } else if (type === "tank-farm") {
+            const bund = new T.BoxGeometry(28, 1.2, 28);
+            bund.translate(0, 0.6, 0);
+            for (const sx of [-7, 7]) {
+              for (const sz of [-7, 7]) {
+                const tank = new T.CylinderGeometry(5.5, 5.5, 7.5, 16);
+                tank.translate(sx, 4.35, sz);
+                parts.push(tank);
+              }
+            }
+            parts.push(bund);
+          } else if (type === "substation") {
+            const baseSlab = new T.BoxGeometry(20, 0.4, 16);
+            baseSlab.translate(0, 0.2, 0);
+            for (const sx of [-5, 5]) {
+              const trans = new T.BoxGeometry(4.2, 3.2, 4.2);
+              trans.translate(sx, 1.8, 0);
+              for (const bx of [-1.2, 0, 1.2]) {
+                const bush = new T.CylinderGeometry(0.15, 0.15, 1.2, 6);
+                bush.translate(sx + bx, 3.8, 0);
+                parts.push(bush);
+              }
+              parts.push(trans);
+            }
+            parts.push(baseSlab);
+          } else {
+            for (const sz of [-10, 0, 10]) {
+              const frame = new T.BoxGeometry(6.0, 5.5, 0.5);
+              frame.translate(0, 2.75, sz);
+              parts.push(frame);
+            }
+            for (const py of [2.5, 4.0, 5.0]) {
+              const pipe = new T.CylinderGeometry(0.35, 0.35, 24.0, 8);
+              pipe.rotateX(Math.PI / 2);
+              pipe.translate(0, py, 0);
+              parts.push(pipe);
+            }
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 48,
+        createGeometry: (T = THREE) => {
+          const bw = type === "tank-farm" ? 26 : type === "substation" ? 18 : 7;
+          const bh = type === "pylon" ? 30 : type === "silo" ? 16 : type === "substation" ? 4.0 : 7.5;
+          const bd = type === "tank-farm" ? 26 : type === "substation" ? 14 : type === "pylon" ? 10 : 20;
+          const b = new T.BoxGeometry(bw, bh, bd);
+          b.translate(0, bh / 2, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const bw = type === "tank-farm" ? 24 : type === "substation" ? 16 : 6;
+          const bh = type === "pylon" ? 26 : type === "silo" ? 14 : type === "substation" ? 3.5 : 6.5;
+          const bd = type === "tank-farm" ? 24 : type === "substation" ? 12 : type === "pylon" ? 8 : 18;
+          const b = new T.BoxGeometry(bw, bh, bd);
+          b.translate(0, bh / 2, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}

@@ -11,7 +11,7 @@
 /**
  * @typedef {Object} AssetEntry
  * @property {string} id
- * @property {"roof"|"furniture"|"facade"|"boundary"|"ground"|"vegetation"|"people"|"vehicles"|"maritime"|"aviation"|"airport"|"roads"|"civic"|"buildings"} category
+ * @property {"roof"|"furniture"|"facade"|"boundary"|"ground"|"vegetation"|"people"|"vehicles"|"maritime"|"aviation"|"airport"|"roads"|"civic"|"buildings"|"parks"|"industrial"} category
  * @property {"built"|"planned"|"generator"|"skipped"} status
  * @property {"code"|"import"} source
  * @property {"close"|"mid"|"far"} seenAs
@@ -191,6 +191,33 @@ export const ASSET_REGISTRY = [
   { id: "bridge-pier", category: "roads", status: "generator", source: "code", seenAs: "far", count: 180, generator: "bridgePier(height, roadClass)", note: "Reinforced concrete pier column with crosshead cap" },
   { id: "bridge-deck-span", category: "roads", status: "generator", source: "code", seenAs: "far", count: 250, generator: "bridgeDeckSpan(length, roadClass)", note: "Modular girder deck span in standard lengths (16, 32, 48, 64m)" },
   { id: "bridge-approach-ramp", category: "roads", status: "generator", source: "code", seenAs: "far", count: 70, generator: "bridgeApproachRamp(elevation, roadClass)", note: "5% grade approach embankment ramp" },
+
+
+  // --- SECTION 4: THE REST OF THE CITY ---
+  { id: "person-action-cyclist", category: "people", status: "generator", source: "code", seenAs: "close", count: 850, generator: "personInAction('cyclist')", note: "Cyclist rider on road bike as unified module" },
+  { id: "person-action-worker", category: "people", status: "generator", source: "code", seenAs: "close", count: 420, generator: "personInAction('worker')", note: "Construction municipal worker in hi-vis vest and hardhat" },
+  { id: "person-action-pram", category: "people", status: "generator", source: "code", seenAs: "close", count: 320, generator: "personInAction('pram')", note: "Adult resident pushing pram / stroller" },
+  { id: "person-action-jogger", category: "people", status: "generator", source: "code", seenAs: "close", count: 650, generator: "personInAction('jogger')", note: "Runner in stride" },
+  { id: "vehicle-service-refuse", category: "vehicles", status: "generator", source: "code", seenAs: "mid", count: 180, generator: "vehicleService('refuse-truck')", note: "Heavy refuse compactor truck" },
+  { id: "vehicle-service-sweeper", category: "vehicles", status: "generator", source: "code", seenAs: "close", count: 120, generator: "vehicleService('sweeper')", note: "Municipal street sweeper with disc brushes" },
+  { id: "vehicle-service-tow", category: "vehicles", status: "generator", source: "code", seenAs: "mid", count: 85, generator: "vehicleService('tow-truck')", note: "Flatbed recovery tow truck with crane boom" },
+  { id: "vehicle-service-tractor", category: "vehicles", status: "generator", source: "code", seenAs: "mid", count: 95, generator: "vehicleService('tractor')", note: "Utility tractor with front loader bucket" },
+  { id: "tree-street-avenue-summer", category: "vegetation", status: "generator", source: "code", seenAs: "mid", count: 4200, generator: "streetTreeSeasonal('summer', 'avenue')", note: "Avenue tree in pit with metal guard cage (summer foliage)" },
+  { id: "tree-street-avenue-winter", category: "vegetation", status: "generator", source: "code", seenAs: "mid", count: 1800, generator: "streetTreeSeasonal('winter', 'avenue')", note: "Avenue street tree with bare winter branches" },
+  { id: "park-feature-bandstand", category: "parks", status: "generator", source: "code", seenAs: "mid", count: 18, generator: "parkFeature('bandstand')", note: "Victorian octagonal bandstand with iron pillars and zinc cupola" },
+  { id: "park-feature-duck-pond", category: "parks", status: "generator", source: "code", seenAs: "mid", count: 24, generator: "parkFeature('duck-pond')", note: "Ornamental park duck pond with stone rim" },
+  { id: "park-feature-sports-pitch", category: "parks", status: "generator", source: "code", seenAs: "far", count: 32, generator: "parkFeature('sports-pitch')", note: "Marked football/soccer pitch with goalposts" },
+  { id: "park-feature-tennis-court", category: "parks", status: "generator", source: "code", seenAs: "mid", count: 45, generator: "parkFeature('tennis-court')", note: "Tennis court with perimeter chainlink fence and center net" },
+  { id: "park-feature-gate", category: "parks", status: "generator", source: "code", seenAs: "close", count: 65, generator: "parkFeature('park-gate')", note: "Park entrance iron gates with stone piers" },
+  { id: "waterfront-crane", category: "maritime", status: "generator", source: "code", seenAs: "far", count: 12, generator: "waterfrontModule('dockside-crane')", note: "Dockside portal crane with lattice jib" },
+  { id: "waterfront-beach-huts", category: "maritime", status: "generator", source: "code", seenAs: "mid", count: 40, generator: "waterfrontModule('beach-huts')", note: "Row of 4 colourful timber beach huts" },
+  { id: "waterfront-slipway", category: "maritime", status: "generator", source: "code", seenAs: "mid", count: 22, generator: "waterfrontModule('slipway')", note: "Concrete inclined boat slipway with winch house" },
+  { id: "waterfront-lifeguard", category: "maritime", status: "generator", source: "code", seenAs: "close", count: 16, generator: "waterfrontModule('lifeguard-tower')", note: "Coastal lifeguard lookout station on timber stilts" },
+  { id: "industrial-pylon", category: "industrial", status: "generator", source: "code", seenAs: "far", count: 120, generator: "industrialInfrastructure('pylon')", note: "High-voltage steel lattice transmission pylon with 3 crossarms" },
+  { id: "industrial-silo", category: "industrial", status: "generator", source: "code", seenAs: "far", count: 85, generator: "industrialInfrastructure('silo')", note: "Grain/cement storage silo cylinder with conical roof" },
+  { id: "industrial-tank-farm", category: "industrial", status: "generator", source: "code", seenAs: "far", count: 35, generator: "industrialInfrastructure('tank-farm')", note: "Petrochemical tank farm with 4 storage tanks and containment bund" },
+  { id: "industrial-substation", category: "industrial", status: "generator", source: "code", seenAs: "mid", count: 45, generator: "industrialInfrastructure('substation')", note: "Electrical substation distribution transformer with insulator bushings" },
+  { id: "industrial-pipe-rack", category: "industrial", status: "generator", source: "code", seenAs: "far", count: 160, generator: "industrialInfrastructure('pipe-rack')", note: "Industrial multi-pipe process rack trestle spanning 24m" },
 
 ];
 

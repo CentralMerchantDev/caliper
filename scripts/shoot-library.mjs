@@ -56,7 +56,7 @@ await page.waitForTimeout(1500);
 
 const categories = [
   "all", "roof", "furniture", "ground", "facade", "boundary",
-  "vegetation", "people", "vehicles", "maritime", "airport", "aviation", "roads", "civic", "buildings"
+  "vegetation", "people", "vehicles", "maritime", "airport", "aviation", "roads", "civic", "buildings", "parks", "industrial"
 ];
 
 for (const cat of categories) {
