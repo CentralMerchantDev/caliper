@@ -14,7 +14,7 @@
 //
 //   node scripts/gen-test-count.mjs
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -115,3 +115,54 @@ console.log(
   `wrote test/testCount.generated.json: ${tests} node tests (${fail} fail), ` +
     `${workerTests} worker tests (${workerFail} fail)`,
 );
+
+// =============================================================================
+// AND WRITE THE PAGE, WHICH IS THE HALF THAT KEPT GETTING FORGOTTEN
+//
+// This script recorded the measurement and stopped. The claim on the public page
+// -- the thing publicClaims.test.ts actually guards -- was left to a human, and
+// the failure message even says so: "Update #claim-node-tests in
+// public/index.html, or run gen-test-count.mjs". Running it did not update the
+// page, so it always took two steps and the second one was remembered by nobody.
+//
+// The result is a test that fails one run LATE, every time: you add tests, the
+// suite goes green against the old recorded count, you regenerate, and the NEXT
+// run is red for a reason that has nothing to do with what you were working on.
+// That happened three times in one afternoon, and index.html's own copy already
+// says this sentence "has now gone stale three times in a row while claiming it
+// was read from the runner".
+//
+// A number that is measured in one file and asserted in another needs exactly
+// one writer. This is it.
+// =============================================================================
+const page = join(ROOT, "public", "index.html");
+let html = readFileSync(page, "utf8");
+const before = html;
+const claims = [
+  ["claim-node-tests", tests],
+  ["claim-worker-tests", workerTests],
+];
+const missing = [];
+for (const [id, value] of claims) {
+  // Anchored on the id, and it must already contain a number -- so if the markup
+  // is restructured this reports it rather than silently writing nothing and
+  // leaving the page stale, which is the failure mode it exists to end.
+  const re = new RegExp(`(<span id="${id}">)\\d+(</span>)`);
+  if (!re.test(html)) { missing.push(id); continue; }
+  html = html.replace(re, `$1${value}$2`);
+}
+if (missing.length) {
+  console.error(
+    `\n### could not find ${missing.join(" or ")} in public/index.html.\n` +
+    "### The count was recorded but the PAGE was not updated, which is exactly\n" +
+    "### the stale claim publicClaims.test.ts will fail on. Fix the markup or\n" +
+    "### this script -- do not just edit the number by hand.",
+  );
+  process.exit(1);
+}
+if (html !== before) {
+  writeFileSync(page, html);
+  console.log(`updated public/index.html: ${tests} node tests, ${workerTests} worker tests`);
+} else {
+  console.log("public/index.html already agreed with the measurement");
+}
