@@ -959,7 +959,55 @@ varying vec3 vSeaWorld;`)
     // The wall now runs from the terrain edge down to BEDROCK_Y, which is that
     // same -175, so the two meet and the world closes itself instead of being
     // covered over.
-    verts = terrainMesh(wm(-30000), wm(30000), wm(-33000), wm(10000), LOOK.outerStep, hole, "bedrock", false);
+    // 45, not "bedrock". A full-height skirt here is a 175 m vertical wall
+    // standing in 62%-opacity water all round the modelled rectangle -- the
+    // "long line in the ocean on the left side and right side". The APRON below
+    // now carries the ground on outward and overlaps this border by two of its
+    // own cells, so this skirt only has to close the resolution crack, which is
+    // metres. Same reasoning, same number, as the core seam thirty lines down.
+    const OUT = { x0: wm(-30000), x1: wm(30000), z0: wm(-33000), z1: wm(10000) };
+    verts = terrainMesh(OUT.x0, OUT.x1, OUT.z0, OUT.z1, LOOK.outerStep, hole, 45, false);
+
+    // -------------------------------------------------------------------------
+    // THE APRON -- ground out past the far edge of the water
+    //
+    // Without this the world is a rectangle of real ground floating inside a sea
+    // plane 2.7x wider than it, so the rectangle's edge is visible through the
+    // water as a tray. See WORLD.GROUND_SPAN in city-plan.js for the measurement
+    // and the invariant.
+    //
+    // It is only sea bed, seen from kilometres up through translucent water, so
+    // it is tessellated at ten times the outer step: about 4,900 cells against
+    // the outer mesh's 41,000, which is noise next to a 3.6 M triangle scene.
+    // heightAt answers out here on its own -- roughly -122 m of gently noisy
+    // floor -- so this invents nothing, it only draws what the terrain function
+    // already said was there.
+    // THE APRON GRID ALIGNS EXACTLY TO THE RECTANGLE'S EDGES. This is arithmetic,
+    // not a tolerance, and it is the difference between the apron abutting the
+    // fine mesh and it either gapping or fighting with it.
+    //
+    // The first attempt inset the hole by two apron cells so the two meshes would
+    // OVERLAP, on the reasoning that an overlap is invisible where a gap is a
+    // hole in the world. Measured before committing to it: the highest ground
+    // inside that band is 63.2 m, at (-11600, 3350). So the overlap would have
+    // drawn 650 m-resolution land on top of 162.5 m-resolution land along the
+    // northern edge. Invisible was the wrong word.
+    //
+    //     rectangle spans  39,000 m in x  and  27,950 m in z
+    //     gcd(39000, 27950) = 650
+    //     650 = wm(1000) = LOOK.outerStep x 4
+    //     58,500 = WORLD.SIZE x GROUND_SPAN / 2 = 650 x 90
+    //
+    // With that step and that half-extent, all four edges land on apron grid
+    // lines: (19500 + 58500) / 650 = 120, (-19500 + 58500) / 650 = 60,
+    // (6500 + 58500) / 650 = 100, (-21450 + 58500) / 650 = 57. So the hole is
+    // cut to the rectangle exactly and the two meshes meet edge to edge.
+    //
+    // Cost: 180 x 180 cells less the hole, about 59,600 triangles -- 1.6% of the
+    // scene -- for the thing that made the world look like it was on a tray.
+    const apronHalf = WORLD.SIZE * WORLD.GROUND_SPAN / 2;
+    const apronStep = LOOK.outerStep * 4;
+    verts += terrainMesh(-apronHalf, apronHalf, -apronHalf, apronHalf, apronStep, OUT, "bedrock", false);
     // The skirt only has to be as deep as the height difference a resolution change
     // can leave at the seam, which is metres, not hundreds. At 240 m it was a dark
     // wall standing in the water at the edge of the modelled core, clearly visible
@@ -982,8 +1030,12 @@ varying vec3 vSeaWorld;`)
   // sky through the ocean -- which read as a flat table with a cliff at its edge
   // on every wide shot. Two triangles close the world.
   if (!SKIP.has("water")) {
+    // Now a backstop rather than the thing you are actually looking at: the
+    // apron carries real ground out to GROUND_SPAN, which is wider than the sea
+    // plane, so this is no longer visible THROUGH water anywhere. It stays
+    // because it costs two triangles and closes everything beyond the apron.
     const abyss = new THREE.Mesh(
-      new THREE.PlaneGeometry(WORLD.SIZE * 6, WORLD.SIZE * 6),
+      new THREE.PlaneGeometry(WORLD.SIZE * WORLD.ABYSS_SPAN, WORLD.SIZE * WORLD.ABYSS_SPAN),
       new THREE.MeshStandardMaterial({ color: 0x16334a, roughness: 1 })
     );
     abyss.rotation.x = -Math.PI / 2; abyss.position.y = -175; scene.add(abyss);
@@ -991,7 +1043,7 @@ varying vec3 vSeaWorld;`)
 
   const wn = waterNormalTexture(THREE);
   const sea = SKIP.has("water") ? { position: {} } : new THREE.Mesh(
-    new THREE.PlaneGeometry(WORLD.SIZE * 4, WORLD.SIZE * 4),
+    new THREE.PlaneGeometry(WORLD.SIZE * WORLD.SEA_SPAN, WORLD.SIZE * WORLD.SEA_SPAN),
     new THREE.MeshStandardMaterial({
       // Opacity is the whole depth cue: at 0.80 the modelled sea bed underneath
       // was invisible and the bay was one flat blue. At 0.62 the shelf, the
