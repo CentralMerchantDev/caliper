@@ -36,6 +36,32 @@
  *   the application wants: the values below are the ones that were arrived at
  *   against this scene, not placeholders.
  */
+/**
+ * BLOOM, SHARED, FOR THE SAME REASON THE GRADE IS.
+ *
+ * The two pages carried two different sets and rendered the same world
+ * differently:
+ *
+ *     city.html   0.085 / 0.38 / 2.20   tuned, with its working written down
+ *     index.html  0.02  / 0.12 / 0.99   effectively off, provenance unknown
+ *
+ * A threshold of 0.99 means almost nothing is bright enough to bloom; 0.02
+ * strength means what does barely shows. One page had numbers someone arrived at
+ * by looking at the result, the other had numbers nobody arrived at.
+ *
+ * The tuned ones win, and city.html's own comment is the argument: threshold is
+ * in LINEAR HDR, before tone mapping, so at 0.90 almost every lit surface in a
+ * daylight scene qualified and the city went to milk. 2.20 keeps it to
+ * sun-struck glass, white roofs and specular water.
+ *
+ * It lives here rather than in world-render-3d.js because city.html must be able
+ * to read it, and importing the whole renderer into a page that deliberately
+ * does not use the renderer would be a strange price for three numbers. This
+ * module is already the shared-look module -- makeGradeShader is here for
+ * exactly the same reason.
+ */
+export const BLOOM = { strength: 0.085, radius: 0.38, threshold: 2.20 };
+
 export function makeGradeShader(num) {
   const knob = typeof num === "function" ? num : (_n, d) => d;
   return {

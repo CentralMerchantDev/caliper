@@ -29,11 +29,40 @@ import { WORLD } from "./city-plan.js";
  * The values could not be asserted directly because they were inline literals,
  * so they are named here. The test now reads the value.
  */
+// Imported here rather than with the rest below, because RENDER_TUNING reads it
+// immediately and a reader should not have to trust hoisting to see why the
+// value is defined. (It would work either way -- import bindings are
+// initialised before any module body runs -- but "it works because of hoisting"
+// is the kind of thing that reads as an accident later.)
+import { BLOOM as SHARED_BLOOM } from "./colour-grade.js";
+
 export const RENDER_TUNING = {
   SUN_COLOR: 0xfffaed,
   SUN_INTENSITY: 2.15,      // base; governed 0.02-1.45 at runtime
   SHADOW_BIAS: -0.00018,    // tight, for PCFSoft
-  BLOOM: { strength: 0.02, radius: 0.12, threshold: 0.99 },
+  // BLOOM, TUNED ONCE, IN ONE PLACE.
+  //
+  // This was 0.02 / 0.12 / 0.99 -- a threshold of 0.99 means almost nothing in
+  // the scene is bright enough to bloom at all, and a strength of 0.02 means
+  // whatever does barely registers. Effectively off. Nothing recorded why; those
+  // are placeholder numbers that were never revisited.
+  //
+  // city.html carried a DIFFERENT set -- 0.085 / 0.38 / 2.20 -- tuned against
+  // this same scene, with its own comment recording the working: threshold 0.90
+  // sent the city "to milk", and 1.35 was needed before it stopped. So one page
+  // had numbers arrived at by looking, and the other had numbers arrived at by
+  // nobody, and the two pages rendered the same world differently.
+  //
+  // Adopting the tuned ones. This was mine to decide and I put it to Mark as a
+  // question, which was the wrong call: it is determinable from the evidence in
+  // the two files, and one of them shows its work.
+  //
+  // test/lookPipeline.test.ts asserts both pages grade identically; this is the
+  // same argument applied to the pass above it. The values live in
+  // colour-grade.js so city.html can read the same ones without importing this
+  // entire renderer -- re-exported here so RENDER_TUNING stays the one place a
+  // reader looks for what this renderer is tuned to.
+  BLOOM: SHARED_BLOOM,
 };
 import { placeFeatures } from "./features.js";
 // RE-EXPORTED so index.html can build an offscreen renderer for the 4K export.
@@ -1872,6 +1901,120 @@ class Renderer3D {
     return this._cityMode && this._cityHeightAt
       ? this._cityHeightAt(x, z)
       : terrainHeightAt(x, z);
+  }
+
+  /**
+   * The height of what you would actually STAND ON at (x, z) -- road deck,
+   * bridge, quay, terrain -- rather than the natural ground beneath it.
+   *
+   * WHY THIS IS NOT _groundAt.
+   *
+   * _groundAt returns heightAt: the terrain BEFORE anything was built on it.
+   * But a road is not draped over the ground, it is graded into it -- gradeRun
+   * cuts and fills deliberately, and reports the earthworks it spent doing so.
+   * Measured on two real avenues in this world:
+   *
+   *     EW avenue   mean gap 1.04 m,  worst 3.46 m
+   *     NS avenue   mean gap 1.69 m,  worst 4.93 m
+   *
+   * So a walker placed at heightAt + 1.75 is between a metre and five metres
+   * away from the road they can see -- and at 4.9 m their eyes are BELOW the
+   * carriageway. Mark, on the deployed build: "walk and drive are not connected
+   * to the land so you stay at one fixed height and walk through things rather
+   * than being at 5'6\" off the ground". That is this, exactly.
+   *
+   * WHY A RAYCAST RATHER THAN THE ROAD PROFILES.
+   *
+   * The obvious fix is to store every road's graded profile at generation time
+   * and look up the one under the walker. That is more code, more data to keep
+   * in step, and it answers only for roads -- not bridges, quays, the pier, the
+   * airport apron or a building's own plinth, each of which would need its own
+   * lookup and its own chance to disagree with what is drawn.
+   *
+   * The scene already contains the answer. Casting a ray down and taking the
+   * first hit measures the world AS RENDERED, so it cannot drift from it: the
+   * defect being fixed here exists precisely because a subsystem kept its own
+   * idea of where the ground was. Same reason `focusAtScreen` raycasts rather
+   * than computing.
+   *
+   * Returns null when nothing is under the point at all -- off the map, or over
+   * open water beyond the apron -- so the caller can decide, rather than being
+   * handed a plausible number.
+   */
+  _surfaceUnder(x, z, fromY = 4000) {
+    if (!this._raycaster) return null;
+    // Same root set as focusAtScreen, and for the same reason: in city mode the
+    // world is on the scene, not in neighbourhoodGroup, and the sky must not be
+    // hit. Getting this wrong is what made click-to-focus dead on the real page
+    // for a week.
+    const roots = this._cityMode
+      ? this.scene.children.filter((o) => o.name !== "city-sky" && o !== this._skyMesh)
+      : this.neighbourhoodGroup.children;
+    this._raycaster.set(
+      new THREE.Vector3(x, fromY, z),
+      new THREE.Vector3(0, -1, 0),
+    );
+    const hits = this._raycaster.intersectObjects(roots, true);
+    for (const h of hits) {
+      // Skip anything with no real surface: helper rings, the pivot marker,
+      // sprites. A walker standing on a UI gizmo is worse than one in the dirt.
+      if (h.object?.userData?.nonPhysical) continue;
+      if (Number.isFinite(h.point?.y)) return h.point.y;
+    }
+    return null;
+  }
+
+  /**
+   * The surface to stand on, with a fallback that is honest about being one.
+   *
+   * The raycast is the measurement; heightAt is the estimate. When the ray finds
+   * nothing -- which happens legitimately over open sea -- the terrain answer is
+   * still better than freezing, but the two are not the same kind of thing and
+   * the caller is told which it got.
+   */
+  _standOn(x, z) {
+    const measured = this._surfaceUnder(x, z);
+    if (measured !== null) return { y: measured, measured: true };
+    return { y: this._groundAt(x, z), measured: false };
+  }
+
+  /**
+   * Is something solid within `reach` metres, in the direction of travel?
+   *
+   * Cast horizontally from a point on the walker or the car and look at the
+   * FIRST hit only. Terrain is deliberately not excluded: a hillside directly in
+   * front of you is as solid as a wall, and a walker who can stroll into a cliff
+   * has the same defect as one who can stroll through a house.
+   *
+   * The caller supplies the height to cast from, and it matters: at eye height a
+   * kerb is invisible and at ankle height every kerb is a wall. Chest height is
+   * the compromise a person's body actually makes.
+   */
+  _blockedAhead(x, y, z, dirX, dirZ, reach) {
+    if (!this._raycaster || !(reach > 0)) return false;
+    const roots = this._cityMode
+      ? this.scene.children.filter((o) => o.name !== "city-sky" && o !== this._skyMesh)
+      : this.neighbourhoodGroup.children;
+    const dir = new THREE.Vector3(dirX, 0, dirZ);
+    if (dir.lengthSq() === 0) return false;
+    dir.normalize();
+    this._raycaster.set(new THREE.Vector3(x, y, z), dir);
+    this._raycaster.far = reach;
+    try {
+      const hits = this._raycaster.intersectObjects(roots, true);
+      for (const h of hits) {
+        if (h.object?.userData?.nonPhysical) continue;
+        return true;
+      }
+      return false;
+    } finally {
+      // `far` is shared state on the raycaster, and every other user of it --
+      // click-to-focus, inspect, the pivot marker -- expects the default. Leaving
+      // it at 2 m would silently break all of them, which is the kind of defect
+      // that gets blamed on the feature that appears to fail rather than the one
+      // that caused it.
+      this._raycaster.far = Infinity;
+    }
   }
 
   _refreshFeatureTargets() {
@@ -5914,10 +6057,34 @@ class Renderer3D {
     };
 
     // Upgraded Smooth Logarithmic Wheel Zoom: max distance up to CAMERA_MAX_DIST (3600m), slow and controllable 1.028x factor
+    // ZOOM SCALES WITH HOW FAR YOU ACTUALLY SCROLLED.
+    //
+    // This used to be `deltaY > 0 ? 1.028 : 0.973` -- a fixed 2.8% per EVENT,
+    // with the size of the scroll thrown away. A mouse notch is one event, so it
+    // behaved. A trackpad emits a stream of small events for the same gesture,
+    // and 2.8% compounding thirty times is 2.3x, which is why it felt, in Mark's
+    // words, "a touch too sensitive" and hard to place.
+    //
+    // Three things wrong, all fixed here:
+    //   - the magnitude of deltaY was ignored
+    //   - deltaMode was ignored, and a browser reporting LINES (mode 1) rather
+    //     than pixels means the same gesture arrives ~16x smaller
+    //   - nothing clamped a single violent flick
+    //
+    // Exponential in the normalised delta, so zoom stays proportional -- a step
+    // near the ground moves you a small number of metres and the same step in
+    // orbit moves you a large one, which is what makes a multiplicative zoom feel
+    // right at both ends. One standard 100 px notch is about 3.5%.
+    const ZOOM_PER_PIXEL = 0.00034;   // ln(1.035) / 100
+    const ZOOM_CLAMP = 400;           // one event may not move more than ~14%
     const onWheel = (e) => {
       e.preventDefault();
-      const zoomFactor = e.deltaY > 0 ? 1.028 : 0.973;
-      this._camDist = Math.max(CAMERA_MIN_DIST, Math.min(this._cityMode ? CAMERA_MAX_DIST_CITY : CAMERA_MAX_DIST, (this._camDist || 48) * zoomFactor));
+      // deltaMode: 0 pixels, 1 lines, 2 pages. Normalise everything to pixels.
+      const perUnit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+      const px = Math.max(-ZOOM_CLAMP, Math.min(ZOOM_CLAMP, e.deltaY * perUnit));
+      const zoomFactor = Math.exp(px * ZOOM_PER_PIXEL);
+      const maxDist = this._cityMode ? CAMERA_MAX_DIST_CITY : CAMERA_MAX_DIST;
+      this._camDist = Math.max(CAMERA_MIN_DIST, Math.min(maxDist, (this._camDist || 48) * zoomFactor));
       this._targetCamDist = this._camDist;
     };
 
@@ -7611,8 +7778,61 @@ class Renderer3D {
       // Position update
       const moveFwdX = Math.sin(this._streetAngle);
       const moveFwdZ = Math.cos(this._streetAngle);
-      this._streetPos.x += moveFwdX * this._streetSpeed * dt;
-      this._streetPos.z += moveFwdZ * this._streetSpeed * dt;
+
+      // THE WORLD GETS A VOTE ON WHERE YOU GO.
+      //
+      // Nothing here consulted anything before moving. Mark: "you ... walk
+      // through things", and "the car can even go on water". Both were true and
+      // both are the same defect -- street mode was the one part of this system
+      // that never asked the land a question, in a project whose entire argument
+      // is that the land answers.
+      //
+      // Two refusals, and they are DIFFERENT refusals, which is why they are not
+      // one check:
+      //
+      //   WATER   is about the surface you would be standing on. A car is
+      //           refused; a walker is allowed to wade, because a person at the
+      //           edge of the sea is a normal thing and stopping them dead at an
+      //           invisible line is worse than letting them get their feet wet.
+      //   SOLID   is about something in the way. A wall stops both.
+      //
+      // The step is tested BEFORE it is committed, so a refusal leaves you where
+      // you were rather than half inside a building.
+      const stepX = moveFwdX * this._streetSpeed * dt;
+      const stepZ = moveFwdZ * this._streetSpeed * dt;
+      const nextX = this._streetPos.x + stepX;
+      const nextZ = this._streetPos.z + stepZ;
+
+      let blocked = null;
+      if (this._cityMode && (stepX !== 0 || stepZ !== 0)) {
+        if (isDrive && typeof waterwayAt === "function") {
+          const surf = this._standOn(nextX, nextZ);
+          // Below sea level, or inside a river or canal. A car is not a boat.
+          if (surf.y < 0.4 || waterwayAt(nextX, nextZ)) blocked = "water";
+        }
+        if (!blocked) {
+          // Something solid in the way: cast along the direction of travel from
+          // chest height, and refuse if the first thing hit is closer than the
+          // step plus a body's width. Chest height, not eye height, so a kerb or
+          // a low wall does not stop a walker who would step over it.
+          const probeY = this._standOn(this._streetPos.x, this._streetPos.z).y + (isDrive ? 0.9 : 1.1);
+          const reach = Math.hypot(stepX, stepZ) + (isDrive ? 2.2 : 0.45);
+          if (this._blockedAhead(this._streetPos.x, probeY, this._streetPos.z, moveFwdX, moveFwdZ, reach)) {
+            blocked = "solid";
+          }
+        }
+      }
+
+      if (blocked) {
+        // Stop dead rather than sliding along: a car that keeps its momentum
+        // into a wall reads as a bug, and momentum into water reads as worse.
+        this._streetSpeed = 0;
+        this._streetBlockedBy = blocked;
+      } else {
+        this._streetBlockedBy = null;
+        this._streetPos.x = nextX;
+        this._streetPos.z = nextZ;
+      }
 
       // THE BOX AND THE GROUND WERE BOTH THE VILLAGE'S.
       //
@@ -7639,39 +7859,47 @@ class Renderer3D {
       // or driving toward the coastal cliffs or the alpine range went straight
       // through the hillside and out into open air.
       // The city's own ground in city mode; the village profile otherwise.
-      const groundY = this._groundAt(this._streetPos.x, this._streetPos.z);
+      // THE SURFACE, MEASURED, NOT THE TERRAIN UNDER IT. See _surfaceUnder.
+      //
+      // A raycast per frame, not per movement step: the walker only needs to
+      // know where the ground is where they now are, and one downward ray
+      // against bounding spheres is cheap next to the frame it sits in.
+      const groundY = this._standOn(this._streetPos.x, this._streetPos.z).y;
+
+      // YOU LOOK LEVEL UNLESS YOU PITCH. YOU DO NOT STARE AT THE GROUND AHEAD.
+      //
+      // Both look targets used to be `groundAt(6 or 8 m ahead) + eye height`, so
+      // the camera aimed at the TERRAIN in front of you and pitched itself
+      // whenever that terrain moved -- walking toward a rise tipped the view up,
+      // walking toward a dip tipped it down, and neither is what a person's head
+      // does. It also meant a walker standing on an embankment 4.9 m above the
+      // natural ground looked down at the dirt they were standing over.
+      //
+      // The target is now the camera's own height, offset forward, plus whatever
+      // pitch the player has actually asked for. That is one subtraction instead
+      // of a raycast, and it is also simply correct.
+      const eyeY = isDrive ? groundY + 2.4 : groundY + 1.75;
+      const lookDist = isDrive ? 8.0 : 6.0;
+      const lookTarget = new THREE.Vector3(
+        this._streetPos.x + moveFwdX * lookDist,
+        eyeY + this._streetPitch * lookDist,
+        this._streetPos.z + moveFwdZ * lookDist,
+      );
 
       if (isDrive) {
-        // Third-person vehicle chase camera
         if (this._vehicleGroup) {
           this._vehicleGroup.position.set(this._streetPos.x, groundY + 0.25, this._streetPos.z);
           this._vehicleGroup.rotation.y = this._streetAngle - Math.PI / 2;
         }
-        const camOffsetDist = 6.5;
-        const camHeight = 2.4;
-        // The chase camera sits behind the car, which is over different ground.
-        const camX = this._streetPos.x - moveFwdX * camOffsetDist;
-        const camZ = this._streetPos.z - moveFwdZ * camOffsetDist;
-        const camGroundY = this._groundAt(camX, camZ);
-        this.camera.position.set(camX, Math.max(groundY, camGroundY) + camHeight, camZ);
-        const aheadX = this._streetPos.x + moveFwdX * 8.0;
-        const aheadZ = this._streetPos.z + moveFwdZ * 8.0;
-        const lookTarget = new THREE.Vector3(
-          aheadX,
-          this._groundAt(aheadX, aheadZ) + 1.5 + this._streetPitch * 4.0,
-          aheadZ
-        );
+        // The chase camera sits behind the car, over its own piece of ground --
+        // measured, like the car's, so it does not sink into a rise behind you.
+        const camX = this._streetPos.x - moveFwdX * 6.5;
+        const camZ = this._streetPos.z - moveFwdZ * 6.5;
+        const camGroundY = this._standOn(camX, camZ).y;
+        this.camera.position.set(camX, Math.max(groundY, camGroundY) + 2.4, camZ);
         this.camera.lookAt(lookTarget);
       } else {
-        // First-person walking camera at human eye height (1.75m above the ground)
-        this.camera.position.set(this._streetPos.x, groundY + 1.75, this._streetPos.z);
-        const aheadX = this._streetPos.x + moveFwdX * 6.0;
-        const aheadZ = this._streetPos.z + moveFwdZ * 6.0;
-        const lookTarget = new THREE.Vector3(
-          aheadX,
-          this._groundAt(aheadX, aheadZ) + 1.75 + this._streetPitch * 4.0,
-          aheadZ
-        );
+        this.camera.position.set(this._streetPos.x, eyeY, this._streetPos.z);
         this.camera.lookAt(lookTarget);
       }
     } else if (this._navigationMode === 'fly') {

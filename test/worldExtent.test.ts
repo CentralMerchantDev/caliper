@@ -71,7 +71,10 @@ test("the apron grid lands exactly on the modelled rectangle's edges", () => {
   const k = WORLD.SIZE / 40000;              // the world scale, from SIZE itself
   const wm = (v: number) => v * k;
   const rect = { x0: wm(-30000), x1: wm(30000), z0: wm(-33000), z1: wm(10000) };
-  const step = wm(250) * 4;                  // LOOK.outerStep x 4
+  // From WORLD, not a second copy of the number. The first version of this line
+  // was `wm(250) * 4` -- the test's own arithmetic, checked against itself, and
+  // therefore green whatever the renderer actually used.
+  const step = wm(250) * WORLD.APRON_STEP_MULTIPLE;
   const half = WORLD.SIZE * WORLD.GROUND_SPAN / 2;
 
   for (const [name, edge] of Object.entries(rect)) {

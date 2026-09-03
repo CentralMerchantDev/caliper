@@ -87,6 +87,10 @@ Then two sections that are as important as the findings:
    that will be found again.
 2. **Every fix gets a test that fails without it.** Then break the fix on
    purpose and confirm the test goes red. A fix without that is a hope.
+   **Record the break in `test/mutations.json`, in the same commit**, and run
+   `npm run mutate`. Doing it by hand is four steps and the last one — putting
+   the source back — is the one that goes wrong, which is why the standard was
+   being met about half the time. See the last §7 entry.
 3. **A mutation that does not apply is INCONCLUSIVE, not a pass.** Assert the
    edit landed before trusting the result. This has produced a false "verified"
    twice in this project — both times with `sed` patterns that silently matched
@@ -216,3 +220,77 @@ under it changed from a ×10 tessellation step to a ×4 one.
   currently tells the auditor which way to default; this run defaulted to
   "read it for context, don't re-derive it, say so explicitly" — worth
   promoting to an explicit instruction if it recurs.
+
+### 2026-09-03 (later) · The auditee's half: two ways to set an audit up to fail
+
+Both of these cost a run before the audit above could start, and neither is the
+auditor's fault. §1 says to give it "the files, the spec, and how to run things";
+it does not say to check that any of that works where the auditor will stand.
+
+- **It could not execute anything.** Spawned into a fresh git worktree, which
+  carries tracked files only — so `node_modules` was absent and `npm test`,
+  `tsc`, every mutation and all three shoot scripts were impossible. Measured
+  afterwards: every file it had touched was `docs/*.md`. It was reading
+  documentation because reading was the only thing left it could do. The danger
+  is not the wasted hour. An auditor with no runtime can still read code and
+  still produce a well-shaped report — and this protocol hands it a 222-line
+  document to shape one against. That report would be inference wearing
+  measurement's clothes, which UMAA-CALIPER.md Step 2 exists to forbid, and it
+  would carry a "checked and found clean" section that nothing was.
+  **Now required:** the auditor runs the suite, the typechecker and one shoot
+  script, pastes the real output, and STOPS if any fail. An audit that cannot
+  execute must say so and end, not continue in prose.
+
+- **The verification one-liners were themselves unverified.** Four written that
+  day failed for reasons of their own rather than the thing they were checking:
+  a stubbed `THREE` missing `BufferAttribute`; the same stub building materials
+  as arrow functions, which `new` refuses; a test resolving `test/public`
+  because the runner bundles into `test/.built/`; and `require('three/package.json')`
+  against a package that does not export it. §3 says measure rather than
+  speculate. It did not say **confirm the instrument works before trusting what
+  it reports** — which is the same rule as "a mutation that did not apply is
+  INCONCLUSIVE", one level further out. It says so now.
+
+### 2026-09-03 (later still) · A new control is not exempt from the standard it enforces
+
+The day's defects, in order: a page-count guard that published a count from a red
+run; the deadlock its fix created; a parser in the fix-for-the-fix that could
+never fire because it also matched the summary header `✖ failing tests:`; two
+comments in one commit disagreeing 6× about the same mesh; a test asserting the
+exact prose of an error message.
+
+Every one was found by running something. **None by re-reading it.** And three of
+the five were in code written that same hour *specifically to enforce honesty
+about verification*. That is the tell, and it is not carelessness about the
+product: a control feels finished the moment it is written, and writing it is
+exactly what produces the confidence that it works. §6 has said "the only
+evidence a control exists is that breaking it turns something red" for weeks. The
+standard was met perhaps half the time — not because anyone disagreed with it,
+but because meeting it by hand is four fiddly steps and the fourth, putting the
+source back, is the one that goes wrong.
+
+So it is a command now: **`npm run mutate`**, driven by `test/mutations.json`.
+Each entry names a control, the exact edit that should break it, and the test
+that must notice. The script establishes a green baseline first and refuses to
+run against a red one (the finding directly above, made mechanical), asserts the
+target text matches exactly once, verifies the edit landed on disk before reading
+any result, restores from a hash-checked backup kept outside the repository, and
+reports CAUGHT / SURVIVED / **INCONCLUSIVE** — with inconclusive never counting
+as a pass.
+
+Two things fell out of writing it, which is the argument for having written it:
+
+- `test/worldExtent.test.ts` computed the apron's grid step as `wm(250) * 4`
+  **itself**, so it was checking arithmetic against its own copy of the number
+  and would have passed whatever the renderer used. No mutation to `city-render.js`
+  could fail it. That is §2.2's "a test that reimplements the logic it is
+  checking", and it was found by trying to write the mutation, not by reading the
+  test. The multiple now lives in `WORLD` and both read it.
+- The new script's own failure-parser would have inherited the header bug from
+  `gen-test-count.mjs` verbatim — copying the pattern without the lesson. It was
+  caught only because the lesson was three hours old.
+
+**The rule, stated so it can be checked:** a control ships with its mutation in
+`test/mutations.json`, added in the same commit. Not afterwards, and not only for
+the ones that look fragile — the two worst defects above were both in code that
+looked finished.

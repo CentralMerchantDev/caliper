@@ -84,6 +84,20 @@ export const WORLD = {
   SEA_SPAN: 4,
   ABYSS_SPAN: 6,
   GROUND_SPAN: 4.5,
+
+  // How much coarser the apron is than the outer terrain mesh.
+  //
+  // Here, not at the call site, because test/worldExtent.test.ts asserts that
+  // the apron's grid lands exactly on the modelled rectangle's edges -- and the
+  // first version of that test computed the step as `wm(250) * 4` ITSELF. So it
+  // was checking arithmetic against its own copy of the number, and would have
+  // passed just as happily with the renderer using a different one. That is the
+  // "a test that reimplements the logic it is checking" shape AUDIT-PROTOCOL.md
+  // §2.2 names, and it was found by trying to write a mutation for it: nothing
+  // in city-render.js could be broken in a way the test would notice.
+  //
+  // Read by both now, so breaking one breaks the other.
+  APRON_STEP_MULTIPLE: 4,
 };
 
 // =============================================================================

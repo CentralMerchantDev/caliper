@@ -250,8 +250,24 @@ test("the tuned render values are what they are meant to be", async () => {
   const { RENDER_TUNING } = await import("../public/world-render-3d.js");
   assert.equal(RENDER_TUNING.SUN_INTENSITY, 2.15, "sun base intensity");
   assert.equal(RENDER_TUNING.SHADOW_BIAS, -0.00018, "shadow bias must stay tight for PCFSoft");
-  assert.deepEqual(RENDER_TUNING.BLOOM, { strength: 0.02, radius: 0.12, threshold: 0.99 },
-    "bloom must stay minimal or fog blows out");
+  // BLOOM IS NO LONGER A LITERAL HERE, AND THE OLD REASON WAS WRONG.
+  //
+  // This asserted { 0.02, 0.12, 0.99 } "or fog blows out". There was no fog: the
+  // haze everyone was looking at turned out to be the VIGNETTE mixing toward
+  // grey 0.55, which is fixed. So the stated reason was a rationalisation of
+  // three numbers nobody had tuned, and it was keeping bloom effectively off --
+  // a threshold of 0.99 means almost nothing in the scene qualifies at all.
+  //
+  // What is worth asserting is not the values but the PROPERTY: that the two
+  // pages bloom the same world the same way. So the renderer must use the shared
+  // constant, not a copy of it.
+  const { BLOOM } = await import("../public/colour-grade.js");
+  assert.equal(RENDER_TUNING.BLOOM, BLOOM,
+    "the renderer must use the shared BLOOM, not its own copy -- two pages that " +
+    "bloom differently is the defect the shared colour grade already fixed once");
+  assert.ok(BLOOM.threshold > 1.0,
+    `bloom threshold is in LINEAR HDR before tone mapping; at ${BLOOM.threshold} ` +
+    "almost every lit surface in daylight would qualify and the city goes to milk");
 
   // The rest of the old assertions checked that named helpers and geometry
   // exist. That is a real property, but a source-text match is not how to check

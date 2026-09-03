@@ -70,7 +70,7 @@ import { UnrealBloomPass } from "./vendor/three/addons/postprocessing/UnrealBloo
 import { ShaderPass } from "./vendor/three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "./vendor/three/addons/postprocessing/OutputPass.js";
 import { VignetteShader } from "./vendor/three/addons/shaders/VignetteShader.js";
-import { makeGradeShader } from "./colour-grade.js";
+import { makeGradeShader, BLOOM } from "./colour-grade.js";
 import { buildWorld, LOOK } from "./city-render.js";
 import { loadLiveWorld, buildLiveQuarter, QUARTER } from "./city-live-world.js";
 import { WORLD_SCALE } from "./world-scale.js";
@@ -170,7 +170,12 @@ if (usePost) {
   // Threshold is in LINEAR HDR, before tone mapping. At 0.90 almost every lit
   // surface in a daylight scene qualified and the whole city went to milk.
   // 1.35 keeps it to sun-struck glass, white roofs and specular water.
-  const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.085, 0.38, 2.20);
+  // From colour-grade.js, not typed here. These three numbers were tuned on this
+  // page and index.html carried a different, untuned set, so the same world
+  // bloomed differently depending on which page you opened -- the identical
+  // defect the grade itself had, one pass earlier in the composer.
+  const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight),
+    BLOOM.strength, BLOOM.radius, BLOOM.threshold);
   composer.addPass(bloom);
   const vig = new ShaderPass(VignetteShader);
   vig.uniforms.offset.value = 1.02; vig.uniforms.darkness.value = 1.04;

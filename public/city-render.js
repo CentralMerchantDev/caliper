@@ -517,6 +517,14 @@ function half(h) {
   // world closes itself instead of being closed for it.
   const BEDROCK_Y = -175;
 
+  // How far inland sand is allowed to reach. Built metres, scaled once, because
+  // a beach is a real width in the world and not a fraction of it: 70 m of dry
+  // sand is a generous seaside beach anywhere on earth, and 140 m is where it
+  // has certainly become something else. Between the two it fades, so a shore
+  // that genuinely widens does not end at a drawn line.
+  const BEACH_FULL_M = wm(70);
+  const BEACH_FADE_M = wm(140);
+
   /**
    * What you see in a cut face, by depth below the local surface.
    *
@@ -801,11 +809,34 @@ varying vec3 vSeaWorld;`)
       // built ground reads as ground, not lawn
       const s = h > 0 ? settAt(x, z) : null;
       if (s) c.lerp(new THREE.Color(0xc3b9a6), 0.5);
-      // Sand is refused wherever the CPU already knows better. Both of these
-      // are the SAME judgements the vertex colour above just made, expressed as
-      // a weight rather than a blend -- so the shader cannot paint a beach onto
-      // a sea cliff or through a waterfront street.
-      shoreOK[k] = (1 - cliffAmt) * (s ? 0 : 1);
+      // Sand is refused wherever the CPU already knows better. These are the
+      // SAME judgements the vertex colour above just made, expressed as a weight
+      // rather than a blend -- so the shader cannot paint a beach onto a sea
+      // cliff or through a waterfront street.
+      //
+      // A BEACH HAS A WIDTH. THIS ONE HAD ONLY A HEIGHT.
+      //
+      // Mark, on the deployed build: "on the front edge of the main island there
+      // is a weird sand bar ... it just isn't done well."
+      //
+      // The per-pixel shoreline decides sand from HEIGHT alone -- a 3.8 m window
+      // from the tide strip at -0.6 to dune grass at +3.2. On a steep shore that
+      // window is crossed in twenty metres and the beach looks like a beach. On
+      // the near-flat shelf at the island's front it takes hundreds of metres to
+      // climb 3.8 m, so the same rule paints sand across the whole shelf. That
+      // flat pale sheet with a hard outer edge is not a landform the generator
+      // decided to put there; it is the beach rule with nothing bounding it.
+      //
+      // Real beaches are tens of metres wide, not hundreds -- the width is set by
+      // wave run-up and tide range, not by how slowly the land happens to rise.
+      // field.signed() already returns distance to the coastline (heightAt uses
+      // it for the shore ramp), so the bound costs one call already being made
+      // elsewhere and needs no new data.
+      const dCoast = Math.abs(field.signed(x, z).d);
+      const beachW = dCoast <= BEACH_FULL_M ? 1
+        : dCoast >= BEACH_FADE_M ? 0
+        : 1 - (dCoast - BEACH_FULL_M) / (BEACH_FADE_M - BEACH_FULL_M);
+      shoreOK[k] = (1 - cliffAmt) * (s ? 0 : 1) * beachW;
       // Two scales of variation. One fine (soil, mown grass, scrub) and one
       // broad, so a ten-kilometre hillside is not one flat green: real land
       // reads as patches of pasture, woodland and bare ground at 500 m across.
@@ -1015,7 +1046,7 @@ varying vec3 vSeaWorld;`)
     // Cost: 180 x 180 cells less the hole, about 59,600 triangles -- 1.6% of the
     // scene -- for the thing that made the world look like it was on a tray.
     const apronHalf = WORLD.SIZE * WORLD.GROUND_SPAN / 2;
-    const apronStep = LOOK.outerStep * 4;
+    const apronStep = LOOK.outerStep * WORLD.APRON_STEP_MULTIPLE;
     verts += terrainMesh(-apronHalf, apronHalf, -apronHalf, apronHalf, apronStep, OUT, "bedrock", false);
     // The skirt only has to be as deep as the height difference a resolution change
     // can leave at the seam, which is metres, not hundreds. At 240 m it was a dark

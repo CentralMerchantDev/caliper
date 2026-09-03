@@ -1,0 +1,74 @@
+{
+  "_comment": [
+    "Every entry is a control this project claims to have, and the exact edit that",
+    "should break it. `node scripts/mutate.mjs --all` applies each one to the real",
+    "source, runs the real suite, and demands that the named test goes red.",
+    "",
+    "AUDIT-PROTOCOL.md §6: a green suite is evidence that nothing currently",
+    "disagrees with a control, not that the control exists. This file is where that",
+    "distinction is made mechanical -- and where 'nobody audits the auditor' (§7) is",
+    "answered, because each mutation is stated precisely enough to be re-run by",
+    "anyone who doubts the claim.",
+    "",
+    "ADD AN ENTRY WHEN YOU ADD A CONTROL. Not later, and not only when a control",
+    "looks fragile: the two worst defects of 2026-09-03 were both in code written",
+    "that same hour specifically to enforce verification honesty, and both looked",
+    "finished. `find` must match EXACTLY ONCE or the run reports INCONCLUSIVE.",
+    "",
+    "The `expect` field is a substring of the test name that must appear among the",
+    "failures. Without it, ANY red suite would count as the control working -- which",
+    "is how a mutation that broke something unrelated gets recorded as proof."
+  ],
+  "mutations": [
+    {
+      "id": "ground-reaches-past-water",
+      "guards": "the apron extends further than the sea plane, so the modelled rectangle's edge is not visible through the water as a tray",
+      "file": "public/city-plan.js",
+      "find": "GROUND_SPAN: 4.5,",
+      "replace": "GROUND_SPAN: 3.5,",
+      "expect": "the ground reaches further than the water"
+    },
+    {
+      "id": "apron-grid-alignment",
+      "guards": "the apron's coarse grid lands exactly on the fine mesh's edges, so the two abut instead of gapping or overlapping",
+      "note": "This mutation could not bite at all until APRON_STEP_MULTIPLE moved into WORLD. The test used to compute the step itself, so no change to the renderer could fail it. Writing this entry is what found that.",
+      "file": "public/city-plan.js",
+      "find": "APRON_STEP_MULTIPLE: 4,",
+      "replace": "APRON_STEP_MULTIPLE: 3,",
+      "expect": "the apron grid lands exactly on the modelled rectangle's edges"
+    },
+    {
+      "id": "cloud-decks-independent-materials",
+      "guards": "each cloud deck owns its material, so the low one can fade while the high one is still overhead",
+      "file": "public/sky.js",
+      "find": "const highMat = newCloudMat();",
+      "replace": "const highMat = lowMat;",
+      "expect": "the decks fade INDEPENDENTLY"
+    },
+    {
+      "id": "cloud-deck-hidden-from-above",
+      "guards": "a deck you have climbed above stops drawing, instead of rendering its far rim as a white crescent",
+      "file": "public/sky.js",
+      "find": "cloudsLow.visible = lowMat.opacity > 0.01;",
+      "replace": "cloudsLow.visible = true;",
+      "expect": "at the orbit Mark was flying"
+    },
+    {
+      "id": "bloom-is-shared-not-copied",
+      "guards": "both pages bloom the same world the same way, because the renderer uses the shared BLOOM object rather than a copy of its values",
+      "note": "Mutating to an equal-valued literal, not a different one: the point is that a COPY is the defect, even when the numbers happen to match today. That is precisely how the two pages drifted apart in the first place.",
+      "file": "public/world-render-3d.js",
+      "find": "  BLOOM: SHARED_BLOOM,",
+      "replace": "  BLOOM: { strength: 0.085, radius: 0.38, threshold: 2.20 },",
+      "expect": "the tuned render values are what they are meant to be"
+    },
+    {
+      "id": "library-declares-the-prop-join",
+      "guards": "props.js resolves every manifest id by its own name, so prop-models.js does not need a second table that must agree with it",
+      "file": "public/props.js",
+      "find": "MODELS[\"bench\"] = MODELS[\"bench-slat\"];",
+      "replace": "",
+      "expect": "the LIBRARY declares the join"
+    }
+  ]
+}
