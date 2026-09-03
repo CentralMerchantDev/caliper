@@ -1345,6 +1345,1184 @@ export function testBridgeSpanInvariants() {
   return true;
 }
 
+
+// =============================================================================
+// SECTION 3: CIRCULATION GENERATORS (INTERSECTIONS, ROUNDABOUTS, RAMPS,
+// SLIP LANES, CROSSINGS, RAIL, AND CHAINING BRIDGE KIT)
+// =============================================================================
+
+/**
+ * 4-Way intersection between two pairs of road classes.
+ * Snapped to 8m module with corner radii, tactile paving, zebra crossings, and stop lines.
+ */
+export function intersection4Way(classNS = "STREET", classEW = "STREET") {
+  const stdNS = ROAD_STANDARDS[classNS] || ROAD_STANDARDS.STREET;
+  const stdEW = ROAD_STANDARDS[classEW] || ROAD_STANDARDS.STREET;
+  const maxRow = Math.max(stdNS.row, stdEW.row);
+  const sizeM = Math.ceil((maxRow + 16) / 8) * 8;
+  const halfS = sizeM / 2;
+  const kerbR = Math.min(stdNS.kerbRadiusM, stdEW.kerbRadiusM);
+
+  return {
+    id: `intersection-4way-${classNS.toLowerCase()}-${classEW.toLowerCase()}`,
+    kind: "hard",
+    footprint: { w: sizeM, d: sizeM },
+    height: 0.45,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets: [
+      { at: [0, 0, -halfS], bearing: 180, width: stdNS.row, lanes: stdNS.lanes, kind: "road" },
+      { at: [0, 0, halfS], bearing: 0, width: stdNS.row, lanes: stdNS.lanes, kind: "road" },
+      { at: [-halfS, 0, 0], bearing: 270, width: stdEW.row, lanes: stdEW.lanes, kind: "road" },
+      { at: [halfS, 0, 0], bearing: 90, width: stdEW.row, lanes: stdEW.lanes, kind: "road" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 128,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Main carriageway intersection box
+          const core = new T.BoxGeometry(sizeM, 0.25, sizeM);
+          core.translate(0, 0.125, 0);
+          parts.push(core);
+
+          // 4 Corner Sidewalks with kerb returns & tactile paving pads
+          const cW = (sizeM - stdEW.row) / 2;
+          const cD = (sizeM - stdNS.row) / 2;
+          if (cW > 0.5 && cD > 0.5) {
+            for (const sx of [-1, 1]) {
+              for (const sz of [-1, 1]) {
+                const corner = new T.BoxGeometry(cW, 0.15, cD);
+                corner.translate(
+                  sx * (halfS - cW / 2),
+                  0.325,
+                  sz * (halfS - cD / 2)
+                );
+                // Yellow tactile blister ramp pad (0.8 x 0.8m)
+                const tactile = new T.BoxGeometry(0.8, 0.05, 0.8);
+                tactile.translate(
+                  sx * (halfS - cW + 0.5),
+                  0.425,
+                  sz * (halfS - cD + 0.5)
+                );
+                parts.push(corner, tactile);
+              }
+            }
+          }
+
+          // 4 Zebra Crossing ladders / stop line bars
+          for (const sz of [-stdNS.row / 2 - 1.2, stdNS.row / 2 + 1.2]) {
+            const zebra = new T.BoxGeometry(Math.min(stdEW.row, sizeM * 0.8), 0.02, 2.0);
+            zebra.translate(0, 0.26, sz);
+            parts.push(zebra);
+          }
+
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 32,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(sizeM, 0.25, sizeM);
+          slab.translate(0, 0.125, 0);
+          return slab;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(sizeM, 0.2, sizeM);
+          slab.translate(0, 0.1, 0);
+          return slab;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 3-Way T-Junction between main continuous road and intersecting branch road.
+ */
+export function intersection3Way(classMain = "AVENUE", classBranch = "STREET", branchBearing = 90) {
+  const stdMain = ROAD_STANDARDS[classMain] || ROAD_STANDARDS.AVENUE;
+  const stdBranch = ROAD_STANDARDS[classBranch] || ROAD_STANDARDS.STREET;
+  const maxRow = Math.max(stdMain.row, stdBranch.row);
+  const sizeM = Math.ceil((maxRow + 16) / 8) * 8;
+  const halfS = sizeM / 2;
+
+  const sockets = [
+    { at: [0, 0, -halfS], bearing: 180, width: stdMain.row, lanes: stdMain.lanes, kind: "road" },
+    { at: [0, 0, halfS], bearing: 0, width: stdMain.row, lanes: stdMain.lanes, kind: "road" },
+  ];
+
+  if (branchBearing === 90) {
+    sockets.push({ at: [halfS, 0, 0], bearing: 90, width: stdBranch.row, lanes: stdBranch.lanes, kind: "road" });
+  } else {
+    sockets.push({ at: [-halfS, 0, 0], bearing: 270, width: stdBranch.row, lanes: stdBranch.lanes, kind: "road" });
+  }
+
+  return {
+    id: `intersection-3way-${classMain.toLowerCase()}-${classBranch.toLowerCase()}-${branchBearing}`,
+    kind: "hard",
+    footprint: { w: sizeM, d: sizeM },
+    height: 0.40,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets,
+    lod: [
+      {
+        level: 0,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const core = new T.BoxGeometry(sizeM, 0.25, sizeM);
+          core.translate(0, 0.125, 0);
+          parts.push(core);
+          // Continuous straight through kerb on opposite side
+          const oppSideX = branchBearing === 90 ? -halfS + (sizeM - stdMain.row) / 4 : halfS - (sizeM - stdMain.row) / 4;
+          const oppKerb = new T.BoxGeometry((sizeM - stdMain.row) / 2, 0.15, sizeM);
+          oppKerb.translate(oppSideX, 0.325, 0);
+          parts.push(oppKerb);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(sizeM, 0.25, sizeM);
+          slab.translate(0, 0.125, 0);
+          return slab;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(sizeM, 0.2, sizeM);
+          slab.translate(0, 0.1, 0);
+          return slab;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Modern Roundabout (1-lane or 2-lane circulating) with splitter islands.
+ */
+export function roundaboutModern(lanes = 1, roadClass = "AVENUE", armCount = 4) {
+  const lod0Tris = 260;
+  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.AVENUE;
+  const innerR = lanes === 1 ? 12 : 20;
+  const circW = lanes === 1 ? 6.5 : 10.5;
+  const outerR = innerR + circW;
+  const sizeM = Math.ceil((outerR * 2 + 16) / 8) * 8;
+  const halfS = sizeM / 2;
+
+  const sockets = [];
+  const bearings = armCount === 3 ? [0, 120, 240] : [0, 90, 180, 270];
+  for (const b of bearings) {
+    const rad = (b * Math.PI) / 180;
+    sockets.push({
+      at: [Number((Math.sin(rad) * halfS).toFixed(2)), 0, Number((Math.cos(rad) * halfS).toFixed(2))],
+      bearing: b,
+      width: std.row,
+      lanes: std.lanes,
+      kind: "road",
+    });
+  }
+
+  return {
+    id: `roundabout-${lanes}lane-${roadClass.toLowerCase()}-${armCount}arms`,
+    kind: "hard",
+    footprint: { w: sizeM, d: sizeM },
+    height: 1.5,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets,
+    lod: [
+      {
+        level: 0,
+        tris: 260,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Carriageway square base
+          const base = new T.BoxGeometry(sizeM, 0.25, sizeM);
+          base.translate(0, 0.125, 0);
+          parts.push(base);
+
+          // Central circular landscaped island
+          const island = new T.CylinderGeometry(innerR, innerR, 0.6, 24);
+          island.translate(0, 0.55, 0);
+          // Mountable truck apron ring (sloped kerb)
+          const apron = new T.CylinderGeometry(innerR + 1.8, innerR + 2.2, 0.35, 24);
+          apron.translate(0, 0.30, 0);
+          parts.push(island, apron);
+
+          // Splitter islands on arms
+          for (const b of bearings) {
+            const rad = (b * Math.PI) / 180;
+            const splitter = new T.BoxGeometry(2.4, 0.2, outerR * 0.7);
+            splitter.rotateY(rad);
+            splitter.translate(Math.sin(rad) * (outerR + 2), 0.35, Math.cos(rad) * (outerR + 2));
+            parts.push(splitter);
+          }
+
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 80,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const base = new T.BoxGeometry(sizeM, 0.25, sizeM);
+          base.translate(0, 0.125, 0);
+          const island = new T.CylinderGeometry(innerR, innerR, 0.5, 16);
+          island.translate(0, 0.5, 0);
+          parts.push(base, island);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 2,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const base = new T.BoxGeometry(sizeM, 0.2, sizeM);
+          base.translate(0, 0.1, 0);
+          return base;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * On-Ramp / Off-Ramp Diverge and Merge Taper Modules with Painted Gore Areas.
+ */
+export function rampDiverge(freewayClass = "FREEWAY", rampSide = "right") {
+  const stdMain = ROAD_STANDARDS[freewayClass] || ROAD_STANDARDS.FREEWAY;
+  const stdRamp = ROAD_STANDARDS.RAMP;
+  const lengthM = 64; // 8x8 module
+  const widthM = stdMain.row + stdRamp.row;
+  const halfL = lengthM / 2;
+
+  return {
+    id: `ramp-diverge-${freewayClass.toLowerCase()}-${rampSide}`,
+    kind: "hard",
+    footprint: { w: widthM, d: lengthM },
+    height: 0.35,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets: [
+      { at: [0, 0, -halfL], bearing: 180, width: stdMain.row, lanes: stdMain.lanes, kind: "road" },
+      { at: [0, 0, halfL], bearing: 0, width: stdMain.row, lanes: stdMain.lanes, kind: "road" },
+      {
+        at: [rampSide === "right" ? stdMain.row / 2 + stdRamp.row / 2 : -(stdMain.row / 2 + stdRamp.row / 2), 0, halfL],
+        bearing: 15,
+        width: stdRamp.row,
+        lanes: 1,
+        kind: "road",
+      },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 80,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const slab = new T.BoxGeometry(widthM, 0.25, lengthM);
+          slab.translate(0, 0.125, 0);
+          // Painted Gore Island Wedge
+          const goreW = stdRamp.row * 0.8;
+          const gore = new T.BoxGeometry(goreW, 0.05, lengthM * 0.5);
+          gore.translate(rampSide === "right" ? stdMain.row / 2 : -stdMain.row / 2, 0.275, 0);
+          parts.push(slab, gore);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(widthM, 0.25, lengthM);
+          slab.translate(0, 0.125, 0);
+          return slab;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(widthM, 0.2, lengthM);
+          slab.translate(0, 0.1, 0);
+          return slab;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Slip lane bypass corner module with triangular pedestrian refuge island.
+ */
+export function slipLane(mainClass = "BOULEVARD", crossClass = "AVENUE") {
+  const stdMain = ROAD_STANDARDS[mainClass] || ROAD_STANDARDS.BOULEVARD;
+  const stdCross = ROAD_STANDARDS[crossClass] || ROAD_STANDARDS.AVENUE;
+  const sizeM = 32;
+  const halfS = sizeM / 2;
+
+  return {
+    id: `slip-lane-${mainClass.toLowerCase()}-${crossClass.toLowerCase()}`,
+    kind: "hard",
+    footprint: { w: sizeM, d: sizeM },
+    height: 1.15,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets: [
+      { at: [0, 0, -halfS], bearing: 180, width: stdMain.row, lanes: 1, kind: "road" },
+      { at: [halfS, 0, 0], bearing: 90, width: stdCross.row, lanes: 1, kind: "road" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 88,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const slab = new T.BoxGeometry(sizeM, 0.25, sizeM);
+          slab.translate(0, 0.125, 0);
+          // Triangular Raised Refuge Island
+          const island = new T.CylinderGeometry(5.0, 5.0, 0.18, 3);
+          island.translate(-4.0, 0.34, -4.0);
+          // 2 Yellow Bollards
+          const b1 = new T.CylinderGeometry(0.12, 0.12, 0.8, 6);
+          b1.translate(-3.0, 0.74, -3.0);
+          const b2 = new T.CylinderGeometry(0.12, 0.12, 0.8, 6);
+          b2.translate(-5.0, 0.74, -5.0);
+          parts.push(slab, island, b1, b2);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(sizeM, 0.25, sizeM);
+          slab.translate(0, 0.125, 0);
+          return slab;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(sizeM, 0.2, sizeM);
+          slab.translate(0, 0.1, 0);
+          return slab;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Turning pocket recessed into median for protected turning movements.
+ */
+export function turningPocket(roadClass = "AVENUE", side = "left") {
+  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.AVENUE;
+  const lengthM = 32;
+  const widthM = std.row;
+  const halfL = lengthM / 2;
+
+  return {
+    id: `turning-pocket-${roadClass.toLowerCase()}-${side}`,
+    kind: "hard",
+    footprint: { w: widthM, d: lengthM },
+    height: 0.35,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets: [
+      { at: [0, 0, -halfL], bearing: 180, width: widthM, lanes: std.lanes, kind: "road" },
+      { at: [0, 0, halfL], bearing: 0, width: widthM, lanes: std.lanes + 1, kind: "road" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 64,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const slab = new T.BoxGeometry(widthM, 0.25, lengthM);
+          slab.translate(0, 0.125, 0);
+          // Recessed turning bay taper marking
+          const bayW = 3.5;
+          const bay = new T.BoxGeometry(bayW, 0.02, lengthM * 0.6);
+          bay.translate(side === "left" ? -bayW / 2 : bayW / 2, 0.26, halfL * 0.3);
+          parts.push(slab, bay);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(widthM, 0.25, lengthM);
+          slab.translate(0, 0.125, 0);
+          return slab;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(widthM, 0.2, lengthM);
+          slab.translate(0, 0.1, 0);
+          return slab;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Median break module in boulevard/avenue median for U-turns / emergency access.
+ */
+export function medianBreak(roadClass = "BOULEVARD") {
+  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.BOULEVARD;
+  const lengthM = 16;
+  const widthM = std.row;
+  const halfL = lengthM / 2;
+
+  return {
+    id: `median-break-${roadClass.toLowerCase()}`,
+    kind: "hard",
+    footprint: { w: widthM, d: lengthM },
+    height: 0.35,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets: [
+      { at: [0, 0, -halfL], bearing: 180, width: widthM, lanes: std.lanes, kind: "road" },
+      { at: [0, 0, halfL], bearing: 0, width: widthM, lanes: std.lanes, kind: "road" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 48,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const slab = new T.BoxGeometry(widthM, 0.25, lengthM);
+          slab.translate(0, 0.125, 0);
+          // Paved crossover linking both directions across median
+          const cross = new T.BoxGeometry(8.0, 0.05, lengthM * 0.8);
+          cross.translate(0, 0.275, 0);
+          parts.push(slab, cross);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(widthM, 0.25, lengthM);
+          slab.translate(0, 0.125, 0);
+          return slab;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(widthM, 0.2, lengthM);
+          slab.translate(0, 0.1, 0);
+          return slab;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Indented roadside bus pull-in bay with transit shelter footprint.
+ */
+export function busBay(roadClass = "STREET") {
+  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.STREET;
+  const lengthM = 24;
+  const widthM = std.row + 3.0; // 3m indented bay
+  const halfL = lengthM / 2;
+
+  return {
+    id: `bus-bay-${roadClass.toLowerCase()}`,
+    kind: "hard",
+    footprint: { w: widthM, d: lengthM },
+    height: 2.8,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets: [
+      { at: [0, 0, -halfL], bearing: 180, width: std.row, lanes: std.lanes, kind: "road" },
+      { at: [0, 0, halfL], bearing: 0, width: std.row, lanes: std.lanes, kind: "road" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 112,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const slab = new T.BoxGeometry(widthM, 0.25, lengthM);
+          slab.translate(0, 0.125, 0);
+          // Bus shelter structure on curb
+          const shelterRoof = new T.BoxGeometry(2.4, 0.15, 2.0);
+          shelterRoof.translate(widthM / 2 - 1.3, 2.5, 0);
+          const glassBack = new T.BoxGeometry(2.0, 2.2, 0.1);
+          glassBack.translate(widthM / 2 - 1.3, 1.3, 0);
+          // Yellow BUS STOP road marking rectangle
+          const marking = new T.BoxGeometry(2.4, 0.02, 14.0);
+          marking.translate(widthM / 2 - 3.2, 0.26, 0);
+          parts.push(slab, shelterRoof, glassBack, marking);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 32,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(widthM, 0.25, lengthM);
+          slab.translate(0, 0.125, 0);
+          return slab;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(widthM, 0.2, lengthM);
+          slab.translate(0, 0.1, 0);
+          return slab;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Highway emergency layby / rest stop shoulder widening.
+ */
+export function layby(roadClass = "AVENUE") {
+  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.AVENUE;
+  const lengthM = 32;
+  const widthM = std.row + 3.5;
+  const halfL = lengthM / 2;
+
+  return {
+    id: `layby-${roadClass.toLowerCase()}`,
+    kind: "hard",
+    footprint: { w: widthM, d: lengthM },
+    height: 0.35,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets: [
+      { at: [0, 0, -halfL], bearing: 180, width: std.row, lanes: std.lanes, kind: "road" },
+      { at: [0, 0, halfL], bearing: 0, width: std.row, lanes: std.lanes, kind: "road" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 48,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const slab = new T.BoxGeometry(widthM, 0.25, lengthM);
+          slab.translate(0, 0.125, 0);
+          // Paved parking bay shoulder
+          const bay = new T.BoxGeometry(3.2, 0.05, lengthM * 0.7);
+          bay.translate(widthM / 2 - 1.8, 0.275, 0);
+          parts.push(slab, bay);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(widthM, 0.25, lengthM);
+          slab.translate(0, 0.125, 0);
+          return slab;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(widthM, 0.2, lengthM);
+          slab.translate(0, 0.1, 0);
+          return slab;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Pedestrian Crossings: signalised, zebra, raised-table, and refuge-island.
+ */
+export function crossing(type = "zebra", roadClass = "STREET") {
+  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.STREET;
+  const lengthM = 16;
+  const widthM = std.row;
+  const halfL = lengthM / 2;
+
+  return {
+    id: `crossing-${type}-${roadClass.toLowerCase()}`,
+    kind: "hard",
+    footprint: { w: widthM, d: lengthM },
+    height: type === "signalised" ? 4.8 : type === "zebra" ? 3.7 : type === "refuge-island" ? 1.25 : 0.45,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets: [
+      { at: [0, 0, -halfL], bearing: 180, width: widthM, lanes: std.lanes, kind: "road" },
+      { at: [0, 0, halfL], bearing: 0, width: widthM, lanes: std.lanes, kind: "road" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: type === "signalised" ? 160 : type === "zebra" ? 380 : 80,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const slab = new T.BoxGeometry(widthM, 0.25, lengthM);
+          slab.translate(0, 0.125, 0);
+          parts.push(slab);
+
+          if (type === "signalised") {
+            // Signal masts with push buttons and overhead luminaire heads
+            for (const sx of [-widthM / 2 + 1.0, widthM / 2 - 1.0]) {
+              const mast = new T.CylinderGeometry(0.12, 0.15, 4.2, 6);
+              mast.translate(sx, 2.1, 0);
+              const head = new T.BoxGeometry(0.35, 0.85, 0.3);
+              head.translate(sx, 3.2, 0);
+              const button = new T.BoxGeometry(0.2, 0.35, 0.15);
+              button.translate(sx, 1.1, 0.15);
+              parts.push(mast, head, button);
+            }
+            // Zebra ladder stripes
+            const ladder = new T.BoxGeometry(widthM * 0.7, 0.02, 3.2);
+            ladder.translate(0, 0.26, 0);
+            parts.push(ladder);
+          } else if (type === "zebra") {
+            // Belisha Beacon poles with glowing amber globes
+            for (const sx of [-widthM / 2 + 1.0, widthM / 2 - 1.0]) {
+              const pole = new T.CylinderGeometry(0.08, 0.08, 3.2, 6);
+              pole.translate(sx, 1.6, 0);
+              const globe = new T.SphereGeometry(0.3, 10, 8);
+              globe.translate(sx, 3.4, 0);
+              parts.push(pole, globe);
+            }
+            // Painted zebra stripes
+            const stripes = new T.BoxGeometry(widthM * 0.7, 0.02, 3.6);
+            stripes.translate(0, 0.26, 0);
+            parts.push(stripes);
+          } else if (type === "raised-table") {
+            // Speed table plateau raised 0.15m
+            const table = new T.BoxGeometry(widthM * 0.85, 0.15, 6.0);
+            table.translate(0, 0.325, 0);
+            parts.push(table);
+          } else if (type === "refuge-island") {
+            // Central split pedestrian refuge island with bollards
+            const island = new T.BoxGeometry(2.4, 0.2, 6.0);
+            island.translate(0, 0.35, 0);
+            for (const bz of [-2.2, 2.2]) {
+              const bollard = new T.CylinderGeometry(0.12, 0.12, 0.9, 6);
+              bollard.translate(0, 0.8, bz);
+              parts.push(bollard);
+            }
+            parts.push(island);
+          }
+
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 32,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(widthM, 0.25, lengthM);
+          slab.translate(0, 0.125, 0);
+          return slab;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const slab = new T.BoxGeometry(widthM, 0.2, lengthM);
+          slab.translate(0, 0.1, 0);
+          return slab;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Rail Switch / Points Turnout Module.
+ */
+export function railSwitch(side = "right") {
+  const lengthM = 32;
+  const widthM = 10;
+  const halfL = lengthM / 2;
+
+  return {
+    id: `rail-switch-${side}`,
+    kind: "hard",
+    footprint: { w: widthM, d: lengthM },
+    height: 0.45,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets: [
+      { at: [0, 0, -halfL], bearing: 180, width: 4.8, lanes: 1, kind: "rail" },
+      { at: [0, 0, halfL], bearing: 0, width: 4.8, lanes: 1, kind: "rail" },
+      { at: [side === "right" ? 3.2 : -3.2, 0, halfL], bearing: side === "right" ? 15 : -15, width: 4.8, lanes: 1, kind: "rail" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 160,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Ballast bed
+          const ballast = new T.BoxGeometry(widthM, 0.25, lengthM);
+          ballast.translate(0, 0.125, 0);
+          // Through Straight Track Rails
+          const mainRailL = new T.BoxGeometry(0.1, 0.15, lengthM);
+          mainRailL.translate(-0.7175, 0.325, 0);
+          const mainRailR = new T.BoxGeometry(0.1, 0.15, lengthM);
+          mainRailR.translate(0.7175, 0.325, 0);
+          // Turnout Switch Mechanism Motor Box
+          const motor = new T.BoxGeometry(1.2, 0.3, 0.8);
+          motor.translate(side === "right" ? -1.8 : 1.8, 0.275, -halfL + 4);
+          parts.push(ballast, mainRailL, mainRailR, motor);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 40,
+        createGeometry: (T = THREE) => {
+          const ballast = new T.BoxGeometry(widthM, 0.25, lengthM);
+          ballast.translate(0, 0.125, 0);
+          return ballast;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const ballast = new T.BoxGeometry(widthM, 0.2, lengthM);
+          ballast.translate(0, 0.1, 0);
+          return ballast;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Grade Separation Overpass Modules (Rail over Road or Road over Rail).
+ */
+export function gradeSeparation(type = "rail-over-road", roadClass = "AVENUE") {
+  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.AVENUE;
+  const lengthM = 32;
+  const widthM = std.row + 8;
+  const clearanceH = 5.5; // Standard 5.5m overhead clearance
+
+  return {
+    id: `grade-separation-${type}-${roadClass.toLowerCase()}`,
+    kind: "hard",
+    footprint: { w: widthM, d: lengthM },
+    height: clearanceH + 3.0,
+    clearance: clearanceH,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets: [
+      { at: [0, 0, -lengthM / 2], bearing: 180, width: std.row, lanes: std.lanes, kind: "road" },
+      { at: [0, 0, lengthM / 2], bearing: 0, width: std.row, lanes: std.lanes, kind: "road" },
+      { at: [-widthM / 2, clearanceH + 1.0, 0], bearing: 270, width: 4.8, lanes: 1, kind: type.startsWith("rail") ? "rail" : "road" },
+      { at: [widthM / 2, clearanceH + 1.0, 0], bearing: 90, width: 4.8, lanes: 1, kind: type.startsWith("rail") ? "rail" : "road" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 220,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Lower road carriageway
+          const lowerRoad = new T.BoxGeometry(std.row, 0.25, lengthM);
+          lowerRoad.translate(0, 0.125, 0);
+
+          // 2 Concrete Bridge Abutment Portals
+          for (const sx of [-std.row / 2 - 1.5, std.row / 2 + 1.5]) {
+            const pier = new T.BoxGeometry(2.0, clearanceH + 0.8, lengthM * 0.5);
+            pier.translate(sx, (clearanceH + 0.8) / 2, 0);
+            parts.push(pier);
+          }
+
+          // Upper Overpass Bridge Deck Spanning Across
+          const upperDeck = new T.BoxGeometry(widthM, 1.2, 8.0);
+          upperDeck.translate(0, clearanceH + 0.6, 0);
+          // Steel Bridge Parapets / Girders
+          for (const sz of [-4.2, 4.2]) {
+            const girder = new T.BoxGeometry(widthM, 1.4, 0.4);
+            girder.translate(0, clearanceH + 1.3, sz);
+            parts.push(girder);
+          }
+
+          parts.push(lowerRoad, upperDeck);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 48,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          const lowerRoad = new T.BoxGeometry(std.row, 0.25, lengthM);
+          lowerRoad.translate(0, 0.125, 0);
+          const upperDeck = new T.BoxGeometry(widthM, 1.2, 8.0);
+          upperDeck.translate(0, clearanceH + 0.6, 0);
+          parts.push(lowerRoad, upperDeck);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 2,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const lowerRoad = new T.BoxGeometry(std.row, 0.2, lengthM);
+          lowerRoad.translate(0, 0.1, 0);
+          return lowerRoad;
+        },
+      },
+    ],
+  };
+}
+
+// =============================================================================
+// CHAINING MODULAR BRIDGE KIT (ABUTMENTS, PIERS, SPANS, RAMPS, AND CHAINER)
+// =============================================================================
+
+/**
+ * Concrete bridge abutment bank anchoring piece with wing walls.
+ */
+export function bridgeAbutment(roadClass = "AVENUE", elevationM = 6.0) {
+  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.AVENUE;
+  const lengthM = 16;
+  const widthM = std.row + 4.0;
+  const halfL = lengthM / 2;
+
+  return {
+    id: `bridge-abutment-${roadClass.toLowerCase()}-${elevationM}m`,
+    kind: "hard",
+    footprint: { w: widthM, d: lengthM },
+    height: elevationM + 1.5,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open", "rock"],
+    sockets: [
+      { at: [0, 0, -halfL], bearing: 180, width: std.row, lanes: std.lanes, kind: "road" },
+      { at: [0, elevationM, halfL], bearing: 0, width: std.row, lanes: std.lanes, kind: "bridge-span" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Heavy reinforced concrete abutment wall
+          const wall = new T.BoxGeometry(widthM, elevationM, 4.0);
+          wall.translate(0, elevationM / 2, halfL - 2.0);
+          // 2 Angled Wing Walls
+          for (const sx of [-widthM / 2 + 1.0, widthM / 2 - 1.0]) {
+            const wing = new T.BoxGeometry(1.5, elevationM * 0.8, 10.0);
+            wing.translate(sx, (elevationM * 0.8) / 2, -1.0);
+            parts.push(wing);
+          }
+          parts.push(wall);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 32,
+        createGeometry: (T = THREE) => {
+          const wall = new T.BoxGeometry(widthM, elevationM, lengthM);
+          wall.translate(0, elevationM / 2, 0);
+          return wall;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const wall = new T.BoxGeometry(widthM, elevationM, lengthM);
+          wall.translate(0, elevationM / 2, 0);
+          return wall;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Concrete bridge pier column with crosshead bearing cap.
+ */
+export function bridgePier(heightM = 12.0, roadClass = "AVENUE") {
+  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.AVENUE;
+  const widthM = std.row + 2.0;
+
+  return {
+    id: `bridge-pier-${roadClass.toLowerCase()}-${heightM}m`,
+    kind: "hard",
+    footprint: { w: widthM, d: 6.0 },
+    height: heightM,
+    clearance: heightM,
+    origin: "base-centre",
+    standsOn: ["open", "rock", "water"],
+    sockets: [
+      { at: [0, heightM, 0], bearing: 0, width: std.row, lanes: std.lanes, kind: "bridge-pier-cap" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 240,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Vertical twin columns
+          for (const sx of [-widthM * 0.28, widthM * 0.28]) {
+            const col = new T.CylinderGeometry(1.4, 1.6, heightM - 1.5, 12);
+            col.translate(sx, (heightM - 1.5) / 2, 0);
+            parts.push(col);
+          }
+          // Crosshead hammerhead cap
+          const cap = new T.BoxGeometry(widthM, 1.5, 4.2);
+          cap.translate(0, heightM - 0.75, 0);
+          parts.push(cap);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 32,
+        createGeometry: (T = THREE) => {
+          const col = new T.BoxGeometry(widthM * 0.8, heightM, 3.0);
+          col.translate(0, heightM / 2, 0);
+          return col;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const col = new T.BoxGeometry(widthM * 0.8, heightM, 2.5);
+          col.translate(0, heightM / 2, 0);
+          return col;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Modular Bridge Deck Span (16m, 32m, 48m, 64m) with socket chaining.
+ */
+export function bridgeDeckSpan(spanLengthM = 32, roadClass = "AVENUE") {
+  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.AVENUE;
+  const widthM = std.row;
+  const halfL = spanLengthM / 2;
+
+  return {
+    id: `bridge-deck-span-${spanLengthM}m-${roadClass.toLowerCase()}`,
+    kind: "hard",
+    spanLengthM,
+    footprint: { w: widthM, d: spanLengthM },
+    height: 3.3,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open", "rock", "water"],
+    sockets: [
+      { at: [0, 1.8, -halfL], bearing: 180, width: widthM, lanes: std.lanes, kind: "bridge-span" },
+      { at: [0, 1.8, halfL], bearing: 0, width: widthM, lanes: std.lanes, kind: "bridge-span" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 128,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // 2 Structural I-beam steel box girders underneath
+          for (const sx of [-widthM * 0.35, widthM * 0.35]) {
+            const girder = new T.BoxGeometry(1.2, 1.4, spanLengthM);
+            girder.translate(sx, 0.7, 0);
+            parts.push(girder);
+          }
+          // Girder slab deck
+          const deck = new T.BoxGeometry(widthM, 0.8, spanLengthM);
+          deck.translate(0, 1.8, 0);
+          // Concrete crash barriers / parapets
+          for (const sx of [-widthM / 2 + 0.3, widthM / 2 - 0.3]) {
+            const par = new T.BoxGeometry(0.6, 1.1, spanLengthM);
+            par.translate(sx, 2.75, 0);
+            parts.push(par);
+          }
+          parts.push(deck);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 32,
+        createGeometry: (T = THREE) => {
+          const deck = new T.BoxGeometry(widthM, 1.5, spanLengthM);
+          deck.translate(0, 0.75, 0);
+          return deck;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const deck = new T.BoxGeometry(widthM, 1.2, spanLengthM);
+          deck.translate(0, 0.6, 0);
+          return deck;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 5% Grade Approach Embankment Ramp connecting ground level to elevated deck.
+ */
+export function bridgeApproachRamp(elevationM = 6.0, roadClass = "AVENUE") {
+  const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.AVENUE;
+  // 5% slope: 1m rise per 20m run
+  const runLengthM = Math.ceil((elevationM * 20) / 8) * 8;
+  const widthM = std.row;
+  const halfL = runLengthM / 2;
+
+  return {
+    id: `bridge-approach-ramp-${elevationM}m-${roadClass.toLowerCase()}`,
+    kind: "hard",
+    footprint: { w: widthM, d: runLengthM },
+    height: elevationM + 1.2,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open", "rock"],
+    sockets: [
+      { at: [0, 0, -halfL], bearing: 180, width: widthM, lanes: std.lanes, kind: "road" },
+      { at: [0, elevationM, halfL], bearing: 0, width: widthM, lanes: std.lanes, kind: "bridge-span" },
+    ],
+    lod: [
+      {
+        level: 0,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Stepped ramp embankment segments
+          const steps = 8;
+          const stepL = runLengthM / steps;
+          for (let i = 0; i < steps; i++) {
+            const stepH = ((i + 1) / steps) * elevationM;
+            const stepZ = -halfL + (i + 0.5) * stepL;
+            const block = new T.BoxGeometry(widthM, stepH, stepL);
+            block.translate(0, stepH / 2, stepZ);
+            parts.push(block);
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 32,
+        createGeometry: (T = THREE) => {
+          const ramp = new T.BoxGeometry(widthM, elevationM, runLengthM);
+          ramp.translate(0, elevationM / 2, 0);
+          return ramp;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const ramp = new T.BoxGeometry(widthM, elevationM, runLengthM);
+          ramp.translate(0, elevationM / 2, 0);
+          return ramp;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Automatic Bridge Chainer: Chains Abutments, Piers, and Modular Spans.
+ * Refuses if unsupported single span > 64m or total span > 800m.
+ */
+export function bridgeChain(spanTotalM, roadClass = "AVENUE", elevationM = 8.0, opts = {}) {
+  // Enforce refusal invariants
+  if (spanTotalM < 8.0) {
+    return {
+      ok: false,
+      refusal: `Span distance ${spanTotalM.toFixed(1)}m is too short for bridge structure (minimum 8m module)`,
+    };
+  }
+  if (spanTotalM > 800.0) {
+    return {
+      ok: false,
+      refusal: `Bridge span ${spanTotalM.toFixed(1)}m exceeds maximum supported structural length (800m)`,
+    };
+  }
+
+  const maxUnsupportedSpanM = 64.0;
+  const numSpans = Math.ceil(spanTotalM / maxUnsupportedSpanM);
+  const singleSpanM = spanTotalM / numSpans;
+  const numPiers = numSpans - 1;
+
+  const pieces = [];
+  // 1. Abutment A
+  pieces.push({ type: "abutment", at: 0, elevation: elevationM });
+  // 2. Piers at span intervals
+  for (let p = 1; p <= numPiers; p++) {
+    pieces.push({ type: "pier", at: p * singleSpanM, height: elevationM });
+  }
+  // 3. Spans
+  for (let s = 0; s < numSpans; s++) {
+    pieces.push({ type: "span", from: s * singleSpanM, to: (s + 1) * singleSpanM, length: singleSpanM });
+  }
+  // 4. Abutment B
+  pieces.push({ type: "abutment", at: spanTotalM, elevation: elevationM });
+
+  return {
+    ok: true,
+    spanTotalM,
+    numSpans,
+    singleSpanM,
+    numPiers,
+    pieces,
+    maxUnsupportedSpanM,
+    chainSummary: `Chained ${numSpans} spans of ${singleSpanM.toFixed(1)}m with ${numPiers} intermediate piers`,
+  };
+}
+
 if (typeof process !== "undefined" && process.argv[1] && process.argv[1].replace(/\\/g, "/").includes("roadkit.js")) {
   try {
     testBridgeSpanInvariants();

@@ -158,6 +158,9 @@
   <button class="filter-btn" data-filter="airport">Airport Set</button>
   <button class="filter-btn" data-filter="aviation">Aircraft</button>
   <button class="filter-btn" data-filter="roads">Roads & Rail</button>
+  <button class="filter-btn" data-filter="buildings">Buildings (10)</button>
+  <button class="filter-btn" data-filter="parks">Parks</button>
+  <button class="filter-btn" data-filter="industrial">Industrial</button>
 </div>
 
 <div id="inspector" class="panel">
@@ -189,8 +192,26 @@ import {
   person,
   vehicle,
   vessel,
-  aircraft
+  aircraft,
+  personInAction,
+  vehicleService,
+  streetTreeSeasonal,
+  parkFeature,
+  waterfrontModule,
+  industrialInfrastructure
 } from "./props.js";
+import {
+  bldVilla,
+  bldTerrace,
+  bldTownhouse,
+  bldMidrise,
+  bldTower,
+  bldShop,
+  bldOffice,
+  bldWarehouse,
+  bldWorkshop,
+  bldApartmentWalkup
+} from "./buildings.js";
 import * as ROADKIT from "./roadkit.js";
 import { ASSET_REGISTRY } from "./asset-registry.js";
 
@@ -374,7 +395,30 @@ if (dynamicBridge.ok) {
   items.push({ category: "roads", model: dynamicBridge });
 }
 
-// 12. PLANNED GAPS (From ASSET_REGISTRY)
+
+// 12. BUILDINGS (10 Typologies)
+items.push({ category: "buildings", model: bldVilla("villa-contact"), isGenerator: true });
+items.push({ category: "buildings", model: bldTerrace("terrace-contact"), isGenerator: true });
+items.push({ category: "buildings", model: bldTownhouse("townhouse-contact"), isGenerator: true });
+items.push({ category: "buildings", model: bldMidrise("midrise-contact"), isGenerator: true });
+items.push({ category: "buildings", model: bldTower("tower-contact"), isGenerator: true });
+items.push({ category: "buildings", model: bldShop("shop-contact"), isGenerator: true });
+items.push({ category: "buildings", model: bldOffice("office-contact"), isGenerator: true });
+items.push({ category: "buildings", model: bldWarehouse("warehouse-contact"), isGenerator: true });
+items.push({ category: "buildings", model: bldWorkshop("workshop-contact"), isGenerator: true });
+items.push({ category: "buildings", model: bldApartmentWalkup("walkup-contact"), isGenerator: true });
+
+// 13. PARKS
+for (const pf of ["bandstand", "duck-pond", "sports-pitch", "tennis-court", "park-gate"]) {
+  items.push({ category: "parks", model: parkFeature(pf), isGenerator: true });
+}
+
+// 14. INDUSTRIAL
+for (const ind of ["pylon", "silo", "tank-farm", "substation", "pipe-rack"]) {
+  items.push({ category: "industrial", model: industrialInfrastructure(ind), isGenerator: true });
+}
+
+// 15. PLANNED GAPS (From ASSET_REGISTRY)
 for (const reg of ASSET_REGISTRY) {
   if (reg.status === "planned") {
     items.push({

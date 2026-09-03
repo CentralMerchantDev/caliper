@@ -162,6 +162,8 @@ export function createCitySky(THREE, scene, opts = {}) {
 
   /* --------------------------------------------------------------- clouds -- */
 
+
+
   const cloudTex = makeCloudTexture(THREE, { blobs: opts.cloudBlobs ?? 220 });
   const newCloudMat = () => new THREE.MeshBasicMaterial({
     map: cloudTex, transparent: true, opacity: 0.0,
@@ -236,15 +238,10 @@ export function createCitySky(THREE, scene, opts = {}) {
 
       starMat.opacity = Math.max(0, (nightAmt - 0.25) * 1.33);
       stars.visible = starMat.opacity > 0.01;
-      // Slow rotation, so the sky moves against the land the way it really does.
-      // 15 degrees an hour is the real rate; this is a demo clock, so it is tied
-      // to elapsed time rather than pretending to be sidereal.
       stars.rotation.y += (dt || 0) * 0.0009;
 
       if (sun) {
         sunDir.copy(sun).normalize();
-        // The moon sits opposite the sun, which is what makes it rise as the
-        // sun sets without a second clock to keep in step.
         moon.position.set(
           -sunDir.x * MOON_DISTANCE,
           Math.max(2000, -sunDir.y * MOON_DISTANCE),
@@ -265,7 +262,7 @@ export function createCitySky(THREE, scene, opts = {}) {
       cloudsHigh.visible = highMat.opacity > 0.01;
       cloudsLow.rotation.y += (dt || 0) * 0.0022;
       cloudsHigh.rotation.y -= (dt || 0) * 0.0013;
-      // Tinted by the sun so they warm at dusk with everything else.
+
       const warm = 1 - nightAmt;
       lowMat.color.setRGB(0.62 + 0.38 * warm, 0.64 + 0.34 * warm, 0.70 + 0.30 * warm);
       highMat.color.copy(lowMat.color);

@@ -11,11 +11,12 @@
 /**
  * @typedef {Object} AssetEntry
  * @property {string} id
- * @property {"roof"|"furniture"|"facade"|"boundary"|"ground"|"vegetation"|"people"|"vehicles"|"maritime"|"aviation"|"airport"|"roads"|"civic"} category
+ * @property {"roof"|"furniture"|"facade"|"boundary"|"ground"|"vegetation"|"people"|"vehicles"|"maritime"|"aviation"|"airport"|"roads"|"civic"|"buildings"|"parks"|"industrial"} category
  * @property {"built"|"planned"|"generator"|"skipped"} status
  * @property {"code"|"import"} source
  * @property {"close"|"mid"|"far"} seenAs
  * @property {number} count Estimated instances across the 26 km world
+ * @property {"showstopper"|"signature"|"standard"|"generic"} [tier] Asset visual quality and landmark tier
  * @property {string} [generator] Generator function name if produced by a family
  * @property {string} [note] Design or sourcing rationale
  */
@@ -156,6 +157,101 @@ export const ASSET_REGISTRY = [
   { id: "civic-art-gallery", category: "civic", status: "built", source: "code", seenAs: "far", count: 6, note: "Modern Art Pavilion: sculpted cantilevers, skylight roof sheds" },
   { id: "civic-market-hall", category: "civic", status: "built", source: "code", seenAs: "mid", count: 8, note: "Historic Market Hall: iron/brick arcades with raised clerestory" },
   { id: "civic-stadium", category: "civic", status: "built", source: "code", seenAs: "far", count: 2, note: "Municipal Stadium: tiered oval bowl with cantilevered canopy trusses" },
+
+  // --- 13. ORDINARY BUILDINGS (10 Parameterised Typologies - Section 2) ---
+  { id: "bld-villa", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 9500, generator: "bldVilla(seed)", note: "Detached 1-2 storey villa: gabled/hipped/mansard roof, porch, garage, bay, dormers, chimney" },
+  { id: "bld-terrace", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 4600, generator: "bldTerrace(seed)", note: "Repeating 2-3 storey terrace row: party-wall chimney stacks, stoops, lightwells, string courses" },
+  { id: "bld-townhouse", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 2700, generator: "bldTownhouse(seed)", note: "Urban 3-4 storey townhouse: grand stoop, projecting bay, cornice, rooftop pergola, outrigger" },
+  { id: "bld-midrise", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 1600, generator: "bldMidrise(seed)", note: "Commercial/residential 4-8 storey midrise: retail podium, setback tower, balconies, lift overrun" },
+  { id: "bld-tower", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 80, generator: "bldTower(seed)", note: "Downtown 12-40 storey skyscraper: podium, stepped/tapered/slab/crown profiles, mechanical penthouse" },
+  { id: "bld-shop", category: "buildings", status: "generator", source: "code", seenAs: "mid", count: 800, generator: "bldShop(seed)", note: "High street 1-3 storey shop: glazed shopfront, signage band, canvas awning, corner splay" },
+  { id: "bld-office", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 400, generator: "bldOffice(seed)", note: "Corporate 3-10 storey office: ribbon glazing spandrels, entrance canopy, service core, plant screen" },
+  { id: "bld-warehouse", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 250, generator: "bldWarehouse(seed)", note: "Industrial 1-storey logistics warehouse: sawtooth/barrel vault roof, 2-6 loading dock bays" },
+  { id: "bld-workshop", category: "buildings", status: "generator", source: "code", seenAs: "mid", count: 350, generator: "bldWorkshop(seed)", note: "Light industrial 1-2 storey workshop: yard wall, industrial exhaust flue, roller door" },
+  { id: "bld-apartment-walkup", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 600, generator: "bldApartmentWalkup(seed)", note: "Multi-family 3-4 storey walkup: central/dual stair cores, exterior balconies, garden terraces" },
+
+
+  // --- SECTION 3: CIRCULATION JOINTS & BRIDGE KIT ---
+  { id: "road-intersection-4way", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 3200, generator: "intersection4Way(classNS, classEW)", note: "4-way intersection across all 6 road classes with kerb returns, tactile pads & zebra markings" },
+  { id: "road-intersection-3way", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 4800, generator: "intersection3Way(classMain, classBranch, bearing)", note: "3-way T-junction with continuous main carriageway and flared kerb radii" },
+  { id: "road-roundabout-modern", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 240, generator: "roundaboutModern(lanes, roadClass, arms)", note: "1-lane & 2-lane circular junctions with truck apron and splitter islands" },
+  { id: "road-ramp-diverge", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 180, generator: "rampDiverge(freewayClass, side)", note: "Freeway off-ramp diverge taper with painted chevron gore island" },
+  { id: "road-slip-lane", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 320, generator: "slipLane(mainClass, crossClass)", note: "Channelized corner right-turn bypass with triangular refuge island" },
+  { id: "road-turning-pocket", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 650, generator: "turningPocket(roadClass, side)", note: "Median-recessed protected turning pocket" },
+  { id: "road-median-break", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 400, generator: "medianBreak(roadClass)", note: "Median crossover opening for U-turns and emergency access" },
+  { id: "road-bus-bay", category: "roads", status: "generator", source: "code", seenAs: "close", count: 750, generator: "busBay(roadClass)", note: "Indented curbside bus pull-in bay with transit shelter footprint" },
+  { id: "road-layby", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 180, generator: "layby(roadClass)", note: "Highway emergency layby / rest stop shoulder widening" },
+  { id: "road-crossing-signalised", category: "roads", status: "generator", source: "code", seenAs: "close", count: 1200, generator: "crossing('signalised', roadClass)", note: "Pedestrian signal mast crossing with push buttons and zebra ladder" },
+  { id: "road-crossing-zebra", category: "roads", status: "generator", source: "code", seenAs: "close", count: 2800, generator: "crossing('zebra', roadClass)", note: "Zebra crossing with Belisha beacons and tactile paving ramps" },
+  { id: "road-crossing-raised-table", category: "roads", status: "generator", source: "code", seenAs: "close", count: 950, generator: "crossing('raised-table', roadClass)", note: "Raised speed table plateau with ramped shark-teeth markings" },
+  { id: "road-crossing-refuge", category: "roads", status: "generator", source: "code", seenAs: "close", count: 1400, generator: "crossing('refuge-island', roadClass)", note: "Two-stage crossing with central refuge sanctuary and bollards" },
+  { id: "rail-switch", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 140, generator: "railSwitch(side)", note: "Railway turnout points switch with motor mechanism box" },
+  { id: "grade-separation-rail-over-road", category: "roads", status: "generator", source: "code", seenAs: "far", count: 85, generator: "gradeSeparation('rail-over-road', roadClass)", note: "Rail bridge spanning arterial road with 5.5m clearance" },
+  { id: "grade-separation-road-over-rail", category: "roads", status: "generator", source: "code", seenAs: "far", count: 65, generator: "gradeSeparation('road-over-rail', roadClass)", note: "Road overpass spanning railway corridor with 5.5m clearance" },
+  { id: "bridge-abutment", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 70, generator: "bridgeAbutment(roadClass, elevation)", note: "Reinforced concrete bank abutment with wing walls and bearing seats" },
+  { id: "bridge-pier", category: "roads", status: "generator", source: "code", seenAs: "far", count: 180, generator: "bridgePier(height, roadClass)", note: "Reinforced concrete pier column with crosshead cap" },
+  { id: "bridge-deck-span", category: "roads", status: "generator", source: "code", seenAs: "far", count: 250, generator: "bridgeDeckSpan(length, roadClass)", note: "Modular girder deck span in standard lengths (16, 32, 48, 64m)" },
+  { id: "bridge-approach-ramp", category: "roads", status: "generator", source: "code", seenAs: "far", count: 70, generator: "bridgeApproachRamp(elevation, roadClass)", note: "5% grade approach embankment ramp" },
+
+
+  // --- SECTION 4: THE REST OF THE CITY ---
+  { id: "person-action-cyclist", category: "people", status: "generator", source: "code", seenAs: "close", count: 850, generator: "personInAction('cyclist')", note: "Cyclist rider on road bike as unified module" },
+  { id: "person-action-worker", category: "people", status: "generator", source: "code", seenAs: "close", count: 420, generator: "personInAction('worker')", note: "Construction municipal worker in hi-vis vest and hardhat" },
+  { id: "person-action-pram", category: "people", status: "generator", source: "code", seenAs: "close", count: 320, generator: "personInAction('pram')", note: "Adult resident pushing pram / stroller" },
+  { id: "person-action-jogger", category: "people", status: "generator", source: "code", seenAs: "close", count: 650, generator: "personInAction('jogger')", note: "Runner in stride" },
+  { id: "vehicle-service-refuse", category: "vehicles", status: "generator", source: "code", seenAs: "mid", count: 180, generator: "vehicleService('refuse-truck')", note: "Heavy refuse compactor truck" },
+  { id: "vehicle-service-sweeper", category: "vehicles", status: "generator", source: "code", seenAs: "close", count: 120, generator: "vehicleService('sweeper')", note: "Municipal street sweeper with disc brushes" },
+  { id: "vehicle-service-tow", category: "vehicles", status: "generator", source: "code", seenAs: "mid", count: 85, generator: "vehicleService('tow-truck')", note: "Flatbed recovery tow truck with crane boom" },
+  { id: "vehicle-service-tractor", category: "vehicles", status: "generator", source: "code", seenAs: "mid", count: 95, generator: "vehicleService('tractor')", note: "Utility tractor with front loader bucket" },
+  { id: "tree-street-avenue-summer", category: "vegetation", status: "generator", source: "code", seenAs: "mid", count: 4200, generator: "streetTreeSeasonal('summer', 'avenue')", note: "Avenue tree in pit with metal guard cage (summer foliage)" },
+  { id: "tree-street-avenue-winter", category: "vegetation", status: "generator", source: "code", seenAs: "mid", count: 1800, generator: "streetTreeSeasonal('winter', 'avenue')", note: "Avenue street tree with bare winter branches" },
+  { id: "park-feature-bandstand", category: "parks", status: "generator", source: "code", seenAs: "mid", count: 18, generator: "parkFeature('bandstand')", note: "Victorian octagonal bandstand with iron pillars and zinc cupola" },
+  { id: "park-feature-duck-pond", category: "parks", status: "generator", source: "code", seenAs: "mid", count: 24, generator: "parkFeature('duck-pond')", note: "Ornamental park duck pond with stone rim" },
+  { id: "park-feature-sports-pitch", category: "parks", status: "generator", source: "code", seenAs: "far", count: 32, generator: "parkFeature('sports-pitch')", note: "Marked football/soccer pitch with goalposts" },
+  { id: "park-feature-tennis-court", category: "parks", status: "generator", source: "code", seenAs: "mid", count: 45, generator: "parkFeature('tennis-court')", note: "Tennis court with perimeter chainlink fence and center net" },
+  { id: "park-feature-gate", category: "parks", status: "generator", source: "code", seenAs: "close", count: 65, generator: "parkFeature('park-gate')", note: "Park entrance iron gates with stone piers" },
+  { id: "waterfront-crane", category: "maritime", status: "generator", source: "code", seenAs: "far", count: 12, generator: "waterfrontModule('dockside-crane')", note: "Dockside portal crane with lattice jib" },
+  { id: "waterfront-beach-huts", category: "maritime", status: "generator", source: "code", seenAs: "mid", count: 40, generator: "waterfrontModule('beach-huts')", note: "Row of 4 colourful timber beach huts" },
+  { id: "waterfront-slipway", category: "maritime", status: "generator", source: "code", seenAs: "mid", count: 22, generator: "waterfrontModule('slipway')", note: "Concrete inclined boat slipway with winch house" },
+  { id: "waterfront-lifeguard", category: "maritime", status: "generator", source: "code", seenAs: "close", count: 16, generator: "waterfrontModule('lifeguard-tower')", note: "Coastal lifeguard lookout station on timber stilts" },
+  { id: "industrial-pylon", category: "industrial", status: "generator", source: "code", seenAs: "far", count: 120, generator: "industrialInfrastructure('pylon')", note: "High-voltage steel lattice transmission pylon with 3 crossarms" },
+  { id: "industrial-silo", category: "industrial", status: "generator", source: "code", seenAs: "far", count: 85, generator: "industrialInfrastructure('silo')", note: "Grain/cement storage silo cylinder with conical roof" },
+  { id: "industrial-tank-farm", category: "industrial", status: "generator", source: "code", seenAs: "far", count: 35, generator: "industrialInfrastructure('tank-farm')", note: "Petrochemical tank farm with 4 storage tanks and containment bund" },
+  { id: "industrial-substation", category: "industrial", status: "generator", source: "code", seenAs: "mid", count: 45, generator: "industrialInfrastructure('substation')", note: "Electrical substation distribution transformer with insulator bushings" },
+  { id: "industrial-pipe-rack", category: "industrial", status: "generator", source: "code", seenAs: "far", count: 160, generator: "industrialInfrastructure('pipe-rack')", note: "Industrial multi-pipe process rack trestle spanning 24m" },
+
+
+  // --- SHOWSTOPPERS: HERO LANDMARKS & ICONIC MODELS ---
+  { id: "bld-artdeco-spire", category: "buildings", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 8, generator: "bldArtDecoSpire()", note: "Showstopper: 168m Art Deco skyscraper with stepped crown setbacks and gilded needle spire" },
+  { id: "bld-grand-chateau", category: "buildings", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 14, generator: "bldGrandChateau()", note: "Showstopper: 40x32m French Renaissance grand chateau palace with twin pavilions and copper dormers" },
+  { id: "bld-cascading-terraces", category: "buildings", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 22, generator: "bldCascadingTerraces()", note: "Showstopper: 32x48m cascading waterfront luxury residence with stepped cantilevered glass terraces" },
+  { id: "civic-grand-cathedral", category: "civic", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 2, generator: "civicGrandCathedral()", note: "Showstopper: 64x120m Gothic cathedral with 88m needle spire, twin west towers, and flying buttresses" },
+  { id: "civic-grand-terminus", category: "civic", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 3, generator: "civicGrandTerminus()", note: "Showstopper: 80x160m Beaux-Arts railway terminal with 42m arched glass barrel train-shed and clock tower" },
+  { id: "vehicle-bullet-train", category: "vehicles", tier: "showstopper", status: "generator", source: "code", seenAs: "mid", count: 28, generator: "vehicleBulletTrain()", note: "Showstopper: 72m 3-car high-speed streamlined bullet train with aerodynamic needle nose and roof pantograph" },
+  { id: "vessel-superyacht", category: "maritime", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 12, generator: "vesselSuperyacht()", note: "Showstopper: 54m tri-deck ultra-luxury superyacht with bow helipad, swimming pool, and radar arch" },
+  { id: "park-palm-house", category: "parks", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 6, generator: "parkBotanicalPalmHouse()", note: "Showstopper: 32x64m Victorian crystal palace botanical glasshouse with 24m ribbed central dome" },
+  { id: "park-observation-wheel", category: "parks", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 4, generator: "parkObservationWheel()", note: "Showstopper: 68m giant observation ferris wheel with dual A-frame legs and perimeter capsule ring" },
+  { id: "bridge-cable-stayed-pylon", category: "roads", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 8, generator: "bridgeCableStayedTower()", note: "Showstopper: 96m soaring diamond A-frame cable-stayed bridge pylon tower with fan of 8 stay cables" },
+
+
+  // --- PART TWO: PLOT BOUNDARY KIT & URBAN AMENITIES ---
+  { id: "boundary-front-wall", category: "boundary", tier: "standard", status: "generator", source: "code", seenAs: "close", count: 8500, generator: "boundaryFrontWall(length)", note: "Low brick/stone front property wall with coping" },
+  { id: "boundary-gate", category: "boundary", tier: "standard", status: "generator", source: "code", seenAs: "close", count: 8500, generator: "boundaryGate(width)", note: "Front garden pedestrian swinging gate" },
+  { id: "boundary-driveway", category: "boundary", tier: "standard", status: "generator", source: "code", seenAs: "mid", count: 6200, generator: "boundaryDriveway(length)", note: "Block-paved vehicle access driveway apron" },
+  { id: "boundary-path", category: "boundary", tier: "standard", status: "generator", source: "code", seenAs: "close", count: 8500, generator: "boundaryPath(length)", note: "Flagstone entrance path from gate to door" },
+  { id: "boundary-bin-store", category: "boundary", tier: "standard", status: "built", source: "code", seenAs: "close", count: 7400, generator: "boundaryBinStore()", note: "Timber slatted wheelie bin enclosure" },
+  { id: "boundary-side-return", category: "boundary", tier: "standard", status: "generator", source: "code", seenAs: "close", count: 4200, generator: "boundarySideReturn(width)", note: "Side alley passage gate and return wall" },
+  { id: "parked-cars-kerbside", category: "vehicles", tier: "signature", status: "generator", source: "code", seenAs: "mid", count: 2400, generator: "parkedCarRow('kerbside', count)", note: "Single instanced module of 3 kerbside parked cars" },
+  { id: "parked-cars-echelon", category: "vehicles", tier: "signature", status: "generator", source: "code", seenAs: "mid", count: 1200, generator: "parkedCarRow('echelon', count)", note: "Single instanced module of 4 echelon parking stalls" },
+  { id: "parked-cars-bay", category: "vehicles", tier: "signature", status: "generator", source: "code", seenAs: "mid", count: 1800, generator: "parkedCarRow('bay', count)", note: "Single instanced module of 4 perpendicular parking bays" },
+  { id: "garden-shed", category: "furniture", tier: "standard", status: "generator", source: "code", seenAs: "mid", count: 5600, generator: "gardenFeature('shed')", note: "Timber garden storage shed" },
+  { id: "garden-greenhouse", category: "furniture", tier: "standard", status: "generator", source: "code", seenAs: "mid", count: 2800, generator: "gardenFeature('greenhouse')", note: "Glass greenhouse garden feature" },
+  { id: "garden-trampoline", category: "furniture", tier: "standard", status: "generator", source: "code", seenAs: "mid", count: 3200, generator: "gardenFeature('trampoline')", note: "Backyard trampoline with safety net" },
+  { id: "garden-washing-line", category: "furniture", tier: "standard", status: "generator", source: "code", seenAs: "close", count: 4800, generator: "gardenFeature('washing-line')", note: "Rotary washing line with arms" },
+  { id: "garden-patio-set", category: "furniture", tier: "standard", status: "generator", source: "code", seenAs: "close", count: 5200, generator: "gardenFeature('patio-set')", note: "Patio table and 4 chairs dining set" },
+  { id: "bld-highstreet-terrace", category: "buildings", tier: "signature", status: "generator", source: "code", seenAs: "far", count: 850, generator: "bldHighStreetTerrace(seed, options)", note: "High-street chaining terrace with ground retail and upper flats" },
+  { id: "bld-business-park", category: "buildings", tier: "signature", status: "generator", source: "code", seenAs: "far", count: 320, generator: "bldBusinessParkBlock(seed, options)", note: "Business park commercial block with brise-soleil louvers" },
+
 ];
 
 /**
