@@ -560,6 +560,8 @@
           <button class="lod-btn active" data-lod="0">LOD 0</button>
           <button class="lod-btn" data-lod="1">LOD 1</button>
           <button class="lod-btn" data-lod="2">LOD 2</button>
+          <button class="lod-btn" id="btn-wireframe" title="Toggle Wireframe">Wireframe</button>
+          <button class="lod-btn" id="btn-clay" title="Toggle Clay Shading">Clay</button>
         </div>
       </div>
       <div class="modal-sidebar">
@@ -1203,6 +1205,11 @@ const modalTargetBtn = document.getElementById("modal-btn-target");
 
 let modalRenderer, modalScene, modalCamera, currentModalMesh, activeItem;
 let currentLOD = 0;
+let isWireframe = false;
+let isClay = false;
+
+const clayMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.9, metalness: 0.0 });
+const wireframeOverlayMat = new THREE.MeshBasicMaterial({ color: 0x58a6ff, wireframe: true });
 
 function initModalViewport() {
   modalRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -1302,7 +1309,21 @@ function renderModalLOD(lodIndex) {
   const isRoad = activeItem.registry.category === "roads" || activeItem.registry.category === "airport";
   const lodDef = m.lod[lodIndex] || m.lod[0];
   const geom = lodDef.createGeometry(THREE);
-  currentModalMesh = new THREE.Mesh(geom, isRoad ? studioRoadMat : studioMat);
+
+  // Live measured telemetry
+  geom.computeBoundingBox();
+  const vCount = geom.attributes.position ? geom.attributes.position.count : 0;
+  const tCount = geom.index ? geom.index.count / 3 : vCount / 3;
+  const measuredCell = document.getElementById("spec-measured");
+  if (measuredCell) {
+    measuredCell.textContent = `LOD${lodIndex}: ${tCount} tris (${vCount} verts)`;
+  }
+
+  const baseMat = isClay ? clayMat : isRoad ? studioRoadMat : studioMat;
+  const mat = baseMat.clone();
+  mat.wireframe = isWireframe;
+
+  currentModalMesh = new THREE.Mesh(geom, mat);
   modalScene.add(currentModalMesh);
 
   // Frame modal camera to item bounds
@@ -1326,6 +1347,53 @@ modalTargetBtn.addEventListener("click", () => {
     modal.classList.remove("open");
   }
 });
+
+const btnWireframe = document.getElementById("btn-wireframe");
+if (btnWireframe) {
+  btnWireframe.addEventListener("click", () => {
+    isWireframe = !isWireframe;
+    btnWireframe.classList.toggle("active", isWireframe);
+    renderModalLOD(currentLOD);
+  });
+}
+
+const btnClay = document.getElementById("btn-clay");
+if (btnClay) {
+  btnClay.addEventListener("click", () => {
+    isClay = !isClay;
+    btnClay.classList.toggle("active", isClay);
+    renderModalLOD(currentLOD);
+  });
+}
+
+const modalExportBtn = document.getElementById("modal-btn-export");
+if (modalExportBtn) {
+  modalExportBtn.addEventListener("click", () => {
+    if (!activeItem) return;
+    const m = activeItem.model;
+    const reg = activeItem.registry;
+    const recipe = {
+      id: reg.id,
+      category: reg.category,
+      status: reg.status,
+      source: reg.source,
+      footprint: m.footprint,
+      sweep: m.sweep || m.footprint,
+      height: m.height,
+      clearance: m.clearance ?? 0,
+      origin: m.origin || "base-centre",
+      standsOn: m.standsOn || ["open"],
+      anchors: m.anchors || {},
+      lod: m.lod.map(l => ({ level: l.level, tris: l.tris }))
+    };
+    const jsonStr = JSON.stringify(recipe, null, 2);
+    navigator.clipboard.writeText(jsonStr).then(() => {
+      showToast(`Copied recipe JSON for '${reg.id}' to clipboard!`);
+    }).catch(() => {
+      showToast(`Exported recipe for '${reg.id}'`);
+    });
+  });
+}
 
 modalClose.addEventListener("click", () => modal.classList.remove("open"));
 modal.addEventListener("click", (e) => {
