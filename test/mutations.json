@@ -21,12 +21,13 @@
   ],
   "mutations": [
     {
-      "id": "ground-reaches-past-water",
-      "guards": "the apron extends further than the sea plane, so the modelled rectangle's edge is not visible through the water as a tray",
+      "id": "ground-edge-is-far-enough-out",
+      "guards": "the modelled ground extends far enough that its own outer edge is beyond the range where the sea bed still reads through the water -- the original tray was visible because the ground stopped at 19.5 km, not because it had an edge at all",
+      "note": "This entry SURVIVED once, and correctly. Its expect still named 'the ground reaches further than the water', a test renamed when the seabed-ring invariant was fixed. The mutation turned the suite red, but not on the named test, and the runner refused to score that as a pass. An expect is a reference to a test name, and renaming a test silently breaks it -- which is now checked at startup.",
       "file": "public/city-plan.js",
       "find": "GROUND_SPAN: 4.5,",
       "replace": "GROUND_SPAN: 3.5,",
-      "expect": "the ground reaches further than the water"
+      "expect": "the ground's own edge is far enough out"
     },
     {
       "id": "apron-grid-alignment",
