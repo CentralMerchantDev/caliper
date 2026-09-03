@@ -1165,7 +1165,12 @@ body.inspecting-mobile #nav-compass-pad {
    the third item, clip the gap, and the menu vanishes. This hit area spans it,
    so the pointer never leaves the menu on the way in. */
 .menu-panel::before {
-  content: ""; position: absolute; left: 0; right: 0; top: -13px; height: 13px;
+  /* 9px, matching the gap exactly. It was 13px against a 9px gap, so it
+     overhung the trigger's bottom edge by 4px -- and the panel's click handler
+     finds no button there, so a click on that strip was swallowed and the menu
+     would not close. Measured: elementFromPoint at the trigger's bottom edge
+     returned the panel, not the trigger. */
+  content: ""; position: absolute; left: 0; right: 0; top: -9px; height: 9px;
 }
 .menu-panel > button, .menu-panel > a {
   justify-content: flex-start; text-align: left; width: 100%;
@@ -1435,7 +1440,9 @@ body.inspecting-mobile #nav-compass-pad {
 /* A miss, said out loud. Positioned at the pointer because that is where the
    attention already is, and gone in 1.4s because it is feedback, not a dialog. */
 .nav-flash {
-  position: fixed; z-index: 210; transform: translate(-50%, -140%);
+  /* 195, not 210. Modals sit at 200, and a transient "nothing there to focus
+     on" drawing over an open dialog is chrome overruling content. */
+  position: fixed; z-index: 195; transform: translate(-50%, -140%);
   padding: 5px 10px; border-radius: 8px; pointer-events: none;
   background: var(--ink); color: var(--card);
   font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px;
@@ -1491,7 +1498,7 @@ body.inspecting-mobile #nav-compass-pad {
       <div class="cc-sub">Mark&nbsp;Fraser · Applied&nbsp;AI · Toronto</div>
     </div>
 
-    <div class="cc-commands" role="toolbar" aria-label="Commands">
+    <div class="cc-commands" id="cc-commands" role="toolbar" aria-label="Commands">
       <div class="menu" data-menu="mark">
         <button type="button" class="cc-cmd menu-trigger" id="menu-mark" aria-haspopup="true" aria-expanded="false" aria-controls="menupanel-mark" title="Portfolio, resume, Datum app and contact"><span class="cc-cmd-icon" aria-hidden="true">◆</span><span class="cc-cmd-label">Mark Fraser</span><span class="menu-caret" aria-hidden="true">▾</span></button>
         <div class="menu-panel" id="menupanel-mark" role="menu" aria-labelledby="menu-mark" hidden>
@@ -1566,8 +1573,12 @@ body.inspecting-mobile #nav-compass-pad {
       </div>
     </div>
 
+    <!-- aria-controls named "cc-body", which was never an element on this page.
+         An aria reference to nothing is worse than no reference: it tells a
+         screen reader there is a region to look at and then does not provide
+         one. It points at the commands it actually hides. -->
     <button type="button" id="cc-collapse" class="cc-collapse" aria-expanded="true"
-            aria-controls="cc-body" title="Hide the command centre (H)">▴</button>
+            aria-controls="cc-commands" title="Hide the command centre (H)">▴</button>
   </header>
 </div>
 
@@ -4690,8 +4701,8 @@ function connect(url) {
 import { createMenus, createCommandCentre } from "./menus.js";
 import { createWorkbench } from "./workbench.js";
 import { createNavigation } from "./navigate.js";
-createMenus(document);
-createCommandCentre(document);
+const menus = createMenus(document);
+createCommandCentre(document, menus);
 createWorkbench(document);
 /* The navigation gestures need the camera. A missing renderer here means the
    page's own module did not finish, which is worth SAYING rather than quietly

@@ -75,12 +75,18 @@ export const GRID_UNIT_Z = 4.5;
  * calling it evidence about this file. A rule with no reachable test is a rule
  * nothing is defending.
  *
+ * `max` defaults to Infinity rather than to a number. It used to default to
+ * 3600, which is the VILLAGE limit -- so any caller that forgot to pass `max`
+ * silently clamped a city camera from 46 km to 3.6 km, and nothing would have
+ * said so. A default that quietly does the wrong thing for the larger of two
+ * worlds is worse than no default; the only caller passes it explicitly.
+ *
  * Each focus multiplies the range by `factor`, so repeated focuses walk in
  * geometrically -- roughly 0.45, 0.20, 0.09 of where you started. That is what
  * lets a double-click take you from a 4 km overview to street level in a few
  * presses without ever teleporting.
  */
-export function focusDistance(current, { zoom = true, factor = 0.45, min = 4.0, max = 3600.0 } = {}) {
+export function focusDistance(current, { zoom = true, factor = 0.45, min = 4.0, max = Infinity } = {}) {
   const now = Number.isFinite(current) && current > 0 ? current : 48;
   if (!zoom) return Math.min(max, Math.max(min, now));
   return Math.min(max, Math.max(min, now * factor));
@@ -5684,9 +5690,12 @@ class Renderer3D {
 
       // Check if user is in "Pick Center / Pivot" mode or holding Alt key
       if (this._pickCenterActive || e.altKey) {
-        this._setCenterFromPointer(e);
+        // The result was discarded here, so a missed Set Pivot reset the button
+        // to its resting label, drew nothing and said nothing -- which reads as
+        // a broken feature rather than a missed click. The outcome is passed on.
+        const r = this._setCenterFromPointer(e);
         this._pickCenterActive = false;
-        if (this._onPickCenterDone) this._onPickCenterDone();
+        if (this._onPickCenterDone) this._onPickCenterDone(r);
         return;
       }
 
@@ -5921,23 +5930,20 @@ class Renderer3D {
     };
   }
 
+  /**
+   * ONE implementation, three gestures.
+   *
+   * This used to be a second, worse copy of focusAtScreen: it drew no marker,
+   * it kept the camera at its current distance, and on a miss it returned
+   * nothing at all. So double-click focused and closed the gap, while Alt-click
+   * and the Set Pivot button moved the centre invisibly and stayed just as far
+   * away -- and a blind audit found the file's own comment claiming otherwise.
+   *
+   * A comment that describes a fix applied to one of three callers is a false
+   * comment. Rather than repeat the fix twice more, this now delegates.
+   */
   _setCenterFromPointer(e) {
-    const rect = this.canvas.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    this._mouse.set(x, y);
-    this._raycaster.setFromCamera(this._mouse, this.camera);
-    const intersects = this._raycaster.intersectObjects(this.neighbourhoodGroup.children, true);
-    if (intersects.length > 0) {
-      const hitPoint = intersects[0].point;
-      this.setCenterPoint(hitPoint.x, hitPoint.y, hitPoint.z);
-      // The Alt-click path drew nothing, so the pivot moved invisibly and the
-      // camera appeared to swing for no reason. Same marker, same gesture.
-      this._showPivotMarker(hitPoint);
-      this.playSuccessChime();
-      return true;
-    }
-    return false;
+    return this.focusAtScreen(e.clientX, e.clientY);
   }
 
   /**

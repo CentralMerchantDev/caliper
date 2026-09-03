@@ -48,9 +48,17 @@ const browser = await chromium.launch({ args: ["--no-sandbox"] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 
 // The world is not under test here and building it blocks the main thread past
-// any sane timeout, so the renderer is stubbed. The top bar does not depend on
-// it -- if that ever stops being true, this check will start failing, which is
-// the correct outcome rather than a reason to loosen it.
+// any sane timeout, so the renderer is stubbed.
+//
+// WHAT THAT COSTS, STATED PLAINLY. This file replaces world-render-3d.js,
+// world-render.js and city-render.js before the page loads, so it can say
+// NOTHING about those three. A blind audit put a bare `throw` at module scope in
+// the real renderer and this check stayed green. An earlier version of this
+// comment claimed the opposite -- "if that ever stops being true, this check
+// will start failing" -- which was false in the only direction that matters.
+//
+// That gap is covered by test/modulesLoad.test.ts in the node suite, which
+// imports the real files. Do not re-add the claim here.
 // The stub must satisfy what index.html actually IMPORTS -- { WorldRenderer,
 // THREE } -- or the page's module throws on load and NOT ONE handler binds.
 // The first version of this stub exported neither, which is why an earlier
@@ -90,8 +98,10 @@ const STUB = `
 await page.route("**/{city-render,world-render-3d,world-render}.js", (r) =>
   r.fulfill({ status: 200, contentType: "text/javascript", body: STUB }));
 
-// A page error means the stub is wrong, not that the bar is. Surfaced rather
-// than swallowed, because a silent load failure is what made check 6 lie.
+// A page error here means one of the files this check does NOT stub -- menus.js,
+// workbench.js, navigate.js, index.html's own module -- failed to load. Those it
+// does cover. Surfaced rather than swallowed, because a silent load failure is
+// what made check 6 lie.
 const pageErrors = [];
 page.on("pageerror", (e) => pageErrors.push(String(e).slice(0, 200)));
 await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "load", timeout: 120000 });
@@ -104,10 +114,15 @@ const ok = (name, cond, detail = "") => { lastStep = name; if (!cond) fails.push
 // WHICH assertion it died on. Every ok() records the last thing that passed, so
 // a crash reports where it was instead of leaving it to be guessed at.
 let lastStep = "startup";
-const origOk = ok;
-const track = (name) => { lastStep = name; };
 process.on("uncaughtException", (e) => {
+  // The failures found BEFORE the crash used to be discarded. Under one earlier
+  // mutation this printed only a timeout while `fails` already held the real
+  // finding -- so the crash hid the answer it had already computed.
   console.error(`CRASHED after: ${lastStep}\n  ${String(e).split("\n")[0]}`);
+  if (fails.length) {
+    console.error(`and ${fails.length} assertion(s) had already failed:`);
+    for (const f of fails) console.error("  - " + f);
+  }
   process.exit(1);
 });
 
@@ -115,11 +130,51 @@ const expanded = (m) => page.getAttribute(`#menu-${m}`, "aria-expanded");
 const panelHidden = (m) => page.evaluate((id) => document.getElementById("menupanel-" + id).hidden, m);
 const openMenu = async (m) => { await page.click(`#menu-${m}`); await page.waitForTimeout(120); };
 
-// 1. every control still exists, exactly once
+// 1. every control exists exactly once AND can actually be used.
+//
+// This loop used to assert presence and its comment claimed reachability. A
+// blind audit proved the gap: display:none passed, and disabled passed. Both
+// now fail -- except for the controls this build intentionally disables, which
+// are named rather than tolerated silently.
+//
+// WHICH controls are disabled is NOT decided here, and this file is not
+// entitled to an opinion about it. Three of them -- the 3D view, the roof
+// cutaway, the flythrough -- are switched off by reportUnavailableControl()
+// according to what the RENDERER reports it can do, and this harness replaces
+// the renderer with a stub. So whether view-3d is disabled on the real page is
+// something this check genuinely cannot determine.
+//
+// What it can do is pin the SET. Any control that becomes disabled, or stops
+// being disabled, changes this list and is caught -- without the file pretending
+// to know which state is correct. If the set changes because the product
+// changed, update the baseline and say why in the commit.
+const DISABLED_UNDER_STUB = ["drone-tour-btn", "roof-cutaway", "view-3d"];
+const disabledNow = [];
 for (const id of CONTROLS) {
-  const n = await page.evaluate((i) => document.querySelectorAll("#" + CSS.escape(i) + ", [id='" + i + "']").length, id);
-  ok(`control ${id} present exactly once`, n === 1, `found ${n}`);
+  const st = await page.evaluate((i) => {
+    const all = document.querySelectorAll("[id='" + i + "']");
+    if (all.length !== 1) return { n: all.length };
+    const el = all[0];
+    const cs = getComputedStyle(el);
+    // Inside a closed menu panel a control is legitimately not rendered, so
+    // "hidden" here means hidden by its OWN styles, not by an ancestor popup.
+    const inClosedPanel = !!el.closest(".menu-panel[hidden], .wb-grip-panel[hidden]");
+    return {
+      n: 1,
+      disabled: !!el.disabled || el.getAttribute("aria-disabled") === "true",
+      selfHidden: cs.display === "none" || cs.visibility === "hidden",
+      inClosedPanel,
+    };
+  }, id);
+  ok(`control ${id} present exactly once`, st.n === 1, `found ${st.n}`);
+  if (st.n !== 1) continue;
+  ok(`control ${id} is not hidden by its own styles`, st.selfHidden === false);
+  if (st.disabled) disabledNow.push(id);
 }
+disabledNow.sort();
+ok("the set of disabled controls is unchanged",
+   JSON.stringify(disabledNow) === JSON.stringify([...DISABLED_UNDER_STUB].sort()),
+   `now ${JSON.stringify(disabledNow)}, baseline ${JSON.stringify([...DISABLED_UNDER_STUB].sort())}`);
 
 // 2. every menu starts closed -- the point of the regroup
 for (const m of MENUS) {
@@ -377,7 +432,171 @@ await page.waitForTimeout(150);
 const postSlide = await page.evaluate(() => window.renderer3d._impl._camDist);
 ok("the range slider moves the camera", Math.abs(postSlide - preSlide) > 1, `${preSlide} -> ${postSlide}`);
 
-ok("the page loaded without a module error", pageErrors.length === 0, pageErrors.join(" | "));
+// 17. DRAG. Until now nothing exercised wireDrag or zoneAt at all -- removing
+// the drag wiring entirely, or making every drop zone dead, both went green,
+// because every docking check went through the grip MENU. A pointer drag is the
+// gesture the feature was asked for; it needs its own evidence.
+await page.click('[data-wb-panel="nav"] .wb-grip-menu');
+await page.waitForTimeout(90);
+await page.click('[data-wb-panel="nav"] .wb-grip-panel button[data-region="left"]');
+await page.waitForTimeout(160);
+const grip = await page.evaluate(() => {
+  const r = document.querySelector('[data-wb-panel="nav"] .wb-grip').getBoundingClientRect();
+  return { x: Math.round(r.left + 30), y: Math.round(r.top + r.height / 2) };
+});
+await page.mouse.move(grip.x, grip.y);
+await page.mouse.down();
+await page.mouse.move(grip.x + 60, grip.y + 40, { steps: 4 });   // past the 5px threshold
+const zonesLit = await page.evaluate(() => document.getElementById("wb-zones").classList.contains("is-active"));
+ok("dragging a grip lights the drop zones", zonesLit === true);
+await page.mouse.move(1560, 460, { steps: 8 });                   // into the right-hand zone
+await page.waitForTimeout(120);   // pointermove -> dragTo -> class toggle is not synchronous with the move
+const hot = await page.evaluate(() => document.querySelector(".wb-zone.is-hot")?.dataset.region || null);
+ok("the zone under the pointer highlights", hot === "right", String(hot));
+await page.mouse.up();
+await page.waitForTimeout(200);
+const dropped = await page.evaluate(() => document.querySelector('[data-wb-panel="nav"]').parentElement.id);
+ok("dropping in a zone docks the panel there", dropped === "wb-rail-right", dropped);
+
+// paired: a drop over open world floats it rather than snapping to an edge
+const grip2 = await page.evaluate(() => {
+  const r = document.querySelector('[data-wb-panel="nav"] .wb-grip').getBoundingClientRect();
+  return { x: Math.round(r.left + 30), y: Math.round(r.top + r.height / 2) };
+});
+await page.mouse.move(grip2.x, grip2.y);
+await page.mouse.down();
+await page.mouse.move(760, 460, { steps: 8 });
+await page.mouse.up();
+await page.waitForTimeout(200);
+ok("dropping away from an edge floats the panel",
+   (await page.evaluate(() => document.querySelector('[data-wb-panel="nav"]').parentElement.id)) === "wb-float-layer");
+
+// and a click on the grip that does NOT move must not be read as a drag
+await page.click('[data-wb-panel="nav"] .wb-grip-menu');
+await page.waitForTimeout(90);
+await page.click('[data-wb-panel="nav"] .wb-grip-panel button[data-region="left"]');
+await page.waitForTimeout(160);
+const before17 = await page.evaluate(() => document.querySelector('[data-wb-panel="nav"]').parentElement.id);
+const g3 = await page.evaluate(() => {
+  const r = document.querySelector('[data-wb-panel="nav"] .wb-grip').getBoundingClientRect();
+  return { x: Math.round(r.left + 30), y: Math.round(r.top + r.height / 2) };
+});
+await page.mouse.move(g3.x, g3.y); await page.mouse.down();
+await page.mouse.move(g3.x + 2, g3.y + 2); await page.mouse.up();
+await page.waitForTimeout(150);
+ok("a 2px twitch on the grip is not a drag",
+   (await page.evaluate(() => document.querySelector('[data-wb-panel="nav"]').parentElement.id)) === before17);
+
+// 18. A WELL-FORMED but INVALID saved layout. The existing corrupt-layout check
+// writes truncated JSON, so JSON.parse throws and readLayout returns before the
+// per-field validation it claims to be about ever runs. Deleting that validation
+// left the check green. This payload parses, so the field guards are the only
+// thing standing between it and a crash.
+await page.evaluate(() => localStorage.setItem("caliper.workbench.v1",
+  JSON.stringify({ nav: { region: "upside-down" }, build: 42, status: { region: "float" }, zzz: { region: "left" } })));
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(2200);
+const afterBogus = await page.evaluate(() => ({
+  nav: document.querySelector('[data-wb-panel="nav"]')?.parentElement.id,
+  build: document.querySelector('[data-wb-panel="build"]')?.parentElement.id,
+  status: document.querySelector('[data-wb-panel="status"]')?.parentElement.id,
+  grips: document.querySelectorAll(".wb-grip").length,
+  menusAlive: !!document.getElementById("menu-places"),
+}));
+ok("an unknown region falls back to the panel's home", afterBogus.nav === "wb-rail-left", JSON.stringify(afterBogus));
+ok("a non-object panel entry falls back too", afterBogus.build === "wb-rail-right", JSON.stringify(afterBogus));
+ok("a float with no coordinates is not treated as a float", afterBogus.status === "wb-rail-right", JSON.stringify(afterBogus));
+ok("every panel still gets its grip", afterBogus.grips === 4, String(afterBogus.grips));
+ok("and the page still works", afterBogus.menusAlive === true);
+await page.evaluate(() => localStorage.removeItem("caliper.workbench.v1"));
+
+// 19. KEYBOARD. A menu that can only be opened and walked with a mouse is a
+// menu some visitors do not have. None of this was covered.
+await page.click("#welcome-close-btn").catch(() => {});
+await page.focus("#menu-places");
+await page.keyboard.press("Enter");
+await page.waitForTimeout(140);
+ok("Enter opens a menu", (await panelHidden("places")) === false);
+ok("and focus lands on the first item",
+   (await page.evaluate(() => document.activeElement?.id)) === "bm-town",
+   String(await page.evaluate(() => document.activeElement?.id)));
+await page.keyboard.press("ArrowDown");
+ok("ArrowDown moves to the next item",
+   (await page.evaluate(() => document.activeElement?.id)) === "bm-forge",
+   String(await page.evaluate(() => document.activeElement?.id)));
+await page.keyboard.press("End");
+ok("End jumps to the last item",
+   (await page.evaluate(() => document.activeElement?.id)) === "reset-cam-btn",
+   String(await page.evaluate(() => document.activeElement?.id)));
+await page.keyboard.press("ArrowDown");
+ok("and it wraps round to the first",
+   (await page.evaluate(() => document.activeElement?.id)) === "bm-town");
+await page.keyboard.press("Escape");
+await page.waitForTimeout(100);
+ok("Escape returns focus to the trigger",
+   (await page.evaluate(() => document.activeElement?.id)) === "menu-places");
+
+// 20. ESCAPE MUST NOT SWALLOW EVERYONE ELSE. The capture-phase handler used to
+// stopPropagation whenever a menu was open, which silently disabled Escape for
+// Tour, the command palette, modals and the grip menus.
+const escapeReaches = await page.evaluate(async () => {
+  let heard = 0;
+  const spy = () => { heard++; };
+  document.addEventListener("keydown", spy);          // bubble phase, like the others
+  const r = {};
+  document.getElementById("menu-view").click();
+  await new Promise((s) => setTimeout(s, 120));
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await new Promise((s) => setTimeout(s, 80));
+  r.whileOpen = heard;                                 // the menu consumed it: 0
+  heard = 0;
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await new Promise((s) => setTimeout(s, 80));
+  r.whenNothingOpen = heard;                           // must travel on: 1
+  document.removeEventListener("keydown", spy);
+  return r;
+});
+ok("Escape is consumed while a menu is open", escapeReaches.whileOpen === 0, JSON.stringify(escapeReaches));
+ok("Escape reaches other handlers when nothing of ours is open",
+   escapeReaches.whenNothingOpen === 1, JSON.stringify(escapeReaches));
+
+// 21. The nav paths nothing was checking.
+await page.mouse.move(700, 500);
+await page.evaluate(() => { window.renderer3d.lastFocus = null; });
+await page.keyboard.press("f");
+await page.waitForTimeout(160);
+ok("F focuses at the pointer", (await page.evaluate(() => !!window.renderer3d.lastFocus)));
+// and without a pointer position it uses the centre rather than doing nothing
+await page.evaluate(() => { window.renderer3d.lastFocus = null; });
+await page.evaluate(() => document.getElementById("nav-clear-pivot").click());
+await page.waitForTimeout(120);
+ok("clear-pivot reaches the renderer", (await page.evaluate(() => window.renderer3d.pivotHidden === true)));
+
+// distance formatting by VALUE, not by shape: the old regex accepted 480m
+// rendered as "0.5km" when the km and m branches were swapped.
+const fmt = await page.evaluate(async () => {
+  const out = {};
+  window.renderer3d._impl._camDist = 480; await new Promise((s) => setTimeout(s, 320));
+  out.m = document.getElementById("nav-read-dist").textContent;
+  window.renderer3d._impl._camDist = 2500; await new Promise((s) => setTimeout(s, 320));
+  out.km = document.getElementById("nav-read-dist").textContent;
+  return out;
+});
+ok("480 m reads as metres", fmt.m === "480m", fmt.m);
+ok("2500 m reads as kilometres", fmt.km === "2.5km", fmt.km);
+
+// the slider is logarithmic; at the halfway point a linear scale would put the
+// camera near 23000 m, a log scale near 430 m
+await page.evaluate(() => {
+  const s = document.getElementById("nav-zoom-slider");
+  s.value = "50"; s.dispatchEvent(new Event("input", { bubbles: true }));
+});
+await page.waitForTimeout(150);
+const mid = await page.evaluate(() => window.renderer3d._impl._camDist);
+ok("the range slider is logarithmic, not linear", mid > 200 && mid < 1200, String(Math.round(mid)));
+
+ok("the page loaded without a module error in an unstubbed file",
+   pageErrors.length === 0, pageErrors.join(" | "));
 
 await browser.close();
 server.close();

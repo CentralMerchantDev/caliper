@@ -1,0 +1,139 @@
+What a blind audit found in the UI, including a bug it caused me to find
+
+A context-free agent audited the chrome — the command centre, the rails, the
+menus, the navigation and the check suite that defends them. It was told nothing
+about what any of it was for. It ran 49 mutations, verified each one landed, and
+caught 30. NINETEEN SURVIVED.
+
+That number is the report. Everything below is what it cost.
+
+THE ONE I AM LEAST COMFORTABLE WITH
+
+navigate.js opens with a list of three defects and says they are fixed. Two of
+them were fixed on ONE of three code paths.
+
+Double-click went through focusAtScreen and got the marker, the closed distance
+and the spoken miss. Alt-click and the Set Pivot button went through
+_setCenterFromPointer, which drew nothing, kept the camera exactly where it was,
+and returned a result its only caller discarded — so a missed Set Pivot reset the
+button to its resting label and said nothing at all.
+
+A comment describing a fix applied to a third of its callers is a false comment,
+and it is the specific failure I have criticised in two other reports this week.
+_setCenterFromPointer is now four lines: it delegates. One implementation, three
+gestures, and the caller passes the outcome on.
+
+TWO REGRESSIONS I INTRODUCED AND DEFENDED
+
+The Escape handler ran in the CAPTURE phase and called stopPropagation whenever
+a menu was open. Capture runs before every bubble listener, so while any menu was
+open Escape stopped exiting Tour, stopped closing the command palette, stopped
+dismissing modals and stopped closing the workbench grip menus. Measured: two
+popups open, one Escape, one closed, four other consumers never heard the key.
+The comment claimed one narrow purpose and the code did five things.
+
+Layers now register with a dismiss stack. Escape closes the topmost open layer
+and only then stops the event; when nothing of ours is open it travels on
+untouched.
+
+And H collapsed the command centre out from under an open menu — the panel went
+display:none while the module still held it open and its trigger still read
+aria-expanded="true". It closes the menus first.
+
+THE BUG THE NEW DRAG TEST FOUND IN ITS FIRST RUN
+
+Nothing had ever exercised a pointer drag: every docking check went through the
+grip MENU, so removing the drag wiring entirely and making every drop zone dead
+both went green. A real drag test — press the grip, move to the right-hand zone,
+release — failed immediately, and not for the reason I expected.
+
+beginDrag() reparents the panel into the float layer. MOVING AN ELEMENT IN THE
+DOM RELEASES ITS POINTER CAPTURE. So the instant a panel was lifted, tracking
+fell back to plain hit-testing: the grip kept receiving pointermove only while
+the cursor happened to stay over it, and the drop landed wherever the last
+tracked position was. Released at x=1560, deep inside the right-hand zone, the
+panel floated — because the handler's last sighting was still beside the left
+rail.
+
+Invisible in a screenshot. Invisible to every check that docked by menu. Drag
+tracking now lives on the window, which does not care what the DOM does
+underneath it.
+
+ASSERTIONS OF MINE THAT COULD NOT FAIL
+
+  * The 29-control loop tested PRESENCE while its comment claimed reachability.
+    display:none passed. disabled passed. It now checks both — and does not
+    pretend to know WHICH controls should be disabled, because three of them are
+    switched off according to what the renderer reports and this harness stubs
+    the renderer. It pins the SET instead, so any change is caught without the
+    file inventing an opinion it cannot support.
+  * "Range reads a distance" was a shape test. Swapping the km and m branches
+    rendered 480 m as "0.5km" and it passed. It asserts values now.
+  * The corrupt-layout check wrote TRUNCATED JSON, so JSON.parse threw and the
+    per-field validation it was supposedly about never ran — deleting that
+    validation left it green. There is now a well-formed payload with a bogus
+    region, a non-object entry and a float with no coordinates.
+  * The crash handler discarded every failure found before the crash. Under one
+    mutation it printed a timeout while the real finding was already sitting in
+    the failure list.
+
+AND THE CLAIM I HAD TO WITHDRAW
+
+check-topbar.mjs said: "The top bar does not depend on the renderer — if that
+ever stops being true, this check will start failing, which is the correct
+outcome." The auditor put a bare throw at module scope in the real renderer and
+the check stayed GREEN, because it route-stubs that file before the page loads.
+
+The node suite did catch it — but only by accident, because focusDistance.test.ts
+imports the real module for an unrelated reason. Coverage that exists as a side
+effect of another test disappears the moment someone rewrites that test.
+
+test/modulesLoad.test.ts now imports the nine front-end modules deliberately and
+says what it is for, with a paired case proving a throwing module is reported
+rather than resolving to an empty object. The false comment is gone and the
+assertion is renamed to what it actually covers.
+
+That file also failed on its first run for a reason worth recording: the suite
+compiles tests into test/.built/, so a RUNTIME import specifier of "../public/x"
+resolved to test/public/x. Static imports are rewritten by the build; a string
+passed to import() is not. Anchored to the repo root.
+
+ALSO FIXED
+
+  * Double-tap focus, because a touchscreen produces no dblclick — measured on a
+    390x844 context: two taps did nothing at all.
+  * F worked only after a mouse had moved, so the "keyboard equivalent" required
+    a mouse. With no pointer position it uses the centre of the view.
+  * N is bound. The button's tooltip advertised it before anything was.
+  * The menu hit-bridge was 13px against a 9px gap, so it overhung each trigger
+    by 4px and swallowed clicks on that strip.
+  * aria-controls pointed at "cc-body", which was never an element.
+  * The nav flash drew at z-index 210, over modals at 200.
+  * destroy() cleared one of two intervals.
+  * Clear-marker announced success on the 2D fallback, which has no marker.
+  * focusDistance's max defaulted to 3600 — the VILLAGE limit — silently
+    clamping a city camera from 46 km to 3.6 km for any caller that forgot it.
+
+VERIFIED
+
+Nine new mutations against the new assertions, nine caught, none survived:
+drag wiring removed, drop zones dead, saved-layout validation removed, arrow-key
+navigation removed, Escape swallowing everything, F removed, distance units
+swapped, slider made linear, clear-marker no-op. Plus the module-scope throw,
+now caught.
+
+600/600 node tests, tsc --noEmit clean, top-bar check green.
+
+STILL OPEN
+
+  * Lower-value survivors from the audit: the hover-switch intent delay, the
+    align-right overflow flip (dead at 1600px and untested between 820 and
+    ~1100), Enter/Space-to-open, and the collapsed-state localStorage read.
+  * The nav panel's "no box" assertion still cannot fail from an inline style,
+    because the three properties are !important. It DOES fail if those rules are
+    edited, which is the case that matters, but the limit is real.
+  * scripts/shoot-ui.mjs is back as a named, documented tool rather than the
+    scratch file it was. It photographs CHROME only — the renderer is stubbed, so
+    it can say nothing about the world.
+  * The pivot ring and the focus animation have still never been seen in a real
+    frame. That needs scripts/shoot.mjs and has not been run.

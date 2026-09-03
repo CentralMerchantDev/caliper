@@ -28,6 +28,8 @@
  * and the page still works -- degraded to what it was, not broken.
  */
 
+import { registerDismisser } from "./menus.js";
+
 const REGIONS = ["left", "right", "top", "bottom", "float"];
 const STORE_KEY = "caliper.workbench.v1";
 
@@ -194,9 +196,47 @@ function addChrome(el, panel, api) {
 
 /* ------------------------------------------------------------------- drag -- */
 
+/**
+ * Drag tracking lives on the WINDOW, not on the grip.
+ *
+ * The first version called bar.setPointerCapture() and listened on the grip.
+ * That looks correct and is not: beginDrag() reparents the panel into the float
+ * layer, and moving an element in the DOM RELEASES its pointer capture. So the
+ * instant the panel was lifted, tracking fell back to plain hit-testing -- the
+ * grip only kept receiving pointermove while the cursor happened to stay over
+ * it, and the drop landed wherever the last tracked position was rather than
+ * where the pointer actually was.
+ *
+ * It was invisible in every screenshot and in every check that docked panels
+ * through the grip menu instead of by dragging. A drag test found it in one run:
+ * released at x=1560 in the right-hand zone, the panel floated, because the last
+ * position the handler ever saw was still near the left rail.
+ *
+ * Window listeners do not care what the DOM does underneath them.
+ */
 function wireDrag(el, bar, panel, api) {
   let dragging = false;
   let startX = 0, startY = 0, offX = 0, offY = 0, pid = null;
+
+  const onMove = (e) => {
+    if (pid === null || e.pointerId !== pid) return;
+    // A 5px threshold, so a click on the grip is not read as a drag. Below it
+    // nothing has happened yet and the panel has not moved.
+    if (!dragging && Math.hypot(e.clientX - startX, e.clientY - startY) < 5) return;
+    if (!dragging) { dragging = true; api.beginDrag(panel.key, el); }
+    api.dragTo(el, e.clientX - offX, e.clientY - offY, e.clientX, e.clientY);
+  };
+
+  const finish = (e) => {
+    if (pid === null || (e && e.pointerId !== pid)) return;
+    pid = null;
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", finish);
+    window.removeEventListener("pointercancel", finish);
+    if (!dragging) return;
+    dragging = false;
+    api.endDrag(panel.key, el, e ? e.clientX : 0, e ? e.clientY : 0);
+  };
 
   bar.addEventListener("pointerdown", (e) => {
     if (e.target.closest(".wb-grip-menu, .wb-grip-panel")) return;
@@ -205,30 +245,14 @@ function wireDrag(el, bar, panel, api) {
     startX = e.clientX; startY = e.clientY;
     const r = el.getBoundingClientRect();
     offX = e.clientX - r.left; offY = e.clientY - r.top;
-    bar.setPointerCapture(pid);
+    // Listeners are added per drag and removed in finish(), so a page with four
+    // panels does not carry twelve idle window listeners around.
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", finish);
+    // A cancelled pointer -- the OS taking over, a touch turning into a scroll --
+    // must not leave a panel stuck mid-drag with the drop zones still lit.
+    window.addEventListener("pointercancel", finish);
   });
-
-  bar.addEventListener("pointermove", (e) => {
-    if (pid === null || e.pointerId !== pid) return;
-    // A 5px threshold, so a click on the grip is not read as a drag. Below it
-    // nothing has happened yet and the panel has not moved.
-    if (!dragging && Math.hypot(e.clientX - startX, e.clientY - startY) < 5) return;
-    if (!dragging) { dragging = true; api.beginDrag(panel.key, el); }
-    api.dragTo(el, e.clientX - offX, e.clientY - offY, e.clientX, e.clientY);
-  });
-
-  const finish = (e) => {
-    if (pid === null || (e && e.pointerId !== pid)) return;
-    try { bar.releasePointerCapture(pid); } catch { /* already released */ }
-    pid = null;
-    if (!dragging) return;
-    dragging = false;
-    api.endDrag(panel.key, el, e ? e.clientX : 0, e ? e.clientY : 0);
-  };
-  bar.addEventListener("pointerup", finish);
-  // A cancelled pointer -- the OS taking over, a touch turning into a scroll --
-  // must not leave a panel stuck mid-drag with the drop zones still lit.
-  bar.addEventListener("pointercancel", finish);
 }
 
 /* ----------------------------------------------------------------- public -- */
@@ -379,8 +403,21 @@ export function createWorkbench(doc = document) {
   doc.addEventListener("click", (e) => {
     if (!e.target.closest(".wb-grip")) api.closeAllGrips();
   });
-  doc.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") api.closeAllGrips();
+  // Registered rather than listened for directly: two independent Escape
+  // handlers meant the top bar's ran first, stopped the event, and a grip menu
+  // open at the same time simply stayed open. The stack asks the most recently
+  // opened layer first and stops after exactly one dismissal.
+  registerDismisser(() => {
+    let closed = false;
+    for (const { el } of registry.values()) {
+      const p = el.querySelector(".wb-grip-panel");
+      if (p && !p.hidden) { closed = true; }
+    }
+    if (!closed) return false;
+    api.closeAllGrips();
+    // Focus goes back to the control that opened the menu, not to the document.
+    for (const { el } of registry.values()) el.querySelector(".wb-grip-menu")?.blur?.();
+    return true;
   });
   // A window that shrinks can strand a float off-screen; re-clamp rather than
   // leave a panel the visitor cannot grab.

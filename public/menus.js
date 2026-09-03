@@ -29,6 +29,49 @@
  * Escape to close and return focus to the trigger.
  */
 
+/**
+ * ONE Escape, ONE dismissal, and everybody else still gets a turn.
+ *
+ * The first version of this file listened for Escape on document in the CAPTURE
+ * phase and called stopPropagation whenever a menu was open. That does far more
+ * than the comment claimed: capture runs before every bubble listener, so while
+ * any menu was open Escape stopped exiting Tour, stopped closing the command
+ * palette, stopped dismissing modals, and stopped closing the workbench grip
+ * menus. A blind audit measured it -- two popups open, one Escape, only one
+ * closed, and the other four consumers never heard the key at all.
+ *
+ * So layers register here instead. Escape closes the topmost open layer and
+ * only then stops the event; when nothing of ours is open the key travels on
+ * untouched and Tour, the palette and the modals behave exactly as they did.
+ */
+const dismissers = [];
+
+/** register(fn) -> fn() returns true if it had something open and closed it. */
+export function registerDismisser(fn) {
+  dismissers.push(fn);
+  return () => {
+    const i = dismissers.indexOf(fn);
+    if (i >= 0) dismissers.splice(i, 1);
+  };
+}
+
+let escapeBound = false;
+function bindEscapeOnce(doc) {
+  if (escapeBound) return;
+  escapeBound = true;
+  doc.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    // Last registered is the most recently opened layer, so it is asked first.
+    for (let i = dismissers.length - 1; i >= 0; i--) {
+      if (dismissers[i]()) {
+        e.stopPropagation();
+        return;
+      }
+    }
+    // Nothing of ours was open. Do NOT swallow it.
+  }, true);
+}
+
 /** Items that are settings, not destinations. These leave the menu open. */
 const KEEP_OPEN = new Set([
   "tod-day", "tod-dusk", "tod-night",
@@ -141,14 +184,14 @@ export function createMenus(doc = document) {
     if (!e.target.closest(".menu[data-menu]")) { cancelSwitch(); closeAll(); }
   });
 
-  doc.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
+  bindEscapeOnce(doc);
+  registerDismisser(() => {
     const open_ = menus.filter(isOpen);
-    if (!open_.length) return;
-    e.stopPropagation(); // do not also dismiss a modal behind the bar
+    if (!open_.length) return false;
     cancelSwitch();
     for (const m of open_) { close(m); trigOf(m).focus(); }
-  }, true);
+    return true;
+  });
 
   window.addEventListener("resize", () => { for (const m of menus) if (isOpen(m)) reflow(m); });
 
@@ -162,7 +205,7 @@ export function createMenus(doc = document) {
  * Collapsed it keeps the identity, the palette key and the way back, because a
  * bar that hides its own reopener is a bar you have to reload to recover.
  */
-export function createCommandCentre(doc = document) {
+export function createCommandCentre(doc = document, menus = null) {
   const bar = doc.querySelector(".command-centre");
   const btn = doc.getElementById("cc-collapse");
   if (!bar || !btn) return { toggle() {} };
@@ -192,6 +235,11 @@ export function createCommandCentre(doc = document) {
     // Not while typing: the build box is a text input and H is a letter.
     const t = e.target;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    // Collapsing the bar hides the command menus with display:none, which left
+    // a panel "open" in the module's own bookkeeping and aria-expanded="true"
+    // on a trigger nobody could see. Close them first, so the state the module
+    // reports and the state on screen are the same one.
+    menus?.closeAll?.();
     toggle();
   });
 
