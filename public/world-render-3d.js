@@ -65,6 +65,27 @@ export const BUILDING_TYPE_SCALE = {
 export const GRID_UNIT_X = 6.0;
 export const GRID_UNIT_Z = 4.5;
 
+/**
+ * How far the camera should sit after focusing on something.
+ *
+ * Pulled out as a pure function on purpose. It used to be three lines inside
+ * focusAtScreen, which meant the only way to exercise it was through a browser
+ * -- and the browser check stubs the renderer, so a mutation that turned the
+ * zoom off entirely SURVIVED: the check was measuring the stub's arithmetic and
+ * calling it evidence about this file. A rule with no reachable test is a rule
+ * nothing is defending.
+ *
+ * Each focus multiplies the range by `factor`, so repeated focuses walk in
+ * geometrically -- roughly 0.45, 0.20, 0.09 of where you started. That is what
+ * lets a double-click take you from a 4 km overview to street level in a few
+ * presses without ever teleporting.
+ */
+export function focusDistance(current, { zoom = true, factor = 0.45, min = 4.0, max = 3600.0 } = {}) {
+  const now = Number.isFinite(current) && current > 0 ? current : 48;
+  if (!zoom) return Math.min(max, Math.max(min, now));
+  return Math.min(max, Math.max(min, now * factor));
+}
+
 export const CAMERA_MIN_DIST = 4.0;
 export const CAMERA_MAX_DIST = 3600.0;
 /** The village fits in 3.6 km. The city is 40 km across, so pulling back far
@@ -5910,8 +5931,104 @@ class Renderer3D {
     if (intersects.length > 0) {
       const hitPoint = intersects[0].point;
       this.setCenterPoint(hitPoint.x, hitPoint.y, hitPoint.z);
+      // The Alt-click path drew nothing, so the pivot moved invisibly and the
+      // camera appeared to swing for no reason. Same marker, same gesture.
+      this._showPivotMarker(hitPoint);
       this.playSuccessChime();
+      return true;
     }
+    return false;
+  }
+
+  /**
+   * Focus the camera on whatever is under a screen point, and SHOW where.
+   *
+   * Mark: "you should also be able to pick a point and make it the centre of
+   * focus so that you orbit around that point -- it is hard to navigate through
+   * the world."
+   *
+   * The machinery for this was already here and none of it was usable. Setting
+   * the pivot meant either Alt-clicking -- an undocumented modifier -- or
+   * pressing a button in a panel to enter a mode and then clicking, two steps
+   * for one intention. Neither drew anything, so you could not see what you were
+   * orbiting; and _setCenterFromPointer kept the camera at its current distance,
+   * so "focus" moved the centre without ever bringing you closer. Getting to
+   * street level meant scrolling in by hand afterwards.
+   *
+   * This is one gesture, it closes the distance, it marks the point, and when
+   * the ray hits nothing it SAYS SO instead of silently doing nothing -- the
+   * failure that makes a feature feel broken rather than missed.
+   *
+   * Returns { hit, point, dist }. Callers use hit to give feedback.
+   */
+  focusAtScreen(clientX, clientY, { zoom = true, factor = 0.45 } = {}) {
+    if (!this.canvas || !this.neighbourhoodGroup) return { hit: false, reason: "no scene" };
+    const rect = this.canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return { hit: false, reason: "no viewport" };
+    this._mouse.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this._raycaster.setFromCamera(this._mouse, this.camera);
+    // neighbourhoodGroup, not the whole scene: the ground, the harbours, the
+    // ocean, the beach and every building are in it, while the sky, the clouds
+    // and the starfield are not. Raycasting the scene lets a ray hit a cloud at
+    // y = 200 and focus the camera on thin air over the city.
+    const hits = this._raycaster.intersectObjects(this.neighbourhoodGroup.children, true);
+    if (!hits.length) return { hit: false, reason: "nothing under the pointer" };
+
+    const p = hits[0].point;
+    const current = this._camDist || 48;
+    const maxDist = this._cityMode ? CAMERA_MAX_DIST_CITY : CAMERA_MAX_DIST;
+    // Each focus closes the gap by a fixed proportion, so repeated double-clicks
+    // walk you down to street level instead of teleporting there -- you keep
+    // your bearings, which is the whole complaint.
+    const dist = focusDistance(current, { zoom, factor, min: CAMERA_MIN_DIST, max: maxDist });
+    this.focusOn(p, dist);
+    this._showPivotMarker(p);
+    this.playSuccessChime();
+    return { hit: true, point: { x: p.x, y: p.y, z: p.z }, dist };
+  }
+
+  /**
+   * A ring and a pin at the pivot.
+   *
+   * Scaled from the camera distance every frame, because a marker sized for a
+   * 4 km overview is invisible at 4 m and one sized for 4 m swallows the city
+   * from above. depthTest is off so it reads through a building you have just
+   * focused the far side of.
+   */
+  _showPivotMarker(p) {
+    if (!this._pivotMarker) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xb0560c, transparent: true, opacity: 0.92,
+        side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+      });
+      const g = new THREE.Group();
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 1.0, 36), mat);
+      ring.rotation.x = -Math.PI / 2;
+      const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6), mat);
+      pin.position.y = 1.3;
+      g.add(ring); g.add(pin);
+      g.renderOrder = 998;
+      this._pivotMarker = g;
+      this._pivotMarkerMat = mat;
+      this.scene.add(g);
+    }
+    this._pivotMarker.position.set(p.x, Math.max(0.05, p.y) + 0.04, p.z);
+    this._pivotMarker.visible = true;
+    this._updatePivotMarkerScale();
+  }
+
+  _updatePivotMarkerScale() {
+    if (!this._pivotMarker || !this._pivotMarker.visible) return;
+    // ~2% of the orbit distance keeps the ring a constant size on screen.
+    const s = Math.max(0.5, (this._camDist || 48) * 0.02);
+    this._pivotMarker.scale.setScalar(s);
+  }
+
+  hidePivotMarker() {
+    if (this._pivotMarker) this._pivotMarker.visible = false;
   }
 
   setCenterPoint(x, y, z) {
@@ -6776,6 +6893,11 @@ class Renderer3D {
       this._windmillSails.rotation.z += 0.75 * deltaSec;
     }
 
+    // The pivot ring is sized from the camera distance, so it has to be
+    // resized whenever that distance changes -- which includes scroll-zoom and
+    // pinch, not only a focus animation.
+    this._updatePivotMarkerScale();
+
     // Camera interpolation
     if (this._cameraAnimStartTime > 0 && !this.reducedMotion) {
       const elapsed = performance.now() - this._cameraAnimStartTime;
@@ -7489,6 +7611,14 @@ export class WorldRenderer {
 
   setCenterPoint(x, y, z) {
     if (this._impl.setCenterPoint) this._impl.setCenterPoint(x, y, z);
+  }
+  /** { hit, point, dist } -- see the implementation. hit:false is a real answer. */
+  focusAtScreen(clientX, clientY, opts) {
+    if (!this._impl.focusAtScreen) return { hit: false, reason: "not supported here" };
+    return this._impl.focusAtScreen(clientX, clientY, opts);
+  }
+  hidePivotMarker() {
+    if (this._impl.hidePivotMarker) this._impl.hidePivotMarker();
   }
 
   setNavigationMode(mode) {

@@ -1,0 +1,153 @@
+A command centre, rails you can move, and navigation you can actually use
+
+Mark, across four notes:
+
+  "let's go with a top bar and side bars... having the option to move them to
+   where you like -- side, top, bottom or floating free form would be next
+   level. On the drop downs make sure they are not made so that a slight
+   movement takes you away or kills the drop down."
+
+  "it's just very boring looking and far too small in the frame -- the top bar
+   that is. Something more of a command center that you can hide would be
+   better."
+
+  "make the navigation button nicer looking and better functioning with more
+   controls and more advanced abilities -- it doesn't need the entire box
+   around it."
+
+  "you should also be able to pick a point and make it the centre of focus so
+   that you orbit around that point, as it is hard to navigate through the
+   world. You can even get down to street level."
+
+THE COMMAND CENTRE
+
+Full width, four zones: identity, five command menus, a live telemetry column,
+and a collapse. Chevron or H, and the choice is remembered. Collapsed it keeps
+the wordmark, the palette key and its own reopener -- a bar that hides the
+control that brings it back is a bar you reload to recover.
+
+Every control is the ORIGINAL element, moved. The page binds ~29 listeners by id
+from an inline module, so a re-created button is a dead button. The header was
+assembled by extracting each control's exact markup and asserting the id set is
+identical before and after: 40 in, 40 out.
+
+THE RAILS -- stacking by layout, not by arithmetic
+
+Every panel used to be pinned by hand, and the ones that shared a corner cleared
+each other by reading measured custom properties: .status-card offset itself by
+--dock-h, the welcome card by --topbar-bottom, both republished by a
+ResizeObserver. That is stacking done with arithmetic. Each new panel adds
+another variable and another calc() kept in sync by hand, and the failure mode
+is silent -- panels overlap and nothing says so.
+
+A rail is a flex column. It stacks its children and there is no number to keep in
+sync. Panels dock left, right, top or bottom, or tear off and float anywhere;
+drag the grip, or use its menu if a drag is not available. The layout is saved,
+a corrupt saved layout falls back to the defaults instead of breaking the page,
+and there is a reset.
+
+THE MENUS
+
+Click to open. NOTHING about pointer movement closes them -- not leaving the
+trigger, not crossing the gap, not wandering to the far corner. The 9px gap above
+each panel is bridged by a hit area, because dead space between a trigger and its
+panel is where hover menus go to die. Sliding along the bar switches menus, but
+only after 110ms of intent, so a pointer merely crossing does not flip through
+every one. And an item that changes a VIEW SETTING -- Day, Dusk, Night, 2D, 3D,
+roof, grid, audio -- leaves the menu open, because you are comparing.
+
+NAVIGATION -- the box removed, the numbers added
+
+No panel background, no border, no blur. Each control keeps its own small
+surface. Added: a live readout of heading with compass point, pitch, and orbit
+range in the world's own units; a north-up button; a logarithmic range slider
+that tracks the camera rather than lying about it; and a marker clear.
+
+The readout is the "more advanced" part and it is the fix for "hard to
+navigate": you could not tell which way you faced or how far out you were, so
+every correction was a guess, and a guess in a 26 km world is a minute of
+scrolling.
+
+PICK A POINT AND ORBIT IT
+
+Double-click anything. The machinery for this was already here and none of it
+was usable:
+
+  * Setting the pivot was Alt-click -- an undocumented modifier -- or a button
+    that put you in a mode so a LATER click would count. Two steps for one
+    intention.
+  * Neither drew anything, so you could not see what you were orbiting.
+  * When the ray hit nothing, nothing happened and nothing said why, which is
+    indistinguishable from a broken feature.
+  * setCenterPoint kept the camera at its current distance, so "focus on that"
+    left you exactly as far away as before. Street level was a separate manual
+    scroll.
+
+Now: one gesture, a drawn pivot ring scaled to the orbit range, an explicit
+"nothing there to focus on" when the ray misses, and each focus multiplies the
+range by 0.45 -- so double-clicking walks you in geometrically, 4000 m to 7 m in
+eight presses, without a teleport. F does the same from the keyboard. Alt-click
+still works and now draws the marker too.
+
+TWO BUGS THAT WOULD HAVE SHIPPED, BOTH INVISIBLE IN A SCREENSHOT
+
+`inset: auto !important` on .wb-float is shorthand for all four offsets, and an
+!important declaration beats a plain inline style -- so the top and left the drag
+writes to el.style were silently discarded. EVERY FLOATING PANEL SAT AT 0,0,
+underneath the command centre, unreachable. It photographs perfectly.
+
+And .top-bar-wrapper's z-index:50 opened a stacking context, so a menu panel's
+z-index:210 was ranked only against its siblings inside the bar. The panels
+opened, reported themselves visible, had real bounding boxes -- and were painted
+under the intro card, which ate every click.
+
+VERIFIED BY DRIVING THE REAL PAGE
+
+scripts/check-topbar.mjs now runs ~60 assertions in a real browser: every control
+reachable, menus open/close/Escape/exclusive/outside-click, the WANDERING POINTER
+case, settings items staying open, docking to all five regions, the layout
+surviving a reload, a corrupt layout falling back, the collapse, the nav panel
+drawing no box, the readout printing real bearings, double-click focusing, and a
+miss saying so.
+
+Mutations, each confirmed as landed before its result was read:
+
+  exclusivity removed                  -> caught
+  outside-click listener removed       -> caught
+  Escape handler removed               -> caught
+  z-index put back to 50               -> caught
+  a control deleted from the bar       -> caught
+  double-click no longer focuses       -> caught
+  a miss goes silent again             -> caught
+  north-up does nothing                -> caught
+  the box comes back round the nav pad -> caught
+  the readout stops updating           -> caught
+
+AND ONE SURVIVED, WHICH IS THE MOST USEFUL RESULT HERE
+
+Turning the focus zoom off entirely left the browser check GREEN. It could never
+have failed: the harness stubs the renderer, so the assertion was reading the
+stub's own arithmetic back and calling it evidence about world-render-3d.js.
+
+The rule is now a pure exported function, focusDistance(), and
+test/focusDistance.test.ts defends it in the node suite where nothing is stubbed
+-- including the paired case that zoom:false genuinely leaves the range alone,
+and that a NaN or undefined range falls back rather than poisoning the camera.
+Four mutations against it, four caught.
+
+The browser assertion that was lying has been replaced with one that says only
+what this harness can honestly testify to: that the double-click reached the
+canvas and the renderer was asked.
+
+590/590 node tests, tsc --noEmit clean, top-bar check green.
+
+NOT DONE
+
+  * The build panel's input still crowds its button at rail width.
+  * scripts/_shoot-ui.mjs, _geom.mjs and _open.mjs are scratch harnesses. The
+    sandbox cannot move them; copies are in _TO-DELETE/scratch-ui-scripts-
+    2026-09-02/ and the originals need moving from Mark's terminal. Nothing was
+    deleted.
+  * The pivot ring and the focus animation have not been seen in a real frame --
+    only through the stub. That needs scripts/shoot.mjs and the real renderer,
+    and it has not been run.
