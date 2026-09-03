@@ -169,6 +169,29 @@ export const ASSET_REGISTRY = [
   { id: "bld-workshop", category: "buildings", status: "generator", source: "code", seenAs: "mid", count: 350, generator: "bldWorkshop(seed)", note: "Light industrial 1-2 storey workshop: yard wall, industrial exhaust flue, roller door" },
   { id: "bld-apartment-walkup", category: "buildings", status: "generator", source: "code", seenAs: "far", count: 600, generator: "bldApartmentWalkup(seed)", note: "Multi-family 3-4 storey walkup: central/dual stair cores, exterior balconies, garden terraces" },
 
+
+  // --- SECTION 3: CIRCULATION JOINTS & BRIDGE KIT ---
+  { id: "road-intersection-4way", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 3200, generator: "intersection4Way(classNS, classEW)", note: "4-way intersection across all 6 road classes with kerb returns, tactile pads & zebra markings" },
+  { id: "road-intersection-3way", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 4800, generator: "intersection3Way(classMain, classBranch, bearing)", note: "3-way T-junction with continuous main carriageway and flared kerb radii" },
+  { id: "road-roundabout-modern", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 240, generator: "roundaboutModern(lanes, roadClass, arms)", note: "1-lane & 2-lane circular junctions with truck apron and splitter islands" },
+  { id: "road-ramp-diverge", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 180, generator: "rampDiverge(freewayClass, side)", note: "Freeway off-ramp diverge taper with painted chevron gore island" },
+  { id: "road-slip-lane", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 320, generator: "slipLane(mainClass, crossClass)", note: "Channelized corner right-turn bypass with triangular refuge island" },
+  { id: "road-turning-pocket", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 650, generator: "turningPocket(roadClass, side)", note: "Median-recessed protected turning pocket" },
+  { id: "road-median-break", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 400, generator: "medianBreak(roadClass)", note: "Median crossover opening for U-turns and emergency access" },
+  { id: "road-bus-bay", category: "roads", status: "generator", source: "code", seenAs: "close", count: 750, generator: "busBay(roadClass)", note: "Indented curbside bus pull-in bay with transit shelter footprint" },
+  { id: "road-layby", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 180, generator: "layby(roadClass)", note: "Highway emergency layby / rest stop shoulder widening" },
+  { id: "road-crossing-signalised", category: "roads", status: "generator", source: "code", seenAs: "close", count: 1200, generator: "crossing('signalised', roadClass)", note: "Pedestrian signal mast crossing with push buttons and zebra ladder" },
+  { id: "road-crossing-zebra", category: "roads", status: "generator", source: "code", seenAs: "close", count: 2800, generator: "crossing('zebra', roadClass)", note: "Zebra crossing with Belisha beacons and tactile paving ramps" },
+  { id: "road-crossing-raised-table", category: "roads", status: "generator", source: "code", seenAs: "close", count: 950, generator: "crossing('raised-table', roadClass)", note: "Raised speed table plateau with ramped shark-teeth markings" },
+  { id: "road-crossing-refuge", category: "roads", status: "generator", source: "code", seenAs: "close", count: 1400, generator: "crossing('refuge-island', roadClass)", note: "Two-stage crossing with central refuge sanctuary and bollards" },
+  { id: "rail-switch", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 140, generator: "railSwitch(side)", note: "Railway turnout points switch with motor mechanism box" },
+  { id: "grade-separation-rail-over-road", category: "roads", status: "generator", source: "code", seenAs: "far", count: 85, generator: "gradeSeparation('rail-over-road', roadClass)", note: "Rail bridge spanning arterial road with 5.5m clearance" },
+  { id: "grade-separation-road-over-rail", category: "roads", status: "generator", source: "code", seenAs: "far", count: 65, generator: "gradeSeparation('road-over-rail', roadClass)", note: "Road overpass spanning railway corridor with 5.5m clearance" },
+  { id: "bridge-abutment", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 70, generator: "bridgeAbutment(roadClass, elevation)", note: "Reinforced concrete bank abutment with wing walls and bearing seats" },
+  { id: "bridge-pier", category: "roads", status: "generator", source: "code", seenAs: "far", count: 180, generator: "bridgePier(height, roadClass)", note: "Reinforced concrete pier column with crosshead cap" },
+  { id: "bridge-deck-span", category: "roads", status: "generator", source: "code", seenAs: "far", count: 250, generator: "bridgeDeckSpan(length, roadClass)", note: "Modular girder deck span in standard lengths (16, 32, 48, 64m)" },
+  { id: "bridge-approach-ramp", category: "roads", status: "generator", source: "code", seenAs: "far", count: 70, generator: "bridgeApproachRamp(elevation, roadClass)", note: "5% grade approach embankment ramp" },
+
 ];
 
 /**
