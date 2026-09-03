@@ -54,6 +54,14 @@
       "expect": "at the orbit Mark was flying"
     },
     {
+      "id": "beach-has-a-width",
+      "guards": "sand is bounded by distance from the coastline, not by height alone, so a slowly-rising shelf does not get painted as a 975 m sandbar",
+      "file": "public/terrain.js",
+      "find": "export const BEACH_FADE_M = 140;",
+      "replace": "export const BEACH_FADE_M = 140000;",
+      "expect": "the thresholds are BUILT metres"
+    },
+    {
       "id": "bloom-is-shared-not-copied",
       "guards": "both pages bloom the same world the same way, because the renderer uses the shared BLOOM object rather than a copy of its values",
       "note": "Mutating to an equal-valued literal, not a different one: the point is that a COPY is the defect, even when the numbers happen to match today. That is precisely how the two pages drifted apart in the first place.",

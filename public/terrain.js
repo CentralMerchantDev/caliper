@@ -253,6 +253,51 @@ function shoreRampAt(x, z) {
 const SHORE_RAMP = 105;      // the old single value, kept for reference
 
 // =============================================================================
+// A BEACH HAS A WIDTH, AND IT USED TO HAVE ONLY A HEIGHT
+//
+// The per-pixel shoreline decides sand from HEIGHT: a 3.8 m window from the tide
+// strip at -0.6 m to dune grass at +3.2 m. On a steep shore that window is
+// crossed in twenty metres and the result reads as a beach. Where the land rises
+// slowly it does not, and the same rule paints sand until the ground finally
+// gets there.
+//
+// Mark, on the deployed build: "on the front edge of the main island there is a
+// weird sand bar ... it just isn't done well."
+//
+// MEASURED before this was written, and it nearly was not written at all: three
+// transects across the front shelf came back at 75 m and 0 m, which is an
+// ordinary beach, and the diagnosis looked wrong. A full scan of the modelled
+// area then found an unbroken 975 m band in the height window at (6250, -1175).
+// The spot checks had simply missed it. Worth remembering: a sample that agrees
+// with you is not a measurement.
+//
+// Real beach width is set by wave run-up and tide range -- tens of metres, not
+// hundreds -- and has nothing to do with how slowly the land behind it happens
+// to rise. So sand is bounded by DISTANCE FROM THE COASTLINE as well as height.
+//
+// These are BUILT METRES and do not scale: 70 m of dry sand is a generous
+// seaside beach in any size of world.
+export const BEACH_FULL_M = 70;    // full sand out to here
+export const BEACH_FADE_M = 140;   // certainly something else by here
+
+/**
+ * How much sand belongs at a point this far from the coastline: 1 on the beach,
+ * 0 inland, and a ramp between so a genuinely widening shore does not stop at a
+ * drawn line.
+ *
+ * Takes a distance rather than a coordinate on purpose -- it is a policy about
+ * beaches, not a query about this world, so it can be tested without building
+ * one. Callers pass built metres.
+ */
+export function beachWeight(distanceFromCoastM) {
+  const d = Math.abs(distanceFromCoastM);
+  if (!(d >= 0)) return 0;                       // NaN and nonsense are not beach
+  if (d <= BEACH_FULL_M) return 1;
+  if (d >= BEACH_FADE_M) return 0;
+  return 1 - (d - BEACH_FULL_M) / (BEACH_FADE_M - BEACH_FULL_M);
+}
+
+// =============================================================================
 // LAND FIELD
 //
 // Answering "how far is this point from the nearest shore, and is it inland?"

@@ -31,7 +31,7 @@ import {
   WORLD, ROADS, BRIDGES, MARINA, PIER, BOARDWALK, PLOT_CLASSES,
   generateWorld, generateCityPlan, landmassPolygons, offsetPolygon,
 } from "./city-plan.js";
-import { LandField, makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, GROUND_BANDS, WATERWAYS, waterwaySurface , waterwayAt } from "./terrain.js";
+import { LandField, makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, GROUND_BANDS, WATERWAYS, waterwaySurface , waterwayAt, beachWeight } from "./terrain.js";
 import { assessFootprint } from "./footprint.js";
 import { propFootprint } from "./prop-manifest.js";
 // The join to the asset lane's model library. prop-manifest decides what a prop
@@ -41,7 +41,7 @@ import { propFootprint } from "./prop-manifest.js";
 import { propGeometry } from "./prop-models.js";
 // `sm` is already used as a local variable in this file (a THREE.Mesh), so the
 // world-scale helper is imported under a name that cannot be shadowed.
-import { sm as wm } from "./world-scale.js";
+import { sm as wm, toDesign } from "./world-scale.js";
 import { placeFeatures, FEATURES } from "./features.js";
 import { gradeRun, GRADE, ROAD_GRADE, RAIL_ALIGNMENT } from "./grade.js";
 import { createCollector, emitBuilding, HEIGHT, rnd } from "./buildings.js";
@@ -517,13 +517,6 @@ function half(h) {
   // world closes itself instead of being closed for it.
   const BEDROCK_Y = -175;
 
-  // How far inland sand is allowed to reach. Built metres, scaled once, because
-  // a beach is a real width in the world and not a fraction of it: 70 m of dry
-  // sand is a generous seaside beach anywhere on earth, and 140 m is where it
-  // has certainly become something else. Between the two it fades, so a shore
-  // that genuinely widens does not end at a drawn line.
-  const BEACH_FULL_M = wm(70);
-  const BEACH_FADE_M = wm(140);
 
   /**
    * What you see in a cut face, by depth below the local surface.
@@ -832,10 +825,17 @@ varying vec3 vSeaWorld;`)
       // field.signed() already returns distance to the coastline (heightAt uses
       // it for the shore ramp), so the bound costs one call already being made
       // elsewhere and needs no new data.
-      const dCoast = Math.abs(field.signed(x, z).d);
-      const beachW = dCoast <= BEACH_FULL_M ? 1
-        : dCoast >= BEACH_FADE_M ? 0
-        : 1 - (dCoast - BEACH_FULL_M) / (BEACH_FADE_M - BEACH_FULL_M);
+      //
+      // beachWeight lives in terrain.js with the rest of the shore rules, and it
+      // takes a DISTANCE rather than a coordinate so it can be tested without
+      // building a world -- see test/beachWidth.test.ts. It was inline here
+      // first, which meant the only way to check it was to render.
+      //
+      // toDesign(), because beachWeight's thresholds are BUILT metres -- 70 m of
+      // sand is 70 m of sand in any size of world -- while field.signed returns
+      // world metres. Converting the distance is the same direction the manifest
+      // props already go and keeps one set of numbers rather than two.
+      const beachW = beachWeight(toDesign(Math.abs(field.signed(x, z).d)));
       shoreOK[k] = (1 - cliffAmt) * (s ? 0 : 1) * beachW;
       // Two scales of variation. One fine (soil, mown grass, scrub) and one
       // broad, so a ten-kilometre hillside is not one flat green: real land
