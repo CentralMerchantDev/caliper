@@ -17,7 +17,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231E293B'/%3E%3Ctext x='50' y='68' font-family='monospace' font-size='52' font-weight='700' fill='%2338BDF8' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
 <script type="importmap">
 {
   "imports": {
@@ -28,28 +28,52 @@
 </script>
 <style>
 :root {
-  --bg-deep: #0b0f19;
-  /* 0.82 -> 0.92. Computed over the live canvas, not on paper: the panels are
-     backdrop-blurred glass floating over a 3D sky whose day colours are
-     #38bdf8 and #bae6fd. Composited against the horizon band, --text-muted
-     (#94a3b8) landed at 4.36:1 -- below AA -- and that colour carries the
-     status pill, the clock and the run-record line, at 11px, over exactly the
-     part of the sky the default camera frames. At 0.92 the worst case (a pure
-     white backdrop, harsher than any real sky) is 5.60:1. Still reads as glass. */
-  --panel-bg: rgba(15, 23, 42, 0.92);
-  --panel-border: rgba(255, 255, 255, 0.16);
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --accent: #f59e0b;
-  --accent-glow: rgba(245, 158, 11, 0.35);
-  --emerald: #10b981;
-  --emerald-glow: rgba(16, 185, 129, 0.3);
-  --sky: #38bdf8;
+  /* ---------------------------------------------------------------------
+     THE DATUM PALETTE.
+     
+     Taken from datum's src/ui/index.html rather than approximated, because it
+     is a considered scheme and its own comments carry the measured contrast
+     ratios -- #93826B was replaced there with #6E5E49 for failing WCAG AA at
+     body size, and copying the "nicer" earlier value would have imported a
+     defect somebody had already found and fixed.
+
+     Warm paper and ink instead of slate and amber. The panels sit over a 3D
+     world, so `--card` is used at high opacity rather than as a tint: a
+     translucent light panel over a bright sky is unreadable, which is the one
+     way this palette can go wrong here and does not go wrong in DATUM, where
+     there is no scene behind it.
+     --------------------------------------------------------------------- */
+  --paper: #FAF6EE;
+  --card: #FEFCF6;
+  --ink: #2A201A;
+  --ink2: #5C4B39;
+  --muted: #6E5E49;          /* measured ~5.1:1 on paper, ~5.3:1 on card */
+  --line: rgba(42, 32, 26, 0.16);
+  --line2: rgba(42, 32, 26, 0.08);
+  --line-strong: rgba(42, 32, 26, 0.42);   /* anything outlining a real control */
+  --accent: #B0560C;
+  --accent-soft: #F6E4CF;
+  --sel: rgba(176, 86, 12, 0.09);
+
+  /* The existing names, repointed. Every rule in this file already reads these,
+     so the palette changes in one place rather than in 97 literals -- and the
+     literals that remain are now the ones worth finding. */
+  --bg-deep: #E6E2DA;
+  --panel-bg: rgba(254, 252, 246, 0.955);
+  --panel-border: rgba(42, 32, 26, 0.20);
+  --text-main: #2A201A;
+  --text-muted: #6E5E49;
+  --accent-glow: rgba(176, 86, 12, 0.28);
+  --emerald: #2F6F4F;
+  --emerald-glow: rgba(47, 111, 79, 0.22);
+  --sky: #2C5C7A;
+
   --mono: 'IBM Plex Mono', ui-monospace, monospace;
-  --sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --radius-lg: 16px;
+  --sans: 'Source Serif 4', 'Iowan Old Style', Palatino, Georgia, serif;
+  --radius-lg: 14px;
   --radius-md: 10px;
   --radius-sm: 6px;
+  --sh: 0 1px 2px rgba(42,32,26,.05), 0 10px 28px -14px rgba(42,32,26,.24);
 }
 
 * { box-sizing: border-box; }
@@ -86,7 +110,7 @@ html, body {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--panel-border);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--sh);
 }
 
 .mono { font-family: var(--mono); }
@@ -97,7 +121,13 @@ html, body {
   top: 14px;
   left: 16px;
   right: 16px;
-  z-index: 50;
+  /* 50 -> 70, and the menus are the reason. z-index:50 on a positioned element
+     opens a STACKING CONTEXT, so a menu panel's z-index:210 is ranked only
+     against its siblings inside the bar -- it cannot climb past the overview
+     card at 65. The panels opened, reported themselves visible, and were
+     painted underneath the card, which then swallowed every click. Above the
+     card, below the modals at 200 and the grid badge at 190. */
+  z-index: 70;
   pointer-events: none;
   display: flex;
   justify-content: space-between;
@@ -119,7 +149,7 @@ html, body {
   font-weight: 800;
   font-size: 14px;
   letter-spacing: -0.01em;
-  color: #fff;
+  color: var(--ink);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -162,8 +192,8 @@ html, body {
 
 /* Button & Pill Styles */
 .btn-pill {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--sel);
+  border: 1px solid var(--line);
   color: var(--text-main);
   font-size: 12px;
   font-weight: 600;
@@ -179,18 +209,24 @@ html, body {
 }
 .btn-pill:hover {
   background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.3);
+  border-color: var(--line-strong);
   transform: translateY(-1px);
 }
+/* An active pill was UNREADABLE, and not by a little: --accent-soft (#F6E4CF)
+   on the amber tint measures 1.03:1, and #6ee7b7 on the emerald tint 1.21:1.
+   Both were chosen for a dark background and kept when the surface went to
+   paper. Measured, not eyeballed: 6.01:1 and 4.76:1 now, AA at these sizes. */
 .btn-pill.active, .btn-pill[aria-pressed="true"] {
   background: rgba(245, 158, 11, 0.22);
   border-color: var(--accent);
-  color: #fef08a;
+  color: #8A4309;
+  font-weight: 650;
 }
 .btn-pill.active-emerald {
   background: rgba(16, 185, 129, 0.22);
   border-color: var(--emerald);
-  color: #6ee7b7;
+  color: var(--emerald);
+  font-weight: 650;
 }
 
 .btn-group {
@@ -200,7 +236,7 @@ html, body {
   border: 1px solid var(--panel-border);
 }
 .btn-group button {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--line2);
   border: none;
   border-right: 1px solid var(--panel-border);
   color: var(--text-muted);
@@ -212,10 +248,10 @@ html, body {
   transition: all 0.15s ease;
 }
 .btn-group button:last-child { border-right: none; }
-.btn-group button:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+.btn-group button:hover { background: var(--line); color: var(--ink); }
 .btn-group button.active, .btn-group button[aria-pressed="true"] {
   background: var(--sky);
-  color: #0f172a;
+  color: var(--panel-bg);
   font-weight: 700;
 }
 
@@ -241,7 +277,7 @@ html, body {
               background 0.25s cubic-bezier(0.16, 1, 0.3, 1),
               border-radius 0.25s cubic-bezier(0.16, 1, 0.3, 1),
               padding 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
+  box-shadow: 0 12px 36px rgba(42, 32, 26, 0.18);
 }
 
 /* THE NAV PAD COLLAPSES, THE SAME WAY THE DOCK DOES.
@@ -314,8 +350,8 @@ html, body {
 }
 .scope-pill {
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
+  border: 1px solid var(--line2);
+  color: var(--ink2);
   font-size: 11.5px;
   padding: 4px 10px;
   border-radius: var(--radius-sm);
@@ -323,9 +359,9 @@ html, body {
   transition: all 0.15s ease;
 }
 .scope-pill:hover {
-  background: rgba(56, 189, 248, 0.18);
+  background: var(--line2);
   border-color: var(--sky);
-  color: #fff;
+  color: var(--ink);
   transform: translateY(-1px);
 }
 
@@ -337,9 +373,9 @@ html, body {
 .dock-input {
   flex: 1;
   background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--line);
   border-radius: 12px;
-  color: #fff;
+  color: var(--ink);
   font-size: 14px;
   font-family: inherit;
   padding: 10px 14px;
@@ -351,18 +387,18 @@ html, body {
 }
 .dock-input:focus {
   border-color: var(--sky);
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+  box-shadow: 0 0 12px var(--line);
 }
 .dock-input::placeholder {
   /* was #64748b, ~3.6:1 on this background -- and this placeholder is the only
      instruction telling a visitor what to type */
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .btn-build {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #0f172a;
+  background: linear-gradient(135deg, var(--accent), #d97706);
+  border: 1px solid var(--line-strong);
+  color: var(--panel-bg);
   font-size: 14px;
   font-weight: 800;
   padding: 10px 22px;
@@ -403,7 +439,7 @@ html, body {
   overflow-y: auto;
   display: none;
   animation: fadeIn 0.2s ease-out;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
+  box-shadow: 0 12px 36px rgba(42, 32, 26, 0.18);
 }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-8px); }
@@ -442,7 +478,7 @@ html, body {
   overflow-y: auto;
   overscroll-behavior: contain;
   font-size: 13.5px;
-  color: #cbd5e1;
+  color: var(--ink2);
   line-height: 1.45;
   margin-top: 8px;
 }
@@ -453,7 +489,7 @@ html, body {
 }
 .stage.active { border-left-color: var(--sky); }
 .stage.error { border-left-color: #ef4444; background: rgba(239, 68, 68, 0.12); border-radius: 0 8px 8px 0; padding: 8px 12px; }
-.stage h4 { margin: 0 0 4px; font-size: 12.5px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.05em; color: #fff; }
+.stage h4 { margin: 0 0 4px; font-size: 12.5px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink); }
 
 /* Decision Gates in Dock */
 .gate-container {
@@ -463,7 +499,7 @@ html, body {
   border: 1px solid var(--accent);
   border-radius: 10px;
 }
-.gate-title { font-weight: 700; color: #fef08a; font-size: 13px; margin: 0 0 6px; }
+.gate-title { font-weight: 700; color: var(--accent-soft); font-size: 13px; margin: 0 0 6px; }
 .gate-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 
 /* Inspection Card */
@@ -502,7 +538,7 @@ body.inspecting-mobile #nav-compass-pad {
   font-size: 16px;
   cursor: pointer;
 }
-.inspect-close:hover { color: #fff; }
+.inspect-close:hover { color: var(--ink); }
 
 /* Cinematic Letterbox */
 .letterbox-bar {
@@ -584,8 +620,8 @@ body.inspecting-mobile #nav-compass-pad {
   padding: 16px 20px;
   border-radius: 16px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(56, 189, 248, 0.35);
-  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid var(--line-strong);
+  background: var(--panel-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   /* NOT `transition: all`.
@@ -613,7 +649,7 @@ body.inspecting-mobile #nav-compass-pad {
 }
 .welcome-step-item {
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--sel);
   padding: 8px 12px;
   border-radius: 10px;
 }
@@ -633,10 +669,10 @@ body.inspecting-mobile #nav-compass-pad {
   align-items: center;
   gap: 5px;
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55);
-  background: rgba(15, 23, 42, 0.88);
+  background: var(--panel-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--line);
   user-select: none;
 }
 .nav-pad-title {
@@ -657,14 +693,14 @@ body.inspecting-mobile #nav-compass-pad {
   width: 100%;
   margin-bottom: 4px;
   padding-bottom: 5px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--line2);
 }
 .nav-mode-btn {
   flex: 1;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--sel);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
   padding: 4px 6px;
@@ -676,19 +712,19 @@ body.inspecting-mobile #nav-compass-pad {
   gap: 3px;
 }
 .nav-mode-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
+  background: var(--line);
+  color: var(--ink);
 }
 .nav-mode-btn.active {
   background: var(--sky);
-  color: #0f172a;
+  color: var(--panel-bg);
   font-weight: 700;
   border-color: var(--sky);
 }
 .nav-pad-hint {
   font-size: 9px;
   line-height: 1.35;
-  color: #cbd5e1;
+  color: var(--ink2);
   margin: 2px 0 5px;
   max-width: 150px;
   text-align: center;
@@ -710,22 +746,22 @@ body.inspecting-mobile #nav-compass-pad {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #fff;
+  background: var(--sel);
+  border: 1px solid var(--line);
+  color: var(--ink);
   border-radius: 8px;
   cursor: pointer;
   font-size: 12px;
   transition: all 0.15s ease;
 }
 .nav-btn:hover {
-  background: rgba(56, 189, 248, 0.25);
+  background: var(--line);
   border-color: var(--sky);
   transform: scale(1.06);
 }
 .center-btn {
-  background: rgba(56, 189, 248, 0.15);
-  border-color: rgba(56, 189, 248, 0.3);
+  background: var(--line2);
+  border-color: var(--line);
 }
 .nav-zoom-row {
   display: flex;
@@ -747,23 +783,23 @@ body.inspecting-mobile #nav-compass-pad {
   height: 24px;
   font-size: 10px;
   padding: 0 4px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--line2);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
-  color: #cbd5e1;
+  color: var(--ink2);
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;
 }
 .nav-action-btn:hover {
-  background: rgba(56, 189, 248, 0.2);
+  background: var(--line);
   border-color: var(--sky);
-  color: #fff;
+  color: var(--ink);
 }
 .nav-action-btn.active {
-  background: rgba(56, 189, 248, 0.35);
+  background: var(--line-strong);
   border-color: var(--sky);
-  color: #fff;
+  color: var(--ink);
   font-weight: 700;
 }
 .street-hud {
@@ -775,15 +811,15 @@ body.inspecting-mobile #nav-compass-pad {
   top: calc(var(--topbar-bottom, 60px) + 12px);
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(15, 23, 42, 0.88);
+  background: var(--panel-bg);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(56, 189, 248, 0.4);
+  border: 1px solid var(--line-strong);
   border-radius: 12px;
   padding: 8px 16px;
   display: none;
   align-items: center;
   gap: 12px;
-  color: #fff;
+  color: var(--ink);
   z-index: 100;
   box-shadow: 0 8px 24px rgba(0,0,0,0.5);
 }
@@ -794,7 +830,7 @@ body.inspecting-mobile #nav-compass-pad {
 }
 .street-hud-keys {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 .street-hud-exit {
   background: rgba(239, 68, 68, 0.2);
@@ -807,7 +843,7 @@ body.inspecting-mobile #nav-compass-pad {
 }
 .street-hud-exit:hover {
   background: rgba(239, 68, 68, 0.4);
-  color: #fff;
+  color: var(--ink);
 }
 
 @media(max-width: 768px) {
@@ -1015,6 +1051,398 @@ body.inspecting-mobile #nav-compass-pad {
     touch-action: manipulation;
   }
 }
+
+
+/* ==========================================================================
+   THE COMMAND CENTRE, THE RAILS, AND THE MENUS
+   Mark: "a top bar and side bars... having the option to move them to where
+   you like -- side, top, bottom or floating free form would be next level",
+   and "far too small in the frame... something more of a command center that
+   you can hide would be better."
+   ========================================================================== */
+
+.top-bar-wrapper { display: block; left: 0; right: 0; top: 0; }
+
+.command-centre {
+  /* .top-bar-wrapper sets pointer-events:none so the world stays draggable
+     around the chrome. The old .top-bar-cluster restored it; this header is a
+     different element and inherited the none, so every command click fell
+     straight through to the canvas. */
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: minmax(190px, auto) 1fr minmax(180px, auto) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 16px 12px 20px;
+  border-radius: 0 0 18px 18px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--accent);   /* the frame reads as instrumentation */
+  background: var(--card);
+  box-shadow: 0 10px 30px rgba(42, 32, 26, 0.18);
+  transition: padding 160ms ease, grid-template-columns 160ms ease;
+}
+
+/* --- identity ------------------------------------------------------------ */
+.cc-identity { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.command-centre .brand-badge {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 25px; font-weight: 600; letter-spacing: 0.055em;
+  line-height: 1.05; color: var(--ink);
+}
+.cc-sub {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted); white-space: nowrap;
+}
+
+/* --- commands ------------------------------------------------------------ */
+.cc-commands { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cc-cmd {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 15px; border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13.5px; font-weight: 560; line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 90ms ease;
+}
+.cc-cmd:hover { background: var(--card); border-color: var(--accent); }
+.cc-cmd:active { transform: translateY(1px); }
+.cc-cmd-icon { font-size: 11px; color: var(--accent); opacity: .85; }
+.menu-caret { font-size: 9px; opacity: .5; margin-left: -2px; }
+.menu-trigger[aria-expanded="true"] {
+  background: var(--accent); border-color: var(--accent); color: var(--card);
+}
+.menu-trigger[aria-expanded="true"] .cc-cmd-icon,
+.menu-trigger[aria-expanded="true"] .menu-caret { color: var(--card); opacity: .95; }
+
+/* --- telemetry ----------------------------------------------------------- */
+.cc-telemetry {
+  display: flex; flex-direction: column; gap: 5px; align-items: flex-end;
+  padding-left: 16px; border-left: 1px solid var(--line);
+}
+.cc-tel-row { display: flex; align-items: center; gap: 7px; }
+
+/* --- collapse ------------------------------------------------------------ */
+.cc-collapse {
+  width: 30px; height: 30px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--paper); color: var(--muted);
+  font-size: 13px; line-height: 1;
+}
+.cc-collapse:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Collapsed: identity and the way back survive. A bar that hides its own
+   reopener is a bar you have to reload to recover. */
+.command-centre.is-collapsed { padding: 5px 12px 5px 20px; gap: 12px; }
+.command-centre.is-collapsed .cc-commands,
+.command-centre.is-collapsed .cc-sub,
+.command-centre.is-collapsed .cc-tel-row:first-child { display: none; }
+.command-centre.is-collapsed .brand-badge { font-size: 16px; }
+.command-centre.is-collapsed .cc-telemetry { border-left: 0; padding-left: 0; }
+
+@media (max-width: 900px) {
+  .command-centre { grid-template-columns: 1fr auto; gap: 10px; padding: 10px 12px; }
+  .cc-commands { grid-column: 1 / -1; order: 3; }
+  .cc-telemetry { border-left: 0; padding-left: 0; }
+  .cc-cmd { padding: 8px 12px; font-size: 12.5px; }
+}
+
+/* --- menu panels --------------------------------------------------------- */
+.menu { position: relative; display: inline-flex; }
+.menu-panel {
+  position: absolute; top: calc(100% + 9px); left: 0; z-index: 5;
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+  min-width: 226px; padding: 8px; border-radius: 13px;
+  background: var(--card); border: 1px solid var(--line);
+  box-shadow: 0 16px 40px rgba(42, 32, 26, 0.24);
+  pointer-events: auto;   /* .top-bar-wrapper sets none; this is not a .btn-pill */
+}
+.menu-panel.align-right { left: auto; right: 0; }
+.menu-panel[hidden] { display: none; }
+/* THE BRIDGE. The 9px gap above is dead space, and dead space between a trigger
+   and its panel is where hover menus go to die -- you travel diagonally toward
+   the third item, clip the gap, and the menu vanishes. This hit area spans it,
+   so the pointer never leaves the menu on the way in. */
+.menu-panel::before {
+  content: ""; position: absolute; left: 0; right: 0; top: -13px; height: 13px;
+}
+.menu-panel > button, .menu-panel > a {
+  justify-content: flex-start; text-align: left; width: 100%;
+  padding: 8px 11px; font-size: 12.5px;
+}
+.menu-panel .btn-group { display: flex; width: 100%; }
+.menu-panel .btn-group > button { flex: 1 1 0; }
+.menu-sep { height: 1px; background: var(--line); margin: 3px 0; }
+
+/* ==========================================================================
+   RAILS -- panels stack by LAYOUT, not by measured clearance arithmetic
+   ========================================================================== */
+/* 66, above the welcome card at 65. Docking a panel TOP puts it in the middle
+   of the frame, which is exactly where the intro card sits -- and the card was
+   drawing over it and eating its clicks. The card is content and dismissible;
+   the panels are the tools. Tools sit above. Still below the bar at 70. */
+.wb-layer { position: fixed; inset: 0; z-index: 66; pointer-events: none; }
+.wb-rail {
+  position: absolute; display: flex; gap: 12px; pointer-events: none;
+  --rail-top: calc(var(--topbar-bottom, 96px) + 12px);
+}
+.wb-rail-left, .wb-rail-right {
+  flex-direction: column; top: var(--rail-top); bottom: 14px;
+  width: min(330px, 30vw); overflow-y: auto; overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.wb-rail-left { left: 14px; } .wb-rail-right { right: 14px; align-items: stretch; }
+.wb-rail-top, .wb-rail-bottom {
+  flex-direction: row; left: 14px; right: 14px; justify-content: center;
+  align-items: flex-start; flex-wrap: wrap;
+}
+.wb-rail-top { top: var(--rail-top); } .wb-rail-bottom { bottom: 14px; align-items: flex-end; }
+.wb-rail:empty { display: none; }
+.wb-float-layer { position: absolute; inset: 0; pointer-events: none; }
+
+/* A docked panel surrenders its hand-placed position to the rail. */
+.wb-docked {
+  position: static !important;
+  inset: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  pointer-events: auto;
+  flex: 0 0 auto;
+}
+.wb-rail-top > .wb-docked, .wb-rail-bottom > .wb-docked { width: min(430px, 44vw) !important; }
+
+.wb-float {
+  position: fixed !important;
+  /* NOT `inset: auto !important`. inset is shorthand for all four offsets, and
+     an !important declaration beats a plain inline style -- so the top and left
+     the drag writes to el.style were silently discarded and every floating
+     panel sat at 0,0, underneath the command centre, unreachable. Only the two
+     offsets that must be neutralised are named. */
+  right: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+  z-index: 62;
+  width: min(360px, calc(100vw - 28px)) !important;
+  max-width: none !important;
+  pointer-events: auto;
+}
+.wb-float.is-dragging { opacity: .92; cursor: grabbing; box-shadow: 0 22px 52px rgba(42,32,26,.34); }
+
+/* --- grips --------------------------------------------------------------- */
+.wb-grip {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  margin: -2px -2px 8px; padding: 5px 6px 7px;
+  border-bottom: 1px solid var(--line);
+  cursor: grab; touch-action: none; user-select: none;
+}
+.wb-grip:active { cursor: grabbing; }
+.wb-grip-dots {
+  width: 14px; height: 10px; flex: 0 0 auto; opacity: .5;
+  background-image: radial-gradient(currentColor 1px, transparent 1.2px);
+  background-size: 4px 4px; color: var(--muted);
+}
+.wb-grip-label {
+  flex: 1 1 auto; min-width: 0;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9px; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wb-grip-menu {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 7px; cursor: pointer;
+  border: 1px solid transparent; background: transparent; color: var(--muted);
+  font-size: 14px; line-height: 1;
+}
+.wb-grip-menu:hover { border-color: var(--line); color: var(--ink); background: var(--paper); }
+.wb-grip-panel {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 8;
+  display: flex; flex-direction: column; gap: 2px; min-width: 156px; padding: 6px;
+  border-radius: 11px; background: var(--card); border: 1px solid var(--line);
+  box-shadow: 0 14px 34px rgba(42,32,26,.26);
+}
+.wb-grip-panel[hidden] { display: none; }
+.wb-grip-panel button {
+  text-align: left; padding: 7px 10px; border-radius: 7px; cursor: pointer;
+  border: 1px solid transparent; background: transparent; color: var(--ink);
+  font-size: 12px;
+}
+.wb-grip-panel button:hover { background: var(--paper); border-color: var(--line); }
+.wb-grip-panel button[aria-current="true"] { color: var(--accent); font-weight: 650; }
+.wb-grip-panel button[aria-current="true"]::after { content: " ✓"; }
+.wb-grip-quiet { margin-bottom: 2px; border-bottom: 0; padding-bottom: 2px; }
+/* A rail is narrower than the bottom-right corner these panels used to own, so
+   the build row has to be allowed to wrap instead of clipping its own input. */
+.wb-docked .dock-row, .wb-docked .dock-input-row { flex-wrap: wrap; }
+.wb-docked textarea, .wb-docked input[type="text"] { min-height: 62px; }
+.wb-grip-reset { margin-top: 3px; border-top: 1px solid var(--line) !important; border-radius: 0 0 7px 7px !important; color: var(--muted) !important; }
+
+/* --- drop zones, visible only while dragging ------------------------------ */
+.wb-zones { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
+.wb-zones.is-active { opacity: 1; }
+.wb-zone {
+  position: absolute; display: flex; align-items: center; justify-content: center;
+  border: 2px dashed var(--line); border-radius: 14px;
+  background: rgba(176, 86, 12, 0.05);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted);
+  transition: background 110ms ease, border-color 110ms ease, color 110ms ease;
+}
+.wb-zone.is-hot { background: rgba(176, 86, 12, 0.17); border-color: var(--accent); color: var(--accent); border-style: solid; }
+.wb-zone-left { left: 10px; top: 90px; bottom: 90px; width: 132px; }
+.wb-zone-right { right: 10px; top: 90px; bottom: 90px; width: 132px; }
+.wb-zone-top { left: 150px; right: 150px; top: 10px; height: 78px; }
+.wb-zone-bottom { left: 150px; right: 150px; bottom: 10px; height: 78px; }
+
+@media (max-width: 820px) {
+  .wb-rail-left, .wb-rail-right {
+    left: 10px; right: 10px; width: auto; top: auto;
+    bottom: 10px; max-height: 52vh; flex-direction: column;
+  }
+  .wb-rail-left { bottom: auto; top: calc(var(--topbar-bottom, 96px) + 10px); max-height: 34vh; }
+  .menu-panel { position: fixed; left: 10px; right: 10px; min-width: 0; }
+}
+
+/* ==========================================================================
+   NAVIGATION — no box, more control
+   Mark: "make the navigation button nicer looking and better functioning with
+   more controls and more advanced abilities, it doesn't need the entire box
+   around it."
+   ========================================================================== */
+
+/* The card is removed rather than restyled. .nav-pad's panel background, border
+   and blur are overridden to nothing; each control keeps its own small surface,
+   so the chrome is the buttons and not a frame around them. */
+.nav-pad.nav-bare {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  padding: 0 !important;
+  display: flex; flex-direction: column; gap: 7px; align-items: flex-start;
+}
+.nav-bare .nav-strip {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px; border-radius: 11px;
+  background: var(--card); border: 1px solid var(--line);
+  box-shadow: 0 4px 14px rgba(42, 32, 26, 0.14);
+}
+.nav-bare .nav-strip-modes button { padding: 6px 9px; font-size: 11.5px; }
+
+/* --- readout: heading, pitch, range ---------------------------------------
+   Navigating blind is most of why this was hard. These are live numbers, in
+   the world's own units, not decoration. */
+.nav-bare .nav-readout {
+  display: flex; align-items: stretch; gap: 1px;
+  border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--line); background: var(--card);
+  box-shadow: 0 4px 14px rgba(42, 32, 26, 0.14);
+}
+.nav-readout-cell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 52px; padding: 4px 7px; background: var(--paper);
+}
+.nav-readout-cell b {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px; font-weight: 600; color: var(--ink); line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.nav-readout-cell i {
+  font-style: normal; font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 7.5px; letter-spacing: .16em; color: var(--muted);
+}
+.nav-bare #nav-mode-indicator {
+  display: flex; align-items: center; padding: 0 9px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 9px !important; letter-spacing: .14em;
+  color: var(--accent) !important; background: var(--paper);
+}
+
+/* --- the dial ------------------------------------------------------------- */
+.nav-bare .nav-dial {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 7px; border-radius: 50%;
+  background: var(--card); border: 1px solid var(--line);
+  box-shadow: 0 5px 18px rgba(42, 32, 26, 0.16);
+}
+.nav-bare .nav-dial-mid { display: flex; align-items: center; gap: 3px; }
+.nav-bare .nav-dial .nav-btn {
+  width: 30px; height: 30px; padding: 0; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 12px;
+}
+.nav-bare .nav-dial .center-btn { border-radius: 50%; }
+.nav-dial-north {
+  position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+  width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--line); background: var(--paper); color: var(--accent);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px; font-weight: 700; line-height: 1;
+}
+.nav-dial-north:hover { border-color: var(--accent); background: var(--card); }
+
+/* --- zoom ----------------------------------------------------------------- */
+/* Icon-only, because "➕ Zoom In" next to a slider next to "➖ Zoom Out" is
+   wider than the rail and the words add nothing a plus sign does not. The
+   accessible names are untouched -- both buttons already carry aria-label, so
+   this hides the glyph's text, not its meaning. */
+.nav-bare .nav-strip-zoom .nav-btn {
+  width: 28px; height: 26px; padding: 0; font-size: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.nav-bare #nav-zoom-in::before { content: "+"; font-size: 16px; line-height: 1; }
+.nav-bare #nav-zoom-out::before { content: "\2212"; font-size: 16px; line-height: 1; }
+.nav-bare .nav-pad-hint { max-width: 232px; }
+.nav-zoom-slider {
+  width: 104px; height: 4px; cursor: pointer; accent-color: var(--accent);
+  background: var(--line); border-radius: 3px; appearance: none; -webkit-appearance: none;
+}
+.nav-zoom-slider::-webkit-slider-thumb {
+  appearance: none; -webkit-appearance: none;
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--card); cursor: pointer;
+}
+.nav-zoom-slider::-moz-range-thumb {
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--card); cursor: pointer;
+}
+
+/* --- actions -------------------------------------------------------------- */
+.nav-bare .nav-strip-actions button { padding: 5px 8px; font-size: 10.5px; }
+.nav-bare .nav-pad-hint {
+  max-width: 210px; padding: 0 2px;
+  font-size: 10px; line-height: 1.35; color: var(--muted);
+  text-shadow: 0 1px 3px var(--paper);
+}
+.nav-bare.is-collapsed .nav-readout,
+.nav-bare.is-collapsed .nav-dial,
+.nav-bare.is-collapsed .nav-strip-zoom,
+.nav-bare.is-collapsed .nav-pad-hint { display: none; }
+
+/* The grip belongs to the workbench, not to the panel's own surface -- with the
+   box gone it needs its own, or it floats over the world with no ground. */
+.nav-bare > .wb-grip {
+  margin: 0; padding: 3px 5px; border-bottom: 0; border-radius: 9px;
+  background: var(--card); border: 1px solid var(--line);
+  box-shadow: 0 4px 14px rgba(42, 32, 26, 0.14);
+  align-self: stretch;
+}
+
+/* A miss, said out loud. Positioned at the pointer because that is where the
+   attention already is, and gone in 1.4s because it is feedback, not a dialog. */
+.nav-flash {
+  position: fixed; z-index: 210; transform: translate(-50%, -140%);
+  padding: 5px 10px; border-radius: 8px; pointer-events: none;
+  background: var(--ink); color: var(--card);
+  font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px;
+  box-shadow: 0 6px 18px rgba(42,32,26,.3);
+  animation: navFlashOut 1.4s ease forwards;
+}
+@keyframes navFlashOut { 0%,70% { opacity: 1 } 100% { opacity: 0 } }
 </style>
 </head>
 <body>
@@ -1050,80 +1478,97 @@ body.inspecting-mobile #nav-compass-pad {
 
 <!-- Top Floating HUD Bar -->
 <div class="top-bar-wrapper">
-  <!-- Left Cluster: Kingdom & Clock -->
-  <!-- Left Cluster: Portfolio Identity, Mark Fraser Hub & Clock -->
-  <div class="top-bar-cluster glass">
-    <div class="brand-badge">
-      CALIPER · <span class="kingdom">Mark Fraser</span>
+  <!-- THE COMMAND CENTRE.
+       Mark: "it's just very boring looking and far too small in the frame...
+       something more of a command center that you can hide would be better."
+       Full width, and it owns the top of the frame: an identity block, the
+       commands, and a telemetry column reporting what the world is doing.
+       Collapse it with the chevron or H; the state is remembered, and the
+       collapsed strip keeps the way back. -->
+  <header class="command-centre glass" role="banner">
+    <div class="cc-identity">
+      <div class="brand-badge">CALIPER</div>
+      <div class="cc-sub">Mark&nbsp;Fraser · Applied&nbsp;AI · Toronto</div>
     </div>
-    <div class="status-pill">
-      <span class="pulse-dot"></span> Edge V8 Isolate
-    </div>
-    <button type="button" id="village-rules-trigger" class="btn-pill" title="View Deterministic Spatial & Safety Rules">⚙️ Rules</button>
-    <button type="button" id="arch-drawer-trigger" class="btn-pill" title="System Architecture & Isolate Pipeline">📐 Architecture</button>
-    <button type="button" id="portfolio-btn" class="btn-pill active-emerald" title="View Mark Fraser Architectural & AI Portfolio">📁 Portfolio</button>
-    <button type="button" id="resume-btn" class="btn-pill" title="View Professional Resume">📄 Resume</button>
-    <button type="button" id="datum-btn" class="btn-pill" title="Open Datum AEC AI App Preview">📐 Datum App</button>
-    <a href="mailto:mark@fhinc.ca" class="btn-pill" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px" title="Direct Contact Mark Fraser (Applied AI & 18 Yrs AEC)">✉ Contact</a>
-    <div class="clock-pill" id="world-clock-badge">
-      ☀️ Day 1 · 12:00
-    </div>
-    <!-- `active` matters: .btn-pill[aria-pressed="true"] is a styling selector, and
-     the aria mirror derives aria-pressed FROM this class. Without it the mirror
-     correctly reported "false" for a button labelled Pause, and un-highlighted
-     it on load. -->
-<button type="button" id="world-play-pause" class="btn-pill active" style="padding:4px 8px;font-size:11px" aria-pressed="true">⏸ Pause</button>
-  </div>
 
-  <!-- Center Cluster: Coastal District Bookmarks & Navigation -->
-  <div class="top-bar-cluster glass" role="toolbar" aria-label="District Bookmarks">
-    <button type="button" id="bm-town" class="btn-pill" data-district="town" title="Jump to Town Hall, Supreme Courts & Promenade">🏛️ Town Hall</button>
-    <button type="button" id="bm-forge" class="btn-pill" data-district="forge" title="Jump to Maritime Innovation Studio">⚒️ Studio</button>
-    <button type="button" id="bm-datum" class="btn-pill" data-district="datum" title="Jump to Datum AEC AI Architectural Models">📐 Datum Models</button>
-    <button type="button" id="bm-docks" class="btn-pill" data-district="docks" title="Jump to Grand Marina & Yachts">⛵ Marina</button>
-    <button type="button" id="bm-tower" class="btn-pill" data-district="watchtower" title="Jump to Ocean Headland Beacon">🏰 Beacon</button>
-    <button type="button" id="bm-borough" class="btn-pill" data-district="residential" title="Jump to Terraced Coastal Villas">🏡 Villas</button>
-    <button type="button" id="reset-cam-btn" class="btn-pill" title="Reset camera to bay overview">↺ Reset</button>
-  </div>
-
-  <!-- Right Cluster: Atmosphere, Audio Synthesizer, 2D/3D & Architecture Guide -->
-  <div class="top-bar-cluster glass">
-    <!-- Atmosphere Toggle -->
-    <div class="btn-group" role="group" aria-label="Time of Day">
+    <div class="cc-commands" role="toolbar" aria-label="Commands">
+      <div class="menu" data-menu="mark">
+        <button type="button" class="cc-cmd menu-trigger" id="menu-mark" aria-haspopup="true" aria-expanded="false" aria-controls="menupanel-mark" title="Portfolio, resume, Datum app and contact"><span class="cc-cmd-icon" aria-hidden="true">◆</span><span class="cc-cmd-label">Mark Fraser</span><span class="menu-caret" aria-hidden="true">▾</span></button>
+        <div class="menu-panel" id="menupanel-mark" role="menu" aria-labelledby="menu-mark" hidden>
+          <button type="button" id="portfolio-btn" class="btn-pill active-emerald" title="View Mark Fraser Architectural & AI Portfolio">📁 Portfolio</button>
+          <button type="button" id="resume-btn" class="btn-pill" title="View Professional Resume">📄 Resume</button>
+          <button type="button" id="datum-btn" class="btn-pill" title="Open Datum AEC AI App Preview">📐 Datum App</button>
+          <a href="mailto:mark@fhinc.ca" class="btn-pill" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px" title="Direct Contact Mark Fraser (Applied AI & 18 Yrs AEC)">✉ Contact</a>
+        </div>
+      </div>
+      <div class="menu" data-menu="how">
+        <button type="button" class="cc-cmd menu-trigger" id="menu-how" aria-haspopup="true" aria-expanded="false" aria-controls="menupanel-how" title="The rules, the architecture, the write-up and the overview"><span class="cc-cmd-icon" aria-hidden="true">◉</span><span class="cc-cmd-label">How it works</span><span class="menu-caret" aria-hidden="true">▾</span></button>
+        <div class="menu-panel" id="menupanel-how" role="menu" aria-labelledby="menu-how" hidden>
+          <button type="button" id="village-rules-trigger" class="btn-pill" title="View Deterministic Spatial & Safety Rules">⚙️ Rules</button>
+          <button type="button" id="arch-drawer-trigger" class="btn-pill" title="System Architecture & Isolate Pipeline">📐 Architecture</button>
+          <button id="research-paper-trigger" type="button" class="btn-pill" title="Original Research Paper, Findings & Data Matrix">📖 Research & Write-Up</button>
+          <button id="welcome-guide-trigger" type="button" class="btn-pill active" aria-pressed="true" title="Show or hide the overview card">ℹ️ Overview</button>
+        </div>
+      </div>
+      <div class="menu" data-menu="places">
+        <button type="button" class="cc-cmd menu-trigger" id="menu-places" aria-haspopup="true" aria-expanded="false" aria-controls="menupanel-places" title="Jump the camera to a district"><span class="cc-cmd-icon" aria-hidden="true">◈</span><span class="cc-cmd-label">Places</span><span class="menu-caret" aria-hidden="true">▾</span></button>
+        <div class="menu-panel" id="menupanel-places" role="menu" aria-labelledby="menu-places" hidden>
+          <button type="button" id="bm-town" class="btn-pill" data-district="town" title="Jump to Town Hall, Supreme Courts & Promenade">🏛️ Town Hall</button>
+          <button type="button" id="bm-forge" class="btn-pill" data-district="forge" title="Jump to Maritime Innovation Studio">⚒️ Studio</button>
+          <button type="button" id="bm-datum" class="btn-pill" data-district="datum" title="Jump to Datum AEC AI Architectural Models">📐 Datum Models</button>
+          <button type="button" id="bm-docks" class="btn-pill" data-district="docks" title="Jump to Grand Marina & Yachts">⛵ Marina</button>
+          <button type="button" id="bm-tower" class="btn-pill" data-district="watchtower" title="Jump to Ocean Headland Beacon">🏰 Beacon</button>
+          <button type="button" id="bm-borough" class="btn-pill" data-district="residential" title="Jump to Terraced Coastal Villas">🏡 Villas</button>
+          <div class="menu-sep"></div>
+          <button type="button" id="reset-cam-btn" class="btn-pill" title="Reset camera to bay overview">↺ Reset</button>
+        </div>
+      </div>
+      <div class="menu" data-menu="view">
+        <button type="button" class="cc-cmd menu-trigger" id="menu-view" aria-haspopup="true" aria-expanded="false" aria-controls="menupanel-view" title="Time of day, 2D/3D, and roof cutaway"><span class="cc-cmd-icon" aria-hidden="true">◐</span><span class="cc-cmd-label">View</span><span class="menu-caret" aria-hidden="true">▾</span></button>
+        <div class="menu-panel" id="menupanel-view" role="menu" aria-labelledby="menu-view" hidden>
+          <div class="btn-group" role="group" aria-label="Time of Day">
       <button id="tod-day" type="button" class="active" aria-pressed="true" title="High-sun clear daytime">☀️ Day</button>
       <button id="tod-dusk" type="button" aria-pressed="false" title="Dusk golden-hour warmth">🌅 Dusk</button>
       <button id="tod-night" type="button" aria-pressed="false" title="Night starry sky & celestial moon">🌙 Night</button>
     </div>
-
-    <!-- View Mode 2D/3D -->
-    <div class="btn-group" role="group" aria-label="View Mode">
+          <div class="btn-group" role="group" aria-label="View Mode">
       <button id="view-3d" type="button" class="active" aria-pressed="true">3D</button>
       <button id="view-plan" type="button" aria-pressed="false">2D Plan</button>
     </div>
-
-    <!-- Roof Cutaway Toggle -->
-    <div class="btn-group" role="group" aria-label="Roof View">
+          <div class="btn-group" role="group" aria-label="Roof View">
       <button id="roof-exterior" type="button" class="active" aria-pressed="true" title="Full exterior architecture">🏠 Roof</button>
       <button id="roof-cutaway" type="button" aria-pressed="false" title="Interior architectural cutaway">🔍 Cutaway</button>
     </div>
+        </div>
+      </div>
+      <div class="menu" data-menu="more">
+        <button type="button" class="cc-cmd menu-trigger" id="menu-more" aria-haspopup="true" aria-expanded="false" aria-controls="menupanel-more" title="Tour, grid, audio, flythrough and export"><span class="cc-cmd-icon" aria-hidden="true">⋯</span><span class="cc-cmd-label">More</span><span class="menu-caret" aria-hidden="true">▾</span></button>
+        <div class="menu-panel" id="menupanel-more" role="menu" aria-labelledby="menu-more" hidden>
+          <button id="tour-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Put the panels away and fly the city. Press again, or Escape, to come back.">🏙 Tour</button>
+          <button id="grid-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Toggle the 600 m spatial grid and world axes">📐 Grid</button>
+          <button id="sound-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Toggle ambient audio">🎵 Audio</button>
+          <button id="drone-tour-btn" type="button" class="btn-pill" title="Cinematic camera flythrough with architectural narrative">🎬 Flythrough</button>
+          <button id="export-render-btn" type="button" class="btn-pill" title="Export High-Res Architectural Blueprint Screenshot with Title Block">📸 Export 4K</button>
+        </div>
+      </div>
+    </div>
 
-    <!-- Utilities -->
-    <!-- TOUR IS A VIEW, NOT A PAGE.
-         There was a link here to /city.html. When the city lived on its own
-         page that made sense; now the city IS this page, so the link took you
-         somewhere you could look at the same world and do none of the things
-         the app is for. Worse, it read as "the city is over there", when the
-         city is the thing the pipeline builds on and it is right here.
-         So: hide the chrome, keep the world, and keep the way back visible. -->
-    <button id="tour-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Put the panels away and fly the city. Press again, or Escape, to come back.">🏙 Tour</button>
-    <button id="grid-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Toggle the 600 m spatial grid and world axes">📐 Grid</button>
-    <button id="sound-toggle-btn" type="button" class="btn-pill" aria-pressed="false" title="Toggle ambient audio">🎵 Audio</button>
-    <button id="drone-tour-btn" type="button" class="btn-pill" title="Cinematic camera flythrough with architectural narrative">🎬 Flythrough</button>
-    <button id="export-render-btn" type="button" class="btn-pill" title="Export High-Res Architectural Blueprint Screenshot with Title Block">📸 Export 4K</button>
-    <button id="research-paper-trigger" type="button" class="btn-pill" title="Original Research Paper, Findings & Data Matrix">📖 Research & Write-Up</button>
-    <button id="welcome-guide-trigger" type="button" class="btn-pill active" aria-pressed="true" title="Show or hide the overview card">ℹ️ Overview</button>
-    <button id="cmd-k-trigger" type="button" class="btn-pill" title="Command Palette (Cmd+K)">⌘K</button>
-  </div>
+    <div class="cc-telemetry" aria-label="World state">
+      <div class="cc-tel-row">
+        <div class="clock-pill" id="world-clock-badge">
+      ☀️ Day 1 · 12:00
+    </div>
+        <button type="button" id="world-play-pause" class="btn-pill active" style="padding:4px 8px;font-size:11px" aria-pressed="true">⏸ Pause</button>
+      </div>
+      <div class="cc-tel-row">
+        <div class="status-pill"><span class="pulse-dot"></span> Edge V8 Isolate</div>
+        <button id="cmd-k-trigger" type="button" class="btn-pill" title="Command Palette (Cmd+K)">⌘K</button>
+      </div>
+    </div>
+
+    <button type="button" id="cc-collapse" class="cc-collapse" aria-expanded="true"
+            aria-controls="cc-body" title="Hide the command centre (H)">▴</button>
+  </header>
 </div>
 
 <!-- Floating Snapped Grid Coordinates Badge -->
@@ -1138,40 +1583,40 @@ body.inspecting-mobile #nav-compass-pad {
     <div style="display:flex;align-items:center;gap:10px">
       <span style="font-size:24px">⚡</span>
       <div>
-        <h2 style="margin:0;font-size:16px;font-weight:800;color:#fff;letter-spacing:-0.02em">CALIPER — a system that only says yes when yes is true</h2>
+        <h2 style="margin:0;font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.02em">CALIPER — a system that only says yes when yes is true</h2>
         <span style="font-size:11px;color:var(--sky);font-weight:600">Does a verification loop substitute for model capability, and what does it cost?</span>
       </div>
     </div>
     <button type="button" id="welcome-close-btn" class="inspect-close" title="Dismiss Guide" aria-label="Close Guide" style="position:static">✕</button>
   </div>
-  <p style="margin:8px 0 10px;font-size:13px;color:#cbd5e1;line-height:1.5">
+  <p style="margin:8px 0 10px;font-size:13px;color:var(--ink);line-height:1.5">
     Type a change in plain English. It is grounded against the real source, planned, <strong>parked at a gate for you to approve</strong>, implemented, run in an isolated sandbox, and reviewed by a different vendor’s model — and it <strong>refuses</strong> when it cannot show the change is good. Built by <strong>Mark Fraser</strong>, Toronto.
   </p>
   <div class="welcome-steps-grid">
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">⚡</div>
-      <strong style="color:#fff;font-size:12px;display:block">It runs the model’s code in a real sandbox</strong>
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Cloudflare Dynamic Workers: each candidate is loaded into a fresh isolate and executed against the acceptance criteria. Nothing is judged by reading it.</span>
+      <strong style="color:var(--ink);font-size:12px;display:block">It runs the model’s code in a real sandbox</strong>
+      <span style="font-size:11px;color:var(--muted);line-height:1.35">Cloudflare Dynamic Workers: each candidate is loaded into a fresh isolate and executed against the acceptance criteria. Nothing is judged by reading it.</span>
     </div>
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">📐</div>
-      <strong style="color:#fff;font-size:12px;display:block">Every point knows what it is</strong>
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">Click any building: it resolves to a plot, its block, its district and its settlement — an address a change can be written against, and one the system can refuse.</span>
+      <strong style="color:var(--ink);font-size:12px;display:block">Every point knows what it is</strong>
+      <span style="font-size:11px;color:var(--muted);line-height:1.35">Click any building: it resolves to a plot, its block, its district and its settlement — an address a change can be written against, and one the system can refuse.</span>
     </div>
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">📊</div>
-      <strong style="color:#fff;font-size:12px;display:block">387 measured cycles — and one retracted headline</strong>
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">The cheap model reached the same <em>final pass rate</em> at 36–41% the cost per correct result. It does <strong>not</strong> show equal quality — capability was never stressed. I published that correction against my own result.</span>
+      <strong style="color:var(--ink);font-size:12px;display:block">387 measured cycles — and one retracted headline</strong>
+      <span style="font-size:11px;color:var(--muted);line-height:1.35">The cheap model reached the same <em>final pass rate</em> at 36–41% the cost per correct result. It does <strong>not</strong> show equal quality — capability was never stressed. I published that correction against my own result.</span>
     </div>
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">🌍</div>
-      <strong style="color:#fff;font-size:12px;display:block">The Region</strong>
+      <strong style="color:var(--ink);font-size:12px;display:block">The Region</strong>
       <!-- #city-build-notes was a block-level <div> INSIDE this <span>, spliced
            between "settlements," and "19,105 buildings" -- so when the world DID
            have something to report (unplaced features, refused plots, a stale
            bookmark) the warning rendered as a line break in the middle of a
            sentence. Moved below the sentence it annotates. -->
-      <span style="font-size:11px;color:#94a3b8;line-height:1.35">A 26&nbsp;km coastal region generated from one plan: terrain, coastline, <span id="city-stat-settlements">54</span> settlements,
+      <span style="font-size:11px;color:var(--muted);line-height:1.35">A 26&nbsp;km coastal region generated from one plan: terrain, coastline, <span id="city-stat-settlements">54</span> settlements,
         <span id="city-stat-buildings">16,770</span> buildings.
         Press <strong>Tour</strong> in the bar above to put the panels away and fly it.</span>
       <div id="city-build-notes" class="mono" style="display:none;margin-top:6px;font-size:11px;color:#f0b429;line-height:1.4" role="status"></div>
@@ -1180,48 +1625,61 @@ body.inspecting-mobile #nav-compass-pad {
 </div>
 
 <!-- Floating Tactile Navigation Pad (Bottom-Right) -->
-<div id="nav-compass-pad" class="nav-pad glass" role="toolbar" aria-label="Camera Navigation Pad">
-  <div class="nav-pad-title">
-    <span>🧭 NAVIGATION</span>
-    <span id="nav-mode-indicator" style="color:#38bdf8;font-size:9px">ORBIT</span>
-    <!-- THE NAV PAD HAD NO WAY TO GET OUT OF THE WAY.
-         The dock has had #dock-toggle-btn since it was built; this panel never
-         got one, and on a 390x844 phone the two of them plus the top bar, the
-         welcome card and the status card add up to over 1,100px of chrome in an
-         844px viewport. The canvas -- the thing the page is about -- was
-         functionally invisible, and nothing could be dismissed.
-         Both collapse now, and both start collapsed on a phone. -->
-    <button type="button" id="nav-pad-toggle" title="Collapse / expand the navigation pad"
-            aria-label="Collapse the navigation pad" aria-expanded="true"
-            style="margin-left:auto;background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px">▾</button>
-  </div>
-  <!-- Says what the controls are, in the place the controls are. Without this the
-       arrow pad looks like the only way to move and the keyboard is invisible. -->
-  <div class="nav-pad-hint" id="nav-pad-hint">Drag to orbit · scroll to zoom · arrows below</div>
-  <!-- Eye-Level Person, Vehicle, Fly, & Orbit Mode Selectors -->
-  <div class="nav-mode-selector">
+<div id="nav-compass-pad" class="nav-pad nav-bare" role="toolbar" aria-label="Camera Navigation">
+  <!-- NO BOX.
+       Mark: "make the navigation nicer looking and better functioning with more
+       controls and more advanced abilities -- it doesn't need the entire box
+       around it." So the card is gone: no panel background, no border, no
+       backdrop blur. What is left is the controls themselves, each with its own
+       small surface, floating over the world. The panel is still a workbench
+       panel -- it docks and floats with the rest -- it just stops drawing a
+       frame around empty space. -->
+  <div class="nav-strip nav-strip-modes">
     <button type="button" class="nav-mode-btn active" aria-pressed="true" id="btn-mode-orbit" data-nav-mode="orbit" title="Orbital aerial camera view">🌐 Orbit</button>
     <button type="button" class="nav-mode-btn" aria-pressed="false" id="btn-mode-walk" data-nav-mode="walk" title="Eye-level pedestrian walk mode (WASD + Shift to sprint)">🚶 Walk</button>
     <button type="button" class="nav-mode-btn" aria-pressed="false" id="btn-mode-drive" data-nav-mode="drive" title="Drive red sports car along the waterfront esplanade">🏎️ Drive</button>
     <button type="button" class="nav-mode-btn" aria-pressed="false" id="btn-mode-fly" data-nav-mode="fly" title="Free 3D flight drone spectator mode (WASD + Q/E to elevate)">🕊️ Fly</button>
   </div>
-  <div class="nav-pad-grid">
+
+  <!-- The readout is the "more advanced" part: heading, pitch and orbit radius
+       in the units the world is actually in. Navigating blind is what made this
+       hard -- you could not tell which way you were facing or how high you were,
+       so every correction was a guess. -->
+  <div class="nav-readout" aria-live="off">
+    <span class="nav-readout-cell"><b id="nav-read-heading">—</b><i>HDG</i></span>
+    <span class="nav-readout-cell"><b id="nav-read-pitch">—</b><i>PITCH</i></span>
+    <span class="nav-readout-cell"><b id="nav-read-dist">—</b><i>RANGE</i></span>
+    <span id="nav-mode-indicator" style="color:#38bdf8;font-size:9px">ORBIT</span>
+  </div>
+
+  <div class="nav-dial">
+    <button type="button" id="nav-north-up" class="nav-dial-north" title="Face north (N)" aria-label="Face north">N</button>
     <button type="button" id="nav-pitch-up" class="nav-btn" title="Pitch Up / Look Up" aria-label="Pitch camera up">▲</button>
-    <div class="nav-row">
+    <div class="nav-dial-mid">
       <button type="button" id="nav-rot-left" class="nav-btn" title="Orbit / Turn Left" aria-label="Orbit camera left">◀</button>
       <button type="button" id="nav-reset" class="nav-btn center-btn" title="Reset Camera / Eye-Level" aria-label="Reset camera to default view">⌂</button>
       <button type="button" id="nav-rot-right" class="nav-btn" title="Orbit / Turn Right" aria-label="Orbit camera right">▶</button>
     </div>
     <button type="button" id="nav-pitch-down" class="nav-btn" title="Pitch Down / Look Down" aria-label="Pitch camera down">▼</button>
   </div>
-  <div class="nav-zoom-row">
-    <button type="button" id="nav-zoom-in" class="nav-btn zoom-btn" title="Zoom In (Smooth)" aria-label="Zoom camera in">➕ Zoom In</button>
+
+  <div class="nav-strip nav-strip-zoom">
     <button type="button" id="nav-zoom-out" class="nav-btn zoom-btn" title="Zoom Out (Panoramic)" aria-label="Zoom camera out">➖ Zoom Out</button>
+    <input type="range" id="nav-zoom-slider" class="nav-zoom-slider" min="0" max="100" value="50"
+           title="Orbit range" aria-label="Orbit range">
+    <button type="button" id="nav-zoom-in" class="nav-btn zoom-btn" title="Zoom In (Smooth)" aria-label="Zoom camera in">➕ Zoom In</button>
   </div>
-  <div class="nav-action-row">
+
+  <div class="nav-strip nav-strip-actions">
     <button type="button" id="nav-pick-center" class="nav-action-btn" title="Click anywhere on the map to set camera pivot point">🎯 Set Pivot</button>
+    <button type="button" id="nav-clear-pivot" class="nav-action-btn" title="Clear the orbit point marker">✕ Marker</button>
     <button type="button" id="nav-save-view" class="nav-action-btn" title="Save current camera angle and zoom as default">💾 Save View</button>
+    <button type="button" id="nav-pad-toggle" title="Collapse / expand the navigation pad"
+            aria-label="Collapse the navigation pad" aria-expanded="true"
+            style="margin-left:auto;background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px">▾</button>
   </div>
+
+  <div class="nav-pad-hint" id="nav-pad-hint">Drag to orbit · scroll to zoom · arrows below</div>
 </div>
 
 <!-- Street-Level Interactive HUD -->
@@ -1236,7 +1694,7 @@ body.inspecting-mobile #nav-compass-pad {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <span class="mono" style="font-size:11px;color:var(--sky);font-weight:700">PIPELINE EXECUTION</span>
     <span id="pipeline-timer" class="mono" style="font-size:11px;color:var(--text-muted)">Elapsed: 0.0s</span>
-    <button type="button" id="status-card-close" aria-label="Close status panel" title="Close status panel" style="background:none;border:none;color:#94a3b8;cursor:pointer">✕</button>
+    <button type="button" id="status-card-close" aria-label="Close status panel" title="Close status panel" style="background:none;border:none;color:var(--muted);cursor:pointer">✕</button>
   </div>
   <div class="pipeline-steps" role="list" aria-live="polite" aria-label="Pipeline progress">
     <div class="step-item" id="step-1"><span>1. Ground</span></div>
@@ -1284,9 +1742,9 @@ body.inspecting-mobile #nav-compass-pad {
   <button type="button" class="inspect-close" id="inspect-close">✕</button>
   <div style="margin-bottom:6px">
     <span class="mono" id="inspect-parcel-id" style="font-size:10px;color:var(--sky);letter-spacing:0.06em;font-weight:700">DISTRICT</span>
-    <h4 id="inspect-title" style="margin:2px 0 0;font-size:16px;color:#fff">The Central Esplanade & Promenade</h4>
+    <h4 id="inspect-title" style="margin:2px 0 0;font-size:16px;color:var(--ink)">The Central Esplanade & Promenade</h4>
   </div>
-  <div style="font-size:12.5px;color:#cbd5e1;line-height:1.4">
+  <div style="font-size:12.5px;color:var(--ink);line-height:1.4">
     <p style="margin:2px 0"><strong>Type:</strong> <span id="inspect-type">Civic Esplanade</span></p>
     <p style="margin:2px 0"><strong>Occupants:</strong> <span id="inspect-occupants">Citizens & Visitors</span></p>
     <p style="margin:2px 0"><strong>Contents:</strong> <span id="inspect-contents">Compass plaza, stone pavers, palms, street lamps</span></p>
@@ -1294,11 +1752,11 @@ body.inspecting-mobile #nav-compass-pad {
       <div style="display:flex;align-items:center;gap:6px">
         <span id="inspect-npc-avatar" style="font-size:18px">🏛️</span>
         <div>
-          <strong id="inspect-npc-name" style="font-size:12px;color:#fff;display:block">Althea</strong>
-          <span id="inspect-npc-role" style="font-size:10px;color:#94a3b8">Esplanade Director</span>
+          <strong id="inspect-npc-name" style="font-size:12px;color:var(--ink);display:block">Althea</strong>
+          <span id="inspect-npc-role" style="font-size:10px;color:var(--muted)">Esplanade Director</span>
         </div>
       </div>
-      <p id="inspect-npc-thought" style="margin:4px 0 0;font-style:italic;font-size:11.5px;color:#e2e8f0">“The harbour promenade is sparkling in the morning sun.”</p>
+      <p id="inspect-npc-thought" style="margin:4px 0 0;font-style:italic;font-size:11.5px;color:var(--ink)">“The harbour promenade is sparkling in the morning sun.”</p>
     </div>
     <button type="button" id="inspect-focus-btn" class="btn-pill" style="margin-top:8px;width:100%;justify-content:center">🔍 Focus Camera</button>
   </div>
@@ -1410,7 +1868,7 @@ body.inspecting-mobile #nav-compass-pad {
         </div>
       </div>
       <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#d1fae5">
-        <strong>Continuous Verification:</strong> <span id="claim-node-tests">486</span> Node tests and <span id="claim-worker-tests">12</span> Cloudflare Worker integration tests, run against this repository. This sentence has now gone stale three times in a row while claiming it was read from the runner, so it is no longer trusted to a human: <code>test/publicClaims.test.ts</code> counts the suite and fails if these numbers drift.
+        <strong>Continuous Verification:</strong> <span id="claim-node-tests">584</span> Node tests and <span id="claim-worker-tests">12</span> Cloudflare Worker integration tests, run against this repository. This sentence has now gone stale three times in a row while claiming it was read from the runner, so it is no longer trusted to a human: <code>test/publicClaims.test.ts</code> counts the suite and fails if these numbers drift.
       </div>
       <!-- WHAT THIS SITE DOES WITH WHAT YOU TYPE.
            There was no privacy notice of any kind, on a public demo that sends
@@ -1935,6 +2393,11 @@ function reportDegradedRenderer(r) {
 // the renderer reconciles those by id against whatever base scene it has -- so
 // the ops, the sentinel data blocks, the integrity checks and both gates carry
 // over unchanged. The city replaces the ground, not the mechanism.
+/* Published for the chrome modules loaded at the end of the body -- navigate.js
+   needs the camera and this const is module-scoped, so without this the
+   navigation would simply never start. One named global, assigned once, rather
+   than each module reaching for its own back door. */
+window.renderer3d = null;
 const renderer3d = new WorldRenderer(canvas3d, {
   city: true,
   reducedMotion,
@@ -1956,6 +2419,7 @@ const renderer3d = new WorldRenderer(canvas3d, {
     document.body.classList.add('inspecting-mobile');
   }
 });
+window.renderer3d = renderer3d;
 window.__worldRenderer = renderer3d;
 const renderer2d = new WorldRenderer2D(canvas2d, { reducedMotion });
 
@@ -4216,5 +4680,25 @@ function connect(url) {
 }
 </script>
 
+
+
+<script type="module">
+/* The chrome is three modules, loaded after the page's own so that every
+   listener bound by id is already in place before a panel is relocated. If any
+   of this fails, the panels keep the fixed positions the stylesheet gives them
+   and the page is what it was -- degraded, not broken. */
+import { createMenus, createCommandCentre } from "./menus.js";
+import { createWorkbench } from "./workbench.js";
+import { createNavigation } from "./navigate.js";
+createMenus(document);
+createCommandCentre(document);
+createWorkbench(document);
+/* The navigation gestures need the camera. A missing renderer here means the
+   page's own module did not finish, which is worth SAYING rather than quietly
+   shipping a world you cannot navigate -- the first version of this line was a
+   bare `if`, which would have skipped the whole feature in silence. */
+if (window.renderer3d) createNavigation(window.renderer3d, document);
+else console.error("navigation not started: window.renderer3d is missing");
+</script>
 </body>
 </html>
