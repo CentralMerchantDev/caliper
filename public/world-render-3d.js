@@ -7227,6 +7227,10 @@ class Renderer3D {
         nightAmt,
         deltaSec,
         this._lookAt,
+        // The cloud decks are at 2.6 km and 4.2 km. Above them they are not a
+        // ceiling any more, and a BackSide dome seen from outside draws as a
+        // crescent -- the "odd white crest shapes" reported from a 46 km orbit.
+        this.camera?.position?.y,
       );
     }
 
