@@ -1,0 +1,1219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CALIPER — Model Library</title>
+<meta name="description" content="Visual asset library and interactive model browser for CALIPER. Browse, inspect, and target 110+ parameterised 3D urban assets with studio lighting and per-item bounding box framing.">
+<style>
+  :root {
+    --bg-page: #0d1117;
+    --bg-card: #161b22;
+    --bg-card-hover: #1f242c;
+    --border-card: rgba(255, 255, 255, 0.12);
+    --border-card-hover: #388bfd;
+    --text-primary: #f0f6fc;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+    --accent: #1f6feb;
+    --accent-hover: #388bfd;
+    --badge-built: #238636;
+    --badge-gen: #1f6feb;
+    --badge-planned: #8957e5;
+    --badge-gap: #da3633;
+    --stage-bg: #1c2128;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+    background: var(--bg-page);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Header & Navigation */
+  header {
+    position: sticky;
+    top: 0;
+    background: rgba(13, 17, 23, 0.92);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border-card);
+    padding: 16px 24px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #58a6ff;
+  }
+  .brand-tagline {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .stats-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .stat-badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-card);
+    color: var(--text-secondary);
+  }
+  .stat-badge.built { color: #3fb950; border-color: rgba(63, 185, 80, 0.3); }
+  .stat-badge.gen { color: #58a6ff; border-color: rgba(88, 166, 255, 0.3); }
+  .stat-badge.planned { color: #bc8cff; border-color: rgba(188, 140, 255, 0.3); }
+
+  /* Toolbar: Search and Filters */
+  .toolbar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .search-box {
+    position: relative;
+    flex: 1;
+    min-width: 240px;
+    max-width: 360px;
+  }
+  .search-input {
+    width: 100%;
+    padding: 8px 12px 8px 34px;
+    background: #0d1117;
+    border: 1px solid var(--border-card);
+    border-radius: 6px;
+    color: #fff;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+  .search-input:focus {
+    border-color: var(--accent-hover);
+  }
+  .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 9px;
+    width: 16px;
+    height: 16px;
+    fill: var(--text-muted);
+  }
+
+  .filter-pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filter-btn {
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-card);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .filter-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+  }
+  .filter-btn.active {
+    background: var(--accent);
+    border-color: var(--accent-hover);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  /* Grid Layout */
+  main {
+    padding: 24px;
+    max-width: 1720px;
+    margin: 0 auto;
+  }
+
+  .model-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  /* Model Card */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    cursor: pointer;
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-card-hover);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .card-thumbnail {
+    position: relative;
+    width: 100%;
+    height: 200px;
+    background: radial-gradient(circle at center, #21262d 0%, #161b22 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .card-thumbnail canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .card-badges {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    gap: 6px;
+    z-index: 2;
+  }
+  .badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .badge-category {
+    background: rgba(0, 0, 0, 0.6);
+    color: #58a6ff;
+    border: 1px solid rgba(88, 166, 255, 0.3);
+  }
+  .badge-status-built {
+    background: rgba(35, 134, 54, 0.85);
+    color: #fff;
+  }
+  .badge-status-generator {
+    background: rgba(31, 111, 235, 0.85);
+    color: #fff;
+  }
+  .badge-status-planned {
+    background: rgba(137, 87, 229, 0.85);
+    color: #fff;
+  }
+
+  .card-body {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+  }
+  .card-title {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    word-break: break-word;
+  }
+  .card-dims {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    display: flex;
+    justify-content: space-between;
+  }
+  .card-note {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .card-actions {
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s ease;
+  }
+  .btn-inspect {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--border-card);
+    color: var(--text-primary);
+  }
+  .btn-inspect:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+  .btn-target {
+    background: #238636;
+    color: #fff;
+  }
+  .btn-target:hover {
+    background: #2ea043;
+  }
+
+  /* Modal Inspector */
+  .modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    padding: 20px;
+  }
+  .modal-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .modal-window {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 12px;
+    width: 960px;
+    max-width: 100%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+  }
+
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-card);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: #58a6ff;
+    margin: 0;
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .modal-close:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
+
+  .modal-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+  @media (max-width: 768px) {
+    .modal-content { flex-direction: column; overflow-y: auto; }
+  }
+
+  .modal-viewport {
+    flex: 1.3;
+    min-height: 400px;
+    background: radial-gradient(circle at center, #21262d 0%, #0d1117 100%);
+    position: relative;
+  }
+  .modal-viewport canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .viewport-controls {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    display: flex;
+    gap: 6px;
+    background: rgba(13, 17, 23, 0.8);
+    backdrop-filter: blur(8px);
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-card);
+  }
+  .lod-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .lod-btn.active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .modal-sidebar {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    border-left: 1px solid var(--border-card);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .spec-table {
+    width: 100%;
+    font-size: 12.5px;
+    border-collapse: collapse;
+  }
+  .spec-table tr { border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+  .spec-table td { padding: 8px 0; }
+  .spec-label { color: var(--text-secondary); width: 40%; }
+  .spec-val { color: var(--text-primary); font-family: ui-monospace, SFMono-Regular, monospace; font-weight: 500; }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #238636;
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.2s ease;
+    z-index: 2000;
+    pointer-events: none;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.min.js"}}
+</script>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div class="brand">
+      <h1>Caliper &mdash; Model Library</h1>
+      <span class="brand-tagline">3D Asset Catalog with Studio Lighting & Per-Item Auto-Framing</span>
+    </div>
+    <div class="stats-badges" id="stats-badges">
+      <span class="stat-badge built" id="stat-built">-- Built</span>
+      <span class="stat-badge gen" id="stat-gen">-- Generators</span>
+      <span class="stat-badge planned" id="stat-planned">-- Planned Gaps</span>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="search-box">
+      <svg class="search-icon" viewBox="0 0 16 16"><path d="M11.5 7a4.499 4.499 0 1 1-8.998 0A4.499 4.499 0 0 1 11.5 7zm-.82 4.74a6 6 0 1 0-1.06 1.06l3.04 3.04a.75.75 0 1 0 1.06-1.06l-3.04-3.04z"></path></svg>
+      <input type="text" class="search-input" id="search-input" placeholder="Search models, categories, generators...">
+    </div>
+    <div class="filter-pills" id="category-filters">
+      <button class="filter-btn active" data-cat="all">All</button>
+      <button class="filter-btn" data-cat="roof">Roof Clutter</button>
+      <button class="filter-btn" data-cat="furniture">Street & Details</button>
+      <button class="filter-btn" data-cat="ground">Ground</button>
+      <button class="filter-btn" data-cat="facade">Facade</button>
+      <button class="filter-btn" data-cat="boundary">Boundary</button>
+      <button class="filter-btn" data-cat="vegetation">Trees</button>
+      <button class="filter-btn" data-cat="people">People</button>
+      <button class="filter-btn" data-cat="vehicles">Vehicles</button>
+      <button class="filter-btn" data-cat="maritime">Maritime</button>
+      <button class="filter-btn" data-cat="airport">Airport</button>
+      <button class="filter-btn" data-cat="aviation">Aviation</button>
+      <button class="filter-btn" data-cat="roads">Roads & Rail</button>
+      <button class="filter-btn" data-cat="civic">Civic (12)</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="model-grid" id="model-grid"></div>
+</main>
+
+<!-- Modal Inspector -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal-window">
+    <div class="modal-header">
+      <h2 class="modal-title" id="modal-title">Model Details</h2>
+      <button class="modal-close" id="modal-close">&times;</button>
+    </div>
+    <div class="modal-content">
+      <div class="modal-viewport" id="modal-viewport">
+        <div class="viewport-controls">
+          <button class="lod-btn active" data-lod="0">LOD 0</button>
+          <button class="lod-btn" data-lod="1">LOD 1</button>
+          <button class="lod-btn" data-lod="2">LOD 2</button>
+        </div>
+      </div>
+      <div class="modal-sidebar">
+        <div>
+          <h3 style="margin: 0 0 6px; font-size: 14px; color: #58a6ff;">SPECIFICATION</h3>
+          <table class="spec-table">
+            <tr><td class="spec-label">ID:</td><td class="spec-val" id="spec-id">--</td></tr>
+            <tr><td class="spec-label">Category:</td><td class="spec-val" id="spec-cat">--</td></tr>
+            <tr><td class="spec-label">Status:</td><td class="spec-val" id="spec-status">--</td></tr>
+            <tr><td class="spec-label">Source:</td><td class="spec-val" id="spec-source">--</td></tr>
+            <tr><td class="spec-label">Footprint:</td><td class="spec-val" id="spec-foot">--</td></tr>
+            <tr><td class="spec-label">Sweep:</td><td class="spec-val" id="spec-sweep">--</td></tr>
+            <tr><td class="spec-label">Height:</td><td class="spec-val" id="spec-h">--</td></tr>
+            <tr><td class="spec-label">Clearance:</td><td class="spec-val" id="spec-clear">--</td></tr>
+            <tr><td class="spec-label">LOD Tris:</td><td class="spec-val" id="spec-tris">--</td></tr>
+            <tr><td class="spec-label">Stands On:</td><td class="spec-val" id="spec-stands">--</td></tr>
+            <tr><td class="spec-label">World Instances:</td><td class="spec-val" id="spec-count">--</td></tr>
+          </table>
+        </div>
+        <div>
+          <h3 style="margin: 0 0 6px; font-size: 14px; color: #58a6ff;">DESIGN RATIONALE</h3>
+          <p id="spec-note" style="margin: 0; font-size: 12.5px; color: var(--text-secondary); line-height: 1.5;">--</p>
+        </div>
+        <div style="margin-top: auto; padding-top: 16px;">
+          <button class="btn btn-target" id="modal-btn-target" style="width: 100%; padding: 10px; font-size: 13px;">Use as target</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Dispatched caliper:model-target event</div>
+
+<script type="module">
+import * as THREE from "three";
+import {
+  MODELS,
+  roofClutter,
+  streetFurniture,
+  facade,
+  boundary,
+  groundFurniture,
+  tree,
+  person,
+  vehicle,
+  vessel,
+  aircraft
+} from "./props.js";
+import * as ROADKIT from "./roadkit.js";
+import { ASSET_REGISTRY, registrySummary } from "./asset-registry.js";
+import { CIVIC_TYPOLOGIES } from "./buildings.js";
+
+// Update header badges
+const summary = registrySummary();
+document.getElementById("stat-built").textContent = summary.built + " Built";
+document.getElementById("stat-gen").textContent = summary.generators + " Generator Families";
+document.getElementById("stat-planned").textContent = summary.planned + " Planned Gaps";
+
+// --- Registry Item Expansion & Generator Binding ---
+const libraryItems = [];
+
+
+function buildCivicGeometry(typology = "capitol", w = 48, d = 48, h = 32, T = THREE) {
+  const parts = [];
+  function addPart(type, x, y, z, pw, ph, pd) {
+    let g;
+    if (type === "wall" || type === "roof") {
+      g = new T.BoxGeometry(pw, ph, pd);
+      g.translate(x, y, z);
+    } else if (type === "cyl") {
+      g = new T.CylinderGeometry(pw / 2, pw / 2, ph, 12);
+      g.translate(x, y, z);
+    } else if (type === "dome") {
+      g = new T.SphereGeometry(pw / 2, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+      g.scale(1, ph / (pw / 2), 1);
+      g.translate(x, y, z);
+    } else if (type === "barrel") {
+      g = new T.CylinderGeometry(ph, ph, pd, 12, 1, false, 0, Math.PI);
+      g.rotateZ(Math.PI / 2);
+      g.rotateY(Math.PI / 2);
+      g.scale(pw / (ph * 2), 1, 1);
+      g.translate(x, y, z);
+    } else if (type === "pitch" || type === "hip") {
+      g = new T.ConeGeometry(Math.max(pw, pd) / 2, ph, 4);
+      g.rotateY(Math.PI / 4);
+      g.scale(pw / Math.max(pw, pd), 1, pd / Math.max(pw, pd));
+      g.translate(x, y + ph / 2, z);
+    } else if (type === "pyr" || type === "cone") {
+      g = new T.ConeGeometry(pw / 2, ph, 8);
+      g.translate(x, y + ph / 2, z);
+    } else {
+      g = new T.BoxGeometry(pw, ph, pd);
+      g.translate(x, y, z);
+    }
+    parts.push(g);
+  }
+
+  addPart("wall", 0, 1.2, 0, w * 1.08, 2.4, d * 1.08);
+
+  if (typology === "cathedral") {
+    const naveW = w * 0.44, naveD = d * 0.88, bodyH = h * 0.75;
+    addPart("wall", 0, 2.4 + bodyH / 2, 0, naveW, bodyH, naveD);
+    addPart("barrel", 0, 2.4 + bodyH, 0, naveW * 1.02, bodyH * 0.4, naveD * 1.01);
+    const transW = w * 0.92, transD = d * 0.32;
+    addPart("wall", 0, 2.4 + bodyH * 0.42, 0, transW, bodyH * 0.84, transD);
+    addPart("pitch", 0, 2.4 + bodyH * 0.84, 0, transW * 1.02, bodyH * 0.32, transD * 1.02);
+    addPart("pyr", 0, 2.4 + bodyH * 1.25 + 7, 0, 4.2, 14, 4.2);
+    const tW = w * 0.22, tD = d * 0.22, towerH = bodyH * 1.35;
+    for (const side of [-1, 1]) {
+      const tx = side * (naveW / 2 - tW / 2);
+      const tz = naveD / 2 - tD / 2;
+      addPart("wall", tx, 2.4 + towerH / 2, tz, tW, towerH, tD);
+      addPart("pyr", tx, 2.4 + towerH + 1.2 + 8, tz, tW * 0.9, 16, tD * 0.9);
+    }
+  } else if (typology === "station") {
+    const headD = d * 0.32, headH = h * 0.68;
+    addPart("wall", 0, 2.4 + headH / 2, d / 2 - headD / 2, w * 0.96, headH, headD);
+    const shedD = d * 0.62, shedH = h * 0.72;
+    addPart("barrel", 0, 2.4 + shedH * 0.5, -d / 2 + shedD / 2, w * 0.90, shedH * 0.75, shedD * 1.01);
+    const cW = Math.min(12, w * 0.16), cH = headH + 20, cX = -w * 0.42, cZ = d / 2 - headD / 2;
+    addPart("wall", cX, 2.4 + cH / 2, cZ, cW, cH, cW);
+    addPart("pyr", cX, 2.4 + cH + 1.2 + 5, cZ, cW * 0.95, 10, cW * 0.95);
+  } else if (typology === "capitol") {
+    const bodyH = h * 0.65, coreW = w * 0.38, coreD = d * 0.88;
+    for (const side of [-1, 1]) {
+      const wx = side * (w / 2 - (w * 0.36) / 2);
+      addPart("wall", wx, 2.4 + bodyH / 2, 0, w * 0.36, bodyH, d * 0.82);
+    }
+    addPart("wall", 0, 2.4 + (bodyH + 3) / 2, 0, coreW, bodyH + 3, coreD);
+    const drumR = coreW * 0.32, drumH = 6;
+    addPart("cyl", 0, 2.4 + bodyH + 3 + drumH / 2, 0, drumR * 2, drumH, drumR * 2);
+    const domeH = coreW * 0.26;
+    addPart("dome", 0, 2.4 + bodyH + 3 + drumH, 0, drumR * 1.95, domeH, drumR * 1.95);
+    addPart("cyl", 0, 2.4 + bodyH + 3 + drumH + domeH + 2, 0, 2.0, 4.0, 2.0);
+  } else if (typology === "library") {
+    const bodyH = h * 0.62;
+    addPart("wall", 0, 2.4 + bodyH / 2, 0, w * 0.96, bodyH, d * 0.86);
+    const rotR = Math.min(w, d) * 0.28;
+    addPart("dome", 0, 2.4 + bodyH + 1.6, 0, rotR * 2, rotR * 0.8, rotR * 2);
+    for (const sx of [-1, 1]) {
+      addPart("wall", sx * (w * 0.44), 2.4 + (bodyH + 4) / 2, 0, w * 0.16, bodyH + 4, d * 0.88);
+    }
+  } else if (typology === "opera") {
+    const bodyH = h * 0.64, hallW = w * 0.72, hallD = d * 0.60;
+    addPart("wall", 0, 2.4 + 4, d * 0.25, w * 0.92, 8, d * 0.46);
+    addPart("wall", 0, 2.4 + bodyH / 2, -d * 0.05, hallW, bodyH, hallD);
+    addPart("barrel", 0, 2.4 + bodyH, -d * 0.05, hallW * 1.02, bodyH * 0.4, hallD * 1.01);
+    const flyW = hallW * 0.75, flyD = d * 0.28, flyH = bodyH + 14;
+    addPart("wall", 0, 2.4 + flyH / 2, -d * 0.34, flyW, flyH, flyD);
+  } else if (typology === "courthouse") {
+    const bodyH = h * 0.66;
+    addPart("wall", 0, 2.4 + bodyH / 2, 0, w * 0.92, bodyH, d * 0.84);
+    addPart("pitch", 0, 2.4 + bodyH + 1.6, d * 0.38, w * 0.48 * 1.04, 5.0, d * 0.20 * 1.1);
+    for (const sx of [-1, 1]) {
+      addPart("wall", sx * (w * 0.38), 2.4 + (bodyH + 2) / 2, 0, w * 0.22, bodyH + 2, d * 0.86);
+    }
+  } else if (typology === "hospital") {
+    addPart("wall", 0, 2.4 + 3.0, 0, w * 0.96, 6.0, d * 0.90);
+    const wardW = w * 0.38, wardD = d * 0.75, wardH = h * 0.78;
+    for (const side of [-1, 1]) {
+      addPart("wall", side * (w * 0.26), 2.4 + 6.0 + wardH / 2, 0, wardW, wardH, wardD);
+    }
+    addPart("cyl", w * 0.26, 2.4 + 6.0 + wardH + 1.2, 0, 14, 0.8, 14);
+  } else if (typology === "university") {
+    const bodyH = h * 0.60;
+    for (const side of [-1, 1]) {
+      addPart("wall", side * (w / 2 - (w * 0.22) / 2), 2.4 + bodyH / 2, 0, w * 0.22, bodyH, d * 0.88);
+    }
+    const towW = Math.min(16, w * 0.28), towH = bodyH + 22;
+    addPart("wall", 0, 2.4 + towH / 2, d * 0.38, towW, towH, towW);
+    addPart("pyr", 0, 2.4 + towH + 1.6 + 3, d * 0.38, towW * 0.8, 8, towW * 0.8);
+  } else if (typology === "theatre") {
+    const bodyH = h * 0.62;
+    addPart("wall", 0, 2.4 + bodyH / 2, 0, w * 0.88, bodyH, d * 0.84);
+    addPart("roof", 0, 2.4 + 4.5, d * 0.46, w * 0.65, 0.8, 6.0);
+    const flyW = w * 0.58, flyD = d * 0.32, flyH = bodyH + 12;
+    addPart("wall", 0, 2.4 + flyH / 2, -d * 0.28, flyW, flyH, flyD);
+  } else if (typology === "art-gallery") {
+    const bodyH = h * 0.55;
+    addPart("wall", 0, 2.4 + bodyH / 2, 0, w * 0.92, bodyH, d * 0.88);
+    const upW = w * 0.78, upD = d * 0.72, upH = bodyH * 0.65;
+    addPart("wall", w * 0.08, 2.4 + bodyH + upH / 2, -d * 0.06, upW, upH, upD);
+  } else if (typology === "market-hall") {
+    const bodyH = h * 0.58;
+    addPart("wall", 0, 2.4 + bodyH / 2, 0, w * 0.94, bodyH, d * 0.92);
+    addPart("pitch", 0, 2.4 + bodyH, 0, w * 0.96, w * 0.25, d * 0.94);
+    addPart("wall", 0, 2.4 + bodyH + w * 0.25 + 2.0, 0, w * 0.38, 4.0, d * 0.88);
+  } else if (typology === "stadium") {
+    const bowlH = h * 0.70;
+    addPart("cyl", 0, 2.4 + bowlH / 2, 0, w * 0.95, bowlH, d * 0.95);
+    addPart("cyl", 0, 2.4 + bowlH + 2.0, 0, w * 1.02, 3.0, d * 1.02);
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        addPart("cyl", sx * (w * 0.46), 2.4 + (bowlH + 20) / 2, sz * (d * 0.46), 2.4, bowlH + 20, 2.4);
+      }
+    }
+  } else {
+    addPart("wall", 0, 2.4 + h * 0.3, 0, w * 0.92, h * 0.6, d * 0.88);
+  }
+
+  // Convert all parts to non-indexed before concatenating positions
+  const nonIndexedParts = parts.map(p => p.index ? p.toNonIndexed() : p);
+  let count = 0;
+  for (const p of nonIndexedParts) count += p.attributes.position.count;
+  const posArr = new Float32Array(count * 3);
+  let offset = 0;
+  for (const p of nonIndexedParts) {
+    const pArr = p.attributes.position.array;
+    posArr.set(pArr, offset);
+    offset += pArr.length;
+  }
+  const merged = new T.BufferGeometry();
+  merged.setAttribute("position", new T.BufferAttribute(posArr, 3));
+  merged.computeVertexNormals();
+  return merged;
+}
+
+// Helper to get real model definition
+function resolveModel(reg) {
+  if (reg.category === "civic") {
+    const typ = reg.id.replace("civic-", "");
+    const w = typ === "stadium" ? 90 : typ === "station" ? 64 : 48;
+    const d = typ === "stadium" ? 70 : typ === "station" ? 80 : 48;
+    const h = typ === "cathedral" ? 44 : typ === "capitol" ? 38 : typ === "station" ? 34 : 28;
+    return {
+      id: reg.id,
+      kind: "civic",
+      footprint: { w, d },
+      height: h,
+      clearance: 0,
+      origin: "base-centre",
+      standsOn: ["plot"],
+      lod: [
+        { level: 0, tris: 280, createGeometry: (T = THREE) => buildCivicGeometry(typ, w, d, h, T) },
+        { level: 1, tris: 80, createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(w, h * 0.75, d);
+          b.translate(0, h * 0.375, 0);
+          return b;
+        }},
+        { level: 2, tris: 12, createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(w, h * 0.75, d);
+          b.translate(0, h * 0.375, 0);
+          return b;
+        }}
+      ]
+    };
+  }
+
+  // Check direct MODELS
+  if (MODELS[reg.id]) return MODELS[reg.id];
+
+  // Try generator families
+  if (reg.category === "roof") {
+    const k = reg.id.replace("roof-", "").replace("-roof", "");
+    try { return roofClutter(k, "medium"); } catch(e){}
+  }
+  if (reg.category === "furniture") {
+    try { return streetFurniture(reg.id.split("-")[0], "standard"); } catch(e){}
+  }
+  if (reg.category === "facade") {
+    try { return facade(reg.id, 2.4); } catch(e){}
+  }
+  if (reg.category === "boundary") {
+    try { return boundary(reg.id, 2.4); } catch(e){}
+  }
+  if (reg.category === "ground") {
+    try { return groundFurniture(reg.id === "drain-grating" ? "grate" : "manhole"); } catch(e){}
+  }
+  if (reg.category === "vegetation") {
+    const sp = reg.id.replace("tree-", "");
+    try { return tree(sp, "mature"); } catch(e){}
+  }
+  if (reg.category === "people") {
+    const b = reg.id.replace("person-", "");
+    try { return person(b, "standing", "casual"); } catch(e){}
+  }
+  if (reg.category === "vehicles") {
+    const v = reg.id.replace("vehicle-", "");
+    try { return vehicle(v === "car" ? "car" : v, v === "car" ? "sedan" : "standard"); } catch(e){}
+  }
+  if (reg.category === "maritime") {
+    const v = reg.id.replace("vessel-", "");
+    try { return vessel(v); } catch(e){}
+  }
+  if (reg.category === "aviation") {
+    const a = reg.id.replace("aircraft-", "");
+    try { return aircraft(a); } catch(e){}
+  }
+  if (reg.category === "roads") {
+    if (reg.id === "road-straight") return ROADKIT.straight("STREET", 1);
+    if (reg.id === "road-curve") return ROADKIT.curve("STREET", 32, 90);
+    if (reg.id === "road-junction") return ROADKIT.junction([{class:"STREET",bearing:0},{class:"STREET",bearing:90},{class:"STREET",bearing:180},{class:"STREET",bearing:270}]);
+    if (reg.id === "road-roundabout") return ROADKIT.roundabout([{class:"AVENUE",bearing:0},{class:"AVENUE",bearing:90},{class:"AVENUE",bearing:180},{class:"AVENUE",bearing:270}], 16);
+    if (reg.id === "road-ramp-merge") return ROADKIT.rampMerge("FREEWAY", "right");
+    if (reg.id === "road-level-crossing") return ROADKIT.levelCrossing("STREET");
+    if (reg.id === "road-turning-head") return ROADKIT.turningHead("STREET", "bulb");
+    if (reg.id === "bridge-span") return ROADKIT.bridgeSpan([0,0,0], [0,0,96], { roadClass: "AVENUE", clearance: 12 });
+    if (reg.id === "rail-straight") return ROADKIT.railStraight(1);
+    if (reg.id === "rail-platform") return ROADKIT.railPlatform(2);
+  }
+
+  // Fallback placeholder model
+  return {
+    id: reg.id,
+    kind: reg.status === "planned" ? "gap" : "hard",
+    footprint: { w: 2.0, d: 2.0 },
+    height: 1.5,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    lod: [
+      { level: 0, tris: 0, createGeometry: () => new THREE.BufferGeometry() },
+      { level: 1, tris: 0, createGeometry: () => new THREE.BufferGeometry() },
+      { level: 2, tris: 0, createGeometry: () => new THREE.BufferGeometry() }
+    ]
+  };
+}
+
+for (const reg of ASSET_REGISTRY) {
+  const model = resolveModel(reg);
+  libraryItems.push({
+    registry: reg,
+    model: model,
+    isGap: reg.status === "planned"
+  });
+}
+
+// --- SHARED STUDIO WEBGL RENDERER (ONE CONTEXT ONLY) ---
+const sharedCanvas = document.createElement("canvas");
+sharedCanvas.width = 320;
+sharedCanvas.height = 200;
+const sharedRenderer = new THREE.WebGLRenderer({
+  canvas: sharedCanvas,
+  antialias: true,
+  alpha: true,
+  preserveDrawingBuffer: true
+});
+sharedRenderer.setSize(320, 200, false);
+sharedRenderer.setPixelRatio(1);
+sharedRenderer.shadowMap.enabled = true;
+sharedRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const studioScene = new THREE.Scene();
+const studioCamera = new THREE.PerspectiveCamera(38, 320 / 200, 0.1, 2000);
+
+// Neutral Studio Lighting (3-Point Studio Setup)
+const studioAmbient = new THREE.AmbientLight(0xffffff, 0.85);
+studioScene.add(studioAmbient);
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.3);
+keyLight.position.set(20, 40, 30);
+keyLight.castShadow = true;
+studioScene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0x90caf9, 0.5);
+fillLight.position.set(-30, 20, -20);
+studioScene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0xffb74d, 0.4);
+rimLight.position.set(0, -20, -40);
+studioScene.add(rimLight);
+
+// Shared Studio Materials
+const studioMat = new THREE.MeshStandardMaterial({
+  color: 0x90caf9,
+  roughness: 0.35,
+  metalness: 0.2
+});
+const studioRoadMat = new THREE.MeshStandardMaterial({
+  color: 0x475569,
+  roughness: 0.75,
+  metalness: 0.1
+});
+
+// Studio Ground Disc
+const groundDiscGeo = new THREE.CylinderGeometry(1, 1, 0.05, 32);
+const groundDiscMat = new THREE.MeshStandardMaterial({ color: 0x21262d, roughness: 0.9 });
+const groundDisc = new THREE.Mesh(groundDiscGeo, groundDiscMat);
+groundDisc.position.y = -0.025;
+groundDisc.receiveShadow = true;
+studioScene.add(groundDisc);
+
+// Container for model in studio
+const studioModelGroup = new THREE.Group();
+studioScene.add(studioModelGroup);
+
+/**
+ * Render an item framed to its own bounding box onto a 2D canvas context.
+ */
+function renderItemThumbnail(item, targetCtx) {
+  // Clear studio model group
+  while (studioModelGroup.children.length > 0) {
+    studioModelGroup.remove(studioModelGroup.children[0]);
+  }
+
+  const m = item.model;
+  const isGap = item.isGap;
+
+  if (isGap) {
+    // Render planned gap wireframe box
+    const w = m.footprint.w, d = m.footprint.d, h = m.height;
+    const boxGeo = new THREE.BoxGeometry(w, h, d);
+    boxGeo.translate(0, h / 2, 0);
+    const wireMat = new THREE.MeshBasicMaterial({ color: 0xbc8cff, wireframe: true });
+    const wireMesh = new THREE.Mesh(boxGeo, wireMat);
+    studioModelGroup.add(wireMesh);
+  } else {
+    // Render LOD0 mesh
+    const lod0 = m.lod[0] || m.lod[m.lod.length - 1];
+    const geom = lod0.createGeometry(THREE);
+    const isRoad = item.registry.category === "roads" || item.registry.category === "airport";
+    const mesh = new THREE.Mesh(geom, isRoad ? studioRoadMat : studioMat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    studioModelGroup.add(mesh);
+  }
+
+  // Bounding Box Calculation for Per-Item Framing
+  const foot = m.footprint;
+  const sweep = m.sweep || foot;
+  const maxDim = Math.max(foot.w, foot.d, sweep.w, sweep.d, m.height, 0.8);
+  const radius = maxDim * 0.95;
+
+  // Scale ground disc to match item scale
+  groundDisc.scale.set(maxDim * 1.6, 1, maxDim * 1.6);
+
+  // Position camera at consistent 3/4 studio angle
+  const dist = radius / Math.tan((studioCamera.fov * Math.PI) / 360);
+  const elev = 0.55; // 30 deg elevation
+  const azim = 0.65; // 37 deg azimuth
+
+  const targetY = m.height * 0.42;
+  studioCamera.position.set(
+    dist * Math.cos(elev) * Math.sin(azim),
+    targetY + dist * Math.sin(elev),
+    dist * Math.cos(elev) * Math.cos(azim)
+  );
+  studioCamera.lookAt(0, targetY, 0);
+  studioCamera.updateProjectionMatrix();
+
+  // Render & copy to 2D card canvas
+  sharedRenderer.render(studioScene, studioCamera);
+  targetCtx.clearRect(0, 0, 320, 200);
+  targetCtx.drawImage(sharedCanvas, 0, 0, 320, 200);
+}
+
+// --- Card Grid Population & Lazy Rendering ---
+const grid = document.getElementById("model-grid");
+
+const observer = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (entry.isIntersecting) {
+      const card = entry.target;
+      const idx = Number(card.dataset.index);
+      const item = libraryItems[idx];
+      const canvas = card.querySelector("canvas");
+      if (canvas && !card.dataset.rendered) {
+        const ctx = canvas.getContext("2d");
+        renderItemThumbnail(item, ctx);
+        card.dataset.rendered = "true";
+      }
+    }
+  }
+}, { rootMargin: "150px" });
+
+function buildCards() {
+  grid.innerHTML = "";
+  libraryItems.forEach((item, idx) => {
+    const reg = item.registry;
+    const m = item.model;
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.index = idx;
+    card.dataset.modelId = reg.id;
+    card.dataset.category = reg.category;
+    card.dataset.status = reg.status;
+    card.dataset.source = reg.source;
+
+    const statusClass = reg.status === "built" ? "badge-status-built" : reg.status === "generator" ? "badge-status-generator" : "badge-status-planned";
+    const statusLabel = reg.status === "built" ? "Built" : reg.status === "generator" ? "Generator" : "Planned Gap";
+
+    card.innerHTML = `
+      <div class="card-thumbnail">
+        <div class="card-badges">
+          <span class="badge badge-category">${reg.category}</span>
+          <span class="badge ${statusClass}">${statusLabel}</span>
+        </div>
+        <canvas width="320" height="200"></canvas>
+      </div>
+      <div class="card-body">
+        <h4 class="card-title">${reg.id}</h4>
+        <div class="card-dims">
+          <span>${m.footprint.w}m &times; ${m.footprint.d}m</span>
+          <span>h=${m.height}m</span>
+          <span>${reg.seenAs}</span>
+        </div>
+        <div class="card-note">${reg.note || reg.generator || ""}</div>
+      </div>
+      <div class="card-actions">
+        <button class="btn btn-inspect" data-action="inspect">Inspect 3D</button>
+        <button class="btn btn-target" data-action="target">Use as target</button>
+      </div>
+    `;
+
+    // Hook card action events
+    card.querySelector("[data-action='target']").addEventListener("click", (e) => {
+      e.stopPropagation();
+      dispatchTargetEvent(reg);
+    });
+
+    card.addEventListener("click", () => {
+      openInspector(item);
+    });
+
+    grid.appendChild(card);
+    observer.observe(card);
+  });
+}
+buildCards();
+
+// --- Target Dispatch Hook (Brief 6 Task 3) ---
+function dispatchTargetEvent(reg) {
+  document.dispatchEvent(new CustomEvent("caliper:model-target", {
+    detail: { id: reg.id, category: reg.category, source: reg.source },
+    bubbles: true
+  }));
+  showToast(`Dispatched caliper:model-target: ${reg.id}`);
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2400);
+}
+
+// --- Search and Filtering ---
+const searchInput = document.getElementById("search-input");
+let activeCategory = "all";
+
+function filterCards() {
+  const query = searchInput.value.toLowerCase().trim();
+  const cards = document.querySelectorAll(".card");
+
+  cards.forEach((card) => {
+    const id = card.dataset.modelId.toLowerCase();
+    const cat = card.dataset.category.toLowerCase();
+    const note = card.querySelector(".card-note").textContent.toLowerCase();
+
+    const matchesCat = (activeCategory === "all" || cat === activeCategory);
+    const matchesQuery = !query || id.includes(query) || cat.includes(query) || note.includes(query);
+
+    card.style.display = (matchesCat && matchesQuery) ? "flex" : "none";
+  });
+}
+
+searchInput.addEventListener("input", filterCards);
+document.querySelectorAll("#category-filters .filter-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#category-filters .filter-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    activeCategory = btn.dataset.cat;
+    filterCards();
+  });
+});
+
+// --- Modal 3D Orbit Inspector ---
+const modal = document.getElementById("modal");
+const modalClose = document.getElementById("modal-close");
+const modalViewport = document.getElementById("modal-viewport");
+const modalTargetBtn = document.getElementById("modal-btn-target");
+
+let modalRenderer, modalScene, modalCamera, currentModalMesh, activeItem;
+let currentLOD = 0;
+
+function initModalViewport() {
+  modalRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  modalRenderer.setSize(modalViewport.clientWidth || 500, modalViewport.clientHeight || 400);
+  modalRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  modalViewport.appendChild(modalRenderer.domElement);
+
+  modalScene = new THREE.Scene();
+  modalCamera = new THREE.PerspectiveCamera(40, (modalViewport.clientWidth || 500) / (modalViewport.clientHeight || 400), 0.1, 3000);
+
+  const amb = new THREE.AmbientLight(0xffffff, 0.85);
+  modalScene.add(amb);
+  const dl = new THREE.DirectionalLight(0xffffff, 1.2);
+  dl.position.set(30, 60, 40);
+  modalScene.add(dl);
+  const fl = new THREE.DirectionalLight(0x90caf9, 0.4);
+  fl.position.set(-30, 20, -30);
+  modalScene.add(fl);
+
+  // Orbit rotation
+  let isDown = false, px = 0, py = 0;
+  let sph = { r: 10, theta: 0.6, phi: 1.05 };
+  let targetPos = new THREE.Vector3(0, 0, 0);
+
+  function updateCam() {
+    modalCamera.position.x = targetPos.x + sph.r * Math.sin(sph.phi) * Math.sin(sph.theta);
+    modalCamera.position.y = targetPos.y + sph.r * Math.cos(sph.phi);
+    modalCamera.position.z = targetPos.z + sph.r * Math.sin(sph.phi) * Math.cos(sph.theta);
+    modalCamera.lookAt(targetPos);
+  }
+
+  modalViewport.addEventListener("mousedown", (e) => {
+    isDown = true; px = e.clientX; py = e.clientY;
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!isDown) return;
+    const dx = e.clientX - px;
+    const dy = e.clientY - py;
+    px = e.clientX; py = e.clientY;
+    sph.theta -= dx * 0.008;
+    sph.phi = Math.max(0.1, Math.min(Math.PI/2 - 0.02, sph.phi - dy * 0.008));
+    updateCam();
+  });
+  window.addEventListener("mouseup", () => { isDown = false; });
+  modalViewport.addEventListener("wheel", (e) => {
+    sph.r = Math.max(1, Math.min(500, sph.r + e.deltaY * 0.02));
+    updateCam();
+  }, { passive: true });
+
+  window.modalOrbit = { sph, targetPos, updateCam };
+
+  function anim() {
+    requestAnimationFrame(anim);
+    if (modal.classList.contains("open")) {
+      modalRenderer.render(modalScene, modalCamera);
+    }
+  }
+  anim();
+}
+initModalViewport();
+
+function openInspector(item) {
+  activeItem = item;
+  const reg = item.registry;
+  const m = item.model;
+
+  document.getElementById("modal-title").textContent = reg.id;
+  document.getElementById("spec-id").textContent = reg.id;
+  document.getElementById("spec-cat").textContent = reg.category;
+  document.getElementById("spec-status").textContent = reg.status.toUpperCase();
+  document.getElementById("spec-source").textContent = reg.source;
+  document.getElementById("spec-foot").textContent = m.footprint.w + "m × " + m.footprint.d + "m";
+  document.getElementById("spec-sweep").textContent = m.sweep ? (m.sweep.w + "m × " + m.sweep.d + "m") : (m.footprint.w + "m × " + m.footprint.d + "m");
+  document.getElementById("spec-h").textContent = m.height + "m";
+  document.getElementById("spec-clear").textContent = (m.clearance ?? 0) + "m";
+  document.getElementById("spec-tris").textContent = m.lod.map((l) => l.tris).join(" / ");
+  document.getElementById("spec-stands").textContent = Array.isArray(m.standsOn) ? m.standsOn.join(", ") : "open";
+  document.getElementById("spec-count").textContent = reg.count ? reg.count.toLocaleString() : "--";
+  document.getElementById("spec-note").textContent = reg.note || reg.generator || "Standard parameterised asset specification.";
+
+  renderModalLOD(0);
+
+  modal.classList.add("open");
+}
+
+function renderModalLOD(lodIndex) {
+  currentLOD = lodIndex;
+  document.querySelectorAll(".lod-btn").forEach((b) => {
+    b.classList.toggle("active", Number(b.dataset.lod) === lodIndex);
+  });
+
+  if (currentModalMesh) {
+    modalScene.remove(currentModalMesh);
+  }
+
+  const m = activeItem.model;
+  const isRoad = activeItem.registry.category === "roads" || activeItem.registry.category === "airport";
+  const lodDef = m.lod[lodIndex] || m.lod[0];
+  const geom = lodDef.createGeometry(THREE);
+  currentModalMesh = new THREE.Mesh(geom, isRoad ? studioRoadMat : studioMat);
+  modalScene.add(currentModalMesh);
+
+  // Frame modal camera to item bounds
+  const foot = m.footprint;
+  const sweep = m.sweep || foot;
+  const maxDim = Math.max(foot.w, foot.d, sweep.w, sweep.d, m.height, 1.0);
+  window.modalOrbit.targetPos.set(0, m.height * 0.45, 0);
+  window.modalOrbit.sph.r = maxDim * 1.8;
+  window.modalOrbit.updateCam();
+}
+
+document.querySelectorAll(".lod-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    renderModalLOD(Number(btn.dataset.lod));
+  });
+});
+
+modalTargetBtn.addEventListener("click", () => {
+  if (activeItem) {
+    dispatchTargetEvent(activeItem.registry);
+    modal.classList.remove("open");
+  }
+});
+
+modalClose.addEventListener("click", () => modal.classList.remove("open"));
+modal.addEventListener("click", (e) => {
+  if (e.target === modal) modal.classList.remove("open");
+});
+</script>
+</body>
+</html>

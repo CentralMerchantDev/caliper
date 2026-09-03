@@ -249,8 +249,8 @@ export function vehicle(vehicleClass = "car", variant = "sedan") {
     artic: { w: 2.6, d: 16.5, h: 4.0, tris: 88 },
     taxi: { w: 1.9, d: 4.5, h: 1.5, tris: 72 },
     emergency: { w: 2.2, d: 6.2, h: 2.6, tris: 76 },
-    bicycle: { w: 0.55, d: 1.75, h: 1.05, tris: 38 },
-    motorcycle: { w: 0.8, d: 2.2, h: 1.25, tris: 48 },
+    bicycle: { w: 0.55, d: 1.75, h: 1.05, tris: 88 },
+    motorcycle: { w: 0.8, d: 2.2, h: 1.25, tris: 88 },
   };
   const sp = specs[vehicleClass] || specs.car;
 
@@ -272,9 +272,24 @@ export function vehicle(vehicleClass = "car", variant = "sedan") {
         createGeometry: (T = THREE) => {
           const parts = [];
           if (vehicleClass === "bicycle" || vehicleClass === "motorcycle") {
-            const frame = new T.BoxGeometry(sp.w, sp.h * 0.8, sp.d * 0.85);
-            frame.translate(0, sp.h * 0.45, 0);
-            parts.push(frame);
+            const isMoto = vehicleClass === "motorcycle";
+            const wheelR = isMoto ? 0.35 : 0.32;
+            const wheelThick = isMoto ? 0.12 : 0.05;
+            // Front & Rear Wheels
+            const wRear = new T.CylinderGeometry(wheelR, wheelR, wheelThick, 8);
+            wRear.rotateZ(Math.PI / 2);
+            wRear.translate(0, wheelR, -sp.d * 0.3);
+            const wFront = new T.CylinderGeometry(wheelR, wheelR, wheelThick, 8);
+            wFront.rotateZ(Math.PI / 2);
+            wFront.translate(0, wheelR, sp.d * 0.3);
+            // Frame & Tank / Seat
+            const frameH = sp.h * (isMoto ? 0.55 : 0.45);
+            const frame = new T.BoxGeometry(sp.w * (isMoto ? 0.6 : 0.25), frameH, sp.d * 0.55);
+            frame.translate(0, wheelR + frameH / 2, 0);
+            // Handlebars
+            const bars = new T.BoxGeometry(sp.w * 0.9, 0.05, 0.08);
+            bars.translate(0, sp.h * 0.92, sp.d * 0.25);
+            parts.push(wRear, wFront, frame, bars);
           } else {
             const lowerH = sp.h * 0.45;
             const lower = new T.BoxGeometry(sp.w, lowerH, sp.d);
