@@ -970,6 +970,22 @@ groundFurniture.variants = {
 };
 
 export const MODELS = {
+
+  "boundary-front-wall": boundaryFrontWall(8.0),
+  "boundary-gate": boundaryGate(1.2),
+  "boundary-driveway": boundaryDriveway(8.0),
+  "boundary-path": boundaryPath(6.0),
+  "boundary-bin-store": boundaryBinStore(),
+  "boundary-side-return": boundarySideReturn(1.4),
+  "parked-cars-kerbside": parkedCarRow("kerbside", 3),
+  "parked-cars-echelon": parkedCarRow("echelon", 4),
+  "parked-cars-bay": parkedCarRow("bay", 4),
+  "garden-shed": gardenFeature("shed"),
+  "garden-greenhouse": gardenFeature("greenhouse"),
+  "garden-trampoline": gardenFeature("trampoline"),
+  "garden-washing-line": gardenFeature("washing-line"),
+  "garden-patio-set": gardenFeature("patio-set"),
+
   ...SHOWSTOPPERS,
   "person-action-cyclist": personInAction("cyclist"),
   "person-action-worker": personInAction("worker"),
@@ -4700,6 +4716,474 @@ export function industrialInfrastructure(type = "pylon") {
           const bd = type === "tank-farm" ? 24 : type === "substation" ? 12 : type === "pylon" ? 8 : 18;
           const b = new T.BoxGeometry(bw, bh, bd);
           b.translate(0, bh / 2, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+
+
+
+function mergeGeometriesPart2(geometries, T = THREE) {
+  let totalVerts = 0;
+  for (const g of geometries) {
+    if (g && g.attributes && g.attributes.position) {
+      totalVerts += g.attributes.position.count;
+    }
+  }
+  const pos = new Float32Array(totalVerts * 3);
+  let offset = 0;
+  for (const g of geometries) {
+    if (g && g.attributes && g.attributes.position) {
+      const p = g.attributes.position.array;
+      pos.set(p, offset);
+      offset += p.length;
+    }
+  }
+  const merged = new T.BufferGeometry();
+  merged.setAttribute("position", new T.BufferAttribute(pos, 3));
+  merged.computeVertexNormals();
+  return merged;
+}
+
+// =============================================================================
+// A4. PLOT BOUNDARY KIT
+// =============================================================================
+
+/**
+ * 1. Front Wall (Low brick/stone front property wall with coping stone)
+ */
+export function boundaryFrontWall(length = 8.0) {
+  return {
+    id: `boundary-front-wall-${length}m`,
+    kind: "hard",
+    footprint: { w: length, d: 0.45 },
+    height: 0.9,
+    clearance: 0.1,
+    origin: "base-centre",
+    standsOn: ["plot", "sidewalk", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 36,
+        createGeometry: (T = THREE) => {
+          const wall = new T.BoxGeometry(length, 0.8, 0.35);
+          wall.translate(0, 0.4, 0);
+          const coping = new T.BoxGeometry(length, 0.1, 0.42);
+          coping.translate(0, 0.85, 0);
+          return mergeGeometries([wall, coping], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(length, 0.9, 0.4);
+          b.translate(0, 0.45, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(length, 0.9, 0.4);
+          b.translate(0, 0.45, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 2. Front Garden Gate (Pedestrian swinging metal/timber gate with posts)
+ */
+export function boundaryGate(width = 1.2) {
+  return {
+    id: `boundary-gate-${width}m`,
+    kind: "hard",
+    footprint: { w: width, d: 0.4 },
+    height: 1.1,
+    clearance: 0.1,
+    origin: "base-centre",
+    standsOn: ["plot", "sidewalk", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 48,
+        createGeometry: (T = THREE) => {
+          const p1 = new T.BoxGeometry(0.18, 1.1, 0.18);
+          p1.translate(-width / 2 + 0.09, 0.55, 0);
+          const p2 = new T.BoxGeometry(0.18, 1.1, 0.18);
+          p2.translate(width / 2 - 0.09, 0.55, 0);
+          const gate = new T.BoxGeometry(width - 0.4, 0.85, 0.05);
+          gate.translate(0, 0.48, 0);
+          return mergeGeometries([p1, p2, gate], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(width, 1.1, 0.2);
+          b.translate(0, 0.55, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(width, 1.1, 0.2);
+          b.translate(0, 0.55, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 3. Driveway Apron (Block-paved vehicular driveway with dropped kerb)
+ */
+export function boundaryDriveway(length = 8.0) {
+  return {
+    id: `boundary-driveway-${length}m`,
+    kind: "soft",
+    footprint: { w: 3.6, d: length },
+    height: 0.15,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["plot", "verge", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 48,
+        createGeometry: (T = THREE) => {
+          const paving = new T.BoxGeometry(3.5, 0.1, length);
+          paving.translate(0, 0.05, 0);
+          const kerb1 = new T.BoxGeometry(0.15, 0.12, length);
+          kerb1.translate(-1.75, 0.06, 0);
+          const kerb2 = new T.BoxGeometry(0.15, 0.12, length);
+          kerb2.translate(1.75, 0.06, 0);
+          return mergeGeometries([paving, kerb1, kerb2], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.6, 0.1, length);
+          b.translate(0, 0.05, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.6, 0.1, length);
+          b.translate(0, 0.05, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 4. Front Entrance Path (Flagstone pathway leading from gate to door)
+ */
+export function boundaryPath(length = 6.0) {
+  return {
+    id: `boundary-path-${length}m`,
+    kind: "soft",
+    footprint: { w: 1.4, d: length },
+    height: 0.1,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["plot", "verge", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 18,
+        createGeometry: (T = THREE) => {
+          const path = new T.BoxGeometry(1.3, 0.08, length);
+          path.translate(0, 0.04, 0);
+          return path;
+        },
+      },
+      {
+        level: 1,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.3, 0.08, length);
+          b.translate(0, 0.04, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.3, 0.08, length);
+          b.translate(0, 0.04, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 5. Wheelie Bin Store (Timber slatted twin enclosure with lid)
+ */
+export function boundaryBinStore() {
+  return {
+    id: "boundary-bin-store",
+    kind: "hard",
+    footprint: { w: 1.6, d: 0.9 },
+    height: 1.25,
+    clearance: 0.2,
+    origin: "base-centre",
+    standsOn: ["plot", "sidewalk", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 48,
+        createGeometry: (T = THREE) => {
+          const body = new T.BoxGeometry(1.5, 1.1, 0.8);
+          body.translate(0, 0.55, 0);
+          const lid = new T.BoxGeometry(1.56, 0.08, 0.86);
+          lid.translate(0, 1.14, 0);
+          return mergeGeometries([body, lid], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.5, 1.2, 0.85);
+          b.translate(0, 0.6, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.5, 1.2, 0.85);
+          b.translate(0, 0.6, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 6. Side Return Alley Gate (Passage gate between houses)
+ */
+export function boundarySideReturn(width = 1.4) {
+  return {
+    id: `boundary-side-return-${width}m`,
+    kind: "hard",
+    footprint: { w: width, d: 0.35 },
+    height: 1.9,
+    clearance: 0.1,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 36,
+        createGeometry: (T = THREE) => {
+          const door = new T.BoxGeometry(width * 0.9, 1.8, 0.08);
+          door.translate(0, 0.9, 0);
+          const frame = new T.BoxGeometry(width, 0.1, 0.12);
+          frame.translate(0, 1.85, 0);
+          return mergeGeometries([door, frame], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(width, 1.9, 0.12);
+          b.translate(0, 0.95, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(width, 1.9, 0.12);
+          b.translate(0, 0.95, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+// =============================================================================
+// D1. PARKED CAR ROWS (Single Instanced Prop Modules)
+// =============================================================================
+
+/**
+ * Parked Car Row: "kerbside" | "echelon" | "bay"
+ */
+export function parkedCarRow(layout = "kerbside", count = 3) {
+  const isKerb = layout === "kerbside";
+  const isEchelon = layout === "echelon";
+  const bayW = isKerb ? 6.0 : 2.8;
+  const bayD = isKerb ? 2.4 : 5.2;
+  const totalW = isKerb ? count * bayW : count * bayW;
+  const totalD = isKerb ? 2.4 : isEchelon ? 5.8 : 5.2;
+
+  return {
+    id: `parked-cars-${layout}-${count}`,
+    kind: "hard",
+    footprint: { w: +totalW.toFixed(1), d: +totalD.toFixed(1) },
+    height: 1.6,
+    clearance: 0.2,
+    origin: "base-centre",
+    standsOn: ["carriageway", "parking", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: count * 80 + 36,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          for (let i = 0; i < count; i++) {
+            const bx = -totalW / 2 + bayW / 2 + i * bayW;
+            // Car chassis
+            const carW = 1.8, carD = 4.2, carH = 1.35;
+            const chassis = new T.BoxGeometry(isKerb ? carD : carW, carH * 0.45, isKerb ? carW : carD);
+            chassis.translate(bx, (carH * 0.45) / 2 + 0.15, 0);
+            const cabin = new T.BoxGeometry(isKerb ? carD * 0.55 : carW * 0.88, carH * 0.48, isKerb ? carW * 0.88 : carD * 0.55);
+            cabin.translate(bx, carH * 0.45 + 0.15 + (carH * 0.48) / 2, 0);
+            parts.push(chassis, cabin);
+
+            // Marked bay white lines
+            const mark = new T.BoxGeometry(isKerb ? bayW * 0.95 : 0.15, 0.02, isKerb ? 0.15 : bayD * 0.95);
+            mark.translate(bx, 0.01, isKerb ? 1.1 : 0);
+            parts.push(mark);
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: count * 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(totalW, 1.5, totalD);
+          b.translate(0, 0.75, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(totalW, 1.5, totalD);
+          b.translate(0, 0.75, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+// =============================================================================
+// D2. GARDEN & YARD CONTENTS
+// =============================================================================
+
+export function gardenFeature(feature = "shed") {
+  const specs = {
+    shed: { w: 2.4, d: 3.0, h: 2.2, tris: 68 },
+    greenhouse: { w: 2.2, d: 2.8, h: 2.3, tris: 72 },
+    trampoline: { w: 3.2, d: 3.2, h: 2.4, tris: 64 },
+    "washing-line": { w: 2.4, d: 2.4, h: 1.9, tris: 48 },
+    "patio-set": { w: 2.2, d: 2.2, h: 0.9, tris: 84 },
+  };
+  const sp = specs[feature] || specs.shed;
+
+  return {
+    id: `garden-${feature}`,
+    kind: "hard",
+    footprint: { w: sp.w, d: sp.d },
+    height: sp.h,
+    clearance: 0.2,
+    origin: "base-centre",
+    standsOn: ["plot", "park", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: sp.tris,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          if (feature === "shed") {
+            const body = new T.BoxGeometry(sp.w * 0.9, sp.h * 0.7, sp.d * 0.9);
+            body.translate(0, (sp.h * 0.7) / 2, 0);
+            const roof = new T.ConeGeometry(sp.w * 0.65, sp.h * 0.3, 4);
+            roof.rotateY(Math.PI / 4);
+            roof.scale(1, 1, sp.d / sp.w);
+            roof.translate(0, sp.h * 0.7 + (sp.h * 0.3) / 2, 0);
+            parts.push(body, roof);
+          } else if (feature === "greenhouse") {
+            const frame = new T.BoxGeometry(sp.w * 0.9, sp.h * 0.65, sp.d * 0.9);
+            frame.translate(0, (sp.h * 0.65) / 2, 0);
+            const apex = new T.ConeGeometry(sp.w * 0.6, sp.h * 0.35, 4);
+            apex.rotateY(Math.PI / 4);
+            apex.scale(1, 1, sp.d / sp.w);
+            apex.translate(0, sp.h * 0.65 + (sp.h * 0.35) / 2, 0);
+            parts.push(frame, apex);
+          } else if (feature === "trampoline") {
+            const mat = new T.CylinderGeometry(sp.w / 2, sp.w / 2, 0.1, 12);
+            mat.translate(0, 0.75, 0);
+            const net = new T.CylinderGeometry(sp.w / 2, sp.w / 2, 1.6, 12, 1, true);
+            net.translate(0, 1.55, 0);
+            parts.push(mat, net);
+          } else if (feature === "washing-line") {
+            const pole = new T.CylinderGeometry(0.04, 0.04, 1.9, 6);
+            pole.translate(0, 0.95, 0);
+            const arms = new T.BoxGeometry(sp.w, 0.04, sp.d);
+            arms.translate(0, 1.8, 0);
+            parts.push(pole, arms);
+          } else {
+            // Patio table + 4 chairs
+            const table = new T.CylinderGeometry(0.6, 0.6, 0.75, 8);
+            table.translate(0, 0.375, 0);
+            parts.push(table);
+            for (const [cx, cz] of [[-0.8, 0], [0.8, 0], [0, -0.8], [0, 0.8]]) {
+              const chair = new T.BoxGeometry(0.4, 0.8, 0.4);
+              chair.translate(cx, 0.4, cz);
+              parts.push(chair);
+            }
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(sp.w, sp.h, sp.d);
+          b.translate(0, sp.h / 2, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(sp.w, sp.h, sp.d);
+          b.translate(0, sp.h / 2, 0);
           return b;
         },
       },

@@ -233,6 +233,25 @@ export const ASSET_REGISTRY = [
   { id: "park-observation-wheel", category: "parks", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 4, generator: "parkObservationWheel()", note: "Showstopper: 68m giant observation ferris wheel with dual A-frame legs and perimeter capsule ring" },
   { id: "bridge-cable-stayed-pylon", category: "roads", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 8, generator: "bridgeCableStayedTower()", note: "Showstopper: 96m soaring diamond A-frame cable-stayed bridge pylon tower with fan of 8 stay cables" },
 
+
+  // --- PART TWO: PLOT BOUNDARY KIT & URBAN AMENITIES ---
+  { id: "boundary-front-wall", category: "boundary", tier: "standard", status: "generator", source: "code", seenAs: "close", count: 8500, generator: "boundaryFrontWall(length)", note: "Low brick/stone front property wall with coping" },
+  { id: "boundary-gate", category: "boundary", tier: "standard", status: "generator", source: "code", seenAs: "close", count: 8500, generator: "boundaryGate(width)", note: "Front garden pedestrian swinging gate" },
+  { id: "boundary-driveway", category: "boundary", tier: "standard", status: "generator", source: "code", seenAs: "mid", count: 6200, generator: "boundaryDriveway(length)", note: "Block-paved vehicle access driveway apron" },
+  { id: "boundary-path", category: "boundary", tier: "standard", status: "generator", source: "code", seenAs: "close", count: 8500, generator: "boundaryPath(length)", note: "Flagstone entrance path from gate to door" },
+  { id: "boundary-bin-store", category: "boundary", tier: "standard", status: "built", source: "code", seenAs: "close", count: 7400, generator: "boundaryBinStore()", note: "Timber slatted wheelie bin enclosure" },
+  { id: "boundary-side-return", category: "boundary", tier: "standard", status: "generator", source: "code", seenAs: "close", count: 4200, generator: "boundarySideReturn(width)", note: "Side alley passage gate and return wall" },
+  { id: "parked-cars-kerbside", category: "vehicles", tier: "signature", status: "generator", source: "code", seenAs: "mid", count: 2400, generator: "parkedCarRow('kerbside', count)", note: "Single instanced module of 3 kerbside parked cars" },
+  { id: "parked-cars-echelon", category: "vehicles", tier: "signature", status: "generator", source: "code", seenAs: "mid", count: 1200, generator: "parkedCarRow('echelon', count)", note: "Single instanced module of 4 echelon parking stalls" },
+  { id: "parked-cars-bay", category: "vehicles", tier: "signature", status: "generator", source: "code", seenAs: "mid", count: 1800, generator: "parkedCarRow('bay', count)", note: "Single instanced module of 4 perpendicular parking bays" },
+  { id: "garden-shed", category: "furniture", tier: "standard", status: "generator", source: "code", seenAs: "mid", count: 5600, generator: "gardenFeature('shed')", note: "Timber garden storage shed" },
+  { id: "garden-greenhouse", category: "furniture", tier: "standard", status: "generator", source: "code", seenAs: "mid", count: 2800, generator: "gardenFeature('greenhouse')", note: "Glass greenhouse garden feature" },
+  { id: "garden-trampoline", category: "furniture", tier: "standard", status: "generator", source: "code", seenAs: "mid", count: 3200, generator: "gardenFeature('trampoline')", note: "Backyard trampoline with safety net" },
+  { id: "garden-washing-line", category: "furniture", tier: "standard", status: "generator", source: "code", seenAs: "close", count: 4800, generator: "gardenFeature('washing-line')", note: "Rotary washing line with arms" },
+  { id: "garden-patio-set", category: "furniture", tier: "standard", status: "generator", source: "code", seenAs: "close", count: 5200, generator: "gardenFeature('patio-set')", note: "Patio table and 4 chairs dining set" },
+  { id: "bld-highstreet-terrace", category: "buildings", tier: "signature", status: "generator", source: "code", seenAs: "far", count: 850, generator: "bldHighStreetTerrace(seed, options)", note: "High-street chaining terrace with ground retail and upper flats" },
+  { id: "bld-business-park", category: "buildings", tier: "signature", status: "generator", source: "code", seenAs: "far", count: 320, generator: "bldBusinessParkBlock(seed, options)", note: "Business park commercial block with brise-soleil louvers" },
+
 ];
 
 /**

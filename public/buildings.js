@@ -921,30 +921,58 @@ function mergeGeometries(geoms, T = THREE) {
  * Axes: roof (gable, hip, mansard, flat), porch, garage (attached/detached/none),
  * bay window, dormers, chimney, wall material.
  */
+
+
+export const CHARACTER_SETS = ["heritage", "interwar", "postwar", "contemporary"];
+
+
+
+function applyFoundation(parts, footW, footD, foundation = "slab", T = THREE) {
+  if (foundation === "plinth") {
+    const plinth = new T.BoxGeometry(footW * 0.96, 1.2, footD * 0.94);
+    plinth.translate(0, 0.6, 0);
+    const steps = new T.BoxGeometry(4.0, 0.6, 2.0);
+    steps.translate(0, 0.3, footD * 0.47 + 1.0);
+    parts.push(plinth, steps);
+    return 1.2;
+  } else if (foundation === "stepped") {
+    const stepBase = new T.BoxGeometry(footW * 0.48, 1.4, footD * 0.94);
+    stepBase.translate(-footW * 0.24, 0.7, 0);
+    parts.push(stepBase);
+    return 0.7;
+  }
+  return 0.0;
+}
+
 export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
   const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
-  const r5 = rnd(seed + "5"), r6 = rnd(seed + "6"), r7 = rnd(seed + "7"), r8 = rnd(seed + "8");
+  const r5 = rnd(seed + "5"), r6 = rnd(seed + "6");
 
-  const cellW = 2 + Math.floor(r1 * 3); // 2, 3, 4 cells (16, 24, 32m)
-  const cellD = 2 + Math.floor(r2 * 3); // 2, 3, 4 cells (16, 24, 32m)
+  const corner = options.corner || (r1 < 0.25 ? "left" : r1 < 0.5 ? "right" : "none");
+  const foundation = options.foundation || (r2 < 0.3 ? "plinth" : r2 < 0.55 ? "stepped" : "slab");
+  const character = options.character || CHARACTER_SETS[Math.floor(r3 * CHARACTER_SETS.length)];
+
+  const cellW = 2 + Math.floor(r1 * 2); // 2 or 3 cells (16 or 24m)
+  const cellD = 3 + Math.floor(r2 * 2); // 3 or 4 cells (24 or 32m)
   const footW = cellW * 8;
   const footD = cellD * 8;
 
-  const storeys = r3 < 0.4 ? 1 : 2;
+  const storeys = r3 < 0.45 ? 2 : 3;
   const bodyH = storeys * 4;
+  const roofStyle = options.roofStyle || (r4 < 0.3 ? "gable" : r4 < 0.6 ? "hip" : r4 < 0.85 ? "mansard" : "parapet");
+  const roofH = roofStyle === "gable" ? 4.5 : roofStyle === "hip" ? 3.8 : roofStyle === "mansard" ? 3.2 : 1.2;
 
-  const roofStyle = r4 < 0.30 ? "gable" : r4 < 0.55 ? "hip" : r4 < 0.80 ? "mansard" : "flat";
   const hasPorch = r5 > 0.25;
-  const garageType = r6 < 0.30 ? "none" : r6 < 0.65 ? "attached" : "detached";
-  const hasBay = r7 > 0.35;
-  const hasDormers = storeys === 2 && r8 > 0.4;
-  const hasChimney = r1 > 0.20;
+  const garageType = r6 < 0.4 ? "attached" : r6 < 0.7 ? "detached" : "none";
+  const hasBay = r1 > 0.3;
+  const hasDormers = (roofStyle === "gable" || roofStyle === "mansard") && r2 > 0.4;
+  const hasChimney = r3 > 0.3;
 
-  const roofH = roofStyle === "flat" ? 0.8 : roofStyle === "mansard" ? 3.2 : 4.2;
-  const totalH = +(bodyH + roofH + (hasChimney ? 1.2 : 0)).toFixed(2);
-
+  const totalH = +(bodyH + roofH + (foundation === "plinth" ? 1.2 : 0) + 1.2).toFixed(2);
   const wallCol = WALLS.VILLA[Math.floor(r1 * WALLS.VILLA.length)];
   const roofCol = ROOFS.VILLA[Math.floor(r2 * ROOFS.VILLA.length)];
+
+  const frontageEdges = corner === "left" ? ["front", "left"] : corner === "right" ? ["front", "right"] : ["front"];
 
   return {
     id: `bld-villa-${seed}`,
@@ -955,81 +983,91 @@ export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
     clearance: 1.0,
     origin: "base-centre",
     standsOn: ["plot", "open"],
+    frontageEdges,
     material: { wall: wallCol, roof: roofCol },
-    params: { cellW, cellD, storeys, roofStyle, hasPorch, garageType, hasBay, hasDormers, hasChimney },
+    params: { cellW, cellD, storeys, roofStyle, corner, foundation, character, hasPorch, garageType, hasBay, hasDormers, hasChimney },
     lod: [
       {
         level: 0,
         tris: 360,
         createGeometry: () => {
           const parts = [];
-          const bW = footW * 0.82;
-          const bD = footD * 0.78;
+          const bW = footW * 0.78;
+          const bD = footD * 0.74;
+          const baseOffset = applyFoundation(parts, footW, footD, foundation, T);
+
           const body = new T.BoxGeometry(bW, bodyH, bD);
-          body.translate(0, bodyH / 2, 0);
+          body.translate(0, baseOffset + bodyH / 2, 0);
           parts.push(body);
 
+          // Corner wrap / flank return bay
+          if (corner === "left") {
+            const sideBay = new T.BoxGeometry(0.5, bodyH * 0.75, bD * 0.4);
+            sideBay.translate(-bW / 2 - 0.25, baseOffset + (bodyH * 0.75) / 2, 0);
+            parts.push(sideBay);
+          } else if (corner === "right") {
+            const sideBay = new T.BoxGeometry(0.5, bodyH * 0.75, bD * 0.4);
+            sideBay.translate(bW / 2 + 0.25, baseOffset + (bodyH * 0.75) / 2, 0);
+            parts.push(sideBay);
+          }
+
+          // Roof geometry
           if (roofStyle === "gable") {
-            const roof = new T.ConeGeometry(bW * 0.65, roofH, 4);
+            const roof = new T.ConeGeometry(bW * 0.60, roofH, 4);
             roof.rotateY(Math.PI / 4);
-            roof.translate(0, bodyH + roofH / 2, 0);
+            roof.translate(0, baseOffset + bodyH + roofH / 2, 0);
             parts.push(roof);
           } else if (roofStyle === "hip") {
-            const roof = new T.ConeGeometry(bW * 0.62, roofH, 4);
+            const roof = new T.ConeGeometry(bW * 0.58, roofH, 4);
             roof.rotateY(Math.PI / 4);
             roof.scale(1, 1, bD / bW);
-            roof.translate(0, bodyH + roofH / 2, 0);
+            roof.translate(0, baseOffset + bodyH + roofH / 2, 0);
             parts.push(roof);
           } else if (roofStyle === "mansard") {
-            const lower = new T.BoxGeometry(bW * 1.04, roofH * 0.65, bD * 1.04);
-            lower.translate(0, bodyH + roofH * 0.325, 0);
-            const upper = new T.BoxGeometry(bW * 0.85, roofH * 0.35, bD * 0.85);
-            upper.translate(0, bodyH + roofH * 0.825, 0);
+            const lower = new T.BoxGeometry(bW * 1.02, roofH * 0.65, bD * 1.02);
+            lower.translate(0, baseOffset + bodyH + roofH * 0.325, 0);
+            const upper = new T.BoxGeometry(bW * 0.82, roofH * 0.35, bD * 0.82);
+            upper.translate(0, baseOffset + bodyH + roofH * 0.825, 0);
             parts.push(lower, upper);
           } else {
             const parapet = new T.BoxGeometry(bW * 1.02, 0.8, bD * 1.02);
-            parapet.translate(0, bodyH + 0.4, 0);
+            parapet.translate(0, baseOffset + bodyH + 0.4, 0);
             parts.push(parapet);
           }
 
           if (hasPorch) {
-            const pW = 4.0, pD = 2.4, pH = 3.2;
+            const pW = 3.8, pD = 2.2, pH = 3.2;
             const porchFloor = new T.BoxGeometry(pW, 0.3, pD);
-            porchFloor.translate(0, 0.15, bD / 2 + pD / 2);
-            const porchRoof = new T.BoxGeometry(pW * 1.1, 0.3, pD * 1.1);
-            porchRoof.translate(0, pH, bD / 2 + pD / 2);
+            porchFloor.translate(0, baseOffset + 0.15, bD / 2 + pD / 2);
+            const porchRoof = new T.BoxGeometry(pW * 1.05, 0.3, pD * 1.05);
+            porchRoof.translate(0, baseOffset + pH, bD / 2 + pD / 2);
             parts.push(porchFloor, porchRoof);
           }
 
           if (garageType === "attached") {
-            const gW = 6.0, gD = 6.5, gH = 3.5;
+            const gW = 5.6, gD = 6.0, gH = 3.5;
             const garage = new T.BoxGeometry(gW, gH, gD);
-            garage.translate(bW / 2 + gW / 2 - 0.5, gH / 2, 0);
-            parts.push(garage);
-          } else if (garageType === "detached") {
-            const gW = 5.5, gD = 6.0, gH = 3.2;
-            const garage = new T.BoxGeometry(gW, gH, gD);
-            garage.translate(-footW / 2 + gW / 2 + 0.5, gH / 2, -footD / 2 + gD / 2 + 0.5);
+            garage.translate(bW / 2 + gW / 2 - 0.4, baseOffset + gH / 2, 0);
             parts.push(garage);
           }
 
           if (hasBay) {
-            const bay = new T.BoxGeometry(3.2, bodyH * 0.85, 1.2);
-            bay.translate(-bW * 0.25, bodyH * 0.45, bD / 2 + 0.6);
+            const bay = new T.BoxGeometry(3.0, bodyH * 0.85, 1.0);
+            bay.translate(-bW * 0.25, baseOffset + bodyH * 0.45, bD / 2 + 0.5);
             parts.push(bay);
           }
 
           if (hasDormers) {
             for (const dx of [-bW * 0.25, bW * 0.25]) {
-              const dormer = new T.BoxGeometry(1.6, 1.6, 1.8);
-              dormer.translate(dx, bodyH + 1.2, bD * 0.35);
+              const dormer = new T.BoxGeometry(1.4, 1.4, 1.6);
+              dormer.translate(dx, baseOffset + bodyH + 1.1, bD * 0.32);
               parts.push(dormer);
             }
           }
 
           if (hasChimney) {
-            const chim = new T.BoxGeometry(1.2, bodyH + roofH + 1.2, 1.2);
-            chim.translate(bW * 0.35, (bodyH + roofH + 1.2) / 2, -bD * 0.2);
+            const chim = new T.BoxGeometry(1.1, bodyH + roofH + 1.0, 1.1);
+            chim.translate(bW * 0.32, (baseOffset + bodyH + roofH + 1.0) / 2, -bD * 0.2);
             parts.push(chim);
           }
 
@@ -1040,9 +1078,9 @@ export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
         level: 1,
         tris: 48,
         createGeometry: () => {
-          const body = new T.BoxGeometry(footW * 0.85, bodyH, footD * 0.8);
+          const body = new T.BoxGeometry(footW * 0.82, bodyH, footD * 0.78);
           body.translate(0, bodyH / 2, 0);
-          const roof = new T.BoxGeometry(footW * 0.9, roofH, footD * 0.85);
+          const roof = new T.BoxGeometry(footW * 0.85, roofH, footD * 0.8);
           roof.translate(0, bodyH + roofH / 2, 0);
           return mergeGeometries([body, roof], T);
         }
@@ -1051,7 +1089,7 @@ export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
         level: 2,
         tris: 12,
         createGeometry: () => {
-          const b = new T.BoxGeometry(footW * 0.9, totalH, footD * 0.85);
+          const b = new T.BoxGeometry(footW * 0.85, totalH, footD * 0.8);
           b.translate(0, totalH / 2, 0);
           return b;
         }
@@ -1060,31 +1098,36 @@ export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
   };
 }
 
-/**
- * 2. BLD-TERRACE (1x3 cells repeating unit = 8x24m per unit x N units, 2-3 storeys = 8-12m)
- * Axes: party-wall unit repeated N times (2..6); door position, window rhythm,
- * parapet vs pitched, basement area lightwell, string course, dormers.
- */
+// =============================================================================
+// 2. BLD-TERRACE
+// =============================================================================
 export function bldTerrace(seed = "terrace-0", options = {}, T = THREE) {
   const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
   const r5 = rnd(seed + "5"), r6 = rnd(seed + "6");
 
-  const units = 2 + Math.floor(r1 * 5); // 2, 3, 4, 5, 6 units (16, 24, 32, 40, 48m)
+  const corner = options.corner || (r1 < 0.2 ? "left" : r1 < 0.4 ? "right" : "none");
+  const position = options.position || (corner === "left" ? "end-left" : corner === "right" ? "end-right" : "middle");
+  const foundation = options.foundation || (r3 < 0.25 ? "plinth" : r3 < 0.45 ? "stepped" : "slab");
+  const character = options.character || CHARACTER_SETS[Math.floor(r4 * CHARACTER_SETS.length)];
+
+  const units = options.units || (position === "middle" ? 1 : 2 + Math.floor(r1 * 4));
   const footW = units * 8;
   const footD = 24;
 
   const storeys = r2 < 0.45 ? 2 : 3;
-  const bodyH = storeys * 4; // 8m or 12m
-  const roofType = r3 < 0.40 ? "parapet" : r3 < 0.75 ? "pitched" : "mansard";
-  const roofH = roofType === "parapet" ? 1.0 : roofType === "mansard" ? 3.0 : 3.6;
-  const totalH = +(bodyH + roofH + 1.2).toFixed(2);
+  const bodyH = storeys * 4;
+  const roofStyle = options.roofStyle || (r3 < 0.40 ? "parapet" : r3 < 0.75 ? "pitched" : "mansard");
+  const roofH = roofStyle === "parapet" ? 1.0 : roofStyle === "mansard" ? 3.0 : 3.6;
+  const totalH = +(bodyH + roofH + (foundation === "plinth" ? 1.2 : 0) + 1.2).toFixed(2);
 
   const hasBasement = r4 > 0.35;
   const hasStringCourse = r5 > 0.25;
-  const hasDormers = roofType !== "parapet" && r6 > 0.4;
+  const hasDormers = roofStyle !== "parapet" && r6 > 0.4;
 
   const wallCol = WALLS.TERRACE[Math.floor(r1 * WALLS.TERRACE.length)];
   const roofCol = ROOFS.TERRACE[Math.floor(r2 * ROOFS.TERRACE.length)];
+
+  const frontageEdges = corner === "left" ? ["front", "left"] : corner === "right" ? ["front", "right"] : ["front"];
 
   return {
     id: `bld-terrace-${seed}`,
@@ -1095,68 +1138,84 @@ export function bldTerrace(seed = "terrace-0", options = {}, T = THREE) {
     clearance: 0.5,
     origin: "base-centre",
     standsOn: ["plot", "open"],
+    frontageEdges,
     material: { wall: wallCol, roof: roofCol },
-    params: { units, storeys, roofType, hasBasement, hasStringCourse, hasDormers },
+    params: { units, storeys, roofStyle, corner, position, foundation, character, hasBasement, hasStringCourse, hasDormers },
     lod: [
       {
         level: 0,
         tris: 480,
         createGeometry: () => {
           const parts = [];
-          const uW = 7.6;
+          const uW = 8.0; // Exact 8m width for seamless party wall tiling
           const uD = 20.0;
+          const baseOffset = applyFoundation(parts, footW, footD, foundation, T);
+
           for (let i = 0; i < units; i++) {
             const ux = -footW / 2 + 4 + i * 8;
+            const isLeftEnd = (i === 0 && (position === "end-left" || corner === "left"));
+            const isRightEnd = (i === units - 1 && (position === "end-right" || corner === "right"));
+
+            // Unit body: strictly fits [-4, 4] locally so units tile seamlessly
             const unitBody = new T.BoxGeometry(uW, bodyH, uD);
-            unitBody.translate(ux, bodyH / 2, 0);
+            unitBody.translate(ux, baseOffset + bodyH / 2, 0);
             parts.push(unitBody);
 
-            // Party wall chimney stack
-            const chim = new T.BoxGeometry(0.6, bodyH + roofH + 1.2, 1.2);
-            chim.translate(ux + 3.4, (bodyH + roofH + 1.2) / 2, 0);
+            // Chimney centered on party wall line
+            const chim = new T.BoxGeometry(0.5, bodyH + roofH + 1.0, 1.0);
+            chim.translate(ux + (isRightEnd ? -3.4 : 3.6), (baseOffset + bodyH + roofH + 1.0) / 2, 0);
             parts.push(chim);
 
-            // Front door entrance stoop steps
+            // Front door stoop
             const doorSide = (i + Math.floor(r4 * 2)) % 2 === 0 ? -2.2 : 2.2;
-            const stoop = new T.BoxGeometry(1.8, 0.6, 1.5);
-            stoop.translate(ux + doorSide, 0.3, uD / 2 + 0.75);
+            const stoop = new T.BoxGeometry(1.6, 0.6, 1.4);
+            stoop.translate(ux + doorSide, baseOffset + 0.3, uD / 2 + 0.7);
             parts.push(stoop);
 
-            // Basement area lightwell well
             if (hasBasement) {
-              const well = new T.BoxGeometry(3.0, 0.4, 1.2);
-              well.translate(ux - doorSide, 0.2, uD / 2 + 0.6);
+              const well = new T.BoxGeometry(2.8, 0.4, 1.0);
+              well.translate(ux - doorSide, baseOffset + 0.2, uD / 2 + 0.5);
               parts.push(well);
             }
 
-            // String course architectural horizontal banding
             if (hasStringCourse) {
-              const stringCourse = new T.BoxGeometry(uW, 0.25, uD * 1.02);
-              stringCourse.translate(ux, 4.0, 0);
+              const stringCourse = new T.BoxGeometry(uW, 0.22, uD * 1.01);
+              stringCourse.translate(ux, baseOffset + 4.0, 0);
               parts.push(stringCourse);
             }
 
-            // Unit dormers
             if (hasDormers) {
-              const dorm = new T.BoxGeometry(1.4, 1.4, 1.6);
-              dorm.translate(ux, bodyH + 1.0, uD * 0.35);
+              const dorm = new T.BoxGeometry(1.3, 1.3, 1.5);
+              dorm.translate(ux, baseOffset + bodyH + 0.9, uD * 0.32);
               parts.push(dorm);
+            }
+
+            // Flank window return for end/corner units
+            if (isLeftEnd) {
+              const returnTrim = new T.BoxGeometry(0.2, bodyH * 0.8, 2.4);
+              returnTrim.translate(ux - uW / 2 + 0.1, baseOffset + bodyH * 0.45, 0);
+              parts.push(returnTrim);
+            }
+            if (isRightEnd) {
+              const returnTrim = new T.BoxGeometry(0.2, bodyH * 0.8, 2.4);
+              returnTrim.translate(ux + uW / 2 - 0.1, baseOffset + bodyH * 0.45, 0);
+              parts.push(returnTrim);
             }
           }
 
-          if (roofType === "parapet") {
-            const par = new T.BoxGeometry(footW * 0.98, 1.0, uD * 1.02);
-            par.translate(0, bodyH + 0.5, 0);
+          if (roofStyle === "parapet") {
+            const par = new T.BoxGeometry(footW, 0.9, uD * 1.01);
+            par.translate(0, baseOffset + bodyH + 0.45, 0);
             parts.push(par);
-          } else if (roofType === "mansard") {
-            const lower = new T.BoxGeometry(footW * 1.02, roofH * 0.65, uD * 1.02);
-            lower.translate(0, bodyH + roofH * 0.325, 0);
+          } else if (roofStyle === "mansard") {
+            const lower = new T.BoxGeometry(footW, roofH * 0.65, uD * 1.01);
+            lower.translate(0, baseOffset + bodyH + roofH * 0.325, 0);
             const upper = new T.BoxGeometry(footW * 0.88, roofH * 0.35, uD * 0.88);
-            upper.translate(0, bodyH + roofH * 0.825, 0);
+            upper.translate(0, baseOffset + bodyH + roofH * 0.825, 0);
             parts.push(lower, upper);
           } else {
-            const pitched = new T.BoxGeometry(footW, roofH, uD * 0.9);
-            pitched.translate(0, bodyH + roofH / 2, 0);
+            const pitched = new T.BoxGeometry(footW, roofH, uD * 0.92);
+            pitched.translate(0, baseOffset + bodyH + roofH / 2, 0);
             parts.push(pitched);
           }
           return mergeGeometries(parts, T);
@@ -1186,13 +1245,17 @@ export function bldTerrace(seed = "terrace-0", options = {}, T = THREE) {
   };
 }
 
-/**
- * 3. BLD-TOWNHOUSE (2x3 cells = 16x24m, 3-4 storeys = 12-16m)
- * Axes: stoop height, cornice, bay projection, roof deck, brick vs render, rear extension.
- */
+// =============================================================================
+// 3. BLD-TOWNHOUSE
+// =============================================================================
 export function bldTownhouse(seed = "townhouse-0", options = {}, T = THREE) {
   const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
   const r5 = rnd(seed + "5"), r6 = rnd(seed + "6");
+
+  const corner = options.corner || (r1 < 0.25 ? "left" : r1 < 0.5 ? "right" : "none");
+  const position = options.position || (corner === "left" ? "end-left" : corner === "right" ? "end-right" : "middle");
+  const foundation = options.foundation || (r3 < 0.3 ? "plinth" : r3 < 0.5 ? "stepped" : "slab");
+  const character = options.character || CHARACTER_SETS[Math.floor(r4 * CHARACTER_SETS.length)];
 
   const footW = 16;
   const footD = 24;
@@ -1200,17 +1263,19 @@ export function bldTownhouse(seed = "townhouse-0", options = {}, T = THREE) {
   const storeys = r1 < 0.45 ? 3 : 4;
   const bodyH = storeys * 4;
 
-  const stoopHeightTier = r2 < 0.35 ? 1.0 : r2 < 0.70 ? 1.8 : 2.6; // low, mid, grand stoop
+  const stoopHeightTier = r2 < 0.35 ? 1.0 : r2 < 0.70 ? 1.8 : 2.6;
   const bayStyle = r3 < 0.30 ? "none" : r3 < 0.65 ? "full" : "cantilever";
   const hasRoofDeck = r4 > 0.4;
   const hasRearExtension = r5 > 0.35;
   const corniceTier = r6 < 0.5 ? "classic" : "dentil";
 
   const roofH = hasRoofDeck ? 2.4 : 2.6;
-  const totalH = +(bodyH + roofH).toFixed(2);
+  const totalH = +(bodyH + roofH + (foundation === "plinth" ? 1.2 : 0)).toFixed(2);
 
   const wallCol = WALLS.TOWNHOUSE[Math.floor(r1 * WALLS.TOWNHOUSE.length)];
   const roofCol = ROOFS.TOWNHOUSE[Math.floor(r2 * ROOFS.TOWNHOUSE.length)];
+
+  const frontageEdges = corner === "left" ? ["front", "left"] : corner === "right" ? ["front", "right"] : ["front"];
 
   return {
     id: `bld-townhouse-${seed}`,
@@ -1221,8 +1286,9 @@ export function bldTownhouse(seed = "townhouse-0", options = {}, T = THREE) {
     clearance: 0.5,
     origin: "base-centre",
     standsOn: ["plot", "open"],
+    frontageEdges,
     material: { wall: wallCol, roof: roofCol },
-    params: { storeys, stoopHeightTier, bayStyle, hasRoofDeck, hasRearExtension, corniceTier },
+    params: { storeys, stoopHeightTier, bayStyle, hasRoofDeck, hasRearExtension, corniceTier, corner, position, foundation, character },
     lod: [
       {
         level: 0,
@@ -1231,42 +1297,50 @@ export function bldTownhouse(seed = "townhouse-0", options = {}, T = THREE) {
           const parts = [];
           const bW = 14.8;
           const bD = 16.0;
+          const baseOffset = applyFoundation(parts, footW, footD, foundation, T);
+
           const body = new T.BoxGeometry(bW, bodyH, bD);
-          body.translate(0, bodyH / 2, 0);
+          body.translate(0, baseOffset + bodyH / 2, 0);
           parts.push(body);
 
           // Grand entrance stoop
-          const stoop = new T.BoxGeometry(3.4, stoopHeightTier, 2.2);
-          stoop.translate(3.5, stoopHeightTier / 2, bD / 2 + 1.1);
+          const stoop = new T.BoxGeometry(3.2, stoopHeightTier, 2.0);
+          stoop.translate(3.5, baseOffset + stoopHeightTier / 2, bD / 2 + 1.0);
           parts.push(stoop);
 
           // Projecting bay window
           if (bayStyle === "full") {
-            const bay = new T.BoxGeometry(4.6, bodyH * 0.8, 1.2);
-            bay.translate(-3.5, bodyH * 0.45, bD / 2 + 0.6);
-            parts.push(bay);
-          } else if (bayStyle === "cantilever") {
-            const bay = new T.BoxGeometry(4.4, 4.0, 1.4);
-            bay.translate(-3.5, 6.0, bD / 2 + 0.7);
+            const bay = new T.BoxGeometry(4.4, bodyH * 0.8, 1.1);
+            bay.translate(-3.5, baseOffset + bodyH * 0.45, bD / 2 + 0.55);
             parts.push(bay);
           }
 
-          // Rear extension wing (classic townhouse back outrigger)
+          // Corner return window bay
+          if (corner === "left" || position === "end-left") {
+            const flank = new T.BoxGeometry(0.5, bodyH * 0.75, 4.2);
+            flank.translate(-bW / 2 - 0.25, baseOffset + (bodyH * 0.75) / 2, 0);
+            parts.push(flank);
+          } else if (corner === "right" || position === "end-right") {
+            const flank = new T.BoxGeometry(0.5, bodyH * 0.75, 4.2);
+            flank.translate(bW / 2 + 0.25, baseOffset + (bodyH * 0.75) / 2, 0);
+            parts.push(flank);
+          }
+
+          // Rear extension outrigger
           if (hasRearExtension) {
-            const extW = 5.6, extH = (storeys - 1) * 4, extD = 4.5;
+            const extW = 5.4, extH = (storeys - 1) * 4, extD = 3.6;
             const ext = new T.BoxGeometry(extW, extH, extD);
-            ext.translate(3.0, extH / 2, -bD / 2 - extD / 2);
+            ext.translate(3.0, baseOffset + extH / 2, -bD / 2 - extD / 2);
             parts.push(ext);
           }
 
-          // Cornice overhang
-          const cornice = new T.BoxGeometry(bW * 1.02, corniceTier === "dentil" ? 0.8 : 0.5, bD * 1.04);
-          cornice.translate(0, bodyH + 0.35, 0);
+          const cornice = new T.BoxGeometry(bW * 1.02, corniceTier === "dentil" ? 0.7 : 0.5, bD * 1.02);
+          cornice.translate(0, baseOffset + bodyH + 0.35, 0);
           parts.push(cornice);
 
           if (hasRoofDeck) {
-            const pergola = new T.BoxGeometry(6.5, 2.4, 6.5);
-            pergola.translate(0, bodyH + 1.2, 0);
+            const pergola = new T.BoxGeometry(6.0, 2.2, 6.0);
+            pergola.translate(0, baseOffset + bodyH + 1.1, 0);
             parts.push(pergola);
           }
           return mergeGeometries(parts, T);
@@ -1294,30 +1368,34 @@ export function bldTownhouse(seed = "townhouse-0", options = {}, T = THREE) {
   };
 }
 
-/**
- * 4. BLD-MIDRISE (3x4 to 6x8 cells = 24x32m to 48x64m, 4-8 storeys = 16-32m)
- * Axes: podium (retail/blank/recessed), facade grid rhythm, balcony pattern,
- * corner treatment, crown/parapet, setback above N storeys.
- */
+// =============================================================================
+// 4. BLD-MIDRISE
+// =============================================================================
 export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
   const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
   const r5 = rnd(seed + "5"), r6 = rnd(seed + "6");
 
-  const cellW = 3 + Math.floor(r1 * 4); // 3, 4, 5, 6 cells (24, 32, 40, 48m)
-  const cellD = 4 + Math.floor(r2 * 5); // 4, 5, 6, 7, 8 cells (32, 40, 48, 56, 64m)
+  const corner = options.corner || (r1 < 0.3 ? "left" : r1 < 0.6 ? "right" : "none");
+  const foundation = options.foundation || (r2 < 0.25 ? "plinth" : "slab");
+  const character = options.character || CHARACTER_SETS[Math.floor(r3 * CHARACTER_SETS.length)];
+
+  const cellW = 3 + Math.floor(r1 * 4);
+  const cellD = 4 + Math.floor(r2 * 5);
   const footW = cellW * 8;
   const footD = cellD * 8;
 
-  const storeys = 4 + Math.floor(r3 * 5); // 4, 5, 6, 7, 8 storeys (16 to 32m)
+  const storeys = 4 + Math.floor(r3 * 5);
   const bodyH = storeys * 4;
 
   const podiumType = r4 < 0.35 ? "retail" : r4 < 0.70 ? "arcade" : "flush";
   const hasSetback = storeys >= 6 && r5 > 0.30;
   const cornerTreatment = r6 < 0.35 ? "chamfer" : r6 < 0.70 ? "curved" : "square";
-  const totalH = +(bodyH + 3.2).toFixed(2);
+  const totalH = +(bodyH + 3.2 + (foundation === "plinth" ? 1.2 : 0)).toFixed(2);
 
   const wallCol = WALLS.MIDRISE[Math.floor(r1 * WALLS.MIDRISE.length)];
   const roofCol = ROOFS.MIDRISE[Math.floor(r2 * ROOFS.MIDRISE.length)];
+
+  const frontageEdges = corner === "left" ? ["front", "left"] : corner === "right" ? ["front", "right"] : ["front"];
 
   return {
     id: `bld-midrise-${seed}`,
@@ -1328,57 +1406,63 @@ export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
     clearance: 1.0,
     origin: "base-centre",
     standsOn: ["plot", "open"],
+    frontageEdges,
     material: { wall: wallCol, roof: roofCol },
-    params: { cellW, cellD, storeys, podiumType, hasSetback, cornerTreatment },
+    params: { cellW, cellD, storeys, podiumType, hasSetback, cornerTreatment, corner, foundation, character },
     lod: [
       {
         level: 0,
         tris: 520,
         createGeometry: () => {
           const parts = [];
-          const bW = footW * 0.92;
-          const bD = footD * 0.90;
+          const bW = footW * 0.90;
+          const bD = footD * 0.88;
+          const baseOffset = applyFoundation(parts, footW, footD, foundation, T);
 
           if (hasSetback) {
-            const lowStoreys = 4;
-            const lowH = lowStoreys * 4;
+            const lowH = 16;
             const lowBody = new T.BoxGeometry(bW, lowH, bD);
-            lowBody.translate(0, lowH / 2, 0);
+            lowBody.translate(0, baseOffset + lowH / 2, 0);
             const highH = bodyH - lowH;
-            const highBody = new T.BoxGeometry(bW * 0.78, highH, bD * 0.78);
-            highBody.translate(0, lowH + highH / 2, 0);
+            const highBody = new T.BoxGeometry(bW * 0.76, highH, bD * 0.76);
+            highBody.translate(0, baseOffset + lowH + highH / 2, 0);
             parts.push(lowBody, highBody);
           } else {
             const body = new T.BoxGeometry(bW, bodyH, bD);
-            body.translate(0, bodyH / 2, 0);
+            body.translate(0, baseOffset + bodyH / 2, 0);
             parts.push(body);
+          }
+
+          if (corner === "left") {
+            const chamfer = new T.BoxGeometry(3.5, bodyH * 0.9, 3.5);
+            chamfer.rotateY(Math.PI / 4);
+            chamfer.translate(-bW / 2 + 1.2, baseOffset + bodyH * 0.45, bD / 2 - 1.2);
+            parts.push(chamfer);
+          } else if (corner === "right") {
+            const chamfer = new T.BoxGeometry(3.5, bodyH * 0.9, 3.5);
+            chamfer.rotateY(Math.PI / 4);
+            chamfer.translate(bW / 2 - 1.2, baseOffset + bodyH * 0.45, bD / 2 - 1.2);
+            parts.push(chamfer);
           }
 
           if (podiumType === "retail") {
             const podH = 4.8;
-            const pod = new T.BoxGeometry(bW * 1.04, podH, bD * 1.04);
-            pod.translate(0, podH / 2, 0);
+            const pod = new T.BoxGeometry(bW * 1.02, podH, bD * 1.02);
+            pod.translate(0, baseOffset + podH / 2, 0);
             parts.push(pod);
-          } else if (podiumType === "arcade") {
-            const arcH = 4.5;
-            const arcade = new T.BoxGeometry(bW * 1.06, 0.6, bD * 1.06);
-            arcade.translate(0, arcH, 0);
-            parts.push(arcade);
           }
 
-          // Balconies stack
           for (let s = 1; s < storeys; s++) {
-            const by = s * 4 + 0.15;
-            const balc = new T.BoxGeometry(bW * 0.6, 0.3, 1.8);
-            balc.translate(0, by, bD / 2 + 0.9);
+            const by = baseOffset + s * 4 + 0.15;
+            const balc = new T.BoxGeometry(bW * 0.58, 0.3, 1.6);
+            balc.translate(0, by, bD / 2 + 0.8);
             parts.push(balc);
           }
 
-          // Parapet crown and lift motor overrun
           const parapet = new T.BoxGeometry(bW * 0.85, 1.2, bD * 0.85);
-          parapet.translate(0, bodyH + 0.6, 0);
-          const lift = new T.BoxGeometry(6.0, 3.2, 6.0);
-          lift.translate(0, bodyH + 1.6, 0);
+          parapet.translate(0, baseOffset + bodyH + 0.6, 0);
+          const lift = new T.BoxGeometry(5.5, 3.0, 5.5);
+          lift.translate(0, baseOffset + bodyH + 1.5, 0);
           parts.push(parapet, lift);
 
           return mergeGeometries(parts, T);
@@ -1406,22 +1490,516 @@ export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
   };
 }
 
-/**
- * 5. BLD-TOWER (4x4 to 8x8 cells = 32x32m to 64x64m, 12-40 storeys = 48-160m)
- * Axes: podium, shaft profile (straight, stepped, tapered, crown, slab), curtain wall vs punched window, crown, setbacks.
- */
-export function bldTower(seed = "tower-0", options = {}, T = THREE) {
+// =============================================================================
+// 5. BLD-SHOP
+// =============================================================================
+export function bldShop(seed = "shop-0", options = {}, T = THREE) {
   const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
-  const cellW = 4 + Math.floor(r1 * 5); // 4, 5, 6, 7, 8 cells (32 to 64m)
-  const cellD = 4 + Math.floor(r2 * 5); // 4, 5, 6, 7, 8 cells (32 to 64m)
+  const r5 = rnd(seed + "5");
+
+  const corner = options.corner || (r1 < 0.35 ? "left" : r1 < 0.7 ? "right" : "none");
+  const foundation = options.foundation || (r2 < 0.2 ? "plinth" : "slab");
+  const character = options.character || CHARACTER_SETS[Math.floor(r3 * CHARACTER_SETS.length)];
+
+  const cellW = 2 + Math.floor(r1 * 3);
+  const cellD = 2 + Math.floor(r2 * 2);
   const footW = cellW * 8;
   const footD = cellD * 8;
 
-  const storeys = 12 + Math.floor(Math.pow(r3, 1.5) * 29); // 12 to 40 storeys (48 to 160m)
+  const storeys = 1 + Math.floor(r3 * 3);
   const bodyH = storeys * 4;
-  const profile = r4 < 0.25 ? "stepped" : r4 < 0.50 ? "tapered" : r4 < 0.70 ? "slab" : r4 < 0.85 ? "crown" : "straight";
+  const hasAwning = r4 > 0.25;
+  const isCornerUnit = corner !== "none";
+  const totalH = +(bodyH + 1.2 + (foundation === "plinth" ? 1.0 : 0)).toFixed(2);
+
+  const wallCol = WALLS.TERRACE[Math.floor(r1 * WALLS.TERRACE.length)];
+  const roofCol = ROOFS.TERRACE[Math.floor(r2 * ROOFS.TERRACE.length)];
+
+  const frontageEdges = corner === "left" ? ["front", "left"] : corner === "right" ? ["front", "right"] : ["front"];
+
+  return {
+    id: `bld-shop-${seed}`,
+    typology: "bld-shop",
+    kind: "hard",
+    footprint: { w: footW, d: footD },
+    height: totalH,
+    clearance: 0.5,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    frontageEdges,
+    material: { wall: wallCol, roof: roofCol },
+    params: { cellW, cellD, storeys, hasAwning, isCornerUnit, corner, foundation, character },
+    lod: [
+      {
+        level: 0,
+        tris: 360,
+        createGeometry: () => {
+          const parts = [];
+          const bW = footW * 0.82;
+          const bD = footD * 0.74;
+          const baseOffset = applyFoundation(parts, footW, footD, foundation, T);
+
+          const body = new T.BoxGeometry(bW, bodyH, bD);
+          body.translate(0, baseOffset + bodyH / 2, 0);
+          parts.push(body);
+
+          // Signage band above shopfront
+          const signBand = new T.BoxGeometry(bW, 0.9, bD * 1.01);
+          signBand.translate(0, baseOffset + 3.8, 0);
+          parts.push(signBand);
+
+          if (hasAwning) {
+            const awn = new T.BoxGeometry(bW * 0.90, 0.15, 1.8);
+            awn.rotateX(-0.2);
+            awn.translate(0, baseOffset + 3.2, bD / 2 + 0.9);
+            parts.push(awn);
+          }
+
+          if (isCornerUnit) {
+            const cornerSplay = new T.BoxGeometry(2.8, 3.8, 2.8);
+            cornerSplay.rotateY(Math.PI / 4);
+            const cx = corner === "left" ? -bW / 2 + 1.0 : bW / 2 - 1.0;
+            cornerSplay.translate(cx, baseOffset + 1.9, bD / 2 - 1.0);
+            parts.push(cornerSplay);
+          }
+
+          const par = new T.BoxGeometry(bW, 0.9, bD * 1.01);
+          par.translate(0, baseOffset + bodyH + 0.45, 0);
+          parts.push(par);
+          return mergeGeometries(parts, T);
+        }
+      },
+      {
+        level: 1,
+        tris: 48,
+        createGeometry: () => {
+          const body = new T.BoxGeometry(footW * 0.88, bodyH, footD * 0.85);
+          body.translate(0, bodyH / 2, 0);
+          return body;
+        }
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: () => {
+          const b = new T.BoxGeometry(footW * 0.88, totalH, footD * 0.85);
+          b.translate(0, totalH / 2, 0);
+          return b;
+        }
+      }
+    ]
+  };
+}
+
+// =============================================================================
+// 6. BLD-OFFICE
+// =============================================================================
+export function bldOffice(seed = "office-0", options = {}, T = THREE) {
+  const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
+  const corner = options.corner || (r1 < 0.3 ? "left" : r1 < 0.6 ? "right" : "none");
+  const foundation = options.foundation || (r2 < 0.2 ? "plinth" : "slab");
+  const character = options.character || CHARACTER_SETS[Math.floor(r3 * CHARACTER_SETS.length)];
+
+  const cellW = 4 + Math.floor(r1 * 5);
+  const cellD = 6 + Math.floor(r2 * 5);
+  const footW = cellW * 8;
+  const footD = cellD * 8;
+
+  const storeys = 3 + Math.floor(r3 * 8);
+  const bodyH = storeys * 4;
+  const hasCoreBulge = r4 > 0.35;
+  const totalH = +(bodyH + 3.0 + (foundation === "plinth" ? 1.2 : 0)).toFixed(2);
+
+  const wallCol = WALLS.MIDRISE[Math.floor(r1 * WALLS.MIDRISE.length)];
+  const roofCol = ROOFS.MIDRISE[Math.floor(r2 * ROOFS.MIDRISE.length)];
+
+  const frontageEdges = corner === "left" ? ["front", "left"] : corner === "right" ? ["front", "right"] : ["front"];
+
+  return {
+    id: `bld-office-${seed}`,
+    typology: "bld-office",
+    kind: "hard",
+    footprint: { w: footW, d: footD },
+    height: totalH,
+    clearance: 1.5,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    frontageEdges,
+    material: { wall: wallCol, roof: roofCol },
+    params: { cellW, cellD, storeys, hasCoreBulge, corner, foundation, character },
+    lod: [
+      {
+        level: 0,
+        tris: 460,
+        createGeometry: () => {
+          const parts = [];
+          const bW = footW * 0.76;
+          const bD = footD * 0.78;
+          const baseOffset = applyFoundation(parts, footW, footD, foundation, T);
+
+          const body = new T.BoxGeometry(bW, bodyH, bD);
+          body.translate(0, baseOffset + bodyH / 2, 0);
+          parts.push(body);
+
+          // Floor spandrel banding
+          for (let s = 1; s < storeys; s++) {
+            const spandrel = new T.BoxGeometry(bW * 1.01, 0.4, bD * 1.01);
+            spandrel.translate(0, baseOffset + s * 4, 0);
+            parts.push(spandrel);
+          }
+
+          // Entrance canopy
+          const canopy = new T.BoxGeometry(7.5, 0.4, 3.2);
+          canopy.translate(0, baseOffset + 4.2, bD / 2 + 1.6);
+          parts.push(canopy);
+
+          // Corner return facade / glazed flank
+          if (corner === "left") {
+            const flank = new T.BoxGeometry(0.5, bodyH * 0.85, bD * 0.45);
+            flank.translate(-bW / 2 - 0.25, baseOffset + (bodyH * 0.85) / 2, 0);
+            parts.push(flank);
+          } else if (corner === "right") {
+            const flank = new T.BoxGeometry(0.5, bodyH * 0.85, bD * 0.45);
+            flank.translate(bW / 2 + 0.25, baseOffset + (bodyH * 0.85) / 2, 0);
+            parts.push(flank);
+          }
+
+          if (hasCoreBulge) {
+            const core = new T.BoxGeometry(2.0, bodyH + 3.0, 5.5);
+            core.translate(-bW / 2 - 1.0, (baseOffset + bodyH + 3.0) / 2, 0);
+            parts.push(core);
+          }
+
+          const screen = new T.BoxGeometry(bW * 0.68, 2.4, bD * 0.68);
+          screen.translate(0, baseOffset + bodyH + 1.2, 0);
+          parts.push(screen);
+          return mergeGeometries(parts, T);
+        }
+      },
+      {
+        level: 1,
+        tris: 60,
+        createGeometry: () => {
+          const body = new T.BoxGeometry(footW * 0.88, bodyH, footD * 0.86);
+          body.translate(0, bodyH / 2, 0);
+          return body;
+        }
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: () => {
+          const b = new T.BoxGeometry(footW * 0.88, totalH, footD * 0.86);
+          b.translate(0, totalH / 2, 0);
+          return b;
+        }
+      }
+    ]
+  };
+}
+
+// =============================================================================
+// 7. BLD-APARTMENT-WALKUP
+// =============================================================================
+export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
+  const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
+  const r5 = rnd(seed + "5"), r6 = rnd(seed + "6");
+
+  const corner = options.corner || (r1 < 0.25 ? "left" : r1 < 0.5 ? "right" : "none");
+  const position = options.position || (corner === "left" ? "end-left" : corner === "right" ? "end-right" : "middle");
+  const foundation = options.foundation || (r3 < 0.25 ? "plinth" : r3 < 0.5 ? "stepped" : "slab");
+  const character = options.character || CHARACTER_SETS[Math.floor(r4 * CHARACTER_SETS.length)];
+
+  const cellW = 3 + Math.floor(r1 * 3);
+  const cellD = 4 + Math.floor(r2 * 4);
+  const footW = cellW * 8;
+  const footD = cellD * 8;
+
+  const storeys = 3 + Math.floor(r3 * 2);
+  const bodyH = storeys * 4;
+  const stairPosition = r4 < 0.4 ? "center" : r4 < 0.7 ? "dual" : "gallery";
+  const roofStyle = options.roofStyle || (r5 < 0.4 ? "pitched" : r5 < 0.75 ? "mansard" : "parapet");
+  const hasGarden = r6 > 0.3;
+
+  const roofH = roofStyle === "pitched" ? 3.5 : roofStyle === "mansard" ? 2.8 : 1.2;
+  const totalH = +(bodyH + Math.max(roofH, 2.0) + (foundation === "plinth" ? 1.2 : 0)).toFixed(2);
+
+  const wallCol = WALLS.MIDRISE[Math.floor(r1 * WALLS.MIDRISE.length)];
+  const roofCol = ROOFS.MIDRISE[Math.floor(r2 * ROOFS.MIDRISE.length)];
+
+  const frontageEdges = corner === "left" ? ["front", "left"] : corner === "right" ? ["front", "right"] : ["front"];
+
+  return {
+    id: `bld-apartment-walkup-${seed}`,
+    typology: "bld-apartment-walkup",
+    kind: "hard",
+    footprint: { w: footW, d: footD },
+    height: totalH,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    frontageEdges,
+    material: { wall: wallCol, roof: roofCol },
+    params: { cellW, cellD, storeys, stairPosition, roofStyle, hasGarden, corner, position, foundation, character },
+    lod: [
+      {
+        level: 0,
+        tris: 480,
+        createGeometry: () => {
+          const parts = [];
+          const bW = footW * 0.76;
+          const bD = footD * 0.74;
+          const baseOffset = applyFoundation(parts, footW, footD, foundation, T);
+
+          const body = new T.BoxGeometry(bW, bodyH, bD);
+          body.translate(0, baseOffset + bodyH / 2, 0);
+          parts.push(body);
+
+          if (stairPosition === "center") {
+            const stair = new T.BoxGeometry(4.0, bodyH + 1.8, 2.6);
+            stair.translate(0, (baseOffset + bodyH + 1.8) / 2, bD / 2 + 1.3);
+            parts.push(stair);
+          } else if (stairPosition === "dual") {
+            for (const sx of [-bW * 0.35, bW * 0.35]) {
+              const stair = new T.BoxGeometry(3.0, bodyH + 1.8, 2.4);
+              stair.translate(sx, (baseOffset + bodyH + 1.8) / 2, bD / 2 + 1.2);
+              parts.push(stair);
+            }
+          }
+
+          for (let s = 1; s < storeys; s++) {
+            const by = baseOffset + s * 4 + 0.15;
+            const hasLeftBalc = (position === "end-left" || position === "detached" || corner === "left");
+            const hasRightBalc = (position === "end-right" || position === "detached" || corner === "right");
+            if (hasLeftBalc) {
+              const balc = new T.BoxGeometry(1.4, 0.3, bD * 0.32);
+              balc.translate(-bW / 2 - 0.7, by, 0);
+              parts.push(balc);
+            }
+            if (hasRightBalc) {
+              const balc = new T.BoxGeometry(1.4, 0.3, bD * 0.32);
+              balc.translate(bW / 2 + 0.7, by, 0);
+              parts.push(balc);
+            }
+          }
+
+          if (roofStyle === "pitched") {
+            const roof = new T.BoxGeometry(bW * 1.01, roofH, bD * 0.88);
+            roof.translate(0, baseOffset + bodyH + roofH / 2, 0);
+            parts.push(roof);
+          } else if (roofStyle === "mansard") {
+            const lower = new T.BoxGeometry(bW * 1.02, roofH * 0.65, bD * 1.02);
+            lower.translate(0, baseOffset + bodyH + roofH * 0.325, 0);
+            const upper = new T.BoxGeometry(bW * 0.86, roofH * 0.35, bD * 0.86);
+            upper.translate(0, baseOffset + bodyH + roofH * 0.825, 0);
+            parts.push(lower, upper);
+          } else {
+            const par = new T.BoxGeometry(bW * 1.01, 1.1, bD * 1.01);
+            par.translate(0, baseOffset + bodyH + 0.55, 0);
+            parts.push(par);
+          }
+          return mergeGeometries(parts, T);
+        }
+      },
+      {
+        level: 1,
+        tris: 60,
+        createGeometry: () => {
+          const body = new T.BoxGeometry(footW * 0.86, bodyH, footD * 0.85);
+          body.translate(0, bodyH / 2, 0);
+          return body;
+        }
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: () => {
+          const b = new T.BoxGeometry(footW * 0.86, totalH, footD * 0.85);
+          b.translate(0, totalH / 2, 0);
+          return b;
+        }
+      }
+    ]
+  };
+}
+
+// =============================================================================
+// 8. BLD-WAREHOUSE, 9. BLD-WORKSHOP, 10. BLD-TOWER
+// =============================================================================
+export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
+  const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
+  const foundation = options.foundation || "slab";
+  const cellW = 6 + Math.floor(r1 * 5);
+  const cellD = 10 + Math.floor(r2 * 11);
+  const footW = cellW * 8;
+  const footD = cellD * 8;
+
+  const roofStyle = options.roofStyle || (r3 < 0.4 ? "sawtooth" : r3 < 0.7 ? "barrel" : "curved");
+  const roofH = 3.5;
+  const bodyH = 12.0;
+  const totalH = +(bodyH + roofH + (foundation === "plinth" ? 1.2 : 0)).toFixed(2);
+
+  const wallCol = WALLS.WAREHOUSE[Math.floor(r1 * WALLS.WAREHOUSE.length)];
+  const roofCol = ROOFS.WAREHOUSE[Math.floor(r2 * ROOFS.WAREHOUSE.length)];
+
+  return {
+    id: `bld-warehouse-${seed}`,
+    typology: "bld-warehouse",
+    kind: "hard",
+    footprint: { w: footW, d: footD },
+    height: totalH,
+    clearance: 2.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    material: { wall: wallCol, roof: roofCol },
+    params: { cellW, cellD, roofStyle },
+    lod: [
+      {
+        level: 0,
+        tris: 380,
+        createGeometry: () => {
+          const parts = [];
+          const bW = footW * 0.90;
+          const bD = footD * 0.92;
+          const baseOffset = applyFoundation(parts, footW, footD, foundation, T);
+          const body = new T.BoxGeometry(bW, bodyH, bD);
+          body.translate(0, baseOffset + bodyH / 2, 0);
+          parts.push(body);
+
+          // Loading docks
+          const numDocks = Math.max(2, Math.floor(cellW * 0.7));
+          for (let i = 0; i < numDocks; i++) {
+            const dx = -bW / 2 + 6 + i * 8;
+            const bay = new T.BoxGeometry(5.0, 4.5, 0.4);
+            bay.translate(dx, 2.25, bD / 2 + 0.2);
+            parts.push(bay);
+          }
+
+          // Sawtooth roof ridge bays
+          if (roofStyle === "sawtooth") {
+            const bays = Math.max(3, Math.floor(cellD * 0.6));
+            const bayD = bD / bays;
+            for (let i = 0; i < bays; i++) {
+              const bz = -bD / 2 + bayD * i + bayD / 2;
+              const tooth = new T.BoxGeometry(bW * 0.98, roofH, bayD * 0.85);
+              tooth.translate(0, bodyH + roofH / 2, bz);
+              parts.push(tooth);
+            }
+          } else {
+            const roof = new T.BoxGeometry(bW * 0.98, roofH, bD * 0.98);
+            roof.translate(0, bodyH + roofH / 2, 0);
+            parts.push(roof);
+          }
+          return mergeGeometries(parts, T);
+        }
+      },
+      {
+        level: 1,
+        tris: 60,
+        createGeometry: () => {
+          const body = new T.BoxGeometry(footW * 0.92, totalH, footD * 0.92);
+          body.translate(0, totalH / 2, 0);
+          return body;
+        }
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: () => {
+          const b = new T.BoxGeometry(footW * 0.92, totalH, footD * 0.92);
+          b.translate(0, totalH / 2, 0);
+          return b;
+        }
+      }
+    ]
+  };
+}
+
+export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
+  const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
+  const foundation = options.foundation || "slab";
+  const cellW = 3 + Math.floor(r1 * 3);
+  const cellD = 4 + Math.floor(r2 * 4);
+  const footW = cellW * 8;
+  const footD = cellD * 8;
+
+  const roofStyle = options.roofStyle || (r3 < 0.5 ? "monopitch" : "gabled");
+  const bodyH = 8.0;
+  const roofH = 4.0;
+  const totalH = +(bodyH + roofH + (foundation === "plinth" ? 1.2 : 0)).toFixed(2);
+
+  const wallCol = WALLS.WAREHOUSE[Math.floor(r1 * WALLS.WAREHOUSE.length)];
+  const roofCol = ROOFS.WAREHOUSE[Math.floor(r2 * ROOFS.WAREHOUSE.length)];
+
+  return {
+    id: `bld-workshop-${seed}`,
+    typology: "bld-workshop",
+    kind: "hard",
+    footprint: { w: footW, d: footD },
+    height: totalH,
+    clearance: 1.5,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    material: { wall: wallCol, roof: roofCol },
+    params: { cellW, cellD, roofStyle },
+    lod: [
+      {
+        level: 0,
+        tris: 340,
+        createGeometry: () => {
+          const parts = [];
+          const bW = footW * 0.85;
+          const bD = footD * 0.85;
+          const baseOffset = applyFoundation(parts, footW, footD, foundation, T);
+          const body = new T.BoxGeometry(bW, bodyH, bD);
+          body.translate(0, baseOffset + bodyH / 2, 0);
+          parts.push(body);
+
+          const roller = new T.BoxGeometry(5.0, 4.5, 0.4);
+          roller.translate(-bW * 0.2, 2.25, bD / 2 + 0.2);
+          parts.push(roller);
+
+          const roof = new T.BoxGeometry(bW * 0.98, roofH, bD * 0.98);
+          roof.translate(0, bodyH + roofH / 2, 0);
+          parts.push(roof);
+          return mergeGeometries(parts, T);
+        }
+      },
+      {
+        level: 1,
+        tris: 50,
+        createGeometry: () => {
+          const body = new T.BoxGeometry(footW * 0.88, totalH, footD * 0.88);
+          body.translate(0, totalH / 2, 0);
+          return body;
+        }
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: () => {
+          const b = new T.BoxGeometry(footW * 0.88, totalH, footD * 0.88);
+          b.translate(0, totalH / 2, 0);
+          return b;
+        }
+      }
+    ]
+  };
+}
+
+export function bldTower(seed = "tower-0", options = {}, T = THREE) {
+  const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
+  const foundation = options.foundation || "slab";
+  const cellW = 4 + Math.floor(r1 * 5);
+  const cellD = 4 + Math.floor(r2 * 5);
+  const footW = cellW * 8;
+  const footD = cellD * 8;
+
+  const storeys = 12 + Math.floor(Math.pow(r3, 1.5) * 29);
+  const bodyH = storeys * 4;
+  const profile = options.profile || (r4 < 0.25 ? "stepped" : r4 < 0.50 ? "tapered" : r4 < 0.70 ? "slab" : r4 < 0.85 ? "crown" : "straight");
   const crownH = profile === "crown" ? 14.0 : 4.0;
-  const totalH = +(bodyH + crownH).toFixed(2);
+  const totalH = +(bodyH + crownH + (foundation === "plinth" ? 1.2 : 0)).toFixed(2);
 
   const wallCol = WALLS.TOWER[Math.floor(r1 * WALLS.TOWER.length)];
   const roofCol = ROOFS.TOWER[Math.floor(r2 * ROOFS.TOWER.length)];
@@ -1445,11 +2023,11 @@ export function bldTower(seed = "tower-0", options = {}, T = THREE) {
           const parts = [];
           const bW = footW * 0.88;
           const bD = footD * 0.88;
+          const baseOffset = applyFoundation(parts, footW, footD, foundation, T);
 
-          // Podium base
           const podH = 12;
           const pod = new T.BoxGeometry(footW * 0.98, podH, footD * 0.98);
-          pod.translate(0, podH / 2, 0);
+          pod.translate(0, baseOffset + podH / 2, 0);
           parts.push(pod);
 
           const shaftH = bodyH - podH;
@@ -1522,166 +2100,64 @@ export function bldTower(seed = "tower-0", options = {}, T = THREE) {
   };
 }
 
+// =============================================================================
+// DISTRICT IDENTITY (Group C)
+// =============================================================================
+
 /**
- * 6. BLD-SHOP (2x2 to 4x3 cells = 16x16m to 32x24m, 1-3 storeys = 4-12m)
- * Axes: shopfront width, awning, signage band, upper-floor residential, corner unit.
+ * C1. High-Street Terrace (Chaining Row Unit with Retail Ground + Residential Flats)
  */
-export function bldShop(seed = "shop-0", options = {}, T = THREE) {
-  const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
-  const r5 = rnd(seed + "5");
-
-  const cellW = 2 + Math.floor(r1 * 3); // 2, 3, 4 cells (16, 24, 32m)
-  const cellD = 2 + Math.floor(r2 * 2); // 2, 3 cells (16, 24m)
-  const footW = cellW * 8;
-  const footD = cellD * 8;
-
-  const storeys = 1 + Math.floor(r3 * 3); // 1, 2, 3 storeys (4, 8, 12m)
-  const bodyH = storeys * 4;
-  const hasAwning = r4 > 0.25;
-  const isCornerUnit = r5 > 0.5;
-  const totalH = +(bodyH + 1.2).toFixed(2);
-
-  const wallCol = WALLS.TERRACE[Math.floor(r1 * WALLS.TERRACE.length)];
-  const roofCol = ROOFS.TERRACE[Math.floor(r2 * ROOFS.TERRACE.length)];
+export function bldHighStreetTerrace(seed = "highstreet-0", options = {}, T = THREE) {
+  const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3");
+  const footW = 16;
+  const footD = 24;
+  const bodyH = 16.0; // 4 storeys
+  const roofH = 3.0; // Mansard roof
+  const totalH = +(bodyH + roofH).toFixed(2);
 
   return {
-    id: `bld-shop-${seed}`,
-    typology: "bld-shop",
+    id: `bld-highstreet-terrace-${seed}`,
+    typology: "bld-highstreet-terrace",
     kind: "hard",
     footprint: { w: footW, d: footD },
     height: totalH,
     clearance: 0.5,
     origin: "base-centre",
     standsOn: ["plot", "open"],
-    material: { wall: wallCol, roof: roofCol },
-    params: { cellW, cellD, storeys, hasAwning, isCornerUnit },
-    lod: [
-      {
-        level: 0,
-        tris: 360,
-        createGeometry: () => {
-          const parts = [];
-          const bW = footW * 0.85;
-          const bD = footD * 0.75;
-          const body = new T.BoxGeometry(bW, bodyH, bD);
-          body.translate(0, bodyH / 2, 0);
-          parts.push(body);
-
-          // Signage band above shopfront
-          const signBand = new T.BoxGeometry(bW, 1.0, bD * 1.02);
-          signBand.translate(0, 3.8, 0);
-          parts.push(signBand);
-
-          // Fabric awning / canopy
-          if (hasAwning) {
-            const awn = new T.BoxGeometry(bW * 0.92, 0.15, 2.0);
-            awn.rotateX(-0.2);
-            awn.translate(0, 3.2, bD / 2 + 1.0);
-            parts.push(awn);
-          }
-
-          // Corner splay entrance
-          if (isCornerUnit) {
-            const cornerSplay = new T.BoxGeometry(3.0, 4.0, 3.0);
-            cornerSplay.rotateY(Math.PI / 4);
-            cornerSplay.translate(bW / 2 - 1.0, 2.0, bD / 2 - 1.0);
-            parts.push(cornerSplay);
-          }
-
-          // Parapet
-          const par = new T.BoxGeometry(bW, 1.0, bD * 1.02);
-          par.translate(0, bodyH + 0.5, 0);
-          parts.push(par);
-          return mergeGeometries(parts, T);
-        }
-      },
-      {
-        level: 1,
-        tris: 48,
-        createGeometry: () => {
-          const body = new T.BoxGeometry(footW * 0.9, bodyH, footD * 0.88);
-          body.translate(0, bodyH / 2, 0);
-          return body;
-        }
-      },
-      {
-        level: 2,
-        tris: 12,
-        createGeometry: () => {
-          const b = new T.BoxGeometry(footW * 0.9, totalH, footD * 0.88);
-          b.translate(0, totalH / 2, 0);
-          return b;
-        }
-      }
-    ]
-  };
-}
-
-/**
- * 7. BLD-OFFICE (4x6 to 8x10 cells = 32x48m to 64x80m, 3-10 storeys = 12-40m)
- * Axes: entrance canopy, glazing ratio, floor banding, service core bulge, plant screen.
- */
-export function bldOffice(seed = "office-0", options = {}, T = THREE) {
-  const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
-  const cellW = 4 + Math.floor(r1 * 5); // 4, 5, 6, 7, 8 cells (32 to 64m)
-  const cellD = 6 + Math.floor(r2 * 5); // 6, 7, 8, 9, 10 cells (48 to 80m)
-  const footW = cellW * 8;
-  const footD = cellD * 8;
-
-  const storeys = 3 + Math.floor(r3 * 8); // 3 to 10 storeys (12 to 40m)
-  const bodyH = storeys * 4;
-  const hasCoreBulge = r4 > 0.35;
-  const totalH = +(bodyH + 3.0).toFixed(2);
-
-  const wallCol = WALLS.MIDRISE[Math.floor(r1 * WALLS.MIDRISE.length)];
-  const roofCol = ROOFS.MIDRISE[Math.floor(r2 * ROOFS.MIDRISE.length)];
-
-  return {
-    id: `bld-office-${seed}`,
-    typology: "bld-office",
-    kind: "hard",
-    footprint: { w: footW, d: footD },
-    height: totalH,
-    clearance: 1.5,
-    origin: "base-centre",
-    standsOn: ["plot", "open"],
-    material: { wall: wallCol, roof: roofCol },
-    params: { cellW, cellD, storeys, hasCoreBulge },
+    material: { wall: WALLS.TERRACE[0], roof: ROOFS.TERRACE[0] },
     lod: [
       {
         level: 0,
         tris: 460,
         createGeometry: () => {
           const parts = [];
-          const bW = footW * 0.78;
-          const bD = footD * 0.80;
+          const bW = 16.0; // Seamless party wall width
+          const bD = 20.0;
+          // Main Upper Flats Body
           const body = new T.BoxGeometry(bW, bodyH, bD);
           body.translate(0, bodyH / 2, 0);
           parts.push(body);
 
-          // Floor spandrel banding
-          for (let s = 1; s < storeys; s++) {
-            const spandrel = new T.BoxGeometry(bW * 1.02, 0.4, bD * 1.02);
-            spandrel.translate(0, s * 4, 0);
-            parts.push(spandrel);
+          // Ground floor retail shopfront showcase
+          const shopfront = new T.BoxGeometry(bW * 0.98, 4.2, 1.2);
+          shopfront.translate(0, 2.1, bD / 2 + 0.6);
+          // Signboard fascia
+          const fascia = new T.BoxGeometry(bW * 0.98, 0.9, 0.4);
+          fascia.translate(0, 4.4, bD / 2 + 0.8);
+          parts.push(shopfront, fascia);
+
+          // Upper floor window lintel bands
+          for (let s = 1; s < 4; s++) {
+            const band = new T.BoxGeometry(bW, 0.25, bD * 1.01);
+            band.translate(0, s * 4, 0);
+            parts.push(band);
           }
 
-          // Entrance canopy
-          const canopy = new T.BoxGeometry(8.0, 0.4, 3.5);
-          canopy.translate(0, 4.2, bD / 2 + 1.75);
-          parts.push(canopy);
+          // Mansard roof
+          const roof = new T.BoxGeometry(bW, roofH, bD * 0.88);
+          roof.translate(0, bodyH + roofH / 2, 0);
+          parts.push(roof);
 
-          // Service elevator core bulge
-          if (hasCoreBulge) {
-            const core = new T.BoxGeometry(3.0, bodyH + 3.0, 6.0);
-            core.translate(-bW / 2 - 1.2, (bodyH + 3.0) / 2, 0);
-            parts.push(core);
-          }
-
-          // Rooftop plant screen
-          const screen = new T.BoxGeometry(bW * 0.7, 2.5, bD * 0.7);
-          screen.translate(0, bodyH + 1.25, 0);
-          parts.push(screen);
           return mergeGeometries(parts, T);
         }
       },
@@ -1689,8 +2165,8 @@ export function bldOffice(seed = "office-0", options = {}, T = THREE) {
         level: 1,
         tris: 60,
         createGeometry: () => {
-          const body = new T.BoxGeometry(footW * 0.9, bodyH, footD * 0.88);
-          body.translate(0, bodyH / 2, 0);
+          const body = new T.BoxGeometry(footW, totalH, 20);
+          body.translate(0, totalH / 2, 0);
           return body;
         }
       },
@@ -1698,7 +2174,7 @@ export function bldOffice(seed = "office-0", options = {}, T = THREE) {
         level: 2,
         tris: 12,
         createGeometry: () => {
-          const b = new T.BoxGeometry(footW * 0.9, totalH, footD * 0.88);
+          const b = new T.BoxGeometry(footW, totalH, 20);
           b.translate(0, totalH / 2, 0);
           return b;
         }
@@ -1708,156 +2184,44 @@ export function bldOffice(seed = "office-0", options = {}, T = THREE) {
 }
 
 /**
- * 8. BLD-WAREHOUSE (6x10 to 12x20 cells = 48x80m to 96x160m, 1 storey = 8-12m)
- * Axes: roof (sawtooth, barrel, flat), loading bays 1-6, roller doors, clerestory, gantry.
+ * C2. Industrial Business Park Block
  */
-export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
-  const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
-  const cellW = 6 + Math.floor(r1 * 7); // 6 to 12 cells (48 to 96m)
-  const cellD = 10 + Math.floor(r2 * 11); // 10 to 20 cells (80 to 160m)
-  const footW = cellW * 8;
-  const footD = cellD * 8;
-
-  const bodyH = 8 + Math.floor(r3 * 2) * 4; // 8 or 12m
-  const roofStyle = r4 < 0.40 ? "sawtooth" : r4 < 0.75 ? "barrel" : "flat";
-  const loadingBays = 2 + Math.floor(r1 * 5); // 2 to 6 loading bays
-  const roofH = roofStyle === "barrel" ? 3.5 : 2.0;
-  const totalH = +(bodyH + roofH).toFixed(2);
-
-  const wallCol = WALLS.WAREHOUSE[Math.floor(r1 * WALLS.WAREHOUSE.length)];
-  const roofCol = ROOFS.WAREHOUSE[Math.floor(r2 * ROOFS.WAREHOUSE.length)];
+export function bldBusinessParkBlock(seed = "buspark-0", options = {}, T = THREE) {
+  const footW = 32;
+  const footD = 48;
+  const bodyH = 12.0; // 3 storeys
+  const totalH = 14.5;
 
   return {
-    id: `bld-warehouse-${seed}`,
-    typology: "bld-warehouse",
-    kind: "hard",
-    footprint: { w: footW, d: footD },
-    height: totalH,
-    clearance: 3.0,
-    origin: "base-centre",
-    standsOn: ["plot", "open"],
-    material: { wall: wallCol, roof: roofCol },
-    params: { cellW, cellD, bodyH, roofStyle, loadingBays },
-    lod: [
-      {
-        level: 0,
-        tris: 380,
-        createGeometry: () => {
-          const parts = [];
-          const bW = footW * 0.94;
-          const bD = footD * 0.92;
-          const body = new T.BoxGeometry(bW, bodyH, bD);
-          body.translate(0, bodyH / 2, 0);
-          parts.push(body);
-
-          const dockW = loadingBays * 6.0;
-          const dockPlatform = new T.BoxGeometry(dockW, 1.2, 3.5);
-          dockPlatform.translate(0, 0.6, bD / 2 + 1.75);
-          parts.push(dockPlatform);
-
-          for (let i = 0; i < loadingBays; i++) {
-            const bx = -dockW / 2 + 3.0 + i * 6.0;
-            const bayDoor = new T.BoxGeometry(4.0, 4.2, 0.2);
-            bayDoor.translate(bx, 2.1 + 1.2, bD / 2 + 0.1);
-            parts.push(bayDoor);
-          }
-
-          if (roofStyle === "sawtooth") {
-            const ridges = 4;
-            const rD = bD / ridges;
-            for (let i = 0; i < ridges; i++) {
-              const rz = -bD / 2 + rD / 2 + i * rD;
-              const ridge = new T.BoxGeometry(bW, 2.0, rD * 0.95);
-              ridge.translate(0, bodyH + 1.0, rz);
-              parts.push(ridge);
-            }
-          } else if (roofStyle === "barrel") {
-            const vault = new T.CylinderGeometry(bW * 0.5, bW * 0.5, bD, 8, 1, false, 0, Math.PI);
-            vault.rotateX(Math.PI / 2);
-            vault.scale(1, roofH / (bW * 0.5), 1);
-            vault.translate(0, bodyH, 0);
-            parts.push(vault);
-          }
-          return mergeGeometries(parts, T);
-        }
-      },
-      {
-        level: 1,
-        tris: 60,
-        createGeometry: () => {
-          const body = new T.BoxGeometry(footW * 0.94, bodyH, footD * 0.92);
-          body.translate(0, bodyH / 2, 0);
-          return body;
-        }
-      },
-      {
-        level: 2,
-        tris: 12,
-        createGeometry: () => {
-          const b = new T.BoxGeometry(footW * 0.94, totalH, footD * 0.92);
-          b.translate(0, totalH / 2, 0);
-          return b;
-        }
-      }
-    ]
-  };
-}
-
-/**
- * 9. BLD-WORKSHOP (3x4 to 5x6 cells = 24x32m to 40x48m, 1-2 storeys = 4-8m)
- * Axes: yard wall, chimney/flue, mezzanine windows, roller door.
- */
-export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
-  const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
-  const cellW = 3 + Math.floor(r1 * 3); // 3, 4, 5 cells (24, 32, 40m)
-  const cellD = 4 + Math.floor(r2 * 3); // 4, 5, 6 cells (32, 40, 48m)
-  const footW = cellW * 8;
-  const footD = cellD * 8;
-
-  const storeys = r3 < 0.5 ? 1 : 2;
-  const bodyH = storeys * 4;
-  const totalH = +(bodyH + 4.0).toFixed(2);
-
-  const wallCol = WALLS.WAREHOUSE[Math.floor(r1 * WALLS.WAREHOUSE.length)];
-  const roofCol = ROOFS.WAREHOUSE[Math.floor(r2 * ROOFS.WAREHOUSE.length)];
-
-  return {
-    id: `bld-workshop-${seed}`,
-    typology: "bld-workshop",
+    id: `bld-business-park-${seed}`,
+    typology: "bld-business-park",
     kind: "hard",
     footprint: { w: footW, d: footD },
     height: totalH,
     clearance: 1.5,
     origin: "base-centre",
     standsOn: ["plot", "open"],
-    material: { wall: wallCol, roof: roofCol },
-    params: { cellW, cellD, storeys },
+    material: { wall: WALLS.MIDRISE[1], roof: ROOFS.MIDRISE[0] },
     lod: [
       {
         level: 0,
-        tris: 340,
+        tris: 420,
         createGeometry: () => {
           const parts = [];
-          const bW = footW * 0.70;
-          const bD = footD * 0.75;
-          const body = new T.BoxGeometry(bW, bodyH, bD);
-          body.translate(-footW * 0.1, bodyH / 2, 0);
-          parts.push(body);
-
-          // Yard wall
-          const yardWall = new T.BoxGeometry(footW * 0.92, 2.2, footD * 0.92);
-          yardWall.translate(0, 1.1, 0);
-          parts.push(yardWall);
-
-          // Chimney / Flue
-          const flue = new T.CylinderGeometry(0.5, 0.6, bodyH + 3.8, 6);
-          flue.translate(footW * 0.22, (bodyH + 3.8) / 2, -bD * 0.3);
-          parts.push(flue);
-
-          // Roller door
-          const door = new T.BoxGeometry(5.0, 3.5, 0.3);
-          door.translate(-footW * 0.1, 1.75, bD / 2 + 0.15);
-          parts.push(door);
+          const body = new T.BoxGeometry(footW * 0.82, bodyH, footD * 0.82);
+          body.translate(0, bodyH / 2, 0);
+          // Glazed entrance atrium
+          const atrium = new T.BoxGeometry(10.0, bodyH + 1.0, 3.5);
+          atrium.translate(0, (bodyH + 1.0) / 2, (footD * 0.82) / 2 + 1.75);
+          // Brise-soleil sun louvers
+          for (let s = 1; s < 3; s++) {
+            const louver = new T.BoxGeometry(footW * 0.84, 0.2, 1.2);
+            louver.translate(0, s * 4 + 3.2, (footD * 0.82) / 2 + 0.6);
+            parts.push(louver);
+          }
+          const roofScreen = new T.BoxGeometry((footW * 0.82) * 0.7, 2.5, (footD * 0.82) * 0.7);
+          roofScreen.translate(0, bodyH + 1.25, 0);
+          parts.push(body, atrium, roofScreen);
           return mergeGeometries(parts, T);
         }
       },
@@ -1865,16 +2229,16 @@ export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
         level: 1,
         tris: 50,
         createGeometry: () => {
-          const body = new T.BoxGeometry(footW * 0.8, bodyH, footD * 0.8);
-          body.translate(0, bodyH / 2, 0);
-          return body;
+          const b = new T.BoxGeometry(footW * 0.85, totalH, footD * 0.85);
+          b.translate(0, totalH / 2, 0);
+          return b;
         }
       },
       {
         level: 2,
         tris: 12,
         createGeometry: () => {
-          const b = new T.BoxGeometry(footW * 0.8, totalH, footD * 0.8);
+          const b = new T.BoxGeometry(footW * 0.85, totalH, footD * 0.85);
           b.translate(0, totalH / 2, 0);
           return b;
         }
@@ -1883,135 +2247,6 @@ export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
   };
 }
 
-/**
- * 10. BLD-APARTMENT-WALKUP (3x4 to 4x6 cells = 24x32m to 32x48m, 3-4 storeys = 12-16m)
- * Axes: stair core position, gallery access vs internal, balcony rhythm, ground-floor garden, roof style.
- */
-export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
-  const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
-  const r5 = rnd(seed + "5"), r6 = rnd(seed + "6");
-
-  const cellW = 3 + Math.floor(r1 * 2); // 3, 4 cells (24, 32m)
-  const cellD = 4 + Math.floor(r2 * 3); // 4, 5, 6 cells (32, 40, 48m)
-  const footW = cellW * 8;
-  const footD = cellD * 8;
-
-  const storeys = r3 < 0.5 ? 3 : 4;
-  const bodyH = storeys * 4; // 12 or 16m
-  const stairPosition = r4 < 0.4 ? "center" : r4 < 0.7 ? "dual" : "gallery";
-  const roofStyle = r5 < 0.4 ? "pitched" : r5 < 0.75 ? "mansard" : "parapet";
-  const hasGarden = r6 > 0.3;
-
-  const roofH = roofStyle === "pitched" ? 3.5 : roofStyle === "mansard" ? 2.8 : 1.2;
-  const totalH = +(bodyH + Math.max(roofH, 2.0)).toFixed(2);
-
-  const wallCol = WALLS.MIDRISE[Math.floor(r1 * WALLS.MIDRISE.length)];
-  const roofCol = ROOFS.MIDRISE[Math.floor(r2 * ROOFS.MIDRISE.length)];
-
-  return {
-    id: `bld-apartment-walkup-${seed}`,
-    typology: "bld-apartment-walkup",
-    kind: "hard",
-    footprint: { w: footW, d: footD },
-    height: totalH,
-    clearance: 1.0,
-    origin: "base-centre",
-    standsOn: ["plot", "open"],
-    material: { wall: wallCol, roof: roofCol },
-    params: { cellW, cellD, storeys, stairPosition, roofStyle, hasGarden },
-    lod: [
-      {
-        level: 0,
-        tris: 480,
-        createGeometry: () => {
-          const parts = [];
-          const bW = footW * 0.78;
-          const bD = footD * 0.75;
-          const body = new T.BoxGeometry(bW, bodyH, bD);
-          body.translate(0, bodyH / 2, 0);
-          parts.push(body);
-
-          // Stair core(s)
-          if (stairPosition === "center") {
-            const stair = new T.BoxGeometry(4.2, bodyH + 2.0, 2.8);
-            stair.translate(0, (bodyH + 2.0) / 2, bD / 2 + 1.4);
-            parts.push(stair);
-          } else if (stairPosition === "dual") {
-            for (const sx of [-bW * 0.35, bW * 0.35]) {
-              const stair = new T.BoxGeometry(3.2, bodyH + 2.0, 2.6);
-              stair.translate(sx, (bodyH + 2.0) / 2, bD / 2 + 1.3);
-              parts.push(stair);
-            }
-          } else {
-            // Open gallery walkway on rear
-            for (let s = 1; s < storeys; s++) {
-              const gal = new T.BoxGeometry(bW * 0.9, 0.3, 1.8);
-              gal.translate(0, s * 4 + 0.15, -bD / 2 - 0.9);
-              parts.push(gal);
-            }
-          }
-
-          // Balconies
-          for (let s = 1; s < storeys; s++) {
-            const by = s * 4 + 0.15;
-            for (const side of [-bW / 2 - 0.8, bW / 2 + 0.8]) {
-              const balc = new T.BoxGeometry(1.6, 0.3, bD * 0.35);
-              balc.translate(side, by, 0);
-              parts.push(balc);
-            }
-          }
-
-          // Roof style
-          if (roofStyle === "pitched") {
-            const roof = new T.BoxGeometry(bW * 1.02, roofH, bD * 0.9);
-            roof.translate(0, bodyH + roofH / 2, 0);
-            parts.push(roof);
-          } else if (roofStyle === "mansard") {
-            const lower = new T.BoxGeometry(bW * 1.04, roofH * 0.65, bD * 1.04);
-            lower.translate(0, bodyH + roofH * 0.325, 0);
-            const upper = new T.BoxGeometry(bW * 0.88, roofH * 0.35, bD * 0.88);
-            upper.translate(0, bodyH + roofH * 0.825, 0);
-            parts.push(lower, upper);
-          } else {
-            const par = new T.BoxGeometry(bW * 1.02, 1.2, bD * 1.02);
-            par.translate(0, bodyH + 0.6, 0);
-            parts.push(par);
-          }
-
-          // Garden terrace walls
-          if (hasGarden) {
-            const gw = new T.BoxGeometry(bW * 0.96, 1.2, bD * 1.15);
-            gw.translate(0, 0.6, 0);
-            parts.push(gw);
-          }
-          return mergeGeometries(parts, T);
-        }
-      },
-      {
-        level: 1,
-        tris: 60,
-        createGeometry: () => {
-          const body = new T.BoxGeometry(footW * 0.88, bodyH, footD * 0.86);
-          body.translate(0, bodyH / 2, 0);
-          return body;
-        }
-      },
-      {
-        level: 2,
-        tris: 12,
-        createGeometry: () => {
-          const b = new T.BoxGeometry(footW * 0.88, totalH, footD * 0.86);
-          b.translate(0, totalH / 2, 0);
-          return b;
-        }
-      }
-    ]
-  };
-}
-
-/**
- * Master building generator dispatcher
- */
 export function building(typology = "bld-villa", seed = "seed-0", options = {}) {
   const map = {
     "bld-villa": bldVilla,
@@ -2024,6 +2259,8 @@ export function building(typology = "bld-villa", seed = "seed-0", options = {}) 
     "bld-warehouse": bldWarehouse,
     "bld-workshop": bldWorkshop,
     "bld-apartment-walkup": bldApartmentWalkup,
+    "bld-highstreet-terrace": bldHighStreetTerrace,
+    "bld-business-park": bldBusinessParkBlock,
   };
   const gen = map[typology] || bldVilla;
   return gen(seed, options);
