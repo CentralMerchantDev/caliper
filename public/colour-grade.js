@@ -60,7 +60,12 @@ export function makeGradeShader(num) {
         // HIGHLIGHT ROLL-OFF. The contrast curve pushes the sky and the specular
         // glint on the water straight to white, and a blown horizon is the first
         // thing that reads as "render" rather than "place". Everything above 0.86
-        // is compressed into the last 0.14 instead of clipping.
+        // is compressed rather than clipped.
+        //
+        // Measured, because the comment here used to say "into the last 0.14" and
+        // it is the last 0.058: 0.86 stays 0.860, 0.90 becomes 0.880, 0.95 becomes
+        // 0.901, and 1.0 becomes 0.918. The consequence is real and worth knowing
+        // -- nothing this application renders reaches pure white.
         vec3 hi = step(vec3(0.86), c);
         c = mix(c, 0.86 + (1.0 - exp(-(c - 0.86) * 4.0)) * 0.135, hi);
         // warm the light, cool the dark: separates sunlit from shaded faces

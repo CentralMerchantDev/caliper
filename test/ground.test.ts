@@ -157,9 +157,29 @@ test("but a bridge crosses the same water, because it carries itself", () => {
   // no piers and no boats; if it were absent a bench would float. `support`
   // is what separates them, and it has to be checked rather than assumed.
   const [x, z] = findGround((x, z) => heightAt(x, z) < -20, "deep water");
-  const SPAN = { footprint: { w: 12, d: 40 }, height: 6, clearance: 0, support: "span", maxRange: 1e9 };
+  // `category` IS DECLARED HERE ON PURPOSE, AND ITS ABSENCE WAS THE BUG.
+  //
+  // This case used to omit it, and omitting it is the one shape that dodged the
+  // acceptance table: canPlace only consults ACCEPTS when a spec HAS a category.
+  // So this passed while a bridge that described itself -- which every real
+  // caller does -- was refused "water carries vessel, not a structure". The test
+  // written to defend bridges was passing for the reason bridges were broken.
+  const SPAN = { footprint: { w: 12, d: 40 }, height: 6, clearance: 0, support: "span", category: "structure", maxRange: 1e9 };
   const r = land.canPlace(SPAN, x, z);
   assert.equal(r.ok, true, `a spanning structure must be able to cross water: ${r.reason} — ${r.detail}`);
+
+  // And the same over a cliff, which TERRAIN_REFUSES also grants and ACCEPTS
+  // also revoked -- ACCEPTS[rock] is [], so it refused with "rock carries
+  // nothing" for any category at all.
+  const [cx, cz] = findGround((x2, z2) => land.surfaceAt(x2, z2) === "rock", "a cliff face");
+  const OVER_CLIFF = { footprint: { w: 10, d: 30 }, height: 6, clearance: 0, support: "span", category: "structure", maxRange: 1e9 };
+  assert.equal(land.canPlace(OVER_CLIFF, cx, cz).ok, true,
+    `a bridge must cross a gorge as well as a bay: ${JSON.stringify(land.canPlace(OVER_CLIFF, cx, cz))}`);
+
+  // PAIRED: the exception is for spans, not a hole in the rule. Something that
+  // stands on the ground and calls itself a structure is still refused.
+  const SHED = { footprint: { w: 4, d: 4 }, height: 3, clearance: 0, category: "structure", maxRange: 1e9 };
+  assert.equal(land.canPlace(SHED, x, z).ok, false, "a shed does not float");
 
   const HULL = { footprint: { w: 4, d: 12 }, height: 3, clearance: 0, category: "vessel", maxRange: 1e9 };
   assert.equal(land.canPlace(HULL, x, z).ok, true, "a boat belongs on water");

@@ -1,0 +1,190 @@
+What the second blind audit found, and the one that was shipping broken
+
+A context-free agent audited the world lane -- the land, the sky, the grade, the
+navigation, the workbench and the checks that defend them. 16 mutations, each
+verified as landed. FIVE were caught. ELEVEN SURVIVED.
+
+Everything below is fixed and defended unless it is in the STILL OPEN list at
+the end.
+
+THE ONE THAT WAS ALREADY LIVE
+
+focusAtScreen raycast `neighbourhoodGroup.children`. Measured on the running
+page: scene has 547 children, that group has ZERO. _buildCityBase calls
+buildWorld(THREE, renderer, this.scene), so every piece of city geometry goes on
+the scene and the group holds nothing but reconciled placements.
+
+So double-click-to-focus, F, Alt-click, Set Pivot and the pivot marker were all
+dead on the real page, and navigate.js flashed "nothing there to focus on"
+wherever you clicked. The comment above it asserted the opposite -- that the
+ground, harbours, ocean, beach and every building were in that group.
+
+_inspectClick, 250 lines below in the same file, already carries the fix AND the
+diagnosis: it branches on _cityMode and hits scene.children for exactly this
+reason. focusAtScreen was never given the branch. Nothing in the suite could
+catch it -- the browser check stubs this renderer and its stub returns hit:true
+unconditionally.
+
+Verified after the fix, on the live page:
+    neighbourhoodChildren 0
+    focus { hit: true, point: { x: 0, z: 258 } }   <- a real point
+    targetCamDist 2730 -> 1229                     <- the range closes
+    markerCreated true, markerAt { x: 0, z: 258 }
+
+A SAVED CAMERA VIEW COULD TRAP A VISITOR PERMANENTLY
+
+`caliper_default_camera_view` was accepted on one truthiness check. resetView
+then reads def.lookAt.x/.y/.z and def.dist with no fallback on either, so
+{"lookAt":{}} -- or a perfectly valid-looking {"lookAt":{x,y,z}} with no `dist`
+-- puts NaN into the camera. Measured: camDist NaN, _lookAt [NaN, NaN, 337], no
+page error, SURVIVES EVERY RELOAD because the bad value is still in storage. The
+only escape was Save View, which needs a working view to save.
+
+workbench.js carries thirty lines insisting saved layout is untrusted input and
+validates every field. This key, written by the same interface, had none of it.
+Now validated field by field, and a value that cannot be used is discarded rather
+than kept to fail again on the next reset.
+
+A BRIDGE COULD NOT CROSS WATER
+
+TERRAIN_REFUSES grants `support: "span"` the right to cross water and cliffs --
+that is what a bridge IS. The acceptance step then took it straight back:
+ACCEPTS[water] is ["vessel"], so the moment a bridge also declared
+`category: "structure"` it was refused "water carries vessel -- not a structure".
+ACCEPTS[rock] is [], so a gorge refused everything.
+
+    bridge, span, category "structure"   REFUSED
+    bridge, span, NO category            OK
+
+The exception survived only for callers who omitted an optional field -- and
+test/ground.test.ts's bridge case omitted it. The test written to defend bridges
+was passing for the reason bridges were broken. That is the same "an unstated
+optional field decides the answer" failure the BEACH rule fourteen lines above
+spends a paragraph condemning.
+
+Fixed, and the test now declares a category, adds the cliff case, and pairs with
+a shed that must still be refused.
+
+"THE LAND REFUSES IT" WAS AN ELEVATION TEST
+
+The placement guard added yesterday said "the land refuses" and "catches the next
+mis-addressed placement, whatever produces it". It tested `g > 0.5`. A prop in
+the middle of a river passed, because this world's waterways run 27-105 m ABOVE
+sea level. It now asks waterwayAt -- the same import ground.js uses.
+
+THE VILLAGE SKY WAS STILL BEING ANIMATED AFTER IT WAS DELETED
+
+_buildCityBase removes the moon, moonlight, starfield and cloud group from the
+scene and left the PROPERTIES pointing at them, so every guard in draw() passed
+and the day/night code went on positioning a moon nothing renders. Measured over
+ten ticks: moonInScene false, moon moved (129,192,-1096) -> (-2445,664,-1228),
+star opacity rewritten every frame. sky.js's own header describes this exact
+state as the bug it was written to fix -- it added a replacement and did not stop
+the old code. Nulled and disposed.
+
+THE DROP ZONES YOU SEE ARE NOT THE ONES THAT CATCH
+
+zoneAt computed its own edge bands -- 126 px full-length strips, no inset, no
+corner exclusion -- while the CSS draws inset rectangles that stop 90 px short of
+each corner. Two different shapes, disagreeing in both directions. Measured:
+
+    drop (135,400)  inside the DRAWN left zone   -> floated
+    drop (1470,400) inside the DRAWN right zone  -> floated
+    drop (60,40)    outside every drawn zone     -> docked top
+
+A 16 px strip inside each visible zone was dead; both top corners were live and
+invisible. It now hit-tests the rendered rectangles, so there is no second
+definition to disagree with.
+
+WHAT WAS UNDEFENDED, AND NOW IS NOT
+
+  * The COLOUR GRADE had no control at all. Deleting the pass from the composer
+    left 605 tests, the browser check and tsc all green -- the headline artefact
+    of an entire session, unguarded. test/lookPipeline.test.ts now asserts the
+    pass exists, runs after OutputPass where its curve belongs, that the vignette
+    darkens toward black rather than grey, that both pages use the one shared
+    module, and the measured roll-off curve.
+  * sky.js was in NO load check. A bare `throw` at module scope left 605 tests
+    green. Added, with terrain.js, waterways.js and colour-grade.js.
+  * waterwayAt could be 3x TOO WIDE with the whole suite green. Measured at this
+    extent: 0.255% of the region is water, 0.872% at 3x, 0.127% at half. The new
+    area test bands 0.17-0.45.
+  * The river taper -- a river widening toward its mouth -- had no test.
+  * focusDistance had three survivors: the max clamp on the zoom path, the
+    Infinity default the docstring argues for at length, and the NaN fallback
+    VALUE (the old test only asserted it was >= min, which 4800 satisfies too).
+  * scripts/shoot-app.mjs had no assertion and no non-zero exit. It printed two
+    page errors and twenty refused placements and exited 0. It now fails -- and
+    the first thing it did was flag eight errors that were all the HARNESS:
+    Worker routes a static server cannot serve, and a cross-origin frame policy
+    that allows the deployed origin but not 127.0.0.1. Those are named
+    individually, with reasons; anything else fails.
+  * navigate.js's destroy() cleared its intervals and removed NONE of its eight
+    listeners, under a comment calling the previous version "half a teardown".
+    Every listener is tracked now.
+
+COMMENTS THAT WERE NOT TRUE
+
+The audit was told to treat every factual claim in a comment as a hypothesis.
+Seven failed:
+
+  * sky.js: "three draw calls... they instance to one". Sharing geometry and a
+    material does not instance in three.js. It is four.
+  * sky.js: a per-star `size` attribute PointsMaterial never reads -- 2,600
+    floats uploaded, every star drawn at the uniform size. Removed.
+  * colour-grade.js: "compressed into the last 0.14". Measured: the last 0.058.
+    Nothing this application renders can reach pure white, which is worth knowing.
+  * menus.js: "last registered is the most recently opened layer". Registration
+    is fixed at module init and has nothing to do with what was opened when.
+  * navigate.js: the dblclick handler "re-focuses the same point". It only calls
+    preventDefault -- and a second focus would not be harmless, it would square
+    the 0.45 range factor.
+  * check-topbar.mjs: "records the last thing that PASSED". It records the last
+    thing checked; the assignment runs before the condition.
+  * city.html: "the grade now lives in public/grade.js". grade.js is ROAD
+    grading. That pointer led to the module this one once overwrote.
+
+MUTATIONS, THIS ROUND
+
+  focusAtScreen raycasts the empty group again   -> caught (live-page probe)
+  waterwayAt 3x too wide                          -> caught
+  the river taper removed                         -> caught
+  the colour grade removed from the composer      -> caught
+  the vignette back to greying (darkness 0.45)    -> caught
+  the grade moved before OutputPass               -> caught
+  the span exception revoked                      -> caught
+  destroy() stops removing listeners              -> caught
+  destroy() rips out a live region it not own     -> caught
+  the grip Escape dismisser always returns false  -> caught
+  the drop hit-test widens past the drawn zones   -> caught
+
+11 for 11, after three of my own new assertions failed to bite on the first
+attempt and had to be rewritten -- the teardown check asserted a node count that
+two instances share, and the zone check reimplemented the hit test in the page
+instead of calling it, so mutating the module changed nothing it could see.
+Testing a copy of the thing is the same error as photographing a different page.
+
+620/620 node tests, tsc --noEmit clean, top-bar check green, shoot-app green.
+
+STILL OPEN -- AND THE FIRST TWO NEED MARK
+
+  1. WATERWAY UNITS. waterways.js says "a river's width and depth are BUILT
+     metres and do not scale; only its position does". terrain.js scales both.
+     river-mid declares depth 9 and the land reports 5.85. One of the two is
+     wrong and fixing it changes how the world LOOKS, so it is not mine to
+     decide alone.
+  2. BLOOM IS STILL TWO COPIES. index.html runs strength 0.02 / threshold 0.99 --
+     effectively no bloom. city.html runs 0.085 / 2.20, tuned, with a comment
+     saying 0.90 sent the city "to milk". Unifying means adopting one, which is a
+     visual change on a page just deployed.
+  3. waterAt reports the manifest depth, uniform across the channel, so a hull at
+     the bank reads the mid-channel depth. The docstring describing a computed
+     surface has been corrected to match what it does.
+  4. ground.js's probe docstring claims "never coarser than TARGET_SPACING";
+     measured, it is 8 m at 200 m wide and 140 m at 3,500 m. The 3,500 m runway
+     it uses as its example cannot see a 120 m river.
+  5. findGround makes 3.26 million heightAt calls for one unplaceable spec.
+  6. The pivot marker's APPEARANCE is still unjudged -- it is created at the
+     right point now, but nobody has looked at the ring at street level.
+  7. props.js / roadkit.js / asset-registry.js are still unwired. Blocked on
+     merging assets-lane, which is Mark's call.

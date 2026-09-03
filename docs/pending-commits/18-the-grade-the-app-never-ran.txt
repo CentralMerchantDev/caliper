@@ -1,0 +1,126 @@
+The grade the application never ran, and a sky that was only half swapped
+
+Mark, on the deployed page: "it's still really hazy, and I don't know what it is
+causing this. It's like you're in a foggy atmosphere. It's just fog. There's no
+crispness or cleanness or colour, it's really bland."
+
+Then, after the first theory failed and he sent a second screenshot at midday:
+"I don't think that is it. I think it is the camera settings, as it seems like a
+blur effect."
+
+He was right both times, and I was wrong both times.
+
+IT WAS NOT FOG AND IT WAS NOT BLUR. THE APPLICATION RENDERED UNGRADED.
+
+city.html runs a colour grade as the last pass of its composer: saturation x1.30,
+a contrast S-curve about mid grey, a warm/cool split that separates sunlit from
+shaded faces, and a highlight roll-off above 0.86 whose own comment says "a blown
+horizon is the first thing that reads as 'render' rather than 'place'".
+
+index.html -- the application -- has a composer too. It carried one bloom pass at
+strength 0.02 and NO GRADE AT ALL. So the page a visitor opens rendered with 30%
+less saturation, no contrast curve, no warm/cool separation, and a horizon free
+to clip to white. That is the wash, exactly as described.
+
+AND THIS IS THE PART THAT MATTERS MORE THAN THE FIX
+
+scripts/shoot.mjs renders city.html. Every image used to judge how this world
+looks came through that grade, and the product never did. The measuring
+instrument was flattering the thing it measured, and it went unnoticed for a long
+time because both pictures were of the same city.
+
+That is the third time in one session that a harness diverged from the thing it
+was supposed to be measuring:
+
+  * the browser check stubs the renderer, so a module-scope throw in the real
+    renderer left it green
+  * index.html's animation loop never advanced headlessly, so a camera that had
+    never been positioned made a raycast return the origin, which read as a
+    broken pivot marker
+  * shoot.mjs renders city.html, so neither the pivot marker nor the sky nor the
+    grade could ever appear in a shot of it
+
+Each was found by a different accident. The pattern is one thing: I was reading
+the instrument, not the product.
+
+The grade now lives in public/colour-grade.js and BOTH pages import it. Two
+copies of a look is how a look drifts; one copy cannot.
+
+THE SKY WAS HALF SWAPPED, AND THE OTHER HALF NEVER ARRIVED
+
+_buildCityBase removes the village's sky mesh, starfield, cloud group, moon mesh
+and moon light -- correctly, because they are sized for a village whose clouds
+sit at y = 160-250 m and wrap at +/-850 m, among downtown towers that reach 220 m
+in a world 26 km across. That is the "sea of free floating objects" Mark
+described, and removing them was right.
+
+Nothing put a city-sized replacement back. Meanwhile draw() went on positioning
+the moon, setting the moon light's intensity, fading the starfield and drifting
+the cloud clusters every single frame -- against objects that were no longer in
+the scene. Every guard passed. Every update landed on an orphan.
+
+public/sky.js builds the replacement: a starfield on a 46 km sphere that fades in
+at night and rotates slowly, a moon opposite the sun so it rises as the sun sets
+without a second clock, and clouds as two rotating domes at 2.6 km and 4.2 km
+carrying a procedural, seamlessly tiling texture. Clouds are a LAYER, not
+scenery; they cannot be flown into. Built in city-render.js beside the sun and
+the fog -- not in the shell -- so shoot.mjs can photograph them.
+
+Cost: three draw calls, 14 to 17, written down here rather than found later in a
+frame graph.
+
+Their first version was invisible. Not missing -- a probe confirmed two visible
+domes in the scene -- just white at 5-13% alpha, tiled 3x3, times a material
+opacity of 0.42, over a pale blue sky. Measured, then fixed.
+
+THE TOOLBAR LIED ABOUT THE TIME OF DAY
+
+#tod-day ships with class="active" aria-pressed="true" in the markup, so from the
+first paint the interface claims the world is set to Day. _overrideHour was null,
+meaning nothing was overridden and the hour free-ran on sim time. So the control
+asserted a state the world had never been in, and drifted further from it every
+minute the tab stayed open.
+
+Mark's own screenshot caught it: the Day button lit, the clock reading 05:00, and
+a city washed grey-green by a sun barely over the horizon. He read it as fog. It
+was five in the morning. The default is now 12, matching what the interface says.
+
+This was a real bug and it was NOT his bug -- his second screenshot, at 13:00,
+correctly killed it as the explanation.
+
+AND I DESTROYED A FILE
+
+public/grade.js already existed: 266 lines about ROAD grading -- surveyed
+vertical alignments, gradient limits, earthwork budgets -- imported by
+city-render.js, features.js, land-use.js and world-render-3d.js. I wrote a colour
+grade over it because I named a new file without reading the directory, and
+because the tool said "updated successfully" and I read that as "created".
+
+Restored from git, verified byte-identical with diff, and the colour grade now
+lives under a name that was not already taken. A stale .git/index.lock was
+blocking git again; quarantined to _TO-DELETE/stale-git-lock-2026-09-03b/.
+
+THE OCEAN-TILE BENCHES: NOT REPRODUCIBLE ON MAIN
+
+Mark reported a park bench at the corner of every ocean square. There are exactly
+two paths that can create a bench: the procedural furniture loop, which refuses
+any ground below 1.2 m and so cannot reach water, and the live-world renderer,
+which is confined to a single quarter at a fixed location. A world build was
+probed for instances standing on ground below sea level: 284 of them, and the
+largest group is the 81 marina boats, which belong there.
+
+Not reproduced. Mark guessed it was already fixed by commits he has not deployed,
+and nothing here contradicts that. Worth a second look once the deploy lands.
+
+600/600 node tests, tsc --noEmit clean, top-bar check green.
+
+STILL OPEN
+
+  * Nothing in the renderer imports props.js, roadkit.js or asset-registry.js.
+    The city on screen is still entirely the hand-placed one. That wiring is
+    blocked until assets-lane is merged, which is Mark's call to make.
+  * The pivot marker has still never been seen in a real frame. It cannot be:
+    shoot.mjs renders city.html, which does not construct WorldRenderer, and
+    index.html has no headless capture hooks. Giving it the __ready/__renderOnce
+    pair city.html has is the fix, and it is not done.
+  * The four low-value audit survivors.

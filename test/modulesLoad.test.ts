@@ -24,6 +24,11 @@ import { pathToFileURL } from "node:url";
 const FILES = [
   "world-render-3d.js", "menus.js", "workbench.js", "navigate.js",
   "grid.js", "ground.js", "place.js", "world-registry.js", "prop-manifest.js",
+  // sky.js and colour-grade.js were missing, and an audit proved the cost: a
+  // bare `throw` at module scope in sky.js left the whole 605-test suite green,
+  // because nothing imported it. That is the exact defect this file exists to
+  // prevent, one module over.
+  "sky.js", "colour-grade.js", "terrain.js", "waterways.js",
 ];
 
 for (const name of FILES) {

@@ -13,14 +13,29 @@ await pg.goto(`http://127.0.0.1:${p}/city.html?bare=1&dpr=1`,{waitUntil:"load",t
 await pg.waitForFunction("window.__ready === true",null,{timeout:240000});
 console.log("ERRORS:", errs.length?errs.slice(0,4):"none");
 console.log(JSON.stringify(await pg.evaluate(()=>{
-  const sc=window.__scene;
-  const grp=sc.getObjectByName("city-sky");
-  const out={ skyGroupFound:!!grp, children:[] };
-  if(grp) grp.traverse(o=>{ if(o!==grp) out.children.push({t:o.type, vis:o.visible,
-      op:o.material&&o.material.opacity!==undefined?Number(o.material.opacity.toFixed(3)):null,
-      scale:o.scale?o.scale.toArray().map(n=>Math.round(n)):null }); });
-  out.camY=Math.round(window.__camera.position.y);
-  out.camPos=window.__camera.position.toArray().map(n=>Math.round(n));
+  const W = window.__world, sc = window.__scene;
+  const heightAt = W.heightAt;
+  // Every InstancedMesh in the scene, its instance positions read back from the
+  // matrices, and how many of them stand on ground that is under water.
+  const out = { meshes: [], benchesOnWater: 0, totalOnWater: 0 };
+  const m4 = new W.THREE.Matrix4(), v3 = new W.THREE.Vector3();
+  sc.traverse((o) => {
+    if (!o.isInstancedMesh || !o.count) return;
+    let onWater = 0, minY = Infinity, sample = null;
+    for (let i = 0; i < o.count; i++) {
+      o.getMatrixAt(i, m4);
+      v3.setFromMatrixPosition(m4);
+      const g = heightAt(v3.x, v3.z);
+      if (g < 0.0) { onWater++; if (!sample) sample = [Math.round(v3.x), Math.round(v3.z), Number(g.toFixed(2))]; }
+      if (v3.y < minY) minY = v3.y;
+    }
+    if (onWater > 0) {
+      out.meshes.push({ name: o.name || "(unnamed)", count: o.count, onWater, sample });
+      out.totalOnWater += onWater;
+    }
+  });
+  out.propRefused = W.stats && W.stats.propRefused;
+  out.note = "onWater = terrain height BELOW sea level, i.e. genuinely submerged";
   return out;
 }),null,1));
 await b.close(); s.close();

@@ -39,7 +39,7 @@
 // =============================================================================
 
 import { classifyAt, slopeAt, USE } from "./land-use.js";
-import { waterwayAt } from "./terrain.js";
+import { waterwayAt, waterwayInfoAt } from "./terrain.js";
 import { WORLD_SCALE } from "./world-scale.js";
 
 // -----------------------------------------------------------------------------
@@ -366,6 +366,18 @@ export function createGround({ heightAt, registry = null }) {
         if (mapped) return mapped;
       }
     }
+    // A RIVER IS WATER EVEN WHEN IT IS 40 METRES UP.
+    //
+    // classifyAt decides by ELEVATION, and this world's seven waterways run
+    // between 27 and 105 m above sea level -- so every one of them classified as
+    // dry land, and the land accepted a building in the middle of a river. 643
+    // of 703 sampled in-waterway points did exactly that. terrain.js's own
+    // docstring already said it: "the mistake was expecting an elevation test to
+    // answer a question about waterways". The waterways are asked directly, and
+    // asked FIRST, because they are a fact about the ground rather than an
+    // inference from its height.
+    if (waterwayAt(x, z)) return SURFACE.WATER;
+
     const c = classifyAt(heightAt, x, z);
     if (c.use === USE.WATER) return SURFACE.WATER;
     if (c.use === USE.BEACH) return SURFACE.BEACH;
@@ -480,9 +492,33 @@ export function createGround({ heightAt, registry = null }) {
     // the same ground and it carries cars and refuses lamps. Unbuilt land
     // (OPEN) accepts anything, which is what makes the world buildable rather
     // than a fixed plan.
+    // A SPANNING STRUCTURE DOES NOT STAND ON WHAT IT CROSSES.
+    //
+    // Step 1 grants a bridge, pier or jetty the right to cross water and a
+    // cliff -- that is what `support: "span"` means and TERRAIN_REFUSES returns
+    // null for it. This step then took it straight back: ACCEPTS[water] is
+    // ["vessel"], so the moment a bridge also declared `category: "structure"`
+    // it was refused with "water carries vessel -- not a structure".
+    //
+    // Measured before the fix:
+    //     bridge, span, category "structure"  ->  REFUSED
+    //     bridge, span, NO category           ->  OK
+    //     float platform, support "float"     ->  REFUSED with a category
+    //
+    // So the exception survived only for callers who happened to omit an
+    // optional field -- and test/ground.test.ts's bridge case omits it, which is
+    // why the test written to defend this passed while the behaviour was broken.
+    // That is the same "an unstated optional field decides the answer" failure
+    // the BEACH rule fourteen lines above spends a paragraph condemning.
+    //
+    // What a surface CARRIES is a question about things that rest on it. It is
+    // not a question you can ask about a deck forty metres overhead, so it is
+    // not asked.
+    const spans = spec.support === "span" || spec.support === "float";
     if (spec.category) {
       for (const [px, pz] of pts) {
         const s = surfaceAt(px, pz, t);
+        if (spans && (s === SURFACE.WATER || s === SURFACE.ROCK)) continue;
         const list = ACCEPTS[s];
         // null MEANS ANYTHING. undefined MEANS NOBODY KNOWS, AND THOSE ARE NOT
         // THE SAME ANSWER.
@@ -708,13 +744,31 @@ export function createGround({ heightAt, registry = null }) {
    * something different in a canal and in the open sea -- one is dredged and
    * bounded, the other is not.
    */
+  /**
+   * What water is at a point, and how deep.
+   *
+   * THIS READ THREE FIELDS OFF A BOOLEAN. waterwayAt returns true or false, and
+   * this asked it for `.kind`, `.surface` and `.id`. Every one is undefined on a
+   * boolean, so the fallbacks always won: every waterway in the world reported
+   * itself a "river" -- three of the seven are canals -- and the depth was
+   * max(0, 0 - h), which is zero anywhere at or above sea level. Measured before
+   * the fix: 703 of 703 sampled in-waterway points said "river", 653 of 703 said
+   * depth 0. The code was confident and wrong in the same breath, which is the
+   * failure this whole project is about.
+   *
+   * waterwayInfoAt returns the waterway itself. The surface is its bed plus its
+   * depth -- computed HERE because this is where heightAt lives -- so a canal
+   * 40 m up a valley reports a real depth instead of subtracting sea level from
+   * something that is not at sea level.
+   */
   function waterAt(x, z) {
-    const way = waterwayAt(x, z);
-    if (way) {
-      const h = heightAt(x, z);
-      return { kind: way.kind || "river", depth: Math.max(0, (way.surface !== undefined ? way.surface : 0) - h), id: way.id || null };
-    }
+    const way = waterwayInfoAt(x, z);
     const h = heightAt(x, z);
+    if (way) {
+      // The bed is cut `depth` below the surrounding ground, so the surface sits
+      // at bed + depth and the water at this point is that much above the bed.
+      return { kind: way.kind, depth: Math.max(0, way.depth), id: way.id };
+    }
     if (h < 0) return { kind: "sea", depth: -h, id: null };
     return null;
   }

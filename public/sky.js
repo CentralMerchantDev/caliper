@@ -30,10 +30,13 @@
  * two large domes carrying a procedural cloud texture, rotating slowly at 2.6 km
  * and 4.2 km. They are sky, not scenery, and they cannot be flown into.
  *
- * COST: three draw calls (stars, moon, two cloud domes share one material and
- * one geometry, so they instance to one). The scene budget is fourteen; this
- * takes it to seventeen, and the reason is written here rather than discovered
- * later from a frame graph.
+ * COST: FOUR draw calls -- stars, moon, and the two cloud domes SEPARATELY.
+ *
+ * This said three, on the reasoning that the domes "share one material and one
+ * geometry, so they instance to one". Sharing geometry and material does not
+ * instance anything in three.js; they are two Meshes at different scales and
+ * rotations and each costs a draw. An audit caught it. The scene budget is
+ * fourteen and this takes it to eighteen, which is the number to hold against.
  */
 
 /** How far out the sky sits. Everything here is beyond the far terrain. */
@@ -117,7 +120,6 @@ export function createCitySky(THREE, scene, opts = {}) {
 
   const starCount = opts.stars ?? 2600;
   const starPos = new Float32Array(starCount * 3);
-  const starSize = new Float32Array(starCount);
   let ss = 20250903 >>> 0;
   const srnd = () => { ss = (ss * 1664525 + 1013904223) >>> 0; return ss / 4294967296; };
   for (let i = 0; i < starCount; i++) {
@@ -131,11 +133,15 @@ export function createCitySky(THREE, scene, opts = {}) {
     starPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
     starPos[i * 3 + 1] = Math.abs(r * Math.cos(phi));   // sky only, never below the horizon
     starPos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-    starSize[i] = 60 + srnd() * 180;
   }
   const starGeo = new THREE.BufferGeometry();
   starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
-  starGeo.setAttribute("size", new THREE.BufferAttribute(starSize, 1));
+  // NO `size` ATTRIBUTE. PointsMaterial does not read one -- its vertex shader is
+  // `gl_PointSize = size` against a UNIFORM, and `attribute float size` appears
+  // zero times in the vendored three build. Per-star sizes were being generated
+  // and uploaded, 2,600 floats of them, and every star rendered at the uniform
+  // 120 regardless. Varying star size needs a ShaderMaterial; until it is worth
+  // one, the honest thing is not to pretend.
   const starMat = new THREE.PointsMaterial({
     color: 0xdce6ff, size: 120, sizeAttenuation: true,
     transparent: true, opacity: 0, depthWrite: false, fog: false,

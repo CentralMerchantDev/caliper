@@ -49,6 +49,7 @@ import { Sky } from "./vendor/three/addons/objects/Sky.js";
 import { EffectComposer } from "./vendor/three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "./vendor/three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "./vendor/three/addons/postprocessing/UnrealBloomPass.js";
+import { waterwayAt } from "./terrain.js";
 import { ShaderPass } from "./vendor/three/addons/postprocessing/ShaderPass.js";
 import { makeGradeShader } from "./colour-grade.js";
 import { VignetteShader } from "./vendor/three/addons/shaders/VignetteShader.js";
@@ -1331,12 +1332,41 @@ class Renderer3D {
     this._defaultCameraSettings = this._cityMode
       ? { ...this._cityDefaultCamera }
       : { lookAt: { x: 0, y: 5.0, z: -10.0 }, dist: 85, delta: 0, pitch: 0.32 };
+    // A SAVED VIEW IS UNTRUSTED INPUT, AND A BAD ONE TRAPPED THE VISITOR.
+    //
+    // This accepted anything with a truthy `lookAt`. resetView then does
+    // _targetLookAt.set(def.lookAt.x, .y, .z) and _targetCamDist = def.dist
+    // with no fallback on either, so {"lookAt":{}} -- or a valid-looking
+    // {"lookAt":{"x":0,"y":5,"z":0}} with no `dist` -- puts NaN into the camera.
+    // Measured: camDist NaN, _lookAt [NaN, NaN, 337], no page error, and it
+    // SURVIVES EVERY RELOAD because the bad value is still in localStorage. The
+    // only way out was Save View, which needs a working view to save.
+    //
+    // workbench.js carries thirty lines insisting saved layout is untrusted and
+    // validates every field; this key, written by the same interface, had none
+    // of it. Same rule, same reason.
     try {
       const saved = localStorage.getItem('caliper_default_camera_view');
       if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.lookAt) {
-          this._defaultCameraSettings = parsed;
+        const v = JSON.parse(saved);
+        const num = (n) => typeof n === "number" && Number.isFinite(n);
+        const ok = v && typeof v === "object"
+          && v.lookAt && typeof v.lookAt === "object"
+          && num(v.lookAt.x) && num(v.lookAt.y) && num(v.lookAt.z)
+          && num(v.dist) && v.dist > 0;
+        if (ok) {
+          this._defaultCameraSettings = {
+            lookAt: { x: v.lookAt.x, y: v.lookAt.y, z: v.lookAt.z },
+            dist: v.dist,
+            delta: num(v.delta) ? v.delta : 0,
+            pitch: num(v.pitch) ? v.pitch : 0.38,
+          };
+        } else {
+          // Drop it rather than keep failing on every reset. A stored value that
+          // cannot be used is worse than none: it is indistinguishable from a
+          // working one until the camera goes blank.
+          console.warn("caliper_default_camera_view was not usable and has been discarded");
+          try { localStorage.removeItem('caliper_default_camera_view'); } catch (_) {}
         }
       }
     } catch (_) {}
@@ -1355,7 +1385,17 @@ class Renderer3D {
     // is 120,000 : 1 and cannot resolve 0.6 m at a single kilometre -- inside
     // the city it is meant to show. Roads sit 0.9 m above the terrain, so they
     // were fighting the ground almost everywhere in that view.
-    const renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: "high-performance", logarithmicDepthBuffer: true });
+    // preserveDrawingBuffer is OPT-IN via ?pdb=1, exactly as city.html does it.
+    // A WebGL canvas is cleared the moment its frame is presented, so
+    // toDataURL from a later task returns a blank image -- which is what every
+    // attempt to photograph THIS page produced. It costs memory bandwidth on
+    // every frame, so it is off unless a harness asks for it.
+    const _q = typeof location !== "undefined" ? new URLSearchParams(location.search) : new URLSearchParams();
+    const renderer = new THREE.WebGLRenderer({
+      canvas: this.canvas, antialias: true, powerPreference: "high-performance",
+      logarithmicDepthBuffer: true,
+      preserveDrawingBuffer: _q.has("pdb"),
+    });
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.95;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -1474,18 +1514,33 @@ class Renderer3D {
       const bloomPass = new UnrealBloomPass(new THREE.Vector2(w, h),
         RENDER_TUNING.BLOOM.strength, RENDER_TUNING.BLOOM.radius, RENDER_TUNING.BLOOM.threshold);
       composer.addPass(bloomPass);
-      // THE GRADE. Its absence here is why the deployed page looked washed out
-      // while every screenshot of city.html looked like a place: saturation,
-      // the contrast S-curve, the warm/cool split and -- most visibly -- the
-      // highlight roll-off that stops the horizon blowing to white. Same shader
-      // as city.html, from one file, so the two cannot drift apart again.
-      composer.addPass(new ShaderPass(makeGradeShader()));
+      // THE VIGNETTE WAS THE HAZE, AND IT WAS A UNITS MISREADING.
+      //
+      // three.js's VignetteShader is:
+      //     mix( texel.rgb, vec3(1.0 - darkness), dot(uv, uv) )
+      // so `darkness` is not an amount of darkening -- 1.0 - darkness is the
+      // COLOUR it mixes toward. At 0.45 that colour is grey 0.55, so this did
+      // not darken the corners, it washed them to flat grey. And offset 1.45
+      // puts the corner mix factor above 1, so they were fully grey with a
+      // radial falloff to the centre.
+      //
+      // That is exactly what Mark kept describing -- "it's like you're in a
+      // foggy atmosphere, it's just fog" -- and why neither the fog density nor
+      // the time of day nor the missing grade explained it. city.html, the page
+      // that always looked right, uses 1.02 / 1.04: 1.0 - 1.04 is black, a
+      // conventional darkening vignette at about half strength in the corners.
+      // Matched to it.
       const vignettePass = new ShaderPass(VignetteShader);
-      vignettePass.uniforms["offset"].value = 1.45;
-      vignettePass.uniforms["darkness"].value = 0.45;
+      vignettePass.uniforms["offset"].value = 1.02;
+      vignettePass.uniforms["darkness"].value = 1.04;
       composer.addPass(vignettePass);
       const outputPass = new OutputPass();
       composer.addPass(outputPass);
+      // THE GRADE GOES LAST, AFTER OutputPass, exactly as city.html does it.
+      // Its S-curve about mid grey and its roll-off above 0.86 are written for
+      // DISPLAY-REFERRED values; run before OutputPass they operate on linear
+      // HDR and do something else entirely.
+      composer.addPass(new ShaderPass(makeGradeShader()));
       this.composer = composer;
       this._bloomPass = bloomPass;
       this._vignettePass = vignettePass;
@@ -1668,6 +1723,30 @@ class Renderer3D {
                        this._moonMesh, this._starsMesh, this._cloudsGroup]) {
       if (obj && obj.parent) obj.parent.remove(obj);
     }
+    // REMOVED FROM THE SCENE IS NOT THE SAME AS GONE.
+    //
+    // Taking these out of the scene left the PROPERTIES pointing at them, so
+    // every `if (this._moonMesh && ...)` guard in draw() still passed and the
+    // day/night code went on positioning a moon, fading a starfield and
+    // drifting eighteen cloud clusters that nothing renders. Measured over ten
+    // ticks at night: moonInScene false, yet the moon moved from
+    // (129, 192, -1096) to (-2445, 664, -1228), and star opacity was rewritten
+    // every frame. sky.js's own header describes this exact state as the bug it
+    // was written to fix -- it added a replacement and did not stop the old code.
+    //
+    // Nulled AND disposed: a 1,200-point starfield, eighteen cloud clusters and
+    // a moon sphere were held on the GPU for a scene that cannot show them.
+    for (const [obj, prop] of [[this._moonMesh, "_moonMesh"], [this._starsMesh, "_starsMesh"],
+                               [this._cloudsGroup, "_cloudsGroup"], [this._moonLight, "_moonLight"]]) {
+      if (obj && typeof obj.traverse === "function") {
+        obj.traverse((o) => {
+          if (o.geometry) o.geometry.dispose?.();
+          if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose?.());
+        });
+      }
+      this[prop] = null;
+    }
+    this._cloudPuffs = [];
     // The fireflies are individual meshes, not a group, so they need their own
     // pass. They orbit +/-30 m of the village origin, which in the city is a
     // swarm of glowing dots inside downtown.
@@ -1714,6 +1793,30 @@ class Renderer3D {
     //
     // The sun light travelled through the day; the sky behind it did not.
     this._skyUniforms = (city.sky && city.sky.material && city.sky.material.uniforms) || null;
+
+    // HEADLESS CAPTURE HOOKS -- the same pair city.html has had all along.
+    //
+    // Their absence is why nothing visual about THIS page could ever be
+    // verified. scripts/shoot.mjs renders city.html, which is a bare renderer
+    // that never constructs this class, so the pivot marker, the sky and the
+    // colour grade were all invisible to it -- and the one attempt to drive
+    // index.html directly failed because its animation loop never advanced, so
+    // the camera was never positioned and a raycast from it returned the world
+    // origin at distance zero. That was read, at length, as a broken feature.
+    //
+    // __renderOnce draws a frame on demand and __tick advances the world by a
+    // known step, so a harness can put this page in a deterministic state
+    // instead of waiting on rAF and hoping.
+    if (typeof window !== "undefined") {
+      window.__scene = this.scene;
+      window.__camera = this.camera;
+      window.__renderOnce = () => {
+        if (this.composer) this.composer.render();
+        else this.renderer.render(this.scene, this.camera);
+      };
+      window.__tick = (dt = 0.016) => { this.draw(dt); };
+      window.__ready = true;
+    }
 
     // THE OTHER HALF OF THE SWAP.
     //
@@ -6012,11 +6115,29 @@ class Renderer3D {
       -((clientY - rect.top) / rect.height) * 2 + 1,
     );
     this._raycaster.setFromCamera(this._mouse, this.camera);
-    // neighbourhoodGroup, not the whole scene: the ground, the harbours, the
-    // ocean, the beach and every building are in it, while the sky, the clouds
-    // and the starfield are not. Raycasting the scene lets a ray hit a cloud at
-    // y = 200 and focus the camera on thin air over the city.
-    const hits = this._raycaster.intersectObjects(this.neighbourhoodGroup.children, true);
+    // THE GROUP IS EMPTY IN CITY MODE, AND THIS RAYCAST FOUND NOTHING.
+    //
+    // The comment that stood here said the ground, harbours, ocean, beach and
+    // every building were in neighbourhoodGroup. Measured on the live page:
+    // scene has 547 children, neighbourhoodGroup has ZERO. _buildCityBase calls
+    // buildWorld(THREE, renderer, this.scene), so every piece of city geometry
+    // goes on the scene and that group holds only reconciled placements. So
+    // every focus gesture missed, the camera never moved, and navigate.js
+    // flashed "nothing there to focus on" wherever you clicked.
+    //
+    // _inspectClick, 250 lines below in this same file, already carries the fix
+    // AND the diagnosis -- it branches on _cityMode and hits scene.children for
+    // exactly this reason. focusAtScreen was never given the same branch. A
+    // blind audit found it; nothing in the suite could, because the browser
+    // check stubs this renderer and its stub returns hit:true unconditionally.
+    //
+    // The sky is excluded by name rather than by group, which is what the old
+    // comment was really after: the cloud domes and starfield sit at 2.6-46 km
+    // and a ray that hits one would focus the camera on thin air.
+    const roots = this._cityMode
+      ? this.scene.children.filter((o) => o.name !== "city-sky" && o !== this._skyMesh)
+      : this.neighbourhoodGroup.children;
+    const hits = this._raycaster.intersectObjects(roots, true);
     if (!hits.length) return { hit: false, reason: "nothing under the pointer" };
 
     const p = hits[0].point;
@@ -6795,6 +6916,57 @@ class Renderer3D {
         // checks the metre coordinate, the integrity check passes, the ledger
         // says the edit landed -- and the renderer draws somewhere else.
         const pos = placementToWorldXZ(p.plot, centerX, centerZ, this._cityMode);
+
+        // GROUND HAS TO ACCEPT IT. A PROP IN THE SEA IS A REFUSAL, NOT A DRAW.
+        //
+        // Mark, with three screenshots: "there is a park bench at the corner of
+        // the water tiles and the water is marked as open ground." He was right,
+        // and I had already looked once and reported it as not reproducible --
+        // because I searched the two loops that CREATE furniture and both are
+        // bounded, and never checked the path that RE-CREATES it from world
+        // placements.
+        //
+        // The cause is units. placementToWorldXZ reads plot.x and plot.y as
+        // world METRES in city mode. The six baseline placements in
+        // sim-baseline.generated.js -- two trees, two lamp posts, a bench and a
+        // planter -- carry VILLAGE PLOT UNITS, between 0.6 and 1.4. So they
+        // render within a metre and a half of world zero, which in this world is
+        // open harbour. The inspector Mark clicked read "At (-25, 11) -- no plot
+        // nearby", which is that spot.
+        //
+        // Converting them would be guessing at an address they were never given.
+        // The honest answer is that the land refuses: a placement whose ground is
+        // below sea level does not get drawn, and the refusal is COUNTED and
+        // REPORTED with the rest, so "it did not appear" is a fact a run can
+        // surface rather than an absence nobody can see. That guard also catches
+        // the next mis-addressed placement, whatever produces it.
+        if (this._cityMode && typeof this._cityHeightAt === "function") {
+          // ASK THE LAND, DO NOT INFER FROM THE HEIGHT.
+          //
+          // The first version of this guard tested `g > 0.5` and its comment
+          // said "the land refuses" and "catches the next mis-addressed
+          // placement, whatever produces it". It caught exactly one thing:
+          // below half a metre. A prop dropped mid-river passed, because this
+          // world's seven waterways run 27-105 m ABOVE sea level; so did one on
+          // a cliff face or in a carriageway.
+          //
+          // That is verbatim the mistake terrain.js and ground.js both condemn
+          // in their own headers: expecting an elevation test to answer a
+          // question about waterways. waterwayAt is the same import ground.js
+          // uses, and it is a fact about the ground rather than a guess from it.
+          const g = this._cityHeightAt(pos.x, pos.z);
+          let refuse = null;
+          if (!(g > 0.5)) {
+            refuse = `ground is ${Number.isFinite(g) ? g.toFixed(1) + " m" : "unknown"}, at or below sea level`;
+          } else if (typeof waterwayAt === "function" && waterwayAt(pos.x, pos.z)) {
+            refuse = `in a waterway, ${g.toFixed(1)} m above sea level`;
+          }
+          if (refuse) {
+            unplaceable.push({ id: p.id, location: `${Math.round(pos.x)}, ${Math.round(pos.z)} -- ${refuse}` });
+            continue;
+          }
+        }
+
         targetX = pos.x;
         targetZ = pos.z;
         targetParent = this.neighbourhoodGroup;

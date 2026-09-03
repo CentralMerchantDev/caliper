@@ -304,16 +304,36 @@ export function createWorkbench(doc = document) {
     },
   };
 
-  /** Which edge band, if any, the pointer is over. Null means open water. */
+  /**
+   * Which drop zone the pointer is over -- ASKED OF THE ZONES THEMSELVES.
+   *
+   * This used to compute its own edge bands: full-length strips 126 px wide with
+   * no inset and no corner exclusion. The CSS draws something else -- inset
+   * rectangles that stop 90 px short of each corner. So the picture and the hit
+   * test were different shapes, in both directions. Measured over five drags:
+   *
+   *   drop (135,400)   inside the DRAWN left zone   -> highlighted nothing, floated
+   *   drop (1470,400)  inside the DRAWN right zone  -> highlighted nothing, floated
+   *   drop (60,40)     OUTSIDE every drawn zone     -> docked top
+   *   drop (800,110)   OUTSIDE every drawn zone     -> docked top
+   *
+   * A 16 px strip inside each visible side zone was dead, and a band below the
+   * top zone plus both top corners were live and invisible. Nothing in a
+   * screenshot shows that; you feel it the first time you drag.
+   *
+   * Hit-testing the rendered rectangles removes the second definition entirely.
+   * The zones are laid out in CSS, so CSS is the only place their geometry
+   * lives, and the two cannot disagree because there is no longer a two.
+   */
   function zoneAt(x, y) {
-    const w = window.innerWidth, h = window.innerHeight;
-    const band = Math.min(150, Math.max(80, Math.round(Math.min(w, h) * 0.14)));
-    // Corners are ambiguous; the nearer edge wins rather than whichever test
-    // happens to run first.
-    const d = { left: x, right: w - x, top: y, bottom: h - y };
     let best = null, bestD = Infinity;
-    for (const r of ["left", "right", "top", "bottom"]) {
-      if (d[r] <= band && d[r] < bestD) { best = r; bestD = d[r]; }
+    for (const z of zones.children) {
+      const r = z.getBoundingClientRect();
+      if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue;
+      // Corners can fall inside two rectangles; the nearer edge wins rather than
+      // whichever child happens to come first in the DOM.
+      const d = Math.min(x - r.left, r.right - x, y - r.top, r.bottom - y);
+      if (d < bestD) { bestD = d; best = z.dataset.region; }
     }
     return best;
   }
@@ -409,14 +429,20 @@ export function createWorkbench(doc = document) {
   // opened layer first and stops after exactly one dismissal.
   registerDismisser(() => {
     let closed = false;
+    let openGrip = null;
     for (const { el } of registry.values()) {
       const p = el.querySelector(".wb-grip-panel");
-      if (p && !p.hidden) { closed = true; }
+      if (p && !p.hidden) { closed = true; openGrip = el.querySelector(".wb-grip-menu"); }
     }
     if (!closed) return false;
+    // Focus goes back to the control that opened the menu -- which means
+    // focus(), not blur(). The previous line called blur() under a comment
+    // saying exactly this, and blur() sends focus to the document: measured,
+    // Escape on an open grip menu left activeElement as BODY. menus.js has
+    // always done it correctly two files over.
+    const opener = openGrip;
     api.closeAllGrips();
-    // Focus goes back to the control that opened the menu, not to the document.
-    for (const { el } of registry.values()) el.querySelector(".wb-grip-menu")?.blur?.();
+    if (opener && document.contains(opener)) opener.focus();
     return true;
   });
   // A window that shrinks can strand a float off-screen; re-clamp rather than

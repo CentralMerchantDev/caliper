@@ -39,6 +39,16 @@ export function createNavigation(renderer, doc = document) {
   if (typeof window !== "undefined") window.__navGestures = { canvas: !!canvas, canvasId: canvas?.id ?? null };
   const $ = (id) => doc.getElementById(id);
 
+  // Every listener this function adds is recorded, so destroy() can actually
+  // undo it. Binding through one helper is what makes that possible without
+  // relying on someone remembering to add each new one to a list.
+  const listeners = [];
+  const on = (target, type, fn, opts) => {
+    if (!target) return;
+    target.addEventListener(type, fn, opts);
+    listeners.push([target, type, fn]);
+  };
+
   /* ------------------------------------------------------ focus by pointer -- */
 
   /**
@@ -97,7 +107,7 @@ export function createNavigation(renderer, doc = document) {
     // the canvas element is ever replaced.
     const DOUBLE_MS = 340, DOUBLE_PX = 24;
     let lastUp = 0, lastUpX = 0, lastUpY = 0;
-    doc.addEventListener("pointerup", (e) => {
+    on(doc, "pointerup", (e) => {
       if (!(e.target instanceof Element) || e.target.tagName !== "CANVAS") return;
       if (e.button !== 0 && e.pointerType === "mouse") return;
       const now = performance.now();
@@ -109,9 +119,13 @@ export function createNavigation(renderer, doc = document) {
       }
       lastUp = now; lastUpX = e.clientX; lastUpY = e.clientY;
     });
-    // The browser event too, where it does fire -- harmless if both arrive,
-    // because the second call re-focuses the same point.
-    doc.addEventListener("dblclick", (e) => {
+    // preventDefault ONLY. This does not focus, and the comment here used to say
+    // it did -- "harmless if both arrive, because the second call re-focuses the
+    // same point". Both halves were wrong: it never focused, and a second focus
+    // would not be harmless, because focusAtScreen multiplies the range by 0.45
+    // again and two of them is 0.2025. It exists to stop the browser's default
+    // double-click text selection over the canvas.
+    on(doc, "dblclick", (e) => {
       if (e.target instanceof Element && e.target.tagName === "CANVAS") e.preventDefault();
     });
 
@@ -122,10 +136,10 @@ export function createNavigation(renderer, doc = document) {
     // visitor it did nothing at all, silently. With no pointer position yet, the
     // centre of the view is the honest reading of "whatever I am looking at".
     let lastX = null, lastY = null;
-    doc.addEventListener("pointermove", (e) => {
+    on(doc, "pointermove", (e) => {
       if (e.target instanceof Element && e.target.tagName === "CANVAS") { lastX = e.clientX; lastY = e.clientY; }
     }, { passive: true });
-    doc.addEventListener("keydown", (e) => {
+    on(doc, "keydown", (e) => {
       if (e.key !== "f" && e.key !== "F") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target;
@@ -137,7 +151,7 @@ export function createNavigation(renderer, doc = document) {
 
   // The button's tooltip says "Face north (N)". It said that before anything
   // was bound to N, which is an advertised control that does not exist.
-  doc.addEventListener("keydown", (e) => {
+  on(doc, "keydown", (e) => {
     if (e.key !== "n" && e.key !== "N") return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const t = e.target;
@@ -145,7 +159,7 @@ export function createNavigation(renderer, doc = document) {
     $("nav-north-up")?.click();
   });
 
-  $("nav-clear-pivot")?.addEventListener("click", (e) => {
+  on($("nav-clear-pivot"), "click", (e) => {
     // The 2D fallback renderer defines no hidePivotMarker, and the facade
     // guards the call -- so on that path the button did nothing and still
     // announced success. Report what actually happened.
@@ -159,7 +173,7 @@ export function createNavigation(renderer, doc = document) {
 
   /* --------------------------------------------------------------- north up -- */
 
-  $("nav-north-up")?.addEventListener("click", () => {
+  on($("nav-north-up"), "click", () => {
     // Expressed as a rotation TO zero rather than a set, so it goes through the
     // renderer's existing rotate path and animates like every other turn.
     const heading = readHeadingDeg();
@@ -180,7 +194,7 @@ export function createNavigation(renderer, doc = document) {
     // kilometres; on a linear scale the first 99% of the track would be "very
     // far away" and street level would be one unusable pixel at the end.
     let selfMove = false;
-    slider.addEventListener("input", () => {
+    on(slider, "input", () => {
       selfMove = true;
       const t = Number(slider.value) / 100;
       const min = 4, max = maxRange();
@@ -249,7 +263,15 @@ export function createNavigation(renderer, doc = document) {
   /* ------------------------------------------------------------- announcing -- */
 
   let live = doc.getElementById("nav-live");
+  // Only the instance that CREATED the live region may remove it. Two
+  // instances share one node -- the second finds the first's -- so an
+  // unconditional remove in destroy() tore out a region the other one was still
+  // announcing through. It also made the teardown untestable: the count went
+  // 1 -> 0 whether or not destroy worked, because a second instance never added
+  // a second node.
+  let ownsLive = false;
   if (!live) {
+    ownsLive = true;
     live = doc.createElement("div");
     live.id = "nav-live";
     live.className = "sr-only";
@@ -259,10 +281,27 @@ export function createNavigation(renderer, doc = document) {
   function announce(msg) { live.textContent = msg; }
 
   return {
-    // Both intervals. destroy() used to clear only the readout timer and leave
-    // the slider's 400ms poll running, so the teardown the API advertised was
-    // half a teardown.
-    destroy() { clearInterval(timer); clearInterval(sliderTimer); },
+    /**
+     * Both intervals AND every listener.
+     *
+     * This cleared one of two intervals, then two of two, and both times the
+     * comment called it a teardown. It removed NONE of the eight listeners this
+     * function adds to `document` -- pointerup, dblclick, pointermove, two
+     * keydowns -- nor the two button handlers, nor the #nav-live node it injects
+     * into the body. An audit counted them.
+     *
+     * It is unreachable today: index.html discards the handle this returns, so
+     * nothing calls destroy() and nothing leaks in practice. That is a reason to
+     * make it correct rather than to leave it wrong -- an API that advertises a
+     * teardown it does not do is a trap for whoever first needs one.
+     */
+    destroy() {
+      clearInterval(timer);
+      clearInterval(sliderTimer);
+      for (const [target, type, fn] of listeners) target.removeEventListener(type, fn);
+      listeners.length = 0;
+      if (ownsLive) live?.remove();
+    },
     focusAt,
   };
 }
