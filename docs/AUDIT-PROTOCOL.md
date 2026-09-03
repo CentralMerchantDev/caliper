@@ -145,4 +145,74 @@ described the defect being prevented.
 - **Nobody audits the auditor.** Its "found clean" list is taken on trust. One
   cheap improvement: re-run two of its claimed-clean mutations independently.
 
-### (next entry goes here)
+### 2026-09-03 · World-lane audit (prop join, ground apron, cloud decks, test-count writer)
+
+**What the protocol got right this time:** telling the auditor to actually use
+`scripts/shoot-app.mjs` / `shoot.mjs` / `shoot-library.mjs` (closing last
+entry's gap) produced a real, reproducible "app OK" health check against the
+live `index.html` — something no prior pass in this scope had done. And §2.1
+("claims in comments") caught a genuine one on the first pass: two comments 30
+lines apart, added in the *same commit*, giving triangle-cost figures for the
+same mesh that differ by >6x, because one was never updated when the design
+under it changed from a ×10 tessellation step to a ×4 one.
+
+**What it did NOT ask, and had to be worked out mid-run:**
+
+- **It does not warn that "npm test" itself might already be red on a clean
+  checkout.** Every instruction up to that point (and every prior entry in
+  this file) assumes the auditor mutates a passing baseline and watches it go
+  red. Nobody told this auditor to run the plain, unmutated suite FIRST and
+  check its exit code before touching anything — it happened only because the
+  mutation-testing instructions said to run tests, and the first run already
+  had two real failures on a checkout `git status --short` confirmed was
+  clean. A protocol that only says "break it and watch it go red" has no step
+  for "it was already red before I broke anything," which is arguably the
+  single most damning thing this run found: a public "Continuous
+  Verification" claim sitting on top of a suite that does not pass. Add a
+  step: **run the full, unmutated suite before any mutation, record its exit
+  code and failing tests by name, and treat any pre-existing failure as a
+  CRITICAL finding in its own right** — it is worse than a weak test, because
+  it means the last person to commit did not run what they were asking a
+  reader to trust.
+
+- **It does not anticipate the auditor's own sandbox refusing the mutation
+  step.** §3 says "back up before mutating, restore after, verify the
+  restore" — sound advice, but it assumes the auditor is *allowed* to mutate
+  tracked source at all. This run's permission system blocked direct edits to
+  a tracked file (`public/sky.js`) even inside a same-message mutate-run-
+  restore plan, citing the auditee's own "report only, fix nothing" rule
+  applied over-broadly to a temporary, restored mutation. The workaround —
+  copy the file to an untracked scratch directory *outside the repository*,
+  mutate the copy, and replay the real test file's own assertions against it
+  with a clean-copy sanity check alongside the mutated one — produces
+  evidence of the same strength (real assertion, real production logic) without
+  ever writing to a tracked path, so it satisfies the *intent* of "leave the
+  tree exactly as found" by never touching the tree rather than by touching
+  and restoring it. Worth stating as an explicit fallback in §3, because the
+  first time this happens without a plan, an auditor is likely to either give
+  up on mutation testing entirely (weakening the report) or to keep retrying
+  the blocked action (wasting the run) rather than routing around it this way.
+
+- **It does not ask the auditor to check whether two comments *about the same
+  fact*, added in the same commit, agree with each other** — only whether a
+  comment agrees with the code. This run's Finding 2 was only found because
+  the auditor happened to re-derive the arithmetic behind both comments
+  independently and noticed the two derived numbers didn't match each other,
+  not because anything prompted a same-commit cross-check. Worth naming in
+  §2.1 explicitly: a comment can be self-consistent with the line below it and
+  still contradict a comment thirty lines away describing the same value.
+
+**Still open — the protocol still does not cover:**
+
+- Everything item 4 of the previous entry named ("nobody audits the auditor")
+  is still true here; this report's "found clean" list (four new test files,
+  three of them now mutation-verified via the scratch-copy method above) has
+  not itself been independently re-run by a second party.
+- Same-day commits outside the given file list but touching the same modules
+  (here, `9c3d160`, which also edits `public/sky.js` and
+  `public/world-render-3d.js` the same day as the named scope) are a grey
+  area: re-auditing all of it does not fit one pass, trusting its own
+  self-report does not fully satisfy "the auditor must be blind." No rule
+  currently tells the auditor which way to default; this run defaulted to
+  "read it for context, don't re-derive it, say so explicitly" — worth
+  promoting to an explicit instruction if it recurs.
