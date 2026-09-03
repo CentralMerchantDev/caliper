@@ -55,7 +55,7 @@ await page.evaluate(async () => {
 await page.waitForTimeout(1500);
 
 const categories = [
-  "all", "roof", "furniture", "ground", "facade", "boundary",
+  "all", "showstoppers", "roof", "furniture", "ground", "facade", "boundary",
   "vegetation", "people", "vehicles", "maritime", "airport", "aviation", "roads", "civic", "buildings", "parks", "industrial"
 ];
 

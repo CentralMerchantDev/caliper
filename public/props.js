@@ -1,3 +1,4 @@
+import { SHOWSTOPPERS } from "./showstoppers.js";
 import {
   intersection4Way,
   intersection3Way,
@@ -969,6 +970,7 @@ groundFurniture.variants = {
 };
 
 export const MODELS = {
+  ...SHOWSTOPPERS,
   "person-action-cyclist": personInAction("cyclist"),
   "person-action-worker": personInAction("worker"),
   "person-action-pram": personInAction("pram"),

@@ -16,6 +16,7 @@
  * @property {"code"|"import"} source
  * @property {"close"|"mid"|"far"} seenAs
  * @property {number} count Estimated instances across the 26 km world
+ * @property {"showstopper"|"signature"|"standard"|"generic"} [tier] Asset visual quality and landmark tier
  * @property {string} [generator] Generator function name if produced by a family
  * @property {string} [note] Design or sourcing rationale
  */
@@ -218,6 +219,19 @@ export const ASSET_REGISTRY = [
   { id: "industrial-tank-farm", category: "industrial", status: "generator", source: "code", seenAs: "far", count: 35, generator: "industrialInfrastructure('tank-farm')", note: "Petrochemical tank farm with 4 storage tanks and containment bund" },
   { id: "industrial-substation", category: "industrial", status: "generator", source: "code", seenAs: "mid", count: 45, generator: "industrialInfrastructure('substation')", note: "Electrical substation distribution transformer with insulator bushings" },
   { id: "industrial-pipe-rack", category: "industrial", status: "generator", source: "code", seenAs: "far", count: 160, generator: "industrialInfrastructure('pipe-rack')", note: "Industrial multi-pipe process rack trestle spanning 24m" },
+
+
+  // --- SHOWSTOPPERS: HERO LANDMARKS & ICONIC MODELS ---
+  { id: "bld-artdeco-spire", category: "buildings", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 8, generator: "bldArtDecoSpire()", note: "Showstopper: 168m Art Deco skyscraper with stepped crown setbacks and gilded needle spire" },
+  { id: "bld-grand-chateau", category: "buildings", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 14, generator: "bldGrandChateau()", note: "Showstopper: 40x32m French Renaissance grand chateau palace with twin pavilions and copper dormers" },
+  { id: "bld-cascading-terraces", category: "buildings", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 22, generator: "bldCascadingTerraces()", note: "Showstopper: 32x48m cascading waterfront luxury residence with stepped cantilevered glass terraces" },
+  { id: "civic-grand-cathedral", category: "civic", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 2, generator: "civicGrandCathedral()", note: "Showstopper: 64x120m Gothic cathedral with 88m needle spire, twin west towers, and flying buttresses" },
+  { id: "civic-grand-terminus", category: "civic", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 3, generator: "civicGrandTerminus()", note: "Showstopper: 80x160m Beaux-Arts railway terminal with 42m arched glass barrel train-shed and clock tower" },
+  { id: "vehicle-bullet-train", category: "vehicles", tier: "showstopper", status: "generator", source: "code", seenAs: "mid", count: 28, generator: "vehicleBulletTrain()", note: "Showstopper: 72m 3-car high-speed streamlined bullet train with aerodynamic needle nose and roof pantograph" },
+  { id: "vessel-superyacht", category: "maritime", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 12, generator: "vesselSuperyacht()", note: "Showstopper: 54m tri-deck ultra-luxury superyacht with bow helipad, swimming pool, and radar arch" },
+  { id: "park-palm-house", category: "parks", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 6, generator: "parkBotanicalPalmHouse()", note: "Showstopper: 32x64m Victorian crystal palace botanical glasshouse with 24m ribbed central dome" },
+  { id: "park-observation-wheel", category: "parks", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 4, generator: "parkObservationWheel()", note: "Showstopper: 68m giant observation ferris wheel with dual A-frame legs and perimeter capsule ring" },
+  { id: "bridge-cable-stayed-pylon", category: "roads", tier: "showstopper", status: "generator", source: "code", seenAs: "far", count: 8, generator: "bridgeCableStayedTower()", note: "Showstopper: 96m soaring diamond A-frame cable-stayed bridge pylon tower with fan of 8 stay cables" },
 
 ];
 

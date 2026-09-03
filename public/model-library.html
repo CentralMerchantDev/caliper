@@ -237,6 +237,27 @@
     color: #fff;
   }
 
+  
+  .badge-showstopper {
+    background: linear-gradient(135deg, #d97706, #f59e0b);
+    color: #000;
+    font-weight: 800;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+  }
+  .card.showstopper-card {
+    border-color: rgba(245, 158, 11, 0.45);
+    box-shadow: 0 4px 20px rgba(245, 158, 11, 0.15);
+  }
+  .filter-btn.showstopper-btn {
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.4);
+  }
+  .filter-btn.showstopper-btn.active {
+    background: #f59e0b;
+    color: #000;
+    font-weight: 700;
+  }
+
   .card-body {
     padding: 14px;
     display: flex;
@@ -526,6 +547,7 @@
     </select>
     <div class="filter-pills" id="category-filters">
       <button class="filter-btn active" data-cat="all">All</button>
+      <button class="filter-btn showstopper-btn" data-cat="showstoppers">★ Showstoppers (10)</button>
       <button class="filter-btn" data-cat="roof">Roof Clutter</button>
       <button class="filter-btn" data-cat="furniture">Street & Details</button>
       <button class="filter-btn" data-cat="ground">Ground</button>
@@ -784,6 +806,7 @@ function buildCivicGeometry(typology = "capitol", w = 48, d = 48, h = 32, T = TH
 
 // Helper to get real model definition
 function resolveModel(reg) {
+  if (MODELS[reg.id]) return MODELS[reg.id];
   if (reg.category === "civic") {
     const typ = reg.id.replace("civic-", "");
     const w = typ === "stadium" ? 90 : typ === "station" ? 64 : 48;
@@ -1100,6 +1123,8 @@ function buildCards() {
     card.dataset.status = reg.status;
     card.dataset.source = reg.source;
 
+    const isShowstopper = reg.tier === "showstopper";
+    if (isShowstopper) card.classList.add("showstopper-card");
     const statusClass = reg.status === "built" ? "badge-status-built" : reg.status === "generator" ? "badge-status-generator" : "badge-status-planned";
     const statusLabel = reg.status === "built" ? "Built" : reg.status === "generator" ? "Generator" : "Planned Gap";
 
@@ -1107,6 +1132,7 @@ function buildCards() {
       <div class="card-thumbnail">
         <div class="card-badges">
           <span class="badge badge-category">${reg.category}</span>
+          ${isShowstopper ? '<span class="badge badge-showstopper">★ SHOWSTOPPER</span>' : ''}
           <span class="badge ${statusClass}">${statusLabel}</span>
         </div>
         <canvas width="320" height="200"></canvas>
@@ -1181,9 +1207,8 @@ function filterCards() {
   cards.forEach((card) => {
     const id = card.dataset.modelId.toLowerCase();
     const cat = card.dataset.category.toLowerCase();
-    const note = card.querySelector(".card-note").textContent.toLowerCase();
-
-    const matchesCat = (activeCategory === "all" || cat === activeCategory);
+    const isShowstopper = card.classList.contains("showstopper-card");
+    const matchesCat = (activeCategory === "all" || (activeCategory === "showstoppers" ? isShowstopper : cat === activeCategory));
     const matchesQuery = !query || id.includes(query) || cat.includes(query) || note.includes(query);
 
     card.style.display = (matchesCat && matchesQuery) ? "flex" : "none";
