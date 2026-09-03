@@ -710,6 +710,41 @@ export function waterwayAt(x, z) {
   return false;
 }
 
+/**
+ * WHICH waterway is here, not merely whether one is.
+ *
+ * waterwayAt returns a boolean and two callers rely on that, so its contract is
+ * left alone. But ground.js was reading `.kind`, `.surface` and `.id` off that
+ * boolean: `true.kind` is undefined, so every waterway in the world reported
+ * itself as a "river" -- three of the seven are canals -- and `true.surface`
+ * being undefined made the depth `max(0, 0 - h)`, which is zero for any point
+ * at or above sea level. Measured before this existed: 703 of 703 sampled
+ * in-waterway points said "river", 653 of 703 said depth 0.
+ *
+ * Returning the waterway makes the question answerable. `surfaceY` is the water
+ * surface at this point, which is what a depth is measured from -- a river 40 m
+ * up a valley has a surface 40 m up, and subtracting sea level from it is how
+ * the old code got zero.
+ */
+export function waterwayInfoAt(x, z) {
+  const dx = toDesign(x), dz = toDesign(z);
+  for (const w of WATERWAYS) {
+    const { dist, t } = alongWaterway(dx, dz, w.points);
+    const hw = w.kind === "river" ? w.halfWidth * (0.45 + 0.55 * t) : w.halfWidth;
+    if (dist <= hw) {
+      // No surface height is computed here, deliberately. terrain.js does not
+      // own a height function -- makeHeightAt builds one per world -- so a
+      // surfaceY calculated in this module would have to invent a height field
+      // or import one, and the first version of this did exactly that against a
+      // `heightAtRaw` that does not exist. The caller has heightAt; it can add
+      // `depth` to it. This returns the FACTS about the waterway and nothing
+      // that needs a world to be true.
+      return { id: w.id, kind: w.kind, halfWidth: sm(w.halfWidth), depth: sm(w.depth), t };
+    }
+  }
+  return null;
+}
+
 function waterwayCut(x, z) {
   let cut = 0;
   for (const w of WATERWAYS) {

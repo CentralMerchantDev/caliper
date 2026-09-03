@@ -41,6 +41,37 @@ test("it never goes further than the maximum", () => {
   assert.equal(focusDistance(999999, { zoom: false, min: 4, max: 3600 }), 3600);
 });
 
+// THREE MUTATIONS SURVIVED THIS FILE AND THESE ARE THEM.
+//
+// A blind audit removed the max clamp from the ZOOM path, changed the `max`
+// default from Infinity to 3600, and changed the NaN fallback from 48 to 4800 --
+// all three stayed green. Every one is a behaviour the docstring argues for at
+// length, so the file was defending its prose and not its code.
+
+test("the maximum clamps the zoom path too, not only zoom:false", () => {
+  // A focus that starts beyond the limit must come back inside it. Only the
+  // zoom:false branch was covered, so deleting Math.min from the other one --
+  // the branch every real call takes -- changed nothing any test could see.
+  assert.equal(focusDistance(20000, { factor: 0.45, min: 4, max: 5000 }), 5000);
+  assert.equal(focusDistance(9000, { factor: 0.9, min: 4, max: 6000 }), 6000);
+});
+
+test("max defaults to Infinity, so a city camera is not clamped to a village", () => {
+  // The docstring spends five lines on why this default is Infinity: at 3600 --
+  // the village limit -- any caller that forgot to pass `max` silently clamped a
+  // 46 km city camera to 3.6 km, and nothing would have said so.
+  assert.equal(focusDistance(40000, { zoom: false }), 40000);
+  assert.equal(focusDistance(40000, { factor: 0.5 }), 20000);
+});
+
+test("the fallback for a nonsense range is a sane 48, not an arbitrary number", () => {
+  // Value, not just finiteness. The existing NaN test only asserted the result
+  // was >= min, which 4800 satisfies as happily as 48 does.
+  assert.equal(focusDistance(NaN, { zoom: false, min: 4 }), 48);
+  assert.equal(focusDistance(undefined as unknown as number, { zoom: false, min: 4 }), 48);
+  assert.equal(focusDistance(0, { zoom: false, min: 4 }), 48);
+});
+
 // PAIRED with the first test: turning zoom off must genuinely leave the range
 // alone. Without this, a mutation that hard-codes zoom to false would only be
 // caught by the walk-in test, and only because the numbers happen to differ.

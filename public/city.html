@@ -187,7 +187,8 @@ composer.addPass(new OutputPass());
 // palette work fixes that upstream because the curve is doing it downstream.
 // A little saturation, a gentle contrast S-curve about mid-grey, and a warm
 // highlight / cool shadow split is what puts the colour back.
-// The grade now lives in public/grade.js so index.html can use the SAME one.
+// The grade now lives in public/colour-grade.js so index.html can use the SAME
+// one. NOT grade.js -- that is road grading, and this file once overwrote it.
 // It was private to this page, which is why the application rendered ungraded.
 const GradeShader = makeGradeShader(num);
 if (usePost) composer.addPass(new ShaderPass(GradeShader));

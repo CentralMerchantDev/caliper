@@ -1110,7 +1110,27 @@ body.inspecting-mobile #nav-compass-pad {
 .cc-cmd:hover { background: var(--card); border-color: var(--accent); }
 .cc-cmd:active { transform: translateY(1px); }
 .cc-cmd-icon { font-size: 11px; color: var(--accent); opacity: .85; }
-.menu-caret { font-size: 9px; opacity: .5; margin-left: -2px; }
+/* THE CARET HAS TO SAY "THIS OPENS SOMETHING".
+   At 9px and half opacity it was decoration -- Mark: "how can we make it a
+   little easier to know that the tabs have drop down menus?" Bigger, darker,
+   separated from the label by a hairline so it reads as a control rather than
+   punctuation, and it FLIPS when the menu is open. The rotation is the part
+   that teaches it: you press once, something turns, and the association is
+   made without a tooltip. */
+.menu-caret {
+  font-size: 11px; opacity: .8; line-height: 1;
+  margin-left: 2px; padding-left: 8px;
+  border-left: 1px solid var(--line);
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+.cc-cmd:hover .menu-caret { opacity: 1; }
+.menu-trigger[aria-expanded="true"] .menu-caret {
+  transform: rotate(180deg);
+  /* rotate() spins about the glyph's own box, so the hairline would swing with
+     it -- the border moves to the other side instead of following the arrow. */
+  border-left: 0; border-right: 1px solid rgba(254, 252, 246, 0.35);
+  padding-left: 2px; padding-right: 8px; margin-left: 8px;
+}
 .menu-trigger[aria-expanded="true"] {
   background: var(--accent); border-color: var(--accent); color: var(--card);
 }
@@ -1500,7 +1520,7 @@ body.inspecting-mobile #nav-compass-pad {
 
     <div class="cc-commands" id="cc-commands" role="toolbar" aria-label="Commands">
       <div class="menu" data-menu="mark">
-        <button type="button" class="cc-cmd menu-trigger" id="menu-mark" aria-haspopup="true" aria-expanded="false" aria-controls="menupanel-mark" title="Portfolio, resume, Datum app and contact"><span class="cc-cmd-icon" aria-hidden="true">◆</span><span class="cc-cmd-label">Mark Fraser</span><span class="menu-caret" aria-hidden="true">▾</span></button>
+        <button type="button" class="cc-cmd menu-trigger" id="menu-mark" aria-haspopup="true" aria-expanded="false" aria-controls="menupanel-mark" title="Portfolio, resume, Datum app and contact"><span class="cc-cmd-icon" aria-hidden="true">◆</span><span class="cc-cmd-label">About Mark Fraser</span><span class="menu-caret" aria-hidden="true">▾</span></button>
         <div class="menu-panel" id="menupanel-mark" role="menu" aria-labelledby="menu-mark" hidden>
           <button type="button" id="portfolio-btn" class="btn-pill active-emerald" title="View Mark Fraser Architectural & AI Portfolio">📁 Portfolio</button>
           <button type="button" id="resume-btn" class="btn-pill" title="View Professional Resume">📄 Resume</button>

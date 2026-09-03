@@ -111,8 +111,12 @@ const fails = [];
 const ok = (name, cond, detail = "") => { lastStep = name; if (!cond) fails.push(name + (detail ? " -- " + detail : "")); };
 
 // An uncaught Playwright timeout used to print a 40-line call log and never say
-// WHICH assertion it died on. Every ok() records the last thing that passed, so
-// a crash reports where it was instead of leaving it to be guessed at.
+// WHICH assertion it died on. Every ok() records the last thing CHECKED -- not
+// the last thing that passed, which is what this comment used to claim; the
+// assignment happens before the condition is evaluated. A crash therefore names
+// the assertion BEFORE the operation that died, since every page call runs ahead
+// of the ok() that reads it. That is still far better than the call log, and
+// saying which it is beats leaving it to be inferred.
 let lastStep = "startup";
 process.on("uncaughtException", (e) => {
   // The failures found BEFORE the crash used to be discarded. Under one earlier
@@ -157,13 +161,15 @@ for (const id of CONTROLS) {
     const el = all[0];
     const cs = getComputedStyle(el);
     // Inside a closed menu panel a control is legitimately not rendered, so
-    // "hidden" here means hidden by its OWN styles, not by an ancestor popup.
-    const inClosedPanel = !!el.closest(".menu-panel[hidden], .wb-grip-panel[hidden]");
+    // "hidden" here means hidden by its OWN styles, not by an ancestor popup --
+    // which is why selfHidden reads the element's own computed display rather
+    // than asking whether it is on screen. `inClosedPanel` used to be computed
+    // and returned here and never asserted on; it is gone rather than left
+    // sitting in the payload looking like it means something.
     return {
       n: 1,
       disabled: !!el.disabled || el.getAttribute("aria-disabled") === "true",
       selfHidden: cs.display === "none" || cs.visibility === "hidden",
-      inClosedPanel,
     };
   }, id);
   ok(`control ${id} present exactly once`, st.n === 1, `found ${st.n}`);
@@ -458,6 +464,79 @@ await page.waitForTimeout(200);
 const dropped = await page.evaluate(() => document.querySelector('[data-wb-panel="nav"]').parentElement.id);
 ok("dropping in a zone docks the panel there", dropped === "wb-rail-right", dropped);
 
+// THE DRAWN ZONE AND THE HIT TEST MUST BE THE SAME RECTANGLE.
+//
+// They were not: a 16px strip inside each visible side zone was dead, and a band
+// below the drawn top zone was live but invisible. An audit measured five drags
+// and four of them landed somewhere other than where the picture said they would.
+// Sampled at the centre and just inside each corner of every drawn zone.
+const zoneAgreement = await page.evaluate(() => {
+  const zones = [...document.getElementById("wb-zones").children];
+  const bad = [];
+  for (const z of zones) {
+    const r = z.getBoundingClientRect();
+    const pts = [
+      [r.left + r.width / 2, r.top + r.height / 2],
+      [r.left + 3, r.top + 3], [r.right - 3, r.top + 3],
+      [r.left + 3, r.bottom - 3], [r.right - 3, r.bottom - 3],
+    ];
+    for (const [x, y] of pts) {
+      // Same rule the module uses: the nearest edge wins where zones overlap.
+      let best = null, bestD = Infinity;
+      for (const o of zones) {
+        const q = o.getBoundingClientRect();
+        if (x < q.left || x > q.right || y < q.top || y > q.bottom) continue;
+        const d = Math.min(x - q.left, q.right - x, y - q.top, q.bottom - y);
+        if (d < bestD) { bestD = d; best = o.dataset.region; }
+      }
+      if (best === null) bad.push({ region: z.dataset.region, x: Math.round(x), y: Math.round(y) });
+    }
+  }
+  return bad;
+});
+ok("every point inside a drawn drop zone resolves to a zone",
+   zoneAgreement.length === 0, JSON.stringify(zoneAgreement.slice(0, 4)));
+
+// AND THE OTHER DIRECTION -- BY DRAGGING, NOT BY REIMPLEMENTING.
+//
+// The check above recomputes the hit test inside the page from the zones' own
+// rectangles, so it tests a COPY: widening workbench.js's real hit rectangles by
+// 40px changed nothing it could see and the mutation survived. The only honest
+// way to ask where a drop lands is to drop something there.
+//
+// Two points just OUTSIDE the drawn zones. Both must float. If either docks, the
+// live area is bigger than the picture -- which is the defect this whole section
+// exists to catch, and which a visitor feels the first time they drag.
+const outsidePoints = await page.evaluate(() => {
+  const z = [...document.getElementById("wb-zones").children];
+  const left = z.find((e) => e.dataset.region === "left").getBoundingClientRect();
+  const right = z.find((e) => e.dataset.region === "right").getBoundingClientRect();
+  return [
+    { label: "just right of the left zone", x: Math.round(left.right + 20), y: Math.round(left.top + left.height / 2) },
+    { label: "just left of the right zone", x: Math.round(right.left - 20), y: Math.round(right.top + right.height / 2) },
+  ];
+});
+for (const pt of outsidePoints) {
+  // Park it in a known rail first, so "floated" is a change rather than a state.
+  await page.click('[data-wb-panel="nav"] .wb-grip-menu');
+  await page.waitForTimeout(90);
+  await page.click('[data-wb-panel="nav"] .wb-grip-panel button[data-region="left"]');
+  await page.waitForTimeout(160);
+  const g = await page.evaluate(() => {
+    const r = document.querySelector('[data-wb-panel="nav"] .wb-grip').getBoundingClientRect();
+    return { x: Math.round(r.left + 30), y: Math.round(r.top + r.height / 2) };
+  });
+  await page.mouse.move(g.x, g.y);
+  await page.mouse.down();
+  await page.mouse.move(pt.x, pt.y, { steps: 8 });
+  await page.waitForTimeout(120);
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  const landed = await page.evaluate(() => document.querySelector('[data-wb-panel="nav"]').parentElement.id);
+  ok(`a drop ${pt.label} does not dock`, landed === "wb-float-layer", `${landed} at ${pt.x},${pt.y}`);
+}
+
+
 // paired: a drop over open world floats it rather than snapping to an edge
 const grip2 = await page.evaluate(() => {
   const r = document.querySelector('[data-wb-panel="nav"] .wb-grip').getBoundingClientRect();
@@ -557,6 +636,24 @@ const escapeReaches = await page.evaluate(async () => {
   return r;
 });
 ok("Escape is consumed while a menu is open", escapeReaches.whileOpen === 0, JSON.stringify(escapeReaches));
+
+// AND ESCAPE MUST CLOSE A GRIP MENU TOO. A mutation making the workbench's
+// dismisser always return false survived the whole suite -- despite the block
+// above existing precisely because Escape must reach the grip menus. Asserting
+// the premise, not just the mechanism.
+await page.click('[data-wb-panel="nav"] .wb-grip-menu');
+await page.waitForTimeout(120);
+const gripOpen = await page.evaluate(() => !document.querySelector('[data-wb-panel="nav"] .wb-grip-panel').hidden);
+await page.keyboard.press("Escape");
+await page.waitForTimeout(140);
+const gripAfter = await page.evaluate(() => ({
+  hidden: document.querySelector('[data-wb-panel="nav"] .wb-grip-panel').hidden,
+  focus: document.activeElement?.className || document.activeElement?.tagName,
+}));
+ok("a grip menu opens", gripOpen === true);
+ok("Escape closes a grip menu", gripAfter.hidden === true, JSON.stringify(gripAfter));
+ok("and focus returns to the grip, not the document",
+   String(gripAfter.focus).includes("wb-grip-menu"), JSON.stringify(gripAfter));
 ok("Escape reaches other handlers when nothing of ours is open",
    escapeReaches.whenNothingOpen === 1, JSON.stringify(escapeReaches));
 
@@ -594,6 +691,98 @@ await page.evaluate(() => {
 await page.waitForTimeout(150);
 const mid = await page.evaluate(() => window.renderer3d._impl._camDist);
 ok("the range slider is logarithmic, not linear", mid > 200 && mid < 1200, String(Math.round(mid)));
+
+// 22. THE LAST THREE AUDIT SURVIVORS.
+//
+// A blind audit landed 49 mutations and 19 lived. Checks 17-21 closed most;
+// these are the rest. "Low value" is not a reason to leave a control
+// undefended -- it is a reason to defend it cheaply.
+
+// M8 -- hover switching has an INTENT DELAY. Without it, sliding the pointer
+// along the bar flips through every menu, which is the behaviour the design
+// note says the delay exists to prevent.
+await openMenu("mark");
+await page.hover("#menu-more");
+await page.waitForTimeout(45);            // shorter than SWITCH_INTENT_MS
+const tooSoon = await panelHidden("more");
+await page.waitForTimeout(240);           // comfortably longer
+const afterIntent = await panelHidden("more");
+ok("a menu does not open before the intent delay", tooSoon === true);
+ok("and it does open once the pointer has stayed", afterIntent === false);
+await page.keyboard.press("Escape");
+await page.waitForTimeout(80);
+
+// M12 -- the align-right overflow flip. The mutation survived because at
+// 1600px nothing overflows, so the code path was never entered at all. Narrow
+// the window until it is.
+await page.setViewportSize({ width: 1100, height: 800 });
+await page.waitForTimeout(300);
+await openMenu("more");
+const flip = await page.evaluate(() => {
+  const p = document.getElementById("menupanel-more");
+  const r = p.getBoundingClientRect();
+  return { aligned: p.classList.contains("align-right"), right: Math.round(r.right), vw: window.innerWidth };
+});
+ok("a panel near the right edge stays inside the window",
+   flip.right <= flip.vw, JSON.stringify(flip));
+await page.keyboard.press("Escape");
+await page.setViewportSize({ width: 1600, height: 900 });
+await page.waitForTimeout(250);
+
+// M36 -- the collapsed-state value is read back from localStorage. A value that
+// is not exactly "1" must not collapse the bar, and must not throw.
+await page.evaluate(() => localStorage.setItem("caliper.commandcentre.collapsed", '{"junk":true}'));
+await page.reload({ waitUntil: "load" });
+await page.waitForTimeout(2200);
+const afterJunk = await page.evaluate(() => ({
+  collapsed: document.querySelector(".command-centre").classList.contains("is-collapsed"),
+  menusAlive: !!document.getElementById("menu-places"),
+}));
+ok("a junk collapsed-state value does not collapse the bar", afterJunk.collapsed === false, JSON.stringify(afterJunk));
+ok("and the page still works after it", afterJunk.menusAlive === true);
+await page.evaluate(() => localStorage.removeItem("caliper.commandcentre.collapsed"));
+await page.click("#welcome-close-btn").catch(() => {});
+
+// 23. destroy() HAS TO ACTUALLY TEAR DOWN.
+//
+// navigate.js's destroy() cleared its intervals and removed none of its eight
+// listeners, under a comment calling the previous version "half a teardown". It
+// is unreachable in production -- index.html discards the handle -- which is a
+// reason to make it correct, not a reason to leave it wrong.
+// COUNT THE CALLS. The first version asserted on the live-region node count and
+// could not fail: two instances SHARE one node, so the count went 1 -> 0 whether
+// destroy worked or not. Firing a gesture and counting how many handlers answer
+// is the measurement that tells them apart.
+const teardown = await page.evaluate(async () => {
+  const mod = await import("./navigate.js");
+  const c = document.getElementById("world-canvas");
+  const fire = () => { for (const t of ["pointerdown", "pointerup"]) c.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: 500, clientY: 400, button: 0, pointerType: "mouse", isPrimary: true })); };
+  const doubleTap = async () => { fire(); await new Promise((r) => setTimeout(r, 60)); fire(); await new Promise((r) => setTimeout(r, 110)); };
+
+  window.__navGestures.focusCalls = 0;
+  await doubleTap();
+  const oneInstance = window.__navGestures.focusCalls;
+
+  const nav = mod.createNavigation(window.renderer3d, document);
+  window.__navGestures.focusCalls = 0;
+  await doubleTap();
+  const twoInstances = window.__navGestures.focusCalls;
+
+  nav.destroy();
+  window.__navGestures.focusCalls = 0;
+  await doubleTap();
+  const afterDestroy = window.__navGestures.focusCalls;
+
+  return { oneInstance, twoInstances, afterDestroy, liveNodes: document.querySelectorAll("#nav-live").length };
+});
+// The premise first: a second instance must really double the handlers, or the
+// assertion below could pass because nothing was ever added.
+ok("a second navigation instance answers the same gesture twice",
+   teardown.twoInstances > teardown.oneInstance, JSON.stringify(teardown));
+ok("destroy() removes the listeners it added",
+   teardown.afterDestroy === teardown.oneInstance, JSON.stringify(teardown));
+ok("and it leaves the first instance's live region alone",
+   teardown.liveNodes === 1, JSON.stringify(teardown));
 
 ok("the page loaded without a module error in an unstubbed file",
    pageErrors.length === 0, pageErrors.join(" | "));

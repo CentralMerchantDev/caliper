@@ -61,7 +61,11 @@ function bindEscapeOnce(doc) {
   escapeBound = true;
   doc.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    // Last registered is the most recently opened layer, so it is asked first.
+    // Asked in reverse REGISTRATION order, which is fixed at module init -- not
+    // in the order things were opened. The comment here used to claim the
+    // latter. In practice only one of ours is open at a time, so the two orders
+    // have never differed; if a third layer is ever added that can be open
+    // alongside another, this is where it would need to become a real stack.
     for (let i = dismissers.length - 1; i >= 0; i--) {
       if (dismissers[i]()) {
         e.stopPropagation();
