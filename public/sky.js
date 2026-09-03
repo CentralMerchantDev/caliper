@@ -1,0 +1,230 @@
+/**
+ * The city's sky: clouds, stars and a moon that are actually in the scene.
+ *
+ * Mark: "it's still really hazy... it's like you're in a foggy atmosphere. No
+ * crispness or cleanness or colour, it's really bland. I think we need to create
+ * a sky backdrop that emulates a real world sky that rotates around, clouds and
+ * such in that sky rather than a sea of free floating objects, because the
+ * clouds that are in there look weird. And then you can have moon and stars."
+ *
+ * WHAT WAS ACTUALLY WRONG, because it is not what it looks like.
+ *
+ * The day/night code is complete and correct. Every frame it positions the moon,
+ * sets the moon light's intensity from how dark it is, fades the starfield in,
+ * and drifts the cloud clusters across the sky. All of that runs right now.
+ *
+ * It runs against objects that are not in the scene. `_buildCityBase` removes
+ * the village's sky mesh, starfield, cloud group, moon mesh and moon light --
+ * correctly, because they are sized for a village -- and never puts a city-sized
+ * replacement back. The properties still hold the references, so every guard
+ * passes and every update lands on an orphan. The sky has been empty and the
+ * code animating it has been running the whole time.
+ *
+ * So this is not new behaviour. It is the other half of a swap that was only
+ * ever done halfway.
+ *
+ * WHY THE CLOUDS LOOKED WRONG. The village's were eighteen clusters of blobs at
+ * y = 160-250 m wrapping at +/-850 m. Downtown towers reach 220 m and the world
+ * is 26 km across, so they sat AMONG the buildings rather than above them -- a
+ * sea of free-floating objects, exactly as described. Clouds here are a layer:
+ * two large domes carrying a procedural cloud texture, rotating slowly at 2.6 km
+ * and 4.2 km. They are sky, not scenery, and they cannot be flown into.
+ *
+ * COST: three draw calls (stars, moon, two cloud domes share one material and
+ * one geometry, so they instance to one). The scene budget is fourteen; this
+ * takes it to seventeen, and the reason is written here rather than discovered
+ * later from a frame graph.
+ */
+
+/** How far out the sky sits. Everything here is beyond the far terrain. */
+const STAR_RADIUS = 46000;
+const MOON_DISTANCE = 38000;
+const CLOUD_LOW = 2600;
+const CLOUD_HIGH = 4200;
+
+/**
+ * A soft cloud texture, drawn once to a canvas.
+ *
+ * Procedural rather than a file: it is one 512x512 canvas instead of a network
+ * fetch, it tiles by construction, and its density can be tuned here rather than
+ * in an image editor. Blobs are drawn with radial gradients so they have no hard
+ * edge -- a hard-edged cloud is the thing that reads as an object rather than as
+ * weather.
+ */
+function makeCloudTexture(THREE, { blobs = 220, seed = 7 } = {}) {
+  const S = 512;
+  const c = document.createElement("canvas");
+  c.width = S; c.height = S;
+  const g = c.getContext("2d");
+  g.clearRect(0, 0, S, S);
+
+  // A tiny deterministic PRNG, so the sky is the same on every load. A sky that
+  // reshuffles on refresh makes two screenshots incomparable.
+  let s = seed >>> 0;
+  const rnd = () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+
+  for (let i = 0; i < blobs; i++) {
+    const x = rnd() * S;
+    const y = rnd() * S;
+    const r = 26 + rnd() * 78;
+    // Measured, not guessed: at 0.05-0.13 alpha, tiled 3x3, multiplied by a
+    // material opacity of 0.42, the clouds were present in the scene -- the
+    // probe confirmed two visible domes -- and invisible in the render. White
+    // at a few percent alpha over a pale blue sky is nothing.
+    const a = 0.18 + rnd() * 0.30;
+    // Drawn nine times, wrapped, so a blob crossing an edge appears on the
+    // opposite one and the texture tiles without a visible seam.
+    for (const [ox, oy] of [[0, 0], [S, 0], [-S, 0], [0, S], [0, -S], [S, S], [-S, -S], [S, -S], [-S, S]]) {
+      const grd = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+      grd.addColorStop(0, `rgba(255,255,255,${a})`);
+      grd.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grd;
+      g.beginPath();
+      g.arc(x + ox, y + oy, r, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  // 1.6, not 3: at three repeats over a 20 km dome each blob subtended almost
+  // nothing. Fewer, larger repeats read as weather rather than as noise.
+  tex.repeat.set(1.6, 1.6);
+  tex.colorSpace = THREE.SRGBColorSpace ?? tex.colorSpace;
+  return tex;
+}
+
+/**
+ * Build the city's sky and return a handle that the draw loop updates.
+ *
+ * Nothing here reads the clock or decides what time it is. The renderer already
+ * computes the hour, the sun direction and how dark it is; passing those in
+ * keeps ONE source for the time of day rather than a second one that can drift
+ * out of step with the first.
+ */
+export function createCitySky(THREE, scene, opts = {}) {
+  const group = new THREE.Group();
+  group.name = "city-sky";
+  // renderOrder and depthWrite:false keep the sky behind the world regardless of
+  // its enormous radius -- without it the star sphere z-fights the far mountains.
+  group.renderOrder = -1;
+  scene.add(group);
+
+  /* ---------------------------------------------------------------- stars -- */
+
+  const starCount = opts.stars ?? 2600;
+  const starPos = new Float32Array(starCount * 3);
+  const starSize = new Float32Array(starCount);
+  let ss = 20250903 >>> 0;
+  const srnd = () => { ss = (ss * 1664525 + 1013904223) >>> 0; return ss / 4294967296; };
+  for (let i = 0; i < starCount; i++) {
+    // Uniform on a sphere: acos of a uniform gives even density. Using a raw
+    // uniform for phi instead clusters everything at the poles, which reads as
+    // two bright patches directly overhead and underfoot.
+    const u = srnd() * 2 - 1;
+    const phi = Math.acos(u);
+    const theta = srnd() * Math.PI * 2;
+    const r = STAR_RADIUS;
+    starPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+    starPos[i * 3 + 1] = Math.abs(r * Math.cos(phi));   // sky only, never below the horizon
+    starPos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+    starSize[i] = 60 + srnd() * 180;
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
+  starGeo.setAttribute("size", new THREE.BufferAttribute(starSize, 1));
+  const starMat = new THREE.PointsMaterial({
+    color: 0xdce6ff, size: 120, sizeAttenuation: true,
+    transparent: true, opacity: 0, depthWrite: false, fog: false,
+  });
+  const stars = new THREE.Points(starGeo, starMat);
+  stars.frustumCulled = false;
+  group.add(stars);
+
+  /* ----------------------------------------------------------------- moon -- */
+
+  const moonMat = new THREE.MeshBasicMaterial({
+    color: 0xf4f1e4, transparent: true, opacity: 0, depthWrite: false, fog: false,
+  });
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), moonMat);
+  moon.scale.setScalar(opts.moonRadius ?? 900);
+  moon.frustumCulled = false;
+  group.add(moon);
+
+  /* --------------------------------------------------------------- clouds -- */
+
+  const cloudTex = makeCloudTexture(THREE, { blobs: opts.cloudBlobs ?? 220 });
+  const cloudMat = new THREE.MeshBasicMaterial({
+    map: cloudTex, transparent: true, opacity: 0.0,
+    depthWrite: false, side: THREE.BackSide, fog: false,
+  });
+  // BackSide on a sphere means the texture is on the INSIDE, so it reads as a
+  // ceiling from underneath at any position in a 26 km world. A plane would only
+  // look right from directly below its centre.
+  const cloudGeo = new THREE.SphereGeometry(1, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  const cloudsLow = new THREE.Mesh(cloudGeo, cloudMat);
+  cloudsLow.scale.set(CLOUD_LOW * 8, CLOUD_LOW, CLOUD_LOW * 8);
+  cloudsLow.frustumCulled = false;
+  const cloudsHigh = new THREE.Mesh(cloudGeo, cloudMat);
+  cloudsHigh.scale.set(CLOUD_HIGH * 9, CLOUD_HIGH, CLOUD_HIGH * 9);
+  cloudsHigh.rotation.y = 1.1;
+  cloudsHigh.frustumCulled = false;
+  group.add(cloudsLow, cloudsHigh);
+
+  const sunDir = new THREE.Vector3();
+
+  return {
+    group, stars, moon, cloudsLow, cloudsHigh,
+
+    /**
+     * @param sun      normalised sun direction (the same vector the sky shader gets)
+     * @param nightAmt 0 in full day, 1 at full night
+     * @param dt       seconds since the last frame
+     * @param centre   where the camera is looking, so the dome travels with it
+     */
+    update(sun, nightAmt, dt, centre) {
+      // The whole sky follows the view. In a 26 km world a dome fixed at the
+      // origin is behind you by the time you reach the far headland.
+      if (centre) group.position.set(centre.x, 0, centre.z);
+
+      starMat.opacity = Math.max(0, (nightAmt - 0.25) * 1.33);
+      stars.visible = starMat.opacity > 0.01;
+      // Slow rotation, so the sky moves against the land the way it really does.
+      // 15 degrees an hour is the real rate; this is a demo clock, so it is tied
+      // to elapsed time rather than pretending to be sidereal.
+      stars.rotation.y += (dt || 0) * 0.0009;
+
+      if (sun) {
+        sunDir.copy(sun).normalize();
+        // The moon sits opposite the sun, which is what makes it rise as the
+        // sun sets without a second clock to keep in step.
+        moon.position.set(
+          -sunDir.x * MOON_DISTANCE,
+          Math.max(2000, -sunDir.y * MOON_DISTANCE),
+          -sunDir.z * MOON_DISTANCE,
+        );
+      }
+      moonMat.opacity = Math.max(0, (nightAmt - 0.15) * 1.2);
+      moon.visible = moonMat.opacity > 0.01;
+
+      // Clouds thin out at night rather than vanishing: an empty night sky over
+      // a lit city reads as a missing layer, not as clear weather.
+      cloudMat.opacity = 0.78 - nightAmt * 0.42;
+      cloudsLow.rotation.y += (dt || 0) * 0.0022;
+      cloudsHigh.rotation.y -= (dt || 0) * 0.0013;
+      // Tinted by the sun so they warm at dusk with everything else.
+      const warm = 1 - nightAmt;
+      cloudMat.color.setRGB(0.62 + 0.38 * warm, 0.64 + 0.34 * warm, 0.70 + 0.30 * warm);
+    },
+
+    dispose() {
+      group.removeFromParent();
+      starGeo.dispose(); starMat.dispose();
+      moon.geometry.dispose(); moonMat.dispose();
+      cloudGeo.dispose(); cloudMat.dispose(); cloudTex.dispose();
+    },
+  };
+}

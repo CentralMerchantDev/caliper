@@ -219,8 +219,34 @@ export function createPlacer({ ground, registry, grid = null }) {
     const before = registry.list().filter((e) => e.id === id && e.until > t);
     if (!before.length) return { ok: false, reason: "not-found", detail: `nothing called ${id} is standing` };
 
-    registry.close(id, t);
-    const got = place(model, x, z, { ...opts, id });
+    // WRAPPED, BECAUSE ITS TWIN WAS. remove() thirty lines above carries a nine
+    // line comment about close() throwing on the default t = 0, and wraps it.
+    // This called the same close() bare, in the same file, for the same reason,
+    // written in the same session -- so move() threw on ITS defaults too, and
+    // threw again on a second move at the same instant. A rule applied in one
+    // place and not its twin.
+    try {
+      registry.close(id, t);
+    } catch (e) {
+      return {
+        ok: false, reason: "invalid-time",
+        detail: `${(e && e.message) || e} -- moving something needs a time AFTER it was placed`,
+      };
+    }
+
+    // AND place() MAY THROW, in which case the thing being moved has already
+    // been closed and would be lost. The refusal path below reopens it; the
+    // throw path did not, which is a data-loss route through an editing tool.
+    let got;
+    try {
+      got = place(model, x, z, { ...opts, id });
+    } catch (e) {
+      for (const en of before) registry.reopen(id, en.until, en.since);
+      return {
+        ok: false, reason: "invalid-model",
+        detail: `${(e && e.message) || e} -- ${id} was left where it was`,
+      };
+    }
     if (got.ok) return got;
 
     // Put it back by UN-closing the original, not by reserving a copy of it.

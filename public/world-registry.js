@@ -402,7 +402,51 @@ export function createWorldRegistry(heightAt = null) {
     const {
       yMin = -Infinity, yMax = Infinity,
       ignoreKinds = null, onlyKinds = null,
+      // THE EARTH IS AN OCCUPANT, AND THIS QUERY DID NOT KNOW IT.
+      //
+      // The header of this file says "a query into a hillside and a query into a
+      // reserved footprint are refused by the exact same check, not two", and
+      // that the open sea "gets the same treatment". True of whatIsAt, which
+      // consults heightAt. False of this function and of findFree, which never
+      // did. Measured:
+      //
+      //     whatIsAt(100 m inside the highest peak) -> rock
+      //     overlapsReserved(the same volume)       -> null
+      //     findFree(10x10 at the peak)             -> { moved: 0 }
+      //     findFree(10x10 in 20 m of open sea)     -> { moved: 0 }
+      //
+      // findFree's own docstring promises "nothing SOLID", and ROCK and WATER
+      // are declared solid fifteen lines above it. A layout engine asking the
+      // registry for room was handed the inside of a mountain.
+      //
+      // Terrain is consulted when a height range is given, because that is when
+      // "is this volume free" is being asked rather than "is this ground
+      // claimed". A plan-only query keeps its old meaning exactly.
+      terrain = true,
     } = opts;
+
+    if (terrain && heightAt && yMin > -Infinity) {
+      // Corners and centre: the same shape the ground layer samples with, and
+      // enough to catch a footprint half-buried in a slope.
+      const probes = [
+        [xMin, zMin], [xMax, zMin], [xMin, zMax], [xMax, zMax],
+        [(xMin + xMax) / 2, (zMin + zMax) / 2],
+      ];
+      // ENTIRELY BURIED, not merely touching below the surface -- and the
+      // difference is the whole rule. A foundation, a basement, a sub-base and
+      // a bridge pier's footing ALL reach below the surface; that is what they
+      // are for, and the first version of this check refused every one of them
+      // (571 -> 564 green, instantly). Digging is allowed. Being wholly inside
+      // the hill, with no part reaching daylight, is not.
+      //
+      // Same for water: a hull floats at the surface and a piling goes under
+      // it. A volume entirely below sea level in water is submerged.
+      for (const [px, pz] of probes) {
+        const surface = heightAt(px, pz);
+        if (yMax < surface) return ROCK;
+        if (surface < 0 && yMax <= 0) return WATER;
+      }
+    }
     const ignore = ignoreKinds ? new Set(ignoreKinds) : null;
     const only = onlyKinds ? new Set(onlyKinds) : null;
 
@@ -465,6 +509,8 @@ export function createWorldRegistry(heightAt = null) {
    * then spiral out.
    */
   function findFree(w, d, near, { radius = 1500, step = 40, t = 0, ...opts } = {}) {
+    // Pass a height range and the terrain check above applies; without one this
+    // stays a plan-only search, which is what every existing caller asked for.
     // Passes the height range and kind filters straight through: a search for
     // room that asks a different question from the caller's own placement check
     // will confidently return somewhere that placement then refuses.
@@ -481,10 +527,53 @@ export function createWorldRegistry(heightAt = null) {
     return null;
   }
 
+  /**
+   * EVERYTHING in the way, not the first thing.
+   *
+   * overlapsReserved answers "is this free", which is the right question for
+   * placement and the wrong one for a builder who has just been told no. "A
+   * condo is 10 x 10 and the space is 6 x 6" is only actionable if the answer
+   * names what is standing in the other 4 metres and whether it can be cleared.
+   *
+   * Same filters, same terrain rules, same ordering as overlapsReserved -- it
+   * simply does not stop at the first match.
+   */
+  function allOverlapping(xMin, xMax, zMin, zMax, t = 0, opts = {}) {
+    const {
+      yMin = -Infinity, yMax = Infinity,
+      ignoreKinds = null, onlyKinds = null, terrain = true,
+    } = opts;
+    const out = [];
+
+    if (terrain && heightAt && yMin > -Infinity) {
+      const probes = [
+        [xMin, zMin], [xMax, zMin], [xMin, zMax], [xMax, zMax],
+        [(xMin + xMax) / 2, (zMin + zMax) / 2],
+      ];
+      for (const [px, pz] of probes) {
+        const surface = heightAt(px, pz);
+        if (yMax < surface) { out.push(ROCK); break; }
+        if (surface < 0 && yMax <= 0) { out.push(WATER); break; }
+      }
+    }
+
+    const ignore = ignoreKinds ? new Set(ignoreKinds) : null;
+    const only = onlyKinds ? new Set(onlyKinds) : null;
+    for (const e of candidates(xMin, xMax, zMin, zMax)) {
+      if (t < e.since || t >= e.until) continue;
+      if (only && !only.has(e.kind)) continue;
+      if (ignore && ignore.has(e.kind)) continue;
+      if (xMax <= e.xMin || xMin >= e.xMax || zMax <= e.zMin || zMin >= e.zMax) continue;
+      if (yMax <= e.yMin || yMin >= e.yMax) continue;
+      out.push(e);
+    }
+    return out;
+  }
+
   /** Every reservation currently held, for tests and for a debug inspector. Copied so a caller cannot mutate the registry by editing the array. */
   function list() {
     return entries.map((e) => ({ ...e }));
   }
 
-  return { reserve, release, close, reopen, whatIsAt, occupiedAt, overlapsReserved, findFree, list };
+  return { reserve, release, close, reopen, whatIsAt, occupiedAt, overlapsReserved, allOverlapping, findFree, list };
 }

@@ -70,6 +70,7 @@ import { UnrealBloomPass } from "./vendor/three/addons/postprocessing/UnrealBloo
 import { ShaderPass } from "./vendor/three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "./vendor/three/addons/postprocessing/OutputPass.js";
 import { VignetteShader } from "./vendor/three/addons/shaders/VignetteShader.js";
+import { makeGradeShader } from "./colour-grade.js";
 import { buildWorld, LOOK } from "./city-render.js";
 import { loadLiveWorld, buildLiveQuarter, QUARTER } from "./city-live-world.js";
 import { WORLD_SCALE } from "./world-scale.js";
@@ -186,36 +187,9 @@ composer.addPass(new OutputPass());
 // palette work fixes that upstream because the curve is doing it downstream.
 // A little saturation, a gentle contrast S-curve about mid-grey, and a warm
 // highlight / cool shadow split is what puts the colour back.
-const GradeShader = {
-  uniforms: {
-    tDiffuse: { value: null },
-    saturation: { value: num("sat", 1.30) },
-    contrast: { value: num("con", 1.13) },
-    warmth: { value: num("warm", 0.030) },
-  },
-  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-  fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float saturation, contrast, warmth;
-    varying vec2 vUv;
-    void main(){
-      vec4 t = texture2D(tDiffuse, vUv);
-      vec3 c = t.rgb;
-      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-      c = mix(vec3(l), c, saturation);
-      // S-curve about mid grey, so shadows deepen and highlights stay
-      c = clamp((c - 0.5) * contrast + 0.5, 0.0, 1.0);
-      c = c * c * (3.0 - 2.0 * c) * 0.18 + c * 0.82;
-      // HIGHLIGHT ROLL-OFF. The contrast curve pushes the sky and the specular
-      // glint on the water straight to white, and a blown horizon is the first
-      // thing that reads as "render" rather than "place". Everything above 0.86
-      // is compressed into the last 0.14 instead of clipping.
-      vec3 hi = step(vec3(0.86), c);
-      c = mix(c, 0.86 + (1.0 - exp(-(c - 0.86) * 4.0)) * 0.135, hi);
-      // warm the light, cool the dark: separates sunlit from shaded faces
-      c.r += warmth * l;  c.b += warmth * (1.0 - l);
-      gl_FragColor = vec4(clamp(c, 0.0, 1.0), t.a);
-    }`,
-};
+// The grade now lives in public/grade.js so index.html can use the SAME one.
+// It was private to this page, which is why the application rendered ungraded.
+const GradeShader = makeGradeShader(num);
 if (usePost) composer.addPass(new ShaderPass(GradeShader));
 
 // ---------------------------------------------------------------- camera rig

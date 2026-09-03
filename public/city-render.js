@@ -25,6 +25,7 @@
 // =============================================================================
 
 import { Sky } from "./vendor/three/addons/objects/Sky.js";
+import { createCitySky } from "./sky.js";
 import { RoundedBoxGeometry } from "./vendor/three/addons/geometries/RoundedBoxGeometry.js";
 import {
   WORLD, ROADS, BRIDGES, MARINA, PIER, BOARDWALK, PLOT_CLASSES,
@@ -326,6 +327,21 @@ export function buildWorld(THREE, renderer, scene) {
   scene.add(sky);
 
   scene.fog = new THREE.FogExp2(LOOK.fogColor, LOOK.fogDensity);
+
+  // THE SKY GETS CLOUDS, STARS AND A MOON, AND IT IS BUILT HERE.
+  //
+  // It was first written into world-render-3d.js, next to the day/night code
+  // that drives it. That is the wrong file and the render proved it: city.html
+  // never constructs WorldRenderer, so scripts/shoot.mjs -- the only way to
+  // photograph this world -- could not see any of it. The identical trap had
+  // already cost a long detour on the pivot marker.
+  //
+  // The atmosphere belongs with the sun and the fog. Built here, both pages get
+  // it and it can be verified with a screenshot.
+  const citySky = createCitySky(THREE, scene);
+  // Daytime defaults at construction, so a bare render that never ticks the
+  // day/night loop still shows a sky rather than an empty one.
+  citySky.update(sunPos, 0, 0, null);
 
   // Environment map from the sky itself, so glass and water reflect the actual
   // sky rather than a grey studio.
@@ -1597,7 +1613,7 @@ varying vec3 vSeaWorld;`)
   }
   stats.trees = stats.trees || 0;
 
-  const api = { scene, field, heightAt, plan, world, masses, stats, sun, sunDir: sunPos.clone(), sky, sea, wn, LOOK, THREE, renderer, settAt, SETT, SETT_BY_ID, bridgeSpans, placedBuildings };
+  const api = { scene, field, heightAt, plan, world, masses, stats, sun, sunDir: sunPos.clone(), sky, citySky, sea, wn, LOOK, THREE, renderer, settAt, SETT, SETT_BY_ID, bridgeSpans, placedBuildings };
   if (!SKIP.has("props")) buildProps(api);
   stats.buildMs = Math.round(performance.now() - t0);
   return api;

@@ -1,0 +1,142 @@
+The UMAA audit: twelve of twenty-five mutations survived, and the reason why
+
+A blind auditor ran the full UMAA structure against the land layer -- Phase 0
+re-grounded for the subsystem, the 4-State Horizon across twelve divisions, and
+a cross-disciplinary collision matrix. 25 mutations, each verified as landed.
+13 red, TWELVE SURVIVED. It found 36 findings against code that had already been
+audited once and mutation-tested twice.
+
+ITS VERDICT, AND THE NUMBER WORTH KEEPING: **ZERO**
+
+The number of production files that import ground.js, grid.js or place.js.
+
+Everything else follows from it. The layer's guarantees hold beautifully where
+they are exercised -- the auditor placed 41,944 objects into the real 26 km
+world through the real door and measured ZERO overlapping pairs, at 100x the
+scale the suite tests. And twelve mutations survived, because the only thing
+that ever asks these modules a question is a test written by the person who
+wrote them. A subsystem with no second consumer has no independent source of
+disagreement, which is precisely what the epistemic anchor requires. That is not
+a coverage problem; it is why the coverage problem exists.
+
+WHAT IS FIXED IN THIS COMMIT
+
+C1 -- THE BLOCKING COLLISION. WORLD-RULES §3.2 says "a road piece is one cell
+long" -- 8 m. The size check refused anything larger than its host and anything
+crossing a host's edge. Both individually correct. Together, on a road laid out
+exactly as the specification mandates:
+
+    12 m bus                      -> "too-big: needs 2.5 x 12.0 m;
+                                      road st-1 is 18.0 x 8.0 m"
+    4.4 m car over a piece JOIN   -> "overhangs: fits road st-0 but not
+                                      at this position"
+
+Every bus, tram, lorry and articulated vehicle unplaceable, and roughly half of
+all cars, because the road was built the way the grid says to build it. Register
+the identical road as one 320 m strip and both are accepted -- so the land's
+answer to "may this vehicle stand on this road" depended on how the road had
+been chunked. The layer was refusing its own primary output.
+
+The fix is conceptual, not a patch. A PARCEL -- a plot, a farm, a park -- is
+bounded ground you build WITHIN, and hanging over its edge is trespass. A road,
+a railway, a bridge, a river is something you travel ALONG, and its edge in the
+direction of travel is an artefact of chunking. A vehicle is not too big for a
+road because the road was cut into 8 m pieces.
+
+F12 -- the host query carried no height range, twelve lines above the occupancy
+check that does and has a test defending it. A bench at the edge of a bridge
+deck 30 m overhead was refused "overhangs" by a structure it could walk under.
+The registry gained height ranges precisely because "a bridge blocked the
+channel it spans"; only half of canPlace was updated.
+
+F4 / C4 -- the registry's two occupancy queries disagreed about rock and open
+sea while the file header says they are "the exact same check, not two":
+
+    whatIsAt(100 m inside the highest peak)  -> rock
+    overlapsReserved(the same volume)        -> null
+    findFree(10x10 at the peak)              -> { moved: 0 }
+    findFree(10x10 in 20 m of open sea)      -> { moved: 0 }
+
+findFree's own docstring promises "nothing SOLID", and ROCK and WATER are
+declared solid fifteen lines above it. A layout engine asking the registry for
+room was handed the inside of a mountain.
+
+F6 / F7 / C6 / C7 -- two rule tables failing OPEN where their neighbours fail
+closed. `reserve({ surface: "sidwalk" })` -- one transposed letter -- produced
+the most permissive ground in the world: vehicle, lamp, building and vessel all
+accepted, because ACCEPTS["sidwalk"] and TERRAIN_REFUSES["sidwalk"] are both
+undefined and undefined was read as "anything". And the beach rule, rewritten
+once to remove exactly this, asked for `spec.category` -- optional, and omitted
+by every spec in the suite. The same inconsistency, one field later, inside the
+paragraph criticising it.
+
+F3 / C3 -- move() threw on its own defaults. remove(), thirty lines above,
+carries a nine-line comment about close() throwing on t = 0 and wraps it; move()
+called the same close() bare. Same file, same session, same hand. And move()'s
+THROW path leaked: it closed the object, and if place() threw rather than
+refusing, the thing being moved simply vanished -- a data-loss route through an
+editing tool. The refusal path reopened it; the throw path did not.
+
+I BROKE SOMETHING WHILE FIXING C1, AND THE PAIRED TEST CAUGHT IT IN A MINUTE
+
+The first version of the fix read `hi` -- the highest sample under the footprint
+-- to build the host query's height range. `hi` is accumulated in the FIT step,
+which runs AFTER the size check, so it was still -Infinity: the range was
+(-Infinity, -Infinity), no host was ever found, and a 30 m tower was accepted
+onto a 12 x 18 m house lot. The bus and the car went green and the plot went
+silently wrong.
+
+An unpaired test would have called that a fix. The heights are now sampled once,
+before any check reads them, which removes the ordering hazard rather than this
+instance of it.
+
+AND TWO OF MY TESTS PASSED FOR THE WRONG REASON BEFORE BEING CORRECTED
+
+The bench-under-a-bridge test put the bench INSIDE the deck's plan rectangle,
+where it can never overhang -- so removing the height range left it green. The
+failing case was a bench STRADDLING the deck's edge. And the mast paired with it
+was registered as a `plot`, a surface-defining kind the occupancy check ignores
+by design, so nothing could ever have refused it.
+
+Both were caught by mutation, not by reading. That is three tests this session
+that passed for a reason other than the one stated, and the pattern is the same
+every time: a case constructed by someone who already knew what the answer was
+supposed to be.
+
+VERIFIED BY MUTATION
+
+  size check applies to roads again          -> 2 tests fail
+  host query loses its height range          -> 1 fail (after the test was fixed)
+  heights read before they are sampled       -> 3 fail
+  registry stops consulting the terrain      -> 2 fail
+  terrain refuses anything touching below    -> 1 fail
+  an unknown surface permits everything      -> 1 fail
+  move() calls close() bare again            -> 1 fail
+
+582/582 node tests, tsc --noEmit clean, all three modules byte-identical to
+their pre-mutation state.
+
+STILL OPEN, AND NOT IMPLIED AWAY
+
+The auditor's nine readiness conditions; five remain:
+
+  * F1 / C2 -- `waterAt` reads three fields off a BOOLEAN. terrain.js's
+    waterwayAt returns true/false; ground.js reads way.kind, way.surface,
+    way.id. Measured: 703 of 703 sampled in-waterway points report kind
+    "river" -- three of the seven waterways are canals -- and 653 of 703 report
+    depth 0.
+  * F2 -- the land does not know a river is water. 643 of 703 in-waterway points
+    accept a building, because surfaceAt classifies by elevation and the rivers
+    run 27-105 m above sea level. terrain.js's own docstring says "the mistake
+    was expecting an elevation test to answer a question about waterways".
+  * F5 / C5 -- ground.js says "OWNED HERE, NOT IN THE RENDERER" about the strata
+    table; city-render.js still owns its own copy of STRATA, BEDROCK_Y and
+    strataAt, and imports nothing.
+  * F8 -- `h` and `sweep` are checked against restatements of themselves. The
+    lamp head can move 4.9 m in city-render.js with the suite green.
+  * F22 -- WORLD-RULES §3.2 says "placement snaps to it"; no land module
+    references any grid function. The test calls snap() before calling place().
+
+And the one that subsumes them: nothing but a test calls this layer. Until the
+renderer or the plan generator goes through the door, the surviving-mutation
+count is the only number that matters.
