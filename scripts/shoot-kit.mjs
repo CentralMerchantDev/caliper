@@ -55,7 +55,10 @@ const filters = [
   "maritime",
   "airport",
   "aviation",
-  "roads"
+  "roads",
+  "buildings",
+  "parks",
+  "industrial"
 ];
 
 for (const f of filters) {
