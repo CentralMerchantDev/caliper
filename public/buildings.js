@@ -311,28 +311,74 @@ function midriseCourtyard(o, s, x, z, w, d, h, g) {
   o.add("deck", x, g + 0.4, z, (w - 2 * t) * 0.9, 0.3, (d - 2 * t) * 0.9, 0x7fa860);   // the garden
 }
 
+/**
+ * TERRACE — an actual street of houses, not a stamped brick.
+ *
+ * There are 5,665 terrace houses in this world. Emitting one monolithic box
+ * per plot made a 25-metre-wide plot look like a factory shed with a shopfront.
+ * Real terraces are built in narrow vertical bays (4.5 to 6.5 m wide), with
+ * rhythmic stepping, subtle palette shifts, party-wall chimneys, projecting
+ * bay windows, varied ground floors (some residential stoops, some shopfronts),
+ * and mixed gables, parapets, and mansard dormers.
+ */
 function terrace(o, s, x, z, w, d, h, g) {
-  const wall = pickLocal(WALLS.TERRACE, s + "w", x, z), roof = pickLocal(ROOFS.TERRACE, s + "r", x, z, 1400);
-  const r1 = rnd(s + "1"), r2 = rnd(s + "2"), r3 = rnd(s + "3");
-  o.add("wall", x, g + 2.2, z, w, 4.4, d, 0xd8cdba);                               // shopfront band
-  const bodyH = pos(h - 4.4, 2);
-  o.add("wall", x, g + 4.4 + bodyH / 2, z, w, bodyH, d, wall);
+  // If the plot is wide enough for multiple terrace houses, divide it into bays
+  const nUnits = w >= 7.5 ? Math.max(1, Math.min(5, Math.round(w / 5.2))) : 1;
+  const bayW = w / nUnits;
 
-  // Three roofs, not one. A terrace street is gables, parapets and mansards
-  // mixed -- a whole row of identical gables is the giveaway that nothing here
-  // was designed, only stamped.
-  if (r2 < 0.42) {
-    o.add("pitch", x, g + h, z, w * 1.05, w * 0.34, d * 1.04, roof);               // gable to the street
-    o.add("wall", x + w * 0.3, g + h + w * 0.34 + 1.2, z - d * 0.2, 1.4, 3.4, 1.4, 0x8c7a68);
-  } else if (r2 < 0.74) {
-    o.add("roof", x, g + h + 0.7, z, w * 1.07, 1.4, d * 1.06, roof);               // parapet
-    o.add("wall", x - w * 0.24, g + h + 2.6, z - d * 0.16, 1.3, 3.2, 1.3, 0x8c7a68);
-  } else {
-    o.add("pitch", x, g + h, z, w * 1.02, w * 0.20, d * 1.02, roof);               // mansard: shallow...
-    o.add("wall", x, g + h + w * 0.20 + 0.9, z, w * 0.86, 1.8, d * 0.9, wall);     // ...with an attic storey
+  for (let i = 0; i < nUnits; i++) {
+    const hx = x + (-0.5 + (i + 0.5) / nUnits) * w;
+    const hs = s + "u" + i;
+    const houseWall = pickLocal(WALLS.TERRACE, hs + "w", hx, z, 1100);
+    const houseRoof = pickLocal(ROOFS.TERRACE, hs + "r", hx, z, 1400);
+    const r1 = rnd(hs + "1"), r2 = rnd(hs + "2"), r3 = rnd(hs + "3");
+
+    // Subtle height stepping along the street
+    const stepH = pos(h + (rnd(hs + "j") - 0.5) * 0.9, 7);
+
+    // Ground floor: 55% commercial shopfronts, 45% residential stoops
+    const isShop = r1 < 0.55;
+    if (isShop) {
+      o.add("wall", hx, g + 2.1, z, bayW * 0.98, 4.2, d, 0xd8cdba); // shopfront fascia
+      const bodyH = pos(stepH - 4.2, 2);
+      o.add("wall", hx, g + 4.2 + bodyH / 2, z, bayW * 0.98, bodyH, d, houseWall);
+      if (r3 > 0.45) o.add("roof", hx, g + 4.35, z + d * 0.52, bayW * 0.88, 0.4, 1.8, houseRoof); // awning
+    } else {
+      // Residential ground floor with entrance stoop
+      o.add("deck", hx - bayW * 0.25, g + 0.3, z + d * 0.52, bayW * 0.32, 0.6, 0.8, 0xdcd4c2); // stoop steps
+      o.add("wall", hx, g + stepH / 2, z, bayW * 0.98, stepH, d, houseWall);
+      if (r3 > 0.4) o.add("roof", hx - bayW * 0.25, g + 2.8, z + d * 0.52, bayW * 0.34, 0.3, 0.7, houseRoof); // portico hood
+    }
+
+    // 40% of houses have a projecting 1 or 2 storey bay window
+    if (r3 > 0.60) {
+      const bH = isShop ? 3.8 : 6.0;
+      const bY = isShop ? 4.2 : 0;
+      o.add("wall", hx + bayW * 0.18, g + bY + bH / 2, z + d * 0.51, bayW * 0.36, bH, 0.75, houseWall);
+      o.add("roof", hx + bayW * 0.18, g + bY + bH + 0.15, z + d * 0.51, bayW * 0.40, 0.3, 0.8, houseRoof);
+    }
+
+    // Roof form
+    if (r2 < 0.38) {
+      // Gable to the street
+      o.add("pitch", hx, g + stepH, z, bayW * 1.01, bayW * 0.36, d * 1.02, houseRoof);
+    } else if (r2 < 0.72) {
+      // Parapet with cornice
+      o.add("roof", hx, g + stepH + 0.5, z, bayW * 1.03, 1.0, d * 1.04, houseRoof);
+    } else {
+      // Mansard attic with dormer
+      o.add("pitch", hx, g + stepH, z, bayW * 1.01, bayW * 0.22, d * 1.01, houseRoof);
+      o.add("wall", hx, g + stepH + bayW * 0.22 + 0.8, z, bayW * 0.74, 1.6, d * 0.88, houseWall);
+      o.add("pitch", hx, g + stepH + bayW * 0.22 + 1.6, z + d * 0.2, bayW * 0.36, 0.7, 1.3, houseRoof);
+    }
+
+    // Chimneys on party walls
+    if (i > 0) {
+      o.add("wall", x - w / 2 + i * bayW, g + stepH + 1.6, z - d * 0.18, 0.9, 2.4, 0.9, 0x8c7a68);
+    } else if (r2 < 0.38) {
+      o.add("wall", hx - bayW * 0.38, g + stepH + 1.4, z - d * 0.18, 0.9, 2.2, 0.9, 0x8c7a68);
+    }
   }
-  if (r1 > 0.62) o.add("roof", x, g + 4.6, z + d * 0.52, w * 0.9, 0.5, 1.8, roof); // awning
-  if (r3 > 0.78) o.add("metal", x, g + 5.2, z + d * 0.5, w * 0.7, 0.25, 0.9, 0x6b7280);  // balcony rail
 }
 
 /**
@@ -356,6 +402,7 @@ function townhouse(o, s, x, z, w, d, h, g) {
     const hw = w * 0.47;
     for (const side of [-1, 1]) {
       o.add("wall", x + side * w * 0.25, g + h / 2, z, hw, h, d, wall);
+      if (r1 > 0.4) o.add("roof", x + side * w * 0.25, g + 2.5, z + d * 0.52, hw * 0.4, 0.35, 1.2, roof); // porches
     }
     o.add("hip", x, g + h, z, w * 1.08, w * 0.26, d * 1.10, roof);
     o.add("wall", x, g + h + w * 0.26 + 1.0, z, 1.2, 2.8, 1.2, 0x8c7a68);
@@ -370,6 +417,7 @@ function townhouse(o, s, x, z, w, d, h, g) {
     o.add("wall", x + w * 0.34, g + wh / 2, z + d * 0.18, ww, wh, d * 0.62, wall);
     o.add("pitch", x + w * 0.34, g + wh, z + d * 0.18, ww * 1.12, ww * 0.32, d * 0.66, roof);
     o.add("wall", x - w * 0.36, g + h + mw * 0.30 + 1.0, z, 1.2, 2.8, 1.2, 0x8c7a68);
+    if (r1 > 0.4) o.add("wall", x + w * 0.34, g + 1.4, z + d * 0.54, ww * 0.85, 2.8, 1.2, wall); // garage
     return;
   }
 
@@ -379,13 +427,20 @@ function townhouse(o, s, x, z, w, d, h, g) {
     if (r3 > 0.5) o.add("metal", x + w * 0.22, g + h + 2.0, z - d * 0.2, w * 0.3, 2.0, d * 0.3, 0x9aa2a8);
   } else if (form === "gable") {
     o.add("pitch", x, g + h, z, w * 1.06, w * 0.36, d * 1.04, roof);       // gable to the street
+    // Front dormer
+    if (r3 > 0.6) o.add("pitch", x, g + h + w * 0.2, z + d * 0.2, w * 0.32, 1.4, 2.0, roof);
   } else {
     o.add("hip", x, g + h, z, w * 1.10, w * 0.30, d * 1.10, roof);
   }
   if (form !== "flat") {
     o.add("wall", x - w * 0.28, g + h + w * 0.30 + 1.1, z, 1.3, 3.0, 1.3, 0x8c7a68);
   }
-  if (r1 > 0.5) o.add("roof", x, g + 2.6, z + d * 0.5, w * 0.42, 0.4, 2.2, roof);  // porch canopy
+  // Canted/projecting front bay window
+  if (r2 > 0.5 && form !== "flat") {
+    o.add("wall", x + w * 0.2, g + 2.8, z + d * 0.52, w * 0.36, 4.6, 0.7, wall);
+    o.add("roof", x + w * 0.2, g + 5.2, z + d * 0.52, w * 0.40, 0.3, 0.8, roof);
+  }
+  if (r1 > 0.5) o.add("roof", x - w * 0.2, g + 2.6, z + d * 0.5, w * 0.38, 0.4, 2.0, roof);  // porch canopy
   if (r3 > 0.72) o.add("wall", x + w * 0.36, g + 1.4, z + d * 0.34, w * 0.28, 2.8, d * 0.3, wall);  // garage
 }
 
@@ -400,6 +455,8 @@ function villa(o, s, x, z, w, d, h, g) {
     o.add("roof", x, g + h + 0.4, z, w * 1.08, 0.8, d * 1.08, roof);               // flat, deep overhang
     o.add("deck", x, g + 0.3, z + d * 0.42, w * 0.8, 0.25, d * 0.22, 0xd9cdb4);    // terrace
     if (r2 > 0.5) o.add("deck", x - w * 0.1, g + 0.35, z + d * 0.46, w * 0.5, 0.3, d * 0.26, 0x3fb5cc);
+    // Pergola shading over terrace
+    if (r1 > 0.4) o.add("roof", x + w * 0.2, g + 3.2, z + d * 0.44, w * 0.4, 0.2, d * 0.2, roof);
     return;
   }
   o.add("wall", x, g + h / 2, z, w, h, d, wall);
@@ -410,6 +467,8 @@ function villa(o, s, x, z, w, d, h, g) {
     o.add("hip", x + w * 0.44, g + wh, z - d * 0.2, ww * 1.18, ww * 0.26, d * 0.62, roof);
   }
   if (r2 > 0.68) o.add("deck", x - w * 0.1, g + 0.35, z + d * 0.46, w * 0.5, 0.3, d * 0.26, 0x3fb5cc);  // pool
+  // Chimney stack
+  if (r2 > 0.4) o.add("wall", x - w * 0.35, g + h + w * 0.26 + 0.8, z - d * 0.15, 1.1, 2.2, 1.1, 0x8c7a68);
 }
 
 function resort(o, s, x, z, w, d, h, g) {
@@ -432,25 +491,242 @@ function resort(o, s, x, z, w, d, h, g) {
   o.add("deck", x, g + 0.3, z + d * 0.74, w * 0.40, 0.25, d * 0.22, 0x59b0c4);          // ground pool
 }
 
+/**
+ * CIVIC — 15 landmark institutions across the world.
+ *
+ * Rather than stamping 15 identical colonnaded boxes with either a dome or a
+ * clock, each civic plot deterministically forms one of six monumental typologies:
+ *   - cathedral: cruciform basilica with nave, transepts, twin towers and spires
+ *   - station: grand rail terminus with colossal arched barrel shed and campanile
+ *   - capitol: city hall / parliament with portico, drum, dome and lantern
+ *   - library: national museum / library with peristyle colonnade and rotunda
+ *   - opera: tiered performing arts hall with curved shell and soaring fly tower
+ *   - courthouse: palace of justice with monumental rusticated base and pediment
+ */
+/**
+ * The 12 CIVIC Landmark Typologies:
+ *   1. capitol: city hall / parliament with portico, drum, dome and lantern
+ *   2. cathedral: cruciform basilica, nave, transepts, crossing lantern, twin western towers
+ *   3. station: grand rail terminus with colossal arched barrel shed and campanile clock tower
+ *   4. library: national museum / library with peristyle colonnade, rotunda and corner pavilions
+ *   5. opera: performing arts hall with tiered curved shell and soaring fly tower
+ *   6. courthouse: palace of justice with monumental rusticated base, hexastyle portico and pediment
+ *   7. hospital: municipal medical center with emergency ramp, ward blocks, rooftop helipad
+ *   8. university: collegiate hall with quadrangle cloisters and crenellated clock tower
+ *   9. theatre: civic playhouse with marquee entrance, auditorium block, stage fly tower
+ *  10. art-gallery: modern sculpture pavilion with cantilevered galleries and sawtooth skylights
+ *  11. market-hall: historic covered market with triple arcades and raised glazed clerestory
+ *  12. stadium: municipal arena with tiered oval bowl and cantilevered canopy roof
+ */
+export const CIVIC_TYPOLOGIES = [
+  "capitol", "cathedral", "station", "library", "opera", "courthouse",
+  "hospital", "university", "theatre", "art-gallery", "market-hall", "stadium"
+];
+
 function civic(o, s, x, z, w, d, h, g) {
   const wall = pickLocal(WALLS.CIVIC, s + "w", x, z), roof = pickLocal(ROOFS.CIVIC, s + "r", x, z, 1400);
-  const r1 = rnd(s + "1");
-  o.add("wall", x, g + 1.1, z, w * 1.12, 2.2, d * 1.12, 0xdcd4c2);                 // stylobate
-  o.add("wall", x, g + h / 2 + 2.2, z, w, h, d, wall);
-  o.add("roof", x, g + h + 3.0, z, w * 1.08, 1.6, d * 1.08, roof);                 // entablature
-  // a colonnade across the front -- the cheapest possible "this is a public building"
-  const cols = Math.max(4, Math.min(10, Math.round(w / 9)));
-  for (let i = 0; i < cols; i++) {
-    const cx = x + (-0.5 + (i + 0.5) / cols) * w * 0.92;
-    o.add("cyl", cx, g + (h * 0.62) / 2 + 2.2, z + d * 0.52, 2.0, h * 0.62, 2.0, 0xf6f1e4);
-  }
-  o.add("roof", x, g + h * 0.62 + 3.4, z + d * 0.52, w * 0.96, 1.6, 4.2, roof);
-  if (r1 > 0.55) {                                                                 // dome
-    o.add("dome", x, g + h + 3.8, z, w * 0.34, w * 0.24, w * 0.34, roof);
-    o.add("cyl", x, g + h + 3.8 + w * 0.24 + 2, z, 1.0, 4, 1.0, 0xe4c96a);
-  } else {                                                                          // clock tower
-    o.add("wall", x + w * 0.34, g + h + 8, z, w * 0.16, 16, w * 0.16, wall);
-    o.add("pitch", x + w * 0.34, g + h + 16, z, w * 0.19, w * 0.16, w * 0.19, roof);
+  const rTyp = rnd(s + "typ");
+  const typIdx = Math.floor(rTyp * CIVIC_TYPOLOGIES.length) % CIVIC_TYPOLOGIES.length;
+  const typ = CIVIC_TYPOLOGIES[typIdx];
+
+  // Stepped monumental stylobate approach
+  o.add("wall", x, g + 1.2, z, w * 1.08, 2.4, d * 1.08, 0xdcd4c2);
+
+  if (typ === "cathedral") {
+    // Cruciform basilica: Latin cross nave running length/depth, transepts, twin towers
+    const naveW = w * 0.44, naveD = d * 0.88;
+    const bodyH = pos(h * 0.75, 14);
+    o.add("wall", x, g + 2.4 + bodyH / 2, z, naveW, bodyH, naveD, wall);
+    o.add("barrel", x, g + 2.4 + bodyH, z, naveW * 1.02, bodyH * 0.4, naveD * 1.01, roof);
+    const transW = w * 0.92, transD = d * 0.32;
+    o.add("wall", x, g + 2.4 + bodyH * 0.42, z, transW, bodyH * 0.84, transD, wall);
+    o.add("pitch", x, g + 2.4 + bodyH * 0.84, z, transW * 1.02, bodyH * 0.32, transD * 1.02, roof);
+    o.add("pyr", x, g + 2.4 + bodyH * 1.25 + 7, z, 4.2, 14, 4.2, roof);
+    const tW = w * 0.22, tD = d * 0.22;
+    const towerH = bodyH * 1.35;
+    for (const side of [-1, 1]) {
+      const tx = x + side * (naveW / 2 - tW / 2);
+      const tz = z + naveD / 2 - tD / 2;
+      o.add("wall", tx, g + 2.4 + towerH / 2, tz, tW, towerH, tD, wall);
+      o.add("roof", tx, g + 2.4 + towerH + 0.6, tz, tW * 1.06, 1.2, tD * 1.06, roof);
+      o.add("pyr", tx, g + 2.4 + towerH + 1.2 + 8, tz, tW * 0.9, 16, tD * 0.9, roof);
+    }
+  } else if (typ === "station") {
+    // Grand rail terminus: arched barrel concourse shed + headhouse + clock tower
+    const headD = d * 0.32;
+    const headH = pos(h * 0.68, 12);
+    o.add("wall", x, g + 2.4 + headH / 2, z + d / 2 - headD / 2, w * 0.96, headH, headD, wall);
+    o.add("roof", x, g + 2.4 + headH + 0.8, z + d / 2 - headD / 2, w * 0.98, 1.6, headD * 1.04, roof);
+    const cols = Math.max(4, Math.min(10, Math.round(w / 12)));
+    for (let i = 0; i < cols; i++) {
+      const cx = x + (-0.5 + (i + 0.5) / cols) * w * 0.88;
+      o.add("cyl", cx, g + 2.4 + (headH * 0.6) / 2, z + d / 2 + 1.2, 2.2, headH * 0.6, 2.2, 0xf6f1e4);
+    }
+    const shedD = d * 0.62;
+    const shedH = pos(h * 0.72, 14);
+    o.add("wall", x, g + 2.4 + shedH * 0.25, z - d / 2 + shedD / 2, w * 0.86, shedH * 0.5, shedD, 0xb8c2c8);
+    o.add("barrel", x, g + 2.4 + shedH * 0.5, z - d / 2 + shedD / 2, w * 0.90, shedH * 0.75, shedD * 1.01, roof);
+    const cW = Math.min(12, w * 0.16);
+    const cH = headH + 20;
+    const cX = x - w * 0.42;
+    const cZ = z + d / 2 - headD / 2;
+    o.add("wall", cX, g + 2.4 + cH / 2, cZ, cW, cH, cW, wall);
+    o.add("roof", cX, g + 2.4 + cH + 0.6, cZ, cW * 1.08, 1.2, cW * 1.08, roof);
+    o.add("pyr", cX, g + 2.4 + cH + 1.2 + 5, cZ, cW * 0.95, 10, cW * 0.95, roof);
+  } else if (typ === "capitol") {
+    // City Hall / Capitol: central rotunda with monumental dome, portico, side pavilion wings
+    const bodyH = pos(h * 0.65, 12);
+    const wingW = w * 0.36, wingD = d * 0.82;
+    for (const side of [-1, 1]) {
+      const wx = x + side * (w / 2 - wingW / 2);
+      o.add("wall", wx, g + 2.4 + bodyH / 2, z, wingW, bodyH, wingD, wall);
+      o.add("hip", wx, g + 2.4 + bodyH, z, wingW * 1.06, wingW * 0.24, wingD * 1.06, roof);
+    }
+    const coreW = w * 0.38, coreD = d * 0.88;
+    o.add("wall", x, g + 2.4 + (bodyH + 3) / 2, z, coreW, bodyH + 3, coreD, wall);
+    o.add("pitch", x, g + 2.4 + bodyH + 3.2, z + coreD / 2 - 2, coreW * 0.92, 5.5, 4.5, roof);
+    for (const px of [-coreW * 0.32, -coreW * 0.11, coreW * 0.11, coreW * 0.32]) {
+      o.add("cyl", x + px, g + 2.4 + (bodyH + 2) / 2, z + coreD / 2, 1.8, bodyH + 2, 1.8, 0xf6f1e4);
+    }
+    const drumR = coreW * 0.32;
+    const drumH = 6;
+    o.add("cyl", x, g + 2.4 + bodyH + 3 + drumH / 2, z, drumR * 2, drumH, drumR * 2, wall);
+    const domeH = coreW * 0.26;
+    o.add("dome", x, g + 2.4 + bodyH + 3 + drumH, z, drumR * 1.95, domeH, drumR * 1.95, roof);
+    o.add("cyl", x, g + 2.4 + bodyH + 3 + drumH + domeH + 2, z, 2.0, 4.0, 2.0, 0xe4c96a);
+  } else if (typ === "library") {
+    // Grand Museum / National Library: peristyle colonnade, rotunda atrium, corner pavilions
+    const bodyH = pos(h * 0.62, 11);
+    o.add("wall", x, g + 2.4 + bodyH / 2, z, w * 0.96, bodyH, d * 0.86, wall);
+    o.add("roof", x, g + 2.4 + bodyH + 0.8, z, w * 0.98, 1.6, d * 0.88, roof);
+    const cols = Math.max(6, Math.min(14, Math.round(w / 8)));
+    for (let i = 0; i < cols; i++) {
+      const cx = x + (-0.5 + (i + 0.5) / cols) * w * 0.86;
+      o.add("cyl", cx, g + 2.4 + (bodyH * 0.72) / 2, z + d * 0.44, 1.8, bodyH * 0.72, 1.8, 0xf6f1e4);
+    }
+    o.add("roof", x, g + 2.4 + bodyH * 0.72 + 1.2, z + d * 0.44, w * 0.90, 1.4, 4.0, roof);
+    const rotR = Math.min(w, d) * 0.28;
+    o.add("dome", x, g + 2.4 + bodyH + 1.6, z, rotR * 2, rotR * 0.8, rotR * 2, roof);
+    for (const sx of [-1, 1]) {
+      const px = x + sx * (w * 0.44);
+      o.add("wall", px, g + 2.4 + (bodyH + 4) / 2, z, w * 0.16, bodyH + 4, d * 0.88, wall);
+      o.add("hip", px, g + 2.4 + bodyH + 4, z, w * 0.18, 3.2, d * 0.92, roof);
+    }
+  } else if (typ === "opera") {
+    // Grand Opera / Concert Hall: tiered sculpted massing with auditorium shell & fly tower
+    const bodyH = pos(h * 0.64, 12);
+    o.add(glassBucket(h), x, g + 2.4 + 4, z + d * 0.25, w * 0.92, 8, d * 0.46, wall);
+    o.add("roof", x, g + 2.4 + 8.4, z + d * 0.25, w * 0.96, 1.2, d * 0.50, roof);
+    const hallW = w * 0.72, hallD = d * 0.60;
+    o.add("wall", x, g + 2.4 + bodyH / 2, z - d * 0.05, hallW, bodyH, hallD, wall);
+    o.add("barrel", x, g + 2.4 + bodyH, z - d * 0.05, hallW * 1.02, bodyH * 0.4, hallD * 1.01, roof);
+    const flyW = hallW * 0.75, flyD = d * 0.28;
+    const flyH = bodyH + 14;
+    o.add("wall", x, g + 2.4 + flyH / 2, z - d * 0.34, flyW, flyH, flyD, wall);
+    o.add("roof", x, g + 2.4 + flyH + 0.8, z - d * 0.34, flyW * 1.04, 1.6, flyD * 1.04, roof);
+  } else if (typ === "courthouse") {
+    // Courthouse / Palace of Justice: rusticated base, monumental portico, pediment, symmetric wings
+    const bodyH = pos(h * 0.66, 12);
+    o.add("wall", x, g + 2.4 + bodyH / 2, z, w * 0.92, bodyH, d * 0.84, wall);
+    o.add("roof", x, g + 2.4 + bodyH + 0.8, z, w * 0.94, 1.6, d * 0.86, roof);
+    const portW = w * 0.48, portD = d * 0.20;
+    o.add("pitch", x, g + 2.4 + bodyH + 1.6, z + d * 0.38, portW * 1.04, 5.0, portD * 1.1, roof);
+    for (const px of [-portW * 0.38, -portW * 0.22, -portW * 0.07, portW * 0.07, portW * 0.22, portW * 0.38]) {
+      o.add("cyl", x + px, g + 2.4 + (bodyH * 0.78) / 2, z + d * 0.42, 1.6, bodyH * 0.78, 1.6, 0xf6f1e4);
+    }
+    for (const sx of [-1, 1]) {
+      const px = x + sx * (w * 0.38);
+      o.add("wall", px, g + 2.4 + (bodyH + 2) / 2, z, w * 0.22, bodyH + 2, d * 0.86, wall);
+      o.add("hip", px, g + 2.4 + bodyH + 2, z, w * 0.24, 3.5, d * 0.90, roof);
+    }
+  } else if (typ === "hospital") {
+    // General Hospital: podium, emergency ambulance ramp, paired ward towers, rooftop helipad
+    const podH = 6.0;
+    o.add("wall", x, g + 2.4 + podH / 2, z, w * 0.96, podH, d * 0.90, wall);
+    o.add("roof", x, g + 2.4 + podH + 0.4, z, w * 0.98, 0.8, d * 0.92, roof);
+    // Paired ward blocks
+    const wardW = w * 0.38, wardD = d * 0.75, wardH = pos(h * 0.78, 16);
+    for (const side of [-1, 1]) {
+      const wx = x + side * (w * 0.26);
+      o.add("wall", wx, g + 2.4 + podH + wardH / 2, z, wardW, wardH, wardD, wall);
+      o.add("roof", wx, g + 2.4 + podH + wardH + 0.6, z, wardW * 1.02, 1.2, wardD * 1.02, roof);
+    }
+    // Rooftop Helipad on east tower
+    const hx = x + w * 0.26, hy = g + 2.4 + podH + wardH + 1.2;
+    o.add("cyl", hx, hy + 0.4, z, 14, 0.8, 14, 0x4a5568);
+    o.add("cyl", hx, hy + 0.85, z, 12, 0.1, 12, 0xe2e8f0);
+  } else if (typ === "university") {
+    // University Main Hall: quadrangle cloisters, central gothic clock tower, gabled hall wings
+    const bodyH = pos(h * 0.60, 12);
+    // Quadrangle wings around central courtyard
+    const wingW = w * 0.22, wingD = d * 0.88;
+    for (const side of [-1, 1]) {
+      const wx = x + side * (w / 2 - wingW / 2);
+      o.add("wall", wx, g + 2.4 + bodyH / 2, z, wingW, bodyH, wingD, wall);
+      o.add("pitch", wx, g + 2.4 + bodyH, z, wingW * 1.04, wingW * 0.45, wingD * 1.01, roof);
+    }
+    // Front and rear cloisters
+    o.add("wall", x, g + 2.4 + bodyH * 0.45, z + d * 0.38, w * 0.6, bodyH * 0.9, d * 0.18, wall);
+    o.add("pitch", x, g + 2.4 + bodyH * 0.9, z + d * 0.38, w * 0.62, 4.0, d * 0.2, roof);
+    // Central Collegiate Gothic Tower
+    const towW = Math.min(16, w * 0.28), towH = bodyH + 22;
+    o.add("wall", x, g + 2.4 + towH / 2, z + d * 0.38, towW, towH, towW, wall);
+    o.add("roof", x, g + 2.4 + towH + 0.8, z + d * 0.38, towW * 1.08, 1.6, towW * 1.08, roof);
+    // Crenellations
+    for (const cx of [-towW * 0.4, towW * 0.4]) {
+      for (const cz of [-towW * 0.4, towW * 0.4]) {
+        o.add("pyr", x + cx, g + 2.4 + towH + 1.6 + 3, z + d * 0.38 + cz, 2.4, 6, 2.4, roof);
+      }
+    }
+  } else if (typ === "theatre") {
+    // Civic Playhouse / Theatre: decorative marquee canopy, auditorium block, stage house
+    const bodyH = pos(h * 0.62, 12);
+    o.add("wall", x, g + 2.4 + bodyH / 2, z, w * 0.88, bodyH, d * 0.84, wall);
+    o.add("hip", x, g + 2.4 + bodyH, z, w * 0.92, 4.0, d * 0.88, roof);
+    // Cantilevered illuminated entrance marquee
+    o.add("roof", x, g + 2.4 + 4.5, z + d * 0.46, w * 0.65, 0.8, 6.0, 0xd97706);
+    // Tall rear stage fly tower
+    const flyW = w * 0.58, flyD = d * 0.32, flyH = bodyH + 12;
+    o.add("wall", x, g + 2.4 + flyH / 2, z - d * 0.28, flyW, flyH, flyD, wall);
+    o.add("roof", x, g + 2.4 + flyH + 0.6, z - d * 0.28, flyW * 1.04, 1.2, flyD * 1.04, roof);
+  } else if (typ === "art-gallery") {
+    // Modern Art Gallery: stepped cantilevered modernist blocks, north-light sawtooth skylights
+    const bodyH = pos(h * 0.55, 10);
+    o.add("wall", x, g + 2.4 + bodyH / 2, z, w * 0.92, bodyH, d * 0.88, 0xf1f5f9);
+    // Upper cantilevered gallery block rotated/shifted
+    const upW = w * 0.78, upD = d * 0.72, upH = bodyH * 0.65;
+    o.add("wall", x + w * 0.08, g + 2.4 + bodyH + upH / 2, z - d * 0.06, upW, upH, upD, 0xe2e8f0);
+    // Sawtooth skylight roofs
+    const bays = 4;
+    const bd = upD / bays;
+    for (let i = 0; i < bays; i++) {
+      o.add("pitch", x + w * 0.08, g + 2.4 + bodyH + upH, z - d * 0.06 + (-0.5 + (i + 0.5) / bays) * upD, upW * 0.96, bd * 0.6, bd * 0.9, roof);
+    }
+  } else if (typ === "market-hall") {
+    // Historic Covered Market: triple longitudinal brick/iron arcades with raised clerestory
+    const bodyH = pos(h * 0.58, 10);
+    // Main hall
+    o.add("wall", x, g + 2.4 + bodyH / 2, z, w * 0.94, bodyH, d * 0.92, wall);
+    o.add("pitch", x, g + 2.4 + bodyH, z, w * 0.96, w * 0.25, d * 0.94, roof);
+    // Raised central clerestory lantern ridge
+    const clerW = w * 0.38, clerH = 4.0;
+    o.add(glassBucket(h), x, g + 2.4 + bodyH + w * 0.25 + clerH / 2, z, clerW, clerH, d * 0.88, wall);
+    o.add("pitch", x, g + 2.4 + bodyH + w * 0.25 + clerH, z, clerW * 1.05, 2.5, d * 0.90, roof);
+  } else {
+    // Stadium / Municipal Arena: monumental oval bowl with cantilevered roof canopy
+    const bowlH = pos(h * 0.70, 14);
+    o.add("cyl", x, g + 2.4 + bowlH / 2, z, w * 0.95, bowlH, d * 0.95, 0x94a3b8);
+    // Cantilevered oval canopy roof with open pitch center
+    o.add("cyl", x, g + 2.4 + bowlH + 2.0, z, w * 1.02, 3.0, d * 1.02, roof);
+    // Four corner pylon floodlight masts
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const px = x + sx * (w * 0.46);
+        const pz = z + sz * (d * 0.46);
+        o.add("cyl", px, g + 2.4 + (bowlH + 20) / 2, pz, 2.4, bowlH + 20, 2.4, 0x64748b);
+        o.add("roof", px, g + 2.4 + bowlH + 20 + 1, pz, 6.0, 1.5, 6.0, 0xf8fafc);
+      }
+    }
   }
 }
 

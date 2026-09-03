@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CALIPER — Kit Contact Sheet</title>
+<meta name="description" content="Visual inspection contact sheet for CALIPER asset library: every generator family matrix, planned gaps, road families, and 3-LOD footprints.">
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #0d121a;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #e6edf3;
+    -webkit-font-smoothing: antialiased;
+  }
+  canvas { display: block; }
+  
+  .panel {
+    position: fixed;
+    background: rgba(13, 18, 26, 0.85);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    z-index: 10;
+  }
+
+  #header {
+    top: 16px;
+    left: 16px;
+    padding: 14px 18px;
+    max-width: 400px;
+  }
+  #header h1 {
+    margin: 0 0 6px;
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #7cc4ff;
+    font-weight: 700;
+  }
+  #header p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #8b949e;
+  }
+
+  #filter-bar {
+    top: 16px;
+    right: 16px;
+    padding: 8px 12px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    max-width: 720px;
+  }
+  .filter-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #c9d1d9;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .filter-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+  .filter-btn.active {
+    background: #1f6feb;
+    border-color: #388bfd;
+    color: #fff;
+    font-weight: 600;
+  }
+
+  #inspector {
+    bottom: 16px;
+    left: 16px;
+    padding: 14px 18px;
+    width: 320px;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  #inspector .title {
+    font-weight: 700;
+    font-size: 13px;
+    color: #58a6ff;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 4px;
+  }
+  #inspector .row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3px;
+  }
+  #inspector .label { color: #8b949e; }
+  #inspector .val { color: #f0f6fc; font-family: monospace; }
+  #inspector .stands { color: #7ee787; font-size: 11px; }
+
+  #controls-tip {
+    bottom: 16px;
+    right: 16px;
+    padding: 10px 16px;
+    font-size: 11.5px;
+    color: #8b949e;
+  }
+  #controls-tip span { color: #c9d1d9; font-weight: 500; }
+
+  #legend-lod {
+    top: 116px;
+    left: 16px;
+    padding: 10px 14px;
+    font-size: 11px;
+    display: flex;
+    gap: 16px;
+  }
+  .lod-tag { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot-lod0 { background: #3fb950; }
+  .dot-lod1 { background: #d29922; }
+  .dot-lod2 { background: #f85149; }
+  .dot-gap { background: #8b949e; border: 1px dashed #fff; }
+</style>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.min.js"}}
+</script>
+</head>
+<body>
+
+<div id="header" class="panel">
+  <h1>Caliper &mdash; Asset Kit Contact Sheet</h1>
+  <p>Visual inspection of the five parameterised generator families, 12 civic landmark typologies, modular road kit, and planned gaps from <code>public/asset-registry.js</code>. All items show 3-LOD side-by-side over declared footprint wireframes.</p>
+</div>
+
+<div id="legend-lod" class="panel">
+  <div class="lod-tag"><div class="dot dot-lod0"></div><b>LOD0</b> Full Detail</div>
+  <div class="lod-tag"><div class="dot dot-lod1"></div><b>LOD1</b> Simplified</div>
+  <div class="lod-tag"><div class="dot dot-lod2"></div><b>LOD2</b> Envelope</div>
+  <div class="lod-tag"><div class="dot dot-gap"></div><b>PLANNED GAP</b> Wireframe</div>
+</div>
+
+<div id="filter-bar" class="panel">
+  <button class="filter-btn active" data-filter="all">All Items</button>
+  <button class="filter-btn" data-filter="roof">Roof Clutter</button>
+  <button class="filter-btn" data-filter="furniture">Street & Details</button>
+  <button class="filter-btn" data-filter="ground">Ground Details</button>
+  <button class="filter-btn" data-filter="facade">Facade & Boundaries</button>
+  <button class="filter-btn" data-filter="vegetation">Trees & Flora</button>
+  <button class="filter-btn" data-filter="people">People</button>
+  <button class="filter-btn" data-filter="vehicles">Vehicles</button>
+  <button class="filter-btn" data-filter="maritime">Maritime</button>
+  <button class="filter-btn" data-filter="airport">Airport Set</button>
+  <button class="filter-btn" data-filter="aviation">Aircraft</button>
+  <button class="filter-btn" data-filter="roads">Roads & Rail</button>
+</div>
+
+<div id="inspector" class="panel">
+  <div class="title" id="insp-title">Select an item</div>
+  <div class="row"><span class="label">ID:</span><span class="val" id="insp-id">&mdash;</span></div>
+  <div class="row"><span class="label">Status:</span><span class="val" id="insp-status">&mdash;</span></div>
+  <div class="row"><span class="label">Footprint:</span><span class="val" id="insp-foot">&mdash;</span></div>
+  <div class="row"><span class="label">Sweep:</span><span class="val" id="insp-sweep">&mdash;</span></div>
+  <div class="row"><span class="label">Height:</span><span class="val" id="insp-h">&mdash;</span></div>
+  <div class="row"><span class="label">Clearance:</span><span class="val" id="insp-clear">&mdash;</span></div>
+  <div class="row"><span class="label">LOD Tris:</span><span class="val" id="insp-tris">&mdash;</span></div>
+  <div class="row"><span class="label">Stands On:</span><span class="val stands" id="insp-stands">&mdash;</span></div>
+</div>
+
+<div id="controls-tip" class="panel">
+  <span>Left Drag</span> Orbit &bull; <span>Right Drag / Shift+Drag</span> Pan &bull; <span>Wheel</span> Zoom &bull; <span>Click</span> Inspect Item
+</div>
+
+<script type="module">
+import * as THREE from "three";
+import {
+  MODELS,
+  roofClutter,
+  streetFurniture,
+  facade,
+  boundary,
+  groundFurniture,
+  tree,
+  person,
+  vehicle,
+  vessel,
+  aircraft
+} from "./props.js";
+import * as ROADKIT from "./roadkit.js";
+import { ASSET_REGISTRY } from "./asset-registry.js";
+
+// --- Scene Setup ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d121a);
+scene.fog = new THREE.FogExp2(0x0d121a, 0.001);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 5000);
+camera.position.set(0, 80, 160);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// --- Lighting ---
+const ambient = new THREE.AmbientLight(0xffffff, 0.75);
+scene.add(ambient);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(100, 200, 100);
+dirLight.castShadow = true;
+scene.add(dirLight);
+
+const hemiLight = new THREE.HemisphereLight(0x7cc4ff, 0x1f242d, 0.5);
+scene.add(hemiLight);
+
+// --- Ground Grid Plane ---
+const gridHelper = new THREE.GridHelper(3000, 300, 0x30363d, 0x161b22);
+gridHelper.position.y = -0.01;
+scene.add(gridHelper);
+
+const groundGeo = new THREE.PlaneGeometry(3000, 3000);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x0f1520, roughness: 0.9, metalness: 0.1 });
+const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+groundMesh.rotation.x = -Math.PI / 2;
+groundMesh.position.y = -0.02;
+groundMesh.receiveShadow = true;
+scene.add(groundMesh);
+
+// --- Materials ---
+const matLOD0 = new THREE.MeshStandardMaterial({ color: 0x90caf9, roughness: 0.4, metalness: 0.2 });
+const matLOD1 = new THREE.MeshStandardMaterial({ color: 0xffb74d, roughness: 0.5, metalness: 0.1 });
+const matLOD2 = new THREE.MeshStandardMaterial({ color: 0xe57373, roughness: 0.6, metalness: 0.1 });
+
+const matRoadLOD0 = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.8, metalness: 0.1 });
+const matRoadLOD1 = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.8, metalness: 0.1 });
+const matRoadLOD2 = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness: 0.8, metalness: 0.1 });
+
+// --- Item Gathering & Matrix Generation ---
+const items = [];
+
+// 1. ROOF CLUTTER FAMILY MATRIX (6 Kinds x 3 Sizes)
+const roofKinds = ["plant", "chimney", "aerial", "dish", "solar", "ac"];
+const roofSizes = ["small", "medium", "large"];
+for (const k of roofKinds) {
+  for (const s of roofSizes) {
+    items.push({ category: "roof", model: roofClutter(k, s), isGenerator: true });
+  }
+}
+
+// 2. STREET FURNITURE FAMILY MATRIX
+const streetDefs = [
+  ["bench", "slat"], ["bench", "backless"],
+  ["bin", "round"], ["bin", "post"],
+  ["lamp", "street"], ["lamp", "pedestrian"],
+  ["shelter", "standard"], ["traffic-light", "standard"],
+  ["sign", "warning"], ["sign", "wayfinding"],
+  ["cabinet", "telecom"], ["cabinet", "power"],
+  ["mailbox", "standard"], ["hydrant", "standard"],
+  ["bollard", "standard"], ["planter", "concrete"],
+  ["bike-rack", "hoop"], ["cafe-table", "round"],
+  ["parasol", "hex"], ["market-stall", "canopy"],
+  ["playground", "slide"], ["playground", "swings"],
+  ["civic", "fountain"], ["civic", "statue"], ["civic", "flagpole"]
+];
+for (const [k, v] of streetDefs) {
+  items.push({ category: "furniture", model: streetFurniture(k, v), isGenerator: true });
+}
+
+// 3. GROUND DETAILS FAMILY MATRIX
+items.push({ category: "ground", model: groundFurniture("manhole"), isGenerator: true });
+items.push({ category: "ground", model: groundFurniture("grate"), isGenerator: true });
+
+// 4. FACADE & BOUNDARIES MATRIX
+for (const [k, widths] of Object.entries(facade.variants)) {
+  for (const w of widths) {
+    items.push({ category: "facade", model: facade(k, w), isGenerator: true });
+  }
+}
+for (const [k, lengths] of Object.entries(boundary.variants)) {
+  for (const l of lengths) {
+    items.push({ category: "facade", model: boundary(k, l), isGenerator: true });
+  }
+}
+
+// 5. TREES MATRIX (4 Species x 3 Ages)
+const treeSpecies = ["broadleaf", "conifer", "palm", "cypress"];
+const treeAges = ["sapling", "mature", "ancient"];
+for (const sp of treeSpecies) {
+  for (const ag of treeAges) {
+    items.push({ category: "vegetation", model: tree(sp, ag), isGenerator: true });
+  }
+}
+
+// 6. PEOPLE MATRIX (3 Builds x 3 Poses)
+const builds = ["adult", "child", "tall"];
+const poses = ["standing", "sitting", "walking"];
+for (const b of builds) {
+  for (const p of poses) {
+    items.push({ category: "people", model: person(b, p, "casual"), isGenerator: true });
+  }
+}
+
+// 7. VEHICLES (10 Classes)
+const vClasses = [
+  ["car", "sedan"], ["car", "suv"], ["van", "standard"],
+  ["bus", "transit"], ["truck", "box"], ["truck", "flatbed"],
+  ["taxi", "standard"], ["emergency", "ambulance"], ["bicycle", "standard"], ["motorcycle", "cruiser"]
+];
+for (const [cls, v] of vClasses) {
+  items.push({ category: "vehicles", model: vehicle(cls, v), isGenerator: true });
+}
+
+// 8. MARITIME
+const vesselClasses = ["rowboat", "sailboat", "yacht", "ferry", "container-ship", "tug"];
+for (const vc of vesselClasses) {
+  items.push({ category: "maritime", model: vessel(vc), isGenerator: true });
+}
+if (MODELS["quay-wall"]) items.push({ category: "maritime", model: MODELS["quay-wall"] });
+if (MODELS["jetty"]) items.push({ category: "maritime", model: MODELS["jetty"] });
+if (MODELS["container"]) items.push({ category: "maritime", model: MODELS["container"] });
+if (MODELS["mooring"]) items.push({ category: "maritime", model: MODELS["mooring"] });
+if (MODELS["beacon"]) items.push({ category: "maritime", model: MODELS["beacon"] });
+
+// 9. AIRPORT SET
+const airportKeys = [
+  "runway-module", "taxiway-module", "apron-stand", "jet-bridge", "blast-fence",
+  "approach-lighting", "windsock"
+];
+for (const k of airportKeys) {
+  if (MODELS[k]) items.push({ category: "airport", model: MODELS[k] });
+}
+
+// 10. AVIATION
+const planeClasses = ["light-single", "airliner-twin", "regional-jet", "helicopter"];
+for (const pc of planeClasses) {
+  items.push({ category: "aviation", model: aircraft(pc), isGenerator: true });
+}
+
+// 11. ROADS & RAIL
+items.push({ category: "roads", model: ROADKIT.straight("FREEWAY", 1) });
+items.push({ category: "roads", model: ROADKIT.straight("BOULEVARD", 1) });
+items.push({ category: "roads", model: ROADKIT.straight("AVENUE", 1) });
+items.push({ category: "roads", model: ROADKIT.straight("STREET", 1) });
+items.push({ category: "roads", model: ROADKIT.straight("LANE", 1) });
+items.push({ category: "roads", model: ROADKIT.straight("ALLEY", 1) });
+items.push({ category: "roads", model: ROADKIT.curve("STREET", 32, 90) });
+items.push({ category: "roads", model: ROADKIT.junction([
+  { class: "STREET", bearing: 0 }, { class: "STREET", bearing: 90 },
+  { class: "STREET", bearing: 180 }, { class: "STREET", bearing: 270 }
+]) });
+items.push({ category: "roads", model: ROADKIT.roundabout([
+  { class: "AVENUE", bearing: 0 }, { class: "AVENUE", bearing: 90 },
+  { class: "AVENUE", bearing: 180 }, { class: "AVENUE", bearing: 270 }
+], 16) });
+items.push({ category: "roads", model: ROADKIT.rampMerge("FREEWAY", "right") });
+items.push({ category: "roads", model: ROADKIT.levelCrossing("STREET") });
+items.push({ category: "roads", model: ROADKIT.turningHead("STREET", "bulb") });
+items.push({ category: "roads", model: ROADKIT.bridgeArch("AVENUE", 64, 16) });
+items.push({ category: "roads", model: ROADKIT.bridgeCableStayed("BOULEVARD", 160, 54) });
+items.push({ category: "roads", model: ROADKIT.causeway("FREEWAY", 2) });
+items.push({ category: "roads", model: ROADKIT.railStraight(1) });
+items.push({ category: "roads", model: ROADKIT.railPlatform(2) });
+
+const dynamicBridge = ROADKIT.bridgeSpan([0,0,0], [0,0,96], { roadClass: "AVENUE", clearance: 12 });
+if (dynamicBridge.ok) {
+  items.push({ category: "roads", model: dynamicBridge });
+}
+
+// 12. PLANNED GAPS (From ASSET_REGISTRY)
+for (const reg of ASSET_REGISTRY) {
+  if (reg.status === "planned") {
+    items.push({
+      category: reg.category,
+      isGap: true,
+      model: {
+        id: reg.id + " [PLANNED]",
+        kind: "gap",
+        footprint: { w: 3.0, d: 3.0 },
+        height: 2.0,
+        clearance: 0,
+        origin: "base-centre",
+        standsOn: ["open"],
+        note: reg.note,
+        lod: [
+          { level: 0, tris: 0, createGeometry: () => new THREE.BufferGeometry() },
+          { level: 1, tris: 0, createGeometry: () => new THREE.BufferGeometry() },
+          { level: 2, tris: 0, createGeometry: () => new THREE.BufferGeometry() }
+        ]
+      }
+    });
+  }
+}
+
+// Spatial Layout per category in separate clusters for clean framing
+const itemObjects = [];
+const categoryBounds = {};
+
+// Group by category
+const catGroups = {};
+for (const it of items) {
+  if (!catGroups[it.category]) catGroups[it.category] = [];
+  catGroups[it.category].push(it);
+}
+
+let catOffsetZ = 0;
+for (const [catName, catItems] of Object.entries(catGroups)) {
+  const COLS = Math.min(6, Math.max(3, Math.ceil(Math.sqrt(catItems.length))));
+  let curX = 0;
+  let curZ = catOffsetZ;
+  let maxRowD = 0;
+  let col = 0;
+
+  const minX = curX;
+  let maxX = curX;
+  const minZ = curZ;
+
+  for (const it of catItems) {
+    const m = it.model;
+    const foot = m.footprint;
+    const sweep = m.sweep || foot;
+    const itemW = Math.max(foot.w, sweep.w);
+    const itemD = Math.max(foot.d, sweep.d);
+
+    const lodGap = Math.max(2.5, itemW * 0.35);
+    const cellW = (itemW + lodGap) * 3 + 6;
+    const cellD = itemD + 8;
+
+    if (col >= COLS) {
+      col = 0;
+      curX = 0;
+      curZ += maxRowD + 10;
+      maxRowD = 0;
+    }
+
+    const group = new THREE.Group();
+    group.position.set(curX + cellW / 2, 0, curZ + cellD / 2);
+    group.userData = { item: it, model: m, category: catName };
+
+    const isRoad = catName === "roads" || catName === "airport";
+    const m0 = isRoad ? matRoadLOD0 : matLOD0;
+    const m1 = isRoad ? matRoadLOD1 : matLOD1;
+    const m2 = isRoad ? matRoadLOD2 : matLOD2;
+
+    const stepX = itemW + lodGap;
+    const offsets = [-stepX, 0, stepX];
+
+    if (it.isGap) {
+      // Render Gap / Planned Placeholder Box
+      const hw = foot.w / 2, hd = foot.d / 2;
+      const boxGeo = new THREE.BoxGeometry(foot.w, m.height, foot.d);
+      boxGeo.translate(0, m.height / 2, 0);
+      const wireMat = new THREE.MeshBasicMaterial({ color: 0x8b949e, wireframe: true });
+      const wireMesh = new THREE.Mesh(boxGeo, wireMat);
+      group.add(wireMesh);
+
+      // Footprint marker
+      const footGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-hw, 0.02, -hd), new THREE.Vector3(hw, 0.02, -hd),
+        new THREE.Vector3(hw, 0.02, hd), new THREE.Vector3(-hw, 0.02, hd),
+        new THREE.Vector3(-hw, 0.02, -hd),
+      ]);
+      const footLine = new THREE.Line(footGeo, new THREE.LineBasicMaterial({ color: 0xff7b72, linewidth: 2 }));
+      group.add(footLine);
+    } else {
+      // Render 3 LODs
+      for (let lIdx = 0; lIdx < 3; lIdx++) {
+        const lodDef = m.lod[lIdx] || m.lod[m.lod.length - 1];
+        const geom = lodDef.createGeometry(THREE);
+        const mat = lIdx === 0 ? m0 : lIdx === 1 ? m1 : m2;
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(offsets[lIdx], 0, 0);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+
+        // Footprint Line
+        const hw = foot.w / 2, hd = foot.d / 2;
+        const footGeo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(-hw, 0.02, -hd), new THREE.Vector3(hw, 0.02, -hd),
+          new THREE.Vector3(hw, 0.02, hd), new THREE.Vector3(-hw, 0.02, hd),
+          new THREE.Vector3(-hw, 0.02, -hd),
+        ]);
+        const footLine = new THREE.Line(footGeo, new THREE.LineBasicMaterial({ color: 0x388bfd, linewidth: 2 }));
+        footLine.position.set(offsets[lIdx], 0, 0);
+        group.add(footLine);
+
+        // Sweep Line (if wider)
+        if (m.sweep && (m.sweep.w !== foot.w || m.sweep.d !== foot.d)) {
+          const shw = m.sweep.w / 2, shd = m.sweep.d / 2;
+          const swGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(-shw, 0.04, -shd), new THREE.Vector3(shw, 0.04, -shd),
+            new THREE.Vector3(shw, 0.04, shd), new THREE.Vector3(-shw, 0.04, shd),
+            new THREE.Vector3(-shw, 0.04, -shd),
+          ]);
+          const swLine = new THREE.Line(swGeo, new THREE.LineBasicMaterial({ color: 0xd29922, linewidth: 1 }));
+          swLine.position.set(offsets[lIdx], 0, 0);
+          group.add(swLine);
+        }
+      }
+
+      // Sockets
+      if (Array.isArray(m.sockets)) {
+        for (const s of m.sockets) {
+          const sockGroup = new THREE.Group();
+          sockGroup.position.set(s.at[0] - stepX, s.at[1], s.at[2]);
+          const arrowLen = Math.max(1.5, (s.width || 8) * 0.25);
+          const arrow = new THREE.ArrowHelper(
+            new THREE.Vector3(Math.sin((s.bearing * Math.PI) / 180), 0, Math.cos((s.bearing * Math.PI) / 180)),
+            new THREE.Vector3(0, 0.1, 0),
+            arrowLen,
+            s.kind === "rail" ? 0xf2cc60 : 0x39d353,
+            arrowLen * 0.35,
+            arrowLen * 0.25
+          );
+          sockGroup.add(arrow);
+          group.add(sockGroup);
+        }
+      }
+    }
+
+    scene.add(group);
+    itemObjects.push(group);
+
+    curX += cellW + 10;
+    if (curX > maxX) maxX = curX;
+    if (cellD > maxRowD) maxRowD = cellD;
+    col++;
+  }
+
+  const maxZ = curZ + maxRowD + 10;
+  categoryBounds[catName] = {
+    center: new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2),
+    radius: Math.max(30, Math.hypot(maxX - minX, maxZ - minZ) * 0.65)
+  };
+
+  catOffsetZ = maxZ + 40;
+}
+
+// Calculate global center
+categoryBounds["all"] = {
+  center: new THREE.Vector3(120, 0, catOffsetZ / 2),
+  radius: Math.max(150, catOffsetZ * 0.55)
+};
+
+// --- Controls & Camera Framing ---
+let isDragging = false, isPanning = false;
+let prevMouseX = 0, prevMouseY = 0;
+let spherical = { radius: 180, theta: 0.5, phi: 1.05 };
+const target = new THREE.Vector3();
+
+function frameCategory(cat) {
+  const b = categoryBounds[cat] || categoryBounds["all"];
+  target.copy(b.center);
+  spherical.radius = b.radius;
+  updateCamera();
+}
+
+function updateCamera() {
+  camera.position.x = target.x + spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
+  camera.position.y = target.y + spherical.radius * Math.cos(spherical.phi);
+  camera.position.z = target.z + spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
+  camera.lookAt(target);
+}
+frameCategory("all");
+
+window.addEventListener("mousedown", (e) => {
+  if (e.target.tagName === "BUTTON" || e.target.closest(".panel")) return;
+  if (e.button === 2 || e.shiftKey) isPanning = true;
+  else isDragging = true;
+  prevMouseX = e.clientX;
+  prevMouseY = e.clientY;
+});
+
+window.addEventListener("mousemove", (e) => {
+  const dx = e.clientX - prevMouseX;
+  const dy = e.clientY - prevMouseY;
+  prevMouseX = e.clientX;
+  prevMouseY = e.clientY;
+
+  if (isDragging) {
+    spherical.theta -= dx * 0.006;
+    spherical.phi = Math.max(0.05, Math.min(Math.PI / 2 - 0.02, spherical.phi - dy * 0.006));
+    updateCamera();
+  } else if (isPanning) {
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
+    const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+
+    target.addScaledVector(right, -dx * spherical.radius * 0.001);
+    target.addScaledVector(forward, dy * spherical.radius * 0.001);
+    updateCamera();
+  }
+});
+
+window.addEventListener("mouseup", () => {
+  isDragging = false;
+  isPanning = false;
+});
+
+window.addEventListener("contextmenu", (e) => e.preventDefault());
+
+window.addEventListener("wheel", (e) => {
+  spherical.radius = Math.max(8, Math.min(2000, spherical.radius + e.deltaY * 0.15));
+  updateCamera();
+}, { passive: true });
+
+// Raycasting for Inspector
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+window.addEventListener("click", (e) => {
+  if (e.target.closest(".panel")) return;
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+
+  const intersects = raycaster.intersectObjects(scene.children, true);
+  for (const hit of intersects) {
+    let p = hit.object;
+    while (p && p.parent && p.parent !== scene) {
+      p = p.parent;
+    }
+    if (p && p.userData && p.userData.model) {
+      inspectModel(p.userData.model, p.userData.item);
+      break;
+    }
+  }
+});
+
+function inspectModel(m, it) {
+  document.getElementById("insp-title").textContent = m.id;
+  document.getElementById("insp-id").textContent = m.id;
+  document.getElementById("insp-status").textContent = it && it.isGap ? "PLANNED GAP" : it && it.isGenerator ? "GENERATOR VARIANT" : "BUILT MODEL";
+  document.getElementById("insp-foot").textContent = String(m.footprint.w) + "m × " + String(m.footprint.d) + "m";
+  document.getElementById("insp-sweep").textContent = m.sweep ? (String(m.sweep.w) + "m × " + String(m.sweep.d) + "m") : (String(m.footprint.w) + "m × " + String(m.footprint.d) + "m");
+  document.getElementById("insp-h").textContent = String(m.height) + "m";
+  document.getElementById("insp-clear").textContent = String(m.clearance ?? 0) + "m";
+  document.getElementById("insp-tris").textContent = m.lod.map((l) => l.tris).join(" / ");
+  document.getElementById("insp-stands").textContent = Array.isArray(m.standsOn) ? m.standsOn.join(", ") : "open";
+}
+
+// Category Filter Buttons
+document.querySelectorAll(".filter-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    const filter = btn.dataset.filter;
+
+    for (const grp of itemObjects) {
+      const cat = grp.userData.category;
+      grp.visible = (filter === "all" || cat === filter);
+    }
+    frameCategory(filter);
+  });
+});
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Render Loop
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+animate();
+
+if (items.length > 0) inspectModel(items[0].model, items[0]);
+</script>
+</body>
+</html>

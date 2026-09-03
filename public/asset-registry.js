@@ -1,0 +1,209 @@
+// =============================================================================
+// CALIPER — ASSET REGISTRY
+//
+// Source of truth for what the world needs vs what exists.
+// Sourcing rule:
+//   - count in thousands -> "code" (shared geometry / InstancedMesh)
+//   - seen close and count < 20 -> hand-built or CC0 import
+//   - everything else -> "code", cheapest reasonable version
+// =============================================================================
+
+/**
+ * @typedef {Object} AssetEntry
+ * @property {string} id
+ * @property {"roof"|"furniture"|"facade"|"boundary"|"ground"|"vegetation"|"people"|"vehicles"|"maritime"|"aviation"|"airport"|"roads"|"civic"} category
+ * @property {"built"|"planned"|"generator"|"skipped"} status
+ * @property {"code"|"import"} source
+ * @property {"close"|"mid"|"far"} seenAs
+ * @property {number} count Estimated instances across the 26 km world
+ * @property {string} [generator] Generator function name if produced by a family
+ * @property {string} [note] Design or sourcing rationale
+ */
+
+/** @type {AssetEntry[]} */
+export const ASSET_REGISTRY = [
+  // --- 1. ROOF CLUTTER (18,758 Roofs - Skyline Silhouette) ---
+  { id: "roof-plant", category: "roof", status: "generator", source: "code", seenAs: "far", count: 4200, generator: "roofClutter('plant', size)", note: "Commercial HVAC chillers and air handling units" },
+  { id: "chimney", category: "roof", status: "generator", source: "code", seenAs: "mid", count: 12500, generator: "roofClutter('chimney', size)", note: "Residential brick stacks and terracotta pots" },
+  { id: "aerial", category: "roof", status: "generator", source: "code", seenAs: "mid", count: 8600, generator: "roofClutter('aerial', size)", note: "VHF/UHF communication aerials and rooftop masts" },
+  { id: "satellite-dish", category: "roof", status: "generator", source: "code", seenAs: "mid", count: 6400, generator: "roofClutter('dish', size)", note: "Parabolic satellite transceivers" },
+  { id: "solar-panel", category: "roof", status: "generator", source: "code", seenAs: "far", count: 9800, generator: "roofClutter('solar', size)", note: "Photovoltaic panel arrays" },
+  { id: "ac-unit", category: "roof", status: "generator", source: "code", seenAs: "close", count: 14000, generator: "roofClutter('ac', size)", note: "Wall and rooftop split condensing units" },
+  { id: "water-tower-roof", category: "roof", status: "built", source: "code", seenAs: "far", count: 850, note: "Rooftop wooden/steel water storage tanks" },
+  { id: "elevator-overrun", category: "roof", status: "built", source: "code", seenAs: "far", count: 3200, note: "Lift motor room roof structures" },
+
+  // --- 2. STREET FURNITURE & CIVIC DETAILS ---
+  { id: "bench-slat", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 2400, generator: "streetFurniture('bench', 'slat')", note: "Standard slatted public bench" },
+  { id: "bench-backless", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 1200, generator: "streetFurniture('bench', 'backless')", note: "Plaza backless bench" },
+  { id: "bin-round", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 3100, generator: "streetFurniture('bin', 'round')", note: "Cylindrical litter receptacle" },
+  { id: "bin-post", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 1800, generator: "streetFurniture('bin', 'post')", note: "Post-mounted public litter bin" },
+  { id: "bus-shelter", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 650, generator: "streetFurniture('shelter', 'standard')", note: "Glazed transit shelter with seating" },
+  { id: "lamp-street", category: "furniture", status: "generator", source: "code", seenAs: "mid", count: 5200, generator: "streetFurniture('lamp', 'street')", note: "Arched highway and street luminaire" },
+  { id: "lamp-pedestrian", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 3800, generator: "streetFurniture('lamp', 'pedestrian')", note: "Ornate sidewalk lantern column" },
+  { id: "traffic-light", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 1100, generator: "streetFurniture('traffic-light', 'standard')", note: "Intersection signal mast" },
+  { id: "sign-warning", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 1800, generator: "streetFurniture('sign', 'warning')", note: "Triangular highway warning sign" },
+  { id: "sign-wayfinding", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 950, generator: "streetFurniture('sign', 'wayfinding')", note: "Pedestrian fingerpost navigation" },
+  { id: "utility-cabinet-telecom", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 1400, generator: "streetFurniture('cabinet', 'telecom')", note: "Telecom fiber distribution hub" },
+  { id: "utility-cabinet-power", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 900, generator: "streetFurniture('cabinet', 'power')", note: "Electrical substation kiosk" },
+  { id: "market-stall", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 240, generator: "streetFurniture('market-stall', 'canopy')", note: "Market square retail stall" },
+  { id: "playground-slide", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 180, generator: "streetFurniture('playground', 'slide')", note: "Park playground chute" },
+  { id: "playground-swings", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 180, generator: "streetFurniture('playground', 'swings')", note: "Park playground A-frame swings" },
+  { id: "fountain", category: "furniture", status: "generator", source: "code", seenAs: "mid", count: 75, generator: "streetFurniture('civic', 'fountain')", note: "Tiered civic stone fountain" },
+  { id: "statue", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 45, generator: "streetFurniture('civic', 'statue')", note: "Memorial bronze statue on stone plinth" },
+  { id: "flagpole", category: "furniture", status: "generator", source: "code", seenAs: "mid", count: 320, generator: "streetFurniture('civic', 'flagpole')", note: "Civic flagpole with banner" },
+  { id: "mailbox", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 1600, generator: "streetFurniture('mailbox', 'standard')", note: "Postal collection box" },
+  { id: "hydrant", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 2200, generator: "streetFurniture('hydrant', 'standard')", note: "Fire hydrant pillar" },
+  { id: "bollard", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 6400, generator: "streetFurniture('bollard', 'standard')", note: "Cast iron security bollard" },
+  { id: "planter", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 1900, generator: "streetFurniture('planter', 'concrete')", note: "Concrete street planter box" },
+  { id: "bike-rack", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 1100, generator: "streetFurniture('bike-rack', 'hoop')", note: "Inverted-U bicycle parking hoop" },
+  { id: "cafe-table", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 850, generator: "streetFurniture('cafe-table', 'round')", note: "Sidewalk cafe table and chairs" },
+  { id: "parasol", category: "furniture", status: "generator", source: "code", seenAs: "close", count: 700, generator: "streetFurniture('parasol', 'hex')", note: "Outdoor dining parasol" },
+  { id: "kiosk-newspaper", category: "furniture", status: "built", source: "code", seenAs: "close", count: 120, note: "Street newspaper and tobacco kiosk" },
+  { id: "public-toilet", category: "furniture", status: "built", source: "code", seenAs: "close", count: 80, note: "Automated public convenience pod" },
+
+  // --- 3. GROUND DETAILS ---
+  { id: "manhole", category: "ground", status: "generator", source: "code", seenAs: "close", count: 7800, generator: "groundFurniture('manhole')", note: "Cast iron drainage manhole cover" },
+  { id: "drain-grating", category: "ground", status: "generator", source: "code", seenAs: "close", count: 9200, generator: "groundFurniture('grate')", note: "Gutter stormwater drainage grating" },
+  { id: "paving-tactile", category: "ground", status: "built", source: "code", seenAs: "close", count: 4500, generator: "groundFurniture('tactile')", note: "Pedestrian blister paving crossing slabs" },
+
+  // --- 4. FACADE ELEMENTS ---
+  { id: "awning", category: "facade", status: "generator", source: "code", seenAs: "close", count: 3200, generator: "facade('awning', width)", note: "Fabric retail shop awning" },
+  { id: "shopfront", category: "facade", status: "generator", source: "code", seenAs: "close", count: 2800, generator: "facade('shopfront', width)", note: "Glazed ground-floor commercial shopfront" },
+  { id: "shutters", category: "facade", status: "generator", source: "code", seenAs: "mid", count: 8900, generator: "facade('shutters', width)", note: "External window louvre shutters" },
+  { id: "balcony", category: "facade", status: "generator", source: "code", seenAs: "mid", count: 6400, generator: "facade('balcony', width)", note: "Cantilevered apartment balcony with balustrade" },
+  { id: "fire-escape", category: "facade", status: "built", source: "code", seenAs: "mid", count: 450, note: "External steel fire escape stairs" },
+
+  // --- 5. BOUNDARIES & WALLS ---
+  { id: "fence-iron", category: "boundary", status: "generator", source: "code", seenAs: "close", count: 4800, generator: "boundary('fence-iron', length)", note: "Spear-topped wrought iron railing" },
+  { id: "fence-picket", category: "boundary", status: "generator", source: "code", seenAs: "close", count: 6200, generator: "boundary('fence-picket', length)", note: "Residential timber picket fence" },
+  { id: "gate-iron", category: "boundary", status: "generator", source: "code", seenAs: "close", count: 1800, generator: "boundary('gate-iron', length)", note: "Double swing garden gate" },
+  { id: "hedge", category: "boundary", status: "generator", source: "code", seenAs: "mid", count: 8400, generator: "boundary('hedge', length)", note: "Formal trimmed evergreen hedge" },
+  { id: "wall-garden", category: "boundary", status: "generator", source: "code", seenAs: "close", count: 5600, generator: "boundary('wall-garden', length)", note: "Coursed brick boundary wall" },
+  { id: "wall-retaining", category: "boundary", status: "built", source: "code", seenAs: "mid", count: 1200, note: "Concrete gravity retaining wall" },
+
+  // --- 6. VEGETATION (4 Species x 3 Ages) ---
+  { id: "tree-broadleaf", category: "vegetation", status: "generator", source: "code", seenAs: "mid", count: 14000, generator: "tree('broadleaf', age)", note: "Deciduous shade tree" },
+  { id: "tree-conifer", category: "vegetation", status: "generator", source: "code", seenAs: "mid", count: 9000, generator: "tree('conifer', age)", note: "Pine and evergreen conifer" },
+  { id: "tree-palm", category: "vegetation", status: "generator", source: "code", seenAs: "mid", count: 4200, generator: "tree('palm', age)", note: "Coastal date palm" },
+  { id: "tree-cypress", category: "vegetation", status: "generator", source: "code", seenAs: "mid", count: 3600, generator: "tree('cypress', age)", note: "Columnar Mediterranean cypress" },
+  { id: "bush-flowering", category: "vegetation", status: "built", source: "code", seenAs: "close", count: 5000, note: "Park shrubbery and flower beds" },
+
+  // --- 7. PEOPLE (3 Builds x 3 Poses) ---
+  { id: "person-adult", category: "people", status: "generator", source: "code", seenAs: "close", count: 4800, generator: "person('adult', pose, style)", note: "Pedestrian adult resident" },
+  { id: "person-child", category: "people", status: "generator", source: "code", seenAs: "close", count: 1200, generator: "person('child', pose, style)", note: "Child / youth" },
+  { id: "person-tall", category: "people", status: "generator", source: "code", seenAs: "close", count: 800, generator: "person('tall', pose, style)", note: "Tall adult" },
+
+  // --- 8. VEHICLES (10 Classes) ---
+  { id: "vehicle-car", category: "vehicles", status: "generator", source: "code", seenAs: "mid", count: 6200, generator: "vehicle('car', type)", note: "Sedan and SUV consumer automobiles" },
+  { id: "vehicle-van", category: "vehicles", status: "generator", source: "code", seenAs: "mid", count: 1400, generator: "vehicle('van', type)", note: "Commercial delivery van" },
+  { id: "vehicle-bus", category: "vehicles", status: "generator", source: "code", seenAs: "far", count: 450, generator: "vehicle('bus', type)", note: "Public transit municipal bus" },
+  { id: "vehicle-truck", category: "vehicles", status: "generator", source: "code", seenAs: "far", count: 720, generator: "vehicle('truck', type)", note: "Box and flatbed heavy goods trucks" },
+  { id: "vehicle-taxi", category: "vehicles", status: "generator", source: "code", seenAs: "mid", count: 680, generator: "vehicle('taxi', type)", note: "City taxi cab" },
+  { id: "vehicle-emergency", category: "vehicles", status: "generator", source: "code", seenAs: "mid", count: 120, generator: "vehicle('emergency', type)", note: "Ambulance and fire rescue" },
+  { id: "vehicle-bicycle", category: "vehicles", status: "generator", source: "code", seenAs: "close", count: 1800, generator: "vehicle('bicycle', type)", note: "Commuter bicycle" },
+  { id: "vehicle-motorcycle", category: "vehicles", status: "generator", source: "code", seenAs: "close", count: 540, generator: "vehicle('motorcycle', type)", note: "Motorcycle and scooter" },
+
+  // --- 9. MARITIME INFRASTRUCTURE & VESSELS ---
+  { id: "vessel-rowboat", category: "maritime", status: "generator", source: "code", seenAs: "close", count: 80, generator: "vessel('rowboat')", note: "Small recreational dinghy" },
+  { id: "vessel-sailboat", category: "maritime", status: "generator", source: "code", seenAs: "mid", count: 120, generator: "vessel('sailboat')", note: "Single-masted yacht with sails" },
+  { id: "vessel-yacht", category: "maritime", status: "generator", source: "code", seenAs: "mid", count: 65, generator: "vessel('yacht')", note: "Cabin cruiser motor yacht" },
+  { id: "vessel-ferry", category: "maritime", status: "generator", source: "code", seenAs: "far", count: 18, generator: "vessel('ferry')", note: "Double-ended passenger ferry" },
+  { id: "vessel-container-ship", category: "maritime", status: "generator", source: "code", seenAs: "far", count: 8, generator: "vessel('container-ship')", note: "Cargo vessel with container stacks" },
+  { id: "vessel-tug", category: "maritime", status: "generator", source: "code", seenAs: "mid", count: 14, generator: "vessel('tug')", note: "Harbour towing tugboat" },
+  { id: "quay-wall", category: "maritime", status: "built", source: "code", seenAs: "mid", count: 850, note: "Hard stone harbour retaining quay" },
+  { id: "jetty", category: "maritime", status: "built", source: "code", seenAs: "mid", count: 95, note: "Timber pile landing jetty" },
+  { id: "mooring", category: "maritime", status: "built", source: "code", seenAs: "close", count: 420, note: "Harbour cast mooring bollard" },
+  { id: "beacon", category: "maritime", status: "built", source: "code", seenAs: "far", count: 24, note: "Harbour navigational light beacon" },
+  { id: "buoy-navigation", category: "maritime", status: "built", source: "code", seenAs: "mid", count: 40, note: "Channel marker floating buoy" },
+  { id: "dry-dock", category: "maritime", status: "built", source: "code", seenAs: "far", count: 6, note: "Masonry graving dock basin with caisson gate" },
+
+  // --- 10. AIRPORT SET & AVIATION ---
+  { id: "runway-module", category: "airport", status: "built", source: "code", seenAs: "far", count: 64, note: "45m runway segment with centerline markings" },
+  { id: "taxiway-module", category: "airport", status: "built", source: "code", seenAs: "far", count: 80, note: "23m taxiway segment with guidance line" },
+  { id: "apron-stand", category: "airport", status: "built", source: "code", seenAs: "far", count: 28, note: "Aircraft parking stand with stop bars" },
+  { id: "jet-bridge", category: "airport", status: "built", source: "code", seenAs: "mid", count: 24, note: "Articulated passenger boarding bridge" },
+  { id: "blast-fence", category: "airport", status: "built", source: "code", seenAs: "mid", count: 45, note: "Jet blast deflector screen" },
+  { id: "approach-lighting", category: "airport", status: "built", source: "code", seenAs: "far", count: 32, note: "Elevated ALS approach lighting stanchions" },
+  { id: "windsock", category: "airport", status: "built", source: "code", seenAs: "close", count: 12, note: "Airfield windsock" },
+  { id: "radar-tower", category: "airport", status: "built", source: "code", seenAs: "far", count: 4, note: "Rotating airport surveillance radar" },
+  { id: "aircraft-light-single", category: "aviation", status: "generator", source: "code", seenAs: "mid", count: 40, generator: "aircraft('light-single')", note: "Single-engine Cessna propeller aircraft" },
+  { id: "aircraft-airliner-twin", category: "aviation", status: "generator", source: "code", seenAs: "far", count: 25, generator: "aircraft('airliner-twin')", note: "Narrow-body twin-jet passenger airliner" },
+  { id: "aircraft-regional-jet", category: "aviation", status: "generator", source: "code", seenAs: "far", count: 18, generator: "aircraft('regional-jet')", note: "Regional commuter airliner" },
+  { id: "aircraft-helicopter", category: "aviation", status: "generator", source: "code", seenAs: "mid", count: 12, generator: "aircraft('helicopter')", note: "Civil transport helicopter" },
+
+  // --- 11. ROADS & RAIL (Modular Kit) ---
+  { id: "road-straight", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 8400, generator: "straight(class, modules)", note: "Straight road modules (Freeway to Alley)" },
+  { id: "road-curve", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 3200, generator: "curve(class, radius, arc)", note: "Curved road segments" },
+  { id: "road-junction", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 2400, generator: "junction(branches)", note: "Multi-way street intersections" },
+  { id: "road-roundabout", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 180, generator: "roundabout(arms, radius)", note: "Civic traffic circular junctions" },
+  { id: "road-ramp-merge", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 140, generator: "rampMerge(class, side)", note: "Freeway slip road merges" },
+  { id: "road-level-crossing", category: "roads", status: "generator", source: "code", seenAs: "close", count: 48, generator: "levelCrossing(class)", note: "Rail-road grade crossing" },
+  { id: "road-turning-head", category: "roads", status: "generator", source: "code", seenAs: "close", count: 380, generator: "turningHead(class, type)", note: "Cul-de-sac turnaround bulb" },
+  { id: "bridge-span", category: "roads", status: "generator", source: "code", seenAs: "far", count: 35, generator: "bridgeSpan(a, b, opts)", note: "Dynamic bridge engine (beam, arch, cablestay, causeway)" },
+  { id: "rail-straight", category: "roads", status: "generator", source: "code", seenAs: "mid", count: 1800, generator: "railStraight(modules)", note: "Dual steel rail track with ties & ballast" },
+  { id: "rail-platform", category: "roads", status: "generator", source: "code", seenAs: "close", count: 65, generator: "railPlatform(modules)", note: "Station passenger platform" },
+
+  // --- 12. CIVIC BUILDINGS (12 Landmark Silhouette Typologies) ---
+  { id: "civic-capitol", category: "civic", status: "built", source: "code", seenAs: "far", count: 4, note: "Town Hall / Capitol: portico, drum, dome and lantern" },
+  { id: "civic-cathedral", category: "civic", status: "built", source: "code", seenAs: "far", count: 6, note: "Cathedral: Latin cross basilica, nave, transepts, twin western towers" },
+  { id: "civic-station", category: "civic", status: "built", source: "code", seenAs: "far", count: 8, note: "Grand Terminus: headhouse, colossal barrel shed, campanile clock tower" },
+  { id: "civic-library", category: "civic", status: "built", source: "code", seenAs: "far", count: 12, note: "National Library / Museum: peristyle colonnade, rotunda dome" },
+  { id: "civic-opera", category: "civic", status: "built", source: "code", seenAs: "far", count: 4, note: "Opera House: tiered shell, glass foyer podium, rear stage fly tower" },
+  { id: "civic-courthouse", category: "civic", status: "built", source: "code", seenAs: "far", count: 6, note: "Courthouse / Palace of Justice: rusticated base, hexastyle portico, pediment" },
+  { id: "civic-hospital", category: "civic", status: "built", source: "code", seenAs: "far", count: 8, note: "General Hospital: emergency ramp, ward blocks, helipad pavilion" },
+  { id: "civic-university", category: "civic", status: "built", source: "code", seenAs: "far", count: 6, note: "University Hall: quadrangles, cloister arches, collegiate gothic tower" },
+  { id: "civic-theatre", category: "civic", status: "built", source: "code", seenAs: "mid", count: 10, note: "Civic Playhouse: marquee entrance, arched proscenium massing" },
+  { id: "civic-art-gallery", category: "civic", status: "built", source: "code", seenAs: "far", count: 6, note: "Modern Art Pavilion: sculpted cantilevers, skylight roof sheds" },
+  { id: "civic-market-hall", category: "civic", status: "built", source: "code", seenAs: "mid", count: 8, note: "Historic Market Hall: iron/brick arcades with raised clerestory" },
+  { id: "civic-stadium", category: "civic", status: "built", source: "code", seenAs: "far", count: 2, note: "Municipal Stadium: tiered oval bowl with cantilevered canopy trusses" },
+];
+
+/**
+ * Summary breakdown of registry items by status and category.
+ */
+export function registrySummary() {
+  let built = 0;
+  let planned = 0;
+  let skipped = 0;
+  let generator = 0;
+  const byCategory = {};
+
+  for (const entry of ASSET_REGISTRY) {
+    if (entry.status === "built") built++;
+    else if (entry.status === "generator") { generator++; built++; }
+    else if (entry.status === "planned") planned++;
+    else if (entry.status === "skipped") skipped++;
+
+    if (!byCategory[entry.category]) {
+      byCategory[entry.category] = { built: 0, planned: 0, skipped: 0, generator: 0, total: 0 };
+    }
+    const cat = byCategory[entry.category];
+    cat.total++;
+    if (entry.status === "built") cat.built++;
+    else if (entry.status === "generator") { cat.generator++; cat.built++; }
+    else if (entry.status === "planned") cat.planned++;
+    else if (entry.status === "skipped") cat.skipped++;
+  }
+
+  return {
+    totalItems: ASSET_REGISTRY.length,
+    built,
+    generators: generator,
+    planned,
+    skipped,
+    byCategory,
+  };
+}
+
+if (typeof process !== "undefined" && process.argv[1] && process.argv[1].replace(/\\/g, "/").includes("asset-registry.js")) {
+  const summary = registrySummary();
+  console.log("CALIPER ASSET REGISTRY SUMMARY:");
+  console.log("  Total Registered: " + summary.totalItems);
+  console.log("  Built / Generators: " + summary.built);
+  console.log("  Planned (Gaps): " + summary.planned);
+  console.log("  Skipped: " + summary.skipped);
+  console.log("\nBy Category:");
+  for (const [cat, data] of Object.entries(summary.byCategory)) {
+    console.log("  - " + cat.padEnd(12) + ": " + data.built + " built (" + data.generator + " gen), " + data.planned + " planned");
+  }
+}
