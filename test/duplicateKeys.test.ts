@@ -38,7 +38,28 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as acorn from "acorn";
 
-const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
+// THE SUITE BUNDLES EACH TEST INTO test/.built/, so import.meta.url points
+// THERE, not at test/. The first version of this file did
+// join(HERE, "..", "public") and looked for test/public, which does not exist --
+// so the check that was written to catch a defect spent its first run failing
+// for a reason of its own.
+//
+// Both rendererStatic.test.ts and publicClaims.test.ts already say this, the
+// first in a comment at the top of the file and the second in a repoRoot()
+// walker written for exactly this. The convention was there to be read.
+const HERE = dirname(fileURLToPath(import.meta.url));
+function repoRoot(): string {
+  let dir = HERE;
+  for (let up = 0; up < 6; up++) {
+    try {
+      readFileSync(join(dir, "public", "index.html"), "utf8");
+      return dir;
+    } catch { /* not this level */ }
+    dir = join(dir, "..");
+  }
+  throw new Error("could not locate the repo root from " + HERE);
+}
+const PUBLIC = join(repoRoot(), "public");
 
 /** Every hand-written module. vendor/ is other people's code, minified. */
 function ourModules() {

@@ -135,6 +135,29 @@ console.log(
 // A number that is measured in one file and asserted in another needs exactly
 // one writer. This is it.
 // =============================================================================
+// A COUNT FROM A RED RUN IS NOT A VERIFICATION CLAIM.
+//
+// This script updated the page on a run that reported "(1 fail)", so the public
+// sentence "Continuous Verification: 644 Node tests ... run against this
+// repository" was published from a suite that was failing. The number was even
+// correct. That is not the point: the sentence claims the tests PASS, and a
+// script that writes it while they do not is manufacturing the exact kind of
+// green-looking evidence this project exists to argue against -- and it was
+// written, an hour earlier, to fix a different honesty defect in the same line.
+//
+// The record still gets written, because nodeFail is a measurement and hiding it
+// would be worse. The PAGE does not, and the non-zero exit means a script run in
+// a chain stops there rather than carrying on to a deploy.
+if (fail > 0 || workerFail > 0) {
+  console.error(
+    `\n### NOT updating public/index.html: ${fail} node and ${workerFail} worker tests FAILED.\n` +
+    "### The count was recorded, because a failure is a measurement. The public\n" +
+    "### claim was not, because it says the suite passes. Fix the suite, then\n" +
+    "### run this again.",
+  );
+  process.exit(1);
+}
+
 const page = join(ROOT, "public", "index.html");
 let html = readFileSync(page, "utf8");
 const before = html;

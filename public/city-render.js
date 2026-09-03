@@ -2081,9 +2081,32 @@ function buildProps(api) {
       scene.add(inst);
       return list.length;
     };
-    const nBin = put(new THREE.CylinderGeometry(0.32, 0.28, 1.0, 6), M(0x3f4a44, 0.7), spots.bin, 0.5, false);
-    const nBench = put(new THREE.BoxGeometry(1.8, 0.45, 0.55), M(0xa9835a, 0.85), spots.bench, 0.35, true);
-    const nShel = put(new THREE.BoxGeometry(3.6, 2.5, 1.4), M(0x9fc4dd, 0.25, 0.4), spots.shelter, 1.25, true);
+    // THE SAME STRING NOW CLAIMS THE GROUND AND DRAWS THE THING.
+    //
+    // Twenty lines up, claimProp("bin", ...) decides whether this square metre
+    // is free. Here, propGeometry("bin", ...) decides what stands on it. Until
+    // prop-models.js those were a manifest id and a hand-written primitive with
+    // nothing holding them together, and they had already drifted:
+    //
+    //   bin      CylinderGeometry(0.32, 0.28, 1.0, 6)   a six-sided tube
+    //   bench    BoxGeometry(1.8, 0.45, 0.55)           a box
+    //   shelter  BoxGeometry(3.6, 2.5, 1.4)             a box
+    //
+    // yOff was the tell. It lifted each primitive by half its own height to
+    // stand it on the ground -- 0.5 for a 1.0 m bin, 1.25 for a 2.5 m shelter,
+    // both exactly right. The bench got 0.35 for a 0.45 m box, which is half of
+    // 0.7, not half of 0.45: every bench in the downtown core stood 12.5 cm in
+    // the air. Nothing could see it, because the number that was wrong lived at
+    // a call site and the height it was meant to halve lived in a constructor
+    // argument on the same line.
+    //
+    // The library's origin is "base-centre" -- (0,0,0) is the centre of the
+    // footprint AT GROUND LEVEL -- so there is no lift to get wrong any more.
+    // yOff is 0 for all three, and that is not a tuning choice, it is what the
+    // model contract in docs/WORLD-RULES.md section 4 already says.
+    const nBin = put(propGeometry("bin", THREE), M(0x3f4a44, 0.7), spots.bin, 0, false);
+    const nBench = put(propGeometry("bench", THREE), M(0xa9835a, 0.85), spots.bench, 0, true);
+    const nShel = put(propGeometry("busShelter", THREE), M(0x9fc4dd, 0.25, 0.4), spots.shelter, 0, true);
     stats.streetFurniture = nBin + nBench + nShel;
     // Refusals are a fact about the world, reported rather than swallowed --
     // the same reasoning as refusedWhy for buildings. An empty object here

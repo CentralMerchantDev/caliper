@@ -19,8 +19,33 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PROPS } from "../public/prop-manifest.js";
-import { MODEL_FOR, propModel, propGeometry, modelCoverage, disposePropGeometry } from "../public/prop-models.js";
+import { VARIED, propModel, propGeometry, modelCoverage, disposePropGeometry } from "../public/prop-models.js";
+import { MODELS } from "../public/props.js";
 import * as THREE from "three";
+
+/** Every manifest id: the twelve things city-render can claim ground for. */
+const MANIFEST_IDS = Object.keys(PROPS);
+
+test("the LIBRARY declares the join, and still does", () => {
+  // This is the load-bearing one, and it is the reason this file no longer
+  // carries a hand-written mapping table.
+  //
+  // props.js ends with an alias block -- MODELS["bench"] = MODELS["bench-slat"]
+  // and eight more -- so every manifest id resolves through the library by its
+  // own name. The first version of prop-models.js wrote that mapping out again
+  // by hand, which meant two tables that had to agree and no way to notice when
+  // they stopped.
+  //
+  // If agy removes or renames an alias, resolution would silently fall through
+  // to whatever the seeded path or a stale entry produced. This makes that a
+  // failure with a name in it instead.
+  const unresolvable = MANIFEST_IDS.filter((id) => !VARIED[id] && !MODELS[id]);
+  assert.deepEqual(
+    unresolvable, [],
+    "props.js no longer resolves these manifest ids by name -- check the alias " +
+    `block at the foot of props.js: ${unresolvable.join(", ")}`,
+  );
+});
 
 test("every prop the world can place has a model to draw it", () => {
   const c = modelCoverage();
@@ -28,20 +53,23 @@ test("every prop the world can place has a model to draw it", () => {
   assert.equal(c.covered, c.total, `${c.covered} of ${c.total} manifest props have a model`);
 });
 
-test("and the table has no entries for props that do not exist", () => {
-  // An orphan is a rename that half-landed: the manifest moved on and this table
-  // still points at the old name. Harmless to render, and a lie about coverage.
+test("nothing is seeded that is not a prop", () => {
+  // A VARIED entry for an id the manifest has never heard of is a rename that
+  // half-landed. Harmless to render, and a lie about what varies.
   const c = modelCoverage();
-  assert.deepEqual(c.orphans, [], `MODEL_FOR names props that are not in the manifest: ${c.orphans.join(", ")}`);
+  assert.deepEqual(
+    c.variedButNotAProp, [],
+    `VARIED names things that are not in prop-manifest.js: ${c.variedButNotAProp.join(", ")}`,
+  );
 });
 
 test("what the model CLAIMS and what it DRAWS are the same size", () => {
-  // Static ids only: the generated families (tree, car, person) are declared
+  // Static ids only: the seeded families (tree, car, person) are declared
   // `sized: true` in the manifest, meaning the caller scales them per instance,
   // so there is no single footprint to compare against.
   const disagreements: string[] = [];
-  for (const [id, entry] of Object.entries(MODEL_FOR)) {
-    if (entry.gen) continue;
+  for (const id of MANIFEST_IDS) {
+    if (VARIED[id]) continue;
     const manifest = (PROPS as any)[id];
     if (!manifest || manifest.sized) continue;
     const model: any = propModel(id);
@@ -62,7 +90,7 @@ test("what the model CLAIMS and what it DRAWS are the same size", () => {
 
 test("every prop builds real geometry, with real triangles", () => {
   disposePropGeometry();
-  for (const id of Object.keys(MODEL_FOR)) {
+  for (const id of MANIFEST_IDS) {
     const g: any = propGeometry(id, THREE, { seed: 0 });
     assert.ok(g, `${id} produced no geometry`);
     const pos = g.getAttribute?.("position");
