@@ -66,22 +66,62 @@ export function createNavigation(renderer, doc = document) {
       e.preventDefault();
       focusAt(e.clientX, e.clientY);
     });
-    // F focuses whatever the pointer is over, which is the keyboard equivalent
-    // and the convention in every 3D tool this borrows from.
-    let lastX = 0, lastY = 0;
+    // DOUBLE-TAP, because a touchscreen produces no dblclick.
+    //
+    // A blind audit measured this: two taps on a 390x844 touch context left the
+    // camera untouched, so on a phone the only way to set the pivot was the
+    // degraded Set Pivot path. Tracked by hand: two taps, within 320ms and 24px
+    // of each other, is a double-tap. The distance test is what stops a quick
+    // pan being read as one.
+    let lastTap = 0, lastTapX = 0, lastTapY = 0;
+    canvas.addEventListener("pointerup", (e) => {
+      if (e.pointerType !== "touch") return;
+      const now = performance.now();
+      if (now - lastTap < 320 && Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < 24) {
+        lastTap = 0;
+        focusAt(e.clientX, e.clientY);
+        return;
+      }
+      lastTap = now; lastTapX = e.clientX; lastTapY = e.clientY;
+    });
+
+    // F focuses whatever the pointer is over.
+    //
+    // It used to return early when no pointermove had been seen, which made the
+    // "keyboard equivalent" require a mouse first -- so for a keyboard-only
+    // visitor it did nothing at all, silently. With no pointer position yet, the
+    // centre of the view is the honest reading of "whatever I am looking at".
+    let lastX = null, lastY = null;
     canvas.addEventListener("pointermove", (e) => { lastX = e.clientX; lastY = e.clientY; }, { passive: true });
     doc.addEventListener("keydown", (e) => {
       if (e.key !== "f" && e.key !== "F") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      if (!lastX && !lastY) return;
-      focusAt(lastX, lastY);
+      const r = canvas.getBoundingClientRect();
+      focusAt(lastX ?? (r.left + r.width / 2), lastY ?? (r.top + r.height / 2));
     });
   }
 
-  $("nav-clear-pivot")?.addEventListener("click", () => {
-    renderer.hidePivotMarker?.();
+  // The button's tooltip says "Face north (N)". It said that before anything
+  // was bound to N, which is an advertised control that does not exist.
+  doc.addEventListener("keydown", (e) => {
+    if (e.key !== "n" && e.key !== "N") return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    $("nav-north-up")?.click();
+  });
+
+  $("nav-clear-pivot")?.addEventListener("click", (e) => {
+    // The 2D fallback renderer defines no hidePivotMarker, and the facade
+    // guards the call -- so on that path the button did nothing and still
+    // announced success. Report what actually happened.
+    if (typeof renderer.hidePivotMarker !== "function") {
+      flash("no orbit marker in this view", e.clientX || 20, e.clientY || 20);
+      return;
+    }
+    renderer.hidePivotMarker();
     announce("Orbit marker cleared");
   });
 
@@ -101,6 +141,7 @@ export function createNavigation(renderer, doc = document) {
 
   /* ------------------------------------------------------------ range slider -- */
 
+  let sliderTimer = null;
   const slider = $("nav-zoom-slider");
   if (slider) {
     // The slider is logarithmic. The range runs from about 4 m to tens of
@@ -118,7 +159,7 @@ export function createNavigation(renderer, doc = document) {
     });
     // Keep the handle honest when the camera moves by scroll, pinch or focus --
     // a control that lies about the current value is worse than no control.
-    setInterval(() => {
+    sliderTimer = setInterval(() => {
       if (selfMove) return;
       const now = readDist();
       if (!now) return;
@@ -186,7 +227,10 @@ export function createNavigation(renderer, doc = document) {
   function announce(msg) { live.textContent = msg; }
 
   return {
-    destroy() { clearInterval(timer); },
+    // Both intervals. destroy() used to clear only the readout timer and leave
+    // the slider's 400ms poll running, so the teardown the API advertised was
+    // half a teardown.
+    destroy() { clearInterval(timer); clearInterval(sliderTimer); },
     focusAt,
   };
 }
