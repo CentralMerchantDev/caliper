@@ -19,7 +19,7 @@
   
   .panel {
     position: fixed;
-    background: rgba(13, 18, 26, 0.82);
+    background: rgba(13, 18, 26, 0.85);
     backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
@@ -55,7 +55,7 @@
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
-    max-width: 600px;
+    max-width: 680px;
   }
   .filter-btn {
     background: rgba(255, 255, 255, 0.06);
@@ -113,7 +113,7 @@
   #controls-tip span { color: #c9d1d9; font-weight: 500; }
 
   #legend-lod {
-    top: 96px;
+    top: 108px;
     left: 16px;
     padding: 10px 14px;
     font-size: 11px;
@@ -134,7 +134,7 @@
 
 <div id="header" class="panel">
   <h1>Caliper &mdash; Asset Kit Contact Sheet</h1>
-  <p>Visual inspection of every parameterised model, road family, bridge, and variant. All pieces show LOD0 (left), LOD1 (mid), and LOD2 (right) over declared footprint wireframes.</p>
+  <p>Visual inspection of every parameterised model, roof clutter, airport piece, road family, and variant. All pieces show LOD0 (left), LOD1 (mid), and LOD2 (right) over declared footprint wireframes.</p>
 </div>
 
 <div id="legend-lod" class="panel">
@@ -145,12 +145,15 @@
 
 <div id="filter-bar" class="panel">
   <button class="filter-btn active" data-filter="all">All Items</button>
-  <button class="filter-btn" data-filter="furniture">Street Furniture</button>
+  <button class="filter-btn" data-filter="roof">Roof Clutter</button>
+  <button class="filter-btn" data-filter="furniture">Street & Details</button>
+  <button class="filter-btn" data-filter="facade">Facade & Boundaries</button>
   <button class="filter-btn" data-filter="vegetation">Trees & Flora</button>
   <button class="filter-btn" data-filter="people">People</button>
   <button class="filter-btn" data-filter="vehicles">Vehicles</button>
   <button class="filter-btn" data-filter="maritime">Maritime</button>
-  <button class="filter-btn" data-filter="aviation">Aviation</button>
+  <button class="filter-btn" data-filter="airport">Airport Set</button>
+  <button class="filter-btn" data-filter="aviation">Aircraft</button>
   <button class="filter-btn" data-filter="roads">Roads & Rail</button>
 </div>
 
@@ -178,10 +181,10 @@ import * as ROADKIT from "./roadkit.js";
 // --- Scene Setup ---
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0d121a);
-scene.fog = new THREE.FogExp2(0x0d121a, 0.0015);
+scene.fog = new THREE.FogExp2(0x0d121a, 0.001);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 3000);
-camera.position.set(0, 45, 90);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 4000);
+camera.position.set(0, 75, 150);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -195,27 +198,27 @@ const ambient = new THREE.AmbientLight(0xffffff, 0.7);
 scene.add(ambient);
 
 const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-dirLight.position.set(60, 120, 50);
+dirLight.position.set(100, 200, 100);
 dirLight.castShadow = true;
 dirLight.shadow.mapSize.width = 2048;
 dirLight.shadow.mapSize.height = 2048;
 dirLight.shadow.camera.near = 10;
-dirLight.shadow.camera.far = 300;
-dirLight.shadow.camera.left = -100;
-dirLight.shadow.camera.right = 100;
-dirLight.shadow.camera.top = 100;
-dirLight.shadow.camera.bottom = -100;
+dirLight.shadow.camera.far = 600;
+dirLight.shadow.camera.left = -200;
+dirLight.shadow.camera.right = 200;
+dirLight.shadow.camera.top = 200;
+dirLight.shadow.camera.bottom = -200;
 scene.add(dirLight);
 
 const hemiLight = new THREE.HemisphereLight(0x7cc4ff, 0x1f242d, 0.5);
 scene.add(hemiLight);
 
 // --- Ground Grid Plane ---
-const gridHelper = new THREE.GridHelper(1000, 125, 0x30363d, 0x161b22);
+const gridHelper = new THREE.GridHelper(2000, 200, 0x30363d, 0x161b22);
 gridHelper.position.y = -0.01;
 scene.add(gridHelper);
 
-const groundGeo = new THREE.PlaneGeometry(1000, 1000);
+const groundGeo = new THREE.PlaneGeometry(2000, 2000);
 const groundMat = new THREE.MeshStandardMaterial({ color: 0x0f1520, roughness: 0.9, metalness: 0.1 });
 const groundMesh = new THREE.Mesh(groundGeo, groundMat);
 groundMesh.rotation.x = -Math.PI / 2;
@@ -226,7 +229,7 @@ scene.add(groundMesh);
 // --- Materials ---
 const matLOD0 = new THREE.MeshStandardMaterial({ color: 0x90caf9, roughness: 0.4, metalness: 0.2 });
 const matLOD1 = new THREE.MeshStandardMaterial({ color: 0xffb74d, roughness: 0.5, metalness: 0.1 });
-const matLOD2 = new THREE.MeshStandardMaterial({ color: 0xe57373, roughness: 0.6, metalness: 0.1, wireframe: false });
+const matLOD2 = new THREE.MeshStandardMaterial({ color: 0xe57373, roughness: 0.6, metalness: 0.1 });
 
 const matRoadLOD0 = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.8, metalness: 0.1 });
 const matRoadLOD1 = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.8, metalness: 0.1 });
@@ -235,17 +238,44 @@ const matRoadLOD2 = new THREE.MeshStandardMaterial({ color: 0x6b7280, roughness:
 // --- Item Gathering & Layout ---
 const items = [];
 
-// 1. Static Props & Furniture
-const furnitureKeys = [
+// 1. Roof Clutter (High Value for 18,758 roofs)
+const roofKeys = ["roof-plant", "chimney", "aerial", "satellite-dish", "solar-panel", "ac-unit"];
+for (const k of roofKeys) {
+  if (MODELS[k]) items.push({ category: "roof", model: MODELS[k] });
+}
+
+// 2. Street Furniture & Details
+const streetKeys = [
   "bench-slat", "bench-backless", "bin-round", "bin-post", "bus-shelter",
-  "lamp-street", "lamp-pedestrian", "mailbox", "hydrant", "bollard", "sign",
-  "planter", "bike-rack", "cafe-table", "container", "mooring", "beacon", "rail-tie", "parasol"
+  "lamp-street", "lamp-pedestrian", "traffic-light", "sign-warning", "sign-wayfinding",
+  "utility-cabinet-telecom", "utility-cabinet-power", "manhole", "drain-grating",
+  "market-stall", "playground-slide", "playground-swings", "fountain", "statue",
+  "flagpole", "mailbox", "hydrant", "bollard", "sign", "planter", "bike-rack",
+  "cafe-table", "parasol"
 ];
-for (const k of furnitureKeys) {
+for (const k of streetKeys) {
   if (MODELS[k]) items.push({ category: "furniture", model: MODELS[k] });
 }
 
-// 2. Trees (Matrix of species x age)
+// 3. Facade & Boundaries
+const facadeKeys = [
+  "fence-iron", "fence-picket", "gate-iron", "hedge", "wall-garden",
+  "awning", "shopfront", "shutters", "balcony"
+];
+for (const k of facadeKeys) {
+  if (MODELS[k]) items.push({ category: "facade", model: MODELS[k] });
+}
+
+// 4. Airport Set
+const airportKeys = [
+  "runway-module", "taxiway-module", "apron-stand", "jet-bridge", "blast-fence",
+  "approach-lighting", "windsock"
+];
+for (const k of airportKeys) {
+  if (MODELS[k]) items.push({ category: "airport", model: MODELS[k] });
+}
+
+// 5. Trees (Matrix of species x age)
 const treeSpecies = ["broadleaf", "conifer", "palm", "cypress"];
 const treeAges = ["sapling", "mature", "ancient"];
 for (const sp of treeSpecies) {
@@ -254,7 +284,7 @@ for (const sp of treeSpecies) {
   }
 }
 
-// 3. People (Matrix of build x pose)
+// 6. People (Matrix of build x pose)
 const builds = ["adult", "child", "tall"];
 const poses = ["standing", "sitting", "walking"];
 for (const b of builds) {
@@ -263,7 +293,7 @@ for (const b of builds) {
   }
 }
 
-// 4. Vehicles
+// 7. Vehicles
 const vClasses = [
   ["car", "sedan"], ["car", "suv"], ["van", "standard"],
   ["bus", "transit"], ["truck", "box"], ["truck", "flatbed"],
@@ -273,22 +303,24 @@ for (const [cls, v] of vClasses) {
   items.push({ category: "vehicles", model: vehicle(cls, v) });
 }
 
-// 5. Maritime
+// 8. Maritime
 const vesselClasses = ["rowboat", "sailboat", "yacht", "ferry", "container-ship", "tug"];
 for (const vc of vesselClasses) {
   items.push({ category: "maritime", model: vessel(vc) });
 }
 if (MODELS["quay-wall"]) items.push({ category: "maritime", model: MODELS["quay-wall"] });
 if (MODELS["jetty"]) items.push({ category: "maritime", model: MODELS["jetty"] });
+if (MODELS["container"]) items.push({ category: "maritime", model: MODELS["container"] });
+if (MODELS["mooring"]) items.push({ category: "maritime", model: MODELS["mooring"] });
+if (MODELS["beacon"]) items.push({ category: "maritime", model: MODELS["beacon"] });
 
-// 6. Aviation
+// 9. Aviation (Aircraft)
 const planeClasses = ["light-single", "airliner-twin", "regional-jet", "helicopter"];
 for (const pc of planeClasses) {
   items.push({ category: "aviation", model: aircraft(pc) });
 }
-if (MODELS["windsock"]) items.push({ category: "aviation", model: MODELS["windsock"] });
 
-// 7. Roads & Rail
+// 10. Roads & Rail
 items.push({ category: "roads", model: ROADKIT.straight("FREEWAY", 1) });
 items.push({ category: "roads", model: ROADKIT.straight("BOULEVARD", 1) });
 items.push({ category: "roads", model: ROADKIT.straight("AVENUE", 1) });
@@ -320,9 +352,9 @@ if (dynamicBridge.ok) {
 
 // Layout in spatial grid
 const itemObjects = [];
-const COLS = 6;
-let currentX = -120;
-let currentZ = -120;
+const COLS = 7;
+let currentX = -160;
+let currentZ = -160;
 let rowMaxD = 0;
 let colIdx = 0;
 
@@ -340,7 +372,7 @@ for (let idx = 0; idx < items.length; idx++) {
 
   if (colIdx >= COLS) {
     colIdx = 0;
-    currentX = -120;
+    currentX = -160;
     currentZ += rowMaxD + 12;
     rowMaxD = 0;
   }
@@ -349,7 +381,7 @@ for (let idx = 0; idx < items.length; idx++) {
   group.position.set(currentX + cellW / 2, 0, currentZ + cellD / 2);
   group.userData = { item, model: m };
 
-  const isRoad = item.category === "roads";
+  const isRoad = item.category === "roads" || item.category === "airport";
   const m0 = isRoad ? matRoadLOD0 : matLOD0;
   const m1 = isRoad ? matRoadLOD1 : matLOD1;
   const m2 = isRoad ? matRoadLOD2 : matLOD2;
@@ -435,7 +467,7 @@ let isDragging = false;
 let isPanning = false;
 let prevMouseX = 0;
 let prevMouseY = 0;
-let spherical = { radius: 140, theta: 0.6, phi: 1.1 };
+let spherical = { radius: 180, theta: 0.6, phi: 1.1 };
 const target = new THREE.Vector3(0, 5, 0);
 
 function updateCamera() {
@@ -485,7 +517,7 @@ window.addEventListener("mouseup", () => {
 window.addEventListener("contextmenu", (e) => e.preventDefault());
 
 window.addEventListener("wheel", (e) => {
-  spherical.radius = Math.max(10, Math.min(600, spherical.radius + e.deltaY * 0.1));
+  spherical.radius = Math.max(10, Math.min(1000, spherical.radius + e.deltaY * 0.15));
   updateCamera();
 }, { passive: true });
 

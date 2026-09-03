@@ -1152,6 +1152,23 @@ export function computeBounds(geometry) {
   return { xMin, xMax, yMin, yMax, zMin, zMax };
 }
 
+
+export function verifySocketMating(sockA, sockB) {
+  if (!sockA || !sockB) {
+    throw new Error("Socket mating failed: missing socket definition");
+  }
+  if (sockA.kind !== sockB.kind) {
+    throw new Error(`Socket mating failed: incompatible kind (${sockA.kind} vs ${sockB.kind})`);
+  }
+  if (sockA.width !== sockB.width) {
+    throw new Error(`Socket mating failed: width mismatch (${sockA.width}m vs ${sockB.width}m)`);
+  }
+  if (sockA.lanes !== sockB.lanes) {
+    throw new Error(`Socket mating failed: lane count mismatch (${sockA.lanes} vs ${sockB.lanes})`);
+  }
+  return true;
+}
+
 export function verifyModel(model, T = THREE) {
   const foot = model.footprint;
   const sweep = model.sweep || foot;
@@ -1177,6 +1194,14 @@ export function verifyModel(model, T = THREE) {
       if (bDiff !== 180 && bDiff !== 180) {
         throw new Error(`${model.id}: straight piece sockets must face opposite directions (180 deg apart, got ${bDiff} deg diff)`);
       }
+    }
+  }
+
+  
+  // Module length check for tiling pieces (straight roads, causeways, rails)
+  if (model.id && (model.id.startsWith("road-straight") || model.id.startsWith("rail-straight") || model.id.startsWith("causeway"))) {
+    if (foot.d % MODULE_M !== 0 || foot.d < MODULE_M) {
+      throw new Error(`${model.id}: tiling piece length (${foot.d}m) must be an exact multiple of the ${MODULE_M}m module`);
     }
   }
 
@@ -1244,8 +1269,72 @@ export function verifyAllRoadKit(T = THREE) {
   return models;
 }
 
+
+export function testBridgeSpanInvariants() {
+  // 1. Span under 8m (Refusal + Paired Acceptance)
+  const rShort = bridgeSpan([0, 0, 0], [0, 0, 7.9]);
+  if (rShort.ok || rShort.refusal !== "Span distance 7.9m is too short for bridge structure (minimum 8m module)") {
+    throw new Error("testBridgeSpanInvariants: span < 8m refusal failed (got: " + JSON.stringify(rShort) + ")");
+  }
+  const aShort = bridgeSpan([0, 0, 0], [0, 0, 8.0]);
+  if (!aShort.ok || aShort.typology !== "beam") {
+    throw new Error("testBridgeSpanInvariants: span = 8m acceptance failed");
+  }
+
+  // 2. Span over 800m (Refusal + Paired Acceptance)
+  const rLong = bridgeSpan([0, 0, 0], [0, 0, 800.1]);
+  if (rLong.ok || rLong.refusal !== "Span distance 800.1m exceeds maximum engineering limit (800m)") {
+    throw new Error("testBridgeSpanInvariants: span > 800m refusal failed (got: " + JSON.stringify(rLong) + ")");
+  }
+  const aLong = bridgeSpan([0, 0, 0], [0, 0, 800.0]);
+  if (!aLong.ok || aLong.typology !== "causeway") {
+    throw new Error("testBridgeSpanInvariants: span = 800m acceptance failed");
+  }
+
+  // 3. Grade over 8% (Refusal + Paired Acceptance)
+  const rGrade = bridgeSpan([0, 0, 0], [0, 8.1, 100.0]);
+  if (rGrade.ok || rGrade.refusal !== "Bridge grade 8.1% exceeds maximum allowed vehicular slope (8%)") {
+    throw new Error("testBridgeSpanInvariants: grade > 8% refusal failed (got: " + JSON.stringify(rGrade) + ")");
+  }
+  const aGrade = bridgeSpan([0, 0, 0], [0, 8.0, 100.0]);
+  if (!aGrade.ok) {
+    throw new Error("testBridgeSpanInvariants: grade = 8% acceptance failed");
+  }
+
+  // 4. Abutment on open water (Refusal + Paired Acceptance)
+  const rWaterA = bridgeSpan([0, 0, 0], [0, 0, 100.0], { groundAt: (x, z) => (z === 0 ? "water" : "open") });
+  if (rWaterA.ok || rWaterA.refusal !== "Abutment A sits on open water without solid ground anchorage") {
+    throw new Error("testBridgeSpanInvariants: abutment A water refusal failed");
+  }
+  const rWaterB = bridgeSpan([0, 0, 0], [0, 0, 100.0], { groundAt: (x, z) => (z === 100 ? "water" : "open") });
+  if (rWaterB.ok || rWaterB.refusal !== "Abutment B sits on open water without solid ground anchorage") {
+    throw new Error("testBridgeSpanInvariants: abutment B water refusal failed");
+  }
+  const aGround = bridgeSpan([0, 0, 0], [0, 0, 100.0], { groundAt: () => "open" });
+  if (!aGround.ok) {
+    throw new Error("testBridgeSpanInvariants: solid ground acceptance failed");
+  }
+
+  // 5. Typology boundaries
+  const t31 = bridgeSpan([0, 0, 0], [0, 0, 31.0]);
+  if (t31.typology !== "beam") throw new Error("Span 31m must be beam (got " + t31.typology + ")");
+  const t33 = bridgeSpan([0, 0, 0], [0, 0, 33.0]);
+  if (t33.typology !== "arch") throw new Error("Span 33m must be arch (got " + t33.typology + ")");
+  const t95 = bridgeSpan([0, 0, 0], [0, 0, 95.0]);
+  if (t95.typology !== "arch") throw new Error("Span 95m must be arch (got " + t95.typology + ")");
+  const t97 = bridgeSpan([0, 0, 0], [0, 0, 97.0]);
+  if (t97.typology !== "cablestay") throw new Error("Span 97m must be cablestay (got " + t97.typology + ")");
+  const t350 = bridgeSpan([0, 0, 0], [0, 0, 350.0]);
+  if (t350.typology !== "cablestay") throw new Error("Span 350m must be cablestay (got " + t350.typology + ")");
+  const t351 = bridgeSpan([0, 0, 0], [0, 0, 351.0]);
+  if (t351.typology !== "causeway") throw new Error("Span 351m must be causeway (got " + t351.typology + ")");
+
+  return true;
+}
+
 if (typeof process !== "undefined" && process.argv[1] && process.argv[1].replace(/\\/g, "/").includes("roadkit.js")) {
   try {
+    testBridgeSpanInvariants();
     const verified = verifyAllRoadKit(THREE);
     console.log(`Verified ${verified.length} road kit families successfully:`);
     for (const m of verified) {

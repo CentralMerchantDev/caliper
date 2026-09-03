@@ -1,35 +1,22 @@
-# Vendor 3D Kits — Licences & Provenance
+# Third-Party 3D Assets & Licences
 
-This directory tracks imported detail models, prop kits, and modular reference standards used in Caliper.
+## Current Status: 100% In-Tree Procedural Geometry
 
-## Implementation Architecture: Procedural First
-All prop and road assets in Caliper (`public/props.js`, `public/roadkit.js`) are implemented as clean, parameterised JavaScript modules generating native Three.js `BufferGeometry` instances with 3-level LODs and exact base-centre bounding boxes.
+**No third-party mesh files, binary assets, or external 3D packs are used in this codebase.**
 
-Rather than committing static binary mesh blobs (`.glb`/`.obj`) that cannot be dynamically parameterised (such as `tree(species, age)`, `person(build, pose, palette)`, `vehicle(class, variant)`, or `bridgeSpan(a, b)`), the geometry specifications and proportions are inspired by and calibrated against the CC0 reference packs below. This ensures:
-1. Zero HTTP fetch latency or external binary asset loading overhead.
-2. Perfect vertex budget control across LOD0, LOD1, and LOD2.
-3. 100% deterministic, self-testing bounding boxes verified against `WORLD-RULES.md`.
+All 3D geometry in Caliper (`public/props.js`, `public/roadkit.js`, and `public/buildings.js`) is authored directly in-tree as procedural JavaScript modules producing native Three.js `BufferGeometry` structures. Dimensions for standard urban models are derived from `public/prop-manifest.js` (owned by the world lane).
 
-## Strict CC0 Policy for Binary Imports
-If binary asset files are imported into subdirectories of `public/vendor/kits/`, only assets released under **Creative Commons Zero (CC0 1.0 Universal - Public Domain Dedication)** are permitted. Any pack requiring non-commercial clauses (CC-BY-NC) or share-alike (CC-BY-SA) is strictly excluded.
+## Policy for Future Imports
 
-## Reference Pack Registry
+If binary asset files (e.g. `.glb`, `.gltf`, `.obj`) are imported into subdirectories under `public/vendor/kits/` in the future, the following rules apply:
 
-### 1. Kenney City & Street Furniture Standards
-- **Author**: Kenney (kenney.nl)
-- **Source Reference**: https://kenney.nl/assets/city-kit-commercial / https://kenney.nl/assets/furniture-kit
-- **Licence**: Creative Commons Zero (CC0 1.0 Universal)
-- **Status on Disk**: Dimensionally transcribed and parameterised in `public/props.js` (mailboxes, bins, bollards, signs, bike racks, cafe furniture).
+1. **Strict CC0 Only**: Only assets dedicated to the public domain under **Creative Commons Zero (CC0 1.0 Universal)** or equivalent unconditional public domain terms will be accepted.
+2. **Per-Asset Verification**: The licence must be verified on the specific asset page at download time (aggregators often mix licences across packs).
+3. **Provenance Logging**: Every imported pack must record:
+   - Asset pack name and author
+   - Source URL
+   - Exact licence text/link as stated on author's page
+   - Date retrieved and SHA-256 / file inventory
+4. **No Ambiguity**: Any model with non-commercial (CC-BY-NC), share-alike (CC-BY-SA), attribution-only (CC-BY), or proprietary licensing must not be committed to this repository; it must be built via parameterised code instead.
 
-### 2. Quaternius Modular Urban Standards
-- **Author**: Quaternius (quaternius.com)
-- **Source Reference**: https://quaternius.com/packs/urbanprops.html
-- **Licence**: Creative Commons Zero (CC0 1.0 Universal)
-- **Status on Disk**: Dimensionally transcribed and parameterised in `public/props.js` (hydrants, planters, street lamps).
-
-### 3. KayKit Urban Modular Standards
-- **Author**: Kay Lousberg (kaykit.itch.io)
-- **Source Reference**: https://kaylousberg.itch.io/kaykit-city-builder
-- **Licence**: Creative Commons Zero (CC0 1.0 Universal)
-- **Status on Disk**: Dimensionally transcribed and parameterised in `public/props.js` (benches, barriers, shelters).
 
