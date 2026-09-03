@@ -1451,14 +1451,22 @@ export const MODELS = {
     standsOn: ["plot", "open"],
     lod: [
       {
-        level: 0, tris: 24,
+        level: 0, tris: 60,
         createGeometry: (T = THREE) => {
-          const stand = new T.BoxGeometry(1.8, 0.35, 1.4);
-          stand.translate(0, 0.175, 0);
+          const parts = [];
+          const stand = new T.BoxGeometry(1.8, 0.25, 1.4);
+          stand.translate(0, 0.125, 0);
           const panel = new T.BoxGeometry(2.15, 0.08, 1.75);
           panel.rotateX(0.4);
           panel.translate(0, 0.55, 0);
-          return mergeGeometries([stand, panel], T);
+          parts.push(stand, panel);
+          for (const sx of [-0.85, 0.85]) {
+            const strut = new T.CylinderGeometry(0.03, 0.03, 0.7, 4);
+            strut.rotateX(-0.35);
+            strut.translate(sx, 0.45, -0.45);
+            parts.push(strut);
+          }
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1492,14 +1500,17 @@ export const MODELS = {
     standsOn: ["plot", "open"],
     lod: [
       {
-        level: 0, tris: 44,
+        level: 0, tris: 80,
         createGeometry: (T = THREE) => {
           const body = new T.BoxGeometry(0.88, 0.65, 0.42);
           body.translate(0, 0.325, 0);
           const fan = new T.CylinderGeometry(0.2, 0.2, 0.05, 8);
           fan.rotateX(Math.PI / 2);
           fan.translate(0.18, 0.325, 0.22);
-          return mergeGeometries([body, fan], T);
+          const shroud = new T.CylinderGeometry(0.22, 0.22, 0.03, 8);
+          shroud.rotateX(Math.PI / 2);
+          shroud.translate(0.18, 0.325, 0.23);
+          return mergeGeometries([body, fan, shroud], T);
         },
       },
       {
@@ -1827,7 +1838,7 @@ export const MODELS = {
     standsOn: ["sidewalk", "carriageway", "open"],
     lod: [
       {
-        level: 0, tris: 280,
+        level: 0, tris: 144,
         createGeometry: (T = THREE) => {
           const parts = [];
           const slab = new T.BoxGeometry(0.75, 0.03, 0.75);
@@ -1837,7 +1848,7 @@ export const MODELS = {
             for (let z = 0; z < 4; z++) {
               const px = -0.26 + x * 0.17;
               const pz = -0.26 + z * 0.17;
-              const dot = new T.CylinderGeometry(0.025, 0.025, 0.02, 4);
+              const dot = new T.ConeGeometry(0.03, 0.02, 4);
               dot.translate(px, 0.04, pz);
               parts.push(dot);
             }
@@ -2817,12 +2828,12 @@ export const MODELS = {
         level: 0, tris: 48,
         createGeometry: (T = THREE) => {
           const parts = [];
-          const wall = new T.BoxGeometry(8.0, 3.8, 2.0);
-          wall.translate(0, 1.9, -0.2);
+          const wall = new T.BoxGeometry(8.0, 3.4, 2.0);
+          wall.translate(0, 1.7, -0.2);
           const coping = new T.BoxGeometry(8.0, 0.2, 2.4);
-          coping.translate(0, 3.9, 0);
-          const bollard = new T.CylinderGeometry(0.2, 0.2, 0.45, 6);
-          bollard.translate(0, 4.0, 0.6);
+          coping.translate(0, 3.5, 0);
+          const bollard = new T.CylinderGeometry(0.18, 0.2, 0.4, 6);
+          bollard.translate(0, 3.8, 0.6);
           parts.push(wall, coping, bollard);
           return mergeGeometries(parts, T);
         },
@@ -2936,13 +2947,17 @@ export const MODELS = {
     standsOn: ["sidewalk", "open"],
     lod: [
       {
-        level: 0, tris: 48,
+        level: 0, tris: 68,
         createGeometry: (T = THREE) => {
+          const parts = [];
           const post = new T.CylinderGeometry(0.22, 0.28, 0.65, 6);
           post.translate(0, 0.325, 0);
           const cap = new T.CylinderGeometry(0.28, 0.22, 0.1, 6);
           cap.translate(0, 0.7, 0);
-          return mergeGeometries([post, cap], T);
+          const horn = new T.BoxGeometry(0.52, 0.08, 0.16);
+          horn.translate(0, 0.72, 0);
+          parts.push(post, cap, horn);
+          return mergeGeometries(parts, T);
         },
       },
       {
