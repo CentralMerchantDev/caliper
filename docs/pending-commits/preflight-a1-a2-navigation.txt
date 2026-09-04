@@ -1,0 +1,43 @@
+Catch up the ledger to the tree: A1, A2, D3, D5, E1 land, plus the pages nobody could reach
+
+What was wrong: the tree and the ledger disagreed. A1 (seed the noise) and A2
+(seed the terrain) were done and tested last session but never committed;
+public/terrain.js sat unstaged and test/worldSeed.test.ts was untracked. D3
+(ground transforms), D5 (model verification) and E1 (quests) were built and
+tested but likewise sat staged, uncommitted. Four pages -- model-library.html,
+kit-contact-sheet.html, city.html, world.html -- were reachable only by typing
+the filename; nothing links to them, so the defect is silent by nature. And
+the test-count artefact was stale (recorded 688, the source held 694 call
+sites) the moment the new test files landed, which is the exact failure
+test/publicClaims.test.ts exists to catch.
+
+How it is known to be fixed:
+
+- A1/A2: `node test/run.mjs` -- 794 tests, 0 fail. Seed 0 fingerprints
+  byte-identical to the pre-seed world (sha256 418744f1...) over 37,668
+  height samples; a named seed diverges at every sampled point. Mutations
+  `seed-zero-is-the-original-world`, `a-seeded-field-uses-its-seed`,
+  `the-field-carries-its-seed`, `the-height-function-reads-the-fields-seed`
+  all CAUGHT (test/mutations.json).
+- D3: public/transform.js, test/transform.test.ts (9), refusals carry
+  measured depth/size, alternatives come from findGround.
+- D5: public/model-forge.js, test/modelForge.test.ts (16), scan -> compile ->
+  build -> triangle budget -> build time -> footprint -> determinism.
+- E1: public/quest.js, test/quest.test.ts (16), completion is read from world
+  state, not a flag.
+- Navigation: test/reachability.test.ts walks the real links from index.html
+  and asserts all four previously-orphaned pages resolve; each page also
+  gets a plain-anchor way back so the trap runs both directions.
+- Test count: `node scripts/gen-test-count.mjs` -- 794 node tests (0 fail
+  after regeneration), 12 worker tests, public/index.html's claim spans
+  updated from the artefact, not typed.
+- `npx tsc --noEmit` clean.
+
+What is still open: A2b (seed the plan) is next in PART 7 and is not
+started by this commit. public/asset-registry.js and public/tier-models.js
+are excluded here -- both carry a large uncommitted change (2,400 to 4,800
+models, 10 to 20 categories) that does not correspond to anything in this
+plan's ledger and touches the file this session was explicitly told not to
+touch, since agy is working the asset ledger in assets-lane tonight. Left
+exactly as found, unstaged, not reverted; flagged to Mark rather than guessed
+at.
