@@ -21,10 +21,12 @@
 import { generateWorld } from "./city-plan.js";
 import { LandField, makeHeightAt } from "./terrain.js";
 import { createWorldModel } from "./world-model.js";
+import { createGrid } from "./grid.js";
 import { DEFAULT_SEED } from "./noise.js";
 
 /**
- * `{ seed, layers }` in, `{ seed, plan, land, layers, resolve, toJSON }` out.
+ * `{ seed, layers, regions }` in, `{ seed, plan, land, layers, grid,
+ * resolve, toJSON }` out.
  *
  * `plan` and `land` are the real, live generateWorld/LandField results for
  * this seed -- not a summary of them. `layers` is the layer-model instance
@@ -33,18 +35,25 @@ import { DEFAULT_SEED } from "./noise.js";
  * would have to keep in sync with it. `resolve` and `toJSON` are re-exposed
  * at the top level because a caller working with a world should not need to
  * know it is made of a separate layer model underneath.
+ *
+ * `grid` is createGrid()'s own object, over `regions` (F1) -- `regions`
+ * defaults to `null`, createGrid's own "the whole world is open" default,
+ * so a world built with no regions argument at all behaves exactly as
+ * every world did before this parameter existed.
  */
-export function createWorld({ seed = DEFAULT_SEED, layers = [] } = {}) {
+export function createWorld({ seed = DEFAULT_SEED, layers = [], regions = null } = {}) {
   const land = new LandField(16, 420, 40, seed);
   const heightAt = makeHeightAt(land);
   const plan = generateWorld(heightAt, seed);
   const layerModel = createWorldModel({ seed, layers });
+  const grid = createGrid({ openRegions: regions });
 
   return {
     seed,
     plan,
     land,
     layers: layerModel,
+    grid,
     resolve: (address) => layerModel.resolve(address),
     toJSON: () => layerModel.toJSON(),
   };

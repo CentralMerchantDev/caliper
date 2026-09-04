@@ -201,6 +201,19 @@ export function createGrid({ openRegions = null } = {}) {
     open.push({ xMin, xMax, zMin, zMax, name });
   }
 
+  /** Close a previously opened region by name -- load and UNLOAD, not just
+   *  load. Refused, not a silent no-op, if the name is not currently open:
+   *  a caller that thinks it closed something and did not needs to know. */
+  function closeRegion(name) {
+    if (open === null) {
+      return { ok: false, reason: `grid: cannot close "${name}" -- the whole world is open, not region-tracked` };
+    }
+    const i = open.findIndex((r) => r.name === name);
+    if (i === -1) return { ok: false, reason: `grid: no open region named "${name}"` };
+    open.splice(i, 1);
+    return { ok: true };
+  }
+
   /** Which region a position is in, or null if it is locked or off the map. */
   function regionAt(x, z) {
     if (open === null) return { name: "world", xMin: -HALF, xMax: HALF, zMin: -HALF, zMax: HALF };
@@ -235,5 +248,5 @@ export function createGrid({ openRegions = null } = {}) {
     return open === null ? [{ name: "world", xMin: -HALF, xMax: HALF, zMin: -HALF, zMax: HALF }] : open.map((r) => ({ ...r }));
   }
 
-  return { openRegion, regionAt, check, regions, CELL, LEVEL, CELLS_ACROSS };
+  return { openRegion, closeRegion, regionAt, check, regions, CELL, LEVEL, CELLS_ACROSS };
 }

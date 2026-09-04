@@ -1,0 +1,40 @@
+F1+F2: a world is bigger than the part you are in, and regions load AND unload
+
+What was wrong: grid.js already modelled open/LOCKED regions and refused
+placement with a reason rather than reporting emptiness -- but nothing tied
+that grid to a world instance, and only HALF of "load and unload" existed:
+openRegion (load) had no counterpart. A region could only ever be opened,
+never closed again.
+
+How it is known to be fixed:
+
+- public/world.js: createWorld gets a new regions = null parameter, last,
+  defaulting to createGrid's own "the whole world is open" default -- a
+  world built with no regions argument behaves exactly as every world did
+  before this parameter existed, verified by deepEqual against a bare
+  createGrid() rather than assumed. The returned world now carries `grid`.
+- public/grid.js: closeRegion(name), the missing half. Refuses -- not a
+  silent no-op -- when there is nothing region-tracked to close (the whole
+  world is open) or the name given is not currently open, so a caller that
+  thinks it closed something and did not can tell.
+- test/regions.test.ts (6): a world's grid with no regions argument matches
+  a bare createGrid() exactly, both check() and regions(); a world built
+  with explicit regions is genuinely locked outside them; a never-opened
+  region refuses placement WITH A REASON, not a bare failure; the same
+  region opened no longer refuses; the same region opened then CLOSED
+  refuses AGAIN -- proving close genuinely reverses open rather than merely
+  failing to double-open; closing an unknown region name is refused and
+  leaves the region list unchanged.
+- Mutation `locked-region-refuses-with-a-reason-not-bare-false` CAUGHT --
+  the exact mutation the ledger names for this step, "refuse with a bare
+  false", against the ledger finding it names alongside it: "absence nobody
+  can see", an empty result and a locked region must never look alike.
+  `node scripts/_mutcheck.mjs test/regions.test.ts public/grid.js test/mutations.json`
+- `npm test`: 861/861. `npx tsc --noEmit`: clean.
+
+Phase F (regions) is complete: F1 and F2 both done with evidence.
+
+G1 (one limits object) is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.

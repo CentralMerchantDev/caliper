@@ -730,13 +730,32 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
 
 ### Phase F — regions
 
-- [ ] **F1 — a world is bigger than the part you are in.** `grid.js` already
-      models open/LOCKED regions and refuses with a reason rather than reporting
-      emptiness. Wire it to the world instance.
-- [ ] **F2 — load and unload by region.** *Test:* an unloaded region refuses
-      placement WITH A REASON; a loaded one does not. *Mutation:* refuse with a
-      bare false → the reason test red. (Ledger finding: "absence nobody can
-      see" — an empty result and a locked region must never look alike.)
+- [x] **F1 — a world is bigger than the part you are in.** Evidence:
+      `public/world.js`'s `createWorld` gets a new `regions = null`
+      parameter (last, default `null` is `createGrid`'s own "the whole
+      world is open" default) and exposes `grid` — `createGrid({
+      openRegions: regions })` — on the returned world.
+      `test/regions.test.ts`'s first two tests: a world's grid, built with
+      no `regions` argument, behaves EXACTLY like a bare `createGrid()` (not
+      just "similarly" — `deepEqual` against the real thing, both `.check()`
+      and `.regions()`); a world built with explicit regions is genuinely
+      locked outside them.
+- [x] **F2 — load and unload by region.** Evidence: `public/grid.js` gets
+      `closeRegion(name)` — the missing half of "load and unload"; only
+      `openRegion` (load) existed before. Refuses (not a silent no-op) when
+      the whole world is open (nothing region-tracked to close) or the name
+      is not currently open.
+      `test/regions.test.ts` (6 total): a region that was never opened
+      refuses placement WITH A REASON, not a bare failure; the same region,
+      opened, no longer refuses; the same region, opened THEN CLOSED,
+      refuses AGAIN — proving close genuinely reverses open, not merely
+      "does nothing"; closing an unknown region name is refused and leaves
+      the region list unchanged.
+      Mutation `locked-region-refuses-with-a-reason-not-bare-false` CAUGHT
+      — the exact mutation the ledger names, "refuse with a bare false":
+      `node scripts/_mutcheck.mjs test/regions.test.ts public/grid.js
+      test/mutations.json`.
+      **Phase F (regions) complete.**
 
 ### Phase G — guardrails as dials
 

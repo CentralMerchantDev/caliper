@@ -459,6 +459,15 @@
       "find": "      done: touched.length > 0,",
       "replace": "      done: touched.length > 0 || state.player.mode === \"editing\",",
       "expect": "setting a UI flag, with no real edit, does NOT complete the quest"
+    },
+    {
+      "id": "locked-region-refuses-with-a-reason-not-bare-false",
+      "guards": "a locked/unloaded region refuses placement with a reason and a detail string, never a bare false -- an empty result and a locked region must never look alike",
+      "note": "Ledger finding named directly in the plan: absence nobody can see. A bare false is indistinguishable from any other falsy 'nothing happened' signal; {ok:false, reason, detail} is not.",
+      "file": "public/grid.js",
+      "find": "      return { ok: false, reason: \"locked\", detail: `(${x.toFixed(0)}, ${z.toFixed(0)}) is in a part of the world that is not open yet` };",
+      "replace": "      return false;",
+      "expect": "loaded then unloaded, refuses again"
     }
   ]
 }
