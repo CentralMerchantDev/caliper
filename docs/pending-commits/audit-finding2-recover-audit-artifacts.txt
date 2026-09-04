@@ -1,0 +1,42 @@
+Final audit Finding 2 (MEDIUM): the Phase-A audit report and the final
+Phases B-H report existed only in throwaway worktrees, not on main
+
+What was wrong: docs/WORLD-BUILD-LOG.md (H4) narrates a Phase-A blind audit
+that found three real issues (unseeded exported terrain functions, unseeded
+hash01, unmemoized createWorld()), and this session's own final blind audit
+(docs/audits/UMAA-phases-B-H.md, its own Finding 2) went looking for that
+report at docs/audits/UMAA-phase-A.md and found it absent -- the only file
+present was an unrelated UMAA-world-lane.md. The report existed the whole
+time, but only inside .claude/worktrees/agent-a1b9089b51ea5dda4/, which was
+never merged back to main. The final audit's own report had the identical
+problem: it was written inside .claude/worktrees/agent-a752b27fe63f9a19f/
+and never committed either. AUDIT-PROTOCOL.md's own §7 standing complaint
+("nobody audits the auditor... taken on trust") applies one level earlier
+here: nobody could even re-read a prior auditor's report, because it was
+never in the tree it claimed to audit.
+
+How it's fixed: both reports copied byte-for-byte from their worktrees into
+docs/audits/ on main -- UMAA-phase-A.md (30921 bytes, scope: noise.js,
+terrain.js, city-plan.js, world-model.js, world.js, A1-A4) and
+UMAA-phases-B-H.md (the final comprehensive audit, scope: every Phase B-H
+module, 5 findings including the two above). Each worktree's own
+docs/AUDIT-PROTOCOL.md §7 addition is merged into main's copy too, so the
+lessons those audits recorded about the sandbox (worktrees with no
+node_modules, a permission-lockout cascade from one refused Edit call,
+CRLF-vs-content diffing across checkouts) aren't lost once the worktrees
+themselves eventually get cleaned up.
+
+No test/mutation applies to this commit -- it is documentation recovery, not
+a code or behavior change. Verification is direct: both files now exist at
+the paths their own audits and docs/WORLD-BUILD-LOG.md already cite, with
+content identical to the worktree originals (copied via Read, not
+regenerated or summarized).
+
+What's still open: Findings 3 (untested grid.js closeRegion(open===null)
+branch), 4 (worldFromJSON exported under the same name from two different
+modules with different shapes), and 5 (createWorld() unmemoized, ~2.4s/call,
+17 new test-suite call sites) from the same final audit are not yet
+addressed -- next up.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.

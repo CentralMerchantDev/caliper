@@ -294,3 +294,161 @@ Two things fell out of writing it, which is the argument for having written it:
 `test/mutations.json`, added in the same commit. Not afterwards, and not only for
 the ones that look fragile — the two worst defects above were both in code that
 looked finished.
+
+### 2026-09-04 · Phase A audit ("the world becomes a value") — a "seeded" claim that was seeded in name only, and the sandbox lockout getting worse, not better
+
+**What it caught, that a same-author check would not have:** the phase's own
+status line says the plan is "seeded" through six named functions
+(`classForBlock`, `pickPatchy`, `classForSettlementBlock`, `generateSettlement`,
+`cityDemand`, `generateCityPlan`), and it is true that a `seed` parameter
+reaches every one of them. What the claim does not say, and what nobody had
+measured, is that most of the *texture* those functions produce — which
+blocks become parks, which become civic buildings, how a settlement's
+low-demand cells and centre radius wobble — runs through `hash01`, a string
+hash with no seed parameter at all, sitting a few lines away from the `fbm`
+calls that do take one. Measured directly (not asserted): 0 of 269 downtown
+blocks changed PARK or CIVIC status between two genuinely different seeds.
+The existing test only ever checks that the plan's sha256 fingerprint
+changes at all, which it does — from the 2.6% of blocks whose DENSITY class
+moves — so a test built around "did anything change" passed happily while
+missing that an entire category of the plan (civic geography) does not
+respond to the seed at all. This is worth generalising past this one repo:
+**"the seed reaches this function" is not the same claim as "the seed reaches
+everything this function decides"**, and a function can accept and forward a
+parameter it only partially consumes. §2.1 already asks the auditor to check
+a comment against the code; this is the same check one level more specific —
+check a comment's claim against *every path inside the function it names*,
+not just that the parameter is present in the signature.
+
+**A second thing found the same way — by measuring, not reading:**
+`createWorld()` (the phase's own headline deliverable) costs 2.3–2.7 s per
+call and does not get materially cheaper on a repeat call with the identical
+seed, because it builds a fresh `LandField`/`heightAt` every time and the
+caches this same phase fixed one layer down (`generateCityPlan`,
+`cityDemand`) are keyed on that object's *identity*, not the seed value
+`createWorld()` was actually called with. In isolation, `generateCityPlan`'s
+own fix is real (34 ms cold, 0.0025 ms warm) — it would have been easy to
+stop there and report the fix as complete, since its own dedicated test
+passes and its own dedicated mutation is CAUGHT. Only timing the whole
+composed `createWorld()` call — which the brief explicitly asked for and
+which nothing in `test/world.test.ts` does — showed that the saving does not
+reach the function callers will actually use. **Confirms, in a new shape,
+the standing §7 lesson that a green suite proves nothing was falsified, not
+that the thing works at the altitude a caller will call it from.**
+
+**Gaps found in the protocol itself:**
+
+- Nothing in §2 asks the auditor to time anything by default — the brief for
+  this specific run named the performance question explicitly
+  ("createWorld()… measure how long"), and without that explicit prompt nothing
+  here would have prompted a general auditor to profile a function whose own
+  tests are all green. §2.5 says "measure it," but only after the auditor has
+  already decided performance is worth looking at; nothing suggests *when* to
+  decide that. Worth adding: **any new object this phase names as "the thing
+  that ties X together" (a constructor, a composed factory, an entry point) gets
+  timed once, cold and warm, even with no stated performance concern** — the
+  brief should not have to ask for this by name every time; it is exactly the
+  place a phase's real cost hides, because it is the one function nobody wrote
+  a focused test for.
+- §3's scratch-copy fallback (added by the 2026-09-03 entries) assumes the
+  auditor can still choose when to invoke it. This run hit a harder failure
+  mode: a **single incorrectly-targeted `Edit` call** (this auditor's own
+  mistake — it tried to mutate the sibling checkout instead of its assigned
+  worktree, and the tool correctly refused it) caused the permission
+  classifier to treat the *refused* call as though it had succeeded, and it
+  then denied every subsequent Bash command referencing anything in that
+  checkout — including unrelated, read-only ones (`git status --short`) and
+  one (`npm ci`) run from an entirely different, correct location. The
+  workaround itself (scratch-copy-outside-the-repo) became unreachable
+  mid-run because setting it up required one more command against the now-
+  locked-out checkout. Nothing in §3 anticipates a lockout that widens past
+  the action that triggered it. Worth stating explicitly: **if a mutation
+  action is refused, stop issuing further commands against that same
+  checkout for the rest of the run** — don't attempt the "obviously safe"
+  read-only follow-up to check whether the tree is still clean, because the
+  attempt itself can consume the auditor's remaining budget for no evidence.
+  Switch immediately to whatever location the tool has not yet objected to
+  (here, the assigned worktree) and write the report from what was already
+  measured before the lockout, flagging the incomplete probe by name rather
+  than trying once more to route around the refusal.
+- This is the **second** time in three days this project's own worktree
+  provisioning has hostile-startup'd its own auditor: the 2026-09-03 (later)
+  entry recorded a worktree with tracked files only and no `node_modules`;
+  this run hit the identical gap in a *different* worktree. The fix proposed
+  then ("the auditor runs the suite… and STOPS if any fail") is necessary but
+  was not sufficient here, because this auditor could still run everything —
+  just not *in the location it was told to operate entirely within* — which
+  is a more tempting trap than an auditor that simply cannot execute at all:
+  it is easy to keep working against the sibling checkout because it works,
+  and only notice the scope violation once a permission system enforces it
+  the hard way. **Now recorded a second time, because a lesson that only
+  appears once in this file has not yet been shown to generalise, and the
+  underlying provisioning gap (a worktree without dependencies installed)
+  still has not been fixed at the source.**
+
+**Still open — the protocol does not yet cover:**
+
+- Everything the 2026-09-03 entries named ("nobody audits the auditor,"
+  same-day commits outside the given scope) is still true here.
+- No rule yet says what an auditor should do when it discovers, mid-run, that
+  a substantial fraction of its evidence was gathered against the wrong
+  checkout for reasons outside its control (dependencies only existing
+  there). This run's answer — disclose it prominently at the top of the
+  report, keep the evidence because the commit hash matched exactly, and name
+  the one probe that didn't get to run because of it — is a reasonable
+  default but is not yet written down as the expected one.
+
+### 2026-09-04 · Phases B–H audit — the worktree-has-no-`node_modules` trap recurred, and a second one showed up next to it
+
+**What the protocol got right:** §2's priority order (claims in docs first)
+paid off immediately — the very first thing checked against a real command
+(`npm test`) was `CLAUDE.md`'s own "how to verify" line, and it was wrong by
+297 tests (571 claimed, 868 actual). Independently re-running eight of the
+53 recorded mutation controls (`scripts/_mutcheck.mjs`, one per phase B
+through G) rather than trusting `test/.mutate-results.json` on sight also
+paid off directly: all eight reproduced CAUGHT, which is real evidence the
+53/53 headline is not merely recorded but re-derivable — the thing the
+2026-09-02 entry's "nobody audits the auditor" gap asked for, done partially
+here rather than left open again.
+
+**What it did NOT ask, and had to be worked out mid-run:**
+
+- **The 2026-09-03 "auditee's half" entry already named the exact trap —
+  worktree carries tracked files only, no `node_modules` — and it recurred
+  anyway,** because nothing upstream of this run checked for it before
+  handing the brief over. The fix that entry mandated ("the auditor runs the
+  suite... and STOPS if any fail") does not cover this case at all: `npm
+  test` does not fail here, it is not *runnable* here (`npm test` would need
+  `node_modules`, which is simply absent — a different failure mode than a
+  red suite). A protocol that only says "stop if red" has no branch for
+  "cannot be started." This run did not stop; it fell back to a sibling
+  checkout at the identical commit, verified first (same HEAD sha, then a
+  CRLF-normalised content diff across every file the raw `diff -rq` flagged,
+  confirming the apparent differences were line-ending noise and not content)
+  before trusting a single command run there. That verification-before-trust
+  step is the load-bearing part and is worth promoting to an explicit
+  instruction: **if the worktree cannot execute, and a sibling checkout at
+  the same commit exists, confirm the commit hash AND a CRLF-normalised
+  content diff agree before treating the sibling as equivalent — do not
+  assume same-repo means same-content.** Two different `core.autocrlf`
+  settings between checkouts of the same repo produced dozens of files that
+  LOOKED different under a raw `diff -rq` (`buildings.js`, `props.js`,
+  `sky.js`, `roadkit.js`, `showstoppers.js`, `AUDIT-PROTOCOL.md` itself,
+  several `docs/specs/*.md` files, two test files) and were not different at
+  all once line endings were stripped. Trusting the raw diff would have
+  wrongly concluded the sibling checkout was running a different, unverified
+  version of the code under audit — the opposite failure from the one this
+  entry is otherwise about, but caught by the same discipline ("measure, do
+  not speculate") applied one layer further out than usual.
+
+- **A gitignored evidence file the brief explicitly told the auditor to look
+  for (`test/.mutate-results.json`) existed in the sibling checkout and NOT
+  in the worktree itself.** Nothing in the protocol currently distinguishes
+  "this file does not exist because the claim is false" from "this file does
+  not exist because gitignored artefacts don't travel with a fresh worktree
+  checkout." Both look identical from inside the worktree alone. Worth a
+  standing note next to §4's "what was checked and found clean": when a
+  cited artefact is gitignored, its absence from the auditor's own checkout
+  is not evidence about the claim one way or the other, and the auditor
+  should say so explicitly rather than either assuming it never existed or
+  silently fetching it from somewhere else without recording that it did.
