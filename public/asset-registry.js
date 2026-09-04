@@ -252,6 +252,60 @@ export const ASSET_REGISTRY = [
   { id: "bld-highstreet-terrace", category: "buildings", tier: "signature", status: "generator", source: "code", seenAs: "far", count: 850, generator: "bldHighStreetTerrace(seed, options)", note: "High-street chaining terrace with ground retail and upper flats" },
   { id: "bld-business-park", category: "buildings", tier: "signature", status: "generator", source: "code", seenAs: "far", count: 320, generator: "bldBusinessParkBlock(seed, options)", note: "Business park commercial block with brise-soleil louvers" },
 
+
+  // --- ECO-FRIENDLY ZAHA HADID SHOWSTOPPERS (RESIDENTIAL) ---
+  { id: "bld-eco-bosco-verticale", category: "buildings", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 420, generator: "bldEcoBoscoVerticale()", note: "Vertical forest cascading residential tower with planter balconies" },
+  { id: "bld-eco-curved-ribbon-villa", category: "buildings", tier: "showstopper", status: "built", source: "code", seenAs: "mid", count: 650, generator: "bldEcoCurvedRibbonVilla()", note: "Zaha Hadid fluid curved ribbon luxury eco-villa with green roof" },
+  { id: "bld-eco-step-garden-walkup", category: "buildings", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 780, generator: "bldEcoStepGardenWalkup()", note: "Stepped garden terraced biophilic apartments with pergola decks" },
+  { id: "bld-eco-biophilic-townhouse-row", category: "buildings", tier: "showstopper", status: "built", source: "code", seenAs: "mid", count: 850, generator: "bldEcoBiophilicTownhouseRow()", note: "Modern biophilic triple townhouse row with timber louvers & solariums" },
+  { id: "bld-eco-helix-terrace", category: "buildings", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 520, generator: "bldEcoHelixTerrace()", note: "Interlocking double-helix eco residential terraces with sky courts" },
+
+  // --- ECO-FRIENDLY ZAHA HADID SHOWSTOPPERS (COMMERCIAL & OFFICE) ---
+  { id: "bld-eco-diagrid-biotower", category: "buildings", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 310, generator: "bldEcoDiagridBiotower()", note: "Zaha Hadid diagrid twisting organic skyscraper with central atrium" },
+  { id: "bld-eco-hyperboloid-timber-hq", category: "buildings", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 240, generator: "bldEcoHyperboloidTimberHQ()", note: "Mass-timber hyperboloid corporate campus with undulating sedum roof" },
+  { id: "bld-eco-floating-canopy-hub", category: "buildings", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 360, generator: "bldEcoFloatingCanopyHub()", note: "Cantilevered aerodynamic solar-wing tech hub with indoor winter garden" },
+  { id: "bld-eco-solar-spire", category: "buildings", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 180, generator: "bldEcoSolarSpire()", note: "Aerodynamic faceted solar spire tower with photovoltaic louvers" },
+  { id: "bld-eco-green-pod-office", category: "buildings", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 290, generator: "bldEcoGreenPodOffice()", note: "Elevated organic pod research campus with aerial skybridges" },
+
+  // --- ECO-FRIENDLY ZAHA HADID SHOWSTOPPERS (CIVIC & CULTURAL) ---
+  { id: "civic-eco-opera-flow", category: "civic", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 120, generator: "civicEcoOperaFlow()", note: "Zaha Hadid fluid sinuous performing arts centre with green roof ramp" },
+  { id: "civic-eco-biome-dome", category: "civic", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 90, generator: "civicEcoBiomeDome()", note: "Botanical geodesic crystalline biome dome with tiered viewing bridges" },
+  { id: "civic-eco-wave-library", category: "civic", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 160, generator: "civicEcoWaveLibrary()", note: "Undulating parametric timber wave civic library with reading terraces" },
+  { id: "civic-eco-sports-arena", category: "civic", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 60, generator: "civicEcoSportsArena()", note: "Zero-carbon sports arena with kinetic solar petal roof & arboretum" },
+  { id: "civic-eco-hydro-transit-terminal", category: "civic", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 110, generator: "civicEcoHydroTransitTerminal()", note: "Futuristic multimodal vaulted transit terminal with living sedum canopy" },
+
+  // --- ECO ROADWAYS & FINISHES ---
+  { id: "roadway-permeable-paved-street", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 4500, generator: "roadwayPermeablePavedStreet()", note: "Permeable block-paved street with drainage channels" },
+  { id: "roadway-bioswale-avenue", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 3200, generator: "roadwayBioswaleAvenue()", note: "Dual avenue with sunken central vegetated rain bioswale" },
+  { id: "roadway-green-tramway-lawn", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 2800, generator: "roadwayGreenTramwayLawn()", note: "Green grass light-rail tramway corridor with embedded steel rails" },
+  { id: "roadway-cycle-superhighway", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 3800, generator: "roadwayCycleSuperhighway()", note: "Segregated dual red cycle track with landscaped buffer verge" },
+  { id: "roadway-woonerf-shared-space", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 2900, generator: "roadwayWoonerfSharedSpace()", note: "Dutch living street with cobblestone paving and offset chicanes" },
+  { id: "pathway-timber-boardwalk", category: "roads", tier: "standard", status: "built", source: "code", seenAs: "close", count: 5200, generator: "pathwayTimberBoardwalk()", note: "Elevated timber plank boardwalk with rope bollards" },
+  { id: "pathway-flagstone-promenade", category: "roads", tier: "standard", status: "built", source: "code", seenAs: "close", count: 6400, generator: "pathwayFlagstonePromenade()", note: "Granite flagstone promenade with tree planting pits" },
+  { id: "pathway-gravel-meander", category: "roads", tier: "standard", status: "built", source: "code", seenAs: "close", count: 4800, generator: "pathwayGravelMeander()", note: "Natural crushed stone park trail with timber border edging" },
+  { id: "sidewalk-rain-garden-curb", category: "roads", tier: "standard", status: "built", source: "code", seenAs: "close", count: 7200, generator: "sidewalkRainGardenCurb()", note: "Sidewalk module with integrated curb-cut rain garden planter" },
+  { id: "sidewalk-solar-paver-walk", category: "roads", tier: "standard", status: "built", source: "code", seenAs: "close", count: 6100, generator: "sidewalkSolarPaverWalk()", note: "Sidewalk with solar photovoltaic floor tiles and guide strip" },
+
+  // --- ECO BRIDGES & OVERPASSES ---
+  { id: "bridge-living-green-viaduct", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "far", count: 480, generator: "bridgeLivingGreenViaduct()", note: "Arched green viaduct carrying park & cycle tracks over highway" },
+  { id: "bridge-cable-stayed-skybridge", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "far", count: 320, generator: "bridgeCableStayedSkybridge()", note: "Slender pedestrian cable-stayed skybridge connecting towers" },
+  { id: "bridge-timber-hyperboloid-footbridge", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 640, generator: "bridgeTimberHyperboloidFootbridge()", note: "Glulam reciprocal timber lattice arch footbridge" },
+  { id: "bridge-canal-step-bridge", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 520, generator: "bridgeCanalStepBridge()", note: "Stepped stone canal arch bridge with viewing alcoves" },
+  { id: "bridge-diagrid-tube-skyway", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 410, generator: "bridgeDiagridTubeSkyway()", note: "Glazed tubular diagrid elevated weather-protected skyway" },
+  { id: "bridge-living-arch-aqueduct", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "far", count: 280, generator: "bridgeLivingArchAqueduct()", note: "Stone multi-arch aqueduct/parkway with hanging vertical planters" },
+
+  // --- ECO PROPS & STREET FURNITURE ---
+  { id: "prop-solar-canopy-bench", category: "furniture", tier: "signature", status: "built", source: "code", seenAs: "close", count: 3200, generator: "propSolarCanopyBench()", note: "Smart wooden bench with solar panel shade canopy" },
+  { id: "prop-living-wall-totem", category: "furniture", tier: "signature", status: "built", source: "code", seenAs: "close", count: 2400, generator: "propLivingWallTotem()", note: "Vertical 4-sided hydroponic green wall air purifier totem" },
+  { id: "prop-rain-garden-planter", category: "furniture", tier: "standard", status: "built", source: "code", seenAs: "close", count: 5600, generator: "propRainGardenPlanter()", note: "Corten steel bioretention rain garden planter box" },
+  { id: "prop-kinetic-solar-lamp", category: "furniture", tier: "signature", status: "built", source: "code", seenAs: "close", count: 4200, generator: "propKineticSolarLamp()", note: "Sculptural LED street lamp with micro wind turbine and solar leaf" },
+  { id: "prop-ev-supercharger-hub", category: "furniture", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 1800, generator: "propEvSuperchargerHub()", note: "Dual ultra-fast EV charging station with green roof" },
+  { id: "prop-bike-service-station", category: "furniture", tier: "standard", status: "built", source: "code", seenAs: "close", count: 2900, generator: "propBikeServiceStation()", note: "Public bicycle repair post with air pump and tools" },
+  { id: "prop-water-refill-fountain", category: "furniture", tier: "standard", status: "built", source: "code", seenAs: "close", count: 4600, generator: "propWaterRefillFountain()", note: "Stainless steel bottle refill station and dog bowl" },
+  { id: "prop-pollinator-habitat-post", category: "furniture", tier: "standard", status: "built", source: "code", seenAs: "close", count: 3800, generator: "propPollinatorHabitatPost()", note: "Wild bee and butterfly biodiversity nesting tower" },
+  { id: "prop-smart-waste-compactor", category: "furniture", tier: "standard", status: "built", source: "code", seenAs: "close", count: 4100, generator: "propSmartWasteCompactor()", note: "Solar-powered triple waste and recycling compactor station" },
+  { id: "prop-shaded-parklet-deck", category: "furniture", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 1600, generator: "propShadedParkletDeck()", note: "Curbside wooden parklet platform with planters and timber pergola" },
+
 ];
 
 /**

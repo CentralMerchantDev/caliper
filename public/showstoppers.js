@@ -757,3 +757,862 @@ export const SHOWSTOPPERS = {
   "park-observation-wheel": parkObservationWheel(),
   "bridge-cable-stayed-pylon": bridgeCableStayedTower(),
 };
+
+
+
+
+
+// =============================================================================
+// RESIDENTIAL ECO SHOWSTOPPERS (5 Models)
+// =============================================================================
+
+export function bldEcoBoscoVerticale() {
+  return {
+    id: "bld-eco-bosco-verticale",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 40, d: 40 },
+    height: 112.0,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 580,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Main tower core (28x28m, 108m high)
+          const core = new T.BoxGeometry(28, 108, 28);
+          core.translate(0, 54, 0);
+          parts.push(core);
+
+          // 14 Staggered Cantilevered Green Planter Balconies on 4 faces
+          for (let i = 1; i <= 14; i++) {
+            const y = i * 7.2;
+            const side = (i % 2 === 0) ? 1 : -1;
+            // North/South Balcony
+            const bNS = new T.BoxGeometry(36, 1.2, 5.0);
+            bNS.translate(0, y, side * 16);
+            // Green foliage box
+            const fNS = new T.BoxGeometry(34, 1.8, 3.8);
+            fNS.translate(0, y + 1.2, side * 16);
+            // East/West Balcony
+            const bEW = new T.BoxGeometry(5.0, 1.2, 36);
+            bEW.translate(-side * 16, y + 3.6, 0);
+            const fEW = new T.BoxGeometry(3.8, 1.8, 34);
+            fEW.translate(-side * 16, y + 4.8, 0);
+            parts.push(bNS, fNS, bEW, fEW);
+          }
+
+          // Rooftop Pergola Arboretum
+          const pergola = new T.BoxGeometry(26, 4.0, 26);
+          pergola.translate(0, 110, 0);
+          parts.push(pergola);
+
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 88,
+        createGeometry: (T = THREE) => {
+          const body = new T.BoxGeometry(34, 110, 34);
+          body.translate(0, 55, 0);
+          return body;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(34, 112, 34);
+          b.translate(0, 56, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoCurvedRibbonVilla() {
+  return {
+    id: "bld-eco-curved-ribbon-villa",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 24, d: 32 },
+    height: 12.0,
+    clearance: 0.5,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 440,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Lower Ground Pod
+          const pod1 = new T.CylinderGeometry(10, 11, 4.5, 16);
+          pod1.scale(1.0, 1.0, 1.3);
+          pod1.translate(0, 2.25, 0);
+          parts.push(pod1);
+
+          // Upper Fluid Ribbon (Cantilevered Sweeping Floor)
+          const ribbon = new T.CylinderGeometry(11, 10, 4.5, 16);
+          ribbon.scale(0.9, 1.0, 1.2);
+          ribbon.translate(0, 6.75, 2.0);
+          parts.push(ribbon);
+
+          // Sinuous Green Roof Parapet & Solar Pergola
+          const roofGarden = new T.CylinderGeometry(9.5, 9.5, 1.0, 16);
+          roofGarden.scale(0.9, 1.0, 1.2);
+          roofGarden.translate(0, 9.5, 2.0);
+          const pergola = new T.BoxGeometry(14, 2.0, 16);
+          pergola.translate(0, 11.0, 2.0);
+          parts.push(roofGarden, pergola);
+
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 64,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(22, 12, 30);
+          b.translate(0, 6, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(22, 12, 30);
+          b.translate(0, 6, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoStepGardenWalkup() {
+  return {
+    id: "bld-eco-step-garden-walkup",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 32, d: 48 },
+    height: 24.0,
+    clearance: 0.5,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 480,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // 5 Cascading stepped residential tiers
+          for (let i = 0; i < 5; i++) {
+            const y = i * 4.4 + 2.2;
+            const d = 44 - i * 7.5;
+            const z = i * 3.6;
+            const tier = new T.BoxGeometry(28, 4.4, d);
+            tier.translate(0, y, z);
+            // Green balcony planter ledge
+            const planter = new T.BoxGeometry(28, 0.8, 1.6);
+            planter.translate(0, y + 2.0, z - d / 2 + 0.8);
+            parts.push(tier, planter);
+          }
+          const pergola = new T.BoxGeometry(24, 2.0, 12);
+          pergola.translate(0, 23.0, 14);
+          parts.push(pergola);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 72,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(30, 24, 46);
+          b.translate(0, 12, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(30, 24, 46);
+          b.translate(0, 12, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoBiophilicTownhouseRow() {
+  return {
+    id: "bld-eco-biophilic-townhouse-row",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 24, d: 24 },
+    height: 16.0,
+    clearance: 0.5,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 460,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          for (let i = 0; i < 3; i++) {
+            const ux = -8 + i * 8;
+            // Unit Body
+            const body = new T.BoxGeometry(7.6, 12, 20);
+            body.translate(ux, 6, 0);
+            // Vertical Green Timber Screen
+            const screen = new T.BoxGeometry(7.2, 10, 0.4);
+            screen.translate(ux, 6, 10.2);
+            // Rooftop Green Solarium Greenhouse
+            const solarium = new T.BoxGeometry(6.4, 3.8, 12);
+            solarium.translate(ux, 14, -2.0);
+            parts.push(body, screen, solarium);
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 64,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(24, 16, 22);
+          b.translate(0, 8, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(24, 16, 22);
+          b.translate(0, 8, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoHelixTerrace() {
+  return {
+    id: "bld-eco-helix-terrace",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 32, d: 32 },
+    height: 28.0,
+    clearance: 0.5,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 520,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // 7 Interlocking Rotated Quadrant Floor Plates with Sky Garden Balconies
+          for (let i = 0; i < 7; i++) {
+            const y = i * 3.8 + 1.9;
+            const rot = i * 0.15;
+            const floor = new T.BoxGeometry(20, 3.4, 20);
+            floor.rotateY(rot);
+            floor.translate(0, y, 0);
+            // Garden corner protrusion
+            const garden = new T.BoxGeometry(5.0, 1.2, 5.0);
+            garden.rotateY(rot);
+            garden.translate(Math.cos(rot) * 9.5, y + 1.2, Math.sin(rot) * 9.5);
+            parts.push(floor, garden);
+          }
+          const crown = new T.CylinderGeometry(10, 12, 1.4, 12);
+          crown.translate(0, 27.3, 0);
+          parts.push(crown);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 80,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(30, 28, 30);
+          b.translate(0, 14, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(30, 28, 30);
+          b.translate(0, 14, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+// =============================================================================
+// COMMERCIAL / OFFICE ECO SHOWSTOPPERS (5 Models)
+// =============================================================================
+
+export function bldEcoDiagridBiotower() {
+  return {
+    id: "bld-eco-diagrid-biotower",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 48, d: 48 },
+    height: 144.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 580,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Podium (44x44m, 16m high)
+          const pod = new T.CylinderGeometry(22, 23, 16, 16);
+          pod.translate(0, 8, 0);
+          parts.push(pod);
+
+          // 4 Main Diagrid Twisted Shaft Sections with Atrium Hollow
+          for (let i = 0; i < 4; i++) {
+            const y = 16 + i * 28 + 14;
+            const rTop = 20 - i * 1.5;
+            const rBot = 22 - i * 1.5;
+            const sec = new T.CylinderGeometry(rTop, rBot, 28, 16);
+            sec.rotateY(i * 0.2);
+            sec.translate(0, y, 0);
+            parts.push(sec);
+          }
+
+          // Sky Garden Atrium Crown
+          const crown = new T.CylinderGeometry(12, 15, 16, 16);
+          crown.translate(0, 136, 0);
+          parts.push(crown);
+
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const b = new T.CylinderGeometry(15, 23, 144, 12);
+          b.translate(0, 72, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(44, 144, 44);
+          b.translate(0, 72, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoHyperboloidTimberHQ() {
+  return {
+    id: "bld-eco-hyperboloid-timber-hq",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 48, d: 64 },
+    height: 36.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 500,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Base campus podium
+          const pod = new T.BoxGeometry(44, 12, 58);
+          pod.translate(0, 6, 0);
+          // Hyperbolic curved timber shell
+          const shell = new T.CylinderGeometry(20, 24, 20, 16);
+          shell.scale(1.0, 1.0, 1.3);
+          shell.translate(0, 22, 0);
+          // Undulating Sedum green roof canopy
+          const sedumRoof = new T.CylinderGeometry(18, 20, 4, 16);
+          sedumRoof.scale(1.0, 1.0, 1.3);
+          sedumRoof.translate(0, 34, 0);
+          parts.push(pod, shell, sedumRoof);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 72,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(44, 36, 60);
+          b.translate(0, 18, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(44, 36, 60);
+          b.translate(0, 18, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoFloatingCanopyHub() {
+  return {
+    id: "bld-eco-floating-canopy-hub",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 40, d: 56 },
+    height: 32.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 480,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Elevated Glass Pod Body (y: 6 - 26m)
+          const pod = new T.BoxGeometry(34, 20, 46);
+          pod.translate(0, 16, -2.0);
+          // Cantilevered Solar Aerofoil Wing (y: 26 - 32m)
+          const wing = new T.BoxGeometry(38, 2.5, 54);
+          wing.translate(0, 28, 0);
+          const solarLip = new T.BoxGeometry(36, 1.5, 52);
+          solarLip.translate(0, 30.5, 0);
+          // Ground Sculptural Columns
+          for (const cx of [-12, 12]) {
+            for (const cz of [-16, 16]) {
+              const col = new T.CylinderGeometry(1.2, 1.8, 6.0, 8);
+              col.translate(cx, 3.0, cz);
+              parts.push(col);
+            }
+          }
+          parts.push(pod, wing, solarLip);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 64,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(38, 32, 54);
+          b.translate(0, 16, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(38, 32, 54);
+          b.translate(0, 16, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoSolarSpire() {
+  return {
+    id: "bld-eco-solar-spire",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 40, d: 40 },
+    height: 160.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 560,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Tapered 4-facet Photovoltaic tower shaft (4 tiers)
+          for (let i = 0; i < 4; i++) {
+            const y = i * 36 + 18;
+            const wBot = 36 - i * 5;
+            const wTop = 31 - i * 5;
+            const tier = new T.CylinderGeometry(wTop / 2, wBot / 2, 36, 4);
+            tier.rotateY(Math.PI / 4);
+            tier.translate(0, y, 0);
+            parts.push(tier);
+          }
+          // Spire Tip & Wind Cowl
+          const spire = new T.ConeGeometry(3.0, 16.0, 4);
+          spire.rotateY(Math.PI / 4);
+          spire.translate(0, 152, 0);
+          parts.push(spire);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 88,
+        createGeometry: (T = THREE) => {
+          const b = new T.ConeGeometry(18, 160, 4);
+          b.rotateY(Math.PI / 4);
+          b.translate(0, 80, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(36, 160, 36);
+          b.translate(0, 80, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoGreenPodOffice() {
+  return {
+    id: "bld-eco-green-pod-office",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 48, d: 48 },
+    height: 28.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 540,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // 4 Elevated Circular Pods on Stems
+          const coords = [[-12, -12], [12, -12], [-12, 12], [12, 12]];
+          for (const [cx, cz] of coords) {
+            const stem = new T.CylinderGeometry(2.0, 3.0, 8.0, 8);
+            stem.translate(cx, 4.0, cz);
+            const pod = new T.CylinderGeometry(9.0, 8.0, 16.0, 12);
+            pod.translate(cx, 16.0, cz);
+            const greenCap = new T.CylinderGeometry(8.0, 9.0, 2.0, 12);
+            greenCap.translate(cx, 25.0, cz);
+            parts.push(stem, pod, greenCap);
+          }
+          // Connecting Cross Skybridge (y: 16m)
+          const bridgeX = new T.BoxGeometry(32, 3.2, 4.0);
+          bridgeX.translate(0, 16.0, 0);
+          const bridgeZ = new T.BoxGeometry(4.0, 3.2, 32);
+          bridgeZ.translate(0, 16.0, 0);
+          parts.push(bridgeX, bridgeZ);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 80,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(44, 28, 44);
+          b.translate(0, 14, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(44, 28, 44);
+          b.translate(0, 14, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+// =============================================================================
+// CIVIC / CULTURAL / MIXED-USE ECO SHOWSTOPPERS (5 Models)
+// =============================================================================
+
+export function civicEcoOperaFlow() {
+  return {
+    id: "civic-eco-opera-flow",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 64, d: 96 },
+    height: 36.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 580,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Sculptural Sinuous Primary Shell (Auditorium 1)
+          const shell1 = new T.CylinderGeometry(16, 20, 28, 16);
+          shell1.scale(1.0, 1.0, 1.25);
+          shell1.translate(0, 14, -12);
+          // Secondary Shell (Auditorium 2)
+          const shell2 = new T.CylinderGeometry(12, 16, 20, 16);
+          shell2.scale(1.0, 1.0, 1.25);
+          shell2.translate(0, 10, 18);
+          // Walkable Landscaped Green Ramp Concourse
+          const ramp = new T.BoxGeometry(58, 3.0, 80);
+          ramp.rotateX(-0.04);
+          ramp.translate(0, 3.2, 0);
+          parts.push(shell1, shell2, ramp);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(60, 36, 92);
+          b.translate(0, 18, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(60, 36, 92);
+          b.translate(0, 18, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function civicEcoBiomeDome() {
+  return {
+    id: "civic-eco-biome-dome",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 64, d: 64 },
+    height: 42.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 540,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Central Grand Geodesic Dome (56m dia, 38m high)
+          const dome = new T.SphereGeometry(28, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
+          dome.scale(1.0, 1.35, 1.0);
+          dome.translate(0, 0, 0);
+          // Surrounding Ring Canopy
+          const ring = new T.CylinderGeometry(30, 31, 4.0, 16);
+          ring.translate(0, 2.0, 0);
+          parts.push(dome, ring);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 88,
+        createGeometry: (T = THREE) => {
+          const dome = new T.SphereGeometry(28, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.5);
+          dome.scale(1.0, 1.35, 1.0);
+          return dome;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(58, 42, 58);
+          b.translate(0, 21, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function civicEcoWaveLibrary() {
+  return {
+    id: "civic-eco-wave-library",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 48, d: 72 },
+    height: 28.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 500,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Main library podium
+          const body = new T.BoxGeometry(44, 16, 66);
+          body.translate(0, 8, 0);
+          // Parametric Wave Timber Roof
+          const wave1 = new T.CylinderGeometry(14, 18, 6.0, 16);
+          wave1.scale(1.0, 1.0, 1.15);
+          wave1.translate(0, 19, -10);
+          const wave2 = new T.CylinderGeometry(12, 16, 8.0, 16);
+          wave2.scale(1.0, 1.0, 1.15);
+          wave2.translate(0, 22, 12);
+          parts.push(body, wave1, wave2);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 80,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(46, 28, 68);
+          b.translate(0, 14, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(46, 28, 68);
+          b.translate(0, 14, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function civicEcoSportsArena() {
+  return {
+    id: "civic-eco-sports-arena",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 80, d: 96 },
+    height: 36.0,
+    clearance: 2.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 580,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Elliptical Stadium Bowl (74x90m, 24m high)
+          const bowl = new T.CylinderGeometry(34, 38, 24, 16);
+          bowl.scale(1.0, 1.0, 1.2);
+          bowl.translate(0, 12, 0);
+          // Floating Solar Petal Canopy Ring (y: 24 - 36m)
+          const canopy = new T.CylinderGeometry(36, 32, 10, 16);
+          canopy.scale(1.0, 1.0, 1.22);
+          canopy.translate(0, 29, 0);
+          parts.push(bowl, canopy);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const b = new T.CylinderGeometry(36, 38, 36, 12);
+          b.scale(1.0, 1.0, 1.2);
+          b.translate(0, 18, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(76, 36, 92);
+          b.translate(0, 18, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function civicEcoHydroTransitTerminal() {
+  return {
+    id: "civic-eco-hydro-transit-terminal",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 64, d: 112 },
+    height: 32.0,
+    clearance: 2.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 560,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Grand Concourse Vault (58x104m, 26m high)
+          const vault = new T.CylinderGeometry(26, 30, 26, 16);
+          vault.scale(1.0, 1.0, 1.8);
+          vault.translate(0, 13, 0);
+          // Green Rooftop Living Sedum Canopy with Clerestory Skylights
+          const roof = new T.BoxGeometry(60, 4.0, 106);
+          roof.translate(0, 28, 0);
+          // Transit Dock Piers (South)
+          const pier = new T.BoxGeometry(20, 2.0, 14);
+          pier.translate(0, 1.0, 46);
+          parts.push(vault, roof, pier);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 88,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(60, 32, 108);
+          b.translate(0, 16, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(60, 32, 108);
+          b.translate(0, 16, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}

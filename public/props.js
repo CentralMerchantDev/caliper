@@ -1,3 +1,22 @@
+
+import {
+  bldEcoBoscoVerticale,
+  bldEcoCurvedRibbonVilla,
+  bldEcoStepGardenWalkup,
+  bldEcoBiophilicTownhouseRow,
+  bldEcoHelixTerrace,
+  bldEcoDiagridBiotower,
+  bldEcoHyperboloidTimberHQ,
+  bldEcoFloatingCanopyHub,
+  bldEcoSolarSpire,
+  bldEcoGreenPodOffice,
+  civicEcoOperaFlow,
+  civicEcoBiomeDome,
+  civicEcoWaveLibrary,
+  civicEcoSportsArena,
+  civicEcoHydroTransitTerminal,
+} from "./showstoppers.js";
+
 import { SHOWSTOPPERS } from "./showstoppers.js";
 import {
   intersection4Way,
@@ -970,6 +989,56 @@ groundFurniture.variants = {
 };
 
 export const MODELS = {
+
+  // --- ECO ROADWAYS & PATHWAYS ---
+  "roadway-permeable-paved-street": roadwayPermeablePavedStreet(),
+  "roadway-bioswale-avenue": roadwayBioswaleAvenue(),
+  "roadway-green-tramway-lawn": roadwayGreenTramwayLawn(),
+  "roadway-cycle-superhighway": roadwayCycleSuperhighway(),
+  "roadway-woonerf-shared-space": roadwayWoonerfSharedSpace(),
+  "pathway-timber-boardwalk": pathwayTimberBoardwalk(),
+  "pathway-flagstone-promenade": pathwayFlagstonePromenade(),
+  "pathway-gravel-meander": pathwayGravelMeander(),
+  "sidewalk-rain-garden-curb": sidewalkRainGardenCurb(),
+  "sidewalk-solar-paver-walk": sidewalkSolarPaverWalk(),
+
+  // --- ECO BRIDGES & OVERPASSES ---
+  "bridge-living-green-viaduct": bridgeLivingGreenViaduct(),
+  "bridge-cable-stayed-skybridge": bridgeCableStayedSkybridge(),
+  "bridge-timber-hyperboloid-footbridge": bridgeTimberHyperboloidFootbridge(),
+  "bridge-canal-step-bridge": bridgeCanalStepBridge(),
+  "bridge-diagrid-tube-skyway": bridgeDiagridTubeSkyway(),
+  "bridge-living-arch-aqueduct": bridgeLivingArchAqueduct(),
+
+  // --- ECO PROPS & URBAN AMENITIES ---
+  "prop-solar-canopy-bench": propSolarCanopyBench(),
+  "prop-living-wall-totem": propLivingWallTotem(),
+  "prop-rain-garden-planter": propRainGardenPlanter(),
+  "prop-kinetic-solar-lamp": propKineticSolarLamp(),
+  "prop-ev-supercharger-hub": propEvSuperchargerHub(),
+  "prop-bike-service-station": propBikeServiceStation(),
+  "prop-water-refill-fountain": propWaterRefillFountain(),
+  "prop-pollinator-habitat-post": propPollinatorHabitatPost(),
+  "prop-smart-waste-compactor": propSmartWasteCompactor(),
+  "prop-shaded-parklet-deck": propShadedParkletDeck(),
+
+  // --- 15 ECO SHOWSTOPPERS ---
+  "bld-eco-bosco-verticale": bldEcoBoscoVerticale(),
+  "bld-eco-curved-ribbon-villa": bldEcoCurvedRibbonVilla(),
+  "bld-eco-step-garden-walkup": bldEcoStepGardenWalkup(),
+  "bld-eco-biophilic-townhouse-row": bldEcoBiophilicTownhouseRow(),
+  "bld-eco-helix-terrace": bldEcoHelixTerrace(),
+  "bld-eco-diagrid-biotower": bldEcoDiagridBiotower(),
+  "bld-eco-hyperboloid-timber-hq": bldEcoHyperboloidTimberHQ(),
+  "bld-eco-floating-canopy-hub": bldEcoFloatingCanopyHub(),
+  "bld-eco-solar-spire": bldEcoSolarSpire(),
+  "bld-eco-green-pod-office": bldEcoGreenPodOffice(),
+  "civic-eco-opera-flow": civicEcoOperaFlow(),
+  "civic-eco-biome-dome": civicEcoBiomeDome(),
+  "civic-eco-wave-library": civicEcoWaveLibrary(),
+  "civic-eco-sports-arena": civicEcoSportsArena(),
+  "civic-eco-hydro-transit-terminal": civicEcoHydroTransitTerminal(),
+
 
   "boundary-front-wall": boundaryFrontWall(8.0),
   "boundary-gate": boundaryGate(1.2),
@@ -5184,6 +5253,1230 @@ export function gardenFeature(feature = "shed") {
         createGeometry: (T = THREE) => {
           const b = new T.BoxGeometry(sp.w, sp.h, sp.d);
           b.translate(0, sp.h / 2, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+
+
+
+
+// =============================================================================
+// ROADWAYS, SIDEWALKS & PATHWAYS (10 Models)
+// =============================================================================
+
+export function roadwayPermeablePavedStreet() {
+  return {
+    id: "roadway-permeable-paved-street",
+    kind: "soft",
+    footprint: { w: 18, d: 16 },
+    height: 0.45,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const road = new T.BoxGeometry(17.8, 0.2, 16);
+          road.translate(0, 0.1, 0);
+          const channelL = new T.BoxGeometry(0.6, 0.1, 16);
+          channelL.translate(-7.0, 0.2, 0);
+          const channelR = new T.BoxGeometry(0.6, 0.1, 16);
+          channelR.translate(7.0, 0.2, 0);
+          return mergeGeometries([road, channelL, channelR], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(18, 0.4, 16);
+          b.translate(0, 0.2, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(18, 0.4, 16);
+          b.translate(0, 0.2, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function roadwayBioswaleAvenue() {
+  return {
+    id: "roadway-bioswale-avenue",
+    kind: "soft",
+    footprint: { w: 28, d: 32 },
+    height: 0.4,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 112,
+        createGeometry: (T = THREE) => {
+          // Dual carriageways
+          const laneL = new T.BoxGeometry(11, 0.2, 32);
+          laneL.translate(-8.0, 0.1, 0);
+          const laneR = new T.BoxGeometry(11, 0.2, 32);
+          laneR.translate(8.0, 0.1, 0);
+          // Central Sunken Bioswale
+          const swale = new T.BoxGeometry(4.6, 0.15, 32);
+          swale.translate(0, 0.05, 0);
+          return mergeGeometries([laneL, laneR, swale], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(28, 0.35, 32);
+          b.translate(0, 0.175, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(28, 0.35, 32);
+          b.translate(0, 0.175, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function roadwayGreenTramwayLawn() {
+  return {
+    id: "roadway-green-tramway-lawn",
+    kind: "soft",
+    footprint: { w: 24, d: 32 },
+    height: 0.45,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 140,
+        createGeometry: (T = THREE) => {
+          // Central Green Turf Lawn (10m wide)
+          const lawn = new T.BoxGeometry(10, 0.22, 32);
+          lawn.translate(0, 0.11, 0);
+          // 4 Embedded Steel Rails
+          const rails = [];
+          for (const rx of [-3.8, -2.4, 2.4, 3.8]) {
+            const rail = new T.BoxGeometry(0.12, 0.05, 32);
+            rail.translate(rx, 0.24, 0);
+            rails.push(rail);
+          }
+          // Flanking Road Lanes
+          const rL = new T.BoxGeometry(6.8, 0.2, 32);
+          rL.translate(-8.4, 0.1, 0);
+          const rR = new T.BoxGeometry(6.8, 0.2, 32);
+          rR.translate(8.4, 0.1, 0);
+          return mergeGeometries([lawn, ...rails, rL, rR], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 32,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(24, 0.4, 32);
+          b.translate(0, 0.2, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(24, 0.4, 32);
+          b.translate(0, 0.2, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function roadwayCycleSuperhighway() {
+  return {
+    id: "roadway-cycle-superhighway",
+    kind: "soft",
+    footprint: { w: 16, d: 16 },
+    height: 0.35,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 80,
+        createGeometry: (T = THREE) => {
+          // Dual Red Cycle Track (4m wide)
+          const cycle = new T.BoxGeometry(4.0, 0.22, 16);
+          cycle.translate(-4.5, 0.11, 0);
+          // Green Buffer Verge
+          const verge = new T.BoxGeometry(1.2, 0.25, 16);
+          verge.translate(-1.9, 0.125, 0);
+          // Main Roadway
+          const road = new T.BoxGeometry(9.0, 0.2, 16);
+          road.translate(3.2, 0.1, 0);
+          return mergeGeometries([cycle, verge, road], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(16, 0.3, 16);
+          b.translate(0, 0.15, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(16, 0.3, 16);
+          b.translate(0, 0.15, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function roadwayWoonerfSharedSpace() {
+  return {
+    id: "roadway-woonerf-shared-space",
+    kind: "soft",
+    footprint: { w: 16, d: 16 },
+    height: 0.8,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const pave = new T.BoxGeometry(15.8, 0.18, 16);
+          pave.translate(0, 0.09, 0);
+          // Chicane Planters
+          const p1 = new T.BoxGeometry(2.2, 0.6, 3.2);
+          p1.translate(-4.5, 0.3, -4.0);
+          const p2 = new T.BoxGeometry(2.2, 0.6, 3.2);
+          p2.translate(4.5, 0.3, 4.0);
+          return mergeGeometries([pave, p1, p2], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(16, 0.3, 16);
+          b.translate(0, 0.15, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(16, 0.3, 16);
+          b.translate(0, 0.15, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function pathwayTimberBoardwalk() {
+  return {
+    id: "pathway-timber-boardwalk",
+    kind: "soft",
+    footprint: { w: 4.0, d: 16.0 },
+    height: 0.6,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["park", "verge", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 64,
+        createGeometry: (T = THREE) => {
+          const deck = new T.BoxGeometry(3.8, 0.15, 16);
+          deck.translate(0, 0.35, 0);
+          const postL = new T.BoxGeometry(0.12, 0.5, 16);
+          postL.translate(-1.8, 0.25, 0);
+          const postR = new T.BoxGeometry(0.12, 0.5, 16);
+          postR.translate(1.8, 0.25, 0);
+          return mergeGeometries([deck, postL, postR], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(4.0, 0.5, 16);
+          b.translate(0, 0.25, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(4.0, 0.5, 16);
+          b.translate(0, 0.25, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function pathwayFlagstonePromenade() {
+  return {
+    id: "pathway-flagstone-promenade",
+    kind: "soft",
+    footprint: { w: 8.0, d: 16.0 },
+    height: 0.25,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "park", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 48,
+        createGeometry: (T = THREE) => {
+          const pave = new T.BoxGeometry(7.8, 0.12, 16);
+          pave.translate(0, 0.06, 0);
+          const pit1 = new T.BoxGeometry(1.4, 0.04, 1.4);
+          pit1.translate(0, 0.13, -4.0);
+          const pit2 = new T.BoxGeometry(1.4, 0.04, 1.4);
+          pit2.translate(0, 0.13, 4.0);
+          return mergeGeometries([pave, pit1, pit2], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(8.0, 0.2, 16);
+          b.translate(0, 0.1, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(8.0, 0.2, 16);
+          b.translate(0, 0.1, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function pathwayGravelMeander() {
+  return {
+    id: "pathway-gravel-meander",
+    kind: "soft",
+    footprint: { w: 3.2, d: 16.0 },
+    height: 0.15,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["park", "verge", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 36,
+        createGeometry: (T = THREE) => {
+          const gravel = new T.BoxGeometry(3.0, 0.08, 16);
+          gravel.translate(0, 0.04, 0);
+          const edgeL = new T.BoxGeometry(0.1, 0.1, 16);
+          edgeL.translate(-1.5, 0.05, 0);
+          const edgeR = new T.BoxGeometry(0.1, 0.1, 16);
+          edgeR.translate(1.5, 0.05, 0);
+          return mergeGeometries([gravel, edgeL, edgeR], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.2, 0.1, 16);
+          b.translate(0, 0.05, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.2, 0.1, 16);
+          b.translate(0, 0.05, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function sidewalkRainGardenCurb() {
+  return {
+    id: "sidewalk-rain-garden-curb",
+    kind: "soft",
+    footprint: { w: 3.6, d: 16.0 },
+    height: 0.35,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "verge", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 60,
+        createGeometry: (T = THREE) => {
+          const walk = new T.BoxGeometry(2.2, 0.18, 16);
+          walk.translate(-0.6, 0.09, 0);
+          const planter = new T.BoxGeometry(1.2, 0.25, 14);
+          planter.translate(1.1, 0.125, 0);
+          return mergeGeometries([walk, planter], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.6, 0.25, 16);
+          b.translate(0, 0.125, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.6, 0.25, 16);
+          b.translate(0, 0.125, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function sidewalkSolarPaverWalk() {
+  return {
+    id: "sidewalk-solar-paver-walk",
+    kind: "soft",
+    footprint: { w: 4.0, d: 16.0 },
+    height: 0.25,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 54,
+        createGeometry: (T = THREE) => {
+          const walk = new T.BoxGeometry(3.8, 0.14, 16);
+          walk.translate(0, 0.07, 0);
+          const strip = new T.BoxGeometry(0.8, 0.02, 16);
+          strip.translate(0, 0.15, 0);
+          return mergeGeometries([walk, strip], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(4.0, 0.2, 16);
+          b.translate(0, 0.1, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(4.0, 0.2, 16);
+          b.translate(0, 0.1, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+// =============================================================================
+// BRIDGES & OVERPASSES (6 Models)
+// =============================================================================
+
+export function bridgeLivingGreenViaduct() {
+  return {
+    id: "bridge-living-green-viaduct",
+    kind: "hard",
+    footprint: { w: 28, d: 48 },
+    height: 16.0,
+    clearance: 5.5,
+    origin: "base-centre",
+    standsOn: ["carriageway", "water", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 280,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // 2 Massive Arched Piers (y: 0 - 10m)
+          for (const pz of [-16, 16]) {
+            const pier = new T.BoxGeometry(26, 10, 6.0);
+            pier.translate(0, 5.0, pz);
+            parts.push(pier);
+          }
+          // Deck Span (y: 10 - 13m)
+          const deck = new T.BoxGeometry(27.6, 2.5, 48);
+          deck.translate(0, 11.25, 0);
+          // Green Garden Park Top Deck (y: 13 - 15m)
+          const parkLawn = new T.BoxGeometry(26, 1.2, 48);
+          parkLawn.translate(0, 13.1, 0);
+          // Planter Parapets
+          const wallL = new T.BoxGeometry(0.8, 1.6, 48);
+          wallL.translate(-13.4, 13.3, 0);
+          const wallR = new T.BoxGeometry(0.8, 1.6, 48);
+          wallR.translate(13.4, 13.3, 0);
+          parts.push(deck, parkLawn, wallL, wallR);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 64,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(28, 16, 48);
+          b.translate(0, 8, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(28, 16, 48);
+          b.translate(0, 8, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bridgeCableStayedSkybridge() {
+  return {
+    id: "bridge-cable-stayed-skybridge",
+    kind: "hard",
+    footprint: { w: 8.0, d: 48.0 },
+    height: 24.0,
+    clearance: 6.0,
+    origin: "base-centre",
+    standsOn: ["carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 240,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Central A-Frame Pylon (y: 0 - 24m)
+          const pylon = new T.BoxGeometry(1.6, 24, 2.4);
+          pylon.translate(0, 12, 0);
+          // Glazed Bridge Tube (y: 7 - 11m)
+          const tube = new T.BoxGeometry(4.8, 3.8, 48);
+          tube.translate(0, 9.0, 0);
+          // Cables
+          const c1 = new T.BoxGeometry(0.1, 14, 22);
+          c1.translate(0, 16, -12);
+          const c2 = new T.BoxGeometry(0.1, 14, 22);
+          c2.translate(0, 16, 12);
+          parts.push(pylon, tube, c1, c2);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 48,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(6, 24, 48);
+          b.translate(0, 12, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(6, 24, 48);
+          b.translate(0, 12, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bridgeTimberHyperboloidFootbridge() {
+  return {
+    id: "bridge-timber-hyperboloid-footbridge",
+    kind: "hard",
+    footprint: { w: 6.0, d: 32.0 },
+    height: 8.0,
+    clearance: 3.5,
+    origin: "base-centre",
+    standsOn: ["water", "park", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 196,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Arched Deck
+          const deck = new T.BoxGeometry(4.2, 0.8, 32);
+          deck.translate(0, 4.2, 0);
+          // Glulam Timber Lattice Ribs
+          for (const z of [-12, -6, 0, 6, 12]) {
+            const arch = new T.CylinderGeometry(2.8, 2.8, 0.4, 12, 1, true);
+            arch.rotateX(Math.PI / 2);
+            arch.translate(0, 4.5, z);
+            parts.push(arch);
+          }
+          parts.push(deck);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 40,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(6, 8, 32);
+          b.translate(0, 4, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(6, 8, 32);
+          b.translate(0, 4, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bridgeCanalStepBridge() {
+  return {
+    id: "bridge-canal-step-bridge",
+    kind: "hard",
+    footprint: { w: 8.0, d: 24.0 },
+    height: 5.5,
+    clearance: 2.8,
+    origin: "base-centre",
+    standsOn: ["water", "sidewalk", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 180,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Stone Arch Base
+          const arch = new T.BoxGeometry(7.6, 3.2, 24);
+          arch.translate(0, 1.6, 0);
+          // Stepped Ramp & Parapets
+          const steps = new T.BoxGeometry(5.2, 1.6, 16);
+          steps.translate(0, 4.0, 0);
+          const pL = new T.BoxGeometry(0.6, 1.2, 24);
+          pL.translate(-3.5, 4.2, 0);
+          const pR = new T.BoxGeometry(0.6, 1.2, 24);
+          pR.translate(3.5, 4.2, 0);
+          parts.push(arch, steps, pL, pR);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 36,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(8, 5.5, 24);
+          b.translate(0, 2.75, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(8, 5.5, 24);
+          b.translate(0, 2.75, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bridgeDiagridTubeSkyway() {
+  return {
+    id: "bridge-diagrid-tube-skyway",
+    kind: "hard",
+    footprint: { w: 5.0, d: 32.0 },
+    height: 6.0,
+    clearance: 4.5,
+    origin: "base-centre",
+    standsOn: ["carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 160,
+        createGeometry: (T = THREE) => {
+          const tube = new T.CylinderGeometry(2.3, 2.3, 32, 12);
+          tube.rotateX(Math.PI / 2);
+          tube.translate(0, 3.5, 0);
+          return tube;
+        },
+      },
+      {
+        level: 1,
+        tris: 32,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(5, 5, 32);
+          b.translate(0, 3.5, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(5, 5, 32);
+          b.translate(0, 3.5, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bridgeLivingArchAqueduct() {
+  return {
+    id: "bridge-living-arch-aqueduct",
+    kind: "hard",
+    footprint: { w: 12.0, d: 40.0 },
+    height: 14.0,
+    clearance: 6.0,
+    origin: "base-centre",
+    standsOn: ["water", "park", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 220,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          for (const z of [-14, 0, 14]) {
+            const pier = new T.BoxGeometry(10.5, 10, 4.5);
+            pier.translate(0, 5.0, z);
+            parts.push(pier);
+          }
+          const span = new T.BoxGeometry(11.4, 3.5, 40);
+          span.translate(0, 11.75, 0);
+          parts.push(span);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 48,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(12, 14, 40);
+          b.translate(0, 7, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(12, 14, 40);
+          b.translate(0, 7, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+// =============================================================================
+// PROPS & STREET FURNITURE (10 Models)
+// =============================================================================
+
+export function propSolarCanopyBench() {
+  return {
+    id: "prop-solar-canopy-bench",
+    kind: "hard",
+    footprint: { w: 3.2, d: 1.8 },
+    height: 2.8,
+    clearance: 0.2,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "park", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const bench = new T.BoxGeometry(2.8, 0.45, 0.8);
+          bench.translate(0, 0.45, 0);
+          const stem = new T.CylinderGeometry(0.08, 0.08, 2.2, 8);
+          stem.translate(0, 1.4, -0.6);
+          const wing = new T.BoxGeometry(3.0, 0.1, 1.6);
+          wing.rotateX(0.15);
+          wing.translate(0, 2.6, 0);
+          return mergeGeometries([bench, stem, wing], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.2, 2.8, 1.8);
+          b.translate(0, 1.4, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.2, 2.8, 1.8);
+          b.translate(0, 1.4, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function propLivingWallTotem() {
+  return {
+    id: "prop-living-wall-totem",
+    kind: "hard",
+    footprint: { w: 1.2, d: 1.2 },
+    height: 3.8,
+    clearance: 0.1,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "park", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 64,
+        createGeometry: (T = THREE) => {
+          const base = new T.BoxGeometry(1.1, 0.4, 1.1);
+          base.translate(0, 0.2, 0);
+          const wall = new T.BoxGeometry(0.9, 3.2, 0.9);
+          wall.translate(0, 2.0, 0);
+          const cap = new T.BoxGeometry(1.0, 0.2, 1.0);
+          cap.translate(0, 3.7, 0);
+          return mergeGeometries([base, wall, cap], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.2, 3.8, 1.2);
+          b.translate(0, 1.9, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.2, 3.8, 1.2);
+          b.translate(0, 1.9, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function propRainGardenPlanter() {
+  return {
+    id: "prop-rain-garden-planter",
+    kind: "hard",
+    footprint: { w: 4.0, d: 1.6 },
+    height: 0.9,
+    clearance: 0.1,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "verge", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 60,
+        createGeometry: (T = THREE) => {
+          const box = new T.BoxGeometry(3.8, 0.6, 1.4);
+          box.translate(0, 0.3, 0);
+          const flora = new T.BoxGeometry(3.4, 0.4, 1.1);
+          flora.translate(0, 0.7, 0);
+          return mergeGeometries([box, flora], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(4.0, 0.9, 1.6);
+          b.translate(0, 0.45, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(4.0, 0.9, 1.6);
+          b.translate(0, 0.45, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function propKineticSolarLamp() {
+  return {
+    id: "prop-kinetic-solar-lamp",
+    kind: "hard",
+    footprint: { w: 1.0, d: 1.0 },
+    height: 5.2,
+    clearance: 0.1,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "park", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 72,
+        createGeometry: (T = THREE) => {
+          const pole = new T.CylinderGeometry(0.08, 0.12, 4.6, 8);
+          pole.translate(0, 2.3, 0);
+          const head = new T.BoxGeometry(0.5, 0.12, 0.5);
+          head.translate(0, 4.7, 0.1);
+          const turbine = new T.ConeGeometry(0.25, 0.4, 6);
+          turbine.translate(0, 5.0, 0);
+          return mergeGeometries([pole, head, turbine], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 20,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.0, 5.2, 1.0);
+          b.translate(0, 2.6, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.0, 5.2, 1.0);
+          b.translate(0, 2.6, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function propEvSuperchargerHub() {
+  return {
+    id: "prop-ev-supercharger-hub",
+    kind: "hard",
+    footprint: { w: 3.6, d: 2.4 },
+    height: 2.8,
+    clearance: 0.2,
+    origin: "base-centre",
+    standsOn: ["parking", "carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 88,
+        createGeometry: (T = THREE) => {
+          // 2 Charger Bollards
+          const c1 = new T.BoxGeometry(0.6, 1.8, 0.4);
+          c1.translate(-1.0, 0.9, 0);
+          const c2 = new T.BoxGeometry(0.6, 1.8, 0.4);
+          c2.translate(1.0, 0.9, 0);
+          // Green Roof Canopy
+          const canopy = new T.BoxGeometry(3.4, 0.2, 2.2);
+          canopy.translate(0, 2.7, 0);
+          return mergeGeometries([c1, c2, canopy], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.6, 2.8, 2.4);
+          b.translate(0, 1.4, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(3.6, 2.8, 2.4);
+          b.translate(0, 1.4, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function propBikeServiceStation() {
+  return {
+    id: "prop-bike-service-station",
+    kind: "hard",
+    footprint: { w: 1.4, d: 1.0 },
+    height: 1.6,
+    clearance: 0.1,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "park", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 56,
+        createGeometry: (T = THREE) => {
+          const post = new T.BoxGeometry(0.35, 1.5, 0.25);
+          post.translate(0, 0.75, 0);
+          const arm = new T.BoxGeometry(0.6, 0.1, 0.15);
+          arm.translate(0, 1.45, 0.2);
+          return mergeGeometries([post, arm], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.4, 1.6, 1.0);
+          b.translate(0, 0.8, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.4, 1.6, 1.0);
+          b.translate(0, 0.8, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function propWaterRefillFountain() {
+  return {
+    id: "prop-water-refill-fountain",
+    kind: "hard",
+    footprint: { w: 0.9, d: 0.9 },
+    height: 1.4,
+    clearance: 0.1,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "park", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 64,
+        createGeometry: (T = THREE) => {
+          const col = new T.CylinderGeometry(0.18, 0.22, 1.3, 10);
+          col.translate(0, 0.65, 0);
+          const spout = new T.BoxGeometry(0.3, 0.1, 0.3);
+          spout.translate(0, 1.25, 0.15);
+          return mergeGeometries([col, spout], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(0.9, 1.4, 0.9);
+          b.translate(0, 0.7, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(0.9, 1.4, 0.9);
+          b.translate(0, 0.7, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function propPollinatorHabitatPost() {
+  return {
+    id: "prop-pollinator-habitat-post",
+    kind: "hard",
+    footprint: { w: 0.8, d: 0.8 },
+    height: 2.4,
+    clearance: 0.1,
+    origin: "base-centre",
+    standsOn: ["park", "verge", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 52,
+        createGeometry: (T = THREE) => {
+          const pole = new T.BoxGeometry(0.18, 2.3, 0.18);
+          pole.translate(0, 1.15, 0);
+          const house = new T.BoxGeometry(0.6, 0.8, 0.4);
+          house.translate(0, 1.8, 0);
+          return mergeGeometries([pole, house], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(0.8, 2.4, 0.8);
+          b.translate(0, 1.2, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(0.8, 2.4, 0.8);
+          b.translate(0, 1.2, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function propSmartWasteCompactor() {
+  return {
+    id: "prop-smart-waste-compactor",
+    kind: "hard",
+    footprint: { w: 1.8, d: 1.0 },
+    height: 1.5,
+    clearance: 0.1,
+    origin: "base-centre",
+    standsOn: ["sidewalk", "park", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 60,
+        createGeometry: (T = THREE) => {
+          const bin = new T.BoxGeometry(1.6, 1.35, 0.85);
+          bin.translate(0, 0.675, 0);
+          const solar = new T.BoxGeometry(1.65, 0.08, 0.9);
+          solar.translate(0, 1.45, 0);
+          return mergeGeometries([bin, solar], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.8, 1.5, 1.0);
+          b.translate(0, 0.75, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(1.8, 1.5, 1.0);
+          b.translate(0, 0.75, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function propShadedParkletDeck() {
+  return {
+    id: "prop-shaded-parklet-deck",
+    kind: "hard",
+    footprint: { w: 4.8, d: 2.4 },
+    height: 3.0,
+    clearance: 0.2,
+    origin: "base-centre",
+    standsOn: ["parking", "carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 110,
+        createGeometry: (T = THREE) => {
+          const deck = new T.BoxGeometry(4.6, 0.25, 2.2);
+          deck.translate(0, 0.125, 0);
+          const pergola = new T.BoxGeometry(4.4, 0.2, 2.0);
+          pergola.translate(0, 2.8, 0);
+          const p1 = new T.BoxGeometry(0.12, 2.6, 0.12);
+          p1.translate(-2.1, 1.4, -0.9);
+          const p2 = new T.BoxGeometry(0.12, 2.6, 0.12);
+          p2.translate(2.1, 1.4, -0.9);
+          return mergeGeometries([deck, pergola, p1, p2], T);
+        },
+      },
+      {
+        level: 1,
+        tris: 24,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(4.8, 3.0, 2.4);
+          b.translate(0, 1.5, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(4.8, 3.0, 2.4);
+          b.translate(0, 1.5, 0);
           return b;
         },
       },
