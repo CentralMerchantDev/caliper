@@ -900,10 +900,21 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       instead of minutes, at the cost of not re-running the other ~860 tests
       per row, which one final clean `node test/run.mjs` closes cheaply
       afterward.
-- [ ] **H2 — the page's numbers are true.** `node scripts/gen-test-count.mjs`,
-      then re-read every count claimed on the page and confirm it was measured
-      today. The page states its own test count; a stale one is the exact defect
-      this project exists to argue against.
+- [x] **H2 — the page's numbers are true.** Evidence: `node
+      scripts/gen-test-count.mjs` → **868 node tests (0 fail), 12 worker
+      tests (0 fail)**, matching `#claim-node-tests`/`#claim-worker-tests` on
+      the page exactly (written by the generator, not typed).
+      Every other page claim `test/publicClaims.test.ts` pins is covered by
+      the 868/868 clean run above: the world's size, the placeholder city
+      stats, the spend caps/limits (checked against `CONTROL_LIMITS` — the
+      same object G1 proved every gate reads live), and the architecture
+      modal's stage names.
+      `node scripts/gen-city-summary.mjs` re-run and produced **zero diff**
+      against the committed `src/citySummary.generated.ts` — the city itself
+      is unchanged from before tonight's session, consistent with every
+      seed-related step (A2b, A3) pinning the DEFAULT seed byte-identical
+      throughout.
+      `npm test`: 868/868. `npx tsc --noEmit`: clean.
 - [ ] **H3 — update PART 0 ground truth** with the new measured figures, each
       with the command that produced it.
 - [ ] **H4 — write `docs/WORLD-BUILD-LOG.md`**: what was built, what was

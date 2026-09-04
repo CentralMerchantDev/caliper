@@ -1,0 +1,26 @@
+H2: the page's numbers are true
+
+What was checked: node scripts/gen-test-count.mjs regenerated the test count
+artefact -- 868 node tests (0 fail), 12 worker tests (0 fail) -- matching the
+page's #claim-node-tests/#claim-worker-tests spans exactly, because the
+generator writes them, nobody types them.
+
+test/publicClaims.test.ts pins every other number the page claims about
+itself -- the world's size, the placeholder city stats, the spend caps and
+limits (checked against CONTROL_LIMITS, the same object G1 proved every gate
+reads live rather than a hard-coded copy), and the architecture modal's stage
+names -- and all of it is covered by the 868/868 clean run this commit is
+built on.
+
+node scripts/gen-city-summary.mjs was re-run and produced ZERO diff against
+the committed src/citySummary.generated.ts. The city itself is unchanged from
+before tonight's session, which is exactly what every seed-related step
+(A2b, A3) already proved by pinning the DEFAULT seed byte-identical to its
+pre-change fingerprint throughout.
+
+npm test: 868/868. npx tsc --noEmit: clean.
+
+H3 (update PART 0 ground truth with today's measured figures) is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.
