@@ -17,6 +17,33 @@ mkdirSync(outDir, { recursive: true });
 
 const testFiles = readdirSync(testDir).filter((f) => f.endsWith(".test.ts") && !f.endsWith(".workers.test.ts"));
 
+// ONE THREE.JS IN THE PROCESS, NOT ONE PER BUNDLE.
+//
+// Each test file is bundled on its own and then all of them are imported into
+// this single process. An `alias` alone is not enough: it makes both spellings
+// of the import agree WITHIN a bundle, but three.js is then inlined into every
+// bundle that uses it, and five bundles means five copies live at once. The
+// library says so itself -- "THREE.WARNING: Multiple instances of Three.js
+// being imported" -- and the consequence is that classes differ between copies,
+// so `instanceof` across a bundle boundary is false for reasons unrelated to
+// the code under test.
+//
+// So three is resolved to one relative specifier and marked external. esbuild
+// leaves the import alone, node loads the file once, and node's module cache
+// hands every bundle the same instance. The specifier is relative because an
+// absolute Windows path is not a legal ESM import specifier; test/.built/ is a
+// fixed directory, so the relative path is stable.
+const THREE_FROM_BUILT = "../../public/vendor/three/three.module.min.js";
+const singleThree = {
+  name: "single-three",
+  setup(b) {
+    b.onResolve({ filter: /(^three$)|(vendor[/\\]three[/\\]three\.module\.min\.js$)/ }, () => ({
+      path: THREE_FROM_BUILT,
+      external: true,
+    }));
+  },
+};
+
 // BUILD EVERYTHING FIRST, AND FAIL LOUDLY IF ANYTHING WILL NOT BUILD.
 //
 // This used to build and import each file in turn inside one loop. When a build
@@ -43,6 +70,31 @@ for (const file of testFiles) {
       format: "esm",
       target: "node22",
       packages: "external", // real npm deps stay external; only relative src/ imports get bundled
+      plugins: [singleThree],
+      alias: {
+        // THE TESTS MUST LOAD THE SAME THREE THE PAGE LOADS.
+        //
+        // index.html declares an importmap: "three" -> ./vendor/three/three.module.min.js.
+        // So in a browser there is exactly one copy of the library, however a file
+        // spells the import. Node has no importmap, so bare "three" resolves to
+        // node_modules/three (a different build, 650 KB unminified vs the 365 KB
+        // vendored one) while "./vendor/three/..." resolves to the shipped file.
+        //
+        // The suite mixed both spellings -- public/props.js and world-render-3d.js
+        // use bare "three", public/buildings.js and showstoppers.js use the vendored
+        // path -- so a single run held TWO copies of three.js. That is not cosmetic:
+        // classes are per-copy, so `mesh instanceof THREE.Mesh` is false whenever the
+        // mesh was built by the other copy, and any such check passes or fails for
+        // reasons that have nothing to do with the code under test. It announced
+        // itself only as "THREE.WARNING: Multiple instances of Three.js being
+        // imported", which is easy to read as noise.
+        //
+        // Aliasing to the vendored file makes both spellings resolve to one absolute
+        // path, which esbuild then bundles once -- and, more to the point, makes the
+        // tests exercise the file that actually ships rather than a devDependency
+        // that never reaches a user.
+        three: path.join(testDir, "..", "public", "vendor", "three", "three.module.min.js"),
+      },
       logLevel: "warning",
     });
     built.push(outfile);

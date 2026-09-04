@@ -314,12 +314,50 @@ const MAX_SAMPLES_PER_AXIS = 25;
  */
 const TARGET_SPACING = 4;
 
+/**
+ * The widest a sample step is ever allowed to get, however large the footprint.
+ *
+ * WHY THERE HAS TO BE ONE. The per-axis sample cap is a budget, and above about
+ * 100 m of width the budget -- not TARGET_SPACING -- is what sets the spacing.
+ * Measured, before this constant existed:
+ *
+ *     200 m wide  ->   8 m step
+ *     600 m wide  ->  24 m step
+ *   3,500 m wide  -> 140 m step
+ *
+ * The comment above this function claimed "never coarser than TARGET_SPACING",
+ * which was true only below ~100 m and false everywhere it mattered. At 140 m
+ * the airport's own 3,500 m runway footprint could not see a 120 m river lying
+ * across it: the grid simply stepped over the water.
+ *
+ * 56 is chosen against the world, not for tidiness. A uniform grid of step `s`
+ * is guaranteed to land at least one sample inside any band of width `s` or
+ * wider, so the ceiling has to be the width of the narrowest thing a footprint
+ * must not step over. The narrowest water in the world is canal-cormorant at
+ * halfWidth 28, so 56 m of full width -- and this is that number, read from
+ * waterways.js rather than picked.
+ *
+ * WHAT IT DOES NOT GUARANTEE, stated because the previous comment's failure was
+ * claiming a guarantee it did not have: rivers TAPER, so near a river's source
+ * its width falls below 56 m and a large footprint can still step over that
+ * last stretch. Terrain sampling is the wrong instrument for it. `assessFootprint`
+ * asks `waterwayAt` directly for exactly this reason, and that query is the thing
+ * that actually defends against building in a river -- not the density of this
+ * grid. This ceiling closes the common case cheaply; it does not replace the
+ * direct question.
+ */
+const MAX_SPACING = 56;
+
 function sampleGrid(x, z, w, d) {
-  // Never coarser than TARGET_SPACING, never more than MAX_SAMPLES_PER_AXIS
-  // probes, never finer than 0.5 m -- and always at least a 3x3, so every
-  // footprint is sampled at its centre as well as its corners.
-  const stepW = Math.max(w / MAX_SAMPLES_PER_AXIS, Math.min(TARGET_SPACING, w / 2), 0.5);
-  const stepD = Math.max(d / MAX_SAMPLES_PER_AXIS, Math.min(TARGET_SPACING, d / 2), 0.5);
+  // Never finer than 0.5 m, never coarser than MAX_SPACING, at TARGET_SPACING
+  // wherever the sample budget allows it, and always at least a 3x3 so every
+  // footprint is sampled at its centre as well as at its corners.
+  //
+  // Read outward: the budget term sets the floor on step size, the MAX_SPACING
+  // term caps it, and TARGET_SPACING is what you get in between -- which is
+  // every footprint under about 100 m, meaning every building in the world.
+  const stepW = Math.min(MAX_SPACING, Math.max(w / MAX_SAMPLES_PER_AXIS, Math.min(TARGET_SPACING, w / 2), 0.5));
+  const stepD = Math.min(MAX_SPACING, Math.max(d / MAX_SAMPLES_PER_AXIS, Math.min(TARGET_SPACING, d / 2), 0.5));
   const nx = Math.max(2, Math.round(w / stepW));
   const nz = Math.max(2, Math.round(d / stepD));
   const out = [];

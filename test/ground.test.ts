@@ -393,3 +393,51 @@ test("rotation swaps the footprint's axes", () => {
     "an 80 x 4 m footprint gave the same answer in both orientations everywhere — rotation is being ignored",
   );
 });
+
+// A LARGE FOOTPRINT MUST NOT STEP OVER A NARROW FEATURE.
+//
+// `sampleGrid` budgets a fixed number of probes per axis, so the wider the
+// footprint the coarser the grid. Its comment claimed "never coarser than
+// TARGET_SPACING"; measured, that was true below about 100 m and false above it
+// -- 8 m at 200 m wide, 24 m at 600 m, and 140 m at the airport's own 3,500 m
+// runway. At 140 m the runway footprint could not see a 120 m river lying across
+// it. The grid simply stepped over the water.
+//
+// MAX_SPACING caps the step at 56 m, the full width of the narrowest water in
+// waterways.js (canal-cormorant, halfWidth 28). A uniform grid of step s always
+// lands a sample inside any band at least s wide, so that is the guarantee.
+//
+// This fixture puts the trench where the OLD grid provably could not see it. At
+// 3,500 m wide the old step was 140 m with samples at -1750 + 140k, so the two
+// nearest x = 0 are -70 and +70 and a 60 m trench centred on 0 fell cleanly
+// between them. At 56 m the nearest samples are about -27.8 and +27.8, both
+// inside it.
+test("a 3.5 km footprint sees a 60 m trench that used to fall between its samples", () => {
+  const FLAT = 10;
+  const trench = (x: number) => (Math.abs(x) <= 30 ? -20 : FLAT);
+  const ground = createGround({ heightAt: (x: number) => trench(x) });
+
+  const spec = { footprint: { w: 3500, d: 200 }, clearance: 0 };
+  const verdict = ground.canPlace(spec, 0, 0);
+
+  // The trench is 30 m of fall across the footprint. Whatever the ground decides
+  // to DO about that, it must not report flat ground it never looked at.
+  assert.ok(
+    !verdict.ok,
+    "a 3.5 km footprint lying across a 30 m deep trench was accepted -- the sample grid stepped over the water",
+  );
+  // Refused for the GROUND, not for its size or for something standing there.
+  assert.equal(
+    verdict.reason,
+    "terrain",
+    `refused, but not for the ground moving under it: ${verdict.reason}`,
+  );
+});
+
+test("guardrail: the same footprint on genuinely flat ground is still accepted", () => {
+  // Without this, the test above would pass if canPlace simply refused every
+  // large footprint, which is not the same thing as seeing the trench.
+  const ground = createGround({ heightAt: () => 10 });
+  const verdict = ground.canPlace({ footprint: { w: 3500, d: 200 }, clearance: 0 }, 0, 0);
+  assert.ok(verdict.ok, `a 3.5 km footprint on perfectly flat ground was refused: ${verdict.reason}`);
+});

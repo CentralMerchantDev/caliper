@@ -85,6 +85,35 @@ const MARKER = join(BACKUPS, "IN-PROGRESS.json");
 
 const sha = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
 
+/**
+ * Read the leftover-mutation marker, if any, and check its claim against the
+ * file it names.
+ *
+ * Existence of the marker is not evidence: a run can die after restoring but
+ * before unlinking, and the unlink can fail on a read-only or permission-odd
+ * mount. What IS evidence is the sha256 the marker recorded before it mutated
+ * anything. So every question about "is a file still mutated" is answered by
+ * hashing the file, here, in one place, rather than by three callers each
+ * deciding what the marker's presence implies.
+ *
+ * Returns `{ present: false }` when there is no marker, otherwise the parsed
+ * marker plus `onDisk` (the file's current hash, or null if it is missing) and
+ * `restored` (whether the file is byte-identical to its pre-mutation state).
+ */
+function markerFileMatches() {
+  if (!existsSync(MARKER)) return { present: false, restored: true };
+  let m;
+  try {
+    m = JSON.parse(readFileSync(MARKER, "utf8"));
+  } catch (e) {
+    // An unreadable marker is itself a reason to stop: something wrote it and
+    // died, and its contents were the only record of what to put back.
+    return { present: true, unreadable: String(e.message), restored: false, onDisk: null };
+  }
+  const onDisk = m.mutating && existsSync(m.mutating) ? sha(m.mutating) : null;
+  return { present: true, m, onDisk, restored: onDisk === m.originalHash };
+}
+
 function args() {
   const a = process.argv.slice(2);
   const get = (k) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : null; };
@@ -149,19 +178,52 @@ function applyMutation(mut, baseline) {
   // SIGTERM. The IN-MEMORY copy is the source of truth, not the file: `before`
   // is already in hand and cannot be cleared by anything outside this process,
   // which is exactly how the first version lost an original to a /tmp sweep.
+  // RESTORE RETRIES, AND A FAILURE STOPS EVERYTHING.
+  //
+  // Two defects, both found on a real run, and the second is the worse one.
+  //
+  // 1. On Windows a file can be briefly locked by an editor, a watcher or a
+  //    virus scanner, and writeFileSync throws `UNKNOWN: unknown error, open`.
+  //    That happened to public/city-plan.js. It is transient, so it retries.
+  //
+  // 2. When it still failed, the run CARRIED ON. It set process.exitCode and
+  //    returned, the loop moved to the next mutation, and the final summary
+  //    printed "7 of 7 controls proved they exist" -- a success report written
+  //    on top of a source file that was still mutated. Worse, the next mutation
+  //    touched the SAME file, wrote its own marker, restored cleanly and deleted
+  //    the marker, erasing the only on-disk record that anything was wrong. The
+  //    mutated GROUND_SPAN then shipped into the working tree and was found by
+  //    gen-test-count refusing to publish, one command later.
+  //
+  // A tool that reports success over a broken tree is worse than one that
+  // crashes. So a failed restore is FATAL: it throws, which aborts the loop
+  // before any other file is touched, and leaves the marker in place.
   const restore = () => {
-    try {
-      writeFileSync(target, before);
-      if (sha(target) !== originalHash) {
-        console.error(`\n### RESTORE FAILED for ${mut.file}. A copy is at ${backup}. Do not commit.`);
-        process.exitCode = 2;
-        return;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        writeFileSync(target, before);
+        if (sha(target) === originalHash) {
+          try { rmSync(MARKER, { force: true }); } catch { /* the marker is advisory */ }
+          return;
+        }
+        lastErr = new Error("the file on disk does not match the original after writing it back");
+      } catch (e) {
+        lastErr = e;
       }
-      try { rmSync(MARKER, { force: true }); } catch { /* the marker is advisory */ }
-    } catch (e) {
-      console.error(`\n### RESTORE THREW for ${mut.file}: ${e.message}. Backup: ${backup}`);
-      process.exitCode = 2;
+      // Busy-wait rather than async: this runs inside a finally block, and an
+      // await here would let the loop continue before the file was back.
+      const until = Date.now() + 120 * (attempt + 1);
+      while (Date.now() < until) { /* let the lock clear */ }
     }
+    console.error(
+      `\n### RESTORE FAILED for ${mut.file} after 5 attempts: ${lastErr?.message}\n` +
+      `###\n### THAT FILE IS STILL MUTATED ON DISK. Put it back before anything else:\n` +
+      `###     git checkout -- ${mut.file}\n` +
+      `### or copy from ${backup}\n` +
+      `###\n### Stopping here. Continuing would touch other files and bury this.`,
+    );
+    throw new Error(`restore failed for ${mut.file}`);
   };
   const onSignal = () => { restore(); process.exit(130); };
   process.on("SIGINT", onSignal);
@@ -238,14 +300,49 @@ if (opts.file && opts.find && opts.replace != null) {
 // costs an hour.
 if (existsSync(MARKER)) {
   const m = JSON.parse(readFileSync(MARKER, "utf8"));
-  console.error(
-    `### A PREVIOUS RUN DIED WHILE ${m.mutating} WAS MUTATED (${m.id}, ${m.startedAt}).\n` +
-    `### That file is probably still broken on disk. Restore it:\n` +
-    `###     git checkout -- ${m.mutating}\n` +
-    `### or copy back:  ${m.backup}\n` +
-    `### Then delete ${MARKER} and run this again.`,
-  );
-  process.exit(2);
+
+  // CLEAR THE MARKER ONLY ON PROOF, NEVER ON ASSERTION.
+  //
+  // The marker used to end with "then delete this file and run again", which
+  // asks a human to certify a repair by hand -- the same move this project
+  // keeps finding to be the source of false confidence. Whoever deletes it is
+  // stating the file is fixed; nothing checks that it is.
+  //
+  // The marker already carries the sha256 of the file as it was BEFORE the
+  // mutation, so the claim is checkable. Hash the file. If it matches, the
+  // restore genuinely happened -- by git checkout, by copying the backup, by
+  // hand, it does not matter which -- and the marker can go. If it does not
+  // match, refuse, and say so in terms of the file rather than the marker.
+  //
+  // This is the one deletion in this repo that is allowed to be automatic,
+  // because it is the one where the tool can prove the thing the file exists
+  // to warn about is no longer true.
+  const onDisk = markerFileMatches().onDisk;
+  if (onDisk === m.originalHash) {
+    // If the unlink itself fails -- a read-only mount, a permission quirk --
+    // that is not a reason to abort. The file is proven restored, which is the
+    // thing that mattered; the marker is only a note. Every later check reads
+    // the hash rather than the marker's existence, so a stuck marker cannot
+    // turn into a false alarm at the end of the run.
+    try { rmSync(MARKER, { force: true }); } catch { /* the marker is advisory */ }
+    console.log(
+      `a previous run died while ${m.mutating} was mutated (${m.id}, ${m.startedAt}),\n` +
+      "but that file now matches its pre-mutation hash exactly, so it was restored.\n" +
+      "clearing the marker and continuing.\n",
+    );
+  } else {
+    console.error(
+      `### A PREVIOUS RUN DIED WHILE ${m.mutating} WAS MUTATED (${m.id}, ${m.startedAt}).\n` +
+      `### That file is STILL NOT back to its original contents -- checked, not assumed:\n` +
+      `###   expected sha256 ${m.originalHash}\n` +
+      `###   found           ${onDisk ?? "(the file does not exist)"}\n` +
+      "### Restore it:\n" +
+      `###     git checkout -- ${m.mutating}\n` +
+      `### or copy back:  ${m.backup}\n` +
+      "### Then run this again -- it will clear the marker itself once the file matches.",
+    );
+    process.exit(2);
+  }
 }
 
 console.log("running the unmutated suite first, to establish a baseline...\n");
@@ -289,7 +386,18 @@ console.log(`baseline green: ${mutations.length} mutation(s) to run, about 45s e
 const results = [];
 for (const mut of mutations) {
   process.stdout.write(`${mut.id.padEnd(28)} ${mut.file} ... `);
-  const r = applyMutation(mut, baseline);
+  let r;
+  try {
+    r = applyMutation(mut, baseline);
+  } catch (e) {
+    // A restore failure throws. Stop the whole run: the tree is dirty and every
+    // result after this would be measured against a source file nobody intended.
+    console.log("ABORTED");
+    console.error(`\n### RUN ABORTED after ${results.length} of ${mutations.length} mutations.`);
+    console.error(`### ${e.message}`);
+    console.error("### The results above this line are still valid. Nothing below ran.");
+    process.exit(2);
+  }
   results.push({ ...mut, ...r });
   console.log(r.status + (r.why ? `  -- ${r.why}` : ""));
 }
@@ -303,7 +411,28 @@ for (const r of results) {
   if (r.status !== "CAUGHT") console.log(`              WHY: ${r.why}`);
 }
 console.log("=".repeat(72));
-console.log(`${caught.length} of ${results.length} controls proved they exist.`);
+
+// DO NOT REPORT SUCCESS OVER A TREE YOU HAVE NOT CHECKED.
+//
+// The run that found this printed "7 of 7 controls proved they exist" while
+// public/city-plan.js was still mutated on disk. Every restore now aborts on
+// failure, so reaching here should mean the tree is clean -- but "should mean"
+// is exactly the kind of reasoning this project keeps being punished for, and
+// the check costs one stat call.
+const leftover = markerFileMatches();
+if (leftover.present && !leftover.restored) {
+  console.error(
+    "### A FILE WAS LEFT MUTATED BY THIS RUN. The results above describe a tree\n" +
+    "### that no longer matches what you have on disk.\n" +
+    `###   file            ${leftover.m?.mutating ?? "(unreadable marker)"}\n` +
+    `###   expected sha256 ${leftover.m?.originalHash ?? "?"}\n` +
+    `###   found           ${leftover.onDisk ?? "(the file does not exist)"}\n` +
+    `### Restore it:  git checkout -- ${leftover.m?.mutating ?? ""}`,
+  );
+  process.exit(2);
+}
+
+console.log(`${caught.length} of ${results.length} controls proved they exist, and the tree is clean.`);
 if (bad.length) {
   console.error(
     `\n### ${bad.length} did not. A control that survives its own mutation is not a\n` +

@@ -78,6 +78,56 @@
       "find": "MODELS[\"bench\"] = MODELS[\"bench-slat\"];",
       "replace": "",
       "expect": "the LIBRARY declares the join"
+    },
+    {
+      "id": "character-is-per-block-not-per-building",
+      "guards": "every building on a block shares one architectural era, so variety is BETWEEN streets rather than within them -- this is the single decision that stops a rules-driven city reading as clones on a grid",
+      "note": "The wrong version is one character shorter and passes any test that only checks 'a character was assigned'. Rolling per building makes every street an even mix of all four eras, so at the altitude you actually view the city from, every street looks like every other street: randomising per building produces UNIFORMITY. This mutation is the difference, and it is measured on the real 26 km world rather than on a fixture.",
+      "file": "public/layout.js",
+      "find": "character: characterFor(plot.blockId, plot.districtId),",
+      "replace": "character: characterFor(plot.id, plot.districtId),",
+      "expect": "not one block carries two architectural characters"
+    },
+    {
+      "id": "row-ends-are-ends",
+      "guards": "the first and last plot in a row are end units with one party wall, and everything between them is a middle unit with two -- without this a terrace is ten identical houses standing near each other",
+      "file": "public/layout.js",
+      "find": "  if (index === 0) return \"end-left\";",
+      "replace": "  if (index === -999) return \"end-left\";",
+      "expect": "the ends of a row are ends"
+    },
+    {
+      "id": "terrace-units-do-not-overhang-the-plot",
+      "guards": "a terrace is sized DOWN to whole 8 m units that fit the plot, so it never hangs over the boundary and gets refused after the work of building it",
+      "file": "public/layout.js",
+      "find": "  const units = Math.floor(buildableWidthM / 8);",
+      "replace": "  const units = Math.ceil(buildableWidthM / 8);",
+      "expect": "terrace units fill the plot without overhanging it"
+    },
+    {
+      "id": "frontage-gates-the-frontage-typologies",
+      "guards": "a shop or high-street terrace is only placed where it actually has street frontage, so a corner shop is on a corner rather than buried mid-row with its shopfront facing a party wall",
+      "file": "public/layout.js",
+      "find": "  const eligible = table.filter((o) => !o.prefersFrontage || onACorner);",
+      "replace": "  const eligible = table.slice();",
+      "expect": "a shop only appears where it has street frontage"
+    },
+    {
+      "id": "terrace-verdict-is-a-stepped-foundation",
+      "guards": "footprint.js's \"terrace\" VERDICT (ground that steps) is translated to the asset lane's \"stepped\" foundation, so it is never confused with the \"bld-terrace\" TYPOLOGY (a row of houses), which is an unrelated thing wearing the same word",
+      "file": "public/layout.js",
+      "find": "  terrace: \"stepped\",",
+      "replace": "  terrace: \"terrace\",",
+      "expect": "every foundation the table emits is one the asset lane builds"
+    },
+    {
+      "id": "large-footprints-cannot-step-over-water",
+      "guards": "a footprint's sample grid is capped at 56 m however wide the footprint is, so a 3.5 km runway cannot step over a river lying across it -- 56 m is the full width of the narrowest water in waterways.js, read from it rather than picked",
+      "note": "The comment on sampleGrid claimed 'never coarser than TARGET_SPACING'. Measured, it was 8 m at 200 m wide, 24 m at 600 m and 140 m at 3,500 m -- true below about 100 m and false everywhere it mattered. The ceiling costs nothing at any size except the single largest footprint in the world, where it is 6.1x.",
+      "file": "public/ground.js",
+      "find": "const MAX_SPACING = 56;",
+      "replace": "const MAX_SPACING = Infinity;",
+      "expect": "sees a 60 m trench that used to fall between its samples"
     }
   ]
 }

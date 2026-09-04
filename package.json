@@ -11,6 +11,7 @@
     "build": "wrangler deploy --dry-run",
     "test": "npm run typecheck && node test/run.mjs && vitest run",
     "test:e2e": "playwright test",
+    "mutate": "node scripts/mutate.mjs --all",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

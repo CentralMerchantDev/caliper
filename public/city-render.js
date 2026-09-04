@@ -987,20 +987,37 @@ varying vec3 vSeaWorld;`)
   const hole = { x0: -LOOK.coreX, x1: LOOK.coreX, z0: LOOK.coreZ0, z1: LOOK.coreZ1 };
   let verts = 0;
   if (!SKIP.has("terrain")) {
-    // "bedrock", NOT 0. This argument was 0, which meant the outer mesh -- most
-    // of the modelled world -- was built with NO SKIRT AT ALL: a surface with no
-    // underside, over nothing, with a flat plane at y = -175 added later to stop
-    // you seeing sky through the ocean where the grid ended.
+    // THE SKIRT DEPTH IS 45. Not 0, and -- this is the part that has been wrong
+    // twice -- not "bedrock" either.
     //
-    // The wall now runs from the terrain edge down to BEDROCK_Y, which is that
-    // same -175, so the two meet and the world closes itself instead of being
-    // covered over.
-    // 45, not "bedrock". A full-height skirt here is a 175 m vertical wall
-    // standing in 62%-opacity water all round the modelled rectangle -- the
-    // "long line in the ocean on the left side and right side". The APRON below
-    // now carries the ground on outward, abutting this border exactly, so this
-    // skirt only has to close the resolution crack between a 162.5 m mesh and a
-    // 650 m one. Same reasoning, same number, as the core seam thirty lines down.
+    // This one argument has now had three values, and the first two each fixed
+    // the previous defect by causing the next one:
+    //
+    //   0          No skirt at all. The outer mesh -- most of the modelled world
+    //              -- was a surface with no underside, over nothing. A flat plane
+    //              at y = -175 was added later to stop you seeing sky through the
+    //              ocean where the grid ended, which covered the symptom.
+    //   "bedrock"  A wall from the terrain edge all the way down to BEDROCK_Y
+    //              (that same -175). It did close the world. It also stood a
+    //              175 m vertical wall in 62%-opacity water all the way round the
+    //              modelled rectangle, which is exactly the "long line in the
+    //              ocean on the left side and right side" Mark reported seeing.
+    //   45         What is here now. The APRON below carries real ground onward
+    //              past this border, abutting it exactly, so this skirt no longer
+    //              has to reach the sea floor. It only has to close the
+    //              resolution crack between a 162.5 m mesh and a 650 m one, which
+    //              is metres deep, not hundreds. Same reasoning and same number
+    //              as the core seam thirty lines down.
+    //
+    // WHY THIS IS WRITTEN OUT RATHER THAN JUST CORRECTED: the two earlier
+    // comments were both left in place, stacked, one arguing for "bedrock" and
+    // the next saying "45, not bedrock" -- adjacent, contradictory, with the
+    // stale one first. A blind audit found the identical pattern in the apron
+    // comment thirty lines below and ranked it above every logic defect in the
+    // diff, on the grounds that nobody reads code twice and the first number is
+    // the one they believe. That was the apron; this is the same defect in the
+    // same function, and it survived that audit because the audit's scope was
+    // the apron. One history, in order, with the live value named first.
     const OUT = { x0: wm(-30000), x1: wm(30000), z0: wm(-33000), z1: wm(10000) };
     verts = terrainMesh(OUT.x0, OUT.x1, OUT.z0, OUT.z1, LOOK.outerStep, hole, 45, false);
 
