@@ -5,6 +5,7 @@ node_modules/
 *.log
 test/.built/
 test/.mutate-results.json
+test/.mutresolve.json
 PROCESS-ALIGNMENT.md
 
 # --- working artefacts, never part of the project ---------------------------

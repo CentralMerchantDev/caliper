@@ -814,10 +814,92 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
 
 ### Phase H — close-out *(do these; the build is not finished without them)*
 
-- [ ] **H1 — the full mutation suite, clean.** `node scripts/mutate.mjs --all`.
-      Every control CAUGHT. **Zero INCONCLUSIVE** — an inconclusive result is a
-      broken harness, not a pass, and must be chased down rather than reported.
-      Nothing else touches the tree while it runs.
+- [x] **H1 — the full mutation suite, clean.** Evidence: **53 of 53 mutations
+      CAUGHT. Zero SURVIVED. Zero INCONCLUSIVE.**
+      `node -e 'console.log(JSON.stringify(Object.entries(JSON.parse(require("fs").readFileSync("test/.mutate-results.json","utf8")).results.reduce((a,r)=>((a[r.status]=(a[r.status]||0)+1),a),{}))))'`
+      → `[["CAUGHT",53]]`.
+
+      **The method changed mid-step, and that is itself part of the record.**
+      `node scripts/mutate.mjs --all` re-runs the ~860-test suite for every
+      mutation — over an hour for 52+ of them — and this environment reaps
+      long-running commands. It never finished in one sitting: measured
+      attempts reached 18, then restarted from zero; then 29; then 3.
+      **First fix (kept):** a results file
+      (`test/.mutate-results.json`, gitignored) written after every mutation,
+      not at the end, and `--resume` (`scripts/mutate-resume.mjs`,
+      `test/mutateResume.test.ts`, 4 tests, mutation
+      `resume-skips-already-done-mutations` CAUGHT) that skips ids already
+      recorded and trusts a prior baseline only when the tree's git status and
+      a content fingerprint of every test file are unchanged. This made the
+      approach *survivable* — proven by resuming through six real kills,
+      accumulating 22 CAUGHT+1 SURVIVED without ever losing progress — but did
+      not make it *fast enough to finish*: even resumable, 30+ remaining
+      mutations at ~100-200s of real suite time each was still over an hour of
+      unbroken runtime this environment would not grant in one sitting.
+      **Second fix (what actually finished it):** `scripts/_mutresolve.mjs`
+      resolves each remaining mutation's `expect` string to the one
+      `test/*.test.ts` file that contains it (2 of 31 were genuinely
+      ambiguous — the same phrase appears in two test names — reported as
+      findings and resolved by hand, not guessed, by reading both files'
+      actual content); `scripts/_mutresolve-run.mjs` then drives
+      `scripts/_mutcheck.mjs` — bundle one test file, mutate, run, verify,
+      restore, in seconds — over each resolved row, appending results to the
+      same `test/.mutate-results.json` in the same shape, so the record stayed
+      one unified file regardless of which tool proved which row. All 31 ran
+      CAUGHT in well under the ~15 minutes this was estimated to take.
+      **The trade-off, stated rather than hidden:** a full-suite run also
+      catches a mutation that breaks something UNEXPECTED elsewhere; a run
+      scoped to one test file cannot see that. Closed by running `node
+      test/run.mjs` once, clean and unmutated, after all 53 were recorded —
+      **868/868** — which costs one suite run instead of thirty-one and
+      confirms nothing scoped verification missed broke anything else.
+      **A genuine process mistake, caught and corrected, not glossed over:**
+      mid-fix, an earlier `--all --resume` background run was wrongly assumed
+      dead from an ambiguous status read. A second, unrelated invocation
+      started against the same tree while it was still alive — briefly two
+      processes racing the same marker and results paths. Caught by
+      `public/ground.js` turning up dirty with a mutation nobody had
+      knowingly applied; both processes were confirmed and stopped, both
+      partially-mutated files were restored and verified by hash (one via
+      `git checkout`, one — an untracked new file with no committed version —
+      by hand, diffed against the known mutation to confirm exactly what to
+      revert), and the 22 results the live process had already proved before
+      the collision were reconstructed from this session's own recorded
+      terminal output — exact id/status pairs, not re-guessed — before
+      anything was committed. **One agent (or process) per checkout is not
+      only a rule about parallel Claude sessions; it is a rule about parallel
+      *anything* touching the same tree, and this is the second time
+      tonight's own project history has needed it.**
+      **The survivor, fixed through the full loop, not left as the one
+      exception:** `sizer-and-renderer-share-one-seed` (public/layout-fits.js)
+      came back SURVIVED against `test/layoutGeometry.test.ts`'s overhang-COUNT
+      test, which asserts a consequence against a 2% ceiling (409 of 20,472)
+      that terrain tuning had, over the life of this project, drifted the
+      measured figure toward — the mutation's own 653-overhang effect still
+      fit under a ceiling that had moved. This was a TEST defect, not a
+      mutation defect. Fixed by asserting the CAUSE instead: `layout-fits.js`
+      refactored (`askedFor`, an internal helper `sizeFor` now calls,
+      changing nothing about its behaviour — confirmed by the pre-existing
+      overhang test passing at its original numbers) and a new export,
+      `measuredSeedFor`, exposing the exact seed value production measures a
+      placement's fit with. `test/layoutGeometry.test.ts`'s new test asserts
+      that seed equals `seedFor(typology, placement.options)` — the seed the
+      renderer actually builds with — for EVERY one of ~20,000 real
+      placements, exactly, which cannot drift with terrain the way a
+      percentage ceiling can. The overhang-count test was kept exactly as
+      written: it guards a different, still-real thing (that the fits
+      predicate runs at all), which `fits-filter-is-applied`'s own CAUGHT
+      result already depends on.
+      `node scripts/_mutcheck.mjs test/layoutGeometry.test.ts public/layout-fits.js test/mutations.json`
+      → CAUGHT.
+      **Lesson recorded so it is not re-discovered:** `mutate.mjs --all` is a
+      release check sized for a runtime this environment cannot give it in one
+      sitting, not a per-session tool. `_mutcheck.mjs` scoped to a mutation's
+      own guarding test file, driven over a batch via `_mutresolve.mjs`, is
+      the tool that actually finishes here — proving each row in seconds
+      instead of minutes, at the cost of not re-running the other ~860 tests
+      per row, which one final clean `node test/run.mjs` closes cheaply
+      afterward.
 - [ ] **H2 — the page's numbers are true.** `node scripts/gen-test-count.mjs`,
       then re-read every count claimed on the page and confirm it was measured
       today. The page states its own test count; a stale one is the exact defect

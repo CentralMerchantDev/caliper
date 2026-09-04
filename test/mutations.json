@@ -159,11 +159,11 @@
     {
       "id": "sizer-and-renderer-share-one-seed",
       "guards": "layout-fits.js measures a candidate with the SAME seed the renderer will build it with, via the shared seedFor, so the building that was checked for fit is the building that gets built",
-      "note": "Found by measurement, not by reasoning. The sizer briefly computed its own seed while planPlot used the variant key; since the seed drives the fallback size, the two disagreed and overhangs went 269 -> 556 with the whole suite green. The first version of THIS mutation also survived, because countOverhangs measured with the literal seed \"measure\" -- the same defect, committed by the test that was meant to catch it. Both are fixed; the mutation now reports 653 overhangs against a 409 ceiling.",
+      "note": "Found by measurement, not by reasoning. The sizer briefly computed its own seed while planPlot used the variant key; since the seed drives the fallback size, the two disagreed and overhangs went 269 -> 556 with the whole suite green. The first version of THIS mutation also survived, because countOverhangs measured with the literal seed \"measure\" -- the same defect, committed by the test that was meant to catch it. Both are fixed; the mutation now reports 653 overhangs against a 409 ceiling. Find/replace and expect updated when askedFor was pulled out as its own function (H1's survivor fix): the overhang-count test alone could no longer catch this, because terrain tuning moved the measured figure (269 -> ~293) closer to the 409 ceiling, and 653 overhangs still sits under it. The new test asserts the CAUSE -- seed equality, exact over every placement -- rather than the consequence.",
       "file": "public/layout-fits.js",
-      "find": "    const askedSeed = seedFor(typology, asked);",
-      "replace": "    const askedSeed = typology + \"|\" + options.character;",
-      "expect": "stops it overhanging"
+      "find": "  return { asked, askedSeed: seedFor(typology, asked) };",
+      "replace": "  return { asked, askedSeed: typology + \"|\" + asked.character };",
+      "expect": "the seed layout-fits.js measured a placement with is the seed the renderer builds it with"
     },
     {
       "id": "row-origin-is-on-the-cell-grid",

@@ -50,6 +50,42 @@ function optionsFor(typology, situation) {
 }
 
 /**
+ * What `sizeFor` asks buildings.js for, and the seed that request resolves
+ * to -- pulled out on its own so `measuredSeedFor` below can expose the
+ * exact value production uses, rather than a re-derivation of it that could
+ * quietly drift from what `sizeFor` actually does.
+ *
+ * ASK FOR A SIZE RATHER THAN HOPING FOR ONE. buildings.js honours explicit
+ * cellW/cellD (and clamps them to what the typology can actually build). So
+ * instead of asking whether the seed-derived size happens to fit, request
+ * the largest whole number of 8 m cells the plot can hold. Typologies that
+ * do not read these ignore them, and the clamp means an impossible request
+ * comes back as the nearest legal size -- which the fit check in `sizeFor`
+ * then catches, rather than trusting it.
+ */
+function askedFor(typology, situation) {
+  const options = optionsFor(typology, situation);
+  const cellW = Math.max(1, Math.floor(situation.fits.w / 8));
+  const cellD = Math.max(1, Math.floor(situation.fits.d / 8));
+  const asked = { ...options, cellW, cellD };
+  return { asked, askedSeed: seedFor(typology, asked) };
+}
+
+/**
+ * The seed `sizeFor` measured -- or would measure -- a placement's fit with.
+ *
+ * Exists so a test can assert this equals the seed the renderer actually
+ * builds with (`seedFor(typology, placement.options)`), which is the whole
+ * property this file's correctness depends on: a candidate is only really
+ * checked for fit if it is the SAME candidate that gets built. Calling into
+ * `askedFor` rather than re-deriving the seed here is what keeps this from
+ * silently drifting away from what `sizeFor` actually does.
+ */
+export function measuredSeedFor(typology, situation) {
+  return askedFor(typology, situation).askedSeed;
+}
+
+/**
  * A `fits(typology, situation)` predicate for `planCity`.
  *
  * Memoised per call site: the same variant is asked about thousands of times
@@ -65,20 +101,8 @@ export function makeFits() {
   // "fits as it is, no size needed" -- so callers must test for null, not for
   // falsiness. An empty object is truthy; that is deliberate.
   return function sizeFor(typology, situation) {
-    const options = optionsFor(typology, situation);
-
-    // ASK FOR A SIZE RATHER THAN HOPING FOR ONE.
-    //
-    // buildings.js honours explicit cellW/cellD (and clamps them to what the
-    // typology can actually build). So instead of asking whether the
-    // seed-derived size happens to fit, request the largest whole number of 8 m
-    // cells the plot can hold. Typologies that do not read these ignore them,
-    // and the clamp means an impossible request comes back as the nearest legal
-    // size -- which the fit check below then catches, rather than trusting it.
-    const cellW = Math.max(1, Math.floor(situation.fits.w / 8));
-    const cellD = Math.max(1, Math.floor(situation.fits.d / 8));
-    const asked = { ...options, cellW, cellD };
-    const askedSeed = seedFor(typology, asked);
+    const { askedSeed, asked } = askedFor(typology, situation);
+    const { cellW, cellD } = asked;
 
     let hit = cache.get(askedSeed);
     if (!hit) {

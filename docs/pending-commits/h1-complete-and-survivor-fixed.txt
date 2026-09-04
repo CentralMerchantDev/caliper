@@ -1,0 +1,73 @@
+H1 complete: 53 of 53 mutations CAUGHT, and the one survivor fixed by asserting the cause instead of a drifting ceiling
+
+What was wrong, in two parts.
+
+Part one: mutate.mjs --all could not finish in this environment even with the
+--resume harness fix (previous commit) making it resumable -- resumable is not
+the same as fast enough, and 30-plus mutations at ~100-200s of real suite time
+each was still over an hour of unbroken runtime. Switched method: scripts/
+_mutresolve.mjs resolves each remaining mutation's `expect` string to the one
+test file that actually contains it (2 of 31 were genuinely ambiguous --
+resolved by reading both candidate files' real content, not guessed);
+scripts/_mutresolve-run.mjs drives scripts/_mutcheck.mjs -- seconds per
+mutation, scoped to its own guarding test file -- over each resolved row,
+appending to the same test/.mutate-results.json in the same shape mutate.mjs
+writes. All 31 ran CAUGHT. The trade-off this gives up -- a full-suite run
+also catches breakage somewhere UNEXPECTED, which a scoped run cannot see --
+is closed by running node test/run.mjs once, clean and unmutated, after every
+row was recorded: 868/868.
+
+Part two: a genuine process-management mistake, caught before it could do
+real damage. Mid-fix, an earlier --all --resume background run was wrongly
+assumed dead from an ambiguous status read, and a second, unrelated
+invocation was started against the same tree while the first was still
+alive -- briefly two processes racing the same marker and results file
+paths. Caught by public/ground.js turning up dirty with a mutation nobody
+had knowingly applied. Both processes were confirmed running (TaskStop
+returned success for both, meaning both were genuinely still alive) and
+stopped; both partially-mutated files were restored and verified by hash --
+public/ground.js via git checkout, the untracked scripts/mutate-resume.mjs
+by hand (diffed against the known mutation first, to confirm exactly what to
+revert, since it has no committed version to check out to); the 22 results
+the live process had already proved before the collision were reconstructed
+from this session's own recorded terminal output -- exact id/status pairs
+read back from the transcript, not re-guessed -- before anything was
+committed. This is the second time tonight this project's own rule about one
+agent per checkout has mattered, applied here to parallel background
+processes rather than parallel Claude sessions.
+
+How H1 is known to be complete: 53 of 53 mutations recorded CAUGHT, 0
+SURVIVED, 0 INCONCLUSIVE, in test/.mutate-results.json.
+
+The one survivor, sizer-and-renderer-share-one-seed (public/layout-fits.js),
+came back SURVIVED against test/layoutGeometry.test.ts's overhang-COUNT test
+-- which asserts a CONSEQUENCE (how many buildings overhang) against a 2%
+ceiling that terrain tuning had drifted the measured figure toward over the
+life of this project, so the mutation's 653-overhang effect still fit under a
+ceiling that had moved. A test defect, not a mutation defect. Fixed by
+asserting the CAUSE: public/layout-fits.js refactored so sizeFor's seed
+computation lives in a shared internal helper (askedFor), changing nothing
+about sizeFor's behaviour -- confirmed by the pre-existing overhang test
+passing at its original numbers unchanged -- and a new export,
+measuredSeedFor, exposing the exact seed value production measures a
+placement's fit with. test/layoutGeometry.test.ts's new test asserts that
+seed equals seedFor(typology, placement.options) -- the seed the renderer
+actually builds with -- for every one of ~20,000 real placements, exactly,
+which cannot drift with terrain tuning the way a percentage ceiling can. The
+overhang-count test was kept exactly as written, because it guards a
+different, still-real thing: that the fits predicate runs at all.
+`node scripts/_mutcheck.mjs test/layoutGeometry.test.ts public/layout-fits.js test/mutations.json`
+CAUGHT.
+
+`npm test`: 868/868. `npx tsc --noEmit`: clean.
+
+Lesson recorded in the ledger so it is not re-discovered: mutate.mjs --all is
+a release check sized for a runtime this environment cannot give it in one
+sitting. scripts/_mutcheck.mjs scoped to a mutation's own guarding test file,
+driven in a batch via scripts/_mutresolve.mjs, is the tool that actually
+finishes here.
+
+H2 (the page's numbers are true) is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.

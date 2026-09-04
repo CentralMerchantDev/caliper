@@ -20,7 +20,7 @@ import { generateWorld } from "../public/city-plan.js";
 import { assessFootprint } from "../public/footprint.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
 import { planCity, groupByVariant, seedFor } from "../public/layout.js";
-import { makeFits } from "../public/layout-fits.js";
+import { makeFits, measuredSeedFor } from "../public/layout-fits.js";
 import { building } from "../public/buildings.js";
 
 // ONE WORLD, SHARED. Building it costs about 4 seconds, and every test here
@@ -105,6 +105,44 @@ test("asking whether a building FITS before choosing it is what stops it overhan
     overWith < 0.02 * withFits.length,
     `${overWith} of ${withFits.length} buildings overhang their plot, above the 2% ceiling. ` +
       "If this rose suddenly, check that layout-fits.js and variantKeyOf still share seedFor.",
+  );
+});
+
+test("the seed layout-fits.js measured a placement with is the seed the renderer builds it with", () => {
+  // THE CAUSE, NOT THE CONSEQUENCE.
+  //
+  // The overhang-count test above is a real, useful control -- it guards that
+  // the fits predicate runs at all -- but it asserts a CONSEQUENCE (how many
+  // buildings overhang) against a ceiling, and a ceiling is a moving target:
+  // terrain tuning shifted the measured figure from 269 toward 409 over the
+  // life of this project, eating the margin that the sizer/renderer-seed
+  // mutation needs to cross to be caught. The mutation this test exists for
+  // (`sizer-and-renderer-share-one-seed`) doubled overhangs from 269 to
+  // 653 -- and 653 is STILL under a 2% ceiling that has drifted up to 409
+  // only because the fixture has ~20,472 buildings and 2% of that is large.
+  // A ceiling test cannot see a regression that fits under it.
+  //
+  // This asserts the CAUSE instead: for EVERY real placement, the seed
+  // layout-fits.js measured it with (measuredSeedFor, the exact internal
+  // value makeFits() used to decide whether it fits) must equal the seed
+  // variantKeyOf/seedFor computes for that same placement -- the seed the
+  // renderer will actually build it with. That is an exact equality over
+  // ~20,000 real placements, checked directly, and it cannot drift with
+  // terrain tuning the way a percentage ceiling can.
+  let mismatches = 0;
+  const examples: string[] = [];
+  for (const p of placements) {
+    const measured = measuredSeedFor(p.typology, p.situation);
+    const built = seedFor(p.typology, p.options);
+    if (measured !== built) {
+      mismatches++;
+      if (examples.length < 3) examples.push(`${p.plotId}: measured "${measured}" but built "${built}"`);
+    }
+  }
+  assert.equal(
+    mismatches, 0,
+    `${mismatches} of ${placements.length} placements were measured for fit with a different seed than they are built with -- ` +
+      `the building that was checked is not the building that gets built. Examples: ${examples.join("; ")}`,
   );
 });
 
