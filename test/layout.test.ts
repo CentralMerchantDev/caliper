@@ -28,8 +28,10 @@ import {
   planPlot,
   planBlock,
   planCity,
+  variantKeyOf,
+  groupByVariant,
 } from "../public/layout.js";
-import { generateWorld } from "../public/city-plan.js";
+import { generateWorld, PLOT_CLASSES } from "../public/city-plan.js";
 import { assessFootprint } from "../public/footprint.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
 
@@ -59,6 +61,20 @@ function rowOf(n: number, blockId = "block-0-0", row = "", className = "TERRACE"
 }
 
 const allSlab = () => "slab";
+
+// ONE WORLD, BUILT ONCE, SHARED BY EVERY REAL-WORLD TEST BELOW.
+//
+// Each of these tests used to call generateWorld itself. Six builds at about
+// 3.7 seconds each is 22 seconds of suite time spent re-proving determinism
+// that cityWorld.test.ts already proves by sha256. The world is a pure function
+// of its height field, so one is the same as six.
+const realHeightAt = makeHeightAt(new LandField(16));
+const realWorld = generateWorld(realHeightAt);
+const realVerdictFor = (plot: any) => {
+  const b = plot.buildable || plot;
+  return assessFootprint(realHeightAt, { xMin: b.xMin, xMax: b.xMax, zMin: b.zMin, zMax: b.zMax }).verdict;
+};
+
 
 // ---------------------------------------------------------------------------
 // Row position and corners
@@ -392,12 +408,8 @@ test("the whole plan is deterministic -- two runs agree exactly", () => {
 // ---------------------------------------------------------------------------
 
 test("the layout plans the real world: nearly every plot is placed, and refusals are named", () => {
-  const heightAt = makeHeightAt(new LandField(16));
-  const world = generateWorld(heightAt);
-  const verdictFor = (plot: any) => {
-    const b = plot.buildable || plot;
-    return assessFootprint(heightAt, { xMin: b.xMin, xMax: b.xMax, zMin: b.zMin, zMax: b.zMax }).verdict;
-  };
+  const world = realWorld;
+  const verdictFor = realVerdictFor;
 
   const { stats, placements } = planCity(world.blocks, world.plots, verdictFor);
 
@@ -420,12 +432,8 @@ test("ON THE REAL WORLD: not one block carries two architectural characters", ()
   // This is the anti-clone decision, measured rather than asserted. Rolling
   // character per building instead of per block leaves this at roughly the block
   // count rather than at zero, so the mutation is loud.
-  const heightAt = makeHeightAt(new LandField(16));
-  const world = generateWorld(heightAt);
-  const verdictFor = (plot: any) => {
-    const b = plot.buildable || plot;
-    return assessFootprint(heightAt, { xMin: b.xMin, xMax: b.xMax, zMin: b.zMin, zMax: b.zMax }).verdict;
-  };
+  const world = realWorld;
+  const verdictFor = realVerdictFor;
   const { placements } = planCity(world.blocks, world.plots, verdictFor);
 
   const byBlock = new Map<string, Set<string>>();
@@ -443,12 +451,8 @@ test("ON THE REAL WORLD: not one block carries two architectural characters", ()
 });
 
 test("ON THE REAL WORLD: no single typology takes the city", () => {
-  const heightAt = makeHeightAt(new LandField(16));
-  const world = generateWorld(heightAt);
-  const verdictFor = (plot: any) => {
-    const b = plot.buildable || plot;
-    return assessFootprint(heightAt, { xMin: b.xMin, xMax: b.xMax, zMin: b.zMin, zMax: b.zMax }).verdict;
-  };
+  const world = realWorld;
+  const verdictFor = realVerdictFor;
   const { stats } = planCity(world.blocks, world.plots, verdictFor);
 
   const counts = Object.values(stats.byTypology) as number[];
@@ -464,12 +468,8 @@ test("ON THE REAL WORLD: the terrain actually drives the foundations", () => {
   // 100% slab would mean the ground is never being asked -- the exact defect
   // that made the first run of scripts/measure-layout.mjs print a flat world
   // under a heading claiming it was the real terrain.
-  const heightAt = makeHeightAt(new LandField(16));
-  const world = generateWorld(heightAt);
-  const verdictFor = (plot: any) => {
-    const b = plot.buildable || plot;
-    return assessFootprint(heightAt, { xMin: b.xMin, xMax: b.xMax, zMin: b.zMin, zMax: b.zMax }).verdict;
-  };
+  const world = realWorld;
+  const verdictFor = realVerdictFor;
   const { placements } = planCity(world.blocks, world.plots, verdictFor);
 
   const byFoundation: Record<string, number> = {};
@@ -480,6 +480,93 @@ test("ON THE REAL WORLD: the terrain actually drives the foundations", () => {
   assert.ok(
     byFoundation.slab / placements.length < 0.99,
     `${(100 * byFoundation.slab / placements.length).toFixed(1)}% slab -- the terrain query is answering flat for everything`,
+  );
+});
+
+test("ON THE REAL WORLD: the whole city collapses to a few hundred instanceable variants", () => {
+  // `building()` returns one merged geometry per building. 20,472 buildings
+  // seeded per plot would be 20,472 geometries and 20,472 draw calls, against
+  // the 14 instanced buckets the renderer uses now -- a different renderer, not
+  // a tuning problem. Grouping by SITUATION rather than by plot id is what makes
+  // the city drawable, and this is the measurement that says it still is.
+  const world = realWorld;
+  const verdictFor = realVerdictFor;
+  const { placements } = planCity(world.blocks, world.plots, verdictFor);
+  const groups = groupByVariant(placements);
+
+  assert.ok(groups.size > 100, `only ${groups.size} variants -- the city is more repetitive than it looks`);
+  assert.ok(groups.size < 900, `${groups.size} variants is ${groups.size} draw calls for buildings alone`);
+
+  // Every placement lands in exactly one group, and no placement is lost.
+  const total = [...groups.values()].reduce((n, g) => n + g.placements.length, 0);
+  assert.equal(total, placements.length, "grouping dropped or duplicated placements");
+
+  // The seed must be the KEY, not a plot id -- otherwise members of a group get
+  // different geometry and cannot be instanced together.
+  for (const g of groups.values()) {
+    assert.equal(g.seed, g.key, "a variant group is seeded by something other than its own key");
+  }
+});
+
+test("two placements in the same situation share a variant, and one difference splits them", () => {
+  const base = planPlot(plotAt("block-5-5", 1), 1, 5, "slab");
+  const same = planPlot(plotAt("block-5-5", 1), 1, 5, "slab");
+  assert.equal(variantKeyOf(base), variantKeyOf(same));
+
+  // Different ground under it is a different building, so a different variant.
+  const onAPlinth = planPlot(plotAt("block-5-5", 1), 1, 5, "plinth");
+  assert.notEqual(variantKeyOf(base), variantKeyOf(onAPlinth));
+
+  // And the end of a row is not the middle of one.
+  const atTheEnd = planPlot(plotAt("block-5-5", 1), 0, 5, "slab");
+  assert.notEqual(variantKeyOf(base), variantKeyOf(atTheEnd));
+});
+
+test("ON THE REAL WORLD: every row-class plot is a whole number of 8 m cells", () => {
+  // WITHOUT THIS THE ROW VARIANTS ARE POINTLESS.
+  //
+  // A terrace tiles: middle units carry blank party walls and butt against their
+  // neighbours. That only works if the PLOTS line up on the same 8 m module the
+  // buildings are built from. Measured before PLOT_CLASSES declared a module:
+  // of 5,257 TERRACE plots, ZERO tiled -- mean plot width 12 m against an 8 m
+  // unit left a 4.00 m gap between every pair of adjacent houses, so each one
+  // presented a blank windowless flank across the gap to its neighbour's blank
+  // windowless flank. The models were right and the subdivision defeated them.
+  const world = realWorld;
+
+  for (const [className, cls] of Object.entries(PLOT_CLASSES) as [string, any][]) {
+    if (!cls.module) continue;
+    const plots = world.plots.filter((p: any) => p.className === className);
+    assert.ok(plots.length > 100, `only ${plots.length} ${className} plots -- too few to measure`);
+
+    const offenders = plots.filter((p: any) => {
+      const w = p.buildable.xMax - p.buildable.xMin;
+      return Math.abs(w / cls.module - Math.round(w / cls.module)) > 1e-6;
+    });
+    assert.equal(
+      offenders.length,
+      0,
+      `${offenders.length} of ${plots.length} ${className} plots are not a whole number of ${cls.module} m cells, ` +
+        `e.g. ${offenders[0] && (offenders[0].buildable.xMax - offenders[0].buildable.xMin).toFixed(2)} m`,
+    );
+  }
+});
+
+test("guardrail: a class with NO module is left alone, so the snap is targeted", () => {
+  // If the snap applied to everything, this test would fail -- and a villa
+  // forced onto an 8 m grid is a different (and wrong) world, not a safer one.
+  const world = realWorld;
+  const villas = world.plots.filter((p: any) => p.className === "VILLA");
+  assert.ok(villas.length > 100, "not enough VILLA plots to make this measurement");
+  assert.equal((PLOT_CLASSES as any).VILLA.module, undefined, "VILLA should not declare a module");
+
+  const offGrid = villas.filter((p: any) => {
+    const w = p.buildable.xMax - p.buildable.xMin;
+    return Math.abs(w / 8 - Math.round(w / 8)) > 1e-6;
+  });
+  assert.ok(
+    offGrid.length > 0,
+    "every VILLA plot happens to be a whole number of 8 m cells -- the snap is being applied to classes that did not ask for it",
   );
 });
 

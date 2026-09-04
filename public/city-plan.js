@@ -921,9 +921,15 @@ export const GRID = {
 // lots or a single tower podium, and the pipeline has a legal range to work
 // inside when a visitor asks to merge or split.
 // -----------------------------------------------------------------------------
+// `module`, where present, is the width increment a plot of this class must be
+// a whole number of. It is the 8 m CELL of WORLD-RULES section 3.2, and it is
+// declared only on the classes the asset lane builds as TILING ROWS: a terrace
+// and a townhouse row share party walls, so their plots have to line up on the
+// same module the buildings do. Everything else -- a villa, a tower, a farm --
+// stands on its own and can take whatever width the block divides into.
 export const PLOT_CLASSES = {
-  TERRACE:   { minW: 8,   maxW: 16,  minD: 22, maxD: 34,  maxHeight:  18 },
-  TOWNHOUSE: { minW: 14,  maxW: 26,  minD: 26, maxD: 40,  maxHeight:  24 },
+  TERRACE:   { minW: 8,   maxW: 16,  minD: 22, maxD: 34,  maxHeight:  18, module: 8 },
+  TOWNHOUSE: { minW: 14,  maxW: 26,  minD: 26, maxD: 40,  maxHeight:  24, module: 8 },
   MIDRISE:   { minW: 26,  maxW: 52,  minD: 32, maxD: 60,  maxHeight:  55 },
   TOWER:     { minW: 45,  maxW: 90,  minD: 45, maxD: 90,  maxHeight: 220 },
   CIVIC:     { minW: 60,  maxW: 180, minD: 50, maxD: 110, maxHeight:  70 },
@@ -1234,8 +1240,42 @@ export function subdivideBlock(block, className) {
   const maxCount = Math.floor(block.width / cls.minW);
   const minCount = Math.ceil(block.width / cls.maxW);
   if (maxCount < 1 || minCount > maxCount) return [];
-  const count = Math.max(1, Math.min(maxCount, Math.max(minCount, Math.round(block.width / ((cls.minW + cls.maxW) / 2)))));
-  const w = block.width / count;
+  const count0 = Math.max(1, Math.min(maxCount, Math.max(minCount, Math.round(block.width / ((cls.minW + cls.maxW) / 2)))));
+  let w = block.width / count0;
+  let count = count0;
+
+  // ROW CLASSES ARE BUILT IN WHOLE CELLS, BECAUSE A TERRACE HAS TO TILE.
+  //
+  // Dividing the block evenly gives a nice number -- 11.7 m, 12.3 m, 12.5 m --
+  // and it is the wrong number. The asset lane builds terraces and townhouses
+  // from 8 m units so that a middle unit tiles against its neighbours with no
+  // seam, which is the entire point of the end-left / middle / end-right
+  // variants and of their blank party walls.
+  //
+  // MEASURED, before this: of 5,257 TERRACE plots in the world, ZERO could tile.
+  // Mean plot width 12 m against an 8 m module leaves a 4.00 m gap between every
+  // pair of adjacent houses -- so a "terrace" was a row of detached houses, each
+  // presenting a blank, windowless party wall across a 4 m gap to the blank,
+  // windowless party wall of its neighbour. Every row-variant model built for
+  // Group A2 was defeated by the plan, and the defect would have read as a
+  // rendering bug rather than as a subdivision one.
+  //
+  // So for classes that declare a module, the plot width snaps DOWN to whole
+  // cells. The remainder is not spread back across the row -- that is what
+  // produced the 4 m gaps in the first place -- it is left at the end of the
+  // row, where a short site at the corner of a block is what a real street
+  // looks like anyway.
+  if (cls.module) {
+    const cells = Math.floor(w / cls.module);
+    const snapped = cells * cls.module;
+    if (snapped >= cls.minW - 1e-9) {
+      w = snapped;
+      // With narrower plots the block carries more of them. Recount rather than
+      // keeping count0, or the row would stop short of the far street.
+      count = Math.max(1, Math.floor((block.width + 1e-9) / w));
+    }
+  }
+
   if (w < cls.minW - 1e-9 || w > cls.maxW + 1e-9) return [];
 
   // TWO ROWS, back to back, when the block is deep enough to carry them.

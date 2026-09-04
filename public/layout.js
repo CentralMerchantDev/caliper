@@ -279,12 +279,36 @@ export function terraceUnitsFor(buildableWidthM) {
  * a row is not a corner shop; it is a shop with no visible frontage, which is
  * both wrong and invisible, so the work of building it is wasted.
  */
-export function typologyFor(className, situation) {
+export function typologyFor(className, situation, fits = null) {
   const table = TYPOLOGIES_FOR_CLASS[className];
   if (!table) return null;
 
   const onACorner = situation.corner !== "none";
-  const eligible = table.filter((o) => !o.prefersFrontage || onACorner);
+  let eligible = table.filter((o) => !o.prefersFrontage || onACorner);
+
+  // ASK WHETHER IT FITS BEFORE CHOOSING IT.
+  //
+  // A typology sizes itself: `cellW` inside buildings.js is derived from the
+  // seed and cannot be driven from options, so bld-office can decide it is
+  // 48 x 56 m and be placed on a 48 x 53 m plot. Measured without this filter:
+  // 3,552 of 20,472 buildings -- 17.4% -- overhung the plot they were chosen
+  // for. Every one of them would be refused by place.js, AFTER the work of
+  // building it, or would visibly sit across its own boundary.
+  //
+  // `fits(typology, situation)` is supplied by the caller, NOT computed here.
+  // The sizes live in buildings.js, which pulls in three.js; a copy of them in
+  // this file would be a second table that has to agree with the first, which
+  // is the defect class this repo keeps finding. So the layout asks the library
+  // the question rather than keeping its own answer to it.
+  if (typeof fits === "function") {
+    const affordable = eligible.filter((o) => o.typology === null || fits(o.typology, situation));
+    // If NOTHING fits, fall through to the unfiltered set rather than returning
+    // null. A plot with no building is a refusal, and a refusal has to be a
+    // decision the caller can see and count -- not a silent consequence of a
+    // size table. planPlot reports the overhang instead.
+    if (affordable.length) eligible = affordable;
+  }
+
   // A class whose every entry prefers frontage would filter to nothing on an
   // interior plot. None currently does, but falling back to the full table is
   // the difference between a missing building and a crash if one ever does.
@@ -329,14 +353,16 @@ export function situationOf(plot, index, count, verdict) {
  * Silently dropping them is how the old world ended up with 89 buildings
  * standing in rivers.
  */
-export function planPlot(plot, index, count, verdict) {
+export function planPlot(plot, index, count, verdict, fits = null) {
   const situation = situationOf(plot, index, count, verdict);
 
   if (verdict === "refuse" || !situation.foundation) {
     return { plotId: plot.id, refused: true, reason: verdict === "refuse" ? "ground refused" : `unknown verdict: ${verdict}` };
   }
 
-  const typology = typologyFor(plot.className, situation);
+  const b0 = plot.buildable || plot;
+  situation.fits = { w: Math.max(0, b0.xMax - b0.xMin), d: Math.max(0, b0.zMax - b0.zMin) };
+  const typology = typologyFor(plot.className, situation, fits);
   if (typology === null) {
     // PARK is the designed case, and it is not a defect. An unknown class is.
     const known = Object.prototype.hasOwnProperty.call(TYPOLOGIES_FOR_CLASS, plot.className);
@@ -376,6 +402,64 @@ export function planPlot(plot, index, count, verdict) {
 }
 
 /**
+ * The key that decides which placements can share one piece of geometry.
+ *
+ * WHY THIS EXISTS AT ALL. `building()` returns ONE MERGED GEOMETRY per building
+ * -- about 480 triangles for a terrace. There are 20,472 buildings in this
+ * world. Calling it per plot would mean 20,472 distinct geometries and 20,472
+ * draw calls, against the 14 instanced buckets the renderer uses today. That is
+ * not a tuning problem, it is a different renderer.
+ *
+ * But two buildings with the same typology, the same row position, the same
+ * corner, the same foundation, the same era and the same size ARE the same
+ * building. They can share one geometry and be drawn as one InstancedMesh.
+ *
+ * MEASURED on the real world: the 20,472 placements collapse to 298 distinct
+ * keys, median 10 instances each. So the whole city is 298 instanced meshes --
+ * the same order as the 549 objects already in the scene -- while still being
+ * 298 genuinely different buildings rather than one repeated.
+ *
+ * WHAT IS DELIBERATELY NOT IN THE KEY: the plot id. Seeding each building from
+ * its own plot would make every one unique, which sounds like more variety and
+ * is actually the thing that makes instancing impossible. The variety here comes
+ * from the SITUATION -- where the building stands and what it stands on -- which
+ * is both cheaper and more truthful than noise, because two houses in the same
+ * position on the same kind of street SHOULD look alike.
+ */
+export function variantKeyOf(placement) {
+  const o = placement.options;
+  return [
+    placement.typology,
+    o.position,
+    o.corner,
+    o.foundation,
+    o.character,
+    `u${o.units || 0}`,
+  ].join("|");
+}
+
+/**
+ * Group placements by the geometry they can share.
+ *
+ * Returns a Map of variant key -> { typology, options, seed, placements }. The
+ * seed is the KEY, not a plot id, so every member of a group gets byte-identical
+ * geometry -- which is what makes them instanceable rather than merely similar.
+ */
+export function groupByVariant(placements) {
+  const groups = new Map();
+  for (const p of placements) {
+    const key = variantKeyOf(p);
+    let g = groups.get(key);
+    if (!g) {
+      g = { key, typology: p.typology, options: p.options, seed: key, placements: [] };
+      groups.set(key, g);
+    }
+    g.placements.push(p);
+  }
+  return groups;
+}
+
+/**
  * Plan every plot in a block.
  *
  * Row membership is what makes a terrace a terrace, so plots are grouped by the
@@ -384,7 +468,7 @@ export function planPlot(plot, index, count, verdict) {
  * and reading a 20-plot block as one 20-long row would put an "end-right" unit
  * in the middle of the front street.
  */
-export function planBlock(block, plots, verdictFor) {
+export function planBlock(block, plots, verdictFor, fits = null) {
   const rows = new Map();
   for (const plot of plots) {
     // "block-1-2-p7b" -> row "b"; "block-1-2-p7" -> row "" (the front row).
@@ -399,7 +483,7 @@ export function planBlock(block, plots, verdictFor) {
     // Sort by x so "end-left" is genuinely the left-hand end on the ground, not
     // whichever plot happened to be pushed first.
     row.sort((a, b) => a.xMin - b.xMin);
-    row.forEach((plot, i) => out.push(planPlot(plot, i, row.length, verdictFor(plot))));
+    row.forEach((plot, i) => out.push(planPlot(plot, i, row.length, verdictFor(plot), fits)));
   }
   return out;
 }
@@ -412,7 +496,7 @@ export function planBlock(block, plots, verdictFor) {
  * last of which is the measurement that says whether the layout is working or
  * quietly refusing half the world.
  */
-export function planCity(blocks, plots, verdictFor) {
+export function planCity(blocks, plots, verdictFor, fits = null) {
   const byBlock = new Map();
   for (const plot of plots) {
     if (!byBlock.has(plot.blockId)) byBlock.set(plot.blockId, []);
@@ -424,7 +508,7 @@ export function planCity(blocks, plots, verdictFor) {
   for (const block of blocks) {
     const mine = byBlock.get(block.id);
     if (!mine || !mine.length) continue;
-    for (const r of planBlock(block, mine, verdictFor)) {
+    for (const r of planBlock(block, mine, verdictFor, fits)) {
       (r.refused ? refusals : placements).push(r);
     }
   }

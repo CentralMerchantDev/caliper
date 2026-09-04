@@ -128,6 +128,15 @@
       "find": "const MAX_SPACING = 56;",
       "replace": "const MAX_SPACING = Infinity;",
       "expect": "sees a 60 m trench that used to fall between its samples"
+    },
+    {
+      "id": "row-plots-are-whole-cells",
+      "guards": "a plot of a class that declares a module is a whole number of those 8 m cells wide, so a terrace actually tiles instead of standing as detached houses showing each other their blank party walls",
+      "note": "Measured before PLOT_CLASSES declared a module: 0 of 5,257 TERRACE plots could tile. Mean plot width 12 m against an 8 m unit left a 4.00 m gap between every adjacent pair. Every end-left/middle/end-right variant the asset lane built was defeated by the subdivision, and the result would have read as a rendering bug rather than a planning one.",
+      "file": "public/city-plan.js",
+      "find": "  if (cls.module) {",
+      "replace": "  if (false && cls.module) {",
+      "expect": "every row-class plot is a whole number of 8 m cells"
     }
   ]
 }
