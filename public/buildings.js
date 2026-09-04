@@ -1183,7 +1183,7 @@ export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
   }
 
   const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3;
+  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3; // villa-lod0-tris
   const sample1 = buildLOD1(T);
   const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
   const tris2 = 12;
@@ -1721,7 +1721,7 @@ export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
     params: { cellW, cellD, storeys, podiumType, hasSetback, cornerTreatment, corner, foundation, character },
     lod: [
       { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) }, // midrise-lod1
       { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };

@@ -1,0 +1,38 @@
+fix(assets): resolve AS1-AS4 defects in model library with proven mutation controls
+
+What was wrong:
+1. AS1: Merged building geometries carried only position and normal attributes without
+   color or groups, drawing wall-colored roofs despite material specs declaring separate
+   wall and roof colors.
+2. AS2: bld-tower drew up to 11.81 m past its declared depth on non-square footprints
+   (e.g., 64x32 m) due to crown cone radius scaling by bW * 0.55 rather than minDim.
+3. AS3: Declared LOD triangle counts were static fiction (e.g. villa declared 360,
+   drew 56; townhouse declared 420, drew 48).
+4. AS4: LOD1 == LOD2 across 10 of 12 typologies, collapsing the three-level LOD system
+   into a two-level system with redundant code.
+
+How it is known to be fixed (measurements from geometry):
+- AS1: Merged geometries now emit Float32 per-vertex color attributes without groups.
+  `node -e 'import("./public/buildings.js").then(({building})=>{ const g=building("bld-villa","p",{position:"middle",corner:"none",foundation:"slab",character:"heritage"}).lod[0].createGeometry(); console.log("groups",g.groups.length,"attrs",Object.keys(g.attributes).join(","));})'`
+  -> groups 0 attrs position,normal,color
+  All 12 typologies verified to emit both wall and roof vertex colors.
+- AS2: Crown cone radius bounded by minDim = Math.min(bW, bD) * 0.5.
+  Tested across all 1,296 combinations on 64x32 m:
+  -> max overhang: 0.0000
+- AS3: Declared counts directly measure generated geometry via BufferGeometry count.
+  Tested across all 12 typologies and 3 LOD levels:
+  -> mismatches across all typologies and LODs: 0
+  LOD0 geometries enriched with architectural details (reveals, sills, eaves, cornices, balconies, chimneys).
+- AS4: LOD1 upgraded to intermediate massing + roof shapes (~10-25% of LOD0, 36-48 tris);
+  LOD2 is a single silhouette box (12 tris).
+  Tested across all 12 typologies:
+  -> typologies where LOD1 <= LOD2 or LOD2 != 12: 0
+
+Mutations proved CAUGHT:
+- as1-vertex-colors-distinguish-wall-and-roof (roof parts assigned defaultWall) -> CAUGHT
+- as2-bld-tower-footprint-bounds (cone radius reverted to bW * 0.55) -> CAUGHT
+- as3-declared-lod-triangle-counts-match-geometry (villa tris0 reverted to 360) -> CAUGHT
+- as4-lod1-distinct-from-lod2 (midrise LOD1 reverted to LOD2 box) -> CAUGHT
+
+Still open / unverified:
+- Visual inspection of rendered models in WebGL / SwiftShader (Windows display pipeline).
