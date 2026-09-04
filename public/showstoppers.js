@@ -757,3 +757,1303 @@ export const SHOWSTOPPERS = {
   "park-observation-wheel": parkObservationWheel(),
   "bridge-cable-stayed-pylon": bridgeCableStayedTower(),
 };
+
+
+
+
+
+// =============================================================================
+// RESIDENTIAL ECO SHOWSTOPPERS (5 Models)
+// =============================================================================
+
+export function bldEcoBoscoVerticale() {
+  return {
+    id: "bld-eco-bosco-verticale",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 40, d: 40 },
+    height: 112.0,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 580,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Main tower core (28x28m, 108m high)
+          const core = new T.BoxGeometry(28, 108, 28);
+          core.translate(0, 54, 0);
+          parts.push(core);
+
+          // 14 Staggered Cantilevered Green Planter Balconies on 4 faces
+          for (let i = 1; i <= 14; i++) {
+            const y = i * 7.2;
+            const side = (i % 2 === 0) ? 1 : -1;
+            // North/South Balcony
+            const bNS = new T.BoxGeometry(36, 1.2, 5.0);
+            bNS.translate(0, y, side * 16);
+            // Green foliage box
+            const fNS = new T.BoxGeometry(34, 1.8, 3.8);
+            fNS.translate(0, y + 1.2, side * 16);
+            // East/West Balcony
+            const bEW = new T.BoxGeometry(5.0, 1.2, 36);
+            bEW.translate(-side * 16, y + 3.6, 0);
+            const fEW = new T.BoxGeometry(3.8, 1.8, 34);
+            fEW.translate(-side * 16, y + 4.8, 0);
+            parts.push(bNS, fNS, bEW, fEW);
+          }
+
+          // Rooftop Pergola Arboretum
+          const pergola = new T.BoxGeometry(26, 4.0, 26);
+          pergola.translate(0, 110, 0);
+          parts.push(pergola);
+
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 88,
+        createGeometry: (T = THREE) => {
+          const body = new T.BoxGeometry(34, 110, 34);
+          body.translate(0, 55, 0);
+          return body;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(34, 112, 34);
+          b.translate(0, 56, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoCurvedRibbonVilla() {
+  return {
+    id: "bld-eco-curved-ribbon-villa",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 24, d: 32 },
+    height: 12.0,
+    clearance: 0.5,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 440,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Lower Ground Pod
+          const pod1 = new T.CylinderGeometry(10, 11, 4.5, 16);
+          pod1.scale(1.0, 1.0, 1.3);
+          pod1.translate(0, 2.25, 0);
+          parts.push(pod1);
+
+          // Upper Fluid Ribbon (Cantilevered Sweeping Floor)
+          const ribbon = new T.CylinderGeometry(11, 10, 4.5, 16);
+          ribbon.scale(0.9, 1.0, 1.2);
+          ribbon.translate(0, 6.75, 2.0);
+          parts.push(ribbon);
+
+          // Sinuous Green Roof Parapet & Solar Pergola
+          const roofGarden = new T.CylinderGeometry(9.5, 9.5, 1.0, 16);
+          roofGarden.scale(0.9, 1.0, 1.2);
+          roofGarden.translate(0, 9.5, 2.0);
+          const pergola = new T.BoxGeometry(14, 2.0, 16);
+          pergola.translate(0, 11.0, 2.0);
+          parts.push(roofGarden, pergola);
+
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 64,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(22, 12, 30);
+          b.translate(0, 6, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(22, 12, 30);
+          b.translate(0, 6, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoStepGardenWalkup() {
+  return {
+    id: "bld-eco-step-garden-walkup",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 32, d: 48 },
+    height: 24.0,
+    clearance: 0.5,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 480,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // 5 Cascading stepped residential tiers
+          for (let i = 0; i < 5; i++) {
+            const y = i * 4.4 + 2.2;
+            const d = 44 - i * 7.5;
+            const z = i * 3.6;
+            const tier = new T.BoxGeometry(28, 4.4, d);
+            tier.translate(0, y, z);
+            // Green balcony planter ledge
+            const planter = new T.BoxGeometry(28, 0.8, 1.6);
+            planter.translate(0, y + 2.0, z - d / 2 + 0.8);
+            parts.push(tier, planter);
+          }
+          const pergola = new T.BoxGeometry(24, 2.0, 12);
+          pergola.translate(0, 23.0, 14);
+          parts.push(pergola);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 72,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(30, 24, 46);
+          b.translate(0, 12, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(30, 24, 46);
+          b.translate(0, 12, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoBiophilicTownhouseRow() {
+  return {
+    id: "bld-eco-biophilic-townhouse-row",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 24, d: 24 },
+    height: 16.0,
+    clearance: 0.5,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 460,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          for (let i = 0; i < 3; i++) {
+            const ux = -8 + i * 8;
+            // Unit Body
+            const body = new T.BoxGeometry(7.6, 12, 20);
+            body.translate(ux, 6, 0);
+            // Vertical Green Timber Screen
+            const screen = new T.BoxGeometry(7.2, 10, 0.4);
+            screen.translate(ux, 6, 10.2);
+            // Rooftop Green Solarium Greenhouse
+            const solarium = new T.BoxGeometry(6.4, 3.8, 12);
+            solarium.translate(ux, 14, -2.0);
+            parts.push(body, screen, solarium);
+          }
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 64,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(24, 16, 22);
+          b.translate(0, 8, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(24, 16, 22);
+          b.translate(0, 8, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoHelixTerrace() {
+  return {
+    id: "bld-eco-helix-terrace",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 32, d: 32 },
+    height: 28.0,
+    clearance: 0.5,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 520,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // 7 Interlocking Rotated Quadrant Floor Plates with Sky Garden Balconies
+          for (let i = 0; i < 7; i++) {
+            const y = i * 3.8 + 1.9;
+            const rot = i * 0.15;
+            const floor = new T.BoxGeometry(20, 3.4, 20);
+            floor.rotateY(rot);
+            floor.translate(0, y, 0);
+            // Garden corner protrusion
+            const garden = new T.BoxGeometry(5.0, 1.2, 5.0);
+            garden.rotateY(rot);
+            garden.translate(Math.cos(rot) * 9.5, y + 1.2, Math.sin(rot) * 9.5);
+            parts.push(floor, garden);
+          }
+          const crown = new T.CylinderGeometry(10, 12, 1.4, 12);
+          crown.translate(0, 27.3, 0);
+          parts.push(crown);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 80,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(30, 28, 30);
+          b.translate(0, 14, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(30, 28, 30);
+          b.translate(0, 14, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+// =============================================================================
+// COMMERCIAL / OFFICE ECO SHOWSTOPPERS (5 Models)
+// =============================================================================
+
+export function bldEcoDiagridBiotower() {
+  return {
+    id: "bld-eco-diagrid-biotower",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 48, d: 48 },
+    height: 144.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 580,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Podium (44x44m, 16m high)
+          const pod = new T.CylinderGeometry(22, 23, 16, 16);
+          pod.translate(0, 8, 0);
+          parts.push(pod);
+
+          // 4 Main Diagrid Twisted Shaft Sections with Atrium Hollow
+          for (let i = 0; i < 4; i++) {
+            const y = 16 + i * 28 + 14;
+            const rTop = 20 - i * 1.5;
+            const rBot = 22 - i * 1.5;
+            const sec = new T.CylinderGeometry(rTop, rBot, 28, 16);
+            sec.rotateY(i * 0.2);
+            sec.translate(0, y, 0);
+            parts.push(sec);
+          }
+
+          // Sky Garden Atrium Crown
+          const crown = new T.CylinderGeometry(12, 15, 16, 16);
+          crown.translate(0, 136, 0);
+          parts.push(crown);
+
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const b = new T.CylinderGeometry(15, 23, 144, 12);
+          b.translate(0, 72, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(44, 144, 44);
+          b.translate(0, 72, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoHyperboloidTimberHQ() {
+  return {
+    id: "bld-eco-hyperboloid-timber-hq",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 48, d: 64 },
+    height: 36.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 500,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Base campus podium
+          const pod = new T.BoxGeometry(44, 12, 58);
+          pod.translate(0, 6, 0);
+          // Hyperbolic curved timber shell
+          const shell = new T.CylinderGeometry(20, 24, 20, 16);
+          shell.scale(1.0, 1.0, 1.3);
+          shell.translate(0, 22, 0);
+          // Undulating Sedum green roof canopy
+          const sedumRoof = new T.CylinderGeometry(18, 20, 4, 16);
+          sedumRoof.scale(1.0, 1.0, 1.3);
+          sedumRoof.translate(0, 34, 0);
+          parts.push(pod, shell, sedumRoof);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 72,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(44, 36, 60);
+          b.translate(0, 18, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(44, 36, 60);
+          b.translate(0, 18, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoFloatingCanopyHub() {
+  return {
+    id: "bld-eco-floating-canopy-hub",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 40, d: 56 },
+    height: 32.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 480,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Elevated Glass Pod Body (y: 6 - 26m)
+          const pod = new T.BoxGeometry(34, 20, 46);
+          pod.translate(0, 16, -2.0);
+          // Cantilevered Solar Aerofoil Wing (y: 26 - 32m)
+          const wing = new T.BoxGeometry(38, 2.5, 54);
+          wing.translate(0, 28, 0);
+          const solarLip = new T.BoxGeometry(36, 1.5, 52);
+          solarLip.translate(0, 30.5, 0);
+          // Ground Sculptural Columns
+          for (const cx of [-12, 12]) {
+            for (const cz of [-16, 16]) {
+              const col = new T.CylinderGeometry(1.2, 1.8, 6.0, 8);
+              col.translate(cx, 3.0, cz);
+              parts.push(col);
+            }
+          }
+          parts.push(pod, wing, solarLip);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 64,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(38, 32, 54);
+          b.translate(0, 16, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(38, 32, 54);
+          b.translate(0, 16, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoSolarSpire() {
+  return {
+    id: "bld-eco-solar-spire",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 40, d: 40 },
+    height: 160.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 560,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Tapered 4-facet Photovoltaic tower shaft (4 tiers)
+          for (let i = 0; i < 4; i++) {
+            const y = i * 36 + 18;
+            const wBot = 36 - i * 5;
+            const wTop = 31 - i * 5;
+            const tier = new T.CylinderGeometry(wTop / 2, wBot / 2, 36, 4);
+            tier.rotateY(Math.PI / 4);
+            tier.translate(0, y, 0);
+            parts.push(tier);
+          }
+          // Spire Tip & Wind Cowl
+          const spire = new T.ConeGeometry(3.0, 16.0, 4);
+          spire.rotateY(Math.PI / 4);
+          spire.translate(0, 152, 0);
+          parts.push(spire);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 88,
+        createGeometry: (T = THREE) => {
+          const b = new T.ConeGeometry(18, 160, 4);
+          b.rotateY(Math.PI / 4);
+          b.translate(0, 80, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(36, 160, 36);
+          b.translate(0, 80, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function bldEcoGreenPodOffice() {
+  return {
+    id: "bld-eco-green-pod-office",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 48, d: 48 },
+    height: 28.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 540,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // 4 Elevated Circular Pods on Stems
+          const coords = [[-12, -12], [12, -12], [-12, 12], [12, 12]];
+          for (const [cx, cz] of coords) {
+            const stem = new T.CylinderGeometry(2.0, 3.0, 8.0, 8);
+            stem.translate(cx, 4.0, cz);
+            const pod = new T.CylinderGeometry(9.0, 8.0, 16.0, 12);
+            pod.translate(cx, 16.0, cz);
+            const greenCap = new T.CylinderGeometry(8.0, 9.0, 2.0, 12);
+            greenCap.translate(cx, 25.0, cz);
+            parts.push(stem, pod, greenCap);
+          }
+          // Connecting Cross Skybridge (y: 16m)
+          const bridgeX = new T.BoxGeometry(32, 3.2, 4.0);
+          bridgeX.translate(0, 16.0, 0);
+          const bridgeZ = new T.BoxGeometry(4.0, 3.2, 32);
+          bridgeZ.translate(0, 16.0, 0);
+          parts.push(bridgeX, bridgeZ);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 80,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(44, 28, 44);
+          b.translate(0, 14, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(44, 28, 44);
+          b.translate(0, 14, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+// =============================================================================
+// CIVIC / CULTURAL / MIXED-USE ECO SHOWSTOPPERS (5 Models)
+// =============================================================================
+
+export function civicEcoOperaFlow() {
+  return {
+    id: "civic-eco-opera-flow",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 64, d: 96 },
+    height: 36.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 580,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Sculptural Sinuous Primary Shell (Auditorium 1)
+          const shell1 = new T.CylinderGeometry(16, 20, 28, 16);
+          shell1.scale(1.0, 1.0, 1.25);
+          shell1.translate(0, 14, -12);
+          // Secondary Shell (Auditorium 2)
+          const shell2 = new T.CylinderGeometry(12, 16, 20, 16);
+          shell2.scale(1.0, 1.0, 1.25);
+          shell2.translate(0, 10, 18);
+          // Walkable Landscaped Green Ramp Concourse
+          const ramp = new T.BoxGeometry(58, 3.0, 80);
+          ramp.rotateX(-0.04);
+          ramp.translate(0, 3.2, 0);
+          parts.push(shell1, shell2, ramp);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(60, 36, 92);
+          b.translate(0, 18, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(60, 36, 92);
+          b.translate(0, 18, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function civicEcoBiomeDome() {
+  return {
+    id: "civic-eco-biome-dome",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 64, d: 64 },
+    height: 42.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 540,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Central Grand Geodesic Dome (56m dia, 38m high)
+          const dome = new T.SphereGeometry(28, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
+          dome.scale(1.0, 1.35, 1.0);
+          dome.translate(0, 0, 0);
+          // Surrounding Ring Canopy
+          const ring = new T.CylinderGeometry(30, 31, 4.0, 16);
+          ring.translate(0, 2.0, 0);
+          parts.push(dome, ring);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 88,
+        createGeometry: (T = THREE) => {
+          const dome = new T.SphereGeometry(28, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.5);
+          dome.scale(1.0, 1.35, 1.0);
+          return dome;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(58, 42, 58);
+          b.translate(0, 21, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function civicEcoWaveLibrary() {
+  return {
+    id: "civic-eco-wave-library",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 48, d: 72 },
+    height: 28.0,
+    clearance: 1.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 500,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Main library podium
+          const body = new T.BoxGeometry(44, 16, 66);
+          body.translate(0, 8, 0);
+          // Parametric Wave Timber Roof
+          const wave1 = new T.CylinderGeometry(14, 18, 6.0, 16);
+          wave1.scale(1.0, 1.0, 1.15);
+          wave1.translate(0, 19, -10);
+          const wave2 = new T.CylinderGeometry(12, 16, 8.0, 16);
+          wave2.scale(1.0, 1.0, 1.15);
+          wave2.translate(0, 22, 12);
+          parts.push(body, wave1, wave2);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 80,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(46, 28, 68);
+          b.translate(0, 14, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(46, 28, 68);
+          b.translate(0, 14, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function civicEcoSportsArena() {
+  return {
+    id: "civic-eco-sports-arena",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 80, d: 96 },
+    height: 36.0,
+    clearance: 2.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 580,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Elliptical Stadium Bowl (74x90m, 24m high)
+          const bowl = new T.CylinderGeometry(34, 38, 24, 16);
+          bowl.scale(1.0, 1.0, 1.2);
+          bowl.translate(0, 12, 0);
+          // Floating Solar Petal Canopy Ring (y: 24 - 36m)
+          const canopy = new T.CylinderGeometry(36, 32, 10, 16);
+          canopy.scale(1.0, 1.0, 1.22);
+          canopy.translate(0, 29, 0);
+          parts.push(bowl, canopy);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const b = new T.CylinderGeometry(36, 38, 36, 12);
+          b.scale(1.0, 1.0, 1.2);
+          b.translate(0, 18, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(76, 36, 92);
+          b.translate(0, 18, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+export function civicEcoHydroTransitTerminal() {
+  return {
+    id: "civic-eco-hydro-transit-terminal",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 64, d: 112 },
+    height: 32.0,
+    clearance: 2.0,
+    origin: "base-centre",
+    standsOn: ["plot", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 560,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Grand Concourse Vault (58x104m, 26m high)
+          const vault = new T.CylinderGeometry(26, 30, 26, 16);
+          vault.scale(1.0, 1.0, 1.8);
+          vault.translate(0, 13, 0);
+          // Green Rooftop Living Sedum Canopy with Clerestory Skylights
+          const roof = new T.BoxGeometry(60, 4.0, 106);
+          roof.translate(0, 28, 0);
+          // Transit Dock Piers (South)
+          const pier = new T.BoxGeometry(20, 2.0, 14);
+          pier.translate(0, 1.0, 46);
+          parts.push(vault, roof, pier);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 88,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(60, 32, 108);
+          b.translate(0, 16, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(60, 32, 108);
+          b.translate(0, 16, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+
+
+
+
+// =============================================================================
+// CALATRAVA-INSPIRED SCULPTURAL BRIDGES (6 Models)
+// =============================================================================
+
+/**
+ * 1. Calatrava Inclined Harp Pylon Cable Bridge (Alamillo / Chords style)
+ * 36x128m, h=64m. Leaning 58-deg parabolic spine pylon with harp cable fan.
+ */
+export function bridgeCalatravaHarpPylon() {
+  return {
+    id: "bridge-calatrava-harp-pylon",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 36, d: 128 },
+    height: 64.0,
+    clearance: 6.5,
+    origin: "base-centre",
+    standsOn: ["water", "carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 540,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Aerodynamic Dual-Box Girder Deck (y: 6.5 - 9.5m)
+          const deck = new T.BoxGeometry(32, 2.5, 126);
+          deck.translate(0, 7.75, 0);
+          // Central Spine Box
+          const spine = new T.BoxGeometry(3.5, 1.2, 126);
+          spine.translate(0, 9.5, 0);
+
+          // Leaning 58-degree Sculptural Spine Pylon at South Abutment (z: -48)
+          const pylon = new T.BoxGeometry(4.2, 60, 4.8);
+          pylon.rotateX(0.42); // 58-deg lean backward
+          pylon.translate(0, 31.0, -42);
+
+          // 12 Stay Cable Harps connecting Pylon to Deck Spine
+          for (let i = 0; i < 12; i++) {
+            const py = 15 + i * 4.0;
+            const pz = -42 - i * 1.5;
+            const dz = -30 + i * 7.5;
+            const cable = new T.BoxGeometry(0.12, py - 9.0, Math.abs(dz - pz));
+            cable.translate(0, 9.0 + (py - 9.0) / 2, (pz + dz) / 2);
+            parts.push(cable);
+          }
+
+          // Abutment piers
+          const abS = new T.BoxGeometry(34, 7.0, 10);
+          abS.translate(0, 3.5, -58);
+          const abN = new T.BoxGeometry(34, 7.0, 10);
+          abN.translate(0, 3.5, 58);
+
+          parts.push(deck, spine, pylon, abS, abN);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const deck = new T.BoxGeometry(34, 3, 128);
+          deck.translate(0, 8, 0);
+          const pylon = new T.BoxGeometry(5, 60, 5);
+          pylon.rotateX(0.42);
+          pylon.translate(0, 31, -42);
+          return mergeGeometries([deck, pylon], T);
+        },
+      },
+      {
+        level: 2,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(36, 64, 128);
+          b.translate(0, 32, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 2. Calatrava Sundial Cantilevered Footbridge (Sundial Bridge style)
+ * 16x64m, h=38m. Soaring forward-canted white mast acting as gnomon with glass deck.
+ */
+export function bridgeCalatravaSundialFootbridge() {
+  return {
+    id: "bridge-calatrava-sundial-footbridge",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 16, d: 64 },
+    height: 38.0,
+    clearance: 4.5,
+    origin: "base-centre",
+    standsOn: ["water", "park", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 440,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Cantilevered Glass Walkway Deck (y: 4.5 - 6.0m)
+          const deck = new T.BoxGeometry(8.5, 1.2, 62);
+          deck.translate(0, 5.1, 0);
+          // Translucent Balustrades
+          const railL = new T.BoxGeometry(0.3, 1.1, 62);
+          railL.translate(-4.1, 6.2, 0);
+          const railR = new T.BoxGeometry(0.3, 1.1, 62);
+          railR.translate(4.1, 6.2, 0);
+
+          // Soaring Forward-Leaning Mast (Gnomon) at North End (z: 22)
+          const mast = new T.ConeGeometry(2.4, 36, 8);
+          mast.rotateX(-0.35); // Leaning forward over water
+          mast.translate(0, 18.5, 20);
+
+          // Radiating Cable Fan
+          for (let i = 0; i < 8; i++) {
+            const my = 12 + i * 3.2;
+            const mz = 20 - i * 1.2;
+            const dz = -24 + i * 5.5;
+            const cable = new T.BoxGeometry(0.08, my - 5.5, Math.abs(dz - mz));
+            cable.translate(0, 5.5 + (my - 5.5) / 2, (mz + dz) / 2);
+            parts.push(cable);
+          }
+
+          // Abutment Plaza Plinths
+          const plinthS = new T.BoxGeometry(14, 5.0, 8);
+          plinthS.translate(0, 2.5, -28);
+          const plinthN = new T.BoxGeometry(14, 5.0, 8);
+          plinthN.translate(0, 2.5, 28);
+
+          parts.push(deck, railL, railR, mast, plinthS, plinthN);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 72,
+        createGeometry: (T = THREE) => {
+          const deck = new T.BoxGeometry(10, 2, 64);
+          deck.translate(0, 5, 0);
+          const mast = new T.ConeGeometry(3, 36, 6);
+          mast.rotateX(-0.35);
+          mast.translate(0, 18.5, 20);
+          return mergeGeometries([deck, mast], T);
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(16, 38, 64);
+          b.translate(0, 19, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 3. Calatrava Curved Parabolic Rib Tied-Arch Bridge (Zubizuri / Campo Volantin style)
+ * 18x48m, h=16m. Tilted parabolic white arch rib with curved deck & harp struts.
+ */
+export function bridgeCalatravaRibArch() {
+  return {
+    id: "bridge-calatrava-rib-arch",
+    kind: "hard",
+    footprint: { w: 18, d: 48 },
+    height: 16.0,
+    clearance: 4.5,
+    origin: "base-centre",
+    standsOn: ["water", "sidewalk", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 380,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Curved Promenade Deck (y: 4.5 - 6.0m)
+          const deck = new T.BoxGeometry(12, 1.2, 46);
+          deck.translate(0, 5.1, 0);
+
+          // Tilted Parabolic Arch Rib (y: 5 - 15.5m)
+          const arch = new T.CylinderGeometry(1.2, 1.4, 46, 12, 1, true);
+          arch.rotateX(Math.PI / 2);
+          arch.rotateZ(0.24); // 14-deg lateral tilt
+          arch.translate(-3.2, 11.5, 0);
+          parts.push(arch);
+
+          // 10 Harp Strut Hangers
+          for (let i = 0; i < 10; i++) {
+            const z = -20 + i * 4.4;
+            const ay = 11.5 + Math.sin((i / 9) * Math.PI) * 3.8;
+            const strut = new T.BoxGeometry(0.1, ay - 5.5, 0.1);
+            strut.translate(-1.8, 5.5 + (ay - 5.5) / 2, z);
+            parts.push(strut);
+          }
+
+          // Abutment Ramp Plinths
+          const ab1 = new T.BoxGeometry(15, 5.0, 6.0);
+          ab1.translate(0, 2.5, -21);
+          const ab2 = new T.BoxGeometry(15, 5.0, 6.0);
+          ab2.translate(0, 2.5, 21);
+
+          parts.push(deck, ab1, ab2);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 60,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(16, 16, 48);
+          b.translate(0, 8, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(16, 16, 48);
+          b.translate(0, 8, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 4. Calatrava Twin Wave-Sail Cable Viaduct (Reggio Emilia style)
+ * 32x96m, h=44m. Dual wave-like sail pylons with intersecting cable harp sails.
+ */
+export function bridgeCalatravaTwinMastViaduct() {
+  return {
+    id: "bridge-calatrava-twin-mast-viaduct",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 36, d: 96 },
+    height: 44.0,
+    clearance: 6.5,
+    origin: "base-centre",
+    standsOn: ["carriageway", "water", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 480,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Roadway Deck (y: 6.5 - 9.5m)
+          const deck = new T.BoxGeometry(28, 2.5, 94);
+          deck.translate(0, 7.75, 0);
+
+          // Twin Wave-Sail Pylons on Left and Right Sides (y: 0 - 44m)
+          for (const sx of [-12, 12]) {
+            const mast = new T.CylinderGeometry(1.6, 2.4, 42, 10);
+            mast.rotateZ(sx > 0 ? -0.15 : 0.15); // Outward sail tilt
+            mast.translate(sx, 22, 0);
+            parts.push(mast);
+
+            // Intersecting Cable Sails
+            for (let i = 0; i < 8; i++) {
+              const my = 18 + i * 3.2;
+              const dz = -36 + i * 10;
+              const cable = new T.BoxGeometry(0.1, my - 9.0, Math.abs(dz));
+              cable.translate(sx * 0.6, 9.0 + (my - 9.0) / 2, dz / 2);
+              parts.push(cable);
+            }
+          }
+
+          // Abutment Bases
+          const abS = new T.BoxGeometry(30, 7.0, 8);
+          abS.translate(0, 3.5, -44);
+          const abN = new T.BoxGeometry(30, 7.0, 8);
+          abN.translate(0, 3.5, 44);
+
+          parts.push(deck, abS, abN);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 80,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(30, 44, 96);
+          b.translate(0, 22, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(30, 44, 96);
+          b.translate(0, 22, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 5. Calatrava Asymmetrical Winged Swing Bridge (Puente de la Mujer style)
+ * 20x72m, h=34m. Dynamic asymmetrical cantilevering white needle harp arm on cylindrical plinth.
+ */
+export function bridgeCalatravaWingedSwingBridge() {
+  return {
+    id: "bridge-calatrava-winged-swing-bridge",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 20, d: 72 },
+    height: 34.0,
+    clearance: 3.8,
+    origin: "base-centre",
+    standsOn: ["water", "sidewalk", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 420,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Rotating Swing Walkway Deck (y: 3.8 - 5.4m)
+          const deck = new T.BoxGeometry(9.0, 1.4, 70);
+          deck.translate(0, 4.5, 0);
+
+          // Central Cylindrical Pivot Island Plinth (y: 0 - 5.0m)
+          const pivot = new T.CylinderGeometry(7.5, 8.5, 5.0, 16);
+          pivot.translate(0, 2.5, -8);
+
+          // Asymmetrical Needle Harp Arm (y: 5 - 34m)
+          const arm = new T.ConeGeometry(2.2, 30, 8);
+          arm.rotateX(0.55); // 35-deg dramatic diagonal forward angle
+          arm.translate(0, 19.5, -8);
+
+          // 8 Harp Stay Cables
+          for (let i = 0; i < 8; i++) {
+            const ay = 10 + i * 2.8;
+            const az = -8 + i * 2.2;
+            const dz = 4 + i * 3.8;
+            const cable = new T.BoxGeometry(0.08, ay - 5.0, Math.abs(dz - az));
+            cable.translate(0, 5.0 + (ay - 5.0) / 2, (az + dz) / 2);
+            parts.push(cable);
+          }
+
+          parts.push(deck, pivot, arm);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 68,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(18, 34, 72);
+          b.translate(0, 17, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(18, 34, 72);
+          b.translate(0, 17, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 6. Calatrava Skeletal Bone-Rib Enclosed Skywalk (Peace Bridge / Oriente style)
+ * 8x48m, h=8.0m. Repeating white steel parabolic vertebrae cage enclosing walkway.
+ */
+export function bridgeCalatravaSkeletalSpineOverpass() {
+  return {
+    id: "bridge-calatrava-skeletal-spine-overpass",
+    kind: "hard",
+    footprint: { w: 8.0, d: 48.0 },
+    height: 9.6,
+    clearance: 4.8,
+    origin: "base-centre",
+    standsOn: ["carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 360,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Suspended Pedestrian Deck (y: 4.8 - 5.8m)
+          const deck = new T.BoxGeometry(5.2, 0.8, 48);
+          deck.translate(0, 5.2, 0);
+
+          // 12 Repeating Skeletal Vertebrae Ribs (y: 4.5 - 8.0m)
+          for (let i = 0; i < 12; i++) {
+            const z = -22 + i * 4.0;
+            const rib = new T.CylinderGeometry(3.6, 3.6, 0.35, 12, 1, true);
+            rib.rotateX(Math.PI / 2);
+            rib.translate(0, 5.6, z);
+            parts.push(rib);
+          }
+
+          // Abutment Stair Portals
+          const p1 = new T.BoxGeometry(6.4, 5.0, 4.0);
+          p1.translate(0, 2.5, -22);
+          const p2 = new T.BoxGeometry(6.4, 5.0, 4.0);
+          p2.translate(0, 2.5, 22);
+
+          parts.push(deck, p1, p2);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 48,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(8, 8, 48);
+          b.translate(0, 4, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(8, 8, 48);
+          b.translate(0, 4, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}

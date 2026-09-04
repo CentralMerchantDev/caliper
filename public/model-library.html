@@ -237,26 +237,58 @@
     color: #fff;
   }
 
-  
-  .badge-showstopper {
+  /* Quality Tier Badges & Cards */
+  .badge-tier {
+    font-weight: 800;
+    letter-spacing: 0.05em;
+  }
+  .badge-tier-showstopper {
     background: linear-gradient(135deg, #d97706, #f59e0b);
     color: #000;
-    font-weight: 800;
     box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
   }
-  .card.showstopper-card {
-    border-color: rgba(245, 158, 11, 0.45);
-    box-shadow: 0 4px 20px rgba(245, 158, 11, 0.15);
+  .badge-tier-luxury {
+    background: linear-gradient(135deg, #7c3aed, #a855f7);
+    color: #fff;
+    box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
   }
-  .filter-btn.showstopper-btn {
-    color: #f59e0b;
-    border-color: rgba(245, 158, 11, 0.4);
+  .badge-tier-highend {
+    background: linear-gradient(135deg, #0284c7, #06b6d4);
+    color: #fff;
+    box-shadow: 0 0 8px rgba(6, 182, 212, 0.35);
   }
-  .filter-btn.showstopper-btn.active {
-    background: #f59e0b;
-    color: #000;
-    font-weight: 700;
+  .badge-tier-midhigh {
+    background: linear-gradient(135deg, #2563eb, #3b82f6);
+    color: #fff;
   }
+  .badge-tier-mid {
+    background: linear-gradient(135deg, #475569, #64748b);
+    color: #fff;
+  }
+  .badge-tier-midlow {
+    background: linear-gradient(135deg, #334155, #475569);
+    color: #cbd5e1;
+  }
+
+  .card.tier-showstopper-card { border-color: rgba(245, 158, 11, 0.5); box-shadow: 0 4px 20px rgba(245, 158, 11, 0.15); }
+  .card.tier-luxury-card { border-color: rgba(168, 85, 247, 0.45); }
+  .card.tier-highend-card { border-color: rgba(6, 182, 212, 0.4); }
+  .card.tier-midhigh-card { border-color: rgba(59, 130, 246, 0.35); }
+  .card.tier-mid-card { border-color: rgba(100, 116, 139, 0.3); }
+  .card.tier-midlow-card { border-color: rgba(71, 85, 105, 0.25); }
+
+  .filter-btn.tier-showstopper { color: #f59e0b; border-color: rgba(245, 158, 11, 0.4); }
+  .filter-btn.tier-showstopper.active { background: #f59e0b; color: #000; font-weight: 700; }
+  .filter-btn.tier-luxury { color: #c084fc; border-color: rgba(192, 132, 252, 0.4); }
+  .filter-btn.tier-luxury.active { background: #9333ea; color: #fff; font-weight: 700; }
+  .filter-btn.tier-highend { color: #38bdf8; border-color: rgba(56, 189, 248, 0.4); }
+  .filter-btn.tier-highend.active { background: #0284c7; color: #fff; font-weight: 700; }
+  .filter-btn.tier-midhigh { color: #60a5fa; border-color: rgba(96, 165, 250, 0.4); }
+  .filter-btn.tier-midhigh.active { background: #2563eb; color: #fff; font-weight: 700; }
+  .filter-btn.tier-mid { color: #94a3b8; border-color: rgba(148, 163, 184, 0.4); }
+  .filter-btn.tier-mid.active { background: #475569; color: #fff; font-weight: 700; }
+  .filter-btn.tier-midlow { color: #64748b; border-color: rgba(100, 116, 139, 0.4); }
+  .filter-btn.tier-midlow.active { background: #334155; color: #cbd5e1; font-weight: 700; }
 
   .card-body {
     padding: 14px;
@@ -537,34 +569,43 @@
   <div class="toolbar">
     <div class="search-box">
       <svg class="search-icon" viewBox="0 0 16 16"><path d="M11.5 7a4.499 4.499 0 1 1-8.998 0A4.499 4.499 0 0 1 11.5 7zm-.82 4.74a6 6 0 1 0-1.06 1.06l3.04 3.04a.75.75 0 1 0 1.06-1.06l-3.04-3.04z"></path></svg>
-      <input type="text" class="search-input" id="search-input" placeholder="Search models, categories, generators...">
+      <input type="text" class="search-input" id="search-input" placeholder="Search 540+ models, categories, quality tiers...">
     </div>
     <select id="sort-select" class="sort-select">
+      <option value="name">Sort: Model Name (A–Z)</option>
+      <option value="tris">Sort: LOD0 Triangles (High–Low)</option>
       <option value="cost">Sort: World Cost (Count × LOD0)</option>
       <option value="count">Sort: Instance Count</option>
-      <option value="tris">Sort: LOD0 Triangles</option>
-      <option value="name">Sort: Model Name (A–Z)</option>
     </select>
-    <div class="filter-pills" id="category-filters">
-      <button class="filter-btn active" data-cat="all">All</button>
-      <button class="filter-btn showstopper-btn" data-cat="showstoppers">★ Showstoppers (10)</button>
-      <button class="filter-btn" data-cat="roof">Roof Clutter</button>
-      <button class="filter-btn" data-cat="furniture">Street & Details</button>
-      <button class="filter-btn" data-cat="ground">Ground</button>
-      <button class="filter-btn" data-cat="facade">Facade</button>
-      <button class="filter-btn" data-cat="boundary">Boundary</button>
-      <button class="filter-btn" data-cat="vegetation">Trees</button>
-      <button class="filter-btn" data-cat="people">People</button>
-      <button class="filter-btn" data-cat="vehicles">Vehicles</button>
-      <button class="filter-btn" data-cat="maritime">Maritime</button>
-      <button class="filter-btn" data-cat="airport">Airport</button>
-      <button class="filter-btn" data-cat="aviation">Aviation</button>
-      <button class="filter-btn" data-cat="roads">Roads & Rail</button>
-      <button class="filter-btn" data-cat="civic">Civic (12)</button>
-      <button class="filter-btn" data-cat="buildings">Buildings (10)</button>
-      <button class="filter-btn" data-cat="parks">Parks</button>
-      <button class="filter-btn" data-cat="industrial">Industrial</button>
-    </div>
+  </div>
+
+  <div class="filter-pills" id="tier-filters" style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding-top: 4px;">
+    <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-right: 4px;">Tier:</span>
+    <button class="filter-btn active" data-tier="all">All Tiers (540+)</button>
+    <button class="filter-btn tier-showstopper" data-tier="showstopper">★ Showstopper (90)</button>
+    <button class="filter-btn tier-luxury" data-tier="luxury">◆ Luxury (90)</button>
+    <button class="filter-btn tier-highend" data-tier="highend">▲ High-End (90)</button>
+    <button class="filter-btn tier-midhigh" data-tier="midhigh">■ Mid-High (90)</button>
+    <button class="filter-btn tier-mid" data-tier="mid">● Mid (90)</button>
+    <button class="filter-btn tier-midlow" data-tier="midlow">○ Mid-Low (90)</button>
+  </div>
+
+  <div class="filter-pills" id="category-filters" style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding-top: 4px;">
+    <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-right: 4px;">Category:</span>
+    <button class="filter-btn active" data-cat="all">All Categories</button>
+    <button class="filter-btn" data-cat="buildings">Buildings (70)</button>
+    <button class="filter-btn" data-cat="civic">Civic (72)</button>
+    <button class="filter-btn" data-cat="roads">Roads & Rail (70)</button>
+    <button class="filter-btn" data-cat="vehicles">Vehicles (70)</button>
+    <button class="filter-btn" data-cat="maritime">Maritime (70)</button>
+    <button class="filter-btn" data-cat="aviation">Aviation (70)</button>
+    <button class="filter-btn" data-cat="vegetation">Vegetation (70)</button>
+    <button class="filter-btn" data-cat="furniture">Street & Furniture (70)</button>
+    <button class="filter-btn" data-cat="boundary">Boundary (70)</button>
+    <button class="filter-btn" data-cat="roof">Roof Clutter</button>
+    <button class="filter-btn" data-cat="facade">Facade</button>
+    <button class="filter-btn" data-cat="ground">Ground</button>
+    <button class="filter-btn" data-cat="people">People</button>
   </div>
 </header>
 
@@ -594,6 +635,7 @@
           <h3 style="margin: 0 0 6px; font-size: 14px; color: #58a6ff;">SPECIFICATION</h3>
           <table class="spec-table">
             <tr><td class="spec-label">ID:</td><td class="spec-val" id="spec-id">--</td></tr>
+            <tr><td class="spec-label">Quality Tier:</td><td class="spec-val" id="spec-tier">--</td></tr>
             <tr><td class="spec-label">Category:</td><td class="spec-val" id="spec-cat">--</td></tr>
             <tr><td class="spec-label">Status:</td><td class="spec-val" id="spec-status">--</td></tr>
             <tr><td class="spec-label">Source:</td><td class="spec-val" id="spec-source">--</td></tr>
@@ -917,7 +959,8 @@ function resolveModel(reg) {
   };
 }
 
-for (const reg of ASSET_REGISTRY) {
+const registryList = Array.isArray(ASSET_REGISTRY) ? ASSET_REGISTRY : Object.values(ASSET_REGISTRY);
+for (const reg of registryList) {
   const model = resolveModel(reg);
   libraryItems.push({
     registry: reg,
@@ -1085,7 +1128,7 @@ if (realisticBadge) realisticBadge.textContent = `~${totalRealisticTris.toLocale
 const ceilingBadge = document.getElementById("stat-ceiling");
 if (ceilingBadge) ceilingBadge.textContent = `Ceiling: ${totalCeilingTris.toLocaleString()} (All LOD0)`;
 
-let currentSort = "cost";
+let currentSort = "name";
 
 function sortLibraryItems() {
   if (currentSort === "cost") {
@@ -1107,6 +1150,15 @@ function buildCards() {
   grid.innerHTML = "";
   sortLibraryItems();
 
+  const tierBadgeMap = {
+    showstopper: '<span class="badge badge-tier badge-tier-showstopper">★ SHOWSTOPPER</span>',
+    luxury: '<span class="badge badge-tier badge-tier-luxury">◆ LUXURY</span>',
+    highend: '<span class="badge badge-tier badge-tier-highend">▲ HIGH-END</span>',
+    midhigh: '<span class="badge badge-tier badge-tier-midhigh">■ MID-HIGH</span>',
+    mid: '<span class="badge badge-tier badge-tier-mid">● MID</span>',
+    midlow: '<span class="badge badge-tier badge-tier-midlow">○ MID-LOW</span>'
+  };
+
   libraryItems.forEach((item, idx) => {
     const reg = item.registry;
     const m = item.model;
@@ -1120,11 +1172,14 @@ function buildCards() {
     card.dataset.index = idx;
     card.dataset.modelId = reg.id;
     card.dataset.category = reg.category;
-    card.dataset.status = reg.status;
-    card.dataset.source = reg.source;
+    card.dataset.tier = reg.tier || "standard";
+    card.dataset.status = reg.status || "built";
+    card.dataset.source = reg.source || "procedural";
 
-    const isShowstopper = reg.tier === "showstopper";
-    if (isShowstopper) card.classList.add("showstopper-card");
+    const tier = reg.tier || "standard";
+    if (tier) card.classList.add(`tier-${tier}-card`);
+
+    const tierBadge = tierBadgeMap[tier] || '';
     const statusClass = reg.status === "built" ? "badge-status-built" : reg.status === "generator" ? "badge-status-generator" : "badge-status-planned";
     const statusLabel = reg.status === "built" ? "Built" : reg.status === "generator" ? "Generator" : "Planned Gap";
 
@@ -1132,7 +1187,7 @@ function buildCards() {
       <div class="card-thumbnail">
         <div class="card-badges">
           <span class="badge badge-category">${reg.category}</span>
-          ${isShowstopper ? '<span class="badge badge-showstopper">★ SHOWSTOPPER</span>' : ''}
+          ${tierBadge}
           <span class="badge ${statusClass}">${statusLabel}</span>
         </div>
         <canvas width="320" height="200"></canvas>
@@ -1142,7 +1197,7 @@ function buildCards() {
         <div class="card-dims">
           <span>${m.footprint.w}m &times; ${m.footprint.d}m</span>
           <span>h=${m.height}m</span>
-          <span>${reg.seenAs}</span>
+          <span>${reg.seenAs || (tier ? tier.toUpperCase() : "STANDARD")}</span>
         </div>
         <div class="card-note">${reg.note || reg.generator || ""}</div>
         <div class="card-budget">
@@ -1199,6 +1254,7 @@ function showToast(msg) {
 // --- Search and Filtering ---
 const searchInput = document.getElementById("search-input");
 let activeCategory = "all";
+let activeTier = "all";
 
 function filterCards() {
   const query = searchInput.value.toLowerCase().trim();
@@ -1206,16 +1262,29 @@ function filterCards() {
 
   cards.forEach((card) => {
     const id = card.dataset.modelId.toLowerCase();
-    const cat = card.dataset.category.toLowerCase();
-    const isShowstopper = card.classList.contains("showstopper-card");
-    const matchesCat = (activeCategory === "all" || (activeCategory === "showstoppers" ? isShowstopper : cat === activeCategory));
-    const matchesQuery = !query || id.includes(query) || cat.includes(query) || note.includes(query);
+    const cat = (card.dataset.category || "").toLowerCase();
+    const tier = (card.dataset.tier || "").toLowerCase();
+    const note = (card.querySelector(".card-note")?.textContent || "").toLowerCase();
 
-    card.style.display = (matchesCat && matchesQuery) ? "flex" : "none";
+    const matchesCat = (activeCategory === "all" || cat === activeCategory);
+    const matchesTier = (activeTier === "all" || tier === activeTier);
+    const matchesQuery = !query || id.includes(query) || cat.includes(query) || tier.includes(query) || note.includes(query);
+
+    card.style.display = (matchesCat && matchesTier && matchesQuery) ? "flex" : "none";
   });
 }
 
 searchInput.addEventListener("input", filterCards);
+
+document.querySelectorAll("#tier-filters .filter-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#tier-filters .filter-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    activeTier = btn.dataset.tier;
+    filterCards();
+  });
+});
+
 document.querySelectorAll("#category-filters .filter-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll("#category-filters .filter-btn").forEach((b) => b.classList.remove("active"));
@@ -1306,9 +1375,10 @@ function openInspector(item) {
 
   document.getElementById("modal-title").textContent = reg.id;
   document.getElementById("spec-id").textContent = reg.id;
+  document.getElementById("spec-tier").textContent = (reg.tier || "standard").toUpperCase();
   document.getElementById("spec-cat").textContent = reg.category;
-  document.getElementById("spec-status").textContent = reg.status.toUpperCase();
-  document.getElementById("spec-source").textContent = reg.source;
+  document.getElementById("spec-status").textContent = (reg.status || "built").toUpperCase();
+  document.getElementById("spec-source").textContent = reg.source || "procedural";
   document.getElementById("spec-foot").textContent = m.footprint.w + "m × " + m.footprint.d + "m";
   document.getElementById("spec-sweep").textContent = m.sweep ? (m.sweep.w + "m × " + m.sweep.d + "m") : (m.footprint.w + "m × " + m.footprint.d + "m");
   document.getElementById("spec-h").textContent = m.height + "m";
