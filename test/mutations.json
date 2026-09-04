@@ -396,6 +396,15 @@
       "find": "    const model = registry.get(modelId);\n    if (!model) {\n      refused.push({ plotId: p.plotId, modelId, reason: `no model registered for id \"${modelId}\"` });\n      continue;\n    }",
       "replace": "    const model = registry.get(modelId) || { ok: true, geometry: { attributes: {} }, measured: { triangles: 12 } };",
       "expect": "a layer referencing an unknown model id is refused at resolve"
+    },
+    {
+      "id": "pick-returns-the-plot-not-the-block",
+      "guards": "a pick's plotId is the actual plot id, not the containing block's id -- the two ids look similar (both plan-derived strings) so a swap would not throw, only quietly point every edit at the wrong granularity of object",
+      "note": "The ledger names this exact failure mode: return the nearest block instead of the plot.",
+      "file": "public/selection.js",
+      "find": "      current = index.addressAt(x, z);\n      return current;",
+      "replace": "      current = { ...index.addressAt(x, z) }; current.plotId = current.blockId;\n      return current;",
+      "expect": "a pick returns a real plot id that is present in the plan"
     }
   ]
 }

@@ -544,11 +544,24 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
 
 ### Phase D — the agent's path into the world *(this is the product)*
 
-- [ ] **D1 — pick.** A click resolves to an address. The spatial index already
-      resolves plot / block / district / settlement; wire it to a selection
-      state and show what is selected.
-      *Test:* a pick returns a real plot id that is present in the plan.
-      *Mutation:* return the nearest block instead of the plot → red.
+- [x] **D1 — pick.** Evidence: `public/selection.js`, `createSelection(index)`
+      — a thin stateful wrapper over `spatial-index.js`'s `addressAt`, the
+      same "compose, do not reimplement" discipline `world.js` and
+      `apply-layers.js` already follow. `test/selection.test.ts` (3), run
+      against the REAL generated plan (not a fixture): a pick at a real
+      plot's centre returns that exact plot's real id, present in
+      `plan.plots`; the selection persists as `.current` until picked again
+      or `clear()`ed; a pick far outside any built land resolves with
+      `onPlot: false` rather than throwing. Mutation
+      `pick-returns-the-plot-not-the-block` CAUGHT — swaps `plotId` for
+      `blockId`, the exact failure the ledger names: `node
+      scripts/_mutcheck.mjs test/selection.test.ts public/selection.js
+      test/mutations.json`.
+      **Undone:** not wired to an actual click handler or shown in the page
+      — that is a DOM/UI concern this Node-testable layer intentionally does
+      not reach into; a real pointer event calling `.pick(x, z)` with a
+      raycast hit is a small, mechanical follow-on once the renderer itself
+      is live-wired (D7).
 - [ ] **D2 — describe.** A plain-English box scoped to the selection. **No option
       list.** The absence of a menu is the point: the player writes English and
       the machine deals with it.

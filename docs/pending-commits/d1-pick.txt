@@ -1,0 +1,33 @@
+D1: pick -- a click resolves to an address, and stays selected
+
+What was wrong: spatial-index.js already answers "what is at this point" --
+plot, block, district, settlement -- but nothing remembered what was picked
+between a click and the plain-English request D2 will scope to it. The
+addressing itself was never the gap; the missing piece was state.
+
+How it is known to be fixed:
+
+- public/selection.js, new. createSelection(index) wraps addressAt with
+  pick(x, z) / .current / clear() -- the same "compose, do not reimplement"
+  discipline world.js and apply-layers.js already follow. It re-derives
+  nothing about addressing.
+- test/selection.test.ts (3), run against the REAL generated plan rather than
+  a fixture: a pick at a real plot's centre returns that plot's own real id,
+  confirmed present in plan.plots; the selection persists as .current across
+  calls until picked again or cleared; a pick far outside any built land
+  resolves with onPlot:false instead of throwing.
+- Mutation `pick-returns-the-plot-not-the-block` CAUGHT. Swaps plotId for
+  blockId -- both are plan-derived id strings, so the swap does not throw,
+  it just quietly points every future edit at the wrong granularity of
+  object, which is exactly the failure the ledger names:
+  `node scripts/_mutcheck.mjs test/selection.test.ts public/selection.js test/mutations.json`
+- `npm test`: 832/832. `npx tsc --noEmit`: clean.
+
+What is still open: this is not wired to an actual pointer/click handler or
+shown anywhere in the page -- that is a DOM/renderer concern this
+Node-testable layer deliberately does not reach into. A real click handler
+calling .pick(x, z) with a raycast hit is a small, mechanical follow-on once
+the renderer is live-wired to a real world (D7). D2 (describe) is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.
