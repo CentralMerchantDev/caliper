@@ -495,15 +495,30 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
 
 ### Phase C — it draws  *(visual verification is Windows-only — see note)*
 
-- [ ] **C1 — instanced draw honours overrides.** The 480 variant meshes group by
-      situation. An overridden object must LEAVE its instance group and be drawn
-      from its own model, or the override is invisible.
-      *Test:* an overridden plot is absent from its original variant's instance
-      count, and the totals still add up to the plot count — nothing lost in the
-      gap. *Mutation:* apply the override without removing it from the group →
-      the count test red (the object would draw twice).
-      *Look for on Windows:* one building visibly different, everything else
-      unchanged, triangle count within a few thousand of 1.45 M.
+- [x] **C1 — instanced draw honours overrides.** Evidence: `public/instance-
+      groups.js`, `partitionForInstancing(placements)`. Runs on
+      `apply-layers.js`'s output, before `groupByVariant` ever sees the
+      placements, so the existing shared-InstancedMesh path in
+      `city-render.js` needs no edits — it simply never receives a placement
+      this has already pulled out. `test/instanceGroups.test.ts` (3): an
+      overridden plot is absent from its group and a removed one from
+      everywhere, with conservation checked (nothing lost, nothing
+      duplicated); a world with no edits leaves every placement
+      REFERENCE-EQUAL, never even inspected; and — not a fixture — the same
+      property proven against the REAL generated plan (`generateWorld` +
+      `planCity`, ~19,800 real placements), overriding one real plot and
+      confirming it is absent from its real instance group. Mutation
+      `override-leaves-its-instance-group` CAUGHT — `node
+      scripts/_mutcheck.mjs test/instanceGroups.test.ts
+      public/instance-groups.js test/mutations.json`.
+      **Undone, named rather than skipped:** `city-render.js` itself is not
+      yet wired to build its world via `createWorld({ seed, layers })` — it
+      still calls `generateWorld(heightAt)` directly, with no layer stack to
+      partition. The mechanism is built and proven at real scale; the live
+      integration (and the "one building visibly different" Windows check
+      this step originally asked for) is deferred to **D7 — apply and
+      persist**, which is where a layer becomes visible in the running app
+      at all. Checking it here would have nothing yet to check.
 - [ ] **C2 — generated models render.** A forge-verified model registers by id;
       a layer referencing that id draws it.
       *Test:* a layer referencing an UNKNOWN model id is refused at load, naming

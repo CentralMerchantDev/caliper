@@ -378,6 +378,15 @@
       "find": "  for (const address of touched) {",
       "replace": "  for (const p of placements) { const address = p.plotId;",
       "expect": "resolve is called exactly once per touched address"
+    },
+    {
+      "id": "override-leaves-its-instance-group",
+      "guards": "an overridden placement is pushed to overridden and EXCLUDED from instanced, so the shared InstancedMesh group never sees it -- otherwise it draws from the old shared geometry as well as its own override, twice",
+      "note": "Dropping the else keeps the if-branch's push but ALSO falls through to the instanced push, exactly the failure mode named in the ledger: apply the override without removing it from the group.",
+      "file": "public/instance-groups.js",
+      "find": "    if (p.override) overridden.push(p);\n    else instanced.push(p);",
+      "replace": "    if (p.override) overridden.push(p);\n    instanced.push(p);",
+      "expect": "an overridden plot is absent from its original variant's instance group"
     }
   ]
 }

@@ -1,0 +1,45 @@
+C1: an overridden object leaves its instance group
+
+What was wrong: nothing yet decided what happens to the shared-InstancedMesh
+draw path when a layer overrides a placement inside it. An InstancedMesh
+draws every instance from one geometry, so a placement left in its group
+after being overridden either shows the OLD model (the edit is invisible) or,
+if something else also draws the override, shows both (the building doubles).
+
+How it is known to be fixed:
+
+- public/instance-groups.js, new. partitionForInstancing(placements) runs on
+  apply-layers.js's output, before groupByVariant ever sees anything -- so
+  the existing shared-mesh path in city-render.js needs no changes at all,
+  because it simply never receives a placement this has already pulled out.
+  A removed placement is dropped from both instanced and overridden -- there
+  is nothing to draw.
+- test/instanceGroups.test.ts (3): an overridden plot is absent from its
+  original variant's instance group and a removed one is absent from
+  everywhere, with conservation explicitly checked (instanced.length +
+  overridden.length accounts for exactly the non-removed placements); a
+  world with no layer edits leaves every placement in `instanced` REFERENCE-
+  EQUAL to the input, proving nothing was even inspected, let alone changed;
+  and -- not a fixture -- the same property re-proven against the real
+  generated plan (generateWorld + planCity, ~19,800 real placements),
+  overriding one real plot in the middle of the list and confirming it is
+  absent from its real instance group, which is a property of the real
+  pipeline, not of a six-item toy array.
+- Mutation `override-leaves-its-instance-group` CAUGHT. Drops the `else` so
+  an overridden placement is pushed to BOTH `overridden` and `instanced` --
+  exactly the failure mode named in the ledger, "apply the override without
+  removing it from the group":
+  `node scripts/_mutcheck.mjs test/instanceGroups.test.ts public/instance-groups.js test/mutations.json`
+- `npm test`: 824/824. `npx tsc --noEmit`: clean.
+
+What is still open, named rather than silently skipped: city-render.js does
+not yet build its world via createWorld({ seed, layers }) -- it still calls
+generateWorld(heightAt) directly with no layer stack to partition. The
+mechanism above is built and proven at real scale; wiring it into the live
+renderer, and the "one building visibly different" Windows visual check this
+step originally named, are deferred to D7 (apply and persist), which is
+where an edit becomes visible in the running app at all. Checking a Windows
+screenshot now would have nothing new to see.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.
