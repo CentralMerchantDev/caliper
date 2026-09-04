@@ -432,6 +432,15 @@
       "find": "  return { ok: false, text: `verification failed at ${v.stage}: ${v.reason}` };",
       "replace": "  return { ok: true, text: `verified ok` };",
       "expect": "a failed verify is shown as a failed verify"
+    },
+    {
+      "id": "layer-references-model-by-id-not-source",
+      "guards": "the persisted layer references its model by id only -- the generated source is never inlined into it, which is what keeps a layer storable, sendable and diffable as plain data",
+      "note": "source is in scope in applyAndPersist (the caller has it right after D4s verify step) -- this mutation is the realistic accident of including it, not a strawman.",
+      "file": "public/apply-and-persist.js",
+      "find": "    edits: [{ address: request.address, op: \"replace\", payload: { modelId } }],",
+      "replace": "    edits: [{ address: request.address, op: \"replace\", payload: { modelId, source } }],",
+      "expect": "a verified model becomes a layer that references it BY ID, never inlining the source"
     }
   ]
 }

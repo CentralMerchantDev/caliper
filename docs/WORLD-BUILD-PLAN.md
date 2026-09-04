@@ -646,10 +646,38 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       applied to one stage's own display text: `node
       scripts/_mutcheck.mjs test/stageArtefact.test.ts
       public/stage-artefact.js test/mutations.json`.
-- [ ] **D7 — apply and persist.** The result becomes a layer: authored, stored,
-      visible immediately. *Test:* the layer is valid per `validateLayer`,
-      references the model BY ID (never inlines the function), and survives a
-      reload.
+- [x] **D7 — apply and persist.** Evidence: `public/apply-and-persist.js`,
+      `applyAndPersist({ world, worldId, registry, store, request, source,
+      verdict, modelId, layerId, author })` — the join across everything
+      built tonight: an unverified model is refused before anything happens
+      (never registered, never becomes a layer, never persisted); a verified
+      one registers, becomes a layer via `world-model.js`'s own
+      `layerFrom`/`validateLayer` (not a second check that could disagree
+      with them), is added to the world, and is saved through B1's store.
+      `test/applyAndPersist.test.ts` (4): a verified model becomes a layer
+      referencing the model BY ID — `source` is genuinely in scope in this
+      function (the realistic calling context, right after D4's verify
+      step) and the test proves the serialised layer never contains it, not
+      a vacuous check against a function that was never given the source at
+      all; the produced layer is valid per the real `validateLayer`; the
+      layer survives store → `worldFromJSON` → resolve, matching what was
+      persisted; an unverified model touches none of world/registry/store.
+      Mutation `layer-references-model-by-id-not-source` CAUGHT — inlines
+      `source` into the payload alongside `modelId`, the accident this
+      module exists to prevent: `node scripts/_mutcheck.mjs
+      test/applyAndPersist.test.ts public/apply-and-persist.js
+      test/mutations.json`.
+      **"Visible immediately" is Undone, named plainly rather than claimed:**
+      C1/C2/D7 together are a complete, tested MECHANISM — override
+      partitioning, model registry, apply-and-persist — but nothing
+      tonight wired `city-render.js` to build its scene from a
+      `createWorld({ seed, layers })` instead of a bare
+      `generateWorld(heightAt)`, and no click handler, text box, or API
+      route exists yet to drive D1/D2/D4 live. That is a materially larger
+      task than this ledger line captures — real DOM wiring, a real request
+      to a real model under the pipeline's existing spend gates — and
+      belongs to its own step with its own plan, not squeezed into D7's
+      evidence by generous interpretation.
 - [ ] **D8 — undo.** Drop the layer. *Test:* undo removes exactly that layer's
       edits and leaves every other author's work standing — this is already
       proven at the model level in `test/worldModel.test.ts`; prove it end to

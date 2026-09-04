@@ -1,0 +1,48 @@
+D7: apply and persist -- the result becomes a layer, and an unverified one touches nothing
+
+What was wrong: D1 (pick), D2 (describe), D4 (generate+verify), C2's model
+registry, and B1's store all proved their own piece, in isolation. Nothing
+yet joined them: a verified model becoming an actual, storable layer, and an
+unverified one being refused before it could touch any of world state, the
+registry, or storage.
+
+How it is known to be fixed:
+
+- public/apply-and-persist.js, new. applyAndPersist(...) refuses first,
+  before anything happens, when the verdict is not ok:true. A verified model
+  registers (model-registry.js's own gate is a second, independent line of
+  defence -- register() itself throws on an unverified verdict), becomes a
+  layer via world-model.js's own layerFrom/validateLayer (not a second
+  validation path that could quietly disagree with the one already tested),
+  is added to the world, and is saved through B1's store.
+- source is genuinely in scope in this function -- the realistic calling
+  context, since the caller has both source and verdict right after D4's
+  verify step -- and is deliberately never read past model-registry.js. The
+  layer carries modelId only.
+- test/applyAndPersist.test.ts (4): a verified model becomes a layer that
+  references it by id, proven by asserting the SERIALISED layer never
+  contains the source string (a real check against a function that had
+  access to the source, not a vacuous one against a function that was never
+  given it); the produced layer is valid per the real validateLayer; the
+  layer survives store -> worldFromJSON -> resolve, matching exactly what
+  was persisted; an unverified model never reaches world.layers, the
+  registry, or the store.
+- Mutation `layer-references-model-by-id-not-source` CAUGHT. Inlines source
+  into the payload alongside modelId -- the realistic accident this module
+  exists to prevent, not a strawman:
+  `node scripts/_mutcheck.mjs test/applyAndPersist.test.ts public/apply-and-persist.js test/mutations.json`
+- `npm test`: 848/848. `npx tsc --noEmit`: clean.
+
+What is honestly still open, named rather than claimed: "visible
+immediately" is not demonstrated live. C1 (instance partitioning), C2 (model
+registry) and D7 (apply-and-persist) together are a complete, tested
+mechanism, but nothing tonight wired city-render.js to build its scene from
+createWorld({ seed, layers }) instead of a bare generateWorld(heightAt), and
+no click handler, text box, or API route exists yet to drive D1/D2/D4 live.
+That is materially larger than this one ledger line -- real DOM wiring, a
+real model call under the pipeline's existing spend gates -- and deserves
+its own step and its own plan rather than being squeezed into this evidence
+by generous interpretation. D8 (undo) is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.
