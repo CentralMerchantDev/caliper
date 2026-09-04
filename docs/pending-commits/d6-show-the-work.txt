@@ -1,0 +1,45 @@
+D6: show the work -- a failed verify reads as a failed verify, never smoothed
+
+What was wrong: src/changePipeline.ts already streams stages over SSE and
+the page already renders grounding -> plan -> implement -> verify -> review
+-> fix, for the data-edit path against the parcel. Nothing shaped what the
+source-edit path (D4) would show a player -- the code a model actually
+wrote, and whether it actually passed -- and nothing guarded against the one
+failure this whole project exists to prevent: a failed check reading as a
+pass.
+
+How it is known to be fixed:
+
+- public/stage-artefact.js, new. stageArtefact(stage, source, verdict) shapes
+  one stream event; describeStageOutcome(artefact) returns
+  ok: true | false | null -- deliberately never collapsed to a plain boolean,
+  because "not yet checked" (an implement event fires before verify runs) is
+  a real, different state from either a pass or a fail, and losing that
+  distinction is the same failure-floor shape this project keeps finding
+  elsewhere in different clothes.
+- Deliberately did NOT touch src/changePipeline.ts (2,000+ live lines,
+  already carrying real spend caps and gates) or index.html's existing stage
+  rendering -- the same "prove the mechanism, defer the wiring" pattern
+  D1/D2/D4 already used tonight, doubly warranted here since src/ is
+  extended, never rewritten, and D4's own generate/verify path is not wired
+  into that pipeline yet either.
+- test/stageArtefact.test.ts (4): the artefact carries the source and verdict
+  unaltered; a FAILED verify's description text matches /fail|refus/i and
+  explicitly does NOT match /success|verified ok|passed/i; a passing verify's
+  text names what was actually measured (a triangle count), not a bare "ok";
+  an artefact with no verdict yet reads as ok:null, neither a pass nor a
+  fail.
+- Mutation `failed-verify-reads-as-failed` CAUGHT. Reports "verified ok" for
+  a failed verdict regardless of what actually failed -- precisely
+  failure-floor item 1, shipping an unverified change while reporting it as
+  verified, applied to one stage's own display text:
+  `node scripts/_mutcheck.mjs test/stageArtefact.test.ts public/stage-artefact.js test/mutations.json`
+- `npm test`: 844/844. `npx tsc --noEmit`: clean.
+
+What is still open: wiring this into the real SSE stream and the page's
+existing stage renderer is deferred, same reason as D1/D2/D4 -- there is
+nothing live yet for it to attach to until the source-edit path itself is
+wired into the pipeline. D7 (apply and persist) is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.

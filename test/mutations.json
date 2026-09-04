@@ -423,6 +423,15 @@
       "find": "  return verifyModelSource(source, prompt.constraints.footprint, evaluate, THREE);",
       "replace": "  return verifyModelSource(source, { w: prompt.constraints.footprint.w + 1000, d: prompt.constraints.footprint.d + 1000 }, evaluate, THREE);",
       "expect": "verification uses the REQUESTED footprint, never anything the response itself claims"
+    },
+    {
+      "id": "failed-verify-reads-as-failed",
+      "guards": "a failed verdict is described in words that say failed/refused, never smoothed into text that reads as a success -- the failure-floor item 1 this whole project is built to prevent, applied to one stage's own display text",
+      "note": "The mutation reports success text regardless of the verdict, which is exactly shipping an unverified/failed change while reporting it as verified.",
+      "file": "public/stage-artefact.js",
+      "find": "  return { ok: false, text: `verification failed at ${v.stage}: ${v.reason}` };",
+      "replace": "  return { ok: true, text: `verified ok` };",
+      "expect": "a failed verify is shown as a failed verify"
     }
   ]
 }

@@ -620,12 +620,32 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
 - [x] **D5 — verify.** `verifyModelSource`: scan → compile → build → triangle
       budget → build time → footprint → determinism. Built and tested:
       `public/model-forge.js`, 16 tests.
-- [ ] **D6 — show the work.** Stages already stream over SSE and the page
-      already renders `grounding → plan → implement → verify → review → fix`.
-      Add the artefact: **the player sees the code that was written for them**,
-      and sees it fail and get fixed when it does.
-      *Test:* the stage stream carries the source and the verdict, and a failed
-      verify is shown as a failed verify — never smoothed into a success.
+- [x] **D6 — show the work.** Evidence: `public/stage-artefact.js`.
+      `stageArtefact(stage, source, verdict)` shapes what one stream event
+      carries; `describeStageOutcome(artefact)` returns `ok: true | false |
+      null` — deliberately never collapsed to a boolean, because "not yet
+      checked" (an `implement` event before `verify` has run) is a real
+      state distinct from either a pass or a fail, and losing that
+      distinction is the exact failure-floor shape this project keeps
+      finding elsewhere.
+      **Deliberately did not touch `src/changePipeline.ts`** (2,000+ lines,
+      live, already carries real spend/gates) or `index.html`'s existing
+      stage rendering — same "prove the mechanism, defer the wiring"
+      pattern as D1/D2/D4, doubly warranted here since `src/` is extended,
+      never rewritten, and this step's own source-edit path (D4) is not
+      wired into that pipeline yet either.
+      `test/stageArtefact.test.ts` (4): the artefact carries the source and
+      verdict unaltered; a FAILED verify's description text matches
+      `/fail|refus/i` and explicitly does NOT match `/success|verified ok|
+      passed/i`; a passing verify's text names what was actually measured
+      (triangle count), not a generic "ok"; an artefact with no verdict yet
+      reads as `ok: null`, neither a pass nor a fail. Mutation
+      `failed-verify-reads-as-failed` CAUGHT — reports "verified ok" for a
+      failed verdict regardless of what actually failed, which is precisely
+      failure-floor item 1 (shipping unverified work reported as verified),
+      applied to one stage's own display text: `node
+      scripts/_mutcheck.mjs test/stageArtefact.test.ts
+      public/stage-artefact.js test/mutations.json`.
 - [ ] **D7 — apply and persist.** The result becomes a layer: authored, stored,
       visible immediately. *Test:* the layer is valid per `validateLayer`,
       references the model BY ID (never inlines the function), and survives a
