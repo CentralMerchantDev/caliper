@@ -444,16 +444,31 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
 
 ### Phase B — it persists
 
-- [ ] **B1 — the layer store.** `public/world-store.js`. Browser: IndexedDB with
-      a localStorage fallback. Node/server: the existing KV. One interface,
-      `save(worldId, stack)` / `load(worldId)` / `list()`.
-      *Test:* a saved world reloads with its edits; **a corrupt record is
-      REPORTED, not silently dropped** — `createWorldModel`'s `rejected()` path
-      already exists and is tested, wire the store into it.
-      *Mutation:* swallow the load error → the reporting test red.
-      *Watch for:* localStorage throws in private mode and returns null when
-      full. A store that treats "threw" as "empty" loses a player's work and
-      says nothing.
+- [x] **B1 — the layer store.** Evidence: `public/world-store.js`. One
+      adapter-agnostic core (`createWorldStore`) over `save`/`load`/`list`,
+      with four adapters — `memoryAdapter` (real, used directly as the
+      Node/no-storage default and as the reference implementation the tests
+      are proven against), `localStorageAdapter` (browser fallback, takes the
+      storage object explicitly so a throw-on-write fake can stand in for
+      Safari private mode without needing a real browser), `kvAdapter`
+      (server-side, same `{get,put,delete,list}` shape this repo's own fake
+      KV in `test/changePipelineErrorRecovery.test.ts` already uses),
+      `browserAdapter` (selects IndexedDB then localStorage; `indexedDBAdapter`
+      itself is UNVERIFIED IN THIS SANDBOX — no IndexedDB in Node, kept
+      deliberately small since nothing here can exercise it).
+      `test/worldStore.test.ts` (8): round-trip with layers intact; loading a
+      never-saved id is reported, not returned empty; a stored blob that is
+      not valid JSON, or is valid JSON but not a world shape, is REPORTED —
+      not silently treated as a fresh empty world; an adapter that THROWS on
+      write (the private-mode/quota case) is reported as a failed save, not
+      swallowed as success; `localStorageAdapter`/`kvAdapter` each round-trip
+      through a real fake matching their backend's actual interface, prefixed
+      correctly; `list()` names exactly what was saved.
+      Mutation `world-store-reports-corrupt-json` CAUGHT — deliberately
+      replaces the reported failure with a fabricated VALID-shaped result
+      (real string seed, empty layers), not a malformed one, so the mutation
+      cannot be caught by the next validation check for an unrelated reason:
+      `node scripts/_mutcheck.mjs test/worldStore.test.ts public/world-store.js test/mutations.json`.
 - [ ] **B2 — apply layers to the plan.** After `planCity`, before the renderer.
       Resolve **only touched addresses** — `world.touched()` already gives that
       set; never walk all 20,624.

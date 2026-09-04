@@ -360,6 +360,15 @@
       "find": "    toJSON: () => layerModel.toJSON(),",
       "replace": "    toJSON: () => ({ seed }),",
       "expect": "rebuilds to the same fingerprint"
+    },
+    {
+      "id": "world-store-reports-corrupt-json",
+      "guards": "load() reports a stored record that is not valid JSON, instead of swallowing the parse failure and quietly returning what looks like a valid, empty world",
+      "note": "The mutation replaces the reported failure with a fabricated, VALID-shaped result (a real string seed, empty layers) rather than just deleting the return -- a mutation that left data malformed would still get caught by the very next validation check for an unrelated reason, which would prove nothing about this specific line.",
+      "file": "public/world-store.js",
+      "find": "        return { ok: false, reason: `stored record for \"${worldId}\" is not valid JSON -- refusing to load it as an empty world` };",
+      "replace": "        data = { seed: \"recovered\", layers: [] };",
+      "expect": "is REPORTED, not silently dropped"
     }
   ]
 }

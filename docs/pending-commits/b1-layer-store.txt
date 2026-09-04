@@ -1,0 +1,62 @@
+B1: the layer store -- a saved world says so when it can't be trusted
+
+What was wrong: a world could be built, seeded, and edited with layers, and
+none of it survived a reload. localStorage held UI preferences only; the
+pipeline's own KV persists the source parcel the change pipeline edits, not
+the city the player is looking at.
+
+How it is known to be fixed:
+
+- public/world-store.js, new. createWorldStore(adapter) is adapter-agnostic
+  save/load/list over a four-method shape (get/put/delete/list) matched to
+  the fake KV this repo's own test/changePipelineErrorRecovery.test.ts
+  already uses, so kvAdapter is a thin pass-through rather than a translation
+  layer with its own bugs to have.
+- Four adapters: memoryAdapter (real, not a test double -- the Node/no-storage
+  default and the reference implementation every test below is proven
+  against), localStorageAdapter (takes the storage object explicitly so a
+  fake that throws on demand can stand in for Safari private mode without a
+  real browser), kvAdapter (server-side), browserAdapter (selects IndexedDB
+  then localStorage). indexedDBAdapter is real and working but UNVERIFIED IN
+  THIS SANDBOX -- there is no IndexedDB in Node and this project does not fake
+  the thing under test -- kept deliberately small (one object store, no
+  multi-op transactions) because the smaller it is, the less there is to be
+  wrong in a path nothing here can exercise.
+- THE ACTUAL POINT OF THIS STEP: a corrupt stored record is REPORTED, not
+  silently returned as a fresh empty world. Two distinct cases, both tested --
+  a stored blob that fails JSON.parse, and one that parses fine but is not
+  world-shaped (no seed). Both return { ok: false, reason } rather than a
+  quiet, wrong success. This is one level below createWorldModel's existing
+  rejected() path (which handles one malformed LAYER inside an otherwise-good
+  record) -- this handles the record itself being unusable.
+- test/worldStore.test.ts (8): round-trip with layers intact; a never-saved
+  id is reported rather than returned as empty; both corruption shapes above
+  are reported with a distinguishable reason; an adapter that THROWS on write
+  (the localStorage private-mode/quota case the plan explicitly named) is
+  reported as a failed save, never swallowed as success; localStorageAdapter
+  and kvAdapter each round-trip through a fake shaped like their real backend,
+  prefixed correctly so two stores never collide; list() names exactly what
+  was saved.
+- Mutation `world-store-reports-corrupt-json` CAUGHT. Deliberately replaces
+  the reported failure with a FABRICATED VALID-SHAPED result (a real string
+  seed, empty layers) rather than a malformed one -- a malformed replacement
+  would still get caught by the very next validation check for an unrelated
+  reason, proving nothing about this specific line:
+  `node scripts/_mutcheck.mjs test/worldStore.test.ts public/world-store.js test/mutations.json`
+- `npm test`: 816/816. `npx tsc --noEmit`: clean.
+
+Process note: the test was written, then the implementation was moved aside
+and rebuilt against it from a fresh failing build (not just eyeballed) after
+noticing the implementation had been written before the test -- BUILD-LOOP
+STEP 3 requires the test be watched failing first, and this corrects that
+after the fact rather than skipping it.
+
+What is still open: B2 (apply layers to the plan, touched-only resolve) is
+next. public/asset-registry.js and public/tier-models.js remain excluded from
+this and every commit tonight -- untouched, unstaged, flagged previously. The
+Phase A blind audit (docs/audits/UMAA-phase-A.md, not yet merged) found three
+real defects in Phase A's own work -- seed not reaching terrain.js's exported
+cliffiness/edgeFalloff/reliefAt, hash01 being unseeded so most plan "texture"
+is seed-invariant, and createWorld() costing 2.3-2.7s with no memoization
+across calls -- deferred to a consolidated audit-and-fix pass after Phase G,
+per instruction, rather than fixed mid-phase.
