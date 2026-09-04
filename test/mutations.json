@@ -387,6 +387,15 @@
       "find": "    if (p.override) overridden.push(p);\n    else instanced.push(p);",
       "replace": "    if (p.override) overridden.push(p);\n    instanced.push(p);",
       "expect": "an overridden plot is absent from its original variant's instance group"
+    },
+    {
+      "id": "resolve-models-refuses-unknown-id",
+      "guards": "an override naming a model id that is not in the registry is refused BY THAT ID, never silently drawn as a fallback shape",
+      "note": "The mutation is literally the temptation the ledger names: fall back to a default model on unknown id.",
+      "file": "public/resolve-models.js",
+      "find": "    const model = registry.get(modelId);\n    if (!model) {\n      refused.push({ plotId: p.plotId, modelId, reason: `no model registered for id \"${modelId}\"` });\n      continue;\n    }",
+      "replace": "    const model = registry.get(modelId) || { ok: true, geometry: { attributes: {} }, measured: { triangles: 12 } };",
+      "expect": "a layer referencing an unknown model id is refused at resolve"
     }
   ]
 }

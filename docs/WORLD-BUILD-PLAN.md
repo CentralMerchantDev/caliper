@@ -519,13 +519,28 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       this step originally asked for) is deferred to **D7 — apply and
       persist**, which is where a layer becomes visible in the running app
       at all. Checking it here would have nothing yet to check.
-- [ ] **C2 — generated models render.** A forge-verified model registers by id;
-      a layer referencing that id draws it.
-      *Test:* a layer referencing an UNKNOWN model id is refused at load, naming
-      the id — not drawn as an empty hole. *Mutation:* fall back to a default
-      model on unknown id → the refusal test red.
-      *Look for on Windows:* the generated shape sits on the ground at the right
-      size, not floating or sunk.
+- [x] **C2 — generated models render.** Evidence: `public/model-registry.js`
+      (`register`/`get`/`has`/`ids`, gated on `verdict.ok === true` from
+      `model-forge.js`'s `verifyModelSource` — an unverified model is refused
+      registration outright, not merely unregistered) and
+      `public/resolve-models.js` (`resolveOverrideModels(overridden,
+      registry)` — a "replace" override resolves against the registry or is
+      refused BY MODEL ID; a "retint"/"move" override never asks the
+      registry anything, since it never claimed a model).
+      `test/modelRegistry.test.ts` (5): a verified model registers and
+      fetches back; registering a FAILED verdict is refused outright; an
+      unknown model id is refused at resolve, naming the id; a registered
+      model resolves carrying its verified geometry; a bare retint/move is
+      never sent through the registry at all. Mutation
+      `resolve-models-refuses-unknown-id` CAUGHT — falls back to a
+      default-shaped model on an unknown id, the exact temptation the ledger
+      names: `node scripts/_mutcheck.mjs test/modelRegistry.test.ts
+      public/resolve-models.js test/mutations.json`.
+      **Undone, same reason as C1:** not yet wired into `city-render.js`,
+      which has no layer stack to resolve models against until it builds its
+      world via `createWorld`. Deferred to **D7**. **Phase C (it draws)
+      complete** at the mechanism level; the Windows visual check on both C1
+      and C2 is deferred with it.
 
 ### Phase D — the agent's path into the world *(this is the product)*
 

@@ -1,0 +1,44 @@
+C2: generated models render, and an unknown id is refused by name
+
+What was wrong: model-forge.js already proves a generated model is real
+(scan, compile, build, triangle budget, footprint, determinism) but nothing
+gave a verified model a NAME a layer could reference, and nothing decided
+what happens when a layer's "replace" edit names a model that was never
+verified, or never existed. The obvious wrong answer -- draw a default box in
+its place -- would make a broken reference look like a working one.
+
+How it is known to be fixed:
+
+- public/model-registry.js, new. register/get/has/ids over a Map, gated on
+  verdict.ok === true from verifyModelSource -- a failed or absent verdict is
+  refused registration outright, not silently left unregistered. Only a
+  verified model gets a name at all.
+- public/resolve-models.js, new. resolveOverrideModels(overridden, registry)
+  takes instance-groups.js's overridden output and, for each "replace"
+  override, looks the model id up in the registry: found, it resolves
+  carrying the verified geometry; not found, it is REFUSED, naming the exact
+  model id, never silently substituted. A "retint" or "move" override never
+  claims a model and is never sent through the registry at all -- refusing it
+  for having no model would be refusing something it never asked for.
+- test/modelRegistry.test.ts (5): register/fetch round-trips; registering a
+  FAILED verdict throws; an unknown model id is refused at resolve, naming
+  the id; a registered model resolves carrying its actual verified geometry;
+  a bare retint/move bypasses the registry entirely.
+- Mutation `resolve-models-refuses-unknown-id` CAUGHT. Falls back to a
+  default-shaped model on an unknown id -- the exact temptation the ledger
+  names as the wrong answer:
+  `node scripts/_mutcheck.mjs test/modelRegistry.test.ts public/resolve-models.js test/mutations.json`
+- `npm test`: 829/829. `npx tsc --noEmit`: clean.
+
+Phase C (it draws) is complete at the mechanism level: C1 and C2 both build
+and prove, in isolation and (C1) at real scale, exactly what the renderer
+will need once it has a layer stack to draw from.
+
+What is still open, same as C1 and for the same reason: city-render.js does
+not yet build its world via createWorld({ seed, layers }), so there is
+nothing live for either mechanism to run against yet, and no Windows
+screenshot would show anything different from today. Both are deferred to D7
+(apply and persist), where an edit becomes visible in the running app at all.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.
