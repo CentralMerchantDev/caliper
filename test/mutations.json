@@ -182,6 +182,51 @@
       "find": "      r.facing = rowKey ? Math.PI : 0;",
       "replace": "      r.facing = 0;",
       "expect": "back row faces the other way"
+    },
+    {
+      "id": "nav-rows-share-one-radius",
+      "guards": "every row of the navigation pad draws itself with --nav-radius and --nav-shadow, so the pad reads as one instrument instead of a stack of chips with different corners",
+      "note": "Mark: 'the nav is a mess from a looks standpoint ... it just looks disconnected from each other and random.' Measured, that was three different corner radii (11px on the strips, 10px on the readout, 50% on the dial) and two shadows across five rows. No single row was wrong, which is how they got there one at a time -- so the control is against the FOURTH one arriving.",
+      "file": "public/index.html",
+      "find": "  padding: 4px; border-radius: var(--nav-radius);",
+      "replace": "  padding: 4px; border-radius: 11px;",
+      "expect": "uses those tokens instead of its own numbers"
+    },
+    {
+      "id": "nav-rows-are-one-width",
+      "guards": "the pad's rows are border-box and full width, so their left AND right edges line up instead of each row sizing to its own content",
+      "note": "Without border-box the 1px borders and the padding push each row past --nav-w by a different amount, and the ragged right edge returns by arithmetic rather than by anyone typing a width -- which is the version of this defect that would be hardest to see in a diff.",
+      "file": "public/index.html",
+      "find": ".nav-bare > * { box-sizing: border-box; width: 100%; }",
+      "replace": ".nav-bare > * { box-sizing: content-box; }",
+      "expect": "edges line up"
+    },
+    {
+      "id": "ground-is-measured-only-when-needed",
+      "guards": "canPlace takes the footprint's heights through a getter, so a candidate refused by the terrain or by what is already built never pays for a measurement it does not use -- and nothing can read the heights before they are taken",
+      "note": "The measurement used to be eager, to close a real ordering hazard where a later step read `hi` as -Infinity and a 30 m tower was accepted onto a house lot. Eager fixed that and made every rejection pay 676 probes. MEASURED on findGround for an unplaceable spec: 12,142,980 heightAt calls in 11.0 s, over 17,910 candidates. After: 35,820 calls in 0.46 s -- 339x fewer probes, same answer. The getter closes both problems, where simply moving the loop later would have reopened the first.",
+      "file": "public/ground.js",
+      "find": "    // 1. DOES THE LAND ITSELF FORBID IT?",
+      "replace": "    groundRange();\n    // 1. DOES THE LAND ITSELF FORBID IT?",
+      "expect": "does not pay to measure the ground first"
+    },
+    {
+      "id": "waterway-depth-is-local-not-declared",
+      "guards": "waterAt reports the depth AT THE POINT, derived from the channel's own surface level, so a hull at the bank does not read the mid-channel figure",
+      "note": "MEASURED on river-mid before: bed 59.31 m at the centreline climbing to 66.34 m at 50 m out, and 5.85 m of declared depth reported at every one of them. The function even computed heightAt and discarded it, under a comment describing a surface at bed + depth that nothing calculated.",
+      "file": "public/ground.js",
+      "find": "      const depth = surfaceY - h;",
+      "replace": "      const depth = way.depth;",
+      "expect": "a level surface, a sloping bed, and dry banks"
+    },
+    {
+      "id": "a-waterway-has-banks",
+      "guards": "ground inside a channel's envelope but above its water line is dry land, so a river has banks rather than vertical walls and nothing floats up a shelving bed",
+      "note": "The first version of this control SURVIVED, and finding out why exposed a third defect: waterwayInfoAt reported the manifest's untapered halfWidth while membership was decided by the tapered one, so the test's walk was escaping the rectangle rather than reaching a waterline. It reports the deciding figure now.",
+      "file": "public/ground.js",
+      "find": "      if (depth <= 0) return null;",
+      "replace": "      if (depth <= -99999) return null;",
+      "expect": "a level surface, a sloping bed, and dry banks"
     }
   ]
 }

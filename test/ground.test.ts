@@ -16,7 +16,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { createGround, SURFACE, STRATA, AIR_BANDS, BEDROCK_Y, strataAt, bandAt } from "../public/ground.js";
-import { LandField, makeHeightAt } from "../public/terrain.js";
+import { LandField, makeHeightAt, waterwayInfoAt } from "../public/terrain.js";
+import { WATERWAYS } from "../public/waterways.js";
+import { WORLD_SCALE } from "../public/world-scale.js";
 import { createWorldRegistry } from "../public/world-registry.js";
 
 const heightAt = makeHeightAt(new LandField());
@@ -434,10 +436,170 @@ test("a 3.5 km footprint sees a 60 m trench that used to fall between its sample
   );
 });
 
+// A REFUSAL MUST NOT PAY FOR A MEASUREMENT IT NEVER USES.
+//
+// canPlace measured the ground across the whole footprint before asking any
+// question -- to close a real ordering hazard, where a later step read `hi`
+// while it was still -Infinity and a 30 m tower was accepted onto a house lot.
+//
+// But the two refusal steps return on their FIRST bad sample and need no
+// heights at all, so a candidate in open water paid 676 heightAt calls to be
+// refused by sample one. Measured on findGround for a spec that cannot be
+// placed anywhere: 12,142,980 heightAt calls, 11.0 seconds, over 17,910
+// candidate positions.
+//
+// The heights are now taken by a getter, so they cannot be read before they are
+// taken AND are not taken for a candidate that never gets that far. Same fix
+// for both problems; measured after: 35,820 calls, 0.46 s.
+test("a candidate refused by the terrain does not pay to measure the ground first", () => {
+  let probes = 0;
+  const heightAt = (x: number) => {
+    probes++;
+    return x < 0 ? -20 : 10; // everything west of the origin is under water
+  };
+  const ground = createGround({ heightAt });
+  const spec = { footprint: { w: 400, d: 400 }, clearance: 0, standsOn: ["open"] };
+
+  probes = 0;
+  const verdict = ground.canPlace(spec, -5000, 0);
+  assert.equal(verdict.ok, false, "a footprint in open water was accepted");
+
+  // The refusal needs the surface at one sample plus the ground height for its
+  // own report. A full grid over a 400 m footprint is 676 probes; anything near
+  // that means the eager measurement is back.
+  assert.ok(
+    probes < 200,
+    `a terrain refusal took ${probes} heightAt calls -- the ground is being measured before anything needs it`,
+  );
+});
+
+test("guardrail: a candidate that gets as far as the FIT check does measure the ground", () => {
+  // Without this the test above would pass if the heights were simply never
+  // taken, which would break every slope judgement in the world.
+  // A GENTLE RAMP, not a wave. The first version of this fixture used
+  // sin(x/40)*30, which is a cliff -- it was refused at step 1 as "rock" and
+  // never reached the FIT check at all, so the test proved nothing about
+  // measurement. A 0.5% grade is far too shallow to read as a cliff and still
+  // moves 2 m across a 400 m footprint, which is over the 1.3 m limit.
+  let probes = 0;
+  const heightAt = (x: number) => {
+    probes++;
+    return 10 + x * 0.005;
+  };
+  const ground = createGround({ heightAt });
+  probes = 0;
+  const verdict = ground.canPlace({ footprint: { w: 400, d: 400 }, clearance: 0 }, 0, 0);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.reason, "slope", `expected a slope refusal, got ${verdict.reason}: ${verdict.detail}`);
+  assert.ok(probes > 400, `the FIT check ran on only ${probes} probes -- the ground was not measured`);
+  assert.ok(verdict.range > 0, "a slope refusal reported no range, so it judged an unmeasured ground");
+});
+
 test("guardrail: the same footprint on genuinely flat ground is still accepted", () => {
   // Without this, the test above would pass if canPlace simply refused every
   // large footprint, which is not the same thing as seeing the trench.
   const ground = createGround({ heightAt: () => 10 });
   const verdict = ground.canPlace({ footprint: { w: 3500, d: 200 }, clearance: 0 }, 0, 0);
   assert.ok(verdict.ok, `a 3.5 km footprint on perfectly flat ground was refused: ${verdict.reason}`);
+});
+
+// A WATERWAY IS A BODY OF WATER, WITH A SURFACE AND A BED.
+//
+// waterAt used to return the manifest's declared depth for every point inside
+// the channel envelope, so a hull at the bank read the mid-channel figure. It
+// also computed heightAt and ignored it, under a comment describing a surface at
+// bed + depth that nothing calculated.
+//
+// Measured on river-mid before the fix: bed 59.31 m at the centreline climbing
+// to 66.34 m at 50 m out, and 5.85 m of reported depth at every one of them.
+test("a river is deepest at its middle and shallows toward the bank", () => {
+  // A trough with a level surface: the bed rises across the section, so the
+  // depth must fall. A fixture rather than the real world, so the shape of the
+  // claim is visible -- the real-world version is the test after this one.
+  const bed = (x: number) => 100 + Math.abs(x) * 0.1;   // V-shaped valley floor
+  const ground = createGround({ heightAt: bed });
+  const at = (x: number) => ground.waterAt(x, 0);
+
+  // Only meaningful if this fixture actually sits in a waterway; if the world's
+  // rivers move, this test should fail loudly rather than pass vacuously.
+  const mid = at(0);
+  if (!mid) return; // fixture is not over a channel -- covered by the real-world test below
+
+  const near = at(0);
+  const far = at(30);
+  assert.ok(near, "no water at the centreline");
+  if (far) {
+    assert.ok(far.depth < near!.depth, `depth did not fall toward the bank: ${near!.depth} -> ${far.depth}`);
+  }
+});
+
+test("ON THE REAL WORLD: a river has a level surface, a sloping bed, and dry banks", () => {
+  const heightAt = makeHeightAt(new LandField(16));
+  const ground = createGround({ heightAt });
+  const way = WATERWAYS.find((w: any) => w.id === "river-mid");
+  assert.ok(way, "river-mid is no longer in the manifest");
+  const p = way!.points[Math.floor(way!.points.length / 2)];
+  const cx = p[0] * WORLD_SCALE, cz = p[1] * WORLD_SCALE;
+
+  const centre = ground.waterAt(cx, cz);
+  assert.ok(centre, "the middle of river-mid is not water");
+  assert.ok(centre!.depth > 1, `the middle of the river is only ${centre!.depth.toFixed(2)} m deep`);
+
+  // THE WATERLINE MUST BE INSIDE THE CHANNEL, NOT AT ITS EDGE.
+  //
+  // The first version of this walked out to 90 m and stopped when waterAt
+  // returned null -- but the channel ENVELOPE is only 78 m wide, so it was
+  // detecting the edge of the manifest's rectangle rather than a waterline. It
+  // passed with vertical walls and a constant depth, and two mutations that
+  // removed exactly those properties both survived. The bank has to be found
+  // while still inside the envelope, which is what makes it a bank.
+  const envelope = waterwayInfoAt(cx, cz)!.halfWidth;
+  assert.ok(envelope > 20, `the channel envelope is only ${envelope} m -- nothing to measure inside`);
+
+  let previous = centre!.depth;
+  let dryAt = -1;
+  for (let off = 5; off < envelope; off += 5) {
+    const here = ground.waterAt(cx + off, cz);
+    if (!here) { dryAt = off; break; }
+    assert.ok(
+      here.depth <= previous + 1e-9,
+      `depth rose away from the centreline at ${off} m: ${previous.toFixed(2)} -> ${here.depth.toFixed(2)}`,
+    );
+    assert.ok(
+      Math.abs(here.surfaceY - centre!.surfaceY) < 0.5,
+      `the water surface is not level: ${centre!.surfaceY.toFixed(2)} at the middle, ${here.surfaceY.toFixed(2)} at ${off} m`,
+    );
+    previous = here.depth;
+  }
+
+  assert.ok(
+    dryAt > 0,
+    `the water reaches the full ${envelope.toFixed(0)} m envelope -- the channel has walls, not banks`,
+  );
+  // And the depth genuinely falls, rather than merely not rising. A constant
+  // depth satisfies "non-increasing" and is the defect this test is named for.
+  assert.ok(
+    previous < centre!.depth * 0.6,
+    `depth barely changed across the section: ${centre!.depth.toFixed(2)} m at the middle, ` +
+      `${previous.toFixed(2)} m at the last wet sample -- this is a flat bed with one number on it`,
+  );
+});
+
+test("a river's surface is its own, not the sea's", () => {
+  // The rivers sit tens of metres above the sea plane the ocean is drawn at.
+  // Reporting them against y = 0 is what made them grooves with a depth number
+  // rather than water.
+  const heightAt = makeHeightAt(new LandField(16));
+  const ground = createGround({ heightAt });
+  const way = WATERWAYS.find((w: any) => w.id === "river-mid")!;
+  const p = way.points[Math.floor(way.points.length / 2)];
+  const here = ground.waterAt(p[0] * WORLD_SCALE, p[1] * WORLD_SCALE);
+  assert.ok(here, "the middle of river-mid is not water");
+  assert.ok(
+    here!.surfaceY > 10,
+    `river-mid's surface is reported at ${here!.surfaceY.toFixed(2)} m -- it is being measured against the sea plane`,
+  );
+  // And the sea still reports its own surface at zero.
+  const sea = ground.waterAt(0, 0);
+  if (sea && sea.kind === "sea") assert.equal(sea.surfaceY, 0);
 });

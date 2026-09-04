@@ -147,8 +147,44 @@ if (errs.length !== realErrs.length) {
 // plot units and the land correctly refuses them -- so the assertion is on the
 // COUNT not moving, rather than on there being none. A new refusal is a fact
 // worth surfacing; silence about twenty of them is not.
-const EXPECTED_UNPLACEABLE = Number(process.env.EXPECT_UNPLACEABLE || 20);
+// A TOTAL CANNOT TELL A REGRESSION FROM A FIX.
+//
+// This watched one number: 20. Those 20 are two unrelated populations, and the
+// total is blind to either changing:
+//
+//   14  no-interior-in-city  the sim's dwellings do not exist in a 26 km city,
+//                            so there is nowhere to stand a bed. A property of
+//                            the MODE, and correct.
+//    6  ground-refused       six baseline placements carry VILLAGE PLOT UNITS
+//                            (0.6 to 1.4) and land in open harbour a metre from
+//                            world zero. A property of the DATA, also correctly
+//                            refused -- converting them would be guessing at an
+//                            address they were never given.
+//
+// Three new refusals of one kind and three repairs of the other leave the total
+// at 20 and this check silent. So it asserts the breakdown.
+const EXPECTED_BY_REASON = { "no-interior-in-city": 14, "ground-refused": 6 };
+const EXPECTED_UNPLACEABLE = Number(
+  process.env.EXPECT_UNPLACEABLE ||
+  Object.values(EXPECTED_BY_REASON).reduce((a, b) => a + b, 0),
+);
 const got = report.unplaceable?.length ?? 0;
+
+if (!process.env.EXPECT_UNPLACEABLE) {
+  const byReason = {};
+  for (const u of report.unplaceable || []) {
+    byReason[u.reason || "unstated"] = (byReason[u.reason || "unstated"] || 0) + 1;
+  }
+  for (const [reason, want] of Object.entries(EXPECTED_BY_REASON)) {
+    const have = byReason[reason] || 0;
+    if (have !== want) problems.push(`${have} unplaceable for "${reason}", expected ${want}`);
+  }
+  for (const reason of Object.keys(byReason)) {
+    if (!(reason in EXPECTED_BY_REASON)) {
+      problems.push(`${byReason[reason]} unplaceable for a NEW reason "${reason}" -- nothing expected this`);
+    }
+  }
+}
 if (got !== EXPECTED_UNPLACEABLE) {
   problems.push(`${got} unplaceable placements, expected ${EXPECTED_UNPLACEABLE} -- set EXPECT_UNPLACEABLE if this is intended`);
 }

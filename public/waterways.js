@@ -12,12 +12,28 @@
 // a workaround -- this data was never terrain.js's to own any more than it is
 // city-plan.js's; both files consume it.
 //
-// Design-space metres, matching every other manifest in this codebase.
-// world-scale.js's rule applies here too: a river's width and depth are BUILT
-// metres and do not scale with the world; only its position does. Each
+// Design-space metres, matching every other manifest in this codebase. Each
 // consumer scales for itself with its own sm()/toDesign(), which is why this
 // file stays a plain, unscaled export rather than shipping a pre-scaled copy
 // that could disagree with either caller's.
+//
+// A RIVER'S WIDTH AND DEPTH ARE LANDFORM METRES, AND THEY SCALE.
+//
+// This comment used to claim the opposite -- that width and depth were BUILT
+// metres and did not scale, "only its position does". terrain.js has always
+// scaled both, and the disagreement was filed as a finding on the grounds that
+// one of the two must be wrong.
+//
+// The code is right and this comment was wrong. A channel is CUT INTO the land:
+// waterwayCut works in design space and the whole height field is then scaled,
+// so the river on the ground is a scaled river whatever any comment says. There
+// is no version of this where the trough scales and its own depth does not.
+//
+// So river-mid declaring depth 9 and the land reporting 5.85 at k = 0.65 is not
+// a defect, it is 9 design metres seen in a world scaled to 0.65. What WAS a
+// defect is that the reported figure was the same at the bank as at the
+// thalweg; ground.js's waterAt now derives the depth at a point from the
+// channel's own surface level. See the note there.
 // =============================================================================
 
 /**

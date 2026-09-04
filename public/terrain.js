@@ -711,16 +711,27 @@ function waterwayGeometry(pts) {
 /** Distance from (x,z) to a polyline, and how far along it we are (0..1). */
 function alongWaterway(x, z, pts) {
   const g = waterwayGeometry(pts);
-  let best = Infinity, bestT = 0;
+  let best = Infinity, bestT = 0, bestX = x, bestZ = z;
   for (let i = 0; i < g.n; i++) {
     const rx = x - g.ax[i], rz = z - g.az[i];
     let t = (rx * g.dx[i] + rz * g.dz[i]) * g.invL2[i];
     t = t < 0 ? 0 : t > 1 ? 1 : t;
     const qx = rx - t * g.dx[i], qz = rz - t * g.dz[i];
     const dist = Math.sqrt(qx * qx + qz * qz);   // see distance(): sqrt over hypot
-    if (dist < best) { best = dist; bestT = (g.before[i] + t * g.len[i]) * g.invTotal; }
+    if (dist < best) {
+      best = dist; bestT = (g.before[i] + t * g.len[i]) * g.invTotal;
+      // THE NEAREST POINT ON THE CENTRELINE, not just the distance to it.
+      //
+      // A waterway's surface is level across its own cross-section, so the only
+      // way to know how deep the water is at a point on the bank is to know
+      // where the middle of the channel is. Returning the distance alone made
+      // that unanswerable, which is why waterAt reported one depth for the whole
+      // channel and a hull at the bank read the mid-channel figure.
+      bestX = g.ax[i] + t * g.dx[i];
+      bestZ = g.az[i] + t * g.dz[i];
+    }
   }
-  return { dist: best, t: bestT };
+  return { dist: best, t: bestT, cx: bestX, cz: bestZ };
 }
 
 /** How much to subtract from the land height at (x,z) for rivers and canals. */
@@ -774,7 +785,7 @@ export function waterwayAt(x, z) {
 export function waterwayInfoAt(x, z) {
   const dx = toDesign(x), dz = toDesign(z);
   for (const w of WATERWAYS) {
-    const { dist, t } = alongWaterway(dx, dz, w.points);
+    const { dist, t, cx, cz } = alongWaterway(dx, dz, w.points);
     const hw = w.kind === "river" ? w.halfWidth * (0.45 + 0.55 * t) : w.halfWidth;
     if (dist <= hw) {
       // No surface height is computed here, deliberately. terrain.js does not
@@ -784,7 +795,26 @@ export function waterwayInfoAt(x, z) {
       // `heightAtRaw` that does not exist. The caller has heightAt; it can add
       // `depth` to it. This returns the FACTS about the waterway and nothing
       // that needs a world to be true.
-      return { id: w.id, kind: w.kind, halfWidth: sm(w.halfWidth), depth: sm(w.depth), t };
+      // `dist` and `centre` are what let a caller with a height function work
+      // out the water level and the depth AT THIS POINT rather than at the
+      // middle of the channel. This module still computes no height of its own.
+      // THE HALF-WIDTH REPORTED IS THE ONE THAT DECIDED MEMBERSHIP.
+      //
+      // This returned `w.halfWidth` -- the manifest's figure -- while the test
+      // one line above used `hw`, the figure TAPERED by how far along the river
+      // this point is. For river-mid that is 78 m reported against a channel
+      // that is narrower nearly everywhere, so a caller walking outward to the
+      // reported edge left the water long before it got there and could not tell
+      // a bank from the end of the rectangle.
+      //
+      // Found by a mutation that should have failed and did not: a test for the
+      // channel having banks passed even with containment removed, because the
+      // walk was escaping the envelope rather than reaching a waterline.
+      return {
+        id: w.id, kind: w.kind, halfWidth: sm(hw), declaredHalfWidth: sm(w.halfWidth),
+        depth: sm(w.depth), t,
+        dist: sm(dist), centre: { x: sm(cx), z: sm(cz) },
+      };
     }
   }
   return null;

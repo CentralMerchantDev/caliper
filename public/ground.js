@@ -495,12 +495,39 @@ export function createGround({ heightAt, registry = null }) {
     //
     // Computing them here removes the ordering hazard rather than fixing this
     // instance of it: no later step can read a value that has not been taken.
-    let lo = Infinity, hi = -Infinity;
-    for (const [px, pz] of pts) {
-      const h = heightAt(px, pz);
-      if (h < lo) lo = h;
-      if (h > hi) hi = h;
-    }
+    // MEASURED ON DEMAND, AND IMPOSSIBLE TO READ UNMEASURED.
+    //
+    // This was an eager loop right here, and the comment above explains why it
+    // was moved to the front: a later step read `hi` while it was still
+    // -Infinity, and a 30 m tower was accepted onto a 12 x 18 m house lot.
+    // Measuring first removed the ordering hazard.
+    //
+    // It also made every rejection pay for a measurement it never used. The two
+    // refusal steps below -- the terrain and what is already built here -- return
+    // on their FIRST bad sample and need no heights at all. So a candidate in
+    // open water paid 676 heightAt calls to be refused by sample one.
+    //
+    // MEASURED: findGround for a spec that cannot be placed anywhere made
+    // 12,142,980 heightAt calls and took 11.0 seconds, across 17,910 candidate
+    // positions -- 678 probes each, almost all of them thrown away.
+    //
+    // A getter fixes both. The heights cannot be read before they are taken,
+    // because taking them IS reading them; and they are not taken for a
+    // candidate that never gets that far. Moving the loop later would have been
+    // cheaper too, and would have put the original hazard back for the next
+    // person to add a step above it.
+    let _lo = Infinity, _hi = -Infinity, _measured = false;
+    const groundRange = () => {
+      if (!_measured) {
+        _measured = true;
+        for (const [px, pz] of pts) {
+          const h = heightAt(px, pz);
+          if (h < _lo) _lo = h;
+          if (h > _hi) _hi = h;
+        }
+      }
+      return { lo: _lo, hi: _hi };
+    };
 
     // 1. DOES THE LAND ITSELF FORBID IT?
     //
@@ -626,7 +653,7 @@ export function createGround({ heightAt, registry = null }) {
     // height ranges precisely because "a bridge blocked the channel it spans";
     // only half of canPlace was updated.
     if (registry && registry.overlapsReserved) {
-      const hostY = opts.y !== undefined ? opts.y : hi;
+      const hostY = opts.y !== undefined ? opts.y : groundRange().hi;
       const yMin = hostY - (spec.depth || 0);
       const yMax = hostY + (spec.height || 0);
       // THE HOST IS FOUND BY THE WHOLE FOOTPRINT, NOT BY ITS CENTRE.
@@ -663,7 +690,9 @@ export function createGround({ heightAt, registry = null }) {
       }
     }
 
-    // 4. FIT -- how much the ground moves under it. Measured above; judged here.
+    // 4. FIT -- how much the ground moves under it. This is the first step that
+    // genuinely needs the heights, so this is where they are taken.
+    const { lo, hi } = groundRange();
     const range = hi - lo;
     // Landform metres, so this scales with the world; the footprint does not.
     const maxRange = spec.maxRange !== undefined ? spec.maxRange : 2 * WORLD_SCALE;
@@ -799,15 +828,51 @@ export function createGround({ heightAt, registry = null }) {
    * 40 m up a valley reports a real depth instead of subtracting sea level from
    * something that is not at sea level.
    */
+  /**
+   * A WATERWAY IS A BODY OF WATER, NOT A NUMBER ATTACHED TO A GROOVE.
+   *
+   * This used to return the manifest's declared depth for every point inside the
+   * channel, so a hull at the bank read the mid-channel figure. It also computed
+   * `heightAt` and then ignored it, while its own comment described a surface at
+   * bed + depth that nothing calculated.
+   *
+   * MEASURED, walking out from river-mid's centreline:
+   *
+   *     offset   bed height   reported depth
+   *      0 m       59.31 m        5.85 m
+   *     20 m       62.06 m        5.85 m
+   *     50 m       66.34 m        5.85 m
+   *
+   * Two things are wrong there and only one of them was filed. The bed CLIMBS
+   * 7 m across the channel, so a constant depth is false at every point but one.
+   * And the whole channel sits 59 m above the sea plane the water is drawn at --
+   * so there was no water in this river at all. It is a groove on a hillside
+   * with a depth number attached, which is ledger finding 3.1 in a new form: that
+   * one was closed by making `waterwayAt` answer the question directly instead of
+   * inferring it from elevation, which stopped the wrong answers without ever
+   * making the rivers wet.
+   *
+   * So a waterway now carries its OWN SURFACE LEVEL. Water is level across a
+   * cross-section, so the surface is fixed by the deepest part -- the centreline
+   * -- and the depth anywhere else is the drop from that surface to the bed
+   * underfoot. Ground standing above the surface is dry, which is what gives the
+   * channel banks instead of vertical walls, and is why this returns null there
+   * rather than "you are in a river".
+   */
   function waterAt(x, z) {
     const way = waterwayInfoAt(x, z);
     const h = heightAt(x, z);
     if (way) {
-      // The bed is cut `depth` below the surrounding ground, so the surface sits
-      // at bed + depth and the water at this point is that much above the bed.
-      return { kind: way.kind, depth: Math.max(0, way.depth), id: way.id };
+      // The surface is set at the centreline, where the channel is deepest.
+      const surfaceY = heightAt(way.centre.x, way.centre.z) + way.depth;
+      const depth = surfaceY - h;
+      // CONTAINMENT. Inside the channel's envelope but above its water line is a
+      // bank, not a river. Reporting it as water is what let something float up
+      // a shelving bed.
+      if (depth <= 0) return null;
+      return { kind: way.kind, depth, surfaceY, id: way.id };
     }
-    if (h < 0) return { kind: "sea", depth: -h, id: null };
+    if (h < 0) return { kind: "sea", depth: -h, surfaceY: 0, id: null };
     return null;
   }
 

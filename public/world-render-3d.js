@@ -7176,7 +7176,16 @@ class Renderer3D {
             refuse = `in a waterway, ${g.toFixed(1)} m above sea level`;
           }
           if (refuse) {
-            unplaceable.push({ id: p.id, location: `${Math.round(pos.x)}, ${Math.round(pos.z)} -- ${refuse}` });
+            // WHY, NOT JUST THAT. A single count of refusals cannot tell a
+            // regression from a fix: three new refusals and three repaired ones
+            // leave the total unchanged, and the harness baseline that watches
+            // the total would report nothing either way. The reason is what
+            // makes the two populations separable.
+            unplaceable.push({
+              id: p.id,
+              location: `${Math.round(pos.x)}, ${Math.round(pos.z)} -- ${refuse}`,
+              reason: "ground-refused",
+            });
             continue;
           }
         }
@@ -7201,7 +7210,11 @@ class Renderer3D {
         // counted and reported now, so "nothing happened" is a fact the run can
         // surface rather than an absence nobody can see.
         if (!home || !scale) {
-          unplaceable.push({ id: p.id, location: p.location });
+          // Not the same fact as a refusal by the ground. In city mode there is
+          // no interior to stand a bed in, which is a property of the MODE; a
+          // prop in the harbour is a property of the DATA. Counting them
+          // together is what made the harness baseline blind to both.
+          unplaceable.push({ id: p.id, location: p.location, reason: "no-interior-in-city" });
           continue;
         }
         const local = stationLocalXZ(typeDef.local || IDLE_LOCAL, scale.w * BUILDING_W, scale.d * BUILDING_D);

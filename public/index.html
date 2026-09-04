@@ -1349,21 +1349,59 @@ body.inspecting-mobile #nav-compass-pad {
 /* The card is removed rather than restyled. .nav-pad's panel background, border
    and blur are overridden to nothing; each control keeps its own small surface,
    so the chrome is the buttons and not a frame around them. */
+/* =============================================================================
+   THE NAVIGATION PAD -- ONE INSTRUMENT, NOT FIVE CHIPS
+   =============================================================================
+   Mark, on the first boxless version: "the nav is a mess from a looks standpoint
+   ... overall it just looks disconnected from each other and random."
+   He was right, and the reason is measurable rather than a matter of taste.
+
+   The pad is five stacked pieces -- modes, readout, dial, zoom, actions. Each
+   one sized itself to its own content and was left-aligned, so their right edges
+   landed at five different places. Each drew its own surface, with three
+   different corner radii (11px on the strips, 10px on the readout, 50% on the
+   dial) and two different shadows. Five ragged widths and three radii is what
+   "random" looks like; nothing was wrong with any single piece.
+
+   Removing the box was still right -- a panel around empty space is worse. The
+   fix is not to put the frame back but to make the pieces agree:
+
+     ONE WIDTH   every row fills --nav-w, so the left AND right edges line up
+     ONE RADIUS  --nav-radius everywhere, so the corners rhyme
+     ONE SHADOW  --nav-shadow everywhere, so they sit at one depth
+
+   That reads as a column of instruments on a rail, which is what it is. The
+   tokens exist so a later edit cannot quietly reintroduce a fourth radius --
+   test/navPad.test.ts fails if the nav CSS hard-codes one instead of using them.
+   ========================================================================== */
 .nav-pad.nav-bare {
+  --nav-w: 232px;
+  --nav-radius: 11px;
+  --nav-shadow: 0 4px 14px rgba(42, 32, 26, 0.14);
+
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   padding: 0 !important;
-  display: flex; flex-direction: column; gap: 7px; align-items: flex-start;
+  display: flex; flex-direction: column; gap: 6px; align-items: stretch;
+  width: var(--nav-w);
 }
+/* Every direct row is the same width and is measured the same way. Without
+   border-box the 1px borders and the padding push each row past --nav-w by a
+   different amount, which is the ragged edge coming back by arithmetic. */
+.nav-bare > * { box-sizing: border-box; width: 100%; }
 .nav-bare .nav-strip {
   display: flex; align-items: center; gap: 4px;
-  padding: 4px; border-radius: 11px;
+  padding: 4px; border-radius: var(--nav-radius);
   background: var(--card); border: 1px solid var(--line);
-  box-shadow: 0 4px 14px rgba(42, 32, 26, 0.14);
+  box-shadow: var(--nav-shadow);
 }
+/* The mode buttons share the row equally rather than each taking its label's
+   width -- four differently-sized mode buttons was the most visible piece of
+   the raggedness, because it is the row your eye lands on first. */
+.nav-bare .nav-strip-modes button { flex: 1; padding: 6px 4px; }
 .nav-bare .nav-strip-modes button { padding: 6px 9px; font-size: 11.5px; }
 
 /* --- readout: heading, pitch, range ---------------------------------------
@@ -1371,13 +1409,13 @@ body.inspecting-mobile #nav-compass-pad {
    the world's own units, not decoration. */
 .nav-bare .nav-readout {
   display: flex; align-items: stretch; gap: 1px;
-  border-radius: 10px; overflow: hidden;
+  border-radius: var(--nav-radius); overflow: hidden;
   border: 1px solid var(--line); background: var(--card);
-  box-shadow: 0 4px 14px rgba(42, 32, 26, 0.14);
+  box-shadow: var(--nav-shadow);
 }
 .nav-readout-cell {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  min-width: 52px; padding: 4px 7px; background: var(--paper);
+  flex: 1; min-width: 0; padding: 4px 6px; background: var(--paper);
 }
 .nav-readout-cell b {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
@@ -1399,9 +1437,9 @@ body.inspecting-mobile #nav-compass-pad {
 .nav-bare .nav-dial {
   position: relative;
   display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 7px; border-radius: 50%;
+  padding: 9px 7px 7px; border-radius: var(--nav-radius);
   background: var(--card); border: 1px solid var(--line);
-  box-shadow: 0 5px 18px rgba(42, 32, 26, 0.16);
+  box-shadow: var(--nav-shadow);
 }
 .nav-bare .nav-dial-mid { display: flex; align-items: center; gap: 3px; }
 .nav-bare .nav-dial .nav-btn {
@@ -1410,7 +1448,7 @@ body.inspecting-mobile #nav-compass-pad {
 }
 .nav-bare .nav-dial .center-btn { border-radius: 50%; }
 .nav-dial-north {
-  position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 3px; left: 50%; transform: translateX(-50%);
   width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
   border: 1px solid var(--line); background: var(--paper); color: var(--accent);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
@@ -1431,7 +1469,7 @@ body.inspecting-mobile #nav-compass-pad {
 .nav-bare #nav-zoom-out::before { content: "\2212"; font-size: 16px; line-height: 1; }
 .nav-bare .nav-pad-hint { max-width: 232px; }
 .nav-zoom-slider {
-  width: 104px; height: 4px; cursor: pointer; accent-color: var(--accent);
+  flex: 1; min-width: 0; height: 4px; cursor: pointer; accent-color: var(--accent);
   background: var(--line); border-radius: 3px; appearance: none; -webkit-appearance: none;
 }
 .nav-zoom-slider::-webkit-slider-thumb {

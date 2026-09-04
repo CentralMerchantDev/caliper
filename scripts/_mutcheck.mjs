@@ -10,7 +10,12 @@
 //   1. REBUILD BETWEEN MUTATIONS. esbuild inlines the source into the bundle, so
 //      a bundle built before the edit runs the ORIGINAL code and every mutation
 //      reports SURVIVED.
-//   2. A RED SUITE IS NOT A CATCH. The failure has to name the expected test.
+//   2. IT BUILDS INSIDE THE REPO, not into /tmp. Tests that locate the repo
+//      root by walking up from import.meta.url -- publicClaims, navPad,
+//      threeIsSingle -- cannot find it from /tmp and fail for a reason that has
+//      nothing to do with the mutation. The real runner builds into
+//      test/.built/, so this does too.
+//   3. A RED SUITE IS NOT A CATCH. The failure has to name the expected test.
 //      A crash -- a missing bundle, a syntax error -- turns everything red and
 //      would otherwise score as proof that the control works.
 //
@@ -30,11 +35,11 @@ const original = readFileSync(sourceFile, "utf8");
 
 function run() {
   execFileSync("npx", [
-    "esbuild", testFile, "--outfile=/tmp/_mutcheck.mjs", "--bundle",
+    "esbuild", testFile, "--outfile=test/.built/_mutcheck.scratch.mjs", "--bundle",
     "--platform=node", "--format=esm", "--target=node22", "--packages=external", "--log-level=error",
   ], { encoding: "utf8" });
   try {
-    execFileSync("node", ["/tmp/_mutcheck.mjs"], { encoding: "utf8" });
+    execFileSync("node", ["test/.built/_mutcheck.scratch.mjs"], { encoding: "utf8" });
     return { ok: true, failed: [] };
   } catch (e) {
     const out = String(e.stdout || "");
