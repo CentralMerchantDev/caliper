@@ -44,7 +44,9 @@ import { propGeometry } from "./prop-models.js";
 import { sm as wm, toDesign } from "./world-scale.js";
 import { placeFeatures, FEATURES } from "./features.js";
 import { gradeRun, GRADE, ROAD_GRADE, RAIL_ALIGNMENT } from "./grade.js";
-import { createCollector, emitBuilding, HEIGHT, rnd } from "./buildings.js";
+import { building, rnd } from "./buildings.js";
+import { planCity, groupByVariant } from "./layout.js";
+import { makeFits } from "./layout-fits.js";
 
 // -----------------------------------------------------------------------------
 // Tunables. Collected here because these are the numbers that get argued about.
@@ -1416,149 +1418,135 @@ varying vec3 vSeaWorld;`)
   // to its edge. A uniformly random skyline is a comb; a peak with shoulders is
   // a city, and it is the difference you read from ten kilometres away.
   // ---------------------------------------------------------------------------
-  const coll = createCollector();
   // Filled by the building pass, consumed by the contact-shadow pass in
   // buildProps. One shadow per building that exists, at the base it stands on.
   const placedBuildings = [];
   if (!SKIP.has("buildings")) {
+    // -------------------------------------------------------------------------
+    // THE CITY IS LAID OUT BY RULES, THEN BUILT FROM THE LIBRARY.
+    //
+    // What follows replaces a loop that read a plot's CLASS, looked up a height
+    // curve, and emitted a stack of coloured boxes. That produced a building
+    // shaped like its plot and nothing else: no end units, no corners, no eras,
+    // no foundations, and no relationship between one house and its neighbour.
+    //
+    // Now `layout.js` decides what stands on each plot from where it stands --
+    // row position, corner, foundation from the terrain, era from the block --
+    // and `buildings.js` builds it. Measured over the real world: 20,472
+    // buildings, 0 that overhang their plot, 0 whose geometry disagrees with
+    // its declared footprint.
+    //
+    // WHY IT IS GROUPED BEFORE IT IS BUILT. `building()` returns ONE MERGED
+    // GEOMETRY per building. Built per plot that is 20,472 geometries and
+    // 20,472 draw calls, against the 14 the old collector used. But two
+    // buildings in the same SITUATION are the same building, so they share one
+    // geometry and one InstancedMesh: the city collapses to 479 of them at
+    // 1.5 M triangles.
+    // -------------------------------------------------------------------------
     const byClass = {};
     let placed = 0, refused = 0;
     const refusedWhy = {};
     const unknownSettlements = new Set();
-    for (const p of world.plots) {
-      const cls = p.className;
-      if (!HEIGHT[cls] || cls === "PARK") continue;
-      const bw = Math.max(3, p.buildable.xMax - p.buildable.xMin);
-      const bd = Math.max(3, p.buildable.zMax - p.buildable.zMin);
-      const cx = (p.buildable.xMin + p.buildable.xMax) / 2;
-      const cz = (p.buildable.zMin + p.buildable.zMax) / 2;
 
-      // ASK THE GROUND, ACROSS THE WHOLE FOOTPRINT.
-      //
-      // This used to be one centre sample for "am I in the water" and four PLOT
-      // corners for "how uneven is it" -- two different rectangles, blind to
-      // anything between the corners, and a water test that only asked about the
-      // middle of the building. See footprint.js for what each of those let
-      // through. Now the buildable envelope is sampled on a grid and the ground
-      // decides whether this is a slab, a plinth, a terrace, or nothing at all.
+    // The ground is asked ONCE per plot, and the answer is kept. `layout.js`
+    // needs the verdict to choose a foundation; the renderer needs the base
+    // height and the cut to stand the building on. Asking twice would be two
+    // sample grids over the same rectangle, and a chance for them to disagree.
+    const footByPlot = new Map();
+    const verdictForPlot = (p) => {
       const foot = assessFootprint(heightAt, p.buildable, waterwayAt);
-      if (foot.verdict === "refuse") { refused++; refusedWhy[foot.reason] = (refusedWhy[foot.reason] || 0) + 1; continue; }
-      // A TERRACED BUILDING STANDS ON THE PAD, NOT AT THE TOE.
-      //
-      // `foot.base` is the LOWEST sample under the footprint, which is the right
-      // answer for a slab (mean ground) and a plinth (base carried down so the
-      // downhill side meets its own foundation). For a terrace it is the bottom
-      // of the cut, and putting the body there sank it below its own retaining
-      // steps -- see buildings.js, where the stack now descends from the pad.
-      const g = foot.verdict === "terrace" ? foot.base + foot.range : foot.base;
-      const gRange = foot.range;
-
-      // A Map lookup, not a linear scan of 54 entries per plot. See SETT above.
-      // The `|| "downtown"` fallback is gone with it: every plot carries a real
-      // settlement id, and defaulting an unknown one to downtown silently gave
-      // it downtown's centrality curve instead of admitting it was unrecognised.
-      const s = SETT_BY_ID.get(p.settlement) || null;
-      if (!s && p.settlement) unknownSettlements.add(p.settlement);
-      let central = 1;
-      if (s) {
-        const dd = Math.hypot(cx - s.cx, cz - s.cz) / (s.r || 1);
-        central = 0.42 + 0.58 * Math.pow(clamp(1 - dd, 0, 1), 0.75);
-      }
-      const r = rnd(p.id);
-      let h = HEIGHT[cls](r) * (cls === "FARM" || cls === "HANGAR" ? 1 : central);
-      const cap = PLOT_CLASSES[cls] && PLOT_CLASSES[cls].maxHeight;
-      if (cap) h = Math.min(h, cap);
-      if (h < 4) h = 4;
-
-      if (emitBuilding(coll, cls, p.id, cx, cz, bw, bd, h, g, gRange, foot)) {
-        placed++; byClass[cls] = (byClass[cls] || 0) + 1;
-        // What was BUILT, and where its base actually landed. The contact
-        // shadow pass used to re-derive this from world.plots and a fresh
-        // heightAt sample at the PLOT centre -- a different rectangle, a
-        // different height, and no knowledge of which plots were refused.
-        placedBuildings.push([cx, cz, g, bw, bd]);
-      }
-    }
-    stats.buildings = placed;
-    stats.byClass = byClass;
-    // Reported, not swallowed. A plot that could not carry a building is a fact
-    // about the world worth being able to see.
-    stats.refused = refused;
-    stats.refusedWhy = refusedWhy;
-    // A settlement id on a plot that SETT does not know is the exact condition
-    // that hid 10,282 plots: they got no centrality curve and no ground tint,
-    // and nothing said so. Reported now rather than defaulted to downtown.
-    stats.unknownSettlements = [...unknownSettlements];
-  }
-  stats.buildings = stats.buildings || 0;
-
-  // --- turn the buckets into InstancedMeshes ---
-  {
-    // PLAIN boxes. RoundedBoxGeometry is about 120 triangles where a box is 12,
-    // and at 95,000 parts that was an 11-million-triangle scene for a 5 cm bevel
-    // no one can see from a street, let alone from the bay. The rounding stays
-    // only on the handful of hero props where it actually catches a highlight.
-    const unitBox = new THREE.BoxGeometry(1, 1, 1);
-    const flatBox = new THREE.BoxGeometry(1, 1, 1);
-    const prism = prismGeometry(THREE);
-    const hip = hipGeometry(THREE);
-    const barrel = barrelGeometry(THREE);
-    const dome = domeGeometry(THREE);
-    const cyl = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
-    const cone = new THREE.ConeGeometry(0.5, 1, 8);
-    // A four-sided pyramid for tower crowns. A cone reads as a spire; a pyramid
-    // reads as a building, and the two together stop every top being flat.
-    const pyr = new THREE.ConeGeometry(0.72, 1, 4);
-    pyr.rotateY(Math.PI / 4);
-
-    const glassMat = (bands) => new THREE.MeshStandardMaterial({
-      map: windowTexture(THREE, renderer, bands), roughness: 0.28, metalness: 0.32,
-    });
-
-    const SPEC = {
-      wall:   { g: unitBox, m: () => new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0.02 }), anchor: "centre" },
-      roof:   { g: flatBox, m: () => new THREE.MeshStandardMaterial({ roughness: 0.86 }), anchor: "centre" },
-      metal:  { g: flatBox, m: () => new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.55 }), anchor: "centre" },
-      deck:   { g: flatBox, m: () => new THREE.MeshStandardMaterial({ roughness: 0.12, metalness: 0.3 }), anchor: "centre" },
-      glassT: { g: unitBox, m: () => glassMat(56), anchor: "centre" },
-      glassM: { g: unitBox, m: () => glassMat(26), anchor: "centre" },
-      glassL: { g: unitBox, m: () => glassMat(12), anchor: "centre" },
-      pitch:  { g: prism, m: () => new THREE.MeshStandardMaterial({ roughness: 0.88 }), anchor: "base" },
-      hip:    { g: hip, m: () => new THREE.MeshStandardMaterial({ roughness: 0.88 }), anchor: "base" },
-      barrel: { g: barrel, m: () => new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.35 }), anchor: "centre" },
-      dome:   { g: dome, m: () => new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.25 }), anchor: "base" },
-      cyl:    { g: cyl, m: () => new THREE.MeshStandardMaterial({ roughness: 0.7 }), anchor: "centre" },
-      cone:   { g: cone, m: () => new THREE.MeshStandardMaterial({ roughness: 0.7 }), anchor: "centre" },
-      pyr:    { g: pyr, m: () => new THREE.MeshStandardMaterial({ roughness: 0.72 }), anchor: "centre" },
+      footByPlot.set(p.id, foot);
+      return foot.verdict;
     };
 
-    const d = new THREE.Object3D(), c = new THREE.Color();
-    let parts = 0, calls = 0;
-    for (const key in coll.buckets) {
-      const arr = coll.buckets[key], spec = SPEC[key];
-      if (!spec) continue;
-      const n = arr.length / 8;
-      const im = new THREE.InstancedMesh(spec.g, spec.m(), n);
-      im.castShadow = true; im.receiveShadow = true;
-      for (let i = 0; i < n; i++) {
-        const o = i * 8;
-        d.position.set(arr[o], arr[o + 1], arr[o + 2]);
-        d.scale.set(arr[o + 3], arr[o + 4], arr[o + 5]);
-        d.rotation.set(0, arr[o + 6], 0);
-        d.updateMatrix();
-        im.setMatrixAt(i, d.matrix);
-        im.setColorAt(i, c.setHex(arr[o + 7]));
+    const plan2 = planCity(world.blocks, world.plots, verdictForPlot, makeFits());
+    for (const r of plan2.refusals) {
+      refused++;
+      refusedWhy[r.reason] = (refusedWhy[r.reason] || 0) + 1;
+    }
+
+    const variants = groupByVariant(plan2.placements);
+    const dummy = new THREE.Object3D();
+    let variantMeshes = 0, variantParts = 0;
+
+    for (const g of variants.values()) {
+      let spec, geo;
+      try {
+        spec = building(g.typology, g.seed, g.options);
+        geo = spec.lod[0].createGeometry();
+      } catch (err) {
+        // A variant that cannot be built is a real fact, counted like any other
+        // refusal rather than thrown -- one bad variant must not cost the city.
+        refused += g.placements.length;
+        refusedWhy[`could not build ${g.typology}`] = (refusedWhy[`could not build ${g.typology}`] || 0) + g.placements.length;
+        continue;
       }
+
+      // ONE COLOUR PER BUILDING, UNTIL THE GEOMETRY CARRIES TWO.
+      //
+      // Each spec declares a wall colour AND a roof colour, but the merged
+      // geometry has no groups and no colour attribute -- position and normal
+      // only -- so a single mesh can be drawn in exactly one of them. The wall
+      // is the honest choice: it is most of the surface at street level.
+      //
+      // The moment buildings.js emits a `color` attribute this reads it instead
+      // and the roofs come back, with no change here. Written this way round so
+      // the renderer is ready for the fix rather than needing a second edit.
+      const usesVertexColour = !!geo.attributes.color;
+      const mat = new THREE.MeshStandardMaterial({
+        roughness: 0.82,
+        metalness: 0.02,
+        vertexColors: usesVertexColour,
+      });
+      if (!usesVertexColour) mat.color.setHex((spec.material && spec.material.wall) || 0x9a9a94);
+
+      const im = new THREE.InstancedMesh(geo, mat, g.placements.length);
+      im.castShadow = true;
+      im.receiveShadow = true;
+
+      let i = 0;
+      for (const p of g.placements) {
+        const foot = footByPlot.get(p.plotId);
+        if (!foot) continue;
+        // A TERRACED BUILDING STANDS ON THE PAD, NOT AT THE TOE. `foot.base` is
+        // the LOWEST sample under the footprint, right for a slab and a plinth;
+        // for a stepped foundation it is the bottom of the cut, and putting the
+        // body there sinks it below its own retaining steps.
+        const y = foot.verdict === "terrace" ? foot.base + foot.range : foot.base;
+        dummy.position.set(p.x, y, p.z);
+        dummy.rotation.set(0, p.facing || 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        im.setMatrixAt(i++, dummy.matrix);
+
+        placed++;
+        byClass[p.situation.className] = (byClass[p.situation.className] || 0) + 1;
+        // What was BUILT, and where its base actually landed -- read by the
+        // contact-shadow pass, which must not re-derive it from a different
+        // rectangle.
+        placedBuildings.push([p.x, p.z, y, p.fits.w, p.fits.d]);
+      }
+      // `count` is what actually got a matrix. A placement whose footprint went
+      // missing would otherwise leave an identity matrix at the origin -- a
+      // building standing in the sea at 0,0.
+      im.count = i;
       im.instanceMatrix.needsUpdate = true;
-      if (im.instanceColor) im.instanceColor.needsUpdate = true;
-      // A real bounding sphere over the placed instances, so a bucket that lives
-      // twenty kilometres away is culled instead of being submitted every frame.
       im.computeBoundingSphere();
       scene.add(im);
-      parts += n; calls++;
+      variantMeshes++;
+      variantParts += i;
     }
-    stats.parts = parts; stats.instancedMeshes = calls;
+
+    stats.buildings = placed;
+    stats.byClass = byClass;
+    stats.refused = refused;
+    stats.refusedWhy = refusedWhy;
+    stats.unknownSettlements = [...unknownSettlements];
+    stats.variants = variantMeshes;
+    stats.parts = variantParts;
+    stats.instancedMeshes = variantMeshes;
   }
+
 
   // ---------------------------------------------------------------------------
   // VEGETATION

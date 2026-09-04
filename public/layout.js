@@ -506,11 +506,26 @@ export function planBlock(block, plots, verdictFor, fits = null) {
   }
 
   const out = [];
-  for (const row of rows.values()) {
+  for (const [rowKey, row] of rows.entries()) {
     // Sort by x so "end-left" is genuinely the left-hand end on the ground, not
     // whichever plot happened to be pushed first.
     row.sort((a, b) => a.xMin - b.xMin);
-    row.forEach((plot, i) => out.push(planPlot(plot, i, row.length, verdictFor(plot), fits)));
+    row.forEach((plot, i) => {
+      const r = planPlot(plot, i, row.length, verdictFor(plot), fits);
+      // WHICH WAY THE BUILDING FACES.
+      //
+      // subdivideBlock lays two rows back to back, fronting opposite streets --
+      // the "b" row faces the far side. A building model is built facing +z, so
+      // a back-row building placed unrotated has its front door, its porch and
+      // its shopfront against the rear boundary, and shows the street its back
+      // garden. Every block in the city would be half right and half backwards,
+      // and from the air it would look like nothing at all was wrong.
+      //
+      // This belongs in the layout, not the renderer: which street a building
+      // addresses is a fact about where it stands, not about how it is drawn.
+      r.facing = rowKey ? Math.PI : 0;
+      out.push(r);
+    });
   }
   return out;
 }

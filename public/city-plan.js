@@ -1265,14 +1265,42 @@ export function subdivideBlock(block, className) {
   // produced the 4 m gaps in the first place -- it is left at the end of the
   // row, where a short site at the corner of a block is what a real street
   // looks like anyway.
+  // WHERE THE ROW STARTS MATTERS AS MUCH AS HOW WIDE ITS PLOTS ARE.
+  //
+  // Snapping the WIDTH to whole cells makes a row tile against itself. It does
+  // not put the row on the world's grid, because the row still starts wherever
+  // the block starts -- and measured, only 3 of 2,291 blocks begin on an 8 m
+  // boundary, median offset 2.80 m. So every building in the world sat at a
+  // fractional cell address.
+  //
+  // Nothing LOOKS wrong: plots tile within their block and the streets between
+  // blocks hide the offset. But WORLD-RULES section 3.2 declares an 8 m CELL as
+  // the module the whole world is built on, and grid.js hands out cell
+  // addresses on that basis. A world where no building has a whole-cell address
+  // has a module system in the documentation and not in the ground -- which is
+  // the kind of gap that costs nothing today and everything the first time
+  // something needs to address a cell: the AI edit path placing an object at a
+  // named cell, or streaming a region a cell at a time.
+  //
+  // Starting the row at the first cell boundary inside the block fixes it for
+  // the classes that build in modules. The metre or two before that boundary
+  // becomes verge, which is what the gap between a pavement and the first
+  // property line is anyway. Roads and blocks are NOT moved -- this changes
+  // where plots begin inside a block, nothing else.
+  const originX = cls.module
+    ? Math.ceil((block.xMin - 1e-9) / cls.module) * cls.module
+    : block.xMin;
+
   if (cls.module) {
     const cells = Math.floor(w / cls.module);
     const snapped = cells * cls.module;
     if (snapped >= cls.minW - 1e-9) {
       w = snapped;
-      // With narrower plots the block carries more of them. Recount rather than
-      // keeping count0, or the row would stop short of the far street.
-      count = Math.max(1, Math.floor((block.width + 1e-9) / w));
+      // With narrower plots the block carries more of them, and the row now
+      // starts at originX rather than at block.xMin, so the space available is
+      // measured from there. Recount rather than keeping count0, or the row
+      // would either stop short of the far street or run past it.
+      count = Math.max(1, Math.floor((block.xMax - originX + 1e-9) / w));
     }
   }
 
@@ -1299,7 +1327,7 @@ export function subdivideBlock(block, className) {
   rows.forEach((row, r) => {
     const dep = row.depth || usableD;
     for (let i = 0; i < count; i++) {
-      const xMin = block.xMin + i * w;
+      const xMin = originX + i * w;
       const zMin = row.front;
       plots.push({
         id: `${block.id}-p${i}${r ? "b" : ""}`, blockId: block.id, districtId: block.districtId,

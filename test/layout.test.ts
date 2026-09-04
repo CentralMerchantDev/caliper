@@ -353,6 +353,35 @@ test("the two rows of a block are two rows, not one long one", () => {
   assert.equal(out.length, 10, "every plot in both rows should have been planned");
 });
 
+test("the back row faces the other way, so no building shows the street its garden", () => {
+  // A block carries two rows fronting opposite streets. Models are built facing
+  // +z, so a back-row building placed unrotated puts its front door, porch and
+  // shopfront against the rear boundary and shows the street its back garden.
+  // Half of every block in the city would be backwards, and from the air nothing
+  // would look wrong at all.
+  const front = rowOf(4, "block-3-3", "");
+  const back = rowOf(4, "block-3-3", "b");
+  const out = planBlock({ id: "block-3-3" }, [...front, ...back], allSlab);
+
+  const f = out.filter((r) => !r.plotId.endsWith("b"));
+  const b = out.filter((r) => r.plotId.endsWith("b"));
+  assert.equal(f.length, 4);
+  assert.equal(b.length, 4);
+  assert.ok(f.every((r) => r.facing === 0), "a front-row building was rotated");
+  assert.ok(b.every((r) => Math.abs(r.facing - Math.PI) < 1e-9), "a back-row building was not turned to face its own street");
+});
+
+test("ON THE REAL WORLD: every back-row building is turned, and every front-row one is not", () => {
+  const verdictFor = realVerdictFor;
+  const { placements } = planCity(realWorld.blocks, realWorld.plots, verdictFor);
+  const back = placements.filter((p: any) => p.plotId.endsWith("b"));
+  const front = placements.filter((p: any) => !p.plotId.endsWith("b"));
+  assert.ok(back.length > 1000, `only ${back.length} back-row buildings -- too few to measure`);
+  assert.ok(front.length > 1000, `only ${front.length} front-row buildings -- too few to measure`);
+  assert.equal(back.filter((p: any) => Math.abs(p.facing - Math.PI) > 1e-9).length, 0);
+  assert.equal(front.filter((p: any) => p.facing !== 0).length, 0);
+});
+
 test("end-left is the left-hand end on the ground, whatever order the plots arrived in", () => {
   const row = rowOf(4, "block-2-2", "");
   const shuffled = [row[2], row[0], row[3], row[1]];
@@ -548,6 +577,35 @@ test("ON THE REAL WORLD: every row-class plot is a whole number of 8 m cells", (
       0,
       `${offenders.length} of ${plots.length} ${className} plots are not a whole number of ${cls.module} m cells, ` +
         `e.g. ${offenders[0] && (offenders[0].buildable.xMax - offenders[0].buildable.xMin).toFixed(2)} m`,
+    );
+  }
+});
+
+test("ON THE REAL WORLD: every row-class plot STARTS on an 8 m cell, not just is one wide", () => {
+  // Snapping the WIDTH makes a row tile against itself. It does not put the row
+  // on the world's grid: measured, only 3 of 2,291 blocks begin on an 8 m
+  // boundary (median offset 2.80 m), so every building sat at a fractional cell
+  // address. Nothing looked wrong -- the streets hide it -- but WORLD-RULES
+  // section 3.2 declares the 8 m CELL as the module the world is built on, and
+  // grid.js hands out addresses on that basis. A module system that exists in
+  // the documentation and not in the ground costs nothing until the first thing
+  // that needs to address a cell: the AI edit path, or streaming a region.
+  const world = realWorld;
+
+  for (const [className, cls] of Object.entries(PLOT_CLASSES) as [string, any][]) {
+    if (!cls.module) continue;
+    const plots = world.plots.filter((p: any) => p.className === className);
+    assert.ok(plots.length > 100, `only ${plots.length} ${className} plots -- too few to measure`);
+
+    const offGrid = plots.filter((p: any) => {
+      const r = Math.abs(p.xMin / cls.module - Math.round(p.xMin / cls.module));
+      return r > 1e-6;
+    });
+    assert.equal(
+      offGrid.length,
+      0,
+      `${offGrid.length} of ${plots.length} ${className} plots start off the ${cls.module} m grid, ` +
+        `e.g. xMin ${offGrid[0] && offGrid[0].xMin}`,
     );
   }
 });

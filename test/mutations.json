@@ -164,6 +164,24 @@
       "find": "    const askedSeed = seedFor(typology, asked);",
       "replace": "    const askedSeed = typology + \"|\" + options.character;",
       "expect": "stops it overhanging"
+    },
+    {
+      "id": "row-origin-is-on-the-cell-grid",
+      "guards": "a row of module-class plots STARTS on an 8 m cell, so every building in the world has a whole-cell address rather than merely tiling against its own neighbours",
+      "note": "Snapping the plot WIDTH was not enough. Measured, only 3 of 2,291 blocks begin on an 8 m boundary (median offset 2.80 m), so a perfectly tiling row still sat at a fractional cell address. Nothing looked wrong because the streets hide it -- but WORLD-RULES 3.2 declares the 8 m CELL as the module the world is built on and grid.js hands out addresses on it. After the fix: 14,378 of 14,378 module-class plots start on a cell.",
+      "file": "public/city-plan.js",
+      "find": "    ? Math.ceil((block.xMin - 1e-9) / cls.module) * cls.module",
+      "replace": "    ? block.xMin",
+      "expect": "STARTS on an 8 m cell"
+    },
+    {
+      "id": "back-row-faces-its-own-street",
+      "guards": "the back row of a block is turned 180 degrees, so it addresses the street it fronts instead of showing it a back garden",
+      "note": "subdivideBlock lays two rows back to back fronting opposite streets, and models are built facing +z. Unrotated, 9,845 of 19,725 buildings -- half the city -- would present their front door, porch and shopfront to the rear boundary. Nothing would look broken from the air, which is what makes it worth a control.",
+      "file": "public/layout.js",
+      "find": "      r.facing = rowKey ? Math.PI : 0;",
+      "replace": "      r.facing = 0;",
+      "expect": "back row faces the other way"
     }
   ]
 }
