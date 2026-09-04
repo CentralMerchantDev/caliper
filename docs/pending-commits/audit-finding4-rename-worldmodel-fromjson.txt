@@ -1,0 +1,51 @@
+Final audit Finding 4 (LOW): two functions named worldFromJSON, different
+shapes, in different modules
+
+What was wrong: docs/audits/UMAA-phases-B-H.md's blind auditor found
+public/world.js's worldFromJSON(json) returns a full world instance
+(createWorld({ seed, layers }) -- { seed, plan, land, layers, grid, resolve,
+toJSON }) while public/world-model.js's worldFromJSON(json), same name, same
+{ seed, layers } input shape, returns only the layer model itself
+(createWorldModel({ seed, layers }) -- { seed, add, remove, resolve, ... } as
+top-level methods, no .plan/.land/.grid). No current caller imports the wrong
+one -- every Phase B-D persistence file (world-store.js, apply-and-persist.js,
+undo.js) already imports world.js's version, and only test/worldModel.test.ts
+imports world-model.js's directly -- but it is the same defect CLASS the
+hash2/districts-copy bugs earlier in this project were: two things that must
+be told apart, kept apart, sharing a name. world-model.js is the file that
+introduced the concept and is the likelier muscle-memory import for a future
+caller, and picking it by habit would silently hand back an object with no
+.plan/.land, surfacing as an undefined.plots deep inside a renderer or test
+fixture rather than at the import line.
+
+How it's fixed: public/world-model.js's worldFromJSON renamed to
+worldModelFromJSON, with a doc comment explaining why (naming the sibling in
+world.js explicitly, so a future reader sees the distinction at the
+definition, not just in an audit report). Only caller updated:
+test/worldModel.test.ts's import and one call site. public/world.js's own
+worldFromJSON is untouched -- it is the one every real persistence path
+already uses, and CLAUDE.md's "nothing is deleted, everything is inventoried"
+rule plus the small blast radius (one file, one test) made a rename safer
+than leaving both and documenting around it.
+
+No new mutation needed -- test/mutations.json had no entry naming
+world-model.js's worldFromJSON (checked directly: zero hits), so there was
+nothing to update, and the existing 5 world-model.js mutations
+(a-layer-must-be-plain-data, a-clone-is-independent, later-layers-win-per-op,
+rejected-layers-are-reported, a-removal-wins-outright) all still run CAUGHT
+against the renamed function, confirming the rename didn't disturb anything
+they guard:
+
+  node scripts/_mutcheck.mjs test/worldModel.test.ts public/world-model.js test/mutations.json
+  baseline: GREEN
+  CAUGHT (all 5)
+  restored: byte identical
+
+Measured: npx tsc --noEmit clean. npm test: 871/871, 0 fail (no test count
+change -- a rename, not new coverage).
+
+What's still open: Finding 5 (createWorld() unmemoized, ~2.4s/call, 17 new
+test-suite call sites) from the same audit is not yet addressed.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.

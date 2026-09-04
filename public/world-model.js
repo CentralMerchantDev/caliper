@@ -263,8 +263,19 @@ export function createWorldModel({ seed = "caliper", layers = [] } = {}) {
   };
 }
 
-/** Read a world back from storage, keeping any refusals visible. */
-export function worldFromJSON(json) {
+/**
+ * Read a LAYER MODEL back from storage, keeping any refusals visible.
+ *
+ * Named worldModelFromJSON, not worldFromJSON, because public/world.js
+ * exports its own worldFromJSON that returns a full world instance
+ * ({ seed, plan, land, layers, grid, resolve, toJSON }) -- a different
+ * shape round-tripping the same { seed, layers } payload. Two functions
+ * with the same name and different shapes is the exact trap the districts/
+ * settlements aliasing bugs earlier in this project were, one level up:
+ * this is a naming trap, not a data trap, but the fix is the same --
+ * stop letting them share a name.
+ */
+export function worldModelFromJSON(json) {
   const data = typeof json === "string" ? JSON.parse(json) : json;
   if (!data || typeof data !== "object") throw new Error("a stored world must be an object");
   return createWorldModel({ seed: data.seed, layers: Array.isArray(data.layers) ? data.layers : [] });

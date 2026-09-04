@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 
 import {
   createWorldModel,
-  worldFromJSON,
+  worldModelFromJSON,
   validateLayer,
   validateEdit,
   layerFrom,
@@ -95,7 +95,7 @@ test("an edit survives a reload -- the whole world round-trips as JSON", () => {
   w.add(layer());
   const stored = JSON.stringify(w.toJSON());
 
-  const back = worldFromJSON(stored);
+  const back = worldModelFromJSON(stored);
   assert.equal(back.seed, "harbour-of-saint-elms");
   assert.equal(back.layers().length, 1);
   assert.equal(back.resolve("block-146-1100-p0").retint.color, 0xff00ff);
