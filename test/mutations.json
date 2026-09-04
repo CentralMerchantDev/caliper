@@ -468,6 +468,15 @@
       "find": "      return { ok: false, reason: \"locked\", detail: `(${x.toFixed(0)}, ${z.toFixed(0)}) is in a part of the world that is not open yet` };",
       "replace": "      return false;",
       "expect": "loaded then unloaded, refuses again"
+    },
+    {
+      "id": "checkInputGuard-reads-control-limits-not-a-literal",
+      "guards": "checkInputGuard reads its length cap from CONTROL_LIMITS.FREE_FORM_MAX_LENGTH, never a hard-coded number at the call site -- a hard-coded copy stops tracking the one limits object silently",
+      "note": "This is the exact mutation G1 names in the plan: hard-code one -> the test names it.",
+      "file": "src/controlLayer.ts",
+      "find": "  if (trimmed.length > CONTROL_LIMITS.FREE_FORM_MAX_LENGTH) {",
+      "replace": "  if (trimmed.length > 500) {",
+      "expect": "checkInputGuard reads FREE_FORM_MAX_LENGTH live from CONTROL_LIMITS"
     }
   ]
 }

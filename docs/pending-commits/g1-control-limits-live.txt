@@ -1,0 +1,43 @@
+G1: one limits object, proven to be read live -- and one gap named rather than fabricated
+
+What was wrong: src/controlLayer.ts's CONTROL_LIMITS already centralises
+budget, per-IP, daily, ops (fix attempts, review rounds, token caps),
+concurrency and the circuit breaker in one object -- but nothing proved that
+every gate actually reads it live, rather than some call site quietly
+holding its own copy of a number that would silently stop tracking
+CONTROL_LIMITS the moment someone typed a literal instead of a reference.
+
+How it is known to be fixed:
+
+- NOTHING IN src/ WAS CHANGED for this step. The file already satisfied the
+  property this step asks for; what was missing was proof, not code.
+- test/controlLimitsAreLive.test.ts, new (2 tests), behavioural rather than
+  textual. Monkey-patches CONTROL_LIMITS.FREE_FORM_MAX_LENGTH and, in a
+  second test, CONTROL_LIMITS.CIRCUIT_FAILURE_THRESHOLD, on the REAL,
+  live-imported object, and confirms checkInputGuard's and the circuit
+  breaker's actual behaviour moves with the change. A hard-coded call site
+  cannot pass this: there is no way to "happen to" read a value that changed
+  after the function was already compiled. Both values are restored after
+  every test and the restore is itself asserted.
+- Mutation `checkInputGuard-reads-control-limits-not-a-literal` CAUGHT --
+  the exact mutation the ledger names for this step, hard-coding one limit
+  to a bare `500` -- run against src/controlLayer.ts itself. Given how
+  protected this file is, the tool's own byte-identical restore was
+  independently reverified with `git diff --stat src/controlLayer.ts`
+  (empty) after the mutation check completed:
+  `node scripts/_mutcheck.mjs test/controlLimitsAreLive.test.ts src/controlLayer.ts test/mutations.json`
+- `npm test`: 863/863. `npx tsc --noEmit`: clean.
+
+What is honestly still open, named rather than fabricated: "Scope (one
+object)" -- a cap on how many addresses a single layer/request may touch --
+does not exist anywhere today, and there is no enforcement point to wire it
+to. public/*.js never imports from src/*.ts (confirmed by search across the
+whole public/ directory) -- the world/game system built tonight and the
+pipeline in src/ are genuinely separate today. Adding an unenforced constant
+to CONTROL_LIMITS for this would have been a number with nothing reading it,
+which is exactly the "true by construction" shape AUDIT-PROTOCOL.md warns
+an auditor to watch for -- so it was not added. G2 (demo profile vs builder
+profile) is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.

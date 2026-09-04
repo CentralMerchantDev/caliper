@@ -759,10 +759,36 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
 
 ### Phase G — guardrails as dials
 
-- [ ] **G1 — one limits object.** Scope, ops, budget, per-IP, daily — all in
-      `controlLayer.ts` beside the existing caps.
-      *Test:* every limit is READ from that object; no limit is hard-coded at a
-      call site. *Mutation:* hard-code one → the test names which one.
+- [x] **G1 — one limits object.** Evidence: `src/controlLayer.ts` already has
+      exactly one limits object, `CONTROL_LIMITS` — budget (three spend
+      ceilings), per-IP (`DAILY_LIVE_RUNS_PER_IP`), daily (the same three
+      ceilings), ops (`MAX_FIX_ATTEMPTS`, `MAX_REVIEW_ROUNDS`, token caps),
+      concurrency and the circuit breaker. **Nothing in `src/` was changed
+      for this step** — the file already satisfied the property; what did
+      not exist was a test proving it, so that is what this step adds.
+      `test/controlLimitsAreLive.test.ts` (2), behavioural rather than
+      textual: monkey-patch `CONTROL_LIMITS.FREE_FORM_MAX_LENGTH` (and
+      separately `CIRCUIT_FAILURE_THRESHOLD`) on the REAL, live imported
+      object and confirm `checkInputGuard`/the circuit breaker's actual
+      behaviour moves with it — a hard-coded call site cannot pass this,
+      because there is no way to "happen to" read a value that changed
+      after the function was compiled. Restored after every test, verified
+      by re-reading `CONTROL_LIMITS` back to its original value.
+      Mutation `checkInputGuard-reads-control-limits-not-a-literal` CAUGHT
+      — the exact mutation the ledger names, hard-coding one to a bare
+      `500` — against `src/controlLayer.ts` itself, restored and
+      independently reverified clean via `git diff --stat` (empty) after
+      `_mutcheck.mjs`'s own restore, given how protected this file is:
+      `node scripts/_mutcheck.mjs test/controlLimitsAreLive.test.ts
+      src/controlLayer.ts test/mutations.json`.
+      **"Scope (one object)" is Undone, named plainly rather than
+      fabricated:** nothing today caps how many addresses one layer/request
+      may touch, and no enforcement point exists to wire it to —
+      `public/*.js` never imports from `src/*.ts` (confirmed by search; the
+      game/world and the pipeline are genuinely separate today), so adding
+      an unenforced constant would have been a number with nothing reading
+      it, which is the exact "true by construction" shape this project's
+      own protocol warns against.
 - [ ] **G2 — demo profile vs builder profile.** Numbers, not code paths. A
       second profile must not introduce a second branch of behaviour.
       *Test:* switching profile changes only values; the code path taken is
