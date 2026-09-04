@@ -301,19 +301,19 @@
     {
       "id": "seed-zero-is-the-original-world",
       "guards": "seed 0 reproduces the pre-seed noise field byte for byte, so adding seeding did not silently move the world every measured number in this repo describes",
-      "note": "The seed is mixed in by MULTIPLICATION precisely so it contributes exactly zero at seed 0. Most of this suite asserts properties rather than values, so a terrain that shifted by a metre would go on passing while invalidating 20,624 plots, 480 variants, 1.45 M triangles, the zoning percentiles and the airport's 11,041 dry sample points. The identity is pinned against the original expression written out longhand.",
+      "note": "The seed is mixed in by MULTIPLICATION precisely so it contributes exactly zero at seed 0. Most of this suite asserts properties rather than values, so a terrain that shifted by a metre would go on passing while invalidating 20,624 plots, 480 variants, 1.45 M triangles, the zoning percentiles and the airport's 11,041 dry sample points. The identity is pinned against the original expression written out longhand. Find/replace updated when hash2 started converting its own seed with seedToInt (A2b) -- the line moved from \"Math.imul(seed, ...)\" to \"Math.imul(s, ...)\".",
       "file": "public/noise.js",
-      "find": "  let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(seed, 1013904223);",
-      "replace": "  let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(seed, 1013904223) + 1;",
+      "find": "  let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(s, 1013904223);",
+      "replace": "  let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(s, 1013904223) + 1;",
       "expect": "reproduces the original noise field exactly"
     },
     {
       "id": "a-seeded-field-uses-its-seed",
       "guards": "createNoise binds its seed into every function it returns, so a named world is genuinely a different landmass rather than the same one under a new name",
-      "note": "The first version of this mutation neutered only hash2 and valueNoise and left fbm seeded, so the world still differed and it SURVIVED -- a bad mutation, not a weak test. Targeting the single place the seed is resolved is what makes it bite.",
+      "note": "The first version of this mutation neutered only hash2 and valueNoise and left fbm seeded, so the world still differed and it SURVIVED -- a bad mutation, not a weak test. Targeting the single place the seed is resolved is what makes it bite. Find/replace widened to include the function signature when A2b made hash2 also call seedToInt(seed) into a same-named local -- the old one-line find matched twice (hash2 and createNoise) and would have scored INCONCLUSIVE.",
       "file": "public/noise.js",
-      "find": "  const s = seedToInt(seed);",
-      "replace": "  const s = 0;",
+      "find": "export function createNoise(seed = DEFAULT_SEED) {\n  const s = seedToInt(seed);",
+      "replace": "export function createNoise(seed = DEFAULT_SEED) {\n  const s = 0;",
       "expect": "different seed is a different world"
     },
     {
@@ -333,6 +333,15 @@
       "find": "  const seed = field && Number.isFinite(field.seed) ? field.seed : DEFAULT_SEED;",
       "replace": "  const seed = DEFAULT_SEED;",
       "expect": "named seed is a genuinely different landmass"
+    },
+    {
+      "id": "generateWorld-forwards-its-seed",
+      "guards": "generateWorld threads its seed into the plan (cityDemand, generateCityPlan, generateSettlement), not just the ground, so a named world gets a genuinely different street grid and zoning mix, not just different hills",
+      "note": "Reassigns the seed AT ITS FIRST USE inside generateWorld rather than at one of the three downstream call sites -- the seed fans out to cityDemand, generateCityPlan and generateSettlement independently, and settlement plots alone still differ by seed even if only the downtown path (generateCityPlan) is broken, so a mutation on that one call site alone would SURVIVE against a whole-world fingerprint. This targets the single point all three pass through.",
+      "file": "public/city-plan.js",
+      "find": "  const demandAt = heightAt ? cityDemand(heightAt, seed) : null;",
+      "replace": "  const demandAt = heightAt ? cityDemand(heightAt, seed = DEFAULT_SEED) : null;",
+      "expect": "a named seed lays out a genuinely different street grid"
     }
   ]
 }

@@ -30,20 +30,42 @@ if (!testFile || !sourceFile || !specFile) {
   process.exit(2);
 }
 
-const muts = JSON.parse(readFileSync(specFile, "utf8"));
+// test/mutations.json is `{ _comment, mutations: [...] }`, not a bare array --
+// this read the whole file as the array and threw "muts is not iterable" the
+// first time it was pointed at the real manifest rather than an ad-hoc scratch
+// list. Accepts both shapes so a genuinely bare array still works.
+const specParsed = JSON.parse(readFileSync(specFile, "utf8"));
+const allMuts = Array.isArray(specParsed) ? specParsed : specParsed.mutations;
+// Scoped to this source file. Without this, every mutation recorded for every
+// OTHER file in the manifest reports INCONCLUSIVE against this one (its find
+// string matches zero times here, correctly, but noisily) -- and running the
+// real edit through NO filter at all one time did exactly that across 30-plus
+// unrelated entries before the actual result could be read.
+const muts = allMuts.filter((m) => !m.file || m.file === sourceFile);
 const original = readFileSync(sourceFile, "utf8");
 
 function run() {
+  // shell: true -- on Windows, npx is npx.cmd, and execFileSync cannot launch
+  // a .cmd directly (CreateProcess needs a real executable). `which npx` in a
+  // POSIX shell finds it because the shell does its own PATH resolution; Node
+  // asking Windows to run it directly does not, and fails ENOENT with no
+  // mutation ever attempted -- silently zero, not a mutation-testing error.
   execFileSync("npx", [
     "esbuild", testFile, "--outfile=test/.built/_mutcheck.scratch.mjs", "--bundle",
     "--platform=node", "--format=esm", "--target=node22", "--packages=external", "--log-level=error",
-  ], { encoding: "utf8" });
+  ], { encoding: "utf8", shell: true });
   try {
     execFileSync("node", ["test/.built/_mutcheck.scratch.mjs"], { encoding: "utf8" });
     return { ok: true, failed: [] };
   } catch (e) {
     const out = String(e.stdout || "");
-    const failed = (out.match(/^not ok \d+ - (.*)$/gm) || []).map((s) => s.replace(/^not ok \d+ - /, ""));
+    // Node's built-in test runner's default ("spec") reporter prints
+    // "✖ name (12.3ms)", not TAP's "not ok N - name" -- the old regex
+    // never matched it, so every genuinely red run reported CAUGHT/SURVIVED
+    // against an EMPTY failed-test list and printed "red, but not on ...: "
+    // with nothing after the colon. That is INCONCLUSIVE dressed as a result:
+    // the run really was red, but which test failed was never actually read.
+    const failed = [...out.matchAll(/^✖ (.+?) \([\d.]+m?s\)$/gm)].map((m) => m[1]);
     return { ok: false, failed };
   }
 }

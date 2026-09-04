@@ -1,0 +1,64 @@
+A2b: seed the plan, and a seed-coercion bug in hash2 that would have made every named world the same street grid
+
+What was wrong: generateWorld() took no seed. Its four fbm calls -- the land
+value field, the demand noise, and the patchy typology picker -- were hard-
+wired to DEFAULT_SEED, so two players naming two different worlds would stand
+on different hills (A2) but walk the identical streets, because nothing
+downstream of the terrain varied by seed at all.
+
+Re-grounding before writing the fix (BUILD-LOOP STEP 1) found two defects a
+naive seed-threading pass would have shipped silently:
+
+1. hash2 mixed the seed with `Math.imul(seed, 1013904223)` directly. Math.imul
+   coerces its argument with ToInt32, and ToInt32 of a non-numeric string is 0
+   -- so passing a NAME straight through, as every call site in city-plan.js
+   was about to do, collided with seed 0 every time, regardless of the name.
+   terrain.js avoided this by converting once in LandField's constructor;
+   city-plan.js had no equivalent boundary. Fixed at the root: hash2 now runs
+   seedToInt(seed) before using it, so no caller -- present or future -- can
+   hit this trap again.
+2. generateCityPlan() was memoised in a single unkeyed module-level singleton,
+   and cityDemand() in a WeakMap keyed only on heightAt. Neither cache had any
+   notion of "which seed". A second seed, in the same process, would have
+   silently returned the FIRST seed's cached plan -- worse than not seeding at
+   all, because it fails invisibly and would have been correct on the first
+   call of a session and wrong on every call after it.
+
+How it is known to be fixed:
+
+- seed threaded last through intensityAt, classForBlock, pickPatchy,
+  classForSettlementBlock, generateSettlement, cityDemand, generateCityPlan,
+  generateWorld -- default DEFAULT_SEED, no existing call site's behaviour
+  changed.
+- Default plan pinned before any edit: sha256 a88cfd0397e9... over 19,874
+  plots + 2,291 blocks + 1,402 roads from the unmodified generateWorld(). Same
+  fingerprint after the change (test/planSeed.test.ts).
+- test/planSeed.test.ts (5): the pin holds; a named seed changes the
+  street/zoning mix over real blocks via classForBlock directly (not just the
+  plot list, which can change length when a class crosses into or out of
+  PARK); the same seed agrees with itself in either call order, which is what
+  actually rules out the memo bug rather than merely "a different seed gives a
+  different answer".
+- Mutation `generateWorld-forwards-its-seed` CAUGHT:
+  `node scripts/_mutcheck.mjs test/planSeed.test.ts public/city-plan.js test/mutations.json`
+  Targets the single point all three downstream paths (cityDemand,
+  generateCityPlan, generateSettlement) pass through, not one call site in
+  isolation -- a mutation on generateCityPlan's call alone would SURVIVE
+  because settlement plots still differ by seed through the other two paths.
+- `npm test`: 799/799. `npx tsc --noEmit`: clean.
+
+Also fixed, because every remaining step tonight depends on it working:
+scripts/_mutcheck.mjs had three separate bugs on this platform -- execFileSync
+could not launch npx (a .cmd) without shell:true; it parsed test/mutations.json
+as a bare array instead of unwrapping {mutations:[...]}; and its
+failure-name regex was written for TAP ("not ok N - name") against a runner
+that actually prints "✖ name (Nms)", so every genuinely red run reported
+INCONCLUSIVE with an empty failed-test list -- a red run whose cause was never
+actually read. Fixed all three, then reverified the two pre-existing A1
+mutations (seed-zero-is-the-original-world, a-seeded-field-uses-its-seed)
+whose find strings the hash2 edit also broke (matched twice / matched a moved
+line) -- both repaired and CAUGHT again.
+
+What is still open: A3 (districts/settlements/bridges/grid become per-world)
+is next. public/asset-registry.js and public/tier-models.js remain excluded
+from this and every commit tonight -- untouched, unstaged, flagged previously.

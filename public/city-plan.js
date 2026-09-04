@@ -21,7 +21,7 @@
 // +x is east. Ground datum y = 0.
 // =============================================================================
 
-import { fbm, hash01, clamp, smoother } from "./noise.js";
+import { fbm, hash01, clamp, smoother, DEFAULT_SEED } from "./noise.js";
 import { WORLD_SCALE, sm, sPoint, sFields, sBounds } from "./world-scale.js";
 import { roadAllowedAt, makeDemand } from "./land-use.js";
 import { fitSettlements } from "./settlement-fit.js";
@@ -1071,7 +1071,7 @@ export const CENTRES = [
 /**
  * 0..1 land value at a point on the island. Pure and deterministic.
  */
-export function intensityAt(x, z) {
+export function intensityAt(x, z, seed = DEFAULT_SEED) {
   const fx = (x - ISLAND.xMin) / ISLAND.width;
   const fz = (z - ISLAND.zMin) / ISLAND.depth;
 
@@ -1089,8 +1089,8 @@ export function intensityAt(x, z) {
   v = Math.max(v, shore * (0.55 + 0.45 * smoother(clamp(1 - Math.abs(fx - 0.5) / 0.55, 0, 1))));
 
   // grain: nobody builds to exactly the value of their land
-  v *= 0.80 + 0.40 * fbm(x, z, 620, 3);
-  v += (fbm(x + 5000, z - 3000, 1900, 2) - 0.5) * 0.16;
+  v *= 0.80 + 0.40 * fbm(x, z, 620, 3, 0.5, 2.03, seed);
+  v += (fbm(x + 5000, z - 3000, 1900, 2, 0.5, 2.03, seed) - 0.5) * 0.16;
   return clamp(v, 0, 1);
 }
 
@@ -1116,7 +1116,7 @@ function classForValue(v) {
  * the district allows. The jitter is what mixes classes at a boundary instead
  * of drawing a line through the city.
  */
-export function classForBlock(block, district) {
+export function classForBlock(block, district, seed = DEFAULT_SEED) {
   const cx = (block.xMin + block.xMax) / 2, cz = (block.zMin + block.zMax) / 2;
   const r = hash01(`cls|${block.id}`);
 
@@ -1126,7 +1126,7 @@ export function classForBlock(block, district) {
   if (district && (district.allow || []).includes("PARK") && r > 0.93) return "PARK";
   if (district && (district.allow || []).includes("CIVIC") && r > 0.86 && r <= 0.93) return "CIVIC";
 
-  let v = intensityAt(cx, cz) + (hash01(`jit|${block.id}`) - 0.5) * 0.30;
+  let v = intensityAt(cx, cz, seed) + (hash01(`jit|${block.id}`) - 0.5) * 0.30;
   if (district && typeof district.bias === "number") v += district.bias;
   v = clamp(v, 0, 0.999);
 
@@ -1695,9 +1695,14 @@ function settlementCentres(s) {
 // silently reused a demand field measured against a different world. Keying on
 // the height function means a new world gets a new field and an unchanged one
 // still pays nothing.
+// Keyed on heightAt AND seed. A WeakMap keyed on heightAt alone would hand a
+// second seed the FIRST seed's demand field, because heightAt is the same
+// cachedHeight() wrapper for every seed built against the same ground -- only
+// the noise closure below differs, and nothing about the outer key saw that.
 const _demandCache = new WeakMap();
-export function cityDemand(heightAt) {
-  const hit = _demandCache.get(heightAt);
+export function cityDemand(heightAt, seed = DEFAULT_SEED) {
+  let bySeed = _demandCache.get(heightAt);
+  const hit = bySeed && bySeed.get(seed);
   if (hit) return hit;
 
   // Positions and radii of influence are landform-scale and follow the world.
@@ -1743,9 +1748,10 @@ export function cityDemand(heightAt) {
 
   const demand = makeDemand({
     cores, gateways, distToWater,
-    noise: (x, z) => fbm(x + sm(900), z - sm(400), sm(2200), 2),
+    noise: (x, z) => fbm(x + sm(900), z - sm(400), sm(2200), 2, 0.5, 2.03, seed),
   });
-  _demandCache.set(heightAt, demand);
+  if (!bySeed) _demandCache.set(heightAt, (bySeed = new Map()));
+  bySeed.set(seed, demand);
   return demand;
 }
 
@@ -1761,8 +1767,8 @@ export function cityDemand(heightAt) {
  * theoretical range, and was never reached on the narrow strips of land these
  * settlements actually occupy. Stretching the real range onto 0..1 fixes it.
  */
-function pickPatchy(list, x, z, salt, scale) {
-  const band = fbm(x + salt * 733, z - salt * 517, scale, 2);
+function pickPatchy(list, x, z, salt, scale, seed = DEFAULT_SEED) {
+  const band = fbm(x + salt * 733, z - salt * 517, scale, 2, 0.5, 2.03, seed);
   const t = clamp((band - 0.28) / 0.44, 0, 0.9999);
   return list[Math.floor(t * list.length)];
 }
@@ -1808,7 +1814,7 @@ const DEMAND_FOR = {
   FARM: 0.0,
 };
 
-export function classForSettlementBlock(s, blk, corridorRoads, centres, demandAt = null) {
+export function classForSettlementBlock(s, blk, corridorRoads, centres, demandAt = null, seed = DEFAULT_SEED) {
   const mix = SETTLEMENT_MIX[s.cls] || SETTLEMENT_MIX.TOWNHOUSE;
   const cx = (blk.xMin + blk.xMax) / 2, cz = (blk.zMin + blk.zMax) / 2;
 
@@ -1844,7 +1850,7 @@ export function classForSettlementBlock(s, blk, corridorRoads, centres, demandAt
     const along = ew ? cx : cz, across = ew ? cz : cx;
     if (along < Math.min(r.from, r.to) - 40 || along > Math.max(r.from, r.to) + 40) continue;
     if (Math.abs(across - r.at) <= CORRIDOR_DEPTH) {
-      return pickPatchy(mix.corridor, cx, cz, 3, 380);
+      return pickPatchy(mix.corridor, cx, cz, 3, 380, seed);
     }
   }
 
@@ -1852,12 +1858,12 @@ export function classForSettlementBlock(s, blk, corridorRoads, centres, demandAt
   for (const c of centres) {
     const t = Math.hypot(cx - c.x, cz - c.z);
     if (t < CENTRE_RADIUS * (0.7 + hash01(`${s.id}|r|${Math.round(cx / 200)}|${Math.round(cz / 200)}`) * 0.6)) {
-      return pickPatchy(mix.centre, cx, cz, 7, 300);
+      return pickPatchy(mix.centre, cx, cz, 7, 300, seed);
     }
   }
 
   // 3. the fabric
-  return pickPatchy(mix.body, cx, cz, 11, 460);
+  return pickPatchy(mix.body, cx, cz, 11, 460, seed);
 }
 
 /** How deep from an arterial's centreline the commercial frontage runs. */
@@ -1866,7 +1872,7 @@ const CORRIDOR_DEPTH = 68;
 const CENTRE_RADIUS = 300;
 
 /** Build one settlement's roads, blocks and plots, clipped to its land mass. */
-export function generateSettlement(s, polyByLandmass, demandAt = null) {
+export function generateSettlement(s, polyByLandmass, demandAt = null, seed = DEFAULT_SEED) {
   const poly = polyByLandmass[s.landmass];
   const avHalf = ROADS.AVENUE.row / 2, stHalf = ROADS.STREET.row / 2;
   const roads = [], blocks = [], plots = [];
@@ -1950,7 +1956,7 @@ export function generateSettlement(s, polyByLandmass, demandAt = null) {
 
       // What kind of block this is, from the corridor/centre/fabric rule rather
       // than from one class for the whole settlement.
-      const want = classForSettlementBlock(s, blk, corridorRoads, centres, demandAt);
+      const want = classForSettlementBlock(s, blk, corridorRoads, centres, demandAt, seed);
       if (want === "PARK") { blk.kind = "park"; blk.cls = "PARK"; blocks.push(blk); continue; }
 
       // A block may be too small for the class the field picked -- a corridor
@@ -2878,14 +2884,14 @@ function cachedHeight(heightAt, cell = sm(12)) {
   };
 }
 
-export function generateWorld(rawHeightAt = null) {
+export function generateWorld(rawHeightAt = null, seed = DEFAULT_SEED) {
   // everything below uses the cached height for bulk queries
   const heightAt = rawHeightAt ? cachedHeight(rawHeightAt) : null;
   const masses = landmassPolygons(16);
   const polyBy = Object.fromEntries(masses.map(m => [m.id, m.polygon]));
 
-  const demandAt = heightAt ? cityDemand(heightAt) : null;
-  const city = generateCityPlan();
+  const demandAt = heightAt ? cityDemand(heightAt, seed) : null;
+  const city = generateCityPlan(seed);
   const roads  = [
     ...city.roads.map(r => ({ ...r, settlement:"downtown" })),
     ...HIGHWAYS,
@@ -3007,7 +3013,7 @@ export function generateWorld(rawHeightAt = null) {
   roads.push(...barrierSpine(polyBy.barrier));
   if (heightAt) roads.push(...coastRoad(polyBy.mainland, heightAt));
   for (const s of settlementList) {
-    const out = generateSettlement(s, polyBy, demandAt);
+    const out = generateSettlement(s, polyBy, demandAt, seed);
     roads.push(...out.roads); blocks.push(...out.blocks); plots.push(...out.plots);
     settlements.push({ id:s.id, name:s.name, landmass:s.landmass,
                        plots:out.plots.length, blocks:out.blocks.length, cls:s.cls });
@@ -3371,7 +3377,7 @@ export function generateWorld(rawHeightAt = null) {
     }
   }
 
-  return { world:WORLD, masses, roads: out, blocks, plots: keptPlots, settlements,
+  return { world:WORLD, seed, masses, roads: out, blocks, plots: keptPlots, settlements,
            // THE SINGLE SOURCE OF TRUTH FOR "WHAT IS AT THIS POINT".
            //
            // null when built with no heightAt, matching every other
@@ -3460,20 +3466,26 @@ export function generateWorld(rawHeightAt = null) {
 // change that made the plan depend on call order would have desynchronised the
 // renderer from the world silently. Memoising costs nothing and removes the
 // possibility rather than relying on it not happening.
-let _cityPlan = null;
-export function generateCityPlan() {
-  if (_cityPlan) return _cityPlan;
-  return (_cityPlan = buildCityPlan());
+// Keyed by seed, not a single singleton -- a bare `let _cityPlan` handed the
+// SECOND seed asked for in a process the FIRST seed's plan, silently, because
+// nothing about the cache had a notion of "which seed" to begin with.
+const _cityPlanBySeed = new Map();
+export function generateCityPlan(seed = DEFAULT_SEED) {
+  const hit = _cityPlanBySeed.get(seed);
+  if (hit) return hit;
+  const built = buildCityPlan(seed);
+  _cityPlanBySeed.set(seed, built);
+  return built;
 }
 
-function buildCityPlan() {
+function buildCityPlan(seed = DEFAULT_SEED) {
   const roads = generateRoads();
   const blocks = generateBlocks();
   const plots = [];
   const parks = [];
   for (const b of blocks) {
     const d = DISTRICTS.find((x) => x.id === b.districtId);
-    const want = classForBlock(b, d);
+    const want = classForBlock(b, d, seed);
     if (want === "PARK") { parks.push({ ...b, kind: "park" }); continue; }
     // the field's choice first, then anything else the district allows that the
     // block can legally carry -- never a class the district forbids

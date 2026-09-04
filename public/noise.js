@@ -48,7 +48,15 @@ export function seedToInt(seed) {
 }
 
 export function hash2(i, j, seed = DEFAULT_SEED) {
-  let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(seed, 1013904223);
+  // seedToInt, not the raw value: Math.imul coerces its argument with ToInt32,
+  // and ToInt32 of a non-numeric string is 0 -- so a NAME passed straight
+  // through here collided with seed 0 silently, every time, no matter what the
+  // name was. seedToInt is idempotent on a value already run through it (an
+  // int seed | 0's to itself), so this costs nothing for every caller that was
+  // already converting -- LandField's constructor, createNoise -- and fixes
+  // every caller that was not.
+  const s = seedToInt(seed);
+  let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(s, 1013904223);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
 }

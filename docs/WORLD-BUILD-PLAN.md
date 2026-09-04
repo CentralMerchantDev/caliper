@@ -103,8 +103,8 @@ layer carrying a closure could not be stored, sent, cloned or attributed, and
 |---|---|---|
 | **A1** seed the noise | **DONE** | `createNoise(seed)`; seed 0 bit-identical to the pre-seed field over 5,000+ samples; a named seed differs at 200/200. `test/noise.test.ts` (7). Mutations `seed-zero-is-the-original-world`, `a-seeded-field-uses-its-seed` CAUGHT. |
 | **A2** seed the terrain | **DONE** | Seed threaded through `edgeFalloff`, `cliffiness`, `shoreRampAt`, `reliefAt`; carried on `LandField`; read once in `makeHeightAt`. **Default world byte-identical** — sha256 `418744f1…` over 37,668 height samples, before and after. `test/worldSeed.test.ts` (6). Mutations `the-field-carries-its-seed`, `the-height-function-reads-the-fields-seed` CAUGHT. |
-| **A2b** seed the PLAN | **NEXT** | `generateWorld()` still takes no seed. `city-plan.js` calls `fbm` at lines ~1092, 1093, 1746, 1765 unseeded. Same pattern as A2: seed last, default preserves today, fingerprint the plot/block/road sha256 before and after. |
-| **A3** districts/settlements per-world | TODO | `DISTRICTS`, `SETTLEMENTS`, `BRIDGES`, `GRID` are module constants. Make them the SPEC; the instance derives its own copy. |
+| **A2b** seed the PLAN | **DONE** | Seed threaded through `intensityAt`, `classForBlock`, `pickPatchy`, `classForSettlementBlock`, `generateSettlement`, `cityDemand`, `generateCityPlan`, `generateWorld`. **Default plan byte-identical** — sha256 `a88cfd03…` over 19,874 plots + 2,291 blocks + 1,402 roads, before and after. Root-cause fix alongside it: `hash2` was mixing the seed with `Math.imul(seed, …)` directly, and `Math.imul` coerces via `ToInt32` — a STRING seed silently became 0, colliding with the default seed for every named world. `hash2` now runs `seedToInt(seed)` first, closing the hole for every caller, present and future. Also found and fixed while re-grounding: `generateCityPlan` was memoised in a single unkeyed singleton and `cityDemand` in a `WeakMap` keyed only on `heightAt` — a second seed would have silently returned the first seed's cached plan. Both are now keyed on seed. `test/planSeed.test.ts` (5). Mutation `generateWorld-forwards-its-seed` CAUGHT. Two pre-existing A1 mutations (`seed-zero-is-the-original-world`, `a-seeded-field-uses-its-seed`) had their `find` strings broken by the `hash2` edit — repaired and reverified CAUGHT. `scripts/_mutcheck.mjs` was also broken on Windows (three separate bugs: `npx` needs `shell:true`, didn't unwrap `{mutations:[...]}`, and its reporter regex was TAP-shaped against a runner that prints `✖ name (Nms)`) — fixed, since every remaining step tonight needs it. |
+| **A3** districts/settlements per-world | **NEXT** | `DISTRICTS`, `SETTLEMENTS`, `BRIDGES`, `GRID` are module constants. Make them the SPEC; the instance derives its own copy. |
 | **A4** the world instance | TODO | `createWorld({ seed, layers })` ties plan + land + layers together. |
 | **B–G** | TODO | As specified below. |
 
@@ -385,14 +385,30 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       37,668 samples, unchanged; `test/worldSeed.test.ts` (6); mutations
       `the-field-carries-its-seed`, `the-height-function-reads-the-fields-seed`
       CAUGHT.
-- [ ] **A2b — seed the PLAN.** `generateWorld({ seed, heightAt })`. `city-plan.js`
-      calls `fbm` unseeded at ~1092, 1093, 1746, 1765. Seed goes LAST, default
-      `DEFAULT_SEED`, so no existing call site changes.
-      *Before you start:* capture the current plot/block/road sha256 with
-      `node scripts/measure-layout.mjs` and paste it into the test as the pin —
-      the same discipline A2 used. *Test:* the default plan is identical to that
-      pin; two seeds differ; one seed twice agrees. *Mutation:* drop the seed
-      inside `generateWorld` → the differ test goes red.
+- [x] **A2b — seed the PLAN.** Evidence: default plan sha256
+      `a88cfd0397e923e71eeb59b06b6448dc1f0749032ddca161702dbe8deb20b1a1` over
+      19,874 plots + 2,291 blocks + 1,402 roads, unchanged (measured by a
+      one-off script before any edit, pinned in `test/planSeed.test.ts`).
+      `test/planSeed.test.ts` (5): default plan matches the pin; a named seed
+      changes the street/zoning mix, not just the ground; the same seed agrees
+      with itself twice, in either call order (kills a memo bug, not just an
+      unseeded path). Mutation `generateWorld-forwards-its-seed` CAUGHT —
+      `node scripts/_mutcheck.mjs test/planSeed.test.ts public/city-plan.js
+      test/mutations.json`.
+      Root-cause fix found while re-grounding (STEP 1): `hash2` mixed the seed
+      via `Math.imul(seed, …)` directly, and `Math.imul` coerces with
+      `ToInt32` — a STRING seed silently became 0, colliding with the default
+      seed. Fixed at the root (`hash2` now runs `seedToInt(seed)` first), not
+      patched per call site. Also found: `generateCityPlan`'s memo was one
+      unkeyed singleton and `cityDemand`'s was a `WeakMap` keyed only on
+      `heightAt` — a second seed would have silently returned the first
+      seed's cached plan. Both now keyed on seed.
+      `scripts/_mutcheck.mjs` was broken on this platform (three bugs: `npx`
+      needs `shell:true` on Windows, it didn't unwrap `test/mutations.json`'s
+      `{mutations:[...]}` shape, and its failure-name regex was TAP-shaped
+      against a runner that prints `✖ name (Nms)`) — fixed, verified against
+      the two pre-existing A1 mutations whose `find` strings the `hash2` edit
+      also broke (both repaired and reverified CAUGHT).
 - [ ] **A3 — districts, settlements, bridges, grid become per-world.**
       `DISTRICTS`, `SETTLEMENTS`, `BRIDGES`, `GRID` are module constants. Make
       them the frozen SPEC; each world derives its own copy at construction.
