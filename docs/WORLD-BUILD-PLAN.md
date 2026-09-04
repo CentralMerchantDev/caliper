@@ -705,12 +705,28 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
 - [x] **E1 — quests as the way in.** `public/quest.js` built and tested (16). A
       quest is a function over world state and may only say done when done is
       true. It hands the player to the agent; it does not say how.
-- [ ] **E2 — completion from world state, including layers.** So "change
-      something in the world" completes because something actually changed.
-      *Test:* the quest reads the live world, not a flag set by the UI; setting
-      the flag without changing the world does NOT complete it.
-      *Mutation:* complete on the flag → red. This is the single most important
-      mutation in Phase E: a quest that completes on a flag is a cutscene.
+- [x] **E2 — completion from world state, including layers.** Evidence:
+      `public/quest.js`'s `questState` gets a 5th parameter, `layers = null`
+      (new, last, default preserves every existing call site exactly —
+      verified directly: a call with no 5th argument gets `changed:
+      {touchedAddresses: [], layerCount: 0}`), sourced from the live layer
+      model's own `touched()`/`layers()` — the same calls
+      `test/worldModel.test.ts` already proves correct, not a second
+      tracking mechanism that could disagree with them.
+      `public/change-quest.js`, new: `changeSomethingQuest.check` reads
+      `state.changed.touchedAddresses.length > 0` — nothing else.
+      `test/questCompletion.test.ts` (4): the new field is empty by default
+      for pre-existing callers; a snapshot carrying a UI-shaped signal
+      (`player.mode: "editing"`) but no real edit does NOT complete the
+      quest; a REAL layer added to a real world DOES complete it; the
+      check function's own source is grepped and contains neither `flag`
+      nor `player.mode` — so a reviewer, or a future generated quest
+      copying this one, cannot even see a flag-shaped field to complete on.
+      Mutation `quest-completes-on-a-real-edit-not-a-flag` CAUGHT — the
+      single most important mutation in Phase E, exactly as named: `node
+      scripts/_mutcheck.mjs test/questCompletion.test.ts
+      public/change-quest.js test/mutations.json`.
+      **Phase E (quests) complete.**
 
 ### Phase F — regions
 

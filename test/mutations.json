@@ -450,6 +450,15 @@
       "find": "  const saved = await store.save(worldId, world.toJSON());\n  if (!saved.ok) return saved;\n\n  return { ok: true };",
       "replace": "  return { ok: true };",
       "expect": "the undo survives a reload"
+    },
+    {
+      "id": "quest-completes-on-a-real-edit-not-a-flag",
+      "guards": "changeSomethingQuest completes because the world's own layer stack actually holds an edit, never because a UI-set flag says so -- a quest that completes on a flag is a cutscene",
+      "note": "Named in the plan as the single most important mutation in Phase E. Reading state.player.mode is exactly the shape of the failure this quest exists to refuse.",
+      "file": "public/change-quest.js",
+      "find": "      done: touched.length > 0,",
+      "replace": "      done: touched.length > 0 || state.player.mode === \"editing\",",
+      "expect": "setting a UI flag, with no real edit, does NOT complete the quest"
     }
   ]
 }

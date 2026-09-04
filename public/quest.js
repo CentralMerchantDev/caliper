@@ -76,6 +76,12 @@ export const QUEST_STATE_FIELDS = Object.freeze({
   world: ["plots", "blocks", "districts", "settlements", "bridges"],
   time: ["day", "hour"],
   built: ["placementIds"],
+  // WHAT THE WORLD'S OWN LAYER STACK ACTUALLY HOLDS -- not a UI signal.
+  // "Change something in the world" can only honestly complete by reading
+  // this, because it is sourced from world-model.js's own touched()/
+  // layers() rather than anything a player-facing flag could set without a
+  // real edit behind it.
+  changed: ["touchedAddresses", "layerCount"],
 });
 
 /**
@@ -85,7 +91,7 @@ export const QUEST_STATE_FIELDS = Object.freeze({
  * "am I in the harbour district"; it may not walk 20,000 plot objects, which
  * would make every check slow and would put the whole world in a prompt.
  */
-export function questState(world, player = {}, time = {}, built = {}) {
+export function questState(world, player = {}, time = {}, built = {}, layers = null) {
   const w = world || {};
   return {
     player: {
@@ -108,6 +114,13 @@ export function questState(world, player = {}, time = {}, built = {}) {
     },
     built: {
       placementIds: Array.isArray(built.placementIds) ? [...built.placementIds] : [],
+    },
+    // `layers` is the live layer MODEL (world.layers from public/world.js),
+    // not a snapshot someone could fake by hand -- touched()/layers() are
+    // the same calls world-model.js's own tests already prove correct.
+    changed: {
+      touchedAddresses: layers && typeof layers.touched === "function" ? layers.touched() : [],
+      layerCount: layers && typeof layers.layers === "function" ? layers.layers().length : 0,
     },
   };
 }

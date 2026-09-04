@@ -1,0 +1,41 @@
+E2: a quest completes because the world actually changed, not because a flag said so
+
+What was wrong: E1's quest.js already proves a quest may only say done when
+done is true -- but nothing yet gave a quest a way to answer "did the player
+change something in the world" from the world's OWN state. Without that, the
+only honest-looking implementation available would have been a flag the UI
+sets on its own say-so, which is a cutscene wearing a quest's costume.
+
+How it is known to be fixed:
+
+- public/quest.js: questState gets a 5th parameter, layers = null -- new,
+  last, default preserves every existing call site exactly. Verified
+  directly rather than assumed: calling questState with no 5th argument at
+  all produces changed: { touchedAddresses: [], layerCount: 0 }, identical
+  to before this change existed. When a real layer model is passed,
+  touchedAddresses/layerCount come from its own touched()/layers() -- the
+  same calls test/worldModel.test.ts already proves correct, not a second
+  tracking mechanism sitting beside it that could quietly disagree.
+- public/change-quest.js, new. changeSomethingQuest.check reads
+  state.changed.touchedAddresses.length > 0 and nothing else -- there is no
+  other field in the check function this quest could complete on.
+- test/questCompletion.test.ts (4): the new field defaults to empty, so
+  every call site from before tonight is unaffected; a snapshot carrying a
+  UI-shaped signal (player.mode: "editing") but no real edit behind it does
+  NOT complete the quest; a real layer added to a real world DOES complete
+  it; the check function's own source is grepped directly and contains
+  neither the word "flag" nor "player.mode" -- so a reviewer, or a future
+  generated quest copying this one as a template, cannot even see a
+  flag-shaped field to complete on.
+- Mutation `quest-completes-on-a-real-edit-not-a-flag` CAUGHT. Named in the
+  plan as the single most important mutation in Phase E: a quest that
+  completes on a flag is a cutscene.
+  `node scripts/_mutcheck.mjs test/questCompletion.test.ts public/change-quest.js test/mutations.json`
+- `npm test`: 855/855. `npx tsc --noEmit`: clean.
+
+Phase E (quests) is complete: E1 and E2 both done with evidence.
+
+F1 (wire grid.js regions to the world instance) is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.
