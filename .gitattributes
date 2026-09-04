@@ -1,6 +1,61 @@
-# Set default behavior to automatically normalize line endings
-* text=auto
+# LINE ENDINGS ARE LF EVERYWHERE, IN THE REPO AND IN THE WORKING TREE.
+#
+# This used to be `* text=auto`, which stores LF in the repository and checks
+# out CRLF on Windows. That conversion is not free and it is not silent:
+#
+#   * EVERY `git add` REWRITES EVERY FILE IT TOUCHES. One commit of small edits
+#     reported 66,043 insertions and 22,701 deletions across 12 files, because
+#     the content git compared was a re-encoded copy rather than the file.
+#
+#   * IT BROKE A RUN. `git add -A` renormalised public/tier-models.js -- 4 MB
+#     and 109,447 lines -- while `node scripts/mutate.mjs --all` was running.
+#     esbuild read the file mid-rewrite and reported a syntax error at
+#     4722:40 that does not exist. Three test files failed to build, and the
+#     mutation run produced 14 consecutive INCONCLUSIVE results before
+#     reporting "10 of 24 controls proved they exist" -- which reads as
+#     fourteen weak controls and was nothing of the sort.
+#
+#   * IT MAKES TWO EDITORS DISAGREE. This repo is edited from Windows and from
+#     a Linux mount of the same directory. One writes LF, the conversion turns
+#     it into CRLF, the next add turns it back, and every command prints a wall
+#     of "LF will be replaced by CRLF" warnings that nobody can read past.
+#
+# `eol=lf` keeps the working tree the same bytes as the repository, so there is
+# nothing to convert and nothing to rewrite. Node, esbuild, wrangler and VS Code
+# are all indifferent to line endings; git was the only thing that cared.
+#
+# ONE-TIME COST: after changing this, the working tree has to be renormalised
+# once. See the note at the bottom.
+* text=auto eol=lf
 
-# Shell scripts must always use LF
+# Shell scripts must always use LF -- unchanged, and now the same as everything
+# else rather than an exception.
 *.sh text eol=lf
 *.bash text eol=lf
+
+# Windows scripts are the one place CRLF is genuinely required.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binaries git must never treat as text. Getting this wrong corrupts them
+# silently, which is worse than the churn this file exists to stop.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.hdr binary
+*.zip binary
+*.pdf binary
+
+# TO APPLY, ONCE, WITH A CLEAN TREE (nothing uncommitted, nothing running):
+#
+#     git add --renormalize .
+#     git status            # review -- repository content does not change
+#     git commit -m "Normalise line endings to LF so git stops rewriting files"
+#
+# The repository already stores LF, so this rewrites the WORKING TREE only. If
+# `git status` comes back empty afterwards, there was nothing to fix.

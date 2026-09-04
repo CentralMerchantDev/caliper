@@ -250,7 +250,32 @@ function applyMutation(mut, baseline) {
     }
 
     const r = runSuite();
-    if (r.fail === null) return { status: "INCONCLUSIVE", why: "could not read a fail count from the runner" };
+    if (r.fail === null) {
+      // THE HARNESS BROKE, WHICH IS NOT THE SAME AS A CONTROL FAILING.
+      //
+      // No fail count means the suite did not RUN -- a file did not build, the
+      // runner crashed, something outside this mutation went wrong. That says
+      // nothing about the control, and it will say nothing about the next
+      // twenty either, because whatever broke is still broken.
+      //
+      // This used to return INCONCLUSIVE and carry on. Measured on a real run:
+      // `git add -A` renormalised line endings on a 4 MB tier-models.js while
+      // this was running, esbuild read the file mid-rewrite, and the run
+      // produced 14 consecutive INCONCLUSIVE results over about ten minutes
+      // before reporting "10 of 24 controls proved they exist" -- which reads
+      // as fourteen weak controls and was nothing of the sort.
+      //
+      // So it throws, which the caller turns into an abort. One honest "the
+      // harness broke, fix that first" beats fourteen findings about nothing.
+      const e = new Error(
+        `the suite did not run for mutation "${mut.id}" -- no fail count.\n` +
+        "This is the HARNESS failing, not the control. Nothing after this point would mean anything.\n" +
+        "Most likely something else is writing to the tree: another editor, a git checkout, or a\n" +
+        "`git add` renormalising line endings. Let the tree settle, then run this again.",
+      );
+      e.harnessBroke = true;
+      throw e;
+    }
     if (r.fail === 0) return { status: "SURVIVED", why: "the suite stayed green with the control broken", failing: [] };
 
     const named = mut.expect
@@ -390,12 +415,22 @@ for (const mut of mutations) {
   try {
     r = applyMutation(mut, baseline);
   } catch (e) {
-    // A restore failure throws. Stop the whole run: the tree is dirty and every
-    // result after this would be measured against a source file nobody intended.
+    // Two things throw here, and both mean the same thing: stop.
+    //
+    //   a restore failure  -- the tree is dirty, and every later result would be
+    //                         measured against a source file nobody intended.
+    //   a harness failure  -- the suite did not run at all, so every later
+    //                         result would be INCONCLUSIVE for the same reason.
+    //
+    // Either way the results already gathered are still valid and the ones
+    // below would not be.
     console.log("ABORTED");
     console.error(`\n### RUN ABORTED after ${results.length} of ${mutations.length} mutations.`);
     console.error(`### ${e.message}`);
     console.error("### The results above this line are still valid. Nothing below ran.");
+    if (e.harnessBroke) {
+      console.error("###\n### Re-run once the tree is settled; this is not a finding about any control.");
+    }
     process.exit(2);
   }
   results.push({ ...mut, ...r });

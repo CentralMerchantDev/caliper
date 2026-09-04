@@ -227,6 +227,15 @@
       "find": "      if (depth <= 0) return null;",
       "replace": "      if (depth <= -99999) return null;",
       "expect": "a level surface, a sloping bed, and dry banks"
+    },
+    {
+      "id": "line-endings-stay-lf",
+      "guards": "the working tree holds the same bytes as the repository, so `git add` has nothing to convert and never rewrites a file another process is reading",
+      "note": "`* text=auto` stores LF and checks out CRLF on Windows. MEASURED: one commit of small edits reported 66,043 insertions across 12 files, and `git add -A` renormalising the 4 MB public/tier-models.js during a mutate run made esbuild read it mid-rewrite -- a syntax error at 4722:40 that does not exist, 3 test files failing to build, and 14 consecutive INCONCLUSIVE results reported as '10 of 24 controls proved they exist'.",
+      "file": ".gitattributes",
+      "find": "* text=auto eol=lf",
+      "replace": "* text=auto",
+      "expect": "the working tree and the repository hold the same bytes"
     }
   ]
 }
