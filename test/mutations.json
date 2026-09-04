@@ -414,6 +414,15 @@
       "find": "    address: selection.current.plotId,\n    text,",
       "replace": "    address: selection.current.plotId,\n    text: `<span>${text}</span>`,",
       "expect": "typed text that looks like HTML passes through byte-identical"
+    },
+    {
+      "id": "verify-generated-geometry-uses-real-constraint",
+      "guards": "verifyGeneratedGeometry checks a response against the ACTUAL requested footprint, never a loosened or fabricated one -- a response that ignores the constraint fails verification rather than being repaired or waved through",
+      "note": "This is the ledgers own failure mode for D4: a response that ignores the measured constraints must fail verification, not be silently accepted. Inflating the declared footprint before checking is exactly the kind of quiet repair that would let it through.",
+      "file": "public/generate-request.js",
+      "find": "  return verifyModelSource(source, prompt.constraints.footprint, evaluate, THREE);",
+      "replace": "  return verifyModelSource(source, { w: prompt.constraints.footprint.w + 1000, d: prompt.constraints.footprint.d + 1000 }, evaluate, THREE);",
+      "expect": "verification uses the REQUESTED footprint, never anything the response itself claims"
     }
   ]
 }

@@ -591,12 +591,32 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       Built and tested: `public/transform.js`, `test/transform.test.ts` (9).
       Refusals carry the actual depth/size under that object; alternatives come
       from `findGround`, never invented.
-- [ ] **D4 — generate.** The source-edit path: the model writes a real
-      `createGeometry` builder. **This is the step where the agent genuinely
-      codes**, and it is the reason source-edit exists alongside data-edit.
-      *Test:* the prompt carries the measured constraints from D3 (footprint,
-      support, clearance) so the model is not guessing; a response that ignores
-      them fails verification rather than being repaired silently.
+- [x] **D4 — generate.** Evidence: `public/generate-request.js`.
+      `buildGeometryPrompt(assessment, want, request)` carries D3's measured
+      constraints (footprint, support, clearance) verbatim, and refuses
+      before anything is prompted when `assessTransform` has not approved
+      the transform — which also means nothing is ever sent anywhere for a
+      request that cannot work, in keeping with zero spend without
+      authorisation. `verifyGeneratedGeometry(source, prompt, evaluate,
+      THREE)` is a thin wrapper over D5's already-proven
+      `verifyModelSource`, passing `prompt.constraints.footprint` as
+      `declared` — there is no field anywhere a response could use to
+      declare its own footprint instead; the only footprint that exists in
+      the call is the one the request itself carried.
+      **No model is called anywhere in this step or its tests** — every
+      "response" is a hand-written source string, honouring zero API spend
+      without explicit authorisation.
+      `test/generateRequest.test.ts` (4): the prompt carries D3's exact
+      footprint/support/clearance; generation is refused before any prompt
+      exists when the ground has not approved the transform; a response that
+      ignores the requested footprint (asked for 3×3, source builds 40×40)
+      fails verification at the `footprint` stage; a response that genuinely
+      honours the constraint verifies clean. Mutation
+      `verify-generated-geometry-uses-real-constraint` CAUGHT — inflates the
+      declared footprint by 1000 m before checking, the exact "repaired
+      silently" failure mode the ledger names: `node
+      scripts/_mutcheck.mjs test/generateRequest.test.ts
+      public/generate-request.js test/mutations.json`.
 - [x] **D5 — verify.** `verifyModelSource`: scan → compile → build → triangle
       budget → build time → footprint → determinism. Built and tested:
       `public/model-forge.js`, 16 tests.

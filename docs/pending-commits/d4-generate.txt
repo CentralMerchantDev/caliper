@@ -1,0 +1,47 @@
+D4: generate -- the model writes a builder, checked against what was actually asked
+
+What was wrong: D3 already answers "could this become that, here?" against
+the real land, measuring the actual constraints. Nothing yet turned a YES
+from that into a prompt carrying those real numbers, and nothing decided
+what happens when the model's response ignores them -- the wrong answer
+being to quietly repair or wave through geometry that does not honour what
+was actually asked for.
+
+How it is known to be fixed:
+
+- public/generate-request.js, new. buildGeometryPrompt(assessment, want,
+  request) carries D3's measured footprint/support/clearance verbatim into
+  the prompt, and refuses BEFORE anything is prompted when assessTransform
+  has not approved the transform -- there is nothing to generate for at a
+  location the request does not fit, and refusing here is also what stops a
+  prompt (and a spend) being sent for a request that cannot work.
+- verifyGeneratedGeometry(source, prompt, evaluate, THREE) is a thin wrapper
+  over D5's already-proven verifyModelSource, passing
+  prompt.constraints.footprint as `declared`. There is no field anywhere in
+  a response a model could use to declare its own footprint instead -- the
+  only footprint that exists in the whole call is the one the ORIGINAL
+  request carried, so a response that ignores it fails D5's existing
+  footprint check by construction, not by anything new this step invents.
+- NO MODEL IS CALLED ANYWHERE, including in the tests -- every "response" in
+  test/generateRequest.test.ts is a hand-written source string. Zero API
+  spend without explicit authorisation is a standing rule and it applies to
+  test code as much as production code.
+- test/generateRequest.test.ts (4): the prompt carries D3's exact
+  footprint/support/clearance; generation is refused before any prompt
+  exists when the ground refuses the transform; a response asked for a 3x3
+  footprint that instead builds 40x40 fails verification at the "footprint"
+  stage; a response that genuinely honours the constraint verifies clean.
+- Mutation `verify-generated-geometry-uses-real-constraint` CAUGHT. Inflates
+  the declared footprint by 1000 m before checking -- the exact "repaired
+  silently" failure mode the ledger names as the wrong answer:
+  `node scripts/_mutcheck.mjs test/generateRequest.test.ts public/generate-request.js test/mutations.json`
+- `npm test`: 840/840. `npx tsc --noEmit`: clean.
+
+What is still open: this builds the prompt and the verification wiring, not
+the actual model call or the repair loop that reads a failed verdict and
+retries. Those live in the pipeline (src/), under its existing gates and
+spend caps, which this step deliberately did not touch. D6 (show the work)
+is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.
