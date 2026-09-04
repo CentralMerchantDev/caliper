@@ -351,6 +351,15 @@
       "find": "districts: DISTRICTS.map((d) => ({ ...d, bounds: { ...d.bounds } })),",
       "replace": "districts: DISTRICTS.map((d) => ({ ...d })),",
       "expect": "mutating one world's district bounds does not reach another world's, or the spec"
+    },
+    {
+      "id": "world-toJSON-carries-its-layers",
+      "guards": "createWorlds toJSON includes the layer stack, not just the seed, so a stored world can rebuild with its edits intact",
+      "note": "The whole point of A4 is that a world round-trips -- a toJSON that dropped layers would serialise a world that forgets every edit on the next load, silently.",
+      "file": "public/world.js",
+      "find": "    toJSON: () => layerModel.toJSON(),",
+      "replace": "    toJSON: () => ({ seed }),",
+      "expect": "rebuilds to the same fingerprint"
     }
   ]
 }

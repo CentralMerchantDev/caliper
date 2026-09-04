@@ -1,0 +1,37 @@
+A4: the world instance -- plan, land and layers tied to one seed
+
+What was wrong: A1/A2/A2b seeded the noise, the terrain and the plan, and A3
+made the shared tables per-world, but nothing tied one seed's plan, land and
+layer stack together as a single value. A player's world was still three
+separate function calls a caller had to remember to make with the same seed,
+not a thing that could be built, compared, stored or handed around.
+
+How it is known to be fixed:
+
+- public/world.js, new. `createWorld({ seed, layers })` returns `{ seed, plan,
+  land, layers, resolve, toJSON }`. It composes generateWorld, LandField /
+  makeHeightAt, and world-model.js's createWorldModel -- it generates none of
+  that logic itself, which test/world.test.ts's first test checks directly
+  (fingerprint-equal to calling all three by hand for the same seed), not
+  assumed from "it returned an object with the right keys".
+- test/world.test.ts (4): the composition check above; two createWorld calls
+  with the same seed produce equal plan/land fingerprints but independent
+  layer stacks (adding a layer to world A's stack does not appear in world
+  B's); a world round-trips through toJSON()/worldFromJSON() and rebuilds to
+  the same plan and land fingerprint, with its layers intact; world.resolve
+  and world.toJSON are the layer model's own methods, re-exposed at the top
+  level, not a second implementation a future edit could let drift.
+- worldFromJSON only ever needs { seed, layers } -- plan and land are not
+  serialised, because both regenerate byte-identically from the seed alone
+  (that determinism is the whole precondition this design already depends on,
+  and test/worldSeed.test.ts / test/planSeed.test.ts pin it).
+- Mutation `world-toJSON-carries-its-layers` CAUGHT (dropping layers from
+  toJSON turns the round-trip test red):
+  `node scripts/_mutcheck.mjs test/world.test.ts public/world.js test/mutations.json`
+- `npm test`: 808/808. `npx tsc --noEmit`: clean.
+
+Phase A (the world becomes a value) is complete: A1, A2, A2b, A3, A4 all done
+with evidence. What is still open: a blind audit of Phase A is next, per
+BUILD-LOOP.md STEP 10, before Phase B starts. public/asset-registry.js and
+public/tier-models.js remain excluded from this and every commit tonight --
+untouched, unstaged, flagged previously.

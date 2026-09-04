@@ -105,7 +105,7 @@ layer carrying a closure could not be stored, sent, cloned or attributed, and
 | **A2** seed the terrain | **DONE** | Seed threaded through `edgeFalloff`, `cliffiness`, `shoreRampAt`, `reliefAt`; carried on `LandField`; read once in `makeHeightAt`. **Default world byte-identical** — sha256 `418744f1…` over 37,668 height samples, before and after. `test/worldSeed.test.ts` (6). Mutations `the-field-carries-its-seed`, `the-height-function-reads-the-fields-seed` CAUGHT. |
 | **A2b** seed the PLAN | **DONE** | Seed threaded through `intensityAt`, `classForBlock`, `pickPatchy`, `classForSettlementBlock`, `generateSettlement`, `cityDemand`, `generateCityPlan`, `generateWorld`. **Default plan byte-identical** — sha256 `a88cfd03…` over 19,874 plots + 2,291 blocks + 1,402 roads, before and after. Root-cause fix alongside it: `hash2` was mixing the seed with `Math.imul(seed, …)` directly, and `Math.imul` coerces via `ToInt32` — a STRING seed silently became 0, colliding with the default seed for every named world. `hash2` now runs `seedToInt(seed)` first, closing the hole for every caller, present and future. Also found and fixed while re-grounding: `generateCityPlan` was memoised in a single unkeyed singleton and `cityDemand` in a `WeakMap` keyed only on `heightAt` — a second seed would have silently returned the first seed's cached plan. Both are now keyed on seed. `test/planSeed.test.ts` (5). Mutation `generateWorld-forwards-its-seed` CAUGHT. Two pre-existing A1 mutations (`seed-zero-is-the-original-world`, `a-seeded-field-uses-its-seed`) had their `find` strings broken by the `hash2` edit — repaired and reverified CAUGHT. `scripts/_mutcheck.mjs` was also broken on Windows (three separate bugs: `npx` needs `shell:true`, didn't unwrap `{mutations:[...]}`, and its reporter regex was TAP-shaped against a runner that prints `✖ name (Nms)`) — fixed, since every remaining step tonight needs it. |
 | **A3** districts/settlements per-world | **DONE** | `DISTRICTS`, `SETTLEMENTS`, `BRIDGES`, `GRID` deep-frozen as the spec — writing any field, top-level or nested, throws. Real bug found and fixed: `generateWorld`'s returned `districts` copy was shallow (`{ ...d }`), so every world's `districts[i].bounds` was the SAME object `DISTRICTS[i].bounds` — mutating one world's district bounds silently moved every other world's, and the (now-frozen) spec. `test/worldSpec.test.ts` (5). Mutation `districts-copy-clones-its-bounds` CAUGHT. |
-| **A4** the world instance | **NEXT** | `createWorld({ seed, layers })` ties plan + land + layers together. |
+| **A4** the world instance | **DONE** | `public/world.js`. `createWorld({ seed, layers })` → `{ seed, plan, land, layers, resolve, toJSON }`, composing `generateWorld`/`LandField`/`createWorldModel` — generates nothing itself. `test/world.test.ts` (4): composes rather than reimplements (fingerprint-equal to calling the three directly); two same-seed instances share plan/land but have independent layer stacks; JSON round-trip rebuilds to the same fingerprint with layers intact; `resolve`/`toJSON` are the layer model's own. Mutation `world-toJSON-carries-its-layers` CAUGHT. **Phase A complete — audit next.** |
 | **B–G** | TODO | As specified below. |
 
 **Built and tested, waiting to be wired in (B–G use these):**
@@ -428,12 +428,19 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       once before. This was the same defect one level up, in the source
       tables — and it turned out the fix at that level was ALSO shallow, one
       level down again, in the object the copy pointed at.
-- [ ] **A4 — the world instance.** `createWorld({ seed, layers })` →
-      `{ seed, plan, land, layers, resolve, toJSON }`, in a new
-      `public/world.js`. It composes; it generates nothing itself.
-      *Test:* a world round-trips through JSON and rebuilds to the same
-      fingerprint; two instances with the same seed are equal and independent.
-      *Mutation:* drop `layers` from `toJSON` → the round-trip test red.
+- [x] **A4 — the world instance.** Evidence: `public/world.js`, `createWorld({
+      seed, layers })` → `{ seed, plan, land, layers, resolve, toJSON }`.
+      Composes `generateWorld`, `LandField`/`makeHeightAt` and
+      `createWorldModel` — verified fingerprint-equal to calling all three
+      directly, not just "produces something". `test/world.test.ts` (4): the
+      composition check above; two same-seed instances have equal plan/land
+      but independent layer stacks (adding a layer to one does not appear in
+      the other's); a JSON round-trip rebuilds to the same plan/land
+      fingerprint with its layers intact; `resolve`/`toJSON` are the layer
+      model's own methods, not a second implementation of them. Mutation
+      `world-toJSON-carries-its-layers` CAUGHT — `node scripts/_mutcheck.mjs
+      test/world.test.ts public/world.js test/mutations.json`.
+      **Phase A (the world becomes a value) is complete.**
 
 ### Phase B — it persists
 
