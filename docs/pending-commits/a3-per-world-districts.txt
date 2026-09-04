@@ -1,0 +1,42 @@
+A3: freeze the spec, and a shallow copy that let one world's district bounds move another's
+
+What was wrong: DISTRICTS, SETTLEMENTS, BRIDGES and GRID were plain module
+constants -- one array, shared by every call to generateWorld() in the
+process, writable by anything that got a reference to them. Nothing stopped a
+caller reassigning a field, editing a nested bounds rectangle in place, or
+pushing a new entry, and any of those would move every world built afterwards,
+not just the one the caller thought they were touching.
+
+Implementing the fix surfaced a second, real defect: generateWorld's own
+returned `districts` field was `DISTRICTS.map((d) => ({ ...d }))` -- a shallow
+copy. `bounds` is a nested object, so every copy's `bounds` property was still
+the exact same object `DISTRICTS[i].bounds` owns. Building two worlds and
+mutating world A's district bounds silently mutated world B's copy of that
+same district, and the module's own source table, because the "copy" only
+looked independent at the top level. Ledger 3.4 fixed a version of this once
+before, for generateWorld's return; this was the identical shape one level
+up, in the source tables -- and the earlier fix turned out to be shallow one
+level further down, in the object the copy pointed at.
+
+How it is known to be fixed:
+
+- DISTRICTS, SETTLEMENTS, BRIDGES, GRID deep-frozen at module load (new
+  `deepFreeze` helper: freezes an object and recurses into every nested
+  value). GRID is frozen with plain Object.freeze, not deepFreeze, since it
+  carries getters (ORIGIN_X/ORIGIN_Z) and a method (edges()) rather than data
+  to walk into.
+- generateWorld's districts copy now clones `bounds` too:
+  `{ ...d, bounds: { ...d.bounds } }`.
+- test/worldSpec.test.ts (5): DISTRICTS/SETTLEMENTS/BRIDGES/GRID each throw
+  when written through, at the top level and the nested level; GRID's getters
+  and edges() still work after freezing; building two worlds and mutating
+  world A's district bounds leaves world B's district, and the frozen spec,
+  unchanged.
+- Mutation `districts-copy-clones-its-bounds` CAUGHT (reverting the districts
+  copy to the old shallow `{ ...d }` turns the cross-contamination test red):
+  `node scripts/_mutcheck.mjs test/worldSpec.test.ts public/city-plan.js test/mutations.json`
+- `npm test`: 804/804. `npx tsc --noEmit`: clean.
+
+What is still open: A4 (the world instance, createWorld({ seed, layers })) is
+next. public/asset-registry.js and public/tier-models.js remain excluded from
+this and every commit tonight -- untouched, unstaged, flagged previously.

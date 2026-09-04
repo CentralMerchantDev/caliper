@@ -104,8 +104,8 @@ layer carrying a closure could not be stored, sent, cloned or attributed, and
 | **A1** seed the noise | **DONE** | `createNoise(seed)`; seed 0 bit-identical to the pre-seed field over 5,000+ samples; a named seed differs at 200/200. `test/noise.test.ts` (7). Mutations `seed-zero-is-the-original-world`, `a-seeded-field-uses-its-seed` CAUGHT. |
 | **A2** seed the terrain | **DONE** | Seed threaded through `edgeFalloff`, `cliffiness`, `shoreRampAt`, `reliefAt`; carried on `LandField`; read once in `makeHeightAt`. **Default world byte-identical** — sha256 `418744f1…` over 37,668 height samples, before and after. `test/worldSeed.test.ts` (6). Mutations `the-field-carries-its-seed`, `the-height-function-reads-the-fields-seed` CAUGHT. |
 | **A2b** seed the PLAN | **DONE** | Seed threaded through `intensityAt`, `classForBlock`, `pickPatchy`, `classForSettlementBlock`, `generateSettlement`, `cityDemand`, `generateCityPlan`, `generateWorld`. **Default plan byte-identical** — sha256 `a88cfd03…` over 19,874 plots + 2,291 blocks + 1,402 roads, before and after. Root-cause fix alongside it: `hash2` was mixing the seed with `Math.imul(seed, …)` directly, and `Math.imul` coerces via `ToInt32` — a STRING seed silently became 0, colliding with the default seed for every named world. `hash2` now runs `seedToInt(seed)` first, closing the hole for every caller, present and future. Also found and fixed while re-grounding: `generateCityPlan` was memoised in a single unkeyed singleton and `cityDemand` in a `WeakMap` keyed only on `heightAt` — a second seed would have silently returned the first seed's cached plan. Both are now keyed on seed. `test/planSeed.test.ts` (5). Mutation `generateWorld-forwards-its-seed` CAUGHT. Two pre-existing A1 mutations (`seed-zero-is-the-original-world`, `a-seeded-field-uses-its-seed`) had their `find` strings broken by the `hash2` edit — repaired and reverified CAUGHT. `scripts/_mutcheck.mjs` was also broken on Windows (three separate bugs: `npx` needs `shell:true`, didn't unwrap `{mutations:[...]}`, and its reporter regex was TAP-shaped against a runner that prints `✖ name (Nms)`) — fixed, since every remaining step tonight needs it. |
-| **A3** districts/settlements per-world | **NEXT** | `DISTRICTS`, `SETTLEMENTS`, `BRIDGES`, `GRID` are module constants. Make them the SPEC; the instance derives its own copy. |
-| **A4** the world instance | TODO | `createWorld({ seed, layers })` ties plan + land + layers together. |
+| **A3** districts/settlements per-world | **DONE** | `DISTRICTS`, `SETTLEMENTS`, `BRIDGES`, `GRID` deep-frozen as the spec — writing any field, top-level or nested, throws. Real bug found and fixed: `generateWorld`'s returned `districts` copy was shallow (`{ ...d }`), so every world's `districts[i].bounds` was the SAME object `DISTRICTS[i].bounds` — mutating one world's district bounds silently moved every other world's, and the (now-frozen) spec. `test/worldSpec.test.ts` (5). Mutation `districts-copy-clones-its-bounds` CAUGHT. |
+| **A4** the world instance | **NEXT** | `createWorld({ seed, layers })` ties plan + land + layers together. |
 | **B–G** | TODO | As specified below. |
 
 **Built and tested, waiting to be wired in (B–G use these):**
@@ -409,14 +409,25 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       against a runner that prints `✖ name (Nms)`) — fixed, verified against
       the two pre-existing A1 mutations whose `find` strings the `hash2` edit
       also broke (both repaired and reverified CAUGHT).
-- [ ] **A3 — districts, settlements, bridges, grid become per-world.**
-      `DISTRICTS`, `SETTLEMENTS`, `BRIDGES`, `GRID` are module constants. Make
-      them the frozen SPEC; each world derives its own copy at construction.
-      *Test:* mutating world A's districts does not reach world B's; the spec
-      itself is frozen and cannot be written through. *Mutation:* return the
-      module array instead of a copy → the cross-contamination test red.
-      *Note:* ledger 3.4 fixed this for `generateWorld`'s RETURN. This is the
-      same defect one level up, in the source tables.
+- [x] **A3 — districts, settlements, bridges, grid become per-world.**
+      Evidence: `DISTRICTS`, `SETTLEMENTS`, `BRIDGES`, `GRID` deep-frozen (a
+      new `deepFreeze` helper, applied to each array, each element, and each
+      nested `bounds`/`exclude`) — `test/worldSpec.test.ts`'s "cannot be
+      written through" tests assert every level throws.
+      Real defect found while implementing, not hypothetical: `generateWorld`'s
+      returned `districts` copy was `DISTRICTS.map((d) => ({ ...d }))` — a
+      shallow spread, so every copy's `bounds` property still pointed at the
+      SAME object `DISTRICTS[i].bounds` owns. Two worlds built in the same
+      process shared one `bounds` object per district; mutating world A's
+      moved world B's, and (before freezing) the spec itself. Fixed by cloning
+      `bounds` too: `{ ...d, bounds: { ...d.bounds } }`.
+      `test/worldSpec.test.ts` (5). Mutation `districts-copy-clones-its-bounds`
+      CAUGHT — `node scripts/_mutcheck.mjs test/worldSpec.test.ts
+      public/city-plan.js test/mutations.json`.
+      *Note:* ledger 3.4 fixed a version of this for `generateWorld`'s RETURN
+      once before. This was the same defect one level up, in the source
+      tables — and it turned out the fix at that level was ALSO shallow, one
+      level down again, in the object the copy pointed at.
 - [ ] **A4 — the world instance.** `createWorld({ seed, layers })` →
       `{ seed, plan, land, layers, resolve, toJSON }`, in a new
       `public/world.js`. It composes; it generates nothing itself.

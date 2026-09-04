@@ -342,6 +342,15 @@
       "find": "  const demandAt = heightAt ? cityDemand(heightAt, seed) : null;",
       "replace": "  const demandAt = heightAt ? cityDemand(heightAt, seed = DEFAULT_SEED) : null;",
       "expect": "a named seed lays out a genuinely different street grid"
+    },
+    {
+      "id": "districts-copy-clones-its-bounds",
+      "guards": "generateWorld's returned districts array deep-copies each district's nested bounds object, so mutating one world's district bounds cannot reach another world's copy or the frozen spec",
+      "note": "A shallow { ...d } copies the top-level fields but leaves bounds pointing at DISTRICTS[i]s own object -- every world built in the process shared one bounds object per district until this was fixed.",
+      "file": "public/city-plan.js",
+      "find": "districts: DISTRICTS.map((d) => ({ ...d, bounds: { ...d.bounds } })),",
+      "replace": "districts: DISTRICTS.map((d) => ({ ...d })),",
+      "expect": "mutating one world's district bounds does not reach another world's, or the spec"
     }
   ]
 }

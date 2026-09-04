@@ -29,6 +29,21 @@ import { makeZoning, zoneCharacter, CHARACTER_SPACING, DENSITY_BANDS } from "./z
 import { PLOT_BUCKET } from "./spatial-index.js";
 import { placeFeatures, FEATURES, footprintOf } from "./features.js";
 import { createWorldRegistry } from "./world-registry.js";
+
+/** Freezes an object and everything nested inside it -- DISTRICTS, SETTLEMENTS,
+ *  BRIDGES and GRID are the SPEC, built once at module load and read by every
+ *  world generateWorld() ever builds in this process. A shallow Object.freeze
+ *  stops a new entry being pushed onto the array but does nothing for
+ *  `district.bounds.xMin = ...`, because `bounds` is its own, unfrozen object
+ *  one level down -- exactly the crack a caller (or a careless copy) can write
+ *  through and move every world built afterwards, not just the one intended. */
+function deepFreeze(obj) {
+  if (obj && typeof obj === "object" && !Object.isFrozen(obj)) {
+    Object.freeze(obj);
+    for (const v of Object.values(obj)) deepFreeze(v);
+  }
+  return obj;
+}
 // DESIGN-SPACE, LIKE THE FILE IT CAME FROM.
 //
 // waterways.js is the dependency-free module both this file and terrain.js
@@ -431,6 +446,7 @@ export const BRIDGES = [
   // to the mainland's eastern arm at z 2050, the narrowest strait between them.
   { id: "redcliff-mainland-e", axis: "ew", x: 2050, a: 16425, b: 18050, type: "cable", class: "AVENUE" },
 ].map((b) => sFields(b, ["x", "a", "b"]));
+deepFreeze(BRIDGES);
 
 // Kept as an alias so nothing that imported the old name breaks.
 export const CAUSEWAYS = BRIDGES;
@@ -913,6 +929,11 @@ export const GRID = {
   get ORIGIN_X() { return ISLAND.xMin; },
   get ORIGIN_Z() { return ISLAND.zMin; },
 };
+// Object.freeze only, not deepFreeze -- ORIGIN_X/ORIGIN_Z are getters (freezing
+// stops them being redefined or deleted, which is the point) and edges() is a
+// pure function with no state to protect; deepFreeze's Object.values(GRID)
+// would invoke the getters and walk into the function object for no benefit.
+Object.freeze(GRID);
 
 // -----------------------------------------------------------------------------
 // 5. PLOT SIZE CLASSES
@@ -1009,7 +1030,7 @@ const DISTRICT_SPEC = [
     allow: ["MIDRISE", "TOWER", "PARK", "CIVIC"], character: "hotels, dining pavilions, condos, public realm" },
 ];
 
-export const DISTRICTS = DISTRICT_SPEC.map((d) => ({
+export const DISTRICTS = deepFreeze(DISTRICT_SPEC.map((d) => ({
   ...d,
   bounds: {
     xMin: ISLAND.xMin + d.f[0] * ISLAND.width,
@@ -1017,7 +1038,7 @@ export const DISTRICTS = DISTRICT_SPEC.map((d) => ({
     zMin: ISLAND.zMin + d.f[2] * ISLAND.depth,
     zMax: ISLAND.zMin + d.f[3] * ISLAND.depth,
   },
-}));
+})));
 
 // Suburbs sit on the mainland across the inner harbour, reachable by bridge.
 // They exist so the world continues past the island and so "bridge across to a
@@ -1466,6 +1487,7 @@ export const SETTLEMENTS = [
   bounds: sBounds(st.bounds),
   exclude: st.exclude ? sBounds(st.exclude) : undefined,
 }));
+deepFreeze(SETTLEMENTS);
 
 /** Highways and arterials tying the whole world together. */
 // =============================================================================
@@ -3396,7 +3418,14 @@ export function generateWorld(rawHeightAt = null, seed = DEFAULT_SEED) {
            //
            // Shallow copies of the arrays and of each entry. Determinism by VALUE
            // always held; this closes the leak by REFERENCE.
-           districts: DISTRICTS.map((d) => ({ ...d })),
+           // { ...d } alone is NOT enough: `bounds` is a nested object, so a
+           // shallow spread copies the top-level fields but every instance's
+           // `bounds` still points at the SAME object DISTRICTS[i] owns. That
+           // let one world's edit path move another world's district (and the
+           // frozen spec, before it was frozen) through a copy that only
+           // looked independent. Cloning `bounds` too is what actually cuts
+           // the reference.
+           districts: DISTRICTS.map((d) => ({ ...d, bounds: { ...d.bounds } })),
            bridges: BRIDGES.map((b) => ({ ...b })),
            causeways: BRIDGES.map((b) => ({ ...b })),
            highways: HIGHWAYS.map((h) => ({ ...h })),
