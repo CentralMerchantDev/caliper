@@ -1,3 +1,4 @@
+import { TIER_MODELS } from "./tier-models.js";
 
 import {
   bridgeCalatravaHarpPylon,
@@ -999,6 +1000,7 @@ groundFurniture.variants = {
 };
 
 export const MODELS = {
+  ...TIER_MODELS,
 
   // --- CALATRAVA SCULPTURAL BRIDGES ---
   "bridge-calatrava-harp-pylon": bridgeCalatravaHarpPylon(),
