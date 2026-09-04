@@ -492,9 +492,18 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 869 node tests + 12 worker tests",
+      "find": "npm test            # 871 node tests + 12 worker tests",
       "replace": "npm test            # 900 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
+    },
+    {
+      "id": "close-region-on-open-null-refuses-not-a-silent-success",
+      "guards": "closeRegion on a whole-world-open grid (open === null) genuinely refuses with a reason, rather than silently reporting success for a region that was never load-tracked in the first place",
+      "note": "Found untested by docs/audits/UMAA-phases-B-H.md (Finding 3): every prior closeRegion test used an explicit openRegions list; createWorld()'s own default (regions: null) -- the shape of every world built today -- reaches this branch and nothing exercised it.",
+      "file": "public/grid.js",
+      "find": "      return { ok: false, reason: `grid: cannot close \"${name}\" -- the whole world is open, not region-tracked` };",
+      "replace": "      return { ok: true };",
+      "expect": "closing a region on a whole-world-open grid (open === null) is refused"
     }
   ]
 }

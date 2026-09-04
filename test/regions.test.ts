@@ -60,3 +60,26 @@ test("F2: closing an unknown region name is refused, not a silent no-op", () => 
   assert.equal(result.ok, false);
   assert.equal(grid.regions().length, 1, "closing an unknown region changed the region list anyway");
 });
+
+// Found untested by docs/audits/UMAA-phases-B-H.md (Finding 3): every prior
+// closeRegion call above is against a grid built with an explicit
+// openRegions list. createWorld()'s own default (regions: null) -- the
+// shape of every world built today, since nothing wires createWorld({
+// regions }) from a live call site yet -- produces a grid with open ===
+// null, "the whole world is open, not region-tracked", and that branch of
+// closeRegion had never been exercised.
+test("F2: closing a region on a whole-world-open grid (open === null) is refused, not a silent no-op or a throw", () => {
+  const grid = createGrid();
+  assert.equal(grid.check(500, 500).ok, true, "setup: a bare grid should start open");
+  const result = grid.closeRegion("downtown");
+  assert.equal(result.ok, false);
+  assert.ok(result.reason, "the open === null branch refused with no reason to act on");
+  assert.equal(grid.check(500, 500).ok, true, "a refused close still locked the world");
+});
+
+test("F2: the same open === null sentinel, reached through createWorld()'s own default regions", () => {
+  const world = createWorld({ seed: "x" });
+  const result = world.grid.closeRegion("downtown");
+  assert.equal(result.ok, false);
+  assert.ok(result.reason);
+});

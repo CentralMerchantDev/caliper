@@ -1,0 +1,47 @@
+Final audit Finding 3 (LOW/MEDIUM): grid.js's closeRegion on the
+whole-world-open sentinel (open === null) was untested
+
+What was wrong: docs/audits/UMAA-phases-B-H.md's blind auditor found that
+every existing call to grid.js's closeRegion() in test/regions.test.ts was
+against a grid built with an explicit openRegions list (either [] or a real
+region array). createWorld()'s own default -- regions: null, the shape of
+every world built today, since nothing wires createWorld({ regions }) from a
+live call site yet -- produces a grid with open === null, "the whole world is
+already open, not region-tracked", and closeRegion's refusal branch for that
+case had never been exercised by anything. Reading the code the branch looked
+correct (an explicit {ok:false, reason} refusal, not a throw or a silent
+no-op), but per AUDIT-PROTOCOL.md's own standard of proof, a green suite is
+not evidence a control exists -- it is evidence nothing currently disagrees
+with it, which was true here only because nothing tried.
+
+How it's fixed: two tests added to test/regions.test.ts -- one against a bare
+createGrid() (open === null by construction), one against the more likely
+real-world shape, createWorld({ seed }) with no regions argument at all --
+both assert closeRegion() refuses with a reason and that the world stays
+locked/open exactly as it was before the refused call.
+
+Mutation proof: test/mutations.json gained
+close-region-on-open-null-refuses-not-a-silent-success (the open === null
+branch's `return { ok: false, reason: ... }` replaced with `return { ok:
+true }`, i.e. silently reporting success for a region that was never
+load-tracked). Run in isolation, alongside the pre-existing grid.js mutation
+to confirm neither regressed the other:
+
+  node scripts/_mutcheck.mjs test/regions.test.ts public/grid.js test/mutations.json
+  baseline: GREEN
+  CAUGHT   locked-region-refuses-with-a-reason-not-bare-false
+  CAUGHT   close-region-on-open-null-refuses-not-a-silent-success
+  restored: byte identical
+
+Measured: npm test -- 871 node tests, 0 fail (869 plus these two); 12 worker,
+0 fail. npx tsc --noEmit: clean. CLAUDE.md's own verification line and
+test/testCount.generated.json regenerated to match (871), and
+claudeMd-test-count-matches-generated (Finding 1's own mutation control)
+re-verified CAUGHT against the new count.
+
+What's still open: Findings 4 (duplicate worldFromJSON naming across
+world.js/world-model.js) and 5 (createWorld() unmemoized, ~2.4s/call) from
+the same audit are not yet addressed.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.
