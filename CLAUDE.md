@@ -9,6 +9,19 @@ Everything below exists to protect that claim.
 
 ---
 
+## How work is done here
+
+**[docs/BUILD-LOOP.md](docs/BUILD-LOOP.md) is the procedure, and it is not
+optional.** Every step of every plan runs through it, in order: orient,
+re-ground, plan the step, test first, implement, verify, mutate, measure, check
+the guards, tick the ledger, commit, and at every phase boundary audit blind and
+replan. Read it at the start of a session and again after any context clear.
+
+The current work and its step ledger are in
+[docs/WORLD-BUILD-PLAN.md](docs/WORLD-BUILD-PLAN.md) — PART 7 is the checklist.
+
+---
+
 ## The standard of proof
 
 **A green suite is not evidence a control exists.** It is evidence that nothing

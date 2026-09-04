@@ -236,6 +236,103 @@
       "find": "* text=auto eol=lf",
       "replace": "* text=auto",
       "expect": "the working tree and the repository hold the same bytes"
+    },
+    {
+      "id": "catalogue-has-a-door",
+      "guards": "the model catalogue is linked from the front door, so a player can reach the 2,400 models by clicking rather than by typing a filename",
+      "note": "The worst defect found in this repository, and it was not a bug -- everything worked. Six pages existed in public/ and exactly ONE was reachable. An unreachable page is not an error, it is an absence, and absences do not throw, which is why no test would ever have caught it. This one walks the links.",
+      "file": "public/index.html",
+      "find": "<a href=\"./model-library.html\"",
+      "replace": "<a href=\"#no-catalogue\"",
+      "expect": "reachable from the front door"
+    },
+    {
+      "id": "pages-have-a-way-back",
+      "guards": "every page a player can land on links back to the front door, so none of them is a trap",
+      "note": "The first version of this control accepted EITHER a back-to-caliper class OR a link home, and a mutation renaming the class correctly survived -- the href was still there. That exposed the weakness in the other direction: a page carrying the class with a broken href would have passed on the strength of a CSS class name. A class is decoration; an href is the way out.",
+      "file": "public/model-library.html",
+      "find": "<a href=\"./index.html\" class=\"back-to-caliper\"",
+      "replace": "<a href=\"#stranded\" class=\"back-to-caliper\"",
+      "expect": "way back"
+    },
+    {
+      "id": "a-layer-must-be-plain-data",
+      "guards": "a layer is refused unless it is storable data, so a world can be saved, sent, cloned and attributed",
+      "note": "The first version relied on JSON.stringify failing on a function. It does not -- it silently DROPS it, so a layer carrying a closure round-tripped with the same edit count and was accepted, then lost the player's work on save with no message. Found by this exact mutation surviving.",
+      "file": "public/world-model.js",
+      "find": "  const live = firstLiveValue(layer);",
+      "replace": "  const live = null;",
+      "expect": "plain data that survives being stored"
+    },
+    {
+      "id": "a-clone-is-independent",
+      "guards": "cloning a world deep-copies its layers, so editing your copy cannot reach back into the world you copied from",
+      "note": "The first version spread each edit but shared its payload object. Editing a clone would have silently edited the original -- the worst possible version of this feature and invisible until someone noticed their world had changed. The test only compared layer COUNTS, so the mutation survived until it was strengthened to mutate a payload.",
+      "file": "public/world-model.js",
+      "find": "      return JSON.parse(JSON.stringify(stack));",
+      "replace": "      return stack.map((l) => ({ ...l, edits: l.edits.map((e) => ({ ...e })) }));",
+      "expect": "same base and a copy of the work"
+    },
+    {
+      "id": "later-layers-win-per-op",
+      "guards": "a later layer overrides an earlier one PER OP, so a move and a retint by two different authors coexist on the same object",
+      "note": "Whole-object replacement would make collaboration impossible and undo destructive: the newest edit would erase every other change anyone had made to that thing.",
+      "file": "public/world-model.js",
+      "find": "      for (const e of this.editsFor(address)) byOp.set(e.op, e);",
+      "replace": "      for (const e of this.editsFor(address)) { byOp.clear(); byOp.set(e.op, e); }",
+      "expect": "independent changes coexist"
+    },
+    {
+      "id": "rejected-layers-are-reported",
+      "guards": "a stored layer that fails to load is reported rather than dropped, so a player's work never vanishes from their world in silence",
+      "file": "public/world-model.js",
+      "find": "    if (bad) errors.push({ id: layer && layer.id, reason: bad });",
+      "replace": "    if (bad) { /* dropped */ }",
+      "expect": "REPORTED, not silently dropped"
+    },
+    {
+      "id": "a-removal-wins-outright",
+      "guards": "a remove beats every other edit to the same address, whatever order they arrived in",
+      "file": "public/world-model.js",
+      "find": "      if (byOp.has(\"remove\")) return { removed: true, address };",
+      "replace": "      if (false) return { removed: true, address };",
+      "expect": "removal wins outright"
+    },
+    {
+      "id": "seed-zero-is-the-original-world",
+      "guards": "seed 0 reproduces the pre-seed noise field byte for byte, so adding seeding did not silently move the world every measured number in this repo describes",
+      "note": "The seed is mixed in by MULTIPLICATION precisely so it contributes exactly zero at seed 0. Most of this suite asserts properties rather than values, so a terrain that shifted by a metre would go on passing while invalidating 20,624 plots, 480 variants, 1.45 M triangles, the zoning percentiles and the airport's 11,041 dry sample points. The identity is pinned against the original expression written out longhand.",
+      "file": "public/noise.js",
+      "find": "  let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(seed, 1013904223);",
+      "replace": "  let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(seed, 1013904223) + 1;",
+      "expect": "reproduces the original noise field exactly"
+    },
+    {
+      "id": "a-seeded-field-uses-its-seed",
+      "guards": "createNoise binds its seed into every function it returns, so a named world is genuinely a different landmass rather than the same one under a new name",
+      "note": "The first version of this mutation neutered only hash2 and valueNoise and left fbm seeded, so the world still differed and it SURVIVED -- a bad mutation, not a weak test. Targeting the single place the seed is resolved is what makes it bite.",
+      "file": "public/noise.js",
+      "find": "  const s = seedToInt(seed);",
+      "replace": "  const s = 0;",
+      "expect": "different seed is a different world"
+    },
+    {
+      "id": "the-field-carries-its-seed",
+      "guards": "a LandField keeps the seed it was built with, so a named world is a genuinely different landmass rather than the same one relabelled",
+      "note": "The seed lives on the FIELD rather than being threaded through every height call: heightAt is asked tens of millions of times per world build, and a parameter that must be passed at every call site is one somebody eventually forgets, producing a world that is half one place and half another.",
+      "file": "public/terrain.js",
+      "find": "    this.seed = seedToInt(seed);",
+      "replace": "    this.seed = 0;",
+      "expect": "named seed is a genuinely different landmass"
+    },
+    {
+      "id": "the-height-function-reads-the-fields-seed",
+      "guards": "makeHeightAt reads the field's seed and passes it to every shaping function, so seeding reaches the actual ground rather than stopping at the field object",
+      "note": "An earlier version of this mutation neutered only edgeFalloff and SURVIVED -- cliffiness, shoreRampAt and reliefAt were still seeded, so the world still differed. A partial mutation proves nothing. KNOWN GAP: this pins that the seed reaches the shaping functions collectively, not that each one's seed is individually load-bearing.",
+      "file": "public/terrain.js",
+      "find": "  const seed = field && Number.isFinite(field.seed) ? field.seed : DEFAULT_SEED;",
+      "replace": "  const seed = DEFAULT_SEED;",
+      "expect": "named seed is a genuinely different landmass"
     }
   ]
 }

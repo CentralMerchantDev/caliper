@@ -1614,6 +1614,31 @@ body.inspecting-mobile #nav-compass-pad {
     </div>
         </div>
       </div>
+      <!-- THE CATALOGUE IS A DOOR, AND IT DID NOT HAVE ONE.
+           Six pages exist in public/ and exactly one of them was reachable:
+           model-library.html (53 KB), kit-contact-sheet.html (27 KB),
+           city.html (27 KB) and world.html (9 KB) were linked from nowhere at
+           all. 2,400 registry entries and 2,403 model builders that a player
+           could only reach by typing the filename.
+
+           It is filed under Build rather than under More because in a game
+           about building the library is not a gallery of what was made -- it is
+           the CATALOGUE YOU BUILD FROM. Putting it beside "Audio" and
+           "Flythrough" would repeat the mistake in a smaller way.
+
+           test/reachability.test.ts walks these links, because this defect
+           recurs silently: nothing breaks when a page stops being reachable,
+           which is exactly why nobody noticed for four pages. -->
+      <div class="menu" data-menu="build">
+        <button type="button" class="cc-cmd menu-trigger" id="menu-build" aria-haspopup="true" aria-expanded="false" aria-controls="menupanel-build" title="The catalogue you build from, and the kit it is made of"><span class="cc-cmd-icon" aria-hidden="true">▣</span><span class="cc-cmd-label">Build</span><span class="menu-caret" aria-hidden="true">▾</span></button>
+        <div class="menu-panel" id="menupanel-build" role="menu" aria-labelledby="menu-build" hidden>
+          <a href="./model-library.html" class="btn-pill" role="menuitem" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px" title="Every building, prop, roadway and bridge in the catalogue">▣ Model Catalogue</a>
+          <a href="./kit-contact-sheet.html" class="btn-pill" role="menuitem" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px" title="Contact sheet of the road and street kit">▤ Kit Sheet</a>
+          <a href="./city.html" class="btn-pill" role="menuitem" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px" title="The 26 km city on its own, without the application chrome">◱ The City</a>
+          <a href="./world.html" class="btn-pill" role="menuitem" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px" title="The parcel the change pipeline edits, on its own">◰ The Parcel</a>
+        </div>
+      </div>
+
       <div class="menu" data-menu="more">
         <button type="button" class="cc-cmd menu-trigger" id="menu-more" aria-haspopup="true" aria-expanded="false" aria-controls="menupanel-more" title="Tour, grid, audio, flythrough and export"><span class="cc-cmd-icon" aria-hidden="true">⋯</span><span class="cc-cmd-label">More</span><span class="menu-caret" aria-hidden="true">▾</span></button>
         <div class="menu-panel" id="menupanel-more" role="menu" aria-labelledby="menu-more" hidden>
@@ -1945,7 +1970,7 @@ body.inspecting-mobile #nav-compass-pad {
         </div>
       </div>
       <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#d1fae5">
-        <strong>Continuous Verification:</strong> <span id="claim-node-tests">688</span> Node tests and <span id="claim-worker-tests">12</span> Cloudflare Worker integration tests, run against this repository. This sentence has now gone stale three times in a row while claiming it was read from the runner, so it is no longer trusted to a human: <code>test/publicClaims.test.ts</code> counts the suite and fails if these numbers drift.
+        <strong>Continuous Verification:</strong> <span id="claim-node-tests">794</span> Node tests and <span id="claim-worker-tests">12</span> Cloudflare Worker integration tests, run against this repository. This sentence has now gone stale three times in a row while claiming it was read from the runner, so it is no longer trusted to a human: <code>test/publicClaims.test.ts</code> counts the suite and fails if these numbers drift.
       </div>
       <!-- WHAT THIS SITE DOES WITH WHAT YOU TYPE.
            There was no privacy notice of any kind, on a public demo that sends

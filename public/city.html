@@ -34,6 +34,24 @@
 </style>
 </head>
 <body>
+<!-- A WAY BACK. Every one of these pages was reachable only by typing its
+     filename, and none of them offered a way home once you were there. A door
+     that only opens one way is barely a door: a player who finds the catalogue
+     and cannot get back to the world has been trapped by the navigation, which
+     reads as broken even though every page works.
+
+     A plain anchor, deliberately. It needs no script, cannot break when a
+     renderer fails to boot, and is the first thing painted rather than the
+     last -- these pages build large scenes, and a back link that appears only
+     after that is not there when it is most needed. -->
+<a href="./index.html" class="back-to-caliper" aria-label="Back to CALIPER"
+   style="position:fixed;top:14px;left:14px;z-index:9999;display:inline-flex;align-items:center;gap:7px;
+          padding:7px 13px;border-radius:11px;text-decoration:none;font:600 12px/1 system-ui,sans-serif;
+          letter-spacing:.02em;color:#e8e4de;background:rgba(22,20,18,.82);border:1px solid rgba(255,255,255,.16);
+          backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 6px 20px rgba(0,0,0,.4)">
+  <span aria-hidden="true">&#8592;</span> CALIPER
+</a>
+
 <div id="load">BUILDING THE WORLD…</div>
 <div id="hud" class="panel"><b>CALIPER CITY</b><div id="legend"></div></div>
 <div id="views" class="panel"></div>

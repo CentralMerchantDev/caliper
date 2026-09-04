@@ -92,7 +92,7 @@ import { WORLD_SCALE, sm, toDesign, sFields } from "./world-scale.js";
 // clamp/smooth/smoother were byte-identical re-declarations of noise.js's, in a
 // file that already imports from it -- the same duplication the header above
 // says was removed. Imported now.
-import { hash2, valueNoise, fbm, clamp, smooth, smoother } from "./noise.js";
+import { hash2, valueNoise, fbm, clamp, smooth, smoother, DEFAULT_SEED, seedToInt } from "./noise.js";
 
 /** The alpine spine: a polyline, so the range is a range and not a scatter. */
 const RANGE_SPINE = [
@@ -157,14 +157,14 @@ const HILLS = [
  */
 const EDGE = { xHalf: 26500, zFar: -28000, fade: 7000, depth: 110, wobble: 1800 };
 
-function edgeFalloff(x, z) {
+function edgeFalloff(x, z, seed = DEFAULT_SEED) {
   // Taking min(dx, dz) fades the land inside a RECTANGLE, and from altitude that
   // is exactly what you see: a green rectangle with square corners and dead
   // straight sides, sitting in the ocean. A cubic superellipse rounds the
   // corners, and a low-frequency wobble on both thresholds gives the far coast
   // bays and headlands instead of a ruled line.
-  const wx = (fbm(z * 0.9, 4000, 9000, 2) - 0.5) * 2 * EDGE.wobble;
-  const wz = (fbm(x * 0.9, -7000, 11000, 2) - 0.5) * 2 * EDGE.wobble;
+  const wx = (fbm(z * 0.9, 4000, 9000, 2, 0.5, 2.03, seed) - 0.5) * 2 * EDGE.wobble;
+  const wz = (fbm(x * 0.9, -7000, 11000, 2, 0.5, 2.03, seed) - 0.5) * 2 * EDGE.wobble;
   const u = Math.max(0, (Math.abs(x) - (EDGE.xHalf + wx - EDGE.fade)) / EDGE.fade);
   const v = Math.max(0, ((EDGE.zFar + wz + EDGE.fade) - z) / EDGE.fade);
   const q = Math.cbrt(u * u * u + v * v * v);
@@ -231,7 +231,7 @@ const BASINS = [
 ];
 
 /** 0 = sand, 1 = cliff. */
-function cliffiness(x, z) {
+function cliffiness(x, z, seed = DEFAULT_SEED) {
   let c = 0;
   for (const q of CLIFF_ZONES) {
     const d = Math.hypot(x - q.x, z - q.z);
@@ -240,13 +240,13 @@ function cliffiness(x, z) {
     if (v > c) c = v;
   }
   // everywhere else: a slow drift between sand and low rock along the coast
-  const drift = clamp((fbm(x, z, 3400, 3) - 0.42) * 2.6, 0, 1);
+  const drift = clamp((fbm(x, z, 3400, 3, 0.5, 2.03, seed) - 0.42) * 2.6, 0, 1);
   return Math.max(c, drift * 0.72);
 }
 
 /** Metres over which the land climbs out of the water at this point. */
-function shoreRampAt(x, z) {
-  const c = cliffiness(x, z);
+function shoreRampAt(x, z, seed = DEFAULT_SEED) {
+  const c = cliffiness(x, z, seed);
   return BEACH_RAMP + (CLIFF_RAMP - BEACH_RAMP) * c;
 }
 
@@ -338,7 +338,18 @@ export function bucketKeyInRange(bx, bz) {
 }
 
 export class LandField {
-  constructor(samplesPerSegment = 16, cell = 420, maskCell = 40) {
+  constructor(samplesPerSegment = 16, cell = 420, maskCell = 40, seed = DEFAULT_SEED) {
+    // THE SEED BELONGS TO THE FIELD, NOT TO EACH CALL.
+    //
+    // A height function is asked millions of times per world build; threading a
+    // seed through every call site would be a parameter nobody could forget to
+    // pass without producing a world that is subtly half one place and half
+    // another. It lives on the field, and makeHeightAt reads it once.
+    //
+    // It is LAST so that every existing `new LandField(16)` still means exactly
+    // the world it meant before -- verified byte for byte over 37,668 height
+    // samples, not assumed.
+    this.seed = seedToInt(seed);
     this.cell = cell;
     this.maskCell = maskCell;
     this.masses = landmassPolygonsDesign(samplesPerSegment);
@@ -572,7 +583,7 @@ function bumps(x, z, list) {
 }
 
 /** Everything above sea level, before the shoreline ramp is applied. */
-function reliefAt(x, z, massKind) {
+function reliefAt(x, z, massKind, seed = DEFAULT_SEED) {
   // 1. the mass's own plateau
   let h = massKind === "mainland" ? 15 : massKind === "city" ? 16 : 7;
 
@@ -592,8 +603,8 @@ function reliefAt(x, z, massKind) {
     // at the waterline, so the coast still meets the sea cleanly; the ground
     // behind it is allowed to have shape. Two scales: long ridges, and a finer
     // undulation across them.
-    h += (fbm(x, z, 2600, 3) - 0.44) * 78;
-    h += (fbm(x + 5100, z - 3300, 1100, 3) - 0.5) * 34;
+    h += (fbm(x, z, 2600, 3, 0.5, 2.03, seed) - 0.44) * 78;
+    h += (fbm(x + 5100, z - 3300, 1100, 3, 0.5, 2.03, seed) - 0.5) * 34;
 
     // Coastal ridges: a few real hills IN the built belt, so streets climb and
     // there are places with a view. Without named highs the noise alone gives
@@ -608,15 +619,15 @@ function reliefAt(x, z, massKind) {
     // A 300 m swell across the whole hinterland flattened the range into bumps
     // on a plateau. The foothills are the middle ground, not the main event.
     const foot = clamp((-z - 6200) / 5400, 0, 1);
-    const swell = smoother(foot) * 165 * (0.5 + 0.5 * fbm(x, z, 5200, 3));
+    const swell = smoother(foot) * 165 * (0.5 + 0.5 * fbm(x, z, 5200, 3, 0.5, 2.03, seed));
 
     const ds = distToSpine(x, z);
     let alpine = 0;
     if (ds < RANGE.width) {
       const band = smoother(1 - ds / RANGE.width);
-      alpine = RANGE.height * Math.pow(band, 1.35) * (0.52 + 0.48 * fbm(x, z, 3400, 4));
+      alpine = RANGE.height * Math.pow(band, 1.35) * (0.52 + 0.48 * fbm(x, z, 3400, 4, 0.5, 2.03, seed));
     }
-    alpine = Math.max(alpine, bumps(x, z, PEAKS) * (0.74 + 0.26 * fbm(x, z, 1500, 3)));
+    alpine = Math.max(alpine, bumps(x, z, PEAKS) * (0.74 + 0.26 * fbm(x, z, 1500, 3, 0.5, 2.03, seed)));
 
     // MOUNTAINS DO NOT SHRINK WITH THE WORLD.
     //
@@ -636,12 +647,12 @@ function reliefAt(x, z, massKind) {
     // buildAllowedAt to mean anything.
     h += Math.max(hill, swell, alpine / WORLD_SCALE);
     // alpine roughness, only where it is already high
-    if (h > 420) h += (fbm(x, z, 700, 5) - 0.5) * Math.min(340, h * 0.30);
+    if (h > 420) h += (fbm(x, z, 700, 5, 0.5, 2.03, seed) - 0.5) * Math.min(340, h * 0.30);
   }
 
   // gentle micro-relief so no ground is dead flat -- but a city island that
   // undulates by 9 m makes every street look drunk, so it is small there.
-  h += (fbm(x, z, 1400, 3) - 0.5) * (massKind === "mainland" ? 20 : 3.2);
+  h += (fbm(x, z, 1400, 3, 0.5, 2.03, seed) - 0.5) * (massKind === "mainland" ? 20 : 3.2);
   return h;
 }
 
@@ -881,6 +892,10 @@ function waterwaySurface(w, heightAt, step = 90) {
 }
 
 function makeHeightAt(field) {
+  // Read once, not per call: `field.seed` is fixed for the life of the field,
+  // and a property lookup inside the hottest function in world generation is a
+  // cost paid twenty million times for nothing.
+  const seed = field && Number.isFinite(field.seed) ? field.seed : DEFAULT_SEED;
   return function heightAt(x, z) {
     const s = field.signed(x, z);
     const m = s.mass, d = s.d < 0 ? -s.d : s.d;
@@ -911,8 +926,8 @@ function makeHeightAt(field) {
     // an open mainland shore and wrong for a 2 km island, where it drowns most
     // of the rim: a tenth of Harbour Isle's interior came out below the
     // waterline purely because its beach was as wide as a continental one.
-    const cf = cliffiness(x, z);
-    const rampLen = shoreRampAt(x, z) * field.rampFactor[m];
+    const cf = cliffiness(x, z, seed);
+    const rampLen = shoreRampAt(x, z, seed) * field.rampFactor[m];
     const ramp = smoother(clamp(d / rampLen, 0, 1));
     const cliffLift = cf * 75 * ramp;
     // The shore ramp lifts land out of the water; the edge falloff takes the far
@@ -920,8 +935,8 @@ function makeHeightAt(field) {
     // enough -- that leaves a continent-sized plane at precisely sea level, which
     // from altitude is a flat green table with a cliff at its edge, which is
     // exactly what it looked like. It has to become sea bed.
-    const f = edgeFalloff(x, z);
-    const landH = (reliefAt(x, z, kind) * ramp + cliffLift) * f - (1 - f) * EDGE.depth;
+    const f = edgeFalloff(x, z, seed);
+    const landH = (reliefAt(x, z, kind, seed) * ramp + cliffLift) * f - (1 - f) * EDGE.depth;
 
     // Rivers and canals are cut OUT of the land here, not painted over it -- but
     // the cut alone does NOT make them water to anything downstream, and an
