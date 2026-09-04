@@ -1,0 +1,39 @@
+G2: demo profile vs builder profile -- BLOCKED, and why
+
+What this step asks: a second "builder" profile for CONTROL_LIMITS, numbers
+only, no second code path -- switching profile should change only values,
+never which branch of logic runs.
+
+Why it is blocked rather than done: a genuine second profile needs two
+things this session does not have.
+
+1. Real, authorised numbers for a builder tier's spend caps. This touches
+   CONTROL_LIMITS, the object governing actual dollar limits on a live
+   pipeline. CLAUDE.md's "zero API spend without explicit authorisation"
+   applies to inventing a business number here as much as it applies to
+   spending one -- a fabricated builder-tier daily cap is still a business
+   decision, made without the authority to make it.
+2. A live selection mechanism. Nothing today decides which profile is
+   active -- no header, no env var, no route. Without one, a second profile
+   is reachable by nothing.
+
+Restructuring CONTROL_LIMITS into CONTROL_PROFILES.demo/.builder with
+invented builder numbers, and no code path that ever selects builder, would
+satisfy the LETTER of "numbers, not code paths" while producing exactly the
+shape AUDIT-PROTOCOL.md's own §2 asks an auditor to distrust: a test that is
+true by construction, proving a structure nothing uses. G1 (the previous
+step, same commit lineage) declined the equivalent temptation for "scope
+(one object)" for the same reason -- an unenforced constant with nothing
+reading it. This is the identical call, made explicitly here rather than by
+silent omission.
+
+What would unblock it: Mark supplies the actual builder-tier numbers (or
+confirms a stated multiple of CONTROL_LIMITS is the real answer), and a real
+call site that selects which profile is active. Until then this is honestly
+Undone, recorded as such in docs/WORLD-BUILD-PLAN.md, not silently skipped
+or faked.
+
+No source or test files changed for this step -- src/controlLayer.ts and
+everything else remain exactly as G1 left them.
+
+H1 (the full mutation suite) is next.

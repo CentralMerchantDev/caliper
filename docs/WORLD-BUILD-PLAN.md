@@ -789,10 +789,28 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       an unenforced constant would have been a number with nothing reading
       it, which is the exact "true by construction" shape this project's
       own protocol warns against.
-- [ ] **G2 — demo profile vs builder profile.** Numbers, not code paths. A
-      second profile must not introduce a second branch of behaviour.
-      *Test:* switching profile changes only values; the code path taken is
-      identical under both.
+- [!] **G2 — demo profile vs builder profile. BLOCKED.**
+      A genuine second profile needs two things this session does not have:
+      real, authorised numbers for a "builder" tier's spend caps (this
+      touches `CONTROL_LIMITS`, the file governing actual dollar limits on
+      a live pipeline — CLAUDE.md's "zero API spend without explicit
+      authorisation" applies to inventing a business number here as much as
+      to spending one), and a live selection mechanism to make the second
+      profile reachable at all. Neither exists tonight.
+      Restructuring `CONTROL_LIMITS` into a `CONTROL_PROFILES.demo /
+      .builder` shape with FABRICATED builder numbers, and no code path
+      that ever selects `builder`, would satisfy the letter of "numbers,
+      not code paths" while producing exactly the shape
+      `AUDIT-PROTOCOL.md` §2 asks an auditor to distrust: a test that is
+      true by construction, proving a structure nothing uses. G1 declined
+      the equivalent temptation for "scope (one object)" for the same
+      reason; this is the same call, made explicitly rather than by
+      omission.
+      *What would unblock it:* Mark supplies the actual builder-tier caps
+      (or confirms doubling/some stated multiple of `CONTROL_LIMITS` is the
+      real answer), and a real call site (a header, an env var, an
+      authenticated route) that selects which profile is active. Until
+      then this is honestly Undone, not silently skipped.
 
 ### Phase H — close-out *(do these; the build is not finished without them)*
 
