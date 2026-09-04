@@ -562,11 +562,31 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       not reach into; a real pointer event calling `.pick(x, z)` with a
       raycast hit is a small, mechanical follow-on once the renderer itself
       is live-wired (D7).
-- [ ] **D2 — describe.** A plain-English box scoped to the selection. **No option
-      list.** The absence of a menu is the point: the player writes English and
-      the machine deals with it.
-      *Test:* the request carries the selected address and the typed text, and
-      the typed text is never rendered back to the page as HTML.
+- [x] **D2 — describe.** Evidence: `public/describe-request.js`,
+      `makeDescribeRequest(selection, text)`. Every existing display path in
+      `index.html` already uses `.textContent` for visitor-typed text (grepped
+      across the whole file — never `.innerHTML` for it), which cannot execute
+      markup by construction of the DOM API. The one way that defense breaks
+      is something UPSTREAM templating the text into an HTML string first, so
+      this module's contract is narrower than escaping: the text is carried
+      VERBATIM, never touched, never concatenated into markup — there is
+      nothing here for an escaping bug to hide in, because there is no
+      string-building of it at all.
+      `test/describeRequest.test.ts` (4): the request carries the selected
+      address and the typed text; text containing real HTML metacharacters
+      (`<img src=x onerror=...>`) passes through byte-identical, not escaped,
+      not stripped, not wrapped; nothing selected is refused rather than
+      silently addressing nothing; empty/whitespace-only text is refused
+      rather than sent as an empty request.
+      Mutation `describe-request-carries-text-verbatim` CAUGHT — wraps the
+      text in `<span>...</span>`, the literal anti-pattern this module exists
+      to never do: `node scripts/_mutcheck.mjs
+      test/describeRequest.test.ts public/describe-request.js
+      test/mutations.json`.
+      **Undone:** the actual `<textarea>`/box in the page and its submit
+      handler are not built — this is the request-construction logic a real
+      box will call, following D1's same "prove the mechanism, defer the DOM
+      wiring" pattern.
 - [x] **D3 — ground it physically.** `assessTransform` against the real land.
       Built and tested: `public/transform.js`, `test/transform.test.ts` (9).
       Refusals carry the actual depth/size under that object; alternatives come

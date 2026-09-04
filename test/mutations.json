@@ -405,6 +405,15 @@
       "find": "      current = index.addressAt(x, z);\n      return current;",
       "replace": "      current = { ...index.addressAt(x, z) }; current.plotId = current.blockId;\n      return current;",
       "expect": "a pick returns a real plot id that is present in the plan"
+    },
+    {
+      "id": "describe-request-carries-text-verbatim",
+      "guards": "the requests text field is exactly what was typed -- never templated into a markup string, which is the one way the apps existing textContent-only display discipline could be defeated upstream",
+      "note": "Wrapping the text in a span is the literal anti-pattern this module exists to never do.",
+      "file": "public/describe-request.js",
+      "find": "    address: selection.current.plotId,\n    text,",
+      "replace": "    address: selection.current.plotId,\n    text: `<span>${text}</span>`,",
+      "expect": "typed text that looks like HTML passes through byte-identical"
     }
   ]
 }

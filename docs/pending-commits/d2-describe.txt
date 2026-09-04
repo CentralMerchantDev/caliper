@@ -1,0 +1,40 @@
+D2: describe -- a plain-English box, scoped to the selection, no option list
+
+What was wrong: nothing yet turned a selection (D1) and typed text into a
+request the pipeline could act on. The absence of an option list is the
+point of this step -- the player writes English, not a menu choice -- and
+the one risk that comes with a free-text box is displaying what was typed
+back as if it were markup.
+
+How it is known to be fixed:
+
+- public/describe-request.js, new. makeDescribeRequest(selection, text)
+  refuses when nothing is selected (named, not a silent address of nothing)
+  and refuses empty/whitespace-only text, otherwise returns
+  { ok: true, address, text }.
+- Verified first, not assumed: every existing display path in index.html
+  already uses .textContent for visitor-typed text -- grepped across the
+  whole file, never .innerHTML for it. .textContent cannot execute markup by
+  construction of the DOM API, so the actual risk is narrower than escaping:
+  it is whether anything UPSTREAM of display templates the text into an HTML
+  STRING first. This module's contract is written to that exact risk: text
+  is carried verbatim, never concatenated into markup, never touched at all
+  beyond being carried.
+- test/describeRequest.test.ts (4): the request carries the selected address
+  and the typed text; text containing real HTML metacharacters
+  (<img src=x onerror=...>) survives byte-identical, not escaped, not
+  stripped, not wrapped -- proving nothing on this path did anything clever
+  with it; no selection is refused rather than silently addressing nothing;
+  empty/whitespace text is refused rather than sent as an empty request.
+- Mutation `describe-request-carries-text-verbatim` CAUGHT. Wraps the typed
+  text in <span>...</span> -- the literal anti-pattern this module exists to
+  never do:
+  `node scripts/_mutcheck.mjs test/describeRequest.test.ts public/describe-request.js test/mutations.json`
+- `npm test`: 836/836. `npx tsc --noEmit`: clean.
+
+What is still open: the actual <textarea>/box in the page and its submit
+handler are not built -- same "prove the mechanism, defer the DOM wiring"
+pattern as D1. D4 (generate -- the source-edit path) is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.
