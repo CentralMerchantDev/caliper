@@ -492,7 +492,7 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 871 node tests + 12 worker tests",
+      "find": "npm test            # 872 node tests + 12 worker tests",
       "replace": "npm test            # 900 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
@@ -504,6 +504,15 @@
       "find": "      return { ok: false, reason: `grid: cannot close \"${name}\" -- the whole world is open, not region-tracked` };",
       "replace": "      return { ok: true };",
       "expect": "closing a region on a whole-world-open grid (open === null) is refused"
+    },
+    {
+      "id": "createWorld-reuses-land-for-a-repeat-seed",
+      "guards": "a second createWorld() call for the same seed reuses the same LandField/heightAt object, not a fresh one -- the memoisation Finding 5 asked for, without which generateWorld's own heightAt-identity-keyed caches (cityDemand, placeFeatures) never hit on a repeat call",
+      "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 5): createWorld() cost 2.3-2.7s per call and a repeat call with the identical seed was not materially cheaper, because a fresh LandField/heightAt was built every time.",
+      "file": "public/world.js",
+      "find": "  let entry = landCache.get(seed);",
+      "replace": "  let entry = undefined;",
+      "expect": "a second createWorld() call for the same seed reuses the same land"
     }
   ]
 }

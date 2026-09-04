@@ -76,3 +76,27 @@ test("world.resolve and world.toJSON are the layer model's own, not a second imp
   assert.deepEqual(w.resolve("p9"), w.layers.resolve("p9"));
   assert.deepEqual(w.toJSON(), w.layers.toJSON());
 });
+
+// Found by docs/audits/UMAA-phases-B-H.md (Finding 5): createWorld() costs
+// 2.3-2.7 s per call and a REPEAT call with the identical seed was not
+// materially cheaper, because a fresh LandField/heightAt was built every
+// time and generateWorld's own internal caches are keyed on that object's
+// identity, not the seed. A caller doing exactly what B1's store and this
+// suite's own 17 other createWorld() call sites do -- ask for the same seed
+// more than once in a session -- paid the full cost every time.
+// Asserts the CAUSE (the same object is reused), not the timing CONSEQUENCE --
+// the lesson test/layoutFits.test.ts's own H1 survivor fix already recorded
+// for this project: a millisecond threshold is a margin that erodes with
+// unrelated tuning and machine load, an object-identity check cannot drift.
+// The actual saving (measured separately, not asserted here, because timing
+// assertions are exactly the flakiness this discipline exists to avoid): a
+// fresh heightAt costs ~2.4s to generate a world from; the SAME heightAt
+// object, reused, costs ~1.2s -- generateWorld's own cityDemand/placeFeatures
+// caches (keyed on heightAt identity) finally get to hit on a repeat call.
+test("a second createWorld() call for the same seed reuses the same land -- not a fresh one every time", () => {
+  const a = createWorld({ seed: "sixth-street-crossing" });
+  const b = createWorld({ seed: "sixth-street-crossing" });
+  assert.equal(a.land, b.land, "two calls with the identical seed built two separate LandField instances -- the memoisation this test guards is not happening");
+  const c = createWorld({ seed: "a-completely-different-seed" });
+  assert.notEqual(a.land, c.land, "two calls with DIFFERENT seeds shared the same land -- the cache is keyed wrong");
+});

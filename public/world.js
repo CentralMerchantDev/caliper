@@ -24,6 +24,41 @@ import { createWorldModel } from "./world-model.js";
 import { createGrid } from "./grid.js";
 import { DEFAULT_SEED } from "./noise.js";
 
+// LAND, MEMOISED BY SEED -- NOT THE WHOLE WORLD.
+//
+// Found by docs/audits/UMAA-phases-B-H.md (Finding 5): createWorld() cost
+// 2.3-2.7 s per call and a REPEAT call with the identical seed was not
+// materially cheaper, because it built a fresh LandField/heightAt every
+// time, and generateWorld's own internal caches (cityDemand, placeFeatures --
+// see city-plan.js, features.js) are keyed on that heightAt object's
+// IDENTITY, not the seed value. Building it once per seed and handing back
+// the same object is what lets those existing caches actually hit on a
+// repeat call (measured, isolated: 2657 ms fresh heightAt vs 1227 ms same
+// heightAt object) -- this file was the one thing standing between that
+// saving and a caller who asks for the same seed twice.
+//
+// This does NOT memoise `plan`, `layers` or `grid`. `plan` still comes from
+// a fresh generateWorld() call every time, because test/worldSpec.test.ts
+// pins that two calls (even with the identical heightAt) must return
+// independently mutable district data -- caching the plan itself would
+// silently violate that. `layers` and `grid` stay one-per-call on purpose:
+// test/world.test.ts's "two instances with the same seed have... independent
+// layers" would break the moment two callers of the same seed got handed the
+// same mutable layer-model object. LandField itself has no caller-mutable
+// state after construction (nothing in this codebase writes to a LandField
+// instance once built), which is what makes sharing it safe.
+const landCache = new Map();
+
+function landFor(seed) {
+  let entry = landCache.get(seed);
+  if (!entry) {
+    const land = new LandField(16, 420, 40, seed);
+    entry = { land, heightAt: makeHeightAt(land) };
+    landCache.set(seed, entry);
+  }
+  return entry;
+}
+
 /**
  * `{ seed, layers, regions }` in, `{ seed, plan, land, layers, grid,
  * resolve, toJSON }` out.
@@ -42,8 +77,7 @@ import { DEFAULT_SEED } from "./noise.js";
  * every world did before this parameter existed.
  */
 export function createWorld({ seed = DEFAULT_SEED, layers = [], regions = null } = {}) {
-  const land = new LandField(16, 420, 40, seed);
-  const heightAt = makeHeightAt(land);
+  const { land, heightAt } = landFor(seed);
   const plan = generateWorld(heightAt, seed);
   const layerModel = createWorldModel({ seed, layers });
   const grid = createGrid({ openRegions: regions });

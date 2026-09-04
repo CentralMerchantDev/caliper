@@ -1,0 +1,88 @@
+Final audit Finding 5 (MEDIUM): createWorld() cost ~2.4s per call and a
+repeat call with the identical seed was not materially cheaper
+
+What was wrong: docs/audits/UMAA-phases-B-H.md's blind auditor measured
+createWorld() at 2.4-2.5s per call and found Phase B-H had added ~17 new
+test-suite call sites that ask for the same seed more than once (5 in
+applyLayers.test.ts, 3 in instanceGroups.test.ts, 3 in
+applyAndPersist.test.ts, 2 each in questCompletion/regions.test.ts, 1 each
+in undo/worldStore.test.ts) -- a meaningful fraction of the suite's runtime,
+and confirmed the same finding the earlier Phase-A audit
+(docs/audits/UMAA-phase-A.md) had already made and left undocumented and
+unfixed. The root cause, isolated there and reconfirmed here: createWorld()
+built a fresh LandField/heightAt on every single call, so the WeakMap caches
+inside generateWorld's own cityDemand/placeFeatures (city-plan.js,
+features.js) -- keyed on heightAt object IDENTITY, not the seed value --
+never hit, even for two calls with the identical seed.
+
+How it's fixed: public/world.js now memoizes LandField/heightAt in a
+module-level Map keyed on seed (landFor()), so a repeat createWorld() call
+for the same seed reuses the same land/heightAt object and the existing
+downstream caches finally get to hit. Deliberately NOT a blanket cache of
+the whole createWorld() return: `plan` is still generated fresh every call
+(test/worldSpec.test.ts requires two generateWorld() calls, even with an
+identical heightAt, to return independently mutable district data -- caching
+plan itself would silently break that), and `layers`/`grid` stay one
+fresh instance per call on purpose (test/world.test.ts's own "two instances
+with the same seed have... independent layers" would break the moment two
+callers of the same seed shared a mutable layer-model object). LandField has
+no caller-mutable state after construction anywhere in this codebase
+(checked directly: zero test mutates a `.land` property), which is what
+makes sharing it safe.
+
+Test-first, proven both directions: the new tests were written and run
+against the PRE-fix world.js first (git checkout -- public/world.js), which
+correctly failed RED on both:
+
+  node scripts/_mutcheck.mjs test/world.test.ts public/world.js test/mutations.json
+  baseline: RED
+  a second createWorld() call for the same seed reuses the same land -- not a fresh one every time
+  a second createWorld() call for the same seed is measurably cheaper than the first
+
+then the fix was restored and the same run went GREEN. A first version of
+the second test asserted a millisecond threshold (second call under half the
+first) and was itself flaky -- it failed on a clean re-run for the same
+reason test/layoutFits.test.ts's own H1 survivor fix already recorded in
+this project: a timing margin erodes under machine load and JIT warmup, and
+this codebase's own standard of proof is "assert the cause, not the
+consequence." Dropped in favor of the deterministic test that remains
+(object identity: a.land === b.land for the same seed, a.land !== c.land for
+a different one). The actual timing improvement was measured separately,
+outside the automated suite, specifically because timing assertions are the
+flakiness this discipline exists to avoid:
+
+  node -e '... createWorld({seed}) x3, same seed, after a warmup call ...'
+  first call (cold land):        4093 ms
+  second call (same seed):       2054 ms
+  third call (same seed):        2064 ms
+
+~50% reduction, consistent across two repeat calls, matching both audits'
+independent measurements (2657ms -> 1227ms for a bare heightAt reuse).
+
+Mutation proof: test/mutations.json gained
+createWorld-reuses-land-for-a-repeat-seed (landFor()'s cache lookup replaced
+with `undefined`, forcing a fresh LandField every call):
+
+  node scripts/_mutcheck.mjs test/world.test.ts public/world.js test/mutations.json
+  baseline: GREEN
+  CAUGHT   world-toJSON-carries-its-layers
+  CAUGHT   createWorld-reuses-land-for-a-repeat-seed
+  restored: byte identical
+
+Measured: npx tsc --noEmit clean. npm test: 872/872, 0 fail (871 plus this
+commit's own two new tests, minus the one flaky test dropped before it was
+ever committed). Whole-suite runtime dropped from ~292s to ~235s on the same
+machine, same run method -- roughly a fifth faster, consistent with the
+per-call saving landing across the suite's real repeat-seed call sites, not
+just the one isolated test that measures it directly. CLAUDE.md's own count
+line and test/testCount.generated.json regenerated to 872; the
+claudeMd-test-count-matches-generated mutation (Finding 1's own control)
+re-verified CAUGHT against the new count.
+
+This closes the final finding from docs/audits/UMAA-phases-B-H.md. All five
+findings (CLAUDE.md's stale count, the two missing audit artefacts, the
+untested closeRegion(open===null) branch, the duplicate worldFromJSON
+naming, and this memoization gap) are now addressed.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.
