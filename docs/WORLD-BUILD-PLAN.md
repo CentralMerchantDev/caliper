@@ -469,12 +469,29 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       (real string seed, empty layers), not a malformed one, so the mutation
       cannot be caught by the next validation check for an unrelated reason:
       `node scripts/_mutcheck.mjs test/worldStore.test.ts public/world-store.js test/mutations.json`.
-- [ ] **B2 — apply layers to the plan.** After `planCity`, before the renderer.
-      Resolve **only touched addresses** — `world.touched()` already gives that
-      set; never walk all 20,624.
-      *Test:* an edit changes exactly its own object and nothing else; the
-      resolve count equals the touched count, not the plot count.
-      *Mutation:* re-resolve everything → the touched-only test red.
+- [x] **B2 — apply layers to the plan.** Evidence: `public/apply-layers.js`,
+      `applyLayers(placements, world)`. Resolves only `world.layers.touched()`
+      — not a top-level `world.touched()`, since the ledger's own A4 return
+      shape (`{ seed, plan, land, layers, resolve, toJSON }`) does not list
+      one; caught by the first test run (`world.touched is not a function`)
+      and fixed in the caller rather than by silently widening world.js's
+      already-committed, already-mutation-tested surface.
+      `test/applyLayers.test.ts` (5): an edit changes exactly its own
+      placement — every OTHER placement in the output is the exact same
+      object reference as the input, not a copy that happens to be
+      unchanged; `world.resolve` is called exactly once for one touched
+      address out of 1,000 placements, never once per placement; a removed
+      address is marked removed rather than silently kept; an edit
+      addressing something outside this placement set (a road, a park) does
+      not throw; zero touched addresses returns the identical array, not an
+      allocated copy.
+      Mutation `apply-layers-resolves-only-touched` CAUGHT — re-resolving
+      every placement instead of only the touched ones still produces a
+      visually correct result (an unedited address resolves to an unedited
+      state), so only counting `resolve()` calls catches it, never a
+      happy-path visibility check:
+      `node scripts/_mutcheck.mjs test/applyLayers.test.ts public/apply-layers.js test/mutations.json`.
+      **Phase B (it persists) complete.**
 
 ### Phase C — it draws  *(visual verification is Windows-only — see note)*
 

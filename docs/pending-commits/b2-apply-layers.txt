@@ -1,0 +1,45 @@
+B2: layers apply to the plan, touching only what they touch
+
+What was wrong: nothing yet connected a world's layer stack (A4, B1) to a
+built plan. Even once that connection exists, the naive version -- re-resolve
+every placement against the layer stack -- would make the cost of having ANY
+layers at all scale with the size of the world (up to ~20,000 placements)
+instead of the size of the edit, which for a real session is a handful of
+addresses at most.
+
+How it is known to be fixed:
+
+- public/apply-layers.js, new. applyLayers(placements, world) walks
+  world.layers.touched() -- not a bare world.touched(); the first test run
+  surfaced that A4's already-committed return shape only lists
+  { seed, plan, land, layers, resolve, toJSON }, and the fix went in the
+  caller rather than silently widening a surface that was already shipped and
+  mutation-tested.
+- Untouched placements are not copied, only referenced: the output array
+  holds the SAME OBJECT for every address no layer mentions. That is the
+  actual guard, not "the edit is visible" -- a function that re-resolved
+  everything would also make an edit visible, correctly, while still costing
+  O(plots) on every build.
+- test/applyLayers.test.ts (5): a touched placement is replaced and every
+  other one is reference-identical to the input, not merely deep-equal;
+  world.resolve is called exactly once for one touched address out of 1,000
+  placements; a removed address is marked removed; an edit addressing
+  something outside this placement set (a road, a park) does not throw;
+  zero touched addresses returns the identical array rather than an
+  allocated copy.
+- Mutation `apply-layers-resolves-only-touched` CAUGHT. Loops over every
+  placement and resolves each one instead of only the touched addresses --
+  still visually correct (an unedited address resolves to an unedited state),
+  so only counting resolve() calls catches it:
+  `node scripts/_mutcheck.mjs test/applyLayers.test.ts public/apply-layers.js test/mutations.json`
+- `npm test`: 821/821. `npx tsc --noEmit`: clean.
+
+Phase B (it persists) is complete: B1 and B2 both done with evidence.
+
+What is still open: Phase C (it draws) is next -- C1 (instanced draw honours
+overrides) and C2 (generated models render), both visual and only verifiable
+on Windows via scripts/shoot-app.mjs, per the plan's own note. The
+consolidated blind audit deferred from each phase boundary, including Phase
+A's already-completed findings, still applies once B/C/D/E/F/G are done.
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.

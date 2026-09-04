@@ -369,6 +369,15 @@
       "find": "        return { ok: false, reason: `stored record for \"${worldId}\" is not valid JSON -- refusing to load it as an empty world` };",
       "replace": "        data = { seed: \"recovered\", layers: [] };",
       "expect": "is REPORTED, not silently dropped"
+    },
+    {
+      "id": "apply-layers-resolves-only-touched",
+      "guards": "applyLayers calls world.resolve only for addresses the layer stack actually touched, never once per placement -- the cost of having layers scales with the size of the edit, not the size of the world",
+      "note": "Re-resolving every placement would still produce a visually correct result (an untouched address resolves to an unedited state), so a happy-path visibility test would not catch this -- only counting resolve() calls does.",
+      "file": "public/apply-layers.js",
+      "find": "  for (const address of touched) {",
+      "replace": "  for (const p of placements) { const address = p.plotId;",
+      "expect": "resolve is called exactly once per touched address"
     }
   ]
 }
