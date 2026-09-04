@@ -1182,12 +1182,6 @@ export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
     return mergeGeometries([{ geo: b, tag: "wall" }], mat, geomT);
   }
 
-  const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3; // villa-lod0-tris
-  const sample1 = buildLOD1(T);
-  const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
-  const tris2 = 12;
-
   return {
     id: `bld-villa-${seed}`,
     typology: "bld-villa",
@@ -1201,9 +1195,9 @@ export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, roofStyle, corner, foundation, character, hasPorch, garageType, hasBay, hasDormers, hasChimney },
     lod: [
-      { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) },
-      { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
+      { level: 0, tris: 700, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 50, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
 }
@@ -1364,12 +1358,6 @@ export function bldTerrace(seed = "terrace-0", options = {}, T = THREE) {
     return mergeGeometries([{ geo: b, tag: "wall" }], mat, geomT);
   }
 
-  const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3;
-  const sample1 = buildLOD1(T);
-  const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
-  const tris2 = 12;
-
   return {
     id: `bld-terrace-${seed}`,
     typology: "bld-terrace",
@@ -1383,9 +1371,9 @@ export function bldTerrace(seed = "terrace-0", options = {}, T = THREE) {
     material: mat,
     params: { units, storeys, roofStyle, corner, position, foundation, character, hasBasement, hasStringCourse, hasDormers },
     lod: [
-      { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) },
-      { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
+      { level: 0, tris: 480, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 50, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
 }
@@ -1543,12 +1531,6 @@ export function bldTownhouse(seed = "townhouse-0", options = {}, T = THREE) {
     return mergeGeometries([{ geo: b, tag: "wall" }], mat, geomT);
   }
 
-  const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3;
-  const sample1 = buildLOD1(T);
-  const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
-  const tris2 = 12;
-
   return {
     id: `bld-townhouse-${seed}`,
     typology: "bld-townhouse",
@@ -1562,9 +1544,9 @@ export function bldTownhouse(seed = "townhouse-0", options = {}, T = THREE) {
     material: mat,
     params: { storeys, stoopHeightTier, bayStyle, hasRoofDeck, hasRearExtension, corniceTier, corner, position, foundation, character },
     lod: [
-      { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) },
-      { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
+      { level: 0, tris: 320, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 50, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
 }
@@ -1701,12 +1683,6 @@ export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
     return mergeGeometries([{ geo: b, tag: "wall" }], mat, geomT);
   }
 
-  const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3;
-  const sample1 = buildLOD1(T);
-  const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
-  const tris2 = 12;
-
   return {
     id: `bld-midrise-${seed}`,
     typology: "bld-midrise",
@@ -1720,9 +1696,9 @@ export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, podiumType, hasSetback, cornerTreatment, corner, foundation, character },
     lod: [
-      { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) }, // midrise-lod1
-      { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
+      { level: 0, tris: 320, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 50, createGeometry: (geomT) => buildLOD1(geomT || T) }, // midrise-lod1
+      { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
 }
@@ -1840,12 +1816,6 @@ export function bldShop(seed = "shop-0", options = {}, T = THREE) {
     return mergeGeometries([{ geo: b, tag: "wall" }], mat, geomT);
   }
 
-  const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3;
-  const sample1 = buildLOD1(T);
-  const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
-  const tris2 = 12;
-
   return {
     id: `bld-shop-${seed}`,
     typology: "bld-shop",
@@ -1859,9 +1829,9 @@ export function bldShop(seed = "shop-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, hasAwning, isCornerUnit, corner, foundation, character },
     lod: [
-      { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) },
-      { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
+      { level: 0, tris: 180, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
 }
@@ -1969,12 +1939,6 @@ export function bldOffice(seed = "office-0", options = {}, T = THREE) {
     return mergeGeometries([{ geo: b, tag: "wall" }], mat, geomT);
   }
 
-  const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3;
-  const sample1 = buildLOD1(T);
-  const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
-  const tris2 = 12;
-
   return {
     id: `bld-office-${seed}`,
     typology: "bld-office",
@@ -1988,9 +1952,9 @@ export function bldOffice(seed = "office-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, hasCoreBulge, corner, foundation, character },
     lod: [
-      { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) },
-      { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
+      { level: 0, tris: 200, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
 }
@@ -2144,12 +2108,6 @@ export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
     return mergeGeometries([{ geo: b, tag: "wall" }], mat, geomT);
   }
 
-  const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3;
-  const sample1 = buildLOD1(T);
-  const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
-  const tris2 = 12;
-
   return {
     id: `bld-apartment-walkup-${seed}`,
     typology: "bld-apartment-walkup",
@@ -2163,9 +2121,9 @@ export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, stairPosition, roofStyle, hasGarden, corner, position, foundation, character },
     lod: [
-      { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) },
-      { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
+      { level: 0, tris: 500, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
 }
@@ -2273,12 +2231,6 @@ export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
     return mergeGeometries([{ geo: b, tag: "wall" }], mat, geomT);
   }
 
-  const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3;
-  const sample1 = buildLOD1(T);
-  const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
-  const tris2 = 12;
-
   return {
     id: `bld-warehouse-${seed}`,
     typology: "bld-warehouse",
@@ -2291,9 +2243,9 @@ export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, roofStyle },
     lod: [
-      { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) },
-      { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
+      { level: 0, tris: 240, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
 }
@@ -2388,12 +2340,6 @@ export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
     return mergeGeometries([{ geo: b, tag: "wall" }], mat, geomT);
   }
 
-  const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3;
-  const sample1 = buildLOD1(T);
-  const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
-  const tris2 = 12;
-
   return {
     id: `bld-workshop-${seed}`,
     typology: "bld-workshop",
@@ -2406,9 +2352,9 @@ export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, roofStyle },
     lod: [
-      { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) },
-      { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
+      { level: 0, tris: 170, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
 }
@@ -2543,12 +2489,6 @@ export function bldTower(seed = "tower-0", options = {}, T = THREE) {
     return mergeGeometries([{ geo: b, tag: "wall" }], mat, geomT);
   }
 
-  const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3;
-  const sample1 = buildLOD1(T);
-  const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
-  const tris2 = 12;
-
   return {
     id: `bld-tower-${seed}`,
     typology: "bld-tower",
@@ -2561,9 +2501,9 @@ export function bldTower(seed = "tower-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, profile },
     lod: [
-      { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) },
-      { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
+      { level: 0, tris: 160, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
 }
@@ -2667,12 +2607,6 @@ export function bldHighStreetTerrace(seed = "highstreet-0", options = {}, T = TH
     return mergeGeometries([{ geo: b, tag: "wall" }], mat, geomT);
   }
 
-  const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3;
-  const sample1 = buildLOD1(T);
-  const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
-  const tris2 = 12;
-
   return {
     id: `bld-highstreet-terrace-${seed}`,
     typology: "bld-highstreet-terrace",
@@ -2684,9 +2618,9 @@ export function bldHighStreetTerrace(seed = "highstreet-0", options = {}, T = TH
     standsOn: ["plot", "open"],
     material: mat,
     lod: [
-      { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) },
-      { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
+      { level: 0, tris: 450, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
 }
@@ -2773,12 +2707,6 @@ export function bldBusinessParkBlock(seed = "buspark-0", options = {}, T = THREE
     return mergeGeometries([{ geo: b, tag: "wall" }], mat, geomT);
   }
 
-  const sample0 = buildLOD0(T);
-  const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3;
-  const sample1 = buildLOD1(T);
-  const tris1 = (sample1.index ? sample1.index.count : sample1.attributes.position.count) / 3;
-  const tris2 = 12;
-
   return {
     id: `bld-business-park-${seed}`,
     typology: "bld-business-park",
@@ -2790,9 +2718,9 @@ export function bldBusinessParkBlock(seed = "buspark-0", options = {}, T = THREE
     standsOn: ["plot", "open"],
     material: mat,
     lod: [
-      { level: 0, tris: tris0, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) },
-      { level: 2, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }
+      { level: 0, tris: 150, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
 }

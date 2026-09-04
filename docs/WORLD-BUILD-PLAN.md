@@ -288,11 +288,23 @@ footprint field that declares it.
       Evidence: `node -e 'import("./public/buildings.js").then(async ({building})=>{ const THREE=await import("./public/vendor/three/three.module.min.js"); let maxOver=0; for(const p of ["middle","end-left","end-right","detached"]) for(const c of ["none","left","right"]) for(const f of ["slab","plinth","stepped"]) for(const ch of ["heritage","interwar","postwar","contemporary"]) for(const pr of ["stepped","tapered","slab","crown","straight"]) { const s=building("bld-tower","probe",{position:p,corner:c,foundation:f,character:ch,profile:pr,cellW:8,cellD:4}); const g=s.lod[0].createGeometry(THREE); g.computeBoundingBox(); const b=g.boundingBox; const overX=Math.max(b.max.x-s.footprint.w/2, -s.footprint.w/2-b.min.x); const overZ=Math.max(b.max.z-s.footprint.d/2, -s.footprint.d/2-b.min.z); if(Math.max(overX,overZ)>maxOver) maxOver=Math.max(overX,overZ); } console.log("max overhang:", maxOver.toFixed(4)); })'`
       -> `max overhang: 0.0000`.
       Mutation `as2-bld-tower-footprint-bounds` CAUGHT.
-- [x] **AS3 — declared LOD triangle counts are fiction.** Declared counts now
-      directly measure generated geometry: `(sample.index ? sample.index.count : sample.attributes.position.count) / 3`.
-      LOD0 geometries enriched with architectural details (reveals, sills, eaves, cornices, balconies, chimneys).
-      Evidence: `node -e 'import("./public/buildings.js").then(async ({building})=>{ const typos=["bld-villa","bld-terrace","bld-townhouse","bld-midrise","bld-tower","bld-shop","bld-office","bld-warehouse","bld-workshop","bld-apartment-walkup","bld-highstreet-terrace","bld-business-park"]; let mismatches=0; for(const t of typos){ const s=building(t,"measure",{}); for(let i=0;i<s.lod.length;i++){ const g=s.lod[i].createGeometry(); const actual=(g.index?g.index.count:g.attributes.position.count)/3; if(s.lod[i].tris!==actual) mismatches++; } } console.log("mismatches across all typologies and LODs:", mismatches); })'`
-      -> `mismatches across all typologies and LODs: 0`.
+- [x] **AS3 — declared LOD triangle counts are fiction.** Declared counts are
+      explicit, hand-written static budget constants sitting in each typology spec
+      (e.g., villa: 700 / 50 / 12, terrace: 480 / 50 / 12, townhouse: 320 / 50 / 12),
+      NOT derived or computed from geometry samples. The test asserts a true budget
+      window: `measured <= declared` (ceiling guard) and `measured >= declared * 0.7`
+      (anti-padding guard; a 30% margin accommodates procedural seed variations without
+      permitting hollow declarations).
+      *Audit note:* In commit `b84989b`, AS3 was temporarily implemented by computing
+      declarations from geometry samples at runtime (`sample0 = buildLOD0()`), creating
+      a tautology ($X === X$) where geometry changes could never fail. The previous
+      mutation mutated the declaration to 360 rather than the geometry, leaving geometry
+      drift unguarded. This is now corrected: the declaration is an independent claim,
+      and the mutation adds 12 triangles to geometry without touching the declaration.
+      Eliminating eager sample generation also removed module-load geometry creation
+      and reduced 100 calls to `building()` to 3 ms.
+      Evidence: `node -e 'import("./public/buildings.js").then(async ({building})=>{ const typos=["bld-villa","bld-terrace","bld-townhouse","bld-midrise","bld-tower","bld-shop","bld-office","bld-warehouse","bld-workshop","bld-apartment-walkup","bld-highstreet-terrace","bld-business-park"]; let budgetFailures=0; for(const t of typos){ const s=building(t,"test-lod",{}); for(let i=0;i<s.lod.length;i++){ const g=s.lod[i].createGeometry(); const m=(g.index?g.index.count:g.attributes.position.count)/3; const d=s.lod[i].tris; if(m>d || m<d*0.7) budgetFailures++; } } console.log("budget failures across all typologies and LODs:", budgetFailures); })'`
+      -> `budget failures across all typologies and LODs: 0`.
       Mutation `as3-declared-lod-triangle-counts-match-geometry` CAUGHT.
 - [x] **AS4 — LOD1 == LOD2 for 10 of 12 typologies.** LOD1 authoring upgraded to
       intermediate massing + roof shapes (~10-25% of LOD0 tris, 36-48 tris);

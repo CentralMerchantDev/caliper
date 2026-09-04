@@ -496,18 +496,18 @@
     },
     {
       "id": "as3-declared-lod-triangle-counts-match-geometry",
-      "guards": "declared triangle counts match measured geometry count rather than fictional static claims",
+      "guards": "declared triangle budget acts as a ceiling constraint that trips when geometry exceeds its budget, without hollow padding",
       "file": "public/buildings.js",
-      "find": "const tris0 = (sample0.index ? sample0.index.count : sample0.attributes.position.count) / 3; // villa-lod0-tris",
-      "replace": "const tris0 = 360; // villa-lod0-tris",
+      "find": "parts.push({ geo: chim, tag: \"wall\" }, { geo: chimCap, tag: \"roof\" }, { geo: chimPot1, tag: \"roof\" }, { geo: chimPot2, tag: \"roof\" });",
+      "replace": "parts.push({ geo: chim, tag: \"wall\" }, { geo: chimCap, tag: \"roof\" }, { geo: chimPot1, tag: \"roof\" }, { geo: chimPot2, tag: \"roof\" }, { geo: new geomT.BoxGeometry(1, 1, 1), tag: \"wall\" });",
       "expect": "declared and actual triangle counts agree"
     },
     {
       "id": "as4-lod1-distinct-from-lod2",
       "guards": "LOD1 provides a genuine intermediate massing level distinct from the LOD2 single silhouette box",
       "file": "public/buildings.js",
-      "find": "{ level: 1, tris: tris1, createGeometry: (geomT) => buildLOD1(geomT || T) }, // midrise-lod1",
-      "replace": "{ level: 1, tris: tris2, createGeometry: (geomT) => buildLOD2(geomT || T) }, // midrise-lod1",
+      "find": "{ level: 1, tris: 50, createGeometry: (geomT) => buildLOD1(geomT || T) }, // midrise-lod1",
+      "replace": "{ level: 1, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }, // midrise-lod1",
       "expect": "LOD1 is an intermediate massing level distinct from LOD2"
     }
   ]

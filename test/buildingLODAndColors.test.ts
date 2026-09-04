@@ -111,11 +111,18 @@ test("AS3: declared and actual triangle counts agree and LOD0 geometry is enrich
     const s = building(typo, "test-lod", {}, THREE);
     for (let i = 0; i < s.lod.length; i++) {
       const g = s.lod[i].createGeometry(THREE);
-      const actual = (g.index ? g.index.count : g.attributes.position.count) / 3;
-      assert.equal(
-        s.lod[i].tris,
-        actual,
-        `${typo} LOD${i} declared tris (${s.lod[i].tris}) != actual tris (${actual})`
+      const measured = (g.index ? g.index.count : g.attributes.position.count) / 3;
+      const declared = s.lod[i].tris;
+      // Budget check: measured geometry must stay within declared budget ceiling
+      assert.ok(
+        measured <= declared,
+        `${typo} LOD${i} measured triangles (${measured}) exceed declared budget (${declared})`
+      );
+      // Anti-padding check: measured geometry must be at least 70% of budget
+      // (a 30% margin accommodates procedural variation across seeds without permitting hollow declarations)
+      assert.ok(
+        measured >= declared * 0.7,
+        `${typo} LOD${i} measured triangles (${measured}) below 70% of declared budget (${declared})`
       );
     }
     // Verify LOD0 is enriched (>= 140 tris)
@@ -129,16 +136,29 @@ test("AS3: declared and actual triangle counts agree and LOD0 geometry is enrich
 test("AS4: LOD1 is an intermediate massing level distinct from LOD2 single silhouette box", () => {
   for (const typo of TYPOLOGIES) {
     const s = building(typo, "test-lod-dist", {}, THREE);
+    const g1 = s.lod[1].createGeometry(THREE);
+    const tris1 = (g1.index ? g1.index.count : g1.attributes.position.count) / 3;
+    const g2 = s.lod[2].createGeometry(THREE);
+    const tris2 = (g2.index ? g2.index.count : g2.attributes.position.count) / 3;
     // Verify LOD1 is a true intermediate level (distinct from LOD2)
     assert.ok(
+      tris1 > tris2,
+      `${typo} LOD1 measured tris (${tris1}) is not greater than LOD2 (${tris2})`
+    );
+    assert.ok(
       s.lod[1].tris > s.lod[2].tris,
-      `${typo} LOD1 tris (${s.lod[1].tris}) is not greater than LOD2 (${s.lod[2].tris})`
+      `${typo} LOD1 declared tris (${s.lod[1].tris}) is not greater than LOD2 (${s.lod[2].tris})`
     );
     // Verify LOD2 is exactly 12 triangles (single box)
     assert.equal(
+      tris2,
+      12,
+      `${typo} LOD2 measured tris (${tris2}) != 12`
+    );
+    assert.equal(
       s.lod[2].tris,
       12,
-      `${typo} LOD2 tris (${s.lod[2].tris}) != 12`
+      `${typo} LOD2 declared tris (${s.lod[2].tris}) != 12`
     );
   }
 });
