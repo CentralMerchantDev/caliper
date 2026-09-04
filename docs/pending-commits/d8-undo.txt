@@ -1,0 +1,42 @@
+D8: undo is dropping a layer, proven end to end -- including that it survives a reload
+
+What was wrong: world-model.js's remove() already proves "drop exactly this
+layer's edits, leave every other author's work standing" in isolation
+(test/worldModel.test.ts). Isolation cannot see the actual risk: a removal
+that only happens in the in-memory world and is never re-saved would look
+like undo worked, right up until the next reload brought the supposedly
+undone layer straight back.
+
+How it is known to be fixed:
+
+- public/undo.js, new. undoLayer(world, worldId, layerId, store) calls the
+  existing, already-tested remove(), then always re-persists through the
+  same store D7's apply-and-persist uses. A failed remove (unknown layer id)
+  is returned as-is, never persisted over.
+- test/undo.test.ts (3), end to end through the real stack -- two authors,
+  three layers, a real memory-backed store, not a fixture standing in for
+  any one piece: undoing one of Mark's two layers removes exactly that
+  layer's own edit, leaving his OTHER layer and Jess's layer both untouched;
+  the undo survives a reload -- store, load, worldFromJSON, and only THEN
+  check the layer is gone, which is the property isolation-level proof
+  cannot demonstrate; undoing a layer id that does not exist is refused, not
+  a silent no-op success that leaves the caller unable to tell whether
+  anything happened.
+- Mutation `undo-persists-the-removal` CAUGHT. Drops the re-save after a
+  successful remove -- the removal then exists only in memory, and the
+  undone layer comes back after a reload, which is exactly the gap this
+  step exists to close:
+  `node scripts/_mutcheck.mjs test/undo.test.ts public/undo.js test/mutations.json`
+- `npm test`: 851/851. `npx tsc --noEmit`: clean.
+
+Phase D (the agent's path into the world) is complete at the mechanism
+level -- D1, D2, D3, D4, D5, D6, D7, D8 all done with evidence. The
+live-wiring gap (city-render.js does not yet build from createWorld, and no
+DOM/API path drives any of this live) is named honestly at D7 rather than
+claimed here or anywhere else.
+
+E1 (quests as the way in) is already done. E2 (completion from world state)
+is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.

@@ -441,6 +441,15 @@
       "find": "    edits: [{ address: request.address, op: \"replace\", payload: { modelId } }],",
       "replace": "    edits: [{ address: request.address, op: \"replace\", payload: { modelId, source } }],",
       "expect": "a verified model becomes a layer that references it BY ID, never inlining the source"
+    },
+    {
+      "id": "undo-persists-the-removal",
+      "guards": "undoLayer re-saves the world after removing a layer, so the removal survives a reload instead of only existing in memory until the next persisted save brings the undone layer back",
+      "note": "This is the actual gap end-to-end proof exists for: worldModel.test.ts already proves remove() itself works in isolation. What isolation cannot see is a removal that never gets persisted.",
+      "file": "public/undo.js",
+      "find": "  const saved = await store.save(worldId, world.toJSON());\n  if (!saved.ok) return saved;\n\n  return { ok: true };",
+      "replace": "  return { ok: true };",
+      "expect": "the undo survives a reload"
     }
   ]
 }

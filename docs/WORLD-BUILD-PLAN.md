@@ -678,10 +678,27 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       to a real model under the pipeline's existing spend gates — and
       belongs to its own step with its own plan, not squeezed into D7's
       evidence by generous interpretation.
-- [ ] **D8 — undo.** Drop the layer. *Test:* undo removes exactly that layer's
-      edits and leaves every other author's work standing — this is already
-      proven at the model level in `test/worldModel.test.ts`; prove it end to
-      end here.
+- [x] **D8 — undo.** Evidence: `public/undo.js`, `undoLayer(world, worldId,
+      layerId, store)`. `world-model.js`'s `remove()` already does the real
+      work and is proven in isolation; the gap isolation cannot see is
+      persistence — a removal that only happens in the in-memory world and
+      is never re-saved would look like undo worked right up until the next
+      reload brought the "removed" layer straight back. This always
+      re-persists after a successful remove, through the same store D7
+      uses.
+      `test/undo.test.ts` (3), end to end through the real stack (two
+      authors, three layers, a real memory-backed store): undoing one of
+      Mark's two layers removes exactly its own edit — his other layer and
+      Jess's are both untouched; the undo SURVIVES A RELOAD (store → load →
+      `worldFromJSON`), not just proven true in the same in-memory world
+      that removed it; undoing a layer id that does not exist is refused,
+      not a silent no-op success. Mutation `undo-persists-the-removal`
+      CAUGHT — drops the re-save, so the removal exists only in memory and
+      the undone layer comes back after a reload, exactly the gap
+      isolation-level proof cannot see: `node scripts/_mutcheck.mjs
+      test/undo.test.ts public/undo.js test/mutations.json`.
+      **Phase D (the agent's path into the world) is complete** at the
+      mechanism level, with the live-wiring gap named honestly at D7.
 
 ### Phase E — quests
 
