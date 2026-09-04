@@ -54,13 +54,67 @@
 // a result it did not observe -- the same rule the pipeline itself is built on.
 // =============================================================================
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync, rmSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { filterPending, baselineIsFresh } from "./mutate-resume.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = join(ROOT, "test", "mutations.json");
+
+// A KILL MUST COST ONE MUTATION, NEVER THE WHOLE RUN.
+//
+// This environment reaps long-running commands. Every result used to live
+// only in the `results` array below and get written once, at the very end --
+// so a kill at mutation 29 of 52 discarded all 29, and the next start paid
+// for the baseline and the first 29 all over again. 52 mutations at
+// (measured) 100-200s each is over two unbroken hours; nothing here can
+// assume it gets that in one sitting.
+//
+// This is written after EVERY mutation, not at the end -- gitignored, since
+// it is a progress file, not a project artefact.
+const RESULTS_PATH = join(ROOT, "test", ".mutate-results.json");
+
+function loadResults() {
+  if (!existsSync(RESULTS_PATH)) return { results: [], baseline: null };
+  try {
+    return JSON.parse(readFileSync(RESULTS_PATH, "utf8"));
+  } catch {
+    return { results: [], baseline: null };
+  }
+}
+
+function saveResults(state) {
+  writeFileSync(RESULTS_PATH, JSON.stringify(state, null, 2));
+}
+
+function gitStatusString() {
+  try {
+    return execFileSync("git", ["status", "--short"], { cwd: ROOT, encoding: "utf8" });
+  } catch (e) {
+    return `(git status failed: ${e && e.message})`;
+  }
+}
+
+/**
+ * A fingerprint of everything that could change what the baseline measured,
+ * without running anything. `test(` call sites are a LOWER bound on the real
+ * test count (gen-test-count.mjs's own finding -- tests inside a loop expand
+ * at runtime), so there is no cheap way to know the real count without
+ * running the suite. What IS cheap and exact is: did any test file's
+ * CONTENT, or the mutation manifest's, change since the baseline was
+ * measured. Either changing invalidates the recorded baseline; neither
+ * changing means it is still the same suite that was proven green.
+ */
+function testFilesFingerprint() {
+  const testDir = join(ROOT, "test");
+  const files = readdirSync(testDir).filter((f) => f.endsWith(".test.ts")).sort();
+  const h = createHash("sha256");
+  for (const f of files) h.update(f + ":").update(readFileSync(join(testDir, f)));
+  h.update(readFileSync(MANIFEST));
+  return h.digest("hex");
+}
 
 // WHERE THE BACKUP LIVES, AND WHY NOT /tmp.
 //
@@ -118,7 +172,8 @@ function args() {
   const a = process.argv.slice(2);
   const get = (k) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : null; };
   return { all: a.includes("--all"), id: get("--id"), file: get("--file"),
-           find: get("--find"), replace: get("--replace"), expect: get("--expect") };
+           find: get("--find"), replace: get("--replace"), expect: get("--expect"),
+           resume: a.includes("--resume") };
 }
 
 /** Run the node suite and report which tests failed, by name. */
@@ -370,16 +425,43 @@ if (existsSync(MARKER)) {
   }
 }
 
-console.log("running the unmutated suite first, to establish a baseline...\n");
-const baseline = runSuite();
-if (baseline.fail === null) { console.error("could not read the baseline fail count"); process.exit(1); }
-if (baseline.fail > 0) {
-  console.error(`### THE SUITE IS ALREADY RED: ${baseline.fail} failing before any mutation.`);
-  console.error("### " + baseline.failing.join("\n### "));
-  console.error("###\n### Every mutation result would be inconclusive against this, because the\n" +
-                "### mutation's effect could not be told apart from the failure already there.\n" +
-                "### Fix the suite, then run this.");
-  process.exit(1);
+// RESUME: SKIP WHAT A PRIOR SESSION ALREADY PROVED.
+//
+// Only when --resume is passed -- a plain --all always starts from an empty
+// results file, so it never silently inherits a stale progress record from
+// an unrelated earlier run.
+const resumeState = opts.resume ? loadResults() : { results: [], baseline: null };
+const alreadyDone = resumeState.results.length;
+if (opts.resume) {
+  const doneIds = resumeState.results.map((r) => r.id);
+  const before = mutations.length;
+  mutations = filterPending(mutations, doneIds);
+  console.log(`resuming: ${alreadyDone} of ${before} already done, ${mutations.length} remaining.\n`);
+}
+const totalThisSelection = alreadyDone + mutations.length;
+
+let baseline;
+const fresh = opts.resume && baselineIsFresh(resumeState.baseline, gitStatusString(), testFilesFingerprint());
+if (fresh) {
+  console.log("baseline still fresh -- the tree and every test file match what was measured last time. Not re-running it.\n");
+  baseline = resumeState.baseline;
+} else {
+  if (opts.resume && resumeState.baseline) {
+    console.log("the recorded baseline is stale (the tree or a test file changed since it was measured) -- re-measuring.\n");
+  }
+  console.log("running the unmutated suite first, to establish a baseline...\n");
+  baseline = runSuite();
+  if (baseline.fail === null) { console.error("could not read the baseline fail count"); process.exit(1); }
+  if (baseline.fail > 0) {
+    console.error(`### THE SUITE IS ALREADY RED: ${baseline.fail} failing before any mutation.`);
+    console.error("### " + baseline.failing.join("\n### "));
+    console.error("###\n### Every mutation result would be inconclusive against this, because the\n" +
+                  "### mutation's effect could not be told apart from the failure already there.\n" +
+                  "### Fix the suite, then run this.");
+    process.exit(1);
+  }
+  resumeState.baseline = { gitStatus: gitStatusString(), fingerprint: testFilesFingerprint(), fail: baseline.fail, all: baseline.all };
+  saveResults(resumeState);
 }
 // EVERY `expect` MUST NAME A TEST THAT EXISTS.
 //
@@ -408,7 +490,6 @@ if (stale.length) {
 
 console.log(`baseline green: ${mutations.length} mutation(s) to run, about 45s each.\n`);
 
-const results = [];
 for (const mut of mutations) {
   process.stdout.write(`${mut.id.padEnd(28)} ${mut.file} ... `);
   let r;
@@ -422,25 +503,31 @@ for (const mut of mutations) {
     //   a harness failure  -- the suite did not run at all, so every later
     //                         result would be INCONCLUSIVE for the same reason.
     //
-    // Either way the results already gathered are still valid and the ones
-    // below would not be.
+    // Either way the results already gathered (in RESULTS_PATH, written after
+    // every prior mutation -- see below) are still valid and the ones below
+    // would not be.
     console.log("ABORTED");
-    console.error(`\n### RUN ABORTED after ${results.length} of ${mutations.length} mutations.`);
+    console.error(`\n### RUN ABORTED after ${resumeState.results.length} of ${totalThisSelection} total mutations.`);
     console.error(`### ${e.message}`);
-    console.error("### The results above this line are still valid. Nothing below ran.");
+    console.error(`### Results so far are saved in ${RESULTS_PATH}. Re-run with --resume to continue.`);
     if (e.harnessBroke) {
       console.error("###\n### Re-run once the tree is settled; this is not a finding about any control.");
     }
     process.exit(2);
   }
-  results.push({ ...mut, ...r });
+  // WRITTEN NOW, NOT AT THE END. This is the whole fix: a kill one line after
+  // this still leaves the result on disk, so --resume never re-runs (or
+  // re-reports) a mutation this process already proved.
+  resumeState.results.push({ ...mut, ...r });
+  saveResults(resumeState);
   console.log(r.status + (r.why ? `  -- ${r.why}` : ""));
 }
 
 console.log("\n" + "=".repeat(72));
-const caught = results.filter((r) => r.status === "CAUGHT");
-const bad = results.filter((r) => r.status !== "CAUGHT");
-for (const r of results) {
+const allResults = resumeState.results;
+const caught = allResults.filter((r) => r.status === "CAUGHT");
+const bad = allResults.filter((r) => r.status !== "CAUGHT");
+for (const r of allResults) {
   console.log(`${r.status.padEnd(13)} ${r.id}`);
   console.log(`              guards: ${r.guards}`);
   if (r.status !== "CAUGHT") console.log(`              WHY: ${r.why}`);
@@ -467,7 +554,7 @@ if (leftover.present && !leftover.restored) {
   process.exit(2);
 }
 
-console.log(`${caught.length} of ${results.length} controls proved they exist, and the tree is clean.`);
+console.log(`${caught.length} of ${allResults.length} controls proved they exist, and the tree is clean.`);
 if (bad.length) {
   console.error(
     `\n### ${bad.length} did not. A control that survives its own mutation is not a\n` +

@@ -477,6 +477,15 @@
       "find": "  if (trimmed.length > CONTROL_LIMITS.FREE_FORM_MAX_LENGTH) {",
       "replace": "  if (trimmed.length > 500) {",
       "expect": "checkInputGuard reads FREE_FORM_MAX_LENGTH live from CONTROL_LIMITS"
+    },
+    {
+      "id": "resume-skips-already-done-mutations",
+      "guards": "filterPending actually removes mutations whose id is already recorded, so --resume does not re-run (and re-report) work a prior, killed session already proved",
+      "note": "Without this, --resume would print resuming: N of 52 already done and then run all 52 again anyway -- the exact defect the harness fix exists to prevent.",
+      "file": "scripts/mutate-resume.mjs",
+      "find": "  return mutations.filter((m) => !done.has(m.id));",
+      "replace": "  return mutations;",
+      "expect": "a results file with three ids recorded causes those three to be skipped"
     }
   ]
 }

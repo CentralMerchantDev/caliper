@@ -1,0 +1,72 @@
+H1 harness fix: a kill costs one mutation, not the whole run
+
+What was wrong: scripts/mutate.mjs held every mutation's result in memory and
+wrote nothing until the final summary. This environment reaps long-running
+commands, and 52 mutations against the ~860-test suite is well over an hour --
+so every kill discarded the entire run. Measured across the actual attempts
+tonight: 18 mutations proved, then a kill and a restart from zero; then 29;
+then 3. Not a finding about any control -- the harness could not survive the
+runtime the check genuinely costs.
+
+How it is known to be fixed:
+
+- test/.mutate-results.json (gitignored, a progress file, not a project
+  artefact) is written after EVERY mutation completes, not at the end.
+- --resume reads it and skips any id already recorded, via
+  scripts/mutate-resume.mjs's filterPending(mutations, doneIds) -- a small,
+  pure function kept separate from the orchestration specifically so it could
+  be tested without re-running the suite it exists to make interruptible.
+- The baseline is skipped on resume when nothing that would change its answer
+  has moved: the tree's git status is byte-identical to what it was when the
+  baseline was measured, and a sha256 fingerprint over every test file's
+  content plus the mutation manifest is unchanged (baselineIsFresh, also in
+  mutate-resume.mjs). Test file counts cannot be known statically --
+  gen-test-count.mjs's own header notes `test(` calls inside a loop expand at
+  runtime -- so this fingerprints CONTENT rather than attempting a cheap count
+  that would be wrong.
+- test/mutateResume.test.ts (4): a results file with three ids recorded causes
+  those three to be skipped and a fourth to run; an empty done list leaves
+  everything pending; every id done leaves nothing pending; a baseline is
+  trusted only when BOTH the git-status string and the fingerprint still
+  match, refused if either differs or nothing was ever recorded.
+- Mutation `resume-skips-already-done-mutations` CAUGHT -- filterPending
+  returning every mutation regardless of doneIds, the exact defect that would
+  make --resume silently re-run (and re-report) work already proved:
+  `node scripts/_mutcheck.mjs test/mutateResume.test.ts scripts/mutate-resume.mjs test/mutations.json`
+- Measured proof the fix works, not just the unit tests: a second
+  `--id resume-skips-already-done-mutations --resume` invocation, run
+  immediately after the first recorded it done, completed in 0.225s instead
+  of paying for the suite again, correctly reporting "resuming: 1 of 1 already
+  done, 0 remaining" and reusing the recorded CAUGHT result.
+- `npm test`: 867/867. `npx tsc --noEmit`: clean.
+
+A field the first version of this fix got wrong: the baseline record named its
+fingerprint field `testCount`, which was never a count -- it always held a
+sha256 hash. Renamed to `fingerprint` in mutate.mjs, mutate-resume.mjs and the
+test before this commit, so the name says what the value is.
+
+A process mistake caught and corrected before committing, recorded here
+because it is exactly the kind of thing this project's own rules exist to
+catch: mid-fix, an earlier `--all --resume` background invocation was assumed
+killed on the strength of an ambiguous status read, when it was still actively
+running. A second, unrelated `--id` invocation was started against the same
+tree while it was still alive -- briefly two processes writing the same
+marker and results paths. Caught by noticing public/ground.js dirty with a
+mutation nobody had knowingly applied and TaskStop confirming a process was
+still live; both processes were stopped, both partially-mutated files
+(public/ground.js via `git checkout`, the untracked scripts/mutate-resume.mjs
+by hand, since it has no committed version to check out to) were restored and
+verified by hash before anything else touched the tree, and the full suite
+was re-run clean (867/867) before this commit. The 22 mutations already
+proved by the live process before the collision were not lost -- reconstructed
+into test/.mutate-results.json from this session's own recorded terminal
+output (each id's exact CAUGHT/SURVIVED status, not guessed), so H1's record
+stays accurate.
+
+What is still open: 31 of 52 mutations remain to be proved, now via
+scripts/_mutcheck.mjs scoped to each one's own guarding test file rather than
+mutate.mjs --all's full-suite-per-mutation approach, which this environment
+cannot sustain for a run this size. That is the next step, not this commit.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.

@@ -4,6 +4,7 @@ node_modules/
 .claude/
 *.log
 test/.built/
+test/.mutate-results.json
 PROCESS-ALIGNMENT.md
 
 # --- working artefacts, never part of the project ---------------------------
