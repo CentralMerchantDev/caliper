@@ -1,0 +1,44 @@
+H3: PART 0 ground truth re-measured, and a pre-existing staleness found and named
+
+What was wrong: PART 0's opening figures (781 tests, 32 mutation controls,
+20,624 plots) were already stale before this session's own build work began --
+from a main-branch fix (627e599, "row plots tile") that landed before tonight
+and was never reflected back into this table. Not a defect PART 7 introduced;
+a defect PART 7's own re-measurement step exists to catch regardless of who
+caused it.
+
+How it is known to be current now, each figure with the command that
+produced it:
+
+- Suite: 868 node tests across 81 files (0 fail), 12 worker tests (0 fail) --
+  node scripts/gen-test-count.mjs
+- Mutation controls: 53, all finds unique, 53/53 CAUGHT -- test/mutations.json,
+  test/.mutate-results.json (H1)
+- World: 2,291 blocks, 19,874 plots, 19,725 placed (99.3%), 149 refused --
+  node scripts/measure-layout.mjs
+- Draw: 480 InstancedMeshes, 1,451,912 triangles, 0 overhangs, 0 misdeclared
+  footprints -- node scripts/check-layout-geometry.mjs
+- Scene: sceneChildren: 1015, app OK, no page errors -- node
+  scripts/shoot-app.mjs
+- City summary: zero diff on regeneration -- node scripts/gen-city-summary.mjs
+
+Library (asset-registry.js / tier-models.js counts) is explicitly marked NOT
+re-measured, with the reason stated in the table itself: both files carry an
+uncommitted, unrelated change from the parallel assets-lane (2,400 -> 4,800
+models), excluded from every commit tonight and flagged to Mark before the
+build began. Measuring against the current working tree would report a
+number that is neither the committed ground truth nor a real deployed state
+-- reporting it anyway, or silently leaving the old figure standing as if it
+were still current, would both have been worse than saying plainly that this
+one was not checked and why.
+
+The default (no-seed) world's own identity is not asserted here, it is
+pinned: test/worldSeed.test.ts and test/planSeed.test.ts fingerprint the
+terrain and the plan against sha256 hashes captured before A1/A2/A2b/A3, and
+both still match exactly, which is what makes it safe to say the plot-count
+difference above is not something PART 7 moved.
+
+H4 (write docs/WORLD-BUILD-LOG.md) is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.

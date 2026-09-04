@@ -19,15 +19,32 @@ is the reason the repo can be trusted at 781 tests rather than merely large.
 
 Everything here came from a command. Nothing is remembered.
 
+**Re-measured 2026-09-04, at the close of the PART 7 build (Phase H).** The
+figures below replace the ones this section opened with, which were already
+stale before this session's own work began (781 tests / 32 controls / 20,624
+plots was the count from an EARLIER point in the project's history, not
+anything this session's changes moved) — itself a small instance of the
+exact defect PART 0's own header line exists to prevent.
+
 | Fact | Value | Source |
 |---|---|---|
-| Suite | 781 tests, 62 files, 0 fail | `node test/run.mjs` |
-| Mutation controls | 32, all finds unique | `test/mutations.json` |
-| World | 20,624 plots, 20,472 buildings placed | `scripts/measure-layout.mjs` |
-| Draw | 480 InstancedMeshes, 1.45 M triangles | `scripts/check-layout-geometry.mjs` |
-| Overhangs / misdeclarations | 0 / 0 | same |
-| Library | 2,400 registry entries, 2,403 builders | `public/asset-registry.js`, `tier-models.js` |
-| Scene | `sceneChildren: 1015`, app OK | `scripts/shoot-app.mjs` |
+| Suite | 868 node tests across 81 files (0 fail), 12 worker tests (0 fail) | `node scripts/gen-test-count.mjs` |
+| Mutation controls | 53, all finds unique, 53/53 CAUGHT | `test/mutations.json`; `test/.mutate-results.json` (H1) |
+| World | 2,291 blocks, 19,874 plots, 19,725 placed (99.3%), 149 refused | `node scripts/measure-layout.mjs` |
+| Draw | 480 InstancedMeshes, 1,451,912 triangles (49,164 across the 480 distinct geometries) | `node scripts/check-layout-geometry.mjs` |
+| Overhangs / misdeclared footprints | 0 / 0 | same |
+| Library | **not re-measured this session** — `public/asset-registry.js` and `public/tier-models.js` carry an uncommitted, unrelated change (2,400 → 4,800 models) from the parallel `assets-lane`, excluded from every commit tonight and flagged to Mark before the build began. Measuring against the current working tree would report a number that is neither the committed ground truth nor a real deployed state. |
+| Scene | `sceneChildren: 1015`, app OK, no page errors | `node scripts/shoot-app.mjs` |
+| City summary | `src/citySummary.generated.ts` — zero diff on regeneration | `node scripts/gen-city-summary.mjs` (H2) |
+
+The default (no-seed) world is unchanged from every prior measurement of it —
+not asserted, pinned: `test/worldSeed.test.ts` and `test/planSeed.test.ts`
+fingerprint the terrain and the plan against sha256 hashes captured before
+this session's own A1/A2/A2b/A3 changes, and both still match exactly. The
+plot/placement counts above differ from PART 0's original figures because
+the original figures were stale relative to a `main`-branch fix already
+landed before tonight (`627e599`, "row plots tile"), not because of anything
+built in PART 7.
 
 ### What is already right and is NOT being rebuilt
 
@@ -61,6 +78,16 @@ Everything here came from a command. Nothing is remembered.
    written on the data path.
 
 ### Already built tonight, toward this plan
+
+This table is what existed BEFORE PART 7's own build loop started (A1, A2,
+D3, D5, E1's foundations). It is not the full inventory — PART 7 itself went
+on to add roughly twenty more `public/` modules (`world.js`, `world-store.js`,
+`apply-layers.js`, `instance-groups.js`, `model-registry.js`,
+`resolve-models.js`, `selection.js`, `describe-request.js`,
+`generate-request.js`, `stage-artefact.js`, `apply-and-persist.js`,
+`undo.js`, `change-quest.js`, among others) plus the `_mutresolve*`/
+`mutate-resume` tooling. The full list, each with its own evidence, is PART
+7's own ledger below; `docs/WORLD-BUILD-LOG.md` (H4) is the narrative account.
 
 | File | What it does | Tests |
 |---|---|---|
@@ -915,8 +942,21 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       seed-related step (A2b, A3) pinning the DEFAULT seed byte-identical
       throughout.
       `npm test`: 868/868. `npx tsc --noEmit`: clean.
-- [ ] **H3 — update PART 0 ground truth** with the new measured figures, each
-      with the command that produced it.
+- [x] **H3 — update PART 0 ground truth.** Evidence: PART 0's table above,
+      each figure with the command that produced it — `node
+      scripts/gen-test-count.mjs` (868 node / 12 worker), `node
+      scripts/measure-layout.mjs` (2,291 blocks, 19,874 plots, 19,725
+      placed), `node scripts/check-layout-geometry.mjs` (480 InstancedMeshes,
+      1,451,912 triangles, 0 overhangs), `node scripts/shoot-app.mjs`
+      (`sceneChildren: 1015`), `node scripts/gen-city-summary.mjs` (zero
+      diff). Library explicitly marked NOT re-measured, with the reason
+      (the contaminated working tree), rather than either measuring a wrong
+      number or silently leaving the old one uncorrected.
+      Found in the process: PART 0's opening figures (781 tests / 32
+      controls / 20,624 plots) were already stale before tonight's session
+      began — from a `main`-branch fix (`627e599`, landed before this
+      session) that PART 0 was never updated against. Noted in the table
+      itself so the next reader does not attribute the difference to PART 7.
 - [ ] **H4 — write `docs/WORLD-BUILD-LOG.md`**: what was built, what was
       measured, what is still not verified (the visual checks), and every step
       marked BLOCKED with its reason. Honest, specific, no rounding up.
