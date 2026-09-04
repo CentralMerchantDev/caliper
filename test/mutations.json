@@ -486,6 +486,15 @@
       "find": "  return mutations.filter((m) => !done.has(m.id));",
       "replace": "  return mutations;",
       "expect": "a results file with three ids recorded causes those three to be skipped"
+    },
+    {
+      "id": "claudeMd-test-count-matches-generated",
+      "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
+      "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
+      "file": "CLAUDE.md",
+      "find": "npm test            # 869 node tests + 12 worker tests",
+      "replace": "npm test            # 900 node tests + 12 worker tests",
+      "expect": "CLAUDE.md's verification line names the real test counts"
     }
   ]
 }

@@ -1,0 +1,38 @@
+Final audit Finding 1 (HIGH): CLAUDE.md's own verification line was stale
+
+What was wrong: docs/audits/UMAA-phases-B-H.md's blind auditor ran `npm test`
+against a clean tree and got 868 node tests where CLAUDE.md's "How to verify"
+section claimed 571 -- stale by 297 tests (52%). public/index.html's identical
+claim was NOT stale, because test/publicClaims.test.ts already pins it
+mechanically; CLAUDE.md had no equivalent pin, so nobody would notice it drift
+again the next time a test was added.
+
+How it's fixed: test/claudeMdIsCurrent.test.ts reads CLAUDE.md's
+`npm test # N node tests + M worker tests` line and asserts N/M against
+test/testCount.generated.json, the same generated source publicClaims.test.ts
+already trusts. Written test-first: it failed first on a root-path bug
+(esbuild bundles into test/.built/, two levels below the repo root, not one --
+fixed by copying the walk-up repoRoot() helper already used in
+publicClaims.test.ts), then correctly on the real assertion (571 !== 868).
+CLAUDE.md's line is now updated to the currently-measured 869 (the suite grew
+by exactly one test: this new test itself).
+
+Mutation proof: test/mutations.json gained
+claudeMd-test-count-matches-generated (find the real line, replace the count
+with a wrong one). Run in isolation:
+
+  node scripts/_mutcheck.mjs test/claudeMdIsCurrent.test.ts CLAUDE.md test/mutations.json
+  baseline: GREEN
+  CAUGHT   claudeMd-test-count-matches-generated
+  restored: byte identical
+
+Measured: npm test -- 869 node tests, 0 fail; 12 worker, 0 fail (regenerated
+via node scripts/gen-test-count.mjs).
+
+What's still open: Findings 2-5 of the same audit (missing audit artefacts in
+docs/audits/, untested closeRegion(open===null) branch, duplicate
+worldFromJSON naming, unmemoized createWorld()) are tracked separately --
+Finding 2 lands in the next commit, the rest are follow-up work.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.
