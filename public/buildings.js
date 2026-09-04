@@ -931,8 +931,10 @@ function applyFoundation(parts, footW, footD, foundation = "slab", T = THREE) {
   if (foundation === "plinth") {
     const plinth = new T.BoxGeometry(footW * 0.96, 1.2, footD * 0.94);
     plinth.translate(0, 0.6, 0);
-    const steps = new T.BoxGeometry(4.0, 0.6, 2.0);
-    steps.translate(0, 0.3, footD * 0.47 + 1.0);
+    const stepW = Math.min(4.0, footW * 0.4);
+    const stepD = Math.min(1.0, footD * 0.05);
+    const steps = new T.BoxGeometry(stepW, 0.6, stepD);
+    steps.translate(0, 0.3, footD * 0.47 - stepD / 2);
     parts.push(plinth, steps);
     return 1.2;
   } else if (foundation === "stepped") {
@@ -952,8 +954,10 @@ export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
   const foundation = options.foundation || (r2 < 0.3 ? "plinth" : r2 < 0.55 ? "stepped" : "slab");
   const character = options.character || CHARACTER_SETS[Math.floor(r3 * CHARACTER_SETS.length)];
 
-  const cellW = 2 + Math.floor(r1 * 2); // 2 or 3 cells (16 or 24m)
-  const cellD = 3 + Math.floor(r2 * 2); // 3 or 4 cells (24 or 32m)
+  const rawCellW = Number.isFinite(options.cellW) ? options.cellW : (2 + Math.floor(r1 * 2)); // 2 or 3 cells (16 or 24m)
+  const rawCellD = Number.isFinite(options.cellD) ? options.cellD : (3 + Math.floor(r2 * 2)); // 3 or 4 cells (24 or 32m)
+  const cellW = Math.max(2, Math.min(3, Math.round(rawCellW)));
+  const cellD = Math.max(3, Math.min(4, Math.round(rawCellD)));
   const footW = cellW * 8;
   const footD = cellD * 8;
 
@@ -996,78 +1000,82 @@ export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
           const bD = footD * 0.74;
           const baseOffset = applyFoundation(parts, footW, footD, foundation, T);
 
-          const body = new T.BoxGeometry(bW, bodyH, bD);
-          body.translate(0, baseOffset + bodyH / 2, 0);
+          const gW = Math.min(5.6, footW * 0.32), gD = Math.min(6.0, bD * 0.8), gH = 3.5;
+          const mainBW = garageType === "attached" ? Math.min(bW, footW * 0.60) : bW;
+          const mainOffset = garageType === "attached" ? -gW / 2 : 0;
+
+          const body = new T.BoxGeometry(mainBW, bodyH, bD);
+          body.translate(mainOffset, baseOffset + bodyH / 2, 0);
           parts.push(body);
 
           // Corner wrap / flank return bay
           if (corner === "left") {
             const sideBay = new T.BoxGeometry(0.5, bodyH * 0.75, bD * 0.4);
-            sideBay.translate(-bW / 2 - 0.25, baseOffset + (bodyH * 0.75) / 2, 0);
+            sideBay.translate(mainOffset - mainBW / 2 - 0.25, baseOffset + (bodyH * 0.75) / 2, 0);
             parts.push(sideBay);
           } else if (corner === "right") {
             const sideBay = new T.BoxGeometry(0.5, bodyH * 0.75, bD * 0.4);
-            sideBay.translate(bW / 2 + 0.25, baseOffset + (bodyH * 0.75) / 2, 0);
+            sideBay.translate(mainOffset + mainBW / 2 + 0.25, baseOffset + (bodyH * 0.75) / 2, 0);
             parts.push(sideBay);
           }
 
           // Roof geometry
           if (roofStyle === "gable") {
-            const roof = new T.ConeGeometry(bW * 0.60, roofH, 4);
+            const roof = new T.ConeGeometry(mainBW * 0.60, roofH, 4);
             roof.rotateY(Math.PI / 4);
-            roof.translate(0, baseOffset + bodyH + roofH / 2, 0);
+            roof.translate(mainOffset, baseOffset + bodyH + roofH / 2, 0);
             parts.push(roof);
           } else if (roofStyle === "hip") {
-            const roof = new T.ConeGeometry(bW * 0.58, roofH, 4);
+            const roof = new T.ConeGeometry(mainBW * 0.58, roofH, 4);
             roof.rotateY(Math.PI / 4);
-            roof.scale(1, 1, bD / bW);
-            roof.translate(0, baseOffset + bodyH + roofH / 2, 0);
+            roof.scale(1, 1, bD / mainBW);
+            roof.translate(mainOffset, baseOffset + bodyH + roofH / 2, 0);
             parts.push(roof);
           } else if (roofStyle === "mansard") {
-            const lower = new T.BoxGeometry(bW * 1.02, roofH * 0.65, bD * 1.02);
-            lower.translate(0, baseOffset + bodyH + roofH * 0.325, 0);
-            const upper = new T.BoxGeometry(bW * 0.82, roofH * 0.35, bD * 0.82);
-            upper.translate(0, baseOffset + bodyH + roofH * 0.825, 0);
+            const lower = new T.BoxGeometry(mainBW * 1.02, roofH * 0.65, bD * 1.02);
+            lower.translate(mainOffset, baseOffset + bodyH + roofH * 0.325, 0);
+            const upper = new T.BoxGeometry(mainBW * 0.82, roofH * 0.35, bD * 0.82);
+            upper.translate(mainOffset, baseOffset + bodyH + roofH * 0.825, 0);
             parts.push(lower, upper);
           } else {
-            const parapet = new T.BoxGeometry(bW * 1.02, 0.8, bD * 1.02);
-            parapet.translate(0, baseOffset + bodyH + 0.4, 0);
+            const parapet = new T.BoxGeometry(mainBW * 1.02, 0.8, bD * 1.02);
+            parapet.translate(mainOffset, baseOffset + bodyH + 0.4, 0);
             parts.push(parapet);
           }
 
           if (hasPorch) {
-            const pW = 3.8, pD = 2.2, pH = 3.2;
+            const pW = Math.min(3.8, mainBW * 0.6), pD = Math.min(2.0, (footD - bD) / 2 * 0.9), pH = 3.2;
             const porchFloor = new T.BoxGeometry(pW, 0.3, pD);
-            porchFloor.translate(0, baseOffset + 0.15, bD / 2 + pD / 2);
-            const porchRoof = new T.BoxGeometry(pW * 1.05, 0.3, pD * 1.05);
-            porchRoof.translate(0, baseOffset + pH, bD / 2 + pD / 2);
+            porchFloor.translate(mainOffset, baseOffset + 0.15, bD / 2 + pD / 2);
+            const porchRoof = new T.BoxGeometry(pW * 1.02, 0.3, pD * 1.02);
+            porchRoof.translate(mainOffset, baseOffset + pH, bD / 2 + pD / 2);
             parts.push(porchFloor, porchRoof);
           }
 
           if (garageType === "attached") {
-            const gW = 5.6, gD = 6.0, gH = 3.5;
             const garage = new T.BoxGeometry(gW, gH, gD);
-            garage.translate(bW / 2 + gW / 2 - 0.4, baseOffset + gH / 2, 0);
+            garage.translate(mainOffset + mainBW / 2 + gW / 2 - 0.2, baseOffset + gH / 2, 0);
             parts.push(garage);
           }
 
           if (hasBay) {
-            const bay = new T.BoxGeometry(3.0, bodyH * 0.85, 1.0);
-            bay.translate(-bW * 0.25, baseOffset + bodyH * 0.45, bD / 2 + 0.5);
+            const bayD = Math.min(1.0, (footD - bD) / 2 * 0.9);
+            const bay = new T.BoxGeometry(Math.min(3.0, mainBW * 0.5), bodyH * 0.85, bayD);
+            bay.translate(mainOffset - mainBW * 0.25, baseOffset + bodyH * 0.45, bD / 2 + bayD / 2);
             parts.push(bay);
           }
 
           if (hasDormers) {
-            for (const dx of [-bW * 0.25, bW * 0.25]) {
+            for (const dx of [-mainBW * 0.25, mainBW * 0.25]) {
               const dormer = new T.BoxGeometry(1.4, 1.4, 1.6);
-              dormer.translate(dx, baseOffset + bodyH + 1.1, bD * 0.32);
+              dormer.translate(mainOffset + dx, baseOffset + bodyH + 1.1, bD * 0.32);
               parts.push(dormer);
             }
           }
 
           if (hasChimney) {
             const chim = new T.BoxGeometry(1.1, bodyH + roofH + 1.0, 1.1);
-            chim.translate(bW * 0.32, (baseOffset + bodyH + roofH + 1.0) / 2, -bD * 0.2);
+            chim.translate(mainOffset + mainBW * 0.32, (baseOffset + bodyH + roofH + 1.0) / 2, -bD * 0.2);
             parts.push(chim);
           }
 
@@ -1379,8 +1387,10 @@ export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
   const foundation = options.foundation || (r2 < 0.25 ? "plinth" : "slab");
   const character = options.character || CHARACTER_SETS[Math.floor(r3 * CHARACTER_SETS.length)];
 
-  const cellW = 3 + Math.floor(r1 * 4);
-  const cellD = 4 + Math.floor(r2 * 5);
+  const rawCellW = Number.isFinite(options.cellW) ? options.cellW : (3 + Math.floor(r1 * 4));
+  const rawCellD = Number.isFinite(options.cellD) ? options.cellD : (4 + Math.floor(r2 * 5));
+  const cellW = Math.max(3, Math.min(6, Math.round(rawCellW)));
+  const cellD = Math.max(4, Math.min(8, Math.round(rawCellD)));
   const footW = cellW * 8;
   const footD = cellD * 8;
 
@@ -1415,8 +1425,8 @@ export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
         tris: 520,
         createGeometry: () => {
           const parts = [];
-          const bW = footW * 0.90;
-          const bD = footD * 0.88;
+          const bW = footW * 0.88;
+          const bD = footD * 0.86;
           const baseOffset = applyFoundation(parts, footW, footD, foundation, T);
 
           if (hasSetback) {
@@ -1434,28 +1444,29 @@ export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
           }
 
           if (corner === "left") {
-            const chamfer = new T.BoxGeometry(3.5, bodyH * 0.9, 3.5);
+            const chamfer = new T.BoxGeometry(2.0, bodyH * 0.9, 2.0);
             chamfer.rotateY(Math.PI / 4);
-            chamfer.translate(-bW / 2 + 1.2, baseOffset + bodyH * 0.45, bD / 2 - 1.2);
+            chamfer.translate(-bW / 2 + 0.8, baseOffset + bodyH * 0.45, bD / 2 - 0.8);
             parts.push(chamfer);
           } else if (corner === "right") {
-            const chamfer = new T.BoxGeometry(3.5, bodyH * 0.9, 3.5);
+            const chamfer = new T.BoxGeometry(2.0, bodyH * 0.9, 2.0);
             chamfer.rotateY(Math.PI / 4);
-            chamfer.translate(bW / 2 - 1.2, baseOffset + bodyH * 0.45, bD / 2 - 1.2);
+            chamfer.translate(bW / 2 - 0.8, baseOffset + bodyH * 0.45, bD / 2 - 0.8);
             parts.push(chamfer);
           }
 
           if (podiumType === "retail") {
             const podH = 4.8;
-            const pod = new T.BoxGeometry(bW * 1.02, podH, bD * 1.02);
+            const pod = new T.BoxGeometry(bW * 1.01, podH, bD * 1.01);
             pod.translate(0, baseOffset + podH / 2, 0);
             parts.push(pod);
           }
 
           for (let s = 1; s < storeys; s++) {
             const by = baseOffset + s * 4 + 0.15;
-            const balc = new T.BoxGeometry(bW * 0.58, 0.3, 1.6);
-            balc.translate(0, by, bD / 2 + 0.8);
+            const balcD = Math.min(1.2, (footD - bD) / 2 * 0.9);
+            const balc = new T.BoxGeometry(bW * 0.58, 0.3, balcD);
+            balc.translate(0, by, bD / 2 + balcD / 2);
             parts.push(balc);
           }
 
@@ -1501,8 +1512,10 @@ export function bldShop(seed = "shop-0", options = {}, T = THREE) {
   const foundation = options.foundation || (r2 < 0.2 ? "plinth" : "slab");
   const character = options.character || CHARACTER_SETS[Math.floor(r3 * CHARACTER_SETS.length)];
 
-  const cellW = 2 + Math.floor(r1 * 3);
-  const cellD = 2 + Math.floor(r2 * 2);
+  const rawCellW = Number.isFinite(options.cellW) ? options.cellW : (2 + Math.floor(r1 * 3));
+  const rawCellD = Number.isFinite(options.cellD) ? options.cellD : (2 + Math.floor(r2 * 2));
+  const cellW = Math.max(2, Math.min(4, Math.round(rawCellW)));
+  const cellD = Math.max(2, Math.min(3, Math.round(rawCellD)));
   const footW = cellW * 8;
   const footD = cellD * 8;
 
@@ -1549,17 +1562,18 @@ export function bldShop(seed = "shop-0", options = {}, T = THREE) {
           parts.push(signBand);
 
           if (hasAwning) {
-            const awn = new T.BoxGeometry(bW * 0.90, 0.15, 1.8);
+            const awnD = Math.min(1.5, (footD - bD) / 2 * 0.9);
+            const awn = new T.BoxGeometry(bW * 0.90, 0.15, awnD);
             awn.rotateX(-0.2);
-            awn.translate(0, baseOffset + 3.2, bD / 2 + 0.9);
+            awn.translate(0, baseOffset + 3.2, bD / 2 + awnD / 2);
             parts.push(awn);
           }
 
           if (isCornerUnit) {
-            const cornerSplay = new T.BoxGeometry(2.8, 3.8, 2.8);
+            const cornerSplay = new T.BoxGeometry(1.8, 3.8, 1.8);
             cornerSplay.rotateY(Math.PI / 4);
-            const cx = corner === "left" ? -bW / 2 + 1.0 : bW / 2 - 1.0;
-            cornerSplay.translate(cx, baseOffset + 1.9, bD / 2 - 1.0);
+            const cx = corner === "left" ? -bW / 2 + 0.8 : bW / 2 - 0.8;
+            cornerSplay.translate(cx, baseOffset + 1.9, bD / 2 - 0.8);
             parts.push(cornerSplay);
           }
 
@@ -1600,8 +1614,10 @@ export function bldOffice(seed = "office-0", options = {}, T = THREE) {
   const foundation = options.foundation || (r2 < 0.2 ? "plinth" : "slab");
   const character = options.character || CHARACTER_SETS[Math.floor(r3 * CHARACTER_SETS.length)];
 
-  const cellW = 4 + Math.floor(r1 * 5);
-  const cellD = 6 + Math.floor(r2 * 5);
+  const rawCellW = Number.isFinite(options.cellW) ? options.cellW : (4 + Math.floor(r1 * 5));
+  const rawCellD = Number.isFinite(options.cellD) ? options.cellD : (6 + Math.floor(r2 * 5));
+  const cellW = Math.max(4, Math.min(8, Math.round(rawCellW)));
+  const cellD = Math.max(6, Math.min(10, Math.round(rawCellD)));
   const footW = cellW * 8;
   const footD = cellD * 8;
 
@@ -1649,8 +1665,10 @@ export function bldOffice(seed = "office-0", options = {}, T = THREE) {
           }
 
           // Entrance canopy
-          const canopy = new T.BoxGeometry(7.5, 0.4, 3.2);
-          canopy.translate(0, baseOffset + 4.2, bD / 2 + 1.6);
+          const canopyD = Math.min(2.5, (footD - bD) / 2 * 0.9);
+          const canopyW = Math.min(7.5, bW * 0.5);
+          const canopy = new T.BoxGeometry(canopyW, 0.4, canopyD);
+          canopy.translate(0, baseOffset + 4.2, bD / 2 + canopyD / 2);
           parts.push(canopy);
 
           // Corner return facade / glazed flank
@@ -1710,8 +1728,10 @@ export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
   const foundation = options.foundation || (r3 < 0.25 ? "plinth" : r3 < 0.5 ? "stepped" : "slab");
   const character = options.character || CHARACTER_SETS[Math.floor(r4 * CHARACTER_SETS.length)];
 
-  const cellW = 3 + Math.floor(r1 * 3);
-  const cellD = 4 + Math.floor(r2 * 4);
+  const rawCellW = Number.isFinite(options.cellW) ? options.cellW : (3 + Math.floor(r1 * 3));
+  const rawCellD = Number.isFinite(options.cellD) ? options.cellD : (4 + Math.floor(r2 * 4));
+  const cellW = Math.max(3, Math.min(5, Math.round(rawCellW)));
+  const cellD = Math.max(4, Math.min(7, Math.round(rawCellD)));
   const footW = cellW * 8;
   const footD = cellD * 8;
 
@@ -1756,13 +1776,15 @@ export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
           parts.push(body);
 
           if (stairPosition === "center") {
-            const stair = new T.BoxGeometry(4.0, bodyH + 1.8, 2.6);
-            stair.translate(0, (baseOffset + bodyH + 1.8) / 2, bD / 2 + 1.3);
+            const stairD = Math.min(2.0, (footD - bD) / 2 * 0.9);
+            const stair = new T.BoxGeometry(4.0, bodyH + 1.8, stairD);
+            stair.translate(0, (baseOffset + bodyH + 1.8) / 2, bD / 2 + stairD / 2);
             parts.push(stair);
           } else if (stairPosition === "dual") {
+            const stairD = Math.min(1.8, (footD - bD) / 2 * 0.9);
             for (const sx of [-bW * 0.35, bW * 0.35]) {
-              const stair = new T.BoxGeometry(3.0, bodyH + 1.8, 2.4);
-              stair.translate(sx, (baseOffset + bodyH + 1.8) / 2, bD / 2 + 1.2);
+              const stair = new T.BoxGeometry(3.0, bodyH + 1.8, stairD);
+              stair.translate(sx, (baseOffset + bodyH + 1.8) / 2, bD / 2 + stairD / 2);
               parts.push(stair);
             }
           }
@@ -1829,8 +1851,10 @@ export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
 export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
   const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
   const foundation = options.foundation || "slab";
-  const cellW = 6 + Math.floor(r1 * 5);
-  const cellD = 10 + Math.floor(r2 * 11);
+  const rawCellW = Number.isFinite(options.cellW) ? options.cellW : (6 + Math.floor(r1 * 5));
+  const rawCellD = Number.isFinite(options.cellD) ? options.cellD : (10 + Math.floor(r2 * 11));
+  const cellW = Math.max(6, Math.min(10, Math.round(rawCellW)));
+  const cellD = Math.max(10, Math.min(20, Math.round(rawCellD)));
   const footW = cellW * 8;
   const footD = cellD * 8;
 
@@ -1918,8 +1942,10 @@ export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
 export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
   const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
   const foundation = options.foundation || "slab";
-  const cellW = 3 + Math.floor(r1 * 3);
-  const cellD = 4 + Math.floor(r2 * 4);
+  const rawCellW = Number.isFinite(options.cellW) ? options.cellW : (3 + Math.floor(r1 * 3));
+  const rawCellD = Number.isFinite(options.cellD) ? options.cellD : (4 + Math.floor(r2 * 4));
+  const cellW = Math.max(3, Math.min(5, Math.round(rawCellW)));
+  const cellD = Math.max(4, Math.min(7, Math.round(rawCellD)));
   const footW = cellW * 8;
   const footD = cellD * 8;
 
@@ -1990,8 +2016,10 @@ export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
 export function bldTower(seed = "tower-0", options = {}, T = THREE) {
   const r1 = rnd(seed + "1"), r2 = rnd(seed + "2"), r3 = rnd(seed + "3"), r4 = rnd(seed + "4");
   const foundation = options.foundation || "slab";
-  const cellW = 4 + Math.floor(r1 * 5);
-  const cellD = 4 + Math.floor(r2 * 5);
+  const rawCellW = Number.isFinite(options.cellW) ? options.cellW : (4 + Math.floor(r1 * 5));
+  const rawCellD = Number.isFinite(options.cellD) ? options.cellD : (4 + Math.floor(r2 * 5));
+  const cellW = Math.max(4, Math.min(8, Math.round(rawCellW)));
+  const cellD = Math.max(4, Math.min(8, Math.round(rawCellD)));
   const footW = cellW * 8;
   const footD = cellD * 8;
 
