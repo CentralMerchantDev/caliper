@@ -306,6 +306,15 @@ export const ASSET_REGISTRY = [
   { id: "prop-smart-waste-compactor", category: "furniture", tier: "standard", status: "built", source: "code", seenAs: "close", count: 4100, generator: "propSmartWasteCompactor()", note: "Solar-powered triple waste and recycling compactor station" },
   { id: "prop-shaded-parklet-deck", category: "furniture", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 1600, generator: "propShadedParkletDeck()", note: "Curbside wooden parklet platform with planters and timber pergola" },
 
+
+  // --- CALATRAVA-INSPIRED SCULPTURAL BRIDGES ---
+  { id: "bridge-calatrava-harp-pylon", category: "roads", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 180, generator: "bridgeCalatravaHarpPylon()", note: "Calatrava 58-degree inclined leaning harp pylon cable bridge" },
+  { id: "bridge-calatrava-sundial-footbridge", category: "roads", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 240, generator: "bridgeCalatravaSundialFootbridge()", note: "Calatrava soaring forward-canted sundial gnomon footbridge with glass deck" },
+  { id: "bridge-calatrava-rib-arch", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 320, generator: "bridgeCalatravaRibArch()", note: "Calatrava curved parabolic rib tied-arch bridge with harp hanger struts" },
+  { id: "bridge-calatrava-twin-mast-viaduct", category: "roads", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 160, generator: "bridgeCalatravaTwinMastViaduct()", note: "Calatrava dual wave-sail pylon viaduct with intersecting cable sails" },
+  { id: "bridge-calatrava-winged-swing-bridge", category: "roads", tier: "showstopper", status: "built", source: "code", seenAs: "far", count: 190, generator: "bridgeCalatravaWingedSwingBridge()", note: "Calatrava asymmetrical cantilevering needle harp arm rotating swing bridge" },
+  { id: "bridge-calatrava-skeletal-spine-overpass", category: "roads", tier: "signature", status: "built", source: "code", seenAs: "mid", count: 410, generator: "bridgeCalatravaSkeletalSpineOverpass()", note: "Calatrava repeating skeletal vertebrae bone-rib cage skywalk" },
+
 ];
 
 /**

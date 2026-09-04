@@ -1616,3 +1616,444 @@ export function civicEcoHydroTransitTerminal() {
     ],
   };
 }
+
+
+
+
+
+// =============================================================================
+// CALATRAVA-INSPIRED SCULPTURAL BRIDGES (6 Models)
+// =============================================================================
+
+/**
+ * 1. Calatrava Inclined Harp Pylon Cable Bridge (Alamillo / Chords style)
+ * 36x128m, h=64m. Leaning 58-deg parabolic spine pylon with harp cable fan.
+ */
+export function bridgeCalatravaHarpPylon() {
+  return {
+    id: "bridge-calatrava-harp-pylon",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 36, d: 128 },
+    height: 64.0,
+    clearance: 6.5,
+    origin: "base-centre",
+    standsOn: ["water", "carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 540,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Aerodynamic Dual-Box Girder Deck (y: 6.5 - 9.5m)
+          const deck = new T.BoxGeometry(32, 2.5, 126);
+          deck.translate(0, 7.75, 0);
+          // Central Spine Box
+          const spine = new T.BoxGeometry(3.5, 1.2, 126);
+          spine.translate(0, 9.5, 0);
+
+          // Leaning 58-degree Sculptural Spine Pylon at South Abutment (z: -48)
+          const pylon = new T.BoxGeometry(4.2, 60, 4.8);
+          pylon.rotateX(0.42); // 58-deg lean backward
+          pylon.translate(0, 31.0, -42);
+
+          // 12 Stay Cable Harps connecting Pylon to Deck Spine
+          for (let i = 0; i < 12; i++) {
+            const py = 15 + i * 4.0;
+            const pz = -42 - i * 1.5;
+            const dz = -30 + i * 7.5;
+            const cable = new T.BoxGeometry(0.12, py - 9.0, Math.abs(dz - pz));
+            cable.translate(0, 9.0 + (py - 9.0) / 2, (pz + dz) / 2);
+            parts.push(cable);
+          }
+
+          // Abutment piers
+          const abS = new T.BoxGeometry(34, 7.0, 10);
+          abS.translate(0, 3.5, -58);
+          const abN = new T.BoxGeometry(34, 7.0, 10);
+          abN.translate(0, 3.5, 58);
+
+          parts.push(deck, spine, pylon, abS, abN);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 96,
+        createGeometry: (T = THREE) => {
+          const deck = new T.BoxGeometry(34, 3, 128);
+          deck.translate(0, 8, 0);
+          const pylon = new T.BoxGeometry(5, 60, 5);
+          pylon.rotateX(0.42);
+          pylon.translate(0, 31, -42);
+          return mergeGeometries([deck, pylon], T);
+        },
+      },
+      {
+        level: 2,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(36, 64, 128);
+          b.translate(0, 32, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 2. Calatrava Sundial Cantilevered Footbridge (Sundial Bridge style)
+ * 16x64m, h=38m. Soaring forward-canted white mast acting as gnomon with glass deck.
+ */
+export function bridgeCalatravaSundialFootbridge() {
+  return {
+    id: "bridge-calatrava-sundial-footbridge",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 16, d: 64 },
+    height: 38.0,
+    clearance: 4.5,
+    origin: "base-centre",
+    standsOn: ["water", "park", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 440,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Cantilevered Glass Walkway Deck (y: 4.5 - 6.0m)
+          const deck = new T.BoxGeometry(8.5, 1.2, 62);
+          deck.translate(0, 5.1, 0);
+          // Translucent Balustrades
+          const railL = new T.BoxGeometry(0.3, 1.1, 62);
+          railL.translate(-4.1, 6.2, 0);
+          const railR = new T.BoxGeometry(0.3, 1.1, 62);
+          railR.translate(4.1, 6.2, 0);
+
+          // Soaring Forward-Leaning Mast (Gnomon) at North End (z: 22)
+          const mast = new T.ConeGeometry(2.4, 36, 8);
+          mast.rotateX(-0.35); // Leaning forward over water
+          mast.translate(0, 18.5, 20);
+
+          // Radiating Cable Fan
+          for (let i = 0; i < 8; i++) {
+            const my = 12 + i * 3.2;
+            const mz = 20 - i * 1.2;
+            const dz = -24 + i * 5.5;
+            const cable = new T.BoxGeometry(0.08, my - 5.5, Math.abs(dz - mz));
+            cable.translate(0, 5.5 + (my - 5.5) / 2, (mz + dz) / 2);
+            parts.push(cable);
+          }
+
+          // Abutment Plaza Plinths
+          const plinthS = new T.BoxGeometry(14, 5.0, 8);
+          plinthS.translate(0, 2.5, -28);
+          const plinthN = new T.BoxGeometry(14, 5.0, 8);
+          plinthN.translate(0, 2.5, 28);
+
+          parts.push(deck, railL, railR, mast, plinthS, plinthN);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 72,
+        createGeometry: (T = THREE) => {
+          const deck = new T.BoxGeometry(10, 2, 64);
+          deck.translate(0, 5, 0);
+          const mast = new T.ConeGeometry(3, 36, 6);
+          mast.rotateX(-0.35);
+          mast.translate(0, 18.5, 20);
+          return mergeGeometries([deck, mast], T);
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(16, 38, 64);
+          b.translate(0, 19, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 3. Calatrava Curved Parabolic Rib Tied-Arch Bridge (Zubizuri / Campo Volantin style)
+ * 18x48m, h=16m. Tilted parabolic white arch rib with curved deck & harp struts.
+ */
+export function bridgeCalatravaRibArch() {
+  return {
+    id: "bridge-calatrava-rib-arch",
+    kind: "hard",
+    footprint: { w: 18, d: 48 },
+    height: 16.0,
+    clearance: 4.5,
+    origin: "base-centre",
+    standsOn: ["water", "sidewalk", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 380,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Curved Promenade Deck (y: 4.5 - 6.0m)
+          const deck = new T.BoxGeometry(12, 1.2, 46);
+          deck.translate(0, 5.1, 0);
+
+          // Tilted Parabolic Arch Rib (y: 5 - 15.5m)
+          const arch = new T.CylinderGeometry(1.2, 1.4, 46, 12, 1, true);
+          arch.rotateX(Math.PI / 2);
+          arch.rotateZ(0.24); // 14-deg lateral tilt
+          arch.translate(-3.2, 11.5, 0);
+          parts.push(arch);
+
+          // 10 Harp Strut Hangers
+          for (let i = 0; i < 10; i++) {
+            const z = -20 + i * 4.4;
+            const ay = 11.5 + Math.sin((i / 9) * Math.PI) * 3.8;
+            const strut = new T.BoxGeometry(0.1, ay - 5.5, 0.1);
+            strut.translate(-1.8, 5.5 + (ay - 5.5) / 2, z);
+            parts.push(strut);
+          }
+
+          // Abutment Ramp Plinths
+          const ab1 = new T.BoxGeometry(15, 5.0, 6.0);
+          ab1.translate(0, 2.5, -21);
+          const ab2 = new T.BoxGeometry(15, 5.0, 6.0);
+          ab2.translate(0, 2.5, 21);
+
+          parts.push(deck, ab1, ab2);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 60,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(16, 16, 48);
+          b.translate(0, 8, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(16, 16, 48);
+          b.translate(0, 8, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 4. Calatrava Twin Wave-Sail Cable Viaduct (Reggio Emilia style)
+ * 32x96m, h=44m. Dual wave-like sail pylons with intersecting cable harp sails.
+ */
+export function bridgeCalatravaTwinMastViaduct() {
+  return {
+    id: "bridge-calatrava-twin-mast-viaduct",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 36, d: 96 },
+    height: 44.0,
+    clearance: 6.5,
+    origin: "base-centre",
+    standsOn: ["carriageway", "water", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 480,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Roadway Deck (y: 6.5 - 9.5m)
+          const deck = new T.BoxGeometry(28, 2.5, 94);
+          deck.translate(0, 7.75, 0);
+
+          // Twin Wave-Sail Pylons on Left and Right Sides (y: 0 - 44m)
+          for (const sx of [-12, 12]) {
+            const mast = new T.CylinderGeometry(1.6, 2.4, 42, 10);
+            mast.rotateZ(sx > 0 ? -0.15 : 0.15); // Outward sail tilt
+            mast.translate(sx, 22, 0);
+            parts.push(mast);
+
+            // Intersecting Cable Sails
+            for (let i = 0; i < 8; i++) {
+              const my = 18 + i * 3.2;
+              const dz = -36 + i * 10;
+              const cable = new T.BoxGeometry(0.1, my - 9.0, Math.abs(dz));
+              cable.translate(sx * 0.6, 9.0 + (my - 9.0) / 2, dz / 2);
+              parts.push(cable);
+            }
+          }
+
+          // Abutment Bases
+          const abS = new T.BoxGeometry(30, 7.0, 8);
+          abS.translate(0, 3.5, -44);
+          const abN = new T.BoxGeometry(30, 7.0, 8);
+          abN.translate(0, 3.5, 44);
+
+          parts.push(deck, abS, abN);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 80,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(30, 44, 96);
+          b.translate(0, 22, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 16,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(30, 44, 96);
+          b.translate(0, 22, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 5. Calatrava Asymmetrical Winged Swing Bridge (Puente de la Mujer style)
+ * 20x72m, h=34m. Dynamic asymmetrical cantilevering white needle harp arm on cylindrical plinth.
+ */
+export function bridgeCalatravaWingedSwingBridge() {
+  return {
+    id: "bridge-calatrava-winged-swing-bridge",
+    tier: "showstopper",
+    kind: "hard",
+    footprint: { w: 20, d: 72 },
+    height: 34.0,
+    clearance: 3.8,
+    origin: "base-centre",
+    standsOn: ["water", "sidewalk", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 420,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Rotating Swing Walkway Deck (y: 3.8 - 5.4m)
+          const deck = new T.BoxGeometry(9.0, 1.4, 70);
+          deck.translate(0, 4.5, 0);
+
+          // Central Cylindrical Pivot Island Plinth (y: 0 - 5.0m)
+          const pivot = new T.CylinderGeometry(7.5, 8.5, 5.0, 16);
+          pivot.translate(0, 2.5, -8);
+
+          // Asymmetrical Needle Harp Arm (y: 5 - 34m)
+          const arm = new T.ConeGeometry(2.2, 30, 8);
+          arm.rotateX(0.55); // 35-deg dramatic diagonal forward angle
+          arm.translate(0, 19.5, -8);
+
+          // 8 Harp Stay Cables
+          for (let i = 0; i < 8; i++) {
+            const ay = 10 + i * 2.8;
+            const az = -8 + i * 2.2;
+            const dz = 4 + i * 3.8;
+            const cable = new T.BoxGeometry(0.08, ay - 5.0, Math.abs(dz - az));
+            cable.translate(0, 5.0 + (ay - 5.0) / 2, (az + dz) / 2);
+            parts.push(cable);
+          }
+
+          parts.push(deck, pivot, arm);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 68,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(18, 34, 72);
+          b.translate(0, 17, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(18, 34, 72);
+          b.translate(0, 17, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * 6. Calatrava Skeletal Bone-Rib Enclosed Skywalk (Peace Bridge / Oriente style)
+ * 8x48m, h=8.0m. Repeating white steel parabolic vertebrae cage enclosing walkway.
+ */
+export function bridgeCalatravaSkeletalSpineOverpass() {
+  return {
+    id: "bridge-calatrava-skeletal-spine-overpass",
+    kind: "hard",
+    footprint: { w: 8.0, d: 48.0 },
+    height: 9.6,
+    clearance: 4.8,
+    origin: "base-centre",
+    standsOn: ["carriageway", "open"],
+    lod: [
+      {
+        level: 0,
+        tris: 360,
+        createGeometry: (T = THREE) => {
+          const parts = [];
+          // Suspended Pedestrian Deck (y: 4.8 - 5.8m)
+          const deck = new T.BoxGeometry(5.2, 0.8, 48);
+          deck.translate(0, 5.2, 0);
+
+          // 12 Repeating Skeletal Vertebrae Ribs (y: 4.5 - 8.0m)
+          for (let i = 0; i < 12; i++) {
+            const z = -22 + i * 4.0;
+            const rib = new T.CylinderGeometry(3.6, 3.6, 0.35, 12, 1, true);
+            rib.rotateX(Math.PI / 2);
+            rib.translate(0, 5.6, z);
+            parts.push(rib);
+          }
+
+          // Abutment Stair Portals
+          const p1 = new T.BoxGeometry(6.4, 5.0, 4.0);
+          p1.translate(0, 2.5, -22);
+          const p2 = new T.BoxGeometry(6.4, 5.0, 4.0);
+          p2.translate(0, 2.5, 22);
+
+          parts.push(deck, p1, p2);
+          return mergeGeometries(parts, T);
+        },
+      },
+      {
+        level: 1,
+        tris: 48,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(8, 8, 48);
+          b.translate(0, 4, 0);
+          return b;
+        },
+      },
+      {
+        level: 2,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const b = new T.BoxGeometry(8, 8, 48);
+          b.translate(0, 4, 0);
+          return b;
+        },
+      },
+    ],
+  };
+}

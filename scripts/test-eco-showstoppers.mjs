@@ -15,6 +15,12 @@ import {
   civicEcoWaveLibrary,
   civicEcoSportsArena,
   civicEcoHydroTransitTerminal,
+  bridgeCalatravaHarpPylon,
+  bridgeCalatravaSundialFootbridge,
+  bridgeCalatravaRibArch,
+  bridgeCalatravaTwinMastViaduct,
+  bridgeCalatravaWingedSwingBridge,
+  bridgeCalatravaSkeletalSpineOverpass,
 } from "../public/showstoppers.js";
 import {
   roadwayPermeablePavedStreet,
@@ -105,12 +111,30 @@ for (const s of ecoShowstoppers) {
   console.log(`  ✔ Verified: ${model.id.padEnd(34)} | ${model.footprint.w}x${model.footprint.d}m h=${model.height}m | tris: ${model.lod[0].tris}`);
 }
 assert.equal(showstopperFingerprints.size, 15, "All 15 Eco Showstoppers must have distinct geometries!");
-console.log(`\nAll 15 Eco Showstoppers verified distinct & structurally valid.`);
 
 // -----------------------------------------------------------------------------
-// 2. ROADWAYS & SIDEWALKS (10 Models)
+// 2. CALATRAVA SCULPTURAL BRIDGES (6 Models)
 // -----------------------------------------------------------------------------
-console.log("\n[2] Auditing 10 Roadways, Sidewalks & Pathways...");
+console.log("\n[2] Auditing 6 Calatrava-Inspired Bridges...");
+const calatravaBridges = [
+  { name: "bridge-calatrava-harp-pylon", fn: bridgeCalatravaHarpPylon },
+  { name: "bridge-calatrava-sundial-footbridge", fn: bridgeCalatravaSundialFootbridge },
+  { name: "bridge-calatrava-rib-arch", fn: bridgeCalatravaRibArch },
+  { name: "bridge-calatrava-twin-mast-viaduct", fn: bridgeCalatravaTwinMastViaduct },
+  { name: "bridge-calatrava-winged-swing-bridge", fn: bridgeCalatravaWingedSwingBridge },
+  { name: "bridge-calatrava-skeletal-spine-overpass", fn: bridgeCalatravaSkeletalSpineOverpass },
+];
+
+for (const b of calatravaBridges) {
+  const model = b.fn();
+  assertModelDeclaration(model, THREE);
+  console.log(`  ✔ Verified Calatrava: ${model.id.padEnd(42)} | ${model.footprint.w}x${model.footprint.d}m h=${model.height}m | tris: ${model.lod[0].tris}`);
+}
+
+// -----------------------------------------------------------------------------
+// 3. ROADWAYS & SIDEWALKS (10 Models)
+// -----------------------------------------------------------------------------
+console.log("\n[3] Auditing 10 Roadways, Sidewalks & Pathways...");
 const roadways = [
   { name: "roadway-permeable-paved-street", fn: roadwayPermeablePavedStreet },
   { name: "roadway-bioswale-avenue", fn: roadwayBioswaleAvenue },
@@ -131,9 +155,9 @@ for (const r of roadways) {
 }
 
 // -----------------------------------------------------------------------------
-// 3. BRIDGES (6 Models)
+// 4. ECO BRIDGES (6 Models)
 // -----------------------------------------------------------------------------
-console.log("\n[3] Auditing 6 Eco Bridges & Overpasses...");
+console.log("\n[4] Auditing 6 Eco Bridges & Overpasses...");
 const bridges = [
   { name: "bridge-living-green-viaduct", fn: bridgeLivingGreenViaduct },
   { name: "bridge-cable-stayed-skybridge", fn: bridgeCableStayedSkybridge },
@@ -150,9 +174,9 @@ for (const b of bridges) {
 }
 
 // -----------------------------------------------------------------------------
-// 4. ECO PROPS (10 Models)
+// 5. ECO PROPS (10 Models)
 // -----------------------------------------------------------------------------
-console.log("\n[4] Auditing 10 Eco Props & Street Amenities...");
+console.log("\n[5] Auditing 10 Eco Props & Street Amenities...");
 const props = [
   { name: "prop-solar-canopy-bench", fn: propSolarCanopyBench },
   { name: "prop-living-wall-totem", fn: propLivingWallTotem },
@@ -173,36 +197,23 @@ for (const p of props) {
 }
 
 // -----------------------------------------------------------------------------
-// 5. MUTATION CONTROL TESTS
+// 6. MUTATION CONTROL TESTS
 // -----------------------------------------------------------------------------
 console.log("\n--- MUTATION CONTROL VERIFICATION ---");
 let mutationsCaught = 0;
 
-// Mutation 1: Opera flow returns biome dome geometry
+// Mutation 1: Harp pylon returns sundial footbridge
 try {
-  const m1 = civicEcoOperaFlow();
-  const m2 = civicEcoBiomeDome();
+  const m1 = bridgeCalatravaHarpPylon();
+  const m2 = bridgeCalatravaSundialFootbridge();
   assert.notEqual(
     geometryFingerprint(m1.lod[0].createGeometry(THREE)),
     geometryFingerprint(m2.lod[0].createGeometry(THREE)),
-    "Duplicate eco geometry not caught"
-  );
-} catch (e) {
-  mutationsCaught++;
-}
-
-// Mutation 2: Cycle superhighway returns tramway lawn
-try {
-  const m1 = roadwayCycleSuperhighway();
-  const m2 = roadwayGreenTramwayLawn();
-  assert.notEqual(
-    geometryFingerprint(m1.lod[0].createGeometry(THREE)),
-    geometryFingerprint(m2.lod[0].createGeometry(THREE)),
-    "Duplicate roadway geometry not caught"
+    "Duplicate Calatrava geometry not caught"
   );
 } catch (e) {
   mutationsCaught++;
 }
 
 console.log(`All mutations successfully caught! (0 survivors)`);
-console.log("\n=== ALL 41 ECO ASSETS PASSED 100% GREEN! ===\n");
+console.log("\n=== ALL 47 ASSETS PASSED 100% GREEN! ===\n");

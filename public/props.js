@@ -1,5 +1,15 @@
 
 import {
+  bridgeCalatravaHarpPylon,
+  bridgeCalatravaSundialFootbridge,
+  bridgeCalatravaRibArch,
+  bridgeCalatravaTwinMastViaduct,
+  bridgeCalatravaWingedSwingBridge,
+  bridgeCalatravaSkeletalSpineOverpass,
+} from "./showstoppers.js";
+
+
+import {
   bldEcoBoscoVerticale,
   bldEcoCurvedRibbonVilla,
   bldEcoStepGardenWalkup,
@@ -989,6 +999,15 @@ groundFurniture.variants = {
 };
 
 export const MODELS = {
+
+  // --- CALATRAVA SCULPTURAL BRIDGES ---
+  "bridge-calatrava-harp-pylon": bridgeCalatravaHarpPylon(),
+  "bridge-calatrava-sundial-footbridge": bridgeCalatravaSundialFootbridge(),
+  "bridge-calatrava-rib-arch": bridgeCalatravaRibArch(),
+  "bridge-calatrava-twin-mast-viaduct": bridgeCalatravaTwinMastViaduct(),
+  "bridge-calatrava-winged-swing-bridge": bridgeCalatravaWingedSwingBridge(),
+  "bridge-calatrava-skeletal-spine-overpass": bridgeCalatravaSkeletalSpineOverpass(),
+
 
   // --- ECO ROADWAYS & PATHWAYS ---
   "roadway-permeable-paved-street": roadwayPermeablePavedStreet(),
