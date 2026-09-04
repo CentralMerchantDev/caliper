@@ -1,0 +1,37 @@
+H4: the build log, and PART 7 complete
+
+What this closes: docs/WORLD-BUILD-LOG.md is the narrative account of the
+whole PART 7 run -- what was built per phase, the measured figures with the
+commands that produced them, what is still not verified, and the two
+incidents worth remembering so they are not repeated: a PART 0 staleness that
+predated this session, found and corrected at H3; and two processes racing
+the same tree mid-H1, caught by a file turning up dirty that nobody had
+knowingly mutated, and recovered without losing any already-proven work.
+
+The single biggest thing named as still open: none of C1/C2/D1/D2/D4/D6/D7/D8
+is wired into the live app. Every one is a real, tested, standalone
+mechanism -- the same build-then-defer-the-wiring pattern used consistently
+across the whole session -- but city-render.js still builds its scene from a
+bare generateWorld(heightAt), and there is no click handler, text box, or
+model-calling route anywhere. That is materially larger than any one ledger
+line and deserves its own plan.
+
+Every box in docs/WORLD-BUILD-PLAN.md PART 7 is now [x] with evidence or [!]
+with a reason (G2 alone). That is what "the build is complete" means here --
+not that everything asked for exists live in the app, but that everything the
+plan asked for was either built and proven, or explicitly refused with a
+stated reason, with nothing left silently undone.
+
+What is genuinely still open, beyond tonight's scope:
+- Wiring C1/C2/D1/D2/D4/D6/D7/D8 into the live renderer and page (see above).
+- G2 (demo profile vs builder profile), blocked on Mark's authorised numbers
+  and a real profile-selection mechanism.
+- The comprehensive blind audit across Phases B-G, deferred to a consolidated
+  pass per instruction mid-session -- the Phase A audit that DID run found
+  three real issues (unseeded terrain functions, unseeded hash01, unmemoized
+  createWorld cost) worth carrying into it.
+- public/asset-registry.js and public/tier-models.js remain uncommitted and
+  untouched -- assets-lane's work, not this session's to resolve.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.

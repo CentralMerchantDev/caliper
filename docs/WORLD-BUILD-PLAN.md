@@ -957,9 +957,16 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       began — from a `main`-branch fix (`627e599`, landed before this
       session) that PART 0 was never updated against. Noted in the table
       itself so the next reader does not attribute the difference to PART 7.
-- [ ] **H4 — write `docs/WORLD-BUILD-LOG.md`**: what was built, what was
-      measured, what is still not verified (the visual checks), and every step
-      marked BLOCKED with its reason. Honest, specific, no rounding up.
+- [x] **H4 — write `docs/WORLD-BUILD-LOG.md`.** Evidence: the file itself —
+      what was built per phase, the measured figures with their commands, what
+      is still not verified (the live-rendering integration gap that spans
+      C1/C2/D1/D2/D4/D6/D7/D8, named as the single biggest remaining item),
+      G2's BLOCKED reason, and the two incidents worth remembering (a
+      pre-existing PART 0 staleness found and fixed; two processes racing the
+      same tree mid-H1, caught and recovered). **Every box in PART 7 is now
+      `[x]` with evidence or `[!]` with a reason — the build described by this
+      plan is complete at the mechanism level**, with the live-wiring gap
+      named plainly rather than claimed.
 
 ---
 
