@@ -301,7 +301,7 @@ export function typologyFor(className, situation, fits = null) {
   // is the defect class this repo keeps finding. So the layout asks the library
   // the question rather than keeping its own answer to it.
   if (typeof fits === "function") {
-    const affordable = eligible.filter((o) => o.typology === null || fits(o.typology, situation));
+    const affordable = eligible.filter((o) => o.typology === null || fits(o.typology, situation) !== null);
     // If NOTHING fits, fall through to the unfiltered set rather than returning
     // null. A plot with no building is a refusal, and a refusal has to be a
     // decision the caller can see and count -- not a silent consequence of a
@@ -384,6 +384,18 @@ export function planPlot(plot, index, count, verdict, fits = null) {
   // be an option it ignores, which reads as though it were doing something.
   if (typology === "bld-terrace") options.units = terraceUnitsFor(buildableW);
 
+  // THE SIZER MAY ASK FOR A SPECIFIC SIZE.
+  //
+  // buildings.js now honours explicit cellW/cellD, so the bridge can request a
+  // building that fits this plot rather than merely checking whether the
+  // seed-derived one happens to. Those options come from the sizer because only
+  // it knows which typologies read them -- a list here would be a third copy of
+  // knowledge that already lives in buildings.js.
+  if (typeof fits === "function") {
+    const asked = fits(typology, situation);
+    if (asked && typeof asked === "object") Object.assign(options, asked);
+  }
+
   return {
     plotId: plot.id,
     blockId: plot.blockId,
@@ -426,16 +438,31 @@ export function planPlot(plot, index, count, verdict, fits = null) {
  * is both cheaper and more truthful than noise, because two houses in the same
  * position on the same kind of street SHOULD look alike.
  */
+/**
+ * The one place a (typology, options) pair is turned into a seed.
+ *
+ * EVERY OPTION, NOT A HAND-LISTED SUBSET. An earlier version named the six
+ * options it knew about, which is a table that has to be kept in step with
+ * whatever the sizer adds. The failure is silent and severe: an option that
+ * changes the geometry but is missing from the key means two DIFFERENT
+ * buildings share one key, so one of them is drawn with the other's mesh.
+ *
+ * AND IT IS SHARED, WHICH IS THE POINT. `layout-fits.js` measures a candidate
+ * building to decide whether it fits; the renderer then builds the chosen one.
+ * If those two used different seeds they would be asking about different
+ * buildings, and the fit check would be a confident answer to the wrong
+ * question. That is not hypothetical -- it happened: the sizer built with its
+ * own seed while planPlot used the variant key, and because the seed drives the
+ * fallback size, overhangs went from 269 to 556 while every test stayed green.
+ * One function, used by both, is what makes the two agree by construction.
+ */
+export function seedFor(typology, options) {
+  const keys = Object.keys(options).sort();
+  return [typology, ...keys.map((k) => `${k}=${options[k]}`)].join("|");
+}
+
 export function variantKeyOf(placement) {
-  const o = placement.options;
-  return [
-    placement.typology,
-    o.position,
-    o.corner,
-    o.foundation,
-    o.character,
-    `u${o.units || 0}`,
-  ].join("|");
+  return seedFor(placement.typology, placement.options);
 }
 
 /**

@@ -19,7 +19,8 @@ import assert from "node:assert/strict";
 import { generateWorld } from "../public/city-plan.js";
 import { assessFootprint } from "../public/footprint.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
-import { planCity, groupByVariant } from "../public/layout.js";
+import { planCity, groupByVariant, seedFor } from "../public/layout.js";
+import { makeFits } from "../public/layout-fits.js";
 import { building } from "../public/buildings.js";
 
 // ONE WORLD, SHARED. Building it costs about 4 seconds, and every test here
@@ -31,8 +32,81 @@ const verdictFor = (plot: any) => {
   const b = plot.buildable || plot;
   return assessFootprint(heightAt, { xMin: b.xMin, xMax: b.xMax, zMin: b.zMin, zMax: b.zMax }).verdict;
 };
-const { placements } = planCity(world.blocks, world.plots, verdictFor);
+const { placements } = planCity(world.blocks, world.plots, verdictFor, makeFits());
 const groups = groupByVariant(placements);
+
+/**
+ * How many of these placements are larger than the plot they were chosen for.
+ *
+ * THE SEED MUST BE THE REAL ONE. The first version of this passed the literal
+ * string "measure" as the seed, which means it measured a DIFFERENT building
+ * from the one the renderer builds -- and, for any typology whose size still
+ * falls back to the seed, a differently sized one. It therefore reported 293
+ * overhangs while the real figure under a broken sizer was 653, and a mutation
+ * that genuinely doubled overhangs came back SURVIVED.
+ *
+ * That is the same defect this file is testing for, committed by the test. The
+ * seed is `seedFor(typology, options)`, exactly as the renderer will compute it.
+ */
+function countOverhangs(list: any[]) {
+  let over = 0;
+  const specs = new Map<string, any>();
+  for (const p of list) {
+    const seed = seedFor(p.typology, p.options);
+    let spec = specs.get(seed);
+    if (!spec) {
+      spec = building(p.typology, seed, p.options);
+      specs.set(seed, spec);
+    }
+    if (spec.footprint.w > p.fits.w + 1e-6 || spec.footprint.d > p.fits.d + 1e-6) over++;
+  }
+  return over;
+}
+
+test("asking whether a building FITS before choosing it is what stops it overhanging", () => {
+  // THIS TEST EXISTS BECAUSE A MUTATION SURVIVED.
+  //
+  // The fits predicate is optional -- planCity takes it and defaults to null --
+  // so every test in layout.test.ts exercises the unfiltered path. Disabling the
+  // filter therefore changed nothing any test could see, and the mutation
+  // `fits-filter-is-applied` reported SURVIVED. A control that is only exercised
+  // by a script is not a control.
+  //
+  // Measured: without the predicate 3,552 of 20,472 buildings (17.4%) are bigger
+  // than their plot, because cellW is seed-derived inside buildings.js and a
+  // bld-office can decide it is 48 x 56 m on a 48 x 53 m plot. With it, 269.
+  const without = planCity(world.blocks, world.plots, verdictFor).placements;
+  const withFits = placements;
+
+  const overWithout = countOverhangs(without);
+  const overWith = countOverhangs(withFits);
+
+  assert.ok(
+    overWithout > 1000,
+    `only ${overWithout} overhangs without the predicate -- the fixture no longer reproduces the problem, ` +
+      "so this test would pass whether or not the filter works",
+  );
+  assert.ok(
+    overWith < overWithout / 5,
+    `the fits predicate cut overhangs from ${overWithout} to ${overWith}, which is not the order of improvement it claims`,
+  );
+  // AN ABSOLUTE CEILING, AND IT IS TIGHT ON PURPOSE.
+  //
+  // This started at 3% and that was too loose to be a control. When the sizer
+  // and the renderer briefly used DIFFERENT seeds -- so the size that was
+  // measured was not the size that would be built -- overhangs went from 269 to
+  // 556, and 556 sat comfortably under both the 5x rule and a 3% ceiling. The
+  // suite stayed green through a real regression.
+  //
+  // 2% of the city is 409 buildings. The measured figure is 293. That leaves
+  // room for terrain tuning to move it a little and no room at all for the
+  // seeds to come apart again.
+  assert.ok(
+    overWith < 0.02 * withFits.length,
+    `${overWith} of ${withFits.length} buildings overhang their plot, above the 2% ceiling. ` +
+      "If this rose suddenly, check that layout-fits.js and variantKeyOf still share seedFor.",
+  );
+});
 
 test("every variant the layout asks for can actually be built", () => {
   assert.ok(groups.size > 100, `only ${groups.size} variants -- the fixture is too small to mean anything`);

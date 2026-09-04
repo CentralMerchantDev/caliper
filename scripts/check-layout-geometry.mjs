@@ -26,47 +26,9 @@
 import { generateWorld } from "../public/city-plan.js";
 import { assessFootprint } from "../public/footprint.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
-import { planCity, groupByVariant, terraceUnitsFor } from "../public/layout.js";
+import { planCity, groupByVariant } from "../public/layout.js";
+import { makeFits } from "../public/layout-fits.js";
 import { building } from "../public/buildings.js";
-
-// DOES THIS TYPOLOGY FIT THIS PLOT?
-//
-// The layout cannot answer this itself: a typology's cellW is derived from its
-// seed inside buildings.js, so only buildings.js knows how big the thing will
-// be. Rather than keep a copy of those sizes in layout.js -- a second table
-// that would have to agree with the first -- the layout takes this predicate
-// and asks.
-//
-// The spec is built with the SAME seed and options the renderer will use, so
-// this is the real size, not a sample or an estimate. Only `footprint` is read,
-// and `building()` computes that without touching geometry, so it is cheap.
-const fitCache = new Map();
-export function makeFits() {
-  return function fits(typology, situation) {
-    const options = {
-      corner: situation.corner,
-      position: situation.position,
-      foundation: situation.foundation,
-      character: situation.character,
-    };
-    // Row typologies take a unit count, and it changes their width, so the
-    // question has to be asked about the building that would actually be built.
-    if (typology === "bld-terrace") options.units = terraceUnitsFor(situation.fits.w);
-    const key = [typology, options.position, options.corner, options.foundation, options.character, `u${options.units || 0}`].join("|");
-
-    let fp = fitCache.get(key);
-    if (!fp) {
-      try {
-        fp = building(typology, key, options).footprint;
-      } catch {
-        // A typology that cannot even be described is not a typology that fits.
-        fp = { w: Infinity, d: Infinity };
-      }
-      fitCache.set(key, fp);
-    }
-    return fp.w <= situation.fits.w + 1e-6 && fp.d <= situation.fits.d + 1e-6;
-  };
-}
 
 const heightAt = makeHeightAt(new LandField(16));
 const world = generateWorld(heightAt);

@@ -108,8 +108,8 @@
       "id": "frontage-gates-the-frontage-typologies",
       "guards": "a shop or high-street terrace is only placed where it actually has street frontage, so a corner shop is on a corner rather than buried mid-row with its shopfront facing a party wall",
       "file": "public/layout.js",
-      "find": "  const eligible = table.filter((o) => !o.prefersFrontage || onACorner);",
-      "replace": "  const eligible = table.slice();",
+      "find": "  let eligible = table.filter((o) => !o.prefersFrontage || onACorner);",
+      "replace": "  let eligible = table.slice();",
       "expect": "a shop only appears where it has street frontage"
     },
     {
@@ -137,6 +137,33 @@
       "find": "  if (cls.module) {",
       "replace": "  if (false && cls.module) {",
       "expect": "every row-class plot is a whole number of 8 m cells"
+    },
+    {
+      "id": "variant-seed-is-the-situation-not-the-plot",
+      "guards": "a variant group is seeded by its own key, so every member gets byte-identical geometry and the city can be drawn as a few hundred InstancedMeshes instead of one mesh per building",
+      "note": "Seeding each building from its plot id sounds like more variety and is what makes instancing impossible: 20,472 buildings would be 20,472 draw calls against the 14 instanced buckets the renderer uses today. Measured, grouping by SITUATION collapses the city to 244 variants at 1.48 M triangles.",
+      "file": "public/layout.js",
+      "find": "seed: key, placements: [] };",
+      "replace": "seed: p.plotId, placements: [] };",
+      "expect": "collapses to a few hundred instanceable variants"
+    },
+    {
+      "id": "fits-filter-is-applied",
+      "guards": "the layout asks buildings.js whether a typology fits the plot BEFORE choosing it, instead of picking by weight and discovering the overhang at placement time",
+      "note": "This entry exists because the first version of it SURVIVED. The predicate is optional (planCity defaults it to null), so every test in layout.test.ts ran the unfiltered path and disabling the filter changed nothing any test could see. A control only exercised by a script is not a control. The test now lives in layoutGeometry.test.ts, where buildings.js is available, and measures the difference: 3,552 overhangs without, 269 with.",
+      "file": "public/layout.js",
+      "find": "    if (affordable.length) eligible = affordable;",
+      "replace": "    if (false) eligible = affordable;",
+      "expect": "stops it overhanging"
+    },
+    {
+      "id": "sizer-and-renderer-share-one-seed",
+      "guards": "layout-fits.js measures a candidate with the SAME seed the renderer will build it with, via the shared seedFor, so the building that was checked for fit is the building that gets built",
+      "note": "Found by measurement, not by reasoning. The sizer briefly computed its own seed while planPlot used the variant key; since the seed drives the fallback size, the two disagreed and overhangs went 269 -> 556 with the whole suite green. The first version of THIS mutation also survived, because countOverhangs measured with the literal seed \"measure\" -- the same defect, committed by the test that was meant to catch it. Both are fixed; the mutation now reports 653 overhangs against a 409 ceiling.",
+      "file": "public/layout-fits.js",
+      "find": "    const askedSeed = seedFor(typology, asked);",
+      "replace": "    const askedSeed = typology + \"|\" + options.character;",
+      "expect": "stops it overhanging"
     }
   ]
 }
