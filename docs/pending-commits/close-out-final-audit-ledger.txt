@@ -1,0 +1,20 @@
+Tick the ledger: final consolidated blind audit closed, all 5 findings fixed
+
+What this is: docs/WORLD-BUILD-PLAN.md PART 7 gets one new entry, after H4,
+recording the final consolidated blind audit this session's own mid-session
+redirect asked for ("do the blind audit at the end... with the same note for
+all of them", instead of one per phase boundary). The audit itself
+(docs/audits/UMAA-phases-B-H.md) and its five findings were already fixed,
+tested, mutation-proven and committed across five prior commits tonight
+(CLAUDE.md's stale count, the two missing audit artefacts, the untested
+closeRegion(open===null) branch, the duplicate worldFromJSON naming, and
+createWorld()'s missing per-seed memoization). This commit is the ledger
+catching up to that work, not new code.
+
+Every box in PART 7 is now [x] with evidence or [!] with a reason, and the
+audit loop the session opened -- one consolidated pass instead of one per
+phase, on the explicit condition that its findings actually get closed, not
+just reported -- is closed by this entry.
+
+public/asset-registry.js and public/tier-models.js remain excluded from this
+and every commit tonight -- untouched, unstaged, flagged previously.

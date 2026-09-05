@@ -967,6 +967,44 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
       `[x]` with evidence or `[!]` with a reason — the build described by this
       plan is complete at the mechanism level**, with the live-wiring gap
       named plainly rather than claimed.
+- [x] **Final consolidated blind audit (Phase B–H, per the session's own
+      redirect to run one audit at the end rather than one per phase
+      boundary).** A fresh, no-history agent, spawned into an isolated
+      worktree, audited every Phase B–H module against the running commit
+      history. Report: `docs/audits/UMAA-phases-B-H.md`. Five findings, all
+      now fixed, tested, mutation-proven and committed:
+      1. **HIGH** — `CLAUDE.md`'s own "how to verify" line was stale by 297
+         tests (571 claimed, 868 measured). Fixed by `test/claudeMdIsCurrent.test.ts`,
+         mechanically pinning the line to `test/testCount.generated.json` the
+         same way `test/publicClaims.test.ts` already pins the page.
+      2. **MEDIUM** — the Phase A audit report the build log cites, and this
+         audit's own report, existed only inside throwaway `.claude/worktrees/`
+         checkouts, never merged to `main`. Both recovered and committed to
+         `docs/audits/`, along with their `AUDIT-PROTOCOL.md` §7 additions.
+      3. **LOW/MEDIUM** — `grid.js`'s `closeRegion` on the whole-world-open
+         sentinel (`open === null`) — the shape every world built today
+         actually has, since nothing wires `createWorld({ regions })` from a
+         live call site yet — was untested. Two tests added to
+         `test/regions.test.ts`; mutation `close-region-on-open-null-refuses-not-a-silent-success`
+         CAUGHT.
+      4. **LOW** — two different functions both named `worldFromJSON`
+         (`world.js`, a full world; `world-model.js`, the layer model alone),
+         a naming trap for a future caller. `world-model.js`'s renamed to
+         `worldModelFromJSON`.
+      5. **MEDIUM** — `createWorld()` cost ~2.4s/call with no saving on a
+         repeat call for the same seed (confirming the earlier Phase A
+         audit's identical, previously undocumented finding), and Phase B–H's
+         own new tests had added ~17 call sites that do exactly that.
+         `public/world.js` now memoizes `LandField`/`heightAt` per seed —
+         `plan`/`layers`/`grid` deliberately stay per-call, since two tests
+         require independent mutable district data and independent layer
+         stacks for the same seed. Measured: ~50% reduction per repeat call
+         (4093ms → ~2060ms), whole-suite runtime dropped ~292s → ~235s.
+
+      **This closes the audit loop this session opened**: the redirect that
+      asked for one consolidated audit at the end, rather than one per phase
+      boundary, is honoured by this entry — every finding it produced has a
+      commit, a test, and a mutation, not just a report.
 
 ---
 
