@@ -15,6 +15,7 @@
 import * as THREE from "three";
 import { WORLD_SCALE } from "./world-scale.js";
 import { WORLD } from "./city-plan.js";
+import { createSelection } from "./selection.js";
 
 /**
  * TUNED VALUES, NAMED SO A TEST CAN READ THEM.
@@ -1809,6 +1810,14 @@ class Renderer3D {
     // describe a world that is not on screen.
     const { buildSpatialIndex } = await import("./spatial-index.js");
     this._index = buildSpatialIndex(city.world);
+    // I3: WHAT WAS PICKED STAYS PICKED, BETWEEN THE CLICK AND WHATEVER ASKS
+    // ABOUT IT NEXT. `_index.addressAt(x, z)` alone answers the question for
+    // one instant; nothing remembered it a moment later, which is fine for a
+    // label on screen but not for D2/D4's "describe this" -- that request is
+    // written after the click, against whatever was last selected. Composes
+    // D1's createSelection() over the same index, rather than a second,
+    // parallel notion of "what is selected".
+    this._selection = createSelection(this._index);
     this.sun = city.sun;                    // the shell's day/night code drives this
     this._skyMesh = city.sky;
     // AND ITS UNIFORMS, WHICH WERE LEFT POINTING AT THE VILLAGE'S SKY.
@@ -6623,7 +6632,7 @@ class Renderer3D {
       const cityHits = this._raycaster.intersectObjects(this.scene.children, true);
       if (cityHits.length === 0) return;
       const pt = cityHits[0].point;
-      const addr = this._index ? this._index.addressAt(pt.x, pt.z) : null;
+      const addr = this._selection ? this._selection.pick(pt.x, pt.z) : null;
       const where = this._index ? this._index.describeAt(pt.x, pt.z) : "somewhere in the city";
       this._lastPickedPoint = { x: pt.x, z: pt.z };
       if (this.onInspect) {

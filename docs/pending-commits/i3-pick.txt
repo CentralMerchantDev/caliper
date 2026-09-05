@@ -1,0 +1,54 @@
+I3: pick -- what was clicked stays selected
+
+What was wrong: public/world-render-3d.js's city-mode click handler already
+raycast a click to a world point and asked the spatial index what was there
+("CITY MODE PICKS AGAINST THE SCENE" -- that mechanism predates this step
+and was never broken). It called `this._index.addressAt(x, z)` fresh on
+every click and kept nothing: D1's createSelection() (public/selection.js)
+was proven correct in isolation and never wired in, so a later "describe
+this" request (D2/D4) would have had nothing to read.
+
+How it's fixed: constructs `this._selection = createSelection(this._index)`
+alongside the spatial index, and the city-mode handler now resolves through
+`this._selection.pick(x, z)` instead of the index directly -- same address,
+now persisted at `.current`. "Something on screen naming what is picked"
+was already true (the existing onInspect callback populates the HUD) and is
+unchanged.
+
+Two tests, at the two levels this codebase actually verifies renderer code:
+  - test/pickSelection.test.ts's DATA test, against the real generated plan
+    (not a fixture): a pick at a real plot's real centre returns that exact
+    plot's id and it stays at .current; a second pick on a different plot
+    replaces the first (one selection, not a history).
+  - The same file's WIRING test, reading world-render-3d.js's own source
+    (constructing a real WorldRenderer needs a GPU this suite does not have
+    -- the same limitation test/rendererStatic.test.ts already states and
+    works around the same way): pins that the city-mode handler resolves
+    through this._selection.pick, not this._index.addressAt directly.
+
+Mutation city-mode-pick-resolves-through-persisted-selection (reverts the
+handler to call the index directly) CAUGHT:
+  node scripts/_mutcheck.mjs test/pickSelection.test.ts
+  public/world-render-3d.js test/mutations.json
+  baseline: GREEN / CAUGHT city-mode-pick-resolves-through-persisted-selection
+  / restored: byte identical
+
+Verified live, not just at the module level: a throwaway Playwright script
+(_TO-DELETE/i3-visual-check/check-selection.mjs, gitignored, kept per
+policy) loaded the real running app, confirmed a genuine `_cityMode: true`
+WorldRenderer3D instance with a real `_selection` exists, called
+.pick(1000, 500) and read .current straight back -- a real address
+(districtId "harbourside", nearestPlotId "block-836-590-p1"), with
+.current === what pick() returned, proving persistence end to end in the
+actual app, not assumed from the source alone.
+
+Measured: npx tsc --noEmit clean. npm test: 884/884, 0 fail (882 plus these
+two new tests). CLAUDE.md's count line and test/testCount.generated.json
+regenerated to match; claudeMd-test-count-matches-generated re-verified
+CAUGHT. Default-world guard unaffected -- this step touches no generation
+code, only the click-handling wiring.
+
+What's still open: I4 (describe) is next.
+
+public/asset-registry.js and public/tier-models.js remain excluded -- agy's
+assets-lane work, untouched, unstaged, flagged previously.

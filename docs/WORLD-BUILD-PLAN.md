@@ -1088,11 +1088,39 @@ line below was written by this plan about itself — lines 541, 566, 697, 728, 8
       `npx tsc --noEmit`: clean. `npm test`: 882/882. Default-world guard
       re-measured: `sha256` of `new LandField(16)`'s height fingerprint is
       still `418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96`.
-- [ ] **I3 — pick.** A click raycasts to a placement and `createSelection`
-      resolves it to an address that stays selected, with something on screen
-      naming what is picked.
-      *Test:* a synthetic click at a known plot's centre selects that plot's real
-      id. *Mutation:* return the nearest block instead of the plot → red.
+- [x] **I3 — pick.** Evidence: `public/world-render-3d.js`'s existing
+      city-mode click handler ("CITY MODE PICKS AGAINST THE SCENE") already
+      raycast to a world point and asked the spatial index what was there —
+      that part predates this step. What was missing was memory: it called
+      `this._index.addressAt(x, z)` fresh every click, with nothing keeping
+      what was picked a moment later for D2/D4's describe/generate step to
+      read. Now constructs `this._selection = createSelection(this._index)`
+      alongside the index and resolves through `this._selection.pick(x, z)`
+      — same address, now persisted at `.current`. "Something on screen
+      naming what is picked" was already true (the existing `onInspect`
+      callback), unchanged.
+      `test/pickSelection.test.ts` (2): a DATA test, against the real
+      generated plan — a pick at a real plot's real centre returns that
+      exact plot's id and it stays at `.current`, and a second pick on a
+      different plot replaces the first (one selection, not a history); a
+      WIRING test, reading `world-render-3d.js`'s own source (constructing a
+      real `WorldRenderer` needs a GPU this suite does not have — the same
+      limitation `test/rendererStatic.test.ts` already states and works
+      around the same way) — pins that the city-mode handler resolves
+      through `this._selection.pick`, not `this._index.addressAt` directly.
+      Mutation `city-mode-pick-resolves-through-persisted-selection`
+      (reverts the handler to call the index directly) CAUGHT: `node
+      scripts/_mutcheck.mjs test/pickSelection.test.ts
+      public/world-render-3d.js test/mutations.json`.
+      Live, not just simulated: a throwaway Playwright script
+      (`_TO-DELETE/i3-visual-check/check-selection.mjs`, gitignored, kept
+      per policy) loaded the real app, confirmed `_cityMode: true` and a
+      real `_selection` instance exist, called `.pick(1000, 500)` and read
+      `.current` straight back — a real address (`districtId: "harbourside"`,
+      `nearestPlotId: "block-836-590-p1"`), with `.current === the value pick()
+      returned`, proving persistence end to end, not just at the module level.
+      `npx tsc --noEmit`: clean. `npm test`: 884/884. Default-world guard
+      unaffected (this step touches no generation code).
 - [ ] **I4 — describe.** A plain-English box scoped to the selection, wired to
       `makeDescribeRequest`. **No option list.**
       *Test:* the request carries the selected address and the typed text, and
