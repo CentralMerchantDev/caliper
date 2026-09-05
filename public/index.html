@@ -1861,6 +1861,18 @@ body.inspecting-mobile #nav-compass-pad {
       <p id="inspect-npc-thought" style="margin:4px 0 0;font-style:italic;font-size:11.5px;color:var(--ink)">“The harbour promenade is sparkling in the morning sun.”</p>
     </div>
     <button type="button" id="inspect-focus-btn" class="btn-pill" style="margin-top:8px;width:100%;justify-content:center">🔍 Focus Camera</button>
+    <!-- I4: DESCRIBE -- A PLAIN-ENGLISH BOX, SCOPED TO THE SELECTION.
+         No option list, deliberately: this is a free-text box, not a menu.
+         Wired to public/describe-request.js's makeDescribeRequest(), which
+         carries the typed text verbatim -- never templated into markup --
+         so #describe-result below only ever uses .textContent. Separate
+         from the existing #bar-request-input/#bar-submit dock, which drives
+         the pre-existing pipeline; I5 is where the two paths meet. -->
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1)">
+      <textarea id="describe-input" class="dock-input" maxlength="500" aria-label="Describe a change to the selected plot" placeholder="e.g. make this taller" style="width:100%;box-sizing:border-box"></textarea>
+      <button type="button" id="describe-submit" class="btn-pill" style="margin-top:6px;width:100%;justify-content:center">✏️ Describe this change</button>
+      <p id="describe-result" style="margin:6px 0 0;font-size:11.5px;color:var(--muted)"></p>
+    </div>
   </div>
 </div>
 
@@ -1970,7 +1982,7 @@ body.inspecting-mobile #nav-compass-pad {
         </div>
       </div>
       <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#d1fae5">
-        <strong>Continuous Verification:</strong> <span id="claim-node-tests">884</span> Node tests and <span id="claim-worker-tests">12</span> Cloudflare Worker integration tests, run against this repository. This sentence has now gone stale three times in a row while claiming it was read from the runner, so it is no longer trusted to a human: <code>test/publicClaims.test.ts</code> counts the suite and fails if these numbers drift.
+        <strong>Continuous Verification:</strong> <span id="claim-node-tests">886</span> Node tests and <span id="claim-worker-tests">12</span> Cloudflare Worker integration tests, run against this repository. This sentence has now gone stale three times in a row while claiming it was read from the runner, so it is no longer trusted to a human: <code>test/publicClaims.test.ts</code> counts the suite and fails if these numbers drift.
       </div>
       <!-- WHAT THIS SITE DOES WITH WHAT YOU TYPE.
            There was no privacy notice of any kind, on a public demo that sends
@@ -2293,6 +2305,7 @@ body.inspecting-mobile #nav-compass-pad {
 <script type="module">
 import { WorldRenderer, THREE } from "./world-render-3d.js";
 import { WorldRenderer as WorldRenderer2D } from "./world-render.js";
+import { makeDescribeRequest } from "./describe-request.js";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2524,6 +2537,25 @@ const renderer3d = new WorldRenderer(canvas3d, {
 window.renderer3d = renderer3d;
 window.__worldRenderer = renderer3d;
 const renderer2d = new WorldRenderer2D(canvas2d, { reducedMotion });
+
+// I4: DESCRIBE -- makeDescribeRequest(selection, text), READ BACK ONLY WITH
+// .textContent. `req.text` is the visitor's own typed text, carried
+// verbatim by describe-request.js (never templated into markup, per its own
+// header) -- this is the one and only place it is displayed, and it MUST
+// stay .textContent. Using innerHTML here is exactly the mutation
+// test/describeRequestUI.test.ts guards against.
+$('#describe-submit').addEventListener('click', () => {
+  const input = $('#describe-input');
+  const result = $('#describe-result');
+  const selection = renderer3d.getSelection();
+  const req = makeDescribeRequest(selection, input.value);
+  if (!req.ok) {
+    result.textContent = req.reason;
+    return;
+  }
+  result.textContent = `Scoped to ${req.address}: "${req.text}"`;
+  input.value = '';
+});
 
 // Roof toggle handlers
 // ASSIGNED AND NEVER READ. setRoofView is the single source of truth for this

@@ -1121,11 +1121,41 @@ line below was written by this plan about itself — lines 541, 566, 697, 728, 8
       returned`, proving persistence end to end, not just at the module level.
       `npx tsc --noEmit`: clean. `npm test`: 884/884. Default-world guard
       unaffected (this step touches no generation code).
-- [ ] **I4 — describe.** A plain-English box scoped to the selection, wired to
-      `makeDescribeRequest`. **No option list.**
-      *Test:* the request carries the selected address and the typed text, and
-      the typed text never reaches the DOM as HTML on any path.
-      *Mutation:* render the text with innerHTML → the escaping test red.
+- [x] **I4 — describe.** Evidence: `public/index.html` gained
+      `#describe-input`/`#describe-submit`/`#describe-result` inside the
+      existing parcel-inspect panel (shown by I3's `onInspect`, unchanged) —
+      a free-text box, no option list, calling D2's `makeDescribeRequest`
+      with `renderer3d.getSelection()` (a new thin delegate on the
+      `WorldRenderer` wrapper, `public/world-render-3d.js`, returning the
+      real `_selection` I3 wired, or `null` in the 2D fallback) and the
+      box's own text. Deliberately separate from the pre-existing
+      `#bar-request-input`/`#bar-submit` dock and its `startRun` pipeline —
+      I5 is where the two paths meet, not this step.
+      `test/describeRequestUI.test.ts` (2), reading `index.html`'s own
+      source (it is markup with an inline module script, not importable as
+      an ES module — the same constraint `test/rendererStatic.test.ts` and
+      `test/pickSelection.test.ts` already state and work around the same
+      way): pins that the handler reads the real selection and calls
+      `makeDescribeRequest`; pins that the result is written with
+      `.textContent`, never `.innerHTML`. Mutation
+      `describe-result-uses-textContent-not-innerHTML` (the exact mutation
+      the ledger names — render with innerHTML) CAUGHT: `node
+      scripts/_mutcheck.mjs test/describeRequestUI.test.ts public/index.html
+      test/mutations.json`.
+      Live, not just simulated: a throwaway Playwright script
+      (`_TO-DELETE/i4-visual-check/check-describe.mjs`, gitignored, kept per
+      policy) picked a real on-plot address, typed
+      `<img src=x onerror="window.__i4pwn=true">make this a tower` into the
+      real box and clicked the real button. Measured directly: `.textContent`
+      read back the dangerous string byte-for-byte as plain text;
+      `.innerHTML` read back the BROWSER'S OWN escaped form
+      (`&lt;img src=x ...&gt;`), proving the DOM stored it as a text node,
+      never parsed as markup; `window.__i4pwn` was never set — the `onerror`
+      handler never ran, because no `<img>` element was ever created.
+      `npx tsc --noEmit`: clean. `npm test`: 886/886. `node
+      scripts/shoot-app.mjs`: still clean, no new page errors, screenshot
+      unchanged in kind. Default-world guard unaffected (no generation code
+      touched).
 - [ ] **I5 — the request path, end to end, with a real model call.**
       `assessTransform` → `buildGeometryPrompt` → **the pipeline in `src/`** →
       `verifyModelSource` → `stageArtefact` → the page.

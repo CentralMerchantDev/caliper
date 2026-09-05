@@ -8194,6 +8194,12 @@ export class WorldRenderer {
     return this._impl.getNavigationMode ? this._impl.getNavigationMode() : "orbit";
   }
 
+  /** I3/I4: the persisted selection (public/selection.js), or null in the
+   *  2D fallback -- city mode's picking has no 2D equivalent. */
+  getSelection() {
+    return this._impl._selection || null;
+  }
+
   pressNavKey(key) {
     if (this._impl.pressNavKey) this._impl.pressNavKey(key);
   }

@@ -1,0 +1,59 @@
+I4: describe -- a plain-English box, scoped to the selection, wired for real
+
+What was wrong: D2's makeDescribeRequest (public/describe-request.js) was
+proven correct in isolation (test/describeRequest.test.ts) and never wired
+into the running page -- nothing imported it. The existing text box in the
+app (#bar-request-input/#bar-submit) drives the pre-existing "startRun"
+pipeline against parcel ids, a different, older addressing scheme; I5 is
+where that path and the new one meet, not this step.
+
+How it's fixed: public/index.html gained #describe-input/#describe-submit/
+#describe-result inside the existing parcel-inspect panel (the one I3's
+onInspect already shows on a real pick) -- a free-text box, no option list.
+Its click handler calls makeDescribeRequest(renderer3d.getSelection(), text).
+getSelection() is a new, small delegate method on the WorldRenderer wrapper
+(public/world-render-3d.js), returning the real, persisted _selection I3
+wired in, or null in the 2D fallback. The result -- the resolved address and
+the typed text -- is displayed with .textContent only, on the one path any
+visitor-typed text reaches the DOM.
+
+Two tests, reading index.html's own source (it is markup with an inline
+module script, not importable as an ES module in Node -- the same
+constraint test/rendererStatic.test.ts and test/pickSelection.test.ts
+already state and work around the same way):
+  - the handler reads the real selection (renderer3d.getSelection()) and
+    calls makeDescribeRequest -- not a stale or fabricated value.
+  - the result is written with .textContent, never .innerHTML.
+
+Mutation describe-result-uses-textContent-not-innerHTML (renders the result
+with innerHTML instead) CAUGHT -- the exact mutation the ledger names:
+  node scripts/_mutcheck.mjs test/describeRequestUI.test.ts public/index.html
+  test/mutations.json
+  baseline: GREEN / CAUGHT describe-result-uses-textContent-not-innerHTML /
+  restored: byte identical
+
+Verified live, not just from source: a throwaway Playwright script
+(_TO-DELETE/i4-visual-check/check-describe.mjs, gitignored, kept per policy)
+picked a real on-plot address in the running app, typed
+`<img src=x onerror="window.__i4pwn=true">make this a tower` into the real
+box and clicked the real button. Measured directly: .textContent read back
+the dangerous string byte-for-byte as plain text; .innerHTML read back the
+BROWSER'S OWN escaped form (&lt;img src=x ...&gt;), proving the DOM stored
+it as a text node and never parsed it as markup; window.__i4pwn was never
+set -- the onerror handler never ran, because no <img> element was ever
+created.
+
+Measured: npx tsc --noEmit clean. npm test: 886/886, 0 fail (884 plus these
+two new tests). node scripts/shoot-app.mjs: still clean, no new page errors.
+CLAUDE.md's count line and test/testCount.generated.json regenerated to
+match; claudeMd-test-count-matches-generated re-verified CAUGHT.
+Default-world guard unaffected -- this step touches no generation code.
+
+What's still open: I5 is the first real spend on this path (assessTransform
+-> buildGeometryPrompt -> the pipeline in src/ -> verifyModelSource ->
+stageArtefact -> the page). Per the plan's own standing instruction, this
+stops here -- Mark is told before it starts, and one supervised end-to-end
+run happens before anything else continues on this path.
+
+public/asset-registry.js and public/tier-models.js remain excluded -- agy's
+assets-lane work, untouched, unstaged, flagged previously.

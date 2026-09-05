@@ -492,7 +492,7 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 884 node tests + 12 worker tests",
+      "find": "npm test            # 886 node tests + 12 worker tests",
       "replace": "npm test            # 900 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
@@ -594,6 +594,15 @@
       "find": "const addr = this._selection ? this._selection.pick(pt.x, pt.z) : null;",
       "replace": "const addr = this._index ? this._index.addressAt(pt.x, pt.z) : null;",
       "expect": "the real click handler resolves through the persisted selection"
+    },
+    {
+      "id": "describe-result-uses-textContent-not-innerHTML",
+      "guards": "I4: the describe box's result is displayed with .textContent, never .innerHTML -- the typed text is carried verbatim by makeDescribeRequest with no escaping of its own, so the display site is the one and only place this defense can live",
+      "note": "describe-request.js's own header names this exact failure mode: something upstream builds an HTML string out of the text before display sees it. The ledger names the mutation directly: render the text with innerHTML -> the escaping test red.",
+      "file": "public/index.html",
+      "find": "result.textContent = `Scoped to ${req.address}: \"${req.text}\"`;",
+      "replace": "result.innerHTML = `Scoped to ${req.address}: \"${req.text}\"`;",
+      "expect": "the describe result is displayed with .textContent only"
     }
   ]
 }
