@@ -492,7 +492,7 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 886 node tests + 12 worker tests",
+      "find": "npm test            # 894 node tests + 12 worker tests",
       "replace": "npm test            # 900 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
@@ -603,6 +603,51 @@
       "find": "result.textContent = `Scoped to ${req.address}: \"${req.text}\"`;",
       "replace": "result.innerHTML = `Scoped to ${req.address}: \"${req.text}\"`;",
       "expect": "the describe result is displayed with .textContent only"
+    },
+    {
+      "id": "runGenerateRequest-never-calls-caller-on-a-refused-prompt",
+      "guards": "I5: a refused transform must never reach the injected model caller -- this is the mutation that guards real money, checked by the stub's CALL COUNT, never its outcome",
+      "note": "Named before the test was written, per instruction. An outcome-only test on a stub caller passes whether or not the call was made; the call-count assertion is the actual guard.",
+      "file": "public/run-generate-request.js",
+      "find": "  if (!prompt.ok) {\n    // NOTHING BELOW THIS LINE RUNS. `caller` is not referenced, let alone\n    // invoked -- the money-guarding property this file exists for.\n    return { ok: false, stage: \"prompt\", reason: prompt.reason, assessment, prompt };\n  }\n  const source = await caller(prompt);",
+      "replace": "  const source = await caller(prompt);\n  if (!prompt.ok) {\n    return { ok: false, stage: \"prompt\", reason: prompt.reason, assessment, prompt };\n  }",
+      "expect": "a refused transform never reaches the caller"
+    },
+    {
+      "id": "runGenerateRequest-verifies-what-the-caller-actually-returned",
+      "guards": "I5: the response verifyGeneratedGeometry checks is the one the injected caller actually returned, not a discarded or fabricated value -- otherwise a good model response could be silently ignored and the request would appear to fail (or a bad one silently pass) for reasons unrelated to what the model wrote",
+      "note": "Found by test that good answers are found, not only that bad ones are refused -- every D-phase test up to I5 proved only refusals.",
+      "file": "public/run-generate-request.js",
+      "find": "  const source = await caller(prompt);\n  const verdict = verifyGeneratedGeometry(source, prompt, evaluate, THREE);",
+      "replace": "  const source = await caller(prompt);\n  const verdict = verifyGeneratedGeometry(\"\", prompt, evaluate, THREE);",
+      "expect": "a stubbed valid model response is verified"
+    },
+    {
+      "id": "productionModelCaller-refuses-rather-than-calling",
+      "guards": "I5: productionModelCaller throws rather than attempting a live call -- no route exists yet for it to call safely",
+      "file": "public/model-caller.js",
+      "note": "A caller that structurally cannot spend money is the safest thing to ship before the route it needs is reviewed and built.",
+      "find": "  throw new Error(\n    \"no live model route is wired yet -- public/*.js has nowhere authorised to send a prompt. \" +\n    \"See docs/WORLD-BUILD-PLAN.md's I5 entry for the exact command Mark runs for a supervised live call.\",\n  );",
+      "replace": "  return \"(T) => new T.BoxGeometry(1,1,1)\";",
+      "expect": "productionModelCaller refuses immediately"
+    },
+    {
+      "id": "supervised-generate-refuses-without-api-key",
+      "guards": "I5: scripts/supervised-generate.mjs refuses immediately when ANTHROPIC_API_KEY is unset -- the first, cheapest safety layer against an accidental spend",
+      "file": "scripts/supervised-generate.mjs",
+      "note": "A caller that structurally cannot spend money is the safest thing to ship before the route it needs is reviewed and built.",
+      "find": "  const apiKey = process.env.ANTHROPIC_API_KEY;\n  if (!apiKey) {",
+      "replace": "  const apiKey = process.env.ANTHROPIC_API_KEY;\n  if (false) {",
+      "expect": "refuses with no ANTHROPIC_API_KEY"
+    },
+    {
+      "id": "supervised-generate-refuses-before-printing-a-prompt-for-a-refused-transform",
+      "guards": "I5: the script never prints a prompt (or reaches the spend-confirmation step) for a transform the ground has not approved",
+      "file": "scripts/supervised-generate.mjs",
+      "note": "The same money-guard property public/run-generate-request.js enforces at the module level, checked again here at the script's own boundary.",
+      "find": "  if (!promptSeen) {",
+      "replace": "  if (false) {",
+      "expect": "refuses a transform the ground does not approve"
     }
   ]
 }

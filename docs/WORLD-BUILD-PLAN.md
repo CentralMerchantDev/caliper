@@ -1156,16 +1156,104 @@ line below was written by this plan about itself — lines 541, 566, 697, 728, 8
       scripts/shoot-app.mjs`: still clean, no new page errors, screenshot
       unchanged in kind. Default-world guard unaffected (no generation code
       touched).
-- [ ] **I5 — the request path, end to end, with a real model call.**
-      `assessTransform` → `buildGeometryPrompt` → **the pipeline in `src/`** →
-      `verifyModelSource` → `stageArtefact` → the page.
-      **This is the first real spend on this path.** It runs through the existing
-      gates, caps, per-IP limits and circuit breaker — extend them, never bypass.
-      *Test:* a refusal from `assessTransform` stops the run before any model
-      call is made (proved by asserting the call count, not the outcome); a
-      failed verify renders as a failed verify.
-      *Mutation:* let a refused transform proceed to generation → the
-      no-call-on-refusal test red. That mutation guards real money.
+- [x] **I5 — the request path, end to end. BUILT AND STUB-PROVEN; NEVER
+      CALLED.** Evidence: `public/run-generate-request.js`'s
+      `runGenerateRequest({ subject, want, request, land, caller, evaluate,
+      THREE })` composes `assessTransform` (D3) → `buildGeometryPrompt` (D4)
+      → **an INJECTED caller** → `verifyGeneratedGeometry`/`verifyModelSource`
+      (D4). The caller is dependency-injected, not imported: production
+      passes `public/model-caller.js`'s `productionModelCaller`, tests pass a
+      stub — the whole path is provable at $0. `productionModelCaller`
+      itself throws immediately rather than attempting a call, because
+      `public/*.js` has nowhere authorised to send a prompt yet (the same gap
+      G1 found from the other side: "`public/*.js` never imports from
+      `src/*.ts`") — a caller that cannot structurally spend money is the
+      safest thing to ship before that route exists and is reviewed.
+      **Decision, close and reversible, noted rather than silently made:**
+      building a real `fetch`-based caller pointing at a not-yet-existing
+      Worker route was considered and rejected in favour of the throwing
+      placeholder — a caller that cannot spend is safer to leave in a
+      codebase nobody has reviewed than one that would 404. Reversible in one
+      line once a real route exists.
+      `test/runGenerateRequest.test.ts` (3):
+      1. **THE MONEY GUARD**, checked by call COUNT, not outcome: a cruise
+         ship assessed against 3 m of harbour water is refused by
+         `assessTransform` before a prompt is built, and the stub caller's
+         call count is asserted `0` — an outcome-only assertion would have
+         passed whether or not the caller was ever invoked, which is
+         precisely the gap the instruction named as already having shipped
+         a broken feature once, elsewhere, tonight.
+      2. **The positive case**: a stubbed VALID response (a real,
+         hand-written `createGeometry` source, honouring the requested
+         footprint) verifies clean, and the stub was called exactly once —
+         proving a good answer is found and usable, not only that bad ones
+         are refused (every D-phase test before this one only ever proved a
+         refusal).
+      3. **End to end, against the real generated plan, not a fixture**: the
+         verified result is registered (`model-registry.js`), applied as a
+         real "replace" layer (`apply-and-persist.js`) against a real
+         plot id, persisted to a `memoryAdapter`-backed store, RELOADED
+         (`worldFromJSON` — not just true in the same in-memory instance
+         that wrote it, the exact gap D8's own undo test exists to catch),
+         and resolved through I2's own `buildScenePlacements` +
+         `resolveOverrideModels` — confirming the placement's resolved
+         `model.geometry` is the SAME object the stub call produced. This is
+         "reaches the scene," measured, not asserted from `verifyModelSource`
+         alone.
+      Mutations, both named before the tests were written:
+      `runGenerateRequest-never-calls-caller-on-a-refused-prompt` (lets a
+      refused transform reach the caller anyway) and
+      `runGenerateRequest-verifies-what-the-caller-actually-returned`
+      (verifies an empty string instead of the caller's real response) —
+      both CAUGHT: `node scripts/_mutcheck.mjs test/runGenerateRequest.test.ts
+      public/run-generate-request.js test/mutations.json`.
+      `test/modelCaller.test.ts` (1) and mutation
+      `productionModelCaller-refuses-rather-than-calling` (returns a fake
+      geometry instead of throwing) CAUGHT, proving the placeholder's own
+      refusal is real, not just documented.
+      **`scripts/supervised-generate.mjs` is the exact command for Mark's
+      supervised live call — written, tested, never executed by this
+      session.** Four independent safety layers (its own header): it is a
+      script nothing on the live page can reach; it refuses with no
+      `ANTHROPIC_API_KEY`; it refuses without `--confirm`; it prints the
+      real prompt and asks on the terminal for a final `y` before spending,
+      unless `--yes` is also given. Manually verified safe end to end this
+      session, without ever providing a real key: refuses cleanly with no
+      key, refuses without `--confirm`, refuses on missing args, refuses a
+      500×500 m "stadium" on a real plot before printing any prompt (ground
+      not approved), and — the one path that reaches real code — builds and
+      PRINTS a correct, real prompt against a real plot from the default
+      seed, then aborts cleanly on `n` with nothing called. Automated in
+      `test/supervisedGenerateScript.test.ts` (4, via `execFileSync` against
+      the real script, no network): the no-key, no-confirm and bad-args
+      refusals, plus the refused-transform-before-any-prompt check. Mutations
+      `supervised-generate-refuses-without-api-key` and
+      `supervised-generate-refuses-before-printing-a-prompt-for-a-refused-transform`
+      CAUGHT.
+      **THE COMMAND MARK RUNS:**
+      ```
+      ANTHROPIC_API_KEY=sk-... node scripts/supervised-generate.mjs \
+        --address <a real plotId from the seed below> \
+        --text "add a small shed" \
+        --w 3 --d 3 \
+        --seed default \
+        --confirm
+      ```
+      **WHAT TO LOOK FOR**, in order: the printed PROMPT — confirm the
+      footprint/support/clearance and `instructions` (your own text,
+      verbatim) are what you expect for the plot named, before typing `y`
+      at the confirmation; the RAW RESPONSE — read what the model actually
+      wrote, unfiltered; the VERDICT — `ok: true` with a real triangle/vertex
+      count means it passed determinism, footprint and compile checks
+      against the SAME numbers the prompt asked for, never anything the
+      response claimed about itself; the TOKEN USAGE block, printed last,
+      from the API response's own usage field, not estimated. The script
+      does not register, apply or persist anything — that join is already
+      built and stub-proven above; wiring a real verified result through it
+      live is a deliberate, separate, later step.
+      `npx tsc --noEmit`: clean. `npm test`: 894/894 (886 plus these eight
+      new tests). Default-world guard re-measured: unchanged. **No model was
+      called by this session, at any point.**
       **Supervised first run.** Watch one end to end before anything is public.
 - [ ] **I6 — apply, persist, undo, live.** `applyAndPersist` writes the layer
       through `world-store`; the scene updates without a rebuild; `undoLayer`

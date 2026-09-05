@@ -1,0 +1,98 @@
+I5: the request path, end to end -- built and stub-proven, never called
+
+What was wrong: D3 (assessTransform) and D4 (buildGeometryPrompt/
+verifyGeneratedGeometry) were each proven correct in isolation, and D4's own
+header already named the gap: "the API call this pipeline sends the prompt
+to... lives elsewhere." Nowhere composed the three into one path, and no
+project convention existed for calling a model at $0 risk while the
+mechanism is built and reviewed.
+
+How it's fixed: public/run-generate-request.js's runGenerateRequest composes
+assessTransform -> buildGeometryPrompt -> an INJECTED caller ->
+verifyGeneratedGeometry. The caller is dependency-injected, not imported:
+production passes public/model-caller.js's productionModelCaller, every test
+passes a stub. productionModelCaller itself throws immediately rather than
+attempting a call -- public/*.js has nowhere authorised to send a prompt yet
+(the same gap G1 found from the other direction: "public/*.js never imports
+from src/*.ts"), so a caller that structurally cannot spend money is what
+ships before that route exists and has been reviewed.
+
+DECISION, close and reversible, recorded rather than made silently: building
+a real fetch-based caller pointing at a not-yet-existing Worker route was
+considered and rejected in favour of the throwing placeholder. A caller that
+cannot spend is safer to leave in an unreviewed codebase than one that would
+404 or, worse, succeed against the wrong route. Reversible in one line once
+a real route exists and is reviewed.
+
+Two properties test/runGenerateRequest.test.ts proves, not one:
+  1. THE MONEY GUARD, checked by call COUNT, never outcome: a cruise ship
+     assessed against 3 m of harbour water is refused before a prompt is
+     built, and the stub's call count is asserted 0. An outcome-only
+     assertion passes whether or not the caller was ever invoked -- exactly
+     the gap named as having already shipped a broken feature elsewhere
+     tonight with its gate "proved" and nothing actually exercising it.
+  2. THE POSITIVE CASE, end to end, against the real generated plan, not a
+     fixture: a stubbed VALID response verifies clean and is called exactly
+     once; the verified result is registered, applied as a real "replace"
+     layer, persisted, RELOADED (worldFromJSON, not just true in the same
+     in-memory instance that wrote it -- the exact gap D8's undo test exists
+     to catch), and resolved through I2's own buildScenePlacements +
+     resolveOverrideModels -- confirming the placement's resolved
+     model.geometry is the SAME object the stub produced. "Reaches the
+     scene," measured, not asserted from verifyModelSource alone. Every
+     D-phase test before this one only ever proved a refusal; this is the
+     other half.
+
+Mutations, named before the tests were written:
+  runGenerateRequest-never-calls-caller-on-a-refused-prompt (lets a refused
+  transform reach the caller anyway) and
+  runGenerateRequest-verifies-what-the-caller-actually-returned (verifies an
+  empty string instead of the caller's real response) -- both CAUGHT:
+    node scripts/_mutcheck.mjs test/runGenerateRequest.test.ts
+    public/run-generate-request.js test/mutations.json
+
+test/modelCaller.test.ts (1) plus mutation
+productionModelCaller-refuses-rather-than-calling (returns fake geometry
+instead of throwing) CAUGHT -- the placeholder's own refusal is proven, not
+just documented.
+
+scripts/supervised-generate.mjs IS the exact command for Mark's supervised
+live call -- written, tested, never executed this session. Four independent
+safety layers (its own header names them): a script, not a route, so
+nothing on the live page can reach it; refuses with no ANTHROPIC_API_KEY;
+refuses without --confirm; prints the real prompt and asks on the terminal
+for a final y before spending, unless --yes is also given. Verified safe
+end to end manually, without ever providing a real key: clean refusal with
+no key, refuses without --confirm, refuses on missing args, refuses a
+500x500m "stadium" on a real plot before printing anything (ground not
+approved), and -- the one path that reaches real code -- builds and PRINTS a
+correct, real prompt against a real plot from the default seed, then aborts
+cleanly on "n" with nothing called (Windows dynamic-import path bug found
+and fixed in the process: raw "C:\..." paths are not valid file:// URLs for
+import(), fixed with pathToFileURL). Automated in
+test/supervisedGenerateScript.test.ts (4, via execFileSync against the real
+script, no network, no Anthropic SDK import on any tested path). Mutations
+supervised-generate-refuses-without-api-key and
+supervised-generate-refuses-before-printing-a-prompt-for-a-refused-transform
+CAUGHT.
+
+The exact command and what to look for are written directly into
+docs/WORLD-BUILD-PLAN.md's I5 entry, in the order Mark should read the
+output: the prompt (check it before confirming), the raw response, the
+verdict (ok:true + a real measured triangle/vertex count), the token usage
+(from the API's own usage field, never estimated). The script does not
+register, apply or persist anything -- that join is already built and
+stub-proven above; wiring a real verified result through it live is a
+deliberate, separate, later step.
+
+Measured: npx tsc --noEmit clean. npm test: 894/894, 0 fail (886 plus these
+eight new tests). CLAUDE.md's count line and test/testCount.generated.json
+regenerated to match; claudeMd-test-count-matches-generated re-verified
+CAUGHT. Default-world guard re-measured: sha256 of `new LandField(16)`'s
+height fingerprint is still
+418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96.
+
+NO MODEL WAS CALLED BY THIS SESSION, AT ANY POINT.
+
+public/asset-registry.js and public/tier-models.js remain excluded -- agy's
+assets-lane work, untouched, unstaged, flagged previously.
