@@ -1,0 +1,41 @@
+Phase L: L1, L3, L4 -- measured, verified live, and PART 0 updated
+
+L1 (the distinctTris measurement) and L2 (the merge itself) were already
+recorded in the merge commit. This closes out the rest of Phase L, each with
+the command run:
+
+L3 -- the visual check agy's own log flagged as the one outstanding item.
+node scripts/shoot-app.mjs: the real app renders clean, no new page errors
+beyond the five pre-existing harness-only ones (Worker routes, the
+cross-origin DATUM frame -- unrelated, unchanged from every prior run this
+session). node scripts/shoot.mjs "Downtown close": AS1's vertex-colour
+enrichment is visibly there -- distinct dark roof caps against lighter walls
+across the skyline, seen in a real frame for the first time. No overhangs,
+no distorted geometry, nothing that reads as wrong.
+
+L4 -- re-measured everything the merge could plausibly have moved, each
+against a command run just now, not carried over from before the merge:
+  node scripts/measure-layout.mjs: 2,291 blocks / 19,874 plots / 19,725
+  placed (99.3%) / 149 refused -- unchanged from H3, as expected: the merge
+  changed geometry (assets-lane), not layout (land-lane).
+  node scripts/check-layout-geometry.mjs: 480 InstancedMeshes, 153,060
+  distinct triangles, 6,886,892 triangles drawn for the whole city -- up
+  from the pre-merge 1,451,912 total / 49,164 distinct.
+  node scripts/gen-city-summary.mjs: zero diff, still -- geometry detail
+  does not feed this summary.
+  node scripts/shoot-app.mjs: sceneChildren 1015, unchanged.
+
+PART 0's ground truth table is updated with all of the above, replacing the
+pre-merge figures, and Phase L's own four ledger items are ticked with this
+evidence. The Library row still reads "not re-measured" -- that caveat was
+never about assets-lane's committed history (confirmed absent from the
+main...assets-lane diff and untouched by the L2 merge); it is about the
+separate, still-uncommitted, still-unrelated public/asset-registry.js and
+public/tier-models.js contamination in the working tree, flagged all
+session and unchanged by this commit.
+
+Measured: npx tsc --noEmit clean. npm test: 898/898 (unchanged from the
+merge commit -- this is documentation only, no code touched).
+
+public/asset-registry.js and public/tier-models.js remain excluded --
+unrelated, unstaged, flagged previously.

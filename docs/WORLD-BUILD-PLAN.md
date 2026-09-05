@@ -30,14 +30,14 @@ already-stale 781/32/20,624 figures — main's re-measured table is kept.)
 
 | Fact | Value | Source |
 |---|---|---|
-| Suite | 868 node tests across 81 files (0 fail), 12 worker tests (0 fail) | `node scripts/gen-test-count.mjs` |
-| Mutation controls | 53, all finds unique, 53/53 CAUGHT | `test/mutations.json`; `test/.mutate-results.json` (H1) |
-| World | 2,291 blocks, 19,874 plots, 19,725 placed (99.3%), 149 refused | `node scripts/measure-layout.mjs` |
-| Draw | 480 InstancedMeshes, 1,451,912 triangles (49,164 across the 480 distinct geometries) | `node scripts/check-layout-geometry.mjs` |
+| Suite | 898 node tests (0 fail), 12 worker tests (0 fail) | `node scripts/gen-test-count.mjs` |
+| Mutation controls | 75, all ids unique, spot-checked CAUGHT (AS1-AS4, the two resolved-conflict controls) | `test/mutations.json` (L2) |
+| World | 2,291 blocks, 19,874 plots, 19,725 placed (99.3%), 149 refused | `node scripts/measure-layout.mjs` (re-run L4, unchanged from H3 — the merge touched geometry, not layout) |
+| Draw | 480 InstancedMeshes, 6,886,892 triangles drawn (153,060 across the 480 distinct geometries — under `distinctTris < 200_000`) | `node scripts/check-layout-geometry.mjs` (L1/L4, post-merge — up from 1,451,912/49,164 pre-merge; agy's LOD0 enrichment, ~56-84 tris to 140-696, measured and not close to the ceiling) |
 | Overhangs / misdeclared footprints | 0 / 0 | same |
-| Library | **not re-measured this session** — `public/asset-registry.js` and `public/tier-models.js` carry an uncommitted, unrelated change (2,400 → 4,800 models) from the parallel `assets-lane`, excluded from every commit tonight and flagged to Mark before the build began. Measuring against the current working tree would report a number that is neither the committed ground truth nor a real deployed state. |
-| Scene | `sceneChildren: 1015`, app OK, no page errors | `node scripts/shoot-app.mjs` |
-| City summary | `src/citySummary.generated.ts` — zero diff on regeneration | `node scripts/gen-city-summary.mjs` (H2) |
+| Library (asset registry) | **still not re-measured** — `public/asset-registry.js` and `public/tier-models.js` remain an UNCOMMITTED, unrelated change in the working tree (2,400 → 4,800 models), separate from `assets-lane`'s own committed history (confirmed: absent from the `main...assets-lane` diff), excluded from every commit tonight including the L2 merge, and flagged to Mark before the build began. |
+| Scene | `sceneChildren: 1015`, app OK, no page errors | `node scripts/shoot-app.mjs` (re-run L3/L4, unchanged) |
+| City summary | `src/citySummary.generated.ts` — zero diff on regeneration | `node scripts/gen-city-summary.mjs` (re-run L4, still zero diff — geometry detail does not feed this summary) |
 
 The default (no-seed) world is unchanged from every prior measurement of it —
 not asserted, pinned: `test/worldSeed.test.ts` and `test/planSeed.test.ts`
@@ -1320,22 +1320,50 @@ the same scrutiny.
 
 ### Phase L — THE ASSETS MERGE *(agy's lane, held all night)*
 
-- [ ] **L1 — measure before merging.** From the assets checkout:
-      `node scripts/check-layout-geometry.mjs`. LOD0 went from ~56–84 triangles
-      to 140–696; main asserts `distinctTris < 200_000` against a current 27,608.
-      The result may legitimately cross the ceiling.
-      **If it crosses, that is a decision with a measured justification, not a
-      number to quietly raise.**
-- [ ] **L2 — merge by hand where both sides edited.** `test/mutations.json` and
-      `docs/WORLD-BUILD-PLAN.md` are edited on both lanes. A clobber on the
-      manifest silently drops controls.
-      *Test:* after merge, every mutation id in the manifest is unique and the
-      count is the sum of both lanes minus any deliberate removal, named.
-- [ ] **L3 — the visual check agy could not run.** Enriched LOD0 geometry and
-      the new vertex colours have never been seen in a real frame. This is the
-      only outstanding item agy itself flagged.
-- [ ] **L4 — re-measure everything the merge moved.** Triangle counts, variant
-      counts, the page's figures, PART 0's ground truth. Each with its command.
+- [x] **L1 — measure before merging.** `scripts/check-layout-geometry.mjs`
+      cannot run standalone from `sandbox-spike-assets` — it needs
+      `public/layout.js`, which lives on `land-lane`, not `assets-lane`, so
+      the actual measurement was taken from the merge itself, staged with
+      `git merge --no-commit --no-ff` (inspectable and abortable before
+      finalizing, never a bare `--all-or-nothing` merge). Evidence:
+      `153,060` triangles across 480 distinct geometries — up sharply from
+      the pre-merge `27,608` (agy's LOD0 enrichment, ~56–84 triangles to
+      140–696), against `test/layoutGeometry.test.ts`'s own
+      `distinctTris < 200_000`. **Did not cross the ceiling** — no
+      quiet-raise decision was needed; the number is simply reported.
+- [x] **L2 — merge by hand where both sides edited.** Three conflicts:
+      `scripts/mutate.mjs` (kept main's whole — a strict superset, this
+      session's own resume-harness fix over the same original tool
+      assets-lane independently copied), `test/mutations.json` (two
+      same-id-different-target conflicts resolved by keeping whichever side
+      still matched the real, current source — both were fixing the
+      identical defect against two different snapshots of it — plus ~200
+      lines of genuinely disjoint new entries concatenated whole),
+      `docs/WORLD-BUILD-PLAN.md` (four regions: PART 0 kept main's
+      re-measured figures over assets-lane's already-stale copy; the AS1-AS4
+      ledger kept assets-lane's completed, evidenced entries over main's
+      unstarted placeholders; Phase H-M kept main's whole real history).
+      *Test, run for real, not assumed:* every mutation id from both
+      original files (71 main, 56 assets-lane) is present in the merged
+      75-entry file, checked programmatically — zero missing from either
+      side — and all 75 ids are unique.
+- [x] **L3 — the visual check agy could not run.** `node
+      scripts/shoot-app.mjs`: app OK, world built, no page errors beyond the
+      five pre-existing harness-only ones (Worker routes, cross-origin
+      frame — unrelated, unchanged). `node scripts/shoot.mjs "Downtown
+      close"`: visibly distinct dark roof caps against lighter walls across
+      the skyline — AS1's vertex-colour enrichment, confirmed live in a real
+      frame for the first time. No overhangs, no distorted geometry.
+- [x] **L4 — re-measure everything the merge moved.** `node
+      scripts/measure-layout.mjs`: 2,291 blocks / 19,874 plots / 19,725
+      placed (99.3%) / 149 refused — unchanged from H3 (the merge moved
+      geometry, not layout). `node scripts/check-layout-geometry.mjs`:
+      480 InstancedMeshes, 153,060 distinct triangles, 6,886,892 drawn city
+      triangles (up from 1,451,912 pre-merge). `node
+      scripts/gen-city-summary.mjs`: zero diff, still (geometry detail does
+      not feed the summary). `node scripts/shoot-app.mjs`: `sceneChildren:
+      1015`, unchanged. PART 0's table above updated with all of the above.
+      `npx tsc --noEmit` clean; `npm test` 898/898.
 
 ---
 
