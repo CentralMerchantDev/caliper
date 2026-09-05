@@ -1,0 +1,56 @@
+J4: every number on the page is generated -- audited first, then the gap
+closed structurally
+
+What was already true, verified rather than assumed: test/publicClaims.test.ts
+(pre-existing) already pins the world size (swept across both public pages,
+not three hand-picked lines -- catches the aria-label and meta description
+too), the placeholder city stats (against the generated citySummary), the
+test counts (against testCount.generated.json), the spend caps/limits
+(against CONTROL_LIMITS, with a distinct-value check so a fourth invented
+cap could not hide beside the real three), and the pipeline's stage names
+(against changePipeline.ts's real emitted events).
+
+A full sweep of index.html's visible text (script/style/comments stripped,
+matching every standalone number token) found nothing else numeric and
+drift-prone on the page: the remainder are CSS values, UI structure (slider
+bounds, step labels), Mark's own bio line, and a fixed historical research
+report (32 benchmark tasks, 387 stored cycles, 3 models, pass rates) -- a
+completed study's own numbers, not a claim about this project's current,
+changing state. Recorded here so the sweep itself is evidence, not an
+unstated assumption.
+
+What was genuinely missing: today's coverage is complete, but nothing
+stopped tomorrow's claim from being added unchecked. A developer adds a new
+figure, follows the exact id convention claim-node-tests/claim-worker-tests
+already established, and never adds the check -- the number looks generated
+(it has the right id) and is not.
+
+How it's fixed: test/claimSpansAreChecked.test.ts is a registry check, not a
+number check -- every id="claim-*" / id="city-stat-*" span in the page's
+visible copy must be named somewhere in test/publicClaims.test.ts's own
+source, or the build fails by id, before anyone has to notice a number
+drifted.
+
+Mutation claim-span-added-without-a-check-is-caught (adds a new
+id="claim-test-mutation-unchecked" span next to the real buildings claim,
+simulating exactly the failure this test exists for) CAUGHT:
+  node scripts/_mutcheck.mjs test/claimSpansAreChecked.test.ts
+  public/index.html test/mutations.json
+  baseline: GREEN / CAUGHT claim-span-added-without-a-check-is-caught /
+  restored: byte identical
+
+Measured: npx tsc --noEmit clean. npm test: 899/899, 0 fail (898 plus this
+one new test). CLAUDE.md's count line and test/testCount.generated.json
+regenerated to match; claudeMd-test-count-matches-generated re-verified
+CAUGHT. Default-world guard unaffected -- no generation code touched.
+
+What's still open, named rather than silently skipped: J1's own claim
+(test/publicClaims.test.ts pins the one-sentence above-the-fold description)
+was not independently re-verified against UMAA Division 7's specific
+finding. J2 (a real refusal visible on first paint) and J3 (recorded runs
+free, live path rationed) both need a real run history this session's
+zero-spend, stub-only I5 does not produce -- correctly out of scope per this
+session's own "where it does not depend on I5" instruction.
+
+public/asset-registry.js and public/tier-models.js remain excluded --
+unrelated, unstaged, flagged previously.

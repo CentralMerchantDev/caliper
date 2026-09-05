@@ -1284,9 +1284,45 @@ session and it was not a technical defect.
       with a daily ceiling; when the budget is spent it replays and **says so**.
       *Test:* with the budget exhausted, the page still works and states that it
       is replaying. *Mutation:* replay silently → that test red.
-- [ ] **J4 — every number on the page is generated.** Extend
-      `gen-test-count.mjs`'s discipline to every figure the page claims.
-      *Test:* a hand-typed number in a claim span fails the build.
+- [x] **J4 — every number on the page is generated.** Audited first, rather
+      than assumed incomplete: `test/publicClaims.test.ts` (pre-existing)
+      already pins the world size (every `N km` on both public pages, swept,
+      not just three hand-picked lines), the placeholder city stats
+      (`city-stat-settlements`/`city-stat-buildings`, checked against the
+      generated `citySummary.generated.ts`), the test counts
+      (`claim-node-tests`/`claim-worker-tests`, from `testCount.generated.json`),
+      the spend caps/limits (against `CONTROL_LIMITS`, with a distinct-value
+      check so a fourth invented cap could not hide beside the real three),
+      and the architecture modal's stage names (against `changePipeline.ts`'s
+      real emitted events). A full sweep of `index.html`'s VISIBLE text (script/
+      style/comments stripped, matching every `\d[\d,]*` token, not just
+      obvious candidates) found nothing else numeric and drift-prone: the
+      remaining figures are CSS values, UI structure (slider min/max, step
+      labels), Mark's own bio ("18 Yrs AEC"), and a fixed historical research
+      report (32 benchmark tasks, 387 stored cycles, 3 models, pass rates) —
+      a completed study's own numbers, not a claim about this project's
+      current, changing state, and not the kind of figure this discipline is
+      for.
+      **What was actually missing, extended now:** the discipline covered
+      today's KNOWN claims but nothing stopped a FUTURE one from being added
+      unchecked. `test/claimSpansAreChecked.test.ts` closes that: every
+      `id="claim-*"` / `id="city-stat-*"` span in the page's visible copy
+      (the exact convention `claim-node-tests`/`claim-worker-tests` already
+      established) must be named somewhere in `test/publicClaims.test.ts`'s
+      own source, or the build fails, by id, before anyone has to notice a
+      number drifted. Mutation `claim-span-added-without-a-check-is-caught`
+      (adds a new `id="claim-test-mutation-unchecked"` span next to the real
+      buildings claim, simulating exactly the failure this test exists for)
+      CAUGHT: `node scripts/_mutcheck.mjs test/claimSpansAreChecked.test.ts
+      public/index.html test/mutations.json`.
+      `npx tsc --noEmit`: clean. `npm test`: 899/899. Default-world guard
+      unaffected (no generation code touched).
+      **J1-J3 not attempted this pass**, named rather than silently skipped:
+      J1's own claim (`test/publicClaims.test.ts` pins the one-sentence
+      above-the-fold description) was not independently verified against
+      UMAA Division 7's specific finding; J2 (a real refusal on first paint)
+      and J3 (recorded-free / live-rationed) both need a real run history
+      this session's zero-spend, stub-only I5 does not produce yet.
 
 ---
 
