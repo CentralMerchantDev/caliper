@@ -1,0 +1,25 @@
+Part 3: docs/LESSONS.md -- a §7 for the build itself, not just its audits
+
+What was missing: docs/AUDIT-PROTOCOL.md §7 records what an AUDIT missed and
+why. Nothing recorded what the WORK ITSELF missed -- a place where a fix, not
+a review, let something through. The LandField-sharing gap this session
+found (Finding 5's memoization silently relaxing the aliasing guarantee A3
+established three commits earlier) is exactly that shape: not a review
+failure, a build one.
+
+docs/LESSONS.md is seeded with that one entry, same shape as §7 (what was
+missed, why it got through, the control that now prevents it, status), with
+the same rule stated up front: nothing is learned until it is a check, and an
+entry stays OPEN until it names a real test that has actually been seen red.
+This entry is marked CLOSED because that already happened -- see the
+previous commit's mutation-verified fixes and test/worldAliasing.test.ts,
+which failed three times in sequence while it was being built, against real,
+diagnosed reproductions, before it was allowed to pass.
+
+CLAUDE.md gets a two-line pointer to it, next to the existing AUDIT-PROTOCOL
+pointer, so a future session finds it the same way it already finds §7.
+
+No code change, no test change -- documentation only.
+
+public/asset-registry.js and public/tier-models.js remain excluded -- agy's
+assets-lane work, untouched, unstaged, flagged previously.

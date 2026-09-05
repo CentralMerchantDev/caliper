@@ -58,6 +58,12 @@ Grounding (epistemic anchor, artifact topology, failure floor):
 [docs/UMAA-CALIPER.md](docs/UMAA-CALIPER.md). Phase order and running ledger:
 [docs/AUDIT-PLAN.md](docs/AUDIT-PLAN.md), [docs/AUDIT-LEDGER.md](docs/AUDIT-LEDGER.md).
 
+[docs/LESSONS.md](docs/LESSONS.md) is §7's counterpart for the *build* itself,
+not the audit of it — a place a fix (not a review) let something through.
+Same rule: an entry stays OPEN until it names a real test and that test has
+been seen red. When the work itself finds a defect a review would have named,
+it goes here.
+
 ## The world
 
 [docs/WORLD-RULES.md](docs/WORLD-RULES.md) is the specification for the land,
