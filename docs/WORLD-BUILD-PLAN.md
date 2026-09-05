@@ -24,7 +24,9 @@ figures below replace the ones this section opened with, which were already
 stale before this session's own work began (781 tests / 32 controls / 20,624
 plots was the count from an EARLIER point in the project's history, not
 anything this session's changes moved) — itself a small instance of the
-exact defect PART 0's own header line exists to prevent.
+exact defect PART 0's own header line exists to prevent. (Merge note, Phase
+L: assets-lane's own copy of this table still carried those same
+already-stale 781/32/20,624 figures — main's re-measured table is kept.)
 
 | Fact | Value | Source |
 |---|---|---|
@@ -304,51 +306,44 @@ All four of these exist because **a declared value was reported as though it had
 been measured.** Take every number from the geometry, never from the `tris` or
 footprint field that declares it.
 
-- [ ] **AS1 — vertex colours.** Merged geometry carries `position` and `normal`
-      only — no groups, no `color` — so every building draws with
-      wall-coloured roofs while its spec declares `material:{wall,roof}`.
-      ```
-      node -e 'import("./public/buildings.js").then(({building})=>{
-        const g=building("bld-villa","p",{position:"middle",corner:"none",
-          foundation:"slab",character:"heritage"}).lod[0].createGeometry();
-        console.log("groups",g.groups.length,"attrs",Object.keys(g.attributes).join(","));})'
-      -> groups 0  attrs position,normal
-      ```
-      *Fix:* emit a per-vertex `color` attribute — tag each part wall or roof as
-      it is pushed, and have `mergeGeometries` write Float32 colours from
-      `spec.material`. **Do NOT use geometry groups:** an InstancedMesh takes
-      one material, so groups do not help. The renderer already reads
-      `geo.attributes.color` and switches to `vertexColors` automatically — no
-      change is needed on the world side.
-- [ ] **AS2 — `bld-tower` draws 11.81 m past its declared depth.** Declares
-      64×32, draws 62.7×43.8, on 7 of 1,296 combinations (position × corner ×
-      foundation × character). Every placement check downstream reads the
-      DECLARATION, so it reserves one piece of ground and occupies another.
-      Find what extends past `footD`; bring it inside or raise the declaration.
-- [ ] **AS3 — declared LOD triangle counts are fiction.**
-      `actual = (geo.index ? geo.index.count : geo.attributes.position.count) / 3`
-      | typology | declares | draws |
-      |---|---|---|
-      | bld-villa | 360 | 56 |
-      | bld-townhouse | 420 | 48 |
-      | bld-terrace | 480 | 84 |
-      | bld-midrise | 520 | 84 |
-      | bld-tower | 580 | 72 |
-      | bld-office | 460 | 72 |
-      Every one is 10–22% of its claim. Decide which number is right, make them
-      agree, and SAY which was chosen. The geometry is the likelier defect: 56
-      triangles is about four boxes, and a villa with a porch, garage, bay
-      window, dormers and a chimney cannot be four boxes.
-      *Budget, measured:* 20,472 buildings collapse to 480 instanced variants,
-      today 1.45 M triangles. At a genuine 400–600 at LOD0 that is roughly 7–9 M
-      before LOD selection, inside the 12 M ceiling `test/layoutGeometry.test.ts`
-      asserts. Build to the declared budget and spend the detail where it is
-      SEEN — window reveals, sills, eaves, cornices, balcony rails, roof clutter.
-- [ ] **AS4 — LOD1 == LOD2 for 10 of 12 typologies.** `bld-midrise` 84/12/12,
-      `bld-tower` 72/12/12, `bld-office` 72/12/12. A three-level system whose
-      middle level costs the same as its lowest is a two-level system with extra
-      code. LOD1 ≈ 15% of LOD0 (massing plus roof shape), LOD2 ≈ 3% (one
-      silhouette box).
+- [x] **AS1 — vertex colours.** Emits per-vertex `color` attribute tagging wall
+      and roof from `spec.material` with no geometry groups (`groups.length === 0`).
+      Evidence: `node -e 'import("./public/buildings.js").then(({building})=>{ const g=building("bld-villa","p",{position:"middle",corner:"none",foundation:"slab",character:"heritage"}).lod[0].createGeometry(); console.log("groups",g.groups.length,"attrs",Object.keys(g.attributes).join(","));})'`
+      -> `groups 0 attrs position,normal,color`.
+      Mutation `as1-vertex-colors-distinguish-wall-and-roof` CAUGHT.
+- [x] **AS2 — `bld-tower` draws 11.81 m past its declared depth.** Bounded crown
+      pyramid radius by `minDim` (`Math.min(bW, bD)`) rather than `bW`, ensuring
+      no overhang past `footD` or `footW` across all combinations.
+      Evidence: `node -e 'import("./public/buildings.js").then(async ({building})=>{ const THREE=await import("./public/vendor/three/three.module.min.js"); let maxOver=0; for(const p of ["middle","end-left","end-right","detached"]) for(const c of ["none","left","right"]) for(const f of ["slab","plinth","stepped"]) for(const ch of ["heritage","interwar","postwar","contemporary"]) for(const pr of ["stepped","tapered","slab","crown","straight"]) { const s=building("bld-tower","probe",{position:p,corner:c,foundation:f,character:ch,profile:pr,cellW:8,cellD:4}); const g=s.lod[0].createGeometry(THREE); g.computeBoundingBox(); const b=g.boundingBox; const overX=Math.max(b.max.x-s.footprint.w/2, -s.footprint.w/2-b.min.x); const overZ=Math.max(b.max.z-s.footprint.d/2, -s.footprint.d/2-b.min.z); if(Math.max(overX,overZ)>maxOver) maxOver=Math.max(overX,overZ); } console.log("max overhang:", maxOver.toFixed(4)); })'`
+      -> `max overhang: 0.0000`.
+      Mutation `as2-bld-tower-footprint-bounds` CAUGHT.
+- [x] **AS3 — declared LOD triangle counts are fiction.** Declared counts are
+      explicit, hand-written static budget constants sitting in each typology spec
+      (e.g., villa: 700 / 50 / 12, terrace: 480 / 50 / 12, townhouse: 320 / 50 / 12),
+      NOT derived or computed from geometry samples. The test asserts a true budget
+      window: `measured <= declared` (ceiling guard) and `measured >= declared * 0.7`
+      (anti-padding guard; a 30% margin accommodates procedural seed variations without
+      permitting hollow declarations).
+      *Audit note:* In commit `b84989b`, AS3 was temporarily implemented by computing
+      declarations from geometry samples at runtime (`sample0 = buildLOD0()`), creating
+      a tautology ($X === X$) where geometry changes could never fail. The previous
+      mutation mutated the declaration to 360 rather than the geometry, leaving geometry
+      drift unguarded. This is now corrected: the declaration is an independent claim,
+      and the mutation adds 12 triangles to geometry without touching the declaration.
+      Eliminating eager sample generation also removed module-load geometry creation
+      and reduced 100 calls to `building()` to 3 ms.
+      Evidence: `node -e 'import("./public/buildings.js").then(async ({building})=>{ const typos=["bld-villa","bld-terrace","bld-townhouse","bld-midrise","bld-tower","bld-shop","bld-office","bld-warehouse","bld-workshop","bld-apartment-walkup","bld-highstreet-terrace","bld-business-park"]; let budgetFailures=0; for(const t of typos){ const s=building(t,"test-lod",{}); for(let i=0;i<s.lod.length;i++){ const g=s.lod[i].createGeometry(); const m=(g.index?g.index.count:g.attributes.position.count)/3; const d=s.lod[i].tris; if(m>d || m<d*0.7) budgetFailures++; } } console.log("budget failures across all typologies and LODs:", budgetFailures); })'`
+      -> `budget failures across all typologies and LODs: 0`.
+      Mutation `as3-declared-lod-triangle-counts-match-geometry` CAUGHT.
+- [x] **AS4 — LOD1 == LOD2 for 10 of 12 typologies.** LOD1 authoring upgraded to
+      intermediate massing + roof shapes (~10-25% of LOD0 tris, 36-48 tris);
+      LOD2 is a single bounding silhouette box (12 tris). `tris1 > tris2` for all 12 typologies.
+      Evidence: `node -e 'import("./public/buildings.js").then(async ({building})=>{ const typos=["bld-villa","bld-terrace","bld-townhouse","bld-midrise","bld-tower","bld-shop","bld-office","bld-warehouse","bld-workshop","bld-apartment-walkup","bld-highstreet-terrace","bld-business-park"]; let equalLevels=0; for(const t of typos){ const s=building(t,"measure",{}); const tris1=s.lod[1].tris; const tris2=s.lod[2].tris; if(tris1<=tris2 || tris2!==12) equalLevels++; } console.log("typologies where LOD1 <= LOD2 or LOD2 != 12:", equalLevels); })'`
+      -> `typologies where LOD1 <= LOD2 or LOD2 != 12: 0`.
+      Mutation `as4-lod1-distinct-from-lod2` CAUGHT.
+      (Merge note, Phase L: main's copy of AS1-AS4 still carried the original,
+      unstarted task descriptions — agy's own completed ledger, with real
+      evidence and CAUGHT mutations, is kept in full.)
 
 ---
 
@@ -1375,6 +1370,11 @@ cannot be verified, say so plainly rather than claiming it.**
 
 A phase heading is not a finishing line. The work ends when every box above is
 `[x]` with evidence or `[!]` with a reason.
+
+*(Merge note, Phase L: assets-lane's copy of this document predates all of
+Phase H-M's work — its H1-H4 entries were still the original, unstarted task
+descriptions. Kept in full above from main, whose H1-H4 (and I-M, which
+assets-lane's copy does not have at all) are the real, evidenced history.)*
 
 ---
 

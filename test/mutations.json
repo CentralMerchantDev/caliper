@@ -159,7 +159,7 @@
     {
       "id": "sizer-and-renderer-share-one-seed",
       "guards": "layout-fits.js measures a candidate with the SAME seed the renderer will build it with, via the shared seedFor, so the building that was checked for fit is the building that gets built",
-      "note": "Found by measurement, not by reasoning. The sizer briefly computed its own seed while planPlot used the variant key; since the seed drives the fallback size, the two disagreed and overhangs went 269 -> 556 with the whole suite green. The first version of THIS mutation also survived, because countOverhangs measured with the literal seed \"measure\" -- the same defect, committed by the test that was meant to catch it. Both are fixed; the mutation now reports 653 overhangs against a 409 ceiling. Find/replace and expect updated when askedFor was pulled out as its own function (H1's survivor fix): the overhang-count test alone could no longer catch this, because terrain tuning moved the measured figure (269 -> ~293) closer to the 409 ceiling, and 653 overhangs still sits under it. The new test asserts the CAUSE -- seed equality, exact over every placement -- rather than the consequence.",
+      "note": "Found by measurement, not by reasoning. The sizer briefly computed its own seed while planPlot used the variant key; since the seed drives the fallback size, the two disagreed and overhangs went 269 -> 556 with the whole suite green. The first version of THIS mutation also survived, because countOverhangs measured with the literal seed \"measure\" -- the same defect, committed by the test that was meant to catch it. Both are fixed; the mutation now reports 653 overhangs against a 409 ceiling. Find/replace and expect updated when askedFor was pulled out as its own function (H1's survivor fix): the overhang-count test alone could no longer catch this, because terrain tuning moved the measured figure (269 -> ~293) closer to the 409 ceiling, and 653 overhangs still sits under it. The new test asserts the CAUSE -- seed equality, exact over every placement -- rather than the consequence. (Merge note, Phase L: assets-lane independently edited this same entry against the pre-H1-refactor shape of layout-fits.js -- that target line no longer exists after the refactor, so main's version is kept; assets-lane's edit is superseded, not lost -- both were fixing the identical defect.)",
       "file": "public/layout-fits.js",
       "find": "  return { asked, askedSeed: seedFor(typology, asked) };",
       "replace": "  return { asked, askedSeed: typology + \"|\" + asked.character };",
@@ -492,7 +492,7 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 894 node tests + 12 worker tests",
+      "find": "npm test            # 898 node tests + 12 worker tests",
       "replace": "npm test            # 900 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
@@ -648,6 +648,38 @@
       "find": "  if (!promptSeen) {",
       "replace": "  if (false) {",
       "expect": "refuses a transform the ground does not approve"
+    },
+    {
+      "id": "as1-vertex-colors-distinguish-wall-and-roof",
+      "guards": "merged geometry emits per-vertex colors tagging roof vs wall so that InstancedMesh can render contrasting colors via vertexColors",
+      "file": "public/buildings.js",
+      "find": "if (item.tag === \"roof\") colVal = defaultRoof;",
+      "replace": "if (item.tag === \"roof\") colVal = defaultWall;",
+      "expect": "distinguishing wall and roof"
+    },
+    {
+      "id": "as2-bld-tower-footprint-bounds",
+      "guards": "bld-tower crown cone radius is bounded by minDim instead of bW, preventing the pyramid cap from overhanging by 11.81m in depth on non-square footprints",
+      "file": "public/buildings.js",
+      "find": "const pyr = new geomT.ConeGeometry(minDim * 0.5, crownH, 4);",
+      "replace": "const pyr = new geomT.ConeGeometry(bW * 0.55, crownH, 4);",
+      "expect": "bld-tower never draws past declared footprint"
+    },
+    {
+      "id": "as3-declared-lod-triangle-counts-match-geometry",
+      "guards": "declared triangle budget acts as a ceiling constraint that trips when geometry exceeds its budget, without hollow padding",
+      "file": "public/buildings.js",
+      "find": "parts.push({ geo: chim, tag: \"wall\" }, { geo: chimCap, tag: \"roof\" }, { geo: chimPot1, tag: \"roof\" }, { geo: chimPot2, tag: \"roof\" });",
+      "replace": "parts.push({ geo: chim, tag: \"wall\" }, { geo: chimCap, tag: \"roof\" }, { geo: chimPot1, tag: \"roof\" }, { geo: chimPot2, tag: \"roof\" }, { geo: new geomT.BoxGeometry(1, 1, 1), tag: \"wall\" });",
+      "expect": "declared and actual triangle counts agree"
+    },
+    {
+      "id": "as4-lod1-distinct-from-lod2",
+      "guards": "LOD1 provides a genuine intermediate massing level distinct from the LOD2 single silhouette box",
+      "file": "public/buildings.js",
+      "find": "{ level: 1, tris: 50, createGeometry: (geomT) => buildLOD1(geomT || T) }, // midrise-lod1",
+      "replace": "{ level: 1, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }, // midrise-lod1",
+      "expect": "LOD1 is an intermediate massing level distinct from LOD2"
     }
   ]
 }

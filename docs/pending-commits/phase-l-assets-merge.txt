@@ -1,0 +1,95 @@
+Phase L: the assets merge -- agy's lane, held all night, merged by hand
+
+L1 -- measured before merging, from a real run against the merged state
+(check-layout-geometry.mjs does not run standalone from the assets checkout:
+it needs public/layout.js, which lives on land-lane, not assets-lane, so the
+script was copied in temporarily -- not committed there -- and the real
+measurement was taken from the merge itself, staged but uncommitted, so it
+could be inspected and aborted if anything looked wrong before finalizing):
+
+  19725 placements -> 480 variants
+  BUILT 480 of 480, FAILED 0
+  DECLARED FOOTPRINT vs DRAWN GEOMETRY: 0 disagree
+  fits 19725, overhangs 0 (0.0%)
+  153,060 triangles across 480 distinct geometries
+  6,886,892 triangles drawn for the whole city
+
+distinctTris (153,060) stays under test/layoutGeometry.test.ts's own
+`distinctTris < 200_000` ceiling with room to spare -- up sharply from the
+pre-merge 27,608 (agy's own LOD0 enrichment, ~56-84 tris to 140-696), but not
+close to crossing. No ceiling-crossing decision was needed; recorded as a
+real number, not assumed close enough.
+
+L2 -- merged main and assets-lane by hand. `git merge-base main assets-lane`
+is 49ac367 (an old commit, well before tonight's own A-H/I-M work on main and
+before agy's AS1-AS4 fixes on assets-lane) -- both branches had diverged a
+long way, but the actual conflicts were narrow: three files.
+
+  scripts/mutate.mjs (add/add): both branches independently wrote a copy of
+  this tool after diverging (it did not exist at the merge-base at all).
+  Main's version is a strict superset -- the SAME original tool plus this
+  session's own resume-harness fix (results written incrementally, --resume,
+  the fingerprint rename) -- so main's version is kept whole.
+
+  test/mutations.json (three separate conflict regions): two were the SAME
+  control id edited on both sides against two different snapshots of the
+  same source file --
+    - sizer-and-renderer-share-one-seed: assets-lane's edit targeted
+      layout-fits.js's pre-H1-refactor shape; that exact line no longer
+      exists after H1's own survivor fix pulled askedFor() into its own
+      function. Main's version (the only one that still matches the real
+      file) is kept, with a merge note added explaining why assets-lane's
+      edit was superseded rather than lost -- both were fixing the identical
+      defect.
+    - districts-copy-clones-its-bounds: same shape -- assets-lane's edit
+      targeted the pre-Finding-4 district copy (bounds only); main's version
+      (bounds + f + allow, from this session's LandField-aliasing work) is
+      the one that matches the current source.
+  The third region was ~200 lines of genuinely disjoint new entries -- main's
+  H1 through I5 controls, assets-lane's AS1-AS4 -- concatenated whole, no id
+  collisions. VERIFIED, not assumed: every id from both original files
+  (71 on main, 56 on assets-lane) is present in the merged 75-entry file
+  (checked programmatically -- zero missing from either side), and every id
+  in the merged file is unique (75 total, 75 unique). The count is not
+  71+56=127 because roughly half of both files' entries were already
+  identical, carried from shared history before either branch's own new
+  work -- not lost, counted once.
+
+  docs/WORLD-BUILD-PLAN.md (four conflict regions, one file each side
+  independently maintains its own "living" copy of): PART 0's ground truth
+  table -- main's re-measured H3 figures kept, assets-lane's copy still
+  carried the SAME already-stale 781/32/20,624 numbers PART 0's own header
+  already names as stale before tonight's session began. The Phase 4 AS1-AS4
+  ledger -- the opposite direction: main's copy still had the four items
+  unstarted (`[ ]`); assets-lane's copy has agy's own completed work, real
+  evidence and CAUGHT mutations for all four (`[x]`) -- kept whole. Phase H
+  through M -- main's real, evidenced H1-M history kept whole; assets-lane's
+  copy predates all of it (still the unstarted H1-H4 task descriptions, and
+  no I-M section exists there at all). Each resolution left a merge note in
+  the document itself, not just in this commit, so a future reader does not
+  have to reconstruct the reasoning from git history.
+
+Verified after merging, before committing (git merge --no-commit --no-ff,
+so the whole state could be inspected and aborted first): npx tsc --noEmit
+clean; npm test 898/898 (894 plus assets-lane's own 4-test
+test/buildingLODAndColors.test.ts); all four AS1-AS4 mutations independently
+re-run and CAUGHT against the real merged public/buildings.js (node
+scripts/_mutcheck.mjs test/buildingLODAndColors.test.ts public/buildings.js
+test/mutations.json); the two resolved-conflict controls
+(districts-copy-clones-its-bounds, sizer-and-renderer-share-one-seed)
+independently re-run and CAUGHT against their real guarding test files.
+Default-world guard re-measured: sha256 of `new LandField(16)`'s height
+fingerprint is still
+418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96 --
+public/buildings.js changes nothing about terrain or plan generation.
+CLAUDE.md's count line and test/testCount.generated.json regenerated to 898;
+claudeMd-test-count-matches-generated re-verified CAUGHT.
+
+L3 (the visual check agy itself flagged as the one outstanding item) and L4
+(re-measuring everything else the merge moved) follow in their own commits.
+
+public/asset-registry.js and public/tier-models.js remain excluded and
+untouched by this merge -- assets-lane's own history does not modify them
+(confirmed: absent from the main...assets-lane diff), so the pre-existing,
+unrelated, unstaged working-tree changes to both are exactly as they were
+before this merge, flagged all session, still not this commit's to resolve.
