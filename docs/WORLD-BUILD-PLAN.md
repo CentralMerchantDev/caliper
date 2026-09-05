@@ -1020,13 +1020,30 @@ Phase I is the plan's own **Undone** column becoming its **Done** column. Every
 line below was written by this plan about itself — lines 541, 566, 697, 728, 811,
 968. Nothing here is new scope.
 
-- [ ] **I1 — the renderer builds a world instance.** `city-render.js` calls
-      `createWorld({ seed, layers })` instead of `generateWorld(heightAt)`.
-      The seed comes from the URL or a default; today's default world must stay
-      byte-identical — pin it by fingerprint before and after, as A2/A2b did.
-      *Test:* the scene built from `createWorld` is identical to the scene built
-      the old way, for the default seed. *Mutation:* drop the seed on the way
-      through → the identity test red.
+- [x] **I1 — the renderer builds a world instance.** Evidence:
+      `public/city-render.js`'s new `buildWorldState(seed, layers)`, used by
+      `buildWorld()` itself, composes via `createWorld()` (`public/world.js`)
+      instead of calling `new LandField(16)` / `generateWorld(heightAt)`
+      directly. `buildWorld()` now reads `?seed=` from the URL, defaulting to
+      `DEFAULT_SEED`. `test/cityRenderWorldState.test.ts` (2): for the
+      default seed, `buildWorldState()`'s field/heightAt/plan/world are
+      byte-identical (fingerprinted) to what the old bare calls produced —
+      composes, does not reimplement; a named non-default seed
+      (`"shoreline-district-9"`) produces genuinely different field/world
+      fingerprints, proving the seed reaches `createWorld()` rather than
+      silently defaulting. Mutation `buildWorldState-forwards-its-seed`
+      CAUGHT (drops `seed` from the `createWorld({...})` call): `node
+      scripts/_mutcheck.mjs test/cityRenderWorldState.test.ts
+      public/city-render.js test/mutations.json`.
+      Default-world guard measured directly, matching
+      `test/worldSeed.test.ts`'s own pin: `sha256` of `new LandField(16)`'s
+      height fingerprint is `418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96`
+      — unchanged.
+      `npx tsc --noEmit`: clean. `npm test`: 880/880.
+      **Not yet claimed:** whether the scene actually RENDERS from this —
+      no visual check yet. That is I2's own step, deliberately, since I2 is
+      the first point a layer (and therefore any visible difference) exists
+      to check.
 - [ ] **I2 — layers reach the scene.** `applyLayers(placements, world)` runs
       between `planCity` and the renderer; `partitionForInstancing` pulls
       overridden placements out of their instance groups; `resolve-models` +

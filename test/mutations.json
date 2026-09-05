@@ -492,7 +492,7 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 878 node tests + 12 worker tests",
+      "find": "npm test            # 880 node tests + 12 worker tests",
       "replace": "npm test            # 900 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
@@ -567,6 +567,15 @@
       "find": "deepFreeze(HIGHWAYS);",
       "replace": "",
       "expect": "HIGHWAYS cannot be written through"
+    },
+    {
+      "id": "buildWorldState-forwards-its-seed",
+      "guards": "I1: buildWorldState threads its seed argument through to createWorld() -- a caller asking for a named seed must not silently get DEFAULT_SEED back",
+      "note": "The default-seed identity test alone cannot catch this: a dropped seed still falls back to DEFAULT_SEED, so it would still match the old bare-calls path for the default case. Needs the separate non-default-seed divergence test.",
+      "file": "public/city-render.js",
+      "find": "export function buildWorldState(seed = DEFAULT_SEED, layers = []) {\n  const instance = createWorld({ seed, layers });",
+      "replace": "export function buildWorldState(seed = DEFAULT_SEED, layers = []) {\n  const instance = createWorld({ layers });",
+      "expect": "a named, non-default seed reaches createWorld()"
     }
   ]
 }

@@ -1,0 +1,59 @@
+I1: the renderer builds a world instance -- the first Undone item in Phase I
+becomes Done
+
+What was wrong: nine of the thirteen modules built across Phases A-H were
+imported by nothing, and public/city-render.js -- the renderer -- still
+built its scene from bare `new LandField(16)` / `generateWorld(heightAt)`
+calls rather than public/world.js's `createWorld({ seed, layers })`, exactly
+as the plan's own Undone notes said at lines 541, 566, 697, 728, 968. The
+mechanism was proven in isolation since A4; nothing ran it.
+
+How it's fixed: `buildWorldState(seed, layers)`, exported from
+city-render.js and used by `buildWorld()` itself, composes via
+`createWorld()` instead of reimplementing plan/terrain generation a second
+time. `buildWorld()` now reads `?seed=` from the URL (default
+`DEFAULT_SEED`, unchanged behaviour for every call site that does not pass
+one). `plan` (the downtown-only slice, from `generateCityPlan`) and `world`
+(the whole world, from `createWorld()`'s own `.plan`) stay two separate
+values on purpose -- this file already relies on that distinction (`plan.
+plots` is 1,374 downtown entries; `world.plots` is the whole ~20,000-plot
+world) and `createWorld()` only exposes the latter; `generateCityPlan(seed)`
+is memoised by seed since A2b, so calling it again here is a cache hit, not
+a second generation.
+
+Test-first, two properties, both named in the ledger: test/
+cityRenderWorldState.test.ts watched RED first (buildWorldState did not
+exist -- esbuild failed the import outright), then implemented.
+  1. For the default seed, buildWorldState()'s field/heightAt/plan/world are
+     byte-identical (fingerprinted) to what the old bare calls produced --
+     a data-source swap, not a behaviour change.
+  2. A named, non-default seed ("shoreline-district-9") produces genuinely
+     different field/world fingerprints -- proving the seed reaches
+     createWorld() rather than silently defaulting, which property (1) alone
+     cannot see (a dropped seed still falls back to the same DEFAULT_SEED).
+
+Mutation buildWorldState-forwards-its-seed (drops `seed` from the
+`createWorld({...})` call) CAUGHT against property (2):
+  node scripts/_mutcheck.mjs test/cityRenderWorldState.test.ts
+  public/city-render.js test/mutations.json
+  baseline: GREEN / CAUGHT buildWorldState-forwards-its-seed / restored:
+  byte identical
+
+Default-world guard, measured directly and matching test/worldSeed.test.ts's
+own pin exactly: sha256 of `new LandField(16)`'s height fingerprint is
+418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96 -- unchanged
+before and after this commit.
+
+Measured: npx tsc --noEmit clean. npm test: 880/880, 0 fail (878 plus these
+two new tests). CLAUDE.md's count line and test/testCount.generated.json
+regenerated to match; claudeMd-test-count-matches-generated re-verified
+CAUGHT against the new count.
+
+What's still open: whether the scene actually RENDERS from this path has not
+been checked -- no visual verification yet, deliberately. I2 (layers reach
+the scene) is the first point a layer, and therefore any visible difference,
+exists to check, and is where the ledger asks for the Windows visual check
+(node scripts/shoot-app.mjs). Doing it here would have nothing yet to look at.
+
+public/asset-registry.js and public/tier-models.js remain excluded -- agy's
+assets-lane work, untouched, unstaged, flagged previously.

@@ -31,7 +31,9 @@ import {
   WORLD, ROADS, BRIDGES, MARINA, PIER, BOARDWALK, PLOT_CLASSES,
   generateWorld, generateCityPlan, landmassPolygons, offsetPolygon,
 } from "./city-plan.js";
-import { LandField, makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, GROUND_BANDS, WATERWAYS, waterwaySurface , waterwayAt, beachWeight } from "./terrain.js";
+import { makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, GROUND_BANDS, WATERWAYS, waterwaySurface , waterwayAt, beachWeight } from "./terrain.js";
+import { createWorld } from "./world.js";
+import { DEFAULT_SEED } from "./noise.js";
 import { assessFootprint } from "./footprint.js";
 import { propFootprint } from "./prop-manifest.js";
 // The join to the asset lane's model library. prop-manifest decides what a prop
@@ -219,6 +221,34 @@ function foamTexture(THREE) {
   return t;
 }
 
+/**
+ * The world this renderer draws, tied to one seed -- I1.
+ *
+ * Composes via createWorld() (public/world.js) instead of reimplementing
+ * plan/terrain generation a second time here, the exact discipline world.js's
+ * own header states and this file's own header claims ("owns no world data
+ * of its own"). Returns the same four values buildWorld() has always built
+ * inline (field/heightAt/plan/world) -- a data-SOURCE swap, not a behaviour
+ * change: for the default seed, every one of them is byte-identical to what
+ * the direct `new LandField(16)` / `generateWorld(heightAt)` calls this
+ * replaces used to produce (test/cityRenderWorldState.test.ts).
+ *
+ * `plan` (the downtown-only slice, from generateCityPlan) and `world` (the
+ * whole world, from createWorld's own `.plan`) stay two separate values, not
+ * one -- this file already relies on that distinction (plan.plots is 1,374
+ * downtown entries; world.plots is the whole world, ~20,000) and createWorld
+ * only exposes the latter. generateCityPlan(seed) is memoised by seed
+ * (A2b), so calling it again here is a cache hit, not a second generation.
+ */
+export function buildWorldState(seed = DEFAULT_SEED, layers = []) {
+  const instance = createWorld({ seed, layers });
+  const field = instance.land;
+  const heightAt = makeHeightAt(field);
+  const plan = generateCityPlan(seed);
+  const world = instance.plan;
+  return { instance, field, heightAt, plan, world };
+}
+
 // =============================================================================
 // BUILD
 // =============================================================================
@@ -228,14 +258,14 @@ export function buildWorld(THREE, renderer, scene) {
   // ?skip=trees,props — a bisect handle. Worth keeping: when a scene this size
   // misbehaves, being able to remove one subsystem at a time is the difference
   // between a diagnosis and a guess.
-  const SKIP = new Set(
-    (typeof location !== "undefined" ? new URLSearchParams(location.search).get("skip") || "" : "").split(",")
-  );
+  const params = typeof location !== "undefined" ? new URLSearchParams(location.search) : null;
+  const SKIP = new Set((params ? params.get("skip") || "" : "").split(","));
+  // ?seed=<name> -- I1: the renderer now builds a world instance instead of
+  // the bare module-default plan/terrain, so which seed it builds is a real
+  // question with a real answer instead of always DEFAULT_SEED.
+  const seed = (params && params.get("seed")) || DEFAULT_SEED;
 
-  const field = new LandField(16);
-  const heightAt = makeHeightAt(field);
-  const plan = generateCityPlan();
-  const world = generateWorld(heightAt);
+  const { field, heightAt, plan, world } = buildWorldState(seed);
   const masses = landmassPolygons(16);
 
   // --- settlement lookup, used for urban ground tint and centrality ---
