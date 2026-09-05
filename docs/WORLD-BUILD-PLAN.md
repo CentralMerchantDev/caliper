@@ -28,10 +28,60 @@ exact defect PART 0's own header line exists to prevent. (Merge note, Phase
 L: assets-lane's own copy of this table still carried those same
 already-stale 781/32/20,624 figures — main's re-measured table is kept.)
 
+**Mutation-control gap closed 2026-09-05.** The Phase L merge concatenated
+`test/mutations.json` from both lanes to 75 (later 79) entries by hand, and
+this row was written as "spot-checked CAUGHT" — true of a handful, not
+measured of the rest. `test/.mutate-results.json` (the record of every
+mutation actually run and its verdict) held only 53 entries against a
+79-entry manifest: 26 controls, most of them from this session's own I5/L/J4
+work, had been counted as proven while never having been run even once. Each
+of the 26 was identified by set difference (manifest ids minus results ids,
+computed, not eyeballed) and run individually with `_mutcheck.mjs`, scoped to
+its own guarding test file, not the whole suite:
+
+```
+node scripts/_mutcheck.mjs test/claudeMdIsCurrent.test.ts CLAUDE.md test/mutations.json
+node scripts/_mutcheck.mjs test/regions.test.ts public/grid.js test/mutations.json
+node scripts/_mutcheck.mjs test/world.test.ts public/world.js test/mutations.json
+node scripts/_mutcheck.mjs test/world.test.ts public/terrain.js test/mutations.json
+node scripts/_mutcheck.mjs test/worldAliasing.test.ts public/city-plan.js test/mutations.json
+node scripts/_mutcheck.mjs test/worldSpec.test.ts public/city-plan.js test/mutations.json
+node scripts/_mutcheck.mjs test/cityRenderWorldState.test.ts public/city-render.js test/mutations.json
+node scripts/_mutcheck.mjs test/cityRenderScenePlacements.test.ts public/city-render.js test/mutations.json
+node scripts/_mutcheck.mjs test/pickSelection.test.ts public/world-render-3d.js test/mutations.json
+node scripts/_mutcheck.mjs test/describeRequestUI.test.ts public/index.html test/mutations.json
+node scripts/_mutcheck.mjs test/claimSpansAreChecked.test.ts public/index.html test/mutations.json
+node scripts/_mutcheck.mjs test/runGenerateRequest.test.ts public/run-generate-request.js test/mutations.json
+node scripts/_mutcheck.mjs test/modelCaller.test.ts public/model-caller.js test/mutations.json
+node scripts/_mutcheck.mjs test/supervisedGenerateScript.test.ts scripts/supervised-generate.mjs test/mutations.json
+node scripts/_mutcheck.mjs test/buildingLODAndColors.test.ts public/buildings.js test/mutations.json
+node scripts/_mutcheck.mjs test/verifyUntrustedGeometry.test.ts scripts/verify-untrusted-geometry-caller.mjs test/mutations.json
+node scripts/_mutcheck.mjs test/claimSpansAreChecked.test.ts test/claimSpansAreChecked.test.ts test/mutations.json
+```
+
+Result: all 26 CAUGHT, 0 SURVIVED, 0 INCONCLUSIVE — every one of the 79 now
+holds a real, observed verdict (`test/.mutate-results.json`, 79 entries,
+ids match the manifest exactly). Because nothing survived, there is no
+defect in the guarded code to record in docs/LESSONS.md — that file's own
+rule is that an entry stays OPEN until a real test has been seen red, and
+none of these 26 ever were. The process gap itself (a merge that let
+"counted" stand in for "run") is recorded here, at its source, rather than
+manufacturing a LESSONS.md entry for a finding that turned out negative.
+One incidental hazard surfaced while running these: two `_mutcheck.mjs`
+invocations were started in parallel against the same source file
+(`public/city-plan.js`) and raced — one's baseline read the other's
+in-flight mutation as RED and exited via `process.exit(1)`, which does not
+run the script's `finally`-block restore. The file was found byte-identical
+again once both processes had finished (confirmed via `git diff`, not
+assumed), so nothing was lost here — but `_mutcheck.mjs` holds no lock
+against two runs sharing a source file, unlike `scripts/mutate.mjs`'s
+marker-file protection for the same hazard. All 26 runs above were re-issued
+one at a time after this was noticed.
+
 | Fact | Value | Source |
 |---|---|---|
 | Suite | 898 node tests (0 fail), 12 worker tests (0 fail) | `node scripts/gen-test-count.mjs` |
-| Mutation controls | 75, all ids unique, spot-checked CAUGHT (AS1-AS4, the two resolved-conflict controls) | `test/mutations.json` (L2) |
+| Mutation controls | 79 defined, 79 run, 79 CAUGHT (0 SURVIVED, 0 INCONCLUSIVE) | `test/mutations.json` vs `test/.mutate-results.json`, re-verified per-id with `node scripts/_mutcheck.mjs <guarding test file> <source file> test/mutations.json` |
 | World | 2,291 blocks, 19,874 plots, 19,725 placed (99.3%), 149 refused | `node scripts/measure-layout.mjs` (re-run L4, unchanged from H3 — the merge touched geometry, not layout) |
 | Draw | 480 InstancedMeshes, 6,886,892 triangles drawn (153,060 across the 480 distinct geometries — under `distinctTris < 200_000`) | `node scripts/check-layout-geometry.mjs` (L1/L4, post-merge — up from 1,451,912/49,164 pre-merge; agy's LOD0 enrichment, ~56-84 tris to 140-696, measured and not close to the ceiling) |
 | Overhangs / misdeclared footprints | 0 / 0 | same |

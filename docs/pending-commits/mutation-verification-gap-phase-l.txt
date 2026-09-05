@@ -1,0 +1,48 @@
+Close the mutation-verification gap Phase L opened: 26 controls counted before being run, now run
+
+What was wrong: test/mutations.json defines 79 controls. test/.mutate-results.json
+(the record of every mutation actually executed, gitignored, not a project
+artefact) held only 53, all from a full run that predates the Phase L
+assets-lane merge. 26 controls -- most of them this session's own I5/L/J4
+work -- had therefore never been executed even once, while PART 0's own
+ground-truth table described the set as "75, ... spot-checked CAUGHT". Under
+this project's own standard a control that has not been seen catching
+something is not known to be a control; counting all of them anyway is the
+same error the project has already named and fixed twice this session
+(AUDIT-PROTOCOL.md's own INCONCLUSIVE-is-not-a-pass rule exists for exactly
+this shape of mistake), re-entered through the merge rather than through a
+single edit.
+
+How it is known to be fixed: the 26 were identified by an exact set
+difference (manifest ids minus results ids, computed with a script, not
+eyeballed) and each run individually with scripts/_mutcheck.mjs, scoped to
+its own guarding test file rather than the whole suite -- 17 commands
+covering all 26 ids, listed with the finding in docs/WORLD-BUILD-PLAN.md's
+PART 0. Result: 26 of 26 CAUGHT, 0 SURVIVED, 0 INCONCLUSIVE. All 79 manifest
+ids now have a matching, real result in test/.mutate-results.json (verified:
+the two id sets are exactly equal, not merely the same length). No
+docs/LESSONS.md entry was added, because nothing survived -- that file's own
+rule requires a test actually seen red, and none of these 26 ever were;
+manufacturing an entry for a negative finding would be the same category of
+dishonesty the file exists to prevent. `node test/run.mjs`: 905/905, 0 fail,
+confirming the tree is exactly as it was before this check (every mutation
+restored byte-identical, each individually verified by _mutcheck.mjs's own
+restore check, not assumed).
+
+One incidental hazard surfaced and is recorded, not fixed: two _mutcheck.mjs
+invocations run in parallel against the same source file (public/city-plan.js)
+raced -- one process's baseline read the other's in-flight mutation as RED
+and exited via process.exit(1), which bypasses the script's try/finally
+restore. The file was confirmed byte-identical again once both processes had
+finished (checked with git diff, not assumed), so nothing was lost, but
+_mutcheck.mjs holds no lock against two runs sharing a source file, unlike
+scripts/mutate.mjs's marker-file protection for the identical hazard. All 26
+runs in this pass were re-issued one at a time after this was noticed.
+Not fixed here because it was not asked for and no data was lost; named so
+it is not re-discovered the expensive way.
+
+What is still open: this closes the mutation-manifest/results gap only.
+I6-I8, K1-K4, M1-M5, J1-J3 remain not attempted, per the existing ledger.
+
+public/asset-registry.js and public/tier-models.js remain excluded -- agy's
+assets-lane work, untouched, unstaged, flagged previously.
