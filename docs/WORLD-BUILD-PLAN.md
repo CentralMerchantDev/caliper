@@ -1008,6 +1008,180 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
 
 ---
 
+
+### Phase I — WIRE IT IN *(the mechanisms exist and nothing runs them)*
+
+Nine of the thirteen modules built in A–H are imported by **nothing**:
+`world-store.js`, `resolve-models.js`, `selection.js`, `describe-request.js`,
+`generate-request.js`, `stage-artefact.js`, `apply-and-persist.js`, `undo.js`,
+`change-quest.js`. `city-render.js:238` still calls `generateWorld(heightAt)`.
+
+Phase I is the plan's own **Undone** column becoming its **Done** column. Every
+line below was written by this plan about itself — lines 541, 566, 697, 728, 811,
+968. Nothing here is new scope.
+
+- [ ] **I1 — the renderer builds a world instance.** `city-render.js` calls
+      `createWorld({ seed, layers })` instead of `generateWorld(heightAt)`.
+      The seed comes from the URL or a default; today's default world must stay
+      byte-identical — pin it by fingerprint before and after, as A2/A2b did.
+      *Test:* the scene built from `createWorld` is identical to the scene built
+      the old way, for the default seed. *Mutation:* drop the seed on the way
+      through → the identity test red.
+- [ ] **I2 — layers reach the scene.** `applyLayers(placements, world)` runs
+      between `planCity` and the renderer; `partitionForInstancing` pulls
+      overridden placements out of their instance groups; `resolve-models` +
+      `model-registry` draw them individually.
+      *Test:* a layer injected by hand changes exactly one building in the built
+      scene, and the total placement count is unchanged — nothing lost, nothing
+      drawn twice. *Mutation:* leave the override in its group → the count test
+      red (it would draw twice).
+      **This is the first moment any of A–H is visible.** Do the Windows visual
+      check here: one building visibly different, everything else unchanged,
+      triangle count within a few thousand of the recorded figure.
+- [ ] **I3 — pick.** A click raycasts to a placement and `createSelection`
+      resolves it to an address that stays selected, with something on screen
+      naming what is picked.
+      *Test:* a synthetic click at a known plot's centre selects that plot's real
+      id. *Mutation:* return the nearest block instead of the plot → red.
+- [ ] **I4 — describe.** A plain-English box scoped to the selection, wired to
+      `makeDescribeRequest`. **No option list.**
+      *Test:* the request carries the selected address and the typed text, and
+      the typed text never reaches the DOM as HTML on any path.
+      *Mutation:* render the text with innerHTML → the escaping test red.
+- [ ] **I5 — the request path, end to end, with a real model call.**
+      `assessTransform` → `buildGeometryPrompt` → **the pipeline in `src/`** →
+      `verifyModelSource` → `stageArtefact` → the page.
+      **This is the first real spend on this path.** It runs through the existing
+      gates, caps, per-IP limits and circuit breaker — extend them, never bypass.
+      *Test:* a refusal from `assessTransform` stops the run before any model
+      call is made (proved by asserting the call count, not the outcome); a
+      failed verify renders as a failed verify.
+      *Mutation:* let a refused transform proceed to generation → the
+      no-call-on-refusal test red. That mutation guards real money.
+      **Supervised first run.** Watch one end to end before anything is public.
+- [ ] **I6 — apply, persist, undo, live.** `applyAndPersist` writes the layer
+      through `world-store`; the scene updates without a rebuild; `undoLayer`
+      removes it and the removal survives a reload.
+      *Test:* a layer applied in the browser is present after a reload and absent
+      after undo — driven through the page, not the module.
+- [ ] **I7 — the quest completes from the live world.** `change-quest` reads
+      `world.layers.touched()`.
+      *Mutation:* complete on a UI flag → red. Already the single most important
+      mutation in Phase E; now it runs against the real thing.
+- [ ] **I8 — the deferred visual checks.** C1, C2 and D7 each deferred a Windows
+      visual check to "when it is wired." It is wired. Run
+      `node scripts/shoot-app.mjs`, look at the output, and record what you saw
+      — including anything that looks wrong and is not yet a test.
+
+---
+
+### Phase J — THE PUBLIC SURFACE *(it is a portfolio piece; it must be read)*
+
+UMAA Division 7 found CALIPER's central claim sitting at second 25 of a
+30-second visit behind an 11.5px link. That was the highest-value change of that
+session and it was not a technical defect.
+
+- [ ] **J1 — one sentence, above the fold.** What this is, without overclaiming,
+      readable on a phone.
+      *Test:* `test/publicClaims.test.ts` pins it; a change to the sentence
+      without a change to the test fails.
+- [ ] **J2 — a refusal is visible on first paint.** Not a success reel. The most
+      recent real refusal renders before any interaction.
+      *Test:* the first-paint payload contains a refusal with its reason.
+- [ ] **J3 — recorded runs are free, the live button is rationed.** Every real
+      run is recorded and replayable at zero cost; the live path is per-IP capped
+      with a daily ceiling; when the budget is spent it replays and **says so**.
+      *Test:* with the budget exhausted, the page still works and states that it
+      is replaying. *Mutation:* replay silently → that test red.
+- [ ] **J4 — every number on the page is generated.** Extend
+      `gen-test-count.mjs`'s discipline to every figure the page claims.
+      *Test:* a hand-typed number in a claim span fails the build.
+
+---
+
+### Phase K — SECURITY AND SPEND *(before anything is public)*
+
+Division 11 produced the two worst findings in CALIPER's entire audit — a
+forgeable verdict and a scanner bypass — both defeating failure-floor invariants
+that four technical passes had walked past. I5 opens a new public path. It gets
+the same scrutiny.
+
+- [ ] **K1 — the scope limit G1 could not build.** G1 recorded "Scope (one
+      object)" as Undone because `public/*.js` and `src/*.ts` never touched.
+      After I5 they do, so the limit now has an enforcement point.
+      *Test:* a request naming two addresses is refused by the limit, not by
+      chance. *Mutation:* hard-code the scope → the test names it.
+- [ ] **K2 — G2, unblocked.** A second limits profile is now answerable because
+      I5 gives real per-run cost figures. Measure one real run first, then set
+      both profiles from measurement.
+      *Test:* switching profile changes only values; the code path is identical
+      under both.
+- [ ] **K3 — a blind security audit of the new path.** Fresh agent, no history,
+      given I5's route and the gates. Not told what you think is safe.
+      Specifically: can a visitor cause spend beyond the cap; can generated code
+      reach the Worker's environment; can one visitor's run affect another's; is
+      any refusal forgeable from the client.
+- [ ] **K4 — the abuse surface, stated.** Rate limits, retention, what is logged,
+      what a visitor can trigger and what it costs at the worst case. Published,
+      not just implemented.
+
+---
+
+### Phase L — THE ASSETS MERGE *(agy's lane, held all night)*
+
+- [ ] **L1 — measure before merging.** From the assets checkout:
+      `node scripts/check-layout-geometry.mjs`. LOD0 went from ~56–84 triangles
+      to 140–696; main asserts `distinctTris < 200_000` against a current 27,608.
+      The result may legitimately cross the ceiling.
+      **If it crosses, that is a decision with a measured justification, not a
+      number to quietly raise.**
+- [ ] **L2 — merge by hand where both sides edited.** `test/mutations.json` and
+      `docs/WORLD-BUILD-PLAN.md` are edited on both lanes. A clobber on the
+      manifest silently drops controls.
+      *Test:* after merge, every mutation id in the manifest is unique and the
+      count is the sum of both lanes minus any deliberate removal, named.
+- [ ] **L3 — the visual check agy could not run.** Enriched LOD0 geometry and
+      the new vertex colours have never been seen in a real frame. This is the
+      only outstanding item agy itself flagged.
+- [ ] **L4 — re-measure everything the merge moved.** Triangle counts, variant
+      counts, the page's figures, PART 0's ground truth. Each with its command.
+
+---
+
+### Phase M — SHIP
+
+- [ ] **M1 — the full mutation suite, clean.** Use the scoped method
+      (`_mutresolve` + `_mutcheck`), not `--all`. Zero SURVIVED, zero
+      INCONCLUSIVE, and **every row carrying `measuredAt` and `method`** — a row
+      without provenance is not a measured row.
+- [ ] **M2 — the final blind UMAA audit**, across I–L, all twelve divisions, the
+      four-state horizon answered. A division not audited is not a pass. Append
+      what it missed to `AUDIT-PROTOCOL.md` §7 and anything the *work* missed to
+      `docs/LESSONS.md`.
+- [ ] **M3 — every claim traced.** Every number on the page, in `docs/`, and in
+      the résumé's CALIPER section resolves to a command run that week. No
+      exceptions and no rounding up.
+- [ ] **M4 — deploy, then verify the live site matches the repo.** Page
+      byte-identical to source, no stale figures, both admin routes closed,
+      dynamic counts rendering live.
+- [ ] **M5 — the résumé section, written from the measured figures.** Not before
+      M3. CALIPER replaces what DATUM used to occupy, and it can be stated
+      directly rather than hedged.
+
+---
+
+### The standing rule for I through M
+
+Same as A through H, and it is the reason any of this is worth sending to
+anyone: **name the mutation before writing the test; watch the test go red;
+measure anything you claim, with the command beside it; and where something
+cannot be verified, say so plainly rather than claiming it.**
+
+A phase heading is not a finishing line. The work ends when every box above is
+`[x]` with evidence or `[!]` with a reason.
+
+---
+
 ## PART 8 — Beyond H, and why it is not being built tonight
 
 These are real and the layer model exists so they are cheap later. None is in

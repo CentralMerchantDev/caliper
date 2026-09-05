@@ -1,0 +1,17 @@
+Plan: add Phases I-M to docs/WORLD-BUILD-PLAN.md PART 7
+
+The ledger's own Undone notes (lines 541, 566, 697, 728, 811, 968) named what
+A-H deliberately deferred: nine of the thirteen modules built tonight are
+imported by nothing, and city-render.js still builds its scene from a bare
+generateWorld(heightAt) rather than createWorld({seed, layers}). Phase I is
+that Undone column becoming Done -- wiring the renderer, the pick/describe/
+generate path (including the first real model spend, gated behind a
+supervised run), apply/persist/undo live, and the deferred Windows visual
+checks. J covers the public page itself, K covers security/spend review of
+the newly-opened path, L is agy's held assets-lane merge, M is ship.
+
+No code change -- this commit is the plan only, so the ledger and the tree
+agree before I1's work starts.
+
+public/asset-registry.js and public/tier-models.js remain excluded -- agy's
+assets-lane work, untouched, unstaged, flagged previously.
