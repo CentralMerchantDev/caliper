@@ -13,6 +13,15 @@
 //      accident either.
 //   4. It prints the prompt BEFORE calling anything, and asks on the
 //      terminal for a final go-ahead unless --yes is also passed.
+//   5. THE MODEL'S OWN RESPONSE NEVER RUNS IN THIS PROCESS. A blind audit
+//      (docs/audits/UMAA-I5-L-J4.md, Finding 1, HIGH) found the original
+//      version of this script ran the response through `new Function` in
+//      the SAME process that had just read ANTHROPIC_API_KEY, defended only
+//      by a denylist model-forge.js's own comment already says is not real
+//      protection -- and demonstrated a working bypass of it. See
+//      scripts/verify-untrusted-geometry-caller.mjs and scripts/_verify-
+//      untrusted-geometry.mjs's own headers for what changed and, as
+//      importantly, what did not: this is still not a real sandbox.
 //
 //   USAGE
 //     ANTHROPIC_API_KEY=sk-... node scripts/supervised-generate.mjs \
@@ -45,6 +54,7 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 import readline from "node:readline";
+import { verifyUntrustedGeometry } from "./verify-untrusted-geometry-caller.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 /** Dynamic import() requires a file:// URL on Windows -- a raw "C:\..." path throws ERR_UNSUPPORTED_ESM_URL_SCHEME. */
@@ -158,11 +168,14 @@ async function main() {
   console.log(rawText);
 
   const source = rawText.trim().replace(/^```[a-z]*\n?/i, "").replace(/```$/, "").trim();
-  const realCaller = async () => source;
-  const result = await runGenerateRequest({ subject, want, request, land, caller: realCaller, evaluate, THREE });
+  // NOT runGenerateRequest with the in-process `evaluate` here -- that would
+  // run the model's own response through `new Function` in THIS process,
+  // which just read ANTHROPIC_API_KEY. verifyUntrustedGeometry spawns a
+  // child process with no secret in its environment to do this instead.
+  const verdict = verifyUntrustedGeometry(source, promptSeen.constraints.footprint);
 
   console.log("\nVERDICT:");
-  console.log(JSON.stringify(result.verdict, null, 2));
+  console.log(JSON.stringify(verdict, null, 2));
 
   const usage = response.usage;
   if (usage) {

@@ -492,8 +492,8 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 899 node tests + 12 worker tests",
-      "replace": "npm test            # 900 node tests + 12 worker tests",
+      "find": "npm test            # 905 node tests + 12 worker tests",
+      "replace": "npm test            # 906 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
     {
@@ -688,7 +688,34 @@
       "file": "public/index.html",
       "find": "        <span id=\"city-stat-buildings\">16,770</span> buildings.",
       "replace": "        <span id=\"city-stat-buildings\">16,770</span> buildings. <span id=\"claim-test-mutation-unchecked\">999</span>",
-      "expect": "every claim-* / city-stat-* span on the page is checked"
+      "expect": "every claim-* / city-stat-* span across index.html and city.html is checked"
+    },
+    {
+      "id": "verify-untrusted-geometry-child-env-is-allowlisted-not-inherited",
+      "guards": "the security fix for docs/audits/UMAA-I5-L-J4.md Finding 1 (HIGH): the child process that executes a real model response is spawned with an ALLOWLISTED environment, not the parent process env -- so ANTHROPIC_API_KEY is not merely hidden from untrusted code, it does not exist in that process at all",
+      "note": "Reverting to the parent env (the pre-fix shape) reintroduces the exact exploit the audit demonstrated: a unicode-escaped `process` identifier reads process.env.ANTHROPIC_API_KEY successfully.",
+      "file": "scripts/verify-untrusted-geometry-caller.mjs",
+      "find": "  const childEnv = {};\n  for (const k of [\"PATH\", \"SystemRoot\", \"windir\", \"TEMP\", \"TMP\"]) {\n    if (process.env[k] !== undefined) childEnv[k] = process.env[k];\n  }",
+      "replace": "  const childEnv = process.env;",
+      "expect": "the child process has no secret to steal"
+    },
+    {
+      "id": "claimSpansAreChecked-strips-comments-before-searching",
+      "guards": "J4's claim-span registry check (docs/audits/UMAA-I5-L-J4.md Finding 2) requires a claim id to be referenced by REAL CODE, not a dead comment -- stripComments() is what makes a `// TODO: claim-foo` comment insufficient",
+      "note": "Found by a blind audit: the original .includes() ran against the raw, uncommented source, so a developer's own half-finished TODO comment satisfied the guard with zero real verification present.",
+      "file": "test/claimSpansAreChecked.test.ts",
+      "find": "function stripComments(src: string): string {\n  return src\n    .replace(/\\/\\*[\\s\\S]*?\\*\\//g, \" \")\n    .replace(/\\/\\/.*$/gm, \" \");\n}",
+      "replace": "function stripComments(src: string): string {\n  return src;\n}",
+      "expect": "a claim span mentioned only in a dead comment is NOT considered checked"
+    },
+    {
+      "id": "findUncheckedClaimSpans-scans-every-given-html-source",
+      "guards": "J4's claim-span registry check (docs/audits/UMAA-I5-L-J4.md Finding 3) scans EVERY html source it is given, not just the first -- so a claim span on a second page is still found",
+      "note": "Found by a blind audit: the original check only ever read public/index.html, while publicClaims.test.ts's own city-stats test also reads public/city.html.",
+      "file": "test/claimSpansAreChecked.test.ts",
+      "find": "  const ids = new Set<string>();\n  for (const html of htmlSources) {",
+      "replace": "  const ids = new Set<string>();\n  for (const html of htmlSources.slice(0, 1)) {",
+      "expect": "a claim span present in a SECOND html source is still found"
     }
   ]
 }

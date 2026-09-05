@@ -1,0 +1,72 @@
+Blind audit of I5/Phase L/J4: one real credential leak closed, two claim-registry gaps closed
+
+What was wrong: a follow-up blind audit (docs/audits/UMAA-I5-L-J4.md) built and
+ran a working proof-of-concept against scripts/supervised-generate.mjs
+(I5's one real caller). Its `evaluate` ran the model's response through plain
+`new Function` in the SAME process that had just read ANTHROPIC_API_KEY,
+relying entirely on model-forge.js's scanSource denylist -- and that file's
+own comment already says a denylist described as protection is worse than no
+denylist, because it invites someone to rely on it. The audit's exploit used
+a standard JS unicode-escaped identifier (`process`, which V8 resolves
+to the real `process` global at parse time but which never contains the
+literal substring "process" for .includes() to catch) and confirmed it reads
+process.env.ANTHROPIC_API_KEY once evaluated. Two smaller gaps were found in
+the same pass, both in the claim-span registry test built for J4: the check
+ran `.includes(id)` against the raw test source, so a dead
+`// TODO: check claim-foo` comment satisfied it with zero real verification;
+and it only ever read public/index.html, while publicClaims.test.ts's own
+city-stats check also reads public/city.html.
+
+How it is known to be fixed:
+
+- I5 (HIGH): the model's response now runs in a separate child process
+  (scripts/_verify-untrusted-geometry.mjs), spawned by
+  scripts/verify-untrusted-geometry-caller.mjs with an ALLOWLISTED
+  environment (PATH/SystemRoot/windir/TEMP/TMP only, never the parent's).
+  The audit's own exploit still executes against this fix -- the denylist is
+  unchanged and still bypassed -- but reading ANTHROPIC_API_KEY inside the
+  child now returns undefined, because the child process never had it. This
+  is not a claim the denylist is fixed or that model-authored code is safe
+  to execute in general; it is the narrower claim that the one credential
+  this session's code could reach has been moved somewhere that code cannot
+  follow it to. test/verifyUntrustedGeometry.test.ts (4 tests) reproduces
+  the audit's exact exploit against the fix, confirms it still executes and
+  still leaks nothing, and confirms via a real spawned process introspecting
+  its own env that ANTHROPIC_API_KEY is genuinely absent, not merely
+  unread. Mutation
+  verify-untrusted-geometry-child-env-is-allowlisted-not-inherited (revert
+  the child's env to the parent's full process.env) CAUGHT.
+- J4 (MEDIUM/LOW): test/claimSpansAreChecked.test.ts's registry check now
+  strips comments before searching (stripComments) and scans every given
+  HTML source, not just the first -- both fixes proven with SYNTHETIC
+  inputs, not just today's real files, because today's real files happen
+  not to exercise either gap (nothing is checked only in a comment;
+  city.html carries no claim spans yet), so a mutation against only the
+  real files would have survived by construction. Mutations
+  claimSpansAreChecked-strips-comments-before-searching and
+  findUncheckedClaimSpans-scans-every-given-html-source both CAUGHT.
+- Full suite: `node test/run.mjs` -- 905/905, 0 fail. `npx tsc --noEmit`
+  clean. Default-world fingerprint re-verified unchanged
+  (418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96, no
+  generation code touched by this round).
+- Test count regenerated (`node scripts/gen-test-count.mjs`): 905 node + 12
+  worker tests. CLAUDE.md and public/index.html updated from the artefact,
+  not typed; mutation claudeMd-test-count-matches-generated's find/replace
+  pair bumped to match and re-verified CAUGHT.
+- docs/AUDIT-PROTOCOL.md gained a dated Section 7 entry describing what this
+  audit found and a proposed protocol addition ("a comment that delegates a
+  promise to its caller, and the caller breaks the promise"). docs/LESSONS.md
+  gained the matching build-lesson entry, CLOSED, naming the test that has
+  actually been seen red. docs/WORLD-BUILD-PLAN.md's I5 and J4 ledger
+  entries each carry a CORRECTION paragraph documenting the finding and its
+  fix rather than silently editing the original entry.
+
+What is still open: this fix does not generalise. Before any future caller
+of run-generate-request.js/model-caller.js is built against a real Worker
+route, the same "does the response run where the secret lives" question
+needs to be asked again, from scratch, for that caller specifically. I6-I8,
+K1-K4, M1-M5, and J1-J3 are not attempted this pass, named rather than
+silently skipped, per docs/WORLD-BUILD-PLAN.md.
+
+public/asset-registry.js and public/tier-models.js remain excluded -- agy's
+assets-lane work, untouched, unstaged, flagged previously.

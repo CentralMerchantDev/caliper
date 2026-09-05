@@ -452,3 +452,54 @@ here rather than left open again.
   is not evidence about the claim one way or the other, and the auditor
   should say so explicitly rather than either assuming it never existed or
   silently fetching it from somewhere else without recording that it did.
+
+### 2026-09-05 · I5 / Phase L merge / J4 — a documented contract violated by the one caller that actually exists, found only by trying to defeat the auditee's own denylist
+
+**What it caught, that reading alone would have missed:** `public/model-forge.js`'s
+`verifyModelSource` documents its `evaluate` parameter as "in production this
+is a Dynamic Worker isolate"; the only concrete production caller this batch
+adds (`scripts/supervised-generate.mjs`) instead passes plain `new Function`,
+and reads a real `ANTHROPIC_API_KEY` into the same process moments earlier.
+Reading the code was not enough to know whether this mattered — the file's own
+`FORBIDDEN_TOKENS` denylist (`process`, `fetch`, `globalThis`, …) looked like
+it might cover the gap. It was closed by *trying to break it*: a standalone,
+untracked script built a "geometry builder" whose source string never
+contains the literal substring `"process"` (a standard JS unicode-escaped
+identifier, `process`, which V8 resolves to the real global at parse
+time) and confirmed it sails through `scanSource` and then genuinely reads
+`process.env.ANTHROPIC_API_KEY` once evaluated. §2.2 already asks the auditor
+to break a test the same way; this is the same discipline applied to a
+*denylist* rather than a test assertion, and it is worth naming as its own
+case: **a comment that says "X provides the real protection" is a claim like
+any other in §2.1's category, and the way to check a denylist's strength is
+the same as the way to check a test's — try to defeat it, don't read it and
+nod.** The file's own comment ("a denylist described as protection is worse
+than no denylist") already half-admits this, which made it tempting to treat
+the weak denylist as *known and accepted* rather than checking whether the
+thing the docstring says stands in front of it (a Dynamic Worker isolate)
+actually does, anywhere. It does not, yet, in the one place that matters.
+
+**What the protocol did not ask, and had to be supplied unprompted:** nothing
+in §2 says "when a docstring names a specific security mechanism ('a Dynamic
+Worker isolate'), go and check that the concrete caller actually uses it,"
+as distinct from checking that the *comment matches the code around it*
+(which it does — the docstring is honest about being a contract the module
+"never chooses" to enforce itself). The defect here is one level up: the
+contract is real and honestly stated, and the one caller built to fulfil it
+does not. §2.1 catches "a comment that is not true of the code it sits next
+to"; it does not currently prompt for "a comment that delegates a promise to
+its caller, and the caller breaks the promise" — worth adding, since the
+whole point of an injected-dependency design (which this codebase uses
+deliberately and well, e.g. I5's own `caller` parameter) is that the safety
+property lives at the call site, not the module, and an auditor who only
+reads the module will see a correct, honest contract and stop looking.
+
+**Still open:** this was found because the task brief happened to ask
+"does the safety chain have a gap" pointed at the spend-authorisation layers
+specifically; nothing forced a check of what the *authorised* call's own
+response is then permitted to do. The four accompanying UMAA-CALIPER Failure
+Floor items are exactly this shape (verified-vs-reported, spend cap, sandbox
+escape, HTML injection) and this protocol still has no standing instruction
+to check all four by name on every pass that touches a new caller boundary —
+each has so far been found because a specific brief asked about it, not
+because the protocol runs a fixed checklist against them.

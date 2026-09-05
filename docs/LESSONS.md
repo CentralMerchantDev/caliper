@@ -92,3 +92,74 @@ The named mutation above was then run and confirmed `CAUGHT`, and the walk's
 own cost was measured in isolation (64 ms for one world's full graph,
 ~75,000 objects) to confirm the slow part of this test is `createWorld()`'s
 own already-documented generation cost, not the check itself.
+
+---
+
+### 2026-09-05 · A script built to prove "zero spend" honestly ran the thing it was proving safe in the same process as the credential that pays for it
+
+**WHAT WAS MISSED** `scripts/supervised-generate.mjs` (I5) was built with
+four documented safety layers, all genuinely about *whether* to call a real
+model — API key present, `--confirm`, the printed prompt, a terminal `y/N`.
+None of them were about what the model's *own answer* is then allowed to
+do. Its `evaluate` ran the response through plain `new Function`, in the
+same OS process that had just read `process.env.ANTHROPIC_API_KEY` — while
+`public/model-forge.js`'s own docstring, written earlier the same session
+and never re-checked against this new caller, states the contract plainly:
+"in production this is a Dynamic Worker isolate." The one concrete caller
+this session ever built does not use one. The only thing between a real
+model's response and the API key was `scanSource`'s `FORBIDDEN_TOKENS`
+denylist — and that same file's own comment already says a denylist is not
+real protection, in a section of code sitting one screen away from a caller
+built as though it were.
+
+**WHY IT GOT THROUGH** Every test written for I5 proved the *authorisation*
+chain (money is never spent without an explicit key + flag + typed `y`).
+Nothing tested what happens *after* authorisation is granted and a real
+response arrives — the exact split `docs/UMAA-CALIPER.md`'s own Failure
+Floor draws between item 2 (spend cap) and item 3 (sandbox escape), treated
+here as one problem when they are two. The docstring's contract was read as
+satisfied because the code *around* it was consistent with it (the module
+genuinely never chooses where `evaluate` runs, exactly as documented) — the
+gap was one level further out: at the one place that decision actually gets
+made, for real.
+
+**Found by a blind audit** (`docs/audits/UMAA-I5-L-J4.md`, Finding 1, HIGH),
+which built and ran a standalone proof-of-concept: a "geometry builder"
+source string using a standard JS unicode-escaped identifier (`process`,
+which V8 resolves to the real `process` global at parse time but which never
+contains the literal substring `"process"` for `.includes()` to catch) —
+confirmed it passes `scanSource` and genuinely reads
+`process.env.ANTHROPIC_API_KEY` once evaluated.
+
+**THE CONTROL** [`test/verifyUntrustedGeometry.test.ts`](../test/verifyUntrustedGeometry.test.ts),
+exercising [`scripts/verify-untrusted-geometry-caller.mjs`](../scripts/verify-untrusted-geometry-caller.mjs).
+Rather than trying to fix the denylist (an unwinnable arms race the code's
+own comment already names — more substrings does not close a unicode-escape
+bypass, or `String.fromCharCode`, or any of the others), the fix is
+architectural: the model's response now runs in a **separate child
+process**, spawned with an **allowlisted** environment
+(`PATH`/`SystemRoot`/`windir`/`TEMP`/`TMP` only, never the parent's). The
+audit's own exploit still executes against this fix — the denylist is
+unchanged and still bypassed, and the test says so plainly rather than
+claiming otherwise — but reading `process.env.ANTHROPIC_API_KEY` inside the
+child now returns `undefined`, because the child process never had it. The
+secret is not hidden from untrusted code; it does not exist where that code
+runs. A named mutation
+(`verify-untrusted-geometry-child-env-is-allowlisted-not-inherited`,
+reverting the child's environment to the parent's full `process.env`)
+reintroduces the exact exploit and turns the test red.
+
+**STATUS** **CLOSED.** The audit's exact exploit was reproduced against the
+fix (not a paraphrase of it) and confirmed to still execute — `ok: false`
+at the `"build"` stage, the payload's own thrown error naming what it
+found: the literal string `"undefined"`, not a real key. The named mutation
+above was run and confirmed `CAUGHT`, restored byte-identical. This is
+explicitly **not** a claim that model-authored code is now safe to execute
+in general, or that the denylist has been strengthened — both are false.
+It is a narrower, honestly-scoped claim: the one credential this session's
+own new code could reach has been moved somewhere that code cannot follow
+it to. Before any future caller of `run-generate-request.js`/`model-caller.js`
+is built against a real Worker route, the same "does the response run
+where the secret lives" question needs to be asked again, from scratch, for
+that caller specifically — this fix does not generalise to a different
+process architecture.

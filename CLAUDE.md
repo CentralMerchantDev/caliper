@@ -75,7 +75,7 @@ not leave them disagreeing.
 ## How to verify
 
 ```
-npm test            # 899 node tests + 12 worker tests
+npm test            # 905 node tests + 12 worker tests
 npx tsc --noEmit    # types
 node scripts/shoot.mjs "Downtown close"   # headless render, PNGs to .shots/
 ```

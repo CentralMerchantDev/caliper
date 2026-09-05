@@ -1246,9 +1246,35 @@ line below was written by this plan about itself — lines 541, 566, 697, 728, 8
       does not register, apply or persist anything — that join is already
       built and stub-proven above; wiring a real verified result through it
       live is a deliberate, separate, later step.
-      `npx tsc --noEmit`: clean. `npm test`: 894/894 (886 plus these eight
-      new tests). Default-world guard re-measured: unchanged. **No model was
-      called by this session, at any point.**
+      **CORRECTION, found by the follow-up blind audit
+      (`docs/audits/UMAA-I5-L-J4.md`, Finding 1, HIGH — see
+      `docs/LESSONS.md`'s matching entry): the four safety layers above are
+      all about whether to call a model. None were about what the model's
+      OWN response is then allowed to do.** `evaluate` ran the response
+      through plain `new Function` in the same process that had just read
+      `ANTHROPIC_API_KEY`, and `public/model-forge.js`'s own docstring
+      ("in production this is a Dynamic Worker isolate") was not true of
+      the one caller built to fulfil it. The audit built and ran a working
+      exploit: a JS unicode-escaped `process` identifier defeats
+      `scanSource`'s `FORBIDDEN_TOKENS` denylist (the same file's own
+      comment already says a denylist "invites someone to rely on it") and
+      genuinely reads the key. **Fixed, not patched:** rather than chasing
+      the denylist (an unwinnable arms race), the model's response now
+      executes in a separate CHILD PROCESS
+      (`scripts/verify-untrusted-geometry-caller.mjs` →
+      `scripts/_verify-untrusted-geometry.mjs`) spawned with an ALLOWLISTED
+      environment (`PATH`/`SystemRoot`/`windir`/`TEMP`/`TMP` only, never
+      the parent's `process.env`). The exploit still executes against the
+      fix — stated honestly, not claimed away — but finds `undefined`
+      where the key used to be, because the child process never had it.
+      `test/verifyUntrustedGeometry.test.ts` (4) reproduces the audit's
+      exact bypass and confirms it; mutation
+      `verify-untrusted-geometry-child-env-is-allowlisted-not-inherited`
+      (reverts to the parent's full environment) CAUGHT.
+      `npx tsc --noEmit`: clean. `npm test`: 905/905 (899 plus the security
+      fix's tests and J4's two comment/second-page fixes below).
+      Default-world guard re-measured: unchanged. **No model was called by
+      this session, at any point.**
       **Supervised first run.** Watch one end to end before anything is public.
 - [ ] **I6 — apply, persist, undo, live.** `applyAndPersist` writes the layer
       through `world-store`; the scene updates without a rebuild; `undoLayer`
@@ -1315,7 +1341,21 @@ session and it was not a technical defect.
       buildings claim, simulating exactly the failure this test exists for)
       CAUGHT: `node scripts/_mutcheck.mjs test/claimSpansAreChecked.test.ts
       public/index.html test/mutations.json`.
-      `npx tsc --noEmit`: clean. `npm test`: 899/899. Default-world guard
+      **Two gaps found by the follow-up blind audit
+      (`docs/audits/UMAA-I5-L-J4.md`, Findings 2/3), both closed:** the
+      original check was `.includes(id)` against the RAW test source, so a
+      dead `// TODO: check claim-foo` comment satisfied it with zero real
+      verification — comments are now stripped before the search
+      (`stripComments`). And the check only ever read `public/index.html`,
+      while `test/publicClaims.test.ts`'s own city-stats check also reads
+      `public/city.html` — both are read now. Both fixes proven with
+      SYNTHETIC inputs, not just today's real files (which happen not to
+      exercise either gap, so a mutation against only the real files would
+      have SURVIVED by construction): `findUncheckedClaimSpans` extracted
+      as a pure, exported function, unit-tested directly. Mutations
+      `claimSpansAreChecked-strips-comments-before-searching` and
+      `findUncheckedClaimSpans-scans-every-given-html-source` both CAUGHT.
+      `npx tsc --noEmit`: clean. `npm test`: 905/905. Default-world guard
       unaffected (no generation code touched).
       **J1-J3 not attempted this pass**, named rather than silently skipped:
       J1's own claim (`test/publicClaims.test.ts` pins the one-sentence
