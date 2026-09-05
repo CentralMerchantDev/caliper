@@ -19,7 +19,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { generateWorld, DISTRICTS, SETTLEMENTS, BRIDGES, GRID } from "../public/city-plan.js";
+import { generateWorld, DISTRICTS, SETTLEMENTS, BRIDGES, GRID, WORLD, LANDMASSES, HIGHWAYS } from "../public/city-plan.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
 
 const heightAt = makeHeightAt(new LandField(16));
@@ -50,6 +50,32 @@ test("GRID cannot be written through", () => {
   // the getters or the method, only made them impossible to overwrite
   assert.equal(typeof GRID.ORIGIN_X, "number");
   assert.ok(Array.isArray(GRID.edges(0, 500, 230, 1, 1)));
+});
+
+// Found by test/worldAliasing.test.ts (the general form of the check above):
+// WORLD, LANDMASSES and HIGHWAYS are ALSO embedded by reference in every
+// plan generateWorld() returns -- WORLD directly, LANDMASSES via each mass's
+// `.points`, HIGHWAYS via `roads`' `...HIGHWAYS` spread -- and none of the
+// three was frozen. Unlike DISTRICTS' `bounds`, nothing anywhere writes
+// through any of them (checked directly), so the fix here is to freeze the
+// source, not to give every world a mutable copy of static geometry it never
+// needs to mutate.
+test("WORLD cannot be written through", () => {
+  assert.throws(() => { (WORLD as any).SIZE = 1; }, "SIZE was writable");
+  assert.throws(() => { (WORLD as any).smuggled = true; }, "a new field could be added to WORLD");
+});
+
+test("LANDMASSES cannot be written through", () => {
+  const withPoints = LANDMASSES.find((lm: any) => lm.points);
+  assert.ok(withPoints, "no fixture landmass has points to test");
+  assert.throws(() => { (withPoints as any).baseHeight = 999; }, "a top-level field was writable");
+  assert.throws(() => { (withPoints!.points as any)[0][0] = 999; }, "a coordinate inside a point pair was writable");
+  assert.throws(() => { (withPoints!.points as any).push([0, 0]); }, "a new point could be pushed onto a mass outline");
+});
+
+test("HIGHWAYS cannot be written through", () => {
+  assert.throws(() => { (HIGHWAYS[0] as any).at = 1; }, "a top-level field was writable");
+  assert.throws(() => { (HIGHWAYS as any).push({ id: "smuggled" }); }, "a new highway could be pushed onto the spec");
 });
 
 test("mutating one world's district bounds does not reach another world's, or the spec", () => {

@@ -348,8 +348,8 @@
       "guards": "generateWorld's returned districts array deep-copies each district's nested bounds object, so mutating one world's district bounds cannot reach another world's copy or the frozen spec",
       "note": "A shallow { ...d } copies the top-level fields but leaves bounds pointing at DISTRICTS[i]s own object -- every world built in the process shared one bounds object per district until this was fixed.",
       "file": "public/city-plan.js",
-      "find": "districts: DISTRICTS.map((d) => ({ ...d, bounds: { ...d.bounds } })),",
-      "replace": "districts: DISTRICTS.map((d) => ({ ...d })),",
+      "find": "districts: DISTRICTS.map((d) => ({ ...d, bounds: { ...d.bounds }, f: [...d.f], allow: [...d.allow] })),",
+      "replace": "districts: DISTRICTS.map((d) => ({ ...d, f: [...d.f], allow: [...d.allow] })),",
       "expect": "mutating one world's district bounds does not reach another world's, or the spec"
     },
     {
@@ -492,7 +492,7 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 872 node tests + 12 worker tests",
+      "find": "npm test            # 878 node tests + 12 worker tests",
       "replace": "npm test            # 900 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
@@ -513,6 +513,60 @@
       "find": "  let entry = landCache.get(seed);",
       "replace": "  let entry = undefined;",
       "expect": "a second createWorld() call for the same seed reuses the same land"
+    },
+    {
+      "id": "world-aliasing-districts-f-and-allow-stay-independent",
+      "guards": "the general aliasing test (test/worldAliasing.test.ts) subsumes the specific district-bounds test (test/worldSpec.test.ts) A3 wrote -- reintroducing A3's own shallow-copy bug (this time for the f/allow fields the original fix missed) must turn the GENERAL test red, not just be caught by luck",
+      "note": "Named before the test was written, per instruction: reintroducing A3's shallow district copy (removing the f/allow deep-copy this session added alongside it) should turn test/worldAliasing.test.ts red, proving it subsumes the specific case rather than duplicating it.",
+      "file": "public/city-plan.js",
+      "find": "districts: DISTRICTS.map((d) => ({ ...d, bounds: { ...d.bounds }, f: [...d.f], allow: [...d.allow] })),",
+      "replace": "districts: DISTRICTS.map((d) => ({ ...d, bounds: { ...d.bounds } })),",
+      "expect": "two worlds with the SAME seed share only the declared allow-list"
+    },
+    {
+      "id": "world-aliasing-plot-buildable-stays-independent",
+      "guards": "generateWorld copies each downtown plot's buildable rectangle, not just the plot itself -- generateCityPlan's own seed-keyed cache (A2b) means two same-seed worlds share the underlying city.plots array, so a shallow plot copy alone still aliases .buildable across both",
+      "note": "Found by test/worldAliasing.test.ts: this was a live gap from A2b's own caching, never exercised until the general aliasing test walked two same-seed worlds and compared them.",
+      "file": "public/city-plan.js",
+      "find": "const plots  = [...city.plots.map(p => ({ ...p, settlement:\"downtown\", buildable: { ...p.buildable } }))];",
+      "replace": "const plots  = [...city.plots.map(p => ({ ...p, settlement:\"downtown\" }))];",
+      "expect": "two worlds with the SAME seed share only the declared allow-list"
+    },
+    {
+      "id": "landfield-freezes-itself",
+      "guards": "LandField freezes itself once built -- decision A, made explicit: sharing land across two same-seed worlds (Finding 5) is safe only because nothing can write through it",
+      "note": "Verified empirically before this freeze was made permanent: the full 872-test suite was run once with it in place and passed unchanged, proving nothing in this codebase currently writes to a LandField after construction.",
+      "file": "public/terrain.js",
+      "find": "    this.MAX_D = cell * 3;\n    Object.freeze(this);\n  }",
+      "replace": "    this.MAX_D = cell * 3;\n  }",
+      "expect": "LandField cannot be written through"
+    },
+    {
+      "id": "world-freezes-itself",
+      "guards": "WORLD (world-extent constants) is frozen -- generateWorld() embeds it by reference in every plan, for every seed, so a caller writing through one world's plan.world would move every world in the process",
+      "note": "Found by test/worldAliasing.test.ts: WORLD was shared by reference (same object as terrain.js's TERRAIN.WORLD) but had never been frozen, unlike DISTRICTS/SETTLEMENTS/BRIDGES/GRID.",
+      "file": "public/city-plan.js",
+      "find": "Object.freeze(WORLD);",
+      "replace": "",
+      "expect": "WORLD cannot be written through"
+    },
+    {
+      "id": "landmasses-freezes-itself",
+      "guards": "LANDMASSES (raw authored coastline outlines) is deep-frozen -- landmassPolygonsDesign()'s {...lm, polygon} shallow-copies each entry but leaves .points shared by reference across every world",
+      "note": "Found by test/worldAliasing.test.ts.",
+      "file": "public/city-plan.js",
+      "find": "deepFreeze(LANDMASSES);",
+      "replace": "",
+      "expect": "LANDMASSES cannot be written through"
+    },
+    {
+      "id": "highways-freezes-itself",
+      "guards": "HIGHWAYS is deep-frozen -- generateWorld's roads array spreads ...HIGHWAYS directly (unlike the separately-copied highways: field), so an unclipped highway is the literal HIGHWAYS object shared across every world",
+      "note": "Found by test/worldAliasing.test.ts.",
+      "file": "public/city-plan.js",
+      "find": "deepFreeze(HIGHWAYS);",
+      "replace": "",
+      "expect": "HIGHWAYS cannot be written through"
     }
   ]
 }

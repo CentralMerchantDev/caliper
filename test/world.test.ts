@@ -100,3 +100,18 @@ test("a second createWorld() call for the same seed reuses the same land -- not 
   const c = createWorld({ seed: "a-completely-different-seed" });
   assert.notEqual(a.land, c.land, "two calls with DIFFERENT seeds shared the same land -- the cache is keyed wrong");
 });
+
+// DECISION A, MADE EXPLICIT (see the comment on the LandField class itself):
+// sharing land across two same-seed worlds is correct because LandField is
+// derived, read-only data and nothing writes to it after construction --
+// proven, not just claimed, by running the full 872-test suite once with
+// this freeze in place and finding it unchanged. This test is the part of
+// that proof that stays: a future write attempt through a SHARED land
+// object must throw immediately, not corrupt every world holding it.
+test("LandField cannot be written through, once shared across two worlds", () => {
+  const a = createWorld({ seed: "freeze-proof-seed" });
+  const b = createWorld({ seed: "freeze-proof-seed" });
+  assert.equal(a.land, b.land, "setup: these should be the same cached land");
+  assert.throws(() => { (a.land as any).seed = 999; }, "a top-level field (seed) was writable");
+  assert.throws(() => { (a.land as any).smuggled = true; }, "a new field could be added to a shared LandField");
+});

@@ -144,6 +144,22 @@ export const WORLD = {
   APRON_STEP_MULTIPLE: 4,
 };
 
+// FROZEN FOR THE SAME REASON DISTRICTS/SETTLEMENTS/BRIDGES/GRID ARE.
+//
+// Found while writing test/worldAliasing.test.ts: generateWorld()'s public
+// return embeds `world: WORLD` by direct reference (not a copy), and
+// terrain.js's exported `TERRAIN.WORLD` is the identical object -- so this
+// was ALREADY shared, by reference, across every world ever built in the
+// process, and across the renderer's own terrain module, the whole time.
+// It just never got the freeze A3 gave the other four shared spec tables,
+// an oversight the general aliasing test surfaced rather than the specific
+// district-bounds test that prompted A3 (which only ever looked at
+// DISTRICTS). Every value in WORLD is a flat number -- no nested objects --
+// so a shallow freeze is complete here, unlike LandField or DISTRICTS.
+// Nothing writes to WORLD anywhere in this codebase (checked directly), so
+// this closes the gap rather than changing any live behaviour.
+Object.freeze(WORLD);
+
 // =============================================================================
 // LAND MASSES
 //
@@ -378,6 +394,18 @@ export const LANDMASSES = [
   },
 
 ];
+// FROZEN FOR THE SAME REASON DISTRICTS/SETTLEMENTS/BRIDGES/WORLD ARE.
+//
+// Found by test/worldAliasing.test.ts (the general form of A3's own check):
+// landmassPolygonsDesign()'s `{ ...lm, polygon }` shallow-copies each entry
+// -- the same shape as A3's original `{ ...d }` districts bug -- so every
+// call shares `.points`, the raw authored outline, by reference. Unlike
+// DISTRICTS' `bounds` (which A3 deep-copies per world because the edit path
+// genuinely mutates it), nothing anywhere reads OR writes `.points` after
+// generation except to spline it into `polygon` -- checked directly, zero
+// write sites -- so this is WORLD's case, not districts': one frozen,
+// deliberately shared source table, not one copy per world.
+deepFreeze(LANDMASSES);
 
 // =============================================================================
 // BRIDGES
@@ -1582,6 +1610,20 @@ export const HIGHWAYS = [
   { id:"beach-spine-c", axis:"ew", at: 3450, from:-3400, to: 2600, class:"BOULEVARD" },
   { id:"beach-spine-e", axis:"ew", at: 2100, from: 4200, to: 7600, class:"BOULEVARD" },
 ].map((r) => sFields(r, ["at", "from", "to"]));
+// FROZEN FOR THE SAME REASON BRIDGES IS.
+//
+// Found by test/worldAliasing.test.ts: generateWorld() builds `roads` as
+// `[...city.roads..., ...HIGHWAYS, ...FREEWAYS.map(...), ...generateRamps()]`
+// -- a plain array spread, which copies the OUTER array but hands out each
+// HIGHWAYS entry itself by reference, unlike the separate `highways:` field
+// a few lines down (`HIGHWAYS.map((h) => ({ ...h }))`), which does copy them.
+// So every world's `roads` array held the identical highway objects, for
+// every seed, in the same process -- flat spec data (id/axis/at/from/to/
+// class, all primitives, verified: zero write sites anywhere), the same
+// category BRIDGES already is. Frozen here rather than also copied at the
+// `roads` spread, so there is one source of truth for "is this safe to
+// share" instead of two copy sites that could drift out of sync again.
+deepFreeze(HIGHWAYS);
 
 /**
  * How likely a block at (x, z) is to be built at all.
@@ -2921,7 +2963,14 @@ export function generateWorld(rawHeightAt = null, seed = DEFAULT_SEED) {
     ...generateRamps(),
   ];
   const blocks = [...city.blocks.map(b => ({ ...b, settlement:"downtown" }))];
-  const plots  = [...city.plots.map(p => ({ ...p, settlement:"downtown" }))];
+  // { ...p } alone is not enough: `buildable` is a nested object. Found by
+  // test/worldAliasing.test.ts -- generateCityPlan()'s own seed-keyed cache
+  // (A2b) means two generateWorld() calls for the SAME seed share the
+  // identical `city.plots` array and its plot objects, so a shallow copy
+  // here left every downtown plot's `.buildable` rectangle aliased across
+  // both worlds -- the same shape as the districts `bounds`/`f`/`allow` gap,
+  // just one call frame lower.
+  const plots  = [...city.plots.map(p => ({ ...p, settlement:"downtown", buildable: { ...p.buildable } }))];
 
   const settlements = [{ id:"downtown", name:"Downtown", landmass:"downtown",
                          plots:city.plots.length, blocks:city.blocks.length }];
@@ -3418,14 +3467,19 @@ export function generateWorld(rawHeightAt = null, seed = DEFAULT_SEED) {
            //
            // Shallow copies of the arrays and of each entry. Determinism by VALUE
            // always held; this closes the leak by REFERENCE.
-           // { ...d } alone is NOT enough: `bounds` is a nested object, so a
-           // shallow spread copies the top-level fields but every instance's
-           // `bounds` still points at the SAME object DISTRICTS[i] owns. That
-           // let one world's edit path move another world's district (and the
-           // frozen spec, before it was frozen) through a copy that only
-           // looked independent. Cloning `bounds` too is what actually cuts
-           // the reference.
-           districts: DISTRICTS.map((d) => ({ ...d, bounds: { ...d.bounds } })),
+           // { ...d } alone is NOT enough: `bounds`, `f` and `allow` are all
+           // nested objects/arrays, so a shallow spread copies the top-level
+           // fields but every instance's `bounds`/`f`/`allow` still points at
+           // the SAME object or array DISTRICTS[i] owns. That let one world's
+           // edit path move another world's district (and the frozen spec,
+           // before it was frozen) through a copy that only looked
+           // independent. Cloning `bounds` (plus, found by
+           // test/worldAliasing.test.ts's general form of this same check:
+           // `f` and `allow` were the identical gap, just never named --
+           // DISTRICTS is deep-frozen so nothing was silently corrupted, but
+           // the returned copy was not the "genuinely independent" one this
+           // comment already claimed) is what actually cuts the reference.
+           districts: DISTRICTS.map((d) => ({ ...d, bounds: { ...d.bounds }, f: [...d.f], allow: [...d.allow] })),
            bridges: BRIDGES.map((b) => ({ ...b })),
            causeways: BRIDGES.map((b) => ({ ...b })),
            highways: HIGHWAYS.map((h) => ({ ...h })),

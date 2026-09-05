@@ -1,0 +1,127 @@
+Decide LandField's sharing on purpose (Part 1), then build the check that
+would have caught it landing silently (Part 2) -- and fix everything it found
+
+PART 1 -- THE DECISION, MADE EXPLICIT AND PROVEN, NOT JUST ASSERTED
+
+Finding 5 (previous commit) cached LandField by seed, so two same-seed worlds
+share the SAME `land` object -- on the opposite reasoning from A3, three
+commits earlier, which found generateWorld's districts copy was shallow and
+fixed it with a deep copy AND a freeze, because nothing stopped a caller
+writing through it.
+
+Decision: A -- sharing is correct. LandField is derived, read-only data and
+the cache IS the point (the ~50% saving Finding 5 measured only exists
+because two calls share one heightAt object). Proven, not assumed:
+
+  - Searched directly for every way LandField could be written after
+    construction: no `this.x =` outside the constructor, no external file
+    sets a property on one, no method calls .push/.set/an index-write on
+    edges/buckets/mask after the constructor returns. Zero hits.
+  - Added `Object.freeze(this)` at the end of the constructor and ran the
+    FULL suite once with it in place, specifically to test the "nothing
+    writes to it" claim empirically rather than trust the search: 872/872,
+    unchanged. If freezing had broken something, that would have been the
+    finding (a live write this search missed) -- it did not.
+  - The freeze is documented precisely about its own limits, not oversold:
+    Object.freeze(this) blocks reassigning a top-level property (this
+    module is strict-mode ESM, so `land.seed = x` now throws) but does
+    NOT block `land.buckets.set(...)` (Map.set is unaffected by freezing
+    the Map instance -- verified with node -e, not assumed) and does NOT
+    block mutating an array nested inside `edges` (freezing the outer array
+    blocks push, not `edges[0][0] = x`). `land.mask` (an Int8Array) cannot
+    even be frozen once populated -- Object.freeze on a non-empty TypedArray
+    throws, so it is not attempted. The real protection is a freeze against
+    accidental reassignment PLUS verified-by-search-and-experiment absence
+    of any mutation, not a claim that everything is airtight.
+
+test/world.test.ts gained "LandField cannot be written through, once shared
+across two worlds" (mutation landfield-freezes-itself: removing the freeze
+line, CAUGHT).
+
+PART 2 -- THE GENERAL FORM, AND WHAT IT FOUND
+
+A3 established "one world's state must not alias another's" but only ever
+tested it for district bounds. Finding 5 shared a DIFFERENT object and that
+specific test stayed green -- a performance fix silently relaxed a safety
+property a correctness fix had established three commits earlier, and
+nothing could see it happen.
+
+test/worldAliasing.test.ts is the general property: build two worlds with
+the same seed and two with different seeds, walk both object graphs
+(plan/land/layers/grid) by IDENTITY -- depth-capped, visited-set-bounded,
+primitives and TypedArray contents skipped since only objects can alias --
+collect everything reached by both, and assert that set is exactly a
+declared, reasoned allow-list. The walk itself is fast (measured in
+isolation: 64ms for one world's ~75,000-object graph); the ~8-11s a test
+takes is createWorld()'s own already-documented ~2-5s/call generation cost,
+not this check.
+
+Named before it was written, per the instruction: reintroducing a narrower
+version of A3's own shallow-copy bug (world-aliasing-districts-f-and-allow-
+stay-independent) turns this test red -- proving it subsumes
+test/worldSpec.test.ts's specific check rather than duplicating it. CAUGHT,
+verified.
+
+Building and running this test against the real code (not audited, not
+guessed -- run, and read what it actually reported) found FOUR live gaps,
+none previously known, all fixed this commit:
+
+  1. WORLD (public/city-plan.js) is embedded by reference in every plan
+     (terrain.js's TERRAIN.WORLD is the identical object) and had never
+     been frozen, unlike DISTRICTS/SETTLEMENTS/BRIDGES/GRID. Frozen now
+     (Object.freeze(WORLD) -- flat, no nested objects, shallow is complete).
+     Mutation world-freezes-itself, CAUGHT.
+
+  2. LANDMASSES' raw `.points` outlines leak by reference into every
+     world's `masses[i].points` -- landmassPolygonsDesign()'s `{ ...lm,
+     polygon }` shallow-copies each entry but leaves `.points` shared, the
+     exact shape of A3's original bug. Nothing reads or writes `.points`
+     after generation except to spline it into `polygon` (checked
+     directly), so this is WORLD's case, not districts': deep-frozen the
+     source (deepFreeze(LANDMASSES)) rather than copying per world.
+     Mutation landmasses-freezes-itself, CAUGHT.
+
+  3. HIGHWAYS entries leak the same way: generateWorld's `roads` array
+     spreads `...HIGHWAYS` directly, unlike the separately-copied
+     `highways:` field a few lines down. Flat spec data, zero write sites,
+     same category as BRIDGES -- deep-frozen (deepFreeze(HIGHWAYS)).
+     Mutation highways-freezes-itself, CAUGHT.
+
+  4. DISTRICTS' own per-world copy (A3's fix) was itself incomplete: it
+     cloned `bounds` but not `f` or `allow`, sitting on the same object --
+     the identical bug, unfixed in two fields A3 never named. DISTRICTS is
+     deep-frozen so nothing was silently corrupted (a write would have
+     thrown), but the returned copy was not the "genuinely independent"
+     one A3's own comment already claimed it was. Now clones all three:
+     `{ ...d, bounds: { ...d.bounds }, f: [...d.f], allow: [...d.allow] }`.
+     test/worldSpec.test.ts's existing mutation (districts-copy-clones-its-
+     bounds) updated to match the new line and reverified CAUGHT against
+     its original test.
+
+  5. generateCityPlan's own seed-keyed cache (A2b, predating both A3 and
+     Finding 5) means two same-seed generateWorld() calls already share
+     `city.plots` -- live since A2b, never exercised until this test ran
+     two same-seed worlds against each other. generateWorld's `plots =
+     [...city.plots.map(p => ({ ...p, settlement: "downtown" }))]` left
+     each plot's nested `.buildable` rectangle aliased across both worlds.
+     Now copies it: `buildable: { ...p.buildable }`. Mutation
+     world-aliasing-plot-buildable-stays-independent, CAUGHT.
+
+test/worldSpec.test.ts gained matching "cannot be written through" tests for
+WORLD, LANDMASSES and HIGHWAYS, mirroring its existing DISTRICTS/SETTLEMENTS/
+BRIDGES/GRID tests.
+
+Measured: npx tsc --noEmit clean. npm test: 878/878, 0 fail (872 plus these
+six new tests). CLAUDE.md's count line and test/testCount.generated.json
+regenerated to match; claudeMd-test-count-matches-generated (a prior
+finding's own control) re-verified CAUGHT against the new count.
+
+Every mutation added this commit was run via scripts/_mutcheck.mjs against
+its correct guarding test file (not assumed from the manifest), each showing
+baseline GREEN, the target CAUGHT, and "restored: byte identical" -- expected
+cross-file SURVIVED/INCONCLUSIVE noise on unrelated city-plan.js/terrain.js
+mutations when run against a test file that does not guard them, matching
+the pattern this project's audits have already documented.
+
+public/asset-registry.js and public/tier-models.js remain excluded -- agy's
+assets-lane work, untouched, unstaged, flagged previously.

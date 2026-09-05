@@ -337,6 +337,45 @@ export function bucketKeyInRange(bx, bz) {
       && bz > -BUCKET_HALF && bz < BUCKET_HALF - 1;
 }
 
+/**
+ * DELIBERATELY SHARED, DERIVED, READ-ONLY DATA -- FROZEN, NOT COPIED.
+ *
+ * public/world.js's createWorld() caches one LandField per seed (Finding 5:
+ * building a fresh one on every call was most of its ~2.4s cost, and the
+ * caches inside generateWorld/cityDemand/placeFeatures only pay off when the
+ * heightAt closure they are keyed on is the SAME object across calls). That
+ * means two `createWorld({ seed: X })` calls hand back the identical
+ * LandField instance, not two copies -- the opposite choice from A3's fix
+ * for DISTRICTS/SETTLEMENTS/BRIDGES/GRID, which were copied per-world
+ * because a caller DOES write through them (an edit path moves a district).
+ * Nothing here writes through a LandField after construction -- checked
+ * directly (no `this.x =` outside the constructor, no external code sets a
+ * property on one, no method calls `.push`/`.set`/an index-write on
+ * `edges`/`buckets`/`mask` after it is built) -- so sharing it is the point
+ * of the cache, not a risk grandfathered in.
+ *
+ * The constructor freezes itself as an assertion of that decision, not a
+ * complete guarantee of it -- BE PRECISE about what Object.freeze(this)
+ * actually does here, verified directly, not assumed:
+ *   - IT DOES block reassigning an own top-level property (`land.seed = x`
+ *     throws, this module is strict-mode ESM) and block adding a new one.
+ *   - IT DOES NOT block `land.buckets.set(...)` -- freezing a Map's own
+ *     properties has no effect on its prototype methods; Map.set() keeps
+ *     working on a frozen Map.
+ *   - IT DOES NOT block `land.edges.push(...)` from failing loudly (a frozen
+ *     array does throw on push, since that touches the array's own length),
+ *     but it does NOT stop `land.edges[0][0] = 999` -- freezing `edges`
+ *     itself does not freeze the arrays nested inside it.
+ *   - `land.mask` (an Int8Array) cannot even be frozen once populated --
+ *     `Object.freeze()` on a non-empty TypedArray throws. It is not attempted.
+ * So this freeze is real protection against the accidental-reassignment
+ * class of bug (the same class A3 found in DISTRICTS' shallow `bounds`
+ * copy), and it is verified-by-absence, not freeze, that protects the
+ * mutable-content class: nothing calls those methods after construction
+ * today, checked by direct search, and the full suite was run once with
+ * this freeze in place specifically to test that claim empirically, not
+ * just assert it -- it passed 872/872 unchanged.
+ */
 export class LandField {
   constructor(samplesPerSegment = 16, cell = 420, maskCell = 40, seed = DEFAULT_SEED) {
     // THE SEED BELONGS TO THE FIELD, NOT TO EACH CALL.
@@ -437,6 +476,7 @@ export class LandField {
     });
 
     this.MAX_D = cell * 3;
+    Object.freeze(this);
   }
 
   /** Which land mass covers (x, z)? -1 for water. */
