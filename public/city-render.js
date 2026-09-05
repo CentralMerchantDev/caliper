@@ -34,6 +34,10 @@ import {
 import { makeHeightAt, groundColor, fbm, cliffiness, TREE_LINE, GROUND_BANDS, WATERWAYS, waterwaySurface , waterwayAt, beachWeight } from "./terrain.js";
 import { createWorld } from "./world.js";
 import { DEFAULT_SEED } from "./noise.js";
+import { applyLayers } from "./apply-layers.js";
+import { partitionForInstancing } from "./instance-groups.js";
+import { resolveOverrideModels } from "./resolve-models.js";
+import { createModelRegistry } from "./model-registry.js";
 import { assessFootprint } from "./footprint.js";
 import { propFootprint } from "./prop-manifest.js";
 // The join to the asset lane's model library. prop-manifest decides what a prop
@@ -249,10 +253,38 @@ export function buildWorldState(seed = DEFAULT_SEED, layers = []) {
   return { instance, field, heightAt, plan, world };
 }
 
+/**
+ * Which placements still share an instance group, and which a layer has
+ * pulled out to draw on their own -- I2.
+ *
+ * Pure (no THREE): this is the ONLY place city-render.js decides which
+ * placements go where, so it is the one thing about "layers reach the
+ * scene" that can be proven without a renderer. Runs apply-layers.js
+ * (public/apply-layers.js) between planCity and instance-groups.js
+ * (public/instance-groups.js), exactly the order Phase B/C proved in
+ * isolation and nothing had run for real until now.
+ *
+ * `instance` must be the FULL createWorld() object (`.layers`/`.resolve`),
+ * not `world` (`instance.plan`, plain data) -- apply-layers.js's own
+ * contract needs both of those methods.
+ */
+export function buildScenePlacements({ instance, world, heightAt }) {
+  const footByPlot = new Map();
+  const verdictForPlot = (p) => {
+    const foot = assessFootprint(heightAt, p.buildable, waterwayAt);
+    footByPlot.set(p.id, foot);
+    return foot.verdict;
+  };
+  const plan2 = planCity(world.blocks, world.plots, verdictForPlot, makeFits());
+  const withLayers = applyLayers(plan2.placements, instance);
+  const { instanced, overridden } = partitionForInstancing(withLayers);
+  return { instanced, overridden, refusals: plan2.refusals, footByPlot };
+}
+
 // =============================================================================
 // BUILD
 // =============================================================================
-export function buildWorld(THREE, renderer, scene) {
+export function buildWorld(THREE, renderer, scene, layers = []) {
   const t0 = performance.now();
   const stats = {};
   // ?skip=trees,props — a bisect handle. Worth keeping: when a scene this size
@@ -264,8 +296,12 @@ export function buildWorld(THREE, renderer, scene) {
   // the bare module-default plan/terrain, so which seed it builds is a real
   // question with a real answer instead of always DEFAULT_SEED.
   const seed = (params && params.get("seed")) || DEFAULT_SEED;
+  // `layers` is a 4th, optional argument, last, defaulting to `[]` -- every
+  // existing call site (city.html, world-render-3d.js's WorldRenderer) still
+  // means exactly what it meant before I2. Nothing today passes one; I6 is
+  // where a live, persisted layer stack reaches this argument for real.
 
-  const { field, heightAt, plan, world } = buildWorldState(seed);
+  const { instance, field, heightAt, plan, world } = buildWorldState(seed, layers);
   const masses = landmassPolygons(16);
 
   // --- settlement lookup, used for urban ground tint and centrality ---
@@ -1478,24 +1514,24 @@ varying vec3 vSeaWorld;`)
     const refusedWhy = {};
     const unknownSettlements = new Set();
 
-    // The ground is asked ONCE per plot, and the answer is kept. `layout.js`
-    // needs the verdict to choose a foundation; the renderer needs the base
-    // height and the cut to stand the building on. Asking twice would be two
-    // sample grids over the same rectangle, and a chance for them to disagree.
-    const footByPlot = new Map();
-    const verdictForPlot = (p) => {
-      const foot = assessFootprint(heightAt, p.buildable, waterwayAt);
-      footByPlot.set(p.id, foot);
-      return foot.verdict;
-    };
-
-    const plan2 = planCity(world.blocks, world.plots, verdictForPlot, makeFits());
-    for (const r of plan2.refusals) {
+    // I2: layers reach the scene. buildScenePlacements() runs apply-layers.js
+    // between planCity and here, then instance-groups.js to pull anything a
+    // layer touched OUT of instancing entirely -- an InstancedMesh draws
+    // every instance from the same geometry, so an overridden placement left
+    // in its group would be drawn there AND wherever the override draws it.
+    // `footByPlot` (the ground asked ONCE per plot, kept rather than
+    // re-sampled) comes back from the same call for the same reason it
+    // always has: layout.js needs the verdict to choose a foundation, the
+    // renderer needs the base height, and asking twice risks the two
+    // disagreeing.
+    const { instanced, overridden, refusals: layoutRefusals, footByPlot } =
+      buildScenePlacements({ instance, world, heightAt });
+    for (const r of layoutRefusals) {
       refused++;
       refusedWhy[r.reason] = (refusedWhy[r.reason] || 0) + 1;
     }
 
-    const variants = groupByVariant(plan2.placements);
+    const variants = groupByVariant(instanced);
     const dummy = new THREE.Object3D();
     let variantMeshes = 0, variantParts = 0;
 
@@ -1567,6 +1603,68 @@ varying vec3 vSeaWorld;`)
       variantParts += i;
     }
 
+    // I2: OVERRIDDEN PLACEMENTS, DRAWN INDIVIDUALLY, NOT INSTANCED.
+    //
+    // resolve-models.js decides what an override actually draws: a "replace"
+    // must name a VERIFIED, registered model or it is refused outright (never
+    // a default-shaped fallback -- that is the exact temptation its own
+    // header names); a "retint"/"move" never touches the registry at all and
+    // draws the placement's own stock model with the edit applied. The
+    // registry starts empty every build -- nothing generates and registers a
+    // real model yet (I5), so every "replace" is refused today, correctly and
+    // safely, not silently.
+    const registry = createModelRegistry();
+    const { resolved: resolvedOverrides, refused: modelRefusals } = resolveOverrideModels(overridden, registry);
+    for (const r of modelRefusals) {
+      refused++;
+      refusedWhy[r.reason] = (refusedWhy[r.reason] || 0) + 1;
+    }
+    let overriddenDrawn = 0;
+    for (const p of resolvedOverrides) {
+      const foot = footByPlot.get(p.plotId);
+      if (!foot) continue;
+      let geo, mat;
+      if (p.model) {
+        // A verified replace -- the registered, already-built geometry.
+        geo = p.model.geometry;
+        mat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0.02, vertexColors: !!geo.attributes.color });
+        if (!geo.attributes.color) mat.color.setHex(0x9a9a94);
+      } else {
+        // A retint/move only -- the placement's own stock model, built once
+        // more because it can no longer share the instanced group's copy.
+        let spec;
+        try {
+          spec = building(p.typology, p.seed, p.options);
+          geo = spec.lod[0].createGeometry();
+        } catch (err) {
+          refused++;
+          refusedWhy[`could not build ${p.typology}`] = (refusedWhy[`could not build ${p.typology}`] || 0) + 1;
+          continue;
+        }
+        const usesVertexColour = !!geo.attributes.color;
+        mat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0.02, vertexColors: usesVertexColour });
+        const retint = p.override && p.override.retint;
+        if (retint) mat.color.setHex(retint.color);
+        else if (!usesVertexColour) mat.color.setHex((spec.material && spec.material.wall) || 0x9a9a94);
+      }
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      // A move gives an absolute new (x, z); the HEIGHT is not re-assessed at
+      // the new position (that would need a fresh assessFootprint call this
+      // step does not make) -- stated plainly rather than claimed more exact
+      // than it is. Untouched, a placement draws at its own x/z as before.
+      const move = p.override && p.override.move;
+      const px = move ? move.x : p.x;
+      const pz = move ? move.z : p.z;
+      const y = foot.verdict === "terrace" ? foot.base + foot.range : foot.base;
+      mesh.position.set(px, y, pz);
+      scene.add(mesh);
+      placedBuildings.push([px, pz, y, p.fits.w, p.fits.d]);
+      overriddenDrawn++;
+      placed++;
+    }
+
     stats.buildings = placed;
     stats.byClass = byClass;
     stats.refused = refused;
@@ -1575,6 +1673,7 @@ varying vec3 vSeaWorld;`)
     stats.variants = variantMeshes;
     stats.parts = variantParts;
     stats.instancedMeshes = variantMeshes;
+    stats.overriddenBuildings = overriddenDrawn;
   }
 
 

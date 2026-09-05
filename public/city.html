@@ -93,6 +93,7 @@ import { buildWorld, LOOK } from "./city-render.js";
 import { loadLiveWorld, buildLiveQuarter, QUARTER } from "./city-live-world.js";
 import { WORLD_SCALE } from "./world-scale.js";
 import { WORLD as PLAN_WORLD } from "./city-plan.js";
+import { layerFrom } from "./world-model.js";
 
 const Q = new URLSearchParams(location.search);
 const num = (k, d) => (Q.has(k) ? parseFloat(Q.get(k)) : d);
@@ -153,9 +154,18 @@ const camera = new THREE.PerspectiveCamera(num("fov", 33), innerWidth / innerHei
 // every single page load -- which surfaced as #load sitting at "BUILDING THE
 // WORLD…" indefinitely, indistinguishable from a large scene taking its time.
 // Nothing on the page said otherwise and nothing in the suite could have.
+// ?debugOverridePlot=<plotId> -- I2's own visual proof, debug-only and not
+// part of the application: constructs one hand-injected retint layer so
+// scripts/shoot.mjs can photograph "one building visibly different,
+// everything else unchanged" without needing I6's live persistence wired.
+const debugPlot = Q.get("debugOverridePlot");
+const debugLayers = debugPlot
+  ? [layerFrom({ id: "debug-i2-check", author: "i2-visual-check", edits: [{ address: debugPlot, op: "retint", payload: { color: 0xff00ff } }] })]
+  : [];
+
 let W;
 try {
-  W = buildWorld(THREE, renderer, scene);
+  W = buildWorld(THREE, renderer, scene, debugLayers);
 } catch (err) {
   const el = document.getElementById("load");
   if (el) {

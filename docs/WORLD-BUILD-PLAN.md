@@ -1044,17 +1044,50 @@ line below was written by this plan about itself — lines 541, 566, 697, 728, 8
       no visual check yet. That is I2's own step, deliberately, since I2 is
       the first point a layer (and therefore any visible difference) exists
       to check.
-- [ ] **I2 — layers reach the scene.** `applyLayers(placements, world)` runs
-      between `planCity` and the renderer; `partitionForInstancing` pulls
-      overridden placements out of their instance groups; `resolve-models` +
-      `model-registry` draw them individually.
-      *Test:* a layer injected by hand changes exactly one building in the built
-      scene, and the total placement count is unchanged — nothing lost, nothing
-      drawn twice. *Mutation:* leave the override in its group → the count test
-      red (it would draw twice).
-      **This is the first moment any of A–H is visible.** Do the Windows visual
-      check here: one building visibly different, everything else unchanged,
-      triangle count within a few thousand of the recorded figure.
+- [x] **I2 — layers reach the scene.** Evidence: `public/city-render.js`'s
+      new `buildScenePlacements({ instance, world, heightAt })` (pure, no
+      THREE) runs `applyLayers` (`public/apply-layers.js`) between `planCity`
+      and `instance-groups.js`'s `partitionForInstancing`, exactly the order
+      Phase B/C proved in isolation and nothing had run for real until now.
+      `buildWorld()` feeds `groupByVariant` only the `instanced` half, and
+      draws `overridden` individually after resolving each against
+      `resolve-models.js` + a fresh `model-registry.js` instance — a
+      verified "replace" draws its registered geometry; a bare
+      retint/move draws the placement's own stock model with the edit
+      applied; an unresolved "replace" (nothing is registered yet — that is
+      I5) is refused outright, never a default-shaped fallback.
+      `test/cityRenderScenePlacements.test.ts` (2), against the REAL
+      generated plan (~20,000 placements, not a fixture): a hand-injected
+      retint layer moves exactly the targeted plot to `overridden`, the
+      total (`instanced.length + overridden.length`) is unchanged, and every
+      untouched placement is still present; with no layers, everything is
+      instanced and nothing is overridden. Mutation
+      `buildScenePlacements-partitions-overrides-out-of-instancing` (feeds
+      `groupByVariant` the override too, instead of partitioning it out)
+      CAUGHT: `node scripts/_mutcheck.mjs
+      test/cityRenderScenePlacements.test.ts public/city-render.js
+      test/mutations.json`.
+      **This is the first moment any of A–H is visible — checked, not
+      assumed.** `node scripts/shoot-app.mjs`: the real app page renders
+      clean, no page errors, world built (screenshot: `.shots/app.png`).
+      For the one-building-visible check specifically (nothing yet writes a
+      live layer into the real app — that is I6's job), `public/city.html`
+      gained a debug-only `?debugOverridePlot=<id>` hook (not a production
+      feature) constructing one hand-injected retint layer;
+      `node _TO-DELETE/i2-visual-check/shoot-override.mjs` (throwaway,
+      kept per policy, not committed — gitignored under `_TO-DELETE/`)
+      photographed the same camera view with and without it. Measured
+      directly from the HUD: `buildings` stayed at 19,725 before and after
+      (nothing lost, nothing doubled); `parts` (the InstancedMesh-drawn
+      count) dropped from 19,725 to 19,724 — exactly the one placement that
+      left instancing to draw on its own; a visibly magenta building appears
+      near the waterfront in the "after" shot at the retinted plot's
+      location. No triangle-count figure is exposed by this HUD to compare
+      against PART 0's recorded figure — noted as not covered here rather
+      than assumed close enough.
+      `npx tsc --noEmit`: clean. `npm test`: 882/882. Default-world guard
+      re-measured: `sha256` of `new LandField(16)`'s height fingerprint is
+      still `418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96`.
 - [ ] **I3 — pick.** A click raycasts to a placement and `createSelection`
       resolves it to an address that stays selected, with something on screen
       naming what is picked.

@@ -492,7 +492,7 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 880 node tests + 12 worker tests",
+      "find": "npm test            # 882 node tests + 12 worker tests",
       "replace": "npm test            # 900 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
@@ -576,6 +576,15 @@
       "find": "export function buildWorldState(seed = DEFAULT_SEED, layers = []) {\n  const instance = createWorld({ seed, layers });",
       "replace": "export function buildWorldState(seed = DEFAULT_SEED, layers = []) {\n  const instance = createWorld({ layers });",
       "expect": "a named, non-default seed reaches createWorld()"
+    },
+    {
+      "id": "buildScenePlacements-partitions-overrides-out-of-instancing",
+      "guards": "I2: an overridden placement must leave its instance group entirely, not stay in it -- an InstancedMesh draws every instance from the same geometry, so a placement left in its group after being overridden is drawn there AND wherever the override draws it, doubled",
+      "note": "The ledger names this mutation directly: leave the override in its group -> the count test red (it would draw twice).",
+      "file": "public/city-render.js",
+      "find": "  const { instanced, overridden } = partitionForInstancing(withLayers);",
+      "replace": "  const { instanced, overridden } = { instanced: withLayers, overridden: [] };",
+      "expect": "an injected layer moves exactly one placement to overridden"
     }
   ]
 }

@@ -1,0 +1,75 @@
+I2: layers reach the scene -- the first moment anything built in A-H is
+visible
+
+What was wrong: apply-layers.js, instance-groups.js, resolve-models.js and
+model-registry.js were each proven correct in isolation across Phases B/C
+and none of them ran for real. public/city-render.js fed groupByVariant()
+the raw planCity() output directly -- no layer was ever applied, and nothing
+pulled an overridden placement out of its shared InstancedMesh group, which
+would double-draw it (once in the group, once wherever the override draws
+it).
+
+How it's fixed: buildScenePlacements({ instance, world, heightAt }), exported
+from city-render.js and used by buildWorld() itself, runs applyLayers
+between planCity and instance-groups.js's partitionForInstancing -- pure, no
+THREE, so it is the one thing about "layers reach the scene" provable
+without a renderer. buildWorld() now feeds groupByVariant only the
+`instanced` half and draws `overridden` individually: each is resolved
+against resolve-models.js + a fresh model-registry.js instance; a verified
+"replace" draws its registered geometry; a bare retint/move draws the
+placement's own stock model with the edit applied (move gives an absolute
+new x/z; the height is NOT re-assessed at the new position, stated plainly
+rather than claimed more exact than it is); an unresolved "replace" (nothing
+is registered yet -- that is I5) is refused outright, never a default-shaped
+fallback, matching resolve-models.js's own stated discipline.
+
+Test-first, against the real generated plan (~20,000 placements, not a
+fixture): test/cityRenderScenePlacements.test.ts asserts a hand-injected
+retint layer moves EXACTLY the targeted plot to `overridden`, the total
+(instanced.length + overridden.length) is unchanged from before the layer
+existed, the overridden plot is genuinely absent from `instanced` (would
+double-draw otherwise), and every other placement is still present. A
+second test confirms an unedited world leaves everything instanced.
+
+Mutation buildScenePlacements-partitions-overrides-out-of-instancing (feeds
+groupByVariant the override too, bypassing the partition) CAUGHT -- the
+exact mutation the ledger names ("leave the override in its group"):
+  node scripts/_mutcheck.mjs test/cityRenderScenePlacements.test.ts
+  public/city-render.js test/mutations.json
+  baseline: GREEN / CAUGHT buildScenePlacements-partitions-overrides-out-of-instancing
+  / restored: byte identical
+
+Windows visual check, done here as the ledger asks, not deferred again:
+  node scripts/shoot-app.mjs -- the real app page (index.html) renders
+  clean, no page errors, world built. Screenshot: .shots/app.png.
+
+For "one building visibly different" specifically: nothing writes a live
+layer into the real running app yet (I6's job -- apply/persist/undo LIVE).
+public/city.html (the bare-renderer test harness scripts/shoot.mjs already
+uses, not the production page) gained a debug-only `?debugOverridePlot=<id>`
+hook -- constructs one hand-injected retint layer, nothing else -- so the
+mechanism could be photographed today rather than waited on. A throwaway
+script (_TO-DELETE/i2-visual-check/shoot-override.mjs, gitignored, kept per
+policy rather than deleted) shot the same camera view with and without it.
+Measured directly from the HUD, not assumed: `buildings` 19,725 before and
+after (nothing lost, nothing doubled); `parts` (the InstancedMesh-drawn
+count) 19,725 -> 19,724, exactly the one placement that left instancing; a
+visibly magenta building appears near the waterfront in the "after" shot, at
+the retinted plot. No triangle-count figure is exposed by either HUD to
+compare against PART 0's recorded number -- named as not covered, not
+assumed close enough.
+
+Measured: npx tsc --noEmit clean. npm test: 882/882, 0 fail (880 plus these
+two new tests). CLAUDE.md's count line and test/testCount.generated.json
+regenerated to match; claudeMd-test-count-matches-generated re-verified
+CAUGHT. Default-world guard re-measured directly: sha256 of `new
+LandField(16)`'s height fingerprint is still
+418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96, unchanged.
+
+What's still open: the model registry is empty every build (I5 wires real
+model generation and registration); no live layer source reaches the real
+app yet (I6); triangle-count verification against PART 0's recorded figure
+was not covered, for the reason stated above.
+
+public/asset-registry.js and public/tier-models.js remain excluded -- agy's
+assets-lane work, untouched, unstaged, flagged previously.
