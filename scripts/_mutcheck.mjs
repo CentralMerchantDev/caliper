@@ -4,7 +4,7 @@
 // which is right for a permanent record and too slow for a tight loop. This
 // rebuilds and runs a single test file instead.
 //
-// It repeats mutate.mjs's two hard-won rules, because both were re-learned the
+// It repeats mutate.mjs's hard-won rules, because all were re-learned the
 // expensive way while writing the layout engine:
 //
 //   1. REBUILD BETWEEN MUTATIONS. esbuild inlines the source into the bundle, so
@@ -18,17 +18,30 @@
 //   3. A RED SUITE IS NOT A CATCH. The failure has to name the expected test.
 //      A crash -- a missing bundle, a syntax error -- turns everything red and
 //      would otherwise score as proof that the control works.
+//   4. TAKE THE LOCK. PART 7b/E1 (docs/WORLD-BUILD-PLAN.md): two of THIS
+//      script's own invocations, run concurrently against the same source
+//      file, raced -- one read the other's in-flight mutation as a red
+//      baseline. Nothing was lost that time (confirmed by diff afterward),
+//      but nothing prevented it either. Now this and mutate.mjs share one
+//      lock (scripts/mutate-lock.mjs); a second run against a file the first
+//      still holds refuses outright rather than measuring anything.
 //
 // Usage: node scripts/_mutcheck.mjs <testFile> <sourceFile> <mutations.json>
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
+import { acquireLock, releaseLock, sha } from "./mutate-lock.mjs";
 
 const [testFile, sourceFile, specFile] = process.argv.slice(2);
 if (!testFile || !sourceFile || !specFile) {
   console.error("usage: node scripts/_mutcheck.mjs <testFile> <sourceFile> <mutations.json>");
   process.exit(2);
 }
+// Resolved, not the raw argv spelling -- so this coordinates with mutate.mjs
+// (and with a second _mutcheck.mjs invocation using a different relative
+// path to the same file) through one identity, not two.
+const sourcePath = resolve(sourceFile);
 
 // test/mutations.json is `{ _comment, mutations: [...] }`, not a bare array --
 // this read the whole file as the array and threw "muts is not iterable" the
@@ -43,6 +56,14 @@ const allMuts = Array.isArray(specParsed) ? specParsed : specParsed.mutations;
 // unrelated entries before the actual result could be read.
 const muts = allMuts.filter((m) => !m.file || m.file === sourceFile);
 const original = readFileSync(sourceFile, "utf8");
+
+// TAKE THE LOCK BEFORE THE BASELINE, NOT JUST BEFORE THE FIRST MUTATION.
+//
+// The race PART 7b/E1 records was exactly this: a second process's baseline
+// ran while a first process had this same file mid-mutation, and read a
+// corrupted "original" as though it were real. Throws, touching nothing, if
+// another run already holds this file.
+acquireLock(sourcePath, `${testFile} vs ${sourceFile}`, sha(sourcePath));
 
 function run() {
   // shell: true -- on Windows, npx is npx.cmd, and execFileSync cannot launch
@@ -70,11 +91,35 @@ function run() {
   }
 }
 
+// A KILL MUST NOT LEAVE THE FILE MUTATED OR THE LOCK STUCK.
+//
+// Found for real, not hypothesized: a prior run of this exact scenario
+// (two concurrent invocations, one of them killed by an outer timeout) left
+// `public/city-plan.js` on disk with `deepFreeze(LANDMASSES);` still deleted
+// and the lock marker still present -- because this script had no SIGINT/
+// SIGTERM handler, unlike mutate.mjs, which grew one for the identical
+// reason. Node does not run a `finally` block on an uncaught signal by
+// default; without a handler the process just stops.
+let restored = false;
+function cleanup() {
+  if (restored) return;
+  restored = true;
+  try { writeFileSync(sourceFile, original); } catch { /* best effort on the way out */ }
+  releaseLock();
+}
+const onSignal = () => { cleanup(); process.exit(130); };
+process.on("SIGINT", onSignal);
+process.on("SIGTERM", onSignal);
+
 try {
   const base = run();
   console.log(`baseline: ${base.ok ? "GREEN" : "RED"}`);
   if (!base.ok) {
     console.error("refusing to score mutations against a red baseline:\n  " + base.failed.join("\n  "));
+    // process.exit() inside a try does not run `finally` -- cleanup() must be
+    // called explicitly here, or the lock this run just took would stick
+    // forever with nothing mutated to explain why.
+    cleanup();
     process.exit(1);
   }
 
@@ -98,4 +143,8 @@ try {
 } finally {
   writeFileSync(sourceFile, original);
   console.log(`\nrestored: ${readFileSync(sourceFile, "utf8") === original ? "byte identical" : "MISMATCH"}`);
+  restored = true;
+  releaseLock();
+  process.off("SIGINT", onSignal);
+  process.off("SIGTERM", onSignal);
 }

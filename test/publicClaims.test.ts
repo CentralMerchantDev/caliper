@@ -156,13 +156,43 @@ test("the placeholder city stats are reachable numbers, not decoration", () => {
   );
 
   const summary = readFileSync(join(ROOT, "src", "citySummary.generated.ts"), "utf8");
-  const settMatch = summary.match(/(\d+)\s+settlements/i);
-  if (settMatch) {
-    assert.equal(
-      settlements, Number(settMatch[1]),
-      `the page says ${settlements} settlements; the generated summary says ${settMatch[1]}`
-    );
-  }
+  const mismatch = settlementsClaimMismatch(settlements, summary);
+  assert.equal(mismatch, null, mismatch ?? "");
+});
+
+/**
+ * PART 7b/E8: this used to be `if (settMatch) { assert... }` -- a regex
+ * that stops matching (the summary's prose is reworded, a typo lands in
+ * gen-city-summary.mjs) silently SKIPPED the whole comparison instead of
+ * failing it. That is the exact fail-open shape J4's own tolerance-band
+ * defect had: a check that looks present but stops asserting anything the
+ * moment its one precondition quietly breaks.
+ *
+ * Extracted as a pure function, rather than inlined in the test above, so
+ * the "the regex cannot match" branch is directly testable with a synthetic
+ * string -- today's real citySummary.generated.ts always matches, so a
+ * mutation against only the real file would SURVIVE by construction and
+ * prove nothing about whether the fail-open path is actually closed.
+ *
+ * Returns null when the claim checks out, or a message naming what failed.
+ */
+export function settlementsClaimMismatch(claimedSettlements: number, summaryText: string): string | null {
+  const settMatch = summaryText.match(/(\d+)\s+settlements/i);
+  if (!settMatch) return "could not read a settlement count out of citySummary.generated.ts -- has its wording changed?";
+  const real = Number(settMatch[1]);
+  if (claimedSettlements !== real) return `the page says ${claimedSettlements} settlements; the generated summary says ${real}`;
+  return null;
+}
+
+test("J4/E8 (synthetic): an unreadable settlement count fails loudly, it does not silently pass", () => {
+  const unreadable = settlementsClaimMismatch(54, "this summary text has no number followed by the word settlements at all");
+  assert.notEqual(unreadable, null, "an unmatchable summary must not be treated as a passing check");
+  assert.match(unreadable!, /could not read/);
+
+  // And the two real, meaningful outcomes, so this is not simply "always fails":
+  assert.equal(settlementsClaimMismatch(54, "It contains 19,874 building plots in 54 settlements, 1,402 roads"), null);
+  const wrong = settlementsClaimMismatch(57, "It contains 19,874 building plots in 54 settlements, 1,402 roads");
+  assert.match(wrong!, /the page says 57 settlements; the generated summary says 54/);
 });
 
 // ---------------------------------------------------------------------------

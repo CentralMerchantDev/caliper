@@ -492,8 +492,8 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 905 node tests + 12 worker tests",
-      "replace": "npm test            # 906 node tests + 12 worker tests",
+      "find": "npm test            # 912 node tests + 12 worker tests",
+      "replace": "npm test            # 913 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
     {
@@ -725,6 +725,42 @@
       "find": "  \"buildingsPlaced\": 19725,",
       "replace": "  \"buildingsPlaced\": 16770,",
       "expect": "the placeholder city stats are reachable numbers, not decoration"
+    },
+    {
+      "id": "mutationSummary-catches-its-own-stale-counter",
+      "guards": "PART 7b/E2: test/mutationSummary.generated.json -- the committed evidence that every control in test/mutations.json has actually been run and CAUGHT -- is checked against its own internal counters, not just trusted",
+      "note": "Simulates the summary's own `caught` field disagreeing with its own `mutations` array (a hand edit, or a future writer bug in gen-mutation-summary.mjs) -- the artefact contradicting itself, which is exactly the shape of defect a generated-but-unchecked file invites.",
+      "file": "test/mutationSummary.generated.json",
+      "find": "  \"caught\": 81,",
+      "replace": "  \"caught\": 80,",
+      "expect": "the summary is not stale against the manifest it claims to cover"
+    },
+    {
+      "id": "acquireLock-refuses-a-second-holder",
+      "guards": "PART 7b/E1: acquireLock() throws when a second caller asks for a lock the first has not proven released -- the concurrency guard behind both mutate.mjs and _mutcheck.mjs, closing the race that let two invocations touch the same source file at once",
+      "note": "Removing the throw and letting a second lock silently succeed reintroduces exactly the race PART 7b/E1 found for real: one process's in-flight mutation read as another's baseline.",
+      "file": "scripts/mutate-lock.mjs",
+      "find": "  if (existing.present && !existing.restored) {\n    throw new Error(",
+      "replace": "  if (false && existing.present && !existing.restored) {\n    throw new Error(",
+      "expect": "a second acquireLock on a file the first still holds throws, and mutates nothing"
+    },
+    {
+      "id": "changelog-record-keeps-the-ledger-with-its-stage-provenance",
+      "guards": "PART 7b/E3: recordTerminalRun's destructuring keeps the whole ledger (including each stage's model/at) in the changelog/ record it writes -- only the raw visitor request is stripped",
+      "note": "Simulates a plausible future mistake -- someone destructuring a second field out alongside changeRequest and not noticing, since the changelog write still succeeds either way.",
+      "file": "src/changePipeline.ts",
+      "find": "const { changeRequest: _rawVisitorRequest, ...changelogRecord } = full;",
+      "replace": "const { changeRequest: _rawVisitorRequest, ledger: _droppedLedger, ...changelogRecord } = full as any;",
+      "expect": "a stage cost's model and timestamp survive into the changelog record"
+    },
+    {
+      "id": "settlementsClaimMismatch-fails-when-the-regex-cannot-match",
+      "guards": "PART 7b/E8: settlementsClaimMismatch() returns a failure message, not null, when the summary text has no readable settlement count -- the fail-open shape J4's tolerance band had, closed here for the settlements check specifically",
+      "note": "Reintroducing a silent `return null` when the regex fails to match means a reworded summary makes the whole comparison vanish instead of failing loudly.",
+      "file": "test/publicClaims.test.ts",
+      "find": "  if (!settMatch) return \"could not read a settlement count out of citySummary.generated.ts -- has its wording changed?\";",
+      "replace": "  if (!settMatch) return null;",
+      "expect": "an unreadable settlement count fails loudly, it does not silently pass"
     }
   ]
 }

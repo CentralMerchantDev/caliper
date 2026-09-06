@@ -133,7 +133,7 @@ export interface ChangeLedger {
     | "halted-awaiting-error-decision"
     | "abandoned-after-error";
   totalCostUsd: number;
-  stageCosts: { stage: string; costUsd: number; wallTimeMs: number }[];
+  stageCosts: { stage: string; costUsd: number; wallTimeMs: number; model: string; at: number }[];
   reviewFoundMaterial: number;
   reviewFoundNits: number;
   fixApplied: boolean;
@@ -285,7 +285,7 @@ interface ChangeState {
   changeRequest: string;
   currentSourceAtStart: string;
   budgetSpent: number;
-  stageCosts: { stage: string; costUsd: number; wallTimeMs: number }[];
+  stageCosts: { stage: string; costUsd: number; wallTimeMs: number; model: string; at: number }[];
   questionAsked: boolean;
   planGateReplyCount: number;
   runStartedAt: number;
@@ -655,7 +655,7 @@ export async function checkStopped(kv: KVNamespace, runId: string): Promise<bool
 }
 
 function buildStoppedLedger(
-  stageCosts: { stage: string; costUsd: number; wallTimeMs: number }[],
+  stageCosts: { stage: string; costUsd: number; wallTimeMs: number; model: string; at: number }[],
   budget: CallBudget,
   questionAsked: boolean,
   planGateReplyCount: number,
@@ -735,7 +735,7 @@ function haltLedger(
  * is the same terminal shape as a visitor choosing to stop, just reached
  * from a different halt. */
 function buildAbandonedAfterErrorLedger(
-  stageCosts: { stage: string; costUsd: number; wallTimeMs: number }[],
+  stageCosts: { stage: string; costUsd: number; wallTimeMs: number; model: string; at: number }[],
   budget: CallBudget,
   questionAsked: boolean,
   planGateReplyCount: number,
@@ -810,11 +810,11 @@ async function recordLessonOccurrence(kv: KVNamespace, lesson: string): Promise<
 async function runRetrospectiveAndRecord(
   env: ChangeEnv,
   budget: CallBudget,
-  stageCosts: { stage: string; costUsd: number; wallTimeMs: number }[],
+  stageCosts: { stage: string; costUsd: number; wallTimeMs: number; model: string; at: number }[],
   runSummary: string,
 ): Promise<{ lesson: string | null; recurrenceCount: number | null }> {
   const retro = await callAnthropic(env, budget, WORST_CASE.retrospective, () => runRetrospective(env.ANTHROPIC_API_KEY, runSummary, RETROSPECTIVE_MAX_TOKENS, RETROSPECTIVE_MODEL));
-  stageCosts.push({ stage: "retrospective", costUsd: retro.costUsd, wallTimeMs: retro.wallTimeMs });
+  stageCosts.push({ stage: "retrospective", costUsd: retro.costUsd, wallTimeMs: retro.wallTimeMs, model: retro.model, at: Date.now() });
   let recurrenceCount: number | null = null;
   if (retro.lesson) {
     await appendInstruction(env.SPEND_KV, retro.lesson);
@@ -1094,14 +1094,14 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     lastClarification = clarification;
     onEvent({ type: "grounding" });
     const groundResult = await callAnthropic(env, budget, WORST_CASE.ground, () => groundRequest(env.ANTHROPIC_API_KEY, changeRequest, GROUND_MODEL, CONTROL_LIMITS.TOKEN_CAPS.ground, currentSourceAtStart));
-    stageCosts.push({ stage: `ground${label}`, costUsd: groundResult.costUsd, wallTimeMs: groundResult.wallTimeMs });
+    stageCosts.push({ stage: `ground${label}`, costUsd: groundResult.costUsd, wallTimeMs: groundResult.wallTimeMs, model: groundResult.model, at: Date.now() });
     onEvent({ type: "grounded", result: groundResult.result, model: groundResult.model, inputTokens: groundResult.inputTokens, outputTokens: groundResult.outputTokens, costUsd: groundResult.costUsd, wallTimeMs: groundResult.wallTimeMs });
 
     onEvent({ type: "planning" });
     const planResult = await callAnthropic(env, budget, WORST_CASE.plan, () =>
       generatePlan(env.ANTHROPIC_API_KEY, currentSourceAtStart, regressionSummaryText(), changeRequest, clarification, PLAN_MAX_TOKENS, priorLessons, formatGroundingForPlan(groundResult.result)),
     );
-    stageCosts.push({ stage: `plan${label}`, costUsd: planResult.costUsd, wallTimeMs: planResult.wallTimeMs });
+    stageCosts.push({ stage: `plan${label}`, costUsd: planResult.costUsd, wallTimeMs: planResult.wallTimeMs, model: planResult.model, at: Date.now() });
     onEvent({ type: "planned", plan: planResult.plan, model: planResult.model, inputTokens: planResult.inputTokens, outputTokens: planResult.outputTokens, costUsd: planResult.costUsd, wallTimeMs: planResult.wallTimeMs });
     return { grounding: groundResult.result, plan: planResult.plan };
   }
@@ -1368,7 +1368,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         : await callAnthropic(env, budget, WORST_CASE.implement, () =>
             implementChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, changeRequest, IMPLEMENT_MODEL, CONTROL_LIMITS.TOKEN_CAPS.implement, priorLessons),
           );
-      stageCosts.push({ stage: `implement (${plan!.implementationPath})`, costUsd: impl.costUsd, wallTimeMs: impl.wallTimeMs });
+      stageCosts.push({ stage: `implement (${plan!.implementationPath})`, costUsd: impl.costUsd, wallTimeMs: impl.wallTimeMs, model: impl.model, at: Date.now() });
       onEvent({ type: "implemented", model: impl.model, inputTokens: impl.inputTokens, outputTokens: impl.outputTokens, costUsd: impl.costUsd, wallTimeMs: impl.wallTimeMs, code: impl.code });
       implCode = impl.code;
     }
@@ -1432,7 +1432,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         : await callAnthropic(env, budget, WORST_CASE.fix, () =>
             fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, implCode!, [], FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
           );
-      stageCosts.push({ stage: `fix (${plan!.implementationPath}, convergence attempt ${convergenceFixAttempts})`, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs });
+      stageCosts.push({ stage: `fix (${plan!.implementationPath}, convergence attempt ${convergenceFixAttempts})`, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, model: fix.model, at: Date.now() });
       if (fix.rejectionReason) {
         convergenceRejectionReason = fix.rejectionReason;
         break;
@@ -1534,7 +1534,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
         priorLessons,
       ),
     );
-    stageCosts.push({ stage: "review", costUsd: review.costUsd, wallTimeMs: review.wallTimeMs });
+    stageCosts.push({ stage: "review", costUsd: review.costUsd, wallTimeMs: review.wallTimeMs, model: review.model, at: Date.now() });
     findings = parseFindings(review.text);
     // The reviewer has now seen the work once. Left at 0, a run whose first
     // review was clean reported that the reviewer never looked at it -- the
@@ -1727,7 +1727,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
           assessment = await callAnthropic(env, budget, WORST_CASE.assess, () =>
             assessReview(env.ANTHROPIC_API_KEY, plan!, finalCode, material, stillPassingNow, CONTROL_LIMITS.TOKEN_CAPS.assess, DEFAULT_MODEL, priorLessons),
           );
-          stageCosts.push({ stage: `assess review (round ${round})`, costUsd: assessment.costUsd, wallTimeMs: assessment.wallTimeMs });
+          stageCosts.push({ stage: `assess review (round ${round})`, costUsd: assessment.costUsd, wallTimeMs: assessment.wallTimeMs, model: assessment.model, at: Date.now() });
           assessments.push(assessment);
           onEvent({ type: "review-assessed", round, approach: assessment.approach, reasoning: assessment.reasoning, verdicts: assessment.verdicts });
           // A finding the author judged NOT valid, with a stated reason, is
@@ -1787,7 +1787,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
             : await callAnthropic(env, budget, WORST_CASE.fix, () =>
                 fixChange(env.ANTHROPIC_API_KEY, currentSourceAtStart, plan!, finalCode, fixFindings, FIX_MODEL, CONTROL_LIMITS.TOKEN_CAPS.fix, verificationFailures, stillPassing, priorLessons),
               );
-          stageCosts.push({ stage: `fix (${plan!.implementationPath}, round ${round})`, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs });
+          stageCosts.push({ stage: `fix (${plan!.implementationPath}, round ${round})`, costUsd: fix.costUsd, wallTimeMs: fix.wallTimeMs, model: fix.model, at: Date.now() });
           if (fix.rejectionReason) {
             verifyFatalError = fix.rejectionReason;
             fixHeld = false;
@@ -1855,7 +1855,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
             { priorFindings: material, acceptedByDesign, round },
           ),
         );
-        stageCosts.push({ stage: `review (round ${round})`, costUsd: reReview.costUsd, wallTimeMs: reReview.wallTimeMs });
+        stageCosts.push({ stage: `review (round ${round})`, costUsd: reReview.costUsd, wallTimeMs: reReview.wallTimeMs, model: reReview.model, at: Date.now() });
         findings = parseFindings(reReview.text);
         onEvent({ type: "reviewed", model: reReview.model, inputTokens: reReview.inputTokens, outputTokens: reReview.outputTokens, costUsd: reReview.costUsd, wallTimeMs: reReview.wallTimeMs, reviewText: reReview.text, findings });
 
@@ -1984,7 +1984,7 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
           CONTROL_LIMITS.TOKEN_CAPS.qa,
         ),
       );
-      stageCosts.push({ stage: "qa", costUsd: qa.costUsd, wallTimeMs: qa.wallTimeMs });
+      stageCosts.push({ stage: "qa", costUsd: qa.costUsd, wallTimeMs: qa.wallTimeMs, model: qa.model, at: Date.now() });
       onEvent({ type: "qa", passed: qa.passed, gaps: qa.gaps, model: qa.model, costUsd: qa.costUsd, wallTimeMs: qa.wallTimeMs });
       qaGaps = qa.passed ? [] : qa.gaps;
       // A verdict line that never arrived is the call failing, not the change.

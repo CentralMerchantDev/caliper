@@ -54,11 +54,12 @@
 // a result it did not observe -- the same rule the pipeline itself is built on.
 // =============================================================================
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync, rmSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { filterPending, baselineIsFresh } from "./mutate-resume.mjs";
+import { MARKER, markerFileMatches, acquireLock, releaseLock, sha } from "./mutate-lock.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = join(ROOT, "test", "mutations.json");
@@ -116,7 +117,7 @@ function testFilesFingerprint() {
   return h.digest("hex");
 }
 
-// WHERE THE BACKUP LIVES, AND WHY NOT /tmp.
+// WHERE THE BACKUP LIVES, WHY NOT /tmp, AND WHY THIS IS A SHARED MODULE NOW.
 //
 // The first version put backups in os.tmpdir(). Then the very first run of this
 // script was killed by SIGKILL mid-mutation -- no handler fires on SIGKILL -- and
@@ -131,42 +132,15 @@ function testFilesFingerprint() {
 // dies without running anything -- which means it has to still be there tomorrow.
 // _TO-DELETE/ is already gitignored and is where this project quarantines things
 // rather than deleting them.
-const BACKUPS = join(ROOT, "_TO-DELETE", "mutate-backups");
-// Written before the first edit, removed after the last restore. If it is still
-// here at startup, a previous run died between those two points and something on
-// disk is still mutated.
-const MARKER = join(BACKUPS, "IN-PROGRESS.json");
-
-const sha = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
-
-/**
- * Read the leftover-mutation marker, if any, and check its claim against the
- * file it names.
- *
- * Existence of the marker is not evidence: a run can die after restoring but
- * before unlinking, and the unlink can fail on a read-only or permission-odd
- * mount. What IS evidence is the sha256 the marker recorded before it mutated
- * anything. So every question about "is a file still mutated" is answered by
- * hashing the file, here, in one place, rather than by three callers each
- * deciding what the marker's presence implies.
- *
- * Returns `{ present: false }` when there is no marker, otherwise the parsed
- * marker plus `onDisk` (the file's current hash, or null if it is missing) and
- * `restored` (whether the file is byte-identical to its pre-mutation state).
- */
-function markerFileMatches() {
-  if (!existsSync(MARKER)) return { present: false, restored: true };
-  let m;
-  try {
-    m = JSON.parse(readFileSync(MARKER, "utf8"));
-  } catch (e) {
-    // An unreadable marker is itself a reason to stop: something wrote it and
-    // died, and its contents were the only record of what to put back.
-    return { present: true, unreadable: String(e.message), restored: false, onDisk: null };
-  }
-  const onDisk = m.mutating && existsSync(m.mutating) ? sha(m.mutating) : null;
-  return { present: true, m, onDisk, restored: onDisk === m.originalHash };
-}
+//
+// BACKUPS/MARKER/sha/markerFileMatches/acquireLock/releaseLock used to live here,
+// inline. PART 7b/E1 (docs/WORLD-BUILD-PLAN.md) moved them to ./mutate-lock.mjs
+// because scripts/_mutcheck.mjs needed the exact same lock, at the exact same
+// path, to actually coordinate with this tool -- two independent marker files
+// would have coordinated nothing. See that module for what changed
+// (acquireLock's atomic `wx` create, specifically, which this file did not have
+// before: the marker was written with a plain writeFileSync, closing the gap
+// between "check" and "write" only by luck, not by design).
 
 function args() {
   const a = process.argv.slice(2);
@@ -214,20 +188,15 @@ function applyMutation(mut, baseline) {
   if (hits === 0) return { status: "INCONCLUSIVE", why: `the text to mutate is not in ${mut.file} -- it has been renamed or reworded` };
   if (hits > 1) return { status: "INCONCLUSIVE", why: `the text to mutate appears ${hits} times in ${mut.file}; narrow it` };
 
-  mkdirSync(BACKUPS, { recursive: true });
-  const backup = join(BACKUPS, mut.file.replace(/[\\/]/g, "__"));
-  copyFileSync(target, backup);
   const originalHash = sha(target);
-  // The marker is what makes a SIGKILL recoverable BY A HUMAN. Nothing in this
-  // process runs after SIGKILL, so the only thing that can help is a note left
-  // on disk beforehand saying exactly what was about to be changed and where the
-  // original is.
-  writeFileSync(MARKER, JSON.stringify({
-    startedAt: new Date().toISOString(),
-    mutating: mut.file, id: mut.id, backup, originalHash,
-    ifYouAreReadingThis: "a mutation run died before restoring. Copy the backup " +
-      "back over the file above, or `git checkout -- " + mut.file + "` if it was committed.",
-  }, null, 2));
+  // acquireLock is what makes a SIGKILL recoverable BY A HUMAN, and now also
+  // what stops a SECOND process (this tool or _mutcheck.mjs) from mutating
+  // the same file at the same time -- PART 7b/E1. Throws, mutating nothing,
+  // if another run already holds it and has not proven itself restored.
+  // Locked by the RESOLVED absolute path, not `mut.file` as written in the
+  // manifest, so this coordinates with _mutcheck.mjs regardless of which
+  // relative spelling either tool was invoked with.
+  const { backup } = acquireLock(target, mut.id, originalHash);
 
   // Restore on ANY exit this process can still act on -- return, throw, SIGINT,
   // SIGTERM. The IN-MEMORY copy is the source of truth, not the file: `before`
@@ -259,7 +228,7 @@ function applyMutation(mut, baseline) {
       try {
         writeFileSync(target, before);
         if (sha(target) === originalHash) {
-          try { rmSync(MARKER, { force: true }); } catch { /* the marker is advisory */ }
+          releaseLock();
           return;
         }
         lastErr = new Error("the file on disk does not match the original after writing it back");
@@ -404,7 +373,7 @@ if (existsSync(MARKER)) {
     // thing that mattered; the marker is only a note. Every later check reads
     // the hash rather than the marker's existence, so a stuck marker cannot
     // turn into a false alarm at the end of the run.
-    try { rmSync(MARKER, { force: true }); } catch { /* the marker is advisory */ }
+    releaseLock();
     console.log(
       `a previous run died while ${m.mutating} was mutated (${m.id}, ${m.startedAt}),\n` +
       "but that file now matches its pre-mutation hash exactly, so it was restored.\n" +
@@ -518,7 +487,18 @@ for (const mut of mutations) {
   // WRITTEN NOW, NOT AT THE END. This is the whole fix: a kill one line after
   // this still leaves the result on disk, so --resume never re-runs (or
   // re-reports) a mutation this process already proved.
-  resumeState.results.push({ ...mut, ...r });
+  //
+  // measuredAt/method: PART 7 Phase M/M1 ("every row carrying measuredAt and
+  // method -- a row without provenance is not a measured row") and PART 7b/E2
+  // (scripts/gen-mutation-summary.mjs reads these into the committed
+  // summary). Added here, going forward, rather than backfilled for rows
+  // that never recorded them -- a guessed date would be worse than an absent
+  // one.
+  resumeState.results.push({
+    ...mut, ...r,
+    measuredAt: new Date().toISOString().slice(0, 10),
+    method: `mutate.mjs ${opts.all ? "--all" : opts.id ? `--id ${opts.id}` : "--file/--find/--replace"}`,
+  });
   saveResults(resumeState);
   console.log(r.status + (r.why ? `  -- ${r.why}` : ""));
 }

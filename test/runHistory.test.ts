@@ -197,3 +197,54 @@ test("a run still halted at a gate (not yet terminal) does NOT write a changelog
   const raw = await kv.get(`changelog/${runId}`);
   assert.equal(raw, null, "a run still parked at a gate is not finished -- it must not appear in a history of completed runs");
 });
+
+// ---------------------------------------------------------------------
+// PART 7b/E3 -- the changelog records WHICH MODEL and WHEN, per stage.
+//
+// 19 real production runs (checked directly against the live changelog/ KV
+// namespace) carry neither: stageCosts entries were always {stage, costUsd,
+// wallTimeMs}, so a run's outcome could never be attributed to a specific
+// model or dated. groundRequest/generatePlan/etc. all already RETURN a
+// `model` field (checked directly in src/claude.ts/src/openai.ts) -- it was
+// just never copied into stageCosts. Testing the real call sites would
+// need a real Anthropic/OpenAI call, which the zero-spend constraint above
+// forbids; this instead proves the SURVIVAL half of the claim -- once a
+// stage-cost entry carries model/at, it reaches the actual changelog/ KV
+// record unchanged, through the real recordTerminalRun -- using the same
+// seeded-state, zero-spend resume technique as the "stopped" test above.
+// ---------------------------------------------------------------------
+
+test("a stage cost's model and timestamp survive into the changelog record", async () => {
+  const kv = makeFakeKV();
+  const env = makeEnv(kv);
+  const runId = `test-history-provenance-${Date.now()}`;
+  const changeRequest = "add a lamp post near the workshop";
+
+  const plan = { willBuild: "x", willNotTouch: "y", criteria: [], implementationPath: "data-edit", question: null, understoodIntent: "Add a lamp post near the workshop." };
+  const grounding = { premisesHold: true, reasoning: "ok", falsePremises: [] };
+  const seededStageCosts = [
+    { stage: "ground", costUsd: 0.00247, wallTimeMs: 2835, model: "claude-haiku-4-5", at: 1735000000000 },
+  ];
+  await kv.put(
+    `change/state/${runId}`,
+    JSON.stringify({
+      runId, changeRequest, currentSourceAtStart: "", budgetSpent: 0, stageCosts: seededStageCosts,
+      questionAsked: false, planGateReplyCount: 0, runStartedAt: Date.now(),
+      stage: "errored", errorMessage: "simulated prior transient blip", erroredAtStage: "implement",
+      errorKind: "transient", erroredPastGate1: true, plan, grounding,
+    }),
+  );
+  await kv.put(`change/error-decision/${runId}`, JSON.stringify({ approve: true }));
+  await kv.put(`change/stop/${runId}`, "1");
+
+  const rec = await runChangePipeline(env, runId, changeRequest, () => {});
+  assert.equal(rec.ledger.outcome, "stopped");
+  assert.equal(rec.ledger.stageCosts[0].model, "claude-haiku-4-5", "the in-memory ledger must carry the stage's model");
+  assert.equal(rec.ledger.stageCosts[0].at, 1735000000000, "the in-memory ledger must carry the stage's timestamp");
+
+  const raw = await kv.get(`changelog/${runId}`);
+  assert.ok(raw, "a stopped run must be in changelog/");
+  const stored = JSON.parse(raw!);
+  assert.equal(stored.ledger.stageCosts[0].model, "claude-haiku-4-5", "the CHANGELOG record -- what a fresh reader actually sees -- must carry the model, not just the in-memory object");
+  assert.equal(stored.ledger.stageCosts[0].at, 1735000000000, "the CHANGELOG record must carry the timestamp");
+});

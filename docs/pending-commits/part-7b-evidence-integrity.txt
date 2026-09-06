@@ -1,0 +1,108 @@
+PART 7b — evidence integrity: E1-E8, the audit that checks its own checking tools
+
+What was wrong: two claims audits found the PAGE's numbers stale; this one, requested
+separately, checked whether the MACHINERY that verifies those numbers could be
+trusted, and found eight real gaps in it. Each is closed below with a real test
+watched red before green, not asserted fixed.
+
+E1 -- scripts/_mutcheck.mjs had no lock against a second invocation touching the
+same source file. Confirmed for real, twice, mid-fix: a killed background test run
+left public/city-plan.js genuinely mutated (deepFreeze(LANDMASSES) deleted) with no
+process left to restore it, because _mutcheck.mjs also had no SIGINT/SIGTERM handler
+(mutate.mjs already did). Fixed: extracted the marker-file lock into
+scripts/mutate-lock.mjs (atomic `wx` create, so a second caller gets EEXIST rather
+than a check-then-write race window), shared by both tools; added the missing signal
+handler. Also found and fixed along the way: the backup filename sanitizer stripped
+`\`/`/` but not `:`, so an absolute Windows path's drive letter turned a mutation
+backup into an NTFS Alternate Data Stream on a file literally named "C" -- a backup
+that looks like it exists and restores nothing. Test: two real _mutcheck.mjs
+processes launched ~2s apart against the same file -- the second refused
+immediately, zero mutations attempted; test/mutateLock.test.ts (3 tests, in-process)
+proves the same contract without needing two real processes.
+
+E2 -- test/.mutate-results.json (the only proof every control has actually been run
+and caught something) is gitignored, so a fresh clone gets 0 rows of evidence for
+this project's central claim. Decided: generate a committed SUMMARY from it, same
+shape as gen-test-count.mjs/gen-city-summary.mjs. scripts/gen-mutation-summary.mjs
+writes committed test/mutationSummary.generated.json; test/mutationEvidence.test.ts
+checks it against the live manifest. Real accident, worth recording because it
+demonstrates the point E2 exists to make: rebuilding this required re-running all 80
+controls after `mutate.mjs --id ...` (a sanity check for the E1 fix, run without
+--resume) reset the local results file to empty by design -- the exact risk of
+"evidence lives only in a local, disposable file," demonstrated by accident mid-fix.
+
+E3 -- the changelog ledger's stageCosts entries carried no model id and no per-stage
+timestamp, so 19 real production runs can never be attributed to a model or dated at
+that granularity (the record DOES have a top-level completedAt already -- checked
+directly, the task's framing was half right). Every underlying call already returns
+.model; it was just never copied into stageCosts. Fixed at all 10 push sites plus the
+type declared at all 5 places it appeared; npx tsc --noEmit confirmed every result
+object actually carries .model. Zero-spend rule makes the push sites themselves
+untestable live; what IS tested (new case in test/runHistory.test.ts, same seeded-
+state zero-spend technique already used there) is that a stage cost's model/at
+survive, unmutated, into the real changelog/ KV record recordTerminalRun writes.
+
+E4 -- src/claude.ts cited docs/journal/FOUNDATION-2.md three times; the file was
+never committed at any point in 309 commits and does not exist on disk anywhere
+searched. Re-measuring means a real API call, forbidden. Marked plainly unsourced at
+all three citations; the measurements themselves are kept, since nothing contradicts
+them, only their paper trail is gone.
+
+E5 -- the "33% of criteria were vacuous" figure, no n/date/denominator/data file
+anywhere, appeared six places, not five (a sixth in test/criteriaDryRun.test.ts,
+found by this same sweep). Removed from all four LIVE locations; the two
+docs/journal/ citations left untouched, since that directory's own README states
+journal entries are history kept verbatim, and rewriting them would violate the
+policy this project already committed to.
+
+E6 -- docs/UMAA-CALIPER.md, the document blind audits are handed as grounding,
+says 438 tests against a real 912. Added a prominent re-grounding note under the
+title rather than rewriting history in place: 438 describes that document's own
+Phases 1-7, rewriting it would falsify a completed phase's tally. Also flagged the
+same document's stale plot/road counts, found while checking the same section.
+
+E7 -- four claimed contradictions, investigated individually rather than resolved
+by formula. None were "two values, delete the loser": (1) findGround's probe count
+is correct and cross-verified in two places (ground.js, ground.test.ts), from the
+fix; the "3.26 million" is the audit finding that prompted the fix, one day earlier,
+a historical commit message, not rewritten. (2) createWorld's two timing figures are
+not a contradiction -- the same commit message states both explicitly as different
+measurements (whole call vs. bare heightAt) of the same ~50% saving; added a scope
+note to the ledger entry that only quoted one. (3) "KV vs DO monthly spend" -- the
+literal cited figures could not be found anywhere; the real issue is that
+spendCap.ts's cumulative_spend_usd (checked live: $1.2713 right now) has no month
+boundary in its code at all and calling it "monthly" is simply wrong -- it isn't the
+same measurement as the pipeline's real, separate, DO-backed monthly counter
+(checked live: $0.00 of $20 right now) at all. (4) one CASE-FILE run's $0.2976 is
+real, derivable by summing the doc's own published per-stage table; $0.172495 could
+not be confirmed -- the run's changelog entry returns 404 in live production KV
+right now, and the figure appears nowhere in the repository or any worktree. Said
+plainly: one side verified, the other unconfirmable, not "wrong."
+
+E8 -- publicClaims.test.ts's settlements check was wrapped in `if (settMatch)` --
+the exact fail-open shape J4's own tolerance-band defect had. Extracted into a pure,
+exported settlementsClaimMismatch(claimed, summaryText); a mutation against only the
+real file would SURVIVE by construction (today's summary always matches), so a
+synthetic test feeds it an unmatchable string and asserts a message comes back, not
+null. Mutation reintroducing the silent `return null` CAUGHT.
+
+How it is known to be fixed: every one of the 6 new/changed controls above (E1
+lock+signal-handler, E2 evidence summary, E3 changelog provenance, E8 fail-closed
+settlements check) has a mutation in test/mutations.json, run for real via
+_mutcheck.mjs, CAUGHT, and recorded with real measuredAt/method provenance in
+test/mutationSummary.generated.json -- 84 of 84 defined controls now CAUGHT, up from
+80 (four new: acquireLock-refuses-a-second-holder,
+mutationSummary-catches-its-own-stale-counter,
+changelog-record-keeps-the-ledger-with-its-stage-provenance,
+settlementsClaimMismatch-fails-when-the-regex-cannot-match). `node test/run.mjs`:
+912/912, 0 fail (was 905; +7 from the new test files). `npx tsc --noEmit`: clean.
+
+What is still open, said plainly rather than hidden: vitest's cloudflare-pool
+runner failed to start 4 consecutive times this session (workerd.exe itself
+confirmed healthy via --version; no .workers.test.ts file was touched), so the
+12-worker-test figure in test/testCount.generated.json/CLAUDE.md/public/index.html
+is carried forward from its last real measurement, not re-confirmed this pass --
+noted directly in the generated file's own _comment. Re-run
+`node scripts/gen-test-count.mjs` once vitest starts cleanly again, before deploy.
+
+Default-world guard unaffected -- no generation code touched by any of E1-E8.

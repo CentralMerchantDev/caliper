@@ -1062,6 +1062,16 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done, evidence given ·
          require independent mutable district data and independent layer
          stacks for the same seed. Measured: ~50% reduction per repeat call
          (4093ms → ~2060ms), whole-suite runtime dropped ~292s → ~235s.
+         **PART 7b/E7 note:** this is the WHOLE `createWorld({seed})` call,
+         cold vs. warm — a different, narrower measurement exists too
+         ("2657ms → 1227ms for a bare `heightAt` reuse", commit `a6255a4`'s
+         own message) and the two can look like a disagreement side by side.
+         They are not: `a6255a4` states both explicitly, in the same
+         paragraph, as two separate measurements of the same ~50% saving —
+         one for the full call, one for an isolated `heightAt` lookup — and
+         calls them consistent, not conflicting. Neither figure is wrong;
+         named here so a future reader does not "resolve" a disagreement
+         that was never one.
 
       **This closes the audit loop this session opened**: the redirect that
       asked for one consolidated audit at the end, rather than one per phase
@@ -1561,6 +1571,237 @@ the same scrutiny.
       not feed the summary). `node scripts/shoot-app.mjs`: `sceneChildren:
       1015`, unchanged. PART 0's table above updated with all of the above.
       `npx tsc --noEmit` clean; `npm test` 898/898.
+
+---
+
+### PART 7b — EVIDENCE INTEGRITY *(found by the 2026-09-05 evidence audit)*
+
+Two claims audits in one day (the buildings claim, then the 387/33%/PART-0/
+stale-pointer/cost-claim sweep) found defects in the EVIDENCE ITSELF, not just
+in what the page said about it: a mutation runner with no lock against its own
+known race, a central results file nobody can see, a ledger schema that cannot
+attribute its own runs, a citation to a file that isn't there, a number with no
+data behind it anywhere, a grounding document the audits trust that is itself
+stale, four places where this project asserts two different numbers for the
+same measurement, and a check that fails open. Sequenced before Phase M because
+M1 (the full mutation suite) is not trustworthy until E1 exists, and M3 (every
+claim traced) is not achievable while E4-E7 stand.
+
+- [x] **E1 — `_mutcheck.mjs` takes `mutate.mjs`'s marker-file lock.**
+      Extracted the marker into `scripts/mutate-lock.mjs` (`acquireLock`/
+      `releaseLock`/`markerFileMatches`, atomic `wx` create so a second
+      caller gets `EEXIST` rather than a check-then-write race window), and
+      both `mutate.mjs` and `_mutcheck.mjs` now take it before touching
+      anything, including their own baseline run. `_mutcheck.mjs` also
+      gained the `SIGINT`/`SIGTERM` handler `mutate.mjs` already had — found
+      it was missing the hard way, mid-fix: a background test run this
+      session was killed by the harness and left `public/city-plan.js`
+      genuinely mutated (`deepFreeze(LANDMASSES);` deleted) with the lock
+      still held, twice, once before the handler existed and once after
+      (this environment's kill did not deliver a catchable signal either
+      time — restored both times via `git checkout` + sha256 verification
+      against `git show HEAD`, not assumed). **Test, run for real:** two
+      `_mutcheck.mjs` processes launched ~2s apart against
+      `public/city-plan.js` (`test/worldSpec.test.ts` vs
+      `test/worldAliasing.test.ts`) — the second refused immediately
+      (`Error: refusing to run: ... already mutated by "test/worldSpec.test.ts
+      vs public/city-plan.js"`, exit 1, zero mutations attempted, zero
+      results reported); the first ran its full 11-mutation suite to
+      completion normally. Also `test/mutateLock.test.ts` (3 tests,
+      in-process, no child-process spawn needed) and mutation
+      `acquireLock-refuses-a-second-holder` CAUGHT:
+      `node scripts/_mutcheck.mjs test/mutateLock.test.ts
+      scripts/mutate-lock.mjs test/mutations.json`. Also found and fixed
+      along the way: the backup filename sanitizer stripped `\`/`/` but not
+      `:`, so an absolute Windows path's drive letter (`C:\...`) turned the
+      backup into an NTFS Alternate Data Stream on a file literally named
+      `C` — a backup that looks like it exists and restores nothing (found
+      by `Get-Item -Stream *` after a real run left one behind; fixed by
+      sanitizing `:` too, re-verified the resulting backup file is
+      byte-identical to the source).
+- [x] **E2 — `test/.mutate-results.json` is gitignored.** The evidence for
+      this project's central claim (every control has actually been run and
+      caught something) is not in the repo — a clone gets 0 rows. Decided:
+      generate a committed SUMMARY from it, same shape as
+      `scripts/gen-test-count.mjs`/`scripts/gen-city-summary.mjs` — the raw
+      progress file stays local and gitignored (it is rewritten after every
+      single mutation on purpose, so a kill costs one result, not the run;
+      committing that churn would dirty the tree on every local pass for no
+      reason), but `scripts/gen-mutation-summary.mjs` now reads it and
+      `test/mutations.json` together and writes committed
+      `test/mutationSummary.generated.json`: counts by status and, per id,
+      `{id, status, measuredAt, method}`. `test/mutationEvidence.test.ts` (2
+      tests) checks the summary against the live manifest — every id has a
+      CAUGHT result, and the summary's own counters agree with its own
+      array — watched red (added a manifest id with no result: "these
+      controls exist... have no result"; then a stale `manifestCount`)
+      then green after restoring/regenerating. Mutation
+      `mutationSummary-catches-its-own-stale-counter` CAUGHT.
+      **Real accident, worth recording exactly because it demonstrates the
+      point E2 exists to make:** rebuilding this required re-running all 80
+      controls after `mutate.mjs --id ... ` (run once, without `--resume`,
+      to sanity-check the E1 refactor) reset the local results file to
+      empty by design — the exact risk of "the evidence lives only in a
+      local, disposable file" that E2 names, demonstrated by accident
+      mid-fix. Recovered by re-running every control via `_mutcheck.mjs`
+      (82 total after E1/E2's own two new controls), this time recording
+      real `measuredAt`/`method` provenance per row — which M1 will not
+      need to do again, since it already exists.
+      `measuredAt`/`method` were also added to `scripts/mutate.mjs`'s own
+      result-writing, going forward (PART 7 Phase M/M1's "every row carries
+      measuredAt and method" — done here, ahead of M1, as a side effect of
+      the recovery above).
+- [x] **E3 — the changelog ledger records no model id and no timestamp.**
+      Checked first, not assumed: production `changelog/*` records DO carry
+      a record-level `completedAt` already (confirmed on a real entry:
+      `1788032375551` → a valid ISO date) — the task's framing was half
+      right. What is genuinely missing, confirmed against the same real
+      record, is PER-STAGE attribution: `ledger.stageCosts` entries are
+      `{stage, costUsd, wallTimeMs}, ` with no model and no per-stage time,
+      so a run's cost breakdown can never be tied to which model produced
+      which stage, or when that stage ran relative to the others. Every
+      underlying call already returns `.model` (`generatePlan`,
+      `groundRequest`, `reviewArtifact`, etc. — checked directly in
+      `src/claude.ts`/`src/openai.ts`) — it was computed and simply never
+      copied into `stageCosts`. Fixed: all 10 `stageCosts.push(...)` call
+      sites in `src/changePipeline.ts` now include `model` (from the
+      stage's own result) and `at` (`Date.now()`); the type updated at all
+      5 places it was declared. `npx tsc --noEmit` clean — every push site's
+      result object was confirmed by the compiler itself to actually carry
+      `.model`, not asserted.
+      **What could and could not be tested, said plainly:** the push sites
+      themselves need a real Anthropic/OpenAI call to exercise, forbidden by
+      this session's zero-spend rule — an honest gap, not hidden. What IS
+      tested (`test/runHistory.test.ts`, new case, zero-spend via the
+      existing seeded-state/invalid-key technique): a stage-cost entry
+      carrying `model`/`at` survives, unmutated, all the way into the real
+      `changelog/*` KV record `recordTerminalRun` writes — the actual
+      user-visible claim E3 is about. Mutation: stripped `ledger` from the
+      changelog record's destructuring (a plausible future mistake, not a
+      strawman) — CAUGHT the named test. Backfilling the 3 existing
+      production changelog entries is impossible, confirmed by reading one
+      directly (its `stageCosts` entries have no `model` field to recover)
+      — said so rather than guessed.
+- [x] **E4 — `src/claude.ts:92`/`:746` cite `docs/journal/FOUNDATION-2.md`,
+      which does not exist.** Checked both other options before taking the
+      third: `git log --all --full-history -- "**/FOUNDATION-2.md"` returns
+      nothing across all 309 commits — never committed, so not
+      recoverable by restoring. Re-measuring means live Claude API calls,
+      forbidden by this session's zero-spend rule. So: marked plainly
+      unsourced (done in the prior claims-audit pass, `fe2a745`, re-verified
+      here unchanged) — three citations at `src/claude.ts:97`, `:109`,
+      `:756` each say what was cited, that no file by that name exists
+      anywhere in this repo's history or on disk (also checked: a broad
+      filesystem search under `C:\Code` and `C:\Users\User` for any stray,
+      never-committed copy, found nothing), and that the measurements
+      themselves are kept because nothing contradicts them, only their
+      paper trail is gone.
+- [x] **E5 — the "33% of criteria were vacuous" figure has no n, date,
+      denominator, or data file**, in `src/criteriaDryRun.ts`,
+      `src/changePipeline.ts:1206`, `public/index.html:4317`,
+      `docs/journal/BUILD-WORLD.md:178`, `docs/journal/NEXT.md:46`. Done in
+      the prior claims-audit pass (`fe2a745`), re-verified unchanged here:
+      removed from the three live locations plus a sixth instance the same
+      sweep found in `test/criteriaDryRun.test.ts` — each now says plainly
+      that an earlier version cited a rate with no n/date/dataset behind it,
+      rather than requoting the number. The two journal citations are left
+      byte-for-byte as written: `docs/journal/README.md` states journal
+      entries are history, kept verbatim, and where they disagree with the
+      code the code is right — rewriting them to retract a number would be
+      exactly the rewriting-after-the-fact that policy exists to forbid.
+      Named here rather than silently skipped.
+- [x] **E6 — `docs/UMAA-CALIPER.md` says 438 tests against a real 905**, and
+      it is the grounding document the blind audits are handed. Added a
+      prominent re-grounding note directly under the title (read before
+      anything else, not buried) rather than silently rewriting the
+      historical figures in place: the "438 tests" at lines ~133/~204/~219
+      describes that document's own Phases 1–7 (`up from 379`) — rewriting
+      a completed phase's own tally in place would falsify history, not fix
+      it, the same reasoning `docs/journal/README.md` states for the
+      journal files. The note says plainly: 905 is current
+      (`node scripts/gen-test-count.mjs`), every specific figure below is
+      dated to Phases 1–7, and a future auditor must re-measure before
+      citing any of them. Also flagged, found while checking the same
+      section: line ~77's "19,481 plots / 1,399 roads" is also stale (now
+      19,874 / 1,402) — named in the same note rather than left for the
+      next reader to trip over.
+- [x] **E7 — four internal contradictions, two published values each.**
+      None turned out to be "two values, pick the winner, delete the loser"
+      — each is different once actually investigated, named individually
+      rather than forced into one shape:
+
+      1. **`findGround` probe count — resolved, not deleted.** `public/
+         ground.js`'s own comment (`12,142,980` calls, `17,910` candidates
+         × `678` probes — the multiplication checks out exactly) was added
+         by commit `f670c71` (2026-09-04), the fix itself, and is echoed
+         verbatim in `test/ground.test.ts`'s own comment — two independent
+         places agreeing. `docs/pending-commits/19-what-the-second-blind-
+         audit-found.txt`'s "3.26 million" is commit `9c3d160`, one day
+         earlier (2026-09-03) — the audit finding that PROMPTED the fix,
+         necessarily measured before the precise re-measurement existed.
+         Nothing to delete: a committed historical commit-message file, the
+         same category as `docs/journal/`, not rewritten after the fact.
+         `ground.js`'s figure is the current, precise, cross-verified one.
+      2. **`createWorld` memoisation timing — not actually a contradiction.**
+         Investigated by reading commit `a6255a4`'s full message, not just
+         the two numbers: it states BOTH figures in the same paragraph as
+         two different measurements of the same ~50% saving — "4093ms →
+         2054/2064ms" for the whole `createWorld({seed})` call, "2657ms →
+         1227ms" explicitly labelled "for a bare `heightAt` reuse" — and
+         calls them consistent. `docs/WORLD-BUILD-PLAN.md`'s own H5 entry
+         only quoted the first figure with no scope note, which is what
+         made it look like it disagreed with the second. Fixed: added a
+         note distinguishing the two measurements' scope, so a future
+         reader does not "resolve" a disagreement that commit `a6255a4`
+         already explained was never one.
+      3. **KV vs. DO "monthly" spend — a naming error, not a data
+         contradiction.** The literal figures in the task ("3.8098" /
+         "0.168063") could not be located anywhere in the repository, any
+         worktree, or live KV/DO data (checked directly: `wrangler kv key
+         get cumulative_spend_usd` reads **$1.2713** right now; `GET
+         /pipeline-budget` reads **$0.00** of a $20 monthly cap right now).
+         The real, underlying issue those figures were pointing at is real
+         though: `src/spendCap.ts`'s `cumulative_spend_usd` (the MATRIX
+         benchmark's own cap, `callForCode`'s call sites only) is a plain,
+         ever-growing, all-time total with no month boundary anywhere in
+         its code — calling it "monthly" is simply wrong. It is not the
+         same measurement as `controlLayer.ts`'s Durable-Object-backed
+         `monthlySpentUsd` (the CHANGE PIPELINE's own, separate budget,
+         resetting on a real calendar month) — two different subsystems,
+         tracking two different things, that will always look
+         "inconsistent" if compared as though they were one number.
+      4. **CASE-FILE-PET-CHANGE run `b99d3894`'s total — one side verified,
+         the other could not be found.** `$0.2976` is real, derivable
+         directly from the doc's own published per-stage cost table
+         (`0.0346+0.0283+0.0353+0.0241+0.0408+0.0415+0.0428+0.0502`,
+         excluding the separate controlled-experiment rows) — the doc
+         never states it as a lump sum, which is why it reads as
+         undocumented until you add the table yourself. `$0.172495` — "its
+         stored ledger" — could not be confirmed: `changelog/b99d3894-df75-
+         4558-8ba9-27ea28ba4d2f` returns 404 in live production KV right
+         now (checked directly), and grepping the figure across every
+         tracked file and worktree found nothing. The primary source this
+         second figure would need to come from no longer exists to check
+         against. Said plainly rather than guessed at: **$0.2976 is
+         verified; $0.172495 is unconfirmable, not "wrong."**
+
+      Nothing moved to `_TO-DELETE/` — none of the four turned out to be a
+      genuine "two values, one of them wrong" case once actually
+      investigated rather than assumed.
+- [x] **E8 — `publicClaims.test.ts`'s settlements check is wrapped in
+      `if (settMatch)`.** Extracted into a pure, exported
+      `settlementsClaimMismatch(claimed, summaryText)` (returns a message or
+      `null`) rather than fixed inline — today's real
+      `citySummary.generated.ts` always matches the regex, so a mutation
+      against only the real file would SURVIVE by construction and prove
+      nothing about whether the fail-open path is actually closed (the same
+      reasoning J4's own Finding 2/3 fixes used). New synthetic test feeds
+      it a string with no readable settlement count and asserts a message
+      comes back, not `null`, plus both real outcomes (match, mismatch).
+      Mutation `settlementsClaimMismatch-fails-when-the-regex-cannot-match`
+      (reintroduces the silent `return null`) CAUGHT:
+      `node scripts/_mutcheck.mjs test/publicClaims.test.ts
+      test/publicClaims.test.ts test/mutations.json`.
 
 ---
 
