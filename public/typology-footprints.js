@@ -1,25 +1,29 @@
 // =============================================================================
-// docs/specs/PLACEMENT-CONTRACT.md, PART 1 -- THE ONE TABLE BOTH LANES READ.
+// docs/specs/PLACEMENT-CONTRACT.md, PART 1 -- A BUILDING'S OWN DECLARED SPACE.
 //
-// "A model declares what it needs. The board is carved to fit models. Never
-// the other way round." public/buildings.js's bld* functions already declare
-// their own footprint in whole 8 m cells (cellW/cellD, clamped per typology);
-// public/city-plan.js's PLOT_CLASSES did not agree with any of them. This is
-// the reconciliation: every number below is READ off buildings.js's own
-// Math.max/Math.min clamps, not invented, so a change to a model's own
-// declared size is a change to this file, not a second guess living here.
+// CORRECTED 2026-09-06 (Mark): a plot is not a slot for a kind of building.
+// It is space. This file used to frame itself as "the reconciliation" between
+// buildings.js's own cell clamps and city-plan.js's PLOT_CLASSES -- as if a
+// typology's footprint had to be checked against a plot's declared CLASS
+// before it could stand there. That framing is retired. There is no class to
+// reconcile against any more: PLOT_CLASSES survives only as a record of what
+// world generation chose to seed on a plot (see its own comment in
+// city-plan.js), never a constraint on what a player may later build there.
 //
-// WHOEVER GETS HERE FIRST COMMITS IT. If public/buildings.js or public/
-// props.js already exports an equivalent table by the time you read this,
-// that one is the real one -- delete this file's claim to be first, do not
-// keep two.
+// What this file actually is, now: each typology's own statement of the
+// ground it needs -- `foot`, in whole 8 m cells, read directly off
+// buildings.js's own Math.max/Math.min clamps, not invented. The board's only
+// question is whether a free rectangle of that size (plus `clear`, the space
+// required AROUND it -- not yet declared anywhere, see the note at the bottom
+// of this file) exists where a player wants to build. No class check, no use
+// check. A villa may go downtown; a tower may go in a field with the room
+// for it.
 //
-// This file imports nothing from buildings.js and buildings.js imports
-// nothing from here (yet) -- the CLI lane does not edit public/buildings.js
-// (scope fence, WORLD-REBALANCE-BRIEF.md), so this is a NEUTRAL file both
-// lanes can read: city-plan.js reads it now; buildings.js reading it too is
-// how "make both PLOT_CLASSES and the model generators read from that
-// constant rather than restating it" (the contract's own words) finishes.
+// WHOEVER GETS HERE FIRST COMMITS IT (docs/specs/PLACEMENT-CONTRACT.md's own
+// rule) is done: this file won that race (landed as de2573b) over a second,
+// independently-written table (public/footprint-contract.js) whose bld-tower
+// entry used a plot-class proposal number instead of bld-tower's own real
+// clamp -- exactly the invented-number mistake this file exists to avoid.
 //
 // ONLY TYPOLOGIES WITH A REAL, REGISTERED BUILDER ARE LISTED.
 // public/layout.js's TYPOLOGIES_FOR_CLASS also names "bld-highstreet-terrace"
@@ -62,19 +66,14 @@ export const TYPOLOGY_FOOTPRINT_CELLS = Object.freeze({
 });
 
 /**
- * TOWER-CLASS PLOTS, MARK'S DECISION PENDING.
- *
- * PLOT_CLASSES.TOWER's old minimum was 45 m -- 5.625 cells, not a whole
- * number, which is the specific defect this file exists to close. The
- * contract's own proposal is 6-11 cells (48-88 m), "proposed, not decided
- * -- use the proposal meanwhile." Recorded here, not silently folded into
- * the table above, because it is a target for PLOT_CLASSES to carve toward,
- * not a measurement of what any model currently declares -- bld-tower's own
- * clamp (4-8 cells, above) only covers the bottom of this range today. A
- * TOWER plot carved at 9-11 cells has no typology that currently fits it
- * exactly; 6-8 cells does. That gap is Mark's to close by widening
- * bld-tower's own clamp, or by narrowing this bracket -- not this file's
- * call, and not silently resolved here either way.
+ * VOID, kept for the historical record rather than deleted (nothing is
+ * deleted in this repo). This existed to answer "what plot-class bracket
+ * should TOWER declare so a bld-tower typology is guaranteed to fit it" --
+ * a question that only made sense when a plot's class bound what could be
+ * built on it. Mark's 2026-09-06 correction removed that binding entirely:
+ * a plot's only property is how many free cells it has, so bld-tower's own
+ * clamp (4-8 cells, above) is already the complete, sufficient statement of
+ * what a tower needs. Nothing reads this constant any more.
  */
 export const TOWER_PLOT_CELLS_PROPOSED = Object.freeze({ w: { min: 6, max: 11 }, d: { min: 6, max: 11 } });
 
@@ -84,11 +83,13 @@ export const TOWER_PLOT_CELLS_PROPOSED = Object.freeze({ w: { min: 6, max: 11 },
 export const TYPOLOGIES_WITH_NO_REGISTERED_BUILDER = Object.freeze(["bld-highstreet-terrace", "bld-business-park"]);
 
 /**
- * Plot classes where PART 1's own test ("at least one typology's footprint
- * range fits inside that class's size range") genuinely fails today, found
- * while writing that test rather than assumed. Widening PLOT_CLASSES'
- * bounds outward to the nearest whole cell (the rest of this file's job)
- * cannot close either gap, because the gap is not a rounding error:
+ * A SEEDING gap, not a placement rule -- there is no test enforcing this any
+ * more (see the note at this file's top: a plot's class no longer binds what
+ * can be built there). What is still real: when world generation seeds a
+ * FARM or HANGAR plot with an initial building (Step 3's "downtown seeds
+ * towers, the shore seeds villas" per-district decision), neither class's own
+ * typologies are remotely close to the ground FARM/HANGAR plots actually
+ * carve:
  *
  *   FARM   { minW: 160-464m / 20-58 cells }  vs its typologies' widest w:
  *            bld-workshop 3-5 cells (24-40m), bld-villa 2-3 cells (16-24m)
@@ -98,20 +99,19 @@ export const TYPOLOGIES_WITH_NO_REGISTERED_BUILDER = Object.freeze(["bld-highstr
  * Both plot classes are carried by public/buildings.js's ARCHETYPE map
  * (farm(), hangar()) for WORLD GENERATION, but neither has a player-facing
  * bld* equivalent at all -- not a size mismatch, an absent typology. Not
- * this file's gap to close (that is buildings.js, agy's file); named here,
- * the same way TYPOLOGIES_WITH_NO_REGISTERED_BUILDER names the other kind
- * of gap, so the Part 1 test can be honest about what actually holds today
- * rather than quietly excluding these two with no record of why. */
+ * this file's gap to close (that is buildings.js, agy's file); named here
+ * so Step 3's seeding work knows before it starts rather than discovering it
+ * mid-pass. */
 export const CLASSES_WITH_NO_TYPOLOGY_LARGE_ENOUGH = Object.freeze(["FARM", "HANGAR"]);
 
 /**
- * Does a typology's declared cell range overlap a plot class's declared
- * cell range, in both directions? Overlap, not subset: `TOWER_PLOT_CELLS_
- * PROPOSED` (6-11) and bld-tower's own clamp (4-8) share 6-8, and a plot
- * carved anywhere in that overlap is buildable by a real model today --
- * which is the actual, practical question "can this class hold this
- * typology" is asking. A pure subset test would fail on that overlap for a
- * reason that has nothing to do with whether a real building fits.
+ * General-purpose cell-range overlap, kept for whatever placement code needs
+ * it next (checking a proposed foot+clear rectangle against free ground, for
+ * instance) -- not deleted even though its original purpose (checking a
+ * typology's footprint against a plot class's declared range) is retired
+ * along with plot classes binding what can be built on them. Overlap, not
+ * subset: two ranges that share only part of their span still describe a
+ * real size something could be built at.
  */
 export function rangesOverlap(a, b) {
   const aMax = a.max === null ? Infinity : a.max;

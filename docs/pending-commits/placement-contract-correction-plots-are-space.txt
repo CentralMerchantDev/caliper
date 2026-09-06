@@ -1,0 +1,52 @@
+Placement contract, corrected: a plot is space, not a slot for a kind of
+building
+
+Mark, 2026-09-06, after reading the whole-cell-carving work in the previous
+commit: "the plots should not be made to suit a single type of building, you
+should be able to put any building you want anywhere you want, building just
+require a set amount of space open to be able to build them / place them...
+it just needs to be known the amount of open space that is needed for it."
+
+This is a correction to docs/specs/PLACEMENT-CONTRACT.md Part 1's own
+framing, not a reversal of the previous commit -- the whole-cell carving it
+landed stays exactly as built. What changes is what PLOT_CLASSES is FOR.
+
+PLOT_CLASSES survives only as a record of what world generation chose to
+seed on a plot at creation time (public/city-plan.js, new comment on the
+export itself). Nothing later reads it as permission or refusal -- a villa
+may go downtown, a tower may go in a field with the room for it. The board's
+only question is whether enough free space exists, which is `foot` (already
+in public/typology-footprints.js, unchanged -- every entry was read straight
+off buildings.js's own clamps and Mark confirmed it independently) plus
+`clear` (space required around a building, not yet declared anywhere).
+
+RETIRED, not weakened to pass: test/typologyFootprints.test.ts's two tests
+that checked a plot class against its typologies' footprint range ("every
+plot class can hold at least one registered typology" and "TOWER's proposed
+bracket is 6-11 cells") tested a class-to-typology binding that no longer
+exists. Removed along with the now-dead TOWER_PLOT_CELLS_PROPOSED reasoning
+in typology-footprints.js (constant itself kept, not deleted, marked VOID)
+and the FARM/HANGAR test's framing (kept, reframed as a seeding-gap note for
+step 3 rather than a claim about a binding contract).
+
+THE NEW GAP, surfaced not solved: no typology declares `clear` yet. Followed
+the existing precedent (public/prop-manifest.js already has this exact
+concept for small props) rather than inventing a new one, and derived a
+reasoned starting proposal per typology from what each needs to be
+approached and entered -- not measured, not decided, written into
+docs/audits/VISUAL-RUN-QUESTIONS.md as section 1a for Mark and agy to own.
+Flagged a real open question inside that proposal too: prop-manifest's
+symmetric all-sides pad is right for a free-standing building but wrong for
+a tiling row typology (bld-terrace, bld-townhouse) that shares party walls
+by design -- not resolved here.
+
+How it is known to work: node test/run.mjs -- the same 953/955 as the
+previous commit (the two known-red seed-pin/summary tests are untouched by
+this commit, still deferred to WORLD-REBALANCE-BRIEF.md's own step 3
+re-pin). npx tsc --noEmit clean.
+
+Step 2 of WORLD-REBALANCE-BRIEF.md ("bind declared class to carved
+geometry") is paused, not resumed, by this commit -- it was built on the
+model this correction replaces. Re-scoping it is the next piece of work,
+under the new framing: settlement seeding decisions (Step 3's "downtown
+seeds towers, the shore seeds villas") rather than geometry binding.
