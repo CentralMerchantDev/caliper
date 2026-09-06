@@ -24,6 +24,9 @@ import { fbm, clamp } from "./noise.js";
 // height ceilings live there because they are a property of the PLAN, and this
 // module has to honour them rather than keep a second copy that can drift.
 import { PLOT_CLASSES } from "./city-plan.js";
+import { TYPOLOGY_FOOTPRINT_CELLS } from "./typology-footprints.js";
+
+export { TYPOLOGY_FOOTPRINT_CELLS };
 
 /** Deterministic 0..1 from any string. Same hash the plan generator uses. */
 export function rnd(s) {
@@ -896,6 +899,7 @@ function mergeGeometries(parts, palette = {}, T = THREE) {
   const posArray = new Float32Array(totalPositions * 3);
   const normArray = new Float32Array(totalPositions * 3);
   const colArray = new Float32Array(totalPositions * 3);
+  const uvArray = new Float32Array(totalPositions * 2);
   const indexArray = new Uint32Array(totalIndices);
 
   const defaultWall = palette.wall !== undefined ? palette.wall : 0xcccccc;
@@ -912,6 +916,10 @@ function mergeGeometries(parts, palette = {}, T = THREE) {
 
     if (g.attributes.normal) {
       normArray.set(g.attributes.normal.array, posOffset * 3);
+    }
+
+    if (g.attributes.uv) {
+      uvArray.set(g.attributes.uv.array, posOffset * 2);
     }
 
     let colVal = item.color;
@@ -947,6 +955,7 @@ function mergeGeometries(parts, palette = {}, T = THREE) {
   merged.setAttribute("position", new T.BufferAttribute(posArray, 3));
   merged.setAttribute("normal", new T.BufferAttribute(normArray, 3));
   merged.setAttribute("color", new T.BufferAttribute(colArray, 3));
+  merged.setAttribute("uv", new T.BufferAttribute(uvArray, 2));
   merged.setIndex(new T.BufferAttribute(indexArray, 1));
   return merged;
 }
