@@ -1,0 +1,16 @@
+Phase M -- M1: the full mutation suite, clean, verified mechanically
+
+Not a new pass -- this ticks the ledger item against work already done and
+already enforced by test/mutationEvidence.test.ts on every run. Checked
+directly rather than trusted on sight: 88 mutations in the manifest, 88
+results, zero missing measuredAt/method provenance, status counts
+{"CAUGHT":88}, and the manifest/results id sets match exactly in both
+directions.
+
+Built via the scoped method throughout this session (_mutcheck.mjs), not
+mutate.mjs --all -- confirmed directly why: a single mutate.mjs --id run for
+one control was still running past 10 minutes and was killed in favour of
+the scoped tool's result, recorded with the same provenance shape
+(measuredAt, method) every other row in this file carries.
+
+node test/run.mjs: 917/917. npx tsc --noEmit: clean.

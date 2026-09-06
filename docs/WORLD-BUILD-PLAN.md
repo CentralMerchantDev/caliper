@@ -2051,10 +2051,31 @@ claim traced) is not achievable while E4-E7 stand.
 
 ### Phase M — SHIP
 
-- [ ] **M1 — the full mutation suite, clean.** Use the scoped method
-      (`_mutresolve` + `_mutcheck`), not `--all`. Zero SURVIVED, zero
-      INCONCLUSIVE, and **every row carrying `measuredAt` and `method`** — a row
-      without provenance is not a measured row.
+- [x] **M1 — the full mutation suite, clean.** Verified mechanically, not
+      eyeballed:
+      ```
+      node -e 'const fs=require("fs");
+        const results=JSON.parse(fs.readFileSync("test/.mutate-results.json","utf8"));
+        const mutations=JSON.parse(fs.readFileSync("test/mutations.json","utf8"));
+        console.log("manifest:", mutations.mutations.length, "results:", results.results.length);
+        console.log("missing provenance:", results.results.filter(r=>!r.measuredAt||!r.method).length);
+        console.log(JSON.stringify(results.results.reduce((a,r)=>((a[r.status]=(a[r.status]||0)+1),a),{})));
+        const mIds=new Set(mutations.mutations.map(m=>m.id)), rIds=new Set(results.results.map(r=>r.id));
+        console.log("in manifest, no result:", [...mIds].filter(id=>!rIds.has(id)));
+        console.log("in results, not manifest:", [...rIds].filter(id=>!mIds.has(id)));'
+      ```
+      → `manifest: 88 results: 88` / `missing provenance: 0` /
+      `{"CAUGHT":88}` / both diff lists empty. Every control this project
+      claims has a CAUGHT result, every result carries `measuredAt` and
+      `method`, and the count matches the live manifest exactly — this is
+      exactly what `test/mutationEvidence.test.ts` already enforces
+      mechanically on every `npm test` run, not a one-off check. Built via
+      the scoped method throughout (`_mutcheck.mjs`, never `--all` for an
+      individual addition — `--all`'s hour-plus full-suite-per-mutation cost
+      was confirmed directly this session when a single `mutate.mjs --id`
+      run was still running after 10+ minutes and was killed in favour of
+      `_mutcheck.mjs`'s scoped result, recorded with the same provenance
+      shape). `node test/run.mjs`: 917/917. `npx tsc --noEmit`: clean.
 - [ ] **M2 — the final blind UMAA audit**, across I–L, all twelve divisions, the
       four-state horizon answered. A division not audited is not a pass. Append
       what it missed to `AUDIT-PROTOCOL.md` §7 and anything the *work* missed to
