@@ -4,18 +4,23 @@ Standard applied: **UMAA-FIELD-PLAYBOOK-2026** (Universal Meta-Audit Architectur
 Target: CALIPER — an AI pipeline that modifies a running 3D city simulation behind
 two human gates.
 
-**RE-GROUNDED 2026-09-06 (PART 7b/E6):** this document is handed to every blind
-audit as grounding material, and its own numbers had gone stale — the exact
-defect Step 2 below exists to name. The "438 tests" cited at lines ~133, ~204
-and ~219 describes this specific document's Phases 1–7 (`up from 379`, its own
-historical progression) and is left as written there — rewriting a completed
-phase's own tally would falsify the history, not fix it. But a fresh auditor
-reading it as "the current suite" would be calibrated to a suite less than half
-its real size: `node scripts/gen-test-count.mjs` measures **905** node tests
-today, not 438. Treat every specific figure below as dated to Phases 1–7,
-including line ~77's "19,481 plots / 1,399 roads" (now 19,874 / 1,402 — 54
-settlements is, coincidentally, still correct) — re-measure before citing any
-of them in a new finding, the same rule Step 2 states for the page itself.
+**RE-GROUNDED 2026-09-06 (PART 7b/E6), RE-MEASURED AGAIN 2026-09-06 (M3):**
+this document is handed to every blind audit as grounding material, and its
+own numbers had gone stale — the exact defect Step 2 below exists to name.
+The "438 tests" cited at lines ~133, ~204 and ~219 describes this specific
+document's Phases 1–7 (`up from 379`, its own historical progression) and is
+left as written there — rewriting a completed phase's own tally would
+falsify the history, not fix it. But a fresh auditor reading it as "the
+current suite" would be calibrated to a suite less than half its real size:
+`node test/run.mjs` measures **919** node tests today (905 when this note
+was first written, five phases and 14 tests ago), not 438. Treat every
+specific figure below as dated to Phases 1–7, including line ~77's "19,481
+plots / 1,399 roads" (now 19,874 / 1,402 — 54 settlements is, coincidentally,
+still correct) — re-measure before citing any of them in a new finding, the
+same rule Step 2 states for the page itself. **This note itself will go
+stale the next time the suite grows — that is expected and fine; the
+instruction to re-measure before citing, not the specific number, is the
+part that must stay true.**
 
 ---
 

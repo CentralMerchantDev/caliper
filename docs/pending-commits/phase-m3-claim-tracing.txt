@@ -1,0 +1,36 @@
+Phase M -- M3: every claim traced, and PART 0's own ground-truth table was
+one of the stale ones
+
+Checked in three layers rather than re-deriving what already exists:
+
+1. Mechanically pinned claims -- the strongest layer. Every id="claim-*"
+   span on the public page, plus world size, city stats, settlement count,
+   spend caps/limits, and architecture-modal stage names, are asserted live
+   by test/publicClaims.test.ts's 7 tests, part of node test/run.mjs,
+   919/919 passing now -- not taken on trust.
+
+2. docs/WORLD-BUILD-PLAN.md's own PART 0 ground-truth table was itself
+   stale, in exactly the recurring shape its own header already names
+   twice: Suite and Mutation controls still said 905/80 while five phases
+   of this session's own work (E-K, M1-M2) each correctly updated their own
+   ledger entry without ever coming back to fix the one row whose entire
+   job is to hold the current figure. Re-measured and corrected to 919 node
+   tests, 89/89 mutations CAUGHT. git diff --stat fe2a745..HEAD confirmed no
+   world-geometry file changed this session, so World/Draw/Overhangs/
+   Library/Scene/City-summary are correctly left untouched rather than
+   re-running expensive scripts against files nothing edited.
+
+3. docs/UMAA-CALIPER.md's own re-grounding note (E6, PART 7b) had gone
+   stale a second time -- it said "905 today," and today is 919. Corrected,
+   with the durable rule made explicit: re-measure before citing, not the
+   specific number, is what must stay true, since this note will go stale
+   again the next time the suite grows and that is expected and fine.
+
+The résumé's CALIPER section does not exist yet -- checked directly,
+public/index.html's résumé modal has only a generic Executive Summary and
+competencies list, no CALIPER-specific measured figures. Nothing to trace
+because nothing has been claimed; M5 is where it gets written, correctly
+not attempted tonight per the standing instruction to stop before M4/M5.
+
+How it is known to be fixed: node test/run.mjs -- 919/919, 0 fail
+(unchanged -- doc-only corrections). npx tsc --noEmit clean.

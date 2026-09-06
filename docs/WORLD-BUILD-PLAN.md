@@ -95,10 +95,22 @@ control added here; the standing discipline (measure with the command,
 correct the row) is the only fix this needs, and it is intentionally the
 boring one.
 
+**Re-measured again, 2026-09-06 (M3), at the close of Phases E through M2.**
+Suite and Mutation controls were stale by exactly the shape PART 0's own
+header warns about: the E–K phases' own ledger entries each correctly
+updated their own count as they went, but this table's two summary rows
+were never brought back to match, same failure as the 2026-09-05 entry
+above. `git diff --stat` confirms none of the world-geometry files (`public/
+city-plan.js`, `layout.js`, `layout-fits.js`, `world-render-3d.js`,
+`buildings.js`, `ground.js`, `terrain.js`, `grid.js`,
+`src/citySummary.generated.ts`, the asset registry) changed between the
+last full measurement (`fe2a745`) and now — every other row below is
+unaffected and not re-run.
+
 | Fact | Value | Source |
 |---|---|---|
-| Suite | 905 node tests (0 fail), 12 worker tests (0 fail) | `node scripts/gen-test-count.mjs` |
-| Mutation controls | 80 defined, 80 run, 80 CAUGHT (0 SURVIVED, 0 INCONCLUSIVE) | `test/mutations.json` vs `test/.mutate-results.json`, re-verified per-id with `node scripts/_mutcheck.mjs <guarding test file> <source file> test/mutations.json` |
+| Suite | 919 node tests (0 fail), 12 worker tests (last real measurement: 3 fail, environment-diagnosed — see `test/testCount.generated.json`'s `workerFailDivergence`) | `node test/run.mjs` (919/919); worker half not re-runnable in this environment tonight (see M2) |
+| Mutation controls | 89 defined, 89 run, 89 CAUGHT (0 SURVIVED, 0 INCONCLUSIVE) | `test/mutations.json` vs `test/.mutate-results.json` — every id present in both, every status CAUGHT, every row carrying `measuredAt`/`method` (M1) |
 | World | 2,291 blocks, 19,874 plots, 19,725 placed (99.3%), 149 refused | `node scripts/measure-layout.mjs` (re-run L4, unchanged from H3 — the merge touched geometry, not layout) |
 | Draw | 480 InstancedMeshes, 6,886,892 triangles drawn (153,060 across the 480 distinct geometries — under `distinctTris < 200_000`) | `node scripts/check-layout-geometry.mjs` (L1/L4, post-merge — up from 1,451,912/49,164 pre-merge; agy's LOD0 enrichment, ~56-84 tris to 140-696, measured and not close to the ceiling) |
 | Overhangs / misdeclared footprints | 0 / 0 | same |
@@ -2141,9 +2153,40 @@ claim traced) is not achievable while E4-E7 stand.
       controls with SHA-256 hash verification on restore.
       `node test/run.mjs`: 919/919 (was 917; +2). `npx tsc --noEmit`: clean.
       Mutation summary: 89/89 CAUGHT (+1).
-- [ ] **M3 — every claim traced.** Every number on the page, in `docs/`, and in
-      the résumé's CALIPER section resolves to a command run that week. No
-      exceptions and no rounding up.
+- [x] **M3 — every claim traced.** Three layers, checked in order:
+      1. **Mechanically pinned claims (the strongest layer):** every
+         `id="claim-*"` span on the public page (`claim-hero-line`,
+         `claim-node-tests`, `claim-worker-tests`) plus the world size, city
+         stats, settlement count, spend caps/limits, and architecture-modal
+         stage names are all asserted live against generated artefacts or
+         the real source by `test/publicClaims.test.ts`'s 7 tests — part of
+         `node test/run.mjs`, 919/919 passing right now, not a claim taken
+         on trust.
+      2. **PART 0's own ground-truth table was itself stale** — Suite and
+         Mutation controls still said 905/80 while five phases of this
+         session's own work (E–K, M1–M2) had each correctly updated their
+         *own* entry elsewhere in this file without ever coming back to fix
+         the one row whose entire job is to hold the current figure, the
+         exact recurring failure its own header already names twice above.
+         Re-measured and corrected: 919 node tests, 89/89 mutations CAUGHT.
+         `git diff --stat fe2a745..HEAD` confirmed no world-geometry file
+         changed this session, so the World/Draw/Overhangs/Library/Scene/
+         City-summary rows are correctly left untouched rather than
+         re-running expensive scripts against files nothing edited.
+      3. **`docs/UMAA-CALIPER.md`'s own re-grounding note (E6) had gone
+         stale a second time** — it said "905 today," and today is now 919.
+         Corrected with the same date and a line making the actual durable
+         rule explicit: re-measure before citing, not the specific number,
+         is what must stay true, since this note will go stale again the
+         next time the suite grows and that is expected.
+      **The résumé's CALIPER section does not exist yet** — checked
+      directly: `public/index.html`'s résumé modal (`#resume-modal`) has an
+      Executive Summary and a generic competencies list, no CALIPER-specific
+      measured figures. Nothing to trace here because nothing has been
+      claimed here; M5 is where it gets written, correctly not before
+      tonight per the standing instruction to stop before M4/M5.
+      `node test/run.mjs`: 919/919 (unchanged — doc-only corrections).
+      `npx tsc --noEmit`: clean.
 - [ ] **M4 — deploy, then verify the live site matches the repo.** Page
       byte-identical to source, no stale figures, both admin routes closed,
       dynamic counts rendering live.
