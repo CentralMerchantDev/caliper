@@ -1,0 +1,61 @@
+The supervised live call refused, correctly, for a real defect: a caller
+that never disabled thinking
+
+WHAT HAPPENED. scripts/supervised-generate.mjs called the model with
+max_tokens: 1024 and no thinking setting. The response came back with
+output_tokens: 1024, of which thinking_tokens: 1023 -- one token of actual
+content, so the generated source was empty and verifyModelSource correctly
+refused at the scan stage. src/claude.ts sets thinking: { type: "disabled"
+} at all 8 of its call sites; this script, written standalone, inherited
+none of them.
+
+Fixed the caller: scripts/supervised-generate.mjs now sets thinking: {
+type: "disabled" }, matching src/claude.ts. Also prints the model id used
+in two places (right after the raw response, and in the token-usage
+block) -- the real run's own transcript never named it, so its cost could
+not be priced from the transcript alone.
+
+The check that matters: test/thinkingDisabledOnEveryCall.test.ts scans
+every real file in src/ and scripts/ for createWithTruncationGuard(...) and
+direct messages.create(...) calls, and fails if any lacks an explicit
+thinking: setting -- exempting only calls that purely forward an
+already-built params object (the shape createWithTruncationGuard's own
+body uses), whose caller is checked separately. Watched red against a REAL
+call site, not just a synthetic fixture: removed the setting from one of
+src/claude.ts's 8 call sites, confirmed the guard test named that exact
+site, restored, green again. Two mutations, both CAUGHT:
+claude-generateFunctionBody-disables-thinking and
+supervised-generate-disables-thinking.
+
+The refusal is recorded in docs/WORLD-BUILD-PLAN.md's J2 entry as this
+project's first real refusal -- dated, with the real token counts (123 in,
+1024 out, 1023 of it thinking) and the cause stated plainly as a caller
+misconfiguration, not a capability finding. It does NOT satisfy J2 itself:
+J2's own mechanism reads /recent-runs' refused field, written only for the
+older change-pipeline's outcomes, and supervised-generate.mjs writes
+nowhere -- J2 stays [!], unchanged. What it does establish: the generation
+path's own refusal machinery (verifyModelSource) has now been proven
+against a real model response once, and refused correctly.
+
+K2 is NOT ticked. The measured cost ($0.0105, 123 in / 1024 out) is the
+cost of a run whose entire output budget went to thinking -- explicitly
+marked non-representative in the ledger and excluded from K2, which stays
+blocked until a real post-fix run is measured.
+
+docs/LESSONS.md: a standalone script that reimplements a call already made
+correctly in eight places drifted from all eight, and nothing checked it.
+Entry marked CLOSED -- the registry test was watched red against a real
+call site (not only a synthetic one), then restored and reverified green,
+satisfying the file's own "stays OPEN until a real test has been seen red"
+rule.
+
+How it is known to be fixed: node test/run.mjs -- 924/924, 0 fail (was 919;
++5, test/thinkingDisabledOnEveryCall.test.ts). npx tsc --noEmit clean.
+Mutation summary: 91/91 CAUGHT (+2). Test-count claims (CLAUDE.md,
+public/index.html, test/testCount.generated.json, PART 0's own ground-truth
+table, the claudeMd-test-count-matches-generated mutation's find/replace)
+bumped 919->924 in lockstep and re-verified CAUGHT.
+
+Default-world guard unaffected -- no generation code's output changed, only
+a CLI caller's model-call configuration and the registry check that now
+guards it.

@@ -109,8 +109,8 @@ unaffected and not re-run.
 
 | Fact | Value | Source |
 |---|---|---|
-| Suite | 919 node tests (0 fail), 12 worker tests (last real measurement: 3 fail, environment-diagnosed — see `test/testCount.generated.json`'s `workerFailDivergence`) | `node test/run.mjs` (919/919); worker half not re-runnable in this environment tonight (see M2) |
-| Mutation controls | 89 defined, 89 run, 89 CAUGHT (0 SURVIVED, 0 INCONCLUSIVE) | `test/mutations.json` vs `test/.mutate-results.json` — every id present in both, every status CAUGHT, every row carrying `measuredAt`/`method` (M1) |
+| Suite | 924 node tests (0 fail), 12 worker tests (last real measurement: 3 fail, environment-diagnosed — see `test/testCount.generated.json`'s `workerFailDivergence`) | `node test/run.mjs` (924/924, post-supervised-run thinking-disabled fix); worker half not re-runnable in this environment tonight (see M2) |
+| Mutation controls | 91 defined, 91 run, 91 CAUGHT (0 SURVIVED, 0 INCONCLUSIVE) | `test/mutations.json` vs `test/.mutate-results.json` — every id present in both, every status CAUGHT, every row carrying `measuredAt`/`method` (M1) |
 | World | 2,291 blocks, 19,874 plots, 19,725 placed (99.3%), 149 refused | `node scripts/measure-layout.mjs` (re-run L4, unchanged from H3 — the merge touched geometry, not layout) |
 | Draw | 480 InstancedMeshes, 6,886,892 triangles drawn (153,060 across the 480 distinct geometries — under `distinctTris < 200_000`) | `node scripts/check-layout-geometry.mjs` (L1/L4, post-merge — up from 1,451,912/49,164 pre-merge; agy's LOD0 enrichment, ~56-84 tris to 140-696, measured and not close to the ceiling) |
 | Overhangs / misdeclared footprints | 0 / 0 | same |
@@ -1494,6 +1494,39 @@ session and it was not a technical defect.
       attempted here). Ticked `[!]` rather than faked: the code reads
       correct, it is unverified against real data, and both reasons are
       named rather than either skipped silently or claimed done.
+      **This project's first real refusal happened 2026-09-06, but through
+      a DIFFERENT mechanism than the one above — recorded here rather than
+      silently conflated with it.** Mark ran the supervised live call
+      (`scripts/supervised-generate.mjs`, I5's own path). Real result:
+      `{ok: false, stage: "scan", reason: "the model source is empty"}`.
+      Cause, measured from the API response's own usage block, not
+      estimated: `max_tokens: 1024`, `output_tokens: 1024`, of which
+      `thinking_tokens: 1023` — one token of actual content, so the
+      generated source was empty and `verifyModelSource` correctly refused
+      at the scan stage before anything unsafe could run. **This is a
+      genuine refusal and the path worked exactly as designed — say
+      plainly, not dressed up as a capability finding: it was caused by a
+      caller misconfiguration** (`scripts/supervised-generate.mjs` omitted
+      `thinking: { type: "disabled" }`, the setting all 8 of
+      `src/claude.ts`'s call sites already carry — see the fix and the new
+      registry test, `test/thinkingDisabledOnEveryCall.test.ts`, added the
+      same day this was found). **This does NOT satisfy J2 above** — J2's
+      own mechanism reads `/recent-runs`' `refused` field, written only for
+      the older change-pipeline's `refused-plan`/`refused-review`/
+      `refused-verification` outcomes; `supervised-generate.mjs` writes
+      nowhere (K4: no `kv.put`, no Durable Object call, no file write) and
+      cannot reach that field. J2 stays `[!]`, unchanged, still waiting on
+      its own real data. **What this DOES establish:** the refusal
+      machinery on the *generation* path (D4's `verifyModelSource`,
+      untested against a real model response until now) has been proven
+      against reality once, and refused correctly.
+      Cost measured, not estimated, from the same response: 123 input
+      tokens, 1024 output tokens, **$0.0105 at sonnet-5 rates.** **NOT a
+      representative per-run figure — do not use it for K2.** The entire
+      output budget went to thinking; a fixed run's typical cost will be
+      materially different (mostly cheaper — no wasted thinking spend — but
+      unmeasured, since no post-fix run has happened yet). K2 stays `[!]`
+      until a real post-fix run is measured.
 - [!] **J3 — recorded runs are free, the live button is rationed. SAME
       SHAPE AS J2: BUILT, NOT TEST-PROVEN.** The `EventSource` `error`
       handler (`public/index.html`) fetches `/live-status` on a failed live

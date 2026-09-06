@@ -167,12 +167,23 @@ async function main() {
     (promptSeen.constraints.support ? `Support: ${promptSeen.constraints.support}.\n` : "") +
     (promptSeen.constraints.clearanceM ? `Clearance: ${promptSeen.constraints.clearanceM} m.\n` : "");
 
+  // 2026-09-06 incident: this call omitted `thinking`, unlike all 8 call
+  // sites in src/claude.ts (which all set `thinking: { type: "disabled" }`)
+  // -- written standalone, it inherited none of them. The real run that
+  // found this spent 1023 of its 1024 max_tokens on thinking output and 1
+  // token on the actual answer, so the source was empty and verifyModel
+  // Source correctly refused at the scan stage. Not a capability finding --
+  // a caller misconfiguration. See test/thinkingDisabledOnEveryCall.test.ts,
+  // which now fails if ANY messages.create call anywhere in src/ or
+  // scripts/ omits this.
   const response = await client.messages.create({
     model, max_tokens: 1024,
+    thinking: { type: "disabled" },
     system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
   });
   const rawText = response.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+  console.log(`\nMODEL: ${model}`);
   console.log("\nRAW RESPONSE:");
   console.log(rawText);
 
@@ -188,7 +199,7 @@ async function main() {
 
   const usage = response.usage;
   if (usage) {
-    console.log("\nTOKEN USAGE (from the API response, not estimated):");
+    console.log(`\nTOKEN USAGE (model: ${model}, from the API response, not estimated):`);
     console.log(JSON.stringify(usage, null, 2));
   }
 }

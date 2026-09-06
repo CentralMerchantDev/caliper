@@ -492,8 +492,8 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 919 node tests + 12 worker tests",
-      "replace": "npm test            # 920 node tests + 12 worker tests",
+      "find": "npm test            # 924 node tests + 12 worker tests",
+      "replace": "npm test            # 925 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
     {
@@ -806,6 +806,24 @@
       "find": "[\"--permission\", `--allow-fs-read=${PUBLIC_DIR_GLOB}`, join(ROOT, \"scripts\", \"_verify-untrusted-geometry.mjs\")],",
       "replace": "[join(ROOT, \"scripts\", \"_verify-untrusted-geometry.mjs\")],",
       "expect": "I5 security: an obfuscated filesystem-read payload that bypasses scanSource is still blocked by the child process's own permission restriction"
+    },
+    {
+      "id": "claude-generateFunctionBody-disables-thinking",
+      "guards": "every createWithTruncationGuard(...) call site in src/claude.ts carries an explicit thinking:{type:\"disabled\"} setting -- 2026-09-06 incident: a caller that omits this can spend its whole max_tokens budget on thinking output and return an empty response.",
+      "note": "The supervised live call that found this used a standalone script that never imported createWithTruncationGuard at all, so this exact mutation (removing the setting from one of the 8 real call sites) is the closest reproduction reachable inside src/claude.ts itself.",
+      "file": "src/claude.ts",
+      "find": "\"generateFunctionBody/repairFunctionBody\", {\n    model,\n    max_tokens: MAX_TOKENS,\n    thinking: { type: \"disabled\" },\n    system: SYSTEM_PROMPT,",
+      "replace": "\"generateFunctionBody/repairFunctionBody\", {\n    model,\n    max_tokens: MAX_TOKENS,\n    system: SYSTEM_PROMPT,",
+      "expect": "every messages.create / createWithTruncationGuard call in src/ and scripts/ carries an explicit thinking setting"
+    },
+    {
+      "id": "supervised-generate-disables-thinking",
+      "guards": "scripts/supervised-generate.mjs's direct messages.create call carries an explicit thinking:{type:\"disabled\"} setting -- the exact call site the 2026-09-06 incident found missing it.",
+      "note": "2026-09-06: the real supervised run spent 1023 of 1024 max_tokens on thinking and 1 token on content, so the generated source was empty and verifyModelSource correctly refused at the scan stage. Not a capability finding -- a caller misconfiguration, fixed here and guarded by the same registry test as src/claude.ts's 8 call sites.",
+      "file": "scripts/supervised-generate.mjs",
+      "find": "  const response = await client.messages.create({\n    model, max_tokens: 1024,\n    thinking: { type: \"disabled\" },\n    system: systemPrompt,",
+      "replace": "  const response = await client.messages.create({\n    model, max_tokens: 1024,\n    system: systemPrompt,",
+      "expect": "every messages.create / createWithTruncationGuard call in src/ and scripts/ carries an explicit thinking setting"
     }
   ]
 }

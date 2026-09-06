@@ -221,3 +221,62 @@ classes, each independently verified. **OPEN, and named as open, for
 network** — no test exists for it because no mitigation exists for it yet;
 this is not a gap in test coverage, it is a real, disclosed, unmitigated
 path, correctly not claimed to be closed.
+
+---
+
+### 2026-09-06 · A standalone script reimplemented a call already made correctly in eight places, and drifted from all eight
+
+**WHAT WAS MISSED** `src/claude.ts` sets `thinking: { type: "disabled" }`
+at every one of its 8 `messages.create` call sites (via
+`createWithTruncationGuard`) — a deliberate, correct, consistent setting.
+`scripts/supervised-generate.mjs` calls `client.messages.create` directly,
+written standalone for the one supervised path that can spend real money,
+and never imported the shared wrapper or copied its setting. Nothing
+checked that a NEW caller matched the other 8. Mark's real supervised run
+found it the expensive way: `max_tokens: 1024`, `output_tokens: 1024`, of
+which `thinking_tokens: 1023` — one token of actual content, so the
+generated source was empty and `verifyModelSource` correctly refused at
+the scan stage before anything unsafe ran. The refusal path worked exactly
+as designed. The call that reached it was misconfigured.
+
+**WHY IT GOT THROUGH** Every test written for this script (`test/
+supervisedGenerateScript.test.ts`) proves its FOUR safety layers — API key
+present, `--confirm` passed, valid args, the transform pre-approved — all
+checked before any prompt is even built. Nothing tested the shape of the
+CALL ITSELF once those four gates pass, because the four gates were the
+part of this project's own discipline (money, consent, scope) that had
+already been named explicitly. `thinking` is neither a spend gate nor a
+consent gate; it is plumbing that happens to determine whether the money
+already approved to spend buys a usable answer or an empty one. A file that
+gets rewritten from scratch outside the module holding the pattern will
+silently not inherit it, no matter how consistent that module is internally
+— consistency inside `src/claude.ts` proved nothing about a caller that
+never imports it.
+
+**THE CONTROL** [`test/thinkingDisabledOnEveryCall.test.ts`](../test/thinkingDisabledOnEveryCall.test.ts),
+a registry check in the same shape as `test/claimSpansAreChecked.test.ts`
+(a different kind of "a new one won't inherit the old ones' discipline"
+drift): every `createWithTruncationGuard(...)` call and every direct
+`<x>.messages.create(...)` call across `src/` and `scripts/` is found by
+scanning the real files, and each must carry an explicit `thinking:`
+setting in its own arguments — a call that purely forwards an
+already-built params object (`{ ...params, ... }`, the shape
+`createWithTruncationGuard`'s own body uses) is exempted, since its caller
+is what actually decides and is checked separately. Watched red first: the
+setting was removed from one of `src/claude.ts`'s 8 real call sites (not a
+synthetic fixture) and the guard test correctly named that exact call site;
+restored, green again. Two mutations, `claude-generateFunctionBody-
+disables-thinking` and `supervised-generate-disables-thinking`, both
+CAUGHT.
+
+**STATUS** **CLOSED.** The registry test was watched red against a real
+call site, not only a synthetic one, then restored and reverified green.
+`scripts/supervised-generate.mjs` now sets `thinking: { type: "disabled" }`
+and prints the model id used (the real run's own transcript never named it,
+so its cost could not be priced from the transcript alone — fixed
+alongside the setting). The refusal itself is recorded in
+`docs/WORLD-BUILD-PLAN.md`'s J2 entry, dated, with the real token counts
+and stated plainly as a caller misconfiguration, not a capability finding
+— and its measured cost ($0.0105, almost entirely wasted thinking spend)
+is explicitly marked non-representative and excluded from K2, which stays
+blocked until a real post-fix run is measured.
