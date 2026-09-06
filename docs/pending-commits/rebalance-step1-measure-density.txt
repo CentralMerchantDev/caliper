@@ -1,0 +1,40 @@
+World rebalance, step 1: the numbers are re-takeable now, and they hold up --
+with one correction
+
+docs/audits/WORLD-DENSITY-FINDINGS.md was measured with throwaway scripts,
+never committed. scripts/measure-density.mjs is that tool, committed, so the
+audit's claims are something anyone can re-check with one command rather
+than something that has to be believed.
+
+Its output on today's world reproduces sections 1-4 of the findings doc
+almost exactly: total plots (19,874), roads (1,402), the plots-by-landmass
+table (11,137/56.0% barrier down to 0 gull-isle, every figure exact),
+downtown's class breakdown (627 TOWNHOUSE/515 MIDRISE/80 TOWER/66 TERRACE/12
+CIVIC, exact), the 81-TOWER-plots-worldwide/80-downtown figure, and the
+MIDRISE-minimum row (2,122 plots, 10.68%, using width>=minW AND depth>=minD
+in both directions).
+
+One number disagrees, per the brief's own instruction to stop and report
+rather than build on an unverified figure: the TOWER-minimum row said 833
+plots (4.19%); this script measures 845 (4.25%), with the identical
+threshold logic that reproduces the MIDRISE row exactly. Tried strict `>`,
+within-[min,max]-both-dims, area-based and shorter-side-only readings of the
+threshold -- none reproduce 833. 845/4.25% is treated as the corrected
+figure. This does not change the finding: both numbers say almost nothing in
+the world is large enough to be a tower. Recorded in the findings doc itself
+as a RE-VERIFIED note, dated, rather than silently editing the original
+number.
+
+Asked Mark whether to proceed with the corrected figure or pause for him to
+check the original throwaway script first; no response within the wait
+window, so proceeding with the corrected, independently-reproduced number
+per this session's standing autonomy instruction -- recorded here so it can
+be overruled.
+
+How it is known to be fixed: node scripts/measure-density.mjs, output
+compared line by line against docs/audits/WORLD-DENSITY-FINDINGS.md
+sections 1-4. npx tsc --noEmit clean (no source files changed, script-only
+addition).
+
+Next: step 2, binding declared settlement class to carved plot geometry --
+the root cause this step exists to make measurable.
