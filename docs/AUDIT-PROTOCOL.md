@@ -503,3 +503,72 @@ escape, HTML injection) and this protocol still has no standing instruction
 to check all four by name on every pass that touches a new caller boundary —
 each has so far been found because a specific brief asked about it, not
 because the protocol runs a fixed checklist against them.
+
+### 2026-09-06 · M2 — a scoped security claim was checked against a resource class nobody asked about, and a generated artefact's own "do not edit by hand" contract had quietly stopped being true
+
+**What it caught, that re-reading the existing tests would not have:** the
+prior entry's fix (env-scrubbed child process, closing a demonstrated
+API-key-theft chain) shipped with a header comment claiming "a successful
+sandbox escape in this process has nothing to steal." The brief for this run
+did not name that sentence, or ask about filesystem access specifically —
+it asked the auditor to attack six files "rather than review them." The
+auditor built a payload using the SAME unicode-escape bypass the earlier
+finding already demonstrated (nothing new about defeating `scanSource`), but
+aimed it at `process.getBuiltinModule("fs").readFileSync(...)` instead of
+`process.env` — a different resource class the earlier fix never addressed
+because the earlier finding never exercised it. **§2's priority order does
+not currently prompt "when a fix closes one specific attack chain, try the
+same bypass against a DIFFERENT resource reachable from the same execution
+context (fs, network, child-process, worker) before trusting the fix's own
+stated scope."** Nothing about this is exotic — it is the same technique
+already in the file (§1: "the way to check a denylist's strength is... try
+to defeat it") applied to a boundary claim instead of a denylist, and it
+found a real, live CRITICAL: a real file, outside the intended scope, read
+and exfiltrated through the verdict's own response channel.
+
+**A second finding, from the instruction to run the baseline first:**
+`test/testCount.generated.json` declares itself GENERATED, "do not edit by
+hand," and had been hand-edited that same session to record `workerFail: 0`
+against a real, same-session measurement of 3 — with the true number and
+the reasoning surviving only as prose in a `_comment` field nothing checked.
+`test/publicClaims.test.ts`'s own guard against exactly this shape of drift
+passed throughout, vacuously, because it compared the page only against
+this now-inaccurate artefact. Neither the artefact's own header nor the
+test that reads it distinguished "measured this run" from "hand-carried
+forward because the tool couldn't run" — the same class of gap as the
+2026-09-04 (Phases B–H) entry's gitignored-file ambiguity, one level
+further in: this time the file existed and was current, machine-readably,
+but silently *wrong* rather than silently *absent*.
+
+**Gaps found in the protocol itself:**
+
+- §2 does not ask the auditor to treat a security-relevant comment's claimed
+  *scope* as a hypothesis to test independently, distinct from checking that
+  the comment agrees with the code around it (§2.1, already covered) or that
+  a named mechanism is actually used by its caller (the 2026-09-05 entry,
+  also already covered). This is a third, narrower case: the comment and the
+  code agree with each other, and the mechanism IS used by its caller — the
+  claim is simply broader than what was tested when it was written. Worth
+  adding to §2.1: **when a fix is scoped to a specific demonstrated attack,
+  treat any comment describing its blast radius in general terms ("nothing
+  to steal", "cannot escape") as unverified until the SAME bypass technique
+  is retried against at least one different resource class reachable from
+  the same execution context.**
+- §3/§4 already tell the auditor to run the real suite first and report what
+  it found. Neither currently tells the auditor to treat a **generated
+  artefact whose own header disclaims hand-editing** as a distinct category
+  worth diffing against a fresh measurement when one is obtainable, even
+  partially — this run's baseline command output would have shown the same
+  divergence directly. Worth adding: **when a file's own header says
+  GENERATED / do not edit by hand, treat any hand-authored-looking prose
+  inside it (a `_comment` explaining a deviation) as a claim in category
+  §2.1, and check whether the file's own DATA (not its prose) still agrees
+  with a fresh measurement, not just whether the prose sounds plausible.**
+
+**Still open:** this run's fixes make the filesystem/child-process/worker
+resource classes structurally checked (Node's `--permission` flag);
+outbound network is explicitly NOT covered (this Node version has no
+`--allow-net` flag) and is named as an open gap rather than swept under the
+same "sandboxed" language that caused this entry. A future audit of the
+same file should not assume network is closed just because filesystem now
+is — the exact mistake this entry documents, one resource class at a time.

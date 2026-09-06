@@ -492,8 +492,8 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 917 node tests + 12 worker tests",
-      "replace": "npm test            # 918 node tests + 12 worker tests",
+      "find": "npm test            # 919 node tests + 12 worker tests",
+      "replace": "npm test            # 920 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
     {
@@ -797,6 +797,15 @@
       "find": "  \"process\", \"child_process\",\n  // K3 found this bypass live: `(function(){}).constructor(\"return\n  // globalThis\")()` reaches the global object without ever spelling \"eval\"\n  // or \"Function(\". Blocking the property access closes that one shape;\n  // it is still a denylist, still incomplete, per the comment above.\n  \"constructor\",\n]);",
       "replace": "  \"process\", \"child_process\",\n]);",
       "expect": "K3: the .constructor(...) bypass the blind audit found no longer sails through the scan"
+    },
+    {
+      "id": "verify-untrusted-geometry-child-process-is-permission-restricted",
+      "guards": "M2: the child process that runs untrusted model-authored geometry code is launched under Node's --permission flag with --allow-fs-read scoped to only the two files it needs -- an obfuscated payload that bypasses scanSource cannot read a file outside public/, even though env-scrubbing alone never prevented that.",
+      "note": "M2 (final blind UMAA audit, 2026-09-06), CRITICAL: the header comment claiming 'a successful sandbox escape in this process has nothing to steal' was false -- fs/child_process/worker access does not depend on process.env at all. Reproduced live: an obfuscated payload read package.json and returned its contents through the verdict's reason string with no --permission flag.",
+      "file": "scripts/verify-untrusted-geometry-caller.mjs",
+      "find": "[\"--permission\", `--allow-fs-read=${PUBLIC_DIR_GLOB}`, join(ROOT, \"scripts\", \"_verify-untrusted-geometry.mjs\")],",
+      "replace": "[join(ROOT, \"scripts\", \"_verify-untrusted-geometry.mjs\")],",
+      "expect": "I5 security: an obfuscated filesystem-read payload that bypasses scanSource is still blocked by the child process's own permission restriction"
     }
   ]
 }

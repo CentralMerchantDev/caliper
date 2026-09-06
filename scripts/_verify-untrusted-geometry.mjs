@@ -20,13 +20,30 @@
 // EXPLICIT ALLOWLIST environment (PATH/SystemRoot/TEMP only -- see that
 // file's own spawn call), so `process.env.ANTHROPIC_API_KEY` is not merely
 // hidden from untrusted code here, it DOES NOT EXIST in this process at
-// all. A successful sandbox escape in this process has nothing to steal.
-// This closes the specific chain the audit demonstrated (read the key,
+// all. This closes the specific chain the audit demonstrated (read the key,
 // execute the response, exfiltrate); it is not a claim that arbitrary
 // model-authored code is safe to run, which is exactly why this script's
 // only job is to report a verdict and exit, never to persist, register, or
 // apply anything (supervised-generate.mjs's own header already draws that
 // boundary one step further out).
+//
+// "A SUCCESSFUL SANDBOX ESCAPE IN THIS PROCESS HAS NOTHING TO STEAL" WAS
+// WRITTEN HERE ONCE, AND IT WAS FALSE. A blind audit following K3 (2026-09-
+// 06) found `new Function` gives model-authored code the full Node API
+// surface regardless of what is or isn't in `process.env` -- a scrubbed
+// environment stops the *specific* key-theft chain, not filesystem or
+// network access, which do not depend on any environment variable at all.
+// Demonstrated live: `process.getBuiltinModule("fs").readFileSync(...)`
+// read an arbitrary file and returned its contents through this script's
+// own verdict channel. Real fix, verified the same way the finding was --
+// by trying to defeat it, not by reading it and nodding: this process is
+// launched with Node's `--permission` flag, `--allow-fs-read` scoped to
+// only the two files this child legitimately needs, and no
+// `--allow-fs-write` / `--allow-child-process` / `--allow-worker` at all
+// (see verify-untrusted-geometry-caller.mjs's own spawn call). Outbound
+// network is NOT covered -- this Node version has no `--allow-net` flag, so
+// `fetch`/`http` remain reachable from inside this process. That is a real,
+// named, currently-open gap, not a claim this closes it.
 
 let input = "";
 process.stdin.setEncoding("utf8");

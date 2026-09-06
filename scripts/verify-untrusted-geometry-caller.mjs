@@ -41,6 +41,34 @@ const ROOT = repoRoot();
  * Node itself needs to start crosses into the child; nothing else does,
  * so there is no differently-named secret left for a filter to miss.
  */
+// K3-following blind audit (2026-09-06): env-scrubbing alone stops the
+// specific chain of "read the key, exfiltrate it" -- it does nothing about
+// the exact same untrusted code reading, writing or exfiltrating anything
+// ELSE the OS user running this script can reach, since `new Function`
+// gives model-authored code the full Node API surface regardless of what is
+// or isn't in `process.env`. Demonstrated live: an obfuscated (unicode-
+// escaped `process`, same trick scanSource already cannot catch by design)
+// payload calling `process.getBuiltinModule("fs").readFileSync(...)` read a
+// file outside `public/` and returned its contents through the verdict's
+// own reason string.
+//
+// Node's permission model (`--permission`, stable since Node 20) is the
+// real, testable fix: with no `--allow-fs-write`, `--allow-child-process` or
+// `--allow-worker`, those APIs throw unconditionally, and `--allow-fs-read`
+// is scoped to exactly the two files this child process legitimately needs
+// (three.js and model-forge.js) -- not the whole repo, not the OS user's
+// home directory. Verified directly, not assumed: the same unicode-escape
+// payload that reads package.json with no `--permission` flag throws
+// "Access to this API has been restricted" with it, while an ordinary
+// builder still verifies clean.
+//
+// NOT COVERED, AND SAID PLAINLY: Node's permission model has no
+// `--allow-net` flag in this Node version -- `fetch`/`http` are NOT gated by
+// `--permission` at all, so outbound network exfiltration is still possible
+// from inside this child process. This narrows the blast radius; it does
+// not close it, and nothing here should be read as claiming otherwise.
+const PUBLIC_DIR_GLOB = join(ROOT, "public").replace(/\\/g, "/") + "/*";
+
 export function verifyUntrustedGeometry(source, footprint) {
   const threeHref = pathToFileURL(join(ROOT, "public", "vendor", "three", "three.module.min.js")).href;
   const modelForgeHref = pathToFileURL(join(ROOT, "public", "model-forge.js")).href;
@@ -50,7 +78,7 @@ export function verifyUntrustedGeometry(source, footprint) {
   }
   const stdout = execFileSync(
     process.execPath,
-    [join(ROOT, "scripts", "_verify-untrusted-geometry.mjs")],
+    ["--permission", `--allow-fs-read=${PUBLIC_DIR_GLOB}`, join(ROOT, "scripts", "_verify-untrusted-geometry.mjs")],
     { input: JSON.stringify({ source, footprint, threeHref, modelForgeHref }), env: childEnv, encoding: "utf8", timeout: 30000 },
   );
   return JSON.parse(stdout);

@@ -247,7 +247,11 @@ test("the test counts on the page are the test counts", () => {
   // only mechanism in this project that has ever kept a number honest.
   const generated = JSON.parse(
     readFileSync(join(ROOT, "test", "testCount.generated.json"), "utf8"),
-  ) as { nodeTests: number; workerTests: number; workerFail: number; workerTestFiles: string[] };
+  ) as {
+    nodeTests: number; workerTests: number; workerFail: number;
+    workerFailLastMeasured: number; workerFailDivergence: string | null;
+    workerTestFiles: string[];
+  };
 
   const claimedNode = Number(spanText(INDEX, "claim-node-tests")?.replace(/,/g, ""));
   const claimedWorker = Number(spanText(INDEX, "claim-worker-tests")?.replace(/,/g, ""));
@@ -349,6 +353,34 @@ test("the test counts on the page are the test counts", () => {
     `last recorded run had ${generated.workerFail} failure(s). Fix them, or ` +
     `change what the page says.`
   );
+
+  // M2 (final blind UMAA audit, 2026-09-06), HIGH: workerFail was hand-set to
+  // 0 while the real, same-session vitest run measured 3 failures -- the file
+  // says "do not edit by hand" and nothing checked that the override was
+  // honest. A published 0 is still allowed (a genuine tool-environment
+  // failure is a legitimate reason to carry the last known-good number
+  // forward, same reasoning as the count-claim exemption above), but the
+  // REAL number can no longer be silently dropped, and the reason can no
+  // longer be prose only a human happens to read: workerFailLastMeasured
+  // must always be a real number, and the moment it diverges from the
+  // published workerFail, workerFailDivergence must specifically name the
+  // cause as environmental -- not just be present, be non-vacuous.
+  assert.equal(
+    typeof generated.workerFailLastMeasured, "number",
+    "testCount.generated.json is missing workerFailLastMeasured -- the real last " +
+    "measurement must always be recorded, even when workerFail carries forward a " +
+    "different, published number."
+  );
+  if (generated.workerFailLastMeasured !== generated.workerFail) {
+    assert.match(
+      generated.workerFailDivergence || "",
+      /environment|sandbox|infrastructure/i,
+      `workerFail (${generated.workerFail}) and workerFailLastMeasured ` +
+      `(${generated.workerFailLastMeasured}) disagree with no specific, ` +
+      `checkable reason in workerFailDivergence -- an unexplained divergence ` +
+      `is exactly the silent override M2's blind audit found.`
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------

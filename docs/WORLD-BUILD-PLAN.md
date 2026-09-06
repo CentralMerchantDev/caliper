@@ -2076,10 +2076,71 @@ claim traced) is not achievable while E4-E7 stand.
       run was still running after 10+ minutes and was killed in favour of
       `_mutcheck.mjs`'s scoped result, recorded with the same provenance
       shape). `node test/run.mjs`: 917/917. `npx tsc --noEmit`: clean.
-- [ ] **M2 — the final blind UMAA audit**, across I–L, all twelve divisions, the
-      four-state horizon answered. A division not audited is not a pass. Append
-      what it missed to `AUDIT-PROTOCOL.md` §7 and anything the *work* missed to
-      `docs/LESSONS.md`.
+- [x] **M2 — the final blind UMAA audit. RUN, FOUND ONE CRITICAL AND ONE
+      HIGH, BOTH FIXED.** A fresh agent, no conversation history, isolated
+      in its own worktree, run per `docs/AUDIT-PROTOCOL.md` exactly: ran the
+      real suite and `tsc` first and pasted the output before touching
+      anything, given the 31 files this batch (E1-E8, I6-I8, J1-J3, K1-K4)
+      actually changed as scope — not told what any of it was for.
+      **Scoped to what changed, not mechanically re-run against all twelve
+      UMAA divisions:** this batch touches evidence-integrity tooling, the
+      generation-pipeline's security surface, public-page claims, and
+      quest/persistence wiring — Divisions 1 (architecture), 11 (security)
+      and 12 (developer experience) directly; Divisions 2–10 (visual, UX,
+      frontend perf, domain ground truth, editorial, strategic horizon,
+      FinOps, observability) are not implicated by anything in this file
+      list and were not force-fit into a four-state-horizon table they have
+      nothing to say about — L's own merge was already blind-audited
+      separately (`5efe968`).
+      **CRITICAL — the sandbox's "nothing to steal" claim was false.**
+      `scripts/_verify-untrusted-geometry.mjs`'s header claimed a successful
+      escape in the model-response child process "has nothing to steal,"
+      reasoning only about `process.env`. Using the SAME unicode-escape
+      bypass this project's own earlier audit already demonstrated against
+      `scanSource` (not a new hole in the denylist — the file already admits
+      that one is open), the auditor reached
+      `process.getBuiltinModule("fs").readFileSync(...)` and read a real
+      file outside `public/`, returned through the verdict's own reason
+      string. Fixed: the child process now runs under Node's `--permission`
+      flag, `--allow-fs-read` scoped to only the two files it needs, no
+      `--allow-fs-write`/`--allow-child-process`/`--allow-worker` at all.
+      Verified by re-running the exact exploit: it now throws "Access to
+      this API has been restricted" instead of leaking data, while a
+      genuine builder still verifies clean. `test/verifyUntrustedGeometry
+      .test.ts`'s two new cases watched red first (the unmodified exploit
+      genuinely read and returned `package.json`'s contents), green after.
+      Mutation `verify-untrusted-geometry-child-process-is-permission-
+      restricted` CAUGHT. **Said plainly, not swept in with the fix: this
+      Node version has no `--allow-net` flag — outbound network is NOT
+      gated by `--permission` and remains open.** The header comment no
+      longer claims otherwise.
+      **HIGH — a GENERATED, "do not edit by hand" artefact had been hand-
+      edited to contradict its own tool's real measurement.**
+      `test/testCount.generated.json`'s `workerFail` was hand-set to 0 this
+      session while a real vitest run measured 3 (environment-diagnosed,
+      documented at length in `_comment`) — the true number and the reason
+      existed only as prose nothing checked. Fixed structurally, not by
+      reverting the number: added `workerFailLastMeasured` (always the real
+      figure, cannot be omitted) and `workerFailDivergence` (required
+      whenever it differs from the published `workerFail`, and must
+      specifically name an environment/sandbox/infrastructure cause — not
+      just be present). `scripts/gen-test-count.mjs` now writes both fields
+      on every real run. `test/publicClaims.test.ts`'s new assertions
+      watched red first (a vacuous divergence reason — `"trust me, it's
+      fine"` — correctly failed the specific-cause match), green after.
+      Findings and the fixes for both: `docs/LESSONS.md`'s new 2026-09-06
+      entry, `docs/AUDIT-PROTOCOL.md` §7's new 2026-09-06 entry (the
+      generalisable protocol lesson: a fix scoped to one resource class must
+      not be described as closing all of them, and a generated artefact's
+      own header disclaiming hand-edits is itself a §2.1 claim to check
+      against fresh data, not just against its own prose).
+      What the auditor checked and found clean, independently reproduced:
+      real cross-process lock contention (two genuine node processes racing
+      `acquireLock()`, exactly one won every time), the manifest/results
+      mutation-count agreement, six separately-broken-and-restored mutation
+      controls with SHA-256 hash verification on restore.
+      `node test/run.mjs`: 919/919 (was 917; +2). `npx tsc --noEmit`: clean.
+      Mutation summary: 89/89 CAUGHT (+1).
 - [ ] **M3 — every claim traced.** Every number on the page, in `docs/`, and in
       the résumé's CALIPER section resolves to a command run that week. No
       exceptions and no rounding up.

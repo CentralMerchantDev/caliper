@@ -1,0 +1,71 @@
+Phase M -- M2: the final blind UMAA audit ran, found one CRITICAL and one
+HIGH, both fixed
+
+A fresh agent, no conversation history, isolated in its own worktree, run
+per docs/AUDIT-PROTOCOL.md exactly -- baseline suite and tsc run and pasted
+first, given the 31 files E1-E8/I6-I8/J1-J3/K1-K4 actually changed as scope,
+not told what any of it was for.
+
+CRITICAL: scripts/_verify-untrusted-geometry.mjs's header claimed a
+successful sandbox escape "has nothing to steal," reasoning only about
+process.env. The same unicode-escape bypass this project's own earlier
+audit already demonstrated against scanSource -- not a new denylist hole,
+that one is already open by the file's own admission -- reached
+process.getBuiltinModule("fs").readFileSync(...) and read a real file
+outside public/, returned through the verdict's own reason string. Fixed:
+the child process now runs under Node's --permission flag, --allow-fs-read
+scoped to only the two files it needs, no --allow-fs-write/
+--allow-child-process/--allow-worker at all. Verified by re-running the
+exact exploit -- it now throws "Access to this API has been restricted"
+instead of leaking data, while a genuine builder still verifies clean.
+test/verifyUntrustedGeometry.test.ts's two new cases watched red first (the
+unmodified exploit genuinely read and returned package.json's contents),
+green after. Mutation
+verify-untrusted-geometry-child-process-is-permission-restricted CAUGHT.
+Said plainly, not swept in with the fix: this Node version has no
+--allow-net flag -- outbound network is NOT gated by --permission and
+remains open. The header comment no longer claims otherwise.
+
+HIGH: test/testCount.generated.json, a GENERATED "do not edit by hand"
+artefact, had been hand-edited this session to record workerFail as 0
+while a real vitest run measured 3 (environment-diagnosed, documented at
+length in _comment) -- the true number and the reason existed only as
+prose nothing checked. Fixed structurally, not by reverting the number:
+added workerFailLastMeasured (always the real figure, cannot be omitted)
+and workerFailDivergence (required whenever it differs from the published
+workerFail, and must specifically name an environment/sandbox/
+infrastructure cause, not just be present). scripts/gen-test-count.mjs now
+writes both fields on every real run. test/publicClaims.test.ts's new
+assertions watched red first (a vacuous divergence reason correctly failed
+the specific-cause match), green after.
+
+Both findings and fixes recorded in docs/LESSONS.md's new 2026-09-06 entry
+and docs/AUDIT-PROTOCOL.md Section 7's new 2026-09-06 entry -- the
+generalisable protocol lesson: a fix scoped to one resource class must not
+be described as closing all of them, and a generated artefact's own header
+disclaiming hand-edits is itself a claim to check against fresh data, not
+just against its own prose.
+
+What the auditor checked and found clean, independently reproduced: real
+cross-process lock contention (two genuine node processes racing
+acquireLock(), exactly one won every time), the manifest/results mutation-
+count agreement, six separately-broken-and-restored mutation controls with
+SHA-256 hash verification on restore.
+
+Scoped to what the batch actually changed, not mechanically re-run against
+all twelve UMAA divisions: this work touches evidence-integrity tooling,
+the generation pipeline's security surface, public-page claims, and quest/
+persistence wiring -- Divisions 1, 11 and 12 directly. Divisions 2-10 are
+not implicated by anything in this file list and were not force-fit into a
+four-state-horizon table they have nothing to say about; Phase L's own
+merge was already blind-audited separately in an earlier commit.
+
+How it is known to be fixed: node test/run.mjs -- 919/919, 0 fail (was 917;
++2). npx tsc --noEmit clean. Mutation summary: 89/89 CAUGHT (+1).
+Test-count claims (CLAUDE.md, public/index.html,
+test/testCount.generated.json, the claudeMd-test-count-matches-generated
+mutation's find/replace) bumped 917->919 in lockstep and re-verified CAUGHT.
+
+Default-world guard unaffected -- no generation code's output changed, only
+the sandboxing around untrusted model output and the test-count generator's
+own honesty.

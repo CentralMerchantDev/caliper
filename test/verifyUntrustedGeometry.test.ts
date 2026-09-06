@@ -20,8 +20,21 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 import { verifyUntrustedGeometry } from "../scripts/verify-untrusted-geometry-caller.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+function repoRoot(): string {
+  let dir = HERE;
+  for (let up = 0; up < 6; up++) {
+    try { readFileSync(join(dir, "CLAUDE.md"), "utf8"); return dir; } catch { /* keep walking */ }
+    dir = join(dir, "..");
+  }
+  throw new Error("could not locate the repo root");
+}
 
 test("I5 security: a genuinely valid geometry response verifies correctly through the child process", () => {
   process.env.ANTHROPIC_API_KEY = "sk-test-fixture-not-a-real-key";
@@ -83,6 +96,40 @@ test("I5 security: the audit's own unicode-escape exploit executes (the denylist
   } finally {
     delete process.env.ANTHROPIC_API_KEY;
   }
+});
+
+// A BLIND AUDIT FOLLOWING K3 (2026-09-06) FOUND THIS FIX WAS NARROWER THAN
+// ITS OWN COMMENT CLAIMED: a scrubbed environment stops key theft, but
+// `new Function` still gives model-authored code the real Node fs API --
+// which does not depend on process.env at all. Demonstrated live:
+// `process.getBuiltinModule("fs").readFileSync(...)` read an arbitrary file
+// through the same unicode-escape bypass used above and returned its
+// contents through the verdict's own reason string. Real fix: the child
+// process is launched under Node's `--permission` flag with `--allow-fs-read`
+// scoped to only the two files it legitimately needs (see
+// verify-untrusted-geometry-caller.mjs). This proves the fix by trying to
+// defeat it, the same discipline as the exploit test above -- not just that
+// a flag was added, but that the exact attack this audit demonstrated now
+// fails, while an ordinary builder is unaffected.
+test("I5 security: an obfuscated filesystem-read payload that bypasses scanSource is still blocked by the child process's own permission restriction", () => {
+  const outsideAllowedPath = join(repoRoot(), "package.json").replace(/\\/g, "/");
+  const maliciousSource =
+    `(T) => { const p = \\u0070rocess; ` +
+    `const fs = p.getBuiltinModule("fs"); ` +
+    `const data = fs.readFileSync("${outsideAllowedPath}", "utf8"); ` +
+    `throw new Error("EXFIL:" + data.slice(0, 20)); }`;
+  assert.equal(maliciousSource.includes("process"), false, "test setup is wrong -- the payload must not contain the literal denylisted substring");
+
+  const verdict = verifyUntrustedGeometry(maliciousSource, { w: 1, d: 1 });
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.stage, "build", `expected the payload to run and be blocked reading the file; got: ${JSON.stringify(verdict)}`);
+  assert.doesNotMatch(verdict.reason, /EXFIL:/, `the payload successfully read a file outside public/: ${verdict.reason}`);
+  assert.match(verdict.reason, /restricted|permission/i, `expected a permission-model refusal, got: ${verdict.reason}`);
+});
+
+test("I5 security: the permission restriction does not break a genuinely valid response", () => {
+  const verdict = verifyUntrustedGeometry("(T) => new T.BoxGeometry(2.5, 3, 2.5)", { w: 3, d: 3 });
+  assert.equal(verdict.ok, true, JSON.stringify(verdict));
 });
 
 // THE PART THAT WOULD MATTER MOST IF `require` HAD BEEN AVAILABLE: even a

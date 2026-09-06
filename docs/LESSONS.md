@@ -163,3 +163,61 @@ is built against a real Worker route, the same "does the response run
 where the secret lives" question needs to be asked again, from scratch, for
 that caller specifically — this fix does not generalise to a different
 process architecture.
+
+---
+
+### 2026-09-06 · A fix that closed one resource class was written as though it closed all of them
+
+**WHAT WAS MISSED** The entry above closed the exact chain a blind audit
+demonstrated: read `ANTHROPIC_API_KEY`, execute the model's response,
+exfiltrate it. The fix — an env-scrubbed child process — genuinely closes
+that chain. The header comment written for it that same session did not
+stop at the claim the fix earns; it said "**a successful sandbox escape in
+this process has nothing to steal**." That sentence is not true. `new
+Function` gives model-authored code the real Node API surface regardless of
+what is or isn't in `process.env` — filesystem read, filesystem write, and
+child-process spawning do not consult the environment at all. A blind audit
+following K3 built a payload using the SAME unicode-escape technique the
+original finding already demonstrated (`scanSource` still cannot catch it,
+by the file's own admission it never claimed to), called
+`process.getBuiltinModule("fs").readFileSync(...)` on a file outside
+`public/`, and returned its contents through the verdict's own reason
+string — a live proof-of-concept, not a hypothetical.
+
+**WHY IT GOT THROUGH** The fix and the claim were written in the same pass,
+against the one attack the audit that prompted them had actually
+demonstrated (key theft). "This closes THAT chain" quietly became "this
+process has nothing to steal" — a generalisation from one resource class
+(environment variables) to all of them (also filesystem, also
+child-process, also, unmitigated either way, network) that nothing checked
+before it was published. The env-allowlist work was real and correct; the
+sentence describing its blast radius was broader than the work.
+
+**THE CONTROL** [`test/verifyUntrustedGeometry.test.ts`](../test/verifyUntrustedGeometry.test.ts)'s
+new case runs the exact obfuscated-fs-read payload the audit built and
+asserts it is refused, not merely that scanSource fails to catch it (it
+doesn't, on purpose — see the entry above). The real fix is
+[`scripts/verify-untrusted-geometry-caller.mjs`](../scripts/verify-untrusted-geometry-caller.mjs):
+the child process is launched under Node's `--permission` flag,
+`--allow-fs-read` scoped to only the two files it legitimately needs, and no
+`--allow-fs-write` / `--allow-child-process` / `--allow-worker` at all — all
+three throw unconditionally otherwise. Verified by trying to defeat it, the
+same discipline as the finding that started this file: the identical
+payload that read `package.json` and leaked it through the verdict's reason
+string with no `--permission` flag now throws "Access to this API has been
+restricted," while an ordinary builder is unaffected. Mutation
+`verify-untrusted-geometry-child-process-is-permission-restricted` (removes
+the flag) reintroduces the exact leak and turns the test red.
+
+**WHAT IS STILL NOT COVERED, SAID PLAINLY RATHER THAN LEFT IMPLIED**: this
+Node version has no `--allow-net` flag. `--permission` does not gate
+`fetch`/`http` at all, so outbound network exfiltration from inside this
+child process is not addressed by this fix. The corrected header comment in
+`scripts/_verify-untrusted-geometry.mjs` says this explicitly now, rather
+than making a scoped claim sound total the way its predecessor did.
+
+**STATUS** **CLOSED** for the filesystem/child-process/worker resource
+classes, each independently verified. **OPEN, and named as open, for
+network** — no test exists for it because no mitigation exists for it yet;
+this is not a gap in test coverage, it is a real, disclosed, unmitigated
+path, correctly not claimed to be closed.
