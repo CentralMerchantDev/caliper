@@ -157,9 +157,20 @@ async function main() {
 
   const client = new Anthropic({ apiKey });
   const model = "claude-sonnet-5";
+  // 2026-09-06 incident, run #2: this system prompt used to say only "a
+  // THREE.js-like namespace `T`" and never what was actually on it. A
+  // competent response reached for `T.BufferGeometryUtils.mergeGeometries
+  // (...)` -- a real three.js addon module, not a property of the core
+  // namespace -- a reasonable guess against an unstated contract, refused
+  // only once the builder actually ran and threw. promptSeen.constraints.
+  // apiNote (public/generate-request.js's buildGeometryPrompt) is now the
+  // ONE place that contract is written -- the same list model-forge.js's
+  // scanSource enforces -- so this prompt states it instead of restating
+  // its own, second copy that could drift from what is actually allowed.
   const systemPrompt =
     "You write a single JavaScript arrow function `(T) => T.Geometry_or_similar`, " +
-    "given a THREE.js-like namespace `T`, that returns a THREE geometry. " +
+    "given a THREE.js-like namespace `T`, that returns a single THREE.BufferGeometry. " +
+    `${promptSeen.constraints.apiNote} ` +
     "Output ONLY the function expression, no markdown fences, no explanation.";
   const userPrompt =
     `Build geometry for: ${promptSeen.instructions}\n` +

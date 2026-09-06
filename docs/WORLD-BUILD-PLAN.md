@@ -109,8 +109,8 @@ unaffected and not re-run.
 
 | Fact | Value | Source |
 |---|---|---|
-| Suite | 924 node tests (0 fail), 12 worker tests (last real measurement: 3 fail, environment-diagnosed — see `test/testCount.generated.json`'s `workerFailDivergence`) | `node test/run.mjs` (924/924, post-supervised-run thinking-disabled fix); worker half not re-runnable in this environment tonight (see M2) |
-| Mutation controls | 91 defined, 91 run, 91 CAUGHT (0 SURVIVED, 0 INCONCLUSIVE) | `test/mutations.json` vs `test/.mutate-results.json` — every id present in both, every status CAUGHT, every row carrying `measuredAt`/`method` (M1) |
+| Suite | 932 node tests (0 fail), 12 worker tests (last real measurement: 3 fail, environment-diagnosed — see `test/testCount.generated.json`'s `workerFailDivergence`) | `node test/run.mjs` (932/932, post-run-2 prompt-contract fix and K2's derived profiles); worker half not re-runnable in this environment tonight (see M2) |
+| Mutation controls | 93 defined, 93 run, 93 CAUGHT (0 SURVIVED, 0 INCONCLUSIVE) | `test/mutations.json` vs `test/.mutate-results.json` — every id present in both, every status CAUGHT, every row carrying `measuredAt`/`method` (M1) |
 | World | 2,291 blocks, 19,874 plots, 19,725 placed (99.3%), 149 refused | `node scripts/measure-layout.mjs` (re-run L4, unchanged from H3 — the merge touched geometry, not layout) |
 | Draw | 480 InstancedMeshes, 6,886,892 triangles drawn (153,060 across the 480 distinct geometries — under `distinctTris < 200_000`) | `node scripts/check-layout-geometry.mjs` (L1/L4, post-merge — up from 1,451,912/49,164 pre-merge; agy's LOD0 enrichment, ~56-84 tris to 140-696, measured and not close to the ceiling) |
 | Overhangs / misdeclared footprints | 0 / 0 | same |
@@ -1365,6 +1365,17 @@ line below was written by this plan about itself — lines 541, 566, 697, 728, 8
       Default-world guard re-measured: unchanged. **No model was called by
       this session, at any point.**
       **Supervised first run.** Watch one end to end before anything is public.
+      **SECOND CORRECTION, found by the supervised run itself (2026-09-06,
+      run 2) — full detail in J2's and K2's own entries, this is the
+      pointer:** `buildGeometryPrompt` handed the model a bare namespace
+      and never said what was on it; a competent response reached for a
+      real three.js addon module (`BufferGeometryUtils`) that is not part
+      of the core namespace, refused only once it actually ran. Fixed at
+      the contract, not the sandbox — `public/model-forge.js`'s new
+      `ALLOWED_GEOMETRY_CONSTRUCTORS` is the one list both the prompt
+      (`buildGeometryPrompt`'s `apiNote`) and `scanSource`'s own
+      enforcement read, so a future response reaching outside it is refused
+      at `scan`, before it runs, not at `build`, after.
 - [!] **I6 — apply, persist, undo, live. IMPLEMENTED, NOT LIVE-VERIFIED —
       environment-blocked, not code-blocked, and proven so.** Wired the
       exact chain `test/runGenerateRequest.test.ts` already proved at the
@@ -1494,39 +1505,48 @@ session and it was not a technical defect.
       attempted here). Ticked `[!]` rather than faked: the code reads
       correct, it is unverified against real data, and both reasons are
       named rather than either skipped silently or claimed done.
-      **This project's first real refusal happened 2026-09-06, but through
-      a DIFFERENT mechanism than the one above — recorded here rather than
-      silently conflated with it.** Mark ran the supervised live call
-      (`scripts/supervised-generate.mjs`, I5's own path). Real result:
-      `{ok: false, stage: "scan", reason: "the model source is empty"}`.
-      Cause, measured from the API response's own usage block, not
-      estimated: `max_tokens: 1024`, `output_tokens: 1024`, of which
-      `thinking_tokens: 1023` — one token of actual content, so the
-      generated source was empty and `verifyModelSource` correctly refused
-      at the scan stage before anything unsafe could run. **This is a
-      genuine refusal and the path worked exactly as designed — say
-      plainly, not dressed up as a capability finding: it was caused by a
-      caller misconfiguration** (`scripts/supervised-generate.mjs` omitted
-      `thinking: { type: "disabled" }`, the setting all 8 of
-      `src/claude.ts`'s call sites already carry — see the fix and the new
-      registry test, `test/thinkingDisabledOnEveryCall.test.ts`, added the
-      same day this was found). **This does NOT satisfy J2 above** — J2's
-      own mechanism reads `/recent-runs`' `refused` field, written only for
-      the older change-pipeline's `refused-plan`/`refused-review`/
+      **This project's first two real refusals happened 2026-09-06, both
+      through a DIFFERENT mechanism than the one above — recorded here
+      rather than silently conflated with it.** Both from Mark's supervised
+      live call (`scripts/supervised-generate.mjs`, I5's own path), model
+      `claude-sonnet-5`, both genuine refusals where the path worked exactly
+      as designed — say plainly, neither is dressed up as a capability
+      finding:
+      - **Run 1 — refused at `scan`**, `reason: "the model source is
+        empty"`. Cause: `max_tokens: 1024`, `output_tokens: 1024`, of which
+        `thinking_tokens: 1023` — one token of actual content. Caller
+        misconfiguration: `scripts/supervised-generate.mjs` omitted
+        `thinking: { type: "disabled" }`, the setting all 8 of
+        `src/claude.ts`'s call sites already carry. Fixed the same day,
+        guarded by `test/thinkingDisabledOnEveryCall.test.ts`.
+      - **Run 2 (the most recent) — refused at `build`**, the model wrote a
+        competent 3×3 shed and called
+        `T.BufferGeometryUtils.mergeGeometries(...)` — a real three.js
+        ADDON module, not a property of the core `T` namespace the prompt
+        handed it. A reasonable guess against a contract the prompt never
+        stated. `123` input / `534` output tokens, `thinking_tokens: 0`
+        (run 1's fix held) — **$0.0056 at sonnet-5's published rate.**
+        Prompt-contract gap, fixed the same day: `buildGeometryPrompt` now
+        names the exact allowed constructor set
+        (`ALLOWED_GEOMETRY_CONSTRUCTORS`, `public/model-forge.js`) in both
+        the prompt sent to the model AND `scanSource`'s own enforcement —
+        the same list, one source of truth, so a future response reaching
+        outside it is refused at `scan`, before it runs, not at `build`,
+        after. Guarded by `test/modelForge.test.ts`'s new case, using the
+        exact real payload shape.
+      **Neither satisfies J2 above as written** — J2's own mechanism reads
+      `/recent-runs`' `refused` field, written only for the older
+      change-pipeline's `refused-plan`/`refused-review`/
       `refused-verification` outcomes; `supervised-generate.mjs` writes
       nowhere (K4: no `kv.put`, no Durable Object call, no file write) and
-      cannot reach that field. J2 stays `[!]`, unchanged, still waiting on
-      its own real data. **What this DOES establish:** the refusal
+      cannot reach that field. J2 stays `[!]`, unchanged — if it COULD
+      render one of these two, it would render run 2, the more recent and
+      more instructive of the pair (a live prompt-contract gap found and
+      closed, not a caller bug). **What both DO establish:** the refusal
       machinery on the *generation* path (D4's `verifyModelSource`,
-      untested against a real model response until now) has been proven
-      against reality once, and refused correctly.
-      Cost measured, not estimated, from the same response: 123 input
-      tokens, 1024 output tokens, **$0.0105 at sonnet-5 rates.** **NOT a
-      representative per-run figure — do not use it for K2.** The entire
-      output budget went to thinking; a fixed run's typical cost will be
-      materially different (mostly cheaper — no wasted thinking spend — but
-      unmeasured, since no post-fix run has happened yet). K2 stays `[!]`
-      until a real post-fix run is measured.
+      untested against a real model response until run 1) has now been
+      proven against reality twice, at two different stages, for two
+      different causes, and refused correctly both times.
 - [!] **J3 — recorded runs are free, the live button is rationed. SAME
       SHAPE AS J2: BUILT, NOT TEST-PROVEN.** The `EventSource` `error`
       handler (`public/index.html`) fetches `/live-status` on a failed live
@@ -1689,21 +1709,39 @@ the same scrutiny.
       test/supervisedGenerateScript.test.ts scripts/supervised-generate.mjs
       test/mutations.json`, file restored byte-identical. `node test/run.mjs`:
       915/915 (was 914; +1). `npx tsc --noEmit`: clean.
-- [!] **K2 — G2, unblocked. STILL BLOCKED, FOR A NARROWER REASON THAN G2's.**
-      G2 was blocked on two things: real builder-tier numbers, and a live
-      selection mechanism. The second reason no longer quite applies —
-      I5 gives real per-run cost SHAPE (one `max_tokens: 1024` call, one
-      model) — but "measure one real run first" means a real, spend-incurring
-      call through `scripts/supervised-generate.mjs`, which this session's
-      zero-API-spend rule forbids regardless of authorisation for the number
-      itself. Not faked: no synthetic per-run figure is substituted for a
-      measured one. **What would unblock it:** Mark runs the printed command
-      once, real spend, and pastes the token-usage/cost line it prints; that
-      one real number is enough to derive both a demo and a builder profile
-      the same way `PER_RUN_CEILING_USD_*` was derived from a worst-case sum
-      rather than a guess. Until then this is Undone, matching J2/J3's own
-      precedent for "blocked on real data this session cannot generate
-      without spending."
+- [x] **K2 — G2, unblocked for real. Mark's second supervised run gave the
+      one real number this needed.** Run 2 reached a real answer (run 1
+      spent its whole budget on thinking and produced nothing to price a
+      normal call from): 123 input / 534 output tokens, thinking correctly
+      disabled, **$0.0056 at sonnet-5's published rate.** Not faked, not
+      averaged — **n=1, one prompt at one size, said plainly** in both the
+      code comment and here.
+      `src/controlLayer.ts`'s new `GENERATION_PROFILES.demo` /
+      `.builder`, each derived from that one figure by a named, stated
+      multiple (demo: 4× per-call, builder: 9×) rather than two
+      independently-guessed numbers that could silently drift apart — the
+      exact "true by construction" shape this project's protocol distrusts,
+      avoided by having a real number to derive FROM rather than inventing
+      one, same discipline `PER_RUN_CEILING_USD_*` used against a
+      worst-case sum instead of a guess.
+      *Test, K2's own spec, watched red then green:*
+      `test/generationProfiles.test.ts` — "K2's own test spec: switching
+      profile changes only the VALUES a call is checked against, not which
+      code runs" — one function, `checkGenerationSpend`, called with either
+      profile; a cost between the two ceilings is refused under `demo` and
+      accepted under `builder` from the identical code path. Confirmed red
+      first: collapsed `builder`'s numbers to `demo`'s, the test correctly
+      failed (no width left to distinguish); restored, green again.
+      *Mutation:* `generation-profiles-builder-tier-is-genuinely-wider`
+      (same collapse) — CAUGHT via `node scripts/_mutcheck.mjs
+      test/generationProfiles.test.ts src/controlLayer.ts
+      test/mutations.json`, file restored byte-identical.
+      **Scope, said plainly:** this is the profile STRUCTURE and its
+      derivation, not a live selection mechanism — nothing routes a real
+      request to either profile yet, because I5 itself still has no live
+      route (K1/K4). `node test/run.mjs`: 932/932 (was 924; +8: 1 prompt-
+      contract test, 2 API-surface tests, 5 profile tests). `npx tsc
+      --noEmit`: clean.
 - [x] **K3 — a blind security audit of the new path. RUN, AND IT FOUND REAL
       THINGS.** A fresh agent, no conversation history, isolated in its own
       worktree, told to ATTACK the six files (run-generate-request.js,

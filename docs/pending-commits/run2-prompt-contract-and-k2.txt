@@ -1,0 +1,67 @@
+The second supervised run refused for a real, specific, fixable reason: the
+prompt never said what API surface the model had
+
+WHAT FAILED. The model wrote a competent 3x3 shed and then called
+T.BufferGeometryUtils.mergeGeometries(...). BufferGeometryUtils is a real
+three.js ADDON module, not a property of the core THREE namespace, so the
+builder threw and verifyModelSource refused at the "build" stage -- after
+the response had already been evaluated and run. The prompt handed the
+model T and never stated what was on it; the model guessed, reasonably.
+
+Fixed the contract, not the sandbox. public/model-forge.js's new
+ALLOWED_GEOMETRY_CONSTRUCTORS is a real, already-proven-safe set -- every
+name in it is already used in public/props.js/public/buildings.js.
+findDisallowedApiSurface reads the injected namespace's own parameter name
+off the source (not assumed to be "T") and flags any member access outside
+that list; scanSource now enforces it, refusing at "scan" before the
+builder ever runs. The SAME list is exported into
+public/generate-request.js's buildGeometryPrompt, which now tells the model
+this exact set in plain language -- one source of truth for what is offered
+and what is enforced, closing the gap that let the prompt and the sandbox
+drift apart. scripts/supervised-generate.mjs's system prompt now uses that
+generated apiNote instead of a separate, vaguer hand-written description.
+
+Watched red first against the exact real payload shape
+(T.BufferGeometryUtils.mergeGeometries(...), reached by plain property
+access, no `new` at all) -- reproduced the real incident, refused at
+"build," not "scan" -- then green after the fix. Mutation
+model-forge-enforces-allowed-api-surface CAUGHT. Not "add BufferGeometryUtils
+to the sandbox instead" -- that would widen exactly the surface K3's audit
+spent effort narrowing.
+
+Both runs recorded as real evidence in docs/WORLD-BUILD-PLAN.md's J2 entry,
+dated 2026-09-06, model claude-sonnet-5: run 1 -- refused at scan, source
+empty, 1023/1024 tokens on thinking, caller misconfiguration. Run 2 --
+refused at build, BufferGeometryUtils undefined, 123 in / 534 out / $0.0056,
+prompt-contract gap. Two refusals, two different stages, two different
+causes, both real, both closed. Neither satisfies J2's own mechanism
+(/recent-runs' refused field, a different, unreached code path) -- J2 stays
+[!], noting run 2 as the more recent and more instructive of the pair.
+
+K2 is now measured, not blocked. $0.0056 is a representative per-call cost
+-- the model call is the whole bill, verification is free whether it passes
+or fails. src/controlLayer.ts's new GENERATION_PROFILES.demo/.builder are
+both derived from that one real figure by a named, stated multiple (4x/9x
+per-call), not two independently-guessed numbers -- explicitly n=1, one
+prompt at one size, not an average, said plainly in the code comment and
+the ledger. checkGenerationSpend is one function; K2's own test spec
+("switching profile changes only values; the code path is identical under
+both") is proven by test/generationProfiles.test.ts, watched red first
+(collapsed builder's numbers to demo's, the test correctly failed), green
+after restoring. Mutation generation-profiles-builder-tier-is-genuinely-wider
+CAUGHT. Scope said plainly: this is the profile structure and its
+derivation, not a live selection mechanism -- nothing routes a real request
+to either profile yet, since I5 itself still has no live route.
+
+How it is known to be fixed: node test/run.mjs -- 932/932, 0 fail (was 924;
++8: 1 prompt-contract test, 2 API-surface tests, 5 generation-profile
+tests). npx tsc --noEmit clean. Mutation summary: 93/93 CAUGHT (+2).
+Test-count claims (CLAUDE.md, public/index.html, test/testCount.generated.json,
+PART 0's ground-truth table, the claudeMd-test-count-matches-generated
+mutation's find/replace) bumped 924->932 in lockstep and re-verified CAUGHT.
+
+Default-world guard unaffected -- no generation code's output changed for
+the default world; only the generation path's own prompt contract, its
+enforcement, and a new, currently-unwired spend-profile structure.
+
+Stopping before any further live call, per instruction.

@@ -216,6 +216,70 @@ export const CONTROL_LIMITS = {
   ACTIVE_RUN_LEASE_TTL_SEC: 330,
 } as const;
 
+/**
+ * K2 (2026-09-06): I5's generation path (public/run-generate-request.js)
+ * had zero limits of its own -- everything gating it was manual, CLI-only
+ * (scripts/supervised-generate.mjs's four safety layers), because it had no
+ * real per-call cost to derive an automated limit FROM. G2 named the same
+ * gap for the older pipeline and stayed blocked on "real, authorised
+ * numbers" -- inventing a builder-tier figure with nothing behind it would
+ * satisfy the letter of "a dial, not a code path" while being exactly the
+ * "true by construction" shape this project's own protocol distrusts.
+ *
+ * Two real supervised calls gave one real, representative figure:
+ * run 2 (the one that reached a real answer -- run 1 spent its whole
+ * budget on thinking and produced nothing to price a NORMAL call from),
+ * 123 input / 534 output tokens, thinking correctly disabled,
+ * **$0.0056 at sonnet-5's published rate.**
+ *
+ * SAID PLAINLY: this is n=1, one prompt at one size, not an average. Both
+ * profiles below are derived from it with a named, stated multiple -- not
+ * two independently-guessed numbers that could silently drift apart from
+ * each other or from what a real call costs. Re-derive from a larger
+ * sample before this is ever a paying tier's actual bill.
+ */
+export const GENERATION_PROFILES = {
+  /** Public, unauthenticated. 4x the one measured call covers a longer
+   *  prompt/response without being a blank cheque; the daily cap is a
+   *  small fraction of CONTROL_LIMITS.PIPELINE_DAILY_CAP_USD so this new,
+   *  less-tested path cannot on its own approach what the existing
+   *  pipeline is already allowed to spend in a day. */
+  demo: {
+    perCallCeilingUsd: 0.02,
+    dailyGenerationsPerIp: 5,
+    dailyGenerationCapUsd: 0.5,
+  },
+  /** A wider, still-bounded tier -- same shape, larger multiples of the
+   *  same measured call, not a different kind of limit. */
+  builder: {
+    perCallCeilingUsd: 0.05,
+    dailyGenerationsPerIp: 20,
+    dailyGenerationCapUsd: 5.0,
+  },
+} as const;
+
+export type GenerationProfileName = keyof typeof GENERATION_PROFILES;
+
+/**
+ * K2's own test spec: "switching profile changes only values; the code
+ * path is identical under both." One function, called with either profile
+ * -- the checks it runs are the same two comparisons either way; only the
+ * thresholds they compare against differ.
+ */
+export function checkGenerationSpend(
+  profile: (typeof GENERATION_PROFILES)[GenerationProfileName],
+  costUsd: number,
+  dailySpentUsd: number,
+): { ok: true } | { ok: false; reason: string } {
+  if (costUsd > profile.perCallCeilingUsd) {
+    return { ok: false, reason: `this generation call would cost $${costUsd.toFixed(4)}, over the $${profile.perCallCeilingUsd} per-call ceiling` };
+  }
+  if (dailySpentUsd + costUsd > profile.dailyGenerationCapUsd) {
+    return { ok: false, reason: `today's generation spend would reach $${(dailySpentUsd + costUsd).toFixed(2)}, over the $${profile.dailyGenerationCapUsd} daily cap` };
+  }
+  return { ok: true };
+}
+
 export class PipelineLimitError extends Error {
   constructor(
     public readonly kind:

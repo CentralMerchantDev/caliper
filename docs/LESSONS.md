@@ -280,3 +280,59 @@ and stated plainly as a caller misconfiguration, not a capability finding
 — and its measured cost ($0.0105, almost entirely wasted thinking spend)
 is explicitly marked non-representative and excluded from K2, which stays
 blocked until a real post-fix run is measured.
+
+---
+
+### 2026-09-06 · A prompt described what to build and never said what it could be built WITH
+
+**WHAT WAS MISSED** `buildGeometryPrompt` (`public/generate-request.js`)
+told the model everything about the OBJECT to build — footprint, support,
+clearance, the visitor's own text — and nothing about the API SURFACE it
+had to build it with. The system prompt said only "a THREE.js-like
+namespace `T`." The second real supervised run (run 1's thinking-disabled
+fix already held: `thinking_tokens: 0`) wrote a competent 3×3 shed and then
+called `T.BufferGeometryUtils.mergeGeometries(...)` — a real three.js ADDON
+module, not a property of the core namespace, a reasonable guess against a
+contract that was never stated. The builder threw; `verifyModelSource`
+refused at the "build" stage, after the response had already been evaluated
+and run.
+
+**WHY IT GOT THROUGH** Every test for this path proved the pipeline
+correctly refuses BAD geometry (wrong footprint, too many triangles, not
+deterministic) and correctly accepts GOOD geometry — both measured against
+a hand-written fixture the test author already knew would compile. Nothing
+tested what happens when a response is well-intentioned and syntactically
+reasonable but reaches for something that was never offered, because no
+fixture had ever done that — the gap was not in what was checked, it was in
+what the model was TOLD, and a prompt that under-specifies its own contract
+produces exactly the class of "reasonable but wrong" response that a
+denylist of malicious tokens was never built to catch (it isn't malicious;
+`BufferGeometryUtils` is a real, common three.js pattern for exactly the
+job of merging shapes into one geometry).
+
+**THE CONTROL** [`test/modelForge.test.ts`](../test/modelForge.test.ts)'s
+new case runs the exact real payload shape (`T.BufferGeometryUtils.merge
+Geometries(...)`, reached by plain property access, no `new` at all) and
+asserts it is refused at `scan`, before the builder ever runs — not merely
+that it fails eventually. The real fix is
+[`public/model-forge.js`](../public/model-forge.js)'s new
+`ALLOWED_GEOMETRY_CONSTRUCTORS`, a real, already-proven-safe set (every
+name in it is already used in `public/props.js`/`public/buildings.js`), and
+`findDisallowedApiSurface`, which reads the injected namespace's own
+parameter name off the source (not assumed to be `T`) and flags any member
+access outside that list. Crucially, the SAME list is exported into
+[`public/generate-request.js`](../public/generate-request.js)'s
+`buildGeometryPrompt`, which now tells the model exactly this set in plain
+language — one source of truth for what is offered and what is enforced,
+not two copies that could drift apart from each other the way the prompt
+and the sandbox had drifted from each other here. Watched red first against
+the real payload (refused at `build`, reproducing the actual incident, not
+a paraphrase of it); green after. Mutation
+`model-forge-enforces-allowed-api-surface` CAUGHT.
+
+**STATUS** **CLOSED.** The registry test was watched red against the exact
+real payload shape the incident produced, then restored and reverified
+green. The fix is explicitly NOT "add BufferGeometryUtils to the sandbox"
+— that would have widened exactly the surface K3's audit spent effort
+narrowing. It is "say what IS there," which is both the safer fix and the
+one that gives the model what it actually needed to succeed the first time.

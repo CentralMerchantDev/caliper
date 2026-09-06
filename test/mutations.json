@@ -492,8 +492,8 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 924 node tests + 12 worker tests",
-      "replace": "npm test            # 925 node tests + 12 worker tests",
+      "find": "npm test            # 932 node tests + 12 worker tests",
+      "replace": "npm test            # 933 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
     {
@@ -824,6 +824,24 @@
       "find": "  const response = await client.messages.create({\n    model, max_tokens: 1024,\n    thinking: { type: \"disabled\" },\n    system: systemPrompt,",
       "replace": "  const response = await client.messages.create({\n    model, max_tokens: 1024,\n    system: systemPrompt,",
       "expect": "every messages.create / createWithTruncationGuard call in src/ and scripts/ carries an explicit thinking setting"
+    },
+    {
+      "id": "model-forge-enforces-allowed-api-surface",
+      "guards": "scanSource refuses a source that reaches for a THREE member outside ALLOWED_GEOMETRY_CONSTRUCTORS -- the real supervised run #2 payload (T.BufferGeometryUtils.mergeGeometries(...)) is refused at scan, before the builder ever runs, not left to throw at build.",
+      "note": "2026-09-06, real supervised run #2: the prompt handed the model a bare namespace and never said what was on it. A competent response reached for a real three.js addon module, not a property of the core namespace, and was refused only once it actually ran (the 'build' stage). Fixed at the contract: the prompt now states the allowed set and scanSource enforces the same list.",
+      "file": "public/model-forge.js",
+      "find": "  const disallowed = findDisallowedApiSurface(source);\n  if (disallowed.length) {\n    return `the model source reaches for \"${disallowed[0]}\", which is not one of the allowed geometry constructors (${ALLOWED_GEOMETRY_CONSTRUCTORS.join(\", \")})`;\n  }\n  return null;\n}",
+      "replace": "  return null;\n}",
+      "expect": "the exact real 2026-09-06 payload -- BufferGeometryUtils reached via property access, no `new` at all -- is refused at scan, not build"
+    },
+    {
+      "id": "generation-profiles-builder-tier-is-genuinely-wider",
+      "guards": "K2: GENERATION_PROFILES.builder's per-call ceiling and daily cap are genuinely wider than demo's, derived from the same real $0.0056/call measurement by a named multiple, not two independently-guessed figures that could collapse to the same number.",
+      "note": "K2 (2026-09-06): unblocked once two real supervised calls gave one representative per-call cost. checkGenerationSpend is one function; switching profile must change only the values a call is checked against, never which code runs -- proven by making builder's ceiling collapse to demo's and watching the test that says so go red.",
+      "file": "src/controlLayer.ts",
+      "find": "  builder: {\n    perCallCeilingUsd: 0.05,\n    dailyGenerationsPerIp: 20,\n    dailyGenerationCapUsd: 5.0,\n  },",
+      "replace": "  builder: {\n    perCallCeilingUsd: 0.02,\n    dailyGenerationsPerIp: 5,\n    dailyGenerationCapUsd: 0.5,\n  },",
+      "expect": "K2's own test spec: switching profile changes only the VALUES a call is checked against, not which code runs"
     }
   ]
 }

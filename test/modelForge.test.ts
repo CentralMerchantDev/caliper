@@ -20,6 +20,8 @@ import {
   describeVerdict,
   FORGE_LIMITS,
   FORBIDDEN_TOKENS,
+  ALLOWED_GEOMETRY_CONSTRUCTORS,
+  findDisallowedApiSurface,
 } from "../public/model-forge.js";
 
 /**
@@ -71,6 +73,34 @@ test("K3: the .constructor(...) bypass the blind audit found no longer sails thr
   assert.equal(v.ok, false, "the constructor-chain bypass was accepted");
   assert.equal(v.stage, "scan");
   assert.match(v.reason!, /constructor/);
+});
+
+// 2026-09-06, real supervised run #2: a competent response built a 3x3 shed
+// and then called T.BufferGeometryUtils.mergeGeometries(...) -- a real
+// three.js ADDON module, not a property of the core namespace the prompt
+// hands the model. The builder threw and verifyModelSource refused at the
+// "build" stage -- correct, but late: the response had already reached and
+// run untrusted logic before anything caught it. This is the exact real
+// payload shape, refused at "scan" now, before it ever runs.
+test("the exact real 2026-09-06 payload -- BufferGeometryUtils reached via property access, no `new` at all -- is refused at scan, not build", () => {
+  const real = `(T) => { const box = new T.BoxGeometry(3, 2.4, 3); const merged = T.BufferGeometryUtils.mergeGeometries([box]); return merged; }`;
+  const v = verifyModelSource(real, { w: 3, d: 3 }, evaluate, THREE);
+  assert.equal(v.ok, false, "the BufferGeometryUtils payload was accepted");
+  assert.equal(v.stage, "scan", `expected a scan-stage refusal (before the builder ever runs); got stage "${v.stage}"`);
+  assert.match(v.reason!, /BufferGeometryUtils/);
+});
+
+test("findDisallowedApiSurface: every allowed constructor is genuinely allowed, and a disallowed one is named", () => {
+  for (const name of ALLOWED_GEOMETRY_CONSTRUCTORS) {
+    assert.deepEqual(findDisallowedApiSurface(`(T) => new T.${name}(1, 1, 1)`), [], `"${name}" is in the allowed list but findDisallowedApiSurface still flags it`);
+  }
+  assert.deepEqual(findDisallowedApiSurface(`(T) => T.BufferGeometryUtils.mergeGeometries([])`), ["BufferGeometryUtils"]);
+  // The parameter name is whatever the model wrote, not assumed to be "T" or "THREE".
+  assert.deepEqual(findDisallowedApiSurface(`(namespace) => namespace.BufferGeometryUtils.mergeGeometries([])`), ["BufferGeometryUtils"]);
+  // A source scanSource already refuses for another reason (unrecognisable
+  // shape) is not this function's job to diagnose -- it returns no findings
+  // rather than guessing, and the compile stage refuses it on its own.
+  assert.deepEqual(findDisallowedApiSurface(`function notAnArrow() { return null; }`), []);
 });
 
 test("every forbidden token is actually detected, so the list is not decoration", () => {

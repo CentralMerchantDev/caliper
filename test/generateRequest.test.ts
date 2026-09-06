@@ -20,6 +20,7 @@ import assert from "node:assert/strict";
 import { buildGeometryPrompt, verifyGeneratedGeometry, MAX_REQUEST_TEXT_LENGTH } from "../public/generate-request.js";
 import { assessTransform, requirements } from "../public/transform.js";
 import { createGround } from "../public/ground.js";
+import { ALLOWED_GEOMETRY_CONSTRUCTORS } from "../public/model-forge.js";
 
 const heightAt = (x: number) => (x < -100 ? 12 : x < 100 ? -3 : -14);
 const land = createGround({ heightAt });
@@ -54,6 +55,30 @@ test("the prompt carries the measured constraints from D3 -- footprint, support,
   assert.equal(prompt.constraints.clearanceM, 2);
   assert.equal(prompt.address, "boat-1");
   assert.equal(prompt.instructions, "make it a bit bigger");
+});
+
+// 2026-09-06, real supervised run #2: the prompt used to hand the model a
+// bare namespace and never say what was on it. A competent response reached
+// for T.BufferGeometryUtils.mergeGeometries(...) -- a real three.js addon
+// module, not a property of the core namespace -- refused only once it
+// actually ran. The prompt must now name its own API surface, the SAME list
+// model-forge.js's scanSource enforces, not a private copy of it.
+test("the prompt names its own available API surface, the same list scanSource enforces", () => {
+  const want = { label: "a small shed", ...requirements({ footprint: { w: 3, d: 3 }, support: "ground" }) };
+  const assessment = assessTransform(shed, want, land);
+  assert.equal(assessment.fits, true, "the fixture shed transform does not fit -- test setup is wrong");
+
+  const prompt = buildGeometryPrompt(assessment, want, { address: "shed-1", text: "a small shed" });
+  assert.equal(prompt.ok, true);
+  assert.deepEqual(
+    prompt.constraints.allowedConstructors, ALLOWED_GEOMETRY_CONSTRUCTORS,
+    "the prompt's own list has drifted from model-forge.js's enforced list -- they must be the exact same array, not two copies",
+  );
+  assert.ok(prompt.constraints.allowedConstructors.length > 0, "an empty allowed-constructor list tells the model nothing");
+  for (const name of prompt.constraints.allowedConstructors) {
+    assert.match(prompt.constraints.apiNote, new RegExp(name), `apiNote does not actually name "${name}" -- the list exists but the text sent to the model doesn't say it`);
+  }
+  assert.match(prompt.constraints.apiNote, /no addon modules|no merging/i, "apiNote does not warn against addon modules -- the exact real gap that caused run #2's refusal");
 });
 
 test("generation is refused before anything is prompted when the ground has not approved the transform", () => {

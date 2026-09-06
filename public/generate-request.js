@@ -14,7 +14,7 @@
 // zero-spend-without-authorisation rule.
 // =============================================================================
 
-import { verifyModelSource } from "./model-forge.js";
+import { verifyModelSource, ALLOWED_GEOMETRY_CONSTRUCTORS } from "./model-forge.js";
 
 /**
  * K3 (blind security audit, 2026-09-06) found request.text had no length
@@ -55,6 +55,20 @@ export function buildGeometryPrompt(assessment, want, request) {
       footprint: { w: want.footprint.w, d: want.footprint.d },
       support: want.support || null,
       clearanceM: want.clearanceM || 0,
+      // 2026-09-06, real supervised run #2: the prompt used to hand the
+      // model a bare namespace and never say what was on it. A competent
+      // response reached for `T.BufferGeometryUtils.mergeGeometries(...)`
+      // -- a real three.js addon module, not a property of the core
+      // namespace -- a reasonable guess against an unstated contract,
+      // refused only once it actually ran. The SAME list model-forge.js's
+      // scanSource enforces, not a second copy that could drift from what
+      // the model is actually told.
+      allowedConstructors: ALLOWED_GEOMETRY_CONSTRUCTORS,
+      apiNote:
+        `The namespace you receive exposes exactly these constructors and nothing else -- ` +
+        `no addon modules (BufferGeometryUtils or similar), no merging multiple geometries: ` +
+        `${ALLOWED_GEOMETRY_CONSTRUCTORS.join(", ")}. Build and return exactly one of them, ` +
+        `parameterised to fit the footprint.`,
     },
   };
 }

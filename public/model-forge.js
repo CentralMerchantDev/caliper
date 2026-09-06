@@ -112,7 +112,65 @@ export const FORBIDDEN_TOKENS = Object.freeze([
   "constructor",
 ]);
 
-/** A cheap pre-scan. Returns the first forbidden token, or null. */
+/**
+ * The ONLY THREE constructors a generated builder may reach for on the
+ * namespace it is handed. An ALLOWLIST, not a denylist -- the prompt (see
+ * public/generate-request.js's buildGeometryPrompt) tells the model exactly
+ * this set, and this is what enforces it: the same list, imported from
+ * here, not a second copy that could drift from what the model was told.
+ *
+ * 2026-09-06, real supervised run #2: the prompt handed the model a bare
+ * namespace, `T`, and never said what was on it. A competent response built
+ * a 3x3 shed and then called `T.BufferGeometryUtils.mergeGeometries(...)`
+ * -- a real three.js ADDON module, not a property of the core namespace --
+ * a reasonable guess against an unstated contract, refused only when the
+ * builder actually ran and threw (the "build" stage). The fix is not to add
+ * BufferGeometryUtils to the sandbox (that widens exactly the surface K3
+ * spent effort narrowing) -- it is to say what IS there, and refuse a
+ * response that reaches past it before it ever runs.
+ *
+ * Every constructor here is already used elsewhere in this project's own
+ * hand-built geometry (public/props.js, public/buildings.js) -- a real,
+ * already-proven-safe set, not a new one invented for this.
+ */
+export const ALLOWED_GEOMETRY_CONSTRUCTORS = Object.freeze([
+  "BoxGeometry", "SphereGeometry", "CylinderGeometry", "ConeGeometry",
+  "CapsuleGeometry", "TorusGeometry", "RingGeometry", "PlaneGeometry",
+  "DodecahedronGeometry", "IcosahedronGeometry",
+]);
+
+/**
+ * The injected-namespace parameter's own name -- whatever the model called
+ * it (the prompt asks for `T`; a test fixture might use `THREE`) -- read
+ * off the source's own function signature, not assumed.
+ */
+function builderParamName(source) {
+  const m =
+    source.match(/^\s*\(?\s*([A-Za-z_$][\w$]*)\s*\)?\s*=>/) ||
+    source.match(/^\s*function\s*\w*\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Every `<param>.<Member>` access on the injected namespace, pure and
+ * exported for its own direct test. Catches both a disallowed `new
+ * T.Foo(...)` AND a plain property reach with no `new` at all -- the exact
+ * shape `T.BufferGeometryUtils.mergeGeometries(...)` used to escape the
+ * (unstated, at the time) contract through: an addon module is reached by
+ * property access, never by construction.
+ */
+export function findDisallowedApiSurface(source) {
+  const param = builderParamName(source);
+  if (!param) return []; // no recognisable single-parameter builder shape -- the compile stage refuses this on its own
+  const escaped = param.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\b${escaped}\\.([A-Za-z_$][\\w$]*)`, "g");
+  const found = new Set();
+  for (const m of source.matchAll(re)) found.add(m[1]);
+  return [...found].filter((name) => !ALLOWED_GEOMETRY_CONSTRUCTORS.includes(name));
+}
+
+/** A cheap pre-scan. Returns the first forbidden token or API-surface
+ *  violation found, or null. */
 export function scanSource(source) {
   if (typeof source !== "string") return "the model source is not a string";
   if (!source.trim()) return "the model source is empty";
@@ -121,6 +179,10 @@ export function scanSource(source) {
   }
   for (const token of FORBIDDEN_TOKENS) {
     if (source.includes(token)) return `the model source mentions "${token}", which a geometry builder has no use for`;
+  }
+  const disallowed = findDisallowedApiSurface(source);
+  if (disallowed.length) {
+    return `the model source reaches for "${disallowed[0]}", which is not one of the allowed geometry constructors (${ALLOWED_GEOMETRY_CONSTRUCTORS.join(", ")})`;
   }
   return null;
 }
