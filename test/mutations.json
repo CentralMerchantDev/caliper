@@ -492,8 +492,8 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 913 node tests + 12 worker tests",
-      "replace": "npm test            # 914 node tests + 12 worker tests",
+      "find": "npm test            # 914 node tests + 12 worker tests",
+      "replace": "npm test            # 915 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
     {
@@ -761,6 +761,15 @@
       "find": "  if (!settMatch) return \"could not read a settlement count out of citySummary.generated.ts -- has its wording changed?\";",
       "replace": "  if (!settMatch) return null;",
       "expect": "an unreadable settlement count fails loudly, it does not silently pass"
+    },
+    {
+      "id": "hero-line-agrees-with-the-page-title",
+      "guards": "J1: #claim-hero-line (the above-the-fold central claim in #welcome-mission-card) is pinned to agree with <title>/og:title/twitter:title, not free to drift into a fifth, private wording of the same claim",
+      "note": "Simulates the hero card's own copy being edited without updating the other three -- the exact way this project's own km/settlement/test-count claims have gone stale before.",
+      "file": "public/index.html",
+      "find": "<h2 id=\"claim-hero-line\" style=\"margin:0;font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.02em\">CALIPER — a system that only says yes when yes is true</h2>",
+      "replace": "<h2 id=\"claim-hero-line\" style=\"margin:0;font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.02em\">CALIPER — a different sentence entirely</h2>",
+      "expect": "the above-the-fold claim agrees with the page's own title -- one sentence, not a private copy of it"
     }
   ]
 }

@@ -1448,18 +1448,55 @@ UMAA Division 7 found CALIPER's central claim sitting at second 25 of a
 30-second visit behind an 11.5px link. That was the highest-value change of that
 session and it was not a technical defect.
 
-- [ ] **J1 — one sentence, above the fold.** What this is, without overclaiming,
-      readable on a phone.
-      *Test:* `test/publicClaims.test.ts` pins it; a change to the sentence
-      without a change to the test fails.
-- [ ] **J2 — a refusal is visible on first paint.** Not a success reel. The most
-      recent real refusal renders before any interaction.
-      *Test:* the first-paint payload contains a refusal with its reason.
-- [ ] **J3 — recorded runs are free, the live button is rationed.** Every real
-      run is recorded and replayable at zero cost; the live path is per-IP capped
-      with a daily ceiling; when the budget is spent it replays and **says so**.
-      *Test:* with the budget exhausted, the page still works and states that it
-      is replaying. *Mutation:* replay silently → that test red.
+- [x] **J1 — one sentence, above the fold.** Already structurally in place
+      from an earlier pass, not built new: `#welcome-mission-card`'s own H2
+      (`position:fixed`, no `display:none`, mobile-width-capped
+      `min(720px, calc(100vw - 24px))`) renders before any click, closing
+      UMAA Division 7's own finding (the central claim sitting behind an
+      11.5px link, 25s into a visit). What was missing was the test. Added
+      `id="claim-hero-line"` and a new case in `test/publicClaims.test.ts`
+      pinning it to agree with `<title>`/`og:title`/`twitter:title` (a
+      shared claim, not a fifth private copy of it that could drift alone),
+      plus a light structural check that it reads as one sentence, not a
+      stacked paragraph. Mutation `hero-line-agrees-with-the-page-title`
+      CAUGHT: `node scripts/_mutcheck.mjs test/publicClaims.test.ts
+      public/index.html test/mutations.json`.
+- [!] **J2 — a refusal is visible on first paint. BUILT, VERIFIED BY READING,
+      NOT TEST-PROVEN — no real refusal exists to prove it against.**
+      `(async function showRunRecord())` (`public/index.html`, an IIFE that
+      runs on load, gated behind no click) fetches `/change-history` and
+      `/recent-runs` and, when `lastRuns.refused` is set, renders it into
+      `#last-refusal` via `refusalHtml()` — exactly "the most recent real
+      refusal renders before any interaction." Checked directly, not
+      assumed: `curl .../recent-runs` on the live site right now returns
+      `{"shipped": null, "refused": null}` — no run in this project's real
+      history has ever ended in `refused-plan`/`refused-review`/
+      `refused-verification` (the three outcomes `recordReplayable` writes
+      to `replay/last-refused` for), so there is currently nothing real for
+      this mechanism to show. Producing one needs a real pipeline run that
+      genuinely gets refused, which needs real spend — forbidden this
+      session. No automated test exists either; `refusalHtml`/
+      `showRunRecord` are inline page script, not an importable module, so
+      testing them needs either a real refusal (blocked, above) or
+      extracting them into a testable module (a real refactor, not
+      attempted here). Ticked `[!]` rather than faked: the code reads
+      correct, it is unverified against real data, and both reasons are
+      named rather than either skipped silently or claimed done.
+- [!] **J3 — recorded runs are free, the live button is rationed. SAME
+      SHAPE AS J2: BUILT, NOT TEST-PROVEN.** The `EventSource` `error`
+      handler (`public/index.html`) fetches `/live-status` on a failed live
+      run and, when the cap is what stopped it, calls
+      `offerRecordedRun('This is the cap doing its job. Here is the full
+      pipeline instead:')` — replays a real run and says so, never
+      silently. Checked directly: `curl .../live-status` right now returns
+      `"ok": true, "runsUsed": 0, "runsLimit": 2, "dailyRemainingUsd": 2` —
+      the budget is not exhausted, and deliberately exhausting it needs
+      real spend (2 real runs), forbidden this session; observing the
+      exhausted state honestly is not currently possible without paying
+      for it. No automated test for the same reason as J2 (inline script,
+      not a module). Ticked `[!]`, same reasoning as J2 — this is exactly
+      the situation the original instruction named in advance ("if I5
+      still cannot spend, tick them `[!]`") rather than faking a run.
 - [x] **J4 — every number on the page is generated.** Audited first, rather
       than assumed incomplete: `test/publicClaims.test.ts` (pre-existing)
       already pins the world size (every `N km` on both public pages, swept,

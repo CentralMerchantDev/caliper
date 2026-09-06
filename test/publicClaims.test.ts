@@ -196,6 +196,41 @@ test("J4/E8 (synthetic): an unreadable settlement count fails loudly, it does no
 });
 
 // ---------------------------------------------------------------------------
+// J1 — ONE SENTENCE, ABOVE THE FOLD
+// ---------------------------------------------------------------------------
+
+test("J1: the above-the-fold claim agrees with the page's own title -- one sentence, not a private copy of it", () => {
+  // UMAA Division 7's finding was that the page's central claim sat behind an
+  // 11.5px link, 25 seconds into a visit. #welcome-mission-card's own H2 --
+  // position:fixed, no `display:none`, rendered before any click -- is the
+  // fix: the same claim the page already makes in <title>/og:title/
+  // twitter:title, restated where a visitor actually sees it first. Pinned
+  // as agreement between the four, not a hand-typed duplicate of any one of
+  // them, so the four cannot quietly drift into four different claims.
+  const titleMatch = INDEX.match(/<title>([^<]*)<\/title>/);
+  const ogMatch = INDEX.match(/<meta property="og:title" content="([^"]*)"/);
+  const twitterMatch = INDEX.match(/<meta name="twitter:title" content="([^"]*)"/);
+  const heroMatch = INDEX.match(/<h2 id="claim-hero-line"[^>]*>([^<]*)<\/h2>/);
+
+  assert.ok(titleMatch, "public/index.html has no <title>");
+  assert.ok(ogMatch, "public/index.html has no og:title meta tag");
+  assert.ok(twitterMatch, "public/index.html has no twitter:title meta tag");
+  assert.ok(heroMatch, "could not find #claim-hero-line -- has the welcome card's markup moved?");
+
+  const title = titleMatch![1];
+  for (const [label, match] of [["og:title", ogMatch], ["twitter:title", twitterMatch], ["#claim-hero-line", heroMatch]] as const) {
+    assert.equal(match![1], title, `${label} says "${match![1]}"; <title> says "${title}" -- the one sentence has drifted into two`);
+  }
+
+  // "One sentence, readable on a phone" is not just short -- an em dash
+  // followed by a full restatement is two clauses doing the work of a
+  // paragraph. This does not enforce a character budget (a good sentence
+  // and a padded one can be the same length), only that it is not visibly
+  // multiple sentences stacked into one string.
+  assert.ok(!/[.!?]\s+[A-Z]/.test(title), `"${title}" reads as more than one sentence`);
+});
+
+// ---------------------------------------------------------------------------
 // THE SUITE
 // ---------------------------------------------------------------------------
 

@@ -1,0 +1,40 @@
+Phase J — J1 tested and pinned; J2/J3 verified as built, honestly untestable
+without real spend
+
+J1 -- one sentence, above the fold. Already structurally in place from an
+earlier pass (#welcome-mission-card's H2, position:fixed, no display:none,
+mobile-width-capped, renders before any click) -- what was missing was the
+test. Added id="claim-hero-line" and a new case in test/publicClaims.test.ts
+pinning it to agree with <title>/og:title/twitter:title (a shared claim, not
+a fifth private copy that could drift alone), plus a light check that it
+reads as one sentence. Mutation hero-line-agrees-with-the-page-title CAUGHT.
+
+J2 -- a refusal is visible on first paint. showRunRecord() (an IIFE, runs on
+load, no click needed) already fetches real run history and renders the most
+recent refusal into #last-refusal when one exists. Checked against live data
+before claiming anything: curl .../recent-runs right now returns
+{"refused": null} -- no run in this project's real history has ever ended in
+a refused-plan/refused-review/refused-verification outcome, so there is
+nothing real for the mechanism to show yet. Producing one needs a real
+pipeline run that gets refused, which needs real spend -- forbidden this
+session, same as I5's own zero-spend constraint. Ticked [!], not faked.
+
+J3 -- recorded runs are free, the live button is rationed. The EventSource
+error handler already fetches /live-status on a failed live run and offers a
+labelled replay when the cap is what stopped it. Checked live: /live-status
+returns ok:true, runsUsed:0 of 2 -- the daily budget is not exhausted, and
+deliberately exhausting it needs 2 real runs, forbidden this session.
+Observing the exhausted state honestly is not currently possible without
+paying for it. Ticked [!], same reasoning as J2 -- exactly the situation the
+standing instruction named in advance rather than a reason to fake a run.
+
+Neither J2 nor J3 has an automated test either way: refusalHtml/
+showRunRecord/the EventSource handler are inline page script, not an
+importable module, so testing them without real data would need extracting
+them first -- a real refactor, not attempted under this pass's time budget.
+
+How it is known to be fixed: node test/run.mjs -- 914/914, 0 fail (was 913;
++1 from J1's new test). npx tsc --noEmit clean. Mutation summary: 85/85
+CAUGHT (+1 from J1's hero-line mutation).
+
+Default-world guard unaffected -- no generation code touched.
