@@ -561,12 +561,23 @@ test("ON THE REAL WORLD: every row-class plot is a whole number of 8 m cells", (
   // unit left a 4.00 m gap between every pair of adjacent houses, so each one
   // presented a blank windowless flank across the gap to its neighbour's blank
   // windowless flank. The models were right and the subdivision defeated them.
+  // PLACEMENT-CONTRACT.md Part 1 made module: 8 universal (it used to be
+  // declared only on TERRACE/TOWNHOUSE), so this loop now covers all eleven
+  // classes -- but only TERRACE/TOWNHOUSE reliably carry thousands of real
+  // plots. A civic building or a hangar is rare by design; requiring >100
+  // samples from a class that is supposed to be rare would make the test
+  // fail on the world being correct. The >100 bar stays for the two classes
+  // it was originally written to guard; every other class is measured with
+  // however many plots the real world actually carved, including zero.
+  const MIN_SAMPLE: Record<string, number> = { TERRACE: 100, TOWNHOUSE: 100 };
   const world = realWorld;
 
   for (const [className, cls] of Object.entries(PLOT_CLASSES) as [string, any][]) {
     if (!cls.module) continue;
     const plots = world.plots.filter((p: any) => p.className === className);
-    assert.ok(plots.length > 100, `only ${plots.length} ${className} plots -- too few to measure`);
+    const minSample = MIN_SAMPLE[className] ?? 0;
+    assert.ok(plots.length >= minSample, `only ${plots.length} ${className} plots -- too few to measure`);
+    if (plots.length === 0) continue;
 
     const offenders = plots.filter((p: any) => {
       const w = p.buildable.xMax - p.buildable.xMin;
@@ -590,12 +601,15 @@ test("ON THE REAL WORLD: every row-class plot STARTS on an 8 m cell, not just is
   // grid.js hands out addresses on that basis. A module system that exists in
   // the documentation and not in the ground costs nothing until the first thing
   // that needs to address a cell: the AI edit path, or streaming a region.
+  const MIN_SAMPLE: Record<string, number> = { TERRACE: 100, TOWNHOUSE: 100 };
   const world = realWorld;
 
   for (const [className, cls] of Object.entries(PLOT_CLASSES) as [string, any][]) {
     if (!cls.module) continue;
     const plots = world.plots.filter((p: any) => p.className === className);
-    assert.ok(plots.length > 100, `only ${plots.length} ${className} plots -- too few to measure`);
+    const minSample = MIN_SAMPLE[className] ?? 0;
+    assert.ok(plots.length >= minSample, `only ${plots.length} ${className} plots -- too few to measure`);
+    if (plots.length === 0) continue;
 
     const offGrid = plots.filter((p: any) => {
       const r = Math.abs(p.xMin / cls.module - Math.round(p.xMin / cls.module));
@@ -610,22 +624,29 @@ test("ON THE REAL WORLD: every row-class plot STARTS on an 8 m cell, not just is
   }
 });
 
-test("guardrail: a class with NO module is left alone, so the snap is targeted", () => {
-  // If the snap applied to everything, this test would fail -- and a villa
-  // forced onto an 8 m grid is a different (and wrong) world, not a safer one.
+test("guardrail: the module snap never produces a plot outside its own class's declared range", () => {
+  // This guardrail used to prove the snap was TARGETED, by pointing at
+  // VILLA, the class that declared no module and so was left alone.
+  // PLACEMENT-CONTRACT.md Part 1 removed that example -- module: 8 is now
+  // universal -- so there is no longer a class to point at for "the snap
+  // does not apply here." What still has to hold, for every class, is the
+  // invariant the old test was really guarding: snapping never pushes a
+  // plot outside the range it was declared to fit in. subdivideBlock's own
+  // fallback (public/city-plan.js) is what keeps this true -- it only
+  // applies the snapped width when the snap still clears minW, and leaves
+  // the unsnapped width alone otherwise.
   const world = realWorld;
-  const villas = world.plots.filter((p: any) => p.className === "VILLA");
-  assert.ok(villas.length > 100, "not enough VILLA plots to make this measurement");
-  assert.equal((PLOT_CLASSES as any).VILLA.module, undefined, "VILLA should not declare a module");
-
-  const offGrid = villas.filter((p: any) => {
-    const w = p.buildable.xMax - p.buildable.xMin;
-    return Math.abs(w / 8 - Math.round(w / 8)) > 1e-6;
-  });
-  assert.ok(
-    offGrid.length > 0,
-    "every VILLA plot happens to be a whole number of 8 m cells -- the snap is being applied to classes that did not ask for it",
-  );
+  for (const [className, cls] of Object.entries(PLOT_CLASSES) as [string, any][]) {
+    const plots = world.plots.filter((p: any) => p.className === className);
+    if (plots.length === 0) continue;
+    const offenders = plots.filter((p: any) => p.width < cls.minW - 1e-6 || p.width > cls.maxW + 1e-6);
+    assert.equal(
+      offenders.length,
+      0,
+      `${offenders.length} of ${plots.length} ${className} plots fall outside its own [${cls.minW}, ${cls.maxW}] m range, ` +
+        `e.g. width ${offenders[0] && offenders[0].width}`,
+    );
+  }
 });
 
 test("situationOf reports the plot's own ids back, so a placement can be traced to its ground", () => {

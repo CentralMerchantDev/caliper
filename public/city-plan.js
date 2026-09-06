@@ -970,25 +970,35 @@ Object.freeze(GRID);
 // lots or a single tower podium, and the pipeline has a legal range to work
 // inside when a visitor asks to merge or split.
 // -----------------------------------------------------------------------------
-// `module`, where present, is the width increment a plot of this class must be
-// a whole number of. It is the 8 m CELL of WORLD-RULES section 3.2, and it is
-// declared only on the classes the asset lane builds as TILING ROWS: a terrace
-// and a townhouse row share party walls, so their plots have to line up on the
-// same module the buildings do. Everything else -- a villa, a tower, a farm --
-// stands on its own and can take whatever width the block divides into.
+// `module` is the width increment a plot of this class must be a whole
+// number of. It is the 8 m CELL of WORLD-RULES section 3.2 and of grid.js.
+// It used to be declared only on TERRACE/TOWNHOUSE (the classes the asset
+// lane builds as tiling rows sharing party walls) -- docs/specs/
+// PLACEMENT-CONTRACT.md Part 1 makes it universal instead: minW/maxW/minD/
+// maxD below are all whole multiples of 8 for every class, widened outward
+// from the old metric numbers (floor on the minimums, ceil on the
+// maximums), never narrowed, so nothing that used to qualify stops
+// qualifying. Integers are checkable; 47.3 metres is not.
+//
+// NOT A CONSTRAINT ON WHAT MAY BE BUILT. Mark, 2026-09-06: a plot is not a
+// slot for a kind of building, it is space -- a rectangle of free cells. A
+// building declares what it needs (see public/typology-footprints.js) and
+// the board answers only whether that much free ground exists. PLOT_CLASSES
+// survives purely as a record of what world generation chose to SEED on a
+// plot at creation time; nothing later reads it as permission or refusal.
 export const PLOT_CLASSES = {
-  TERRACE:   { minW: 8,   maxW: 16,  minD: 22, maxD: 34,  maxHeight:  18, module: 8 },
-  TOWNHOUSE: { minW: 14,  maxW: 26,  minD: 26, maxD: 40,  maxHeight:  24, module: 8 },
-  MIDRISE:   { minW: 26,  maxW: 52,  minD: 32, maxD: 60,  maxHeight:  55 },
-  TOWER:     { minW: 45,  maxW: 90,  minD: 45, maxD: 90,  maxHeight: 220 },
-  CIVIC:     { minW: 60,  maxW: 180, minD: 50, maxD: 110, maxHeight:  70 },
-  PARK:      { minW: 40,  maxW: 200, minD: 40, maxD: 130, maxHeight:   0 },
+  TERRACE:   { minW: 8,   maxW: 16,  minD: 16,  maxD: 40,  maxHeight:  18, module: 8 },
+  TOWNHOUSE: { minW: 8,   maxW: 32,  minD: 24,  maxD: 40,  maxHeight:  24, module: 8 },
+  MIDRISE:   { minW: 24,  maxW: 56,  minD: 32,  maxD: 64,  maxHeight:  55, module: 8 },
+  TOWER:     { minW: 40,  maxW: 96,  minD: 40,  maxD: 96,  maxHeight: 220, module: 8 },
+  CIVIC:     { minW: 56,  maxW: 184, minD: 48,  maxD: 112, maxHeight:  70, module: 8 },
+  PARK:      { minW: 40,  maxW: 200, minD: 40,  maxD: 136, maxHeight:   0, module: 8 },
   // --- beyond the downtown island ---
-  RESORT:    { minW: 34,  maxW: 78,  minD: 34, maxD: 70,  maxHeight:  70 },  // beach hotels
-  VILLA:     { minW: 18,  maxW: 34,  minD: 22, maxD: 40,  maxHeight:  14 },  // low coastal housing
-  WAREHOUSE: { minW: 55,  maxW: 150, minD: 40, maxD: 95,  maxHeight:  22 },  // port sheds
-  FARM:      { minW: 160, maxW: 460, minD: 120, maxD: 340, maxHeight:  11 }, // fields + barns
-  HANGAR:    { minW: 90,  maxW: 220, minD: 70, maxD: 150, maxHeight:  26 },  // airport
+  RESORT:    { minW: 32,  maxW: 80,  minD: 32,  maxD: 72,  maxHeight:  70, module: 8 },  // beach hotels
+  VILLA:     { minW: 16,  maxW: 40,  minD: 16,  maxD: 40,  maxHeight:  14, module: 8 },  // low coastal housing
+  WAREHOUSE: { minW: 48,  maxW: 152, minD: 40,  maxD: 96,  maxHeight:  22, module: 8 },  // port sheds
+  FARM:      { minW: 160, maxW: 464, minD: 120, maxD: 344, maxHeight:  11, module: 8 }, // fields + barns
+  HANGAR:    { minW: 88,  maxW: 224, minD: 64,  maxD: 152, maxHeight:  26, module: 8 },  // airport
 };
 
 export const PLOT_RULES = {

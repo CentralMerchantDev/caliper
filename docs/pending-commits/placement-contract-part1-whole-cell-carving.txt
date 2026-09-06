@@ -1,0 +1,45 @@
+Placement contract Part 1: PLOT_CLASSES is whole cells everywhere, not just
+on the two row classes
+
+docs/specs/PLACEMENT-CONTRACT.md Part 1, the half of it that survives Mark's
+2026-09-06 correction intact: "every plot class declares module: 8, and its
+minW/maxW/minD/maxD are whole multiples of CELL." Before this, only TERRACE
+and TOWNHOUSE declared a module; the other nine classes -- including TOWER,
+whose 45 m minimum is 5.625 cells -- did not. Integers are checkable, 47.3
+metres is not.
+
+All eleven classes now declare module: 8, with bounds widened outward to the
+nearest whole cell (floor on minimums, ceil on maximums) so nothing that used
+to qualify under the old metric numbers stops qualifying -- test/
+typologyFootprints.test.ts's "widened, never narrowed" test proves this per
+class, including TOWER (its earlier 6-11 cell special case is gone: see the
+follow-up commit, "PLOT_CLASSES carries no player-facing constraint" -- Mark
+voided that question separately from this one).
+
+Because subdivideBlock's module-snap was previously reachable only through
+TERRACE/TOWNHOUSE, this exercises it for the other nine classes for the first
+time. Two of test/layout.test.ts's row-class tests hard-required >100 sample
+plots per class to trust the "zero offenders" assertion; that bar is correct
+for TERRACE/TOWNHOUSE (which reliably carry thousands) but wrong for a class
+like CIVIC or HANGAR that is rare by design -- so the bar is now per-class
+(100 for the original two, otherwise "however many the world actually
+carved, including zero"). A third test asserted VILLA specifically declared
+no module, as proof the snap was targeted; there is no longer a class that
+declares none, so it is replaced with the invariant that test was actually
+protecting: no class's module snap ever produces a plot outside its own
+declared [minW, maxW] range.
+
+How it is known to work: node test/run.mjs, 953/955 passing. The two
+failures are expected and out of scope for this commit -- the embedded city
+summary and the seeded-plan pin both assert an exact plot count (19,874) that
+this change legitimately moves, because nine more classes now snap to whole
+cells during subdivision. WORLD-REBALANCE-BRIEF.md already anticipated this
+exact kind of drift ("the seed pin tests WILL go red... re-pin ONCE at the
+end") for its own step 3; the count will move again once that rebalance
+lands, so re-pinning now would just mean doing it twice. npx tsc --noEmit
+clean.
+
+Next: a separate commit for Mark's placement-model correction itself
+(PLOT_CLASSES is a seeding record, not a constraint; the class-to-typology
+agreement test is retired, not weakened to pass; the `clear` proposal for
+docs/audits/VISUAL-RUN-QUESTIONS.md).
