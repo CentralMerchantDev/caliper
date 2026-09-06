@@ -67,3 +67,13 @@ test("I5 script safety: refuses a transform the ground does not approve, before 
   assert.match(stderr, /refused before a prompt was even built/);
   assert.doesNotMatch(stdout, /PROMPT/, "a prompt was printed for a transform the ground refused");
 });
+
+test("K1 scope: a request naming two addresses in one --address is refused by the limit, not by chance", () => {
+  const { code, stdout, stderr } = run(
+    ["--address", "block--1349-760-p0,block--1200-600-p0", "--text", "add a shed", "--w", "3", "--d", "3", "--seed", "default", "--confirm"],
+    { ANTHROPIC_API_KEY: "sk-not-real-never-sent" },
+  );
+  assert.equal(code, 1);
+  assert.match(stderr, /exactly one address/);
+  assert.doesNotMatch(stdout, /PROMPT/, "a prompt was printed for a multi-address request");
+});

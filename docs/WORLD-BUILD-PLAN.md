@@ -1614,24 +1614,99 @@ forgeable verdict and a scanner bypass — both defeating failure-floor invarian
 that four technical passes had walked past. I5 opens a new public path. It gets
 the same scrutiny.
 
-- [ ] **K1 — the scope limit G1 could not build.** G1 recorded "Scope (one
-      object)" as Undone because `public/*.js` and `src/*.ts` never touched.
-      After I5 they do, so the limit now has an enforcement point.
-      *Test:* a request naming two addresses is refused by the limit, not by
-      chance. *Mutation:* hard-code the scope → the test names it.
-- [ ] **K2 — G2, unblocked.** A second limits profile is now answerable because
-      I5 gives real per-run cost figures. Measure one real run first, then set
-      both profiles from measurement.
-      *Test:* switching profile changes only values; the code path is identical
-      under both.
+- [x] **K1 — the scope limit G1 could not build. PREMISE CORRECTED, THEN
+      BUILT.** Measured before building: `grep -rn "run-generate-request\|
+      productionModelCaller\|model-caller" src/ public/index.html` returns
+      nothing. **"After I5, `public/*.js` and `src/*.ts` touch" is false.**
+      I5 (public/run-generate-request.js) was deliberately built stub-only
+      and NEVER wired to any live route — its own ledger entry says so
+      ("public/\*.js has nowhere authorised to send a prompt yet"). So G1's
+      finding stands unchanged: there is still no visitor-reachable
+      enforcement point, because there is still no visitor-reachable path at
+      all. The one thing that changed is that a SECOND real entry point now
+      exists — `scripts/supervised-generate.mjs`, Mark's own CLI, run by
+      hand with his own key — and *that* had no scope limit: its
+      `--address` flag took one string and passed it straight to an
+      exact-match plot lookup, so "one address per request" was true only
+      because nobody had tried otherwise, not because anything enforced it.
+      Built the real thing: a deliberate check (`/[,\s]/.test(args.address)`)
+      refusing before any plot lookup, with its own message, rather than
+      leaning on the exact-match lookup's incidental failure.
+      *Test, watched red then green:* `test/supervisedGenerateScript.test.ts`
+      — "K1 scope: a request naming two addresses in one --address is
+      refused by the limit, not by chance" — asserts the specific
+      `/exactly one address/` message. Confirmed red first: with the check
+      removed, the same input still exits 1, but on `No plot
+      "a,b" in the world...` — a coincidence of the seed data, not a limit;
+      the test correctly failed the regex match. Restored, green again.
+      *Mutation:* `supervised-generate-refuses-multi-address-scope` (disables
+      the check) — CAUGHT via `node scripts/_mutcheck.mjs
+      test/supervisedGenerateScript.test.ts scripts/supervised-generate.mjs
+      test/mutations.json`, file restored byte-identical. `node test/run.mjs`:
+      915/915 (was 914; +1). `npx tsc --noEmit`: clean.
+- [!] **K2 — G2, unblocked. STILL BLOCKED, FOR A NARROWER REASON THAN G2's.**
+      G2 was blocked on two things: real builder-tier numbers, and a live
+      selection mechanism. The second reason no longer quite applies —
+      I5 gives real per-run cost SHAPE (one `max_tokens: 1024` call, one
+      model) — but "measure one real run first" means a real, spend-incurring
+      call through `scripts/supervised-generate.mjs`, which this session's
+      zero-API-spend rule forbids regardless of authorisation for the number
+      itself. Not faked: no synthetic per-run figure is substituted for a
+      measured one. **What would unblock it:** Mark runs the printed command
+      once, real spend, and pastes the token-usage/cost line it prints; that
+      one real number is enough to derive both a demo and a builder profile
+      the same way `PER_RUN_CEILING_USD_*` was derived from a worst-case sum
+      rather than a guess. Until then this is Undone, matching J2/J3's own
+      precedent for "blocked on real data this session cannot generate
+      without spending."
 - [ ] **K3 — a blind security audit of the new path.** Fresh agent, no history,
       given I5's route and the gates. Not told what you think is safe.
       Specifically: can a visitor cause spend beyond the cap; can generated code
       reach the Worker's environment; can one visitor's run affect another's; is
       any refusal forgeable from the client.
-- [ ] **K4 — the abuse surface, stated.** Rate limits, retention, what is logged,
-      what a visitor can trigger and what it costs at the worst case. Published,
-      not just implemented.
+- [x] **K4 — the abuse surface, stated.** Measured, not assumed, in this
+      order:
+      1. **Live surface today: zero.** `grep -rn "run-generate-request\|
+         productionModelCaller\|model-caller" src/ public/index.html` →
+         nothing. No Worker route, no button, no fetch anywhere in the
+         served page reaches I5's path. A visitor to the live site cannot
+         trigger any part of it — not "rate-limited to near-zero," actually
+         zero, because nothing calls it.
+      2. **The one operable path is Mark-only.**
+         `scripts/supervised-generate.mjs`: requires `ANTHROPIC_API_KEY` from
+         the operator's own environment (never present in the deployed
+         Worker — `wrangler.toml`/the Worker's env has no such secret
+         wired), requires `--confirm`, requires the terminal `y` (unless
+         `--yes`), and (K1) requires exactly one address. It is a local
+         script; nothing about it is reachable over HTTP.
+      3. **What is logged / retained: nothing.** The script writes to
+         stdout only — no `kv.put`, no Durable Object call, no file write
+         anywhere in `scripts/supervised-generate.mjs` or
+         `public/run-generate-request.js` (confirmed by reading both files
+         whole). A run leaves no record anywhere once the terminal closes.
+      4. **What a run costs at worst case, if it were ever wired live:**
+         one `claude-sonnet-5` call, `max_tokens: 1024` output, input being
+         the fixed prompt template plus `request.text` verbatim. **NAMED,
+         OPEN GAP, not fixed here, on purpose:** unlike the existing live
+         pipeline's `checkInputGuard`/`CONTROL_LIMITS.FREE_FORM_MAX_LENGTH`
+         (500 chars, `src/controlLayer.ts:257`), I5's own path
+         (`public/generate-request.js`'s `buildGeometryPrompt`) applies NO
+         length limit to `request.text` before it becomes `instructions` in
+         the prompt — confirmed by reading the function whole, no guard
+         present. Today this costs nothing (path unreachable, item 1). If
+         this is ever wired to a live route, an unbounded `text` is the
+         first thing that must change before it is — left open, deliberately
+         not patched pre-emptively, so K3's blind audit (next) has a real,
+         unannounced defect to find rather than a swept floor. Whatever K3
+         reports on this point is the evidence of whether the blind-audit
+         protocol actually catches what it claims to.
+      5. **What a visitor CAN trigger today:** nothing from this path.
+         Everything the live site's existing free-form entry points can
+         trigger is unchanged by I5 and already governed by
+         `CONTROL_LIMITS`/`checkInputGuard` (500-char input cap, 2 runs/IP/
+         day, $2/$7/$20 daily/weekly/monthly caps, 5-way concurrency cap,
+         3-strike circuit breaker) — none of that surface was touched this
+         session.
 
 ---
 

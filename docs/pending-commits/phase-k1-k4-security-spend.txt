@@ -1,0 +1,66 @@
+Phase K -- K1 and K4: the scope limit built where a real gap was, the abuse
+surface stated with one gap named and left open on purpose
+
+K1's own premise was wrong, and that was checked before anything was built.
+"After I5, public/*.js and src/*.ts touch" is false: grep -rn
+"run-generate-request|productionModelCaller|model-caller" src/
+public/index.html returns nothing. I5 (public/run-generate-request.js) was
+deliberately built stub-only and never wired to any live route -- its own
+ledger entry already says so. G1's original finding stands unchanged: there
+is still no visitor-reachable enforcement point, because there is still no
+visitor-reachable path at all.
+
+What DID change is that a second real entry point now exists --
+scripts/supervised-generate.mjs, Mark's own CLI, run by hand with his own
+key -- and that had no scope limit. Its --address flag took one string and
+handed it straight to an exact-match plot lookup, so "one address per
+request" was true only because nobody had tried otherwise, not because
+anything enforced it. Built the real thing: a deliberate check
+(/[,\s]/.test(args.address)) that refuses before any plot lookup, with its
+own message, instead of leaning on the lookup's incidental failure.
+
+Watched red, not assumed: test/supervisedGenerateScript.test.ts's new case
+was run against the pre-fix code first. It failed correctly -- a
+comma-joined address still exits 1, but on "No plot ... in the world", a
+coincidence of the seed data, not a limit, so the /exactly one address/
+assertion did not match. Restored, green again. Mutation
+supervised-generate-refuses-multi-address-scope (disables the check) CAUGHT
+via node scripts/_mutcheck.mjs test/supervisedGenerateScript.test.ts
+scripts/supervised-generate.mjs test/mutations.json, file restored
+byte-identical.
+
+K4 states the abuse surface plainly rather than assuming it:
+  1. Live surface today: zero. Confirmed by the same grep above -- nothing
+     in the served page or the Worker reaches I5's path.
+  2. The one operable path (supervised-generate.mjs) is Mark-only: needs his
+     own ANTHROPIC_API_KEY (never present in the deployed Worker), needs
+     --confirm, needs a terminal y unless --yes, and now needs exactly one
+     address.
+  3. Nothing is logged or retained -- confirmed by reading both files whole,
+     no kv.put, no Durable Object call, no file write anywhere in this path.
+  4. NAMED, OPEN GAP, not fixed here on purpose: public/generate-request.js's
+     buildGeometryPrompt applies no length limit to request.text before it
+     becomes the prompt's `instructions`, unlike the older, already-live
+     pipeline's checkInputGuard/FREE_FORM_MAX_LENGTH (500 chars,
+     src/controlLayer.ts:257). Costs nothing today because the path is
+     unreachable (item 1). Left open deliberately so K3's blind audit has a
+     real, unannounced defect to find rather than a swept floor -- whatever
+     it reports on this point is the evidence of whether the blind-audit
+     protocol actually catches what it claims to.
+  5. What a visitor can trigger today from this new path: nothing. The
+     existing live pipeline's own surface (500-char input cap, 2 runs/IP/
+     day, $2/$7/$20 caps, 5-way concurrency cap, 3-strike circuit breaker)
+     is unchanged and untouched this session.
+
+How it is known to be fixed: node test/run.mjs -- 915/915, 0 fail (was 914;
++1 from K1's new test). npx tsc --noEmit clean. Mutation summary: 86/86
+CAUGHT (+1 from K1's scope mutation). Test-count claims (CLAUDE.md,
+public/index.html, test/testCount.generated.json, the
+claudeMd-test-count-matches-generated mutation's find/replace) bumped
+914->915 in lockstep and re-verified CAUGHT.
+
+Default-world guard unaffected -- no generation code touched, only a CLI
+script's argument handling and a mutation/test-count bookkeeping pass.
+
+K2 (a second limits profile) and K3 (the blind security audit) are separate,
+in progress -- not folded into this commit.

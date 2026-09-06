@@ -492,8 +492,8 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 914 node tests + 12 worker tests",
-      "replace": "npm test            # 915 node tests + 12 worker tests",
+      "find": "npm test            # 915 node tests + 12 worker tests",
+      "replace": "npm test            # 916 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
     {
@@ -770,6 +770,15 @@
       "find": "<h2 id=\"claim-hero-line\" style=\"margin:0;font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.02em\">CALIPER — a system that only says yes when yes is true</h2>",
       "replace": "<h2 id=\"claim-hero-line\" style=\"margin:0;font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.02em\">CALIPER — a different sentence entirely</h2>",
       "expect": "the above-the-fold claim agrees with the page's own title -- one sentence, not a private copy of it"
+    },
+    {
+      "id": "supervised-generate-refuses-multi-address-scope",
+      "guards": "K1: supervised-generate.mjs refuses an --address naming more than one target (comma or whitespace) with a deliberate scope check, before any plot lookup -- not an accidental refusal from a failed exact-match.",
+      "note": "Without this check, a multi-address value still fails plot lookup today (no plot id has a comma in it) and still exits 1 -- but for the wrong reason, with the wrong message, and only by coincidence of the seed data. This mutation proves the refusal is deliberate.",
+      "file": "scripts/supervised-generate.mjs",
+      "find": "if (/[,\\s]/.test(args.address)) {\n    console.error(`Scope: exactly one address per request. \"${args.address}\" looks like more than one -- run this once per address.`);\n    process.exit(1);\n  }",
+      "replace": "if (false) {\n    process.exit(1);\n  }",
+      "expect": "K1 scope: a request naming two addresses in one --address is refused by the limit, not by chance"
     }
   ]
 }

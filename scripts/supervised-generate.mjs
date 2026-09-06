@@ -98,6 +98,15 @@ async function main() {
     console.error("Usage: ANTHROPIC_API_KEY=sk-... node scripts/supervised-generate.mjs --address <plotId> --text \"...\" --w <metres> --d <metres> [--seed <name>] --confirm [--yes]");
     process.exit(1);
   }
+  // K1 -- SCOPE: exactly one address per request. A real plot id never
+  // contains a comma or whitespace, so either is a reliable signal of more
+  // than one target packed into a single --address. Refused here, before
+  // any lookup, rather than left to fail (or not) on whether a plot id
+  // happens to match -- a deliberate check, not a coincidence.
+  if (/[,\s]/.test(args.address)) {
+    console.error(`Scope: exactly one address per request. "${args.address}" looks like more than one -- run this once per address.`);
+    process.exit(1);
+  }
 
   const { createWorld } = await importPublic("world.js");
   const { createGround } = await importPublic("ground.js");
