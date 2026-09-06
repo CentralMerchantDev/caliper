@@ -492,8 +492,8 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 915 node tests + 12 worker tests",
-      "replace": "npm test            # 916 node tests + 12 worker tests",
+      "find": "npm test            # 917 node tests + 12 worker tests",
+      "replace": "npm test            # 918 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
     {
@@ -779,6 +779,24 @@
       "find": "if (/[,\\s]/.test(args.address)) {\n    console.error(`Scope: exactly one address per request. \"${args.address}\" looks like more than one -- run this once per address.`);\n    process.exit(1);\n  }",
       "replace": "if (false) {\n    process.exit(1);\n  }",
       "expect": "K1 scope: a request naming two addresses in one --address is refused by the limit, not by chance"
+    },
+    {
+      "id": "generate-request-enforces-text-length-limit",
+      "guards": "K3: buildGeometryPrompt refuses request.text over MAX_REQUEST_TEXT_LENGTH characters -- the blind audit found this path had no length bound at all, unlike the older live pipeline's checkInputGuard.",
+      "note": "K3 (blind security audit, 2026-09-06), Q1: request.text flowed into the model prompt with no size check anywhere in this pipeline, an unbounded-cost vector if ever wired to a live route.",
+      "file": "public/generate-request.js",
+      "find": "  if (request.text.length > MAX_REQUEST_TEXT_LENGTH) {\n    return { ok: false, reason: `request text is ${request.text.length} characters, over the ${MAX_REQUEST_TEXT_LENGTH}-character limit` };\n  }\n",
+      "replace": "",
+      "expect": "K3: free-form request text has a length limit, same as the older live pipeline's, closing a gap the blind audit found had none"
+    },
+    {
+      "id": "model-forge-blocks-constructor-bypass",
+      "guards": "K3: scanSource's FORBIDDEN_TOKENS includes \"constructor\", closing the (function(){}).constructor(...) chain the blind audit demonstrated reaches the global object without spelling \"eval\" or \"Function(\".",
+      "note": "K3 (blind security audit, 2026-09-06), Q2: found a working denylist bypass distinct from the one already documented in this file's own header.",
+      "file": "public/model-forge.js",
+      "find": "  \"process\", \"child_process\",\n  // K3 found this bypass live: `(function(){}).constructor(\"return\n  // globalThis\")()` reaches the global object without ever spelling \"eval\"\n  // or \"Function(\". Blocking the property access closes that one shape;\n  // it is still a denylist, still incomplete, per the comment above.\n  \"constructor\",\n]);",
+      "replace": "  \"process\", \"child_process\",\n]);",
+      "expect": "K3: the .constructor(...) bypass the blind audit found no longer sails through the scan"
     }
   ]
 }

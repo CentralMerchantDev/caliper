@@ -61,6 +61,18 @@ test("a builder reaching for the page, the network or eval is refused before it 
   }
 });
 
+test("K3: the .constructor(...) bypass the blind audit found no longer sails through the scan", () => {
+  // K3 (blind security audit, 2026-09-06): `(function(){}).constructor("return
+  // this")()` reaches the global object without the source ever containing
+  // the literal substrings "Function(", "eval" or any other pre-existing
+  // token -- so the pre-fix denylist waved it through.
+  const bypass = `(THREE) => { const g = (function(){}).constructor("return this")(); return new THREE.BoxGeometry(1,1,1); }`;
+  const v = verifyModelSource(bypass, { w: 2, d: 2 }, evaluate, THREE);
+  assert.equal(v.ok, false, "the constructor-chain bypass was accepted");
+  assert.equal(v.stage, "scan");
+  assert.match(v.reason!, /constructor/);
+});
+
 test("every forbidden token is actually detected, so the list is not decoration", () => {
   // A list nobody checks is a list that drifts. If a token is added here but
   // scanSource stops looking, this fails rather than the list quietly meaning

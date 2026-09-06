@@ -1,0 +1,71 @@
+Phase K -- K3: the blind security audit ran, and found real things -- three
+fixed, one named for later
+
+A fresh agent, no conversation history, isolated in its own git worktree, was
+told to ATTACK six files (run-generate-request.js, model-caller.js,
+generate-request.js, model-forge.js,
+verify-untrusted-geometry-caller.mjs/_verify-untrusted-geometry.mjs,
+supervised-generate.mjs) rather than review them, explicitly told not to read
+docs/ or git history. This was the meta-test K4 item 4 named in advance:
+whatever it found is evidence of whether the blind-audit protocol actually
+catches what it claims to.
+
+It found the gap K4 already named (request.text had no length bound) --
+independently, unprompted, from reading the code alone -- plus two more
+nobody had named:
+
+1. public/generate-request.js: buildGeometryPrompt had no length limit on
+   request.text before it became the model prompt's `instructions`, unlike
+   the older, already-live pipeline's checkInputGuard/FREE_FORM_MAX_LENGTH.
+   Fixed: MAX_REQUEST_TEXT_LENGTH = 500 (same number, kept local -- this
+   file has no dependency on src/*.ts and should not gain one just to share
+   a constant). test/generateRequest.test.ts's new case watched red first
+   (an oversized request.text was silently accepted), green after. Mutation
+   generate-request-enforces-text-length-limit CAUGHT.
+
+2. public/model-forge.js's own comment claimed "the isolate the code runs
+   in and the AST scanners in src/worldEdit.ts" were the real security
+   boundary. Checked against the actual call graph and found false: grep
+   confirms worldEdit.ts's scanners are never imported by public/*.js or
+   scripts/*.mjs -- they guard the OLDER, separate data-edit pipeline's
+   world.js edits, never this file's generated geometry source -- and no
+   Dynamic Worker isolate exists anywhere in this repo. A denylist described
+   as protected by a boundary that does not apply to it is worse than one
+   that admits it has none. Comment rewritten to say plainly what the real
+   isolation is today (the CLI-only child process with a secrets-free
+   environment allowlist) and what a live route still needs before it exists.
+
+3. public/model-forge.js: FORBIDDEN_TOKENS did not block
+   (function(){}).constructor("return this")() -- a working
+   Function-constructor-chain bypass reaching the global object without
+   spelling "eval" or "Function(", distinct from the unicode-escape bypass
+   this file's header already documents. Fixed: added "constructor" to the
+   list. test/modelForge.test.ts's new case watched red first --
+   verifyModelSource returned ok:true for the exact payload -- green after.
+   Mutation model-forge-blocks-constructor-bypass CAUGHT.
+
+Not fixed, named instead: the audit flagged that once a live route exists,
+want.footprint must not be taken verbatim from client input without an
+independent bound, or the footprint check becomes a dial the visitor sets
+themselves. No code exists yet for this to apply to -- recorded in the
+ledger for whoever builds that route.
+
+Everything else the audit checked came back genuinely clean, verified by
+tracing rather than trusting comments: cross-visitor state (every function
+in the path is pure/stateless), the child-process secret isolation (the env
+allowlist really does exclude ANTHROPIC_API_KEY, not just claim to), and
+client-side refusal forgery (the one refusal gate is computed server-side
+from real ground physics, never from anything a response or client sets).
+
+How it is known to be fixed: node test/run.mjs -- 917/917, 0 fail (was 915;
++2, one test per fix). npx tsc --noEmit clean. Mutation summary: 88/88
+CAUGHT (+2). Test-count claims (CLAUDE.md, public/index.html,
+test/testCount.generated.json, the claudeMd-test-count-matches-generated
+mutation's find/replace) bumped 915->917 in lockstep and re-verified CAUGHT.
+
+Default-world guard unaffected -- no generation code's output changed, only
+its input validation and its own denylist.
+
+K2 (a second limits profile) remains genuinely blocked on real spend this
+session cannot authorise for itself, same as J2/J3's own precedent -- ticked
+[!], not faked.

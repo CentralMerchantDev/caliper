@@ -17,7 +17,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildGeometryPrompt, verifyGeneratedGeometry } from "../public/generate-request.js";
+import { buildGeometryPrompt, verifyGeneratedGeometry, MAX_REQUEST_TEXT_LENGTH } from "../public/generate-request.js";
 import { assessTransform, requirements } from "../public/transform.js";
 import { createGround } from "../public/ground.js";
 
@@ -64,6 +64,21 @@ test("generation is refused before anything is prompted when the ground has not 
   const prompt = buildGeometryPrompt(assessment, want, { address: "boat-1", text: "make it a cruise ship" });
   assert.equal(prompt.ok, false, "a prompt was built for a transform the ground already refused");
   assert.match(prompt.reason, /not approved|refused|fit/i);
+});
+
+test("K3: free-form request text has a length limit, same as the older live pipeline's, closing a gap the blind audit found had none", () => {
+  const want = { label: "a small shed", ...requirements({ footprint: { w: 3, d: 3 }, support: "ground" }) };
+  const assessment = assessTransform(shed, want, land);
+  assert.equal(assessment.fits, true, "the fixture shed transform does not fit -- test setup is wrong");
+
+  const tooLong = "x".repeat(MAX_REQUEST_TEXT_LENGTH + 1);
+  const prompt = buildGeometryPrompt(assessment, want, { address: "shed-1", text: tooLong });
+  assert.equal(prompt.ok, false, "an oversized request.text was accepted with no limit");
+  assert.match(prompt.reason, /character limit/);
+
+  const okLength = "x".repeat(MAX_REQUEST_TEXT_LENGTH);
+  const okPrompt = buildGeometryPrompt(assessment, want, { address: "shed-1", text: okLength });
+  assert.equal(okPrompt.ok, true, "a request.text exactly at the limit was wrongly refused");
 });
 
 test("verification uses the REQUESTED footprint, never anything the response itself claims", () => {

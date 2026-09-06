@@ -74,9 +74,25 @@ export const FORGE_LIMITS = Object.freeze({
 /**
  * Things a generated builder may never mention.
  *
- * NOT A SECURITY BOUNDARY, AND IT MUST NOT BE MISTAKEN FOR ONE. The real
- * boundary is the isolate the code runs in and the AST scanners in
- * src/worldEdit.ts, which are tested against a corpus of dozens of evasions.
+ * NOT A SECURITY BOUNDARY, AND IT MUST NOT BE MISTAKEN FOR ONE.
+ *
+ * K3 (blind security audit, 2026-09-06) checked the claim this comment used
+ * to make -- that "the isolate the code runs in and the AST scanners in
+ * src/worldEdit.ts" are the real boundary -- against the actual call graph.
+ * `browserOnlyReferences`/`topLevelSideEffects` (src/worldEdit.ts) are never
+ * imported by anything in public/*.js or scripts/*.mjs: grep confirms zero
+ * call sites outside worldEdit.ts's own file. They scan edits to the OLDER,
+ * separate data-edit pipeline's world.js source, not anything this file
+ * verifies. There is currently no AST scanning of generated geometry source
+ * anywhere, and no Dynamic Worker isolate exists in this repo (grepped, zero
+ * hits) -- "in production" above was aspirational, describing a component
+ * that has not been built. The only real isolation this path has today is
+ * scripts/verify-untrusted-geometry-caller.mjs's child process with a
+ * secrets-free environment allowlist, which is a CLI-only path, not
+ * something a live route can reach yet (see this file's own module header).
+ * Whoever wires a live route must build real isolation for it first, not
+ * assume worldEdit.ts or a not-yet-existing isolate already covers it.
+ *
  * This is a fast, cheap, obviously-incomplete first pass whose only job is to
  * refuse the boring cases before paying to run them.
  *
@@ -89,6 +105,11 @@ export const FORBIDDEN_TOKENS = Object.freeze([
   "eval", "Function(", "require(", "import(",
   "localStorage", "sessionStorage", "indexedDB",
   "process", "child_process",
+  // K3 found this bypass live: `(function(){}).constructor("return
+  // globalThis")()` reaches the global object without ever spelling "eval"
+  // or "Function(". Blocking the property access closes that one shape;
+  // it is still a denylist, still incomplete, per the comment above.
+  "constructor",
 ]);
 
 /** A cheap pre-scan. Returns the first forbidden token, or null. */

@@ -1659,11 +1659,74 @@ the same scrutiny.
       rather than a guess. Until then this is Undone, matching J2/J3's own
       precedent for "blocked on real data this session cannot generate
       without spending."
-- [ ] **K3 — a blind security audit of the new path.** Fresh agent, no history,
-      given I5's route and the gates. Not told what you think is safe.
-      Specifically: can a visitor cause spend beyond the cap; can generated code
-      reach the Worker's environment; can one visitor's run affect another's; is
-      any refusal forgeable from the client.
+- [x] **K3 — a blind security audit of the new path. RUN, AND IT FOUND REAL
+      THINGS.** A fresh agent, no conversation history, isolated in its own
+      worktree, told to ATTACK the six files (run-generate-request.js,
+      model-caller.js, generate-request.js, model-forge.js,
+      verify-untrusted-geometry-caller.mjs/_verify-untrusted-geometry.mjs,
+      supervised-generate.mjs, controlLayer.ts) rather than review them, and
+      explicitly told not to read docs/ or git history — no intent, no
+      "what you think is safe," just the code as it stands. This is the
+      meta-test K4 item 4 named in advance: whatever it found is the
+      evidence of whether the blind-audit protocol actually catches what it
+      claims to, not just whether the new path is safe.
+      **Verdicts, all four asked-for questions:**
+      1. Spend beyond the cap: **VULNERABLE-BUT-UNREACHABLE-TODAY** —
+         independently found the exact gap K4 item 4 already named
+         (`request.text` had no length bound), plus confirmed the path is
+         not reachable from any live route today.
+      2. Generated code reaching the Worker's environment: **NOT VULNERABLE
+         today, for a structural reason** (the one process that ever runs
+         real model output has no secret in its environment — verified the
+         child-process allowlist is real, not just claimed) — **but found
+         the safety comment overclaimed its own coverage**, and found a
+         second, previously-undocumented denylist bypass distinct from the
+         one this file's header already named.
+      3. Cross-visitor interference: **NOT VULNERABLE** — every function in
+         the path is pure/stateless, verified by reading, no shared mutable
+         state anywhere to race.
+      4. Forgeable refusal: **NOT VULNERABLE as currently reachable** —
+         flagged a latent soft-limit concern (`want.footprint` provenance)
+         for whenever a live route exists and takes it from client input,
+         not exploitable today because no such route exists.
+      **Three real, independently-found defects, all fixed this pass, each
+      watched red before green:**
+      - `public/generate-request.js`: `buildGeometryPrompt` had no length
+        bound on `request.text` — added `MAX_REQUEST_TEXT_LENGTH = 500`
+        (same number as the older pipeline's `FREE_FORM_MAX_LENGTH`, kept
+        local rather than importing `src/*.ts` into `public/*.js`).
+        `test/generateRequest.test.ts`'s new case confirmed red first (an
+        oversized `request.text` was silently accepted), green after.
+        Mutation `generate-request-enforces-text-length-limit` CAUGHT.
+      - `public/model-forge.js`: the comment claiming "the isolate the code
+        runs in and the AST scanners in `src/worldEdit.ts`" are the real
+        boundary was checked against the actual call graph and found false
+        — `grep -rn "browserOnlyReferences|topLevelSideEffects" public/
+        scripts/` returns nothing; those scanners guard the OLDER, separate
+        data-edit pipeline's `world.js` edits, never anything this file
+        verifies, and no Dynamic Worker isolate exists anywhere in the repo
+        (grepped, zero hits). Comment rewritten to say so plainly, naming
+        the one real isolation this path has today
+        (`verify-untrusted-geometry-caller.mjs`'s secrets-free child
+        process, CLI-only) and what whoever wires a live route must still
+        build.
+      - `public/model-forge.js`: `FORBIDDEN_TOKENS` did not block
+        `(function(){}).constructor("return this")()` — a working
+        Function-constructor-chain bypass that reaches the global object
+        without ever spelling "eval" or "Function(". Added `"constructor"`
+        to the list. `test/modelForge.test.ts`'s new case confirmed red
+        first — `verifyModelSource` returned `ok: true` for the exact
+        payload the audit demonstrated — green after. Mutation
+        `model-forge-blocks-constructor-bypass` CAUGHT.
+      **Not fixed, named instead, because there is nothing to fix yet:** the
+      `want.footprint` provenance concern (Q4) has no code to change today —
+      it only becomes real once a live route decides where `want.footprint`
+      comes from, which does not exist. Recorded here so whoever builds that
+      route reads this first.
+      `node test/run.mjs`: 917/917 (was 915; +2, one test per fix).
+      `npx tsc --noEmit`: clean. Mutation summary: 88/88 CAUGHT (+2). Default
+      -world guard unaffected — no generation code's *output* changed, only
+      its input validation and its own denylist.
 - [x] **K4 — the abuse surface, stated.** Measured, not assumed, in this
       order:
       1. **Live surface today: zero.** `grep -rn "run-generate-request\|
@@ -1686,20 +1749,16 @@ the same scrutiny.
          whole). A run leaves no record anywhere once the terminal closes.
       4. **What a run costs at worst case, if it were ever wired live:**
          one `claude-sonnet-5` call, `max_tokens: 1024` output, input being
-         the fixed prompt template plus `request.text` verbatim. **NAMED,
-         OPEN GAP, not fixed here, on purpose:** unlike the existing live
-         pipeline's `checkInputGuard`/`CONTROL_LIMITS.FREE_FORM_MAX_LENGTH`
-         (500 chars, `src/controlLayer.ts:257`), I5's own path
-         (`public/generate-request.js`'s `buildGeometryPrompt`) applies NO
-         length limit to `request.text` before it becomes `instructions` in
-         the prompt — confirmed by reading the function whole, no guard
-         present. Today this costs nothing (path unreachable, item 1). If
-         this is ever wired to a live route, an unbounded `text` is the
-         first thing that must change before it is — left open, deliberately
-         not patched pre-emptively, so K3's blind audit (next) has a real,
-         unannounced defect to find rather than a swept floor. Whatever K3
-         reports on this point is the evidence of whether the blind-audit
-         protocol actually catches what it claims to.
+         the fixed prompt template plus `request.text`. **WAS a named, open
+         gap, left deliberately unpatched here so K3 (next) would have a
+         real, unannounced defect to find rather than a swept floor — K3
+         found it independently, unprompted, exactly as intended, which is
+         itself the evidence that the blind-audit protocol works. NOW
+         FIXED**, in K3's own entry above:
+         `public/generate-request.js`'s `buildGeometryPrompt` refuses
+         `request.text` over `MAX_REQUEST_TEXT_LENGTH` (500, matching the
+         older pipeline's number) before it ever becomes `instructions` in
+         the prompt.
       5. **What a visitor CAN trigger today:** nothing from this path.
          Everything the live site's existing free-form entry points can
          trigger is unchanged by I5 and already governed by

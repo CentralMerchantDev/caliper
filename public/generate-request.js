@@ -17,6 +17,16 @@
 import { verifyModelSource } from "./model-forge.js";
 
 /**
+ * K3 (blind security audit, 2026-09-06) found request.text had no length
+ * bound anywhere in this pipeline -- unlike the older, separate live
+ * pipeline's checkInputGuard/CONTROL_LIMITS.FREE_FORM_MAX_LENGTH
+ * (src/controlLayer.ts), which nothing under public/*.js imports. Same
+ * number, kept local: this file has no dependency on src/*.ts and should
+ * not gain one just to share a constant.
+ */
+export const MAX_REQUEST_TEXT_LENGTH = 500;
+
+/**
  * A prompt carrying D3's measured constraints -- footprint, support,
  * clearance -- so the model is grounded rather than guessing. Refused before
  * anything is built if the ground has not already approved the transform:
@@ -30,6 +40,9 @@ export function buildGeometryPrompt(assessment, want, request) {
   }
   if (!request || typeof request.address !== "string" || typeof request.text !== "string") {
     return { ok: false, reason: "a geometry prompt needs a described request with an address and text" };
+  }
+  if (request.text.length > MAX_REQUEST_TEXT_LENGTH) {
+    return { ok: false, reason: `request text is ${request.text.length} characters, over the ${MAX_REQUEST_TEXT_LENGTH}-character limit` };
   }
   if (!want || !want.footprint) {
     return { ok: false, reason: "a geometry prompt needs a footprint to constrain the model with" };
