@@ -306,7 +306,7 @@
       "id": "quest-completes-on-a-real-edit-not-a-flag",
       "status": "CAUGHT",
       "measuredAt": "2026-09-06",
-      "method": "_mutcheck.mjs test/questCompletion.test.ts public/change-quest.js"
+      "method": "_mutcheck.mjs test/questCompletion.test.ts public/change-quest.js (I7: re-verified against the real production world, not just the toy fixture)"
     },
     {
       "id": "locked-region-refuses-with-a-reason-not-bare-false",

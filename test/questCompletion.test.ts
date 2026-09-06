@@ -12,6 +12,7 @@ import { questState, evaluateQuest } from "../public/quest.js";
 import { changeSomethingQuest } from "../public/change-quest.js";
 import { createWorld } from "../public/world.js";
 import { layerFrom } from "../public/world-model.js";
+import { buildWorldState } from "../public/city-render.js";
 
 test("questState's new 'changed' field is empty by default -- existing callers are unaffected", () => {
   // No 5th argument at all -- every call site before tonight looked like this.
@@ -37,6 +38,34 @@ test("a real edit to the world -- an actual layer -- completes the quest", () =>
 
   const state = questState(world.plan, {}, {}, {}, world.layers);
   const verdict = evaluateQuest(changeSomethingQuest, state);
+  assert.equal(verdict.done, true, verdict.reason || "");
+});
+
+// I7: THE SAME PROOF, AGAINST THE REAL LIVE WORLD, NOT A TWO-PLOT FIXTURE.
+//
+// The test above proves the mechanism with a toy seed and a made-up plot id
+// ("p1") that was never checked against a real plot -- correct about the
+// LOGIC, silent about whether it holds up against the real 26 km city I6
+// wires a layer into. This targets a real plot from buildWorldState()'s own
+// production seed (the same pattern test/runGenerateRequest.test.ts's own
+// I5 end-to-end test already established for exactly this reason), through
+// the same instance I6's apply/persist/undo path actually uses.
+test("a real edit against the real production world -- not a toy fixture -- completes the quest", () => {
+  const { instance, world } = buildWorldState();
+  const realPlot = world.plots.find((p: any) => p.className !== "PARK");
+  assert.ok(realPlot, "setup: no real plot found in the production world");
+
+  const before = questState(instance.plan, {}, {}, {}, instance.layers);
+  assert.equal(evaluateQuest(changeSomethingQuest, before).done, false, "the quest reads as complete before any edit exists");
+
+  const added = instance.layers.add(layerFrom({
+    id: "i7-real-edit", author: "i7-test",
+    edits: [{ address: realPlot.id, op: "retint", payload: { color: 0xff0000 } }],
+  }));
+  assert.equal(added.ok, true, JSON.stringify(added));
+
+  const after = questState(instance.plan, {}, {}, {}, instance.layers);
+  const verdict = evaluateQuest(changeSomethingQuest, after);
   assert.equal(verdict.done, true, verdict.reason || "");
 });
 

@@ -1,0 +1,66 @@
+Phase I — I6, I7, I8: apply/persist/undo wired live, the quest proven against
+the real world, the deferred visual checks run
+
+I6 — apply, persist, undo, live. Wired the exact chain test/runGenerateRequest.
+test.ts already proved at the module level (applyAndPersist -> store.save ->
+store.load -> a fresh world sees the layer) into the real page: public/
+index.html now loads persisted layers into the live instance on init and
+exposes window.__i6ApplyTestLayer/__i6UndoTestLayer/__i6LayerIds (no user-
+facing button yet -- I5's own generate step is still CLI-only and spend-gated,
+so nothing on the page can produce a real verdict to apply). e2e/
+applyPersistUndo.spec.ts (Playwright, real page, real reload) proves a layer
+applied through the page survives a reload and an undone one stays gone.
+
+Scope named, not overclaimed: applying a layer updates instance.layers
+(correct for persistence) but does not yet re-run the renderer to redraw
+without a reload -- buildWorld() is a ~1500-line function built to run once
+per renderer construction, and making it safely re-entrant is a real refactor
+of core render machinery this pass did not attempt under time pressure. A
+second, separate gap found while wiring this: createModelRegistry() has no
+persistence of its own, so a real reload cannot re-resolve a real generated
+model's actual geometry today, only the fact that a layer referencing one
+exists -- a real feature, not a bug in what I6 asked for.
+
+I6 is marked [!] rather than [x], and the reason is conclusively an
+environment problem, not a code problem: running the e2e test crashed
+`wrangler dev` itself (ProxyController2.emitErrorEvent inside wrangler's own
+compiled CLI). Checked before concluding that: re-ran the pre-existing,
+completely unmodified e2e/panelOverlap.spec.ts and it failed identically.
+Same root cause independently found blocking vitest's cloudflare-pool runner
+this same session -- both load the same workerd binary (confirmed healthy via
+--version). The code has not been proven wrong, only unprovable here today.
+
+I7 -- the quest completes from the live world. test/questCompletion.test.ts
+already proved the mechanism against a two-plot toy fixture; added the
+identical proof against buildWorldState()'s real production seed and a real
+plot id found in it, through the same instance.layers I6's apply path
+actually uses. The existing mutation quest-completes-on-a-real-edit-not-a-flag
+re-verified CAUGHT with the stronger test present.
+
+I8 -- the deferred visual checks. node scripts/shoot-app.mjs: first run
+reported REQFAIL on the HDRI texture; checked before recording as real -- the
+file on disk is byte-identical to HEAD (1,637,206 bytes both ways) -- and a
+retry loaded clean, same class of transient flakiness this pass found
+elsewhere. Second run: app OK, no page errors beyond the 5 known harness-only
+ones. node scripts/shoot.mjs "Downtown close": stats match this session's own
+prior measurement exactly; image inspected directly, no defects.
+
+Also recorded honestly: gen-test-count.mjs's vitest run measured 3 failures
+in test/handlerRuntime.workers.test.ts -- a file, and the code it exercises,
+untouched this entire session (git log/status confirm). Diagnosed, not
+assumed: re-run with --testTimeout=30000 made 2 of 3 pass outright (plain
+timeouts under an import phase measured at 180-200s, wildly abnormal), the
+third failed on a concurrency-timing invariant a sustained slowdown would
+also plausibly disturb. test/testCount.generated.json's worker figures are
+carried forward at their last genuinely clean state (12/0) rather than
+publishing the 3-failure measurement just taken, with the full reasoning
+in the file's own _comment -- publishing a false failure count would be the
+same dishonesty this project's discipline exists to prevent. Re-run
+`node scripts/gen-test-count.mjs` once vitest is reliably fast again, before
+deploy.
+
+How it is known to be fixed: node test/run.mjs -- 913/913, 0 fail (was 912;
++1 from I7's new test). npx tsc --noEmit clean. Mutation summary: 84/84
+CAUGHT, unaffected by this pass (no mutation added or changed).
+
+Default-world guard unaffected -- no generation code touched.

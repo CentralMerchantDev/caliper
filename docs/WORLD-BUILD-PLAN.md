@@ -1353,19 +1353,92 @@ line below was written by this plan about itself — lines 541, 566, 697, 728, 8
       Default-world guard re-measured: unchanged. **No model was called by
       this session, at any point.**
       **Supervised first run.** Watch one end to end before anything is public.
-- [ ] **I6 — apply, persist, undo, live.** `applyAndPersist` writes the layer
-      through `world-store`; the scene updates without a rebuild; `undoLayer`
-      removes it and the removal survives a reload.
-      *Test:* a layer applied in the browser is present after a reload and absent
-      after undo — driven through the page, not the module.
-- [ ] **I7 — the quest completes from the live world.** `change-quest` reads
-      `world.layers.touched()`.
-      *Mutation:* complete on a UI flag → red. Already the single most important
-      mutation in Phase E; now it runs against the real thing.
-- [ ] **I8 — the deferred visual checks.** C1, C2 and D7 each deferred a Windows
-      visual check to "when it is wired." It is wired. Run
-      `node scripts/shoot-app.mjs`, look at the output, and record what you saw
-      — including anything that looks wrong and is not yet a test.
+- [!] **I6 — apply, persist, undo, live. IMPLEMENTED, NOT LIVE-VERIFIED —
+      environment-blocked, not code-blocked, and proven so.** Wired the
+      exact chain `test/runGenerateRequest.test.ts` already proved at the
+      module level (`applyAndPersist` → `store.save` → `store.load` → a
+      fresh world sees the layer) into the real live page:
+      `public/index.html` now imports `applyAndPersist`/`undoLayer`/
+      `createModelRegistry`/`createWorldStore`+`browserAdapter`, loads any
+      persisted layers into the live `instance.layers` on page init, and
+      exposes `window.__i6ApplyTestLayer`/`__i6UndoTestLayer`/
+      `__i6LayerIds` (there is no user-facing "apply" button yet — I5's own
+      generate step is still CLI-only and spend-gated, so nothing on the
+      page can produce a real verdict to apply; these are the same real
+      functions, reachable for testing). `e2e/applyPersistUndo.spec.ts`
+      (Playwright, real page, real reload) asserts a layer applied through
+      the page survives a reload and an undone one stays gone after one.
+      **Scope named, not overclaimed:** applying a layer updates
+      `instance.layers` (correct for persistence) but does not yet re-run
+      the renderer to redraw without a reload — `buildWorld()`
+      (`public/city-render.js`) is a ~1500-line function built to run once
+      per renderer construction, and making it safely re-entrant (disposing
+      every mesh/material/texture the previous call created) is a real
+      refactor of core render machinery this pass did not attempt under
+      time pressure, the same caution CLAUDE.md asks for around this
+      project's other load-bearing render code. Change is visible on next
+      reload today; live-without-reload is named future work.
+      **A second, separate gap found while wiring this, not fixed here:**
+      `createModelRegistry()` is a plain in-memory `Map` with no
+      persistence of its own. A layer persists by `modelId` reference
+      (`layer-references-model-by-id-not-source`'s own, correct invariant),
+      but nothing anywhere in D4–D7 persists the REGISTRY (the id →
+      verified-geometry map) — so a real page reload cannot re-resolve a
+      real generated model's actual geometry today, only the fact that a
+      layer referencing one exists. A real feature, not a bug in what I6
+      asked for; not attempted here.
+      **Why "not live-verified" rather than "done": conclusively proven to
+      be an environment problem, not a code problem.** `npx playwright test
+      e2e/applyPersistUndo.spec.ts` crashed `wrangler dev` itself —
+      `ProxyController2.emitErrorEvent` inside wrangler's own compiled CLI,
+      `wrangler-dist/cli.js`, nothing app-specific in the stack trace.
+      Checked whether this was caused by anything in this pass before
+      concluding it was not: re-ran the pre-existing, completely unmodified
+      `e2e/panelOverlap.spec.ts` — it failed identically
+      (`ERR_CONNECTION_REFUSED` after the same crash signature). Same root
+      cause independently found blocking `vitest`'s `cloudflare-pool`
+      runner this same session (`Timeout starting cloudflare-pool runner`,
+      4 consecutive attempts, `workerd.exe --version` itself confirmed
+      healthy) — both `wrangler dev` and `vitest`'s worker pool load the
+      same `workerd` binary, so one underlying instability plausibly
+      explains both. `npx tsc --noEmit`: clean on every new file. `node
+      test/run.mjs`: 912/912, unaffected (this is a browser-only path, no
+      node test touches it). Re-run
+      `npx playwright test e2e/applyPersistUndo.spec.ts` once `wrangler
+      dev`/`vitest` stabilize in this environment, before trusting this
+      done — the code has not been proven wrong, only unprovable here today.
+- [x] **I7 — the quest completes from the live world.** `test/questCompletion.test.ts`
+      already proved the mechanism (Phase E) against a two-plot toy fixture
+      (`createWorld({seed:"x"})`, a made-up plot id "p1" never checked
+      against a real plot). New case added: the identical proof against
+      `buildWorldState()`'s real production seed and a real plot id found
+      in it (same pattern `test/runGenerateRequest.test.ts`'s own I5
+      end-to-end case already established), through `instance.layers` — the
+      same live object I6's apply/persist path actually writes to, not a
+      second, parallel world. Mutation `quest-completes-on-a-real-edit-not-a-flag`
+      (already existed, Phase E) re-verified CAUGHT with this file's
+      stronger test present: `node scripts/_mutcheck.mjs
+      test/questCompletion.test.ts public/change-quest.js
+      test/mutations.json`. `npx tsc --noEmit` clean.
+- [x] **I8 — the deferred visual checks.** `node scripts/shoot-app.mjs`:
+      first run reported one real-looking failure —
+      `REQFAIL .../vendor/hdri/kloofendal_48d_partly_cloudy_1k.hdr` — checked
+      before recording as a pass: the file on disk is byte-identical to
+      `HEAD`'s committed copy (`git show HEAD:... | wc -c` = `wc -c` on disk,
+      1,637,206 both), so not corrupted; re-ran immediately and it loaded
+      clean the second time. Same class of transient local-server flakiness
+      this pass independently found blocking `wrangler dev`/`vitest`
+      (PART 7b/E1's own worktree evidence, I6's entry above) — not a code
+      regression, named rather than silently re-run until green and
+      forgotten. Second run: **"app OK: world built, sky present, clock and
+      camera finite, no page errors"** (5 harness-only errors ignored —
+      Worker routes, cross-origin frame, unrelated and unchanged).
+      `node scripts/shoot.mjs "Downtown close"`: no errors; stats match
+      this session's own prior measurement exactly (19,725 buildings, 480
+      InstancedMeshes, 54 settlements); image inspected directly —
+      buildings show the dark-roof/light-wall vertex-colour split (AS1)
+      live in frame, water/bridges/terrain/mountains render correctly, no
+      overhangs or distorted geometry. Nothing new found wrong.
 
 ---
 
