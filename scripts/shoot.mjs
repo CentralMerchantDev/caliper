@@ -112,3 +112,4 @@ await browser.close();
 server.close();
 if (errors.length) { console.log("\nERRORS:"); for (const e of [...new Set(errors)]) console.log("  " + e); }
 console.log("\nwrote to", OUT);
+process.exit(0);

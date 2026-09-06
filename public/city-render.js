@@ -53,6 +53,7 @@ import { gradeRun, GRADE, ROAD_GRADE, RAIL_ALIGNMENT } from "./grade.js";
 import { building, rnd } from "./buildings.js";
 import { planCity, groupByVariant } from "./layout.js";
 import { makeFits } from "./layout-fits.js";
+import { getFacadeMaterial } from "./facade-textures.js";
 
 // -----------------------------------------------------------------------------
 // Tunables. Collected here because these are the numbers that get argued about.
@@ -1559,12 +1560,9 @@ varying vec3 vSeaWorld;`)
       // and the roofs come back, with no change here. Written this way round so
       // the renderer is ready for the fix rather than needing a second edit.
       const usesVertexColour = !!geo.attributes.color;
-      const mat = new THREE.MeshStandardMaterial({
-        roughness: 0.82,
-        metalness: 0.02,
-        vertexColors: usesVertexColour,
-      });
-      if (!usesVertexColour) mat.color.setHex((spec.material && spec.material.wall) || 0x9a9a94);
+      const char = g.options?.character || spec.character || "heritage";
+      const wallColor = (!usesVertexColour && spec.material && spec.material.wall) || 0x9a9a94;
+      const mat = getFacadeMaterial(char, { vertexColors: usesVertexColour, wallColor });
 
       const im = new THREE.InstancedMesh(geo, mat, g.placements.length);
       im.castShadow = true;
