@@ -401,7 +401,7 @@ export function createWorldRegistry(heightAt = null) {
   function overlapsReserved(xMin, xMax, zMin, zMax, t = 0, opts = {}) {
     const {
       yMin = -Infinity, yMax = Infinity,
-      ignoreKinds = null, onlyKinds = null,
+      ignoreKinds = null, onlyKinds = null, ignoreIds = null,
       // THE EARTH IS AN OCCUPANT, AND THIS QUERY DID NOT KNOW IT.
       //
       // The header of this file says "a query into a hillside and a query into a
@@ -449,6 +449,7 @@ export function createWorldRegistry(heightAt = null) {
     }
     const ignore = ignoreKinds ? new Set(ignoreKinds) : null;
     const only = onlyKinds ? new Set(onlyKinds) : null;
+    const ignoreId = ignoreIds ? new Set(ignoreIds) : null;
 
     for (const e of candidates(xMin, xMax, zMin, zMax)) {
       if (t < e.since || t >= e.until) continue;
@@ -470,6 +471,17 @@ export function createWorldRegistry(heightAt = null) {
       // another prop).
       if (only && !only.has(e.kind)) continue;
       if (ignore && ignore.has(e.kind)) continue;
+      // A THING BEING TRANSFORMED IS NOT AN OBSTACLE TO ITS OWN REPLACEMENT.
+      //
+      // Without this, asking "does a bigger/different version of X fit where
+      // X already stands" found X's own existing reservation and refused --
+      // a self-collision, indistinguishable from the ground genuinely being
+      // full. Measured directly: a request to replace an 18x24 m villa with
+      // an 18x24 m tower AT THE SAME SPOT was refused "occupied -- feature
+      // existing-villa is in the way", even though the villa's own footprint
+      // is exactly the room the request needed. `ignoreIds` is how a caller
+      // that already knows what it is replacing says so.
+      if (ignoreId && e.id !== null && ignoreId.has(e.id)) continue;
       // SHARING AN EDGE IS NOT OVERLAPPING -- <=/>=, not </>.
       //
       // A plot's own xMin is built as `roadCentre + roadWidth/2`: the block
@@ -541,7 +553,7 @@ export function createWorldRegistry(heightAt = null) {
   function allOverlapping(xMin, xMax, zMin, zMax, t = 0, opts = {}) {
     const {
       yMin = -Infinity, yMax = Infinity,
-      ignoreKinds = null, onlyKinds = null, terrain = true,
+      ignoreKinds = null, onlyKinds = null, ignoreIds = null, terrain = true,
     } = opts;
     const out = [];
 
@@ -559,10 +571,13 @@ export function createWorldRegistry(heightAt = null) {
 
     const ignore = ignoreKinds ? new Set(ignoreKinds) : null;
     const only = onlyKinds ? new Set(onlyKinds) : null;
+    const ignoreId = ignoreIds ? new Set(ignoreIds) : null;
     for (const e of candidates(xMin, xMax, zMin, zMax)) {
       if (t < e.since || t >= e.until) continue;
       if (only && !only.has(e.kind)) continue;
       if (ignore && ignore.has(e.kind)) continue;
+      // Same self-collision exemption as overlapsReserved -- see its comment.
+      if (ignoreId && e.id !== null && ignoreId.has(e.id)) continue;
       if (xMax <= e.xMin || xMin >= e.xMax || zMax <= e.zMin || zMin >= e.zMax) continue;
       if (yMax <= e.yMin || yMin >= e.yMax) continue;
       out.push(e);

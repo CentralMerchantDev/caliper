@@ -154,6 +154,17 @@ export function assessTransform(subject, want, land, { searchRadiusM = 1500 } = 
   // The order is better for the ANSWER too, not only the cost: "there is 3 m of
   // water and it draws 9" is a more useful refusal for a ship in a harbour than
   // anything canPlace would have said.
+  // THE THING BEING TRANSFORMED IS NOT AN OBSTACLE TO ITS OWN REPLACEMENT.
+  //
+  // Without ignoreId, "does a bigger/different version of X fit where X
+  // already stands" finds X's OWN reservation and refuses -- a self-
+  // collision indistinguishable from the ground genuinely being full.
+  // Measured directly: an 18x24 m villa replaced by an 18x24 m tower AT THE
+  // SAME SPOT was refused "occupied -- feature existing-villa is in the
+  // way", even though the villa's own footprint is exactly the room the
+  // request needed. This is the mechanism behind "a tall building on open
+  // ground with room was refused" -- not height, not zoning, a self-collision
+  // in the space check.
   const meets = (x, z) => {
     if (want.draughtM > 0 && typeof land.waterAt === "function") {
       const water = land.waterAt(x, z);
@@ -165,12 +176,12 @@ export function assessTransform(subject, want, land, { searchRadiusM = 1500 } = 
           water,
         };
       }
-      const place = land.canPlace(spec, x, z);
-      if (!place.ok) return { ok: false, reason: place.reason, detail: place.detail, water };
+      const place = land.canPlace(spec, x, z, { ignoreId: subject.id });
+      if (!place.ok) return { ok: false, reason: place.reason, detail: place.detail, blockedBy: place.blockedBy, water };
       return { ok: true, reason: null, detail: null, water };
     }
-    const place = land.canPlace(spec, x, z);
-    if (!place.ok) return { ok: false, reason: place.reason, detail: place.detail, water: null };
+    const place = land.canPlace(spec, x, z, { ignoreId: subject.id });
+    if (!place.ok) return { ok: false, reason: place.reason, detail: place.detail, blockedBy: place.blockedBy, water: null };
     return { ok: true, reason: null, detail: null, water: null };
   };
 
@@ -224,7 +235,33 @@ export function assessTransform(subject, want, land, { searchRadiusM = 1500 } = 
         `where ${article(label)} does fit, and make it ${article(label)} there`,
       );
     }
-    alternatives.push(`make it a smaller ${bare(label)} that fits where it already is`);
+
+    // THE OTHER ALTERNATIVE OF THE SAME KIND: WHAT WOULD HAVE TO GO.
+    //
+    // Not "make it smaller" -- that is a different request, the exact thing
+    // this design correction exists to stop offering. canPlace's "occupied"
+    // refusal already names every real obstruction and whether it can be
+    // cleared (ground.js's own allOverlapping); this is that data, offered
+    // as an action rather than buried in a reason string. Rock and water are
+    // never in blockedBy as clearable -- see ground.js's own comment on why.
+    // Offered only when clearing would actually be SUFFICIENT (every
+    // blocker clearable) -- a partial list ("2 of 3 can go") is not an
+    // action a player can take and finish, so it is not offered as one.
+    let offeredDemolition = false;
+    if (here.blockedBy && here.blockedBy.length) {
+      const clearable = here.blockedBy.filter((b) => b.clearable);
+      if (clearable.length === here.blockedBy.length) {
+        const names = clearable.map((b) => `${b.kind}${b.id ? " " + b.id : ""}`).join(", ");
+        alternatives.push(`demolish ${names} to make room here, and make it ${article(label)} there`);
+        offeredDemolition = true;
+      }
+    }
+    // NEITHER ALTERNATIVE APPLIES. Say so, rather than leaving the player
+    // with a refusal and nothing to act on -- the grounding contract this
+    // whole file composes with requires an alternative even here.
+    if (!found && !offeredDemolition) {
+      alternatives.push(`nowhere nearby has room, and nothing here can be cleared to make it`);
+    }
   }
 
   return {

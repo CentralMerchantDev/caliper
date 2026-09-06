@@ -472,7 +472,15 @@ export function createGround({ heightAt, registry = null }) {
    * @returns {{ok:boolean, reason:string|null, detail:string|null, ground:number, range:number, samples:number}}
    */
   function canPlace(spec, x, z, opts = {}) {
-    const { rotated = false, t = 0 } = opts;
+    // ignoreId: the thing being transformed is not an obstacle to its own
+    // replacement -- see world-registry.js's overlapsReserved/allOverlapping
+    // for the actual filter. Without it, "does a bigger version of X fit
+    // where X already stands" finds X's own reservation and refuses --
+    // measured directly: an 18x24 m villa replaced by an 18x24 m tower AT
+    // THE SAME SPOT was refused "occupied", even though the villa's own
+    // footprint is exactly the room the request needed.
+    const { rotated = false, t = 0, ignoreId = null } = opts;
+    const ignoreIds = ignoreId ? [ignoreId] : null;
     const f = spec.footprint;
     if (!f || !(f.w > 0) || !(f.d > 0)) {
       throw new Error("canPlace needs a footprint with a real width and depth");
@@ -668,6 +676,15 @@ export function createGround({ heightAt, registry = null }) {
         x - w / 2, x + w / 2, z - d / 2, z + d / 2, t,
         // PARCELS only. A road's edge in the direction of travel is an artefact
         // of chunking; a plot's edge is a boundary. See PARCEL_KINDS.
+        //
+        // ignoreIds is deliberately NOT passed here. The subject being
+        // transformed may itself BE the parcel (supervised-generate.mjs's
+        // own subject.id is the plot's own id) -- the parcel is the space
+        // constraint, not an obstacle to clear, and excluding it would
+        // remove the too-big/overhangs check entirely for exactly the
+        // request it exists to catch. ignoreId only exempts the subject
+        // from the OCCUPANCY check below (an existing feature blocking its
+        // own replacement), never from the boundary that defines its room.
         { onlyKinds: PARCEL_KINDS, yMin, yMax },
       );
       if (host && host.xMin !== undefined) {
@@ -732,7 +749,7 @@ export function createGround({ heightAt, registry = null }) {
       const yMax = surfaceY + (spec.height || 0);
       const hit = registry.overlapsReserved(
         x - w / 2, x + w / 2, z - d / 2, z + d / 2, t,
-        { yMin, yMax, ignoreKinds: SURFACE_KINDS },
+        { yMin, yMax, ignoreKinds: SURFACE_KINDS, ignoreIds },
       );
       if (hit) {
         // WHAT IS IN THE WAY, AND WHETHER IT CAN BE CLEARED.
@@ -748,7 +765,7 @@ export function createGround({ heightAt, registry = null }) {
         const blockers = registry.allOverlapping
           ? registry.allOverlapping(
               x - w / 2, x + w / 2, z - d / 2, z + d / 2, t,
-              { yMin, yMax, ignoreKinds: SURFACE_KINDS },
+              { yMin, yMax, ignoreKinds: SURFACE_KINDS, ignoreIds },
             )
           : [hit];
         const blockedBy = blockers.map((b) => ({

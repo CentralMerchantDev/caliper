@@ -696,8 +696,25 @@ import {
   aircraft
 } from "./props.js";
 import * as ROADKIT from "./roadkit.js";
-import { ASSET_REGISTRY, registrySummary } from "./asset-registry.js";
+import { ASSET_REGISTRY } from "./asset-registry.js";
 import { CIVIC_TYPOLOGIES } from "./buildings.js";
+
+// 2026-09-06: registrySummary() was deleted from asset-registry.js in
+// f670c71 without checking this page, its only consumer -- the import threw
+// on load and the page rendered nothing. Computed inline here instead of
+// restoring the export: this is a page-level display concern, not part of
+// the asset pipeline itself, and asset-registry.js is explicitly out of
+// scope for this pass. "Generator Families" now counts real distinct
+// categories in the live registry rather than a hardcoded literal that had
+// already drifted once (9, when the old registry data would also show 10).
+function registrySummary() {
+  const all = Object.values(ASSET_REGISTRY);
+  return {
+    built: all.length,
+    generators: new Set(all.map((a) => a.category)).size,
+    planned: 0,
+  };
+}
 
 // Update header badges
 const summary = registrySummary();

@@ -492,8 +492,8 @@
       "guards": "CLAUDE.md's How to verify section names the real, current node/worker test counts -- pinned mechanically, the same way test/publicClaims.test.ts already pins the page's identical claim, closing the gap a blind audit found the file stale by 297 tests",
       "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 1, HIGH): CLAUDE.md claimed 571 node tests where 868 actually ran -- the document instructing a reader how to verify the project was itself unverified against the thing it names.",
       "file": "CLAUDE.md",
-      "find": "npm test            # 932 node tests + 12 worker tests",
-      "replace": "npm test            # 933 node tests + 12 worker tests",
+      "find": "npm test            # 948 node tests + 12 worker tests",
+      "replace": "npm test            # 949 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
     },
     {
@@ -842,6 +842,51 @@
       "find": "  builder: {\n    perCallCeilingUsd: 0.05,\n    dailyGenerationsPerIp: 20,\n    dailyGenerationCapUsd: 5.0,\n  },",
       "replace": "  builder: {\n    perCallCeilingUsd: 0.02,\n    dailyGenerationsPerIp: 5,\n    dailyGenerationCapUsd: 0.5,\n  },",
       "expect": "K2's own test spec: switching profile changes only the VALUES a call is checked against, not which code runs"
+    },
+    {
+      "id": "model-library-import-resolves-against-real-exports",
+      "guards": "public/model-library.html's import from ./asset-registry.js names only bindings that module actually exports -- the exact class of defect that left the page blank after f670c71 deleted registrySummary without checking this, its only consumer.",
+      "note": "2026-09-06: registrySummary was added in 0f7e267 and deleted in f670c71 without checking consumers. A named import of a binding the target module does not export is a hard ESM parse-time error, not a runtime undefined -- the whole page rendered nothing, silently, and nothing in the suite caught it because nothing had ever checked an import against its target's real exports.",
+      "file": "public/model-library.html",
+      "find": "import { ASSET_REGISTRY } from \"./asset-registry.js\";\nimport { CIVIC_TYPOLOGIES } from \"./buildings.js\";\n\n// 2026-09-06: registrySummary() was deleted from asset-registry.js in\n// f670c71 without checking this page, its only consumer -- the import threw\n// on load and the page rendered nothing. Computed inline here instead of\n// restoring the export: this is a page-level display concern, not part of\n// the asset pipeline itself, and asset-registry.js is explicitly out of\n// scope for this pass. \"Generator Families\" now counts real distinct\n// categories in the live registry rather than a hardcoded literal that had\n// already drifted once (9, when the old registry data would also show 10).\nfunction registrySummary() {\n  const all = Object.values(ASSET_REGISTRY);\n  return {\n    built: all.length,\n    generators: new Set(all.map((a) => a.category)).size,\n    planned: 0,\n  };\n}",
+      "replace": "import { ASSET_REGISTRY, registrySummary } from \"./asset-registry.js\";\nimport { CIVIC_TYPOLOGIES } from \"./buildings.js\";",
+      "expect": "every relative import across public/*.js and public/*.html resolves against its target's real exports"
+    },
+    {
+      "id": "describe-submit-hands-off-to-build-pipeline",
+      "guards": "the #describe-submit handler hands its scoped request (a real plot address) to the same build pipeline #bar-submit uses (startRun()), not just a readback -- I4 built it read-back only, Mark wants it wired.",
+      "note": "2026-09-06: #describe-submit called makeDescribeRequest, printed \"Scoped to X: ...\" and stopped. The scope is the useful part -- it carries a real plot address -- so the fix hands the same scoped text to startRun() rather than discarding it at the readback.",
+      "file": "public/index.html",
+      "find": "  $('#bar-request-input').value = `${req.text}\\n\\n(Scope: this change is about plot ${req.address}.)`;\n  startRun();\n});",
+      "replace": "});",
+      "expect": "the describe handler hands its scoped request to the SAME build pipeline the Build button uses, not just a readback"
+    },
+    {
+      "id": "world-registry-overlapsReserved-ignoreIds-exempts-self",
+      "guards": "world-registry.js's overlapsReserved exempts a named id (ignoreIds) from being found as its own obstacle -- the thing being transformed is not an obstacle to its own replacement.",
+      "note": "2026-09-06 design correction: without this, \"does a bigger version of X fit where X already stands\" finds X's own reservation and refuses -- a self-collision indistinguishable from the ground genuinely being full, and the actual mechanism behind a refusal that looked like a height/zoning cap.",
+      "file": "public/world-registry.js",
+      "find": "      if (ignoreId && e.id !== null && ignoreId.has(e.id)) continue;\n      // SHARING AN EDGE IS NOT OVERLAPPING -- <=/>=, not </>.",
+      "replace": "      // SHARING AN EDGE IS NOT OVERLAPPING -- <=/>=, not </>.",
+      "expect": "overlapsReserved: ignoreIds exempts a named reservation from being its own obstacle"
+    },
+    {
+      "id": "transform-self-does-not-block-own-replacement",
+      "guards": "assessTransform's meets() passes ignoreId: subject.id to canPlace, so the thing being transformed is not an obstacle to its own replacement.",
+      "note": "2026-09-06 design correction: measured directly, an 18x24 m villa replaced by an 18x24 m tower AT THE SAME SPOT was refused \"occupied -- feature existing-villa is in the way\" before this fix, even though the villa's own footprint is exactly the room the request needed.",
+      "file": "public/transform.js",
+      "find": "    const place = land.canPlace(spec, x, z, { ignoreId: subject.id });\n    if (!place.ok) return { ok: false, reason: place.reason, detail: place.detail, blockedBy: place.blockedBy, water: null };",
+      "replace": "    const place = land.canPlace(spec, x, z);\n    if (!place.ok) return { ok: false, reason: place.reason, detail: place.detail, blockedBy: place.blockedBy, water: null };",
+      "expect": "a thing being transformed does not block its own replacement -- the self-collision that looked like a height/zoning refusal"
+    },
+    {
+      "id": "transform-never-offers-a-smaller-substitute",
+      "guards": "assessTransform never offers \"make it smaller\" as an alternative -- a different, smaller request is not an alternative to the one asked for, it is a different request, which this design correction exists to stop offering.",
+      "note": "2026-09-06 design correction, item (d): an alternative must be of THE SAME KIND -- a location with room, or a demolition list -- never a substitute.",
+      "file": "public/transform.js",
+      "find": "    let offeredDemolition = false;\n    if (here.blockedBy && here.blockedBy.length) {\n      const clearable = here.blockedBy.filter((b) => b.clearable);\n      if (clearable.length === here.blockedBy.length) {\n        const names = clearable.map((b) => `${b.kind}${b.id ? \" \" + b.id : \"\"}`).join(\", \");\n        alternatives.push(`demolish ${names} to make room here, and make it ${article(label)} there`);\n        offeredDemolition = true;\n      }\n    }\n    // NEITHER ALTERNATIVE APPLIES. Say so, rather than leaving the player\n    // with a refusal and nothing to act on -- the grounding contract this\n    // whole file composes with requires an alternative even here.\n    if (!found && !offeredDemolition) {\n      alternatives.push(`nowhere nearby has room, and nothing here can be cleared to make it`);\n    }\n  }",
+      "replace": "    alternatives.push(`make it a smaller ${bare(label)} that fits where it already is`);\n  }",
+      "expect": "a refusal offers something of the SAME KIND -- a location with room, or a demolition list -- never a substitute"
     }
   ]
 }

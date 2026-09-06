@@ -71,3 +71,42 @@ test("I4: the describe result is displayed with .textContent only, never .innerH
     "the describe handler writes its result with .innerHTML -- visitor-typed text would execute as markup",
   );
 });
+
+// 2026-09-06: I4 built the describe box read-back only -- it confirmed the
+// scope and stopped. #describe-submit currently calls makeDescribeRequest,
+// prints "Scoped to X: ..." and stops. Mark wants it wired: a scoped
+// request must reach the same build pipeline #bar-submit uses, keeping the
+// scope (a real plot address) rather than discarding it.
+test("the describe handler hands its scoped request to the SAME build pipeline the Build button uses, not just a readback", () => {
+  const submitRefIndex = INDEX_HTML.indexOf("#describe-submit");
+  const handlerStart = INDEX_HTML.indexOf("addEventListener", submitRefIndex);
+  const handlerEnd = INDEX_HTML.indexOf("});", handlerStart);
+  const handlerBlock = INDEX_HTML.slice(handlerStart, handlerEnd);
+
+  assert.match(
+    handlerBlock,
+    /\$\(['"]#bar-request-input['"]\)\.value\s*=/,
+    "the describe handler does not populate #bar-request-input -- it has nothing to hand the build pipeline",
+  );
+  assert.match(
+    handlerBlock,
+    /req\.address/,
+    "the describe handler's handoff does not reference req.address -- the scope (a real plot address) would be lost, not kept",
+  );
+  assert.match(
+    handlerBlock,
+    /\bstartRun\s*\(\s*\)/,
+    "the describe handler does not call startRun() -- it stops at the readback instead of reaching the same pipeline #bar-submit uses",
+  );
+
+  // THE EARLY RETURN MUST STILL GUARD IT: a request makeDescribeRequest
+  // refused (req.ok === false) must never reach startRun() -- an unscoped
+  // or unselected request has no business starting a real run.
+  const earlyReturnIndex = handlerBlock.indexOf("return;");
+  const startRunIndex = handlerBlock.indexOf("startRun(");
+  assert.ok(earlyReturnIndex > -1 && startRunIndex > -1, "could not find both the early return and the startRun() call to order them");
+  assert.ok(
+    earlyReturnIndex < startRunIndex,
+    "the refusal's early return does not precede startRun() in the handler -- a refused describe request could still reach the build pipeline",
+  );
+});

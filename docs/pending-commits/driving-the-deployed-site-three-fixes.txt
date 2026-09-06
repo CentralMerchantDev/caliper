@@ -1,0 +1,133 @@
+Three fixes from driving the deployed site: a dead import, a dead end, and a
+design correction that changes how the world refuses things
+
+1. THE MODEL LIBRARY WAS DEAD, since f670c71. public/model-library.html
+   imported { ASSET_REGISTRY, registrySummary } from ./asset-registry.js;
+   registrySummary was added in 0f7e267 and deleted in f670c71 without
+   checking its consumers. A named import of a binding the target module
+   does not export is a hard ESM parse-time error -- the module threw on
+   load and the page rendered nothing. Fixed by computing the summary
+   inline in model-library.html (a page-level display concern, not the
+   asset pipeline, which stays untouched per this pass's own scope) --
+   "Generator Families" now counts real distinct categories in the live
+   registry (10) rather than a hardcoded literal that had already drifted
+   once (9).
+
+   THE CHECK, because this is a class of defect, not one instance:
+   test/importsResolve.test.ts resolves every relative ES import in
+   public/*.js and public/*.html (recursively, including public/vendor/)
+   against the target module's real, current exports, failing and naming
+   both sides on a mismatch. Watched red first against the original broken
+   import (before restoring it), green after. Mutation
+   model-library-import-resolves-against-real-exports CAUGHT.
+
+2. "DESCRIBE THIS CHANGE" WAS A DEAD END. #describe-submit called
+   makeDescribeRequest, printed "Scoped to X: ..." and stopped -- I4 built
+   it read-back only. Fixed: the same scoped text (the plot address is the
+   useful part) now also populates #bar-request-input and calls startRun(),
+   the exact same function #bar-submit uses -- not a parallel path, the
+   same one. The readback stays, so a visitor still sees the scope
+   confirmed before the pipeline picks it up.
+
+   test/describeRequestUI.test.ts's new case watched red against the
+   original stop-at-readback handler, green after; also confirms the early
+   return on an unscoped/unselected request still precedes startRun(), so a
+   refused describe request can never reach the build pipeline. Mutation
+   describe-submit-hands-off-to-build-pipeline CAUGHT.
+
+3. THE DESIGN CORRECTION -- HEIGHT IS NOT A BUILD CONSTRAINT. SPACE IS.
+   Reported before changing anything, per instruction: exhaustive search of
+   assessTransform, requirements, canPlace (ground.js), and every consumer
+   of PLOT_CLASSES/maxHeight across public/*.js and src/*.ts found NO
+   height, storeys, typology-class or zoning refusal anywhere in the
+   transform path. requirements() has no height field at all; canPlace's
+   own header already says "the land holds no zoning"; PLOT_CLASSES.
+   maxHeight exists only as a world-GENERATION parameter (buildings.js's
+   emitBuilding, clamping a procedurally-generated building to its class at
+   world-build time) and as informational display text -- never a
+   request-time gate. createGround() is never called anywhere in the live,
+   deployed app; the one real call site (scripts/supervised-generate.mjs)
+   passes registry: null, so even the space checks below were unreachable
+   from the one live path this project has built.
+
+   Measured directly, with a real populated world-registry.js, the actual
+   mechanism behind a refusal that would read as "the plot's class caps
+   height": a self-collision. Asking "does a bigger/different version of X
+   fit where X already stands" found X's OWN existing reservation and
+   refused -- an 18x24 m villa replaced by an 18x24 m tower AT THE SAME
+   SPOT was refused "occupied -- feature existing-villa is in the way",
+   even though the villa's own footprint is exactly the room the request
+   needed.
+
+   Fixed at the actual mechanism, not a symptom:
+   - world-registry.js: overlapsReserved/allOverlapping gained ignoreIds,
+     exempting named reservations from being found as their own obstacle.
+     Applied ONLY to the occupancy check (ground.js's canPlace step 5,
+     actual features/buildings), never to the too-big/overhangs parcel-
+     boundary query (step 3) -- the parcel is the space constraint, not an
+     obstacle to clear, and a first attempt at this fix wrongly excluded it
+     too, silently removing the too-big check for a subject whose own id
+     matches its own plot (the realistic, common case). Caught by testing
+     both directions before shipping either.
+   - ground.js: canPlace(spec, x, z, { ignoreId }) threads it through to
+     the occupancy query only.
+   - transform.js: assessTransform's meets() passes ignoreId: subject.id.
+   - transform.js: removed "make it a smaller X that fits" as an
+     alternative -- a different, smaller request is not an alternative to
+     the one asked for, it is a different request, the exact thing this
+     correction exists to stop offering. Added a demolition-list
+     alternative instead, built from ground.js's own already-existing
+     allOverlapping/blockedBy data (which already computed "what is in the
+     way and whether it can be cleared" -- it was just never surfaced as an
+     offered action). Offered only when clearing would be SUFFICIENT (every
+     blocker clearable); a partial list is not an action a player can
+     finish. A named fallback ("nowhere nearby has room, and nothing here
+     can be cleared") covers the case where neither alternative applies, so
+     the grounding contract's "always offer something" still holds.
+
+   The too-big/overhangs refusal message already stated the space math in
+   the desired shape ("needs 60.0 x 60.0 m; plot beach-e0-city is 24.0 x
+   30.0 m") -- confirmed by reading and by direct measurement, not
+   rewritten.
+
+   TESTED, red before green, per instruction:
+   - a tall building on open ground WITH ROOM is accepted (test/
+     transform.test.ts) -- passed even before the self-collision fix in
+     this specific shape (no pre-existing occupant), but the self-collision
+     scenario specifically ("does a request fit where the thing being
+     replaced already stands") was confirmed red against the pre-fix code
+     and green after.
+   - a building too large for its space is refused, naming required and
+     available dimensions, with no height/zoning word anywhere in the
+     reason.
+   - a refusal offers only same-kind alternatives (a location with room, or
+     a demolition list) -- confirmed red when "make it smaller" was still
+     present, green after removal.
+   - a demolition list names what is in the way and is offered as an
+     action, not buried in a reason string -- confirmed red before the
+     alternative existed, green after.
+   - water and cliff refusals still hold, unaffected -- terrain facts
+     (reason:"terrain"/"draught"), never zoning.
+   Six mutations across the three files, all CAUGHT, each restored
+   byte-identical.
+
+   tick, chooseAction and applyAction were not touched -- confirmed by
+   `git diff --stat` against src/simRegression.ts, src/simBaseline.ts,
+   src/changePipeline.ts, src/index.ts (empty). The nine regression checks
+   (SIM_REGRESSION_SUITE) are structurally unaffected by anything in this
+   commit.
+
+How it is known to be fixed: node test/run.mjs -- 948/948, 0 fail (was
+932; +16). npx tsc --noEmit clean. Mutation summary: 98/98 CAUGHT (+5 net
+across items 1-3, after accounting for the earlier same-session K1-K4/M-
+phase baseline). Test-count claims (CLAUDE.md, public/index.html,
+test/testCount.generated.json, PART 0's ground-truth table, the
+claudeMd-test-count-matches-generated mutation's find/replace) bumped
+932->948 in lockstep and re-verified CAUGHT.
+
+Default-world guard unaffected -- no world-generation code touched
+(city-plan.js, buildings.js, layout.js untouched); PLOT_CLASSES remains
+exactly what it was, still shaping the initial world, never consulted by
+the transform/request path.
+
+Item 4 (the disabled-looking text inputs) is a separate commit.

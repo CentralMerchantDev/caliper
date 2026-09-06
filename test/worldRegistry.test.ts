@@ -131,6 +131,39 @@ test("overlapsReserved refuses a rectangle that touches a reservation, even with
   assert.equal(reg.overlapsReserved(1000, 1100, 1000, 1100, 0), null);
 });
 
+// 2026-09-06 design correction: a thing being transformed is not an obstacle
+// to its own replacement. Without ignoreIds, "does a bigger version of X fit
+// where X already stands" finds X's own reservation and refuses -- a self-
+// collision indistinguishable from the ground genuinely being full.
+test("overlapsReserved: ignoreIds exempts a named reservation from being its own obstacle", () => {
+  const reg = createWorldRegistry();
+  reg.reserve({ kind: "feature", id: "old-villa", xMin: -9, xMax: 9, zMin: -12, zMax: 12 });
+  // Without ignoreIds, the villa blocks its own footprint.
+  const blocked = reg.overlapsReserved(-9, 9, -12, 12, 0);
+  assert.ok(blocked, "test setup is wrong -- the villa should block an unexempted query");
+  assert.equal(blocked.id, "old-villa");
+  // With ignoreIds naming it, the same query is free.
+  const exempt = reg.overlapsReserved(-9, 9, -12, 12, 0, { ignoreIds: ["old-villa"] });
+  assert.equal(exempt, null, "ignoreIds did not exempt the named reservation");
+});
+
+test("overlapsReserved: ignoreIds does not exempt a DIFFERENT reservation -- it is narrow, not a blanket pass", () => {
+  const reg = createWorldRegistry();
+  reg.reserve({ kind: "feature", id: "old-villa", xMin: -9, xMax: 9, zMin: -12, zMax: 12 });
+  reg.reserve({ kind: "feature", id: "neighbour-shed", xMin: 20, xMax: 26, zMin: 20, zMax: 26 });
+  const hit = reg.overlapsReserved(20, 26, 20, 26, 0, { ignoreIds: ["old-villa"] });
+  assert.ok(hit, "ignoring one id wrongly exempted a completely different reservation");
+  assert.equal(hit.id, "neighbour-shed");
+});
+
+test("allOverlapping: ignoreIds excludes the named reservation from the full obstruction list too", () => {
+  const reg = createWorldRegistry();
+  reg.reserve({ kind: "feature", id: "old-villa", xMin: -9, xMax: 9, zMin: -12, zMax: 12 });
+  reg.reserve({ kind: "feature", id: "neighbour-shed", xMin: 5, xMax: 15, zMin: 5, zMax: 15 });
+  const all = reg.allOverlapping(-9, 15, -12, 15, 0, { ignoreIds: ["old-villa"] });
+  assert.deepEqual(all.map((e) => e.id), ["neighbour-shed"]);
+});
+
 test("findFree returns the requested point when it is already clear", () => {
   const reg = createWorldRegistry();
   const site = reg.findFree(50, 50, { x: 0, z: 0 });

@@ -109,8 +109,8 @@ unaffected and not re-run.
 
 | Fact | Value | Source |
 |---|---|---|
-| Suite | 932 node tests (0 fail), 12 worker tests (last real measurement: 3 fail, environment-diagnosed — see `test/testCount.generated.json`'s `workerFailDivergence`) | `node test/run.mjs` (932/932, post-run-2 prompt-contract fix and K2's derived profiles); worker half not re-runnable in this environment tonight (see M2) |
-| Mutation controls | 93 defined, 93 run, 93 CAUGHT (0 SURVIVED, 0 INCONCLUSIVE) | `test/mutations.json` vs `test/.mutate-results.json` — every id present in both, every status CAUGHT, every row carrying `measuredAt`/`method` (M1) |
+| Suite | 948 node tests (0 fail), 12 worker tests (last real measurement: 3 fail, environment-diagnosed — see `test/testCount.generated.json`'s `workerFailDivergence`) | `node test/run.mjs` (948/948, post four-fixes-from-driving-the-deployed-site pass: model-library import, describe-submit wiring, the height/zoning design correction); worker half not re-runnable in this environment tonight (see M2) |
+| Mutation controls | 98 defined, 98 run, 98 CAUGHT (0 SURVIVED, 0 INCONCLUSIVE) | `test/mutations.json` vs `test/.mutate-results.json` — every id present in both, every status CAUGHT, every row carrying `measuredAt`/`method` (M1) |
 | World | 2,291 blocks, 19,874 plots, 19,725 placed (99.3%), 149 refused | `node scripts/measure-layout.mjs` (re-run L4, unchanged from H3 — the merge touched geometry, not layout) |
 | Draw | 480 InstancedMeshes, 6,886,892 triangles drawn (153,060 across the 480 distinct geometries — under `distinctTris < 200_000`) | `node scripts/check-layout-geometry.mjs` (L1/L4, post-merge — up from 1,451,912/49,164 pre-merge; agy's LOD0 enrichment, ~56-84 tris to 140-696, measured and not close to the ceiling) |
 | Overhangs / misdeclared footprints | 0 / 0 | same |
