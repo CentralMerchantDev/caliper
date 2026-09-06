@@ -179,83 +179,113 @@ export function tree(species = "broadleaf", age = "mature") {
     lod: [
       {
         level: 0,
-        tris: 160,
+        tris: 320,
         createGeometry: (T = THREE) => {
           const trunkH = h * 0.38;
-          const trunk = new T.CylinderGeometry(trunkR * 0.75, trunkR, trunkH, 6);
-          trunk.translate(0, trunkH / 2, 0);
-          const parts = [trunk];
+          const rootFlare = new T.CylinderGeometry(trunkR * 0.8, trunkR * 1.35, trunkH * 0.25, 8);
+          rootFlare.translate(0, trunkH * 0.125, 0);
+          const trunk = new T.CylinderGeometry(trunkR * 0.7, trunkR * 0.8, trunkH * 0.75, 8);
+          trunk.translate(0, trunkH * 0.625, 0);
+          const parts = [rootFlare, trunk];
 
-          if (species === "broadleaf") {
-            // Bifurcating branch boughs
-            const b1 = new T.CylinderGeometry(trunkR * 0.4, trunkR * 0.6, h * 0.25, 4);
-            b1.rotateZ(0.35);
-            b1.translate(crownW * 0.15, trunkH + h * 0.1, 0);
-            const b2 = new T.CylinderGeometry(trunkR * 0.4, trunkR * 0.6, h * 0.25, 4);
-            b2.rotateZ(-0.35);
-            b2.translate(-crownW * 0.15, trunkH + h * 0.1, 0);
-            parts.push(b1, b2);
-            // 3 Overlapping foliage clumps
-            const c1 = new T.SphereGeometry(crownW * 0.35, 6, 4);
-            c1.translate(0, trunkH + crownW * 0.45, 0);
-            const c2 = new T.SphereGeometry(crownW * 0.26, 5, 4);
-            c2.translate(crownW * 0.22, trunkH + crownW * 0.28, crownW * 0.1);
-            const c3 = new T.SphereGeometry(crownW * 0.26, 5, 4);
-            c3.translate(-crownW * 0.22, trunkH + crownW * 0.28, -crownW * 0.1);
-            parts.push(c1, c2, c3);
+          if (species === "broadleaf" || species === "birch") {
+            // Primary bifurcating boughs
+            const b1 = new T.CylinderGeometry(trunkR * 0.35, trunkR * 0.55, h * 0.28, 6);
+            b1.rotateZ(0.42);
+            b1.translate(crownW * 0.18, trunkH + h * 0.1, 0);
+            const b2 = new T.CylinderGeometry(trunkR * 0.35, trunkR * 0.55, h * 0.28, 6);
+            b2.rotateZ(-0.42);
+            b2.translate(-crownW * 0.18, trunkH + h * 0.1, 0);
+            const b3 = new T.CylinderGeometry(trunkR * 0.30, trunkR * 0.45, h * 0.22, 6);
+            b3.rotateX(0.38);
+            b3.translate(0, trunkH + h * 0.12, crownW * 0.15);
+            parts.push(b1, b2, b3);
+
+            // 5 Clustered organic foliage domes
+            const c1 = new T.SphereGeometry(crownW * 0.38, 8, 6);
+            c1.translate(0, trunkH + crownW * 0.52, 0);
+            const c2 = new T.SphereGeometry(crownW * 0.30, 8, 5);
+            c2.translate(crownW * 0.25, trunkH + crownW * 0.32, crownW * 0.12);
+            const c3 = new T.SphereGeometry(crownW * 0.30, 8, 5);
+            c3.translate(-crownW * 0.25, trunkH + crownW * 0.32, -crownW * 0.12);
+            const c4 = new T.SphereGeometry(crownW * 0.26, 7, 5);
+            c4.translate(-crownW * 0.1, trunkH + crownW * 0.38, crownW * 0.22);
+            const c5 = new T.SphereGeometry(crownW * 0.26, 7, 5);
+            c5.translate(crownW * 0.1, trunkH + crownW * 0.38, -crownW * 0.22);
+            parts.push(c1, c2, c3, c4, c5);
           } else if (species === "palm") {
-            // Segmented trunk + 6 arching fronds
-            const t2 = new T.CylinderGeometry(trunkR * 0.6, trunkR * 0.75, h * 0.35, 6);
-            t2.translate(0, trunkH + h * 0.16, 0);
-            parts.push(t2);
-            for (let i = 0; i < 6; i++) {
-              const ang = (i * Math.PI * 2) / 6;
-              const frond = new T.BoxGeometry(crownW * 0.36, 0.05, 0.32);
-              frond.rotateZ(-0.35);
-              frond.rotateY(ang);
-              frond.translate(
-                Math.cos(ang) * (crownW * 0.18),
-                h * 0.88,
-                Math.sin(ang) * (crownW * 0.18)
+            // Segmented curved trunk rings + crown core + 8 arched drooping fronds
+            for (let r = 1; r < 4; r++) {
+              const segH = (h * 0.45) / 3;
+              const ring = new T.CylinderGeometry(trunkR * (0.85 - r * 0.08), trunkR * (0.95 - r * 0.08), segH, 8);
+              ring.translate(Math.sin(r * 0.4) * 0.12, trunkH + (r - 0.5) * segH, 0);
+              parts.push(ring);
+            }
+            const crownCore = new T.SphereGeometry(trunkR * 1.5, 6, 4);
+            crownCore.translate(0.18, h * 0.85, 0);
+            parts.push(crownCore);
+            for (let i = 0; i < 8; i++) {
+              const ang = (i * Math.PI * 2) / 8;
+              const frondStem = new T.BoxGeometry(crownW * 0.42, 0.04, 0.08);
+              frondStem.rotateZ(-0.45);
+              frondStem.rotateY(ang);
+              frondStem.translate(
+                Math.cos(ang) * (crownW * 0.22) + 0.18,
+                h * 0.85,
+                Math.sin(ang) * (crownW * 0.22)
               );
-              parts.push(frond);
+              const frondLeaf = new T.ConeGeometry(crownW * 0.18, crownW * 0.38, 5);
+              frondLeaf.rotateZ(Math.PI / 2);
+              frondLeaf.rotateY(ang);
+              frondLeaf.translate(
+                Math.cos(ang) * (crownW * 0.38) + 0.18,
+                h * 0.72,
+                Math.sin(ang) * (crownW * 0.38)
+              );
+              parts.push(frondStem, frondLeaf);
             }
           } else if (species === "cypress") {
-            // 5 tight alternating offset tiers for jagged silhouette
-            for (let i = 0; i < 5; i++) {
-              const r = (crownW / 2) * (1 - i * 0.16);
-              const th = (h - trunkH) * 0.28;
-              const cone = new T.ConeGeometry(r, th, 6);
-              cone.rotateY((i * Math.PI) / 6);
-              cone.translate(0, trunkH + i * (th * 0.58) + th / 2, 0);
+            // Fluted tapering base + 6 offset tiered cones
+            for (let i = 0; i < 6; i++) {
+              const r = (crownW / 2) * (1.0 - i * 0.14);
+              const th = (h - trunkH) * 0.26;
+              const cone = new T.ConeGeometry(r, th, 8);
+              cone.rotateY((i * Math.PI) / 5);
+              cone.translate(0, trunkH + i * (th * 0.52) + th / 2, 0);
               parts.push(cone);
             }
           } else if (species === "bush-flowering") {
-            // Dense flowering bush with blossom nodes
-            const c1 = new T.SphereGeometry(crownW * 0.35, 6, 4);
-            c1.translate(0, h * 0.5, 0);
-            const c2 = new T.SphereGeometry(crownW * 0.28, 5, 4);
-            c2.translate(crownW * 0.22, h * 0.45, crownW * 0.15);
-            const c3 = new T.SphereGeometry(crownW * 0.28, 5, 4);
-            c3.translate(-crownW * 0.22, h * 0.45, -crownW * 0.15);
-            parts.push(c1, c2, c3);
-            for (let i = 0; i < 6; i++) {
-              const ang = (i * Math.PI * 2) / 6;
-              const fl = new T.BoxGeometry(crownW * 0.08, crownW * 0.08, crownW * 0.08);
-              fl.translate(Math.cos(ang) * (crownW * 0.32), h * 0.65 + Math.sin(i) * 0.1, Math.sin(ang) * (crownW * 0.32));
+            // 4 Dense organic foliage clusters + 8 blossom nodes
+            const c1 = new T.SphereGeometry(crownW * 0.38, 8, 6);
+            c1.translate(0, h * 0.52, 0);
+            const c2 = new T.SphereGeometry(crownW * 0.30, 7, 5);
+            c2.translate(crownW * 0.24, h * 0.44, crownW * 0.15);
+            const c3 = new T.SphereGeometry(crownW * 0.30, 7, 5);
+            c3.translate(-crownW * 0.24, h * 0.44, -crownW * 0.15);
+            const c4 = new T.SphereGeometry(crownW * 0.28, 7, 5);
+            c4.translate(0, h * 0.42, -crownW * 0.22);
+            parts.push(c1, c2, c3, c4);
+            for (let i = 0; i < 8; i++) {
+              const ang = (i * Math.PI * 2) / 8;
+              const fl = new T.SphereGeometry(crownW * 0.07, 5, 4);
+              fl.translate(
+                Math.cos(ang) * (crownW * 0.34),
+                h * 0.58 + Math.sin(i * 2) * 0.12,
+                Math.sin(ang) * (crownW * 0.34)
+              );
               parts.push(fl);
             }
           } else {
-            // Conifer: 4 stepped tiers with jagged needle skirt overhangs
-            for (let i = 0; i < 4; i++) {
-              const r = (crownW / 2) * (0.90 - i * 0.18);
-              const th = (h - trunkH) * 0.34;
-              const cone = new T.ConeGeometry(r, th, 6);
+            // Conifer: 5 stepped tiers with jagged needle skirt overhangs
+            for (let i = 0; i < 5; i++) {
+              const r = (crownW / 2) * (0.95 - i * 0.16);
+              const th = (h - trunkH) * 0.30;
+              const cone = new T.ConeGeometry(r, th, 8);
               cone.rotateY((i * Math.PI) / 4);
-              cone.translate(0, trunkH + i * (th * 0.56) + th / 2, 0);
-              const skirt = new T.ConeGeometry(r * 1.06, th * 0.18, 6);
-              skirt.rotateY((i * Math.PI) / 4 + 0.2);
-              skirt.translate(0, trunkH + i * (th * 0.56) + th * 0.12, 0);
+              cone.translate(0, trunkH + i * (th * 0.52) + th / 2, 0);
+              const skirt = new T.ConeGeometry(r * 1.08, th * 0.16, 8);
+              skirt.rotateY((i * Math.PI) / 4 + 0.25);
+              skirt.translate(0, trunkH + i * (th * 0.52) + th * 0.10, 0);
               parts.push(cone, skirt);
             }
           }
@@ -314,46 +344,67 @@ export function person(build = "adult", pose = "standing", palette = "casual") {
     lod: [
       {
         level: 0,
-        tris: 108,
+        tris: 240,
         createGeometry: (T = THREE) => {
-          const parts = []; // Head with distinct child vs adult cranial ratio
-          const head = new T.SphereGeometry(headR, 6, 4);
+          const parts = [];
+          // Head & Hair/Hat cap
+          const head = new T.SphereGeometry(headR, 8, 6);
           head.translate(0, h - headR, pose === "sitting" ? -0.08 * heightScale : 0);
-          parts.push(head);
+          const hair = new T.SphereGeometry(headR * 1.05, 8, 5);
+          hair.translate(0, h - headR * 0.9, (pose === "sitting" ? -0.08 * heightScale : 0) - 0.02);
+          parts.push(head, hair);
 
-          // Torso
-          const torsoH = h * 0.38;
-          const torsoW = (build === "child" ? 0.24 : 0.32) * heightScale;
-          const torso = new T.BoxGeometry(torsoW, torsoH, 0.18 * heightScale);
-          torso.translate(0, h * 0.55, pose === "sitting" ? -0.08 * heightScale : 0);
-          parts.push(torso);
+          // Neck
+          const neckH = h * 0.06;
+          const neck = new T.CylinderGeometry(headR * 0.5, headR * 0.6, neckH, 6);
+          neck.translate(0, h - headR * 2 - neckH / 2, pose === "sitting" ? -0.08 * heightScale : 0);
+          parts.push(neck);
+
+          // Torso with shoulder taper
+          const torsoH = h * 0.36;
+          const torsoW = (build === "child" ? 0.24 : 0.34) * heightScale;
+          const chest = new T.BoxGeometry(torsoW, torsoH * 0.6, 0.20 * heightScale);
+          chest.translate(0, h * 0.62, pose === "sitting" ? -0.08 * heightScale : 0);
+          const abdomen = new T.BoxGeometry(torsoW * 0.88, torsoH * 0.4, 0.18 * heightScale);
+          abdomen.translate(0, h * 0.46, pose === "sitting" ? -0.08 * heightScale : 0);
+          parts.push(chest, abdomen);
 
           if (pose === "sitting") {
-            const thigh = new T.BoxGeometry(torsoW * 0.9, 0.14 * heightScale, 0.36 * heightScale);
-            thigh.translate(0, h * 0.38, 0.08 * heightScale);
+            const thigh = new T.BoxGeometry(torsoW * 0.92, 0.14 * heightScale, 0.38 * heightScale);
+            thigh.translate(0, h * 0.38, 0.09 * heightScale);
             const shin = new T.BoxGeometry(torsoW * 0.85, 0.38 * heightScale, 0.14 * heightScale);
-            shin.translate(0, 0.19 * heightScale, 0.22 * heightScale);
-            const arms = new T.BoxGeometry(torsoW * 1.3, 0.30 * heightScale, 0.12 * heightScale);
-            arms.translate(0, h * 0.46, 0.05 * heightScale);
-            parts.push(thigh, shin, arms);
+            shin.translate(0, 0.19 * heightScale, 0.24 * heightScale);
+            const shoes = new T.BoxGeometry(torsoW * 0.88, 0.08 * heightScale, 0.22 * heightScale);
+            shoes.translate(0, 0.04 * heightScale, 0.28 * heightScale);
+            const arms = new T.BoxGeometry(torsoW * 1.35, 0.28 * heightScale, 0.12 * heightScale);
+            arms.translate(0, h * 0.48, 0.06 * heightScale);
+            parts.push(thigh, shin, shoes, arms);
           } else {
-            // Separated arms with natural shoulder offset
-            const armW = 0.08 * heightScale;
-            const armH = h * 0.34;
-            const leftArm = new T.CylinderGeometry(armW * 0.4, armW * 0.5, armH, 4);
-            leftArm.translate(-torsoW / 2 - armW * 0.6, h * 0.52, pose === "walking" ? -0.06 : 0);
-            const rightArm = new T.CylinderGeometry(armW * 0.4, armW * 0.5, armH, 4);
-            rightArm.translate(torsoW / 2 + armW * 0.6, h * 0.52, pose === "walking" ? 0.06 : 0);
-            parts.push(leftArm, rightArm);
+            // Articulated arms with hands
+            const armW = 0.075 * heightScale;
+            const armH = h * 0.35;
+            for (const sx of [-1, 1]) {
+              const armX = sx * (torsoW / 2 + armW * 0.6);
+              const armZ = pose === "walking" ? (sx < 0 ? -0.08 : 0.08) : 0;
+              const arm = new T.CylinderGeometry(armW * 0.45, armW * 0.55, armH, 6);
+              arm.translate(armX, h * 0.52, armZ);
+              const hand = new T.SphereGeometry(armW * 0.5, 5, 4);
+              hand.translate(armX, h * 0.52 - armH / 2, armZ);
+              parts.push(arm, hand);
+            }
 
-            // Separated legs with stride stance
+            // Articulated legs with shoes
             const legW = 0.10 * heightScale;
             const legH = h * 0.42;
-            const leftLeg = new T.BoxGeometry(legW, legH, legW * 1.2);
-            leftLeg.translate(-torsoW * 0.25, legH / 2, pose === "walking" ? 0.08 : 0);
-            const rightLeg = new T.BoxGeometry(legW, legH, legW * 1.2);
-            rightLeg.translate(torsoW * 0.25, legH / 2, pose === "walking" ? -0.08 : 0);
-            parts.push(leftLeg, rightLeg);
+            for (const sx of [-1, 1]) {
+              const legX = sx * (torsoW * 0.26);
+              const legZ = pose === "walking" ? (sx < 0 ? 0.10 : -0.10) : 0;
+              const leg = new T.BoxGeometry(legW, legH, legW * 1.1);
+              leg.translate(legX, legH / 2 + 0.04, legZ);
+              const shoe = new T.BoxGeometry(legW * 1.1, 0.06 * heightScale, legW * 1.6);
+              shoe.translate(legX, 0.03 * heightScale, legZ + 0.02 * heightScale);
+              parts.push(leg, shoe);
+            }
           }
           return mergeGeometries(parts, T);
         },
@@ -385,15 +436,15 @@ export function person(build = "adult", pose = "standing", palette = "casual") {
  */
 export function vehicle(vehicleClass = "car", variant = "sedan") {
   const specs = {
-    car: { w: 1.9, d: 4.4, h: 1.45, tris: 120 },
-    van: { w: 2.1, d: 5.4, h: 2.2, tris: 144 },
-    bus: { w: 2.6, d: 12.0, h: 3.2, tris: 240 },
-    truck: { w: 2.5, d: 8.5, h: 3.4, tris: 180 },
-    artic: { w: 2.6, d: 16.5, h: 4.0, tris: 192 },
-    taxi: { w: 1.9, d: 4.5, h: 1.5, tris: 132 },
-    emergency: { w: 2.2, d: 6.2, h: 2.6, tris: 132 },
-    bicycle: { w: 0.55, d: 1.75, h: 1.05, tris: 88 },
-    motorcycle: { w: 0.8, d: 2.2, h: 1.25, tris: 88 },
+    car: { w: 1.9, d: 4.4, h: 1.45, tris: 320 },
+    van: { w: 2.1, d: 5.4, h: 2.2, tris: 340 },
+    bus: { w: 2.6, d: 12.0, h: 3.2, tris: 460 },
+    truck: { w: 2.5, d: 8.5, h: 3.4, tris: 420 },
+    artic: { w: 2.6, d: 16.5, h: 4.0, tris: 440 },
+    taxi: { w: 1.9, d: 4.5, h: 1.5, tris: 340 },
+    emergency: { w: 2.2, d: 6.2, h: 2.6, tris: 360 },
+    bicycle: { w: 0.55, d: 1.75, h: 1.05, tris: 220 },
+    motorcycle: { w: 0.8, d: 2.2, h: 1.25, tris: 260 },
   };
   const sp = specs[vehicleClass] || specs.car;
 
@@ -418,89 +469,128 @@ export function vehicle(vehicleClass = "car", variant = "sedan") {
             const isMoto = vehicleClass === "motorcycle";
             const wheelR = isMoto ? 0.35 : 0.32;
             const wheelThick = isMoto ? 0.12 : 0.05;
-            // Front & Rear Wheels
-            const wRear = new T.CylinderGeometry(wheelR, wheelR, wheelThick, 8);
+            // 8-Segment Cylindrical Wheels with Rims
+            const wRear = new T.CylinderGeometry(wheelR, wheelR, wheelThick, 10);
             wRear.rotateZ(Math.PI / 2);
-            wRear.translate(0, wheelR, -sp.d * 0.3);
-            const wFront = new T.CylinderGeometry(wheelR, wheelR, wheelThick, 8);
+            wRear.translate(0, wheelR, -sp.d * 0.32);
+            const wFront = new T.CylinderGeometry(wheelR, wheelR, wheelThick, 10);
             wFront.rotateZ(Math.PI / 2);
-            wFront.translate(0, wheelR, sp.d * 0.3);
-            // Frame & Tank / Seat
+            wFront.translate(0, wheelR, sp.d * 0.32);
+            // Frame tubes
             const frameH = sp.h * (isMoto ? 0.55 : 0.45);
-            const frame = new T.BoxGeometry(sp.w * (isMoto ? 0.6 : 0.25), frameH, sp.d * 0.55);
-            frame.translate(0, wheelR + frameH / 2, 0);
-            // Handlebars
-            const bars = new T.BoxGeometry(sp.w * 0.9, 0.05, 0.08);
+            const mainFrame = new T.BoxGeometry(sp.w * (isMoto ? 0.6 : 0.15), frameH, sp.d * 0.55);
+            mainFrame.translate(0, wheelR + frameH / 2, 0);
+            const topTube = new T.BoxGeometry(sp.w * (isMoto ? 0.5 : 0.12), 0.06, sp.d * 0.52);
+            topTube.translate(0, wheelR + frameH * 0.9, 0);
+            // Fork & Handlebars
+            const fork = new T.BoxGeometry(sp.w * 0.25, frameH * 0.8, 0.06);
+            fork.rotateX(-0.2);
+            fork.translate(0, wheelR + frameH * 0.5, sp.d * 0.28);
+            const bars = new T.BoxGeometry(sp.w * 0.95, 0.05, 0.08);
             bars.translate(0, sp.h * 0.92, sp.d * 0.25);
-            parts.push(wRear, wFront, frame, bars);
+            const saddle = new T.BoxGeometry(sp.w * (isMoto ? 0.5 : 0.25), 0.08, 0.28);
+            saddle.translate(0, wheelR + frameH * 0.95, -sp.d * 0.12);
+            parts.push(wRear, wFront, mainFrame, topTube, fork, bars, saddle);
+            if (isMoto) {
+              const exhaust = new T.CylinderGeometry(0.06, 0.08, sp.d * 0.45, 6);
+              exhaust.rotateX(Math.PI / 2);
+              exhaust.translate(sp.w * 0.32, wheelR * 0.8, -sp.d * 0.15);
+              const headlight = new T.CylinderGeometry(0.12, 0.12, 0.1, 8);
+              headlight.rotateX(Math.PI / 2);
+              headlight.translate(0, sp.h * 0.75, sp.d * 0.38);
+              parts.push(exhaust, headlight);
+            }
           } else {
-            // Lower chassis with bumper shelves
+            // Lower chassis with contoured wheel wells & bumpers
             const lowerH = sp.h * 0.42;
-            const lower = new T.BoxGeometry(sp.w, lowerH, sp.d);
+            const lower = new T.BoxGeometry(sp.w, lowerH, sp.d * 0.96);
             lower.translate(0, lowerH / 2 + 0.18, 0);
-            parts.push(lower);
+            const bumperF = new T.BoxGeometry(sp.w * 0.98, lowerH * 0.45, 0.15);
+            bumperF.translate(0, lowerH * 0.35 + 0.18, sp.d * 0.49);
+            const bumperR = new T.BoxGeometry(sp.w * 0.98, lowerH * 0.45, 0.15);
+            bumperR.translate(0, lowerH * 0.35 + 0.18, -sp.d * 0.49);
+            parts.push(lower, bumperF, bumperR);
 
-            // Cabin with windscreen rake
+            // Cabin Greenhouse with roof taper
             const cabinH = sp.h * 0.48;
-            const cabinL = sp.d * (vehicleClass === "bus" ? 0.94 : vehicleClass === "van" ? 0.75 : vehicleClass === "truck" || vehicleClass === "artic" ? 0.38 : 0.55);
-            const cabin = new T.BoxGeometry(sp.w * 0.90, cabinH, cabinL);
-            cabin.translate(0, lowerH + 0.18 + cabinH / 2, vehicleClass === "truck" || vehicleClass === "artic" ? sp.d * 0.28 : vehicleClass === "bus" ? 0 : -sp.d * 0.08);
+            const cabinL = sp.d * (vehicleClass === "bus" ? 0.94 : vehicleClass === "van" ? 0.76 : vehicleClass === "truck" || vehicleClass === "artic" ? 0.38 : 0.56);
+            const cabinZ = (vehicleClass === "truck" || vehicleClass === "artic") ? sp.d * 0.28 : vehicleClass === "bus" ? 0 : -sp.d * 0.06;
+            const cabin = new T.BoxGeometry(sp.w * 0.88, cabinH, cabinL);
+            cabin.translate(0, lowerH + 0.18 + cabinH / 2, cabinZ);
             parts.push(cabin);
 
-            // 4 Inset Cylindrical Wheels
+            // 4 Detailed Cylindrical Wheels with Rims (8-sided)
             const wheelR = sp.h * 0.22;
-            const wheelThick = sp.w * 0.12;
-            const wheelTrack = (sp.w - wheelThick) / 2;
-            const wheelBase = sp.d * 0.32;
+            const wheelThick = sp.w * 0.14;
+            const wheelTrack = (sp.w - wheelThick * 0.6) / 2;
+            const wheelBase = sp.d * (vehicleClass === "bus" ? 0.36 : 0.31);
             for (const sx of [-wheelTrack, wheelTrack]) {
               for (const sz of [-wheelBase, wheelBase]) {
-                const w = new T.CylinderGeometry(wheelR, wheelR, wheelThick, 6);
-                w.rotateZ(Math.PI / 2);
-                w.translate(sx, wheelR, sz);
-                parts.push(w);
+                const wTire = new T.CylinderGeometry(wheelR, wheelR, wheelThick, 8);
+                wTire.rotateZ(Math.PI / 2);
+                wTire.translate(sx, wheelR, sz);
+                const wHub = new T.CylinderGeometry(wheelR * 0.55, wheelR * 0.55, wheelThick * 1.05, 8);
+                wHub.rotateZ(Math.PI / 2);
+                wHub.translate(sx, wheelR, sz);
+                parts.push(wTire, wHub);
               }
             }
 
-            // Distinct Class Identifiers
+            // Mirrors
+            for (const sx of [-sp.w * 0.48, sp.w * 0.48]) {
+              const mirror = new T.BoxGeometry(0.06, 0.18, 0.12);
+              mirror.translate(sx, lowerH + 0.18 + cabinH * 0.45, cabinZ + cabinL * 0.35);
+              parts.push(mirror);
+            }
+
+            // Class-Specific Distinct Features
             if (vehicleClass === "taxi") {
-              const sign = new T.BoxGeometry(0.45, 0.14, 0.2);
-              sign.translate(0, sp.h + 0.07, -sp.d * 0.08);
+              const sign = new T.BoxGeometry(0.48, 0.14, 0.22);
+              sign.translate(0, sp.h + 0.07, cabinZ);
               parts.push(sign);
             } else if (vehicleClass === "emergency") {
-              const bar = new T.BoxGeometry(sp.w * 0.7, 0.12, 0.25);
-              bar.translate(0, sp.h + 0.06, -sp.d * 0.05);
-              parts.push(bar);
+              const lightbar = new T.BoxGeometry(sp.w * 0.75, 0.14, 0.25);
+              lightbar.translate(0, sp.h + 0.07, cabinZ);
+              const pushbar = new T.BoxGeometry(sp.w * 0.6, lowerH * 0.7, 0.1);
+              pushbar.translate(0, lowerH * 0.5 + 0.18, sp.d * 0.52);
+              parts.push(lightbar, pushbar);
             } else if (vehicleClass === "van") {
-              // Rear cargo door seam & handle
-              const seam = new T.BoxGeometry(0.04, sp.h * 0.45, 0.04);
-              seam.translate(0, lowerH + 0.18 + (sp.h * 0.45) / 2, -sp.d / 2);
-              const handle = new T.BoxGeometry(0.10, 0.04, 0.05);
-              handle.translate(0.12, lowerH + 0.18 + (sp.h * 0.45) * 0.45, -sp.d / 2);
-              parts.push(seam, handle);
+              const roofArch = new T.BoxGeometry(sp.w * 0.82, 0.12, cabinL * 0.95);
+              roofArch.translate(0, lowerH + 0.18 + cabinH + 0.05, cabinZ);
+              const seam = new T.BoxGeometry(0.04, sp.h * 0.5, 0.04);
+              seam.translate(0, lowerH + 0.18 + (sp.h * 0.5) / 2, -sp.d / 2);
+              parts.push(roofArch, seam);
             } else if (vehicleClass === "bus") {
-              // 4 Window Pillars on each side
+              // 6 Side window pillars
               for (const sx of [-sp.w * 0.45, sp.w * 0.45]) {
-                for (let i = 0; i < 4; i++) {
-                  const z = -sp.d * 0.35 + i * (sp.d * 0.22);
-                  const pillar = new T.BoxGeometry(0.05, cabinH * 0.82, 0.15);
+                for (let i = 0; i < 5; i++) {
+                  const z = -sp.d * 0.38 + i * (sp.d * 0.19);
+                  const pillar = new T.BoxGeometry(0.05, cabinH * 0.85, 0.12);
                   pillar.translate(sx, lowerH + 0.18 + cabinH / 2, z);
                   parts.push(pillar);
                 }
               }
+              // Roof AC pods & destination header
+              const acPod = new T.BoxGeometry(sp.w * 0.65, 0.22, 2.4);
+              acPod.translate(0, sp.h + 0.11, 0);
+              const destBox = new T.BoxGeometry(sp.w * 0.7, 0.28, 0.12);
+              destBox.translate(0, lowerH + 0.18 + cabinH * 0.85, sp.d * 0.48);
+              parts.push(acPod, destBox);
             } else if (vehicleClass === "truck" || vehicleClass === "artic") {
-              const cargoL = sp.d * (vehicleClass === "artic" ? 0.65 : 0.52);
-              const cargoH = sp.h * 0.52;
+              const cargoL = sp.d * (vehicleClass === "artic" ? 0.68 : 0.54);
+              const cargoH = sp.h * 0.58;
               const cargo = new T.BoxGeometry(sp.w * 0.96, cargoH, cargoL);
               cargo.translate(0, lowerH + 0.18 + cargoH / 2, -sp.d * 0.18);
-              parts.push(cargo);
-              // Side Mirrors (Silhouette identifier)
-              for (const sx of [-sp.w * 0.48, sp.w * 0.48]) {
-                const mirror = new T.BoxGeometry(0.06, 0.26, 0.16);
-                mirror.translate(sx, lowerH + 0.18 + cabinH * 0.65, sp.d * 0.38);
-                const arm = new T.BoxGeometry(0.10, 0.04, 0.04);
-                arm.translate(sx > 0 ? sx - 0.05 : sx + 0.05, lowerH + 0.18 + cabinH * 0.65, sp.d * 0.38);
-                parts.push(mirror, arm);
+              // Twin exhaust stacks + fuel tanks
+              for (const sx of [-sp.w * 0.45, sp.w * 0.45]) {
+                const stack = new T.CylinderGeometry(0.06, 0.06, sp.h * 0.65, 6);
+                stack.translate(sx, sp.h * 0.65, sp.d * 0.12);
+                const tank = new T.CylinderGeometry(0.24, 0.24, 1.2, 8);
+                tank.rotateZ(Math.PI / 2);
+                tank.translate(sx * 0.9, wheelR * 1.1, 0);
+                parts.push(stack, tank);
               }
+              parts.push(cargo);
             }
           }
           return mergeGeometries(parts, T);
@@ -534,12 +624,12 @@ export function vehicle(vehicleClass = "car", variant = "sedan") {
  */
 export function vessel(vesselClass = "yacht") {
   const specs = {
-    rowboat: { w: 1.4, d: 3.8, h: 0.9, tris: 48 },
-    sailboat: { w: 3.0, d: 9.2, h: 11.5, sweepW: 3.2, tris: 68 },
-    yacht: { w: 3.6, d: 14.5, h: 4.8, tris: 68 },
-    ferry: { w: 8.5, d: 32.0, h: 7.5, tris: 84 },
-    "container-ship": { w: 18.0, d: 85.0, h: 16.0, tris: 144 },
-    tug: { w: 4.8, d: 16.0, h: 5.5, tris: 64 },
+    rowboat: { w: 1.4, d: 3.8, h: 0.9, tris: 220 },
+    sailboat: { w: 3.0, d: 9.2, h: 11.5, sweepW: 3.2, tris: 340 },
+    yacht: { w: 3.6, d: 14.5, h: 4.8, tris: 380 },
+    ferry: { w: 8.5, d: 32.0, h: 7.5, tris: 460 },
+    "container-ship": { w: 18.0, d: 85.0, h: 16.0, tris: 520 },
+    tug: { w: 4.8, d: 16.0, h: 5.5, tris: 320 },
   };
   const sp = specs[vesselClass] || specs.yacht;
 
@@ -561,64 +651,93 @@ export function vessel(vesselClass = "yacht") {
         createGeometry: (T = THREE) => {
           const parts = [];
           const hullH = sp.h * 0.35;
-          const hull = new T.BoxGeometry(sp.w, hullH, sp.d);
+          const hull = new T.BoxGeometry(sp.w, hullH, sp.d * 0.94);
           hull.translate(0, hullH / 2, 0);
-          parts.push(hull);
+          const bowStem = new T.ConeGeometry(sp.w * 0.5, sp.d * 0.22, 6);
+          bowStem.rotateX(Math.PI / 2);
+          bowStem.translate(0, hullH * 0.5, sp.d * 0.42);
+          parts.push(hull, bowStem);
 
           if (vesselClass === "sailboat") {
-            const mast = new T.CylinderGeometry(0.08, 0.12, sp.h * 0.82, 5);
+            const cabin = new T.BoxGeometry(sp.w * 0.65, hullH * 0.6, sp.d * 0.45);
+            cabin.translate(0, hullH + hullH * 0.3, -sp.d * 0.08);
+            const mast = new T.CylinderGeometry(0.08, 0.12, sp.h * 0.82, 8);
             mast.translate(0, sp.h * 0.44, sp.d * 0.08);
-            const boom = new T.BoxGeometry(0.08, 0.08, sp.d * 0.55);
+            const boom = new T.CylinderGeometry(0.04, 0.05, sp.d * 0.55, 6);
+            boom.rotateX(Math.PI / 2);
             boom.translate(0, hullH + 0.35, -sp.d * 0.18);
             const sail = new T.ConeGeometry(sp.d * 0.24, sp.h * 0.58, 3);
             sail.scale(0.04, 1, 1);
             sail.translate(0, hullH + (sp.h * 0.58) / 2 + 0.35, -sp.d * 0.15);
-            parts.push(mast, boom, sail);
+            const jib = new T.ConeGeometry(sp.d * 0.18, sp.h * 0.48, 3);
+            jib.scale(0.04, 1, 1);
+            jib.translate(0, hullH + (sp.h * 0.48) / 2 + 0.2, sp.d * 0.24);
+            parts.push(cabin, mast, boom, sail, jib);
           } else if (vesselClass === "container-ship") {
             const bridgeH = sp.h * 0.52;
             const bridge = new T.BoxGeometry(sp.w * 0.75, bridgeH, sp.d * 0.14);
             bridge.translate(0, hullH + bridgeH / 2, -sp.d * 0.36);
-            const funnel = new T.CylinderGeometry(1.2, 1.4, 4.2, 6);
+            const wheelhouse = new T.BoxGeometry(sp.w * 0.88, bridgeH * 0.28, sp.d * 0.06);
+            wheelhouse.translate(0, hullH + bridgeH * 0.85, -sp.d * 0.36);
+            const funnel = new T.CylinderGeometry(1.2, 1.4, 4.2, 8);
             funnel.translate(0, hullH + bridgeH + 2.1, -sp.d * 0.34);
-            parts.push(bridge, funnel);
-            for (let r = 0; r < 3; r++) {
-              for (let c = 0; c < 2; c++) {
-                const cz = -sp.d * 0.16 + r * (sp.d * 0.18);
-                const cx = (c === 0 ? -sp.w * 0.22 : sp.w * 0.22);
-                const cont = new T.BoxGeometry(sp.w * 0.38, sp.h * 0.26, sp.d * 0.15);
-                cont.translate(cx, hullH + (sp.h * 0.26) / 2, cz);
+            parts.push(bridge, wheelhouse, funnel);
+            for (let r = 0; r < 4; r++) {
+              for (let c = 0; c < 3; c++) {
+                const cz = -sp.d * 0.22 + r * (sp.d * 0.16);
+                const cx = -sp.w * 0.28 + c * (sp.w * 0.28);
+                const cont = new T.BoxGeometry(sp.w * 0.26, sp.h * 0.28, sp.d * 0.13);
+                cont.translate(cx, hullH + (sp.h * 0.28) / 2, cz);
                 parts.push(cont);
               }
             }
           } else if (vesselClass === "rowboat") {
+            const gunwale = new T.BoxGeometry(sp.w * 0.95, 0.06, sp.d * 0.92);
+            gunwale.translate(0, hullH + 0.03, 0);
             const b1 = new T.BoxGeometry(sp.w * 0.85, 0.08, 0.35);
-            b1.translate(0, hullH + 0.04, -sp.d * 0.2);
+            b1.translate(0, hullH * 0.6, -sp.d * 0.2);
             const b2 = new T.BoxGeometry(sp.w * 0.85, 0.08, 0.35);
-            b2.translate(0, hullH + 0.04, sp.d * 0.2);
-            parts.push(b1, b2);
+            b2.translate(0, hullH * 0.6, sp.d * 0.15);
+            for (const sx of [-sp.w * 0.45, sp.w * 0.45]) {
+              const oar = new T.CylinderGeometry(0.03, 0.03, sp.w * 1.2, 5);
+              oar.rotateZ(sx < 0 ? 0.6 : -0.6);
+              oar.translate(sx * 1.3, hullH + 0.15, 0);
+              parts.push(oar);
+            }
+            parts.push(gunwale, b1, b2);
           } else if (vesselClass === "tug") {
             const cabinH = sp.h * 0.45;
             const cabin = new T.BoxGeometry(sp.w * 0.68, cabinH, sp.d * 0.38);
             cabin.translate(0, hullH + cabinH / 2, -sp.d * 0.05);
-            const stack = new T.CylinderGeometry(0.4, 0.45, 1.8, 6);
-            stack.translate(0, hullH + cabinH + 0.9, -sp.d * 0.16);
-            const bowFender = new T.CylinderGeometry(0.65, 0.65, sp.w * 0.72, 6);
+            const wheelhouse = new T.BoxGeometry(sp.w * 0.55, cabinH * 0.45, sp.d * 0.22);
+            wheelhouse.translate(0, hullH + cabinH + cabinH * 0.225, -sp.d * 0.05);
+            const stack = new T.CylinderGeometry(0.4, 0.45, 1.8, 8);
+            stack.translate(0, hullH + cabinH + 0.9, -sp.d * 0.18);
+            const bowFender = new T.CylinderGeometry(0.65, 0.65, sp.w * 0.72, 8);
             bowFender.rotateZ(Math.PI / 2);
             bowFender.translate(0, hullH * 0.85, sp.d / 2 - 0.1);
-            parts.push(cabin, stack, bowFender);
+            parts.push(cabin, wheelhouse, stack, bowFender);
             for (const sx of [-sp.w / 2 + 0.08, sp.w / 2 - 0.08]) {
-              for (let i = 0; i < 3; i++) {
-                const z = -sp.d * 0.25 + i * (sp.d * 0.25);
-                const sideTyre = new T.CylinderGeometry(0.32, 0.32, 0.18, 6);
+              for (let i = 0; i < 4; i++) {
+                const z = -sp.d * 0.28 + i * (sp.d * 0.20);
+                const sideTyre = new T.CylinderGeometry(0.32, 0.32, 0.18, 8);
                 sideTyre.rotateX(Math.PI / 2);
                 sideTyre.translate(sx, hullH * 0.8, z);
                 parts.push(sideTyre);
               }
             }
           } else {
-            const cabin = new T.BoxGeometry(sp.w * 0.65, sp.h * 0.4, sp.d * 0.4);
-            cabin.translate(0, hullH + sp.h * 0.2, -sp.d * 0.1);
-            parts.push(cabin);
+            // Motor Yacht with tiered decks and flybridge arch
+            const salonH = sp.h * 0.32;
+            const salon = new T.BoxGeometry(sp.w * 0.72, salonH, sp.d * 0.52);
+            salon.translate(0, hullH + salonH / 2, -sp.d * 0.08);
+            const flybridge = new T.BoxGeometry(sp.w * 0.55, salonH * 0.75, sp.d * 0.32);
+            flybridge.translate(0, hullH + salonH + (salonH * 0.75) / 2, -sp.d * 0.12);
+            const radarArch = new T.BoxGeometry(sp.w * 0.58, 0.12, 0.22);
+            radarArch.translate(0, hullH + salonH * 1.8, -sp.d * 0.24);
+            const swimPlat = new T.BoxGeometry(sp.w * 0.85, 0.15, 0.65);
+            swimPlat.translate(0, hullH * 0.4, -sp.d * 0.48);
+            parts.push(salon, flybridge, radarArch, swimPlat);
           }
           return mergeGeometries(parts, T);
         },
@@ -651,10 +770,10 @@ export function vessel(vesselClass = "yacht") {
  */
 export function aircraft(aircraftClass = "light-single") {
   const specs = {
-    "light-single": { w: 10.8, d: 8.2, h: 2.7, tris: 160 },
-    "airliner-twin": { w: 34.0, d: 37.5, h: 11.8, tris: 144 },
-    "regional-jet": { w: 26.0, d: 29.5, h: 8.2, tris: 160 },
-    helicopter: { w: 12.0, d: 13.5, h: 3.8, tris: 96 },
+    "light-single": { w: 10.8, d: 8.2, h: 2.7, tris: 320 },
+    "airliner-twin": { w: 34.0, d: 37.5, h: 11.8, tris: 480 },
+    "regional-jet": { w: 26.0, d: 29.5, h: 8.2, tris: 440 },
+    helicopter: { w: 12.0, d: 13.5, h: 3.8, tris: 280 },
   };
   const sp = specs[aircraftClass] || specs["light-single"];
 
@@ -675,10 +794,13 @@ export function aircraft(aircraftClass = "light-single") {
         createGeometry: (T = THREE) => {
           const parts = [];
           if (aircraftClass === "airliner-twin") {
-            const fuse = new T.CylinderGeometry(sp.w * 0.055, sp.w * 0.055, sp.d * 0.90, 8);
+            const fuse = new T.CylinderGeometry(sp.w * 0.055, sp.w * 0.055, sp.d * 0.90, 10);
             fuse.rotateX(Math.PI / 2);
             fuse.translate(0, sp.h * 0.38, 0);
-            parts.push(fuse);
+            const noseCone = new T.ConeGeometry(sp.w * 0.055, sp.d * 0.12, 10);
+            noseCone.rotateX(-Math.PI / 2);
+            noseCone.translate(0, sp.h * 0.38, sp.d * 0.50);
+            parts.push(fuse, noseCone);
             const wingL = new T.BoxGeometry(sp.w * 0.44, sp.h * 0.04, sp.d * 0.14);
             wingL.rotateY(-0.32);
             wingL.translate(-sp.w * 0.24, sp.h * 0.35, -sp.d * 0.04);
@@ -687,26 +809,37 @@ export function aircraft(aircraftClass = "light-single") {
             wingR.translate(sp.w * 0.24, sp.h * 0.35, -sp.d * 0.04);
             parts.push(wingL, wingR);
             for (const sx of [-sp.w * 0.16, sp.w * 0.16]) {
-              const eng = new T.CylinderGeometry(sp.w * 0.035, sp.w * 0.03, sp.d * 0.12, 6);
+              const pylon = new T.BoxGeometry(0.12, sp.h * 0.14, sp.d * 0.08);
+              pylon.translate(sx, sp.h * 0.29, sp.d * 0.02);
+              const eng = new T.CylinderGeometry(sp.w * 0.038, sp.w * 0.032, sp.d * 0.14, 8);
               eng.rotateX(Math.PI / 2);
-              eng.translate(sx, sp.h * 0.24, sp.d * 0.02);
-              parts.push(eng);
+              eng.translate(sx, sp.h * 0.22, sp.d * 0.02);
+              parts.push(pylon, eng);
             }
-            const fin = new T.BoxGeometry(sp.w * 0.015, sp.h * 0.42, sp.d * 0.18);
+            const fin = new T.BoxGeometry(sp.w * 0.015, sp.h * 0.44, sp.d * 0.20);
             fin.rotateX(0.35);
             fin.translate(0, sp.h * 0.62, -sp.d * 0.38);
-            parts.push(fin);
+            const tailH = new T.BoxGeometry(sp.w * 0.34, sp.h * 0.03, sp.d * 0.12);
+            tailH.translate(0, sp.h * 0.52, -sp.d * 0.42);
+            parts.push(fin, tailH);
           } else if (aircraftClass === "helicopter") {
             const cabin = new T.BoxGeometry(sp.w * 0.28, sp.h * 0.52, sp.d * 0.45);
             cabin.translate(0, sp.h * 0.45, sp.d * 0.12);
-            const boom = new T.CylinderGeometry(sp.w * 0.03, sp.w * 0.04, sp.d * 0.52, 5);
+            const windscreen = new T.BoxGeometry(sp.w * 0.26, sp.h * 0.28, sp.d * 0.16);
+            windscreen.rotateX(-0.3);
+            windscreen.translate(0, sp.h * 0.52, sp.d * 0.32);
+            const boom = new T.CylinderGeometry(sp.w * 0.03, sp.w * 0.04, sp.d * 0.52, 6);
             boom.rotateX(Math.PI / 2);
             boom.translate(0, sp.h * 0.55, -sp.d * 0.22);
-            const rotor = new T.BoxGeometry(sp.w * 0.90, 0.04, sp.w * 0.08);
-            rotor.translate(0, sp.h * 0.85, sp.d * 0.12);
-            parts.push(cabin, boom, rotor);
+            const mast = new T.CylinderGeometry(0.08, 0.08, 0.35, 6);
+            mast.translate(0, sp.h * 0.76, sp.d * 0.12);
+            const rotor = new T.BoxGeometry(sp.w * 0.92, 0.04, sp.w * 0.08);
+            rotor.translate(0, sp.h * 0.90, sp.d * 0.12);
+            const tailRotor = new T.BoxGeometry(0.04, sp.h * 0.35, sp.d * 0.08);
+            tailRotor.translate(sp.w * 0.04, sp.h * 0.58, -sp.d * 0.46);
+            parts.push(cabin, windscreen, boom, mast, rotor, tailRotor);
           } else if (aircraftClass === "regional-jet") {
-            const fuse = new T.CylinderGeometry(sp.w * 0.055, sp.w * 0.055, sp.d * 0.90, 8);
+            const fuse = new T.CylinderGeometry(sp.w * 0.055, sp.w * 0.055, sp.d * 0.90, 10);
             fuse.rotateX(Math.PI / 2);
             fuse.translate(0, sp.h * 0.35, 0);
             parts.push(fuse);
@@ -722,7 +855,7 @@ export function aircraft(aircraftClass = "light-single") {
             wingletR.translate(sp.w * 0.44, sp.h * 0.40, -sp.d * 0.08);
             parts.push(wingL, wingletL, wingR, wingletR);
             for (const sx of [-sp.w * 0.09, sp.w * 0.09]) {
-              const nacelle = new T.CylinderGeometry(sp.w * 0.032, sp.w * 0.028, sp.d * 0.14, 6);
+              const nacelle = new T.CylinderGeometry(sp.w * 0.032, sp.w * 0.028, sp.d * 0.14, 8);
               nacelle.rotateX(Math.PI / 2);
               nacelle.translate(sx, sp.h * 0.42, -sp.d * 0.25);
               parts.push(nacelle);
@@ -737,23 +870,32 @@ export function aircraft(aircraftClass = "light-single") {
             // Light Single Cessna with Propeller and Tricycle Landing Gear
             const fuse = new T.BoxGeometry(sp.w * 0.12, sp.h * 0.38, sp.d * 0.92);
             fuse.translate(0, sp.h * 0.45, 0);
+            const cowl = new T.CylinderGeometry(sp.w * 0.058, sp.w * 0.058, sp.d * 0.15, 8);
+            cowl.rotateX(Math.PI / 2);
+            cowl.translate(0, sp.h * 0.45, sp.d * 0.48);
             const wings = new T.BoxGeometry(sp.w, sp.h * 0.06, sp.d * 0.22);
-            wings.translate(0, sp.h * 0.52, 0);
-            const prop = new T.BoxGeometry(sp.w * 0.22, sp.h * 0.42, 0.05);
-            prop.translate(0, sp.h * 0.45, sp.d * 0.47);
-            const noseStrut = new T.CylinderGeometry(0.03, 0.03, 0.45, 4);
+            wings.translate(0, sp.h * 0.56, 0);
+            const propSpinner = new T.ConeGeometry(0.12, 0.18, 8);
+            propSpinner.rotateX(-Math.PI / 2);
+            propSpinner.translate(0, sp.h * 0.45, sp.d * 0.56);
+            const propBlade = new T.BoxGeometry(sp.w * 0.22, 0.04, 0.02);
+            propBlade.translate(0, sp.h * 0.45, sp.d * 0.55);
+            const noseStrut = new T.CylinderGeometry(0.03, 0.03, 0.45, 6);
             noseStrut.translate(0, 0.225, sp.d * 0.35);
-            const noseWheel = new T.CylinderGeometry(0.12, 0.12, 0.06, 6);
+            const noseWheel = new T.CylinderGeometry(0.12, 0.12, 0.06, 8);
             noseWheel.rotateZ(Math.PI / 2);
             noseWheel.translate(0, 0.12, sp.d * 0.35);
-            parts.push(fuse, wings, prop, noseStrut, noseWheel);
+            parts.push(fuse, cowl, wings, propSpinner, propBlade, noseStrut, noseWheel);
             for (const sx of [-sp.w * 0.18, sp.w * 0.18]) {
-              const mainStrut = new T.CylinderGeometry(0.03, 0.03, 0.52, 4);
+              const mainStrut = new T.CylinderGeometry(0.03, 0.03, 0.52, 6);
               mainStrut.translate(sx, 0.26, -sp.d * 0.05);
-              const mainWheel = new T.CylinderGeometry(0.14, 0.14, 0.08, 6);
+              const mainWheel = new T.CylinderGeometry(0.14, 0.14, 0.08, 8);
               mainWheel.rotateZ(Math.PI / 2);
               mainWheel.translate(sx, 0.14, -sp.d * 0.05);
-              parts.push(mainStrut, mainWheel);
+              const wingStrut = new T.CylinderGeometry(0.02, 0.02, sp.w * 0.28, 4);
+              wingStrut.rotateZ(sx < 0 ? -0.45 : 0.45);
+              wingStrut.translate(sx * 0.5, sp.h * 0.42, 0);
+              parts.push(mainStrut, mainWheel, wingStrut);
             }
           }
           return mergeGeometries(parts, T);
@@ -1138,31 +1280,42 @@ export const MODELS = {
   "bench-slat": {
     id: "bench-slat",
     kind: PROPS.bench.kind,
-    footprint: { w: PROPS.bench.foot.w, d: 0.6 },
-    height: 0.9,
+    footprint: { w: PROPS.bench.foot.w, d: 0.55 },
+    height: 0.85,
     clearance: PROPS.bench.clear,
     origin: "base-centre",
     standsOn: ["sidewalk", "park", "verge", "open"],
     anchors: { seat: [0, 0.45, 0] },
     lod: [
       {
-        level: 0, tris: 84,
+        level: 0, tris: 216,
         createGeometry: (T = THREE) => {
           const parts = [];
-          for (const lx of [-0.75, 0.75]) {
-            const leg = new T.BoxGeometry(0.08, 0.45, 0.52);
-            leg.translate(lx, 0.225, 0);
-            const backPost = new T.BoxGeometry(0.08, 0.48, 0.08);
-            backPost.translate(lx, 0.65, -0.22);
-            parts.push(leg, backPost);
+          for (const lx of [-0.78, 0.78]) {
+            const legFront = new T.BoxGeometry(0.06, 0.44, 0.08);
+            legFront.translate(lx, 0.22, 0.18);
+            const legRear = new T.BoxGeometry(0.06, 0.44, 0.08);
+            legRear.translate(lx, 0.22, -0.18);
+            const seatStretcher = new T.BoxGeometry(0.06, 0.05, 0.44);
+            seatStretcher.translate(lx, 0.42, 0);
+            const backUpright = new T.BoxGeometry(0.06, 0.44, 0.06);
+            backUpright.translate(lx, 0.64, -0.20);
+            const armRest = new T.BoxGeometry(0.06, 0.04, 0.36);
+            armRest.translate(lx, 0.60, 0.02);
+            parts.push(legFront, legRear, seatStretcher, backUpright, armRest);
           }
-          const seatPlank1 = new T.BoxGeometry(1.78, 0.04, 0.22);
-          seatPlank1.translate(0, 0.45, -0.1);
-          const seatPlank2 = new T.BoxGeometry(1.78, 0.04, 0.22);
-          seatPlank2.translate(0, 0.45, 0.14);
-          const backPlank = new T.BoxGeometry(1.78, 0.22, 0.04);
-          backPlank.translate(0, 0.74, -0.24);
-          parts.push(seatPlank1, seatPlank2, backPlank);
+          for (let s = 0; s < 4; s++) {
+            const z = -0.14 + s * 0.10;
+            const plank = new T.BoxGeometry(1.76, 0.035, 0.08);
+            plank.translate(0, 0.45, z);
+            parts.push(plank);
+          }
+          for (let b = 0; b < 3; b++) {
+            const y = 0.56 + b * 0.10;
+            const backSlat = new T.BoxGeometry(1.76, 0.075, 0.035);
+            backSlat.translate(0, y, -0.21);
+            parts.push(backSlat);
+          }
           return mergeGeometries(parts, T);
         },
       },
@@ -1180,8 +1333,8 @@ export const MODELS = {
         level: 2,
         tris: 12,
         createGeometry: (T = THREE) => {
-          const b = new T.BoxGeometry(1.8, 0.9, 0.6);
-          b.translate(0, 0.45, 0);
+          const b = new T.BoxGeometry(1.8, 0.85, 0.55);
+          b.translate(0, 0.425, 0);
           return b;
         },
       },
@@ -1200,15 +1353,23 @@ export const MODELS = {
     anchors: { seat: [0, 0.45, 0] },
     lod: [
       {
-        level: 0, tris: 36,
+        level: 0, tris: 168,
         createGeometry: (T = THREE) => {
-          const p1 = new T.BoxGeometry(0.25, 0.36, 0.48);
-          p1.translate(-0.65, 0.18, 0);
-          const p2 = new T.BoxGeometry(0.25, 0.36, 0.48);
-          p2.translate(0.65, 0.18, 0);
-          const top = new T.BoxGeometry(1.8, 0.09, 0.55);
-          top.translate(0, 0.405, 0);
-          return mergeGeometries([p1, p2, top], T);
+          const parts = [];
+          for (const lx of [-0.68, 0.68]) {
+            const pedestal = new T.BoxGeometry(0.24, 0.38, 0.48);
+            pedestal.translate(lx, 0.19, 0);
+            const plinth = new T.BoxGeometry(0.28, 0.06, 0.52);
+            plinth.translate(lx, 0.03, 0);
+            parts.push(pedestal, plinth);
+          }
+          for (let s = 0; s < 4; s++) {
+            const z = -0.18 + s * 0.12;
+            const slat = new T.BoxGeometry(1.8, 0.05, 0.095);
+            slat.translate(0, 0.41, z);
+            parts.push(slat);
+          }
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1245,15 +1406,21 @@ export const MODELS = {
     anchors: { opening: [0, 0.75, 0] },
     lod: [
       {
-        level: 0, tris: 96,
+        level: 0, tris: 228,
         createGeometry: (T = THREE) => {
-          const base = new T.CylinderGeometry(0.28, 0.31, 0.15, 8);
-          base.translate(0, 0.075, 0);
-          const body = new T.CylinderGeometry(0.31, 0.28, 0.65, 8);
-          body.translate(0, 0.475, 0);
-          const hood = new T.CylinderGeometry(0.32, 0.32, 0.2, 8);
-          hood.translate(0, 0.9, 0);
-          return mergeGeometries([base, body, hood], T);
+          const parts = [];
+          const baseRing = new T.CylinderGeometry(0.31, 0.32, 0.08, 12);
+          baseRing.translate(0, 0.04, 0);
+          const body = new T.CylinderGeometry(0.30, 0.28, 0.65, 12);
+          body.translate(0, 0.405, 0);
+          const collar = new T.CylinderGeometry(0.32, 0.31, 0.06, 12);
+          collar.translate(0, 0.76, 0);
+          const domedHood = new T.CylinderGeometry(0.26, 0.32, 0.18, 12);
+          domedHood.translate(0, 0.88, 0);
+          const apertureLiner = new T.BoxGeometry(0.36, 0.12, 0.36);
+          apertureLiner.translate(0, 0.74, 0);
+          parts.push(baseRing, body, collar, domedHood, apertureLiner);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1287,13 +1454,19 @@ export const MODELS = {
     standsOn: ["sidewalk", "park", "verge", "open"],
     lod: [
       {
-        level: 0, tris: 48,
+        level: 0, tris: 180,
         createGeometry: (T = THREE) => {
-          const post = new T.CylinderGeometry(0.04, 0.04, 0.95, 6);
+          const parts = [];
+          const post = new T.CylinderGeometry(0.04, 0.04, 0.95, 8);
           post.translate(0, 0.475, 0);
-          const drum = new T.CylinderGeometry(0.18, 0.16, 0.45, 6);
-          drum.translate(0, 0.62, 0.05);
-          return mergeGeometries([post, drum], T);
+          const bracket = new T.BoxGeometry(0.08, 0.04, 0.16);
+          bracket.translate(0, 0.62, 0.08);
+          const drum = new T.CylinderGeometry(0.18, 0.16, 0.45, 10);
+          drum.translate(0, 0.62, 0.18);
+          const lid = new T.CylinderGeometry(0.19, 0.19, 0.06, 10);
+          lid.translate(0, 0.86, 0.18);
+          parts.push(post, bracket, drum, lid);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1330,23 +1503,35 @@ export const MODELS = {
     anchors: { bench: [0, 0.45, 0.2] },
     lod: [
       {
-        level: 0, tris: 72,
+        level: 0, tris: 320,
         createGeometry: (T = THREE) => {
           const parts = [];
           for (const px of [-1.65, 0, 1.65]) {
-            const post = new T.BoxGeometry(0.1, 2.45, 0.1);
+            const post = new T.BoxGeometry(0.10, 2.45, 0.10);
             post.translate(px, 1.225, -0.6);
-            parts.push(post);
+            const cantileverArm = new T.BoxGeometry(0.08, 0.08, 1.35);
+            cantileverArm.translate(px, 2.41, 0.05);
+            parts.push(post, cantileverArm);
           }
-          const roof = new T.BoxGeometry(3.6, 0.1, 1.4);
-          roof.translate(0, 2.45, 0);
-          parts.push(roof);
-          const glassBack = new T.BoxGeometry(3.4, 2.1, 0.05);
+          const roofCanopy = new T.BoxGeometry(3.6, 0.08, 1.4);
+          roofCanopy.translate(0, 2.46, 0);
+          const roofFascia = new T.BoxGeometry(3.6, 0.14, 0.06);
+          roofFascia.translate(0, 2.46, 0.7);
+          const glassBack = new T.BoxGeometry(3.4, 2.1, 0.04);
           glassBack.translate(0, 1.2, -0.6);
-          parts.push(glassBack);
-          const bench = new T.BoxGeometry(2.4, 0.45, 0.35);
-          bench.translate(0, 0.225, -0.3);
-          parts.push(bench);
+          const glassEndL = new T.BoxGeometry(0.04, 2.1, 1.2);
+          glassEndL.translate(-1.7, 1.2, 0);
+          const glassEndR = new T.BoxGeometry(0.04, 2.1, 1.2);
+          glassEndR.translate(1.7, 1.2, 0);
+          const benchSeat = new T.BoxGeometry(2.6, 0.05, 0.35);
+          benchSeat.translate(0, 0.45, -0.3);
+          const benchLegL = new T.BoxGeometry(0.08, 0.45, 0.3);
+          benchLegL.translate(-1.1, 0.225, -0.3);
+          const benchLegR = new T.BoxGeometry(0.08, 0.45, 0.3);
+          benchLegR.translate(1.1, 0.225, -0.3);
+          const timetableCase = new T.BoxGeometry(0.65, 1.1, 0.06);
+          timetableCase.translate(-1.2, 1.3, -0.57);
+          parts.push(roofCanopy, roofFascia, glassBack, glassEndL, glassEndR, benchSeat, benchLegL, benchLegR, timetableCase);
           return mergeGeometries(parts, T);
         },
       },
@@ -1386,15 +1571,26 @@ export const MODELS = {
     anchors: { light: [0.55, 8.85, 0] },
     lod: [
       {
-        level: 0, tris: 48,
+        level: 0, tris: 248,
         createGeometry: (T = THREE) => {
-          const post = new T.CylinderGeometry(0.14, 0.28, 8.5, 6);
-          post.translate(0, 4.25, 0);
-          const arm = new T.BoxGeometry(0.5, 0.12, 0.12);
-          arm.translate(0.25, 8.8, 0);
-          const head = new T.BoxGeometry(0.4, 0.22, 0.3);
-          head.translate(0.55, 8.85, 0);
-          return mergeGeometries([post, arm, head], T);
+          const parts = [];
+          const basePedestal = new T.CylinderGeometry(0.24, 0.28, 0.8, 10);
+          basePedestal.translate(0, 0.4, 0);
+          const baseCollar = new T.CylinderGeometry(0.18, 0.24, 0.2, 10);
+          baseCollar.translate(0, 0.9, 0);
+          const lowerMast = new T.CylinderGeometry(0.14, 0.18, 4.5, 10);
+          lowerMast.translate(0, 3.25, 0);
+          const upperMast = new T.CylinderGeometry(0.10, 0.14, 3.5, 10);
+          upperMast.translate(0, 7.25, 0);
+          const curvedArm = new T.BoxGeometry(0.65, 0.10, 0.10);
+          curvedArm.rotateZ(-0.2);
+          curvedArm.translate(0.30, 8.85, 0);
+          const luminaireHead = new T.BoxGeometry(0.55, 0.18, 0.32);
+          luminaireHead.translate(0.60, 8.95, 0);
+          const visor = new T.BoxGeometry(0.38, 0.04, 0.28);
+          visor.translate(0.60, 8.84, 0);
+          parts.push(basePedestal, baseCollar, lowerMast, upperMast, curvedArm, luminaireHead, visor);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1431,15 +1627,23 @@ export const MODELS = {
     anchors: { light: [0, 4.0, 0] },
     lod: [
       {
-        level: 0, tris: 72,
+        level: 0, tris: 260,
         createGeometry: (T = THREE) => {
-          const base = new T.CylinderGeometry(0.18, 0.24, 0.6, 6);
-          base.translate(0, 0.3, 0);
-          const shaft = new T.CylinderGeometry(0.08, 0.12, 3.2, 6);
-          shaft.translate(0, 2.2, 0);
-          const globe = new T.CylinderGeometry(0.22, 0.18, 0.4, 6);
-          globe.translate(0, 4.0, 0);
-          return mergeGeometries([base, shaft, globe], T);
+          const parts = [];
+          const basePlinth = new T.CylinderGeometry(0.22, 0.25, 0.5, 8);
+          basePlinth.translate(0, 0.25, 0);
+          const baseCollar = new T.CylinderGeometry(0.14, 0.22, 0.15, 8);
+          baseCollar.translate(0, 0.575, 0);
+          const shaft = new T.CylinderGeometry(0.08, 0.12, 3.0, 8);
+          shaft.translate(0, 2.15, 0);
+          const capital = new T.CylinderGeometry(0.16, 0.08, 0.15, 8);
+          capital.translate(0, 3.725, 0);
+          const lanternCage = new T.CylinderGeometry(0.22, 0.15, 0.45, 6);
+          lanternCage.translate(0, 4.0, 0);
+          const lanternCap = new T.ConeGeometry(0.24, 0.18, 6);
+          lanternCap.translate(0, 4.3, 0);
+          parts.push(basePlinth, baseCollar, shaft, capital, lanternCage, lanternCap);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1474,15 +1678,24 @@ export const MODELS = {
     standsOn: ["plot", "open"],
     lod: [
       {
-        level: 0, tris: 76,
+        level: 0, tris: 280,
         createGeometry: (T = THREE) => {
-          const body = new T.BoxGeometry(3.2, 1.4, 2.4);
-          body.translate(0, 0.7, 0);
-          const fan1 = new T.CylinderGeometry(0.5, 0.5, 0.3, 8);
-          fan1.translate(-0.8, 1.55, 0);
-          const fan2 = new T.CylinderGeometry(0.5, 0.5, 0.3, 8);
-          fan2.translate(0.8, 1.55, 0);
-          return mergeGeometries([body, fan1, fan2], T);
+          const parts = [];
+          const baseSkid = new T.BoxGeometry(3.1, 0.15, 2.3);
+          baseSkid.translate(0, 0.075, 0);
+          const mainCasing = new T.BoxGeometry(2.9, 1.25, 2.1);
+          mainCasing.translate(0, 0.775, 0);
+          const controlBox = new T.BoxGeometry(0.35, 0.85, 0.45);
+          controlBox.translate(1.5, 0.75, 0);
+          parts.push(baseSkid, mainCasing, controlBox);
+          for (const fx of [-0.75, 0.75]) {
+            const fanRing = new T.CylinderGeometry(0.55, 0.55, 0.12, 10);
+            fanRing.translate(fx, 1.46, 0);
+            const fanCap = new T.CylinderGeometry(0.16, 0.16, 0.18, 8);
+            fanCap.translate(fx, 1.49, 0);
+            parts.push(fanRing, fanCap);
+          }
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1516,15 +1729,22 @@ export const MODELS = {
     standsOn: ["plot", "open"],
     lod: [
       {
-        level: 0, tris: 60,
+        level: 0, tris: 200,
         createGeometry: (T = THREE) => {
-          const stack = new T.BoxGeometry(0.75, 1.25, 0.75);
-          stack.translate(0, 0.625, 0);
-          const pot1 = new T.CylinderGeometry(0.12, 0.14, 0.35, 6);
-          pot1.translate(-0.18, 1.425, 0);
-          const pot2 = new T.CylinderGeometry(0.12, 0.14, 0.35, 6);
-          pot2.translate(0.18, 1.425, 0);
-          return mergeGeometries([stack, pot1, pot2], T);
+          const parts = [];
+          const mainStack = new T.BoxGeometry(0.74, 1.15, 0.74);
+          mainStack.translate(0, 0.575, 0);
+          const corbel = new T.BoxGeometry(0.80, 0.12, 0.80);
+          corbel.translate(0, 1.21, 0);
+          parts.push(mainStack, corbel);
+          for (const sx of [-0.18, 0.18]) {
+            const pot = new T.CylinderGeometry(0.12, 0.14, 0.35, 8);
+            pot.translate(sx, 1.445, 0);
+            const rim = new T.CylinderGeometry(0.14, 0.13, 0.05, 8);
+            rim.translate(sx, 1.60, 0);
+            parts.push(pot, rim);
+          }
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1559,15 +1779,24 @@ export const MODELS = {
     standsOn: ["plot", "open"],
     lod: [
       {
-        level: 0, tris: 48,
+        level: 0, tris: 180,
         createGeometry: (T = THREE) => {
-          const mast = new T.CylinderGeometry(0.04, 0.05, 3.6, 6);
+          const parts = [];
+          const mast = new T.CylinderGeometry(0.04, 0.05, 3.6, 8);
           mast.translate(0, 1.8, 0);
           const cross1 = new T.BoxGeometry(1.5, 0.04, 0.04);
           cross1.translate(0, 3.2, 0);
           const cross2 = new T.BoxGeometry(1.1, 0.04, 0.04);
           cross2.translate(0, 2.7, 0);
-          return mergeGeometries([mast, cross1, cross2], T);
+          const cross3 = new T.BoxGeometry(0.8, 0.04, 0.04);
+          cross3.translate(0, 2.2, 0);
+          parts.push(mast, cross1, cross2, cross3);
+          for (let z = -0.3; z <= 0.3; z += 0.3) {
+            const dipole = new T.BoxGeometry(0.04, 0.04, 0.35);
+            dipole.translate(0, 3.2, z);
+            parts.push(dipole);
+          }
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1602,14 +1831,23 @@ export const MODELS = {
     standsOn: ["plot", "open"],
     lod: [
       {
-        level: 0, tris: 64,
+        level: 0, tris: 220,
         createGeometry: (T = THREE) => {
-          const bracket = new T.CylinderGeometry(0.04, 0.04, 0.9, 6);
+          const parts = [];
+          const mountBase = new T.BoxGeometry(0.35, 0.06, 0.35);
+          mountBase.translate(0, 0.03, 0);
+          const bracket = new T.CylinderGeometry(0.04, 0.04, 0.9, 8);
           bracket.translate(0, 0.45, 0);
-          const dish = new T.CylinderGeometry(0.55, 0.05, 0.15, 10);
+          const dish = new T.CylinderGeometry(0.55, 0.06, 0.15, 12);
           dish.rotateX(Math.PI / 4);
           dish.translate(0, 0.95, 0.2);
-          return mergeGeometries([bracket, dish], T);
+          const feedArm = new T.BoxGeometry(0.03, 0.03, 0.45);
+          feedArm.rotateX(-0.4);
+          feedArm.translate(0, 0.85, 0.45);
+          const lnbHead = new T.CylinderGeometry(0.05, 0.05, 0.08, 6);
+          lnbHead.translate(0, 0.95, 0.55);
+          parts.push(mountBase, bracket, dish, feedArm, lnbHead);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1643,17 +1881,20 @@ export const MODELS = {
     standsOn: ["plot", "open"],
     lod: [
       {
-        level: 0, tris: 60,
+        level: 0, tris: 220,
         createGeometry: (T = THREE) => {
           const parts = [];
-          const stand = new T.BoxGeometry(1.8, 0.25, 1.4);
-          stand.translate(0, 0.125, 0);
-          const panel = new T.BoxGeometry(2.15, 0.08, 1.75);
-          panel.rotateX(0.4);
-          panel.translate(0, 0.55, 0);
-          parts.push(stand, panel);
+          const stand = new T.BoxGeometry(1.9, 0.12, 1.4);
+          stand.translate(0, 0.06, 0);
+          const panelFrame = new T.BoxGeometry(2.15, 0.06, 1.75);
+          panelFrame.rotateX(0.4);
+          panelFrame.translate(0, 0.55, 0);
+          const panelSurface = new T.BoxGeometry(2.05, 0.07, 1.65);
+          panelSurface.rotateX(0.4);
+          panelSurface.translate(0, 0.56, 0);
+          parts.push(stand, panelFrame, panelSurface);
           for (const sx of [-0.85, 0.85]) {
-            const strut = new T.CylinderGeometry(0.03, 0.03, 0.7, 4);
+            const strut = new T.CylinderGeometry(0.03, 0.03, 0.7, 6);
             strut.rotateX(-0.35);
             strut.translate(sx, 0.45, -0.45);
             parts.push(strut);
@@ -1692,17 +1933,22 @@ export const MODELS = {
     standsOn: ["plot", "open"],
     lod: [
       {
-        level: 0, tris: 80,
+        level: 0, tris: 240,
         createGeometry: (T = THREE) => {
+          const parts = [];
           const body = new T.BoxGeometry(0.88, 0.65, 0.42);
           body.translate(0, 0.325, 0);
-          const fan = new T.CylinderGeometry(0.2, 0.2, 0.05, 8);
+          const fan = new T.CylinderGeometry(0.2, 0.2, 0.05, 10);
           fan.rotateX(Math.PI / 2);
           fan.translate(0.18, 0.325, 0.22);
-          const shroud = new T.CylinderGeometry(0.22, 0.22, 0.03, 8);
+          const shroud = new T.CylinderGeometry(0.22, 0.22, 0.03, 10);
           shroud.rotateX(Math.PI / 2);
           shroud.translate(0.18, 0.325, 0.23);
-          return mergeGeometries([body, fan, shroud], T);
+          const grilleRing = new T.CylinderGeometry(0.23, 0.23, 0.02, 10);
+          grilleRing.rotateX(Math.PI / 2);
+          grilleRing.translate(0.18, 0.325, 0.24);
+          parts.push(body, fan, shroud, grilleRing);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1738,13 +1984,26 @@ export const MODELS = {
     standsOn: ["sidewalk", "verge", "open"],
     lod: [
       {
-        level: 0, tris: 36,
+        level: 0, tris: 260,
         createGeometry: (T = THREE) => {
-          const post = new T.CylinderGeometry(0.1, 0.12, 4.0, 6);
-          post.translate(0, 2.0, 0);
-          const head = new T.BoxGeometry(0.35, 1.1, 0.3);
-          head.translate(0.2, 3.5, 0);
-          return mergeGeometries([post, head], T);
+          const parts = [];
+          const postBase = new T.CylinderGeometry(0.14, 0.16, 0.6, 8);
+          postBase.translate(0, 0.3, 0);
+          const post = new T.CylinderGeometry(0.10, 0.12, 3.6, 8);
+          post.translate(0, 2.2, 0);
+          const head = new T.BoxGeometry(0.35, 1.1, 0.28);
+          head.translate(0.24, 3.5, 0);
+          const arm = new T.BoxGeometry(0.24, 0.08, 0.08);
+          arm.translate(0.12, 3.5, 0);
+          parts.push(postBase, post, head, arm);
+          for (let i = 0; i < 3; i++) {
+            const y = 3.2 + i * 0.32;
+            const visor = new T.CylinderGeometry(0.10, 0.10, 0.08, 6);
+            visor.rotateX(Math.PI / 2);
+            visor.translate(0.24, y, 0.16);
+            parts.push(visor);
+          }
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1779,14 +2038,18 @@ export const MODELS = {
     standsOn: ["sidewalk", "verge", "open"],
     lod: [
       {
-        level: 0, tris: 36,
+        level: 0, tris: 180,
         createGeometry: (T = THREE) => {
-          const pole = new T.CylinderGeometry(0.04, 0.04, 2.4, 6);
+          const parts = [];
+          const pole = new T.CylinderGeometry(0.04, 0.04, 2.4, 8);
           pole.translate(0, 1.2, 0);
-          const plate = new T.CylinderGeometry(0.32, 0.32, 0.03, 3);
+          const bracket = new T.BoxGeometry(0.12, 0.08, 0.08);
+          bracket.translate(0, 2.05, 0.04);
+          const plate = new T.CylinderGeometry(0.34, 0.34, 0.03, 3);
           plate.rotateX(Math.PI / 2);
-          plate.translate(0, 2.05, 0);
-          return mergeGeometries([pole, plate], T);
+          plate.translate(0, 2.05, 0.06);
+          parts.push(pole, bracket, plate);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1821,15 +2084,25 @@ export const MODELS = {
     standsOn: ["sidewalk", "open"],
     lod: [
       {
-        level: 0, tris: 48,
+        level: 0, tris: 200,
         createGeometry: (T = THREE) => {
-          const post = new T.CylinderGeometry(0.05, 0.05, 2.8, 6);
-          post.translate(0, 1.4, 0);
-          const blade1 = new T.BoxGeometry(0.65, 0.18, 0.03);
-          blade1.translate(0.3, 2.5, 0);
-          const blade2 = new T.BoxGeometry(0.65, 0.18, 0.03);
-          blade2.translate(-0.3, 2.2, 0);
-          return mergeGeometries([post, blade1, blade2], T);
+          const parts = [];
+          const baseRing = new T.CylinderGeometry(0.12, 0.14, 0.25, 8);
+          baseRing.translate(0, 0.125, 0);
+          const post = new T.CylinderGeometry(0.05, 0.05, 2.75, 8);
+          post.translate(0, 1.375, 0);
+          const cap = new T.SphereGeometry(0.07, 6, 5);
+          cap.translate(0, 2.78, 0);
+          const blade1 = new T.BoxGeometry(0.68, 0.16, 0.03);
+          blade1.translate(0.32, 2.5, 0);
+          const collar1 = new T.CylinderGeometry(0.065, 0.065, 0.14, 8);
+          collar1.translate(0, 2.5, 0);
+          const blade2 = new T.BoxGeometry(0.68, 0.16, 0.03);
+          blade2.translate(-0.32, 2.2, 0);
+          const collar2 = new T.CylinderGeometry(0.065, 0.065, 0.14, 8);
+          collar2.translate(0, 2.2, 0);
+          parts.push(baseRing, post, cap, blade1, collar1, blade2, collar2);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1863,13 +2136,21 @@ export const MODELS = {
     standsOn: ["sidewalk", "verge", "open"],
     lod: [
       {
-        level: 0, tris: 24,
+        level: 0, tris: 200,
         createGeometry: (T = THREE) => {
-          const body = new T.BoxGeometry(1.08, 1.25, 0.42);
-          body.translate(0, 0.625, 0);
-          const top = new T.BoxGeometry(1.1, 0.05, 0.45);
-          top.translate(0, 1.275, 0);
-          return mergeGeometries([body, top], T);
+          const parts = [];
+          const plinth = new T.BoxGeometry(1.08, 0.15, 0.44);
+          plinth.translate(0, 0.075, 0);
+          const body = new T.BoxGeometry(1.04, 1.12, 0.40);
+          body.translate(0, 0.71, 0);
+          const roofHood = new T.BoxGeometry(1.10, 0.08, 0.45);
+          roofHood.translate(0, 1.27, 0);
+          const doorLine = new T.BoxGeometry(0.02, 1.05, 0.42);
+          doorLine.translate(0, 0.71, 0);
+          const lock = new T.BoxGeometry(0.08, 0.08, 0.04);
+          lock.translate(0.06, 0.75, 0.21);
+          parts.push(plinth, body, roofHood, doorLine, lock);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1903,13 +2184,19 @@ export const MODELS = {
     standsOn: ["sidewalk", "verge", "open"],
     lod: [
       {
-        level: 0, tris: 24,
+        level: 0, tris: 220,
         createGeometry: (T = THREE) => {
+          const parts = [];
           const plinth = new T.BoxGeometry(1.58, 0.2, 0.88);
           plinth.translate(0, 0.1, 0);
-          const body = new T.BoxGeometry(1.5, 1.3, 0.8);
-          body.translate(0, 0.85, 0);
-          return mergeGeometries([plinth, body], T);
+          const body = new T.BoxGeometry(1.50, 1.22, 0.80);
+          body.translate(0, 0.81, 0);
+          const roofHood = new T.BoxGeometry(1.60, 0.08, 0.90);
+          roofHood.translate(0, 1.46, 0);
+          const louvers = new T.BoxGeometry(0.65, 0.35, 0.84);
+          louvers.translate(0, 1.05, 0);
+          parts.push(plinth, body, roofHood, louvers);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -1943,16 +2230,22 @@ export const MODELS = {
     standsOn: ["carriageway", "sidewalk", "parking", "open"],
     lod: [
       {
-        level: 0, tris: 96,
+        level: 0, tris: 200,
         createGeometry: (T = THREE) => {
           const parts = [];
-          const rim = new T.CylinderGeometry(0.36, 0.36, 0.04, 10);
+          const rim = new T.CylinderGeometry(0.36, 0.36, 0.04, 12);
           rim.translate(0, 0.02, 0);
-          const inner = new T.CylinderGeometry(0.28, 0.28, 0.045, 8);
-          inner.translate(0, 0.0225, 0);
-          const notch = new T.BoxGeometry(0.04, 0.05, 0.06);
-          notch.translate(0.22, 0.025, 0);
-          parts.push(rim, inner, notch);
+          const innerPlate = new T.CylinderGeometry(0.30, 0.30, 0.045, 12);
+          innerPlate.translate(0, 0.0225, 0);
+          const centreBadge = new T.CylinderGeometry(0.12, 0.12, 0.048, 8);
+          centreBadge.translate(0, 0.024, 0);
+          for (let i = 0; i < 4; i++) {
+            const ang = (i * Math.PI) / 2;
+            const slot = new T.BoxGeometry(0.04, 0.05, 0.08);
+            slot.translate(Math.cos(ang) * 0.22, 0.025, Math.sin(ang) * 0.22);
+            parts.push(slot);
+          }
+          parts.push(rim, innerPlate, centreBadge);
           return mergeGeometries(parts, T);
         },
       },
@@ -1985,7 +2278,7 @@ export const MODELS = {
     standsOn: ["carriageway", "parking", "open"],
     lod: [
       {
-        level: 0, tris: 76,
+        level: 0, tris: 180,
         createGeometry: (T = THREE) => {
           const parts = [];
           const frame = new T.BoxGeometry(0.58, 0.04, 0.38);
@@ -1993,9 +2286,9 @@ export const MODELS = {
           const sump = new T.BoxGeometry(0.50, 0.015, 0.30);
           sump.translate(0, 0.0075, 0);
           parts.push(frame, sump);
-          for (let i = 0; i < 4; i++) {
-            const bar = new T.BoxGeometry(0.035, 0.045, 0.32);
-            bar.translate(-0.16 + i * 0.11, 0.0225, 0);
+          for (let i = 0; i < 7; i++) {
+            const bar = new T.BoxGeometry(0.025, 0.045, 0.32);
+            bar.translate(-0.18 + i * 0.06, 0.0225, 0);
             parts.push(bar);
           }
           return mergeGeometries(parts, T);
@@ -2030,17 +2323,17 @@ export const MODELS = {
     standsOn: ["sidewalk", "carriageway", "open"],
     lod: [
       {
-        level: 0, tris: 144,
+        level: 0, tris: 180,
         createGeometry: (T = THREE) => {
           const parts = [];
           const slab = new T.BoxGeometry(0.75, 0.03, 0.75);
           slab.translate(0, 0.015, 0);
           parts.push(slab);
-          for (let x = 0; x < 4; x++) {
-            for (let z = 0; z < 4; z++) {
-              const px = -0.26 + x * 0.17;
-              const pz = -0.26 + z * 0.17;
-              const dot = new T.ConeGeometry(0.03, 0.02, 4);
+          for (let x = 0; x < 5; x++) {
+            for (let z = 0; z < 5; z++) {
+              const px = -0.28 + x * 0.14;
+              const pz = -0.28 + z * 0.14;
+              const dot = new T.ConeGeometry(0.025, 0.02, 6);
               dot.translate(px, 0.04, pz);
               parts.push(dot);
             }
@@ -2078,14 +2371,38 @@ export const MODELS = {
     standsOn: ["sidewalk", "plot", "open"],
     lod: [
       {
-        level: 0, tris: 20,
+        level: 0, tris: 280,
         createGeometry: (T = THREE) => {
-          const table = new T.BoxGeometry(2.6, 0.85, 1.8);
-          table.translate(0, 0.425, 0);
-          const canopy = new T.ConeGeometry(1.75, 0.7, 4);
+          const parts = [];
+          // 4 Wooden corner posts
+          for (const px of [-1.3, 1.3]) {
+            for (const pz of [-1.0, 1.0]) {
+              const post = new T.BoxGeometry(0.08, 2.4, 0.08);
+              post.translate(px, 1.2, pz);
+              parts.push(post);
+            }
+          }
+          // Tabletop counter
+          const tableTop = new T.BoxGeometry(2.6, 0.08, 1.9);
+          tableTop.translate(0, 0.85, 0);
+          const tableSkirt = new T.BoxGeometry(2.6, 0.75, 0.04);
+          tableSkirt.translate(0, 0.425, 0.92);
+          parts.push(tableTop, tableSkirt);
+          // Canopy roof frame & fabric
+          const canopy = new T.ConeGeometry(1.85, 0.65, 4);
           canopy.rotateY(Math.PI / 4);
-          canopy.translate(0, 2.25, 0);
-          return mergeGeometries([table, canopy], T);
+          canopy.translate(0, 2.35, 0);
+          const eaves = new T.BoxGeometry(3.0, 0.14, 2.4);
+          eaves.translate(0, 2.05, 0);
+          parts.push(canopy, eaves);
+          // Display crates
+          for (let i = 0; i < 3; i++) {
+            const crate = new T.BoxGeometry(0.65, 0.18, 0.52);
+            crate.rotateX(-0.25);
+            crate.translate(-0.75 + i * 0.75, 0.96, 0);
+            parts.push(crate);
+          }
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -2119,14 +2436,34 @@ export const MODELS = {
     standsOn: ["park", "open"],
     lod: [
       {
-        level: 0, tris: 24,
+        level: 0, tris: 240,
         createGeometry: (T = THREE) => {
-          const tower = new T.BoxGeometry(1.0, 1.6, 1.0);
-          tower.translate(-1.1, 0.8, 0);
-          const chute = new T.BoxGeometry(2.4, 0.15, 0.6);
-          chute.rotateZ(-0.55);
+          const parts = [];
+          // Tower Platform & 4 legs
+          for (const lx of [-1.4, -0.8]) {
+            for (const lz of [-0.4, 0.4]) {
+              const leg = new T.BoxGeometry(0.08, 1.6, 0.08);
+              leg.translate(lx, 0.8, lz);
+              parts.push(leg);
+            }
+          }
+          const deck = new T.BoxGeometry(0.8, 0.08, 0.9);
+          deck.translate(-1.1, 1.55, 0);
+          const roof = new T.ConeGeometry(0.65, 0.45, 4);
+          roof.rotateY(Math.PI / 4);
+          roof.translate(-1.1, 2.15, 0);
+          // Slide Chute
+          const chute = new T.BoxGeometry(2.4, 0.08, 0.55);
+          chute.rotateZ(-0.52);
           chute.translate(0.5, 0.85, 0);
-          return mergeGeometries([tower, chute], T);
+          const lipL = new T.BoxGeometry(2.4, 0.16, 0.05);
+          lipL.rotateZ(-0.52);
+          lipL.translate(0.5, 0.92, -0.27);
+          const lipR = new T.BoxGeometry(2.4, 0.16, 0.05);
+          lipR.rotateZ(-0.52);
+          lipR.translate(0.5, 0.92, 0.27);
+          parts.push(deck, roof, chute, lipL, lipR);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -2160,19 +2497,31 @@ export const MODELS = {
     standsOn: ["park", "open"],
     lod: [
       {
-        level: 0, tris: 108,
+        level: 0, tris: 260,
         createGeometry: (T = THREE) => {
-          const topBar = new T.BoxGeometry(3.6, 0.1, 0.1);
+          const topBar = new T.BoxGeometry(3.8, 0.12, 0.12);
           topBar.translate(0, 2.75, 0);
           const parts = [topBar];
-          for (const sx of [-1.75, 1.75]) {
-            const leg1 = new T.CylinderGeometry(0.05, 0.05, 2.8, 6);
+          for (const sx of [-1.8, 1.8]) {
+            const leg1 = new T.CylinderGeometry(0.06, 0.06, 2.9, 8);
             leg1.rotateZ(0.25 * Math.sign(sx));
-            leg1.translate(sx, 1.4, -0.6);
-            const leg2 = new T.CylinderGeometry(0.05, 0.05, 2.8, 6);
+            leg1.translate(sx, 1.4, -0.65);
+            const leg2 = new T.CylinderGeometry(0.06, 0.06, 2.9, 8);
             leg2.rotateZ(0.25 * Math.sign(sx));
-            leg2.translate(sx, 1.4, 0.6);
-            parts.push(leg1, leg2);
+            leg2.translate(sx, 1.4, 0.65);
+            const crossA = new T.BoxGeometry(0.08, 0.08, 0.75);
+            crossA.translate(sx, 1.0, 0);
+            parts.push(leg1, leg2, crossA);
+          }
+          // 2 Swing seats
+          for (const swX of [-0.85, 0.85]) {
+            const seat = new T.BoxGeometry(0.48, 0.05, 0.22);
+            seat.translate(swX, 0.45, 0);
+            const chainL = new T.CylinderGeometry(0.015, 0.015, 2.25, 4);
+            chainL.translate(swX - 0.2, 1.55, 0);
+            const chainR = new T.CylinderGeometry(0.015, 0.015, 2.25, 4);
+            chainR.translate(swX + 0.2, 1.55, 0);
+            parts.push(seat, chainL, chainR);
           }
           return mergeGeometries(parts, T);
         },
@@ -2206,17 +2555,25 @@ export const MODELS = {
     standsOn: ["park", "sidewalk", "plot", "open"],
     lod: [
       {
-        level: 0, tris: 184,
+        level: 0, tris: 320,
         createGeometry: (T = THREE) => {
-          const basin = new T.CylinderGeometry(2.05, 2.05, 0.5, 14);
-          basin.translate(0, 0.25, 0);
-          const pedestal = new T.CylinderGeometry(0.5, 0.6, 1.4, 8);
-          pedestal.translate(0, 1.1, 0);
-          const upperBasin = new T.CylinderGeometry(1.1, 1.1, 0.35, 10);
-          upperBasin.translate(0, 1.9, 0);
-          const topFinial = new T.SphereGeometry(0.35, 7, 5);
-          topFinial.translate(0, 2.45, 0);
-          return mergeGeometries([basin, pedestal, upperBasin, topFinial], T);
+          const parts = [];
+          const outerPlinth = new T.CylinderGeometry(2.1, 2.1, 0.15, 14);
+          outerPlinth.translate(0, 0.075, 0);
+          const basinWall = new T.CylinderGeometry(2.05, 2.05, 0.45, 14);
+          basinWall.translate(0, 0.35, 0);
+          const coping = new T.CylinderGeometry(2.12, 2.05, 0.1, 14);
+          coping.translate(0, 0.55, 0);
+          const pedestal = new T.CylinderGeometry(0.48, 0.65, 1.3, 10);
+          pedestal.translate(0, 1.15, 0);
+          const upperBasin = new T.CylinderGeometry(1.15, 0.6, 0.38, 12);
+          upperBasin.translate(0, 1.95, 0);
+          const upperPedestal = new T.CylinderGeometry(0.25, 0.35, 0.5, 8);
+          upperPedestal.translate(0, 2.35, 0);
+          const finial = new T.SphereGeometry(0.28, 8, 6);
+          finial.translate(0, 2.65, 0);
+          parts.push(outerPlinth, basinWall, coping, pedestal, upperBasin, upperPedestal, finial);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -2252,15 +2609,30 @@ export const MODELS = {
     standsOn: ["park", "sidewalk", "plot", "open"],
     lod: [
       {
-        level: 0, tris: 88,
+        level: 0, tris: 280,
         createGeometry: (T = THREE) => {
-          const plinth = new T.BoxGeometry(1.75, 1.8, 1.75);
-          plinth.translate(0, 0.9, 0);
-          const torso = new T.CylinderGeometry(0.35, 0.3, 1.4, 7);
-          torso.translate(0, 2.5, 0);
-          const head = new T.SphereGeometry(0.24, 6, 5);
-          head.translate(0, 3.5, 0);
-          return mergeGeometries([plinth, torso, head], T);
+          const parts = [];
+          const step1 = new T.BoxGeometry(1.78, 0.25, 1.78);
+          step1.translate(0, 0.125, 0);
+          const step2 = new T.BoxGeometry(1.55, 0.25, 1.55);
+          step2.translate(0, 0.375, 0);
+          const plinth = new T.BoxGeometry(1.35, 1.4, 1.35);
+          plinth.translate(0, 1.15, 0);
+          const cornice = new T.BoxGeometry(1.45, 0.15, 1.45);
+          cornice.translate(0, 1.925, 0);
+          // Heroic Figure
+          const baseBlock = new T.BoxGeometry(0.9, 0.12, 0.9);
+          baseBlock.translate(0, 2.06, 0);
+          const legs = new T.BoxGeometry(0.45, 0.95, 0.45);
+          legs.translate(0, 2.58, 0);
+          const torso = new T.BoxGeometry(0.55, 0.85, 0.38);
+          torso.translate(0, 3.45, 0);
+          const head = new T.SphereGeometry(0.22, 8, 6);
+          head.translate(0, 4.02, 0);
+          const cloak = new T.BoxGeometry(0.65, 1.2, 0.18);
+          cloak.translate(0, 3.25, -0.22);
+          parts.push(step1, step2, plinth, cornice, baseBlock, legs, torso, head, cloak);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -2297,13 +2669,21 @@ export const MODELS = {
     standsOn: ["plot", "park", "sidewalk", "open"],
     lod: [
       {
-        level: 0, tris: 36,
+        level: 0, tris: 220,
         createGeometry: (T = THREE) => {
-          const mast = new T.CylinderGeometry(0.06, 0.12, 9.4, 6);
-          mast.translate(0, 4.7, 0);
-          const flag = new T.BoxGeometry(1.6, 0.9, 0.02);
-          flag.translate(0.85, 8.8, 0);
-          return mergeGeometries([mast, flag], T);
+          const parts = [];
+          const baseRing = new T.CylinderGeometry(0.24, 0.28, 0.45, 8);
+          baseRing.translate(0, 0.225, 0);
+          const mast = new T.CylinderGeometry(0.05, 0.10, 9.1, 8);
+          mast.translate(0, 4.95, 0);
+          const finialBall = new T.SphereGeometry(0.12, 8, 6);
+          finialBall.translate(0, 9.45, 0);
+          const flag = new T.BoxGeometry(1.8, 0.95, 0.03);
+          flag.translate(0.98, 8.8, 0);
+          const cleat = new T.BoxGeometry(0.14, 0.08, 0.06);
+          cleat.translate(0.08, 1.2, 0);
+          parts.push(baseRing, mast, finialBall, flag, cleat);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -3094,11 +3474,35 @@ export const MODELS = {
     standsOn: ["plot", "open"],
     lod: [
       {
-        level: 0, tris: 12,
+        level: 0, tris: 260,
         createGeometry: (T = THREE) => {
-          const box = new T.BoxGeometry(12.0, 2.6, 2.6);
-          box.translate(0, 1.3, 0);
-          return box;
+          const parts = [];
+          const mainBox = new T.BoxGeometry(11.92, 2.54, 2.54);
+          mainBox.translate(0, 1.3, 0);
+          parts.push(mainBox);
+          // 8 Corner castings
+          for (const cx of [-5.95, 5.95]) {
+            for (const cy of [0.12, 2.48]) {
+              for (const cz of [-1.22, 1.22]) {
+                const corner = new T.BoxGeometry(0.18, 0.18, 0.18);
+                corner.translate(cx, cy, cz);
+                parts.push(corner);
+              }
+            }
+          }
+          // Corrugated side rib panels
+          for (let i = 0; i < 7; i++) {
+            const rib = new T.BoxGeometry(0.12, 2.35, 2.58);
+            rib.translate(-4.5 + i * 1.5, 1.3, 0);
+            parts.push(rib);
+          }
+          // Rear door locking bars
+          for (const dz of [-0.4, 0.4]) {
+            const bar = new T.CylinderGeometry(0.025, 0.025, 2.3, 6);
+            bar.translate(5.98, 1.3, dz);
+            parts.push(bar);
+          }
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -3130,16 +3534,24 @@ export const MODELS = {
     standsOn: ["sidewalk", "open"],
     lod: [
       {
-        level: 0, tris: 68,
+        level: 0, tris: 240,
         createGeometry: (T = THREE) => {
           const parts = [];
-          const post = new T.CylinderGeometry(0.22, 0.28, 0.65, 6);
-          post.translate(0, 0.325, 0);
-          const cap = new T.CylinderGeometry(0.28, 0.22, 0.1, 6);
-          cap.translate(0, 0.7, 0);
-          const horn = new T.BoxGeometry(0.52, 0.08, 0.16);
-          horn.translate(0, 0.72, 0);
-          parts.push(post, cap, horn);
+          const basePlinth = new T.CylinderGeometry(0.26, 0.28, 0.15, 10);
+          basePlinth.translate(0, 0.075, 0);
+          const post = new T.CylinderGeometry(0.20, 0.25, 0.55, 10);
+          post.translate(0, 0.425, 0);
+          const cap = new T.CylinderGeometry(0.27, 0.20, 0.12, 10);
+          cap.translate(0, 0.76, 0);
+          const horn = new T.BoxGeometry(0.54, 0.08, 0.16);
+          horn.translate(0, 0.78, 0);
+          for (let i = 0; i < 4; i++) {
+            const ang = (i * Math.PI) / 2 + Math.PI / 4;
+            const bolt = new T.CylinderGeometry(0.025, 0.025, 0.06, 6);
+            bolt.translate(Math.cos(ang) * 0.22, 0.16, Math.sin(ang) * 0.22);
+            parts.push(bolt);
+          }
+          parts.push(basePlinth, post, cap, horn);
           return mergeGeometries(parts, T);
         },
       },
@@ -3175,15 +3587,23 @@ export const MODELS = {
     anchors: { light: [0, 8.8, 0] },
     lod: [
       {
-        level: 0, tris: 88,
+        level: 0, tris: 340,
         createGeometry: (T = THREE) => {
-          const tower = new T.CylinderGeometry(1.4, 2.0, 8.0, 8);
-          tower.translate(0, 4.0, 0);
-          const gallery = new T.CylinderGeometry(1.8, 1.8, 0.4, 8);
-          gallery.translate(0, 8.2, 0);
-          const lantern = new T.CylinderGeometry(0.8, 0.8, 0.8, 6);
-          lantern.translate(0, 8.6, 0);
-          return mergeGeometries([tower, gallery, lantern], T);
+          const parts = [];
+          const basePlinth = new T.CylinderGeometry(1.95, 2.0, 1.2, 12);
+          basePlinth.translate(0, 0.6, 0);
+          const tower = new T.CylinderGeometry(1.35, 1.95, 6.8, 12);
+          tower.translate(0, 4.6, 0);
+          const gallery = new T.CylinderGeometry(1.85, 1.85, 0.35, 12);
+          gallery.translate(0, 8.15, 0);
+          const railing = new T.CylinderGeometry(1.82, 1.82, 0.45, 10);
+          railing.translate(0, 8.45, 0);
+          const lantern = new T.CylinderGeometry(0.85, 0.85, 0.85, 8);
+          lantern.translate(0, 8.65, 0);
+          const domeCap = new T.ConeGeometry(0.95, 0.45, 8);
+          domeCap.translate(0, 9.25, 0);
+          parts.push(basePlinth, tower, gallery, railing, lantern, domeCap);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -3218,13 +3638,19 @@ export const MODELS = {
     standsOn: ["beach", "park", "open"],
     lod: [
       {
-        level: 0, tris: 40,
+        level: 0, tris: 240,
         createGeometry: (T = THREE) => {
-          const pole = new T.CylinderGeometry(0.03, 0.03, 2.1, 6);
+          const parts = [];
+          const baseWeight = new T.CylinderGeometry(0.24, 0.26, 0.08, 10);
+          baseWeight.translate(0, 0.04, 0);
+          const pole = new T.CylinderGeometry(0.035, 0.035, 2.1, 8);
           pole.translate(0, 1.05, 0);
-          const canopy = new T.ConeGeometry(1.1, 0.4, 8);
-          canopy.translate(0, 2.0, 0);
-          return mergeGeometries([pole, canopy], T);
+          const canopy = new T.ConeGeometry(1.1, 0.45, 8);
+          canopy.translate(0, 1.95, 0);
+          const finial = new T.SphereGeometry(0.06, 6, 5);
+          finial.translate(0, 2.18, 0);
+          parts.push(baseWeight, pole, canopy, finial);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -3260,15 +3686,24 @@ export const MODELS = {
     standsOn: ["track", "open"],
     lod: [
       {
-        level: 0, tris: 36,
+        level: 0, tris: 240,
         createGeometry: (T = THREE) => {
-          const sleeper = new T.BoxGeometry(3.2, 0.22, 0.42);
+          const parts = [];
+          const sleeper = new T.BoxGeometry(3.18, 0.22, 0.41);
           sleeper.translate(0, 0.11, 0);
-          const r1 = new T.BoxGeometry(0.08, 0.13, 0.42);
-          r1.translate(-0.7175, 0.285, 0);
-          const r2 = new T.BoxGeometry(0.08, 0.13, 0.42);
-          r2.translate(0.7175, 0.285, 0);
-          return mergeGeometries([sleeper, r1, r2], T);
+          parts.push(sleeper);
+          for (const rx of [-0.7175, 0.7175]) {
+            const pad = new T.BoxGeometry(0.18, 0.03, 0.42);
+            pad.translate(rx, 0.235, 0);
+            const rail = new T.BoxGeometry(0.08, 0.14, 0.42);
+            rail.translate(rx, 0.32, 0);
+            const clipL = new T.BoxGeometry(0.04, 0.06, 0.12);
+            clipL.translate(rx - 0.07, 0.25, 0);
+            const clipR = new T.BoxGeometry(0.04, 0.06, 0.12);
+            clipR.translate(rx + 0.07, 0.25, 0);
+            parts.push(pad, rail, clipL, clipR);
+          }
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -3302,13 +3737,21 @@ export const MODELS = {
     standsOn: ["sidewalk", "open"],
     lod: [
       {
-        level: 0, tris: 48,
+        level: 0, tris: 220,
         createGeometry: (T = THREE) => {
-          const body = new T.CylinderGeometry(0.24, 0.24, 1.05, 8);
-          body.translate(0, 0.525, 0);
-          const cap = new T.ConeGeometry(0.25, 0.15, 8);
-          cap.translate(0, 1.125, 0);
-          return mergeGeometries([body, cap], T);
+          const parts = [];
+          const plinth = new T.CylinderGeometry(0.24, 0.25, 0.15, 10);
+          plinth.translate(0, 0.075, 0);
+          const body = new T.CylinderGeometry(0.23, 0.23, 0.85, 10);
+          body.translate(0, 0.575, 0);
+          const cap = new T.CylinderGeometry(0.24, 0.23, 0.12, 10);
+          cap.translate(0, 1.06, 0);
+          const dome = new T.SphereGeometry(0.24, 8, 6);
+          dome.translate(0, 1.10, 0);
+          const flap = new T.BoxGeometry(0.22, 0.06, 0.08);
+          flap.translate(0, 0.92, 0.22);
+          parts.push(plinth, body, cap, dome, flap);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -3342,16 +3785,28 @@ export const MODELS = {
     standsOn: ["sidewalk", "verge", "open"],
     lod: [
       {
-        level: 0, tris: 68,
+        level: 0, tris: 260,
         createGeometry: (T = THREE) => {
-          const barrel = new T.CylinderGeometry(0.14, 0.16, 0.65, 8);
-          barrel.translate(0, 0.325, 0);
-          const nozzle = new T.CylinderGeometry(0.07, 0.07, 0.38, 6);
-          nozzle.rotateZ(Math.PI / 2);
-          nozzle.translate(0, 0.45, 0);
-          const bonnet = new T.ConeGeometry(0.15, 0.1, 6);
-          bonnet.translate(0, 0.7, 0);
-          return mergeGeometries([barrel, nozzle, bonnet], T);
+          const parts = [];
+          const flange = new T.CylinderGeometry(0.18, 0.20, 0.10, 10);
+          flange.translate(0, 0.05, 0);
+          const barrel = new T.CylinderGeometry(0.14, 0.16, 0.52, 10);
+          barrel.translate(0, 0.36, 0);
+          const bonnet = new T.CylinderGeometry(0.15, 0.14, 0.12, 8);
+          bonnet.translate(0, 0.68, 0);
+          const nut = new T.CylinderGeometry(0.05, 0.05, 0.08, 5);
+          nut.translate(0, 0.78, 0);
+          const sidePortL = new T.CylinderGeometry(0.06, 0.06, 0.12, 8);
+          sidePortL.rotateZ(Math.PI / 2);
+          sidePortL.translate(-0.16, 0.46, 0);
+          const sidePortR = new T.CylinderGeometry(0.06, 0.06, 0.12, 8);
+          sidePortR.rotateZ(Math.PI / 2);
+          sidePortR.translate(0.16, 0.46, 0);
+          const frontPort = new T.CylinderGeometry(0.08, 0.08, 0.12, 8);
+          frontPort.rotateX(Math.PI / 2);
+          frontPort.translate(0, 0.46, 0.16);
+          parts.push(flange, barrel, bonnet, nut, sidePortL, sidePortR, frontPort);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -3385,13 +3840,19 @@ export const MODELS = {
     standsOn: ["sidewalk", "open"],
     lod: [
       {
-        level: 0, tris: 36,
+        level: 0, tris: 180,
         createGeometry: (T = THREE) => {
-          const shaft = new T.CylinderGeometry(0.11, 0.13, 0.8, 6);
-          shaft.translate(0, 0.4, 0);
-          const cap = new T.ConeGeometry(0.12, 0.1, 6);
-          cap.translate(0, 0.85, 0);
-          return mergeGeometries([shaft, cap], T);
+          const parts = [];
+          const baseCollar = new T.CylinderGeometry(0.14, 0.15, 0.12, 10);
+          baseCollar.translate(0, 0.06, 0);
+          const shaft = new T.CylinderGeometry(0.11, 0.13, 0.65, 10);
+          shaft.translate(0, 0.445, 0);
+          const topRing = new T.CylinderGeometry(0.13, 0.11, 0.08, 10);
+          topRing.translate(0, 0.81, 0);
+          const dome = new T.SphereGeometry(0.12, 8, 6);
+          dome.translate(0, 0.85, 0);
+          parts.push(baseCollar, shaft, topRing, dome);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -3426,13 +3887,17 @@ export const MODELS = {
     standsOn: ["sidewalk", "verge", "open"],
     lod: [
       {
-        level: 0, tris: 36,
+        level: 0, tris: 180,
         createGeometry: (T = THREE) => {
-          const pole = new T.CylinderGeometry(0.04, 0.04, 2.4, 6);
+          const parts = [];
+          const pole = new T.CylinderGeometry(0.04, 0.04, 2.4, 8);
           pole.translate(0, 1.2, 0);
-          const blade = new T.BoxGeometry(0.76, 0.35, 0.04);
-          blade.translate(0, 2.15, 0);
-          return mergeGeometries([pole, blade], T);
+          const bracket = new T.BoxGeometry(0.14, 0.12, 0.06);
+          bracket.translate(0, 2.15, 0.03);
+          const blade = new T.BoxGeometry(0.76, 0.35, 0.03);
+          blade.translate(0, 2.15, 0.06);
+          parts.push(pole, bracket, blade);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -3468,13 +3933,27 @@ export const MODELS = {
     standsOn: ["sidewalk", "park", "open"],
     lod: [
       {
-        level: 0, tris: 44,
+        level: 0, tris: 280,
         createGeometry: (T = THREE) => {
-          const pot = new T.CylinderGeometry(0.58, 0.44, 0.6, 8);
-          pot.translate(0, 0.3, 0);
-          const plant = new T.ConeGeometry(0.5, 0.35, 6);
-          plant.translate(0, 0.65, 0);
-          return mergeGeometries([pot, plant], T);
+          const parts = [];
+          const potPlinth = new T.CylinderGeometry(0.48, 0.50, 0.08, 10);
+          potPlinth.translate(0, 0.04, 0);
+          const potBody = new T.CylinderGeometry(0.58, 0.48, 0.52, 10);
+          potBody.translate(0, 0.34, 0);
+          const potRim = new T.CylinderGeometry(0.60, 0.58, 0.08, 10);
+          potRim.translate(0, 0.64, 0);
+          const soil = new T.CylinderGeometry(0.54, 0.54, 0.04, 8);
+          soil.translate(0, 0.65, 0);
+          const bushCenter = new T.SphereGeometry(0.35, 8, 6);
+          bushCenter.translate(0, 0.82, 0);
+          for (let i = 0; i < 4; i++) {
+            const ang = (i * Math.PI) / 2;
+            const bushNode = new T.SphereGeometry(0.24, 6, 5);
+            bushNode.translate(Math.cos(ang) * 0.22, 0.76, Math.sin(ang) * 0.22);
+            parts.push(bushNode);
+          }
+          parts.push(potPlinth, potBody, potRim, soil, bushCenter);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -3508,16 +3987,24 @@ export const MODELS = {
     standsOn: ["sidewalk", "park", "open"],
     lod: [
       {
-        level: 0, tris: 72,
+        level: 0, tris: 220,
         createGeometry: (T = THREE) => {
-          const leg1 = new T.CylinderGeometry(0.03, 0.03, 0.77, 6);
-          leg1.translate(-0.45, 0.385, 0);
-          const leg2 = new T.CylinderGeometry(0.03, 0.03, 0.77, 6);
-          leg2.translate(0.45, 0.385, 0);
-          const top = new T.CylinderGeometry(0.03, 0.03, 0.96, 6);
-          top.rotateZ(Math.PI / 2);
-          top.translate(0, 0.77, 0);
-          return mergeGeometries([leg1, leg2, top], T);
+          const parts = [];
+          for (const lx of [-0.42, 0.42]) {
+            const shoe = new T.CylinderGeometry(0.06, 0.06, 0.04, 8);
+            shoe.translate(lx, 0.02, 0);
+            const leg = new T.CylinderGeometry(0.03, 0.03, 0.74, 8);
+            leg.translate(lx, 0.39, 0);
+            parts.push(shoe, leg);
+          }
+          const topBar = new T.CylinderGeometry(0.03, 0.03, 0.84, 8);
+          topBar.rotateZ(Math.PI / 2);
+          topBar.translate(0, 0.77, 0);
+          const crossBar = new T.CylinderGeometry(0.025, 0.025, 0.84, 8);
+          crossBar.rotateZ(Math.PI / 2);
+          crossBar.translate(0, 0.45, 0);
+          parts.push(topBar, crossBar);
+          return mergeGeometries(parts, T);
         },
       },
       {
@@ -3552,19 +4039,31 @@ export const MODELS = {
     anchors: { tabletop: [0, 0.72, 0] },
     lod: [
       {
-        level: 0, tris: 104,
+        level: 0, tris: 320,
         createGeometry: (T = THREE) => {
-          const leg = new T.CylinderGeometry(0.04, 0.08, 0.7, 6);
-          leg.translate(0, 0.35, 0);
-          const top = new T.CylinderGeometry(0.42, 0.42, 0.04, 8);
-          top.translate(0, 0.72, 0);
-          const parts = [leg, top];
-          for (const cx of [-0.52, 0.52]) {
-            const seat = new T.BoxGeometry(0.34, 0.04, 0.34);
+          const parts = [];
+          const baseClaw = new T.CylinderGeometry(0.28, 0.32, 0.06, 10);
+          baseClaw.translate(0, 0.03, 0);
+          const pedestal = new T.CylinderGeometry(0.04, 0.06, 0.68, 8);
+          pedestal.translate(0, 0.37, 0);
+          const tabletop = new T.CylinderGeometry(0.44, 0.44, 0.04, 12);
+          tabletop.translate(0, 0.73, 0);
+          parts.push(baseClaw, pedestal, tabletop);
+          // 2 Bistro chairs with curved backrest slats
+          for (const cx of [-0.54, 0.54]) {
+            const chairLeg1 = new T.CylinderGeometry(0.02, 0.02, 0.45, 6);
+            chairLeg1.translate(cx, 0.225, -0.15);
+            const chairLeg2 = new T.CylinderGeometry(0.02, 0.02, 0.45, 6);
+            chairLeg2.translate(cx, 0.225, 0.15);
+            const seat = new T.CylinderGeometry(0.18, 0.18, 0.03, 8);
             seat.translate(cx, 0.46, 0);
-            const back = new T.BoxGeometry(0.04, 0.34, 0.34);
-            back.translate(cx + (cx < 0 ? -0.15 : 0.15), 0.63, 0);
-            parts.push(seat, back);
+            const backPost1 = new T.CylinderGeometry(0.02, 0.02, 0.38, 6);
+            backPost1.translate(cx + (cx < 0 ? -0.14 : 0.14), 0.65, -0.12);
+            const backPost2 = new T.CylinderGeometry(0.02, 0.02, 0.38, 6);
+            backPost2.translate(cx + (cx < 0 ? -0.14 : 0.14), 0.65, 0.12);
+            const backRest = new T.BoxGeometry(0.04, 0.12, 0.28);
+            backRest.translate(cx + (cx < 0 ? -0.14 : 0.14), 0.78, 0);
+            parts.push(chairLeg1, chairLeg2, seat, backPost1, backPost2, backRest);
           }
           return mergeGeometries(parts, T);
         },
@@ -3598,23 +4097,32 @@ export const MODELS = {
     standsOn: ["plot", "open"],
     lod: [
       {
-        level: 0, tris: 128,
+        level: 0, tris: 340,
         createGeometry: (T = THREE) => {
           const parts = [];
           for (const sx of [-1.1, 1.1]) {
             for (const sz of [-1.1, 1.1]) {
-              const leg = new T.CylinderGeometry(0.06, 0.08, 1.9, 4);
+              const leg = new T.CylinderGeometry(0.07, 0.09, 1.9, 8);
               leg.translate(sx, 0.95, sz);
               parts.push(leg);
             }
           }
-          const brace = new T.BoxGeometry(2.4, 0.08, 2.4);
-          brace.translate(0, 1.85, 0);
-          const vat = new T.CylinderGeometry(1.3, 1.3, 1.5, 8);
-          vat.translate(0, 2.65, 0);
-          const cap = new T.ConeGeometry(1.4, 0.6, 8);
-          cap.translate(0, 3.7, 0);
-          parts.push(brace, vat, cap);
+          const lowerBrace = new T.BoxGeometry(2.4, 0.08, 2.4);
+          lowerBrace.translate(0, 0.95, 0);
+          const upperDeck = new T.BoxGeometry(2.5, 0.12, 2.5);
+          upperDeck.translate(0, 1.95, 0);
+          const vat = new T.CylinderGeometry(1.3, 1.3, 1.5, 12);
+          vat.translate(0, 2.76, 0);
+          for (let h = 0; h < 3; h++) {
+            const hoop = new T.CylinderGeometry(1.33, 1.33, 0.04, 12);
+            hoop.translate(0, 2.3 + h * 0.45, 0);
+            parts.push(hoop);
+          }
+          const roofCap = new T.ConeGeometry(1.45, 0.65, 12);
+          roofCap.translate(0, 3.82, 0);
+          const finial = new T.SphereGeometry(0.12, 6, 5);
+          finial.translate(0, 4.2, 0);
+          parts.push(lowerBrace, upperDeck, vat, roofCap, finial);
           return mergeGeometries(parts, T);
         },
       },
