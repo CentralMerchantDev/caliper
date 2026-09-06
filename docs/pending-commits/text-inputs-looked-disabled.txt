@@ -1,0 +1,46 @@
+The build and clarification-request text inputs looked disabled because they
+were dark-on-dark, left over from a theme this page moved away from
+
+WHAT WAS WRONG. .dock-input (both #bar-request-input, the Build bar, and
+#describe-input, the clarification box) had background: rgba(0,0,0,0.35)
+and border-color: var(--line) -- a dark, near-black field with a
+barely-visible 16%-opacity border. This page's own palette comment says
+plainly it moved to "warm paper and ink instead of slate and amber" a light
+theme where --ink (#2A201A, the text colour these inputs also use) is
+near-black. Dark text on a dark field: unreadable, and reading exactly as
+a disabled control.
+
+FIXED: background is now var(--card) (#FEFCF6, this palette's own light
+field colour), border is var(--line-strong) (already documented in this
+file as "anything outlining a real control" -- the correct token for
+exactly this job, not a new one invented for it). The focus box-shadow
+moved from a 12px glow of --line (barely visible, part of the same stale
+rule) to a 3px solid ring of --accent-glow, layered on top of the
+pre-existing :focus-visible 2px outline (public/index.html's own comment:
+"~50 controls on dark glass relying on the browser default... near-invisible
+against it" -- that outline already existed and already works; this only
+strengthens the :focus layer beneath it).
+
+VERIFIED against the real, running page (wrangler dev), not just the
+source: both inputs' live computed styles read background rgb(254,252,246),
+border rgba(42,32,26,0.42), text color rgb(42,32,26) -- the fix is what is
+actually rendering, not merely what was written. Text-on-field contrast is
+15.51:1 (WCAG AAA is 7:1). The placeholder colour (--text-muted, #6E5E49)
+was already measured elsewhere in this file at ~5.1:1 on this exact field
+colour -- unchanged, and distinct from the near-black typed-text colour by
+construction. Checked the 390px-viewport media query (public/index.html,
+the block whose own comment says "measured... on a 390px viewport") --
+it overrides only min-height/max-height/font-size/padding/width for
+.dock-input, never background/border/color, so the fix holds at that width
+too. A full 390px visual screenshot could not be captured this session
+(the browser automation's resize_window did not change the live viewport
+here, confirmed via window.innerWidth staying 1536 after a requested
+resize to 390) -- said plainly rather than claimed.
+
+How it is known to be fixed: node test/run.mjs -- 948/948, 0 fail (no new
+tests -- a CSS-only change, verified by direct inspection of the live,
+rendered page rather than by a new automated test). npx tsc --noEmit
+clean.
+
+Default-world guard unaffected -- CSS only, no generation or world code
+touched.

@@ -371,9 +371,18 @@ html, body {
   align-items: center;
 }
 .dock-input {
+  /* 2026-09-06: this was rgba(0,0,0,0.35) with border-color var(--line) --
+     a dark, near-black field with a barely-visible 16%-opacity border,
+     left over from a dark theme this page moved away from (see the
+     palette comment at the top of this file: "warm paper and ink instead
+     of slate and amber"). Combined with --ink (#2A201A, near-black) as the
+     text colour, that was dark text on a dark field: unreadable, and read
+     as disabled. --card and --line-strong are this palette's own answer to
+     "a light field with a border that actually shows" -- line-strong is
+     already documented here as "anything outlining a real control". */
   flex: 1;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--line);
+  background: var(--card);
+  border: 1px solid var(--line-strong);
   border-radius: 12px;
   color: var(--ink);
   font-size: 14px;
@@ -387,7 +396,7 @@ html, body {
 }
 .dock-input:focus {
   border-color: var(--sky);
-  box-shadow: 0 0 12px var(--line);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 .dock-input::placeholder {
   /* was #64748b, ~3.6:1 on this background -- and this placeholder is the only
