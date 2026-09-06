@@ -78,10 +78,27 @@ against two runs sharing a source file, unlike `scripts/mutate.mjs`'s
 marker-file protection for the same hazard. All 26 runs above were re-issued
 one at a time after this was noticed.
 
+**Re-measured again, 2026-09-05, later the same day.** The table below was
+stale in two different ways at once, from two different causes. The Suite
+row said 898 when the real count was already 905 — the security-fix/J4-fix
+pass earlier the same day that produced the 79-mutation correction above
+had *also* raised the test count to 905 (7 new tests: the child-process
+isolation tests and the claim-checker fixes), and updated this file's own
+ledger entries to say so, but never came back to fix this row, the one
+table whose entire job is to hold the current figure. The Mutation controls
+row said 79 because a later, separate fix (pinning `city-stat-buildings` by
+equality instead of a tolerance band) added an 80th mutation
+(`city-stat-buildings-is-pinned-by-equality-not-a-tolerance-band`, confirmed
+against `test/.mutate-results.json`'s own length) and, again, corrected its
+own ledger entry elsewhere in this file without touching this one. No new
+control added here; the standing discipline (measure with the command,
+correct the row) is the only fix this needs, and it is intentionally the
+boring one.
+
 | Fact | Value | Source |
 |---|---|---|
-| Suite | 898 node tests (0 fail), 12 worker tests (0 fail) | `node scripts/gen-test-count.mjs` |
-| Mutation controls | 79 defined, 79 run, 79 CAUGHT (0 SURVIVED, 0 INCONCLUSIVE) | `test/mutations.json` vs `test/.mutate-results.json`, re-verified per-id with `node scripts/_mutcheck.mjs <guarding test file> <source file> test/mutations.json` |
+| Suite | 905 node tests (0 fail), 12 worker tests (0 fail) | `node scripts/gen-test-count.mjs` |
+| Mutation controls | 80 defined, 80 run, 80 CAUGHT (0 SURVIVED, 0 INCONCLUSIVE) | `test/mutations.json` vs `test/.mutate-results.json`, re-verified per-id with `node scripts/_mutcheck.mjs <guarding test file> <source file> test/mutations.json` |
 | World | 2,291 blocks, 19,874 plots, 19,725 placed (99.3%), 149 refused | `node scripts/measure-layout.mjs` (re-run L4, unchanged from H3 — the merge touched geometry, not layout) |
 | Draw | 480 InstancedMeshes, 6,886,892 triangles drawn (153,060 across the 480 distinct geometries — under `distinctTris < 200_000`) | `node scripts/check-layout-geometry.mjs` (L1/L4, post-merge — up from 1,451,912/49,164 pre-merge; agy's LOD0 enrichment, ~56-84 tris to 140-696, measured and not close to the ceiling) |
 | Overhangs / misdeclared footprints | 0 / 0 | same |
@@ -1379,6 +1396,60 @@ session and it was not a technical defect.
       a completed study's own numbers, not a claim about this project's
       current, changing state, and not the kind of figure this discipline is
       for.
+      **CORRECTION, 2026-09-05: this entry's own description of
+      `city-stat-buildings` was wrong.** It says above "checked against the
+      generated `citySummary.generated.ts`" as though by equality, the same
+      as `city-stat-settlements` next to it in the same sentence. What the
+      test actually asserted was `buildings <= plots` (an impossibility
+      check) AND `buildings > plots * 0.8` (a TOLERANCE BAND, not an
+      equality) — calibrated to catch an impossible number ("31,000" against
+      19,481 plots, named earlier in this same file's history) and never
+      recalibrated for staleness. The page said "16,770 buildings" against a
+      world that places 19,725; 16,770/19,874 is 84.4%, four points inside
+      that 80% floor, so the claim was stale by 2,955 buildings and the check
+      built to catch exactly this passed it. Fixed: `gen-city-summary.mjs`
+      now runs the same `planCity()`/`assessFootprint()` measurement
+      `scripts/measure-layout.mjs` reports and emits it as a structured
+      `CITY_STATS` export (`plots`, `buildingsPlaced`, `buildingsRefused`) —
+      the one source for "how many buildings does this world place."
+      `test/publicClaims.test.ts` now asserts `buildings ===
+      CITY_STATS.buildingsPlaced` by equality, the same pattern
+      `claim-node-tests` already used against `testCount.generated.json`.
+      The `<= plots` impossibility check is kept alongside it — it catches a
+      different failure (an unreachable number) and costs nothing. The page
+      updated to 19,725. Mutation
+      `city-stat-buildings-is-pinned-by-equality-not-a-tolerance-band`
+      (changes the generated placement count without touching the page,
+      simulating the world's build changing under a stale page) CAUGHT, run
+      alone: `node scripts/_mutcheck.mjs test/publicClaims.test.ts
+      src/citySummary.generated.ts test/mutations.json`. The pre-existing
+      `claim-span-added-without-a-check-is-caught` mutation's own `find`
+      string still referenced the old "16,770" and would have gone
+      INCONCLUSIVE the next time anyone ran it; updated to "19,725" and
+      re-verified CAUGHT. `npm test`: 905/905 (no test count changed; this
+      swaps one assertion's strictness, not the number of tests).
+      `npx tsc --noEmit`: clean.
+      **Swept every other page claim for the same defect** (a claim pinned
+      by a tolerance rather than an equality) — J4's original sweep audited
+      whether a span was checked at all, not how strictly. Found nothing
+      else: the world-size sweep, both test-count spans, all three spend
+      caps, the distinct-cap check and the input maxlength are all exact
+      equality or presence matches already. Two things reviewed and judged
+      NOT the same defect, named so they are not re-flagged later: (1) the
+      settlements figure in the same test is an equality check but is
+      wrapped in `if (settMatch)` — silently skipped, not loosely checked,
+      if the regex fails to match; a different laxness than a tolerance
+      band, not fixed here because it was not what was asked. (2)
+      `generated.nodeTests >= staticFloor` / `generated.workerTests >=
+      workerCount` look like tolerance but are not: they check the
+      GENERATED ARTEFACT against a source-derived lower bound that is
+      inherently a floor (loop-expanded tests make static counting
+      undercount by construction), not an attempt to average out drift —
+      the page's own claim is still pinned to the artefact by strict
+      equality one test up. Outside `publicClaims.test.ts`,
+      `test/cityWorld.test.ts`'s "the embedded city summary is not stale"
+      check is also exact equality, not a page claim but the same artefact
+      re-checked from a freshly generated world.
       **What was actually missing, extended now:** the discipline covered
       today's KNOWN claims but nothing stopped a FUTURE one from being added
       unchecked. `test/claimSpansAreChecked.test.ts` closes that: every

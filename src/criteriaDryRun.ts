@@ -3,9 +3,16 @@
 //
 // The verification stage reports "criteria 5/5" and the run ships. But a plan
 // proposes its own criteria, and nothing checked whether they could ever have
-// come out any other way. Measured against real historical runs during this
-// project's diagnostic work: 33% of criteria under the old schema were vacuous
-// -- already true of the unmodified world, testing nothing.
+// come out any other way -- a criterion that is already true of the
+// unmodified world proves nothing about the change, whatever the schema says.
+//
+// A prior version of this comment cited a measured rate ("33% of criteria...
+// were vacuous") from informal development-time review. That figure had no
+// recorded n, date, or dataset behind it -- docs/journal/NEXT.md asks a
+// reviewer to reproduce it and docs/journal/BUILD-WORLD.md cites it as a
+// motivation, but neither pins it to data, and no data file recording it was
+// ever found. Removed rather than requoted; the structural argument above
+// does not depend on it.
 //
 // So "5/5" could mean five real assertions about new behaviour, or five checks
 // that would have passed if the model had done nothing at all, and the ledger

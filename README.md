@@ -40,10 +40,15 @@ guard on free-form prompts, and a per-provider circuit breaker (`src/controlLaye
 
 The cheapest model (`claude-haiku-4-5`) matches or slightly exceeds the frontier model's
 (`claude-opus-4-8`) final correctness once one or two repair rounds are in the loop, at
-roughly **36–41% of the cost per correct answer** — measured four separate times across a core
-set of well-specified single-function tasks, a harder tier of classic algorithm problems
-(dynamic programming, graph traversal), and a novel tier of fabricated business-rule specs
-invented specifically so they couldn't be recalled from training data.
+roughly **36–41% of the cost per correct answer** — measured 2026-08-26, `n` given per tier
+on the page and in `docs/MATRIX-RESULTS.md`, four separate times across a core set of
+well-specified single-function tasks, a harder tier of classic algorithm problems (dynamic
+programming, graph traversal), and a novel tier of fabricated business-rule specs invented
+specifically so they couldn't be recalled from training data. `claude-opus-4-8` is a
+benchmark comparison point here, priced and measured against the other two — it is not used
+on any path of the live pipeline described above (that routes Haiku and Sonnet only, with
+`gpt-5.3-codex` reviewing). The ratio describes a controlled benchmark, not this system's
+production cost.
 
 That cost claim is now well-supported. It comes with a real limit that's stated on the page
 and in [`docs/MATRIX-RESULTS.md`](docs/MATRIX-RESULTS.md), not left implicit:
@@ -114,10 +119,9 @@ the page's live-run feature is enforced the same way — see `src/rateLimit.ts`.
 | `src/sandbox.ts` | `SandboxRunner` — the one interface execution goes through. `DynamicWorkersSandbox` is the only implementation actually built; a Workers-for-Platforms fallback would implement the same interface without touching any caller |
 | `src/attacks.ts` | Hand-written, deliberate sandbox-escape attempts (network, env/bindings, CPU, memory, recursion) — used by `/security-check`, not by real task execution |
 | `src/spendCap.ts`, `src/rateLimit.ts` | The original experiment's two hard limits, both KV-backed so they survive isolate restarts |
-| `src/presets.ts` | The pipeline's 5 presets: hand-authored brief, hidden acceptance criteria, structural/interaction checks |
-| `src/pipeline.ts` | The brief → route → implement → verify → review → triage → gate → fix → ship → ledger orchestrator |
+| `src/changePipeline.ts` | The ground → plan → implement → verify → review → gate → fix → ship orchestrator described above. (This table used to list `src/presets.ts` and `src/pipeline.ts` as the orchestrator; neither file exists in this repo. The preset-generation design they described was superseded by this file — the older machinery is still partly present, unused, inside `src/sandbox.ts`/`src/claude.ts`, not deleted.) |
 | `src/controlLayer.ts` | The pipeline's own cost/safety controls — entirely separate budget from `spendCap.ts` above |
-| `src/openai.ts` | The GPT-5.5 cross-model review call, `[MATERIAL]`/`[NIT]` finding parser |
+| `src/openai.ts` | The cross-model review call (routes to `gpt-5.3-codex`), `[MATERIAL]`/`[NIT]` finding parser |
 | `public/index.html` | The live page — single file, no build step, no framework |
 | `docs/` | The actual working instructions given to the AI assistant that built this, and its results log, kept verbatim as project history rather than rewritten after the fact: the pivot from a demo to a published experiment (`BUILD.md`), the harder-tier follow-up (`NEXT.md`), the novel-tier follow-up (`NEXT-2-novel-tier.md`), the reframe-and-commit pass (`NEXT-3-final-pass.md`), the CALIPER rename and public-repo pass (`NEXT-4-caliper-rename.md`), the page brief (`PAGE.md`), the pipeline design proposal (`REBUILD-PROPOSAL.md`), and the full per-sweep results history (`MATRIX-RESULTS.md`) |
 | `REBUILD.md`, `REBUILD-CONTROLS.md` | The instructions the pipeline rebuild was built from, kept verbatim at the repo root since work against them is still in progress |

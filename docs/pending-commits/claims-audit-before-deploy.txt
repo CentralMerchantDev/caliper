@@ -1,0 +1,92 @@
+Deploy-blocking claims audit: evidence found and published, or the claim removed
+
+What was wrong, six things, each checked against real data or removed rather than
+softened:
+
+1. THE BUILDINGS CLAIM (prior pass, committed together with this one). public/
+   index.html's city-stat-buildings span said 16,770 against a world that places
+   19,725, and test/publicClaims.test.ts did not catch it because the check was a
+   tolerance band (buildings > plots * 0.8) built to catch an impossible number
+   ("31,000"), not staleness -- 16,770/19,874 is 84.4%, four points inside that
+   80% floor. Fixed: gen-city-summary.mjs now runs the same planCity()/
+   assessFootprint() measurement scripts/measure-layout.mjs reports and emits a
+   structured CITY_STATS export; the page is pinned to it by equality, the same
+   pattern claim-node-tests already used. The <= plots impossibility check stays
+   alongside it. Page updated to 19,725. Mutation added and CAUGHT.
+
+2. THE NOVEL TIER. README/index.html claimed a "novel tier of seven specs" and
+   "387 stored cycles" for 32 tasks across three tiers; docs/MATRIX-RESULTS.md
+   only ever documented 25 tasks (18 core + 7 hard) summing to that same 387, and
+   named the novel tier as future work. Checked production KV directly
+   (wrangler kv key list / GET /matrix-results, not assumed): the novel tier WAS
+   run for real -- 63 stored cycles (7 tasks x 3 models x 3 reps), 2026-08-26,
+   same date as everything else, 100% first-pass and 100% final-pass for all
+   three models, zero repairs. The true total across every tier is 450, not 387;
+   the 387 figure only ever covered core+hard. HANDOVER.md's own history records
+   a prior pass finding "450 cycles -> 387 (450 appears in no document)" and
+   revising the PAGE DOWN to match the missing documentation, rather than writing
+   the missing documentation -- the wrong direction to resolve that mismatch.
+   Fixed: docs/MATRIX-RESULTS.md gets a new "Fix 3" section with the real table,
+   date, model ids and n; the page's headline, the capability-matrix table (three
+   new rows), the button label and both social-share descriptions are corrected
+   to 450, and the table's own explanatory text is corrected (the previous text
+   blamed part of the "225 of 387" gap on the novel tier, which was never inside
+   387 at all -- the entire gap was the repeated core@2 sweep).
+
+3. THE 33% VACUOUS-CRITERIA FIGURE. Appeared in six places (src/criteriaDryRun.ts,
+   src/changePipeline.ts, public/index.html, test/criteriaDryRun.test.ts, and two
+   docs/journal/ entries) with no n, no date, no denominator, and no data file
+   anywhere in the repo or in production KV's changelog/ records (checked
+   directly -- only 3 changelog entries exist and none store a vacuousCriteria
+   field). Removed from the four LIVE locations (two source comments, the page's
+   mirrored comment, the test file) rather than requoted or softened. The two
+   docs/journal/ citations (BUILD-WORLD.md, NEXT.md) were left untouched:
+   docs/journal/README.md states plainly that journal entries are history, kept
+   verbatim, and where they disagree with the code the code is right -- rewriting
+   them would violate that policy for no reason the removal doesn't already serve.
+
+4. STALE SOURCE POINTERS. src/claude.ts cited "FOUNDATION-2.md's own report"
+   three times for stage-latency figures and a Cloudflare timeout ceiling; no
+   file by that name exists anywhere in this repo (only FOUNDATION.md, which
+   does not contain this data) or in any of the four session worktrees checked.
+   The measurements are kept -- they still explain the 85s constant -- but each
+   citation now says plainly that the source is gone rather than pointing at a
+   file that isn't there. README.md's file table listed src/presets.ts and
+   src/pipeline.ts as the pipeline orchestrator; neither exists on disk or in
+   git. Corrected to src/changePipeline.ts (the real orchestrator), with a note
+   that the preset-generation design they described was superseded, not deleted
+   -- its remnants still sit unused in src/sandbox.ts/src/claude.ts. The same
+   table called src/openai.ts "the GPT-5.5 cross-model review call"; the code
+   (REVIEW_MODEL constant, checked directly) routes to gpt-5.3-codex. Corrected.
+
+5. THE COST CLAIM'S CONDITIONS. "36-41% of the cost per correct answer" compares
+   claude-haiku-4-5 against claude-opus-4-8, and claude-opus-4-8 is priced and
+   benchmarked but runs on no path of the live pipeline (verified directly
+   against src/changePipeline.ts's own GROUND_MODEL/IMPLEMENT_MODEL/FIX_MODEL/
+   RETROSPECTIVE_MODEL constants and its own comment, "No Opus anywhere" --
+   matches docs/journal/FINISH.md's routing instruction exactly). The page's
+   Benchmark Finding box and README's headline sentence now both state the date
+   (2026-08-26), name all three model ids, give n (21 cycles/model, the hard
+   tier the $0.00345/$0.00908 figures come from), and say plainly that
+   claude-opus-4-8 is a benchmark comparison point, not something this system
+   runs in production.
+
+6. PART 0 was stale again, in the section whose header exists to prevent that --
+   twice over, from two different unrelated fixes that each corrected their own
+   ledger entry elsewhere in the same file without coming back to this one. Suite
+   re-measured 905 (was 898); mutation controls re-measured 80 defined/run/CAUGHT
+   (was 79), both confirmed against the actual generated artefacts, not assumed.
+
+How it is known to be fixed: `node test/run.mjs` -- 905/905, 0 fail. `npx tsc
+--noEmit` -- clean. `node scripts/gen-test-count.mjs` -- 905/905, page already
+agreed, nothing to regenerate. No test asserted on any of the six corrected
+numbers before this pass (checked directly), so nothing needed updating there
+beyond what's listed above.
+
+What is still open: the novel tier's own finding is that the quality-equivalence
+question the whole experiment was built to answer is STILL open, for a narrower
+reason than before -- memorization and difficulty have both now been ruled out
+as confounds and the three models still didn't diverge, but nothing built across
+any of the 32 tasks has actually been cognitively hard. That is not a defect to
+fix; it is the honest state of the experiment, stated plainly on the page and in
+docs/MATRIX-RESULTS.md rather than left to be assumed.

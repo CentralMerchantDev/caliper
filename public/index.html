@@ -7,13 +7,13 @@
 <meta name="description" content="Does a verification loop substitute for model capability, and what does it cost? A pipeline that grounds a plain-English change request against real source, parks at a human gate, verifies in a sandbox, has a second vendor's model review it, and refuses when it cannot prove the change is good.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="CALIPER — a system that only says yes when yes is true">
-<meta property="og:description" content="Does a verification loop substitute for model capability, and what does it cost? 387 measured cycles, a human gate, cross-vendor review, and a spend ceiling enforced in code.">
+<meta property="og:description" content="Does a verification loop substitute for model capability, and what does it cost? 450 measured cycles, a human gate, cross-vendor review, and a spend ceiling enforced in code.">
 <meta property="og:url" content="https://caliper.markfrasertoronto.workers.dev/">
 <!-- summary, not summary_large_image: there is no og:image, and a large-image
      card with no image renders as a blank rectangle on every share. -->
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="CALIPER — a system that only says yes when yes is true">
-<meta name="twitter:description" content="A change pipeline that refuses. 387 measured cycles, a human gate, cross-vendor review, spend capped in code.">
+<meta name="twitter:description" content="A change pipeline that refuses. 450 measured cycles, a human gate, cross-vendor review, spend capped in code.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231E293B'/%3E%3Ctext x='50' y='68' font-family='monospace' font-size='52' font-weight='700' fill='%2338BDF8' text-anchor='middle'%3EC%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1707,7 +1707,7 @@ body.inspecting-mobile #nav-compass-pad {
     </div>
     <div class="welcome-step-item">
       <div style="font-size:16px;margin-bottom:2px">📊</div>
-      <strong style="color:var(--ink);font-size:12px;display:block">387 measured cycles — and one retracted headline</strong>
+      <strong style="color:var(--ink);font-size:12px;display:block">450 measured cycles — and one retracted headline</strong>
       <span style="font-size:11px;color:var(--muted);line-height:1.35">The cheap model reached the same <em>final pass rate</em> at 36–41% the cost per correct result. It does <strong>not</strong> show equal quality — capability was never stressed. I published that correction against my own result.</span>
     </div>
     <div class="welcome-step-item">
@@ -1719,7 +1719,7 @@ body.inspecting-mobile #nav-compass-pad {
            bookmark) the warning rendered as a line break in the middle of a
            sentence. Moved below the sentence it annotates. -->
       <span style="font-size:11px;color:var(--muted);line-height:1.35">A 26&nbsp;km coastal region generated from one plan: terrain, coastline, <span id="city-stat-settlements">54</span> settlements,
-        <span id="city-stat-buildings">16,770</span> buildings.
+        <span id="city-stat-buildings">19,725</span> buildings.
         Press <strong>Tour</strong> in the bar above to put the panels away and fly it.</span>
       <div id="city-build-notes" class="mono" style="display:none;margin-top:6px;font-size:11px;color:#f0b429;line-height:1.4" role="status"></div>
     </div>
@@ -2140,11 +2140,12 @@ body.inspecting-mobile #nav-compass-pad {
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;margin-bottom:18px">
       <h3 style="margin:0 0 8px;font-size:16px;color:#f8fafc">The Finding: Cost Asymmetry via Verification</h3>
       <p style="margin:0 0 10px;font-size:13.5px;line-height:1.6;color:#cbd5e1">
-        A Cloudflare Worker that generates structured changes with an LLM, executes them against hidden tests inside an isolated sandbox, and — if a test fails — surfaces exact feedback to the model for an in-loop repair. Tested across <strong>32 single-function benchmark tasks across three difficulty tiers — including a novel tier of seven specs I wrote myself, one of which deliberately contradicts a formula every model has memorised — over 387 stored cycles</strong> and <strong>3 models</strong> (cheapest, mid, and frontier):
+        A Cloudflare Worker that generates structured changes with an LLM, executes them against hidden tests inside an isolated sandbox, and — if a test fails — surfaces exact feedback to the model for an in-loop repair. Tested across <strong>32 single-function benchmark tasks across three difficulty tiers — including a novel tier of seven specs I wrote myself, one of which deliberately contradicts a formula every model has memorised — over 450 stored cycles</strong> and <strong>3 models</strong> (cheapest, mid, and frontier):
       </p>
       <div style="padding:10px 14px;background:rgba(16,185,129,0.12);border-left:3px solid var(--emerald);border-radius:0 8px 8px 0;font-size:13px;color:#d1fae5;line-height:1.5">
-        <strong>The Benchmark Finding:</strong> Across this 32-task benchmark (387 stored cycles), the cheapest model (<code>claude-haiku-4-5</code>) with one or two repair rounds reaches the same <strong>final pass rate</strong> as the frontier model (<code>claude-opus-4-8</code>), at roughly <strong>36–41% of the cost per correct answer</strong> ($0.00345 vs $0.00908 per cycle).
+        <strong>The Benchmark Finding:</strong> Across this 32-task benchmark (450 stored cycles), the cheapest model (<code>claude-haiku-4-5</code>) with one or two repair rounds reaches the same <strong>final pass rate</strong> as the frontier model (<code>claude-opus-4-8</code>), at roughly <strong>36–41% of the cost per correct answer</strong> ($0.00345 vs $0.00908 per cycle, hard tier, n=21 cycles per model, measured 2026-08-26).
         <br><br>Cost figures are modelled: observed token spend plus a modelled <code>~$0.002/cycle</code> for the Dynamic Worker isolate. That modelled component is charged to <em>both</em> models equally, so it makes the gap look <em>smaller</em> than it is — strip it out and the ratio goes from 36% to about 20%. The number quoted above is the conservative one.
+        <br><br><strong>What "frontier model" means here:</strong> three models were benchmarked on this task set — <code>claude-haiku-4-5</code>, <code>claude-sonnet-5</code>, and <code>claude-opus-4-8</code> — but <code>claude-opus-4-8</code> is a benchmark comparison point only. It does not run on any live path of the change pipeline described on this page (ground/plan/implement/fix route through Haiku and Sonnet; <code>gpt-5.3-codex</code> reviews) — see "Multi-Model Cross-Review" below. This ratio describes relative cost in a controlled benchmark, not a cost this system pays in production.
       </div>
     </div>
 
@@ -2166,10 +2167,12 @@ body.inspecting-mobile #nav-compass-pad {
     <div style="margin-bottom:20px">
       <h3 style="margin:0 0 4px;font-size:16px;color:#fff">The capability matrix</h3>
       <p style="margin:0 0 10px;font-size:12px;color:#94a3b8;line-height:1.5">
-        The rows below are the <strong>hard tier and the core tasks</strong> &mdash; 225 of the 387 stored cycles. The
-        remainder are the novel tier (seven specs I wrote myself, one deliberately contradicting a formula every model
-        has memorised, to rule out recall) and repeat runs. The <em>n</em> column is the honest count for each row, so
-        it sums to 225, not 387 &mdash; said here rather than left for you to add up and mistrust.
+        The rows below are the <strong>hard tier, the novel tier, and the core tasks</strong> (at the corrected repair
+        budget) &mdash; 288 of the 450 stored cycles. The remainder (162) is the same 18 core tasks re-run at the
+        earlier, smaller repair budget (<code>MAX_ATTEMPTS=2</code> vs&nbsp;3) &mdash; a repeat at a different setting,
+        not new information; see <code>docs/MATRIX-RESULTS.md</code>'s "Fix 1b" for that comparison. The <em>n</em>
+        column is the honest count for each row, so it sums to 288, not 450 &mdash; said here rather than left for you
+        to add up and mistrust.
         <a href="/matrix-results" style="color:var(--sky);font-weight:600;text-decoration:none">Raw JSON&nbsp;&rarr;</a>
       </p>
       <div style="overflow-x:auto">
@@ -2212,6 +2215,33 @@ body.inspecting-mobile #nav-compass-pad {
               <td style="padding:8px 6px;color:var(--emerald)"><strong>100%</strong></td>
               <td style="padding:8px 6px">0.00</td>
               <td style="padding:8px 6px">$0.00908</td>
+            </tr>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+              <td style="padding:8px 6px;color:#fff"><strong>claude-haiku-4-5</strong></td>
+              <td style="padding:8px 6px">Novel (Business Rules)</td>
+              <td style="padding:8px 6px">21</td>
+              <td style="padding:8px 6px">100%</td>
+              <td style="padding:8px 6px;color:var(--emerald)"><strong>100%</strong></td>
+              <td style="padding:8px 6px">0.00</td>
+              <td style="padding:8px 6px;color:var(--accent)">$0.00108</td>
+            </tr>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+              <td style="padding:8px 6px;color:#fff"><strong>claude-sonnet-5</strong></td>
+              <td style="padding:8px 6px">Novel (Business Rules)</td>
+              <td style="padding:8px 6px">21</td>
+              <td style="padding:8px 6px">100%</td>
+              <td style="padding:8px 6px;color:var(--emerald)"><strong>100%</strong></td>
+              <td style="padding:8px 6px">0.00</td>
+              <td style="padding:8px 6px">$0.00279</td>
+            </tr>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.12)">
+              <td style="padding:8px 6px;color:#fff"><strong>claude-opus-4-8</strong></td>
+              <td style="padding:8px 6px">Novel (Business Rules)</td>
+              <td style="padding:8px 6px">21</td>
+              <td style="padding:8px 6px">100%</td>
+              <td style="padding:8px 6px;color:var(--emerald)"><strong>100%</strong></td>
+              <td style="padding:8px 6px">0.00</td>
+              <td style="padding:8px 6px">$0.00650</td>
             </tr>
             <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
               <td style="padding:8px 6px;color:#fff">claude-haiku-4-5</td>
@@ -2274,7 +2304,7 @@ body.inspecting-mobile #nav-compass-pad {
 
     <!-- Live Links & In-App Data Actions -->
     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding-top:10px;border-top:1px solid rgba(255,255,255,0.1)">
-      <button type="button" class="btn-pill live-data-inapp" data-endpoint="/matrix-results" data-title="Raw benchmark matrix — 32 tasks, 387 stored cycles" style="font-size:12px">📊 Raw Matrix JSON</button>
+      <button type="button" class="btn-pill live-data-inapp" data-endpoint="/matrix-results" data-title="Raw benchmark matrix — 32 tasks, 450 stored cycles" style="font-size:12px">📊 Raw Matrix JSON</button>
       <button type="button" class="btn-pill live-data-inapp" data-endpoint="/change-history" data-title="Every public run, including the failures" style="font-size:12px" title="The unfiltered record of public pipeline runs. It includes runs that failed, because a filtered changelog would be the same lie this project exists to refuse.">📜 Run log (unfiltered)</button>
       <button type="button" class="btn-pill live-data-inapp" data-endpoint="/pipeline-budget" data-title="Spend Counter & Bucket Ledger" style="font-size:12px">💰 Spend Counter</button>
       <button type="button" class="btn-pill live-data-inapp" data-endpoint="/tasks" data-title="32 Benchmark Task Suites" style="font-size:12px">📋 32 Benchmark Tasks</button>
@@ -4314,8 +4344,9 @@ function connect(url) {
     // world UNCHANGED before parking here. Anything that passes was already
     // true, so it cannot tell a change that worked from one that did nothing --
     // and it would still have been counted in the "criteria 5/5" the run
-    // reports on the way to shipping. Measured at 33% of criteria on historical
-    // runs, which is a lot of yes that wasn't quite true.
+    // reports on the way to shipping. (An earlier version of this comment
+    // cited a measured "33% of criteria" rate; no n, date, or dataset behind
+    // that figure could be found, so it is not requoted here.)
     //
     // Shown, not acted on: a vacuous criterion makes a plan weak, not unsafe,
     // and the person about to approve it is the right one to decide whether

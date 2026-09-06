@@ -1,13 +1,18 @@
 # Matrix results — does verification substitute for capability?
 
 Per `BUILD.md` and `NEXT.md`. Runner built, 25-task set (18 core + 7 hard), matrix run
-against production twice (once at `MAX_ATTEMPTS=2`, once at `MAX_ATTEMPTS=3`). **Still no
-UI — the page gets written once, from final data.**
+against production twice (once at `MAX_ATTEMPTS=2`, once at `MAX_ATTEMPTS=3`). Per
+`NEXT-2-novel-tier.md`, a third tier of 7 fabricated business-rule specs was added and run
+once. **Still no UI — the page gets written once, from final data.**
 
 **Run date: 2026-08-26.** Models: `claude-haiku-4-5`, `claude-sonnet-5`, `claude-opus-4-8`.
-Total across both sweeps: 387 stored cycles (162 + 63 + 162), all completed (2 transient
-502s on the second sweep, both succeeded on immediate retry). Total spend so far:
-**$1.118** (against a $10 cap). Raw data: `GET /matrix-results`.
+Total across all sweeps: **450 stored cycles** (162 + 63 + 162 + 63 — core@2, hard,
+core@3, novel), all completed (2 transient 502s on the core@3 sweep, both succeeded on
+immediate retry). Total spend: **$1.6372** (against a $10 cap, summed directly from every
+`totalCostUsd` in `GET /matrix-results` on 2026-09-05 — this document previously said
+$1.118; that figure does not reconcile against any subset of the current 450 records
+checked, core+hard included, so it is corrected here rather than explained, since the
+actual reason for the discrepancy could not be established). Raw data: `GET /matrix-results`.
 
 ---
 
@@ -135,6 +140,37 @@ are ordinary implementation gaps that repair genuinely fixes, which is the usefu
 to `camel-to-snake` — most first-attempt misses in this whole exercise are the boring,
 fixable kind. One is not.
 
+## Fix 3: the novel tier, run for real
+
+Per `NEXT-2-novel-tier.md`: the hard tier measured known-algorithm competence, not capability,
+because textbook algorithms are very likely close to memorized. This tier tests what that
+result couldn't: 7 fabricated business-rule specs, each with a one-line argument for why it
+can't be recalled (invented scoring weights, invented fee/discount/proration formulas, one —
+`inventory-reorder-flag` — deliberately changing a memorized textbook formula's safety-stock
+term from additive to multiplicative, so reciting the standard formula instead of reading the
+prompt gets it wrong). 9 cycles per model (7 tasks × 3 reps), run at `MAX_ATTEMPTS=3`, same date
+and models as everything else. Ground truth verified against independent reference
+implementations first, same discipline as the other two tiers.
+
+| Model | n | First-pass | Final pass | Mean repair rounds | Cost/cycle |
+|---|---|---|---|---|---|
+| claude-haiku-4-5 | 21 | **100%** | **100%** | 0.00 | $0.00108 |
+| claude-sonnet-5 | 21 | **100%** | **100%** | 0.00 | $0.00279 |
+| claude-opus-4-8 | 21 | **100%** | **100%** | 0.00 | $0.00650 |
+
+**Every one of 63 cycles across all three models passed on the first attempt — zero repairs,
+zero failures.** That's a stronger result than the hard tier, not a weaker one: it rules out
+memorization as the explanation (these specs don't exist anywhere to memorize) and the models
+still didn't need a second try. But read this the way the hard tier's own result had to be read:
+"can't be recalled" is not the same property as "hard enough to separate these models." Every
+novel-tier task is still a single pure function with a fully specified rule set spelled out in
+the prompt — holding several interacting constraints at once, not resolving ambiguity or
+searching a large space. **The quality-equivalence question these three tiers were built to
+answer is still open**, for a narrower and better-argued reason than when Fix 1 left it open:
+memorization and difficulty have both now been ruled out as confounds, and the three models
+still didn't diverge. Nothing built across any of the three tiers has actually been cognitively
+hard.
+
 ## Methodology, updated
 
 Everything in the previous version stands (small-n on convergence-rate comparisons,
@@ -148,9 +184,17 @@ single-vendor scope, hand-picked task selection, modeled vs. invoiced DW fee). A
   experiment on identical inputs.
 - **The `camel-to-snake` "finding" is a statement about this benchmark's own test design as
   much as about the models.** That's disclosed above, not hidden in a footnote.
+- **The novel tier rules out memorization, not difficulty.** A 100%-across-the-board result
+  there means these three models handle unfamiliar-but-fully-specified rules as well as
+  familiar ones — it says nothing about tasks that are ambiguous, multi-step, or genuinely
+  hard to reason through, because none of the 32 tasks across all three tiers are that. See
+  Fix 3 above.
 
 ## What would change the conclusion
 
-Same three items as before, plus: a hard tier built from *novel* problems (not
-textbook-canonical ones) is the natural next test if the goal is actually locating a
-capability gap rather than confirming none exists on familiar ground.
+Same three items as before. The novel tier (added in Fix 3) answered the specific question
+raised at the end of Fix 1 — whether textbook-algorithm familiarity was propping up the
+hard-tier result — and the answer is no, memorization was not the explanation; the models
+converged anyway. What would still change the conclusion: a tier that is genuinely difficult
+to reason through (ambiguous requirements, a large search space, multi-step composition) rather
+than merely unfamiliar. Nothing run so far has been that.

@@ -15,6 +15,14 @@
 //     runner at the moment this line is edited, not from memory". It had gone
 //     stale twice before and was corrected twice, by hand, by someone who then
 //     wrote that sentence again. It was stale a third time.
+//   * "16,770 buildings" against a world that places 19,725 -- not caught by
+//     the CHECK meant to catch exactly this, because that check was a
+//     TOLERANCE BAND (`buildings > plots * 0.8`), built to catch the
+//     impossible "31,000" above, not staleness. 16,770/19,874 is 84.4%,
+//     four points inside the 80% floor. A check whose tolerance is wider than
+//     the error it is trusted to catch is not a control -- this one is now an
+//     equality against a generated figure, the same pattern as the test
+//     counts below.
 //
 // The lesson is not "be careful". Three careful people already were. A measured
 // number in prose has no owner and no expiry, so it drifts the moment anything
@@ -39,6 +47,7 @@ import { dirname, join } from "node:path";
 import { WORLD } from "../public/city-plan.js";
 import { CONTROL_LIMITS } from "../src/controlLayer.ts";
 import { MAX_PLAN_REPLIES } from "../src/changePipeline.ts";
+import { CITY_STATS } from "../src/citySummary.generated.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 function repoRoot(): string {
@@ -118,28 +127,35 @@ test("the placeholder city stats are reachable numbers, not decoration", () => {
   // src/citySummary.generated.ts is regenerated from it by scripts/gen-city-summary.mjs
   // and committed. Reading the generated artefact keeps this cheap AND keeps the
   // page tied to the same source of truth the pipeline is grounded on.
-  const summary = readFileSync(join(ROOT, "src", "citySummary.generated.ts"), "utf8");
-  // "building plots", not "plots" -- the summary lists every settlement's own
-  // plot count too, and a bare /plots/ match grabbed downtown's 1,374 and then
-  // reported the page's correct figure as impossible. A regex that matches the
-  // wrong occurrence fails loudly here, but the same mistake in a threshold
-  // would have passed quietly.
-  const plotMatch = summary.match(/([\d,]+)\s+building plots/i);
-  assert.ok(plotMatch, "could not read the total plot count out of citySummary.generated.ts");
-  const plots = Number(plotMatch![1].replace(/,/g, ""));
-
+  //
+  // CITY_STATS.plots/.buildingsPlaced come from gen-city-summary.mjs running
+  // the SAME planCity() measurement scripts/measure-layout.mjs reports (same
+  // heightAt, same assessFootprint call) -- there is exactly one computation
+  // of "how many buildings does this world place", not a regex reading it
+  // back out of prose written for a different purpose.
   assert.ok(
-    buildings <= plots,
+    buildings <= CITY_STATS.plots,
     `the page claims ${buildings.toLocaleString()} buildings, but at most one building ` +
-    `stands per plot and there are ${plots.toLocaleString()} plots. This is not a stale ` +
+    `stands per plot and there are ${CITY_STATS.plots.toLocaleString()} plots. This is not a stale ` +
     `number, it is an impossible one — which is how "31,000" survived so long.`
   );
-  assert.ok(
-    buildings > plots * 0.8,
-    `the page claims only ${buildings.toLocaleString()} buildings against ${plots.toLocaleString()} plots; ` +
-    `if the world really lost that many, say so deliberately rather than leaving a stale figure`
+  // WAS a tolerance band (`buildings > plots * 0.8`). That band was
+  // calibrated to catch an IMPOSSIBLE number ("31,000" above) and did that
+  // job well; it was never calibrated for STALENESS, and "16,770" cleared
+  // the 80% floor by four points (84.4%) for as long as nobody compared the
+  // page to scripts/measure-layout.mjs's own output. A generated figure
+  // exists now (CITY_STATS.buildingsPlaced) precisely so this can be an
+  // equality instead of a band, the same pattern claim-node-tests already
+  // uses below.
+  assert.equal(
+    buildings, CITY_STATS.buildingsPlaced,
+    `the page claims ${buildings.toLocaleString()} buildings; the world this build actually places ` +
+    `has ${CITY_STATS.buildingsPlaced.toLocaleString()} (of ${CITY_STATS.plots.toLocaleString()} plots, ` +
+    `${CITY_STATS.buildingsRefused.toLocaleString()} refused). Update #city-stat-buildings in ` +
+    `public/index.html, or run \`node scripts/gen-city-summary.mjs\` if the world has changed.`
   );
 
+  const summary = readFileSync(join(ROOT, "src", "citySummary.generated.ts"), "utf8");
   const settMatch = summary.match(/(\d+)\s+settlements/i);
   if (settMatch) {
     assert.equal(

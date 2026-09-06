@@ -1203,7 +1203,9 @@ export async function runChangePipeline(env: ChangeEnv, runId: string, changeReq
     // Anything that passes here is vacuous: it was already true, so it cannot
     // tell a change that worked from one that did nothing -- and it would still
     // have been counted in the "criteria 5/5" the run reports on the way to
-    // shipping. Measured at 33% of criteria on historical runs.
+    // shipping. (An earlier version of this comment cited a measured "33% of
+    // criteria" rate; no n, date, or dataset behind that figure could be
+    // found, so it is not requoted here -- see src/criteriaDryRun.ts.)
     //
     // Surfaced at the gate rather than used to auto-reject, deliberately. A
     // vacuous criterion makes a plan WEAK, not unsafe, and the person approving

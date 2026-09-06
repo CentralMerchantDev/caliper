@@ -686,8 +686,8 @@
       "guards": "J4: a new claim-*/city-stat-* span added to the page without a matching check in publicClaims.test.ts fails the build -- a hand-typed number wearing the convention that means \"generated\" is caught by name, not assumed correct",
       "note": "Simulates the exact failure mode this test exists for: a developer adds a new figure, follows the id convention, and never adds the check.",
       "file": "public/index.html",
-      "find": "        <span id=\"city-stat-buildings\">16,770</span> buildings.",
-      "replace": "        <span id=\"city-stat-buildings\">16,770</span> buildings. <span id=\"claim-test-mutation-unchecked\">999</span>",
+      "find": "        <span id=\"city-stat-buildings\">19,725</span> buildings.",
+      "replace": "        <span id=\"city-stat-buildings\">19,725</span> buildings. <span id=\"claim-test-mutation-unchecked\">999</span>",
       "expect": "every claim-* / city-stat-* span across index.html and city.html is checked"
     },
     {
@@ -716,6 +716,15 @@
       "find": "  const ids = new Set<string>();\n  for (const html of htmlSources) {",
       "replace": "  const ids = new Set<string>();\n  for (const html of htmlSources.slice(0, 1)) {",
       "expect": "a claim span present in a SECOND html source is still found"
+    },
+    {
+      "id": "city-stat-buildings-is-pinned-by-equality-not-a-tolerance-band",
+      "guards": "public/index.html's #city-stat-buildings span is checked against CITY_STATS.buildingsPlaced (src/citySummary.generated.ts) by EQUALITY -- replacing the old `buildings > plots * 0.8` tolerance band that let \"16,770\" pass for months at 84.4%, four points inside the 80% floor that band enforced",
+      "note": "Changing the generated placement count without touching the page simulates the world's build changing under a page that was not regenerated -- exactly the staleness the old band was too wide to catch. The <= plots impossibility check (guarded separately, unaffected by this mutation) still exists alongside this one; the two catch different failures.",
+      "file": "src/citySummary.generated.ts",
+      "find": "  \"buildingsPlaced\": 19725,",
+      "replace": "  \"buildingsPlaced\": 16770,",
+      "expect": "the placeholder city stats are reachable numbers, not decoration"
     }
   ]
 }

@@ -3,8 +3,10 @@
 //
 // The verification stage reports "criteria 5/5" and the run ships. But the plan
 // proposes its own criteria, and nothing checked whether they could ever have
-// come out any other way. Measured against real historical runs: 33% were
-// vacuous -- already true of the unmodified world, testing nothing.
+// come out any other way -- a criterion already true of the unmodified world
+// proves nothing about the change. (A prior version of this comment cited a
+// measured "33%... vacuous" rate with no recorded n, date, or dataset behind
+// it -- see the source-gone note in src/criteriaDryRun.ts.)
 //
 // So "5/5" could mean five real assertions about new behaviour, or five checks
 // that would have passed if the model had done nothing at all, and the ledger

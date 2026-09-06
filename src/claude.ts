@@ -85,22 +85,30 @@ export const DEFAULT_MODEL = "claude-sonnet-5";
 const MAX_TOKENS = 1024;
 
 // REFRAME.md item 1 set this to 45s, "bounded well above any real call's
-// observed wall time" -- unmeasured, as it turned out. FOUNDATION-2 item 3
-// measured every stage's real prompt, at its real token cap, against the
-// real world source, several times, on a live Claude subscription (not
-// this Worker's own key -- see FOUNDATION-2.md's own report for the full
-// method and numbers): ground ~15-17s, plan ~40-51s (already over 45s on
+// observed wall time" -- unmeasured, as it turned out. A later diagnostic
+// pass measured every stage's real prompt, at its real token cap, against
+// the real world source, several times, on a live Claude subscription (not
+// this Worker's own key): ground ~15-17s, plan ~40-51s (already over 45s on
 // one of three reps), implement ~82-84s, fix ~114s, retrospective ~21s.
 // 45s was never enough for implement or fix -- both routinely exceed it,
 // which independently explains runs that looked lost after Gate 1: the
-// SDK-level timeout fired mid-call with no server-side trace saved (see
-// FOUNDATION-2 item 4's fix for that half of the problem).
+// SDK-level timeout fired mid-call with no server-side trace saved.
+//
+// SOURCE GONE: this comment used to cite "FOUNDATION-2.md's own report" for
+// the full method and numbers, and "FOUNDATION-2 item 4" for the fix to the
+// missing-trace half of the problem. No file by that name exists in this
+// repo -- only docs/journal/FOUNDATION.md, which does not contain this data
+// -- found auditing the page's claims before a deploy, 2026-09-05. The
+// measurements above are kept because they still explain why 85s below is
+// what it is, but the report they came from cannot be produced, and the fix
+// "item 4" referred to could not be located either.
 //
 // 85s is chosen, not a rounder or larger number, because Cloudflare
 // Workers appears to hard-cap a single outbound subrequest around 90-100s
 // regardless of what timeout this SDK is given (community-reported, not
-// authoritatively documented -- see FOUNDATION-2.md's report) -- raising
-// this past that ceiling would be pricing headroom the platform won't
+// authoritatively documented -- no file in this repo backs this either;
+// see the source-gone note above) -- raising this past that ceiling would
+// be pricing headroom the platform won't
 // honor. It comfortably covers ground/plan/retrospective and most
 // implement calls. It does NOT reliably cover fix, whose single measured
 // rep (114s) exceeds even the platform ceiling this constant is already
@@ -741,11 +749,13 @@ export async function fixChange(
 }
 
 // ---------------------------------------------------------------------
-// FOUNDATION-2 ("emit the change, not the file"): implementChange/fixChange
-// above ask a model to reproduce the ENTIRE ~16KB source for every change,
-// even a one-line placements append -- measured at 79-143s for implement,
-// never completing within 300s for fix (see FOUNDATION-2.md's own
-// report). When plan.implementationPath === "data-edit", these two
+// "Emit the change, not the file": implementChange/fixChange above ask a
+// model to reproduce the ENTIRE ~16KB source for every change, even a
+// one-line placements append -- measured at 79-143s for implement, never
+// completing within 300s for fix. (This paragraph used to cite
+// "FOUNDATION-2.md's own report" for that measurement; no such file exists
+// in this repo -- see the source-gone note on the MAX_TOKENS/timeout
+// comment above.) When plan.implementationPath === "data-edit", these two
 // functions are used instead: the model returns a handful of WorldEdit
 // ops (src/worldEdit.ts) -- add a type, add a placement, override a
 // colour, change a surface -- and the server applies them deterministically.
