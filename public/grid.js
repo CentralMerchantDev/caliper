@@ -52,6 +52,28 @@ import { TERRAIN } from "./terrain.js";
 export const CELL = 8;
 
 /**
+ * PLACEMENT-CONTRACT.md Part 0 (Mark, 2026-09-07): "the board is a list of
+ * cubes, really ... 16x16 then subdivided into quadrants that are 4x4 with
+ * cells that are 1x1." The grid's real addressing unit is the 1 m ATOM, not
+ * `CELL` above -- `CELL` (8 m) now names a standard SIZE increment
+ * (footprints, road widths), the same role `roadkit.js`'s `MODULE_M`
+ * already plays, not an addressing grouping. `QUADRANT` and `BLOCK` are
+ * named groupings for indexing/display ONLY -- Mark: "the groupings do not
+ * constrain placement... nothing refuses because a boundary was crossed."
+ *
+ * ADDITIVE, NOT A REPLACEMENT: `cellOf`/`cellOrigin`/`cellRect`/`cellsFor`
+ * below keep their existing CELL=8 semantics unchanged -- test/grid.test.ts
+ * already exercises them at that granularity in detail (e.g.
+ * `cellsFor(8) === 1`), and redefining them in place would break a real,
+ * passing contract for no reason Part 0 asks for. `atomOf`/`atomOrigin`/
+ * `atomRect`/`atomsFor` are the new 1 m equivalents, for anything
+ * addressing the board at the real unit (board.js, board-adapter.js).
+ */
+export const ATOM = 1;
+export const QUADRANT = 4;
+export const BLOCK = 16;
+
+/**
  * How finely a thing may be positioned within the grid.
  *
  * A tower occupies whole cells. A bollard does not need one, and forcing it to
@@ -157,6 +179,50 @@ export function heightOf(levels) {
  */
 export function inWorld(i, j) {
   const { x, z } = cellOrigin(i, j);
+  return x >= -HALF && x < HALF && z >= -HALF && z < HALF;
+}
+
+// -----------------------------------------------------------------------------
+// ATOM ADDRESSING -- PLACEMENT-CONTRACT.md Part 0, the real unit
+//
+// Same shapes as the CELL functions above (cellOf/cellOrigin/cellCentre/
+// cellRect/cellsFor/inWorld), at ATOM=1 rather than CELL=8. Kept as
+// separate functions rather than redefining the CELL ones in place --
+// test/grid.test.ts exercises the CELL functions at 8 m granularity in
+// detail, and that is still a real, correct contract for anything working
+// in the 8 m standard-size increment (roadkit.js's MODULE_M, the building
+// footprint table). A placed piece's own `cell: {i, j, k}` address is an
+// ATOM address (board.js, board-adapter.js) -- these are what compute it.
+// -----------------------------------------------------------------------------
+
+/** The atom containing a world position. Integers, negative to the west and north. */
+export function atomOf(x, z) {
+  return { i: Math.floor(x / ATOM), j: Math.floor(z / ATOM) };
+}
+
+/** The south-west corner of an atom, in world metres. The canonical anchor. */
+export function atomOrigin(i, j) {
+  return { x: i * ATOM, z: j * ATOM };
+}
+
+/** The centre of an atom. */
+export function atomCentre(i, j) {
+  return { x: i * ATOM + ATOM / 2, z: j * ATOM + ATOM / 2 };
+}
+
+/** The world rectangle covered by a run of atoms starting at (i, j). */
+export function atomRect(i, j, w = 1, d = 1) {
+  return { xMin: i * ATOM, xMax: (i + w) * ATOM, zMin: j * ATOM, zMax: (j + d) * ATOM };
+}
+
+/** How many whole atoms a measurement needs. CEILING, same reasoning as cellsFor. */
+export function atomsFor(metres) {
+  return Math.max(1, Math.ceil(metres / ATOM - 1e-9));
+}
+
+/** Is this atom inside the world at all? Same rule as inWorld, at ATOM granularity. */
+export function atomInWorld(i, j) {
+  const { x, z } = atomOrigin(i, j);
   return x >= -HALF && x < HALF && z >= -HALF && z < HALF;
 }
 

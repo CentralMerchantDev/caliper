@@ -109,33 +109,34 @@ world made of pieces instead of a world generated around them.**
       chain plan, not a model). Command: `node scripts/verify-roadkit.mjs`.
       Before P0.4: 34 checked, 31 failing. Full table in
       `docs/audits/P0-ROADKIT.md` §P0.3.
-- [x] **P0.4** Footprints in whole cells, per `PLACEMENT-CONTRACT.md`. Any piece
-      whose footprint is not a whole cell count gets snapped **outward** and the
-      before/after recorded.
-      **Gate:** zero pieces with a fractional cell footprint.
-      **Done:** `snapCellsOutward()` added to `roadkit.js`, applied to all 26
-      affected pieces (footprint-only where sockets are unaffected; snapped at
-      the source where a cardinal socket's position is derived from the same
-      dimension). Command: `node scripts/verify-roadkit.mjs` → 34 checked,
-      **0 failing**. **3 open findings, not silently forced**: `rampMerge`,
-      `rampDiverge`, `railSwitch` each have one angled connector socket
-      (merge taper / turnout) at a genuine lane/track-gauge offset, not a
-      bounding-box edge — cell-aligning it would mean changing
-      `ROAD_STANDARDS` real-world dimensions, which the file's own header
-      says never scale. Named in-code and in
-      `docs/audits/P0-ROADKIT.md` §P0.4, for Mark to decide.
+- [x] **P0.4** ~~Footprints in whole cells~~ **SUPERSEDED 2026-09-07 by
+      `PLACEMENT-CONTRACT.md` Part 0 — `snapCellsOutward` is REVERTED.**
+      The 8 m cell was never the real addressing unit; the 1 m atom is.
+      **Done, current state:** `roadkit.js`'s footprints are back to their
+      real `ROAD_STANDARDS` values (an 18 m STREET is 18 m again).
+      `rampMerge`/`rampDiverge`'s angled socket — named OPEN below under the
+      old 8 m check — **closes exactly** at 1 m (38 m for FREEWAY/RAMP, a
+      whole metre, verified not assumed). `railSwitch`'s socket does not
+      close even at 1 m (a genuine 3.2 m offset) — still open. **New
+      finding, visible only once the snap was reverted:** 5 pieces
+      (`layby`, `bridgeCableStayed`/`bridgeSpan`'s cablestay case,
+      `railStraight`, `railPlatform`) have a real fractional-metre
+      dimension the old snap was masking. Not fixed — real constants,
+      out of today's scope. Command: `node scripts/verify-roadkit.mjs`.
+      Full account: `docs/audits/P0-ROADKIT.md`'s SUPERSEDED section.
 
-**EXIT P0:** every road piece builds, mates through one verifier that has been
-watched rejecting bad input, and occupies whole cells **except the 3 named
-angled-connector sockets above, which remain open**. Full suite:
-`node test/run.mjs` → 973/978 pass, `npx tsc --noEmit` clean. The 5 failures
-are pre-existing and unrelated to this file: the two known-red seed pins
-(`planSeed.test.ts`, the layout-fits seed-match check), the origin-stability
-test (intentionally red, Step 5), a derived-artifact staleness check, and one
-rendering culling-ratio test traced to agy's own uncommitted, in-progress
-`city-render.js` edits (confirmed via a `mergeGeometries` undefined-reference
-error in that file, gone in a later rerun once agy's WIP moved on) — none in
-a CLI-lane file. Full evidence: `docs/audits/P0-ROADKIT.md`. Committed.
+**EXIT P0, UPDATED 2026-09-07:** every road piece builds and mates through
+one verifier that has been watched rejecting bad input. Footprints are at
+their real, unsnapped `ROAD_STANDARDS` values (Part 0). **2 of the original
+3 angled-connector findings close exactly at the 1 m atom** (`rampMerge`,
+`rampDiverge`); `railSwitch`'s remains genuinely open, and 5 pieces newly
+show a real fractional-metre dimension, both named rather than forced. Full
+suite (pre-pivot, still valid for P0.1–P0.3): `node test/run.mjs` → 973/978
+pass, `npx tsc --noEmit` clean; the 5 failures were pre-existing and
+unrelated (two known-red seed pins, intentionally-red origin-stability,
+a derived-artifact staleness check, and one culling-ratio test traced to
+agy's own concurrent WIP). Full evidence: `docs/audits/P0-ROADKIT.md`.
+Committed.
 
 **STOPPING HERE per the standing rule: stop at every phase exit, do not roll
 into P1 unattended.**
@@ -146,36 +147,175 @@ into P1 unattended.**
 
 *The representation change. This is the phase that makes everything else possible.*
 
-- [ ] **P1.1** Define the placed-piece record. One shape for every element on the
+- [x] **P1.1** Define the placed-piece record. One shape for every element on the
       board — road, building, tree, prop, bridge:
       ```
-      { id, pieceType, cell: {i, j}, rotation, foot: {w, d}, clear: {w, d}, layer }
+      { id, pieceType, cell: {i, j, k}, rotation,
+        foot: {w, d}, levels, clear: {w, d}, standsOn: [...] }
       ```
       `id` unique and stable. `cell` from `grid.js`. Nothing stores metres.
       **Gate:** a test asserting every field is present and integral on a
       generated world; `cell` values round-trip through `cellOf`/`cellOrigin`
       unchanged.
-- [ ] **P1.2** An occupancy index: given a rectangle of cells, what is in it;
+      **Done:** `public/board-adapter.js` — adapts `plots`/`roads`/`bridges`
+      (the three categories `generateWorld()` actually returns; trees/props
+      confirmed absent from its output, named for P3.2, not built here).
+      `standsOn` uses `land-use.js`'s own vocabulary, matched to its
+      existing `buildAllowedAt`/`roadAllowedAt` rules. Command:
+      `node scripts/_board-adapter-probe.mjs` → 16,935 pieces, 0 field
+      violations, 0 duplicate ids.
+      **Round-trip gate measured at the 1 m ATOM (`PLACEMENT-CONTRACT.md`
+      Part 0), and the number is not what the contract claims either:
+      16,009 of 16,209 plots (98.8%) do NOT round-trip.** Cheaper than the
+      old 8 m CELL check (16,204/16,209, i.e. nearly none), matching Mark's
+      own prediction — the residual is now a genuine sub-metre origin
+      fraction (e.g. `block--1349-760-p0`: xMin -1343.8, zMin 768.9), not
+      an 8 m-scale defect — but it is still real, not zero. Not fixed here
+      (`city-plan.js` change, out of P1's scope) — reported plainly.
+      See `docs/audits/P1-BOARD.md` §P1.1.
+      **Rebuilt TWICE mid-phase**: first against an older 2D (`{i,j}`, no
+      `levels`/`standsOn`/`surface`) draft of this gate, before Mark's
+      cubes/stacking rewrite (below) was noticed; then again, fully, after
+      `PLACEMENT-CONTRACT.md` Part 0 changed the addressing unit itself
+      from the 8 m `CELL` to the 1 m `ATOM` (`grid.js`'s `atomOf`/
+      `atomOrigin`/`atomRect`/`atomCentre`/`atomsFor`, added alongside the
+      existing `CELL` functions, not replacing them —
+      `test/grid.test.ts` depends on the 8 m semantics and still passes
+      unchanged). Neither rebuild was committed until it matched the
+      current spec — see `docs/audits/P1-BOARD.md`'s own note.
+
+      **THE BOARD IS CUBES, NOT SQUARES.** Mark, 2026-09-07: *"the board is a
+      list of cubes, really … defined spaces, defined cubes that are told what
+      they are and what they can be."* An earlier draft of this record used
+      `cell: {i, j}` — two dimensions — which cannot express a raised
+      intersection, a flyover, a bridge over a road, or a sunken rail corridor,
+      all of which the road kit already builds. **`k` is the vertical index**,
+      in `grid.js`'s existing `LEVEL = 4` metre unit, with `levelsFor()` and
+      `heightOf()` converting. `levels` is how many cubes tall the piece is.
+
+      **A CELL HAS A KIND, AND A PIECE DECLARES WHAT KINDS IT STANDS ON.** This
+      is Mark's *"what they are and what they can be"*, and both halves already
+      exist:
+
+      - **What a cell is** — `land-use.js` `USE`: `water`, `beach`, `cliff`,
+        `steep`, `reserved`, `buildable`. Plus `locked` for unopened ground per
+        `grid.js`.
+      - **What a piece can stand on** — every `roadkit.js` piece already carries
+        `standsOn`: 20 declare `["open"]`, four bridge pieces declare
+        `["water","rock","open"]`, one declares `["open","plot"]`, one
+        `["track","open"]`. **Nothing enforces it yet because nothing places
+        from the kit** — but the declaration is on every piece already.
+
+      **PIECES STACK, AND A PIECE'S TOP IS GROUND FOR THE NEXT ONE.** Mark's
+      bench, 2026-09-07:
+
+      > if I wanna put a park bench, I can put it onto grass and sidewalk, but
+      > not onto the road or onto the roof of a building … I wanted to put a
+      > rooftop bench, I should be able to put those
+
+      That is not a terrain rule. The bench asks what it is standing on, and the
+      answer comes from **the piece below it**, not from the ground. So every
+      piece declares one more field:
+
+      - **`surface`** — what this piece presents on top: `pavement`, `road`,
+        `roof`, `grass`, `plaza`, `track`, `deck`, or `none` (nothing may sit on
+        me).
+
+      And `standsOn` accepts **surfaces as well as terrain kinds**. A park bench
+      is `standsOn: ["grass", "pavement"]`. A rooftop bench is
+      `standsOn: ["roof"]`. Same mechanism, different list — which is why a
+      rooftop bench is a different *piece*, not a special case in the rules.
+
+      **The stack is therefore: terrain cell → ground piece → prop.** Each layer
+      answers the one above it. `standsOn: ["open", "plot"]` already exists on a
+      road-kit piece, so the mechanism is half-built; what is new is `surface`
+      on the piece below.
+
+      **THE CELL MUST BE SMALLER THAN THE SMALLEST PIECE, OR NOTHING CAN BE
+      REPLACED.** Mark: *"if the whole board is only sized to fit one thing,
+      then only that thing can go there and you could never replace it … you've
+      got to be able to put it anywhere and replace it."*
+
+      This is why the cell is 8 m and not building-sized: a house is 2×3 cells,
+      a tower 6×6, a bench a sixteenth of one. Anything can be swapped for
+      anything that fits the cells freed. `grid.js` already subdivides to 0.5 m
+      for exactly this, so a bench does not have to consume 8 m of ground.
+
+      **This is the whole of the "hard" rule set.** Mark: *"there are rules
+      where you can't place certain things certain places … so that is what
+      prevents you from [putting a] skyscraper in the ocean."* Terrain and
+      surface kinds versus `standsOn` is that rule, and it is the only one the
+      board enforces. Everything else — needing enough room, and progression
+      gates like *"you need to have gotten this to get this"* — is space
+      arithmetic and the game layer respectively. Neither belongs in the board.
+- [x] **P1.2** An occupancy index: given a rectangle of cells, what is in it;
       given a piece id, where is it. Built on `world-registry.js`, not beside it.
       **Gate:** place a piece, query its cells, get it back. Query a cell it does
       not occupy, get nothing. Remove it, query again, get nothing.
-- [ ] **P1.3** `canPlace(pieceType, cell, rotation)` — the only placement
-      question the board answers: **is there a free rectangle of `foot + clear`
-      buildable cells here.** No class check, no use check, no height cap.
+      **Done:** `public/board.js`'s `createBoard()` — `whereIs(id)` is an
+      O(1) `Map` lookup, `inCells(i,j,w,d,k)` wraps `world-registry.js`'s
+      own `allOverlapping` (no second spatial index). Command:
+      `node test/run.mjs`, `test/board.test.ts`. See
+      `docs/audits/P1-BOARD.md` §P1.2.
+- [x] **P1.3** `canPlace(pieceType, cell, rotation)` — the only placement
+      question the board answers: **are there enough free cells here, of a kind
+      this piece can stand on.** Two conditions, and only two:
+
+      1. **Space** — a free box of `foot + clear` cells, `levels` tall.
+      2. **Ground** — every cell's kind is in the piece's `standsOn` list.
+
+      **No zoning check, no plot-class check, no height cap.** A villa may go
+      downtown; a tower may go in a field with the room for it. The only thing
+      that refuses is terrain, and it refuses because a bridge deck declares it
+      stands on water and a house does not.
       **Gate:** watched red first. Place a piece, then attempt to place another
       overlapping it, and see the refusal. Then a piece on water, on a cliff, and
       off the edge of the world.
-- [ ] **P1.4** `place`, `remove`, `replace`, `move`. Each returns the changed
+      **Done, and watched red TWICE, for two different real bugs**:
+      (1) the first terrain-check draft, built against the pre-rewrite 2D
+      spec, failed both water and buried-rock cases the first run
+      (`world-registry.js`'s `WATER`/`ROCK` answer volumetric submersion,
+      not "can this piece stand here" — superseded by GROUND/`standsOn`
+      once the spec changed). (2) after rewriting to the 3D/stacking
+      design, the stacking test itself failed: a rooftop piece above a
+      building on flat ground at y=10 (not y=0) read as floating in mid-
+      air, because `k`'s vertical extent was measured from absolute sea
+      level, not local ground -- fixed by threading a real `groundY`
+      (sampled via `heightAt`) through every vertical-extent calculation.
+      Watched green after, unedited assertions. Command: `node test/run.mjs`.
+      See `docs/audits/P1-BOARD.md` §P1.3 for both, in full.
+- [x] **P1.4** `place`, `remove`, `replace`, `move`. Each returns the changed
       occupancy, each reversible.
       **Gate:** place → remove → the board is byte-identical to before.
       Place → replace → remove → identical. This is the property that makes an
       editor possible later.
-- [ ] **P1.5** Determinism. A world built from the same seed produces the same
+      **Done:** `test/board.test.ts` — place→remove, place→replace→remove,
+      move (+ a refused move leaving the board untouched), replace refusing
+      a shape that would not fit — all byte-identical (`JSON.stringify`
+      equality on `board.list()`) to before. Command: `node test/run.mjs`.
+- [x] **P1.5** Determinism. A world built from the same seed produces the same
       piece list, in the same order, with the same ids.
       **Gate:** build twice, hash both piece lists, assert equal.
+      **Done:** two builds, same seed, same 16,935 pieces, same ids in the
+      same order, same SHA-256 digest. **A real infrastructure problem
+      found and fixed along the way**: building the world even once at
+      module scope in `test/run.mjs`'s shared process (~110 other bundled
+      files' own world-builds already resident) reliably crashed the whole
+      suite with a V8 OOM (`Committing semi space failed`), watched three
+      times with different exit codes. Fixed by moving every
+      `generateWorld()` call for this phase into
+      `scripts/_board-adapter-probe.mjs`, run as a genuine separate `node`
+      child process (`execFileSync`), reporting a small JSON summary back
+      -- never the full world twice in one process. Command:
+      `node test/run.mjs`. See `docs/audits/P1-BOARD.md` §P1.5.
 
 **EXIT P1:** a world can be described as a list of placed pieces, queried by
-cell, and edited reversibly. **Nothing renders differently yet.** Commit.
+cell, and edited reversibly. **Nothing renders differently yet.** Full suite:
+command and result recorded in the RECORD table below. Full evidence:
+`docs/audits/P1-BOARD.md`. Committed.
+
+**STOPPING HERE per the standing rule: stop at every phase exit, do not roll
+into P2 unattended.**
 
 ---
 
@@ -302,8 +442,8 @@ These replace Mark's eye while he is asleep. They are not optional.
 
 | Phase | Status | Gate evidence | Commit |
 |---|---|---|---|
-| P0 | done, 3 open findings named | `node test/run.mjs` 973/978 pass (5 pre-existing, unrelated); `node scripts/verify-roadkit.mjs` 34/34, 0 failing, 3 named open; `npx tsc --noEmit` clean; `docs/audits/P0-ROADKIT.md` | `f0a0372` |
-| P1 | not started | — | — |
+| P0 | done; P0.4 superseded by PLACEMENT-CONTRACT.md Part 0 (snap reverted), 2 of 3 open findings now closed at 1 m, 1 new finding (5 fractional-metre pieces) | `node scripts/verify-roadkit.mjs` (post-revert); `docs/audits/P0-ROADKIT.md` SUPERSEDED section | `f0a0372` + revert (this session, uncommitted at time of writing) |
+| P1 | done, real numbers led with | `node test/run.mjs` (see below); `node scripts/_board-adapter-probe.mjs` 16,935 pieces, 0 field violations, 0 dup ids; plot atom round-trip 200/16,209 (16,009 miss, real but sub-metre); road atom alignment 334/707; `npx tsc --noEmit` clean; `docs/audits/P1-BOARD.md` | (filled in below after commit) |
 | P2 | not started | — | — |
 | P3 | not started | — | — |
 | P4 | not started | — | — |

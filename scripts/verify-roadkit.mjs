@@ -1,11 +1,19 @@
 // BOARD-CONVERSION-PLAN.md P0.3 -- run verifyAllRoadKit() and report, per
-// piece: does it build, is its footprint a whole number of cells, do its
-// sockets sit on cell boundaries. Every piece named, none silently skipped.
+// piece: does it build, is its footprint a whole number of ATOMS (whole
+// metres), do its sockets sit on whole-metre positions. Every piece named,
+// none silently skipped.
+//
+// UPDATED FOR PLACEMENT-CONTRACT.md PART 0 (Mark, 2026-09-07): the grid's
+// addressing unit is the 1 m ATOM, not the old 8 m CELL. This script
+// originally checked 8 m/4 m alignment and required P0.4's snapCellsOutward
+// to pass; that snap is reverted (see roadkit.js), footprints are back to
+// their real ROAD_STANDARDS values, and this script now checks the unit
+// that actually governs placement.
 //
 // Run: node scripts/verify-roadkit.mjs
 import * as RK from "../public/roadkit.js";
 
-const CELL = 8; // public/grid.js CELL, matches roadkit.js's own MODULE_M
+const ATOM = 1; // public/grid.js's new ATOM -- the real addressing unit (PLACEMENT-CONTRACT.md Part 0)
 
 // One representative instance per exported piece builder, using each
 // function's own defaults where sensible so this stays in sync with the
@@ -54,24 +62,15 @@ function nearMultiple(v, step, eps = 1e-6) {
   return Math.abs(r - Math.round(r)) < eps;
 }
 
-// A base-centre piece spanning N whole cells along an axis has its socket
-// on that axis at local offset ±N*CELL/2 -- always an exact multiple of
-// CELL/2 (4m), for ANY integer N, odd or even (N*CELL/2 = N*4). So the
-// correct cell-boundary test for a socket is half-cell granularity, not
-// whole-cell: a socket at local z=+4 (half of an 8m, 1-cell footprint)
-// DOES sit on a true cell boundary once the piece is placed with that
-// footprint spanning a whole cell -- it is only 4 that looks "off-grid"
-// if you test against a full 8m step instead of the 4m one that actually
-// applies at base-centre origin.
-const HALF_CELL = CELL / 2;
-
-// P0.4 OPEN FINDINGS -- these 3 pieces have one socket at a genuine angled
-// connector (merge taper, switch diverge) whose position is derived from
-// real lane/track-gauge widths, not a bounding-box edge. Named directly in
-// roadkit.js at the point of definition; listed here too so this report
-// doesn't read them as an unexplained regression. Not silently skipped --
-// still printed, just not counted as a build-breaking failure.
-const KNOWN_OPEN_SOCKET_FINDINGS = new Set(["ramp-merge-freeway-right", "ramp-diverge-freeway-right", "rail-switch-right"]);
+// STILL OPEN AT 1 M: railSwitch's diverging-route socket sits at a genuine
+// 3.2 m track-gauge-derived offset -- not a whole metre either. rampMerge
+// and rampDiverge's own angled sockets DO land exactly at 1 m (their
+// offset is half the sum of two whole-metre ROAD_STANDARDS values) and are
+// no longer listed here -- see roadkit.js's own comments at each. Named
+// directly in roadkit.js at the point of definition; listed here too so
+// this report doesn't read it as an unexplained regression. Not silently
+// skipped -- still printed, just not counted as a build-breaking failure.
+const KNOWN_OPEN_SOCKET_FINDINGS = new Set(["rail-switch-right"]);
 
 const rows = [];
 for (const [family, make] of instances) {
@@ -104,10 +103,10 @@ for (const [family, make] of instances) {
     }
   }
 
-  const footprintOk = nearMultiple(model.footprint.w, CELL) && nearMultiple(model.footprint.d, CELL);
+  const footprintOk = nearMultiple(model.footprint.w, ATOM) && nearMultiple(model.footprint.d, ATOM);
 
   const badSockets = (model.sockets || []).filter(
-    (s) => !nearMultiple(s.at[0], HALF_CELL) || !nearMultiple(s.at[2], HALF_CELL)
+    (s) => !nearMultiple(s.at[0], ATOM) || !nearMultiple(s.at[2], ATOM)
   );
 
   rows.push({
@@ -122,14 +121,14 @@ for (const [family, make] of instances) {
   });
 }
 
-console.log(`${"id".padEnd(42)} builds  footprint(cells)      sockets`);
+console.log(`${"id".padEnd(42)} builds  footprint(m, whole atoms?)  sockets`);
 console.log("-".repeat(100));
 let failCount = 0;
 let openCount = 0;
 for (const r of rows) {
   const isKnownOpen = KNOWN_OPEN_SOCKET_FINDINGS.has(r.id) && r.builds && r.footprintOk !== false;
   const buildsCol = r.builds ? "yes" : "NO";
-  const footCol = r.footprintOk === null ? "-" : r.footprintOk ? `yes (${r.footprint.w / CELL}x${r.footprint.d / CELL})` : `NO (${r.footprint.w}x${r.footprint.d}m)`;
+  const footCol = r.footprintOk === null ? "-" : r.footprintOk ? `yes (${r.footprint.w}x${r.footprint.d})` : `NO (${r.footprint.w}x${r.footprint.d}m)`;
   const sockCol = r.socketsOk === null ? "-" : r.socketsOk ? "yes" : `${isKnownOpen ? "OPEN" : "NO"} (${r.badSockets.join(", ")})`;
   const failed = !r.builds || r.footprintOk === false || (r.socketsOk === false && !isKnownOpen);
   if (failed) failCount++;

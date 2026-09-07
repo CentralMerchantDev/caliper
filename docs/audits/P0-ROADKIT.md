@@ -3,6 +3,48 @@
 Evidence for `docs/specs/BOARD-CONVERSION-PLAN.md` PHASE P0. Every number
 below has the command that produced it beside it.
 
+---
+
+## SUPERSEDED, 2026-09-07 — P0.4's `snapCellsOutward` IS REVERTED
+
+**Mark's decision, `PLACEMENT-CONTRACT.md` Part 0**: the grid's real
+addressing unit is the 1 m ATOM, not the 8 m CELL this document's P0.4
+snapped footprints onto. *"At 1 m an 18 m street is 18 atoms. The
+standards keep their real values and simply fit."* `snapCellsOutward` was
+lossy (an 18 m street reserving 24 m of ground) and the need for it is
+gone. **The whole P0.4 section below, including its before/after table,
+describes work that has been undone** — kept here as the historical
+record of what was tried and why, not as the current state.
+
+**What actually changed in `roadkit.js`**: `snapCellsOutward` and every
+call to it removed; every footprint back to its real `ROAD_STANDARDS`
+value (an 18 m STREET is 18 m again, not 24 m).
+
+**What this closes, exactly as Mark predicted**: `rampMerge` and
+`rampDiverge`'s angled connector socket — previously named OPEN below,
+because forcing it onto an 8 m cell boundary would have meant falsifying
+`ROAD_STANDARDS` — lands EXACTLY on the 1 m atom grid (its offset is half
+the sum of two whole-metre `ROAD_STANDARDS` values, e.g. 38 m for
+FREEWAY/RAMP). Verified directly, not assumed: `node scripts/verify-roadkit.mjs`
+now reports both as clean.
+
+**What does NOT close**: `railSwitch`'s diverging-route socket sits at a
+genuine 3.2 m track-gauge offset — not a whole metre either, at any grid
+size. Still open, checked directly rather than carried over unexamined.
+
+**A new finding, only visible once the snap was reverted**: 5 pieces have
+a genuinely fractional-metre real-world dimension that the old snap
+happened to mask by always rounding up to a clean 8 m multiple:
+`layby` (31.5 m, from `std.row + 3.5`), `bridgeCableStayed`/`bridgeSpan`'s
+cablestay case (`widthM * 1.4`, e.g. 61.6 m), `railStraight`
+(`RAIL_TRACK_ROW` = 4.8 m), `railPlatform` (3.6 m). Not fixed here —
+these are real dimensional constants, and changing them without checking
+their downstream geometry use is exactly the kind of guess-and-proceed
+this project's rules warn against. Named, reported, left for review.
+See `node scripts/verify-roadkit.mjs`'s current output.
+
+---
+
 ## P0.1 — `verifySocketMating()` actually checks position and bearing
 
 **Before:** the function read `kind`, `width`, `lanes` and returned `true`.

@@ -1,0 +1,116 @@
+BOARD-CONVERSION-PLAN.md Phase P1: the board is a list of placed pieces
+(and P0.4's snap reverted per PLACEMENT-CONTRACT.md Part 0)
+
+What was wrong: P1 started against a 2D, CELL=8 addressing spec, and
+partway through, two things changed underneath it. First, Mark rewrote
+P1.1 to a 3D "cubes" record (cell: {i,j,k}, levels, standsOn, surface) --
+the earlier 2D board.js was fully built and verified before this was
+noticed by re-reading the plan file, and was rebuilt against the current
+spec before anything committed. Second, PLACEMENT-CONTRACT.md gained a
+Part 0: the grid's real addressing unit is the 1 m ATOM, not the 8 m CELL
+-- P0.4's footprint-snapping was declared reverted ("it was lossy and the
+need for it is gone"), and P1 had to be rebuilt a second time onto the new
+unit before it could be trusted.
+
+P0.4 REVERTED, roadkit.js: snapCellsOutward and every call to it removed;
+every footprint back to its real ROAD_STANDARDS value (an 18 m STREET is
+18 m again). rampMerge/rampDiverge's angled connector socket -- named
+OPEN under the old 8 m check -- closes EXACTLY at 1 m (38 m for
+FREEWAY/RAMP, verified not assumed): the grid was wrong, not the socket.
+railSwitch's socket does not close even at 1 m (a genuine 3.2 m
+track-gauge offset) -- still open, checked directly. New finding, visible
+only once the snap was reverted: 5 pieces (layby, bridgeCableStayed's
+cablestay multiplier, railStraight, railPlatform) have a real
+fractional-metre dimension the old snap was masking. Not fixed -- real
+constants, checking their downstream geometry use is out of tonight's
+scope. Command: node scripts/verify-roadkit.mjs.
+
+grid.js gained ATOM=1/QUADRANT=4/BLOCK=16 and
+atomOf/atomOrigin/atomRect/atomCentre/atomsFor, ADDED alongside the
+existing CELL=8 functions, not replacing them -- test/grid.test.ts
+exercises cellOf/cellRect/cellsFor at 8 m granularity in detail and still
+passes unchanged, confirmed directly before assuming it was safe.
+
+P1.1 -- public/board-adapter.js converts generateWorld()'s plots/roads/
+bridges (the three categories it actually returns) into the placed-piece
+record, atom-addressed. Trees and props are NOT adapted: a direct read of
+generateWorld()'s return value found neither exists there today (trees
+are bare render-loop tuples with no id, discarded every frame;
+prop-manifest.js is a type catalogue, not instances) -- P3.2's job, named
+not skipped. Bridges are taken once, from the declarative bridges[] array,
+not also from their roads[] deck-span duplicate, to avoid reserving the
+same ground twice.
+
+Gate measurements, command node scripts/_board-adapter-probe.mjs (run in
+its own child process -- see below): 16,935 pieces, 0 field violations, 0
+duplicate ids. LED WITH THE NUMBER THAT CROSSES A LIMIT: plot-origin
+round-trip through atomOf/atomOrigin is 200/16,209 clean -- 16,009 do not
+round-trip, even at 1 m. Cheaper than the old 8 m CELL check
+(16,204/16,209 miss) exactly as predicted, and the residual is now a real
+but sub-metre origin fraction (e.g. block--1349-760-p0 misses by 0.2 m and
+0.1 m), not the multi-metre defect the coarser check implied --
+PLACEMENT-CONTRACT.md's "carved on whole cells" claim still does not hold.
+Not fixed here (city-plan.js's own carving math, out of P1's
+representation-only scope) -- reported plainly, not silently passed.
+
+P1.2 -- public/board.js's createBoard() wraps world-registry.js's own
+bucketed reservation store, no second spatial index. whereIs(id) is O(1);
+inCells(i,j,w,d,k) translates a cell rectangle to metres and calls the
+registry's allOverlapping.
+
+P1.3 -- canPlace checks exactly two things: SPACE (a free foot+clear box,
+levels tall) and GROUND (every foot cell's kind is in standsOn, where kind
+is land-use.js's classifyAt at k=0, or the surface of whatever piece sits
+directly below at k>0 -- Mark's stacking rule, a rooftop bench standing on
+the roof below it). Watched red twice, for two different real bugs, not
+narrated as smooth: (1) the pre-rewrite terrain check used
+world-registry.js's WATER/ROCK constants, which answer "is this volume
+entirely submerged/buried", not "can a piece stand here" -- an unbounded
+yMax could never read as buried, and a piece reaching into open air above
+underwater ground is never "submerged". Superseded by the current
+standsOn/classifyAt design once the 3D spec landed. (2) after the rewrite,
+the stacking test itself failed: a rooftop piece above a 2-level building
+on flat ground at y=10 (deliberately not y=0) read as floating in mid-air
+with nothing beneath it. Diagnosis: k's vertical extent was computed from
+absolute sea level, not local ground height -- invisible at y=0, wrong
+everywhere else. Fixed by threading a real groundY (sampled via heightAt)
+through every vertical-extent calculation. Watched green after, same
+assertions, unedited.
+
+P1.4 -- place/remove/replace/move, each reversible. test/board.test.ts:
+place then remove is byte-identical (JSON.stringify equality on
+board.list()) to before; place then replace then remove is identical; a
+refused move or replace leaves the board completely untouched, not
+partially applied.
+
+P1.5 -- determinism, and a real infrastructure problem found and fixed
+along the way. Building the world even once at module scope inside
+test/run.mjs's shared process (~110 other bundled test files' own
+world-builds already resident) reliably crashed the whole suite with a V8
+out-of-memory error ("Committing semi space failed"), watched three times
+with different exit codes, across three escalating mitigation attempts.
+The actual fix: every generateWorld() call for this phase now happens in
+scripts/_board-adapter-probe.mjs, run as a genuinely separate node child
+process (execFileSync), which builds the world, runs every P1.1 check
+itself, and reports a small JSON summary (never the full world, never the
+full piece list twice) back over stdout. Two builds, same seed, same
+16,935 pieces, same ids in the same order, same SHA-256 digest.
+
+Full evidence, every number with the command beside it:
+docs/audits/P0-ROADKIT.md (SUPERSEDED section) and docs/audits/P1-BOARD.md.
+
+Full suite: node test/run.mjs -> 998/1004 pass, npx tsc --noEmit clean.
+The 6 failures are pre-existing and unrelated: two known-red seed pins,
+the intentionally-red origin-stability test, a derived-artifact staleness
+check, and two reachability-test failures for agy's own new,
+not-yet-linked kitbash pages -- none in a file this phase touches.
+
+What is still open, named rather than carried silently: railSwitch's 3.2 m
+socket; the 5 fractional-metre roadkit pieces; the plot-origin round-trip
+(200/16,209, real but now sub-metre); road span alignment (334/707,
+measured, no claim exists to hold it to).
+
+Stopping at this phase exit for review before P1 -- per the plan's own
+rule, not rolling into P2 unattended.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
