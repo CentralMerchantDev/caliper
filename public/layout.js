@@ -362,6 +362,19 @@ export function typologyFor(className, situation, fits = null) {
  * like (a downtown core reads prestige, a beach village does not), not
  * measured -- there is nothing yet to measure it against.
  *
+ * UPDATED to the four consolidated finishes (docs/specs/LIBRARY-STRUCTURE.md,
+ * mapping published in docs/audits/VISUAL-RUN-QUESTIONS.md §7): f1 basic,
+ * f2 standard/midhigh, f3 mid/highend, f4 luxury. This file's original six
+ * names translate cleanly for four of them (luxury->f4, highend->f3,
+ * mid->f3, midhigh->f2, all per that published table); "showstopper" and
+ * "midlow" were never among the six LIBRARY-STRUCTURE.md names at all --
+ * they were this file's own semantic labels for "the most exclusive tier a
+ * class reaches" and "the plainest" respectively, so they translate by the
+ * same reasoning that chose them originally: showstopper -> f4 (elite/
+ * showcase, the same sense "showstopper" was reaching for), midlow -> f1
+ * (basic/utilitarian, the same sense "midlow" was reaching for). Still a
+ * proposal, not a re-derivation from anything measured.
+ *
  * Classes absent here (WAREHOUSE, HANGAR, FARM, PARK) are not an oversight:
  * the registry's only building categories are 'buildings' and 'civic' (240
  * each), and neither has an industrial or agricultural style in it yet --
@@ -370,13 +383,13 @@ export function typologyFor(className, situation, fits = null) {
  * than silently returning nothing for a reason nobody wrote down.
  */
 export const LIBRARY_TIERS_FOR_CLASS = {
-  TOWER:     ["luxury", "highend"],
-  CIVIC:     ["highend", "showstopper"],
-  MIDRISE:   ["midhigh", "highend"],
-  RESORT:    ["midhigh", "highend"],
-  TOWNHOUSE: ["mid", "midhigh"],
-  TERRACE:   ["mid", "midlow"],
-  VILLA:     ["midlow", "mid"],
+  TOWER:     ["f4", "f3"],
+  CIVIC:     ["f3", "f4"],
+  MIDRISE:   ["f2", "f3"],
+  RESORT:    ["f2", "f3"],
+  TOWNHOUSE: ["f3", "f2"],
+  TERRACE:   ["f3", "f1"],
+  VILLA:     ["f1", "f3"],
 };
 
 /** CIVIC plots draw from the registry's 'civic' category; every other
@@ -386,20 +399,37 @@ function registryCategoryFor(className) {
   return className === "CIVIC" ? "civic" : "buildings";
 }
 
+/** The 8 m CELL of WORLD-RULES section 3.2 and of grid.js -- kept as a
+ *  literal here rather than imported, the same choice public/typology-
+ *  footprints.js made for the same reason: this file's job is to read the
+ *  registry's own numbers, not add a dependency neither lane asked for. */
+const CELL_M = 8;
+
 /**
  * Does a library entry's footprint fit the free space available, in either
  * orientation -- a building can face either way along its plot, the same
  * rotation prop-manifest.js's `propFootprint` already accounts for.
  *
- * `clear` is read if the entry declares it, and defaults to 0 if not --
- * nothing in the registry declares it yet (LIBRARY-AS-SOURCE.md step 2,
- * agy's, not landed at the time this was written), so this reads whatever
- * is actually there rather than inventing a number step 2 should own.
+ * UPDATED: LIBRARY-AS-SOURCE.md step 2 landed since this was first written.
+ * Entries now carry `foot: { w, d }` in WHOLE CELLS (PLACEMENT-CONTRACT.md's
+ * own unit) and `clear: { w, d }`, also cells, per axis rather than one flat
+ * number -- both converted to metres here (`* CELL_M`) to compare against
+ * `situation.fits`, which is metric. `footprint` (the legacy metric size)
+ * is the fallback for any entry that predates step 2 and has no `foot` yet,
+ * with `clear` read as a flat number or 0 in that case, matching the
+ * original assumption this function shipped with.
  */
 function libraryEntryFits(entry, fits) {
-  const clear = entry.clear || 0;
-  const w = entry.footprint.w + clear * 2;
-  const d = entry.footprint.d + clear * 2;
+  let w, d;
+  if (entry.foot) {
+    const clear = entry.clear || { w: 0, d: 0 };
+    w = (entry.foot.w + (clear.w || 0) * 2) * CELL_M;
+    d = (entry.foot.d + (clear.d || 0) * 2) * CELL_M;
+  } else {
+    const clear = typeof entry.clear === "number" ? entry.clear : 0;
+    w = entry.footprint.w + clear * 2;
+    d = entry.footprint.d + clear * 2;
+  }
   return (w <= fits.w + 1e-6 && d <= fits.d + 1e-6) || (d <= fits.w + 1e-6 && w <= fits.d + 1e-6);
 }
 

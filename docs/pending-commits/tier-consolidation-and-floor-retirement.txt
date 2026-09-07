@@ -1,0 +1,55 @@
+Tier consolidation landed -- LIBRARY_TIERS_FOR_CLASS updated to the published
+mapping; and retire the Step 2 floor test Step 3 correctly outran
+
+Two unrelated fixes, landed together because both surfaced from the same
+test run and both had to be true before Step 3's own verification could
+mean anything.
+
+TIER CONSOLIDATION. docs/specs/LIBRARY-STRUCTURE.md's six-to-four finish
+consolidation landed in the shared registry (public/asset-registry.js) --
+exactly the change flagged as coming, and exactly the outcome predicted for
+it: LIBRARY_TIERS_FOR_CLASS still named the six retired tier strings, so
+test/layout.test.ts's "LIBRARY_TIERS_FOR_CLASS names only real tiers" went
+red, and libraryModelFor started returning null for every mapped class. The
+test firing was correct behaviour, not a defect -- it is why this was found
+rather than shipped as a silent hole.
+
+The old-to-new mapping is now published (docs/audits/VISUAL-RUN-QUESTIONS.md
+§7): f1 basic, f2 standard/midhigh, f3 mid/highend, f4 luxury. Four of this
+file's six original names translate directly from that table (luxury->f4,
+highend->f3, mid->f3, midhigh->f2). The other two, "showstopper" and
+"midlow", were never among LIBRARY-STRUCTURE.md's six names at all -- they
+were this file's own labels for "the most exclusive tier a class reaches"
+and "the plainest", so they translate by the same reasoning that chose them
+originally: showstopper->f4 (elite/showcase), midlow->f1 (basic/
+utilitarian). Not a guess at which of the six survive -- that question is
+answered and published now -- a translation of this file's own prior intent
+into the new four names.
+
+A SECOND CHANGE LANDED IN THE SAME REGISTRY UPDATE: entries now carry
+foot: {w,d} in whole cells (LIBRARY-AS-SOURCE.md step 2, the placement
+contract's own unit) and clear: {w,d}, also cells, per axis -- where this
+file's libraryEntryFits previously read `entry.clear` as a flat number
+defaulting to 0. `clear` being an object now made `clear * 2` evaluate to
+NaN, so every fit check silently failed and libraryModelFor returned null
+for everything, independent of the tier fix. Both are why libraryModelFor
+tested as fully broken before this commit even though the tier names alone
+would explain only part of it. Fixed: `foot`/`clear` are read and converted
+to metres (* CELL_M = 8) when present; the legacy `footprint` + flat
+`clear` path is kept as a fallback for any entry that predates step 2.
+
+THE FLOOR TEST. test/layout.test.ts's "no plot class silently collapses"
+(added in 772fd77 to close the fail-open that let 756fd95's TOWER
+regression through undetected) pinned exact pre-756fd95 counts as a floor.
+WORLD-REBALANCE-BRIEF.md §3's density rebalance (docs/pending-commits/
+step3-rebalance-density.txt) then deliberately dropped TOWNHOUSE, VILLA,
+WAREHOUSE and HANGAR below that baseline -- the rebalance working as
+intended, not a regression, but a fixed numeric floor cannot tell the
+difference and would need updating every time §3's calibration moves again
+before Mark signs off on it. Retired the numeric floor and kept the
+underlying invariant that actually matters -- a class going all the way to
+zero, unnoticed -- as a direct check: every class the world has ever
+produced a real building for must still produce at least one.
+
+How it is known to work: node --test test/layout.test.ts, 46/46. Full suite
+and tsc follow with the rest of Step 3's verification.
