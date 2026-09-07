@@ -19,6 +19,9 @@ import {
   releaseActiveRun,
   PipelineLimitError,
 } from "./controlLayer";
+import { findModels } from "./modelRetrieval";
+// @ts-ignore
+import { ASSET_REGISTRY } from "../public/asset-registry.js";
 export { SpendCounterDO } from "./spendCounterDOClass";
 
 export interface Env {
@@ -29,6 +32,9 @@ export interface Env {
   ANTHROPIC_API_KEY: string;
   OPENAI_API_KEY: string;
   ASSETS: Fetcher;
+  AI?: any;
+  VECTORIZE_MODELS?: any;
+  VECTORIZE_PLANNING?: any;
   /** Set to "false" to disable new public change runs in one deploy. */
   LIVE_RUN_ENABLED?: string;
   /** Optional. When set, ?k=<UNLOCK_CODE> on /change-run bypasses the
@@ -1305,5 +1311,27 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       return json({ ...outcome, passed: outcome.results.filter((r) => r.pass).length, total: outcome.results.length });
     }
 
+    if (url.pathname === "/api/search-models") {
+      const q = url.searchParams.get("q") || "";
+      const category = url.searchParams.get("category") || undefined;
+      const tier = url.searchParams.get("tier") || undefined;
+      const limit = parseInt(url.searchParams.get("limit") || "10", 10);
+      const fitsW = url.searchParams.get("fitsW") ? parseFloat(url.searchParams.get("fitsW")!) : undefined;
+      const fitsD = url.searchParams.get("fitsD") ? parseFloat(url.searchParams.get("fitsD")!) : undefined;
+      const fitsH = url.searchParams.get("fitsH") ? parseFloat(url.searchParams.get("fitsH")!) : undefined;
+
+      const fits = fitsW !== undefined && fitsD !== undefined ? { w: fitsW, d: fitsD, h: fitsH } : undefined;
+      const results = findModels(q, {
+        registry: ASSET_REGISTRY,
+        category,
+        tier,
+        fits,
+        limit,
+        rerank: true,
+      });
+
+      return json({ query: q, total: results.length, results });
+    }
+
     return json({ error: "not found" }, 404);
-}
+  }

@@ -43,6 +43,19 @@
       "new_sqlite_classes": ["SpendCounterDO"]
     }
   ],
+  "ai": {
+    "binding": "AI"
+  },
+  "vectorize": [
+    {
+      "binding": "VECTORIZE_MODELS",
+      "index_name": "caliper-models"
+    },
+    {
+      "binding": "VECTORIZE_PLANNING",
+      "index_name": "caliper-planning"
+    }
+  ],
   "vars": {
     "LIVE_RUN_ENABLED": "true",
     // Hard spend cap in USD across all generation calls, enforced in code
@@ -84,7 +97,9 @@
       "/change-plan-reply",
       "/change-review-decision",
       "/change-error-decision",
-      "/change-answer"
+      "/change-answer",
+      "/api/search-models",
+      "/api/explain-layout"
     ]
   }
 }
