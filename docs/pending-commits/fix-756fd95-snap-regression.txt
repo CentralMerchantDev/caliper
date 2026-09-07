@@ -1,0 +1,112 @@
+Fix 756fd95: the whole-cell snap was applied to classes it was never meant
+for, and took the skyline out with it
+
+Mark's report that started the rebalance work was "the tall buildings and
+downtown is gone." 756fd95 made that dramatically worse without anyone
+watching the numbers that would have caught it -- the exact failure this
+project's own standard of proof exists to prevent.
+
+THE MECHANISM. subdivideBlock's width-snap (public/city-plan.js) used to be
+gated on `cls.module`, which 756fd95 made true on all eleven PLOT_CLASSES
+(previously only TERRACE/TOWNHOUSE). That gate did two things unconditionally
+once true: shifted the row's start inward to the next cell boundary (up to
+7.9 m) and floored every plot's width down to the cell below (up to another
+7.9 m). Correct for a tiling row, where the whole point is party walls
+meeting with no gap. Actively wrong for a standalone class like TOWER, MIDRISE
+or CIVIC, which don't tile and don't need their plot's exact width on a grid
+line -- and TOWER has the highest minimum of any class, so it absorbed almost
+the entire loss: blocks sized to just clear 45 m dropped below it once
+snapped, and silently fell back to a smaller class through the caller's own
+fallback chain (generateBlocks / classForSettlementBlock).
+
+FIX, PART 1: subdivideBlock now gates the width-snap on a new, separate
+`tileRow` flag, declared true only on TERRACE and TOWNHOUSE. `module: 8`
+stays declared on all eleven classes (docs/specs/PLACEMENT-CONTRACT.md Part
+1's own requirement, and the half of the original work Mark said to keep),
+but it now means only "this class's own legal range is whole cells" -- not
+"snap every carved plot of this class onto the grid."
+
+FIX, PART 2, found only by measuring, not by reasoning about the snap fix
+alone: even with the snap correctly restricted, PLOT_CLASSES' bounds
+themselves being widened by the mechanical floor-min/ceil-max rule still
+regressed several classes below their pre-756fd95 counts -- not through the
+snap, but through subdivideBlock's own un-snapped count0 formula and its
+two-row depth threshold, both sensitive to exactly where minW/maxW/minD sit.
+Verified one class at a time against the world before any of this landed
+(node scripts/measure-layout.mjs): MIDRISE's width and TERRACE's depth
+regress the instant they move at all, so both stay at their original metric
+values. TOWER's width had to land on 48-88 m (round to the NEAREST cell)
+rather than the mechanical 40-96 m -- and 48-88 is exactly Mark's own
+originally-proposed 6-11 cell TOWER bracket from docs/specs/PLACEMENT-
+CONTRACT.md, arrived at independently here by a different method. Every
+other class widens either way with no measured cost.
+
+THE NUMBERS, node scripts/measure-layout.mjs, before 756fd95 / after 756fd95
+(broken) / after this fix:
+
+    plots                19,874  ->  19,252  ->  20,059
+    bld-terrace           6,521  ->   6,492  ->   6,521
+    bld-townhouse          5,342  ->   5,343  ->   5,342
+    bld-villa              3,710  ->   3,611  ->   3,896
+    bld-apartment-walkup   2,256  ->   2,250  ->   2,256
+    bld-midrise              857  ->     695  ->     857
+    bld-shop                 348  ->     352  ->     346
+    bld-office                328  ->     229  ->     328
+    bld-highstreet-terrace    192  ->      89  ->     192
+    bld-workshop               70  ->      31  ->      70
+    bld-tower                  55  ->       1  ->      55
+    bld-warehouse               41  ->      42  ->      41
+    bld-business-park            5  ->       0  ->       5
+
+Every figure at or above the pre-756fd95 baseline except bld-shop (346 vs
+348, -2, inside the noise of an unrelated weighted pick) and bld-warehouse/
+bld-townhouse (within 1, same). bld-tower, the one the report was about, is
+exact.
+
+Per-class plot counts, same three states (node -e against generateWorld
+directly, plot.className tally):
+
+    TERRACE      7,477  ->   7,443  ->   7,477
+    TOWNHOUSE    6,901  ->   6,902  ->   6,901
+    MIDRISE      1,344  ->   1,013  ->   1,344
+    TOWER           81  ->       1  ->      81
+    CIVIC           12  ->       0  ->      12
+    VILLA        3,822  ->   3,747  ->   4,007
+    FARM           165  ->      70  ->     165
+    HANGAR          32  ->      36  ->      32
+    WAREHOUSE       40  ->      40  ->      40
+
+CLOSING THE FAIL-OPEN THAT LET IT THROUGH. test/layout.test.ts's row-class
+tests had `const minSample = MIN_SAMPLE[className] ?? 0` and `if
+(plots.length === 0) continue` -- correct for not demanding 100 samples from
+a class that's rare by design, but it meant nine of eleven classes had no
+lower bound on their own count at all, so 55 towers becoming 1 tripped
+nothing. Added "no plot class silently collapses": a per-class floor, at the
+exact pre-756fd95 baseline above, asserting no class that used to build now
+builds less. Watched red against the broken 756fd95 state before trusting it
+green against this fix (git-show'd public/city-plan.js at 756fd95, swapped
+it in, confirmed the new test fails there, restored the fix).
+
+THE TWO TESTS STILL RED, NAMED. test/cityWorld.test.ts's "the embedded city
+summary is not stale" and test/planSeed.test.ts's "the default plan is
+byte-identical to the one before the plan was seeded" both assert an exact
+plot count (19,874) that whole-cell alignment legitimately moves (now
+20,059). Both are expected and both are deliberately NOT fixed here --
+WORLD-REBALANCE-BRIEF.md's own step 3 re-pins the seed hash and regenerates
+the summary ONCE, at the end of the rebalance, because the count will move
+again before that step is done. Fixing them now would mean doing it twice.
+They stay red, named, with a stated reason and a stated closer, not silently
+carried as "953/955, expected" the way an earlier report of mine put it --
+which is exactly the phrasing that lets a red test become a permanent one.
+
+How it is known to work: node test/run.mjs, npx tsc --noEmit clean.
+
+Step 2 of WORLD-REBALANCE-BRIEF.md (re-scoped: settlement seeding decisions,
+not class-geometry binding) resumes after this. One thing changes it: Mark
+has decided the model library becomes the world's building stock (docs/
+specs/LIBRARY-AS-SOURCE.md) -- agy is wiring the registry so 2,400
+catalogued models become reachable. The seeding decision about to be made
+will eventually select from that library rather than the twelve typologies,
+so Step 2's work writes the selection point as one function, not scattered
+through the carve -- not building toward the library integration itself,
+which waits for agy's work to land first.

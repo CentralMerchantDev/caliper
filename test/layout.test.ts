@@ -561,19 +561,20 @@ test("ON THE REAL WORLD: every row-class plot is a whole number of 8 m cells", (
   // unit left a 4.00 m gap between every pair of adjacent houses, so each one
   // presented a blank windowless flank across the gap to its neighbour's blank
   // windowless flank. The models were right and the subdivision defeated them.
-  // PLACEMENT-CONTRACT.md Part 1 made module: 8 universal (it used to be
-  // declared only on TERRACE/TOWNHOUSE), so this loop now covers all eleven
-  // classes -- but only TERRACE/TOWNHOUSE reliably carry thousands of real
-  // plots. A civic building or a hangar is rare by design; requiring >100
-  // samples from a class that is supposed to be rare would make the test
-  // fail on the world being correct. The >100 bar stays for the two classes
-  // it was originally written to guard; every other class is measured with
-  // however many plots the real world actually carved, including zero.
+  // PLACEMENT-CONTRACT.md Part 1 made `module: 8` universal on PLOT_CLASSES
+  // (it used to be declared only on TERRACE/TOWNHOUSE), but this loop gates
+  // on `tileRow`, a narrower, separate flag -- see the comment on PLOT_
+  // CLASSES in city-plan.js. Only TERRACE/TOWNHOUSE actually snap their
+  // carved width to the grid, because only they tile; a standalone class
+  // (TOWER, MIDRISE, ...) declares module for its own legal-range bounds but
+  // is never forced onto the grid at carve time, so this loop still covers
+  // exactly the two classes it always did. The >100 sample bar is for those
+  // same two, which reliably carry thousands of real plots.
   const MIN_SAMPLE: Record<string, number> = { TERRACE: 100, TOWNHOUSE: 100 };
   const world = realWorld;
 
   for (const [className, cls] of Object.entries(PLOT_CLASSES) as [string, any][]) {
-    if (!cls.module) continue;
+    if (!cls.tileRow) continue;
     const plots = world.plots.filter((p: any) => p.className === className);
     const minSample = MIN_SAMPLE[className] ?? 0;
     assert.ok(plots.length >= minSample, `only ${plots.length} ${className} plots -- too few to measure`);
@@ -605,7 +606,7 @@ test("ON THE REAL WORLD: every row-class plot STARTS on an 8 m cell, not just is
   const world = realWorld;
 
   for (const [className, cls] of Object.entries(PLOT_CLASSES) as [string, any][]) {
-    if (!cls.module) continue;
+    if (!cls.tileRow) continue;
     const plots = world.plots.filter((p: any) => p.className === className);
     const minSample = MIN_SAMPLE[className] ?? 0;
     assert.ok(plots.length >= minSample, `only ${plots.length} ${className} plots -- too few to measure`);
@@ -646,6 +647,35 @@ test("guardrail: the module snap never produces a plot outside its own class's d
       `${offenders.length} of ${plots.length} ${className} plots fall outside its own [${cls.minW}, ${cls.maxW}] m range, ` +
         `e.g. width ${offenders[0] && offenders[0].width}`,
     );
+  }
+});
+
+test("no plot class silently collapses -- a per-class floor from the world before whole-cell alignment", () => {
+  // THE FAIL-OPEN THIS CLOSES. The two tests above only assert things about
+  // the plots a class DOES have; a class that quietly stops getting any --
+  // exactly what happened to TOWER (55 bld-tower buildings fell to 1,
+  // world-wide, when PLOT_CLASSES first went whole-cell in 756fd95) -- has
+  // nothing in it to check, so `if (plots.length === 0) continue` reads as
+  // a pass. Nine of eleven classes had no lower-bound test on their own
+  // count at all, which is why a regression that size tripped nothing.
+  //
+  // BASELINE is the exact per-class plot count measured against the world
+  // as it stood before 756fd95 (docs/pending-commits' own before/after
+  // table), not a number picked to make this pass -- classes not listed
+  // here (RESORT, PARK) had zero plots in that world too and are not
+  // claimed to have a floor. Absence must not read as success, so the
+  // check is `>=`, not `===`: growing a class is fine, silently losing one
+  // is what this exists to catch.
+  const BASELINE: Record<string, number> = {
+    TERRACE: 7477, TOWNHOUSE: 6901, MIDRISE: 1344, TOWER: 81, CIVIC: 12,
+    VILLA: 3822, FARM: 165, HANGAR: 32, WAREHOUSE: 40,
+  };
+  const world = realWorld;
+  const counts: Record<string, number> = {};
+  for (const p of world.plots) counts[p.className] = (counts[p.className] || 0) + 1;
+  for (const [className, floor] of Object.entries(BASELINE)) {
+    const now = counts[className] || 0;
+    assert.ok(now >= floor, `${className} has ${now} plots, below its floor of ${floor} -- a class that used to build is silently disappearing`);
   }
 });
 

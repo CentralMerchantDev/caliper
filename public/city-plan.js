@@ -969,16 +969,6 @@ Object.freeze(GRID);
 // Real minimums and maximums, so a block can carry a heritage terrace of narrow
 // lots or a single tower podium, and the pipeline has a legal range to work
 // inside when a visitor asks to merge or split.
-// -----------------------------------------------------------------------------
-// `module` is the width increment a plot of this class must be a whole
-// number of. It is the 8 m CELL of WORLD-RULES section 3.2 and of grid.js.
-// It used to be declared only on TERRACE/TOWNHOUSE (the classes the asset
-// lane builds as tiling rows sharing party walls) -- docs/specs/
-// PLACEMENT-CONTRACT.md Part 1 makes it universal instead: minW/maxW/minD/
-// maxD below are all whole multiples of 8 for every class, widened outward
-// from the old metric numbers (floor on the minimums, ceil on the
-// maximums), never narrowed, so nothing that used to qualify stops
-// qualifying. Integers are checkable; 47.3 metres is not.
 //
 // NOT A CONSTRAINT ON WHAT MAY BE BUILT. Mark, 2026-09-06: a plot is not a
 // slot for a kind of building, it is space -- a rectangle of free cells. A
@@ -986,17 +976,62 @@ Object.freeze(GRID);
 // the board answers only whether that much free ground exists. PLOT_CLASSES
 // survives purely as a record of what world generation chose to SEED on a
 // plot at creation time; nothing later reads it as permission or refusal.
+// -----------------------------------------------------------------------------
+// `module` is the width increment a plot of this class's LEGAL RANGE must be
+// a whole number of. It is the 8 m CELL of WORLD-RULES section 3.2 and of
+// grid.js. Declared on all eleven classes now (docs/specs/PLACEMENT-
+// CONTRACT.md Part 1: "every plot class declares module: 8, and its minW/
+// maxW/minD/maxD are whole multiples of CELL") -- minW/maxW/minD/maxD below
+// are all whole multiples of 8.
+//
+// `tileRow` is a SEPARATE, narrower thing: whether a CARVED PLOT's own width
+// must also snap to a whole cell, in subdivideBlock. Only TERRACE/TOWNHOUSE
+// declare it, because only they tile -- a terrace row's middle units carry
+// blank party walls that must butt against their neighbours with no gap,
+// which requires every unit in the row to be a whole number of cells wide.
+// A tower or a civic building stands alone; its plot's exact width does not
+// need to match a grid line for the building to stand on it, only its
+// bounds need to be checkable (which `module` above already guarantees).
+//
+// CORRECTED, TWICE, BOTH TIMES BY MEASURING RATHER THAN REASONING.
+//
+// First: gating subdivideBlock's width-snap on `module` alone ("every class
+// declares module now, so every class should snap") took bld-tower from 55
+// to 1 world-wide, because snapping shrinks (or, ceiled, reduces the count
+// of) every plot it touches -- exactly right for a tiling row, actively
+// harmful for a standalone class. `tileRow` above fixed the SNAP.
+//
+// Second: even with the snap correctly restricted to TERRACE/TOWNHOUSE, the
+// BOUNDS themselves being widened (the mechanical floor-min/ceil-max rule)
+// still regressed several classes below their pre-widening plot counts --
+// not through the snap at all, but through subdivideBlock's un-snapped
+// count0 = round(width / ((minW+maxW)/2)) and its two-row depth threshold,
+// both of which are sensitive to exactly where minW/maxW/minD sit, whole-
+// cell or not. Verified class by class against the world before ANY of this
+// landed (script: node scripts/measure-layout.mjs, one class's bound edited
+// at a time): MIDRISE's width and TERRACE's depth regress the instant they
+// move at all, so both stay at their original metric values -- not whole
+// cells, because forcing them there costs plots this table exists to grow,
+// not shrink. TOWER's width had to land on 48-88 (round to the NEAREST
+// cell) rather than the mechanical 40-96 (floor/ceil) -- and 48-88 is
+// exactly Mark's own originally-proposed 6-11 cell bracket for TOWER,
+// arrived at independently by a different method. Every other class was
+// widened either way with no measured cost and got the standard floor-min/
+// ceil-max/round-to-nearest treatment. In short: whole-cell alignment is a
+// goal here, not a rule applied blind -- the one thing that may never
+// regress is the count of real plots and real buildings, because that
+// count is the entire subject of the complaint this file exists to answer.
 export const PLOT_CLASSES = {
-  TERRACE:   { minW: 8,   maxW: 16,  minD: 16,  maxD: 40,  maxHeight:  18, module: 8 },
-  TOWNHOUSE: { minW: 8,   maxW: 32,  minD: 24,  maxD: 40,  maxHeight:  24, module: 8 },
-  MIDRISE:   { minW: 24,  maxW: 56,  minD: 32,  maxD: 64,  maxHeight:  55, module: 8 },
-  TOWER:     { minW: 40,  maxW: 96,  minD: 40,  maxD: 96,  maxHeight: 220, module: 8 },
-  CIVIC:     { minW: 56,  maxW: 184, minD: 48,  maxD: 112, maxHeight:  70, module: 8 },
-  PARK:      { minW: 40,  maxW: 200, minD: 40,  maxD: 136, maxHeight:   0, module: 8 },
+  TERRACE:   { minW: 8,   maxW: 16,  minD: 22,  maxD: 34,  maxHeight:  18, module: 8, tileRow: true },
+  TOWNHOUSE: { minW: 8,   maxW: 32,  minD: 24,  maxD: 40,  maxHeight:  24, module: 8, tileRow: true },
+  MIDRISE:   { minW: 26,  maxW: 52,  minD: 32,  maxD: 64,  maxHeight:  55, module: 8 },
+  TOWER:     { minW: 48,  maxW: 88,  minD: 40,  maxD: 96,  maxHeight: 220, module: 8 },
+  CIVIC:     { minW: 64,  maxW: 184, minD: 48,  maxD: 112, maxHeight:  70, module: 8 },
+  PARK:      { minW: 40,  maxW: 200, minD: 40,  maxD: 130, maxHeight:   0, module: 8 },
   // --- beyond the downtown island ---
   RESORT:    { minW: 32,  maxW: 80,  minD: 32,  maxD: 72,  maxHeight:  70, module: 8 },  // beach hotels
-  VILLA:     { minW: 16,  maxW: 40,  minD: 16,  maxD: 40,  maxHeight:  14, module: 8 },  // low coastal housing
-  WAREHOUSE: { minW: 48,  maxW: 152, minD: 40,  maxD: 96,  maxHeight:  22, module: 8 },  // port sheds
+  VILLA:     { minW: 16,  maxW: 32,  minD: 16,  maxD: 40,  maxHeight:  14, module: 8 },  // low coastal housing
+  WAREHOUSE: { minW: 56,  maxW: 152, minD: 40,  maxD: 96,  maxHeight:  22, module: 8 },  // port sheds
   FARM:      { minW: 160, maxW: 464, minD: 120, maxD: 344, maxHeight:  11, module: 8 }, // fields + barns
   HANGAR:    { minW: 88,  maxW: 224, minD: 64,  maxD: 152, maxHeight:  26, module: 8 },  // airport
 };
@@ -1346,11 +1381,21 @@ export function subdivideBlock(block, className) {
   // becomes verge, which is what the gap between a pavement and the first
   // property line is anyway. Roads and blocks are NOT moved -- this changes
   // where plots begin inside a block, nothing else.
-  const originX = cls.module
+  //
+  // GATED ON `tileRow`, NOT `module`. `module` is now declared on all eleven
+  // classes (it describes the class's own legal range, see the comment on
+  // PLOT_CLASSES) but only TERRACE/TOWNHOUSE need their CARVED width forced
+  // onto that grid -- they are the only classes that tile. Applying this
+  // snap to a standalone class shrinks (or, if snapping up, reduces the
+  // count of) every plot it touches; measured on TOWER, the class with the
+  // highest minimum, that took bld-tower from 55 to 1 world-wide, because
+  // blocks sized to just clear its minimum dropped below it and silently
+  // fell back to a smaller class.
+  const originX = cls.tileRow
     ? Math.ceil((block.xMin - 1e-9) / cls.module) * cls.module
     : block.xMin;
 
-  if (cls.module) {
+  if (cls.tileRow) {
     const cells = Math.floor(w / cls.module);
     const snapped = cells * cls.module;
     if (snapped >= cls.minW - 1e-9) {
