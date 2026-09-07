@@ -150,6 +150,102 @@ detours). Measured against the real limit, reported per-edge, not
 silently accepted or silently rerouted. Command: `node -e
 "...buildArterialNetwork({heightAt})..."`.
 
+## P2 finish, item 1 — terrain-following routing (this update)
+
+Mark's explicit instruction after accepting the arterial layer: route
+arterials along the terrain rather than only report the violation, using
+`grade.js`'s existing per-class design gradients as the limit. Gate:
+zero edges over their class limit, or each remaining exception named
+with the terrain reason.
+
+**What was built.** `routeTerrainFollowing()` in `road-network.js`:
+recursively displaces a segment's own midpoint sideways (perpendicular
+to its direct line), tries lateral offsets at ±15/30/45% of the segment
+length each side, keeps whichever most reduces the worst sampled grade
+across the two resulting halves, recurses on each half up to depth 5.
+Named honestly in its own doc comment as a bounded heuristic, not a real
+shortest-feasible-path search (no A* over the height field) — a real
+router is listed under "what is genuinely open," below.
+
+**A real bug, watched red before being called fixed.** The first working
+version of the router correctly bent routes and correctly lowered grade
+findings — but broke socket verification the moment it was measured
+against real terrain: **70 of 2,287 joins failed** with "bearing not
+opposed." Root cause, not papered over: `standardStraight()` pieces are
+literal boxes — their two end faces are always parallel. Two straight
+pieces meeting at a bend can never satisfy `verifySocketMating`'s
+bearing-opposition check by direct abutment, regardless of how the trim
+math is done; a claim in an earlier pass of this same work that bent
+joins "verify identically to same-bearing joins" was wrong, and this
+measurement is what caught it. Fixed by placing a real 2-leg
+`standardJunction()` bend piece at every interior waypoint the router
+introduces, trimmed back by its own radius on each side — the exact same
+pattern P2.2's own settlement-centre junctions already use
+(`standardJunctionRadius`), applied one level further in, not a new
+mechanism.
+
+**A second, earlier bug, re-fixed here:** trimming a graph edge's own
+endpoint along the DIRECT node-to-node bearing (P2.2's original fix)
+stops matching where the junction's real socket sits once the router has
+bent the first or last leg away from that direct line. Fixed by routing
+first on the true, untrimmed node-to-node endpoints, then trimming the
+resulting waypoint path's own first/last leg along ITS OWN actual
+direction (`trimRouteForJunctions`) — route, then trim, not the other
+order.
+
+**Gate, measured, same command as the original grade finding
+(`node -e "...buildArterialNetwork({heightAt})..."`, `heightAt` from
+`terrain.js`'s `makeHeightAt(new LandField(16))`):**
+
+| | before (straight line) | after (terrain-following) |
+|---|---|---|
+| edges over `BOULEVARD` 6% limit | 30 of 80 | **21 of 80** |
+| worst edge | barrier 43→42, 113.5% | barrier 14→15, 48.9% |
+| 2nd worst | barrier 12→13, 100.7% | barrier 43→42, 42.9% |
+| joins verified (real terrain) | not previously measured this way | **0 of 2,294 fail** |
+| junctions ok (real terrain) | not previously measured this way | **72/72** |
+
+**Gate NOT fully met — 21 edges remain over limit, named as exceptions,
+not hidden:** every one is on the barrier crescent, `kingsley-isle`, or
+mainland's steepest ground (full list: `barrier 14→15`, `barrier 43→42`,
+`barrier 12→13`, `barrier 45→44`, `kingsley-isle 0→2`, `barrier 46→45`,
+`mainland 13→12`, `mainland 6→8`, `barrier 42→41`, `mainland 8→10`,
+`mainland 7→6`, `mainland 9→23`, `barrier 11→12`, `mainland 5→4`,
+`mainland 14→15`, `mainland 12→14`, `mainland 15→16`, `mainland 5→7`,
+`mainland 8→9`, `barrier 44→43`, `mainland 22→21`). Terrain reason,
+honestly bounded rather than individually re-derived per edge: the
+router is a depth-5 heuristic over lateral offsets, not a true
+shortest-feasible-path search, and the barrier landmass in particular is
+a thin crescent with little lateral room for a longer detour to actually
+find — the same geometry that produced the single worst finding in the
+original measurement. A real fix needs true pathfinding over the height
+field; not attempted here, listed below under what remains open.
+
+**Tests.** `test/roadNetwork.test.ts` gained two cases exercising the
+real-`heightAt` code path for the first time (the existing P2.2/P2.3/P2.4
+cases all call `buildArterialNetwork({})`, which never reaches
+`routeTerrainFollowing` at all): "real heightAt routing produces zero
+unmated joins (the bend-junction fix)," and "terrain-following routing
+reduces (does not merely report) over-grade edges" (asserted against the
+30-edge baseline, so a future change that silently stops routing fails
+loudly). `npx tsc --noEmit` clean.
+
+**A third instance of the shared-worktree risk CLAUDE.md already names,
+this time with a confirmed cause.** Mid-session, `public/road-network.js`
+was found reverted to its exact last-committed state — `git diff --stat`
+empty against HEAD — losing an uncommitted version of this same fix, for
+the second time in this project's history. `git status` at the same time
+showed `public/model-retrieval.js`, `src/index.ts`,
+`src/modelRetrieval.ts`, and two retrieval test files modified,
+uncommitted, in this exact checkout: agy's retrieval work
+(`docs/specs/RETRIEVAL-PLAN.md`), actively in progress in the same
+working tree at the same time, with no intervening commit that touched
+`road-network.js`. Not a mystery — a second agent in one working tree,
+exactly the class of risk the standing rule names. The fix was redone
+and committed (`11640b8`) staging ONLY `public/road-network.js` and
+`test/roadNetwork.test.ts` by explicit path — not `git add -A` — so as
+not to sweep up or disturb agy's own uncommitted work.
+
 ## Full suite
 
 `node test/run.mjs` and `npx tsc --noEmit` — command and result recorded
@@ -165,7 +261,13 @@ in the RECORD table below.
    two piece families exist now (`road-network.js`'s standard-width
    arterials, `roadkit.js`'s real-ROW-width kit), and nothing yet joins
    them.
-4. **Terrain-aware arterial routing** for the 30 over-grade edges.
+4. **Terrain-aware arterial routing** — done for MST edges as a bounded
+   heuristic (see "P2 finish, item 1" above), cutting over-grade edges
+   from 30 to 21; a true shortest-feasible-path search (A* over the
+   height field) would close the remaining 21. The regional-tie code
+   path (`chainStraightRun` from each landmass's anchor node to the
+   nearest highway point) does not attempt terrain-following at all —
+   not measured, not claimed.
 5. **Water-aware regional ties** (the bridge gap named above).
 6. **`city-render.js` importing the kit** for the FULL network, not just
    the arterial layer's own dedicated map.

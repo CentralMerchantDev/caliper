@@ -356,11 +356,33 @@ Converting it to pieces without changing it would preserve it exactly.
       and every junction failed with a position mismatch equal to the
       junction's own radius; fixed by trimming edges to the junction's socket
       before building them. Command: `node test/run.mjs`
-      (`test/roadNetwork.test.ts`) → **2,034 joins, 0 failures.** Grade
-      checked against `ROAD_GRADE.BOULEVARD.maxGrade` — **30 of 80 edges
-      exceed it**, reported per-edge, not rerouted (terrain-following
-      routing explicitly out of scope, `docs/specs/ROAD-HIERARCHY.md`).
-      See `docs/audits/P2-ARTERIAL.md`.
+      (`test/roadNetwork.test.ts`) → **2,034 joins, 0 failures** (heightAt
+      omitted). Grade checked against `ROAD_GRADE.BOULEVARD.maxGrade` —
+      **30 of 80 edges exceed it** on a straight line, worst two at
+      113.5%/100.7% (a cliff, not a road).
+      **UPDATE — terrain-following routing (P2 finish, item 1):**
+      `routeTerrainFollowing()` bends a route away from the direct line
+      when the straight grade is too steep, a bounded depth-5 lateral-
+      offset heuristic, honestly named as one (not a real A*-over-height-
+      field router). **Watched red once more, at a deeper layer than P2.2's
+      own bug:** the first working version of the router bent routes but
+      abutted straight pieces directly at the bend — a straight piece is a
+      straight box, its two end faces are always parallel, so two of them
+      meeting at different headings can never satisfy socket bearing-
+      opposition. **70 of 2,287 joins failed** under real terrain the
+      moment this was measured (the existing suite never had passed a real
+      `heightAt` in). Fixed by placing a real 2-leg `standardJunction()`
+      bend piece at every interior waypoint, trimmed by its own radius —
+      the same pattern P2.2's own junctions already use, one level
+      further in. **After the fix: 0 of 2,294 joins fail, 72/72 junctions
+      still ok, under real terrain.** Grade: **21 of 80 edges still exceed
+      the limit** (down from 30; worst two now 48.9%/42.9%, down from
+      113.5%/100.7%) — gate not fully met, remaining edges named as
+      exceptions: all on the barrier crescent, kingsley-isle, or
+      mainland's steepest terrain, where the heuristic's bounded search
+      found no lateral offset that helped enough within its depth limit.
+      Command: `node test/run.mjs` (`test/roadNetwork.test.ts`, two new
+      cases). See `docs/audits/P2-ARTERIAL.md`.
 - [ ] **P2.3** Collectors, then locals, each mating into the level above at a
       real junction piece — `intersection4Way`, `intersection3Way`,
       `roundaboutModern`, `slipLane`, `rampMerge`/`rampDiverge` where classes
@@ -502,6 +524,6 @@ These replace Mark's eye while he is asleep. They are not optional.
 |---|---|---|---|
 | P0 | done; P0.4 superseded by PLACEMENT-CONTRACT.md Part 0 (snap reverted), 2 of 3 open findings now closed at 1 m, 1 new finding (5 fractional-metre pieces) | `node scripts/verify-roadkit.mjs` (post-revert); `docs/audits/P0-ROADKIT.md` SUPERSEDED section | `f0a0372`, revert in `90844af` |
 | P1 | done, real numbers led with | `node test/run.mjs` 998/1004 pass (6 pre-existing, unrelated); `node scripts/_board-adapter-probe.mjs` 16,935 pieces, 0 field violations, 0 dup ids; plot atom round-trip 200/16,209 (16,009 miss, real but sub-metre); road atom alignment 334/707; `npx tsc --noEmit` clean; `docs/audits/P1-BOARD.md` | `0408fdc` (Part 0), `90844af` |
-| P2 | PARTIAL — arterial layer only. P2.1/P2.2 done; P2.3/P2.4 met at arterial level, not full network; P2.5 not done; P2.6 partial (arterial map render, not full renderer) | `node test/run.mjs` 1005/1009 pass (4 pre-existing); arterial: 2,034 joins/0 fail, 72 junctions/0 fail, 1 component per landmass (measured); full network: still 52 components/38 stranded (`node scripts/measure-roads.mjs`, unchanged); 30/80 edges over grade; `docs/audits/P2-ARTERIAL.md` | `7cd7de6` (P2.1), `ca8ad3d` |
+| P2 | PARTIAL — arterial layer only. P2.1/P2.2 done; P2.3/P2.4 met at arterial level, not full network; P2.5 not done; P2.6 partial (arterial map render, not full renderer). P2 finish item 1 (terrain-following grade routing) done, not fully gated | `node test/run.mjs` 1012/1014 pass (2 pre-existing); arterial: 2,294 joins/0 fail under real terrain, 72 junctions/0 fail, 1 component per landmass (measured); full network: still 52 components/38 stranded (`node scripts/measure-roads.mjs`, unchanged); grade 30/80 over limit straight-line -> 21/80 after terrain-following routing, remaining named as exceptions (bounded heuristic, steepest terrain); `docs/audits/P2-ARTERIAL.md` | `7cd7de6` (P2.1), `ca8ad3d`, `11640b8` (terrain routing) |
 | P3 | not started | — | — |
 | P4 | not started | — | — |

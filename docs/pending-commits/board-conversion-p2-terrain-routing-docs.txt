@@ -1,0 +1,16 @@
+Record P2 finish item 1 (terrain-following grade routing) in the plan
+and the audit
+
+Updates docs/specs/BOARD-CONVERSION-PLAN.md's P2.2 entry and RECORD
+table row, and appends a new dated section to docs/audits/P2-ARTERIAL.md,
+with the before/after grade distribution (30/80 -> 21/80 over
+BOULEVARD's 6% limit), the bend-mating bug the router exposed (0 ->
+70/2287 -> 0 failures, across two measured states), the 21 remaining
+over-grade edges named individually as exceptions with their shared
+terrain reason, and the confirmed cause of this session's second
+shared-worktree data-loss incident (agy's retrieval work, active in the
+same checkout). Code and tests for this were committed separately
+(11640b8); this commit is documentation only, appended per this
+project's own audit convention rather than rewritten.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
