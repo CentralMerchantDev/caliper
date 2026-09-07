@@ -442,8 +442,8 @@ These replace Mark's eye while he is asleep. They are not optional.
 
 | Phase | Status | Gate evidence | Commit |
 |---|---|---|---|
-| P0 | done; P0.4 superseded by PLACEMENT-CONTRACT.md Part 0 (snap reverted), 2 of 3 open findings now closed at 1 m, 1 new finding (5 fractional-metre pieces) | `node scripts/verify-roadkit.mjs` (post-revert); `docs/audits/P0-ROADKIT.md` SUPERSEDED section | `f0a0372` + revert (this session, uncommitted at time of writing) |
-| P1 | done, real numbers led with | `node test/run.mjs` (see below); `node scripts/_board-adapter-probe.mjs` 16,935 pieces, 0 field violations, 0 dup ids; plot atom round-trip 200/16,209 (16,009 miss, real but sub-metre); road atom alignment 334/707; `npx tsc --noEmit` clean; `docs/audits/P1-BOARD.md` | (filled in below after commit) |
+| P0 | done; P0.4 superseded by PLACEMENT-CONTRACT.md Part 0 (snap reverted), 2 of 3 open findings now closed at 1 m, 1 new finding (5 fractional-metre pieces) | `node scripts/verify-roadkit.mjs` (post-revert); `docs/audits/P0-ROADKIT.md` SUPERSEDED section | `f0a0372`, revert in `90844af` |
+| P1 | done, real numbers led with | `node test/run.mjs` 998/1004 pass (6 pre-existing, unrelated); `node scripts/_board-adapter-probe.mjs` 16,935 pieces, 0 field violations, 0 dup ids; plot atom round-trip 200/16,209 (16,009 miss, real but sub-metre); road atom alignment 334/707; `npx tsc --noEmit` clean; `docs/audits/P1-BOARD.md` | `0408fdc` (Part 0), `90844af` |
 | P2 | not started | — | — |
 | P3 | not started | — | — |
 | P4 | not started | — | — |
