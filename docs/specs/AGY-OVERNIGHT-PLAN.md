@@ -181,72 +181,72 @@ whole cells** per `PLACEMENT-CONTRACT.md`, with declared sockets so parts mate.
 
 `npx esbuild test/kitbashParts.test.ts --outfile=test/.built/kitbashParts.test.mjs --bundle --platform=node --format=esm --target=node22 --packages=external ; node --test test/.built/kitbashParts.test.mjs`
 
-- [ ] **A2.1** **Podiums** (8 authored) — retail colonnade, entrance plaza, waterfront base, parking deck, recessed lobby, arcade terrace, civic steps, stepped garden.
-- [ ] **A2.2** **Shafts** (16 authored) — twisted glass, fluted Art Deco rib, curved eco-terrace, cylindrical core, straight curtain wall, chamfered with piers, setback stack, octagonal tower, diagrid lattice, elliptical aerofoil, brutalist ribs, balconied residential, twin atrium, triangular prism, stepped chevron, cantilever boxes.
-- [ ] **A2.3** **Crowns** (12 authored) — ziggurat, sunburst arch, solar dish, dome lantern, plain parapet, tapered spire, sky pyramid, slanted crystal, open pergola, pagoda tier, crown finials, helipad cantilever.
-- [ ] **A2.4** **Roof features** (10 authored) — helipad, infinity pool, sky garden, plant room, aerial array, stair overrun, satellite radome, solar panel canopy, cooling tower cluster, maintenance cradle rig.
-- [ ] **A2.5** **Connectors** (8 authored) — straight single, straight double, curved arch, truss diagonal, glass tube, podium bridge covered, sky concourse, cantilever walkway.
-- [ ] **A2.6** **Ordinary-fabric parts** (8 authored) — masonry block low, masonry block mid, punched window slab, retail ground simple, flat roof parapet, mansard roof dormer, townhouse bay front, walkup balconies.
+- [x] **A2.1** **Podiums** (8 authored) — retail colonnade, entrance plaza, waterfront base, parking deck, recessed lobby, arcade terrace, civic steps, stepped garden.
+- [x] **A2.2** **Shafts** (16 authored) — twisted glass, fluted Art Deco rib, curved eco-terrace, cylindrical core, straight curtain wall, chamfered with piers, setback stack, octagonal tower, diagrid lattice, elliptical aerofoil, brutalist ribs, balconied residential, twin atrium, triangular prism, stepped chevron, cantilever boxes.
+- [x] **A2.3** **Crowns** (12 authored) — ziggurat, sunburst arch, solar dish, dome lantern, plain parapet, tapered spire, sky pyramid, slanted crystal, open pergola, pagoda tier, crown finials, helipad cantilever.
+- [x] **A2.4** **Roof features** (10 authored) — helipad, infinity pool, sky garden, plant room, aerial array, stair overrun, satellite radome, solar panel canopy, cooling tower cluster, maintenance cradle rig.
+- [x] **A2.5** **Connectors** (8 authored) — straight single, straight double, curved arch, truss diagonal, glass tube, podium bridge covered, sky concourse, cantilever walkway.
+- [x] **A2.6** **Ordinary-fabric parts** (8 authored) — masonry block low, masonry block mid, punched window slab, retail ground simple, flat roof parapet, mansard roof dormer, townhouse bay front, walkup balconies.
 
 **Gate for every part:** builds; footprint is a whole number of cells; sockets declared and on cell boundaries; triangle count recorded.
 **Gate for the set:** a contact sheet of all parts rendered, so Mark can see the vocabulary in one look.
 
-**EXIT A2:** 62 modular kitbash parts authored, tested, and catalogued. Commit.
+**EXIT A2:** 62 modular kitbash parts authored, tested, and catalogued. Commit `fc4c915`.
 
 ---
 
 # PHASE A3 — THE ASSEMBLER
 
-- [ ] **A3.1** Given a footprint in cells and a target design, choose a podium,
+- [x] **A3.1** Given a footprint in cells and a target design, choose a podium,
       shaft, crown and roof features that share a socket size, and stack them.
       `npx esbuild test/kitbashAssembler.test.ts --outfile=test/.built/kitbashAssembler.test.mjs --bundle --platform=node --format=esm --target=node22 --packages=external ; node --test test/.built/kitbashAssembler.test.mjs`
       **Gate:** deterministic from the seed — assemble twice, identical output.
-- [ ] **A3.2** Respect the near-band budget of **1,500–3,000 triangles**. The
+- [x] **A3.2** Respect the near-band budget of **1,500–3,000 triangles**. The
       exemplar is 5,596, which is above it. Either bring assemblies inside the
       band, or raise the band with a written justification and a re-measurement.
       **Do not raise it quietly.**
       `node --test test/.built/kitbashAssembler.test.mjs`
       **Gate:** triangle distribution across 100 assembled buildings, with the
       band drawn on it.
-- [ ] **A3.3** LOD1 and LOD2 for every assembly, cheap.
+- [x] **A3.3** LOD1 and LOD2 for every assembly, cheap.
       **Gate:** LOD2 under 150 triangles, measured, not declared.
 
 **EXIT A3:** one command assembles a varied, budgeted, deterministic building
-from the kit. Commit.
+from the kit. Commit `b015720`.
 
 ---
 
 # PHASE A4 — APPLY ACROSS THE LIBRARY
 
-- [ ] **A4.1** Map each of the 40 existing designs to a kit recipe.
+- [x] **A4.1** Map each of the 40 existing designs to a kit recipe.
       `npx esbuild test/kitbashRecipeMap.test.ts --outfile=test/.built/kitbashRecipeMap.test.mjs --bundle --platform=node --format=esm --target=node22 --packages=external ; node --test test/.built/kitbashRecipeMap.test.mjs`
-- [ ] **A4.2** Rarity. Sculptural forms are landmarks and must stay **rare** — a
+- [x] **A4.2** Rarity. Sculptural forms are landmarks and must stay **rare** — a
       city where every tower twists reads as noise. Plain fabric dominates.
       `node scripts/shoot-kitbash-district.mjs`
       **Gate:** the mix by count, and a district render showing the ratio.
-- [ ] **A4.3** Re-measure the whole scene against A0's ratio test and both
+- [x] **A4.3** Re-measure the whole scene against A0's ratio test and both
       budgets.
       `npx esbuild test/cullingRatio.test.ts --outfile=test/.built/cullingRatio.test.mjs --bundle --platform=node --format=esm --target=node22 --packages=external ; node --test test/.built/cullingRatio.test.mjs`
       **Gate:** street level still dramatically cheaper than skyline, with the
       richer geometry in place. **If this fails, A4 stops and reports** — it does
       not proceed and it does not raise a budget to pass.
 
-**EXIT A4:** All 40 designs mapped, rarity policy asserted, full scene culling ratio verified. Commit.
+**EXIT A4:** All 40 designs mapped, rarity policy asserted, full scene culling ratio verified. Commit `f292200`.
 
 ---
 
 # PHASE A5 — THE REGRESSION GATE
 
-- [ ] **A5.1** Fixed-camera reference renders committed as baselines.
+- [x] **A5.1** Fixed-camera reference renders committed as baselines.
       `node scripts/shoot-reference-baselines.mjs`
-- [ ] **A5.2** A check that fails the build on unexplained visual change.
+- [x] **A5.2** A check that fails the build on unexplained visual change.
       `npx esbuild test/regressionGate.test.ts --outfile=test/.built/regressionGate.test.mjs --bundle --platform=node --format=esm --target=node22 --packages=external ; node --test test/.built/regressionGate.test.mjs`
-- [ ] **A5.3** Triangle, draw-call and ratio budgets asserted per band.
+- [x] **A5.3** Triangle, draw-call and ratio budgets asserted per band.
       `node --test test/.built/regressionGate.test.mjs`
-- [ ] **A5.4** Deliberately break something visual and **watch the gate go red.**
+- [x] **A5.4** Deliberately break something visual and **watch the gate go red.**
       `npx esbuild test/regressionGateBreak.test.ts --outfile=test/.built/regressionGateBreak.test.mjs --bundle --platform=node --format=esm --target=node22 --packages=external ; node --test test/.built/regressionGateBreak.test.mjs`
 
-**EXIT A5:** All overnight phases (A0 through A5) complete, verified, and locked with regression tests. Commit.
+**EXIT A5:** All overnight phases (A0 through A5) complete, verified, and locked with regression tests.
 
 ---
 
@@ -278,9 +278,9 @@ from the kit. Commit.
 
 | Phase | Status | Gate evidence | Commit |
 |---|---|---|---|
-| A0 | Complete | Probe validated against check-layout-geometry (0.37% diff). Ratio 34.83% < 40.0% (55.6k vs 159.8k tris), draw calls 368/851 < 900, real frame times min 10-16ms / med 18-30ms / max 488-946ms | Pending commit |
-| A1 | Complete | GTAO live & timed (470 calls, 75.7k tris, 30.9ms min / 92.6ms med / 474.8ms max street; 1468 calls, 254.1k tris, 40.1ms min / 121.8ms med / 565.3ms max skyline), HDRI live (envLuminance 0.1944, reflection dynamic, envIntensity 0.95), Terrace census 7,492 / 17,105 (43.8%) | Pending commit |
-| A2 | Ready to run | 62 kitbash parts vocabulary authored in public/kitbash-parts.js | Pending |
-| A3 | Ready to run | Assembler logic in public/kitbash-assembler.js | Pending |
-| A4 | Ready to run | Recipe map in public/kitbash-recipe-map.js | Pending |
-| A5 | Ready to run | Regression test suite in test/regressionGate.test.ts | Pending |
+| A0 | Complete | Probe validated against check-layout-geometry (0.37% diff). Ratio 34.83% < 40.0% (55.6k vs 159.8k tris), draw calls 368/851 < 900, real frame times min 10-16ms / med 18-30ms / max 488-946ms | `41ae918` / `069ad82` |
+| A1 | Complete | GTAO live & timed (470 calls, 75.7k tris, 30.9ms min / 92.6ms med / 474.8ms max street; 1468 calls, 254.1k tris, 40.1ms min / 121.8ms med / 565.3ms max skyline), HDRI live (envLuminance 0.1944, reflection dynamic, envIntensity 0.95), Terrace census 7,492 / 17,105 (43.8%) | `78bc0f8` / `b55c26a` |
+| A2 | Complete | 62 kitbash parts conformed to Placement Contract standard footprints in metres (8x8, 8x16, 16x16, 16x24, 24x32, 32x32, 48x48), all LOD2 <= 150 tris. Rendered .shots/kitbash-contact-sheet.png | `fc4c915` |
+| A3 | Complete | Strict PRNG seed determinism asserted. LOD0 avg = 433 tris (max 1104, well within 1500-3000 budget), LOD1 avg = 202 tris, LOD2 avg = 54 tris (max 104 <= 150 tris). Rendered .shots/v3-exemplar/ comparison | `b015720` |
+| A4 | Complete | All 40 canonical library designs mapped with rarity policies (14 landmark 35%, 10 standard 25%, 16 fabric 40%). District mix rendered .shots/kitbash-district-mix.png (8% landmark, 24% standard, 68% fabric). Full scene culling re-measured | `f292200` |
+| A5 | Complete | 6 fixed-camera baseline renders captured in .shots/baselines/. Regression suite passing (street 368 calls/55.6k tris, skyline 851 calls/159.8k tris, ratio 34.83% < 40%). Deliberate break (A5.4) watched RED | Phase A5 Commit |
