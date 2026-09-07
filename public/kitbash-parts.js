@@ -687,8 +687,13 @@ registerPart({
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 10;
     const parts = [];
-    parts.push({ geo: new T.CylinderGeometry(W * 0.5, W * 0.35, 4.0, 16).translate(0, 2, 0), tag: "wall", color: pal.metal });
-    parts.push({ geo: new T.CylinderGeometry(W * 0.45, W * 0.45, 1.0, 16).translate(0, 4.5, 0), tag: "glass", color: pal.glass });
+    if (lod >= 2) {
+      parts.push({ geo: new T.CylinderGeometry(W * 0.45, W * 0.35, 3.0, 6).translate(0, 1.5, 0), tag: "wall", color: pal.metal });
+      return parts;
+    }
+    const segs = lod === 1 ? 8 : 16;
+    parts.push({ geo: new T.CylinderGeometry(W * 0.5, W * 0.35, 4.0, segs).translate(0, 2, 0), tag: "wall", color: pal.metal });
+    parts.push({ geo: new T.CylinderGeometry(W * 0.45, W * 0.45, 1.0, segs).translate(0, 4.5, 0), tag: "glass", color: pal.glass });
     return parts;
   }
 });
@@ -704,8 +709,12 @@ registerPart({
     const pal = resolvePalette(p);
     const R = 11.0, H = 15;
     const parts = [];
-    parts.push({ geo: new T.SphereGeometry(R, lod >= 2 ? 8 : 16, lod >= 2 ? 4 : 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 0, 0), tag: "roof", color: pal.roof });
-    parts.push({ geo: new T.CylinderGeometry(2.0, 2.0, 4.0, 8).translate(0, R + 2.0, 0), tag: "wall", color: pal.trim });
+    if (lod >= 2) {
+      parts.push({ geo: new T.ConeGeometry(R, 8.0, 6).translate(0, 4.0, 0), tag: "roof", color: pal.roof });
+      return parts;
+    }
+    parts.push({ geo: new T.SphereGeometry(R, lod === 1 ? 8 : 16, lod === 1 ? 4 : 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 0, 0), tag: "roof", color: pal.roof });
+    parts.push({ geo: new T.CylinderGeometry(2.0, 2.0, 4.0, lod === 1 ? 4 : 8).translate(0, R + 2.0, 0), tag: "wall", color: pal.trim });
     return parts;
   }
 });
@@ -789,6 +798,10 @@ registerPart({
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 8;
     const parts = [];
+    if (lod >= 2) {
+      parts.push({ geo: new T.BoxGeometry(W, 1.5, D).translate(0, H - 0.75, 0), tag: "wall", color: pal.trim });
+      return parts;
+    }
     parts.push({ geo: new T.BoxGeometry(W, 1.0, D).translate(0, H - 0.5, 0), tag: "wall", color: pal.trim });
     parts.push({ geo: new T.BoxGeometry(1.2, H, 1.2).translate(-W / 2 + 1, H / 2, -D / 2 + 1), tag: "wall", color: pal.wall });
     parts.push({ geo: new T.BoxGeometry(1.2, H, 1.2).translate(W / 2 - 1, H / 2, -D / 2 + 1), tag: "wall", color: pal.wall });
@@ -809,6 +822,10 @@ registerPart({
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0;
     const parts = [];
+    if (lod >= 2) {
+      parts.push({ geo: new T.BoxGeometry(W * 0.9, 8.0, D * 0.9).translate(0, 4.0, 0), tag: "roof", color: pal.roof });
+      return parts;
+    }
     parts.push({ geo: new T.BoxGeometry(W * 1.05, 1.5, D * 1.05).translate(0, 2, 0), tag: "roof", color: pal.roof });
     parts.push({ geo: new T.BoxGeometry(W * 0.85, 1.5, D * 0.85).translate(0, 7, 0), tag: "roof", color: pal.roof });
     parts.push({ geo: new T.BoxGeometry(W * 0.65, 1.5, D * 0.65).translate(0, 12, 0), tag: "roof", color: pal.roof });
@@ -827,6 +844,10 @@ registerPart({
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 12;
     const parts = [];
+    if (lod >= 2) {
+      parts.push({ geo: new T.BoxGeometry(W, 4.0, D).translate(0, 2.0, 0), tag: "wall", color: pal.wall });
+      return parts;
+    }
     parts.push({ geo: new T.BoxGeometry(W, 3.0, D).translate(0, 1.5, 0), tag: "wall", color: pal.wall });
     parts.push({ geo: new T.CylinderGeometry(0.8, 0.8, H, 6).translate(-W / 2 + 1, H / 2, -D / 2 + 1), tag: "wall", color: pal.trim });
     parts.push({ geo: new T.CylinderGeometry(0.8, 0.8, H, 6).translate(W / 2 - 1, H / 2, -D / 2 + 1), tag: "wall", color: pal.trim });
@@ -847,8 +868,12 @@ registerPart({
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 9;
     const parts = [];
+    if (lod >= 2) {
+      parts.push({ geo: new T.BoxGeometry(W * 0.8, H, D * 0.8).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
+      return parts;
+    }
     parts.push({ geo: new T.BoxGeometry(W * 0.8, H * 0.6, D * 0.8).translate(0, H * 0.3, 0), tag: "wall", color: pal.wall });
-    parts.push({ geo: new T.CylinderGeometry(W * 0.55, W * 0.55, 1.5, lod >= 2 ? 8 : 16).translate(0, H - 0.75, 0), tag: "roof", color: pal.roof });
+    parts.push({ geo: new T.CylinderGeometry(W * 0.55, W * 0.55, 1.5, lod === 1 ? 8 : 16).translate(0, H - 0.75, 0), tag: "roof", color: pal.roof });
     return parts;
   }
 });
@@ -868,7 +893,11 @@ registerPart({
     const pal = resolvePalette(p);
     const R = 7.0;
     const parts = [];
-    parts.push({ geo: new T.CylinderGeometry(R, R, 1.0, lod >= 2 ? 8 : 16).translate(0, 2.0, 0), tag: "roof", color: pal.roof });
+    if (lod >= 2) {
+      parts.push({ geo: new T.BoxGeometry(14.0, 1.0, 14.0).translate(0, 0.5, 0), tag: "roof", color: pal.roof });
+      return parts;
+    }
+    parts.push({ geo: new T.CylinderGeometry(R, R, 1.0, lod === 1 ? 8 : 16).translate(0, 2.0, 0), tag: "roof", color: pal.roof });
     return parts;
   }
 });
@@ -885,7 +914,9 @@ registerPart({
     const W = 15.0, D = 15.0;
     const parts = [];
     parts.push({ geo: new T.BoxGeometry(W, 1.2, D).translate(0, 0.6, 0), tag: "wall", color: pal.trim });
-    parts.push({ geo: new T.BoxGeometry(W * 0.75, 0.8, D * 0.75).translate(0, 1.4, 0), tag: "glass", color: pal.glass });
+    if (lod < 2) {
+      parts.push({ geo: new T.BoxGeometry(W * 0.75, 0.8, D * 0.75).translate(0, 1.4, 0), tag: "glass", color: pal.glass });
+    }
     return parts;
   }
 });
@@ -936,7 +967,7 @@ registerPart({
     const pal = resolvePalette(p);
     const H = 24;
     const parts = [];
-    parts.push({ geo: new T.CylinderGeometry(0.3, 0.8, H, 6).translate(0, H / 2, 0), tag: "wall", color: pal.metal });
+    parts.push({ geo: new T.CylinderGeometry(0.3, 0.8, H, lod >= 2 ? 4 : 6).translate(0, H / 2, 0), tag: "wall", color: pal.metal });
     if (lod < 2) {
       parts.push({ geo: new T.CylinderGeometry(1.5, 1.5, 0.4, 8).translate(0, H * 0.7, 0), tag: "wall", color: pal.trim });
     }
@@ -970,7 +1001,11 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const parts = [];
-    parts.push({ geo: new T.SphereGeometry(3.0, lod >= 2 ? 6 : 12, lod >= 2 ? 4 : 8).translate(0, 4.0, 0), tag: "wall", color: pal.wall });
+    if (lod >= 2) {
+      parts.push({ geo: new T.BoxGeometry(4.0, 4.0, 4.0).translate(0, 2.0, 0), tag: "wall", color: pal.wall });
+      return parts;
+    }
+    parts.push({ geo: new T.SphereGeometry(3.0, lod === 1 ? 8 : 12, lod === 1 ? 4 : 8).translate(0, 4.0, 0), tag: "wall", color: pal.wall });
     parts.push({ geo: new T.CylinderGeometry(1.5, 2.0, 2.0, 6).translate(0, 1.0, 0), tag: "wall", color: pal.metal });
     return parts;
   }
@@ -1005,8 +1040,12 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const parts = [];
-    parts.push({ geo: new T.CylinderGeometry(2.5, 2.5, 4.5, 8).translate(-3.5, 2.25, 0), tag: "wall", color: pal.metal });
-    parts.push({ geo: new T.CylinderGeometry(2.5, 2.5, 4.5, 8).translate(3.5, 2.25, 0), tag: "wall", color: pal.metal });
+    if (lod >= 2) {
+      parts.push({ geo: new T.BoxGeometry(12.0, 4.0, 6.0).translate(0, 2.0, 0), tag: "wall", color: pal.metal });
+      return parts;
+    }
+    parts.push({ geo: new T.CylinderGeometry(2.5, 2.5, 4.5, lod === 1 ? 6 : 8).translate(-3.5, 2.25, 0), tag: "wall", color: pal.metal });
+    parts.push({ geo: new T.CylinderGeometry(2.5, 2.5, 4.5, lod === 1 ? 6 : 8).translate(3.5, 2.25, 0), tag: "wall", color: pal.metal });
     return parts;
   }
 });
