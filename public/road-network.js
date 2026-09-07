@@ -143,14 +143,14 @@ function junctionKind(degree) {
   return "intersection4Way-or-roundabout"; // 4+: named, not resolved to a specific piece here
 }
 
-/** Chain standard-width straight segments between two world points,
+/** Chain standard-width straight segments between exactly two world points,
  *  turtle-graphics style (same technique as roadkit-street-demo.js's
  *  buildDemoStreet, P0), verified through roadkit.js's OWN
  *  transformSocket/verifySocketMating -- not a second implementation. */
-function chainStraightRun(cls, ax, az, bx, bz, segmentM = 64) {
+function chainSingleLegRun(cls, ax, az, bx, bz, segmentM = 64) {
   const dx = bx - ax, dz = bz - az;
   const totalLen = Math.hypot(dx, dz);
-  if (totalLen < 1e-6) return { placements: [], verification: [], totalLen: 0 };
+  if (totalLen < 1e-6) return { placements: [], verification: [], totalLen: 0, bearing: 0, entrySocket0: null, exitSocketEnd: null };
   const bearing = ((Math.atan2(dx, dz) * 180) / Math.PI + 360) % 360;
 
   const segments = [];
@@ -188,6 +188,186 @@ function chainStraightRun(cls, ax, az, bx, bz, segmentM = 64) {
     entrySocket0: placements[0] ? transformSocket(placements[0].model.sockets[0], { x: placements[0].x, z: placements[0].z, rotationDeg: placements[0].rotY }) : null,
     exitSocketEnd: prevExitWorld,
   };
+}
+
+/** Backward-compatible two-point wrapper -- most callers (regional ties,
+ *  which do not attempt terrain-following) still just want A to B. */
+function chainStraightRun(cls, ax, az, bx, bz, segmentM = 64) {
+  return chainSingleLegRun(cls, ax, az, bx, bz, segmentM);
+}
+
+/**
+ * Chain standard-width straight segments through an arbitrary multi-point
+ * waypoint path. A REAL BEND JOINT AT EVERY INTERIOR WAYPOINT, not a bare
+ * abutment -- found necessary by measurement, not assumed: a straight
+ * piece's two end faces are always parallel (it is a straight box), so
+ * two straight pieces meeting at different headings can never satisfy
+ * verifySocketMating's bearing-opposition check directly. First attempt
+ * skipped this and produced 70 "bearing not opposed" failures the moment
+ * terrain-following actually bent a route. The fix reuses the SAME
+ * standardJunction() piece the graph's own settlement-centre junctions
+ * use, sized for 2 legs, trimmed back by its own radius on each side --
+ * exactly the pattern already proven at graph nodes, applied one level
+ * further in, at every kink the router introduces. `bearing` on the
+ * return value is the FIRST leg's heading, for the node's own
+ * junction-socket bearing. */
+function chainWaypointRun(cls, points, segmentM = 64) {
+  if (points.length < 2) return { placements: [], verification: [], totalLen: 0, bearing: 0, entrySocket0: null, exitSocketEnd: null };
+  if (points.length === 2) return chainSingleLegRun(cls, points[0][0], points[0][1], points[1][0], points[1][1], segmentM);
+
+  const radius = standardJunctionRadius(cls);
+  const legBearing = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const [ax, az] = points[i], [bx, bz] = points[i + 1];
+    legBearing.push(((Math.atan2(bx - ax, bz - az) * 180) / Math.PI + 360) % 360);
+  }
+  const bendAngle = (b1, b2) => Math.abs(((b1 - b2 + 540) % 360) - 180);
+
+  const placements = [];
+  const verification = [];
+  let totalLen = 0;
+  let firstBearing = null;
+  let prevExitWorld = null;
+  let entrySocket0 = null;
+
+  for (let leg = 0; leg < points.length - 1; leg++) {
+    let [ax, az] = points[leg];
+    let [bx, bz] = points[leg + 1];
+    const dx0 = bx - ax, dz0 = bz - az;
+    const len0 = Math.hypot(dx0, dz0);
+    const ux = len0 > 1e-6 ? dx0 / len0 : 0, uz = len0 > 1e-6 ? dz0 / len0 : 0;
+
+    const bendsAtStart = leg > 0 && bendAngle(legBearing[leg - 1], legBearing[leg]) > 1e-3;
+    const bendsAtEnd = leg < points.length - 2 && bendAngle(legBearing[leg], legBearing[leg + 1]) > 1e-3;
+    const maxTrim = Math.max(len0 - 1e-3, 0) / 2;
+    const ts = bendsAtStart ? Math.min(radius, maxTrim) : 0;
+    const te = bendsAtEnd ? Math.min(radius, maxTrim) : 0;
+    const sax = ax + ux * ts, saz = az + uz * ts;
+    const sbx = bx - ux * te, sbz = bz - uz * te;
+
+    const legRun = chainSingleLegRun(cls, sax, saz, sbx, sbz, segmentM);
+    placements.push(...legRun.placements);
+    verification.push(...legRun.verification);
+    totalLen += legRun.totalLen;
+    if (firstBearing === null && legRun.bearing !== undefined) firstBearing = legRun.bearing;
+    if (!entrySocket0 && legRun.entrySocket0) entrySocket0 = legRun.entrySocket0;
+
+    if (bendsAtStart && prevExitWorld && legRun.entrySocket0) {
+      // The kink junction sits at the route's own (untrimmed) waypoint --
+      // both adjoining legs were trimmed back to meet it exactly there.
+      const [jx, jz] = points[leg];
+      const junctionModel = standardJunction(cls, [(legBearing[leg - 1] + 180) % 360, legBearing[leg]]);
+      const socketBack = transformSocket(junctionModel.sockets[0], { x: jx, z: jz, rotationDeg: 0 });
+      const socketFwd = transformSocket(junctionModel.sockets[1], { x: jx, z: jz, rotationDeg: 0 });
+      let err1 = null, err2 = null;
+      try { verifySocketMating(prevExitWorld, socketBack); } catch (e) { err1 = e.message; }
+      try { verifySocketMating(socketFwd, legRun.entrySocket0); } catch (e) { err2 = e.message; }
+      verification.push({ ok: !err1, error: err1 }, { ok: !err2, error: err2 });
+      placements.push({ model: junctionModel, x: jx, z: jz, rotY: 0 });
+    } else if (prevExitWorld && legRun.entrySocket0) {
+      let error = null;
+      try { verifySocketMating(prevExitWorld, legRun.entrySocket0); } catch (e) { error = e.message; }
+      verification.push({ ok: !error, error });
+    }
+    if (legRun.exitSocketEnd) prevExitWorld = legRun.exitSocketEnd;
+  }
+
+  return { placements, verification, totalLen, bearing: firstBearing ?? 0, entrySocket0, exitSocketEnd: prevExitWorld };
+}
+
+/**
+ * Real max slope along a straight line from (ax,az) to (bx,bz), sampled
+ * every ~40 m -- the same probe this file's own grade-finding pass uses,
+ * factored out so the router can ask the identical question the gate does.
+ */
+function worstGradeAlong(heightAt, ax, az, bx, bz) {
+  const len = Math.hypot(bx - ax, bz - az);
+  if (len < 1e-6) return 0;
+  const steps = Math.max(2, Math.round(len / 40));
+  let worst = 0;
+  let prevH = heightAt(ax, az);
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const h = heightAt(ax + (bx - ax) * t, az + (bz - az) * t);
+    worst = Math.max(worst, Math.abs(h - prevH) / (len / steps));
+    prevH = h;
+  }
+  return worst;
+}
+
+/**
+ * TERRAIN-FOLLOWING ROUTING. A straight line's average grade can hide a
+ * short, genuinely too-steep stretch (this file's own first measurement:
+ * one barrier-crescent edge averaged 100.7%). Real roads climb by taking
+ * a LONGER path -- more horizontal run for the same rise, which is
+ * exactly what grade (rise/run) responds to. This recursively displaces a
+ * segment's own midpoint sideways (perpendicular to its direct line),
+ * trying several offsets each side, keeping whichever most reduces the
+ * WORST sampled slope across the two resulting halves, and recurses on
+ * each half up to a depth limit. NOT a real engineering router (no true
+ * shortest-feasible-path search, e.g. A* over the height field) -- a
+ * bounded heuristic, honestly named as one. `maxDepth` bounds it to at
+ * most 2^maxDepth sub-segments per original edge.
+ */
+function routeTerrainFollowing(heightAt, ax, az, bx, bz, maxGrade, maxDepth = 5, depth = 0) {
+  const direct = worstGradeAlong(heightAt, ax, az, bx, bz);
+  if (direct <= maxGrade || depth >= maxDepth) return [[ax, az], [bx, bz]];
+
+  const dx = bx - ax, dz = bz - az;
+  const len = Math.hypot(dx, dz);
+  const ux = dx / len, uz = dz / len;
+  const perpX = -uz, perpZ = ux; // rotate 90 deg
+  const midX = (ax + bx) / 2, midZ = (az + bz) / 2;
+
+  let best = { grade: direct, mx: midX, mz: midZ };
+  for (const frac of [0.15, 0.3, 0.45]) {
+    for (const side of [1, -1]) {
+      const offset = len * frac * side;
+      const mx = midX + perpX * offset, mz = midZ + perpZ * offset;
+      const g1 = worstGradeAlong(heightAt, ax, az, mx, mz);
+      const g2 = worstGradeAlong(heightAt, mx, mz, bx, bz);
+      const worst = Math.max(g1, g2);
+      if (worst < best.grade) best = { grade: worst, mx, mz };
+    }
+  }
+  if (best.mx === midX && best.mz === midZ && best.grade === direct) {
+    // No lateral offset helped at all (e.g. a genuine cliff, any detour
+    // this search tried is just as steep) -- stop here rather than
+    // recurse forever finding nothing.
+    return [[ax, az], [bx, bz]];
+  }
+  const left = routeTerrainFollowing(heightAt, ax, az, best.mx, best.mz, maxGrade, maxDepth, depth + 1);
+  const right = routeTerrainFollowing(heightAt, best.mx, best.mz, bx, bz, maxGrade, maxDepth, depth + 1);
+  return [...left.slice(0, -1), ...right]; // left's own endpoint === right's own start
+}
+
+/**
+ * Trim a routed waypoint path's first and last leg back by a junction's
+ * own radius -- ALONG THAT LEG'S OWN DIRECTION, not the original straight
+ * A-to-B bearing. Found necessary the hard way: trimming along the direct
+ * bearing while the router had already bent the first leg away from it
+ * left the junction's own socket (built at the CORRECT, bent bearing)
+ * sitting somewhere the trimmed road never actually reached -- the exact
+ * same class of position mismatch the untrimmed-centre-to-centre version
+ * hit originally, one level further in. Route first (on the true
+ * endpoints), THEN trim each end by its own real direction -- not the
+ * other order, which is what created this bug.
+ */
+function trimRouteForJunctions(waypoints, radiusFrom, radiusTo) {
+  if (waypoints.length < 2) return waypoints;
+  const pts = waypoints.map((p) => [...p]);
+  const firstLegLen = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]);
+  if (radiusFrom > 0 && firstLegLen > 1e-6) {
+    const t = Math.min(radiusFrom / firstLegLen, 0.9); // never trim past 90% of a too-short first leg
+    pts[0] = [pts[0][0] + (pts[1][0] - pts[0][0]) * t, pts[0][1] + (pts[1][1] - pts[0][1]) * t];
+  }
+  const n = pts.length;
+  const lastLegLen = Math.hypot(pts[n - 1][0] - pts[n - 2][0], pts[n - 1][1] - pts[n - 2][1]);
+  if (radiusTo > 0 && lastLegLen > 1e-6) {
+    const t = Math.min(radiusTo / lastLegLen, 0.9);
+    pts[n - 1] = [pts[n - 1][0] + (pts[n - 2][0] - pts[n - 1][0]) * t, pts[n - 1][1] + (pts[n - 2][1] - pts[n - 1][1]) * t];
+  }
+  return pts;
 }
 
 /** Prim's algorithm -- straight-line Euclidean distance, connecting every
@@ -343,41 +523,35 @@ export function buildArterialNetwork({ heightAt = null } = {}) {
     const nodeSockets = nodes.map(() => []); // per node: [{bearing away from node, worldSocket the chain presents}]
     for (const e of mstEdges) {
       const a = nodes[e.from], b = nodes[e.to];
-      const dx = b.x - a.x, dz = b.z - a.z;
-      const fullLen = Math.hypot(dx, dz);
-      const ux = fullLen > 1e-6 ? dx / fullLen : 0, uz = fullLen > 1e-6 ? dz / fullLen : 0;
-      // Trimmed endpoints -- the straight run starts/ends where each end's
-      // junction (if any) actually presents its own socket, not at the
-      // node's raw centre point. Found necessary, not assumed: the first
-      // version ran centre-to-centre and every junction verification
-      // failed with a position mismatch equal to exactly the junction's
-      // own radius.
-      const sax = a.x + ux * junctionRadius[e.from], saz = a.z + uz * junctionRadius[e.from];
-      const sbx = b.x - ux * junctionRadius[e.to], sbz = b.z - uz * junctionRadius[e.to];
-      const run = chainStraightRun("BOULEVARD", sax, saz, sbx, sbz);
+
+      // TERRAIN-FOLLOWING FIRST, on the true node-to-node endpoints, THEN
+      // trim each end back by its own junction's radius along whatever
+      // direction the route actually leaves in. Trimming a straight A-to-B
+      // line BEFORE routing (the original version) meant the junction's
+      // own socket -- built at the route's real first-leg bearing -- no
+      // longer lined up with where the trimmed road actually started,
+      // once that first leg bent. Route, then trim; not the other order.
+      const fullRoute = heightAt
+        ? routeTerrainFollowing(heightAt, a.x, a.z, b.x, b.z, ROAD_GRADE.BOULEVARD.maxGrade)
+        : [[a.x, a.z], [b.x, b.z]];
+      const waypoints = trimRouteForJunctions(fullRoute, junctionRadius[e.from], junctionRadius[e.to]);
+
+      const run = chainWaypointRun("BOULEVARD", waypoints);
       allVerification = allVerification.concat(run.verification.map((v) => ({ ...v, landmass, from: e.from, to: e.to })));
-      edgeRuns.push({ from: e.from, to: e.to, distM: e.distM, pieceCount: run.placements.length, bearing: run.bearing });
+      edgeRuns.push({ from: e.from, to: e.to, distM: e.distM, pieceCount: run.placements.length, bearing: run.bearing, waypointCount: waypoints.length });
       if (run.entrySocket0) nodeSockets[e.from].push({ bearing: run.bearing, socket: run.entrySocket0 });
-      if (run.exitSocketEnd) nodeSockets[e.to].push({ bearing: (run.bearing + 180) % 360, socket: run.exitSocketEnd });
+      if (run.exitSocketEnd) nodeSockets[e.to].push({ bearing: (run.exitSocketEnd.bearing + 180) % 360, socket: run.exitSocketEnd });
 
       if (heightAt) {
-        // grade.js's gradeRun() takes an axis-aligned {axis, at, from, to}
-        // span; an arbitrary bearing between two centres is neither ew nor
-        // ns, so grade is sampled directly along the real line instead --
-        // same ROAD_GRADE.BOULEVARD.maxGrade limit gradeRun itself enforces.
-        const steps = Math.max(2, Math.round(e.distM / 40));
+        // Measured against the ACTUAL routed path (every leg of
+        // `waypoints`), not the original straight line -- routing only
+        // means something if the gate checks what was actually built.
         let maxGrade = 0;
-        let prevH = heightAt(a.x, a.z);
-        for (let i = 1; i <= steps; i++) {
-          const t = i / steps;
-          const px = a.x + (b.x - a.x) * t, pz = a.z + (b.z - a.z) * t;
-          const h = heightAt(px, pz);
-          const runM = e.distM / steps;
-          maxGrade = Math.max(maxGrade, Math.abs(h - prevH) / runM);
-          prevH = h;
+        for (let i = 0; i < waypoints.length - 1; i++) {
+          maxGrade = Math.max(maxGrade, worstGradeAlong(heightAt, waypoints[i][0], waypoints[i][1], waypoints[i + 1][0], waypoints[i + 1][1]));
         }
         if (maxGrade > ROAD_GRADE.BOULEVARD.maxGrade) {
-          gradeFindings.push({ from: e.from, to: e.to, maxGrade, limit: ROAD_GRADE.BOULEVARD.maxGrade });
+          gradeFindings.push({ from: e.from, to: e.to, maxGrade, limit: ROAD_GRADE.BOULEVARD.maxGrade, waypointCount: waypoints.length });
         }
       }
     }

@@ -19,6 +19,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildArterialNetwork } from "../public/road-network.js";
+import { LandField, makeHeightAt } from "../public/terrain.js";
 
 test("P2.2: every arterial join is socket-verified through the shared P0 verifier, zero unverified", () => {
   const { verification } = buildArterialNetwork({});
@@ -77,4 +78,49 @@ test("P2.4: zero stranded arterial nodes -- every centre has at least one leg (a
       assert.ok(lm.degree[i] >= 1, `${lm.landmass} node ${i} has degree 0 -- stranded`);
     }
   }
+});
+
+// =============================================================================
+// TERRAIN-FOLLOWING ROUTING (P2 finish, item 1) -- grade problem.
+//
+// A straight line's average grade hid short too-steep stretches: 30 of 80
+// arterial edges exceeded BOULEVARD's 6% limit, one barrier-crescent edge
+// averaging 100.7%. Routing along the terrain (routeTerrainFollowing) can
+// bend a route away from the direct line -- and the FIRST attempt at that
+// introduced a real, measured regression: two straight pieces meeting at
+// different headings can never satisfy verifySocketMating's bearing-
+// opposition check (a straight box's two end faces are always parallel),
+// so bending a route without a real joint piece at the kink produced 70
+// "bearing not opposed" failures the moment a real heightAt was passed in.
+// This is the test that would have caught it, watched red against that
+// broken intermediate version before the bend-junction fix landed.
+// =============================================================================
+test("P2 grade gate: real heightAt routing produces zero unmated joins (the bend-junction fix)", () => {
+  const heightAt = makeHeightAt(new LandField(16));
+  const { verification, landmasses } = buildArterialNetwork({ heightAt });
+  const failed = verification.filter((v) => !v.ok);
+  assert.deepEqual(failed, [], `${failed.length} of ${verification.length} joins failed under real terrain: ${JSON.stringify(failed.slice(0, 3))}`);
+  for (const lm of landmasses) {
+    for (const j of lm.junctions) {
+      assert.equal(j.allOk, true, `${lm.landmass} junction at node ${j.node} failed under real terrain routing`);
+    }
+  }
+});
+
+test("P2 grade gate: terrain-following routing reduces (does not merely report) over-grade edges", () => {
+  const heightAt = makeHeightAt(new LandField(16));
+  const { landmasses } = buildArterialNetwork({ heightAt });
+  const BEFORE_ROUTING_OVER_GRADE = 30; // docs/audits/P2-ARTERIAL.md's own straight-line measurement
+  let totalEdges = 0, totalOverGrade = 0;
+  for (const lm of landmasses) {
+    totalEdges += lm.edges.length;
+    totalOverGrade += lm.gradeFindings.length;
+    // Every remaining exception is named: which edge, by how much, against
+    // which limit -- not silently dropped from the report.
+    for (const g of lm.gradeFindings) {
+      assert.ok(typeof g.maxGrade === "number" && g.maxGrade > g.limit, `${lm.landmass} ${g.from}->${g.to} grade finding missing its own numbers`);
+    }
+  }
+  assert.ok(totalEdges > 0, "expected a real, non-trivial network");
+  assert.ok(totalOverGrade < BEFORE_ROUTING_OVER_GRADE, `routing did not improve on the ${BEFORE_ROUTING_OVER_GRADE}-edge straight-line baseline (still ${totalOverGrade} of ${totalEdges})`);
 });
