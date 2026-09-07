@@ -195,7 +195,21 @@ rather than reading as grass, scrub or forest. Screenshot: `.shots/farm-belt.png
 
 ## 9. MIX WATCH: VERIFIED TERRACE SHARE (43.8%)
 
-- **Measured Count (via `scripts/measure-layout.mjs`):** Exactly **7,492 `bld-terrace`** plots out of 17,105 placed buildings (**43.8%**).
-  (The earlier report cited 8,499 / 49.7% which combined class groupings rather than isolated typology).
-- **Arithmetic Cause of Shift from 33% -> 43.8%:**
-  In the pre-rebalance world, total world plots were ~22,000+ with the barrier island holding over 11,000 plots (56% of the world, mostly suburban/villas/townhouses). In Step 3 density rebalancing, the barrier island density was reduced to `scale: 0.12..0.19` (dropping barrier share to 8% and total world placed plots down to 17,105). Because mainland urban terrace blocks remained constant at ~7,492 plots, their share of the reduced world denominator (17,105) arithmetically rose from ~33% to 43.8%.
+- **Measured Count (via `node scripts/measure-layout.mjs`):** Exactly **7,492 `bld-terrace`** plots out of **17,105 placed buildings** (**43.8%**).
+- **Exact Measured Shift:**
+  - Pre-rebalance placed buildings: **19,725** with **6,521 `bld-terrace`** (33.1% share).
+  - Post-rebalance placed buildings: **17,105** (−2,620 / −13.3%) with **7,492 `bld-terrace`** (+971 / +14.9%).
+  - Total plots in world: 17,583 (17,105 placed, 478 ground refused, 97.3% placement rate).
+- **Typology Census Breakdown (17,105 total placed):**
+  - `bld-terrace`: 7,492 (43.8%)
+  - `bld-townhouse`: 3,287 (19.2%)
+  - `bld-apartment-walkup`: 2,105 (12.3%)
+  - `bld-villa`: 1,480 (8.7%)
+  - `bld-midrise`: 1,334 (7.8%)
+  - `bld-office`: 607 (3.5%)
+  - `bld-highstreet-terrace`: 302 (1.8%)
+  - `bld-shop`: 296 (1.7%)
+  - `bld-tower`: 149 (0.9%)
+  - `bld-workshop`: 29 (0.2%)
+  - `bld-business-park`: 14 (0.1%)
+  - `bld-warehouse`: 10 (0.1%)

@@ -84,6 +84,7 @@
 import * as THREE from "three";
 import { EffectComposer } from "./vendor/three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "./vendor/three/addons/postprocessing/RenderPass.js";
+import { GTAOPass } from "./vendor/three/addons/postprocessing/GTAOPass.js";
 import { UnrealBloomPass } from "./vendor/three/addons/postprocessing/UnrealBloomPass.js";
 import { ShaderPass } from "./vendor/three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "./vendor/three/addons/postprocessing/OutputPass.js";
@@ -203,6 +204,26 @@ console.log("WORLD", JSON.stringify(W.stats));
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const usePost = num("post", 1) > 0;
+const useAO = num("ao", 1) > 0;
+let gtaoPass = null;
+if (usePost && useAO) {
+  try {
+    gtaoPass = new GTAOPass(scene, camera, innerWidth, innerHeight);
+    gtaoPass.output = GTAOPass.OUTPUT.Default;
+    gtaoPass.blendIntensity = num("aointensity", 0.75);
+    gtaoPass.updateGtaoMaterial({
+      radius: num("aoradius", 35),
+      distanceExponent: 1.5,
+      thickness: num("aothick", 8),
+      scale: num("aoscale", 1.0),
+      samples: 16,
+      distanceFallOff: 1.0,
+    });
+    composer.addPass(gtaoPass);
+  } catch (err) {
+    console.warn("GTAOPass initialization fallback:", err);
+  }
+}
 if (usePost) {
   // Threshold is in LINEAR HDR, before tone mapping. At 0.90 almost every lit
   // surface in a daylight scene qualified and the whole city went to milk.
@@ -449,6 +470,7 @@ renderer.domElement.addEventListener("webglcontextlost", (e) => {
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+  if (gtaoPass) gtaoPass.setSize(innerWidth, innerHeight);
 });
 const keys = {};
 addEventListener("keydown", (e) => (keys[e.key.toLowerCase()] = true));
