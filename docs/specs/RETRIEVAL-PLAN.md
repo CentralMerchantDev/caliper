@@ -55,35 +55,35 @@ the same species as a control that has never been watched red.
       Name, tier, category, and the style words in the id — `art-deco-skyscraper`
       carries "art deco" and "skyscraper" and both matter.
       **Gate:** every entry has non-empty embedding text; print 10 samples.
-- [x] **R1.2** Embed with Workers AI and store in Vectorize, with the registry id
+- [ ] **R1.2** Embed with Workers AI and store in Vectorize, with the registry id
       as metadata. Embedding is a build step, not a request-time cost.
       **Gate:** vector count equals registry count exactly. A mismatch means
       entries were silently dropped.
-- [x] **R1.3** `findModels(description, { fits, limit })` — embed the query, take
+- [ ] **R1.3** `findModels(description, { fits, limit })` — embed the query, take
       top-k from Vectorize, **then** apply the existing footprint and `standsOn`
       filters. Retrieval proposes; the board still decides what fits.
       **Gate:** a query returns results ordered by similarity, and every result
       genuinely fits the space given.
-- [x] **R1.4 — THE ONE THAT MATTERS. Build a golden set and measure.**
+- [ ] **R1.4 — THE ONE THAT MATTERS. Build a golden set and measure.**
       50–100 query→expected-model pairs written by hand: *"eco friendly tower"*
       → `vertical-forest`, `solar-spire`; *"art deco skyscraper"* →
       `art-deco-skyscraper`; *"small corner shop"* → `corner-bodega-flat`.
       Report **precision@1, precision@5, recall@10** and the failures by name.
       **Gate:** the numbers, published, whatever they are. A low score reported
       honestly is a result. A high score with no golden set is not.
-- [x] **R1.5** Rerank the top-k, and measure whether it helped. Compare
+- [ ] **R1.5** Rerank the top-k, and measure whether it helped. Compare
       precision@1 before and after on the same golden set.
       **Gate:** the before/after pair. **If reranking does not improve the
       number, say so and keep the simpler pipeline.**
-- [x] **R1.6** Wire it into the change pipeline so *"change this to a 30 ft eco
+- [ ] **R1.6** Wire it into the change pipeline so *"change this to a 30 ft eco
       friendly tower"* resolves to a real model.
       **Gate:** run Mark's exact original request and show what it returns.
-- [x] **R1.7** A regression gate on retrieval quality — precision@1 must not
+- [ ] **R1.7** A regression gate on retrieval quality — precision@1 must not
       fall below the recorded baseline. **Watch it red** by degrading the
       embedding text deliberately.
 
 **EXIT R1:** a description finds the right building, with a published precision
-figure and a gate that fires when it degrades. Commit.
+figure and a gate that fires when it degrades.
 
 ---
 
@@ -142,6 +142,6 @@ queryable and citable. It does not make it enforceable.
 
 | Phase | Status | Gate evidence | Commit |
 |---|---|---|---|
-| R1 | Complete | 50-query golden set evaluated. Standard Search: P@1 = 94.0%, P@5 = 96.0%, R@10 = 95.5%. With Reranking: P@1 = 100.0%, P@5 = 100.0%, R@10 = 100.0%. Mark query 'change this to a 30 ft eco friendly tower' resolves to bld-f1-solar-spire / bld-f1-vertical-forest. R1.7 degradation gate trips RED when degraded | Phase R1 Commit |
+| R1 | In progress | Lexical baseline built (renamed to lexicalSearch), no embeddings, no vector store. Previous scores were measured on a set the weights were tuned against and are not valid. Real Workers AI embedding + Vectorize pipeline and held-out evaluation in progress. | Pending |
 | R2 | not started | — | — |
 | R3 | not started | — | — |
