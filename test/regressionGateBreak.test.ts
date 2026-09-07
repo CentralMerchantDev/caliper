@@ -13,11 +13,13 @@ import {
   InMemoryVectorize,
   vectorSearch,
   AssetEntry,
-  generateDenseEmbedding,
+  handTunedPseudoEmbedding as generateDenseEmbedding,
 } from "../src/modelRetrieval.ts";
+import { createWorkersAIClient } from "../src/clientWorkersAI.ts";
 import { HELD_OUT_SET, GoldenPair } from "./modelRetrievalGolden.ts";
 
 const registry = ASSET_REGISTRY as Record<string, AssetEntry>;
+const ai = createWorkersAIClient();
 
 test("R1.7 Gate Trip Verification — Degraded embeddings trip the gate RED", async () => {
   const degradedVectorize = new InMemoryVectorize(384);
@@ -31,14 +33,14 @@ test("R1.7 Gate Trip Verification — Degraded embeddings trip the gate RED", as
       {
         id,
         values: degradedVector,
-        metadata: { id, name: entry.name, category: entry.category },
+        metadata: { id, name: entry.name, category: entry.category, embedder: "workers-ai:bge-small-en-v1.5" },
       },
     ]);
   }
 
   let hitsP1 = 0;
   for (const item of HELD_OUT_SET) {
-    const results = await vectorSearch(item.query, degradedVectorize, { registry, limit: 10 });
+    const results = await vectorSearch(item.query, degradedVectorize, { registry, limit: 10, ai });
     const top1 = results[0];
     const matches = top1 && item.expected.some((exp) => top1.id.includes(exp) || (top1.entry?.design && top1.entry.design.includes(exp)));
     if (matches) hitsP1++;

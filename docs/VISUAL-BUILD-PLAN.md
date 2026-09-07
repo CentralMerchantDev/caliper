@@ -61,6 +61,55 @@ a much richer near field.
 
 ## PART 1 — THE BUDGET
 
+> ### ⚠️ REWRITTEN 2026-09-07 — THREE OF THESE NUMBERS WERE INVENTED
+>
+> Mark: *"it created a whole bunch of ones that came out of nowhere and has
+> caused us problems … especially ones that were just invented for no reason.
+> Like, the twelve million ceiling has no source at all. So what is it that
+> we're going against?"*
+>
+> He is right, and the audit trail is plain:
+>
+> | Number | Where it came from |
+> |---|---|
+> | **12M drawn triangles** | **no source anywhere.** Never derived, never cited. |
+> | **200,000 distinct triangles** | 7× headroom over a single 27,608 measurement, justified only as "more than the GPU should hold for one city" |
+> | **900 draw calls** | a comment inside `layoutGeometry.test.ts` |
+> | 1,500–3,000 near-band triangles | chosen by eye against reference screenshots |
+>
+> **These caused real damage.** Chunking was removed to satisfy the 900, which
+> broke culling entirely. The kitbash exemplar was reported "over budget" against
+> a band nobody derived. Six times a number was declared a pass or a breach
+> against a threshold that had no authority.
+>
+> ### THE ONLY REAL BUDGET IS FRAME TIME
+>
+> Triangles and draw calls are **proxies** for frame time. Measure the thing
+> itself and the proxies stop being gates:
+>
+> | Budget | Value | Source |
+> |---|---|---|
+> | **Frame time, target** | **16.7 ms (60 fps)** | display refresh rate — physics, not preference |
+> | **Frame time, floor** | **33.3 ms (30 fps)** | below this it is not playable |
+> | **VRAM for distinct geometry** | **~56 MB at 2M triangles** | derived: ~500k vertices × 44 B + index. Arithmetic, and it is written down |
+>
+> **Drawn triangles, draw calls and distinct triangles are now DIAGNOSTICS, not
+> gates.** Report them — they explain *why* frame time moved — but do not pass or
+> fail a phase on them. A phase passes if frame time holds at the stated camera
+> on stated hardware, and fails if it does not.
+>
+> **One caveat that matters:** every frame time measured so far is under
+> SwiftShader software rasterisation, where medians of 60–120 ms are normal and
+> mean nothing about a real GPU. **Until a frame time is measured on real
+> hardware, this project has no verified performance figure at all** — and that
+> should be stated rather than papered over with proxy numbers.
+>
+> The near-band 1,500–3,000 range stays as **guidance for authoring**, explicitly
+> marked as chosen by eye rather than derived. That is honest. Treating it as a
+> gate was not.
+
+### The original table, kept for the record — no longer authoritative
+
 Every phase works inside this. Exceeding a band is a decision with a written
 justification and a re-measurement, never a quiet raise. Enforced by
 `test/layoutGeometry.test.ts`.

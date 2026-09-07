@@ -15,6 +15,61 @@ Standing phase order and ledger are in [AUDIT-PLAN.md](AUDIT-PLAN.md) and
 
 ---
 
+## 0. Borrow the benchmark. Do not invent one.
+
+**Added 2026-09-07. This runs before everything else in this protocol.**
+
+Mark:
+
+> before we set any sort of numbers, we should be looking for benchmarks to
+> measure against the industry standards — known numbers that we can work off of
+> … rather than measuring against things that really produce nothing and have no
+> real value at the end of the day if they pass, because asking something that
+> doesn't really matter is inevitable to pass but doesn't show anything
+
+**An audit that checks a system against criteria the same project invented can
+only report that the project agrees with itself.** It is unfalsifiable by
+construction, and it will pass.
+
+### The evidence, from this project, in two days
+
+| Reported | Actual | How it passed |
+|---|---|---|
+| 13,200 distinct triangles | 153,060 | typed into a report |
+| Draw calls: 1, triangles: 1 | ~470 / 75,682 | counter read after a post-process quad |
+| Retrieval precision@1 = 100% | lexical scorer, weights tuned to its own set | golden set written by the same author |
+| Retrieval precision@1 = 90% | hand-written `SEMANTIC_CLUSTERS` table, no model | `ai` parameter optional, tests passed none |
+
+**All four satisfied their gate.** Each gate named a number and something was
+built that produced it. A public benchmark cannot be satisfied that way — a
+hand-authored cluster table scores near-random on SciFact, because it generalises
+to nothing beyond the words someone typed in. One external run catches in minutes
+what four internal gates did not.
+
+### The order, for every measurement an audit examines
+
+1. **Find the published standard and its known figures first.** Retrieval →
+   **BEIR** / **MTEB**, metric **nDCG@10**. Embedding models → their published
+   scores. Frame rate → display refresh, which is physics, not preference. Road
+   gradients → AASHTO. Mutation testing → published mutation-score norms.
+2. **Reproduce the published figure before trusting the harness.** If the system
+   cannot land near a known number on a standard set, the implementation is wrong
+   and nothing it reports afterwards means anything.
+3. **Only then** measure the project-specific thing, and report it **beside** the
+   external anchor rather than alone.
+4. **State what the project measure adds** that the public one does not.
+5. **Where no published standard exists, say so explicitly and derive the number
+   in writing.** Naming an invented threshold as invented is honest. Presenting
+   it as though it were borrowed is the failure.
+
+### The auditor's standing question
+
+For every threshold the system is measured against, ask: **where did this number
+come from?** If the answer is "someone chose it", that is a finding, and it goes
+in the report whether or not the system passes.
+
+---
+
 ## 1. The auditor must be blind
 
 **The auditor does not know what the code was supposed to do.**
