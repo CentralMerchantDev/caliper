@@ -72,23 +72,36 @@ scene.add(grid);
 
 // Generate a realistic city block layout (5x5 grid of plots)
 const gridSize = 5;
-const spacing = 36;
+const spacing = 48;
 let landmarkCount = 0;
 let standardCount = 0;
 let fabricCount = 0;
 
 for (let gx = 0; gx < gridSize; gx++) {
   for (let gz = 0; gz < gridSize; gz++) {
+    // Exact rarity distribution across 25 plots:
+    // Landmarks: 2 / 25 (8%)
+    // Standard: 6 / 25 (24%)
+    // Fabric: 17 / 25 (68%)
     const isLandmarkSlot = (gx === 2 && gz === 2) || (gx === 1 && gz === 3);
-    const isStandardSlot = !isLandmarkSlot && (gx % 2 === 0 || gz % 2 === 0);
+    const isStandardSlot = !isLandmarkSlot && ((gx === 0 && gz === 2) || (gx === 4 && gz === 2) || (gx === 2 && gz === 0) || (gx === 2 && gz === 4) || (gx === 3 && gz === 1) || (gx === 1 && gz === 1));
 
     let style = "fabric";
-    if (isLandmarkSlot) { style = "landmark"; landmarkCount++; }
-    else if (isStandardSlot) { style = "standard"; standardCount++; }
-    else { fabricCount++; }
+    let foot = { w: 16, d: 16 };
+    if (isLandmarkSlot) {
+      style = "landmark";
+      foot = { w: 32, d: 32 };
+      landmarkCount++;
+    } else if (isStandardSlot) {
+      style = "standard";
+      foot = { w: 24, d: 32 };
+      standardCount++;
+    } else {
+      foot = (gx + gz) % 2 === 0 ? { w: 16, d: 16 } : { w: 8, d: 16 };
+      fabricCount++;
+    }
 
     const seed = gx * 100 + gz * 10 + 17;
-    const foot = isLandmarkSlot ? { w: 4, d: 4 } : (isStandardSlot ? { w: 3, d: 3 } : { w: 2, d: 2 });
     const bld = assembleBuilding({ foot, style, seed, lod: 0 }, THREE);
 
     const bldGroup = new THREE.Group();

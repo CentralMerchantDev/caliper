@@ -14,7 +14,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Alpine Chalet',
     rarity: 'fabric',
     category: 'residential',
-    foot: { w: 2, d: 2 },
+    foot: { w: 16, d: 16 },
     recipe: ['fabric-mansard-roof-dormer'],
   },
   'art-deco-skyscraper': {
@@ -22,7 +22,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Art Deco Skyscraper',
     rarity: 'landmark',
     category: 'tower',
-    foot: { w: 4, d: 4 },
+    foot: { w: 32, d: 32 },
     recipe: ['podium-retail-colonnade', 'shaft-fluted-artdeco', 'crown-ziggurat-lantern', 'roof-aerial-antenna-array'],
   },
   'artisan-workshop': {
@@ -30,7 +30,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Artisan Workshop',
     rarity: 'fabric',
     category: 'commercial',
-    foot: { w: 2, d: 2 },
+    foot: { w: 16, d: 16 },
     recipe: ['fabric-retail-ground-simple'],
   },
   'biophilic-townhouse': {
@@ -38,7 +38,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Biophilic Townhouse',
     rarity: 'fabric',
     category: 'residential',
-    foot: { w: 1, d: 2 },
+    foot: { w: 8, d: 16 },
     recipe: ['fabric-townhouse-bay-front'],
   },
   'biotech-laboratory': {
@@ -46,7 +46,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Biotech Laboratory',
     rarity: 'standard',
     category: 'commercial',
-    foot: { w: 4, d: 4 },
+    foot: { w: 32, d: 32 },
     recipe: ['podium-parking-deck', 'shaft-curtain-wall-straight', 'crown-plain-parapet', 'roof-cooling-tower-cluster'],
   },
   'brutalist-complex': {
@@ -54,7 +54,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Brutalist Complex',
     rarity: 'standard',
     category: 'civic',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-recessed-lobby', 'shaft-brutalist-ribs', 'crown-plain-parapet', 'roof-plant-chiller-room'],
   },
   'canopy-hub': {
@@ -62,7 +62,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Canopy Hub',
     rarity: 'standard',
     category: 'civic',
-    foot: { w: 4, d: 3 },
+    foot: { w: 32, d: 24 },
     recipe: ['podium-entrance-plaza', 'shaft-twin-atrium', 'crown-open-pergola'],
   },
   'cantilever-penthouse': {
@@ -70,7 +70,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Cantilever Penthouse Tower',
     rarity: 'landmark',
     category: 'tower',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-recessed-lobby', 'shaft-cantilever-boxes', 'crown-helipad-cantilever', 'roof-helipad'],
   },
   'corner-bodega-flat': {
@@ -78,7 +78,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Corner Bodega Flat',
     rarity: 'fabric',
     category: 'commercial',
-    foot: { w: 2, d: 2 },
+    foot: { w: 16, d: 16 },
     recipe: ['fabric-retail-ground-simple', 'fabric-masonry-block-low'],
   },
   'craftsman-bungalow': {
@@ -86,7 +86,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Craftsman Bungalow',
     rarity: 'fabric',
     category: 'residential',
-    foot: { w: 2, d: 2 },
+    foot: { w: 16, d: 16 },
     recipe: ['fabric-masonry-block-low'],
   },
   'crystalline-pavilion': {
@@ -94,7 +94,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Crystalline Pavilion',
     rarity: 'landmark',
     category: 'civic',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-entrance-plaza', 'crown-slanted-crystal'],
   },
   'data-center-cube': {
@@ -102,7 +102,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Data Center Cube',
     rarity: 'fabric',
     category: 'industrial',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-parking-deck', 'fabric-punched-window-slab', 'roof-cooling-tower-cluster'],
   },
   'diagrid-tower': {
@@ -110,7 +110,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Diagrid Exoskeleton Tower',
     rarity: 'landmark',
     category: 'tower',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-retail-colonnade', 'shaft-diamond-lattice', 'crown-sky-pyramid'],
   },
   'floating-cube-residence': {
@@ -118,7 +118,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Floating Cube Residence',
     rarity: 'standard',
     category: 'residential',
-    foot: { w: 2, d: 2 },
+    foot: { w: 16, d: 16 },
     recipe: ['shaft-cantilever-boxes'],
   },
   'geodetic-eco-home': {
@@ -126,7 +126,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Geodetic Eco Home',
     rarity: 'standard',
     category: 'residential',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['crown-dome-lantern'],
   },
   'gothic-revival-manor': {
@@ -134,7 +134,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Gothic Revival Manor',
     rarity: 'standard',
     category: 'residential',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['crown-crown-finials'],
   },
   'greenpod-office': {
@@ -142,7 +142,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Greenpod Eco Office',
     rarity: 'standard',
     category: 'commercial',
-    foot: { w: 4, d: 4 },
+    foot: { w: 32, d: 32 },
     recipe: ['podium-stepped-garden', 'shaft-curved-eco-terrace', 'crown-plain-parapet'],
   },
   'helix-terrace': {
@@ -150,7 +150,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Helical Twisted Terrace',
     rarity: 'landmark',
     category: 'tower',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-stepped-garden', 'shaft-twisted-glass', 'crown-solar-dish', 'roof-infinity-pool'],
   },
   'hyperboloid-hq': {
@@ -158,7 +158,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Hyperboloid Global HQ',
     rarity: 'landmark',
     category: 'tower',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-retail-colonnade', 'shaft-cylindrical-core', 'crown-sunburst-arch', 'roof-aerial-antenna-array'],
   },
   'industrial-warehouse-hub': {
@@ -166,7 +166,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Industrial Warehouse Hub',
     rarity: 'fabric',
     category: 'industrial',
-    foot: { w: 2, d: 3 },
+    foot: { w: 16, d: 24 },
     recipe: ['fabric-masonry-block-mid'],
   },
   'kinetic-facade-tower': {
@@ -174,7 +174,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Kinetic Facade Tower',
     rarity: 'landmark',
     category: 'tower',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-retail-colonnade', 'shaft-curtain-wall-straight', 'crown-solar-dish'],
   },
   'micro-apartment-tower': {
@@ -182,7 +182,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Micro Apartment Tower',
     rarity: 'standard',
     category: 'residential',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-recessed-lobby', 'shaft-balconied-residential', 'crown-plain-parapet', 'roof-stair-lift-overrun'],
   },
   'midcentury-ranch': {
@@ -190,7 +190,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Midcentury Ranch',
     rarity: 'fabric',
     category: 'residential',
-    foot: { w: 2, d: 2 },
+    foot: { w: 16, d: 16 },
     recipe: ['fabric-masonry-block-low'],
   },
   'modern-loft-row': {
@@ -198,7 +198,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Modern Loft Row',
     rarity: 'fabric',
     category: 'residential',
-    foot: { w: 1, d: 2 },
+    foot: { w: 8, d: 16 },
     recipe: ['fabric-townhouse-bay-front'],
   },
   'modular-timber-flat': {
@@ -206,7 +206,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Modular Timber Flat',
     rarity: 'fabric',
     category: 'residential',
-    foot: { w: 2, d: 2 },
+    foot: { w: 16, d: 16 },
     recipe: ['fabric-walkup-balconies'],
   },
   'neoclassic-mansion': {
@@ -214,7 +214,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Neoclassic Portico Mansion',
     rarity: 'standard',
     category: 'residential',
-    foot: { w: 5, d: 5 },
+    foot: { w: 48, d: 48 },
     recipe: ['podium-civic-steps', 'crown-dome-lantern'],
   },
   'origami-cultural-center': {
@@ -222,7 +222,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Origami Cultural Center',
     rarity: 'landmark',
     category: 'civic',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-entrance-plaza', 'shaft-triangular-prism', 'crown-slanted-crystal'],
   },
   'parametric-residence': {
@@ -230,7 +230,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Parametric Residence',
     rarity: 'standard',
     category: 'residential',
-    foot: { w: 4, d: 3 },
+    foot: { w: 32, d: 24 },
     recipe: ['shaft-elliptical-aerofoil'],
   },
   'ribbon-villa': {
@@ -238,7 +238,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Ribbon Villa',
     rarity: 'fabric',
     category: 'residential',
-    foot: { w: 1, d: 2 },
+    foot: { w: 8, d: 16 },
     recipe: ['fabric-townhouse-bay-front'],
   },
   'row-brownstone': {
@@ -246,7 +246,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Row Brownstone',
     rarity: 'fabric',
     category: 'residential',
-    foot: { w: 1, d: 2 },
+    foot: { w: 8, d: 16 },
     recipe: ['fabric-townhouse-bay-front'],
   },
   'shard-biotower': {
@@ -254,7 +254,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Shard Biotower',
     rarity: 'landmark',
     category: 'tower',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-entrance-plaza', 'shaft-triangular-prism', 'crown-tapered-spire'],
   },
   'shipping-container-living': {
@@ -262,7 +262,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Shipping Container Living',
     rarity: 'fabric',
     category: 'residential',
-    foot: { w: 2, d: 2 },
+    foot: { w: 16, d: 16 },
     recipe: ['fabric-masonry-block-low'],
   },
   'skybridge-complex': {
@@ -270,7 +270,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Twin Skybridge Complex',
     rarity: 'landmark',
     category: 'tower',
-    foot: { w: 4, d: 3 },
+    foot: { w: 32, d: 24 },
     recipe: ['podium-retail-colonnade', 'shaft-twin-atrium', 'connector-skybridge-straight-double', 'crown-plain-parapet'],
   },
   'solar-spire': {
@@ -278,7 +278,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Solar Spire Tower',
     rarity: 'landmark',
     category: 'tower',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-retail-colonnade', 'shaft-octagonal-tower', 'crown-tapered-spire', 'roof-aerial-antenna-array'],
   },
   'stepgarden-walkup': {
@@ -286,7 +286,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Step-Garden Walkup',
     rarity: 'fabric',
     category: 'residential',
-    foot: { w: 2, d: 2 },
+    foot: { w: 16, d: 16 },
     recipe: ['podium-stepped-garden', 'fabric-walkup-balconies'],
   },
   'suburban-split-level': {
@@ -294,7 +294,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Suburban Split-Level',
     rarity: 'fabric',
     category: 'residential',
-    foot: { w: 2, d: 2 },
+    foot: { w: 16, d: 16 },
     recipe: ['fabric-masonry-block-low'],
   },
   'terraced-courtyard-block': {
@@ -302,7 +302,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Terraced Courtyard Block',
     rarity: 'fabric',
     category: 'residential',
-    foot: { w: 2, d: 3 },
+    foot: { w: 16, d: 24 },
     recipe: ['podium-arcade-terrace', 'fabric-masonry-block-mid'],
   },
   'vertical-forest': {
@@ -310,7 +310,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Vertical Forest Eco-Tower',
     rarity: 'landmark',
     category: 'tower',
-    foot: { w: 3, d: 3 },
+    foot: { w: 24, d: 32 },
     recipe: ['podium-stepped-garden', 'shaft-curved-eco-terrace', 'crown-open-pergola', 'roof-sky-garden'],
   },
   'waterfall-atrium': {
@@ -318,7 +318,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Waterfall Atrium Tower',
     rarity: 'landmark',
     category: 'tower',
-    foot: { w: 4, d: 4 },
+    foot: { w: 32, d: 32 },
     recipe: ['podium-waterfront-base', 'shaft-twin-atrium', 'crown-sunburst-arch'],
   },
   'wave-tower': {
@@ -326,7 +326,7 @@ export const DESIGN_RECIPE_MAP = {
     name: 'Wave Tower',
     rarity: 'landmark',
     category: 'tower',
-    foot: { w: 4, d: 4 },
+    foot: { w: 32, d: 32 },
     recipe: ['podium-waterfront-base', 'shaft-stepped-chevron', 'crown-helipad-cantilever', 'roof-helipad'],
   },
 };
