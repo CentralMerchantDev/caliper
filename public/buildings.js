@@ -919,9 +919,16 @@ function mergeGeometries(parts, palette = {}, T = THREE) {
     }
 
     const isWall = item.tag === "wall";
+    const isGlass = item.tag === "glass";
     if (isWall) {
       if (g.attributes.uv) {
         uvArray.set(g.attributes.uv.array, posOffset * 2);
+      }
+    } else if (isGlass) {
+      // Dedicated curtain wall / structural glass patch (0.03, 0.97)
+      for (let i = 0; i < p.count; i++) {
+        uvArray[(posOffset + i) * 2 + 0] = 0.03;
+        uvArray[(posOffset + i) * 2 + 1] = 0.97;
       }
     } else {
       // Non-wall parts (roof, coping, eaves, chimCap, dormerRoof, pergolas, etc.):
@@ -935,6 +942,7 @@ function mergeGeometries(parts, palette = {}, T = THREE) {
     let colVal = item.color;
     if (colVal === null || colVal === undefined) {
       if (item.tag === "roof") colVal = defaultRoof;
+      else if (item.tag === "glass") colVal = palette.glass !== undefined ? palette.glass : 0x1d3a52;
       else colVal = defaultWall;
     }
 

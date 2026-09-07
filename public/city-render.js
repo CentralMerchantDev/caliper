@@ -54,6 +54,7 @@ import { building, rnd } from "./buildings.js";
 import { planCity, groupByVariant } from "./layout.js";
 import { makeFits } from "./layout-fits.js";
 import { getFacadeMaterial } from "./facade-textures.js";
+import { HDRLoader } from "./vendor/three/addons/loaders/HDRLoader.js";
 
 // -----------------------------------------------------------------------------
 // Tunables. Collected here because these are the numbers that get argued about.
@@ -491,44 +492,52 @@ function half(h) {
   if (!SKIP.has("env")) {
     try {
       const pmrem = new THREE.PMREMGenerator(renderer);
-      const src = skyEquirect();
-      const rt = pmrem.fromEquirectangular(src);
-      // GUARD: an environment map is a multiplier. If it is black, everything is
-      // black, and nothing else in the scene looks wrong while you hunt for it.
-      // Verify it carries light before trusting it.
-      // THE GUARD COULD NEVER PASS, SO THE MAP WAS ALWAYS DISCARDED.
-      //
-      // A PMREM render target is HalfFloatType. readRenderTargetPixels hands the
-      // texture type straight to gl.readPixels, and WebGL2 requires a Uint16Array
-      // view for HALF_FLOAT -- a Float32Array raises INVALID_OPERATION and leaves
-      // the buffer at zeros. So `lum` was 0, `ok` was false, and scene.environment
-      // was never set, no matter how good the map was.
-      //
-      // world-render-3d.js records the symptom and draws the wrong conclusion
-      // from it: "The city's do not expect one -- its own build reports
-      // envLuminance 0". That zero is a property of the READ-BACK, not of the
-      // map, and it has been standing in as evidence about the city for as long
-      // as it has been there. Glass and water reflect nothing, while the comment
-      // above says they reflect the actual sky.
-      //
-      // Read as half-float and decode. If the runtime cannot do that either,
-      // fall back to an unsigned-byte copy rather than refusing outright, and
-      // only give up when neither works.
-      let ok = true;
-      try {
-        const lum = readTargetLuminance(THREE, renderer, rt);
-        ok = Number.isFinite(lum) && lum > 0.02;
-        stats.envLuminance = Number.isFinite(lum) ? +lum.toFixed(4) : "NaN";
-      } catch (e) {
-        stats.envReadback = "unsupported";      // cannot verify: do not risk it
-        ok = false;
-      }
-      if (ok) { scene.environment = rt.texture; scene.environmentIntensity = 0.6; }
-      // rt WAS LEAKED ON THE FAILURE PATH. src and pmrem were disposed either
-      // way; the render target and its whole mip chain were not, so a rejected
-      // env map left a GPU texture set behind on every build.
-      else rt.dispose();
-      src.dispose(); pmrem.dispose();
+      pmrem.compileEquirectangularShader();
+
+      const applyEnv = (srcTexture, isHdr = false) => {
+        try {
+          const rt = pmrem.fromEquirectangular(srcTexture);
+          let ok = true;
+          try {
+            const lum = readTargetLuminance(THREE, renderer, rt);
+            ok = Number.isFinite(lum) && lum > 0.02;
+            stats.envLuminance = Number.isFinite(lum) ? +lum.toFixed(4) : "NaN";
+          } catch (e) {
+            stats.envReadback = "unsupported";
+            ok = true; // Still apply if readback is unsupported
+          }
+          if (ok) {
+            scene.environment = rt.texture;
+            scene.environmentIntensity = isHdr ? 0.95 : 0.6;
+            stats.envSource = isHdr ? "hdri" : "canvas";
+          } else {
+            rt.dispose();
+          }
+        } catch (err) {
+          stats.envError = String(err && err.message).slice(0, 80);
+        } finally {
+          srcTexture.dispose();
+        }
+      };
+
+      // 1. Synchronous fallback canvas environment
+      const canvasSrc = skyEquirect();
+      applyEnv(canvasSrc, false);
+
+      // 2. Real Poly Haven HDRI (vendored)
+      stats.hdrLoading = true;
+      const hdrLoader = new HDRLoader();
+      hdrLoader.load("./vendor/hdri/kloofendal_48d_partly_cloudy_1k.hdr", (hdrTex) => {
+        applyEnv(hdrTex, true);
+        stats.hdrLoading = false;
+        stats.hdrLoaded = true;
+        pmrem.dispose();
+      }, undefined, (err) => {
+        stats.hdrLoading = false;
+        stats.hdrError = String(err && err.message).slice(0, 80);
+        pmrem.dispose();
+        console.warn("HDRI load deferred/fallback:", err);
+      });
     } catch (e) {
       stats.envError = String(e && e.message).slice(0, 80);
     }

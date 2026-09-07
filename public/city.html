@@ -529,7 +529,8 @@ let t = 0, frames = 0;
 // compositor that never goes idle.
 const STILL = num("still", 0);
 (function loop() {
-  if (!STILL || frames < STILL) requestAnimationFrame(loop);
+  const hdrPending = Boolean(W && W.stats && W.stats.hdrLoading);
+  if (!STILL || frames < STILL || hdrPending) requestAnimationFrame(loop);
   t += 0.00028;
   W.wn.offset.set(t, t * 0.6);
   const sp = dist * 0.012;
@@ -549,13 +550,17 @@ const STILL = num("still", 0);
   // below describe the SCENE and not a fullscreen quad.
   if (usePost) composer.render(); else renderer.render(scene, camera);
   window.__ft.push(Math.round(performance.now() - ft));
-  if (++frames === 2) {
-    console.log("WORLD_RENDER " + JSON.stringify({
-      calls: renderer.info.render.calls, tris: renderer.info.render.triangles,
-      geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures,
-      frameMs: Math.round(performance.now() - ft),
-    }));
-    window.__ready = true;
+  frames++;
+  if (frames >= 2 && (!hdrPending || frames > 25)) {
+    if (!window.__ready) {
+      console.log("WORLD_RENDER " + JSON.stringify({
+        calls: renderer.info.render.calls, tris: renderer.info.render.triangles,
+        geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures,
+        frameMs: Math.round(performance.now() - ft),
+        envSource: W?.stats?.envSource,
+      }));
+      window.__ready = true;
+    }
   }
 })();
 </script>

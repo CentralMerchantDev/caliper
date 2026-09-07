@@ -123,11 +123,15 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
   const roughCanvas = createCanvas(size, size);
   const rctx = roughCanvas.getContext("2d");
 
-  // 3. Normal Map Canvas (RGB: X=R, Y=G, Z=B)
+  // 3. Metalness Canvas (Grayscale: 0 = dielectric/wall, 255 = metallic glass)
+  const metalCanvas = createCanvas(size, size);
+  const mctx = metalCanvas.getContext("2d");
+
+  // 4. Normal Map Canvas (RGB: X=R, Y=G, Z=B)
   const normCanvas = createCanvas(size, size);
   const nctx = normCanvas.getContext("2d");
 
-  // 4. Emissive Canvas (RGB: Night glow)
+  // 5. Emissive Canvas (RGB: Night glow)
   const emissCanvas = createCanvas(size, size);
   const ectx = emissCanvas.getContext("2d");
 
@@ -138,6 +142,10 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
   const wallRoughByte = Math.round(spec.roughnessWall * 255);
   rctx.fillStyle = `rgb(${wallRoughByte},${wallRoughByte},${wallRoughByte})`;
   rctx.fillRect(0, 0, size, size);
+
+  const wallMetalByte = Math.round((spec.metalnessWall || 0.0) * 255);
+  mctx.fillStyle = `rgb(${wallMetalByte},${wallMetalByte},${wallMetalByte})`;
+  mctx.fillRect(0, 0, size, size);
 
   // Flat normal base (0.5, 0.5, 1.0 -> RGB: 128, 128, 255)
   nctx.fillStyle = "rgb(128, 128, 255)";
@@ -162,6 +170,8 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
     dctx.fillRect(0, y, size, 8);
     rctx.fillStyle = `rgb(${Math.round(spec.roughnessTrim * 255)},${Math.round(spec.roughnessTrim * 255)},${Math.round(spec.roughnessTrim * 255)})`;
     rctx.fillRect(0, y, size, 8);
+    mctx.fillStyle = `rgb(${wallMetalByte},${wallMetalByte},${wallMetalByte})`;
+    mctx.fillRect(0, y, size, 8);
 
     // Spandrel top/bottom normal bevel
     nctx.fillStyle = "rgb(128, 180, 255)"; // slight upward normal
@@ -181,15 +191,24 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
       // Window Frame
       dctx.fillStyle = spec.windowFrame;
       dctx.fillRect(winX - 3, winY - 3, winW + 6, winH + 6);
+      rctx.fillStyle = `rgb(${Math.round(spec.roughnessTrim * 255)},${Math.round(spec.roughnessTrim * 255)},${Math.round(spec.roughnessTrim * 255)})`;
+      rctx.fillRect(winX - 3, winY - 3, winW + 6, winH + 6);
+      mctx.fillStyle = "rgb(80, 80, 80)"; // metallic trim frame
+      mctx.fillRect(winX - 3, winY - 3, winW + 6, winH + 6);
 
       // Window Glass
       dctx.fillStyle = spec.glassColor;
       dctx.fillRect(winX, winY, winW, winH);
 
-      // Roughness: Glass is very smooth (glossy)
+      // Roughness: Glass is very smooth (glossy specular reflection)
       const glassRoughByte = Math.round(spec.roughnessGlass * 255);
       rctx.fillStyle = `rgb(${glassRoughByte},${glassRoughByte},${glassRoughByte})`;
       rctx.fillRect(winX, winY, winW, winH);
+
+      // Metalness: Glass is highly metallic PBR reflection
+      const glassMetalByte = Math.round(spec.metalnessGlass * 255);
+      mctx.fillStyle = `rgb(${glassMetalByte},${glassMetalByte},${glassMetalByte})`;
+      mctx.fillRect(winX, winY, winW, winH);
 
       // Normal map: Recessed window reveal edges
       // Left edge normal (+X: 180)
@@ -205,10 +224,16 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
       nctx.fillStyle = "rgb(128, 80, 255)";
       nctx.fillRect(winX, winY + winH - 1, winW, 3);
 
-      // Window Mullions (crossbar)
+      // Window Mullions (structural crossbars in diffuse + normal)
       dctx.fillStyle = spec.windowFrame;
       dctx.fillRect(winX + winW / 2 - 1, winY, 2, winH);
       dctx.fillRect(winX, winY + winH * 0.4 - 1, winW, 2);
+
+      // Mullion normal bevels
+      nctx.fillStyle = "rgb(160, 128, 255)";
+      nctx.fillRect(winX + winW / 2 - 1, winY, 1, winH);
+      nctx.fillStyle = "rgb(96, 128, 255)";
+      nctx.fillRect(winX + winW / 2, winY, 1, winH);
 
       // Window Sill
       dctx.fillStyle = spec.stoneTrim;
@@ -223,7 +248,7 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
     }
   }
 
-  // 5. Reserved Plain / Roof Patch (Bottom-Right and Top-Right in UV space)
+  // 6. Reserved Plain / Roof Patch (Bottom-Right and Top-Right in UV space)
   // Ensures that non-wall parts (roofs, copings, eaves, plant) mapped to UV (0.97, 0.97)
   // receive clean solid diffuse (multiplied by vertexColors), matte roughness, flat normal, and zero emissive.
   const patchSize = 64;
@@ -237,11 +262,52 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
     rctx.fillStyle = "rgb(215, 215, 215)";
     rctx.fillRect(patchX, patchY, patchSize, patchSize);
 
+    // Metalness: Zero metalness on roof/stone
+    mctx.fillStyle = "rgb(0, 0, 0)";
+    mctx.fillRect(patchX, patchY, patchSize, patchSize);
+
     // Normal: Flat normal pointing straight out (128, 128, 255)
     nctx.fillStyle = "rgb(128, 128, 255)";
     nctx.fillRect(patchX, patchY, patchSize, patchSize);
 
     // Emissive: Pure black (no window glow on roofs)
+    ectx.fillStyle = "#000000";
+    ectx.fillRect(patchX, patchY, patchSize, patchSize);
+  }
+
+  // 7. Reserved Dedicated Glass / Curtain Wall Patch (Bottom-Left and Top-Left in UV space)
+  // Maps to UV (0.03, 0.97) for glass facades, curtain wall panels, and structural glazing.
+  for (const patchY of [0, size - patchSize]) {
+    const patchX = 0;
+    // Diffuse: Tinted reflective architectural glass
+    dctx.fillStyle = spec.glassColor;
+    dctx.fillRect(patchX, patchY, patchSize, patchSize);
+
+    // Roughness: Ultra-smooth glass (~0.04)
+    rctx.fillStyle = "rgb(10, 10, 10)";
+    rctx.fillRect(patchX, patchY, patchSize, patchSize);
+
+    // Metalness: High PBR specular reflection (~0.94)
+    mctx.fillStyle = "rgb(240, 240, 240)";
+    mctx.fillRect(patchX, patchY, patchSize, patchSize);
+
+    // Normal: Mullion grid lines every 16 pixels
+    nctx.fillStyle = "rgb(128, 128, 255)";
+    nctx.fillRect(patchX, patchY, patchSize, patchSize);
+    for (let gx = 0; gx < patchSize; gx += 16) {
+      nctx.fillStyle = "rgb(160, 128, 255)";
+      nctx.fillRect(patchX + gx, patchY, 1, patchSize);
+      nctx.fillStyle = "rgb(96, 128, 255)";
+      nctx.fillRect(patchX + gx + 1, patchY, 1, patchSize);
+    }
+    for (let gy = 0; gy < patchSize; gy += 16) {
+      nctx.fillStyle = "rgb(128, 160, 255)";
+      nctx.fillRect(patchX, patchY + gy, patchSize, 1);
+      nctx.fillStyle = "rgb(128, 96, 255)";
+      nctx.fillRect(patchX, patchY + gy + 1, patchSize, 1);
+    }
+
+    // Emissive: Pure black
     ectx.fillStyle = "#000000";
     ectx.fillRect(patchX, patchY, patchSize, patchSize);
   }
@@ -255,6 +321,10 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
   roughnessMap.wrapS = THREE.RepeatWrapping;
   roughnessMap.wrapT = THREE.RepeatWrapping;
 
+  const metalnessMap = new THREE.CanvasTexture(metalCanvas);
+  metalnessMap.wrapS = THREE.RepeatWrapping;
+  metalnessMap.wrapT = THREE.RepeatWrapping;
+
   const normalMap = new THREE.CanvasTexture(normCanvas);
   normalMap.wrapS = THREE.RepeatWrapping;
   normalMap.wrapT = THREE.RepeatWrapping;
@@ -263,7 +333,7 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
   emissiveMap.wrapS = THREE.RepeatWrapping;
   emissiveMap.wrapT = THREE.RepeatWrapping;
 
-  return { map, roughnessMap, normalMap, emissiveMap, character, spec };
+  return { map, roughnessMap, metalnessMap, normalMap, emissiveMap, character, spec };
 }
 
 /** Cache of created materials per character */
@@ -273,19 +343,21 @@ const _materialCache = new Map();
  * Returns a PBR MeshStandardMaterial equipped with facade texture maps for a given character.
  */
 export function getFacadeMaterial(character = "heritage", options = {}) {
-  const key = `${character}-${options.vertexColors ? "vc" : options.wallColor || "default"}`;
+  const key = `${character}-${options.vertexColors ? "vc" : options.wallColor || "default"}-${options.night ? "night" : "day"}`;
   if (_materialCache.has(key)) return _materialCache.get(key);
 
   const atlas = generateFacadeAtlas(character);
   const mat = new THREE.MeshStandardMaterial({
     map: atlas.map,
     roughnessMap: atlas.roughnessMap,
+    metalnessMap: atlas.metalnessMap,
     normalMap: atlas.normalMap,
     emissiveMap: atlas.emissiveMap,
     emissive: new THREE.Color(0xffffff),
-    emissiveIntensity: options.night ? 0.8 : 0.05,
-    roughness: 0.8,
-    metalness: atlas.spec.metalnessGlass * 0.15,
+    emissiveIntensity: options.night ? 1.2 : 0.08,
+    roughness: 1.0,
+    metalness: 1.0,
+    envMapIntensity: 1.2,
     vertexColors: !!options.vertexColors,
   });
 
@@ -296,3 +368,4 @@ export function getFacadeMaterial(character = "heritage", options = {}) {
   _materialCache.set(key, mat);
   return mat;
 }
+
