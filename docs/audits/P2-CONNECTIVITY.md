@@ -80,7 +80,7 @@ Command: `node -e "...buildConnectivityBridges(roads)..."` (also
 |---|---|---|
 | components | 52 | **1** |
 | stranded roads | 38 | **0** |
-| roads (incl. connectors/stubs) | 1,357 | 1,547 (190 new spans: 51 bridges' own legs + 102 stubs) |
+| roads (incl. connectors/stubs) | 1,357 | 1,547 (190 new spans: 88 connector legs across the 51 bridges — some are a single straight span, some a 2-leg Manhattan dogleg — + 102 stubs) |
 
 **Gate MET.** One connected component covers the entire existing network,
 every landmass included by construction (there being only one component to
@@ -95,6 +95,51 @@ it would need to be a real bridge/causeway structure. Same class of
 limitation `docs/audits/P2-ARTERIAL.md` already names for the arterial
 layer's own regional ties ("straight lines with no water-crossing
 awareness") — not a new gap, the same one, at a larger scale.
+
+## Blind audit — UMAA trigger 1, first full-network connectivity figure
+
+Run per `docs/AUDIT-PROTOCOL.md`, fresh agent, no conversation history, told
+only the files in scope and how to run them.
+
+**Step 0 (borrow the benchmark):** the auditor's own finding, not asserted
+here first — "connected component" and "isolated node" are self-contained,
+formally-defined graph properties computed by union-find, not an inferred
+score like retrieval precision or a triangle count. No external benchmark
+applies; nothing to reproduce. Correctly distinguished from the DIFFERENT
+question of whether the resulting network is *realistically* connected
+(transportation planning's connectivity indices), which this pass does not
+claim either — already named honestly above as "not redundancy... the
+weakest possible connected structure."
+
+**One real HIGH finding, fixed:** neither `test/connectivityBridges.test.ts`
+nor this document ever asserted `buildConnectivityBridges`'s own internal
+`componentsBefore` count against the watched-red 52. A regression that makes
+`roadsCross()` UNDER-detect crossings (measured by the auditor: an 8 m
+one-eps mutation) inflates `componentsBefore` to 178 internally, and the
+bridging loop simply builds 3.5× more connectors to paper over the
+miscount — the final `after.components === 1` gate stayed green throughout.
+Fixed: `test/connectivityBridges.test.ts` now asserts
+`componentsBefore === 52` directly. Watched red against the exact mutation
+the auditor used (`componentsBefore` measured 178), reverted, hash-verified
+restored.
+
+**One real LOW finding, fixed:** the "190 new spans" breakdown above
+originally read "51 bridges' own legs + 102 stubs", which does not sum
+(51+102=153≠190) — the true breakdown is 88 connector legs (bridges are a
+mix of single straight spans and 2-leg doglegs, so leg count ≠ bridge count)
++ 102 stubs = 190, reproduced exactly and corrected above.
+
+**A disclosed design choice, measured rather than re-argued:** the plan's
+gate text says "one connected component for EACH landmass"; this pass
+builds one GLOBAL MST instead (already named above as the reason). The
+auditor measured the actual consequence: of the 51 bridges, 49 connect
+same-landmass fragments and only 2 are cross-landmass (the two longest,
+`barrier`↔`mainland`) — and both of those are legitimate: the pre-existing
+giant component already spans those two landmasses by design, and the two
+barrier-only fragments this pass had to place are genuinely nearer to
+`mainland` across water than to the rest of `barrier`. The global-MST
+choice does not manufacture gratuitous water crossings a landmass-scoped
+version would have avoided.
 
 ## What this does NOT verify
 

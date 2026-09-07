@@ -53,7 +53,17 @@ test("P2.4: watched red first -- today's full existing network is still 52 compo
 });
 
 test("P2.4: buildConnectivityBridges brings the FULL network to one connected component, zero stranded -- the hard gate, not a report", () => {
-  const { augmentedRoads } = buildConnectivityBridges(roads);
+  const { augmentedRoads, componentsBefore } = buildConnectivityBridges(roads);
+  // Found by a blind audit, not assumed: without this assertion, a
+  // regression that makes road-network.js's OWN roadsCross() UNDER-detect
+  // crossings (the same direction as the real same-axis bug this file's
+  // header describes) inflates componentsBefore -- measured, when
+  // deliberately broken this way, from 52 to 178 -- and the bridging loop
+  // simply builds 3.5x more connectors to paper over the miscount. The
+  // final after.components/stranded assertions below stayed green through
+  // that regression; only pinning componentsBefore against the SAME 52 the
+  // first test already established catches it.
+  assert.equal(componentsBefore, 52, `expected buildConnectivityBridges' own internal component count to match the watched-red baseline (52), got ${componentsBefore} -- road-network.js's roadsCross() disagrees with the pin`);
   const after = measure(augmentedRoads);
   assert.equal(after.components, 1, `expected exactly 1 connected component after bridging, got ${after.components}`);
   assert.equal(after.stranded, 0, `expected zero stranded roads after bridging, got ${after.stranded}`);

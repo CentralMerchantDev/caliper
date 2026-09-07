@@ -1,0 +1,56 @@
+P2.4 audit checkpoint (UMAA trigger 1) -- one real HIGH finding fixed,
+one LOW arithmetic error fixed, one design choice measured and confirmed
+
+A fresh, blind agent (no conversation history) audited the P2.4 full-
+network connectivity work per docs/AUDIT-PROTOCOL.md, triggered by
+docs/UMAA-CALIPER.md's trigger 1 (first full-network connectivity
+figure). Full report appended to docs/audits/P2-CONNECTIVITY.md.
+
+Step 0 (borrow the benchmark): correctly found no external benchmark
+applies -- "connected component" is a formally-defined graph property,
+not an inferred score. Confirmed, not asserted first by this pass.
+
+HIGH finding, fixed: test/connectivityBridges.test.ts asserted the
+FINAL state (1 component after bridging) but never buildConnectivity
+Bridges' own INTERMEDIATE componentsBefore count. A regression that
+makes roadsCross() under-detect crossings inflates that internal count
+(measured by the auditor: 52 -> 178, under an 8m-tolerance mutation)
+while the bridging loop silently builds 3.5x more connectors to reach
+the same final answer -- every existing assertion stayed green. Fixed:
+componentsBefore === 52 is now asserted directly. Watched red against
+the exact mutation the auditor demonstrated (reproduced: 178), file
+restored and hash-verified identical afterward.
+
+LOW finding, fixed: docs/audits/P2-CONNECTIVITY.md's "190 new spans:
+51 bridges' own legs + 102 stubs" did not sum (51+102=153, not 190).
+Corrected to the real breakdown, reproduced exactly: 88 connector legs
+(bridges are a mix of 1-leg straight spans and 2-leg doglegs, so leg
+count != bridge count) + 102 stubs = 190.
+
+Design choice measured, not re-argued: the plan's gate text says "one
+component per landmass"; this pass builds one GLOBAL MST instead
+(already disclosed as a deliberate choice in the original commit). The
+auditor measured the actual consequence: 49 of 51 bridges connect
+same-landmass fragments; the 2 cross-landmass ones are both legitimate
+(the pre-existing giant component already spans those landmasses by
+design, and the fragments involved are genuinely nearer across water
+than to their own landmass's rest). Not a defect -- recorded as
+confirmed.
+
+Appended to docs/AUDIT-PROTOCOL.md section 7: a new, generalisable
+lesson -- when code counts something and then adjusts its own
+behaviour to compensate for the count (an MST building exactly N-1
+edges for whatever N it measures; any self-correcting pipeline stage),
+the intermediate count needs its own pinned assertion, because the
+final state alone cannot distinguish "correct" from "wrong, silently
+absorbed by the adjustment stage." Also recorded, a fourth time: the
+audit worktree provisioning gap (no node_modules) recurred again.
+
+npx tsc --noEmit clean for every file in this commit (unrelated errors
+present in the checkout are in other, untracked, in-progress retrieval
+files, not touched here).
+
+AUDIT CHECKPOINT closed. Proceeding to P2 item 4 (P2.5: retire the
+span representation).
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

@@ -627,3 +627,45 @@ outbound network is explicitly NOT covered (this Node version has no
 same "sandboxed" language that caused this entry. A future audit of the
 same file should not assume network is closed just because filesystem now
 is — the exact mistake this entry documents, one resource class at a time.
+
+### 2026-09-07 · P2.4 full-network connectivity — an intermediate value the final gate could not see past
+
+**What it caught:** a test suite (`test/connectivityBridges.test.ts`) that
+asserted the FINAL state of a two-stage computation (52 pre-existing
+components → 1 after bridging) but never the INTERMEDIATE one
+(`buildConnectivityBridges`'s own internal recount of the 52, returned as
+`componentsBefore`). The auditor mutated the crossing-detection function to
+UNDER-detect (the same direction the real bug this pass fixed already went)
+and measured the internal count silently inflate 52 → 178 while every
+existing assertion stayed green — the bridging algorithm simply built 3.5×
+more connectors and reached the same final answer regardless of how wrong
+the intermediate count was. A test built entirely around "did we reach the
+target state" cannot distinguish "reached it correctly" from "reached it by
+overcorrecting for an upstream miscount" — this is a new shape of §2.2's
+"a test that cannot fail," one level more specific: not a test that
+reimplements the logic it checks, but a test that checks only the
+*outcome* of a pipeline with a self-correcting stage in the middle, letting
+that stage's own error vanish before the final assertion ever sees it.
+
+**Worth adding to §2.2, generalised:** when code under audit computes an
+intermediate measurement and then ADJUSTS BEHAVIOUR to compensate for
+whatever that measurement turns out to be (an MST that builds exactly
+N-1 edges for whatever N it counts, a retry loop that runs until a check
+passes, a normalisation step sized from its own input), the intermediate
+measurement needs its OWN pinned assertion — the final state alone cannot
+tell a correct measurement from a wrong one the adjustment stage quietly
+absorbed. **Ask: does this code count something and then act on the
+count? If so, pin the count, not just the result of acting on it.**
+
+Also confirmed independently in this run: the reverse-direction mutation
+(over-permissive crossing detection) WAS caught by the existing final-state
+assertions (under-bridging is visible; over-correction is not) — so this is
+specifically a blind spot in one direction, not a fully blind test, which
+is easy to miss if a mutation pass only tries the "obvious" direction of a
+tolerance bug.
+
+**Also recorded, not for the first time:** the assigned audit worktree had
+no `node_modules` again — the fourth time this exact provisioning gap
+appears in this file (2026-09-03, 2026-09-04 ×2). The auditor's own
+workaround (verify a sibling checkout at the identical commit, run there)
+remains sound, but the underlying gap is still unfixed at the source.
