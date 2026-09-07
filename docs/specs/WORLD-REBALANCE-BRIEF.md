@@ -117,7 +117,7 @@ Keep the 26 km extent. Keep all eleven landmasses. **Nothing is deleted.**
 | **Downtown island** | A real core. Towers in the middle, mid-rise shoulders, housing at the edge. Height and density fall off with distance from the centre. This is the skyline — it has to read from the air. |
 | **The islands** | Genuine settlements with their own small centres. Not uniform villa fields. |
 | **The mainland** | Suburbs at suburban density near the bridges and roads, thinning outward. |
-| **The barrier island** | Stops being the city. It is a **beach** — shore housing, resorts, low and sparse. Its 56% share should end in single digits. |
+| **The barrier island** | ~~Stops being the city. It is a beach — shore housing, resorts, low and sparse. Its 56% share should end in single digits.~~ **THIS WAS WRONG — see the correction at the end of this document.** |
 | **The land between** | Undeveloped **on purpose**, and it must READ that way: farmland, forest, countryside with roads running through it. |
 
 That last row is the one that is easy to get wrong. Empty ground is fine as
@@ -221,3 +221,76 @@ will collide:
 - Commit with `git commit -F`.
 - **Do not deploy.**
 - One branch. Mark merges.
+
+---
+
+# CORRECTION, 2026-09-07 — THE BARRIER ISLAND *IS* DOWNTOWN
+
+**Confirmed by Mark:** *"downtown is not on the island that the towers are on
+right now, it is the big island that sits on the edge of the ocean."*
+
+That is the **barrier island** — 108.3 km², the outermost landmass, seaward at
+z +1,617 to +8,056. The island the code calls "Downtown Island" is a different,
+inner one of **15.0 km²**, a seventh of the size.
+
+## How this brief got it wrong
+
+Mark's first report read: *"the main island, the one on the ocean, is almost
+vacant — the tall buildings and downtown is gone."* I read "the barrier island
+holds 56% of the world's plots" as the defect. He was saying the opposite: that
+the place that should be his downtown was full of tiny row houses instead of
+towers. **The 56% and the row houses were one complaint, and I split them and
+fixed the wrong half.**
+
+## The original design was closer to right than what replaced it
+
+`barrierSettlements()` already had the correct shape — a dense core stretch
+named "Ocean City", class TOWER, with villas at the two tips. What it actually
+*built* was terraces, because of the plot-class-versus-carved-geometry defect in
+`WORLD-DENSITY-FINDINGS.md` §3. **The intent was sound, the execution was
+broken, and I diagnosed the intent.**
+
+## Why restoring it behaves differently now
+
+Three things have been fixed since: `PLOT_CLASSES` carves on whole cells with
+the ceil-snap; `zoneCharacter` no longer silently overwrites a settlement's
+declared class; and `DENSITY_AT`'s top two rungs dropped from 0.45/0.63 to
+0.36/0.50. **A TOWER-class settlement now actually produces towers. It did not
+before.**
+
+## What the barrier island should be
+
+A city on a crescent — densest in the middle, beach at the ends.
+
+| Along the crescent | |
+|---|---|
+| **Middle** | The downtown. Towers, dense, the skyline. This is what "Ocean City" was for. |
+| **Shoulders** | Mid-rise, falling off from the core. |
+| **The two tips** | Beach — villas and resorts, low and sparse. **This part of tonight's work was right.** |
+
+| Across the crescent | |
+|---|---|
+| **Lagoon side** | The city side. |
+| **Ocean side** | Beachfront — resorts, hotel frontage. |
+
+That cross-section was in the original code, and its comment named Miami Beach
+as the reference. It should come back.
+
+## What tonight's work got RIGHT and must be kept
+
+- **The `scale` density multiplier.** New, and the only thing that can thin a
+  settlement *everywhere* rather than only at its edge. The tips need it.
+- **Roads follow density.** Correct and necessary — the empty street grid was
+  real, and will be real again at the tips.
+- **`zoneCharacter` no longer overriding declared class.** A genuine
+  two-sources-of-truth defect, found and fixed properly.
+- **The `DENSITY_AT` ladder lowered.** Correct, and part of why the core will
+  work this time.
+
+**Only the calibration of the barrier island reverses. None of the mechanism
+does.**
+
+## The inner "Downtown Island"
+
+**Leave it alone.** Mark: *"you can leave that island for now and focus on the
+actual downtown."* Its 142 towers are not too many and are not the question.
