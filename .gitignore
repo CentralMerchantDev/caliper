@@ -16,3 +16,4 @@ _TO-DELETE/
 .shots/
 restore_landmasses.py
 test-results/
+public/.arterial-network-data.json

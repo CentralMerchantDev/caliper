@@ -343,32 +343,83 @@ Converting it to pieces without changing it would preserve it exactly.
       `PLACEMENT-CONTRACT.md` Part 0's standard table, not `ROAD_STANDARDS`'
       real values. Junction-class-by-what-meets-what is a table with a
       source per row (§1.6 conflict points/corner radii/60° minimum angle).
-- [ ] **P2.2** Lay arterials as piece chains between centres, following terrain,
+- [x] **P2.2** Lay arterials as piece chains between centres, following terrain,
       using `ROAD_STANDARDS` for width and `grade.js` for gradient.
       **Gate:** every join socket-verified through the P0 verifier. Zero
       unverified joins in the world.
+      **Done:** `public/road-network.js` — new standard-width pieces (Part 0's
+      table, not `ROAD_STANDARDS`' real values — a documented departure, see
+      the file's own header), MST per landmass over settlement/landmass
+      centres (all 11, including `downtown`/`barrier` which carry no
+      `SETTLEMENTS` entry — confirmed, centres derived from their own
+      geometry). Watched red once: the first version chained centre-to-centre
+      and every junction failed with a position mismatch equal to the
+      junction's own radius; fixed by trimming edges to the junction's socket
+      before building them. Command: `node test/run.mjs`
+      (`test/roadNetwork.test.ts`) → **2,034 joins, 0 failures.** Grade
+      checked against `ROAD_GRADE.BOULEVARD.maxGrade` — **30 of 80 edges
+      exceed it**, reported per-edge, not rerouted (terrain-following
+      routing explicitly out of scope, `docs/specs/ROAD-HIERARCHY.md`).
+      See `docs/audits/P2-ARTERIAL.md`.
 - [ ] **P2.3** Collectors, then locals, each mating into the level above at a
       real junction piece — `intersection4Way`, `intersection3Way`,
       `roundaboutModern`, `slipLane`, `rampMerge`/`rampDiverge` where classes
       differ.
       **Gate:** every junction in the world is a named piece. Zero implicit
       crossings.
+      **NOT DONE for collectors/locals** — the existing ~1,357 spans are
+      untouched. **Partial, at the arterial level (a P2.2 spillover, not
+      this gate's own scope):** every node where 2+ arterial legs meet gets
+      a real junction piece, verified against every leg — **72 junctions, 72
+      fully verified, 0 failures** (`node test/run.mjs`). Piece SELECTION
+      per `docs/specs/ROAD-HIERARCHY.md`'s table (which real roadkit.js
+      piece for which combination) is not built — one uniform junction shape
+      stands in, labelled with what kind it would be. See
+      `docs/audits/P2-ARTERIAL.md`.
 - [ ] **P2.4** **Connectivity, as a hard gate, not a report.** Step 4 measured
       the current network: **52 components, 38 roads connecting to nothing,
       regional connectors fragmenting into 8–11 pieces each.**
       **Gate:** ONE connected component for each landmass's road network, and
       zero stranded roads. Watch the test red against today's world first.
+      **NOT MET for the full network — reconfirmed unchanged:**
+      `node scripts/measure-roads.mjs` → still **52 components, 38 stranded,
+      of 1,357 roads**, identical to Step 4 (collectors/locals untouched).
+      **MET for the new arterial layer alone:** `node test/run.mjs` →
+      every landmass with 2+ centres is exactly 1 connected component
+      (measured by union-find over the real edge list, not assumed from MST
+      theory), zero stranded arterial nodes. See `docs/audits/P2-ARTERIAL.md`
+      for why these are two different, both-real numbers.
 - [ ] **P2.5** Retire the span representation. `{axis, at, from, to}` stops
       existing; nothing reads it.
       **Gate:** grep returns zero uses outside quarantine. Two representations
       is the pattern that has cost this project three times.
+      **NOT DONE, blocked on P2.3's collector/local conversion.** The
+      arterial layer never used the span shape at all (its pieces are
+      `{id, footprint, sockets, lod}` from the start) — but ~1,357 existing
+      uses remain live in `city-plan.js`. Named, not quarantined or forced.
 - [ ] **P2.6** `city-render.js` draws roads from the kit, not from ribbons.
       **Gate:** `roadkit.js` is imported by the render path — today it is not
       imported at all.
+      **Partial.** `city-render.js` still does not import the kit — the full
+      network still renders as ribbons. What exists instead: a dedicated
+      top-down render of the arterial layer,
+      `public/arterial-network-map.html` /
+      `scripts/shoot-arterial-network.mjs` → `.shots/arterial-network-map.png`,
+      viewed directly. Every landmass reads as one connected arterial spine;
+      grade-limit findings are marked in red. A named limitation: regional
+      ties are straight lines with no water-crossing awareness. See
+      `docs/audits/P2-ARTERIAL.md`.
 
-**EXIT P2:** every road in the world is a named piece at a grid address, mated
-by a verified socket, in a connected network, drawn from the kit. **Mark judges
-whether it looks like a city you could drive.** Commit per sub-phase.
+**EXIT P2, HONEST STATE:** the arterial layer is real, fully socket-verified,
+connected by construction and by measurement, and rendered. Collectors and
+locals — the majority of the network — are untouched; P2.4's full gate and
+P2.5 do not close until they are converted. **Mark judges the arterial
+layer's render** against "does it look like something you could drive between
+real places" — not yet the full city, named as such. Full evidence:
+`docs/audits/P2-ARTERIAL.md`.
+
+**STOPPING HERE per the standing rule: stop at every phase exit, do not roll
+into P3 unattended.**
 
 ---
 

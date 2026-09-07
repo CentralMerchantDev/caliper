@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Arterial network — top-down map</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #0d121a; }
+  canvas { display: block; }
+  #hud {
+    position: absolute; top: 8px; left: 8px; z-index: 10;
+    font: 12px/1.5 monospace; color: #c9d1d9; background: rgba(13,18,26,0.85);
+    padding: 8px 12px; border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+<a href="./index.html" class="back-to-caliper" aria-label="Back to CALIPER"
+   style="position:fixed;top:14px;right:14px;z-index:9999;display:inline-flex;align-items:center;gap:7px;
+          padding:7px 13px;border-radius:11px;text-decoration:none;font:600 12px/1 system-ui,sans-serif;
+          letter-spacing:.02em;color:#e8e4de;background:rgba(22,20,18,.82);border:1px solid rgba(255,255,255,.16);
+          backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 6px 20px rgba(0,0,0,.4)">
+  <span aria-hidden="true">&#8592;</span> CALIPER
+</a>
+<div id="hud">loading…</div>
+<canvas id="c" width="1400" height="1400"></canvas>
+<script type="module">
+const data = await (await fetch("./.arterial-network-data.json")).json();
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+// World bounds, from every outline point and every node -- padded 5%.
+let xMin = Infinity, xMax = -Infinity, zMin = Infinity, zMax = -Infinity;
+for (const o of data.outlines) for (const [x, z] of o.points) {
+  if (x < xMin) xMin = x; if (x > xMax) xMax = x;
+  if (z < zMin) zMin = z; if (z > zMax) zMax = z;
+}
+const padX = (xMax - xMin) * 0.05, padZ = (zMax - zMin) * 0.05;
+xMin -= padX; xMax += padX; zMin -= padZ; zMax += padZ;
+const W = canvas.width, H = canvas.height;
+const scale = Math.min(W / (xMax - xMin), H / (zMax - zMin));
+const ox = (W - (xMax - xMin) * scale) / 2, oz = (H - (zMax - zMin) * scale) / 2;
+function px(x) { return ox + (x - xMin) * scale; }
+function pz(z) { return H - (oz + (z - zMin) * scale); } // flip so +z reads "up"
+
+ctx.fillStyle = "#0d121a";
+ctx.fillRect(0, 0, W, H);
+
+// Landmasses -- faint fill, so the arterial network reads against real geography.
+ctx.fillStyle = "#1b2430";
+ctx.strokeStyle = "#2d3a4a";
+ctx.lineWidth = 1;
+for (const o of data.outlines) {
+  ctx.beginPath();
+  o.points.forEach(([x, z], i) => { const fn = i === 0 ? "moveTo" : "lineTo"; ctx[fn](px(x), pz(z)); });
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+// Arterial edges -- BOULEVARD, standard width, drawn as a line (true width
+// is 32 m real, invisible at this zoom -- the point is topology, not scale).
+for (const e of data.edges) {
+  if (e.regionalTieMarker) continue;
+  ctx.strokeStyle = e.overGrade ? "#f85149" : "#58a6ff";
+  ctx.lineWidth = e.overGrade ? 2.5 : 1.8;
+  ctx.beginPath();
+  ctx.moveTo(px(e.ax), pz(e.az));
+  ctx.lineTo(px(e.bx), pz(e.bz));
+  ctx.stroke();
+}
+
+// Junctions -- bigger dot, coloured by leg count.
+for (const j of data.junctions) {
+  ctx.fillStyle = j.legCount >= 4 ? "#d29922" : "#39d353";
+  ctx.beginPath();
+  ctx.arc(px(j.x), pz(j.z), 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Every node (settlement centre / landmass centre), small dot.
+for (const n of data.nodes) {
+  ctx.fillStyle = "#8b949e";
+  ctx.beginPath();
+  ctx.arc(px(n.x), pz(n.z), 2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+const hud = document.getElementById("hud");
+hud.innerHTML =
+  `<b>Arterial network — ${data.nodes.length} centres, ${data.totalEdges} edges, ${data.junctions.length} junctions</b><br>` +
+  `<span style="color:#58a6ff">■</span> BOULEVARD arterial &nbsp; ` +
+  `<span style="color:#f85149">■</span> exceeds BOULEVARD grade limit (${data.totalGradeFindings} of ${data.totalEdges}) &nbsp; ` +
+  `<span style="color:#39d353">●</span> junction (&lt;4 legs) &nbsp; ` +
+  `<span style="color:#d29922">●</span> junction (4+ legs)`;
+
+window.__arterialMapReady = true;
+</script>
+</body>
+</html>

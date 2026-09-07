@@ -1,0 +1,103 @@
+BOARD-CONVERSION-PLAN.md Phase P2: roads become pieces (arterial layer) --
+NOT fully complete, scope led with rather than buried
+
+What this is: P2.1's hierarchy doc, and the arterial layer P2.2/P2.3/P2.4
+partially answer against it -- settlement/landmass centres connected to
+each other and to the regional network, real socket-verified piece chains,
+real junction pieces, connectivity guaranteed by construction and
+independently measured. Collectors and locals -- the majority of the
+existing ~1,357-road network -- are UNTOUCHED. That means P2.4's full gate
+and P2.5 do not close this pass. Named plainly in the plan file and in
+docs/audits/P2-ARTERIAL.md, not silently counted as done because the
+arterial-level work is real.
+
+P2.1: docs/specs/ROAD-HIERARCHY.md, committed separately (7cd7de6) before
+any code. Planning research confirmed as docs/CITY-PLANNING-SPEC.md.
+
+P2.2/P2.3 (arterial level): public/road-network.js. New standard-width
+pieces (PLACEMENT-CONTRACT.md Part 0's table, not ROAD_STANDARDS' real
+values -- roadkit.js's own straight()/intersection4Way() stay locked to
+real ROW widths, correctly, so reusing them directly would have built a
+44 m BOULEVARD where Part 0 asks for 32 m; a documented, deliberate
+departure, not an oversight). Minimum spanning tree per landmass over
+settlement centres (settlementCentres(), newly exported from
+city-plan.js, not reimplemented) plus downtown and barrier's own derived
+centres (neither carries a SETTLEMENTS entry -- confirmed directly, not
+assumed; centres derived from ISLAND's bounds and the traced barrier
+polygon's own perimeter, not a bounding box, since a box cuts across open
+water on a thin curved island).
+
+A real bug, watched red, not narrated as smooth: the first version chained
+each arterial edge centre-to-centre. Every junction verification failed
+with a position mismatch of exactly the junction's own footprint radius
+(25.6 m) -- the straight run went straight through where the junction's
+own socket actually sits. Fixed by computing each node's junction radius
+BEFORE building any edge (degree has to be known first, or an edge already
+built would need rebuilding once its endpoint's radius is decided --
+building the same thing twice is exactly what LESSONS.md exists to name),
+then trimming every edge's endpoint back to that radius. Watched green
+after, same assertions.
+
+Gate: 2,034 joins checked (test/roadNetwork.test.ts, node test/run.mjs),
+0 failures, through the SAME shared verifySocketMating/transformSocket P0
+built -- not a second verifier. 72 junctions, all verified against every
+one of their own legs, 0 failures.
+
+Grade checked against ROAD_GRADE.BOULEVARD.maxGrade (terrain-following
+routing explicitly out of scope, per ROAD-HIERARCHY.md, decided before any
+code): 30 of 80 edges exceed it, some by a large margin (one barrier-
+crescent edge averages 100.7% grade). Reported per-edge, not rerouted or
+hidden.
+
+P2.4: reconfirmed unchanged for the FULL existing network --
+node scripts/measure-roads.mjs -> still 52 components, 38 stranded, of
+1,357 roads, identical to Step 4's own numbers (collectors/locals
+untouched). MET for the new arterial layer alone: every landmass with 2+
+centres is exactly 1 connected component, measured by union-find over the
+real edge list (not assumed from "it's a spanning tree, of course it's
+connected"), zero stranded arterial nodes.
+
+P2.5: not done, blocked on collector/local conversion. The arterial
+layer never used the old span shape at all (its pieces are {id,
+footprint, sockets, lod} from the start); ~1,357 existing spans remain.
+
+P2.6: partial. city-render.js still does not import the kit -- the full
+network still renders as ribbons. A dedicated top-down render of the
+arterial layer instead: public/arterial-network-map.html,
+scripts/shoot-arterial-network.mjs -> .shots/arterial-network-map.png,
+viewed directly. Every landmass reads as one connected arterial spine;
+grade-limit findings marked in red. A real, named limitation: regional
+ties are straight lines with no water-crossing awareness -- visible in
+the render as lines leaving an island's own outline.
+
+A second real bug, caught by this project's own reachability test, not
+missed: the new arterial-network-map.html page was unreachable from
+index.html and had no way back -- the exact "page nobody can navigate to"
+class of defect this codebase already tests for. Fixed: linked from the
+Build menu, given the same back-to-CALIPER control every other demo page
+carries. Confirmed via the reachability test directly, not assumed fixed.
+
+Cross-lane note, not mine to fix, named for the handoff: public/road-
+network.js -- this file -- was already present in git history under
+069ad82 ("fix(claims): synchronize public claims spans..."), an agy
+commit that appears to have swept up this file from the shared working
+tree alongside unrelated changes. Content verified identical to what is
+committed here (git diff HEAD -- public/road-network.js was empty before
+this commit); no work was lost. The same shared-worktree risk CLAUDE.md
+already names ("two agents in one working tree caused overwritten
+commits") from the other direction.
+
+Full evidence, every number with the command beside it:
+docs/audits/P2-ARTERIAL.md.
+
+Full suite: node test/run.mjs -> 1005/1009 pass (measured before the
+reachability fix; the fix itself independently reconfirmed via
+test/reachability.test.ts, 4/4 pass). npx tsc --noEmit clean. The 4
+pre-existing failures are the two known-red seed pins and the
+intentionally-red origin-stability test -- reachability's own 2 failures
+(present in that count) are what this commit's fix closes.
+
+Stopping at this phase exit for review, per the plan's own rule -- not
+starting P3, and not claiming P2 complete when P2.3-P2.5 are not.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
