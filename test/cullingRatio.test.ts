@@ -54,13 +54,19 @@ test("street level drawn triangles are a small fraction of skyline view (culling
 
   const getTris = async (viewName) => {
     const page = await browser.newPage({ viewport: { width: 1200, height: 700 } });
-    const url = `http://127.0.0.1:${port}/city.html?bare=1&dpr=1&shadows=0&post=0&still=2&pdb=1&view=${encodeURIComponent(viewName)}`;
+    const url = `http://127.0.0.1:${port}/city.html?bare=1&dpr=1&shadows=0&post=0&still=5&pdb=1&view=${encodeURIComponent(viewName)}`;
     await page.goto(url, { waitUntil: "load", timeout: 120000 });
     await page.waitForFunction("window.__ready === true", null, { timeout: 240000 });
-    const info = await page.evaluate(() => ({
-      calls: window.__renderer.info.render.calls,
-      triangles: window.__renderer.info.render.triangles,
-    }));
+    const info = await page.evaluate(() => {
+      const stats = window.__getRenderStats ? window.__getRenderStats() : {
+        calls: window.__renderer.info.render.calls,
+        triangles: window.__renderer.info.render.triangles,
+      };
+      return {
+        calls: stats.calls,
+        triangles: stats.triangles,
+      };
+    });
     await page.close();
     return info;
   };

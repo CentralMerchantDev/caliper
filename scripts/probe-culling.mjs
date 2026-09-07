@@ -36,26 +36,32 @@ const browser = await chromium.launch({
 const views = ["Street level", "Downtown skyline", "The harbour"];
 const chunkSizes = [1500, 2000, 3000, 4000];
 
-console.log("\n| Chunk Size | Camera | Draw Calls | Drawn Triangles | Frame Time (GPU loop) | Headless Script Time |");
+console.log("\n| Chunk Size | Camera | Draw Calls | Drawn Triangles | Frame Time min/med/max (ms) | Headless Script Time |");
 console.log("|---|---|---|---|---|---|");
 
 for (const cs of chunkSizes) {
   for (const v of views) {
     const t0 = performance.now();
     const page = await browser.newPage({ viewport: { width: 1200, height: 700 } });
-    const url = `http://127.0.0.1:${PORT}/city.html?bare=1&dpr=1&shadows=0&post=0&still=2&pdb=1&chunkSize=${cs}&view=${encodeURIComponent(v)}`;
+    const url = `http://127.0.0.1:${PORT}/city.html?bare=1&dpr=1&shadows=0&post=0&still=6&pdb=1&chunkSize=${cs}&view=${encodeURIComponent(v)}`;
     await page.goto(url, { timeout: 120000 });
     await page.waitForFunction("window.__ready === true", null, { timeout: 120000 });
     const info = await page.evaluate(() => {
-      return {
+      const renderStats = window.__getRenderStats ? window.__getRenderStats() : {
         calls: window.__renderer.info.render.calls,
         triangles: window.__renderer.info.render.triangles,
-        frameTime: window.__lastFrameMs || (1000 / (window.__fps || 60)),
+      };
+      const frameStats = window.__getFrameStats ? window.__getFrameStats() : null;
+      return {
+        calls: renderStats.calls,
+        triangles: renderStats.triangles,
+        frameStats,
       };
     });
     const scriptTime = (performance.now() - t0).toFixed(1) + "ms";
     await page.close();
-    console.log(`| ${cs}m | ${v} | ${info.calls} | ${info.triangles.toLocaleString()} | ${typeof info.frameTime === 'number' ? info.frameTime.toFixed(1) + 'ms' : info.frameTime} | ${scriptTime} |`);
+    const ftStr = info.frameStats ? `${info.frameStats.min} / ${info.frameStats.median} / ${info.frameStats.max}` : "N/A";
+    console.log(`| ${cs}m | ${v} | ${info.calls} | ${info.triangles.toLocaleString()} | ${ftStr} | ${scriptTime} |`);
   }
 }
 

@@ -349,6 +349,8 @@ export function buildWorld(THREE, renderer, scene, layers = []) {
   const seed = (params && params.get("seed")) || DEFAULT_SEED;
   const CHUNK_SIZE = params && params.get("chunkSize") ? parseFloat(params.get("chunkSize")) : (LOOK.chunkSize || 4000);
   const useChunking = Number.isFinite(CHUNK_SIZE) && CHUNK_SIZE > 0;
+  const useLod = !(params && (params.get("lod") === "0" || params.get("cull") === "0" || params.get("culling") === "0" || params.get("nolod") === "1"));
+  const useFrustumCulling = !(params && (params.get("frustumCull") === "0" || params.get("cull") === "0" || params.get("culling") === "0"));
   // `layers` is a 4th, optional argument, last, defaulting to `[]` -- every
   // existing call site (city.html, world-render-3d.js's WorldRenderer) still
   // means exactly what it meant before I2. Nothing today passes one; I6 is
@@ -1803,6 +1805,7 @@ varying vec3 vSeaWorld;`)
         im0.computeBoundingSphere();
         im0.castShadow = true;
         im0.receiveShadow = true;
+        if (!useFrustumCulling) im0.frustumCulled = false;
 
         if (im1 !== im0) {
           im1.count = i;
@@ -1810,6 +1813,7 @@ varying vec3 vSeaWorld;`)
           im1.computeBoundingSphere();
           im1.castShadow = true;
           im1.receiveShadow = true;
+          if (!useFrustumCulling) im1.frustumCulled = false;
         }
 
         if (im2 !== im0 && im2 !== im1) {
@@ -1818,31 +1822,36 @@ varying vec3 vSeaWorld;`)
           im2.computeBoundingSphere();
           im2.castShadow = true;
           im2.receiveShadow = true;
+          if (!useFrustumCulling) im2.frustumCulled = false;
         }
 
-        const isTower = (typeof g.typology === "string") && (
-          g.typology.includes("tower") ||
-          g.typology.includes("midrise") ||
-          g.typology.includes("office") ||
-          g.typology.includes("civic") ||
-          g.typology.includes("business-park")
-        );
-        lod.isGroundFabric = !isTower;
-        if (isTower) {
-          lod.addLevel(im0, 0);
-          lod.addLevel(im1, 200);
-          lod.addLevel(im2, 5500);
-          const cullMesh = new THREE.Mesh(emptyGeo, mat);
-          lod.addLevel(cullMesh, 10000);
+        if (!useLod) {
+          scene.add(im0);
         } else {
-          lod.addLevel(im0, 0);
-          lod.addLevel(im1, 150);
-          lod.addLevel(im2, 450);
-          const cullMesh = new THREE.Mesh(emptyGeo, mat);
-          lod.addLevel(cullMesh, 4800);
-        }
+          const isTower = (typeof g.typology === "string") && (
+            g.typology.includes("tower") ||
+            g.typology.includes("midrise") ||
+            g.typology.includes("office") ||
+            g.typology.includes("civic") ||
+            g.typology.includes("business-park")
+          );
+          lod.isGroundFabric = !isTower;
+          if (isTower) {
+            lod.addLevel(im0, 0);
+            lod.addLevel(im1, 200);
+            lod.addLevel(im2, 5500);
+            const cullMesh = new THREE.Mesh(emptyGeo, mat);
+            lod.addLevel(cullMesh, 10000);
+          } else {
+            lod.addLevel(im0, 0);
+            lod.addLevel(im1, 150);
+            lod.addLevel(im2, 450);
+            const cullMesh = new THREE.Mesh(emptyGeo, mat);
+            lod.addLevel(cullMesh, 4800);
+          }
 
-        scene.add(lod);
+          scene.add(lod);
+        }
         variantMeshes++;
         variantParts += i;
       }

@@ -202,7 +202,17 @@ console.log("WORLD", JSON.stringify(W.stats));
 // Restrained: a little bloom on the sun-struck glass and water, a whisper of
 // vignette. Post is seasoning -- when you can SEE the bloom, there is too much.
 const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
+const mainRenderPass = new RenderPass(scene, camera);
+let sceneRenderInfo = { calls: 0, triangles: 0 };
+const origMainRender = mainRenderPass.render.bind(mainRenderPass);
+mainRenderPass.render = function(r, writeBuffer, readBuffer, deltaTime, maskActive) {
+  origMainRender(r, writeBuffer, readBuffer, deltaTime, maskActive);
+  sceneRenderInfo = {
+    calls: r.info.render.calls,
+    triangles: r.info.render.triangles,
+  };
+};
+composer.addPass(mainRenderPass);
 const usePost = num("post", 1) > 0;
 const useAO = num("ao", 1) > 0;
 let gtaoPass = null;
@@ -544,6 +554,22 @@ window.__renderOnce = () => { if (usePost) composer.render(); else renderer.rend
 window.__scene = scene;
 window.__renderer = renderer;
 window.__apply = apply;
+window.__getRenderStats = () => {
+  if (usePost) return sceneRenderInfo;
+  return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
+};
+window.__getFrameStats = () => {
+  const times = window.__ft ? window.__ft.slice(1) : []; // omit first frame warmup
+  if (!times.length) return { min: 0, median: 0, max: 0, count: 0, all: [] };
+  const sorted = [...times].sort((a, b) => a - b);
+  return {
+    min: sorted[0],
+    median: sorted[Math.floor(sorted.length / 2)],
+    max: sorted[sorted.length - 1],
+    count: times.length,
+    all: times,
+  };
+};
 
 let t = 0, frames = 0;
 // `still` renders a fixed number of frames and stops. A continuously running
@@ -552,7 +578,7 @@ let t = 0, frames = 0;
 const STILL = num("still", 0);
 (function loop() {
   const hdrPending = Boolean(W && W.stats && W.stats.hdrLoading);
-  if (!STILL || frames < STILL || hdrPending) requestAnimationFrame(loop);
+  if (!STILL || frames < STILL || !window.__ready) requestAnimationFrame(loop);
   t += 0.00028;
   W.wn.offset.set(t, t * 0.6);
   const sp = dist * 0.012;
@@ -568,17 +594,17 @@ const STILL = num("still", 0);
   }
   const ft = performance.now();
   window.__ft = window.__ft || [];
-  // With post off the composer only adds a copy; render straight so the stats
-  // below describe the SCENE and not a fullscreen quad.
   if (usePost) composer.render(); else renderer.render(scene, camera);
-  window.__ft.push(Math.round(performance.now() - ft));
+  const dur = performance.now() - ft;
+  window.__ft.push(Math.round(dur * 10) / 10);
   frames++;
   if (frames >= 2 && (!hdrPending || frames > 25)) {
     if (!window.__ready) {
+      const stats = window.__getRenderStats();
       console.log("WORLD_RENDER " + JSON.stringify({
-        calls: renderer.info.render.calls, tris: renderer.info.render.triangles,
+        calls: stats.calls, tris: stats.triangles,
         geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures,
-        frameMs: Math.round(performance.now() - ft),
+        frameMs: Math.round(dur * 10) / 10,
         envSource: W?.stats?.envSource,
       }));
       window.__ready = true;

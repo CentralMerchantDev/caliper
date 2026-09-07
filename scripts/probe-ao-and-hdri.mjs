@@ -36,25 +36,32 @@ const browser = await chromium.launch({
 const views = ["Street level", "Downtown skyline", "The harbour"];
 
 console.log("\n=== A1.1 SSAO/GTAO PASS PERFORMANCE ===");
-console.log("| Camera | AO Mode | Draw Calls | Drawn Triangles | Frame Time (GPU loop) | Headless Script Time |");
+console.log("| Camera | AO Mode | Draw Calls | Drawn Triangles | Frame Time min/med/max (ms) | Headless Script Time |");
 console.log("|---|---|---|---|---|---|");
 
 for (const ao of [0, 1]) {
   for (const v of views) {
     const t0 = performance.now();
     const page = await browser.newPage({ viewport: { width: 1200, height: 700 } });
-    const url = `http://127.0.0.1:${PORT}/city.html?post=1&ao=${ao}&chunkSize=2000&view=${encodeURIComponent(v)}&still=5`;
+    const url = `http://127.0.0.1:${PORT}/city.html?post=1&ao=${ao}&chunkSize=2000&view=${encodeURIComponent(v)}&still=6`;
     await page.goto(url, { timeout: 120000 });
     await page.waitForFunction("window.__ready === true", null, { timeout: 120000 });
     const info = await page.evaluate(() => {
-      const calls = window.__renderer ? window.__renderer.info.render.calls : 0;
-      const tris = window.__renderer ? window.__renderer.info.render.triangles : 0;
-      const ft = window.__ft && window.__ft.length ? window.__ft[window.__ft.length - 1] : 16.7;
-      return { calls, tris, ft };
+      const renderStats = window.__getRenderStats ? window.__getRenderStats() : {
+        calls: window.__renderer ? window.__renderer.info.render.calls : 0,
+        triangles: window.__renderer ? window.__renderer.info.render.triangles : 0,
+      };
+      const frameStats = window.__getFrameStats ? window.__getFrameStats() : null;
+      return {
+        calls: renderStats.calls,
+        tris: renderStats.triangles,
+        frameStats,
+      };
     });
     const scriptTime = (performance.now() - t0).toFixed(1) + "ms";
     await page.close();
-    console.log(`| ${v} | ${ao === 1 ? "GTAO Enabled" : "No AO"} | ${info.calls} | ${info.tris.toLocaleString()} | ${info.ft}ms | ${scriptTime} |`);
+    const ftStr = info.frameStats ? `${info.frameStats.min} / ${info.frameStats.median} / ${info.frameStats.max}` : "N/A";
+    console.log(`| ${v} | ${ao === 1 ? "GTAO Enabled" : "No AO"} | ${info.calls} | ${info.tris.toLocaleString()} | ${ftStr} | ${scriptTime} |`);
   }
 }
 
