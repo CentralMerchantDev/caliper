@@ -44,6 +44,30 @@
 // -- P3.2 names this exact gap and owns closing it). Left undone here,
 // named, not silently skipped.
 //
+// BUILDINGS -- ADOPTED, WITH TWO REAL DECISIONS MADE, NOT ASSUMED FREE.
+//
+// BOARD-CONVERSION-PLAN.md P3.1 calls this "mostly adoption... they already
+// have ids and footprints." Read directly against `planCity()`'s (layout.js)
+// actual return value, neither claim held: a placement carries `plotId`
+// (the PLOT's id, reused, not a building id of its own) and `fits` (the
+// plot's available ENVELOPE, not the building's real built footprint --
+// that only exists after calling `buildings.js`'s three.js `building()`,
+// which board-adapter.js deliberately does not import, matching every other
+// conversion in this file). Two decisions, made and named:
+//
+//   1. FOOTPRINT: `plot.buildable` (the plot's own setback-adjusted rect,
+//      already computed by city-plan.js, corner-anchored, three.js-free) is
+//      used as a PROXY for the building's real footprint. Close, not exact
+//      -- a real building rarely fills its buildable envelope corner to
+//      corner. Named here, not claimed as the model's own measured size.
+//   2. DOUBLE-RESERVATION: `board.js`'s `canPlace` refuses ANY two pieces
+//      whose foot+clear cells overlap, regardless of `pieceType` -- so a
+//      "plot" piece and a "building" piece covering the same ground would
+//      never both fit on one board. `plotPieces()` below now SKIPS a plot
+//      with a building on it; `buildingPieces()` is the one piece that
+//      actually reserves that ground. An unbuilt plot still gets its own
+//      "plot" piece, exactly as before.
+//
 // BRIDGES APPEAR TWICE IN generateWorld()'S OWN OUTPUT, AND ARE MERGED HERE.
 //
 // Every physical bridge exists as a `roads[]` entry (the deck span that
@@ -81,14 +105,18 @@ function spanToCellFoot({ axis, at, lo, hi, rowWidth }) {
 
 const NO_CLEAR = { w: 0, d: 0 };
 
-/** world.plots -> "plot" pieces. A plot is buildable SPACE, not a building
- *  -- PLACEMENT-CONTRACT.md Part 1, and confirmed directly: every plot's
- *  `occupant` field is always null in the current codebase, nothing ever
- *  writes to it. pieceType "plot" says exactly that, honestly. standsOn
- *  matches land-use.js's own buildAllowedAt(): strictly USE.BUILDABLE. */
-function plotPieces(world) {
+/** world.plots -> "plot" pieces, EXCLUDING any plot a building has been
+ *  placed on (`builtPlotIds`) -- see the file header's "DOUBLE-RESERVATION"
+ *  note. Historically every plot's `occupant` field was always null and
+ *  every plot got a piece unconditionally; that stays true when
+ *  `builtPlotIds` is omitted (every existing caller/test, unchanged). A
+ *  plot is buildable SPACE, not a building -- PLACEMENT-CONTRACT.md Part 1.
+ *  pieceType "plot" says exactly that, honestly. standsOn matches
+ *  land-use.js's own buildAllowedAt(): strictly USE.BUILDABLE. */
+function plotPieces(world, builtPlotIds = null) {
   const out = [];
   for (const p of world.plots) {
+    if (builtPlotIds && builtPlotIds.has(p.id)) continue;
     out.push({
       id: p.id,
       pieceType: "plot",
@@ -99,6 +127,45 @@ function plotPieces(world) {
       clear: NO_CLEAR, // no clear concept on a plot today -- setbacks are baked into `buildable`, a different thing
       standsOn: [USE.BUILDABLE],
       surface: "plaza", // a cleared plot presents as open ground -- the closest declared surface kind to "buildable lot"
+    });
+  }
+  return out;
+}
+
+/** planCity()'s placements (public/layout.js) -> "building" pieces. Not
+ *  derived from `world` -- unlike plots/roads/bridges, buildings do not
+ *  exist on `generateWorld()`'s own return value at all (confirmed by
+ *  reading it directly); `placements` is `planCity(world.blocks,
+ *  world.plots, verdictFor, fits).placements`, computed separately, and a
+ *  second, explicit argument here rather than folded silently into `world`.
+ *  Refused/unplaced entries (`refused: true`, or no matching plot) are
+ *  skipped -- nothing is placed for a building the layout itself declined
+ *  to build. See the file header for the footprint-proxy and rotation-unit
+ *  decisions. */
+function buildingPieces(world, placements) {
+  const plotById = new Map(world.plots.map((p) => [p.id, p]));
+  const out = [];
+  for (const pl of placements) {
+    if (pl.refused) continue;
+    const plot = plotById.get(pl.plotId);
+    if (!plot || !plot.buildable) continue;
+    const b = plot.buildable;
+    const w = b.xMax - b.xMin, d = b.zMax - b.zMin;
+    if (w <= 0 || d <= 0) continue;
+    // `facing` is radians (0 or Math.PI, front row vs back row -- layout.js
+    // never assigns a left/right rotation); board.js wants integer degrees
+    // from {0, 90, 180, 270}.
+    const rotation = Math.abs(Math.round(((pl.facing || 0) * 180) / Math.PI)) % 360;
+    out.push({
+      id: `bld-${pl.plotId}`,
+      pieceType: pl.typology || "building",
+      cell: { ...atomOf(b.xMin, b.zMin), k: 0 },
+      rotation: rotation === 90 || rotation === 270 ? 0 : rotation, // only 0/180 are ever produced; guard rather than trust silently
+      foot: { w: atomsFor(w), d: atomsFor(d) },
+      levels: 1, // ground-level, one storey -- same honest limitation as roads/bridges above; no real height data adapted here
+      clear: NO_CLEAR,
+      standsOn: [USE.BUILDABLE],
+      surface: "building",
     });
   }
   return out;
@@ -157,8 +224,14 @@ function bridgePieces(world) {
   return out;
 }
 
-/** The full placed-piece list for a generated world: plots, roads, bridges.
- *  Trees and props are not included -- see the file header. */
-export function piecesFromWorld(world) {
-  return [...plotPieces(world), ...roadPieces(world), ...bridgePieces(world)];
+/** The full placed-piece list for a generated world: plots, roads, bridges,
+ *  and buildings when `placements` (planCity()'s own output) is supplied.
+ *  `placements` is optional and defaults to none -- every existing caller
+ *  that only has `world` keeps its exact prior behaviour (plots
+ *  unconditionally included, no buildings), unchanged. Trees and props are
+ *  not included -- see the file header. */
+export function piecesFromWorld(world, placements = null) {
+  const builtPlotIds = placements ? new Set(placements.filter((p) => !p.refused).map((p) => p.plotId)) : null;
+  const buildings = placements ? buildingPieces(world, placements) : [];
+  return [...plotPieces(world, builtPlotIds), ...roadPieces(world), ...bridgePieces(world), ...buildings];
 }
