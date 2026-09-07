@@ -36,7 +36,7 @@
 
 import * as THREE from "three";
 import { SETTLEMENTS, HIGHWAYS, FREEWAYS, settlementCentres, ISLAND, LANDMASSES } from "./city-plan.js";
-import { transformSocket, verifySocketMating, ROAD_STANDARDS } from "./roadkit.js";
+import { transformSocket, verifySocketMating, ROAD_STANDARDS, bridgeSpan } from "./roadkit.js";
 import { ROAD_GRADE } from "./grade.js";
 
 /** PLACEMENT-CONTRACT.md Part 0's standard road widths -- the layout unit
@@ -1058,4 +1058,83 @@ export function buildConnectivityBridges(roads, { connectorClass = "STREET" } = 
   }
 
   return { bridges, augmentedRoads: augmented, componentsBefore: components.length };
+}
+
+// =============================================================================
+// BRIDGES AS PIECE CHAINS -- BOARD-CONVERSION-PLAN.md P3.3.
+//
+// `roadkit.js`'s `bridgeSpan(a, b, options)` already builds a real piece,
+// sockets in WORLD space directly (not a local piece needing a placement
+// transform -- a bridge spans between two fixed points, there is no
+// generic local copy of one to place). This function does not reimplement
+// that; it calls it once per `BRIDGES` entry and reports what happened.
+// =============================================================================
+
+/**
+ * `BRIDGES`' `{axis, x, a, b}` shape -> `bridgeSpan`'s own `(a, b)` world
+ * points. `axis` defaults to "ns" (city-plan.js's own convention, several
+ * `BRIDGES` entries omit it).
+ */
+function bridgeEndpoints(b) {
+  return b.axis === "ew"
+    ? [{ x: b.a, y: 0, z: b.x }, { x: b.b, y: 0, z: b.x }]
+    : [{ x: b.x, y: 0, z: b.a }, { x: b.x, y: 0, z: b.b }];
+}
+
+/**
+ * Every `BRIDGES` entry -> a real `bridgeSpan` piece, with real world-space
+ * sockets. `roadkit.js`'s own engineering ceiling (800 m single-piece
+ * span) is not extended here -- measured, not assumed: 11 of 19 real
+ * bridges exceed it (the two harbour crossings and several inter-island
+ * causeways run 850-1,924 m), and `bridgeChain`'s own multi-span plan
+ * (`public/roadkit.js`) is documented to refuse at the identical 800 m
+ * total, so it does not close this gap either. Those 11 are reported,
+ * named by id and by how far over the limit they run, not silently
+ * dropped or forced through.
+ */
+export function buildBridgePieces(bridgeList, { heightAt = null } = {}) {
+  const built = [];
+  const refused = [];
+  for (const b of bridgeList) {
+    const [pA, pB] = bridgeEndpoints(b);
+    const result = bridgeSpan(pA, pB, { roadClass: b.class, heightAt, clearance: 12 });
+    if (result.ok) {
+      built.push({ id: b.id, class: b.class, spanM: result.spanM, typology: result.typology, model: result });
+    } else {
+      refused.push({ id: b.id, class: b.class, reason: result.refusal });
+    }
+  }
+  return { built, refused };
+}
+
+/**
+ * Socket-verify every built bridge's own two ends against the CLOSEST node
+ * of an already-built piece-network (arterial, collector/local, or
+ * connectivity-bridge layer) -- "every bridge end lands on a road piece,"
+ * measured, not assumed from proximity in the source data alone. A bridge
+ * end within `toleranceM` of a network node's own position is checked with
+ * the shared `verifySocketMating`; outside that tolerance, it is counted
+ * as "no matching road piece found" rather than silently skipped. `nodes`
+ * is `[{x, z, bearing, socket}]` -- the caller's own network node list
+ * (this file does not merge the three networks' differing shapes itself).
+ */
+export function verifyBridgeEnds(built, nodes, toleranceM = 5) {
+  const results = [];
+  for (const b of built) {
+    for (const sock of b.model.sockets) {
+      let nearest = null, nearestD = Infinity;
+      for (const n of nodes) {
+        const d = Math.hypot(n.x - sock.at[0], n.z - sock.at[2]);
+        if (d < nearestD) { nearestD = d; nearest = n; }
+      }
+      if (!nearest || nearestD > toleranceM) {
+        results.push({ bridgeId: b.id, ok: false, reason: "no-road-piece-within-tolerance", nearestD });
+        continue;
+      }
+      let error = null;
+      try { verifySocketMating(sock, nearest.socket); } catch (e) { error = e.message; }
+      results.push({ bridgeId: b.id, ok: !error, error, nearestD });
+    }
+  }
+  return results;
 }

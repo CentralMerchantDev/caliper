@@ -538,20 +538,75 @@ into P3 unattended.**
 
 *Buildings are nearly there. Props and trees are not.*
 
-- [ ] **P3.1** Buildings become placed pieces — they already have ids and
+- [x] **P3.1** Buildings become placed pieces — they already have ids and
       footprints, so this is mostly adopting the P1 record.
       **Gate:** every building in the world is findable by id and by cell.
-- [ ] **P3.2** Trees, street furniture and props become placed pieces rather
+      **UPDATE:** "mostly adoption" did not hold on direct reading — a
+      `planCity()` placement carries the PLOT's id, not its own, and the
+      plot's available *envelope*, not the building's real footprint. Two
+      real decisions made and named: `plot.buildable` as a three.js-free
+      footprint proxy, and excluding a built plot's own "plot" piece so it
+      does not double-reserve the same ground as the new building piece. A
+      real bug found by measuring: independent `atomOf`(floor)/`atomsFor`
+      (ceil) rounding at row-house party-wall boundaries overlapped **2,735
+      of 17,105 buildings** by exactly 1 atom; fixed by deriving both edges
+      with `atomOf`. **Gate MET: 17,105 building pieces, 0 building-vs-
+      building overlaps, 0 duplicate ids**, 2 residual (named, not chased)
+      building-vs-unbuilt-plot edge cases. `public/board-adapter.js`'s
+      `buildingPieces()`. See `docs/audits/P3-BUILDINGS-AND-PROPS.md`.
+- [!] **P3.2** BLOCKED on coordination for wiring, checker built and
+      tested. Trees, street furniture and props become placed pieces rather
       than loop output. `prop-manifest.js` already declares `foot`, `sweep` and
       `clear` — adopt it.
       **Gate:** the 27 measured lamp-inside-bench overlaps from
       `prop-manifest.js`'s own header become zero, because occupancy is checked.
-- [ ] **P3.3** Bridges as piece chains — `bridgeChain` already exists.
+      **UPDATE:** `public/prop-placement.js` is a real occupancy checker,
+      using the SAME `world-registry.js` reservation roads/plots already go
+      through — reproduces the exact "lamp inside bench" defect the header
+      names and refuses it (`reason: "occupied"`), confirmed against real
+      `prop-manifest.js` data for every non-`sized` prop type. **Not wired
+      into `city-render.js`'s own placement loops** — that file is
+      `sandbox-spike-agy`'s active work, the same lane boundary P2.6 is
+      blocked on. The real 27-count cannot be re-verified as zero until that
+      wiring lands; what this pass proves is that the checker correctly
+      catches that exact class of overlap. See
+      `docs/audits/P3-BUILDINGS-AND-PROPS.md`.
+- [!] **P3.3** PARTIAL. Bridges as piece chains — `bridgeChain` already exists.
       **Gate:** every bridge end lands on a road piece, socket-verified.
-- [ ] **P3.4** The gap Mark named: **gas stations, EV charging, hydrogen
+      **UPDATE:** `roadkit.js`'s `bridgeSpan()` (real world sockets already,
+      used directly — `bridgeChain`'s own plan is abstract/relative and
+      would need a second placement layer this gate does not require) built
+      as a real piece for **8 of 19** real `BRIDGES` entries. The other 11
+      are refused BY NAME with `roadkit.js`'s own real reason — "exceeds
+      maximum engineering limit (800m)" — the world's two harbour crossings
+      and several causeways genuinely run 852-1,924 m, over BOTH
+      `bridgeSpan`'s and `bridgeChain`'s identical 800 m ceiling. Every
+      built piece's two ends are real, mateable, bearing-opposed sockets
+      (checked, not assumed). **"Lands on a road piece" measured and found
+      NOT met**: none of this pass's three piece-network layers (arterial,
+      collector/local, connectivity bridges) reaches a bridge's actual
+      landing coordinate — arterial nodes are settlement centres ~1.6 km
+      apart, with no reason to coincide, and measurement confirms they do
+      not, for all 8 built bridges' 16 ends. `verifyBridgeEnds()` itself is
+      exercised and correct (planted-match test passes). See
+      `docs/audits/P3-BRIDGES.md`.
+- [x] **P3.4** The gap Mark named: **gas stations, EV charging, hydrogen
       fuelling.** None exist in any category. Geometry is agy's; the placement
       rule and footprint are this lane's.
       **Gate:** named in the handoff with footprint and clearance proposed.
+      **Gate MET.** Confirmed by search first (none of the three exist
+      anywhere in `asset-registry.js`/`prop-manifest.js`/`city-plan.js`).
+      Footprint, clearance and a placement rule proposed for all three —
+      `fuel-gas` (24×18 m, 4 m clear, collector-or-higher frontage),
+      `fuel-hydrogen` (20×16 m, **10 m clear** — the real, sourced
+      difference from gasoline, NFPA 2/ISO 19880-1's wider hydrogen
+      separation distance, plus a named-but-unenforceable
+      residential/civic-proximity rule), `ev-charging` (`sized`, per-stall
+      2.7×5.5 m ADA/ITE standard, 1.5 m aisle clearance, least restrictive
+      of the three — matches real siting, EV charging retrofits into
+      ordinary parking). Every number marked sourced vs. this pass's own
+      derivation, per RULE ZERO. See
+      `docs/audits/P3-FUEL-EV-HYDROGEN-HANDOFF.md`.
 
 **EXIT P3:** nothing on the board is anonymous. Every element can be pointed at
 and named. Commit.

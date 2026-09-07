@@ -20,9 +20,18 @@ import { createHash } from "node:crypto";
 import { generateWorld } from "../public/city-plan.js";
 import { piecesFromWorld } from "../public/board-adapter.js";
 import { atomOf, atomOrigin } from "../public/grid.js";
+import { planCity } from "../public/layout.js";
+import { assessFootprint } from "../public/footprint.js";
+import { LandField, makeHeightAt } from "../public/terrain.js";
 
-const world = generateWorld();
-const pieces = piecesFromWorld(world);
+const heightAt = makeHeightAt(new LandField(16));
+const world = generateWorld(heightAt);
+const verdictFor = (plot) => {
+  const b = plot.buildable || plot;
+  return assessFootprint(heightAt, { xMin: b.xMin, xMax: b.xMax, zMin: b.zMin, zMax: b.zMax }).verdict;
+};
+const { placements } = planCity(world.blocks, world.plots, verdictFor);
+const pieces = piecesFromWorld(world, placements);
 
 // P1.1 -- every field present and integral.
 const fieldViolations = [];
@@ -71,6 +80,52 @@ for (const r of roadsNoBridge) {
   if (back === lo) roadAligned++;
 }
 
+// P3.1 -- buildings: present, and no two overlap each other or an unbuilt
+// plot's own "plot" piece. Grid-bucketed (32x32 atoms), same technique
+// scripts/measure-roads.mjs-style checks use elsewhere in this project --
+// exact pairwise (O(n^2)) is too slow at 17k+ building pieces.
+const buildingPieces = pieces.filter((p) => p.id.startsWith("bld-"));
+const plotPieces = pieces.filter((p) => p.pieceType === "plot");
+function rectOf(p) { return { i0: p.cell.i, j0: p.cell.j, i1: p.cell.i + p.foot.w, j1: p.cell.j + p.foot.d }; }
+function overlaps(a, b) { return a.i0 < b.i1 && a.i1 > b.i0 && a.j0 < b.j1 && a.j1 > b.j0; }
+const BUCKET = 32;
+// Bucket the PIECE, not a freshly-built rect -- comparing rects by object
+// identity for self-exclusion silently failed the first version of this
+// check, because the same piece's rect is rebuilt independently in the
+// outer and inner loops, so `other === r` never matched even for a piece
+// checked against itself, and inflated the count several thousand-fold.
+// Compare piece identity instead.
+function countOverlaps(as, bs) {
+  const buckets = new Map();
+  for (const p of bs) {
+    const r = rectOf(p);
+    for (let bi = Math.floor(r.i0 / BUCKET); bi <= Math.floor((r.i1 - 1) / BUCKET); bi++) {
+      for (let bj = Math.floor(r.j0 / BUCKET); bj <= Math.floor((r.j1 - 1) / BUCKET); bj++) {
+        const k = `${bi}_${bj}`;
+        if (!buckets.has(k)) buckets.set(k, []);
+        buckets.get(k).push(p);
+      }
+    }
+  }
+  let count = 0;
+  for (const p of as) {
+    const r = rectOf(p);
+    const seen = new Set();
+    for (let bi = Math.floor(r.i0 / BUCKET); bi <= Math.floor((r.i1 - 1) / BUCKET); bi++) {
+      for (let bj = Math.floor(r.j0 / BUCKET); bj <= Math.floor((r.j1 - 1) / BUCKET); bj++) {
+        for (const other of buckets.get(`${bi}_${bj}`) || []) {
+          if (other === p || seen.has(other)) continue;
+          seen.add(other);
+          if (overlaps(r, rectOf(other))) { count++; break; }
+        }
+      }
+    }
+  }
+  return count;
+}
+const buildingSelfOverlaps = countOverlaps(buildingPieces, buildingPieces) / 2; // each pair counted from both sides
+const buildingPlotOverlaps = countOverlaps(buildingPieces, plotPieces);
+
 // P1.5 -- digest + ids, for the caller to compare against a second, equally
 // isolated build (see the test file: it spawns this script twice).
 const digest = createHash("sha256").update(JSON.stringify(pieces)).digest("hex");
@@ -85,6 +140,11 @@ process.stdout.write(JSON.stringify({
   plotMismatchCount: plotMismatches.length,
   plotCount: world.plots.length,
   roadAligned, roadTotal: roadsNoBridge.length,
+  buildingCount: buildingPieces.length,
+  placementCount: placements.length,
+  refusedCount: placements.filter((p) => p.refused).length,
+  buildingSelfOverlaps,
+  buildingPlotOverlaps,
   digest,
   ids: pieces.map((p) => p.id),
 }));

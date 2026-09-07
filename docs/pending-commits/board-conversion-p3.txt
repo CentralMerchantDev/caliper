@@ -1,0 +1,82 @@
+Phase P3: everything else is a piece -- buildings, props, bridges, and
+the fuel/EV/hydrogen handoff
+
+P3.1 (buildings, DONE, gate met): "mostly adoption" did not hold on
+direct reading -- a planCity() placement carries the plot's own id, not
+a building id, and the plot's available envelope, not the building's
+real footprint. Two real decisions made and named: plot.buildable as a
+three.js-free footprint proxy, and excluding a built plot's own "plot"
+piece so it does not double-reserve the same ground as the new
+building piece. A real bug found by measuring: independent atomOf
+(floor)/atomsFor(ceil) rounding at row-house party-wall boundaries
+(PLOT_RULES.SETBACK_SIDE=0) overlapped 2,735 of 17,105 buildings by
+exactly 1 atom; fixed by deriving both edges with atomOf. Gate MET:
+17,105 building pieces, 0 building-vs-building overlaps, 0 duplicate
+ids, verified end to end via a real board.place() pass and a fast
+grid-bucketed overlap check independently. public/board-adapter.js's
+new buildingPieces(); test/boardAdapter.test.ts's new P3.1 cases, all
+confirmed green in a full node test/run.mjs pass (1,037 of 1,039,
+2 pre-existing known-red, nothing new).
+
+P3.2 (props, BLOCKED on coordination for wiring, checker built and
+tested): public/prop-placement.js is a real occupancy checker using
+the SAME world-registry.js reservation roads/plots already go through.
+Reproduces the exact "27 lamp posts stand inside a bin or a bench"
+defect prop-manifest.js's own header names and refuses it
+(reason:"occupied"), confirmed against every non-sized real
+prop-manifest.js entry. NOT wired into city-render.js's own placement
+loops -- that file is sandbox-spike-agy's active work, the same lane
+boundary P2.6 is blocked on. The real 27-count cannot be re-verified
+as zero until that wiring lands; what this pass proves is that the
+checker correctly catches that exact class of overlap.
+test/propPlacement.test.ts, six cases, verified directly (tsc clean,
+logic independently reproduced via standalone scripts matching every
+assertion).
+
+P3.3 (bridges, PARTIAL, gate measured and found not fully met):
+roadkit.js's existing bridgeSpan() (real world-space sockets already,
+used directly -- bridgeChain's own plan is abstract and would need a
+second placement layer this gate does not require) built a real piece
+for 8 of 19 real BRIDGES entries. The other 11 are refused BY NAME with
+roadkit.js's own real reason -- "exceeds maximum engineering limit
+(800m)" -- the world's two harbour crossings and several causeways
+genuinely run 852-1,924 m, over both bridgeSpan's and bridgeChain's
+identical 800 m ceiling. Every built piece's two ends are real,
+mateable, bearing-opposed sockets. "Lands on a road piece" measured and
+found NOT met: none of this pass's three piece-network layers
+(arterial, collector/local, connectivity bridges) reaches a bridge's
+actual landing coordinate -- arterial nodes are settlement centres
+~1.6 km apart, with no reason to coincide, and measurement confirms
+they do not, for all 8 built bridges' 16 ends. verifyBridgeEnds()
+itself is exercised and correct (a planted-match test passes).
+public/road-network.js's new buildBridgePieces()/verifyBridgeEnds();
+test/bridgePieces.test.ts, four cases, verified directly.
+
+P3.4 (fuel/EV/hydrogen handoff, DONE, gate met): confirmed by search
+first that none of gas stations, EV charging or hydrogen fuelling exist
+in any category today. Footprint, clearance and a placement rule
+proposed for all three, per RULE ZERO -- every number marked sourced
+(NFPA 2/ISO 19880-1's real, wider hydrogen separation distance; ADA/ITE
+standard parking stall dimensions) vs. this pass's own derivation
+(clearance figures not found published at the same single-number grain
+gasoline's own real fire-code separation would need). Geometry is
+agy's, per Mark's own instruction -- not built here.
+docs/audits/P3-FUEL-EV-HYDROGEN-HANDOFF.md.
+
+Verification: npx tsc --noEmit clean throughout (excluding unrelated,
+untracked, in-progress retrieval files from another concurrent lane in
+this shared checkout). P3.1 confirmed in a full, completed
+node test/run.mjs run (1,037/1,039 pass). P3.2/P3.3's new test files
+were verified directly against the real running code (every assertion
+independently reproduced via standalone scripts, not just written and
+assumed) rather than waiting for a second full ~10-minute suite run,
+given the length of this session -- named here rather than silently
+assumed equivalent to a full-suite pass.
+
+EXIT P3: buildings, bridges (partial) and the fuel/EV/hydrogen handoff
+are done or measured; props are blocked on the same render-lane
+coordination P2.6 already named. Proceeding to the P3-exit audit
+checkpoint (UMAA trigger 3, the no-floating-edge assertion) before
+reporting back.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

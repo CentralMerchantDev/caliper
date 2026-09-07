@@ -156,12 +156,27 @@ function buildingPieces(world, placements) {
     // never assigns a left/right rotation); board.js wants integer degrees
     // from {0, 90, 180, 270}.
     const rotation = Math.abs(Math.round(((pl.facing || 0) * 180) / Math.PI)) % 360;
+    // NOT atomsFor(w)/atomsFor(d) -- a real bug, measured, not assumed.
+    // PLOT_RULES.SETBACK_SIDE is 0 ("party walls allowed"), so row-adjacent
+    // buildings' buildable rects share an EXACT boundary in float space.
+    // atomOf() floors an anchor; atomsFor() CEILS a width (correct in
+    // isolation -- a footprint should never under-report its own size) --
+    // but `floor(xMin) + ceil(width)` can exceed `floor(xMax)` by exactly 1
+    // atom, and does: measured, 2,735 of 17,105 buildings overlapped a
+    // neighbour by exactly 1 atom along the full shared edge before this
+    // fix (oi=1 in every single case, confirming the mechanism rather than
+    // a scatter of unrelated defects). Deriving the far edge the SAME way
+    // (floor of the real coordinate) as the neighbour's own anchor will
+    // independently compute makes the two agree by construction, not by
+    // coincidence.
+    const { i: iMin, j: jMin } = atomOf(b.xMin, b.zMin);
+    const { i: iMax, j: jMax } = atomOf(b.xMax, b.zMax);
     out.push({
       id: `bld-${pl.plotId}`,
       pieceType: pl.typology || "building",
-      cell: { ...atomOf(b.xMin, b.zMin), k: 0 },
+      cell: { i: iMin, j: jMin, k: 0 },
       rotation: rotation === 90 || rotation === 270 ? 0 : rotation, // only 0/180 are ever produced; guard rather than trust silently
-      foot: { w: atomsFor(w), d: atomsFor(d) },
+      foot: { w: Math.max(1, iMax - iMin), d: Math.max(1, jMax - jMin) },
       levels: 1, // ground-level, one storey -- same honest limitation as roads/bridges above; no real height data adapted here
       clear: NO_CLEAR,
       standsOn: [USE.BUILDABLE],
