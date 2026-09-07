@@ -591,6 +591,17 @@ test("plots within a settlement do not meaningfully overlap either", () => {
 // of a world that is not there is the precise failure structureSummary's own
 // no-silent-fallback rule exists to prevent. So it is checked against the plan
 // that actually generates, here, where a world already exists.
+//
+// NAMED, EXPECTED RED as of docs/pending-commits/fix-756fd95-snap-regression
+// and reconcile-narrow-bounds-exception (772fd77, a8a0d28): PLOT_CLASSES going
+// whole-cell moved the real plot count from 19,874 to 20,059, a legitimate
+// change this test correctly caught. NOT fixed here because
+// WORLD-REBALANCE-BRIEF.md's step 3 rebalance will move the count again
+// before this is done -- regenerating now (node scripts/gen-city-summary.mjs)
+// would mean doing it twice. CLOSES at the end of step 3, regenerated once
+// against the final rebalanced world, with a comment here naming the commit
+// that did it. If this comment is still here and step 3 has landed, that is
+// a dropped step, not a tolerated one.
 // =============================================================================
 test("the embedded city summary is not stale", async () => {
   const { CITY_SUMMARY } = await import("../src/citySummary.generated.ts");

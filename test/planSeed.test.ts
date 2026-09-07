@@ -45,6 +45,18 @@ test("the default plan is byte-identical to the one before the plan was seeded",
   // Captured from the pre-seed implementation and pinned here, the same
   // discipline test/worldSeed.test.ts used for the ground:
   //   node -e 'generateWorld(makeHeightAt(new LandField(16))) -> fingerprint'
+  //
+  // NAMED, EXPECTED RED as of docs/pending-commits/fix-756fd95-snap-regression
+  // and reconcile-narrow-bounds-exception (772fd77, a8a0d28): PLOT_CLASSES
+  // going whole-cell moved the real plot count from 19,874 to 20,059, and this
+  // pin -- correctly -- says so. NOT re-pinned here because
+  // WORLD-REBALANCE-BRIEF.md's own step 3 re-pins the plan ONCE, at the end of
+  // the rebalance, once the count is done moving -- re-pinning now would mean
+  // doing it twice, and the second pin would be the only one anyone ever
+  // checks. CLOSES at the end of step 3: new PRE_SEED hash, new plot count,
+  // and a comment here naming the commit that did it. If this comment is
+  // still here and step 3 has landed, that is a dropped step, not a
+  // tolerated one.
   const PRE_SEED = "a88cfd0397e923e71eeb59b06b6448dc1f0749032ddca161702dbe8deb20b1a1";
   const world = generateWorld(heightAt);
   assert.equal(world.plots.length, 19874, "plot count moved -- the pin below is no longer describing this city");

@@ -1,0 +1,28 @@
+Name the two red tests, at the point where they fail
+
+"953/955, both failures expected and deferred" is exactly the phrasing that
+lets a red test become a permanent one -- said once, in a report, with
+nothing durable pointing at it. Named instead, in a comment directly above
+each assertion, so anyone reading the failure sees the answer without
+needing this commit message or the conversation that produced it:
+
+  test/cityWorld.test.ts -- "the embedded city summary is not stale"
+  test/planSeed.test.ts  -- "the default plan is byte-identical to the one
+                             before the plan was seeded"
+
+Both red for the same, single, legitimate reason: docs/pending-commits/
+fix-756fd95-snap-regression.txt and reconcile-narrow-bounds-exception.txt
+(772fd77, a8a0d28) moved PLOT_CLASSES to whole-cell bounds, which moved the
+real plot count from 19,874 to 20,059. Both tests caught that correctly.
+Neither is fixed here, because WORLD-REBALANCE-BRIEF.md's own step 3 moves
+the count again before the rebalance is done -- regenerating the summary or
+re-pinning the hash now would mean doing it twice, and the second pin is the
+only one anyone would ever check. Both close at the end of step 3: summary
+regenerated with node scripts/gen-city-summary.mjs, plan re-pinned with a
+new hash and plot count, and a comment at each site naming the commit that
+did it. Each comment states plainly that its own continued presence after
+step 3 lands is a dropped step, not a tolerated one.
+
+How it is known to work: node --test on both files, confirming the comments
+land next to the still-red assertion rather than replacing it -- these are
+documentation, not a fix. No other test file touched.
