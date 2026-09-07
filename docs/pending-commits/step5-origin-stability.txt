@@ -1,0 +1,48 @@
+World rebalance, step 5: the origin-stability property, written and watched
+red -- not fixed, per the brief
+
+docs/audits/WORLD-DENSITY-FINDINGS.md §8: "a saved build is a coordinate. If
+opening new land ever shifts the origin, every world anyone has ever built
+is silently wrong." Mark's requirement is that 26 km is the world now, not
+forever, and the property everything else depends on: opening more land
+must never re-centre, re-scale or re-index ground that is already open.
+This is that property, written as a test and run, per the brief's own
+instruction ("if it is already red, that is the finding -- report it, do
+not fix it in this pass").
+
+THE OBSTACLE, NAMED RATHER THAN WORKED AROUND: WORLD.SIZE has exactly one
+lever today, WORLD_SCALE (public/world-scale.js, a hardcoded module
+constant, not a runtime parameter) -- and WORLD_SCALE is a full LANDFORM
+RESCALE, not a boundary extension. Its own file states the rule plainly:
+"SCALES: landform metres... coastlines, terrain heights..." Changing it
+does not open new land at a fixed origin; it redraws the entire world
+smaller or larger around wherever the island's bounds resolve to. That is
+the only size change the current code can actually perform, so
+test/originStability.test.ts performs it -- not because it is the
+operation Mark's requirement describes, but because it is the closest real
+lever that exists, and its effect on the origin is exactly what needs to
+be known before a real "open new land" operation is designed. The test
+regenerates the world from a second, disposable copy of public/ patched to
+a different WORLD_SCALE, so nothing in the real source is touched.
+
+RESULT, WATCHED RED: plot[0] moved from (-1343.8, 768.9) to (-1048.0,
+684.9) when WORLD.SIZE moved from 26,000 to 20,800 (WORLD_SCALE 0.65 ->
+0.52, an 0.8x change). Traced to GRID.ORIGIN_X/ORIGIN_Z (public/city-plan.js):
+both are `ISLAND.xMin`/`zMin` -- ISLAND is a landform extent, so it scales
+with WORLD_SCALE by world-scale.js's own documented rule. There is
+currently no fixed, scale-independent anchor a saved coordinate could be
+checked against. This is the finding, not a bug in the test: the origin
+moves because the only "resize" operation that exists is a full rescale,
+and grid.js's own documented design (LOCKED regions, addressable but not
+yet open) has nothing underneath it yet that can grow the world without
+also moving everything already built on it.
+
+NOT FIXED, PER THE BRIEF. No change to GRID, ISLAND, WORLD.SIZE, or
+WORLD_SCALE. This is step 5's own instruction: write the property, watch
+it red, report -- the other two properties WORLD-DENSITY-FINDINGS.md §8
+names (locked-is-not-absent, determinism-survives-growth) are explicitly
+for later, not this pass.
+
+How it is known to work: node --test test/originStability.test.ts, the
+failure message above is the actual assertion output. npx tsc --noEmit
+clean. No leftover temp directories after the run (verified).
