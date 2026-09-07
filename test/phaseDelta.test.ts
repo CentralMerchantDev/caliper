@@ -36,6 +36,13 @@ export const BASELINE_V0: PhaseMeasurement = {
   propTris: 200, // Baseline: ~12-40 tri boxes per prop (~200 tris total)
 };
 
+import { generateWorld } from "../public/city-plan.js";
+import { assessFootprint } from "../public/footprint.js";
+import { LandField, makeHeightAt } from "../public/terrain.js";
+import { planCity, groupByVariant } from "../public/layout.js";
+import { makeFits } from "../public/layout-fits.js";
+import { building } from "../public/buildings.js";
+
 /**
  * Measures live LOD0 triangle count across all manifest props directly from geometry.
  */
@@ -63,6 +70,52 @@ export function measureLiveTextures(): number {
     }
   }
   return validAtlases;
+}
+
+let _layoutMemo: { distinctTris: number; drawnTris: number; variants: number; placements: number } | null = null;
+
+/**
+ * Measures live building layout geometry: distinct triangles and total drawn triangles across the city.
+ */
+export function measureLiveLayoutGeometry(): { distinctTris: number; drawnTris: number; variants: number; placements: number } {
+  if (_layoutMemo) return _layoutMemo;
+  const heightAt = makeHeightAt(new LandField(16));
+  const world = generateWorld(heightAt);
+  const verdictFor = (plot: any) => {
+    const b = plot.buildable || plot;
+    return assessFootprint(heightAt, { xMin: b.xMin, xMax: b.xMax, zMin: b.zMin, zMax: b.zMax }).verdict;
+  };
+
+  const { placements } = planCity(world.blocks, world.plots, verdictFor, makeFits());
+  const groups = groupByVariant(placements);
+
+  let distinctTris = 0;
+  let drawnTris = 0;
+  let variants = 0;
+
+  for (const g of groups.values()) {
+    const spec = building(g.typology, g.seed, g.options);
+    const lod0 = spec.lod && spec.lod[0];
+    if (!lod0 || typeof lod0.createGeometry !== "function") continue;
+    const geo = lod0.createGeometry();
+    if (!geo || !geo.attributes || !geo.attributes.position) continue;
+    const tris = (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
+    distinctTris += tris;
+    drawnTris += tris * g.placements.length;
+    variants++;
+    geo.dispose?.();
+  }
+
+  _layoutMemo = { distinctTris, drawnTris, variants, placements: placements.length };
+  return _layoutMemo;
+}
+
+export function measureLiveGeometry(): number {
+  return measureLiveLayoutGeometry().distinctTris;
+}
+
+export function measureLiveDrawn(): number {
+  return measureLiveLayoutGeometry().drawnTris;
 }
 
 /**
@@ -166,4 +219,29 @@ test("LIVE WORLD GATE: Phase V2 passes by measuring real live prop geometry", ()
   );
   assert.ok(result.valid, result.reason);
   assert.strictEqual(result.delta, livePropTris - BASELINE_V0.propTris!);
+});
+
+test("LIVE WORLD GATE: measureLiveGeometry and measureLiveDrawn measure real city building meshes", () => {
+  const geom = measureLiveLayoutGeometry();
+  assert.ok(geom.distinctTris > 100000, `distinctTris measured ${geom.distinctTris} -- expected > 100,000`);
+  assert.ok(geom.drawnTris > 1000000, `drawnTris measured ${geom.drawnTris} -- expected > 1,000,000`);
+  assert.ok(geom.variants > 300, `variants measured ${geom.variants} -- expected > 300`);
+
+  // Unearned V3 claim with unchanged live geometry MUST trip
+  const v3Unearned = verifyPhaseProgress(
+    { phase: "V2", status: "LANDED", distinctTris: geom.distinctTris },
+    { phase: "V3", status: "LANDED", distinctTris: geom.distinctTris },
+    "geometry"
+  );
+  assert.equal(v3Unearned.valid, false);
+  assert.match(v3Unearned.reason!, /distinctTris did not move/);
+
+  // Unearned V7 claim with unchanged live drawn triangles MUST trip
+  const v7Unearned = verifyPhaseProgress(
+    { phase: "V6", status: "LANDED", drawnTris: geom.drawnTris },
+    { phase: "V7", status: "LANDED", drawnTris: geom.drawnTris },
+    "lod"
+  );
+  assert.equal(v7Unearned.valid, false);
+  assert.match(v7Unearned.reason!, /drawnTris did not move/);
 });
