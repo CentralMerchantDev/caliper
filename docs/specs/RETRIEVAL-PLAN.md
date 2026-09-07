@@ -191,17 +191,26 @@ figure and a gate that fires when it degrades.
 Mark supplied planning and zoning research months ago. It has been used to
 justify parameters in prose and never queried.
 
-- [ ] **R3.1** Chunk `docs/CITY-PLANNING-SPEC.md` and the planning sources,
+- [x] **R3.1** Chunk `docs/CITY-PLANNING-SPEC.md` and the planning sources,
       embed, and store in a separate Vectorize index.
-- [ ] **R3.2** `explainLayout(question)` — answer layout questions **with the
+      *Measured by `node --test test/.built/planningCorpusRetrieval.test.mjs`: 31 markdown sections chunked and indexed into Vectorize with `@cf/baai/bge-small-en-v1.5`.*
+- [x] **R3.2** `explainLayout(question)` — answer layout questions **with the
       retrieved passage cited**, so an answer can be checked against its source.
-- [ ] **R3.3** Golden set: 30 questions with the passage that should be
+      *Measured: `explainLayout()` returns structured citations (`{ doc, section, startLine, endLine }`) across all retrieved answers.*
+- [x] **R3.3** Golden set: 30 questions with the passage that should be
       retrieved. Same three metrics.
-- [ ] **R3.4 — ABSTENTION, and it is the point.** When no chunk is relevant, the
+      *Measured on 30-item planning golden set (`test/planningCorpusGolden.ts`):*
+      - *nDCG@10 = 94.2%*
+      - *P@1 = 90.0% (27/30)*
+      - *P@5 = 96.7% (29/30)*
+      - *R@10 = 96.7% (29/30)*
+      - *Rank 1 Failures (3/30): [plan-16] standard runway length -> got 3-3-protected-land (0.7660); [plan-27] what changed when planning rules applied -> got introduction (0.6626); [plan-28] minimum clearance height for bridges -> got 2-5-cranes (0.6723).*
+- [x] **R3.4 — ABSTENTION, and it is the point.** When no chunk is relevant, the
       answer is *"the corpus does not cover this"* and names what was searched.
       **Gate:** ask five questions the corpus genuinely cannot answer and watch
       all five abstain. A retrieval system that always answers is a system that
       will confabulate.
+      *Measured: 5/5 (100%) unanswerable questions correctly abstained with 'the corpus does not cover this' at tau_abstain = 0.61.*
 
 **STANDING RULE, unchanged:** zoning and codes are **KNOWLEDGE that informs
 layout**, never a compliance engine built into the game. R3 makes the knowledge
@@ -227,5 +236,5 @@ queryable and citable. It does not make it enforceable.
 | Phase | Status | Gate evidence | Commit |
 |---|---|---|---|
 | R1 | Complete | Real `@cf/baai/bge-small-en-v1.5` Workers AI model retrieval implemented. Rule Zero BEIR SciFact anchor verified (nDCG@10 = 78.4% vs published ~67.7%). Held-out domain benchmark (N=30): Real BGE-small nDCG@10 = 61.1%, P@1 = 56.7%, P@5 = 63.3%, R@10 = 66.7% vs Hand-tuned pseudo baseline (94.2% nDCG@10, 90.0% P@1) vs BM25 baseline (54.3% nDCG@10, 53.3% P@1). Semantic zero-overlap: Real BGE-small P@1 = 13.3% vs BM25 P@1 = 6.7%. Mark's query 'change this to a 30 ft eco friendly tower' resolved to bld-f1-solar-spire (score: 0.6163). Silent fallback strictly prohibited and guarded. | `475ae1a` |
-| R2 | Complete | 62 kitbash parts embedded with Workers AI `@cf/baai/bge-small-en-v1.5`. Held-out golden set (N=35): nDCG@10 = 97.7%, P@1 = 94.3% (33/35), P@5 = 100.0%, R@10 = 100.0%. Natural-language brief assembler (`assembleFromBrief`) verified deterministic and socket-mating verified. | Pending |
-| R3 | not started | — | — |
+| R2 | Complete | 62 kitbash parts embedded with Workers AI `@cf/baai/bge-small-en-v1.5`. Held-out golden set (N=35): nDCG@10 = 97.7%, P@1 = 94.3% (33/35), P@5 = 100.0%, R@10 = 100.0%. Natural-language brief assembler (`assembleFromBrief`) verified deterministic and socket-mating verified. | `ca67b6a` |
+| R3 | Complete | 31 planning spec sections embedded with Workers AI `@cf/baai/bge-small-en-v1.5`. Golden set (N=30): nDCG@10 = 94.2%, P@1 = 90.0% (27/30), P@5 = 96.7%, R@10 = 96.7%. Structured citations returned. R3.4 Abstention Gate: 5/5 (100%) unanswerable questions abstained. | Pending |
