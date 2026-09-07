@@ -362,18 +362,16 @@ export function typologyFor(className, situation, fits = null) {
  * like (a downtown core reads prestige, a beach village does not), not
  * measured -- there is nothing yet to measure it against.
  *
- * UPDATED to the four consolidated finishes (docs/specs/LIBRARY-STRUCTURE.md,
- * mapping published in docs/audits/VISUAL-RUN-QUESTIONS.md §7): f1 basic,
- * f2 standard/midhigh, f3 mid/highend, f4 luxury. This file's original six
- * names translate cleanly for four of them (luxury->f4, highend->f3,
- * mid->f3, midhigh->f2, all per that published table); "showstopper" and
- * "midlow" were never among the six LIBRARY-STRUCTURE.md names at all --
- * they were this file's own semantic labels for "the most exclusive tier a
- * class reaches" and "the plainest" respectively, so they translate by the
- * same reasoning that chose them originally: showstopper -> f4 (elite/
- * showcase, the same sense "showstopper" was reaching for), midlow -> f1
- * (basic/utilitarian, the same sense "midlow" was reaching for). Still a
- * proposal, not a re-derivation from anything measured.
+ * UPDATED to agy's own published table for these exact classes (docs/audits/
+ * VISUAL-RUN-QUESTIONS.md §7.1, after docs/specs/LIBRARY-STRUCTURE.md's
+ * six-to-four finish consolidation) rather than this file re-deriving one:
+ * TERRACE and VILLA in particular land on f1/f2 there, not the f1/f3 and
+ * f3/f1 an earlier translation of this file's own six-tier names produced
+ * -- agy's is the one that actually reflects where "mid" and "midhigh"
+ * ended up in the real four-tier census ({f1:400, f2:400, f3:400, f4:400}),
+ * which this file has no independent way to verify. Still a proposal, not
+ * a decision; adopted here because it is more authoritative than a
+ * translation of this file's own retired six-tier guesses.
  *
  * Classes absent here (WAREHOUSE, HANGAR, FARM, PARK) are not an oversight:
  * the registry's only building categories are 'buildings' and 'civic' (240
@@ -383,13 +381,13 @@ export function typologyFor(className, situation, fits = null) {
  * than silently returning nothing for a reason nobody wrote down.
  */
 export const LIBRARY_TIERS_FOR_CLASS = {
-  TOWER:     ["f4", "f3"],
+  TOWER:     ["f3", "f4"],
   CIVIC:     ["f3", "f4"],
   MIDRISE:   ["f2", "f3"],
   RESORT:    ["f2", "f3"],
-  TOWNHOUSE: ["f3", "f2"],
-  TERRACE:   ["f3", "f1"],
-  VILLA:     ["f1", "f3"],
+  TOWNHOUSE: ["f2", "f3"],
+  TERRACE:   ["f1", "f2"],
+  VILLA:     ["f1", "f2"],
 };
 
 /** CIVIC plots draw from the registry's 'civic' category; every other

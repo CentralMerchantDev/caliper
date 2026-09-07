@@ -1,0 +1,46 @@
+Reconcile roads-follow-density against the ITE walkable-block ceiling, and
+adopt agy's own tier table over this file's translation of it
+
+Two fixes, landed together because both surfaced from the same test run
+after the previous commit.
+
+THE ITE CEILING CONFLICT. Widening a sparse settlement's road spacing
+(previous commit) directly collided with an existing, correct invariant:
+"no walkable block exceeds the ITE block-length ceiling" (183 m) and
+"street spacing is derived with the character, not left behind by it" both
+started failing -- beach-w84-villas, zoned VILLA, now carries a 431 m
+block. Both are real rules and neither was wrong; VILLA's own
+CHARACTER_SPACING (180 m) already sits almost at the 183 m ceiling, so
+there was never room to widen a VILLA settlement's spacing at all without
+crossing it -- the two goals are only in tension for a class this
+sparse-by-design.
+
+The resolution follows the ceiling tests' own established reasoning:
+FARM/WAREHOUSE/HANGAR are exempt today not because of their name but
+because "a field or a container yard is legitimately coarse", not
+pedestrian fabric. A settlement built at scale 0.12-0.19 (the barrier
+island, previous commit) is the same category of thing -- a country lane
+network, not urban fabric that happens to be thin -- so it earns the same
+exemption, at a threshold (scale < 0.3) that clears the barrier island's
+own values with a wide margin and leaves every other settlement (scale: 1,
+the default) held to the ceiling exactly as before.
+
+This needed `scale` exposed on the public settlement object returned by
+generateWorld() -- it was computed internally but never surfaced, so the
+tests had no way to ask "is this settlement declared sparse" without
+reaching into SETTLEMENTS/barrierSettlements directly. Added alongside the
+existing `cls`.
+
+AGY'S TIER TABLE SUPERSEDES THIS FILE'S OWN TRANSLATION. The previous
+commit's LIBRARY_TIERS_FOR_CLASS translated this file's retired six-tier
+names into the new four finishes by re-deriving a mapping from
+docs/specs/LIBRARY-STRUCTURE.md's stated intent. agy has since published
+the actual table for these exact classes (docs/audits/VISUAL-RUN-
+QUESTIONS.md §7.1), derived from the real four-tier census this file has
+no way to verify independently. TERRACE and VILLA differ (f1/f2 in agy's
+table; this file's own translation had produced f1/f3 and f3/f1) --
+adopted agy's version as the more authoritative source. Still a proposal,
+not a decision, same as before.
+
+How it is known to work: node --test on both affected files, both
+previously-red assertions now pass. Full suite and tsc follow.

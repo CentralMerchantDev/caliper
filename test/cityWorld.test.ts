@@ -825,6 +825,23 @@ test("the railway runs on land, not across the bay", () => {
 // so this test asserts the distinction rather than a blanket rule, which is what
 // makes it a planning rule instead of a lint.
 // =============================================================================
+// A SETTLEMENT MAY BE TOO SPARSE TO BE "WALKABLE FABRIC" AT ALL.
+//
+// The ITE ceiling below is a pedestrian-scale rule: FARM/WAREHOUSE/HANGAR
+// are exempt because a field or a container yard is legitimately coarse,
+// not because of their name. docs/pending-commits/roads-follow-density.txt
+// made that same coarseness a property a SETTLEMENT can declare directly --
+// `scale`, settlementDensity's flat density multiplier -- for a landmass
+// that is meant to read as low and sparse rather than as urban fabric that
+// happens to be thinly built (WORLD-REBALANCE-BRIEF.md §3's barrier
+// island, scale 0.12-0.19). A settlement at that density is a country lane
+// network, not a city block grid that failed to fill in, and holding it to
+// a walkable-block ceiling built for TERRACE row housing is the same
+// category error the old COARSE-by-class list existed to prevent for FARM.
+// 0.3 clears the barrier island's own values with a wide margin and sits
+// far below 1 (every settlement that never declares `scale`, unaffected).
+const SPARSE_SCALE_THRESHOLD = 0.3;
+
 test("no walkable block exceeds the ITE block-length ceiling", () => {
   const CEILING = 183;
   const COARSE = new Set(["FARM", "WAREHOUSE", "HANGAR"]);
@@ -841,12 +858,16 @@ test("no walkable block exceeds the ITE block-length ceiling", () => {
   //
   // world.settlements carries the derived cls. That is the one to ask.
   const character: Record<string, string> = {};
-  for (const s of overlapWorld.settlements as any[]) if (s.cls) character[s.id] = s.cls;
+  const scaleOf: Record<string, number> = {};
+  for (const s of overlapWorld.settlements as any[]) {
+    if (s.cls) character[s.id] = s.cls;
+    scaleOf[s.id] = s.scale === undefined ? 1 : s.scale;
+  }
 
   const offenders: string[] = [];
   for (const b of overlapWorld.blocks as any[]) {
     const c = character[b.settlement];
-    if (!c || COARSE.has(c)) continue;
+    if (!c || COARSE.has(c) || scaleOf[b.settlement] < SPARSE_SCALE_THRESHOLD) continue;
     const longest = Math.max(b.xMax - b.xMin, b.zMax - b.zMin);
     if (longest > CEILING) {
       offenders.push(`${b.id} (${c}) ${longest.toFixed(0)} m`);
@@ -861,7 +882,8 @@ test("street spacing is derived with the character, not left behind by it", () =
   // deriving the SPACING left re-zoned settlements on their old block grid --
   // villas laid out on 420 m farm parcels. The two must come from one place.
   const walkable = (overlapWorld.settlements as any[])
-    .filter((s) => s.cls && !["FARM", "WAREHOUSE", "HANGAR"].includes(s.cls));
+    .filter((s) => s.cls && !["FARM", "WAREHOUSE", "HANGAR"].includes(s.cls)
+                && (s.scale === undefined ? 1 : s.scale) >= SPARSE_SCALE_THRESHOLD);
   assert.ok(walkable.length > 10, `only ${walkable.length} walkable settlements`);
   for (const s of walkable) {
     const blocks = (overlapWorld.blocks as any[]).filter((b) => b.settlement === s.id);

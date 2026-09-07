@@ -3253,8 +3253,17 @@ export function generateWorld(rawHeightAt = null, seed = DEFAULT_SEED) {
   for (const s of settlementList) {
     const out = generateSettlement(s, polyBy, demandAt, seed);
     roads.push(...out.roads); blocks.push(...out.blocks); plots.push(...out.plots);
+    // `scale` (settlementDensity's flat density multiplier, default 1) is
+    // exposed here so a test can tell a genuinely, deliberately sparse
+    // settlement (the barrier island, scale 0.12-0.19) from a normal one
+    // without reaching into the internal SETTLEMENTS/barrierSettlements
+    // declarations this public object is built from -- test/cityWorld.
+    // test.ts's ITE block-length ceiling needed exactly this to reconcile
+    // "no walkable block exceeds 183 m" against "roads must follow density"
+    // (docs/pending-commits/roads-follow-density.txt).
     settlements.push({ id:s.id, name:s.name, landmass:s.landmass,
-                       plots:out.plots.length, blocks:out.blocks.length, cls:s.cls });
+                       plots:out.plots.length, blocks:out.blocks.length, cls:s.cls,
+                       scale: s.scale === undefined ? 1 : s.scale });
   }
 
   // BRIDGES ARE ROADS. Adding them to the network is what makes them connect to
