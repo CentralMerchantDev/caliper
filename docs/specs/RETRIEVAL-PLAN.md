@@ -43,9 +43,59 @@ vendor, no new deployment target, no new cost tier. Add them to
 **Anyone can say they built a retrieval pipeline. Almost nobody measures whether
 it retrieved the right thing.**
 
-Every phase below ends in a measured retrieval-quality number against a golden
-set, not in "it returns results." A retrieval system with no precision figure is
-the same species as a control that has never been watched red.
+Every phase below ends in a measured retrieval-quality number, not in "it
+returns results." A retrieval system with no quality figure is the same species
+as a control that has never been watched red.
+
+---
+
+## RULE ZERO — BORROW THE BENCHMARK, DO NOT INVENT ONE
+
+**Mark, 2026-09-07, and it supersedes how the earlier phases were specified:**
+
+> before we set any sort of numbers, we should be looking for benchmarks to
+> measure against the industry standards — known numbers that we can work off of
+> — and then ask what needs to be added to those known numbers … rather than
+> measuring against things that really produce nothing and have no real value at
+> the end of the day if they pass, because asking something that doesn't really
+> matter is inevitable to pass but doesn't show anything
+
+**A benchmark we invent, with a threshold we choose, is unfalsifiable by
+construction.** It can only ever report that we agree with ourselves. That is
+how a hand-written `SEMANTIC_CLUSTERS` table scored 90% precision@1 — it was
+measured against a target the same author chose.
+
+**A public benchmark cannot be satisfied that way.** A hand-authored cluster
+table scores near-random on SciFact, because it has no training and generalises
+to nothing beyond the words someone typed into it. One external run catches in
+minutes what four internal gates did not.
+
+### The order of operations, for every measurement in this project
+
+1. **Find the published benchmark and its known numbers first.** For retrieval
+   that is **BEIR** (18 zero-shot retrieval tasks, the field's standard) and
+   **MTEB** (56 tasks). The standard metric is **nDCG@10** — *not* precision@1,
+   which was chosen here because it was easy to compute rather than because
+   anyone compares against it.
+2. **Reproduce the published number.** Run the pipeline on a small standard
+   subset — SciFact or NFCorpus — with `@cf/baai/bge-small-en-v1.5`, and check
+   the result lands near that model's published score. **If it does not, the
+   implementation is wrong and no domain number from it means anything.** This
+   step validates the harness before the harness is trusted.
+3. **Only then measure the domain-specific thing**, and report it *beside* the
+   external anchor rather than alone.
+4. **Say what the domain measure adds** that the public benchmark does not —
+   in this case, whether retrieval finds the right building from an
+   architectural description, which no public set tests.
+
+### This applies beyond retrieval
+
+Every budget in this project was chosen rather than derived. The 200,000
+distinct-triangle ceiling was 7× headroom over a measurement. The 900 draw-call
+limit was a comment. The 12M drawn-triangle ceiling has no published source.
+**Where a published figure exists — frame-time targets, mutation-score norms,
+retrieval metrics — borrow it and cite it. Where none exists, say so explicitly
+and derive the number in writing.**
 
 ---
 
@@ -56,38 +106,32 @@ the same species as a control that has never been watched red.
       carries "art deco" and "skyscraper" and both matter.
       **Gate:** every entry has non-empty embedding text; print 10 samples.
       *Measured by `node --test test/.built/modelRetrieval.test.mjs` (1,600 / 1,600 valid).*
-- [x] **R1.2** Embed with Workers AI and store in Vectorize, with the registry id
+- [ ] **R1.2** Embed with Workers AI and store in Vectorize, with the registry id
       as metadata. Embedding is a build step, not a request-time cost.
       **Gate:** vector count equals registry count exactly. A mismatch means
       entries were silently dropped.
-      *Measured by `node --test test/.built/modelRetrieval.test.mjs` (1,600 / 1,600 indexed).*
-- [x] **R1.3** `findModels(description, { fits, limit })` — embed the query, take
+- [ ] **R1.3** `findModels(description, { fits, limit })` — embed the query, take
       top-k from Vectorize, **then** apply the existing footprint and `standsOn`
       filters. Retrieval proposes; the board still decides what fits.
       **Gate:** a query returns results ordered by similarity, and every result
       genuinely fits the space given.
-      *Measured: cosine similarities returned in [-1, 1], tight plot spatial constraints verified.*
-- [x] **R1.4 — THE ONE THAT MATTERS. Build a golden set and measure.**
+- [ ] **R1.4 — THE ONE THAT MATTERS. Build a golden set and measure.**
       50–100 query→expected-model pairs written by hand: *"eco friendly tower"*
       → `vertical-forest`, `solar-spire`; *"art deco skyscraper"* →
       `art-deco-skyscraper`; *"small corner shop"* → `corner-bodega-flat`.
       Report **precision@1, precision@5, recall@10** and the failures by name.
       **Gate:** the numbers, published, whatever they are. A low score reported
       honestly is a result. A high score with no golden set is not.
-      *Measured on Held-out Set (N=30): Vectorize P@1 = 90.0%, P@5 = 96.7%, R@10 = 96.7% vs Lexical Baseline P@1 = 53.3%. Semantic Zero-Overlap sub-split: Vectorize P@1 = 80.0% vs Lexical P@1 = 6.7%. Misses: [held-03] stone gabled ancestral estate -> brg-f2-stone-triple-arch; [held-05] high density compact residences -> veh-f3-flatbed-cargo-hauler; [held-11] exoskeleton diamond lattice -> brg-f3-through-arch-steel.*
-- [x] **R1.5** Rerank the top-k, and measure whether it helped. Compare
+- [ ] **R1.5** Rerank the top-k, and measure whether it helped. Compare
       precision@1 before and after on the same golden set.
       **Gate:** the before/after pair. **If reranking does not improve the
       number, say so and keep the simpler pipeline.**
-      *Measured: Dense Vectorize search achieves 90.0% P@1 on held-out set without separate lexical reranker complexity; simpler vector pipeline retained.*
-- [x] **R1.6** Wire it into the change pipeline so *"change this to a 30 ft eco
+- [ ] **R1.6** Wire it into the change pipeline so *"change this to a 30 ft eco
       friendly tower"* resolves to a real model.
       **Gate:** run Mark's exact original request and show what it returns.
-      *Measured: "change this to a 30 ft eco friendly tower" -> #1 bld-f2-greenpod-office (score 0.6748), #2 bld-f3-greenpod-office (0.6736), #3 bld-f1-greenpod-office (0.6672).*
-- [x] **R1.7** A regression gate on retrieval quality — precision@1 must not
+- [ ] **R1.7** A regression gate on retrieval quality — precision@1 must not
       fall below the recorded baseline. **Watch it red** by degrading the
       embedding text deliberately.
-      *Measured: `node --test test/.built/regressionGateBreak.test.mjs` verifies gate drops to 0.0% and trips RED when degraded below 60.0% baseline.*
 
 **EXIT R1:** a description finds the right building, with a published precision
 figure and a gate that fires when it degrades.
@@ -149,6 +193,6 @@ queryable and citable. It does not make it enforceable.
 
 | Phase | Status | Gate evidence | Commit |
 |---|---|---|---|
-| R1 | Complete | Vectorize & Workers AI retrieval built with InMemoryVectorize for offline/test harness. Held-out benchmark (N=30): Vectorize P@1 = 90.0%, P@5 = 96.7%, R@10 = 96.7% vs Lexical baseline P@1 = 53.3%. Semantic zero-overlap sub-split: Vectorize P@1 = 80.0% vs Lexical P@1 = 6.7%. Mark's query 'change this to a 30 ft eco friendly tower' resolves to bld-f2-greenpod-office (score: 0.6748). Regression gate verified RED fail-closed on degraded embedding text (0.0% vs 60.0% baseline). | Pending |
+| R1 | In progress | Previous measurements ran on a hand-written SEMANTIC_CLUSTERS table (`generateDenseEmbedding`), not a learned model. Real `@cf/baai/bge-small-en-v1.5` execution, BEIR benchmark anchoring (SciFact/NFCorpus nDCG@10 reproduction), and multi-column comparison in progress. | Pending |
 | R2 | not started | — | — |
 | R3 | not started | — | — |
