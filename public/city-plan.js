@@ -1212,9 +1212,23 @@ export function intensityAt(x, z, seed = DEFAULT_SEED) {
  * island came out with thirty towers in it. Land value is not linear in built
  * form -- the step from a house to a terrace is a small one and the step from
  * mid-rise to a tower is a large one, so the thresholds are not evenly spaced.
+ *
+ * WORLD-REBALANCE-BRIEF.md §3: "towers in the middle, mid-rise shoulders,
+ * housing at the edge, height and density falling off with distance from
+ * the centre. This is the skyline -- it has to read from the air." Measured
+ * before this pass: downtown was 48% TOWNHOUSE, 40% MIDRISE, 6% TOWER --
+ * housing dominant nearly everywhere, not just at the edge, because the top
+ * two rungs (0.45, 0.63) were high enough that most of the island's own
+ * intensity field (peaks at 1.00 dead centre, falling off from there) never
+ * reached them. Lowered here so MIDRISE and TOWER claim more of the
+ * downtown island's real elevated-intensity area -- the CENTRES field
+ * itself is unchanged, so the shape of the falloff (dense at named centres,
+ * thinning with distance) is exactly what it was; only where each rung of
+ * the ladder kicks in moved. TOWER's own exact share is Mark's call, not a
+ * number to settle here -- see docs/audits/WORLD-REBALANCE.md.
  */
 export const DENSITY_LADDER = ["VILLA", "TOWNHOUSE", "TERRACE", "MIDRISE", "TOWER"];
-const DENSITY_AT = [0.00, 0.11, 0.26, 0.45, 0.63];
+const DENSITY_AT = [0.00, 0.11, 0.26, 0.36, 0.50];
 
 function classForValue(v) {
   let out = DENSITY_LADDER[0];
@@ -1541,28 +1555,33 @@ export const SETTLEMENTS = [
     core:0.4, edge:0.18 },
   { id:"coastal-2", name:"Fernwood", landmass:"mainland",
     bounds:{xMin:-12800,xMax:-10200,zMin:-6468,zMax:-2448}, av:150, st:118, cls:"VILLA",
-    core:0.48, edge:0.24 },
+    core:0.55, edge:0.3 },
   { id:"coastal-3", name:"Marchmont", landmass:"mainland",
     bounds:{xMin:-10200,xMax:-7600,zMin:-6476,zMax:-2456}, av:165, st:130, cls:"TOWNHOUSE",
-    core:0.55, edge:0.32 },
+    core:0.62, edge:0.35 },
   { id:"coastal-4", name:"Marchmont", landmass:"mainland",
     bounds:{xMin:-7600,xMax:-5000,zMin:-6335,zMax:-2315}, av:165, st:130, cls:"TOWNHOUSE",
-    core:0.55, edge:0.32 },
+    core:0.62, edge:0.35 },
   { id:"coastal-5", name:"Westgate", landmass:"mainland",
     bounds:{xMin:-5000,xMax:-2400,zMin:-5849,zMax:-1829}, av:195, st:152, cls:"MIDRISE",
-    core:0.62, edge:0.42 },
+    core:0.6, edge:0.38 },
+  // Harbour City was TOWER -- a second skyline on the mainland, which
+  // WORLD-REBALANCE-BRIEF.md §3 does not ask for ("the mainland gets
+  // suburbs... thinning outward", no mainland tower core named). Demoted to
+  // MIDRISE: still the mainland's one employment/harbour hub, at suburban
+  // rather than downtown scale.
   { id:"coastal-6", name:"Harbour City", landmass:"mainland",
-    bounds:{xMin:-2400,xMax:200,zMin:-6125,zMax:-2105}, av:210, st:165, cls:"TOWER",
-    core:0.7, edge:0.5 },
+    bounds:{xMin:-2400,xMax:200,zMin:-6125,zMax:-2105}, av:210, st:165, cls:"MIDRISE",
+    core:0.58, edge:0.36 },
   { id:"coastal-7", name:"Harbour City", landmass:"mainland",
-    bounds:{xMin:200,xMax:2800,zMin:-6413,zMax:-2393}, av:210, st:165, cls:"TOWER",
-    core:0.7, edge:0.5 },
+    bounds:{xMin:200,xMax:2800,zMin:-6413,zMax:-2393}, av:210, st:165, cls:"MIDRISE",
+    core:0.58, edge:0.36 },
   { id:"coastal-8", name:"Stonebridge", landmass:"mainland",
     bounds:{xMin:5400,xMax:8000,zMin:-1608,zMax:-988}, av:165, st:130, cls:"TOWNHOUSE",
-    core:0.55, edge:0.32 },
+    core:0.6, edge:0.35 },
   { id:"coastal-9", name:"Ridgeway", landmass:"mainland",
     bounds:{xMin:10600,xMax:13200,zMin:-5301,zMax:-1281}, av:150, st:118, cls:"VILLA",
-    core:0.48, edge:0.24 },
+    core:0.55, edge:0.3 },
   { id:"coastal-10", name:"East Farms", landmass:"mainland",
     bounds:{xMin:13200,xMax:15800,zMin:-5449,zMax:-1429}, av:420, st:330, cls:"FARM",
     core:0.4, edge:0.18 },
@@ -1719,14 +1738,25 @@ function settlementDensity(s, x, z) {
   // sparse and ragged long before it stops.
   const core = s.core === undefined ? 0.40 : s.core;   // fully built out to here
   const edge = s.edge === undefined ? 0.06 : s.edge;   // density at the boundary
-  if (t <= core) return 1;
+  // `scale`, where present, multiplies the whole result -- for a settlement
+  // that needs to be thin EVERYWHERE, not just past its own core/edge
+  // radius. core/edge alone cannot do this: wobble's floor is 0.62, so even
+  // core near 0 and edge near 0 still leaves moderate density through most
+  // of a settlement's middle band, because the falloff curve only crushes
+  // density near the true boundary (t close to 1). WORLD-REBALANCE-BRIEF.md
+  // §3's barrier island ("low and sparse... single digits [%]") needed this:
+  // measured, core/edge alone took it from 56% of the world's plots to 31%,
+  // nowhere close. barrierSettlements() sets scale on every slice it emits;
+  // every other settlement is unaffected (scale defaults to 1).
+  const scale = s.scale === undefined ? 1 : s.scale;
+  if (t <= core) return scale;
   const k = Math.min(1, (t - core) / (1 - core));
   // ragged, not a clean gradient: a little low-frequency noise on the boundary
   // Two scales of raggedness rather than one, so the edge frays in clumps the
   // size of a few blocks AND in patches the size of a neighbourhood.
   const wobble = 0.62 + hash01(`${s.id}|${Math.round(x / 300)}|${Math.round(z / 300)}`) * 0.55
                       + hash01(`${s.id}|f|${Math.round(x / 90)}|${Math.round(z / 90)}`) * 0.30;
-  return Math.max(0, (1 - k * k * (1 - edge) - k * (1 - edge) * 0.35) * wobble);
+  return Math.max(0, (1 - k * k * (1 - edge) - k * (1 - edge) * 0.35) * wobble * scale);
 }
 
 // =============================================================================
@@ -2543,16 +2573,36 @@ export function coastRoad(mainlandPoly, heightAt) {
 /**
  * Build the barrier island's settlements as slices that follow its shape.
  *
- * Along the crescent: villas at the two tips, mid-rise shoulders, and in the
- * middle the second downtown -- the big one. Across it: the lagoon half is the
- * city side, the ocean half is the beachfront. That cross-section is what makes
- * a barrier city legible from the air; it is Miami Beach's, and it is the
- * reference Mark has been describing throughout.
+ * WORLD-REBALANCE-BRIEF.md §3: "the barrier island stops being the city. It
+ * is a beach -- shore housing, resorts, low and sparse. Its 56% share should
+ * end in single digits." Before this it held a class ("TOWER", core density
+ * 0.85 -- effectively saturated) named "Ocean City" -- a second downtown, in
+ * both name and in what it actually built. That was the root cause measured
+ * in docs/audits/WORLD-DENSITY-FINDINGS.md §1: 11,137 of 19,874 plots on a
+ * sandbar because the sandbar was declared as dense as downtown and is far
+ * larger in area.
+ *
+ * Now every slice is shore housing (VILLA) or a resort (RESORT), never
+ * TOWER or MIDRISE, every core/edge is low, and `scale` (see
+ * settlementDensity in city-plan.js) further dampens the whole slice --
+ * core/edge alone (which only crushes density near a settlement's own
+ * boundary) measured out at 31% of the world's plots, nowhere near "single
+ * digits". av/st stay at VILLA/RESORT's own CHARACTER_SPACING values
+ * (zoning.js) rather than a wider, invented spacing -- a wider block here
+ * once tripped the ITE 183 m walkable-block ceiling on this exact landmass.
  */
 function barrierSettlements(poly) {
   const out = [];
   const STEP = 1200;
   const INSET = 90;              // keep the grid off the beach and the seawall
+  // Low and sparse, everywhere on this landmass -- not just at the tips.
+  // core: the fraction of the settlement's radius built at all; edge: the
+  // density at its own boundary; scale: the flat multiplier described above.
+  // Deliberately far below every other settlement's own core/edge/scale in
+  // SETTLEMENTS -- the barrier island is the one place in the world meant
+  // to read as thin.
+  const SHORE = { core: 0.04, edge: 0.015, scale: 0.12 };
+  const FRONT = { core: 0.05, edge: 0.02, scale: 0.15 };
   for (let x = -10800; x < 10800; x += STEP) {
     const a = massSpanAtX(poly, x + 4), b = massSpanAtX(poly, x + STEP - 4);
     if (!a || !b) continue;
@@ -2567,19 +2617,21 @@ function barrierSettlements(poly) {
     if (centre > 7400) {
       // the tips: low, loose, one band across the whole width
       out.push({ id:`beach-${tag}-villas`, name:"The Points", landmass:"barrier",
-                 bounds:{ xMin:x, xMax:x+STEP, zMin:lo, zMax:hi }, av:150, st:120, cls:"VILLA",
-                 core:0.4, edge:0.5 });
+                 bounds:{ xMin:x, xMax:x+STEP, zMin:lo, zMax:hi }, av:180, st:140, cls:"VILLA",
+                 core: SHORE.core, edge: SHORE.edge, scale: SHORE.scale });
       continue;
     }
 
-    const core = centre <= 4200;                    // the downtown stretch
-    // lagoon side: the city. ocean side: the beachfront.
-    out.push({ id:`beach-${tag}-city`, name: core ? "Ocean City" : "The Shore", landmass:"barrier",
-               bounds:{ xMin:x, xMax:x+STEP, zMin:lo, zMax:mid }, av:190, st:150,
-               cls: core ? "TOWER" : "MIDRISE", core: core ? 0.85 : 0.6, edge: core ? 0.8 : 0.5 });
+    // No more "core" downtown stretch along the crescent -- the whole strip
+    // is shore housing and resort frontage now, uniformly low. Names still
+    // distinguish where along the crescent this slice sits, without
+    // implying one part is denser than another.
+    out.push({ id:`beach-${tag}-city`, name:"Shorehaven", landmass:"barrier",
+               bounds:{ xMin:x, xMax:x+STEP, zMin:lo, zMax:mid }, av:180, st:140,
+               cls:"VILLA", core: SHORE.core, edge: SHORE.edge, scale: SHORE.scale });
     out.push({ id:`beach-${tag}-front`, name:"Beachfront", landmass:"barrier",
-               bounds:{ xMin:x, xMax:x+STEP, zMin:mid, zMax:hi }, av:190, st:150,
-               cls:"RESORT", core: core ? 0.8 : 0.55, edge: core ? 0.72 : 0.45 });
+               bounds:{ xMin:x, xMax:x+STEP, zMin:mid, zMax:hi }, av:180, st:145,
+               cls:"RESORT", core: FRONT.core, edge: FRONT.edge, scale: FRONT.scale });
   }
   return out;
 }
@@ -3132,23 +3184,31 @@ export function generateWorld(rawHeightAt = null, seed = DEFAULT_SEED) {
     // Surfaced, not swallowed: a world with no port has no industrial land, and
     // that is a fact about the world rather than a detail of the zoning pass.
     zoningAnchors = { missing: zoneAt.missingAnchors, hasIndustry: zoneAt.hasIndustry, evaluated: true };
+    // WORLD-REBALANCE-BRIEF.md §3: NOT APPLIED, RECORDED ONLY, for the
+    // duration of the rebalance. zoneCharacter is real and its own header in
+    // zoning.js is explicit that it is a layout HINT, never a rule -- but
+    // applied unconditionally, with no way for a settlement to keep its
+    // declared intent, it silently overrode 21 of 26 non-downtown,
+    // non-barrier settlements measured earlier this pass (81%), including
+    // every settlement this rebalance explicitly hand-tunes: the barrier
+    // island's declared VILLA/RESORT came back TOWNHOUSE/MIDRISE/TERRACE
+    // here, undoing the density-0.16-scale sparsening §3 asks for before a
+    // single plot was measured. That is the same two-sources-of-truth
+    // failure WORLD-DENSITY-FINDINGS.md §3 diagnosed for TOWER settlements,
+    // at the scale of the whole rebalance rather than one class: a generic,
+    // ground-derived guess overriding an explicit, deliberate declaration
+    // with nothing to stop it. This pass's SETTLEMENTS/barrierSettlements
+    // declarations ARE Mark's zoning decision now, more specific and more
+    // authoritative than the heuristic that used to stand in for one.
+    // zoneCharacter still RUNS and zoningChanges still records what it
+    // would have done, so the disagreement stays visible and reportable
+    // (docs/audits/WORLD-REBALANCE.md), even though it is no longer applied.
     settlementList = settlementList.map((st) => {
       const derived = zoneCharacter(zoneAt, st.bounds);
       if (derived && derived !== st.cls) {
-        zoningChanges.push({ id: st.id, was: st.cls, now: derived });
+        zoningChanges.push({ id: st.id, was: st.cls, now: derived, applied: false });
       }
-      if (!derived) return st;
-      // The spacing comes with the character. Deriving one without the other is
-      // what left re-zoned settlements on their old block grid -- villas laid out
-      // on 420 m farm parcels, over the ITE ceiling, invisible because the block
-      // test was reading the class that had just been superseded.
-      const sp = CHARACTER_SPACING[derived];
-      return {
-        ...st, cls: derived, declaredCls: st.cls,
-        av: sp ? sp.av : st.av,
-        st: sp ? sp.st : st.st,
-        declaredAv: st.av, declaredSt: st.st,
-      };
+      return st;
     });
   }
   // the spine goes in with the highways, not as a settlement, because it is a

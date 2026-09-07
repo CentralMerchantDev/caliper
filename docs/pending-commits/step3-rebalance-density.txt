@@ -1,0 +1,91 @@
+World rebalance, step 3, part 1: the barrier island stops being the city,
+the mainland stops having a second one, downtown gets more sky
+
+WORLD-REBALANCE-BRIEF.md §3, against docs/audits/WORLD-DENSITY-FINDINGS.md's
+measured starting point. Arithmetic, not opinion -- every figure below is
+node scripts/measure-density.mjs, before and after this commit.
+
+THE BARRIER ISLAND WAS THE CITY. barrierSettlements() declared its densest
+stretch "Ocean City", class TOWER, core density 0.85 -- effectively
+saturated, and named as a second downtown in both word and effect. Every
+slice is now VILLA (shore housing) or RESORT (beachfront), never TOWER or
+MIDRISE, at a fraction of its old density:
+
+    barrier island share of all plots     56.0%  ->  8.0%
+
+Getting there took two changes, not one. Lowering core/edge alone (the
+existing per-settlement knobs) only reached 31%: the falloff formula's own
+wobble term has a floor of 0.62, so even a near-zero core/edge still leaves
+moderate density through most of a settlement's middle band, only crashing
+near the true boundary. settlementDensity() gained a `scale` field --
+multiplies the whole result, for a settlement that needs to be thin
+EVERYWHERE, not just past its own core/edge radius. Every other settlement
+is unaffected (scale defaults to 1); only the barrier island's slices set
+it, between 0.12 and 0.15.
+
+THE MAINLAND HAD ITS OWN SECOND SKYLINE. coastal-6/7 ("Harbour City") were
+declared TOWER, core 0.7 -- and §3 asks for "suburbs... thinning outward",
+naming no mainland tower core. Demoted to MIDRISE: still the mainland's one
+employment/harbour hub, at suburban rather than downtown scale. The other
+mainland strips (Fernwood, Marchmont, Westgate, Stonebridge, Ridgeway) had
+their core/edge moderated up from what WORLD-DENSITY-FINDINGS.md measured as
+"almost vacant" (coastal-4 at 8/km², coastal-9 at 7/km²).
+
+THIS SURFACED A SECOND, DEEPER PROBLEM THAN §3 NAMED: applying any of the
+above required first disabling generateWorld()'s zoneCharacter override,
+which was silently re-deciding almost every settlement's class regardless of
+what SETTLEMENTS/barrierSettlements declared -- measured earlier this pass,
+21 of 26 non-downtown, non-barrier settlements (81%). This is the same
+two-sources-of-truth failure WORLD-DENSITY-FINDINGS.md §3 diagnosed for
+TOWER settlements specifically, at the scale of the whole rebalance: setting
+the barrier island's declared class to VILLA changed nothing, because
+zoneCharacter turned around and reclassified it back to TOWNHOUSE before a
+single plot was measured. zoneCharacter still runs and zoningChanges still
+records what it would have done (now with `applied: false` on every entry),
+so the disagreement stays visible and reportable -- it is simply no longer
+applied, because this pass's own declarations are Mark's explicit, current
+zoning decision, not a generic heuristic's guess at one.
+
+DOWNTOWN: TOWNHOUSE is no longer a majority. §3: "towers in the middle,
+mid-rise shoulders, housing at the edge... this is the skyline, it has to
+read from the air." DENSITY_AT's top two rungs (0.45 for MIDRISE, 0.63 for
+TOWER) were high enough that most of downtown's own intensity field never
+reached them, even though it correctly peaks at the CBD and falls off from
+there -- the SHAPE of the falloff was already right, just where each class
+kicked in on that shape was too conservative. Lowered to 0.36/0.50:
+
+    downtown TOWNHOUSE share    48%  ->  49% of a changed total (627 plots, unchanged count)
+    downtown TOWER share         6%  ->  11% (80 -> 142 plots)
+    world-wide TOWER-class plots 81  ->  206
+
+TOWNHOUSE's raw count did not move -- its own threshold band didn't change,
+so this is not yet "housing pushed to the edge", it is "more of downtown's
+upper range now reaches MIDRISE/TOWER". Whether that is enough of a skyline,
+or needs to go further, is Mark's call -- see docs/audits/WORLD-REBALANCE.md
+and the renders alongside it. Not settled here.
+
+REGRESSIONS FOUND AND FIXED BEFORE THIS COMMIT, NOT AFTER: the first attempt
+at wider barrier-island block spacing (av 220/st 170, reasoning "wider
+blocks, sparser city") tripped test/cityWorld.test.ts's ITE 183 m
+walkable-block ceiling and its own "spacing follows character" check --
+119 blocks over the line. Fixed by using VILLA/RESORT's own
+CHARACTER_SPACING values (180/140, 180/145) instead of an invented number,
+and reaching the density target through `scale` rather than wider blocks.
+
+ONE REGRESSION NAMED, NOT FIXED HERE: test/cityWorld.test.ts's "industry
+clusters at a transport node" now fails (15 industrial plots, floor is 20) --
+disabling the zoneCharacter override dropped total WAREHOUSE-class plots
+below its old count, and zoneCharacter had apparently been leaning some
+other settlement toward industrial character as a side effect of something
+unrelated to this pass. Tried widening the port settlement's own bounds;
+made no measurable difference (reverted, not shipped as a no-op edit) --
+the real constraint is more likely how much of that frontage is actually
+buildable against the real coastline, not the declared rectangle's size,
+and that needs actual investigation rather than a second guess. Left red
+and named, for the same reason the seed pins are: a real number, not silent.
+
+How it is known to work: node scripts/measure-density.mjs, every figure
+above reproduced from the command beside it. node test/run.mjs and
+npx tsc --noEmit follow in the next commit, alongside the full before/after
+render set and docs/audits/WORLD-REBALANCE.md -- this commit is the
+mechanism; that one is the verification and the questions for Mark.
