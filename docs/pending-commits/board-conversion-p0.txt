@@ -1,0 +1,79 @@
+BOARD-CONVERSION-PLAN.md Phase P0: make the road kit trustworthy
+
+What was wrong: roadkit.js's verifySocketMating() claimed, in its own
+header comment, to check that two sockets "face each other (bearing diff
+180 deg)" as well as matching width/lanes. The function itself only read
+kind, width and lanes -- it never touched .at or .bearing on either
+socket. It would pass two pieces a kilometre apart pointing the same way.
+That gap had already been repeated to Mark as fact. Separately, 31 of the
+kit's 34 representative pieces had a footprint that was not a whole
+number of cells -- most from real-world ROAD_STANDARDS widths (e.g. a
+62m FREEWAY row), a few from sockets derived directly from those same
+un-snapped dimensions.
+
+How it is known to be fixed now:
+
+P0.1 -- verifySocketMating() rewritten to check position (via new
+transformSocket(), local-to-world) and bearing opposition, not just
+dimensional fields. Watched red first: before the fix existed, the test
+suite refused to even build (transformSocket was undefined). After the
+fix, 4 dedicated cases in test/roadkit.test.ts -- coincident+opposed
+passes; different position throws; same-bearing throws; the exact
+"kilometre apart, same direction" regression named in the plan throws.
+
+P0.2 -- roadkit-street-demo.js's hand-rolled duplicate position/bearing
+check retired; it now calls the shared verifySocketMating alone for its
+pass/fail verdict. The 7-piece street chain still reports zero error at
+all 6 joins through that one function (node scripts/shoot-roadkit-street.mjs
+-> ALL JOINS VERIFIED: true; screenshot viewed directly, still correct).
+
+P0.3 -- new scripts/verify-roadkit.mjs instantiates all 30 exported piece
+builders (34 representative instances) and reports, per piece: does it
+build, is its footprint whole-cell, do its sockets sit on a cell boundary
+(proved as CELL/2 = 4m granularity for a base-centre piece, not a full
+8m step -- an N-cell footprint's edge is always at N*CELL/2 from centre,
+an exact multiple of CELL/2 for any integer N). Before any fix: 34
+checked, 31 failing.
+
+P0.4 -- snapCellsOutward() added and applied per piece: footprint-only
+where no socket depends on the snapped axis (23 pieces -- straights,
+curves, bridges, causeway, rail, crossings, laybys, etc.), or snapped at
+the source where a cardinal socket's position is derived from the same
+real-world dimension (junction, legacy roundabout, levelCrossing,
+gradeSeparation -- same pattern intersection4Way already used). Visible
+geometry keeps its true real-world size in every case; only the
+reservation and connection point move outward. After: 34 checked, 0
+failing, 3 named open findings -- rampMerge, rampDiverge and railSwitch
+each have one angled connector socket (a merge taper / turnout) at a
+genuine lane or track-gauge offset, not a bounding-box edge. Forcing it
+onto the grid would mean changing ROAD_STANDARDS real-world dimensions,
+which the file's own header says never scale. Documented in-code and in
+docs/audits/P0-ROADKIT.md, left for Mark to decide -- not silently
+counted as done.
+
+Full evidence, every number with the command beside it, before/after
+footprint table for all 26 changed pieces: docs/audits/P0-ROADKIT.md.
+
+Full suite: node test/run.mjs -> 973/978 pass (up from 615 before this
+session touched anything, as other work landed in parallel), npx tsc
+--noEmit clean. The 5 failures are pre-existing and outside this file:
+the two known-red seed pins, the intentionally-red origin-stability test
+(Step 5), a derived-artifact staleness check, and one rendering
+culling-ratio test traced to agy's own uncommitted, in-progress
+city-render.js (confirmed via a mergeGeometries undefined-reference error
+in that file at the time, which was gone by the next rerun once agy's WIP
+moved on) -- none in a file this phase touches.
+
+A real bug in my own first draft of test/roadkit.test.ts is also fixed
+here: it used bare test()/expect() with no imports, which this project's
+harness does not provide as globals (each bundled file needs its own
+`import { test } from "node:test"`). Rewritten to the project's actual
+node:test/node:assert convention; reran the full suite to confirm all 6
+cases now genuinely register and pass, not just build.
+
+What is still open, named rather than carried silently: the 3
+angled-connector sockets above. Per the plan's own rule, stopping at this
+phase exit for review before P1 -- the board-as-placed-pieces phase
+everything else depends on.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

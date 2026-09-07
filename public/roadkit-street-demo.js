@@ -6,38 +6,16 @@
 // no browser needed) and from a page (for rendering) -- neither environment
 // gets a copy that could drift from the other.
 //
-// WHY THIS DOES ITS OWN POSITION/BEARING CHECK, NOT JUST verifySocketMating.
-// roadkit.js's own header comment claims two sockets mate "when sockets
-// face each other (bearing diff 180°) and widths/lanes match" -- but
-// verifySocketMating (read in full before writing this) only checks kind,
-// width and lanes. It never reads `.at` or `.bearing` at all, on either
-// socket. So calling it alone would "verify" two pieces as mated even if
-// they were nowhere near each other, or facing the same direction instead
-// of opposite. This module places pieces with real position/bearing
-// chaining math (turtle-graphics style: each piece's entry socket lands
-// exactly where the previous piece's exit socket is, facing it), and
-// checks the geometry itself -- not just the dimensional compatibility
-// verifySocketMating checks -- so "socket-verified" here means both:
-// verifySocketMating's own dimensional check, AND an actual coincidence/
-// opposite-bearing check this module supplies because the kit does not.
+// P0.2 (BOARD-CONVERSION-PLAN.md): this used to carry its own duplicate
+// position/bearing mating check, because verifySocketMating() didn't do one
+// -- it only checked kind/width/lanes despite its header claiming otherwise
+// (see roadkit.js). That gap is now fixed there (transformSocket() +
+// verifySocketMating() do the full check, in world space), so this module
+// no longer needs a second implementation of "do these mate". Two
+// implementations of the same check is the two-sources-of-truth pattern
+// that has cost this project the skyline, the tiers and the clearance
+// already -- one verifier, used here and by whatever places pieces later.
 import * as ROADKIT from "./roadkit.js";
-
-const D2R = Math.PI / 180;
-const EPS = 1e-6;
-
-/** World direction, (x, z), for a bearing in degrees. Bearing 0 = +Z. */
-function dirFor(bearingDeg) {
-  const r = bearingDeg * D2R;
-  return [Math.sin(r), Math.cos(r)];
-}
-
-/** Rotate a local (x, z) point by a bearing (degrees) into world space --
- *  the same rotation THREE.Object3D.rotation.y = bearingDeg * D2R applies,
- *  verified against roadkit.js's own convention (bearing 0 = +Z). */
-function rotate(lx, lz, bearingDeg) {
-  const r = bearingDeg * D2R;
-  return [lx * Math.cos(r) + lz * Math.sin(r), -lx * Math.sin(r) + lz * Math.cos(r)];
-}
 
 /**
  * Chain a sequence of {model, entryIdx, exitIdx} through the world, each
@@ -59,53 +37,50 @@ export function buildDemoStreet() {
   let x = 0, z = 0, heading = 0; // heading: world bearing traffic is currently travelling
   const placements = [];
   const verification = [];
-  let prevExit = null; // { x, z, bearing, socket } of the previous piece's exit socket
+  let prevExitWorld = null; // previous piece's exit socket, already in world space; { label, ...socket }
 
   for (const step of seq) {
     const { model, entryIdx, exitIdx, label } = step;
     const entrySock = model.sockets[entryIdx];
     const exitSock = model.sockets[exitIdx];
-
-    // Place so the entry socket, after rotating by `heading`, lands at
-    // the current chain point (x, z).
     const rotY = heading;
-    const [ex, ez] = rotate(entrySock.at[0], entrySock.at[2], rotY);
-    const originX = x - ex, originZ = z - ez;
+
+    // Solve for the origin that puts the entry socket, once rotated by
+    // rotY, at the current chain point (x, z): rotate the local socket
+    // about a placement of (0,0) to get the offset, then subtract it.
+    const rotatedOnly = ROADKIT.transformSocket(entrySock, { x: 0, z: 0, rotationDeg: rotY });
+    const originX = x - rotatedOnly.at[0], originZ = z - rotatedOnly.at[2];
 
     placements.push({ model, label, x: originX, z: originZ, rotY });
 
-    // Verify against the PREVIOUS piece's exit socket, if any.
-    if (prevExit) {
-      let dimError = null;
+    const entryWorld = ROADKIT.transformSocket(entrySock, { x: originX, z: originZ, rotationDeg: rotY });
+
+    // Verify against the PREVIOUS piece's exit socket, if any -- through
+    // the one shared verifier (roadkit.js's verifySocketMating), not a
+    // second implementation of the same check.
+    if (prevExitWorld) {
+      let error = null;
       try {
-        ROADKIT.verifySocketMating(prevExit.socket, entrySock);
+        ROADKIT.verifySocketMating(prevExitWorld, entryWorld);
       } catch (e) {
-        dimError = e.message;
+        error = e.message;
       }
-      const posErr = Math.hypot(x - prevExit.x, z - prevExit.z);
-      const entryWorldBearing = (entrySock.bearing + rotY) % 360;
-      // "Face each other" means entryWorldBearing sits at prevExit.bearing
-      // + 180 -- so measure how far it is from THAT target, wrapped into
-      // [0, 180], not from prevExit.bearing itself (which would always
-      // read exactly 180 off by construction and never detect a real
-      // misalignment).
-      const target = (prevExit.bearing + 180) % 360;
-      const bearingDiff = Math.abs(((entryWorldBearing - target + 540) % 360) - 180);
+      // Diagnostics for the HUD only -- not a second pass/fail verdict.
+      // Pass/fail above comes solely from verifySocketMating.
+      const positionErrorM = Math.hypot(entryWorld.at[0] - prevExitWorld.at[0], entryWorld.at[2] - prevExitWorld.at[2]);
+      const target = ((prevExitWorld.bearing + 180) % 360 + 360) % 360;
+      const bearingDiffFrom180 = Math.abs(((entryWorld.bearing - target + 540) % 360) - 180);
       verification.push({
-        from: prevExit.label, to: label,
-        dimensionalOk: !dimError, dimError,
-        positionErrorM: posErr, positionOk: posErr < EPS,
-        prevExitWorldBearing: prevExit.bearing, entryWorldBearing,
-        bearingDiffFrom180: bearingDiff, bearingOk: bearingDiff < EPS,
+        from: prevExitWorld.label, to: label,
+        ok: !error, error,
+        positionErrorM, bearingDiffFrom180,
       });
     }
 
     // Compute this piece's exit socket in world space, for the next join.
-    const [wx, wz] = rotate(exitSock.at[0], exitSock.at[2], rotY);
-    const exitWorldX = originX + wx, exitWorldZ = originZ + wz;
-    const exitWorldBearing = (exitSock.bearing + rotY) % 360;
-    prevExit = { x: exitWorldX, z: exitWorldZ, bearing: exitWorldBearing, socket: exitSock, label };
-    x = exitWorldX; z = exitWorldZ; heading = exitWorldBearing;
+    const exitWorld = ROADKIT.transformSocket(exitSock, { x: originX, z: originZ, rotationDeg: rotY });
+    prevExitWorld = { ...exitWorld, label };
+    x = exitWorld.at[0]; z = exitWorld.at[2]; heading = exitWorld.bearing;
   }
 
   return { placements, verification };

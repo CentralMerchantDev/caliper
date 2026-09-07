@@ -48,7 +48,7 @@ console.log(`errors: ${errors.length}`);
 for (const e of errors) console.log("  " + e);
 console.log("\nverification:");
 console.log(JSON.stringify(verification, null, 2));
-const allOk = verification.every((v) => v.dimensionalOk && v.positionOk && v.bearingOk);
+const allOk = verification.every((v) => v.ok);
 console.log(`\nALL JOINS VERIFIED: ${allOk}`);
 console.log(`wrote ${path.join(OUT, "roadkit-street-demo.png")}`);
 process.exit(errors.length || !allOk ? 1 : 0);

@@ -30,6 +30,22 @@ import * as THREE from "three";
 export const MODULE_M = 8; // 8 m module length
 
 /**
+ * BOARD-CONVERSION-PLAN.md P0.4: snap a real-world dimension outward to the
+ * next whole cell. Used for FOOTPRINT and SOCKET POSITION only -- never for
+ * the rendered geometry or a socket's declared lane `width`/`lanes` fields.
+ * ROAD_STANDARDS dimensions are real-world metres and never scale (this
+ * file's own header), so the piece's visible geometry keeps its true size;
+ * the reserved footprint and the connection point are pushed out to the
+ * next cell boundary so the piece can be placed on the grid at all. Two
+ * pieces of the same road class still mate dimensionally (their socket
+ * `width` fields stay the true ROAD_STANDARDS.row value) even though their
+ * position now sits on a cell line rather than the exact pavement edge.
+ */
+export function snapCellsOutward(v) {
+  return Math.ceil(v / MODULE_M) * MODULE_M;
+}
+
+/**
  * Standard Right-Of-Way (ROW) definitions from docs/WORLD-RULES.md §3.1
  * Dimensions are real-world metres and NEVER scale.
  */
@@ -218,7 +234,7 @@ export function straight(roadClass = "STREET", modules = 1) {
     kind: "hard",
     roadClass: std.name,
     modules,
-    footprint: { w: widthM, d: lengthM },
+    footprint: { w: snapCellsOutward(widthM), d: lengthM },
     height: 0.35,
     clearance: 0,
     origin: "base-centre",
@@ -284,7 +300,7 @@ export function curve(roadClass = "STREET", radiusM = 32, angleDeg = 90) {
     roadClass: std.name,
     radiusM,
     angleDeg,
-    footprint: { w: chordW, d: chordD },
+    footprint: { w: snapCellsOutward(chordW), d: snapCellsOutward(chordD) },
     height: 0.35,
     clearance: 0,
     origin: "base-centre",
@@ -342,7 +358,10 @@ export function junction(arms = [
   const classes = arms.map((a) => ROAD_STANDARDS[a.class] || ROAD_STANDARDS.STREET);
   const maxRow = Math.max(...classes.map((c) => c.row));
   const maxKerbRadius = Math.max(...classes.map((c) => c.kerbRadiusM));
-  const totalBoxSize = maxRow + maxKerbRadius * 2;
+  // P0.4: snapped outward so every socket -- derived directly from this box
+  // size below -- lands on a cell boundary, same pattern intersection4Way
+  // already uses for its own sizeM.
+  const totalBoxSize = snapCellsOutward(maxRow + maxKerbRadius * 2);
 
   const sockets = arms.map((arm, idx) => {
     const std = classes[idx];
@@ -427,7 +446,11 @@ export function roundabout(arms = [
   const maxRow = Math.max(...classes.map((c) => c.row));
   const circulatingWidthM = 10;
   const outerRadiusM = islandRadiusM + circulatingWidthM;
-  const totalBoxSize = outerRadiusM * 2 + 8;
+  // P0.4: snapped outward -- this box was already a margin around the
+  // visual ring (outerRadiusM*2 + 8m clearance), so growing it further to
+  // the next cell boundary reserves more clearance without touching the
+  // rendered ring/island geometry (outerRadiusM, islandRadiusM) at all.
+  const totalBoxSize = snapCellsOutward(outerRadiusM * 2 + 8);
 
   const sockets = arms.map((arm, idx) => {
     const std = classes[idx];
@@ -501,11 +524,18 @@ export function rampMerge(mainClass = "FREEWAY", rampSide = "right") {
   return {
     id: `ramp-merge-${mainClass.toLowerCase()}-${rampSide}`,
     kind: "hard",
-    footprint: { w: totalWidthM, d: lengthM },
+    footprint: { w: snapCellsOutward(totalWidthM), d: lengthM },
     height: 0.35,
     clearance: 0,
     origin: "base-centre",
     standsOn: ["open"],
+    // P0.4 OPEN FINDING: the ramp socket below is not cell-aligned, and
+    // cannot be made so by a footprint-outward snap -- its lateral offset is
+    // half the sum of two real ROAD_STANDARDS lane widths (a genuine taper
+    // geometry value), not a bounding-box edge. Forcing it onto the grid
+    // would mean changing ROAD_STANDARDS.RAMP.row or the main class's row,
+    // which this file's own header says never scale. Named, not silently
+    // forced -- see BOARD-CONVERSION-PLAN.md P0.4.
     sockets: [
       { at: [0, 0, -halfL], bearing: 180, width: stdMain.row, lanes: stdMain.lanes, kind: "road" },
       {
@@ -552,13 +582,17 @@ export function rampMerge(mainClass = "FREEWAY", rampSide = "right") {
 export function levelCrossing(roadClass = "STREET") {
   const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.STREET;
   const lengthM = 16;
-  const widthM = std.row;
+  const widthM = std.row; // real ROW width -- drives the deck geometry, unsnapped
   const halfL = lengthM / 2;
+  // P0.4: the rail sockets sit at +/- widthM/2, which is not generally a
+  // cell boundary -- position them (and the footprint) from the snapped
+  // width instead. The deck itself still draws at the true widthM.
+  const footW = snapCellsOutward(widthM);
 
   return {
     id: `level-crossing-${roadClass.toLowerCase()}`,
     kind: "hard",
-    footprint: { w: widthM, d: lengthM },
+    footprint: { w: footW, d: lengthM },
     height: 4.5,
     clearance: 0,
     origin: "base-centre",
@@ -566,8 +600,8 @@ export function levelCrossing(roadClass = "STREET") {
     sockets: [
       { at: [0, 0, -halfL], bearing: 180, width: widthM, lanes: std.lanes, kind: "road" },
       { at: [0, 0, halfL],  bearing: 0,   width: widthM, lanes: std.lanes, kind: "road" },
-      { at: [-widthM / 2, 0, 0], bearing: 270, width: 4.8, lanes: 1, kind: "rail" },
-      { at: [widthM / 2, 0, 0],  bearing: 90,  width: 4.8, lanes: 1, kind: "rail" },
+      { at: [-footW / 2, 0, 0], bearing: 270, width: 4.8, lanes: 1, kind: "rail" },
+      { at: [footW / 2, 0, 0],  bearing: 90,  width: 4.8, lanes: 1, kind: "rail" },
     ],
     lod: [
       {
@@ -680,7 +714,7 @@ export function bridgeArch(roadClass = "AVENUE", spanM = 64, clearanceHeightM = 
   return {
     id: `bridge-arch-${roadClass.toLowerCase()}-${spanM}m`,
     kind: "hard",
-    footprint: { w: widthM, d: spanM },
+    footprint: { w: snapCellsOutward(widthM), d: spanM },
     height: totalArchHeightM,
     clearance: 0,
     origin: "base-centre",
@@ -741,7 +775,7 @@ export function bridgeCableStayed(roadClass = "BOULEVARD", spanM = 160, pylonHei
   return {
     id: `bridge-cablestay-${roadClass.toLowerCase()}-${spanM}m`,
     kind: "hard",
-    footprint: { w: widthM * 1.4, d: spanM },
+    footprint: { w: snapCellsOutward(widthM * 1.4), d: spanM },
     height: pylonHeightM,
     clearance: 0,
     origin: "base-centre",
@@ -816,7 +850,7 @@ export function causeway(roadClass = "FREEWAY", modules = 4) {
   return {
     id: `causeway-${roadClass.toLowerCase()}-${modules}m`,
     kind: "hard",
-    footprint: { w: widthM, d: lengthM },
+    footprint: { w: snapCellsOutward(widthM), d: lengthM },
     height: deckHeightM + 1.2,
     clearance: 0,
     origin: "base-centre",
@@ -961,7 +995,7 @@ export function bridgeSpan(a, b, options = {}) {
     roadClass: std.name,
     spanM: horizontalSpanM,
     bearingDeg,
-    footprint: { w: widthM * (typology === "cablestay" ? 1.4 : 1.0), d: horizontalSpanM },
+    footprint: { w: snapCellsOutward(widthM * (typology === "cablestay" ? 1.4 : 1.0)), d: horizontalSpanM },
     height: totalHeightM,
     clearance: 0,
     origin: "base-centre",
@@ -1047,7 +1081,7 @@ export function railStraight(modules = 1) {
     id: `rail-straight-${modules}m`,
     kind: "hard",
     modules,
-    footprint: { w: RAIL_TRACK_ROW, d: lengthM },
+    footprint: { w: snapCellsOutward(RAIL_TRACK_ROW), d: lengthM },
     height: 0.45,
     clearance: 0.5,
     origin: "base-centre",
@@ -1104,7 +1138,7 @@ export function railPlatform(modules = 4) {
   return {
     id: `rail-platform-${modules}m`,
     kind: "hard",
-    footprint: { w: widthM, d: lengthM },
+    footprint: { w: snapCellsOutward(widthM), d: lengthM },
     height: platformH,
     clearance: 0,
     origin: "base-centre",
@@ -1166,7 +1200,34 @@ export function computeBounds(geometry) {
 }
 
 
-export function verifySocketMating(sockA, sockB) {
+/**
+ * A socket's `.at`/`.bearing` are defined in the piece's own local space
+ * (origin: "base-centre"). Transform one into world space given where the
+ * piece itself is placed -- the same rotation THREE.Object3D.rotation.y =
+ * rotationDeg * PI/180 applies, matching this file's own bearing convention
+ * (bearing 0 = +Z).
+ */
+export function transformSocket(socket, placement = {}) {
+  const { x = 0, z = 0, rotationDeg = 0 } = placement;
+  const r = (rotationDeg * Math.PI) / 180;
+  const [lx, ly, lz] = socket.at;
+  return {
+    ...socket,
+    at: [x + lx * Math.cos(r) + lz * Math.sin(r), ly, z - lx * Math.sin(r) + lz * Math.cos(r)],
+    bearing: (((socket.bearing + rotationDeg) % 360) + 360) % 360,
+  };
+}
+
+/**
+ * Two sockets mate when they are dimensionally compatible (kind, width,
+ * lanes) AND face each other in world space: coincident position, bearings
+ * 180 deg apart. sockA/sockB must already be in WORLD space -- transform
+ * local model sockets with transformSocket() first. Passing raw model-local
+ * sockets from two different placements will read as a position mismatch,
+ * which is correct: two pieces at different places in the world are not
+ * mated just because their local socket coordinates happen to agree.
+ */
+export function verifySocketMating(sockA, sockB, eps = 1e-6) {
   if (!sockA || !sockB) {
     throw new Error("Socket mating failed: missing socket definition");
   }
@@ -1178,6 +1239,15 @@ export function verifySocketMating(sockA, sockB) {
   }
   if (sockA.lanes !== sockB.lanes) {
     throw new Error(`Socket mating failed: lane count mismatch (${sockA.lanes} vs ${sockB.lanes})`);
+  }
+  const posErr = Math.hypot(sockA.at[0] - sockB.at[0], sockA.at[2] - sockB.at[2]);
+  if (posErr > eps) {
+    throw new Error(`Socket mating failed: position mismatch (${posErr.toFixed(3)}m apart -- sockets must be in world space; see transformSocket())`);
+  }
+  const target = ((sockA.bearing + 180) % 360 + 360) % 360;
+  const bearingDiff = Math.abs(((sockB.bearing - target + 540) % 360) - 180);
+  if (bearingDiff > eps) {
+    throw new Error(`Socket mating failed: bearing not opposed (${bearingDiff.toFixed(3)} deg off the required 180 deg -- sockA=${sockA.bearing}deg, sockB=${sockB.bearing}deg)`);
   }
   return true;
 }
@@ -1617,11 +1687,14 @@ export function rampDiverge(freewayClass = "FREEWAY", rampSide = "right") {
   return {
     id: `ramp-diverge-${freewayClass.toLowerCase()}-${rampSide}`,
     kind: "hard",
-    footprint: { w: widthM, d: lengthM },
+    footprint: { w: snapCellsOutward(widthM), d: lengthM },
     height: 0.35,
     clearance: 0,
     origin: "base-centre",
     standsOn: ["open"],
+    // P0.4 OPEN FINDING: same as rampMerge -- the ramp socket's lateral
+    // offset is a real lane-width sum, not cell-alignable by a footprint
+    // snap. See BOARD-CONVERSION-PLAN.md P0.4.
     sockets: [
       { at: [0, 0, -halfL], bearing: 180, width: stdMain.row, lanes: stdMain.lanes, kind: "road" },
       { at: [0, 0, halfL], bearing: 0, width: stdMain.row, lanes: stdMain.lanes, kind: "road" },
@@ -1746,7 +1819,7 @@ export function turningPocket(roadClass = "AVENUE", side = "left") {
   return {
     id: `turning-pocket-${roadClass.toLowerCase()}-${side}`,
     kind: "hard",
-    footprint: { w: widthM, d: lengthM },
+    footprint: { w: snapCellsOutward(widthM), d: lengthM },
     height: 0.35,
     clearance: 0,
     origin: "base-centre",
@@ -1805,7 +1878,7 @@ export function medianBreak(roadClass = "BOULEVARD") {
   return {
     id: `median-break-${roadClass.toLowerCase()}`,
     kind: "hard",
-    footprint: { w: widthM, d: lengthM },
+    footprint: { w: snapCellsOutward(widthM), d: lengthM },
     height: 0.35,
     clearance: 0,
     origin: "base-centre",
@@ -1863,7 +1936,7 @@ export function busBay(roadClass = "STREET") {
   return {
     id: `bus-bay-${roadClass.toLowerCase()}`,
     kind: "hard",
-    footprint: { w: widthM, d: lengthM },
+    footprint: { w: snapCellsOutward(widthM), d: lengthM },
     height: 2.8,
     clearance: 0,
     origin: "base-centre",
@@ -1926,7 +1999,7 @@ export function layby(roadClass = "AVENUE") {
   return {
     id: `layby-${roadClass.toLowerCase()}`,
     kind: "hard",
-    footprint: { w: widthM, d: lengthM },
+    footprint: { w: snapCellsOutward(widthM), d: lengthM },
     height: 0.35,
     clearance: 0,
     origin: "base-centre",
@@ -1984,7 +2057,7 @@ export function crossing(type = "zebra", roadClass = "STREET") {
   return {
     id: `crossing-${type}-${roadClass.toLowerCase()}`,
     kind: "hard",
-    footprint: { w: widthM, d: lengthM },
+    footprint: { w: snapCellsOutward(widthM), d: lengthM },
     height: type === "signalised" ? 4.8 : type === "zebra" ? 3.7 : type === "refuge-island" ? 1.25 : 0.45,
     clearance: 0,
     origin: "base-centre",
@@ -2084,11 +2157,15 @@ export function railSwitch(side = "right") {
   return {
     id: `rail-switch-${side}`,
     kind: "hard",
-    footprint: { w: widthM, d: lengthM },
+    footprint: { w: snapCellsOutward(widthM), d: lengthM },
     height: 0.45,
     clearance: 0,
     origin: "base-centre",
     standsOn: ["open"],
+    // P0.4 OPEN FINDING: the diverging-route socket (3rd) is at a genuine
+    // track-gauge-derived offset, not a bounding-box edge -- same category
+    // as rampMerge/rampDiverge's angled socket. Not force-aligned. See
+    // BOARD-CONVERSION-PLAN.md P0.4.
     sockets: [
       { at: [0, 0, -halfL], bearing: 180, width: 4.8, lanes: 1, kind: "rail" },
       { at: [0, 0, halfL], bearing: 0, width: 4.8, lanes: 1, kind: "rail" },
@@ -2143,13 +2220,16 @@ export function railSwitch(side = "right") {
 export function gradeSeparation(type = "rail-over-road", roadClass = "AVENUE") {
   const std = ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.AVENUE;
   const lengthM = 32;
-  const widthM = std.row + 8;
+  const widthM = std.row + 8; // real width -- drives the deck/girder geometry, unsnapped
   const clearanceH = 5.5; // Standard 5.5m overhead clearance
+  // P0.4: the crossing sockets at +/- widthM/2 need a cell-aligned position;
+  // the overpass deck itself still draws at the true widthM.
+  const footW = snapCellsOutward(widthM);
 
   return {
     id: `grade-separation-${type}-${roadClass.toLowerCase()}`,
     kind: "hard",
-    footprint: { w: widthM, d: lengthM },
+    footprint: { w: footW, d: lengthM },
     height: clearanceH + 3.0,
     clearance: clearanceH,
     origin: "base-centre",
@@ -2157,8 +2237,8 @@ export function gradeSeparation(type = "rail-over-road", roadClass = "AVENUE") {
     sockets: [
       { at: [0, 0, -lengthM / 2], bearing: 180, width: std.row, lanes: std.lanes, kind: "road" },
       { at: [0, 0, lengthM / 2], bearing: 0, width: std.row, lanes: std.lanes, kind: "road" },
-      { at: [-widthM / 2, clearanceH + 1.0, 0], bearing: 270, width: 4.8, lanes: 1, kind: type.startsWith("rail") ? "rail" : "road" },
-      { at: [widthM / 2, clearanceH + 1.0, 0], bearing: 90, width: 4.8, lanes: 1, kind: type.startsWith("rail") ? "rail" : "road" },
+      { at: [-footW / 2, clearanceH + 1.0, 0], bearing: 270, width: 4.8, lanes: 1, kind: type.startsWith("rail") ? "rail" : "road" },
+      { at: [footW / 2, clearanceH + 1.0, 0], bearing: 90, width: 4.8, lanes: 1, kind: type.startsWith("rail") ? "rail" : "road" },
     ],
     lod: [
       {
@@ -2293,7 +2373,7 @@ export function bridgePier(heightM = 12.0, roadClass = "AVENUE") {
   return {
     id: `bridge-pier-${roadClass.toLowerCase()}-${heightM}m`,
     kind: "hard",
-    footprint: { w: widthM, d: 6.0 },
+    footprint: { w: snapCellsOutward(widthM), d: snapCellsOutward(6.0) },
     height: heightM,
     clearance: heightM,
     origin: "base-centre",
@@ -2354,7 +2434,7 @@ export function bridgeDeckSpan(spanLengthM = 32, roadClass = "AVENUE") {
     id: `bridge-deck-span-${spanLengthM}m-${roadClass.toLowerCase()}`,
     kind: "hard",
     spanLengthM,
-    footprint: { w: widthM, d: spanLengthM },
+    footprint: { w: snapCellsOutward(widthM), d: spanLengthM },
     height: 3.3,
     clearance: 0,
     origin: "base-centre",
@@ -2423,7 +2503,7 @@ export function bridgeApproachRamp(elevationM = 6.0, roadClass = "AVENUE") {
   return {
     id: `bridge-approach-ramp-${elevationM}m-${roadClass.toLowerCase()}`,
     kind: "hard",
-    footprint: { w: widthM, d: runLengthM },
+    footprint: { w: snapCellsOutward(widthM), d: runLengthM },
     height: elevationM + 1.2,
     clearance: 0,
     origin: "base-centre",
