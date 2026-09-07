@@ -7,11 +7,10 @@
 // =============================================================================
 
 import {
-  InMemoryVectorize,
   embedText,
   embedTextBatch,
-} from "./modelRetrieval.ts";
-import type { WorkersAIBinding } from "./modelRetrieval.ts";
+} from "./modelRetrieval";
+import type { WorkersAIBinding } from "./modelRetrieval";
 
 export interface VectorizeIndex {
   upsert(vectors: any[]): Promise<{ count: number }>;
@@ -46,7 +45,7 @@ export interface LayoutExplanationResult {
 /**
  * Chunks a markdown planning document by headers (## and ###).
  */
-export function chunkPlanningSpec(markdownText: string, docPath: string = "docs/CITY-PLANNING-SPEC.md"): PlanningChunk[] {
+export function chunkPlanningSpec(markdownText: string): PlanningChunk[] {
   const lines = markdownText.split("\n");
   const chunks: PlanningChunk[] = [];
 

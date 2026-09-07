@@ -5,13 +5,13 @@
 // brief assembly with socket-contract verification and deterministic output.
 // =============================================================================
 
-import { KITBASH_PARTS, resolvePalette, CELL_M } from "../public/kitbash-parts.js";
+// @ts-ignore
+import { KITBASH_PARTS } from "../public/kitbash-parts.js";
 import {
-  InMemoryVectorize,
   embedText,
   embedTextBatch,
-} from "./modelRetrieval.ts";
-import type { WorkersAIBinding } from "./modelRetrieval.ts";
+} from "./modelRetrieval";
+import type { WorkersAIBinding } from "./modelRetrieval";
 
 export interface VectorizeIndex {
   upsert(vectors: any[]): Promise<{ count: number }>;
@@ -28,7 +28,7 @@ export interface KitbashPartDef {
     bottom: { w: number; d: number };
     top: { w: number; d: number };
   };
-  buildGeometry?: Function;
+  buildGeometry?: (T: any, palette: any, lod: number) => any[];
 }
 
 export interface KitbashSearchResult {
@@ -194,7 +194,6 @@ export async function assembleFromBrief(
   const {
     ai,
     foot = { w: 32, d: 32 },
-    seed = 42,
     lod = 0,
     palette = {},
     T,
@@ -251,28 +250,34 @@ export async function assembleFromBrief(
   if (T) {
     let currentY = 0;
     // Build Podium
-    const podGeos = podium.buildGeometry(T, palette, lod);
-    for (const g of podGeos) partsGeos.push(g);
+    if (podium.buildGeometry) {
+      const podGeos = podium.buildGeometry(T, palette, lod);
+      for (const g of podGeos) partsGeos.push(g);
+    }
     currentY += podium.height;
 
     // Build Shaft
-    const shaftGeos = shaft.buildGeometry(T, palette, lod);
-    for (const g of shaftGeos) {
-      g.geo.translate(0, currentY, 0);
-      partsGeos.push(g);
+    if (shaft.buildGeometry) {
+      const shaftGeos = shaft.buildGeometry(T, palette, lod);
+      for (const g of shaftGeos) {
+        g.geo.translate(0, currentY, 0);
+        partsGeos.push(g);
+      }
     }
     currentY += shaft.height;
 
     // Build Crown
-    const crownGeos = crown.buildGeometry(T, palette, lod);
-    for (const g of crownGeos) {
-      g.geo.translate(0, currentY, 0);
-      partsGeos.push(g);
+    if (crown.buildGeometry) {
+      const crownGeos = crown.buildGeometry(T, palette, lod);
+      for (const g of crownGeos) {
+        g.geo.translate(0, currentY, 0);
+        partsGeos.push(g);
+      }
     }
     currentY += crown.height;
 
     // Build Roof Feature
-    if (roofFeature) {
+    if (roofFeature && roofFeature.buildGeometry) {
       const roofGeos = roofFeature.buildGeometry(T, palette, lod);
       for (const g of roofGeos) {
         g.geo.translate(0, currentY, 0);
