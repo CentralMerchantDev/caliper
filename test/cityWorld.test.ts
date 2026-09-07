@@ -1006,8 +1006,26 @@ test("industry clusters at a transport node, not at random", () => {
   const rail = sites.railway;
   assert.ok(port && airport, "no port or airport, so this cannot be tested");
 
+  // THE OLD FLOOR (20) WAS CALIBRATED AGAINST A BUG, NOT AGAINST THE WORLD.
+  //
+  // docs/pending-commits/roads-follow-density.txt disabled generateWorld()'s
+  // zoneCharacter override, because it was silently re-deciding settlements'
+  // declared class regardless of what this rebalance asked for. Checked
+  // world.zoningChanges (still recorded, no longer applied) to find out what
+  // that override used to contribute here: it reclassified coastal-9
+  // (declared VILLA) and coastal-10 (declared FARM) to HANGAR, purely from
+  // airport proximity, which through SETTLEMENT_MIX.HANGAR's own mix
+  // legitimately placed WAREHOUSE plots on land this rebalance explicitly
+  // wants as a villa town and farmland, not industrial. So >20 was never a
+  // fact about a working port and airport -- it was a fact about a
+  // proximity heuristic overriding two settlements' declared intent, the
+  // same failure pattern WORLD-DENSITY-FINDINGS.md §3 named for TOWER.
+  // Measured with the override correctly OFF: 15, all of it genuinely at
+  // port or airport (the strays check below, which was already true and
+  // stays exactly as strict). 10 clears that with a small margin for seed
+  // variation, without smuggling the old bug's inflated count back in.
   const industrial = (overlapWorld.plots as any[]).filter((p) => p.className === "WAREHOUSE");
-  assert.ok(industrial.length > 20, `only ${industrial.length} industrial plots`);
+  assert.ok(industrial.length > 10, `only ${industrial.length} industrial plots`);
 
   // The first version of this test asserted every warehouse was within 4 km of
   // the PORT, and it failed -- correctly. The distant ones are at the airport,

@@ -1,0 +1,28 @@
+Close the industry-clusters regression: its floor was calibrated against
+the zoneCharacter bug, not against the world
+
+Named in docs/pending-commits/roads-follow-density.txt as a real, uninvestigated
+regression -- 15 industrial plots against a floor of 20. Investigated by
+reading world.zoningChanges (still recorded, no longer applied, since that
+commit disabled generateWorld()'s zoneCharacter override): it used to
+reclassify coastal-9 (declared VILLA) and coastal-10 (declared FARM) to
+HANGAR purely from airport proximity, which through SETTLEMENT_MIX.HANGAR's
+own mix legitimately placed extra WAREHOUSE plots on land this rebalance
+explicitly wants as a villa town and farmland. So >20 was never a fact
+about a working port and airport's real capacity -- it was a fact about a
+proximity heuristic overriding two settlements' declared intent, the same
+failure pattern WORLD-DENSITY-FINDINGS.md §3 named for TOWER settlements
+and docs/pending-commits/step3-rebalance-density.txt found at the scale of
+the whole rebalance.
+
+The test's OTHER assertion -- every warehouse plot is within 4 km of the
+port or airport, or 1200 m of the rail line -- was never the problem and
+stays exactly as strict: all 15 of today's WAREHOUSE plots (7 port, 8
+airport) already clear it, because they come directly from those
+settlements' own declared classes, not from a heuristic. Lowered the count
+floor to 10, clearing 15 with a small margin for seed variation, rather
+than inflating the world's actual industrial land just to keep a threshold
+that was measuring the bug.
+
+How it is known to work: node --test test/cityWorld.test.ts, both
+assertions in this test pass. Full suite follows with Steps 4-6.
