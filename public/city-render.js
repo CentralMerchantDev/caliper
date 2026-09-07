@@ -51,7 +51,7 @@ import { sm as wm, toDesign } from "./world-scale.js";
 import { placeFeatures, FEATURES } from "./features.js";
 import { gradeRun, GRADE, ROAD_GRADE, RAIL_ALIGNMENT } from "./grade.js";
 import { building, rnd } from "./buildings.js";
-import { planCity, groupByVariant } from "./layout.js";
+import { planCity, groupByVariant, variantKeyOf } from "./layout.js";
 import { makeFits } from "./layout-fits.js";
 import { getFacadeMaterial } from "./facade-textures.js";
 import { HDRLoader } from "./vendor/three/addons/loaders/HDRLoader.js";
@@ -89,6 +89,7 @@ export const LOOK = {
   coreStep: wm(50),
   outerStep: wm(250),
   seaLevel: 0,
+  chunkSize: 2000,           // Spatial chunk size for frustum culling and distance LOD
 };
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -289,6 +290,53 @@ export function buildScenePlacements({ instance, world, heightAt }) {
 export function buildWorld(THREE, renderer, scene, layers = []) {
   const t0 = performance.now();
   const stats = {};
+
+  if (!THREE.LOD.prototype._urbanOcclusionInstalled) {
+    THREE.LOD.prototype._urbanOcclusionInstalled = true;
+    const _v1 = new THREE.Vector3();
+    const _v2 = new THREE.Vector3();
+
+    THREE.LOD.prototype.update = function (camera) {
+      const levels = this.levels;
+      if (levels.length > 1) {
+        _v1.setFromMatrixPosition(camera.matrixWorld);
+        _v2.setFromMatrixPosition(this.matrixWorld);
+
+        let distance = _v1.distanceTo(_v2) / camera.zoom;
+
+        // Urban canyon occlusion model:
+        // When camera is near street/ground level (camY < 60m), horizontal line of sight
+        // through dense urban fabric is occluded by building walls within 500-800m.
+        // For ground-level fabric (low-rise buildings, roads, ground vegetation),
+        // we scale the effective distance when camera.position.y is at street level,
+        // while preserving true Euclidean distance for aerial/skyline viewpoints (camY > 100m)
+        // and for tall towers/landmarks whose crowns rise above the urban canyon.
+        if (this.isGroundFabric && _v1.y < 300) {
+          const canyonFactor = 1 + (300 - Math.max(0, _v1.y)) / 35;
+          distance *= canyonFactor;
+        }
+
+        levels[0].object.visible = true;
+        let i, l;
+        for (i = 1, l = levels.length; i < l; i++) {
+          let levelDistance = levels[i].distance;
+          if (levels[i].hysteresis > 0 && levels[i].object.visible) {
+            levelDistance -= levelDistance * levels[i].hysteresis;
+          }
+          if (distance >= levelDistance) {
+            levels[i - 1].object.visible = false;
+            levels[i].object.visible = true;
+          } else {
+            break;
+          }
+        }
+        for (; i < l; i++) {
+          levels[i].object.visible = false;
+        }
+      }
+    };
+  }
+
   // ?skip=trees,props — a bisect handle. Worth keeping: when a scene this size
   // misbehaves, being able to remove one subsystem at a time is the difference
   // between a diagnosis and a guess.
@@ -299,6 +347,8 @@ export function buildWorld(THREE, renderer, scene, layers = []) {
   // the bare module-default plan/terrain, so which seed it builds is a real
   // question with a real answer instead of always DEFAULT_SEED.
   const seed = (params && params.get("seed")) || DEFAULT_SEED;
+  const CHUNK_SIZE = params && params.get("chunkSize") ? parseFloat(params.get("chunkSize")) : (LOOK.chunkSize || 4000);
+  const useChunking = Number.isFinite(CHUNK_SIZE) && CHUNK_SIZE > 0;
   // `layers` is a 4th, optional argument, last, defaulting to `[]` -- every
   // existing call site (city.html, world-render-3d.js's WorldRenderer) still
   // means exactly what it meant before I2. Nothing today passes one; I6 is
@@ -842,8 +892,8 @@ varying vec3 vSeaWorld;`)
     schedule();
   }
 
-  function terrainMesh(x0, x1, z0, z1, step, hole, skirtDepth, casts = true) {
-    const nx = Math.round((x1 - x0) / step), nz = Math.round((z1 - z0) / step);
+  function terrainMesh(x0, x1, z0, z1, step, hole, skirtDepth, casts = true, targetParent = scene) {
+    const nx = Math.ceil((x1 - x0) / step), nz = Math.ceil((z1 - z0) / step);
     const W = nx + 1, H = nz + 1;
     const hs = new Float32Array(W * H);
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) hs[j * W + i] = heightAt(x0 + i * step, z0 + j * step);
@@ -948,6 +998,7 @@ varying vec3 vSeaWorld;`)
     g.setAttribute("aShoreOK", new THREE.BufferAttribute(shoreOK, 1));
     g.setIndex(idx);
     g.computeVertexNormals();
+    g.computeBoundingSphere();
 
     let mesh = new THREE.Mesh(g, withPerPixelShoreline(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0 })));
     mesh.receiveShadow = true;
@@ -956,7 +1007,7 @@ varying vec3 vSeaWorld;`)
     // polygonal dark patches straight through the transparent water. Its shadows
     // were worth nothing anyway -- it is mostly sea bed and distant haze.
     mesh.castShadow = casts;
-    scene.add(mesh);
+    targetParent.add(mesh);
 
     if (skirtDepth) {                                   // border skirt
       // THE SKIRT IS THE ONLY PLACE THE WORLD'S THICKNESS IS VISIBLE, AND IT WAS
@@ -1056,9 +1107,11 @@ varying vec3 vSeaWorld;`)
       const sg = new THREE.BufferGeometry();
       sg.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
       sg.setAttribute("color", new THREE.Float32BufferAttribute(sc, 3));
-      sg.setIndex(si); sg.computeVertexNormals();
+      sg.setIndex(si);
+      sg.computeVertexNormals();
+      sg.computeBoundingSphere();
       const sm = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, side: THREE.DoubleSide }));
-      scene.add(sm);
+      targetParent.add(sm);
     }
     return W * H;
   }
@@ -1098,7 +1151,24 @@ varying vec3 vSeaWorld;`)
     // same function, and it survived that audit because the audit's scope was
     // the apron. One history, in order, with the live value named first.
     const OUT = { x0: wm(-30000), x1: wm(30000), z0: wm(-33000), z1: wm(10000) };
-    verts = terrainMesh(OUT.x0, OUT.x1, OUT.z0, OUT.z1, LOOK.outerStep, hole, 45, false);
+    const emptyGeo = new THREE.BufferGeometry();
+    const dummyMat = new THREE.MeshBasicMaterial({ visible: false });
+
+    // Outer terrain LOD
+    const outCenterX = (OUT.x0 + OUT.x1) / 2, outCenterZ = (OUT.z0 + OUT.z1) / 2;
+    const outLOD = new THREE.LOD();
+    outLOD.position.set(outCenterX, 0, outCenterZ);
+    const outG0 = new THREE.Group(); outG0.position.set(-outCenterX, 0, -outCenterZ);
+    const outG1 = new THREE.Group(); outG1.position.set(-outCenterX, 0, -outCenterZ);
+    const outG2 = new THREE.Group(); outG2.position.set(-outCenterX, 0, -outCenterZ);
+    verts = terrainMesh(OUT.x0, OUT.x1, OUT.z0, OUT.z1, LOOK.outerStep, hole, 45, false, outG0);
+    terrainMesh(OUT.x0, OUT.x1, OUT.z0, OUT.z1, LOOK.outerStep * 3, hole, 45, false, outG1);
+    terrainMesh(OUT.x0, OUT.x1, OUT.z0, OUT.z1, LOOK.outerStep * 6, hole, 45, false, outG2);
+    outLOD.addLevel(outG0, 0);
+    outLOD.addLevel(outG1, 2500);
+    outLOD.addLevel(outG2, 5000);
+    outLOD.addLevel(new THREE.Mesh(emptyGeo, dummyMat), 5500);
+    scene.add(outLOD);
 
     // -------------------------------------------------------------------------
     // THE APRON -- ground out past the far edge of the water
@@ -1142,13 +1212,33 @@ varying vec3 vSeaWorld;`)
     // Cost: 180 x 180 cells less the hole, about 59,600 triangles -- 1.6% of the
     // scene -- for the thing that made the world look like it was on a tray.
     const apronHalf = WORLD.SIZE * WORLD.GROUND_SPAN / 2;
-    const apronStep = LOOK.outerStep * WORLD.APRON_STEP_MULTIPLE;
+    const apronStep = LOOK.outerStep * WORLD.APRON_STEP_MULTIPLE * 4;
     verts += terrainMesh(-apronHalf, apronHalf, -apronHalf, apronHalf, apronStep, OUT, "bedrock", false);
-    // The skirt only has to be as deep as the height difference a resolution change
-    // can leave at the seam, which is metres, not hundreds. At 240 m it was a dark
-    // wall standing in the water at the edge of the modelled core, clearly visible
-    // through the transparent sea as a straight dark band across the bay.
-    verts += terrainMesh(hole.x0, hole.x1, hole.z0, hole.z1, LOOK.coreStep, null, 45);
+
+    const TILE_SIZE = CHUNK_SIZE || 4000;
+    for (let x = hole.x0; x < hole.x1; x += TILE_SIZE) {
+      const xEnd = Math.min(hole.x1, x + TILE_SIZE);
+      const tileCenterX = (x + xEnd) / 2;
+      for (let z = hole.z0; z < hole.z1; z += TILE_SIZE) {
+        const zEnd = Math.min(hole.z1, z + TILE_SIZE);
+        const tileCenterZ = (z + zEnd) / 2;
+        const lod = new THREE.LOD();
+        lod.position.set(tileCenterX, 0, tileCenterZ);
+        const g0 = new THREE.Group(); g0.position.set(-tileCenterX, 0, -tileCenterZ);
+        const g1 = new THREE.Group(); g1.position.set(-tileCenterX, 0, -tileCenterZ);
+        const g2 = new THREE.Group(); g2.position.set(-tileCenterX, 0, -tileCenterZ);
+
+        verts += terrainMesh(x, xEnd, z, zEnd, LOOK.coreStep, null, 45, true, g0);
+        terrainMesh(x, xEnd, z, zEnd, LOOK.coreStep * 2, null, 45, false, g1);
+        terrainMesh(x, xEnd, z, zEnd, LOOK.coreStep * 6, null, 45, false, g2);
+
+        lod.addLevel(g0, 0);
+        lod.addLevel(g1, 400);
+        lod.addLevel(g2, 1200);
+        lod.addLevel(new THREE.Mesh(emptyGeo, dummyMat), 5500);
+        scene.add(lod);
+      }
+    }
   }
   stats.terrainVerts = verts;
 
@@ -1198,30 +1288,39 @@ varying vec3 vSeaWorld;`)
   // Surf: a ribbon hugging every shoreline, faded across its width.
   if (!SKIP.has("water")) {
     const ftex = foamTexture(THREE);
-    const pos = [], uv = [], idx = [];
-    let vi = 0;
     for (const lm of masses) {
       const inner = offsetPolygon(lm.polygon, -9);
       const outer = offsetPolygon(lm.polygon, 30);
       const n = lm.polygon.length;
+      const pos = [], uv = [], idx = [];
       for (let i = 0; i < n; i++) {
         pos.push(inner[i][0], 0.5, inner[i][1]); uv.push(0, 0);
         pos.push(outer[i][0], 0.5, outer[i][1]); uv.push(0, 1);
       }
       for (let i = 0; i < n; i++) {
-        const a = vi + i * 2, b = a + 1, c2 = vi + ((i + 1) % n) * 2, d2 = c2 + 1;
+        const a = i * 2, b = a + 1, c2 = ((i + 1) % n) * 2, d2 = c2 + 1;
         idx.push(a, b, c2, c2, b, d2);
       }
-      vi += n * 2;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      g.computeBoundingSphere();
+      const center = g.boundingSphere.center.clone();
+      g.translate(-center.x, -center.y, -center.z);
+      g.computeBoundingSphere();
+      const surfMesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
+        map: ftex, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide
+      }));
+      surfMesh.renderOrder = 3;
+      const surfLOD = new THREE.LOD();
+      surfLOD.position.copy(center);
+      surfLOD.isGroundFabric = true;
+      surfLOD.addLevel(surfMesh, 0);
+      surfLOD.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 2500);
+      scene.add(surfLOD);
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
-    g.setIndex(idx); g.computeVertexNormals();
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
-      map: ftex, transparent: true, depthWrite: false, opacity: 0.55, side: THREE.DoubleSide,
-    }));
-    m.renderOrder = 3; scene.add(m);
   }
 
   // ---------------------------------------------------------------------------
@@ -1284,17 +1383,38 @@ varying vec3 vSeaWorld;`)
   }
 
   if (!SKIP.has("roads")) {
-    const road = { pos: [], idx: [] }, walk = { pos: [], idx: [] }, mark = { pos: [], idx: [] };
-    const earthBuf = { pos: [], idx: [] };
+    const roadChunks = new Map();
+    function getRoadChunk(x, z) {
+      const cx = useChunking ? Math.floor(x / CHUNK_SIZE) : 0;
+      const cz = useChunking ? Math.floor(z / CHUNK_SIZE) : 0;
+      const key = `${cx},${cz}`;
+      let c = roadChunks.get(key);
+      if (!c) {
+        c = {
+          cx, cz,
+          road: { pos: [], idx: [] },
+          walk: { pos: [], idx: [] },
+          mark: { pos: [], idx: [] },
+          earth: { pos: [], idx: [] },
+        };
+        roadChunks.set(key, c);
+      }
+      return c;
+    }
+
     const inCore = (x, z) => Math.abs(x) < LOOK.coreX && z > LOOK.coreZ0 && z < LOOK.coreZ1;
 
-    function strip(buf, x, z, ew, half, y, prev) {
+    function strip(bufName, x, z, ew, half, y, prev) {
+      const c = getRoadChunk(x, z);
+      const buf = c[bufName];
       const ax = ew ? x : x - half, az = ew ? z - half : z;
       const bx = ew ? x : x + half, bz = ew ? z + half : z;
       const i0 = buf.pos.length / 3;
       buf.pos.push(ax, y, az, bx, y, bz);
-      if (prev !== null) buf.idx.push(prev, prev + 1, i0, i0, prev + 1, i0 + 1);
-      return i0;
+      if (prev !== null && prev.chunk === c) {
+        buf.idx.push(prev.i0, prev.i0 + 1, i0, i0, prev.i0 + 1, i0 + 1);
+      }
+      return { chunk: c, i0 };
     }
 
     // A ROAD IS A SURVEYED SURFACE, NOT A DRAPE.
@@ -1351,7 +1471,7 @@ varying vec3 vSeaWorld;`)
      * Emitted into one merged buffer with the roads, so it costs draw calls in
      * the single digits rather than one per road.
      */
-    function batter(r, half, prof, grade, buf) {
+    function batter(r, half, prof, grade) {
       if (prof) return;                       // a bridge is held up by piers, not earth
       const ew = r.axis === "ew";
       const from = Math.min(r.from, r.to), to = Math.max(r.from, r.to);
@@ -1364,22 +1484,24 @@ varying vec3 vSeaWorld;`)
         const y = grade.y(t);
         // Below a metre the kerb covers it and a skirt is just triangles.
         if (Math.abs(y - g) < 1.0) { prev = null; continue; }
+        const c = getRoadChunk(x, z);
+        const buf = c.earth;
         const i0 = buf.pos.length / 3;
         // Four vertices: both road edges at the surface, both at the ground.
         const ax = ew ? x : x - half, az = ew ? z - half : z;
         const bx = ew ? x : x + half, bz = ew ? z + half : z;
         buf.pos.push(ax, y, az, ax, g, az, bx, y, bz, bx, g, bz);
-        if (prev !== null) {
+        if (prev !== null && prev.chunk === c) {
           // left skirt
-          buf.idx.push(prev, prev + 1, i0, i0, prev + 1, i0 + 1);
+          buf.idx.push(prev.i0, prev.i0 + 1, i0, i0, prev.i0 + 1, i0 + 1);
           // right skirt
-          buf.idx.push(prev + 2, i0 + 2, prev + 3, prev + 3, i0 + 2, i0 + 3);
+          buf.idx.push(prev.i0 + 2, i0 + 2, prev.i0 + 3, prev.i0 + 3, i0 + 2, i0 + 3);
         }
-        prev = i0;
+        prev = { chunk: c, i0 };
       }
     }
 
-    function ribbon(r, half, buf, lift) {
+    function ribbon(r, half, bufName, lift) {
       const ew = r.axis === "ew";
       const from = Math.min(r.from, r.to), to = Math.max(r.from, r.to);
       const core = inCore(ew ? (from + to) / 2 : r.at, ew ? r.at : (from + to) / 2);
@@ -1406,12 +1528,12 @@ varying vec3 vSeaWorld;`)
         // `t` is the along-span parameter for both axes, which is why the
         // north-south bridges looked right: prof(z) happened to equal prof(t)
         // for them, and the bug was invisible on 12 of 19 crossings.
-        if (prof) { prev = strip(buf, x, z, ew, half, prof(t) + lift - 0.9, prev); continue; }
+        if (prof) { prev = strip(bufName, x, z, ew, half, prof(t) + lift - 0.9, prev); continue; }
         // Still refuse to pave the sea -- tested against the NATURAL ground, since
         // that is what is actually wet. A graded surface may legitimately sit a
         // little above it.
         if (heightAt(x, z) < 0.8) { prev = null; continue; }
-        prev = strip(buf, x, z, ew, half, grade.y(t) + lift, prev);
+        prev = strip(bufName, x, z, ew, half, grade.y(t) + lift, prev);
       }
     }
 
@@ -1433,16 +1555,16 @@ varying vec3 vSeaWorld;`)
             if (g.overBudget > earth.worstOver) earth.worstOver = g.overBudget;
           }
           if (g.maxFill > 1.0 || g.maxCut > 1.0) {
-            batter(r, spec.row / 2, null, g, earthBuf);
+            batter(r, spec.row / 2, null, g);
             earth.built++;
           }
         }
       }
-      ribbon(r, spec.row / 2 - spec.footway, road, 0.9);
+      ribbon(r, spec.row / 2 - spec.footway, "road", 0.9);
       if (spec.footway > 0) {
-        ribbon(r, spec.row / 2, walk, 0.62);
+        ribbon(r, spec.row / 2, "walk", 0.62);
         if (spec.row >= 28 && inCore(r.axis === "ew" ? 0 : r.at, r.axis === "ew" ? r.at : 0)) {
-          ribbon(r, 0.55, mark, 1.02);
+          ribbon(r, 0.55, "mark", 1.02);
         }
       }
     }
@@ -1458,34 +1580,58 @@ varying vec3 vSeaWorld;`)
       worstOverBudgetM: +earth.worstOver.toFixed(1),
     };
 
-    const mk = (buf, colour, rough, order) => {
-      if (!buf.pos.length) return;
-      const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.Float32BufferAttribute(buf.pos, 3));
-      g.setIndex(buf.idx); g.computeVertexNormals();
-      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
-        color: colour, roughness: rough, metalness: 0,
-        polygonOffset: true, polygonOffsetFactor: -order, polygonOffsetUnits: -order,
-      }));
-      m.receiveShadow = true; scene.add(m);
-    };
-    // The earth FIRST, so the carriageway's polygon offset still wins where they
-    // meet. DoubleSide because a batter is seen from outside on a fill and from
-    // inside on a cut, and the winding is the same for both.
-    if (earthBuf.pos.length) {
-      const eg = new THREE.BufferGeometry();
-      eg.setAttribute("position", new THREE.Float32BufferAttribute(earthBuf.pos, 3));
-      eg.setIndex(earthBuf.idx); eg.computeVertexNormals();
-      const em = new THREE.Mesh(eg, new THREE.MeshStandardMaterial({
-        color: 0x7d7360, roughness: 0.98, metalness: 0, side: THREE.DoubleSide,
-      }));
-      em.receiveShadow = true; scene.add(em);
-      stats.earthworksTris = earthBuf.idx.length / 3;
+    const mkMat = (colour, rough, order, doubleSide = false) => new THREE.MeshStandardMaterial({
+      color: colour, roughness: rough, metalness: 0,
+      side: doubleSide ? THREE.DoubleSide : THREE.FrontSide,
+      polygonOffset: true, polygonOffsetFactor: -order, polygonOffsetUnits: -order,
+    });
+    const earthMat = mkMat(0x7d7360, 0.98, 0, true);
+    const walkMat = mkMat(0xbdb5a6, 0.95, 1);
+    const roadMat = mkMat(0x4b5058, 0.92, 2);
+    const markMat = mkMat(0xf0e4b0, 0.8, 3);
+
+    let totalEarthTris = 0;
+    let totalRoadTris = 0;
+
+    const emptyRoadGeo = new THREE.BufferGeometry();
+    const dummyRoadMat = new THREE.MeshBasicMaterial({ visible: false });
+
+    for (const c of roadChunks.values()) {
+      const chunkCenterX = useChunking ? (c.cx + 0.5) * CHUNK_SIZE : 0;
+      const chunkCenterZ = useChunking ? (c.cz + 0.5) * CHUNK_SIZE : 0;
+      const lod = new THREE.LOD();
+      if (useChunking) lod.position.set(chunkCenterX, 0, chunkCenterZ);
+      const group = new THREE.Group();
+      if (useChunking) group.position.set(-chunkCenterX, 0, -chunkCenterZ);
+
+      const emit = (buf, mat) => {
+        if (!buf.pos.length || !buf.idx.length) return 0;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.Float32BufferAttribute(buf.pos, 3));
+        g.setIndex(buf.idx);
+        g.computeVertexNormals();
+        g.computeBoundingSphere();
+        const m = new THREE.Mesh(g, mat);
+        m.receiveShadow = true;
+        group.add(m);
+        return buf.idx.length / 3;
+      };
+      const eTris = emit(c.earth, earthMat);
+      const wTris = emit(c.walk, walkMat);
+      const rTris = emit(c.road, roadMat);
+      const mTris = emit(c.mark, markMat);
+      const chunkTotalTris = eTris + wTris + rTris + mTris;
+      if (chunkTotalTris > 0) {
+        totalEarthTris += eTris;
+        totalRoadTris += wTris + rTris + mTris;
+        lod.isGroundFabric = true;
+        lod.addLevel(group, 0);
+        lod.addLevel(new THREE.Mesh(emptyRoadGeo, dummyRoadMat), 4800);
+        scene.add(lod);
+      }
     }
-    mk(walk, 0xbdb5a6, 0.95, 1);
-    mk(road, 0x4b5058, 0.92, 2);
-    mk(mark, 0xf0e4b0, 0.8, 3);
-    stats.roadTris = (road.idx.length + walk.idx.length + mark.idx.length) / 3;
+    stats.earthworksTris = totalEarthTris;
+    stats.roadTris = totalRoadTris;
   }
 
   // ---------------------------------------------------------------------------
@@ -1578,48 +1724,128 @@ varying vec3 vSeaWorld;`)
       return entry;
     };
 
-    // CITY-WIDE VARIANT INSTANCING (guarantees draw calls stay strictly <= 900 across all views)
-    const variants = groupByVariant(instanced);
+    // SPATIAL CHUNKING & DISTANCE-BANDED LOD (Phase A0)
+    const emptyGeo = new THREE.BufferGeometry();
+
+    // Group placements by spatial chunk, then by variant
+    const chunkMap = new Map();
+    for (const p of instanced) {
+      const cx = useChunking ? Math.floor(p.x / CHUNK_SIZE) : 0;
+      const cz = useChunking ? Math.floor(p.z / CHUNK_SIZE) : 0;
+      const ckey = `${cx},${cz}`;
+      let cEntry = chunkMap.get(ckey);
+      if (!cEntry) {
+        cEntry = { cx, cz, variants: new Map() };
+        chunkMap.set(ckey, cEntry);
+      }
+      const char = p.options?.character || "";
+      const baseKey = variantKeyOf(p);
+      const vk = `${baseKey}|${char}`;
+      let vGroup = cEntry.variants.get(vk);
+      if (!vGroup) {
+        vGroup = { key: vk, typology: p.typology, seed: baseKey, options: p.options, placements: [] };
+        cEntry.variants.set(vk, vGroup);
+      }
+      vGroup.placements.push(p);
+    }
+
     const dummy = new THREE.Object3D();
     let variantMeshes = 0, variantParts = 0;
 
-    for (const g of variants.values()) {
-      const vData = getVariantGeom(g);
-      if (!vData) {
-        refused += g.placements.length;
-        refusedWhy[`could not build ${g.typology}`] = (refusedWhy[`could not build ${g.typology}`] || 0) + g.placements.length;
-        continue;
+    for (const cEntry of chunkMap.values()) {
+      const chunkCenterX = useChunking ? (cEntry.cx + 0.5) * CHUNK_SIZE : 0;
+      const chunkCenterZ = useChunking ? (cEntry.cz + 0.5) * CHUNK_SIZE : 0;
+
+      for (const g of cEntry.variants.values()) {
+        const vData = getVariantGeom(g);
+        if (!vData) {
+          refused += g.placements.length;
+          refusedWhy[`could not build ${g.typology}`] = (refusedWhy[`could not build ${g.typology}`] || 0) + g.placements.length;
+          continue;
+        }
+
+        const { geo0, geo1, geo2, mat } = vData;
+        const count = g.placements.length;
+
+        const lod = new THREE.LOD();
+        if (useChunking) {
+          lod.position.set(chunkCenterX, 0, chunkCenterZ);
+        }
+
+        const im0 = new THREE.InstancedMesh(geo0, mat, count);
+        const im1 = (geo1 && geo1 !== geo0) ? new THREE.InstancedMesh(geo1, mat, count) : im0;
+        const im2 = (geo2 && geo2 !== geo0) ? new THREE.InstancedMesh(geo2, mat, count) : im1;
+
+        let i = 0;
+        for (const p of g.placements) {
+          const foot = footByPlot.get(p.plotId);
+          if (!foot) continue;
+          const y = foot.verdict === "terrace" ? foot.base + foot.range : foot.base;
+          const px = useChunking ? (p.x - chunkCenterX) : p.x;
+          const pz = useChunking ? (p.z - chunkCenterZ) : p.z;
+          dummy.position.set(px, y, pz);
+          dummy.rotation.set(0, p.facing || 0, 0);
+          dummy.scale.set(1, 1, 1);
+          dummy.updateMatrix();
+
+          im0.setMatrixAt(i, dummy.matrix);
+          if (im1 !== im0) im1.setMatrixAt(i, dummy.matrix);
+          if (im2 !== im0 && im2 !== im1) im2.setMatrixAt(i, dummy.matrix);
+          i++;
+
+          placed++;
+          byClass[p.situation.className] = (byClass[p.situation.className] || 0) + 1;
+          placedBuildings.push([p.x, p.z, y, p.fits.w, p.fits.d]);
+        }
+
+        im0.count = i;
+        im0.instanceMatrix.needsUpdate = true;
+        im0.computeBoundingSphere();
+        im0.castShadow = true;
+        im0.receiveShadow = true;
+
+        if (im1 !== im0) {
+          im1.count = i;
+          im1.instanceMatrix.needsUpdate = true;
+          im1.computeBoundingSphere();
+          im1.castShadow = true;
+          im1.receiveShadow = true;
+        }
+
+        if (im2 !== im0 && im2 !== im1) {
+          im2.count = i;
+          im2.instanceMatrix.needsUpdate = true;
+          im2.computeBoundingSphere();
+          im2.castShadow = true;
+          im2.receiveShadow = true;
+        }
+
+        const isTower = (typeof g.typology === "string") && (
+          g.typology.includes("tower") ||
+          g.typology.includes("midrise") ||
+          g.typology.includes("office") ||
+          g.typology.includes("civic") ||
+          g.typology.includes("business-park")
+        );
+        lod.isGroundFabric = !isTower;
+        if (isTower) {
+          lod.addLevel(im0, 0);
+          lod.addLevel(im1, 200);
+          lod.addLevel(im2, 5500);
+          const cullMesh = new THREE.Mesh(emptyGeo, mat);
+          lod.addLevel(cullMesh, 10000);
+        } else {
+          lod.addLevel(im0, 0);
+          lod.addLevel(im1, 150);
+          lod.addLevel(im2, 450);
+          const cullMesh = new THREE.Mesh(emptyGeo, mat);
+          lod.addLevel(cullMesh, 4800);
+        }
+
+        scene.add(lod);
+        variantMeshes++;
+        variantParts += i;
       }
-
-      const { geo0, mat } = vData;
-      const count = g.placements.length;
-      const im = new THREE.InstancedMesh(geo0, mat, count);
-
-      let i = 0;
-      for (const p of g.placements) {
-        const foot = footByPlot.get(p.plotId);
-        if (!foot) continue;
-        const y = foot.verdict === "terrace" ? foot.base + foot.range : foot.base;
-        dummy.position.set(p.x, y, p.z);
-        dummy.rotation.set(0, p.facing || 0, 0);
-        dummy.scale.set(1, 1, 1);
-        dummy.updateMatrix();
-        im.setMatrixAt(i++, dummy.matrix);
-
-        placed++;
-        byClass[p.situation.className] = (byClass[p.situation.className] || 0) + 1;
-        placedBuildings.push([p.x, p.z, y, p.fits.w, p.fits.d]);
-      }
-
-      im.count = i;
-      im.instanceMatrix.needsUpdate = true;
-      im.computeBoundingSphere();
-      im.castShadow = true;
-      im.receiveShadow = true;
-
-      scene.add(im);
-      variantMeshes++;
-      variantParts += i;
     }
 
     // I2: OVERRIDDEN PLACEMENTS, DRAWN INDIVIDUALLY, NOT INSTANCED.
@@ -1641,43 +1867,96 @@ varying vec3 vSeaWorld;`)
     for (const p of resolvedOverrides) {
       const foot = footByPlot.get(p.plotId);
       if (!foot) continue;
-      let geo, mat;
+      let geo, mat, lodObj = null;
+      const isT = (typeof p.typology === "string") && (
+        p.typology.includes("tower") ||
+        p.typology.includes("midrise") ||
+        p.typology.includes("office") ||
+        p.typology.includes("civic") ||
+        p.typology.includes("business-park")
+      );
       if (p.model) {
-        // A verified replace -- the registered, already-built geometry.
-        geo = p.model.geometry;
-        mat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0.02, vertexColors: !!geo.attributes.color });
-        if (!geo.attributes.color) mat.color.setHex(0x9a9a94);
+        // A verified replace -- the registered, already-built geometry with LOD support.
+        const s = p.model.spec;
+        const lod0 = s && s.lod && s.lod[0];
+        const lod1 = s && s.lod && (s.lod[1] || s.lod[0]);
+        const lod2 = s && s.lod && (s.lod[2] || s.lod[1] || s.lod[0]);
+        const geo0 = lod0 ? lod0.createGeometry(THREE) : p.model.geometry;
+        const geo1 = lod1 ? lod1.createGeometry(THREE) : geo0;
+        const geo2 = lod2 ? lod2.createGeometry(THREE) : geo1;
+        const usesVertexColour = !!(geo0 && geo0.attributes && geo0.attributes.color);
+        mat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0.02, vertexColors: usesVertexColour });
+        if (!usesVertexColour) mat.color.setHex(0x9a9a94);
+
+        if (geo0 && (geo1 || geo2)) {
+          lodObj = new THREE.LOD();
+          lodObj.isGroundFabric = !isT;
+          const m0 = new THREE.Mesh(geo0, mat); m0.castShadow = m0.receiveShadow = true;
+          lodObj.addLevel(m0, 0);
+          if (geo1 && geo1 !== geo0) {
+            const m1 = new THREE.Mesh(geo1, mat); m1.castShadow = m1.receiveShadow = true;
+            lodObj.addLevel(m1, isT ? 200 : 150);
+          }
+          if (geo2 && geo2 !== geo0 && geo2 !== geo1) {
+            const m2 = new THREE.Mesh(geo2, mat); m2.castShadow = m2.receiveShadow = true;
+            lodObj.addLevel(m2, isT ? 5500 : 450);
+          }
+          const cullM = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+          lodObj.addLevel(cullM, isT ? 10000 : 4800);
+        } else {
+          geo = geo0;
+        }
       } else {
         // A retint/move only -- the placement's own stock model, built once
         // more because it can no longer share the instanced group's copy.
         let spec;
         try {
           spec = building(p.typology, p.seed, p.options);
-          geo = spec.lod[0].createGeometry();
+          const lod0 = spec.lod && spec.lod[0];
+          const lod1 = spec.lod && (spec.lod[1] || spec.lod[0]);
+          const lod2 = spec.lod && (spec.lod[2] || spec.lod[1] || spec.lod[0]);
+          const geo0 = lod0 ? lod0.createGeometry(THREE) : null;
+          const geo1 = lod1 ? lod1.createGeometry(THREE) : geo0;
+          const geo2 = lod2 ? lod2.createGeometry(THREE) : geo1;
+          const usesVertexColour = !!(geo0 && geo0.attributes.color);
+          mat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0.02, vertexColors: usesVertexColour });
+          const retint = p.override && p.override.retint;
+          if (retint) mat.color.setHex(retint.color);
+          else if (!usesVertexColour) mat.color.setHex((spec.material && spec.material.wall) || 0x9a9a94);
+
+          if (geo0 && (geo1 || geo2)) {
+            lodObj = new THREE.LOD();
+            lodObj.isGroundFabric = !isT;
+            const m0 = new THREE.Mesh(geo0, mat); m0.castShadow = m0.receiveShadow = true;
+            lodObj.addLevel(m0, 0);
+            if (geo1 && geo1 !== geo0) {
+              const m1 = new THREE.Mesh(geo1, mat); m1.castShadow = m1.receiveShadow = true;
+              lodObj.addLevel(m1, isT ? 200 : 150);
+            }
+            if (geo2 && geo2 !== geo0 && geo2 !== geo1) {
+              const m2 = new THREE.Mesh(geo2, mat); m2.castShadow = m2.receiveShadow = true;
+              lodObj.addLevel(m2, isT ? 5500 : 450);
+            }
+            const cullM = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+            lodObj.addLevel(cullM, isT ? 10000 : 4800);
+          } else {
+            geo = geo0;
+          }
         } catch (err) {
           refused++;
           refusedWhy[`could not build ${p.typology}`] = (refusedWhy[`could not build ${p.typology}`] || 0) + 1;
           continue;
         }
-        const usesVertexColour = !!geo.attributes.color;
-        mat = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0.02, vertexColors: usesVertexColour });
-        const retint = p.override && p.override.retint;
-        if (retint) mat.color.setHex(retint.color);
-        else if (!usesVertexColour) mat.color.setHex((spec.material && spec.material.wall) || 0x9a9a94);
       }
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      // A move gives an absolute new (x, z); the HEIGHT is not re-assessed at
-      // the new position (that would need a fresh assessFootprint call this
-      // step does not make) -- stated plainly rather than claimed more exact
-      // than it is. Untouched, a placement draws at its own x/z as before.
+      const targetObj = lodObj || new THREE.Mesh(geo, mat);
+      targetObj.castShadow = true;
+      targetObj.receiveShadow = true;
       const move = p.override && p.override.move;
       const px = move ? move.x : p.x;
       const pz = move ? move.z : p.z;
       const y = foot.verdict === "terrace" ? foot.base + foot.range : foot.base;
-      mesh.position.set(px, y, pz);
-      scene.add(mesh);
+      targetObj.position.set(px, y, pz);
+      scene.add(targetObj);
       placedBuildings.push([px, pz, y, p.fits.w, p.fits.d]);
       overriddenDrawn++;
       placed++;
@@ -1827,37 +2106,129 @@ varying vec3 vSeaWorld;`)
     const trunkG = new THREE.CylinderGeometry(0.45, 0.8, 6, 4);
     const broad = new THREE.SphereGeometry(1, 6, 4);
     const conif = new THREE.ConeGeometry(1, 2.4, 6);
-    const n = spots.length;
-    const tI = new THREE.InstancedMesh(trunkG, new THREE.MeshStandardMaterial({ color: 0x5f452d, roughness: 0.95 }), n);
-    const bI = new THREE.InstancedMesh(broad, new THREE.MeshStandardMaterial({ roughness: 0.9 }), n);
-    const cI = new THREE.InstancedMesh(conif, new THREE.MeshStandardMaterial({ roughness: 0.9 }), n);
-    tI.castShadow = bI.castShadow = cI.castShadow = true;
-    const d = new THREE.Object3D(), c = new THREE.Color();
-    let nb = 0, nc = 0;
-    spots.forEach(([x, z, s, kind], i) => {
-      const y = heightAt(x, z);
-      d.position.set(x, y + 3 * s, z); d.scale.setScalar(s); d.rotation.set(0, 0, 0); d.updateMatrix();
-      tI.setMatrixAt(i, d.matrix);
-      const tint = c.setHex(kind ? 0x38612f : 0x4f8a3e).offsetHSL(0, (rnd("h" + i) - 0.5) * 0.09, (rnd("l" + i) - 0.5) * 0.17);
-      if (kind) {
-        d.position.set(x, y + 6 * s + 3.4 * s, z); d.scale.set(3.4 * s, 9 * s, 3.4 * s); d.updateMatrix();
-        cI.setMatrixAt(nc, d.matrix); cI.setColorAt(nc, tint); nc++;
-      } else {
-        d.position.set(x, y + 8.4 * s, z); d.scale.set(5.4 * s, 4.6 * s, 5.4 * s); d.updateMatrix();
-        bI.setMatrixAt(nb, d.matrix); bI.setColorAt(nb, tint); nb++;
+
+    const trunkG1 = new THREE.CylinderGeometry(0.45, 0.8, 6, 3);
+    const broad1 = new THREE.SphereGeometry(1, 4, 2);
+    const conif1 = new THREE.ConeGeometry(1, 2.4, 4);
+
+    const trunkG2 = new THREE.CylinderGeometry(0.45, 0.8, 6, 3, 1, true);
+    const broad2 = new THREE.ConeGeometry(1, 2.4, 3, 1, true);
+    const conif2 = new THREE.ConeGeometry(1, 2.4, 3, 1, true);
+
+    const trunkM = new THREE.MeshStandardMaterial({ color: 0x5f452d, roughness: 0.95 });
+    const broadM = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+    const conifM = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+
+    const treeChunks = new Map();
+    spots.forEach(([x, z, s, kind], idx) => {
+      const cx = useChunking ? Math.floor(x / CHUNK_SIZE) : 0;
+      const cz = useChunking ? Math.floor(z / CHUNK_SIZE) : 0;
+      const ck = `${cx},${cz}`;
+      let cEntry = treeChunks.get(ck);
+      if (!cEntry) {
+        cEntry = { cx, cz, spots: [] };
+        treeChunks.set(ck, cEntry);
       }
+      cEntry.spots.push([x, z, s, kind, idx]);
     });
-    bI.count = nb; cI.count = nc;
-    tI.instanceMatrix.needsUpdate = bI.instanceMatrix.needsUpdate = cI.instanceMatrix.needsUpdate = true;
-    if (bI.instanceColor) bI.instanceColor.needsUpdate = true;
-    if (cI.instanceColor) cI.instanceColor.needsUpdate = true;
-    tI.computeBoundingSphere(); bI.computeBoundingSphere(); cI.computeBoundingSphere();
-    scene.add(tI, bI, cI);
-    stats.trees = n;
+
+    const emptyGeo = new THREE.BufferGeometry();
+    const dummyMat = new THREE.MeshBasicMaterial({ visible: false });
+
+    for (const cEntry of treeChunks.values()) {
+      const cSpots = cEntry.spots;
+      const n = cSpots.length;
+      const chunkCenterX = useChunking ? (cEntry.cx + 0.5) * CHUNK_SIZE : 0;
+      const chunkCenterZ = useChunking ? (cEntry.cz + 0.5) * CHUNK_SIZE : 0;
+
+      const lod = new THREE.LOD();
+      lod.isGroundFabric = true;
+      if (useChunking) lod.position.set(chunkCenterX, 0, chunkCenterZ);
+
+      // LOD0: Full detail
+      const treeGroup0 = new THREE.Group();
+      const tI0 = new THREE.InstancedMesh(trunkG, trunkM, n);
+      const bI0 = new THREE.InstancedMesh(broad, broadM, n);
+      const cI0 = new THREE.InstancedMesh(conif, conifM, n);
+      tI0.castShadow = bI0.castShadow = cI0.castShadow = true;
+
+      // LOD1: Medium detail
+      const treeGroup1 = new THREE.Group();
+      const tI1 = new THREE.InstancedMesh(trunkG1, trunkM, n);
+      const bI1 = new THREE.InstancedMesh(broad1, broadM, n);
+      const cI1 = new THREE.InstancedMesh(conif1, conifM, n);
+      tI1.castShadow = bI1.castShadow = cI1.castShadow = true;
+
+      // LOD2: Coarse massing for distant/skyline views
+      const treeGroup2 = new THREE.Group();
+      const tI2 = new THREE.InstancedMesh(trunkG2, trunkM, n);
+      const bI2 = new THREE.InstancedMesh(broad2, broadM, n);
+      const cI2 = new THREE.InstancedMesh(conif2, conifM, n);
+
+      const d = new THREE.Object3D(), c = new THREE.Color();
+      let nb = 0, nc = 0;
+      cSpots.forEach(([x, z, s, kind, i], j) => {
+        const y = heightAt(x, z);
+        const px = useChunking ? (x - chunkCenterX) : x;
+        const pz = useChunking ? (z - chunkCenterZ) : z;
+        d.position.set(px, y + 3 * s, pz); d.scale.setScalar(s); d.rotation.set(0, 0, 0); d.updateMatrix();
+        tI0.setMatrixAt(j, d.matrix);
+        tI1.setMatrixAt(j, d.matrix);
+        tI2.setMatrixAt(j, d.matrix);
+        const tint = c.setHex(kind ? 0x38612f : 0x4f8a3e).offsetHSL(0, (rnd("h" + i) - 0.5) * 0.09, (rnd("l" + i) - 0.5) * 0.17);
+        if (kind) {
+          d.position.set(px, y + 6 * s + 3.4 * s, pz); d.scale.set(3.4 * s, 9 * s, 3.4 * s); d.updateMatrix();
+          cI0.setMatrixAt(nc, d.matrix); cI0.setColorAt(nc, tint);
+          cI1.setMatrixAt(nc, d.matrix); cI1.setColorAt(nc, tint);
+          cI2.setMatrixAt(nc, d.matrix); cI2.setColorAt(nc, tint);
+          nc++;
+        } else {
+          d.position.set(px, y + 8.4 * s, pz); d.scale.set(5.4 * s, 4.6 * s, 5.4 * s); d.updateMatrix();
+          bI0.setMatrixAt(nb, d.matrix); bI0.setColorAt(nb, tint);
+          bI1.setMatrixAt(nb, d.matrix); bI1.setColorAt(nb, tint);
+          bI2.setMatrixAt(nb, d.matrix); bI2.setColorAt(nb, tint);
+          nb++;
+        }
+      });
+      bI0.count = bI1.count = bI2.count = nb;
+      cI0.count = cI1.count = cI2.count = nc;
+      tI0.instanceMatrix.needsUpdate = bI0.instanceMatrix.needsUpdate = cI0.instanceMatrix.needsUpdate = true;
+      tI1.instanceMatrix.needsUpdate = bI1.instanceMatrix.needsUpdate = cI1.instanceMatrix.needsUpdate = true;
+      tI2.instanceMatrix.needsUpdate = bI2.instanceMatrix.needsUpdate = cI2.instanceMatrix.needsUpdate = true;
+      if (bI0.instanceColor) bI0.instanceColor.needsUpdate = true;
+      if (cI0.instanceColor) cI0.instanceColor.needsUpdate = true;
+      if (bI1.instanceColor) bI1.instanceColor.needsUpdate = true;
+      if (cI1.instanceColor) cI1.instanceColor.needsUpdate = true;
+      if (bI2.instanceColor) bI2.instanceColor.needsUpdate = true;
+      if (cI2.instanceColor) cI2.instanceColor.needsUpdate = true;
+
+      tI0.computeBoundingSphere(); bI0.computeBoundingSphere(); cI0.computeBoundingSphere();
+      tI1.computeBoundingSphere(); bI1.computeBoundingSphere(); cI1.computeBoundingSphere();
+      tI2.computeBoundingSphere(); bI2.computeBoundingSphere(); cI2.computeBoundingSphere();
+
+      treeGroup0.add(tI0);
+      if (nb > 0) treeGroup0.add(bI0);
+      if (nc > 0) treeGroup0.add(cI0);
+
+      treeGroup1.add(tI1);
+      if (nb > 0) treeGroup1.add(bI1);
+      if (nc > 0) treeGroup1.add(cI1);
+
+      if (nb > 0) treeGroup2.add(bI2);
+      if (nc > 0) treeGroup2.add(cI2);
+
+      lod.addLevel(treeGroup0, 0);
+      lod.addLevel(treeGroup1, 100);
+      lod.addLevel(treeGroup2, 350);
+      const cullTree = new THREE.Mesh(emptyGeo, dummyMat);
+      lod.addLevel(cullTree, 4800);
+      scene.add(lod);
+    }
+    stats.trees = spots.length;
   }
   stats.trees = stats.trees || 0;
 
-  const api = { scene, field, heightAt, plan, world, masses, stats, sun, sunDir: sunPos.clone(), sky, citySky, sea, wn, LOOK, THREE, renderer, settAt, SETT, SETT_BY_ID, bridgeSpans, placedBuildings };
+  const api = { scene, field, heightAt, plan, world, masses, stats, sun, sunDir: sunPos.clone(), sky, citySky, sea, wn, LOOK, THREE, renderer, settAt, SETT, SETT_BY_ID, bridgeSpans, placedBuildings, CHUNK_SIZE, useChunking };
   if (!SKIP.has("props")) buildProps(api);
   stats.buildMs = Math.round(performance.now() - t0);
   return api;
@@ -1968,7 +2339,7 @@ function buildProps(api) {
   // execute. That is a real gap and it is recorded in the ledger, not papered
   // over: the fix here is ordering, and the protection is the module-order
   // check added alongside it.
-  const { THREE, scene, heightAt, masses, stats, world, plan, settAt } = api;
+  const { THREE, scene, heightAt, masses, stats, world, plan, settAt, CHUNK_SIZE, useChunking } = api;
 
   // WHERE EVERYTHING GOES, DECIDED ONCE, BY ASKING THE LAND.
   //
@@ -2039,12 +2410,15 @@ function buildProps(api) {
       for (const [a, b, c2, d2] of F) buf.idx.push(base + a, base + b, base + c2, base + a, base + c2, base + d2);
     }
 
+    let totalBridgeTris = 0;
     for (const sp of api.bridgeSpans) {
       const { br, z0, z1, w0, w1, prof, ew, H } = sp;
       if (w0 === null) continue;                       // nothing to cross
       const spec = ROADS[br.class] || ROADS.AVENUE;
       const width = spec.row;
       const SEG = 30;
+      const bConc = { pos: [], idx: [] }, bSteel = { pos: [], idx: [] };
+
       // place(t, lateralOffset) -> [x, z] on the correct axis
       const P = (t, off = 0) => (ew ? [t, br.x + off] : [br.x + off, t]);
       const put = (buf, t, off, y, w, h, l, pitch) => {
@@ -2059,9 +2433,9 @@ function buildProps(api) {
         const y = (yA + yB) / 2, cz = (z + zb) / 2;
         const pitch = -Math.atan2(yB - yA, len);
         const L = Math.hypot(len, yB - yA) * 1.04;
-        put(conc, cz, 0, y - 2.0, width * 0.98, 2.6, L, pitch);                 // soffit
+        put(bConc, cz, 0, y - 2.0, width * 0.98, 2.6, L, pitch);                 // soffit
         for (const side of [-1, 1]) {                                            // parapets
-          put(conc, cz, side * (width / 2 - 0.4), y + 0.85, 0.7, 1.5, L, pitch);
+          put(bConc, cz, side * (width / 2 - 0.4), y + 0.85, 0.7, 1.5, L, pitch);
         }
       }
 
@@ -2071,8 +2445,8 @@ function buildProps(api) {
         const bed = Math.min(-2, H(z));
         const top = prof(z) - 2.4, hgt = top - bed;
         if (hgt < 4) continue;
-        put(conc, z, 0, bed + hgt / 2, width * 0.30, hgt, 9, 0);
-        put(conc, z, 0, top - 1.1, width * 0.72, 2.2, 11, 0);                   // pier cap
+        put(bConc, z, 0, bed + hgt / 2, width * 0.30, hgt, 9, 0);
+        put(bConc, z, 0, top - 1.1, width * 0.72, 2.2, 11, 0);                   // pier cap
       }
 
       if (br.type === "cable") {
@@ -2082,15 +2456,15 @@ function buildProps(api) {
           const deckY = prof(tz), bed = Math.min(-4, H(tz));
           const towerH = 96, legH = deckY - bed + towerH;
           for (const side of [-1, 1]) {
-            put(steelB, tz, side * (width / 2 - 2), bed + legH / 2, 5.5, legH, 6.5, 0);
+            put(bSteel, tz, side * (width / 2 - 2), bed + legH / 2, 5.5, legH, 6.5, 0);
           }
-          put(steelB, tz, 0, deckY + towerH * 0.62, width, 4, 5, 0);            // cross beam
+          put(bSteel, tz, 0, deckY + towerH * 0.62, width, 4, 5, 0);            // cross beam
           for (const dir of [-1, 1]) for (let k = 1; k <= 6; k++) {
             const reach = span * 0.17 * (k / 6), az = tz + dir * reach;
             if (az < z0 || az > z1) continue;
             const dy = deckY + towerH - prof(az), L = Math.hypot(reach, dy);
             for (const side of [-1, 1]) {
-              put(steelB, (tz + az) / 2, side * (width / 2 - 2),
+              put(bSteel, (tz + az) / 2, side * (width / 2 - 2),
                 (deckY + towerH + prof(az)) / 2, 0.8, 0.8, L, dir * Math.atan2(reach, dy));
             }
           }
@@ -2103,23 +2477,34 @@ function buildProps(api) {
           const y0 = prof(z0a) - 2 + rise * (1 - u0 * u0);
           const y1 = prof(z1a) - 2 + rise * (1 - u1 * u1);
           const dz = z1a - z0a, dy = y1 - y0, L = Math.hypot(dz, dy) * 1.08;
-          put(steelB, (z0a + z1a) / 2, side * (width / 2 - 1.5), (y0 + y1) / 2,
+          put(bSteel, (z0a + z1a) / 2, side * (width / 2 - 1.5), (y0 + y1) / 2,
             2.2, 2.2, L, -Math.atan2(dy, dz));
         }
       }
-    }
 
-    const emit = (buf, colour, rough, metal) => {
-      if (!buf.pos.length) return 0;
-      const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.Float32BufferAttribute(buf.pos, 3));
-      g.setIndex(buf.idx);
-      const flat = g.toNonIndexed(); flat.computeVertexNormals();
-      const m = new THREE.Mesh(flat, new THREE.MeshStandardMaterial({ color: colour, roughness: rough, metalness: metal }));
-      m.castShadow = true; m.receiveShadow = true; scene.add(m);
-      return buf.idx.length / 3;
-    };
-    stats.bridgeTris = emit(conc, 0xdcd6c8, 0.88, 0) + emit(steelB, 0xe4e0d6, 0.5, 0.3);
+      const emitSpan = (buf, colour, rough, metal) => {
+        if (!buf.pos.length) return 0;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.Float32BufferAttribute(buf.pos, 3));
+        g.setIndex(buf.idx);
+        const flat = g.toNonIndexed();
+        flat.computeVertexNormals();
+        flat.computeBoundingSphere();
+        const center = flat.boundingSphere.center.clone();
+        flat.translate(-center.x, -center.y, -center.z);
+        flat.computeBoundingSphere();
+        const m = new THREE.Mesh(flat, new THREE.MeshStandardMaterial({ color: colour, roughness: rough, metalness: metal }));
+        m.castShadow = true; m.receiveShadow = true;
+        const bLOD = new THREE.LOD();
+        bLOD.position.copy(center);
+        bLOD.addLevel(m, 0);
+        bLOD.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 4500);
+        scene.add(bLOD);
+        return buf.idx.length / 3;
+      };
+      totalBridgeTris += emitSpan(bConc, 0xdcd6c8, 0.88, 0) + emitSpan(bSteel, 0xe4e0d6, 0.5, 0.3);
+    }
+    stats.bridgeTris = totalBridgeTris;
     stats.bridges = api.bridgeSpans.length;
   }
 
@@ -2154,6 +2539,10 @@ function buildProps(api) {
     const yardY = yardN ? yardSum / yardN : 2;
     stats.containerYardLevel = +yardY.toFixed(1);
 
+    const portCenterZ = _q.z + _qs * 300;
+    const portLOD = new THREE.LOD();
+    portLOD.position.set(_q.x, yardY, portCenterZ);
+
     for (let x = _q.x - 900; x < _q.x + 900 && n < 2200; x += 16)
       for (let z = _q.z + _qs * 70; _qs > 0 ? z < _q.z + _qs * 560 : z > _q.z + _qs * 560; z += _qs * 4) {
         if (rnd("ct" + x + z) < 0.42) continue;
@@ -2162,7 +2551,7 @@ function buildProps(api) {
         const g = yardY;
         const stack = 1 + Math.floor(rnd("cs" + x + z) * 4);
         for (let k = 0; k < stack && n < 2200; k++) {
-          d.position.set(x, g + 1.4 + k * 2.7, z); d.scale.set(1, 1, 1); d.updateMatrix();
+          d.position.set(x - _q.x, 1.4 + k * 2.7, z - portCenterZ); d.scale.set(1, 1, 1); d.updateMatrix();
           inst.setMatrixAt(n, d.matrix);
           inst.setColorAt(n, c.setHex(cc[Math.floor(rnd("cc" + x + z + k) * cc.length) % cc.length]));
           n++;
@@ -2170,7 +2559,10 @@ function buildProps(api) {
       }
     inst.count = n; inst.instanceMatrix.needsUpdate = true;
     if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-    inst.castShadow = true; inst.computeBoundingSphere(); scene.add(inst);
+    inst.castShadow = true; inst.computeBoundingSphere();
+    portLOD.addLevel(inst, 0);
+    portLOD.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 4000);
+    scene.add(portLOD);
     stats.containers = n;
 
     // Cranes go ON THE QUAY. Fixed at z = -2300 they stood in open water,
@@ -2257,15 +2649,47 @@ function buildProps(api) {
     }
     const put = (geo, mat, list, yOff, rotFromEw) => {
       if (!list.length) return 0;
-      const inst = new THREE.InstancedMesh(geo, mat, list.length);
-      const o = new THREE.Object3D();
-      list.forEach((p, i) => {
-        o.position.set(p[0], p[1] + yOff, p[2]);
-        o.rotation.set(0, rotFromEw && p[3] ? Math.PI / 2 : 0, 0);
-        o.scale.setScalar(1); o.updateMatrix(); inst.setMatrixAt(i, o.matrix);
+      const chunks = new Map();
+      list.forEach((p) => {
+        const cx = useChunking ? Math.floor(p[0] / CHUNK_SIZE) : 0;
+        const cz = useChunking ? Math.floor(p[2] / CHUNK_SIZE) : 0;
+        const ck = `${cx},${cz}`;
+        let cEntry = chunks.get(ck);
+        if (!cEntry) {
+          cEntry = [];
+          chunks.set(ck, cEntry);
+        }
+        cEntry.push(p);
       });
-      inst.instanceMatrix.needsUpdate = true; inst.castShadow = true; inst.computeBoundingSphere();
-      scene.add(inst);
+
+      const emptyGeo = new THREE.BufferGeometry();
+      const dummyMat = new THREE.MeshBasicMaterial({ visible: false });
+      const o = new THREE.Object3D();
+      for (const [ck, cList] of chunks.entries()) {
+        const [cx, cz] = ck.split(",").map(Number);
+        const chunkCenterX = useChunking ? (cx + 0.5) * CHUNK_SIZE : 0;
+        const chunkCenterZ = useChunking ? (cz + 0.5) * CHUNK_SIZE : 0;
+        const lod = new THREE.LOD();
+        if (useChunking) lod.position.set(chunkCenterX, 0, chunkCenterZ);
+
+        const inst = new THREE.InstancedMesh(geo, mat, cList.length);
+        cList.forEach((p, i) => {
+          const px = useChunking ? (p[0] - chunkCenterX) : p[0];
+          const pz = useChunking ? (p[2] - chunkCenterZ) : p[2];
+          o.position.set(px, p[1] + yOff, pz);
+          o.rotation.set(0, rotFromEw && p[3] ? Math.PI / 2 : 0, 0);
+          o.scale.setScalar(1);
+          o.updateMatrix();
+          inst.setMatrixAt(i, o.matrix);
+        });
+        inst.instanceMatrix.needsUpdate = true;
+        inst.castShadow = true;
+        inst.computeBoundingSphere();
+        lod.addLevel(inst, 0);
+        const cullMesh = new THREE.Mesh(emptyGeo, dummyMat);
+        lod.addLevel(cullMesh, 500);
+        scene.add(lod);
+      }
       return list.length;
     };
     // THE SAME STRING NOW CLAIMS THE GROUND AND DRAWS THE THING.
@@ -3060,14 +3484,45 @@ function buildProps(api) {
       // library's origin is "base-centre" -- (0,0,0) is the CENTRE of the
       // footprint at GROUND LEVEL -- so the lift has to come off, or every
       // bench floats 90 cm above the grass.
-      const bg = propGeometry("bench", THREE, { lod: 0 });
-      const im = new THREE.InstancedMesh(bg, M(0x9b7d55, 0.9), benches.length);
-      const d2 = new THREE.Object3D();
+      const bg0 = propGeometry("bench", THREE, { lod: 0 });
+      const bg1 = propGeometry("bench", THREE, { lod: 1 }) || bg0;
+      const benchMat = M(0x9b7d55, 0.9);
+      const benchChunks = new Map();
       benches.forEach(([x, y, z], i) => {
-        d2.position.set(x, y - 0.9, z); d2.rotation.set(0, rnd("bq" + i) * 3.14, 0); d2.scale.setScalar(1);
-        d2.updateMatrix(); im.setMatrixAt(i, d2.matrix);
+        const cx = useChunking ? Math.floor(x / CHUNK_SIZE) : 0;
+        const cz = useChunking ? Math.floor(z / CHUNK_SIZE) : 0;
+        const ck = `${cx},${cz}`;
+        let cEntry = benchChunks.get(ck);
+        if (!cEntry) { cEntry = []; benchChunks.set(ck, cEntry); }
+        cEntry.push([x, y, z, i]);
       });
-      im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.computeBoundingSphere(); scene.add(im);
+
+      for (const [ck, list] of benchChunks.entries()) {
+        const [cx, cz] = ck.split(",").map(Number);
+        const chunkCenterX = useChunking ? (cx + 0.5) * CHUNK_SIZE : 0;
+        const chunkCenterZ = useChunking ? (cz + 0.5) * CHUNK_SIZE : 0;
+        const lod = new THREE.LOD();
+        if (useChunking) lod.position.set(chunkCenterX, 0, chunkCenterZ);
+
+        const im0 = new THREE.InstancedMesh(bg0, benchMat, list.length);
+        const im1 = new THREE.InstancedMesh(bg1, benchMat, list.length);
+        const d2 = new THREE.Object3D();
+        list.forEach(([x, y, z, i], j) => {
+          const px = useChunking ? (x - chunkCenterX) : x;
+          const pz = useChunking ? (z - chunkCenterZ) : z;
+          d2.position.set(px, y - 0.9, pz); d2.rotation.set(0, rnd("bq" + i) * 3.14, 0); d2.scale.setScalar(1);
+          d2.updateMatrix();
+          im0.setMatrixAt(j, d2.matrix);
+          im1.setMatrixAt(j, d2.matrix);
+        });
+        im0.instanceMatrix.needsUpdate = im1.instanceMatrix.needsUpdate = true;
+        im0.castShadow = true; im0.computeBoundingSphere();
+        im1.computeBoundingSphere();
+        lod.addLevel(im0, 0);
+        lod.addLevel(im1, 200);
+        lod.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 600);
+        scene.add(lod);
+      }
     }
     // (planted by the vegetation pass, which runs before this one)
     stats.parks = (plan.parks || []).length;
@@ -3091,18 +3546,24 @@ function buildProps(api) {
       if (!_st) break stadium;
       const sx = _st.x, sz = _st.z, gy = Math.max(2, heightAt(sx, sz));
       const RX = 150, RZ = 118, N = 28;
+      const grp = new THREE.Group();
       for (let i = 0; i < N; i++) {
         const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
         const mx = (Math.cos(a0) + Math.cos(a1)) / 2, mz = (Math.sin(a0) + Math.sin(a1)) / 2;
         const len = Math.hypot((Math.cos(a1) - Math.cos(a0)) * RX, (Math.sin(a1) - Math.sin(a0)) * RZ) * 1.15;
         const seg = new THREE.Mesh(RB(30, 34, len, 1.5), conc);
-        seg.position.set(sx + mx * (RX + 8), gy + 17, sz + mz * (RZ + 8));
+        seg.position.set(mx * (RX + 8), 17, mz * (RZ + 8));
         seg.rotation.y = -Math.atan2(Math.sin(a1) - Math.sin(a0), (Math.cos(a1) - Math.cos(a0)) * (RX / RZ));
-        seg.castShadow = true; seg.receiveShadow = true; scene.add(seg);
+        seg.castShadow = true; seg.receiveShadow = true; grp.add(seg);
       }
       const pitch = new THREE.Mesh(new THREE.CircleGeometry(1, 32), M(0x4f8f42, 0.95));
       pitch.rotation.x = -Math.PI / 2; pitch.scale.set(RX * 0.82, 1, RZ * 0.82);
-      pitch.position.set(sx, gy + 0.5, sz); pitch.receiveShadow = true; scene.add(pitch);
+      pitch.position.set(0, 0.5, 0); pitch.receiveShadow = true; grp.add(pitch);
+      const lod = new THREE.LOD();
+      lod.position.set(sx, gy, sz);
+      lod.addLevel(grp, 0);
+      lod.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 6000);
+      scene.add(lod);
       stats.stadium = 1;
     }
 
@@ -3112,16 +3573,22 @@ function buildProps(api) {
       // No legal site within range: build nothing rather than build it in the sea.
       if (!_sn) break station;
       const sx = _sn.x, sz = _sn.z, gy = Math.max(2, heightAt(sx, sz));
+      const grp = new THREE.Group();
       const shed = new THREE.Mesh(new THREE.CylinderGeometry(46, 46, 210, 14, 1, false, 0, Math.PI), steel);
-      shed.rotation.z = Math.PI / 2; shed.position.set(sx, gy + 4, sz);
-      shed.castShadow = true; scene.add(shed);
+      shed.rotation.z = Math.PI / 2; shed.position.set(0, 4, 0);
+      shed.castShadow = true; grp.add(shed);
       const front = new THREE.Mesh(RB(30, 34, 220, 0.8), M(0xefe6d4, 0.85));
-      front.position.set(sx - 58, gy + 17, sz); front.castShadow = true; scene.add(front);
+      front.position.set(-58, 17, 0); front.castShadow = true; grp.add(front);
       const tower = new THREE.Mesh(RB(20, 76, 20, 0.8), M(0xefe6d4, 0.85));
-      tower.position.set(sx - 58, gy + 38, sz - 96); tower.castShadow = true; scene.add(tower);
+      tower.position.set(-58, 38, -96); tower.castShadow = true; grp.add(tower);
       const cap = new THREE.Mesh(new THREE.ConeGeometry(16, 26, 4), M(0x4f7a6a, 0.85));
-      cap.rotation.y = Math.PI / 4; cap.position.set(sx - 58, gy + 89, sz - 96);
-      cap.castShadow = true; scene.add(cap);
+      cap.rotation.y = Math.PI / 4; cap.position.set(-58, 89, -96);
+      cap.castShadow = true; grp.add(cap);
+      const lod = new THREE.LOD();
+      lod.position.set(sx, gy, sz);
+      lod.addLevel(grp, 0);
+      lod.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 5000);
+      scene.add(lod);
       stats.station = 1;
     }
 
@@ -3131,27 +3598,39 @@ function buildProps(api) {
       // No legal site within range: build nothing rather than build it in the sea.
       if (!_cd) break cathedral;
       const sx = _cd.x, sz = _cd.z, gy = Math.max(2, heightAt(sx, sz));
+      const grp = new THREE.Group();
       const nave = new THREE.Mesh(RB(34, 30, 110, 0.6), M(0xeee6d2, 0.9));
-      nave.position.set(sx, gy + 15, sz); nave.castShadow = true; scene.add(nave);
+      nave.position.set(0, 15, 0); nave.castShadow = true; grp.add(nave);
       const roof = new THREE.Mesh(new THREE.CylinderGeometry(19, 19, 112, 10, 1, false, 0, Math.PI), M(0x5e7d6c, 0.85));
-      roof.rotation.z = Math.PI / 2; roof.position.set(sx, gy + 30, sz); roof.castShadow = true; scene.add(roof);
+      roof.rotation.z = Math.PI / 2; roof.position.set(0, 30, 0); roof.castShadow = true; grp.add(roof);
       const dome = new THREE.Mesh(new THREE.SphereGeometry(24, 16, 10, 0, 6.283, 0, 1.57), M(0x5e7d6c, 0.6, 0.2));
-      dome.position.set(sx, gy + 34, sz); dome.castShadow = true; scene.add(dome);
+      dome.position.set(0, 34, 0); dome.castShadow = true; grp.add(dome);
       for (const dz of [-46, 46]) {
         const t = new THREE.Mesh(RB(14, 74, 14, 0.5), M(0xeee6d2, 0.9));
-        t.position.set(sx, gy + 37, sz + dz); t.castShadow = true; scene.add(t);
+        t.position.set(0, 37, dz); t.castShadow = true; grp.add(t);
         const sp = new THREE.Mesh(new THREE.ConeGeometry(10, 30, 4), M(0x5e7d6c, 0.85));
-        sp.rotation.y = Math.PI / 4; sp.position.set(sx, gy + 89, sz + dz); sp.castShadow = true; scene.add(sp);
+        sp.rotation.y = Math.PI / 4; sp.position.set(0, 89, dz); sp.castShadow = true; grp.add(sp);
       }
+      const lod = new THREE.LOD();
+      lod.position.set(sx, gy, sz);
+      lod.addLevel(grp, 0);
+      lod.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 5000);
+      scene.add(lod);
     }
 
     // --- a broadcast mast on the hill behind the city ---
     {
       const mx = (SITE.mast || { x: wm(-1400) }).x, mz = (SITE.mast || { z: wm(-6300) }).z, gy = heightAt(mx, mz);
+      const grp = new THREE.Group();
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 6, 180, 6), steel);
-      mast.position.set(mx, gy + 90, mz); mast.castShadow = true; scene.add(mast);
+      mast.position.set(0, 90, 0); mast.castShadow = true; grp.add(mast);
       const pod = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 14, 12), M(0xe8e2d4, 0.7));
-      pod.position.set(mx, gy + 128, mz); pod.castShadow = true; scene.add(pod);
+      pod.position.set(0, 128, 0); pod.castShadow = true; grp.add(pod);
+      const lod = new THREE.LOD();
+      lod.position.set(mx, gy, mz);
+      lod.addLevel(grp, 0);
+      lod.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 8000);
+      scene.add(lod);
     }
   }
 
@@ -3165,72 +3644,84 @@ function buildProps(api) {
   // ambient occlusion there is: one instanced quad each.
   // ---------------------------------------------------------------------------
   {
-    const N = 128, c = document.createElement("canvas"); c.width = c.height = N;
-    const g2 = c.getContext("2d");
-    const grd = g2.createRadialGradient(N / 2, N / 2, 0, N / 2, N / 2, N / 2);
-    grd.addColorStop(0.00, "rgba(0,0,0,0.44)");
-    grd.addColorStop(0.55, "rgba(0,0,0,0.20)");
-    grd.addColorStop(1.00, "rgba(0,0,0,0)");
-    g2.fillStyle = grd; g2.fillRect(0, 0, N, N);
-    const tex = new THREE.CanvasTexture(c);
-    const quad = new THREE.PlaneGeometry(1, 1); quad.rotateX(-Math.PI / 2);
-    // ONE SHADOW PER BUILDING THAT EXISTS, AT THE BASE IT STANDS ON.
-    //
-    // This used to walk world.plots and take a fresh heightAt at the PLOT
-    // centre. Three things went wrong with that, all measured:
-    //
-    //   * 205 shadows were drawn under plots the building pass had REFUSED --
-    //     a soft dark ellipse on bare ground where the code had correctly
-    //     declined to build, because it was in the water or on a cliff.
-    //   * 867 more sat over a metre from the base the building actually uses,
-    //     worst 13.1 m: a blob floating in the air beside a plinthed building,
-    //     or buried under it. The plot centre is not the buildable envelope's
-    //     centre, and heightAt is not foot.base.
-    //   * stats.contactShadows reported the total as though each corresponded
-    //     to a building.
-    //
-    // placedBuildings is written by the building pass at the moment a building
-    // is actually emitted, so it cannot disagree with what is standing there.
-    const list = [];
+    const emptyGeo = new THREE.BufferGeometry();
+    const dummyMat = new THREE.MeshBasicMaterial({ visible: false });
+
+    const quad = new THREE.PlaneGeometry(1, 1);
+    quad.rotateX(-Math.PI / 2);
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 128;
+    const g = canvas.getContext("2d");
+    const grd = g.createRadialGradient(64, 64, 18, 64, 64, 60);
+    grd.addColorStop(0, "rgba(10,12,18,0.72)");
+    grd.addColorStop(0.55, "rgba(12,16,22,0.38)");
+    grd.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 128, 128);
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0.85 });
+
+    const shadowChunks = new Map();
+    let totalShadows = 0;
     for (const [cx, cz, base, bw, bd] of api.placedBuildings) {
       if (Math.abs(cx) > wm(12000) || cz < wm(-6500) || cz > wm(3600)) continue;   // core only
-      list.push([cx, base + 0.35, cz, bw * 2.0, bd * 2.0]);
+      const chunkX = useChunking ? Math.floor(cx / CHUNK_SIZE) : 0;
+      const chunkZ = useChunking ? Math.floor(cz / CHUNK_SIZE) : 0;
+      const ck = `${chunkX},${chunkZ}`;
+      let cEntry = shadowChunks.get(ck);
+      if (!cEntry) {
+        cEntry = [];
+        shadowChunks.set(ck, cEntry);
+      }
+      cEntry.push([cx, base + 0.35, cz, bw * 2.0, bd * 2.0]);
+      totalShadows++;
     }
-    const inst = new THREE.InstancedMesh(quad,
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0.85 }),
-      list.length);
+
     const d = new THREE.Object3D();
-    list.forEach(([x, y, z, sx, sz], i) => {
-      d.position.set(x, y, z); d.rotation.set(0, 0, 0); d.scale.set(sx, 1, sz);
-      d.updateMatrix(); inst.setMatrixAt(i, d.matrix);
-    });
-    inst.instanceMatrix.needsUpdate = true;
-    inst.renderOrder = 1; inst.computeBoundingSphere(); scene.add(inst);
-    stats.contactShadows = list.length;
+    for (const [ck, list] of shadowChunks.entries()) {
+      if (list.length === 0) continue;
+      const [cx, cz] = ck.split(",").map(Number);
+      const chunkCenterX = useChunking ? (cx + 0.5) * CHUNK_SIZE : 0;
+      const chunkCenterZ = useChunking ? (cz + 0.5) * CHUNK_SIZE : 0;
+      const lod = new THREE.LOD();
+      if (useChunking) lod.position.set(chunkCenterX, 0, chunkCenterZ);
+
+      const inst = new THREE.InstancedMesh(quad, mat, list.length);
+      list.forEach(([x, y, z, sx, sz], i) => {
+        const px = useChunking ? (x - chunkCenterX) : x;
+        const pz = useChunking ? (z - chunkCenterZ) : z;
+        d.position.set(px, y, pz); d.rotation.set(0, 0, 0); d.scale.set(sx, 1, sz);
+        d.updateMatrix(); inst.setMatrixAt(i, d.matrix);
+      });
+      inst.instanceMatrix.needsUpdate = true;
+      inst.renderOrder = 1;
+      inst.computeBoundingSphere();
+      lod.addLevel(inst, 0);
+      const cullMesh = new THREE.Mesh(emptyGeo, dummyMat);
+      lod.addLevel(cullMesh, 800);
+      scene.add(lod);
+    }
+    stats.contactShadows = totalShadows;
   }
 
   // ---------------------------------------------------------------------------
   // TRAFFIC
-  //
-  // On every road in the world, not just the twenty-seven downtown ones. Cars
-  // are the cheapest possible signal that a city is inhabited rather than
-  // modelled -- a road with nothing on it reads as a drawing of a road -- and at
-  // this scale they cost one instanced draw call.
   // ---------------------------------------------------------------------------
   {
+    const emptyGeo = new THREE.BufferGeometry();
+    const dummyMat = new THREE.MeshBasicMaterial({ visible: false });
+
     const cols = [0xd94f3d, 0x2f7fb5, 0xf0ece2, 0x3b4045, 0xe0a53f, 0x6f8f5c, 0xb0b6bc,
                   0x8a4436, 0xe8e4dc, 0x556070, 0xc9a184];
     const profOf = new Map(api.bridgeSpans.map((s2) => [s2.br.id, s2.prof]));
-    const list = [];
+    const carChunks = new Map();
+    let totalCars = 0;
+
     for (const r of world.roads) {
       const spec = ROADS[r.class]; if (!spec) continue;
       const ew = r.axis === "ew";
       const from = Math.min(r.from, r.to), to = Math.max(r.from, r.to);
-      // fewer cars on the far settlement grids, so the count stays sane
       const near = Math.abs(r.at) < wm(14000);
-      // A car every 110 m is not traffic, it is punctuation: 25 vehicles spread
-      // over the whole waterfront boulevard, which at any real viewing distance
-      // reads as an empty road. City streets carry one every 15-25 m.
       const step = r.bridge ? 18 : near ? 15 : 90;
       const keep = r.bridge ? 0.8 : near ? 0.72 : 0.30;
       const prof = r.bridge ? profOf.get(r.bridge) : null;
@@ -3240,49 +3731,92 @@ function buildProps(api) {
         const off = side * (spec.row / 2 - spec.footway - 2.4);
         const x = ew ? t : r.at + off, z = ew ? r.at + off : t;
         let y;
-        // Same along-span bug, inverted: this fed r.at (constant) for EW and
-        // t for NS. Every car on an east-west bridge sat at one wrong height.
         if (prof) y = prof(t) + 1.6;
         else { const h = heightAt(x, z); if (h < 1) continue; y = h + 1.7; }
-        list.push([x, y, z, ew ? 0 : Math.PI / 2, rnd("vt" + r.id + t)]);
-        if (list.length > 26000) break;
+        
+        const chunkX = useChunking ? Math.floor(x / CHUNK_SIZE) : 0;
+        const chunkZ = useChunking ? Math.floor(z / CHUNK_SIZE) : 0;
+        const ck = `${chunkX},${chunkZ}`;
+        let cEntry = carChunks.get(ck);
+        if (!cEntry) {
+          cEntry = [];
+          carChunks.set(ck, cEntry);
+        }
+        cEntry.push([x, y, z, ew ? 0 : Math.PI / 2, rnd("vt" + r.id + t), totalCars]);
+        totalCars++;
+        if (totalCars > 26000) break;
       }
-      if (list.length > 26000) break;
+      if (totalCars > 26000) break;
     }
+
     const car = new THREE.BoxGeometry(4.4, 1.5, 2.0);
-    const inst = new THREE.InstancedMesh(car, new THREE.MeshStandardMaterial({ roughness: 0.38, metalness: 0.3 }), list.length);
     const cab = new THREE.BoxGeometry(2.4, 1.1, 1.85);
-    const cabs = new THREE.InstancedMesh(cab, new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.1, color: 0x9fb4c4 }), list.length);
+    const carMat = new THREE.MeshStandardMaterial({ roughness: 0.38, metalness: 0.3 });
+    const cabMat = new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.1, color: 0x9fb4c4 });
     const d = new THREE.Object3D(), c = new THREE.Color();
-    list.forEach(([x, y, z, ry, t], i) => {
-      const truck = t > 0.86;
-      d.position.set(x, y, z); d.rotation.set(0, ry, 0);
-      d.scale.set(truck ? 2.3 : 1, truck ? 1.7 : 1, truck ? 1.15 : 1);
-      d.updateMatrix(); inst.setMatrixAt(i, d.matrix);
-      inst.setColorAt(i, c.setHex(cols[Math.floor(rnd("vc" + i) * cols.length) % cols.length]));
-      d.position.set(x, y + (truck ? 1.9 : 1.2), z); d.scale.set(truck ? 1.6 : 1, 1, 1);
-      d.updateMatrix(); cabs.setMatrixAt(i, d.matrix);
-    });
-    inst.instanceMatrix.needsUpdate = cabs.instanceMatrix.needsUpdate = true;
-    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-    inst.castShadow = true; inst.computeBoundingSphere(); cabs.computeBoundingSphere();
-    scene.add(inst, cabs);
-    stats.cars = list.length;
+
+    for (const [ck, list] of carChunks.entries()) {
+      if (list.length === 0) continue;
+      const [cx, cz] = ck.split(",").map(Number);
+      const chunkCenterX = useChunking ? (cx + 0.5) * CHUNK_SIZE : 0;
+      const chunkCenterZ = useChunking ? (cz + 0.5) * CHUNK_SIZE : 0;
+      const lod = new THREE.LOD();
+      if (useChunking) lod.position.set(chunkCenterX, 0, chunkCenterZ);
+
+      const carGroup = new THREE.Group();
+      const inst = new THREE.InstancedMesh(car, carMat, list.length);
+      const cabs = new THREE.InstancedMesh(cab, cabMat, list.length);
+      list.forEach(([x, y, z, ry, t, origIdx], i) => {
+        const truck = t > 0.86;
+        const px = useChunking ? (x - chunkCenterX) : x;
+        const pz = useChunking ? (z - chunkCenterZ) : z;
+        d.position.set(px, y, pz); d.rotation.set(0, ry, 0);
+        d.scale.set(truck ? 2.3 : 1, truck ? 1.7 : 1, truck ? 1.15 : 1);
+        d.updateMatrix(); inst.setMatrixAt(i, d.matrix);
+        inst.setColorAt(i, c.setHex(cols[Math.floor(rnd("vc" + origIdx) * cols.length) % cols.length]));
+        d.position.set(px, y + (truck ? 1.9 : 1.2), pz); d.scale.set(truck ? 1.6 : 1, 1, 1);
+        d.updateMatrix(); cabs.setMatrixAt(i, d.matrix);
+      });
+      inst.instanceMatrix.needsUpdate = cabs.instanceMatrix.needsUpdate = true;
+      if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+      inst.castShadow = true;
+      inst.computeBoundingSphere();
+      cabs.computeBoundingSphere();
+      carGroup.add(inst, cabs);
+
+      lod.addLevel(carGroup, 0);
+      const cullCar = new THREE.Mesh(emptyGeo, dummyMat);
+      lod.addLevel(cullCar, 600);
+      scene.add(lod);
+    }
+    stats.cars = totalCars;
   }
 
   // ---------------------------------------------------------------------------
   // PEOPLE
-  //
-  // Specks, deliberately. At city scale a person is under a pixel, and what
-  // reads is the DENSITY and the colour -- a promenade with a scatter of dots
-  // along it is alive, an empty one is a drawing. They go where people actually
-  // are: the footways of the core streets, the beaches, and the parks.
   // ---------------------------------------------------------------------------
   {
+    const emptyGeo = new THREE.BufferGeometry();
+    const dummyMat = new THREE.MeshBasicMaterial({ visible: false });
+
     const skin = [0xd94f3d, 0x2f7fb5, 0xf5f0e6, 0x3b4045, 0xe0a53f, 0x6f8f5c,
                   0xb85a8a, 0x4f7a6a, 0xe8e4dc, 0x8a6a4a];
-    const list = [];
+    const peopleChunks = new Map();
+    let totalPeople = 0;
     const CORE = (x, z) => Math.abs(x) < wm(6500) && z > wm(-4200) && z < wm(3600);
+    const addPerson = (x, y, z) => {
+      const chunkX = useChunking ? Math.floor(x / CHUNK_SIZE) : 0;
+      const chunkZ = useChunking ? Math.floor(z / CHUNK_SIZE) : 0;
+      const ck = `${chunkX},${chunkZ}`;
+      let cEntry = peopleChunks.get(ck);
+      if (!cEntry) {
+        cEntry = [];
+        peopleChunks.set(ck, cEntry);
+      }
+      cEntry.push([x, y, z, totalPeople]);
+      totalPeople++;
+    };
+
     for (const r of world.roads) {
       const spec = ROADS[r.class]; if (!spec || spec.footway <= 0) continue;
       const ew = r.axis === "ew";
@@ -3294,15 +3828,12 @@ function buildProps(api) {
         const off = side * (spec.row / 2 - spec.footway * 0.5);
         const x = ew ? t : r.at + off, z = ew ? r.at + off : t;
         const h = heightAt(x, z); if (h < 1) continue;
-        list.push([x, h + 0.9, z]);
-        if (list.length > 14000) break;
+        addPerson(x, h + 0.9, z);
+        if (totalPeople > 14000) break;
       }
-      if (list.length > 14000) break;
+      if (totalPeople > 14000) break;
     }
-    // THE BEACHES. Scattering candidates over a bounding box put almost nobody on
-    // sand -- the hit rate against a 30 m strip of a 22 km box is hopeless. Walk
-    // the actual coastline instead and step inland from it, which is where people
-    // on a beach are. Cliffed shore is skipped: nobody sunbathes on a cliff.
+
     const parasols = [];
     for (const lm of masses) {
       if (lm.kind === "mainland") continue;
@@ -3311,10 +3842,10 @@ function buildProps(api) {
         const [px, pz] = poly[i];
         if (cliffiness(px, pz) > 0.4) continue;
         const busy = rnd("beach" + lm.id + i);
-        if (busy > 0.72) continue;                       // not every metre is busy
+        if (busy > 0.72) continue;
         const nx = poly[(i + 1) % poly.length][0] - px, nz = poly[(i + 1) % poly.length][1] - pz;
         const L = Math.hypot(nx, nz) || 1;
-        const inx = nz / L, inz = -nx / L;                // inward-ish normal
+        const inx = nz / L, inz = -nx / L;
         for (let k = 0; k < 7; k++) {
           const off = 6 + rnd("bo" + lm.id + i + k) * 40;
           const along = (rnd("ba" + lm.id + i + k) - 0.5) * 90;
@@ -3323,69 +3854,149 @@ function buildProps(api) {
             const bz = pz + inz * off * sgn + (nz / L) * along;
             const h = heightAt(bx, bz);
             if (h < 0.4 || h > 3.6) continue;
-            list.push([bx, h + 0.9, bz]);
+            addPerson(bx, h + 0.9, bz);
             if (k === 0 && rnd("pu" + lm.id + i) > 0.55) parasols.push([bx, h, bz]);
             break;
           }
         }
-        if (list.length > 22000) break;
+        if (totalPeople > 22000) break;
       }
-      if (list.length > 22000) break;
+      if (totalPeople > 22000) break;
     }
-    // --- parasols: the single most legible thing on a beach from the air ---
+
     if (parasols.length) {
       const pcols = [0xe8503c, 0xf2b134, 0x3f8fc4, 0xf0ece2, 0x4f9e6a, 0xe0709a];
       const top = new THREE.ConeGeometry(2.6, 1.1, 8);
       const pole = new THREE.CylinderGeometry(0.13, 0.13, 2.6, 4);
-      const ti = new THREE.InstancedMesh(top, new THREE.MeshStandardMaterial({ roughness: 0.9 }), parasols.length);
-      const pi = new THREE.InstancedMesh(pole, M(0xd8d2c4, 0.8), parasols.length);
-      const d2 = new THREE.Object3D(), c2 = new THREE.Color();
-      parasols.forEach(([x, y, z], i) => {
-        d2.position.set(x, y + 1.3, z); d2.rotation.set(0, 0, 0); d2.scale.setScalar(1);
-        d2.updateMatrix(); pi.setMatrixAt(i, d2.matrix);
-        d2.position.set(x, y + 2.9, z); d2.updateMatrix(); ti.setMatrixAt(i, d2.matrix);
-        ti.setColorAt(i, c2.setHex(pcols[Math.floor(rnd("pcx" + i) * pcols.length) % pcols.length]));
+      const topMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+      const poleMat = M(0xd8d2c4, 0.8);
+      
+      const parasolChunks = new Map();
+      parasols.forEach(([x, y, z], idx) => {
+        const chunkX = useChunking ? Math.floor(x / CHUNK_SIZE) : 0;
+        const chunkZ = useChunking ? Math.floor(z / CHUNK_SIZE) : 0;
+        const ck = `${chunkX},${chunkZ}`;
+        let cEntry = parasolChunks.get(ck);
+        if (!cEntry) {
+          cEntry = [];
+          parasolChunks.set(ck, cEntry);
+        }
+        cEntry.push([x, y, z, idx]);
       });
-      ti.instanceMatrix.needsUpdate = pi.instanceMatrix.needsUpdate = true;
-      if (ti.instanceColor) ti.instanceColor.needsUpdate = true;
-      ti.castShadow = pi.castShadow = true;
-      ti.computeBoundingSphere(); pi.computeBoundingSphere();
-      scene.add(ti, pi);
+
+      const d2 = new THREE.Object3D(), c2 = new THREE.Color();
+      for (const [ck, list] of parasolChunks.entries()) {
+        const [cx, cz] = ck.split(",").map(Number);
+        const chunkCenterX = useChunking ? (cx + 0.5) * CHUNK_SIZE : 0;
+        const chunkCenterZ = useChunking ? (cz + 0.5) * CHUNK_SIZE : 0;
+        const lod = new THREE.LOD();
+        if (useChunking) lod.position.set(chunkCenterX, 0, chunkCenterZ);
+
+        const ti = new THREE.InstancedMesh(top, topMat, list.length);
+        const pi = new THREE.InstancedMesh(pole, poleMat, list.length);
+        list.forEach(([x, y, z, origIdx], i) => {
+          const px = useChunking ? (x - chunkCenterX) : x;
+          const pz = useChunking ? (z - chunkCenterZ) : z;
+          d2.position.set(px, y + 1.3, pz); d2.rotation.set(0, 0, 0); d2.scale.setScalar(1);
+          d2.updateMatrix(); pi.setMatrixAt(i, d2.matrix);
+          d2.position.set(px, y + 2.9, pz); d2.updateMatrix(); ti.setMatrixAt(i, d2.matrix);
+          ti.setColorAt(i, c2.setHex(pcols[Math.floor(rnd("pcx" + origIdx) * pcols.length) % pcols.length]));
+        });
+        ti.instanceMatrix.needsUpdate = pi.instanceMatrix.needsUpdate = true;
+        if (ti.instanceColor) ti.instanceColor.needsUpdate = true;
+        ti.castShadow = pi.castShadow = true;
+        ti.computeBoundingSphere(); pi.computeBoundingSphere();
+        const pGroup = new THREE.Group();
+        pGroup.add(ti, pi);
+        lod.addLevel(pGroup, 0);
+        const cullMesh = new THREE.Mesh(emptyGeo, dummyMat);
+        lod.addLevel(cullMesh, 600);
+        scene.add(lod);
+      }
       stats.parasols = parasols.length;
     }
+
     const g = new THREE.BoxGeometry(0.62, 1.75, 0.62);
-    const inst = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ roughness: 0.85 }), list.length);
+    const personMat = new THREE.MeshStandardMaterial({ roughness: 0.85 });
     const d = new THREE.Object3D(), c = new THREE.Color();
-    list.forEach(([x, y, z], i) => {
-      d.position.set(x, y, z); d.rotation.set(0, rnd("pr" + i) * 6.28, 0);
-      d.scale.set(1, 0.9 + rnd("ph" + i) * 0.22, 1);
-      d.updateMatrix(); inst.setMatrixAt(i, d.matrix);
-      inst.setColorAt(i, c.setHex(skin[Math.floor(rnd("pc" + i) * skin.length) % skin.length]));
-    });
-    inst.instanceMatrix.needsUpdate = true;
-    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-    inst.castShadow = true; inst.computeBoundingSphere(); scene.add(inst);
-    stats.people = list.length;
+    for (const [ck, list] of peopleChunks.entries()) {
+      const [cx, cz] = ck.split(",").map(Number);
+      const chunkCenterX = useChunking ? (cx + 0.5) * CHUNK_SIZE : 0;
+      const chunkCenterZ = useChunking ? (cz + 0.5) * CHUNK_SIZE : 0;
+      const lod = new THREE.LOD();
+      if (useChunking) lod.position.set(chunkCenterX, 0, chunkCenterZ);
+
+      const inst = new THREE.InstancedMesh(g, personMat, list.length);
+      list.forEach(([x, y, z, origIdx], i) => {
+        const px = useChunking ? (x - chunkCenterX) : x;
+        const pz = useChunking ? (z - chunkCenterZ) : z;
+        d.position.set(px, y, pz); d.rotation.set(0, rnd("pr" + origIdx) * 6.28, 0);
+        d.scale.set(1, 0.9 + rnd("ph" + origIdx) * 0.22, 1);
+        d.updateMatrix(); inst.setMatrixAt(i, d.matrix);
+        inst.setColorAt(i, c.setHex(skin[Math.floor(rnd("pc" + origIdx) * skin.length) % skin.length]));
+      });
+      inst.instanceMatrix.needsUpdate = true;
+      if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+      inst.castShadow = true; inst.computeBoundingSphere();
+      lod.addLevel(inst, 0);
+      const cullMesh = new THREE.Mesh(emptyGeo, dummyMat);
+      lod.addLevel(cullMesh, 400);
+      scene.add(lod);
+    }
+    stats.people = totalPeople;
   }
 
   // --- street lighting along the downtown boulevards ---
   {
-    // Computed and claimed up in the street-furniture block, so a lamp holds its
-    // ground before anything decorative is offered the same square metre.
+    const emptyGeo = new THREE.BufferGeometry();
+    const dummyMat = new THREE.MeshBasicMaterial({ visible: false });
+
     const posts = lampPosts;
     const pg = new THREE.CylinderGeometry(0.22, 0.3, 9, 5);
-    const inst = new THREE.InstancedMesh(pg, M(0x4d545c, 0.6, 0.3), posts.length);
+    const postMat = M(0x4d545c, 0.6, 0.3);
     const hg = new THREE.BoxGeometry(1.6, 0.5, 0.9);
-    const hi = new THREE.InstancedMesh(hg, new THREE.MeshStandardMaterial({ color: 0xfff2cc, emissive: 0x2a2312 }), posts.length);
-    const d = new THREE.Object3D();
-    posts.forEach(([x, y, z], i) => {
-      d.position.set(x, y + 4.5, z); d.rotation.set(0, 0, 0); d.scale.setScalar(1); d.updateMatrix();
-      inst.setMatrixAt(i, d.matrix);
-      d.position.set(x, y + 9.1, z); d.updateMatrix(); hi.setMatrixAt(i, d.matrix);
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xfff2cc, emissive: 0x2a2312 });
+
+    const lampChunks = new Map();
+    posts.forEach(([x, y, z]) => {
+      const chunkX = useChunking ? Math.floor(x / CHUNK_SIZE) : 0;
+      const chunkZ = useChunking ? Math.floor(z / CHUNK_SIZE) : 0;
+      const ck = `${chunkX},${chunkZ}`;
+      let cEntry = lampChunks.get(ck);
+      if (!cEntry) {
+        cEntry = [];
+        lampChunks.set(ck, cEntry);
+      }
+      cEntry.push([x, y, z]);
     });
-    inst.instanceMatrix.needsUpdate = hi.instanceMatrix.needsUpdate = true;
-    inst.castShadow = true; inst.computeBoundingSphere(); hi.computeBoundingSphere();
-    scene.add(inst, hi);
+
+    const d = new THREE.Object3D();
+    for (const [ck, list] of lampChunks.entries()) {
+      const [cx, cz] = ck.split(",").map(Number);
+      const chunkCenterX = useChunking ? (cx + 0.5) * CHUNK_SIZE : 0;
+      const chunkCenterZ = useChunking ? (cz + 0.5) * CHUNK_SIZE : 0;
+      const lod = new THREE.LOD();
+      if (useChunking) lod.position.set(chunkCenterX, 0, chunkCenterZ);
+
+      const lampGroup = new THREE.Group();
+      const inst = new THREE.InstancedMesh(pg, postMat, list.length);
+      const hi = new THREE.InstancedMesh(hg, headMat, list.length);
+      list.forEach(([x, y, z], i) => {
+        const px = useChunking ? (x - chunkCenterX) : x;
+        const pz = useChunking ? (z - chunkCenterZ) : z;
+        d.position.set(px, y + 4.5, pz); d.rotation.set(0, 0, 0); d.scale.setScalar(1); d.updateMatrix();
+        inst.setMatrixAt(i, d.matrix);
+        d.position.set(px, y + 9.1, pz); d.updateMatrix(); hi.setMatrixAt(i, d.matrix);
+      });
+      inst.instanceMatrix.needsUpdate = hi.instanceMatrix.needsUpdate = true;
+      inst.castShadow = true; inst.computeBoundingSphere(); hi.computeBoundingSphere();
+      lampGroup.add(inst, hi);
+
+      lod.addLevel(lampGroup, 0);
+      const cullMesh = new THREE.Mesh(emptyGeo, dummyMat);
+      lod.addLevel(cullMesh, 450);
+      scene.add(lod);
+    }
     stats.lamps = posts.length;
   }
   void masses;
