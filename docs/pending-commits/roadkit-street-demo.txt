@@ -1,0 +1,45 @@
+Road-piece-kit task, step 3: one real street, end to end
+
+What was wrong: public/roadkit.js has shipped 30+ road piece builders --
+straights, curves, a 4-way intersection, a zebra crossing, socket
+metadata, and a verifySocketMating() function -- for a while, and none
+of it has ever been assembled into an actual connected street. Nothing
+in the repo proved the pieces really mate: verifySocketMating() only
+checks kind/width/lane-count, despite its own file's header comment
+claiming it also checks that sockets "face each other (bearing diff
+180 deg)". It doesn't read .at or .bearing on either socket at all --
+so calling it alone would pass two pieces that were nowhere near each
+other, or facing the same way instead of opposite.
+
+How it is known to work now: public/roadkit-street-demo.js chains 7
+pieces (straight, zebra crossing, straight, 90 deg curve, straight,
+4-way intersection, straight) with turtle-graphics placement -- each
+piece's entry socket is solved to land exactly on the previous piece's
+exit socket, facing it. Every one of the 6 joins is checked two ways:
+verifySocketMating() itself (dimensional: kind/width/lanes), and an
+independently written position/bearing check this module supplies
+because the kit doesn't (position error and bearing-diff-from-180,
+both against a real numeric target, not just kind equality).
+
+Measured via `node scripts/shoot-roadkit-street.mjs`: 0 page errors,
+all 6 joins report positionErrorM 0 and bearingDiffFrom180 0, rendered
+to .shots/roadkit-street-demo.png. Viewed the render directly: the
+curve sweeps into the intersection slab, the crossing sits mid-straight,
+and the socket arrows line up head-to-tail across every seam.
+
+Bug caught and fixed before this was true: the first version of the
+bearing check compared entryWorldBearing against prevExit.bearing
+directly, which always reads exactly 180 deg off by construction and
+so always "failed" regardless of correctness. Fixed by comparing
+against the actual target (prevExit.bearing + 180), wrapped into
+[0, 180]. Caught by running the check against a placement whose
+position error was already provably 0, which meant the bearing
+"failure" had to be the check, not the geometry.
+
+What is still open: this is the reading/proof step only. No world
+geometry changed -- the settlement generator and world roads are
+untouched, per explicit scope. Named separately (not fixed here):
+gas stations, EV charging stations, and hydrogen fuelling stations do
+not exist anywhere in roadkit.js or any of asset-registry.js's 10
+categories; the closest match is a furniture-scale EV charger post
+(fur-f1-electric-vehicle-charger), not a station-scale piece.
