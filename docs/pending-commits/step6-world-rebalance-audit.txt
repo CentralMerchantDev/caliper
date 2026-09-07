@@ -1,0 +1,55 @@
+World rebalance, step 6: the audit -- every number before and after, the
+command beside each, and what Mark needs to judge
+
+docs/audits/WORLD-REBALANCE.md. Closes WORLD-REBALANCE-BRIEF.md's own
+step 6 requirement: six renders (downtown from the air, downtown street
+level substitute, one island, mainland, barrier, countryside) plus the two
+extra Mark specifically asked for -- downtown at the current tower count
+and a materially-higher comparison (rendered, not applied -- the
+comparison used DENSITY_AT pushed to [0.00, 0.11, 0.26, 0.32, 0.40], 180
+downtown towers, then reverted; public/city-plan.js is unchanged from the
+committed 149-tower value), and a barrier-island street against an
+ordinary neighbourhood street, so the thinned barrier can be judged against
+something real rather than in isolation.
+
+Every headline number from the brief is in the doc with the command that
+produced it: barrier 56.0% -> 3.3% of all plots, downtown TOWER-class 80 ->
+142, world-wide bld-tower 55 -> 149, barrier plots-per-road 4.3 -> 8.6,
+Harbour City demoted from a TOWER core to MIDRISE, coastal-4/coastal-9
+(the two settlements WORLD-DENSITY-FINDINGS.md named "almost vacant") now
+at 144.5 and 516.0 per km².
+
+Two findings surfaced explicitly, not left for Mark to notice on his own,
+per his own instruction:
+
+  bld-terrace 33.1% -> 43.8% of the world -- worse as a SHARE even though
+  the top end improved, because bld-villa nearly halved and terrace
+  inherited a disproportionate amount of what villa gave up (TERRACE sits
+  in both VILLA's and TOWNHOUSE's own SETTLEMENT_MIX body lists). A
+  proposal, not a decision: narrowing terrace's weight in those body lists
+  is the lever, not touched here, and it pulls on the same tables the
+  tower-count question does.
+
+  Refusals 149 -> 478 (0.75% -> 2.7%), 474 of 478 on mainland specifically
+  -- traced to the mainland density increase that fixed "almost vacant":
+  more blocks attempted per settlement means more attempted near cliffs,
+  slopes and the water's edge, and the footprint system correctly refuses
+  what does not fit. Not a new defect.
+
+Step 4 (road connectivity) and step 5 (origin stability) are both
+summarized in the doc with their own numbers, both measured-not-fixed per
+the brief, both already committed on their own (467a184, ec3b83b) -- this
+document is where they are put together with everything else, not where
+they are re-done.
+
+A closing table names every test still red, why, and when it closes: the
+industry-clusters regression (fixed, b4c95bc), the origin-stability test
+(red on purpose, stays that way until a real "open new land" operation
+exists), the two seed pins (re-pinned in the very next commit, naming this
+one), and one previously-unlisted finding -- 2 of 17,105 placements in
+layoutGeometry.test.ts's seed-matching check, at redcliff-isle-vlg,
+un-investigated this pass and named rather than silently carried.
+
+How it is known to work: every number in the document was taken fresh
+against the current committed world with the command printed beside it,
+not carried from memory across the session.
