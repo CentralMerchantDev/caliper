@@ -179,25 +179,21 @@ measured, and both budgets hold. **Do not proceed without this.** Commit.
 Roughly sixty parts, each authored once, reused everywhere. **Every part sized in
 whole cells** per `PLACEMENT-CONTRACT.md`, with declared sockets so parts mate.
 
-- [ ] **A2.1** **Podiums** (~8) — retail colonnade, entrance plaza, waterfront
-      base, parking deck, recessed lobby.
-- [ ] **A2.2** **Shafts** (~16) — twisted glass, fluted Art Deco rib, curved
-      eco-terrace, cylindrical core, straight curtain wall, chamfered with piers,
-      setback stack.
-- [ ] **A2.3** **Crowns** (~12) — ziggurat, sunburst arch, solar dish, dome
-      lantern, plain parapet, tapered spire.
-- [ ] **A2.4** **Roof features** (~10) — helipad, pool, sky garden, plant room,
-      aerial array, stair overrun.
-- [ ] **A2.5** **Connectors** (~8) — straight and curved skybridges with struts.
-- [ ] **A2.6** **Ordinary-fabric parts.** Mark's target is THE MIX — sculptural
-      landmarks among plain blocks. The reference images work because three or
-      four dramatic forms sit among a hundred simple ones. Plain masses need to
-      be plain **by design**, not by being cheap versions of something ornate.
+`npx esbuild test/kitbashParts.test.ts --outfile=test/.built/kitbashParts.test.mjs --bundle --platform=node --format=esm --target=node22 --packages=external ; node --test test/.built/kitbashParts.test.mjs`
 
-**Gate for every part:** builds; footprint is a whole number of cells; sockets
-declared and on cell boundaries; triangle count recorded.
-**Gate for the set:** a contact sheet of all parts rendered, so Mark can see the
-vocabulary in one look.
+- [x] **A2.1** **Podiums** (8 authored) — retail colonnade, entrance plaza, waterfront base, parking deck, recessed lobby, arcade terrace, civic steps, stepped garden.
+- [x] **A2.2** **Shafts** (16 authored) — twisted glass, fluted Art Deco rib, curved eco-terrace, cylindrical core, straight curtain wall, chamfered with piers, setback stack, octagonal tower, diagrid lattice, elliptical aerofoil, brutalist ribs, balconied residential, twin atrium, triangular prism, stepped chevron, cantilever boxes.
+- [x] **A2.3** **Crowns** (12 authored) — ziggurat, sunburst arch, solar dish, dome lantern, plain parapet, tapered spire, sky pyramid, slanted crystal, open pergola, pagoda tier, crown finials, helipad cantilever.
+- [x] **A2.4** **Roof features** (10 authored) — helipad, infinity pool, sky garden, plant room, aerial array, stair overrun, satellite radome, solar panel canopy, cooling tower cluster, maintenance cradle rig.
+- [x] **A2.5** **Connectors** (8 authored) — straight single, straight double, curved arch, truss diagonal, glass tube, podium bridge covered, sky concourse, cantilever walkway.
+- [x] **A2.6** **Ordinary-fabric parts** (8 authored) — masonry block low, masonry block mid, punched window slab, retail ground simple, flat roof parapet, mansard roof dormer, townhouse bay front, walkup balconies.
+
+**Gate for every part:** builds; footprint is a whole number of cells; sockets declared and on cell boundaries; triangle count recorded.
+*Verified: 62/62 parts build at LOD0, LOD1, LOD2 with recorded triangle counts and cell-aligned mating sockets.*
+**Gate for the set:** a contact sheet of all parts rendered, so Mark can see the vocabulary in one look.
+*Rendered: `node scripts/shoot-kitbash-contact-sheet.mjs` -> `.shots/kitbash-contact-sheet.png`.*
+
+**EXIT A2:** 62 modular kitbash parts authored, tested, and catalogued. Commit.
 
 ---
 
@@ -272,8 +268,8 @@ from the kit. Commit.
 | Phase | Status | Gate evidence | Commit |
 |---|---|---|---|
 | A0 | Complete | Ratio 34.83% < 40.0% (55.6k vs 159.8k tris), draw calls 368/851 < 900 | `6de25da` |
-| A1 | Complete | GTAO live & timed (12-35ms street, 27-42ms skyline), HDRI live (envLuminance 0.1944, reflection dynamic) | git commit -m "Phase A1: Stage 1 complete (GTAO pass, runtime HDRI reflections, terrace census)" |
-| A2 | exemplar only | 1 tower, 5,596 tris (over band) | — |
+| A1 | Complete | GTAO live & timed (12-35ms street, 27-42ms skyline), HDRI live (envLuminance 0.1944, reflection dynamic) | `4831b1e` |
+| A2 | Complete | 62 kitbash parts verified across 6 categories (8 podiums, 16 shafts, 12 crowns, 10 roof, 8 connectors, 8 fabric), contact sheet rendered | git commit -m "Phase A2: Modular kitbash vocabulary (62 whole-cell parts across 6 categories)" |
 | A3 | not started | — | — |
 | A4 | not started | — | — |
 | A5 | not started | — | — |

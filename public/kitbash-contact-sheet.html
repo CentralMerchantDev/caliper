@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CALIPER — Modular Kitbash Vocabulary Contact Sheet</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b1016;color:#f0ece4;font-family:-apple-system,BlinkMacSystemFont,sans-serif;overflow:hidden}
+  #header{position:fixed;top:12px;left:16px;z-index:10;background:rgba(10,14,20,0.7);padding:10px 16px;border-radius:10px;border:1px solid rgba(255,255,255,0.15)}
+  #header h1{margin:0;font-size:15px;font-weight:600;letter-spacing:0.05em}
+  #header p{margin:4px 0 0;font-size:12px;opacity:0.75}
+  canvas{display:block;width:100vw;height:100vh}
+</style>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.min.js"}}
+</script>
+</head>
+<body>
+<div id="header">
+  <h1>MODULAR KITBASH VOCABULARY (62 PARTS)</h1>
+  <p>Podiums (8) · Shafts (16) · Crowns (12) · Roof Features (10) · Connectors (8) · Ordinary Fabric (8)</p>
+</div>
+<canvas id="c"></canvas>
+<script type="module">
+import * as THREE from "three";
+import { KITBASH_PARTS } from "./kitbash-parts.js";
+
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e141c);
+
+const camera = new THREE.PerspectiveCamera(36, window.innerWidth / window.innerHeight, 1, 5000);
+camera.position.set(0, 180, 320);
+camera.lookAt(0, 0, -20);
+
+// Lighting
+const sun = new THREE.DirectionalLight(0xfffaed, 3.2);
+sun.position.set(150, 300, 200);
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x8fb8e4, 0.8);
+fill.position.set(-150, 100, -100);
+scene.add(fill);
+scene.add(new THREE.HemisphereLight(0xddeeff, 0x223344, 0.6));
+
+// Materials cache
+const mats = {
+  wall: new THREE.MeshStandardMaterial({ color: 0xd8d0c2, roughness: 0.7, metalness: 0.1 }),
+  roof: new THREE.MeshStandardMaterial({ color: 0x3d4852, roughness: 0.5, metalness: 0.2 }),
+  glass: new THREE.MeshStandardMaterial({ color: 0x1a3347, roughness: 0.1, metalness: 0.9 }),
+  trim: new THREE.MeshStandardMaterial({ color: 0xb5a995, roughness: 0.6, metalness: 0.3 }),
+  metal: new THREE.MeshStandardMaterial({ color: 0x5a6268, roughness: 0.4, metalness: 0.8 }),
+  green: new THREE.MeshStandardMaterial({ color: 0x3b5e38, roughness: 0.9, metalness: 0.0 }),
+};
+
+// Ground grid
+const grid = new THREE.GridHelper(600, 30, 0x253545, 0x152230);
+grid.position.y = -0.5;
+scene.add(grid);
+
+// Arrange parts in a neat grid on the ground
+const partIds = Object.keys(KITBASH_PARTS);
+const cols = 10;
+const spacingX = 40;
+const spacingZ = 45;
+
+partIds.forEach((id, idx) => {
+  const part = KITBASH_PARTS[id];
+  const col = idx % cols;
+  const row = Math.floor(idx / cols);
+
+  const posX = (col - (cols - 1) / 2) * spacingX;
+  const posZ = (row - 2.5) * spacingZ;
+
+  const partGroup = new THREE.Group();
+  partGroup.position.set(posX, 0, posZ);
+
+  const subParts = part.buildGeometry(THREE, {}, 0);
+  for (const sp of subParts) {
+    const mat = mats[sp.tag] || mats.wall;
+    const mesh = new THREE.Mesh(sp.geo, mat);
+    partGroup.add(mesh);
+  }
+  scene.add(partGroup);
+});
+
+function render() {
+  renderer.render(scene, camera);
+}
+render();
+
+window.__ready = true;
+window.__renderOnce = render;
+window.__scene = scene;
+</script>
+</body>
+</html>
