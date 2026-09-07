@@ -68,5 +68,33 @@ test("every building model generator in TIER_MODELS builds valid multi-LOD geome
 
     checked++;
   }
-  assert.ok(checked >= 160, `checked ${checked} building models`);
+  assert.equal(checked, 160, `checked ${checked} building models`);
 });
+
+test("tier census across entire ASSET_REGISTRY shows exactly four tiers and 1,600 entries", () => {
+  const allEntries = Object.values(ASSET_REGISTRY) as any[];
+  assert.equal(allEntries.length, 1600, `expected 1,600 total entries in registry, got ${allEntries.length}`);
+
+  const census: Record<string, number> = {};
+  for (const e of allEntries) {
+    const finish = e.finish || e.tier;
+    assert.ok(VALID_FINISHES.has(finish), `entry ${e.id} declares invalid tier "${finish}"`);
+    assert.equal(e.tier, e.finish, `entry ${e.id} tier ("${e.tier}") must match finish ("${e.finish}")`);
+    census[finish] = (census[finish] || 0) + 1;
+  }
+
+  assert.deepEqual(census, { f1: 400, f2: 400, f3: 400, f4: 400 });
+});
+
+test("clear is a plain { w, d } object with no custom valueOf coercion", () => {
+  const buildings = Object.values(ASSET_REGISTRY).filter((e: any) => e.category === "buildings") as any[];
+  for (const b of buildings) {
+    assert.ok(b.clear && typeof b.clear === "object", `${b.id} clear must be an object`);
+    assert.equal(typeof b.clear.w, "number", `${b.id} clear.w must be a number`);
+    assert.equal(typeof b.clear.d, "number", `${b.id} clear.d must be a number`);
+    // Crucial: check that clear does not define a custom valueOf that coerces to clear.w
+    assert.equal(Object.prototype.hasOwnProperty.call(b.clear, "valueOf"), false, `${b.id} clear must not have own property valueOf`);
+    assert.equal(b.clear.valueOf(), b.clear, `${b.id} clear.valueOf() must return the plain object itself`);
+  }
+});
+

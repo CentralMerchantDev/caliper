@@ -237,58 +237,44 @@
     color: #fff;
   }
 
-  /* Quality Tier Badges & Cards */
+  /* Quality Tier Badges & Cards (4 Standard Finishes) */
   .badge-tier {
     font-weight: 800;
     letter-spacing: 0.05em;
   }
-  .badge-tier-showstopper {
+  .badge-tier-f4, .badge-tier-showstopper, .badge-tier-luxury {
     background: linear-gradient(135deg, #d97706, #f59e0b);
     color: #000;
     box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
   }
-  .badge-tier-luxury {
-    background: linear-gradient(135deg, #7c3aed, #a855f7);
-    color: #fff;
-    box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
-  }
-  .badge-tier-highend {
+  .badge-tier-f3, .badge-tier-highend {
     background: linear-gradient(135deg, #0284c7, #06b6d4);
     color: #fff;
     box-shadow: 0 0 8px rgba(6, 182, 212, 0.35);
   }
-  .badge-tier-midhigh {
+  .badge-tier-f2, .badge-tier-mid, .badge-tier-midhigh {
     background: linear-gradient(135deg, #2563eb, #3b82f6);
     color: #fff;
   }
-  .badge-tier-mid {
-    background: linear-gradient(135deg, #475569, #64748b);
-    color: #fff;
-  }
-  .badge-tier-midlow {
+  .badge-tier-f1, .badge-tier-midlow, .badge-tier-basic {
     background: linear-gradient(135deg, #334155, #475569);
     color: #cbd5e1;
   }
 
-  .card.tier-showstopper-card { border-color: rgba(245, 158, 11, 0.5); box-shadow: 0 4px 20px rgba(245, 158, 11, 0.15); }
-  .card.tier-luxury-card { border-color: rgba(168, 85, 247, 0.45); }
-  .card.tier-highend-card { border-color: rgba(6, 182, 212, 0.4); }
-  .card.tier-midhigh-card { border-color: rgba(59, 130, 246, 0.35); }
-  .card.tier-mid-card { border-color: rgba(100, 116, 139, 0.3); }
-  .card.tier-midlow-card { border-color: rgba(71, 85, 105, 0.25); }
+  .card.tier-f4-card, .card.tier-showstopper-card, .card.tier-luxury-card { border-color: rgba(245, 158, 11, 0.5); box-shadow: 0 4px 20px rgba(245, 158, 11, 0.15); }
+  .card.tier-f3-card, .card.tier-highend-card { border-color: rgba(6, 182, 212, 0.4); }
+  .card.tier-f2-card, .card.tier-mid-card, .card.tier-midhigh-card { border-color: rgba(59, 130, 246, 0.35); }
+  .card.tier-f1-card, .card.tier-midlow-card, .card.tier-basic-card { border-color: rgba(71, 85, 105, 0.25); }
 
-  .filter-btn.tier-showstopper { color: #f59e0b; border-color: rgba(245, 158, 11, 0.4); }
-  .filter-btn.tier-showstopper.active { background: #f59e0b; color: #000; font-weight: 700; }
-  .filter-btn.tier-luxury { color: #c084fc; border-color: rgba(192, 132, 252, 0.4); }
-  .filter-btn.tier-luxury.active { background: #9333ea; color: #fff; font-weight: 700; }
-  .filter-btn.tier-highend { color: #38bdf8; border-color: rgba(56, 189, 248, 0.4); }
-  .filter-btn.tier-highend.active { background: #0284c7; color: #fff; font-weight: 700; }
-  .filter-btn.tier-midhigh { color: #60a5fa; border-color: rgba(96, 165, 250, 0.4); }
-  .filter-btn.tier-midhigh.active { background: #2563eb; color: #fff; font-weight: 700; }
-  .filter-btn.tier-mid { color: #94a3b8; border-color: rgba(148, 163, 184, 0.4); }
-  .filter-btn.tier-mid.active { background: #475569; color: #fff; font-weight: 700; }
-  .filter-btn.tier-midlow { color: #64748b; border-color: rgba(100, 116, 139, 0.4); }
-  .filter-btn.tier-midlow.active { background: #334155; color: #cbd5e1; font-weight: 700; }
+  .filter-btn.tier-f4 { color: #f59e0b; border-color: rgba(245, 158, 11, 0.4); }
+  .filter-btn.tier-f4.active { background: #f59e0b; color: #000; font-weight: 700; }
+  .filter-btn.tier-f3 { color: #38bdf8; border-color: rgba(56, 189, 248, 0.4); }
+  .filter-btn.tier-f3.active { background: #0284c7; color: #fff; font-weight: 700; }
+  .filter-btn.tier-f2 { color: #60a5fa; border-color: rgba(96, 165, 250, 0.4); }
+  .filter-btn.tier-f2.active { background: #2563eb; color: #fff; font-weight: 700; }
+  .filter-btn.tier-f1 { color: #64748b; border-color: rgba(100, 116, 139, 0.4); }
+  .filter-btn.tier-f1.active { background: #334155; color: #cbd5e1; font-weight: 700; }
+
 
   .card-body {
     padding: 14px;
@@ -598,14 +584,12 @@
   </div>
 
   <div class="filter-pills" id="tier-filters" style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding-top: 4px;">
-    <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-right: 4px;">Tier:</span>
-    <button class="filter-btn active" data-tier="all">All Tiers (540+)</button>
-    <button class="filter-btn tier-showstopper" data-tier="showstopper">★ Showstopper (90)</button>
-    <button class="filter-btn tier-luxury" data-tier="luxury">◆ Luxury (90)</button>
-    <button class="filter-btn tier-highend" data-tier="highend">▲ High-End (90)</button>
-    <button class="filter-btn tier-midhigh" data-tier="midhigh">■ Mid-High (90)</button>
-    <button class="filter-btn tier-mid" data-tier="mid">● Mid (90)</button>
-    <button class="filter-btn tier-midlow" data-tier="midlow">○ Mid-Low (90)</button>
+    <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-right: 4px;">Finish:</span>
+    <button class="filter-btn active" data-tier="all">All Finishes (1,600)</button>
+    <button class="filter-btn tier-f1" data-tier="f1">○ F1 Basic (400)</button>
+    <button class="filter-btn tier-f2" data-tier="f2">● F2 Standard (400)</button>
+    <button class="filter-btn tier-f3" data-tier="f3">▲ F3 Premium (400)</button>
+    <button class="filter-btn tier-f4" data-tier="f4">★ F4 Elite (400)</button>
   </div>
 
   <div class="filter-pills" id="category-filters" style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding-top: 4px;">
@@ -1186,12 +1170,16 @@ function buildCards() {
   sortLibraryItems();
 
   const tierBadgeMap = {
-    showstopper: '<span class="badge badge-tier badge-tier-showstopper">★ SHOWSTOPPER</span>',
-    luxury: '<span class="badge badge-tier badge-tier-luxury">◆ LUXURY</span>',
-    highend: '<span class="badge badge-tier badge-tier-highend">▲ HIGH-END</span>',
-    midhigh: '<span class="badge badge-tier badge-tier-midhigh">■ MID-HIGH</span>',
-    mid: '<span class="badge badge-tier badge-tier-mid">● MID</span>',
-    midlow: '<span class="badge badge-tier badge-tier-midlow">○ MID-LOW</span>'
+    f4: '<span class="badge badge-tier badge-tier-f4">★ F4 ELITE</span>',
+    f3: '<span class="badge badge-tier badge-tier-f3">▲ F3 PREMIUM</span>',
+    f2: '<span class="badge badge-tier badge-tier-f2">● F2 STANDARD</span>',
+    f1: '<span class="badge badge-tier badge-tier-f1">○ F1 BASIC</span>',
+    showstopper: '<span class="badge badge-tier badge-tier-f4">★ F4 ELITE</span>',
+    luxury: '<span class="badge badge-tier badge-tier-f4">★ F4 ELITE</span>',
+    highend: '<span class="badge badge-tier badge-tier-f3">▲ F3 PREMIUM</span>',
+    midhigh: '<span class="badge badge-tier badge-tier-f2">● F2 STANDARD</span>',
+    mid: '<span class="badge badge-tier badge-tier-f2">● F2 STANDARD</span>',
+    midlow: '<span class="badge badge-tier badge-tier-f1">○ F1 BASIC</span>'
   };
 
   libraryItems.forEach((item, idx) => {

@@ -73,13 +73,13 @@ test("an override with no replace (a bare retint or move) is not sent through th
 
 test("populated model registry contains all tier models and resolves real replace overrides", () => {
   const reg = createModelRegistry({ populateTierModels: true });
-  assert.ok(reg.ids().length >= 2400, `expected at least 2,400 models to be registered, got ${reg.ids().length}`);
+  assert.ok(reg.ids().length >= 1600, `expected at least 1,600 models to be registered, got ${reg.ids().length}`);
 
   const testIds = [
-    "bld-highend-art-deco-skyscraper",
-    "bld-highend-alpine-chalet",
-    "civic-highend-cathedral-spire",
-    "veh-showstopper-city-transit-bus",
+    "bld-f3-art-deco-skyscraper",
+    "bld-f3-alpine-chalet",
+    "civic-f3-cathedral-spire",
+    "veh-f4-city-transit-bus",
   ];
 
   for (const id of testIds) {
@@ -89,12 +89,13 @@ test("populated model registry contains all tier models and resolves real replac
     assert.ok(m.geometry.getAttribute("position").count > 0);
   }
 
+
   const overridden = [
-    { plotId: "plot_deco", override: { removed: false, address: "plot_deco", replace: { modelId: "bld-highend-art-deco-skyscraper" } } }
+    { plotId: "plot_deco", override: { removed: false, address: "plot_deco", replace: { modelId: "bld-f3-art-deco-skyscraper" } } }
   ];
   const { resolved, refused } = resolveOverrideModels(overridden, reg);
   assert.equal(refused.length, 0, `refused override: ${refused[0]?.reason}`);
   assert.equal(resolved.length, 1);
-  assert.equal(resolved[0].model.id, "bld-highend-art-deco-skyscraper");
+  assert.equal(resolved[0].model.id, "bld-f3-art-deco-skyscraper");
   assert.ok(resolved[0].model.geometry);
 });

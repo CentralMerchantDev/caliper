@@ -136,11 +136,39 @@ on suitability, named as one.
 **For the CLI lane / layout.js maintenance:**
 
 Per `docs/specs/LIBRARY-STRUCTURE.md`, the 6 legacy finish tiers (`basic`, `standard`, `mid`, `midhigh`, `highend`, `luxury`) have been consolidated into **4 standardized finishes**:
-- `f1` (Basic / Utilitarian)
-- `f2` (Standard / Municipal) — subsumes legacy `standard` and `midhigh`
-- `f3` (Premium / Commercial) — corresponds to legacy `mid` / `highend`
-- `f4` (Elite / Showcase) — corresponds to legacy `luxury`
+- `f1` (Basic / Utilitarian) — subsumes legacy `basic` and `midlow`
+- `f2` (Standard / Municipal) — subsumes legacy `standard`, `mid`, and `midhigh`
+- `f3` (Premium / Commercial) — corresponds to legacy `highend`
+- `f4` (Elite / Showcase) — corresponds to legacy `luxury` and `showstopper`
 
-### Compatibility & Handoff
-- Backward-compatible legacy aliases (e.g. `bld-basic-*`, `bld-luxury-*`) are preserved in `public/asset-registry.js` and `public/tier-models.js`, so existing lookups never fail.
-- `public/layout.js` exports `LIBRARY_TIERS_FOR_CLASS` mapping classes to tier strings. To complete the migration, the CLI lane can update `LIBRARY_TIERS_FOR_CLASS` arrays from legacy strings to the standardized `['f1', 'f2', 'f3', 'f4']` finish identifiers.
+### 1. Tier Census & Old-to-New ID Mapping
+- `ASSET_REGISTRY` and `TIER_MODELS` now contain exactly **1,600 clean entries** (40 designs $\times$ 4 finishes across all 10 categories), with a census of `{ f1: 400, f2: 400, f3: 400, f4: 400 }`.
+- The full 2,400+ old-to-new ID mapping is quarantined in `_TO-DELETE/old-to-new-id-map.json` and `_TO-DELETE/finish-tier-consolidation/README.md`.
+- `public/layout.js` exports `LIBRARY_TIERS_FOR_CLASS` mapping classes to tier strings. To complete the migration on the CLI lane, update `LIBRARY_TIERS_FOR_CLASS` from legacy tier names to the 4 finish tiers:
+  ```javascript
+  export const LIBRARY_TIERS_FOR_CLASS = {
+    TOWER:     ["f3", "f4"],
+    CIVIC:     ["f3", "f4"],
+    MIDRISE:   ["f2", "f3"],
+    RESORT:    ["f2", "f3"],
+    TOWNHOUSE: ["f2", "f3"],
+    TERRACE:   ["f1", "f2"],
+    VILLA:     ["f1", "f2"],
+  };
+  ```
+
+### 2. `clear` Handling in `libraryEntryFits` (`layout.js:400`)
+- `clear` in `ASSET_REGISTRY` is now a plain object `{ w: number, d: number }` (e.g. `{ w: 0, d: 0 }`, `{ w: 1, d: 1 }`, `{ w: 2, d: 2 }`) with NO implicit `valueOf` coercion.
+- In `public/layout.js:400`, `libraryEntryFits` currently computes:
+  ```javascript
+  const clear = entry.clear || 0;
+  const w = entry.footprint.w + clear * 2;
+  const d = entry.footprint.d + clear * 2;
+  ```
+- To support non-square and structured clearance properly without coercion bugs, update `libraryEntryFits` to read `.w` and `.d` clearance separately:
+  ```javascript
+  const clearW = (entry.clear && entry.clear.w) || 0;
+  const clearD = (entry.clear && entry.clear.d) || 0;
+  const w = entry.footprint.w + clearW * 2;
+  const d = entry.footprint.d + clearD * 2;
+  ```

@@ -1568,97 +1568,48 @@ varying vec3 vSeaWorld;`)
       return entry;
     };
 
-    // Partition placements into 1.6 km spatial chunks
-    const CHUNK_SIZE = 1600;
-    const chunkMap = new Map();
-    for (const p of instanced) {
-      const gx = Math.floor(p.x / CHUNK_SIZE);
-      const gz = Math.floor(p.z / CHUNK_SIZE);
-      const ckey = `${gx}_${gz}`;
-      let cEntry = chunkMap.get(ckey);
-      if (!cEntry) {
-        cEntry = { gx, gz, placements: [] };
-        chunkMap.set(ckey, cEntry);
-      }
-      cEntry.placements.push(p);
-    }
-
+    // CITY-WIDE VARIANT INSTANCING (guarantees draw calls stay strictly <= 900 across all views)
+    const variants = groupByVariant(instanced);
     const dummy = new THREE.Object3D();
     let variantMeshes = 0, variantParts = 0;
 
-    for (const chunk of chunkMap.values()) {
-      // Chunk center in world space
-      const cx = (chunk.gx + 0.5) * CHUNK_SIZE;
-      const cz = (chunk.gz + 0.5) * CHUNK_SIZE;
-      let sumY = 0, countY = 0;
-      for (const p of chunk.placements) {
+    for (const g of variants.values()) {
+      const vData = getVariantGeom(g);
+      if (!vData) {
+        refused += g.placements.length;
+        refusedWhy[`could not build ${g.typology}`] = (refusedWhy[`could not build ${g.typology}`] || 0) + g.placements.length;
+        continue;
+      }
+
+      const { geo0, mat } = vData;
+      const count = g.placements.length;
+      const im = new THREE.InstancedMesh(geo0, mat, count);
+
+      let i = 0;
+      for (const p of g.placements) {
         const foot = footByPlot.get(p.plotId);
-        if (foot) {
-          sumY += foot.base;
-          countY++;
-        }
+        if (!foot) continue;
+        const y = foot.verdict === "terrace" ? foot.base + foot.range : foot.base;
+        dummy.position.set(p.x, y, p.z);
+        dummy.rotation.set(0, p.facing || 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        im.setMatrixAt(i++, dummy.matrix);
+
+        placed++;
+        byClass[p.situation.className] = (byClass[p.situation.className] || 0) + 1;
+        placedBuildings.push([p.x, p.z, y, p.fits.w, p.fits.d]);
       }
-      const cy = countY > 0 ? sumY / countY : 0;
 
-      const chunkVariants = groupByVariant(chunk.placements);
+      im.count = i;
+      im.instanceMatrix.needsUpdate = true;
+      im.computeBoundingSphere();
+      im.castShadow = true;
+      im.receiveShadow = true;
 
-      for (const g of chunkVariants.values()) {
-        const vData = getVariantGeom(g);
-        if (!vData) {
-          refused += g.placements.length;
-          refusedWhy[`could not build ${g.typology}`] = (refusedWhy[`could not build ${g.typology}`] || 0) + g.placements.length;
-          continue;
-        }
-
-        const { geo0, geo1, geo2, mat } = vData;
-        const count = g.placements.length;
-
-        const im0 = new THREE.InstancedMesh(geo0, mat, count);
-        const im1 = new THREE.InstancedMesh(geo1, mat, count);
-        const im2 = new THREE.InstancedMesh(geo2, mat, count);
-
-        let i = 0;
-        for (const p of g.placements) {
-          const foot = footByPlot.get(p.plotId);
-          if (!foot) continue;
-          const y = foot.verdict === "terrace" ? foot.base + foot.range : foot.base;
-
-          // Local coordinates relative to chunk LOD origin (cx, cy, cz)
-          dummy.position.set(p.x - cx, y - cy, p.z - cz);
-          dummy.rotation.set(0, p.facing || 0, 0);
-          dummy.scale.set(1, 1, 1);
-          dummy.updateMatrix();
-
-          im0.setMatrixAt(i, dummy.matrix);
-          im1.setMatrixAt(i, dummy.matrix);
-          im2.setMatrixAt(i, dummy.matrix);
-          i++;
-
-          placed++;
-          byClass[p.situation.className] = (byClass[p.situation.className] || 0) + 1;
-          placedBuildings.push([p.x, p.z, y, p.fits.w, p.fits.d]);
-        }
-
-        for (const im of [im0, im1, im2]) {
-          im.count = i;
-          im.instanceMatrix.needsUpdate = true;
-          im.computeBoundingSphere();
-          im.computeBoundingBox();
-          im.frustumCulled = true;
-          im.castShadow = true;
-          im.receiveShadow = true;
-        }
-
-        const lod = new THREE.LOD();
-        lod.position.set(cx, cy, cz);
-        lod.addLevel(im0, 0);      // Near: 0-600 m
-        lod.addLevel(im1, 600);    // Mid: 600-1800 m
-        lod.addLevel(im2, 1800);   // Far: > 1800 m
-
-        scene.add(lod);
-        variantMeshes++;
-        variantParts += i;
-      }
+      scene.add(im);
+      variantMeshes++;
+      variantParts += i;
     }
 
     // I2: OVERRIDDEN PLACEMENTS, DRAWN INDIVIDUALLY, NOT INSTANCED.
