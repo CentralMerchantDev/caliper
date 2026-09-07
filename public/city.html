@@ -214,7 +214,7 @@ mainRenderPass.render = function(r, writeBuffer, readBuffer, deltaTime, maskActi
 };
 composer.addPass(mainRenderPass);
 const usePost = num("post", 1) > 0;
-const useAO = num("ao", 1) > 0;
+const useAO = num("ao", 0) > 0;
 let gtaoPass = null;
 if (usePost && useAO) {
   try {
@@ -598,7 +598,7 @@ const STILL = num("still", 0);
   const dur = performance.now() - ft;
   window.__ft.push(Math.round(dur * 10) / 10);
   frames++;
-  if (frames >= 2 && (!hdrPending || frames > 25)) {
+  if (frames >= 2 && (!hdrPending || frames >= 5)) {
     if (!window.__ready) {
       const stats = window.__getRenderStats();
       console.log("WORLD_RENDER " + JSON.stringify({
