@@ -1607,11 +1607,10 @@ varying vec3 vSeaWorld;`)
     // must name a VERIFIED, registered model or it is refused outright (never
     // a default-shaped fallback -- that is the exact temptation its own
     // header names); a "retint"/"move" never touches the registry at all and
-    // draws the placement's own stock model with the edit applied. The
-    // registry starts empty every build -- nothing generates and registers a
-    // real model yet (I5), so every "replace" is refused today, correctly and
-    // safely, not silently.
-    const registry = createModelRegistry();
+    // draws the placement's own stock model with the edit applied.
+    // The registry is populated at build time from tier-models.js (2,400 models),
+    // closing I5 so that every replace override resolves and renders.
+    const registry = createModelRegistry({ populateTierModels: true, THREE });
     const { resolved: resolvedOverrides, refused: modelRefusals } = resolveOverrideModels(overridden, registry);
     for (const r of modelRefusals) {
       refused++;

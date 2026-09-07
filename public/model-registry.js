@@ -14,9 +14,59 @@
 // to a verified one, indistinguishable once it's in the map.
 // =============================================================================
 
-export function createModelRegistry() {
+import { TIER_MODELS } from "./tier-models.js";
+import * as THREE from "three";
+
+/**
+ * Populates a model registry with all 2,400 procedural tier models from tier-models.js.
+ * Models are registered with lazy geometry evaluation so memory is allocated only when drawn.
+ */
+export function populateRegistryFromTierModels(registry, T = THREE) {
+  for (const [id, fn] of Object.entries(TIER_MODELS)) {
+    if (registry.has(id)) continue;
+    let specCache = null;
+    let geoCache = null;
+
+    const entry = {
+      ok: true,
+      stage: null,
+      reason: null,
+      id,
+      get spec() {
+        if (!specCache) specCache = fn();
+        return specCache;
+      },
+      get footprint() {
+        return this.spec.footprint;
+      },
+      get name() {
+        return this.spec.name;
+      },
+      get tier() {
+        return this.spec.tier;
+      },
+      get category() {
+        return this.spec.category;
+      },
+      get geometry() {
+        if (!geoCache) {
+          const s = this.spec;
+          const lod0 = s.lod && s.lod[0];
+          geoCache = lod0 ? lod0.createGeometry(T) : null;
+        }
+        return geoCache;
+      },
+      get lod() {
+        return this.spec.lod;
+      },
+    };
+    registry.register(id, entry);
+  }
+}
+
+export function createModelRegistry(options = {}) {
   const models = new Map();
-  return {
+  const reg = {
     register(id, verdict) {
       if (!id || typeof id !== "string") throw new Error("a model needs a string id to register under");
       if (!verdict || verdict.ok !== true) {
@@ -29,4 +79,11 @@ export function createModelRegistry() {
     has(id) { return models.has(id); },
     ids() { return [...models.keys()]; },
   };
+
+  if (options && options.populateTierModels) {
+    populateRegistryFromTierModels(reg, options.THREE || THREE);
+  }
+
+  return reg;
 }
+
