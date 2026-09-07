@@ -25,15 +25,25 @@ test("all kitbash parts build, adhere to whole-cell contract and declare sockets
     const part = KITBASH_PARTS[id];
     census[part.category] = (census[part.category] || 0) + 1;
 
-    // 1. Whole cell footprint validation
-    assert.ok(Number.isInteger(part.foot.w) && part.foot.w > 0, `${id}: foot.w must be positive integer`);
-    assert.ok(Number.isInteger(part.foot.d) && part.foot.d > 0, `${id}: foot.d must be positive integer`);
+    // 1. Whole metre footprint validation on standard table or named exception
+    assert.ok(Number.isInteger(part.foot.w) && part.foot.w > 0, `${id}: foot.w must be positive integer in metres`);
+    assert.ok(Number.isInteger(part.foot.d) && part.foot.d > 0, `${id}: foot.d must be positive integer in metres`);
 
-    // 2. Declared sockets validation
+    const STANDARD_FOOTPRINTS = new Set([
+      "8x8", "8x16", "16x8", "16x16", "16x24", "24x16", "24x32", "32x24", "32x32", "48x48", "64x64",
+      // Named exceptions: connectors (skybridges)
+      "32x8", "24x8", "16x8"
+    ]);
+    const footKey = `${part.foot.w}x${part.foot.d}`;
+    assert.ok(STANDARD_FOOTPRINTS.has(footKey), `${id}: footprint ${footKey} must be on standard table or named exception`);
+
+    // 2. Declared sockets validation in whole metres
     assert.ok(part.sockets, `${id}: sockets must be defined`);
     assert.ok(part.sockets.bottom, `${id}: bottom socket must be defined`);
-    assert.ok(Number.isInteger(part.sockets.bottom.w), `${id}: bottom.w must be integer`);
-    assert.ok(Number.isInteger(part.sockets.bottom.d), `${id}: bottom.d must be integer`);
+    assert.ok(Number.isInteger(part.sockets.bottom.w) && part.sockets.bottom.w >= 0, `${id}: bottom.w must be whole metre integer`);
+    assert.ok(Number.isInteger(part.sockets.bottom.d) && part.sockets.bottom.d >= 0, `${id}: bottom.d must be whole metre integer`);
+    assert.ok(Number.isInteger(part.sockets.top.w) && part.sockets.top.w >= 0, `${id}: top.w must be whole metre integer`);
+    assert.ok(Number.isInteger(part.sockets.top.d) && part.sockets.top.d >= 0, `${id}: top.d must be whole metre integer`);
 
     // 3. Geometry builds at LOD0, LOD1, LOD2
     let tris0 = 0, tris1 = 0, tris2 = 0;

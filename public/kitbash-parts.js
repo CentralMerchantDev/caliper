@@ -91,9 +91,9 @@ registerPart({
   id: "podium-retail-colonnade",
   name: "Retail Colonnade Podium",
   category: "podium",
-  foot: { w: 4, d: 4 }, // 32x32m
+  foot: { w: 32, d: 32 }, // 32x32m
   height: 14,
-  sockets: { bottom: { w: 4, d: 4 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 32, d: 32 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 31.0, D = 31.0, H = 14;
@@ -127,9 +127,9 @@ registerPart({
   id: "podium-entrance-plaza",
   name: "Entrance Plaza Podium",
   category: "podium",
-  foot: { w: 4, d: 4 },
+  foot: { w: 32, d: 32 },
   height: 12,
-  sockets: { bottom: { w: 4, d: 4 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 32, d: 32 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 31.0, D = 31.0, H = 12;
@@ -154,9 +154,9 @@ registerPart({
   id: "podium-waterfront-base",
   name: "Waterfront Promenade Base",
   category: "podium",
-  foot: { w: 4, d: 4 },
+  foot: { w: 32, d: 32 },
   height: 10,
-  sockets: { bottom: { w: 4, d: 4 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 32, d: 32 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 31.0, D = 31.0, H = 10;
@@ -176,9 +176,9 @@ registerPart({
   id: "podium-parking-deck",
   name: "Ventilated Parking Deck Podium",
   category: "podium",
-  foot: { w: 4, d: 4 },
+  foot: { w: 32, d: 32 },
   height: 16,
-  sockets: { bottom: { w: 4, d: 4 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 32, d: 32 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 31.0, D = 31.0, H = 16;
@@ -201,9 +201,9 @@ registerPart({
   id: "podium-recessed-lobby",
   name: "Recessed Atrium Lobby",
   category: "podium",
-  foot: { w: 3, d: 3 }, // 24x24m
+  foot: { w: 24, d: 32 }, // 24x24m
   height: 12,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 12;
@@ -223,9 +223,9 @@ registerPart({
   id: "podium-arcade-terrace",
   name: "Classical Arcade Terrace",
   category: "podium",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 10,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 10;
@@ -244,9 +244,9 @@ registerPart({
   id: "podium-civic-steps",
   name: "Civic Portico Steps",
   category: "podium",
-  foot: { w: 5, d: 5 }, // 40x40m
+  foot: { w: 48, d: 48 }, // 40x40m
   height: 14,
-  sockets: { bottom: { w: 5, d: 5 }, top: { w: 4, d: 4 } },
+  sockets: { bottom: { w: 48, d: 48 }, top: { w: 32, d: 32 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 39.0, D = 39.0, H = 14;
@@ -266,9 +266,9 @@ registerPart({
   id: "podium-stepped-garden",
   name: "Stepped Garden Terraces",
   category: "podium",
-  foot: { w: 4, d: 4 },
+  foot: { w: 32, d: 32 },
   height: 15,
-  sockets: { bottom: { w: 4, d: 4 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 32, d: 32 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 31.0, D = 31.0, H = 15;
@@ -292,9 +292,9 @@ registerPart({
   id: "shaft-twisted-glass",
   name: "Twisted Glass Helical Shaft",
   category: "shaft",
-  foot: { w: 3, d: 3 }, // 24x24m
+  foot: { w: 24, d: 32 }, // 24x24m
   height: 60,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 60;
@@ -320,9 +320,9 @@ registerPart({
   id: "shaft-fluted-artdeco",
   name: "Fluted Art Deco Shaft",
   category: "shaft",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 56,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 56;
@@ -346,9 +346,9 @@ registerPart({
   id: "shaft-curved-eco-terrace",
   name: "Curved Eco-Terrace Shaft",
   category: "shaft",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 52,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 52;
@@ -371,9 +371,9 @@ registerPart({
   id: "shaft-cylindrical-core",
   name: "Cylindrical Drum Shaft",
   category: "shaft",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 64,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const R = 11.0, H = 64;
@@ -394,9 +394,9 @@ registerPart({
   id: "shaft-curtain-wall-straight",
   name: "Curtain Wall Glass Shaft",
   category: "shaft",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 48,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 48;
@@ -419,9 +419,9 @@ registerPart({
   id: "shaft-chamfered-piers",
   name: "Chamfered Piers Shaft",
   category: "shaft",
-  foot: { w: 4, d: 4 }, // 32x32m
+  foot: { w: 32, d: 32 }, // 32x32m
   height: 64,
-  sockets: { bottom: { w: 4, d: 4 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 32, d: 32 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 31.0, D = 31.0, H = 64;
@@ -445,9 +445,9 @@ registerPart({
   id: "shaft-setback-stack",
   name: "Telescoping Setback Stack",
   category: "shaft",
-  foot: { w: 4, d: 4 },
+  foot: { w: 32, d: 32 },
   height: 60,
-  sockets: { bottom: { w: 4, d: 4 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 32, d: 32 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 31.0, D = 31.0;
@@ -467,9 +467,9 @@ registerPart({
   id: "shaft-octagonal-tower",
   name: "Octagonal Faceted Shaft",
   category: "shaft",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 54,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const R = 11.5, H = 54;
@@ -486,9 +486,9 @@ registerPart({
   id: "shaft-diamond-lattice",
   name: "Diagrid Exoskeleton Shaft",
   category: "shaft",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 58,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 58;
@@ -507,9 +507,9 @@ registerPart({
   id: "shaft-elliptical-aerofoil",
   name: "Elliptical Aerofoil Shaft",
   category: "shaft",
-  foot: { w: 4, d: 3 },
+  foot: { w: 32, d: 24 },
   height: 50,
-  sockets: { bottom: { w: 4, d: 3 }, top: { w: 3, d: 2 } },
+  sockets: { bottom: { w: 32, d: 24 }, top: { w: 24, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 31.0, D = 23.0, H = 50;
@@ -526,9 +526,9 @@ registerPart({
   id: "shaft-brutalist-ribs",
   name: "Brutalist Concrete Ribs Shaft",
   category: "shaft",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 46,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 46;
@@ -545,9 +545,9 @@ registerPart({
   id: "shaft-balconied-residential",
   name: "Balconied Residential Shaft",
   category: "shaft",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 44,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 44;
@@ -567,9 +567,9 @@ registerPart({
   id: "shaft-twin-atrium",
   name: "Twin Atrium Tower Shaft",
   category: "shaft",
-  foot: { w: 4, d: 3 },
+  foot: { w: 32, d: 24 },
   height: 56,
-  sockets: { bottom: { w: 4, d: 3 }, top: { w: 3, d: 2 } },
+  sockets: { bottom: { w: 32, d: 24 }, top: { w: 24, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 31.0, D = 23.0, H = 56;
@@ -587,9 +587,9 @@ registerPart({
   id: "shaft-triangular-prism",
   name: "Triangular Prism Shaft",
   category: "shaft",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 52,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const R = 12.0, H = 52;
@@ -603,9 +603,9 @@ registerPart({
   id: "shaft-stepped-chevron",
   name: "Stepped Chevron Shaft",
   category: "shaft",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 54,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 54;
@@ -620,9 +620,9 @@ registerPart({
   id: "shaft-cantilever-boxes",
   name: "Cantilever Shifted Boxes",
   category: "shaft",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 48,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 48;
@@ -646,9 +646,9 @@ registerPart({
   id: "crown-ziggurat-lantern",
   name: "Ziggurat Lantern Crown",
   category: "crown",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 18,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 1, d: 1 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 8, d: 8 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0;
@@ -664,9 +664,9 @@ registerPart({
   id: "crown-sunburst-arch",
   name: "Sunburst Vaulted Crown",
   category: "crown",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 16,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 1, d: 1 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 8, d: 8 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 16;
@@ -680,9 +680,9 @@ registerPart({
   id: "crown-solar-dish",
   name: "Parabolic Solar Dish Crown",
   category: "crown",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 10,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 10;
@@ -702,9 +702,9 @@ registerPart({
   id: "crown-dome-lantern",
   name: "Geodesic Dome & Cupola",
   category: "crown",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 15,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 1, d: 1 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 8, d: 8 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const R = 11.0, H = 15;
@@ -723,9 +723,9 @@ registerPart({
   id: "crown-plain-parapet",
   name: "Architectural Parapet Crown",
   category: "crown",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 6,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 6;
@@ -740,9 +740,9 @@ registerPart({
   id: "crown-tapered-spire",
   name: "Tapered Architectural Spire",
   category: "crown",
-  foot: { w: 2, d: 2 },
+  foot: { w: 16, d: 16 },
   height: 32,
-  sockets: { bottom: { w: 2, d: 2 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 16, d: 16 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const R = 7.0, H = 32;
@@ -756,9 +756,9 @@ registerPart({
   id: "crown-sky-pyramid",
   name: "Glass Apex Pyramid Crown",
   category: "crown",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 14,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const R = 11.5, H = 14;
@@ -772,9 +772,9 @@ registerPart({
   id: "crown-slanted-crystal",
   name: "Slanted Crystalline Roof",
   category: "crown",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 16,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 1, d: 1 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 8, d: 8 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 16;
@@ -791,9 +791,9 @@ registerPart({
   id: "crown-open-pergola",
   name: "Open Trellis Pergola",
   category: "crown",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 8,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 8;
@@ -815,9 +815,9 @@ registerPart({
   id: "crown-pagoda-tier",
   name: "Tiered Flared Pagoda Crown",
   category: "crown",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 16,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 1, d: 1 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 8, d: 8 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0;
@@ -837,9 +837,9 @@ registerPart({
   id: "crown-crown-finials",
   name: "Crenellated Finials Crown",
   category: "crown",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 12,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 1, d: 1 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 8, d: 8 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 12;
@@ -861,9 +861,9 @@ registerPart({
   id: "crown-helipad-cantilever",
   name: "Cantilever Flight Deck Crown",
   category: "crown",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 9,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 9;
@@ -886,9 +886,9 @@ registerPart({
   id: "roof-helipad",
   name: "Rooftop Helipad",
   category: "roof",
-  foot: { w: 2, d: 2 },
+  foot: { w: 16, d: 16 },
   height: 4,
-  sockets: { bottom: { w: 2, d: 2 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 16, d: 16 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const R = 7.0;
@@ -906,9 +906,9 @@ registerPart({
   id: "roof-infinity-pool",
   name: "Sky Infinity Pool",
   category: "roof",
-  foot: { w: 2, d: 2 },
+  foot: { w: 16, d: 16 },
   height: 3,
-  sockets: { bottom: { w: 2, d: 2 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 16, d: 16 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0;
@@ -925,9 +925,9 @@ registerPart({
   id: "roof-sky-garden",
   name: "Landscaped Sky Garden",
   category: "roof",
-  foot: { w: 2, d: 2 },
+  foot: { w: 16, d: 16 },
   height: 4,
-  sockets: { bottom: { w: 2, d: 2 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 16, d: 16 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0;
@@ -944,9 +944,9 @@ registerPart({
   id: "roof-plant-chiller-room",
   name: "HVAC Plant Penthouse",
   category: "roof",
-  foot: { w: 2, d: 2 },
+  foot: { w: 16, d: 16 },
   height: 5,
-  sockets: { bottom: { w: 2, d: 2 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 16, d: 16 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 14.0, D = 14.0;
@@ -960,9 +960,9 @@ registerPart({
   id: "roof-aerial-antenna-array",
   name: "Telecommunications Mast",
   category: "roof",
-  foot: { w: 1, d: 1 },
+  foot: { w: 8, d: 8 },
   height: 24,
-  sockets: { bottom: { w: 1, d: 1 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 8, d: 8 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const H = 24;
@@ -979,9 +979,9 @@ registerPart({
   id: "roof-stair-lift-overrun",
   name: "Elevator Lift Overrun",
   category: "roof",
-  foot: { w: 1, d: 1 },
+  foot: { w: 8, d: 8 },
   height: 4,
-  sockets: { bottom: { w: 1, d: 1 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 8, d: 8 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 7.0, D = 7.0;
@@ -995,9 +995,9 @@ registerPart({
   id: "roof-satellite-radome",
   name: "Satellite Radome",
   category: "roof",
-  foot: { w: 1, d: 1 },
+  foot: { w: 8, d: 8 },
   height: 7,
-  sockets: { bottom: { w: 1, d: 1 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 8, d: 8 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const parts = [];
@@ -1015,9 +1015,9 @@ registerPart({
   id: "roof-solar-panel-canopy",
   name: "Solar PV Canopy",
   category: "roof",
-  foot: { w: 2, d: 2 },
+  foot: { w: 16, d: 16 },
   height: 4,
-  sockets: { bottom: { w: 2, d: 2 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 16, d: 16 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0;
@@ -1034,9 +1034,9 @@ registerPart({
   id: "roof-cooling-tower-cluster",
   name: "HVAC Cooling Towers",
   category: "roof",
-  foot: { w: 2, d: 2 },
+  foot: { w: 16, d: 16 },
   height: 6,
-  sockets: { bottom: { w: 2, d: 2 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 16, d: 16 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const parts = [];
@@ -1054,9 +1054,9 @@ registerPart({
   id: "roof-maintenance-cradle-rig",
   name: "Facade BMU Maintenance Rig",
   category: "roof",
-  foot: { w: 1, d: 1 },
+  foot: { w: 8, d: 8 },
   height: 5,
-  sockets: { bottom: { w: 1, d: 1 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 8, d: 8 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const parts = [];
@@ -1074,9 +1074,9 @@ registerPart({
   id: "connector-skybridge-straight-single",
   name: "Single-Deck Skybridge",
   category: "connector",
-  foot: { w: 4, d: 1 },
+  foot: { w: 32, d: 8 },
   height: 6,
-  sockets: { bottom: { w: 4, d: 1 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 32, d: 8 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const L = 30.0, W = 6.0, H = 5.0;
@@ -1092,9 +1092,9 @@ registerPart({
   id: "connector-skybridge-straight-double",
   name: "Double-Deck Skybridge",
   category: "connector",
-  foot: { w: 4, d: 1 },
+  foot: { w: 32, d: 8 },
   height: 12,
-  sockets: { bottom: { w: 4, d: 1 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 32, d: 8 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const L = 30.0, W = 6.5, H = 11.0;
@@ -1109,9 +1109,9 @@ registerPart({
   id: "connector-skybridge-curved-arch",
   name: "Parabolic Arched Skybridge",
   category: "connector",
-  foot: { w: 4, d: 1 },
+  foot: { w: 32, d: 8 },
   height: 10,
-  sockets: { bottom: { w: 4, d: 1 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 32, d: 8 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const L = 30.0, W = 6.0, H = 6.0;
@@ -1125,9 +1125,9 @@ registerPart({
   id: "connector-skybridge-truss-diagonal",
   name: "Exposed Steel Truss Skybridge",
   category: "connector",
-  foot: { w: 4, d: 1 },
+  foot: { w: 32, d: 8 },
   height: 7,
-  sockets: { bottom: { w: 4, d: 1 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 32, d: 8 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const L = 30.0, W = 6.0, H = 6.5;
@@ -1141,9 +1141,9 @@ registerPart({
   id: "connector-skybridge-glass-tube",
   name: "Cylindrical Tube Skybridge",
   category: "connector",
-  foot: { w: 4, d: 1 },
+  foot: { w: 32, d: 8 },
   height: 5,
-  sockets: { bottom: { w: 4, d: 1 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 32, d: 8 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const L = 30.0, R = 3.0;
@@ -1160,9 +1160,9 @@ registerPart({
   id: "connector-podium-bridge-covered",
   name: "Low Covered Podium Bridge",
   category: "connector",
-  foot: { w: 3, d: 1 },
+  foot: { w: 24, d: 8 },
   height: 5,
-  sockets: { bottom: { w: 3, d: 1 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 24, d: 8 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const L = 22.0, W = 5.0, H = 4.5;
@@ -1176,9 +1176,9 @@ registerPart({
   id: "connector-sky-concourse",
   name: "Multi-Tower Sky Concourse",
   category: "connector",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 10,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 10;
@@ -1192,9 +1192,9 @@ registerPart({
   id: "connector-cantilever-walkway",
   name: "Sky Cantilever Walkway",
   category: "connector",
-  foot: { w: 2, d: 1 },
+  foot: { w: 16, d: 8 },
   height: 4,
-  sockets: { bottom: { w: 2, d: 1 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 16, d: 8 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const L = 15.0, W = 5.0, H = 3.5;
@@ -1212,9 +1212,9 @@ registerPart({
   id: "fabric-masonry-block-low",
   name: "Low-Rise Masonry Block",
   category: "fabric",
-  foot: { w: 2, d: 2 },
+  foot: { w: 16, d: 16 },
   height: 12,
-  sockets: { bottom: { w: 2, d: 2 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 16, d: 16 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 12;
@@ -1229,9 +1229,9 @@ registerPart({
   id: "fabric-masonry-block-mid",
   name: "Mid-Rise Perimeter Block",
   category: "fabric",
-  foot: { w: 2, d: 3 },
+  foot: { w: 16, d: 24 },
   height: 22,
-  sockets: { bottom: { w: 2, d: 3 }, top: { w: 2, d: 3 } },
+  sockets: { bottom: { w: 16, d: 24 }, top: { w: 16, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 23.0, H = 22;
@@ -1245,9 +1245,9 @@ registerPart({
   id: "fabric-punched-window-slab",
   name: "Punched-Window Office Slab",
   category: "fabric",
-  foot: { w: 3, d: 3 },
+  foot: { w: 24, d: 32 },
   height: 28,
-  sockets: { bottom: { w: 3, d: 3 }, top: { w: 3, d: 3 } },
+  sockets: { bottom: { w: 24, d: 24 }, top: { w: 24, d: 24 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 28;
@@ -1261,9 +1261,9 @@ registerPart({
   id: "fabric-retail-ground-simple",
   name: "Simple High-Street Shopfront",
   category: "fabric",
-  foot: { w: 2, d: 2 },
+  foot: { w: 16, d: 16 },
   height: 5,
-  sockets: { bottom: { w: 2, d: 2 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 16, d: 16 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 5;
@@ -1278,9 +1278,9 @@ registerPart({
   id: "fabric-flat-roof-parapet",
   name: "Flat Roof Parapet Cap",
   category: "fabric",
-  foot: { w: 2, d: 2 },
+  foot: { w: 16, d: 16 },
   height: 2,
-  sockets: { bottom: { w: 2, d: 2 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 16, d: 16 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 2;
@@ -1294,9 +1294,9 @@ registerPart({
   id: "fabric-mansard-roof-dormer",
   name: "Mansard Roof with Dormers",
   category: "fabric",
-  foot: { w: 2, d: 2 },
+  foot: { w: 16, d: 16 },
   height: 6,
-  sockets: { bottom: { w: 2, d: 2 }, top: { w: 0, d: 0 } },
+  sockets: { bottom: { w: 16, d: 16 }, top: { w: 0, d: 0 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 6;
@@ -1310,9 +1310,9 @@ registerPart({
   id: "fabric-townhouse-bay-front",
   name: "Townhouse with Canted Bays",
   category: "fabric",
-  foot: { w: 1, d: 2 },
+  foot: { w: 8, d: 16 },
   height: 14,
-  sockets: { bottom: { w: 1, d: 2 }, top: { w: 1, d: 2 } },
+  sockets: { bottom: { w: 8, d: 16 }, top: { w: 8, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 7.5, D = 15.0, H = 14;
@@ -1327,9 +1327,9 @@ registerPart({
   id: "fabric-walkup-balconies",
   name: "Walkup with Loggias",
   category: "fabric",
-  foot: { w: 2, d: 2 },
+  foot: { w: 16, d: 16 },
   height: 16,
-  sockets: { bottom: { w: 2, d: 2 }, top: { w: 2, d: 2 } },
+  sockets: { bottom: { w: 16, d: 16 }, top: { w: 16, d: 16 } },
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 16;
