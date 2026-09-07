@@ -223,6 +223,29 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
     }
   }
 
+  // 5. Reserved Plain / Roof Patch (Bottom-Right and Top-Right in UV space)
+  // Ensures that non-wall parts (roofs, copings, eaves, plant) mapped to UV (0.97, 0.97)
+  // receive clean solid diffuse (multiplied by vertexColors), matte roughness, flat normal, and zero emissive.
+  const patchSize = 64;
+  for (const patchY of [0, size - patchSize]) {
+    const patchX = size - patchSize;
+    // Diffuse: Solid pure white so vertex color carries the roof palette
+    dctx.fillStyle = "#ffffff";
+    dctx.fillRect(patchX, patchY, patchSize, patchSize);
+
+    // Roughness: Matte / stone finish (roughness ~0.84)
+    rctx.fillStyle = "rgb(215, 215, 215)";
+    rctx.fillRect(patchX, patchY, patchSize, patchSize);
+
+    // Normal: Flat normal pointing straight out (128, 128, 255)
+    nctx.fillStyle = "rgb(128, 128, 255)";
+    nctx.fillRect(patchX, patchY, patchSize, patchSize);
+
+    // Emissive: Pure black (no window glow on roofs)
+    ectx.fillStyle = "#000000";
+    ectx.fillRect(patchX, patchY, patchSize, patchSize);
+  }
+
   // Create Three.js CanvasTextures
   const map = new THREE.CanvasTexture(diffCanvas);
   map.wrapS = THREE.RepeatWrapping;

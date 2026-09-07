@@ -918,8 +918,18 @@ function mergeGeometries(parts, palette = {}, T = THREE) {
       normArray.set(g.attributes.normal.array, posOffset * 3);
     }
 
-    if (g.attributes.uv) {
-      uvArray.set(g.attributes.uv.array, posOffset * 2);
+    const isWall = item.tag === "wall";
+    if (isWall) {
+      if (g.attributes.uv) {
+        uvArray.set(g.attributes.uv.array, posOffset * 2);
+      }
+    } else {
+      // Non-wall parts (roof, coping, eaves, chimCap, dormerRoof, pergolas, etc.):
+      // Remap UVs into the reserved plain patch (0.97, 0.97) so facade windows are not mapped onto roofs.
+      for (let i = 0; i < p.count; i++) {
+        uvArray[(posOffset + i) * 2 + 0] = 0.97;
+        uvArray[(posOffset + i) * 2 + 1] = 0.97;
+      }
     }
 
     let colVal = item.color;
