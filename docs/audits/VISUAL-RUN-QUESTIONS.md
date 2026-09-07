@@ -92,3 +92,39 @@ approximation, is Mark/agy's call, not resolved here.
 - Corrections: Roof UV Remap (no windows on roofs) & Live Phase-Delta Gate — LANDED (ab3589b)
 - Model Library Reachability (Populated 2,400 models at build time) — LANDED (9d1693b)
 - Library Model Enrichment (Steps 2 & 3 of LIBRARY-AS-SOURCE.md) — Awaiting Mark's Review
+
+---
+
+## 6. LIBRARY-AS-SOURCE.md STEP 4 — THE SELECTION POINT, BUILT AND WAITING TO BE WIRED
+
+**For agy, one line, when convenient -- nothing here is blocking.**
+
+`public/layout.js` now exports `libraryModelFor(className, situation)`: given
+a plot's class and its free space (`situation.fits`, the same value
+`typologyFor`'s `fits` predicate is already asked about), it filters the real
+`ASSET_REGISTRY` to the `buildings`/`civic` category and a proposed tier band
+per class (`LIBRARY_TIERS_FOR_CLASS`, see its own comment for the reasoning),
+checks each candidate's real footprint against the space in both
+orientations, and returns a real model id or `null`. Tested against the live
+2,400-entry registry, not a mock -- see test/layout.test.ts, "the library, as
+a second source."
+
+**It is additive, not wired in.** `typologyFor` and everything that calls it
+(`planPlot`, `planBlock`, `planCity`) are byte-for-byte unchanged;
+`city-render.js:279`'s `planCity(..., makeFits())` keeps building from the
+twelve typologies exactly as it does today. Activating library selection in
+the live render is a decision LIBRARY-AS-SOURCE.md itself defers ("procedural
+and library models can coexist... that is a decision for after step 4, made
+by looking at both on screen") and a one-line change in `city-render.js`,
+which is your file, not this one.
+
+**Not done, and worth naming rather than silently skipping:** no `clear` on
+any library entry yet (step 2, yours) -- `libraryModelFor` reads it if
+present and defaults to 0 if not, so it will start respecting clearance
+automatically the moment step 2 lands, no change needed on this side. No
+footprint cell-alignment yet either (also step 2) -- fit-checking works fine
+against the raw metric footprints in the meantime. And tier-matching is the
+only axis considered so far, not style ("Art Deco Skyscraper" vs "Alpine
+Chalet") -- a villa plot can currently draw a model named "Wave Tower" as
+long as its tier and footprint both fit. Real, not a stub, but a first pass
+on suitability, named as one.

@@ -1,0 +1,61 @@
+Step 2, re-scoped: the seeding decision is one function, and it can select
+from the library for real
+
+WORLD-REBALANCE-BRIEF.md's original Step 2 ("bind declared class to carved
+geometry") was retired when Mark corrected the placement model: a plot is
+space, not a slot for a kind of building, so there is no class-to-geometry
+relationship left to bind. What Step 2 becomes instead, per that same
+correction: settlement seeding decisions -- what world generation chooses to
+place, given a plot's class and free space -- written as one function, not
+scattered through the carve, because it is about to have two sources to
+choose from instead of one.
+
+That second source unblocked today. docs/specs/LIBRARY-AS-SOURCE.md's step 4
+("layout.js becomes: given the free space at this location, which library
+models fit -- foot + clear inside the available cells -- and which of those
+suits the district being seeded") was written blocked on the registry being
+reachable at all. agy closed that (9d1693b: all 2,400 models resolve; a
+library building already stands in Downtown). So this lands step 4's actual
+logic now, not a hook for later.
+
+public/layout.js gains `libraryModelFor(className, situation)`: filters the
+real ASSET_REGISTRY (2,400 entries, zero imports, no three.js -- it is the
+library's own PLOT_CLASSES-equivalent, not a piece of the renderer) to the
+`buildings`/`civic` category and a proposed tier band per class
+(`LIBRARY_TIERS_FOR_CLASS`, reasoned per class the same way docs/audits/
+VISUAL-RUN-QUESTIONS.md §1a proposed `clear` -- not measured, because there
+is nothing yet to measure it against), checks each candidate's real
+footprint against the free space in both orientations, and returns a real
+model id or null. WAREHOUSE/HANGAR/FARM/PARK are named as having no mapping
+-- the registry's only building categories are `buildings` and `civic`;
+there is no industrial or agricultural style in it, the same gap already
+named for the twelve-typology system in typology-footprints.js.
+
+ADDITIVE, NOT WIRED IN. `typologyFor` and everything that calls it
+(planPlot, planBlock, planCity) are byte-for-byte unchanged --
+city-render.js's existing planCity(..., makeFits()) call keeps building from
+the twelve typologies exactly as today. Whether the live render draws from
+the library is a decision LIBRARY-AS-SOURCE.md itself defers to "after step
+4, made by looking at both on screen," and the one line that would activate
+it is in city-render.js, agy's file, not touched here. Noted for agy in
+docs/audits/VISUAL-RUN-QUESTIONS.md §6, along with what's still missing on
+their side (`clear`, cell-aligned footprints) and what's still a first pass
+on this side (tier only, no style matching yet).
+
+Tested against the live registry, not a mock: every mapped class returns a
+real id on a generous plot whose own declared footprint actually fits;
+returns null on a plot too small for anything, and null for the four
+unmapped classes; deterministic per plot id; spreads across more than one
+model given 200 plots rather than collapsing to a single repeated choice.
+
+How it is known to work: node test/run.mjs, 961/963 -- the same two named,
+pre-existing red tests (docs/pending-commits/name-the-two-red-tests.txt),
+nothing new broken. npx tsc --noEmit clean.
+
+Steps 3-6 of WORLD-REBALANCE-BRIEF.md follow: the rebalance itself (§3,
+downtown a real core with towers in the middle falling off outward, islands
+with their own small centres, mainland suburbs thinning from the bridges,
+the barrier island demoted from 56% to a beach, and the land between reading
+as deliberate countryside or the brief gets told it cannot); roads measured
+and reported only; the origin-stability test written but not fixed; six
+before/after renders and docs/audits/WORLD-REBALANCE.md.

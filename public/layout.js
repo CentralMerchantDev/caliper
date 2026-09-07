@@ -1,3 +1,5 @@
+import { ASSET_REGISTRY } from "./asset-registry.js";
+
 // =============================================================================
 // CALIPER — THE LAYOUT ENGINE
 //
@@ -21,6 +23,12 @@
 // asset lane. This module emits a SPEC — a typology name, a seed and an options
 // object — and the renderer feeds that spec to `building()`. The contract
 // between the two is data, so either side can be worked on alone.
+//
+// `asset-registry.js` is the one exception to "no dependencies," and it is not
+// really an exception: it is 2,400 lines of plain data (id, name, tier,
+// category, footprint), zero imports, no three.js -- the model LIBRARY's
+// equivalent of PLOT_CLASSES, not a piece of the renderer. See LIBRARY_MODEL_FOR
+// below.
 //
 // THE DEFECT THIS FILE EXISTS TO PREVENT
 //
@@ -315,6 +323,115 @@ export function typologyFor(className, situation, fits = null) {
   const from = eligible.length ? eligible : table;
 
   return weightedPick(from, hash01(`typ|${situation.plotId}`)).typology;
+}
+
+// -----------------------------------------------------------------------------
+// THE LIBRARY, AS A SECOND SOURCE -- docs/specs/LIBRARY-AS-SOURCE.md STEP 4
+//
+// "Today layout.js maps a plot to one of twelve typologies. It becomes: given
+// the free space at this location, which library models fit -- foot + clear
+// inside the available cells -- and which of those suits the district being
+// seeded." That is this section. It was blocked on the registry being
+// reachable at all (agy's I5, closed in 9d1693b, all 2,400 models resolve);
+// unblocked now, so this reads the real registry and returns a real model id
+// a real plot can actually carry, not a stub waiting for one.
+//
+// ADDITIVE, NOT A REPLACEMENT. `typologyFor` above, and everything that calls
+// it (`planPlot`, `planBlock`, `planCity`), is UNCHANGED -- city-render.js's
+// existing `planCity(..., makeFits())` call keeps building from the twelve
+// typologies exactly as it does today. `libraryModelFor` below is a second,
+// independent entry point a caller can use instead, or alongside, once
+// something decides to ask it. LIBRARY-AS-SOURCE.md's own closing words are
+// why: procedural and library models "can coexist... that is a decision for
+// after step 4, made by looking at both on screen. It is not being made
+// here." Wiring which of the two actually draws city-render.js's buildings
+// is a one-line change in that file, which is agy's, not this commit's.
+//
+// WHY THIS CAN LIVE IN layout.js WITHOUT BREAKING "NO THREE.JS IN IT":
+// `asset-registry.js` is 2,400 lines of plain data -- id, name, tier,
+// category, footprint -- zero imports, no geometry. It is the library's own
+// equivalent of PLOT_CLASSES, not a piece of the renderer, so importing it
+// costs this file nothing it doesn't already pay for PLOT_CLASSES-shaped data.
+// -----------------------------------------------------------------------------
+
+/**
+ * Which library tiers suit a plot class. PROPOSED, not decided -- Mark and
+ * agy own these, the same way public/typology-footprints.js and docs/audits/
+ * VISUAL-RUN-QUESTIONS.md §1a propose rather than decide `clear` for the
+ * twelve typologies. Reasoned from what a place like that actually looks
+ * like (a downtown core reads prestige, a beach village does not), not
+ * measured -- there is nothing yet to measure it against.
+ *
+ * Classes absent here (WAREHOUSE, HANGAR, FARM, PARK) are not an oversight:
+ * the registry's only building categories are 'buildings' and 'civic' (240
+ * each), and neither has an industrial or agricultural style in it yet --
+ * the same gap CLASSES_WITH_NO_TYPOLOGY_LARGE_ENOUGH names in public/
+ * typology-footprints.js for the twelve-typology system. Named here rather
+ * than silently returning nothing for a reason nobody wrote down.
+ */
+export const LIBRARY_TIERS_FOR_CLASS = {
+  TOWER:     ["luxury", "highend"],
+  CIVIC:     ["highend", "showstopper"],
+  MIDRISE:   ["midhigh", "highend"],
+  RESORT:    ["midhigh", "highend"],
+  TOWNHOUSE: ["mid", "midhigh"],
+  TERRACE:   ["mid", "midlow"],
+  VILLA:     ["midlow", "mid"],
+};
+
+/** CIVIC plots draw from the registry's 'civic' category; every other
+ *  mapped class draws from 'buildings' -- the registry has no finer-grained
+ *  category than that split. */
+function registryCategoryFor(className) {
+  return className === "CIVIC" ? "civic" : "buildings";
+}
+
+/**
+ * Does a library entry's footprint fit the free space available, in either
+ * orientation -- a building can face either way along its plot, the same
+ * rotation prop-manifest.js's `propFootprint` already accounts for.
+ *
+ * `clear` is read if the entry declares it, and defaults to 0 if not --
+ * nothing in the registry declares it yet (LIBRARY-AS-SOURCE.md step 2,
+ * agy's, not landed at the time this was written), so this reads whatever
+ * is actually there rather than inventing a number step 2 should own.
+ */
+function libraryEntryFits(entry, fits) {
+  const clear = entry.clear || 0;
+  const w = entry.footprint.w + clear * 2;
+  const d = entry.footprint.d + clear * 2;
+  return (w <= fits.w + 1e-6 && d <= fits.d + 1e-6) || (d <= fits.w + 1e-6 && w <= fits.d + 1e-6);
+}
+
+/**
+ * Select a library model for a plot: which models fit the free space, and
+ * which of those suit the class being seeded. Returns a real ASSET_REGISTRY
+ * id, or null -- for a class with no library mapping yet (see
+ * LIBRARY_TIERS_FOR_CLASS), or because nothing in the matching tiers and
+ * category actually fits. Null is a real answer, the same way it is for
+ * `typologyFor`: a plot the library cannot furnish is a fact about the plot,
+ * not a bug to paper over with the nearest oversized model.
+ *
+ * `situation.fits` (set by `planPlot`) is the free space to fit inside, the
+ * same value `typologyFor`'s injected `fits` predicate is asked about --
+ * one notion of "the space here", not a second one invented for the library.
+ */
+export function libraryModelFor(className, situation) {
+  const tiers = LIBRARY_TIERS_FOR_CLASS[className];
+  if (!tiers || !situation.fits) return null;
+
+  const category = registryCategoryFor(className);
+  const candidates = Object.values(ASSET_REGISTRY).filter(
+    (e) => e.category === category && tiers.includes(e.tier) && libraryEntryFits(e, situation.fits),
+  );
+  if (!candidates.length) return null;
+
+  // Deterministic, uniform pick -- the registry carries no per-entry weight
+  // (unlike TYPOLOGIES_FOR_CLASS's hand-tuned mix), so there is nothing yet
+  // to weight by. A future pass that curates relative frequency by style
+  // changes this to weightedPick; this is the honest baseline until then.
+  const idx = Math.min(candidates.length - 1, Math.floor(hash01(`lib|${situation.plotId}`) * candidates.length));
+  return candidates[idx].id;
 }
 
 // -----------------------------------------------------------------------------

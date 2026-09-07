@@ -17,6 +17,7 @@ import {
   CHARACTERS,
   FOUNDATION_FOR_VERDICT,
   TYPOLOGIES_FOR_CLASS,
+  LIBRARY_TIERS_FOR_CLASS,
   hash01,
   weightedPick,
   rowPositionAt,
@@ -24,6 +25,7 @@ import {
   characterFor,
   terraceUnitsFor,
   typologyFor,
+  libraryModelFor,
   situationOf,
   planPlot,
   planBlock,
@@ -34,6 +36,7 @@ import {
 import { generateWorld, PLOT_CLASSES } from "../public/city-plan.js";
 import { assessFootprint } from "../public/footprint.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
+import { ASSET_REGISTRY } from "../public/asset-registry.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures: plots shaped exactly as `subdivideBlock` emits them.
@@ -247,6 +250,59 @@ test("a shop only appears where it has street frontage", () => {
   }
   assert.ok(sawShop, "no shop appeared on any corner -- the frontage branch is unreachable");
   assert.ok(onCorner);
+});
+
+// ---------------------------------------------------------------------------
+// The library, as a second source -- docs/specs/LIBRARY-AS-SOURCE.md step 4
+// ---------------------------------------------------------------------------
+
+test("LIBRARY_TIERS_FOR_CLASS names only real tiers that really exist in the registry", () => {
+  const realTiers = new Set(Object.values(ASSET_REGISTRY).map((e: any) => e.tier));
+  for (const [cls, tiers] of Object.entries(LIBRARY_TIERS_FOR_CLASS) as [string, string[]][]) {
+    for (const t of tiers) assert.ok(realTiers.has(t), `${cls} names tier "${t}", which no ASSET_REGISTRY entry declares`);
+  }
+});
+
+test("libraryModelFor returns a real registry id whose own footprint actually fits the space given", () => {
+  const generous = { plotId: "lib-test-generous", fits: { w: 60, d: 60 } };
+  for (const cls of Object.keys(LIBRARY_TIERS_FOR_CLASS)) {
+    const id = libraryModelFor(cls, generous);
+    assert.ok(id, `${cls}: no model found on a generous 60x60 plot -- LIBRARY_TIERS_FOR_CLASS or the registry is emptier than expected`);
+    const entry = (ASSET_REGISTRY as any)[id];
+    assert.ok(entry, `libraryModelFor("${cls}", ...) returned "${id}", which is not in ASSET_REGISTRY at all`);
+    const fitsForward = entry.footprint.w <= generous.fits.w && entry.footprint.d <= generous.fits.d;
+    const fitsRotated = entry.footprint.d <= generous.fits.w && entry.footprint.w <= generous.fits.d;
+    assert.ok(fitsForward || fitsRotated, `${cls}: chose "${id}" (${entry.footprint.w}x${entry.footprint.d}), which does not fit a 60x60 plot in either orientation`);
+  }
+});
+
+test("libraryModelFor returns null rather than an overhanging model, on a plot too small for anything", () => {
+  const tiny = { plotId: "lib-test-tiny", fits: { w: 3, d: 3 } };
+  for (const cls of Object.keys(LIBRARY_TIERS_FOR_CLASS)) {
+    assert.equal(libraryModelFor(cls, tiny), null, `${cls}: something fit a 3x3 plot`);
+  }
+});
+
+test("libraryModelFor returns null for a class the library has no mapping for -- a real answer, not a missing one", () => {
+  for (const cls of ["FARM", "HANGAR", "WAREHOUSE", "PARK"]) {
+    assert.equal(libraryModelFor(cls, { plotId: "lib-test-unmapped", fits: { w: 200, d: 200 } }), null);
+  }
+});
+
+test("libraryModelFor is deterministic -- the same plot asked twice gets the same model", () => {
+  const situation = { plotId: "lib-test-determinism", fits: { w: 50, d: 50 } };
+  const a = libraryModelFor("TOWER", situation);
+  const b = libraryModelFor("TOWER", situation);
+  assert.equal(a, b);
+  assert.ok(a);
+});
+
+test("libraryModelFor spreads across more than one model given enough plots -- not one id repeated everywhere", () => {
+  const seen = new Set<string>();
+  for (let i = 0; i < 200; i++) {
+    seen.add(libraryModelFor("TOWER", { plotId: `lib-test-spread-${i}`, fits: { w: 60, d: 60 } }) as string);
+  }
+  assert.ok(seen.size > 1, `every one of 200 TOWER plots chose the same library model: ${[...seen]}`);
 });
 
 test("an unknown plot class returns null rather than guessing a building", () => {
