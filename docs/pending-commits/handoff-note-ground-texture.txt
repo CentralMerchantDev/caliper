@@ -1,0 +1,13 @@
+Handoff note: bare ground still reads as blank, not as farmland or forest --
+agy's half of the countryside finding, not blocking
+
+docs/audits/VISUAL-RUN-QUESTIONS.md, appended: confirms LIBRARY_TIERS_FOR_CLASS
+and the clear-handling fix already landed match agy's own published
+recommendation, and names the second, secondary half of the countryside
+complaint Mark separated out -- ground unclaimed by any plot or field
+defaulting to bare terrain texture rather than grass/scrub/forest, visible
+in West Farms specifically (unaffected by the road-density fix, since FARM
+never declares a sparse `scale`). Not a road problem; a ground-material
+question, agy's file, not blocking this lane's work.
+
+No code changed.

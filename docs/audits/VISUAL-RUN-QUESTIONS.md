@@ -172,3 +172,21 @@ Per `docs/specs/LIBRARY-STRUCTURE.md`, the 6 legacy finish tiers (`basic`, `stan
   const w = entry.footprint.w + clearW * 2;
   const d = entry.footprint.d + clearD * 2;
   ```
+  Already landed this way in `layout.js` (commit `afeb6dd`) -- reading `entry.foot`/`entry.clear` (both cells, `* CELL_M`) when present, falling back to `entry.footprint` + a flat `clear` for any entry that predates step 2. Also adopted your published `LIBRARY_TIERS_FOR_CLASS` table directly (`f2dd717`) rather than keeping this file's own six-to-four translation, since TERRACE/VILLA differed and yours reflects the real four-tier census.
+
+---
+
+## 8. HANDOFF: BARE GROUND STILL READS AS BLANK, NOT AS FARMLAND OR FOREST
+
+**For agy, secondary, not blocking.** Mark's own diagnosis of the countryside
+render (`docs/pending-commits/roads-follow-density.txt` has the full story):
+the barrier island's empty-looking countryside was a CLI-lane defect (roads
+laid out at full urban spacing regardless of settlement density) and is
+fixed. But West Farms (`coastal-0`/`coastal-1`, FARM-classed, mainland) still
+renders with large stretches of bare tan ground between the actual crop-field
+patches, inside a road grid that IS already appropriately wide for FARM
+(`av:420, st:330`, unaffected by the road fix since FARM never declares a
+sparse `scale`). That is not a road-density problem -- it is ground
+UNCLAIMED by any plot or field still defaulting to bare terrain texture
+rather than reading as grass, scrub or forest. Screenshot: `.shots/farm-belt.png`
+(taken against the post-rebalance world, commit `f2dd717`).
