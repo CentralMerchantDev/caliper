@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CALIPER — Kitbash Exemplar Comparison</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #0d1117; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  canvas { width: 100%; height: 100%; display: block; }
+  #hud {
+    position: absolute; top: 16px; left: 20px; z-index: 10;
+    background: rgba(13, 17, 23, 0.85); border: 1px solid rgba(255,255,255,0.15);
+    padding: 12px 18px; border-radius: 8px; color: #f0f6fc; pointer-events: none;
+  }
+  #hud h1 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+  #hud p { margin: 0; font-size: 12px; color: #8b949e; }
+  .label-container {
+    position: absolute; bottom: 24px; left: 0; right: 0;
+    display: flex; justify-content: space-around; pointer-events: none;
+  }
+  .label-card {
+    background: rgba(13, 17, 23, 0.9); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 6px; padding: 8px 16px; text-align: center; color: #f0f6fc;
+  }
+  .label-card b { display: block; font-size: 14px; margin-bottom: 2px; }
+  .label-card span { font-size: 11px; color: #8b949e; }
+</style>
+</head>
+<body>
+<a href="./index.html" class="back-to-caliper" aria-label="Back to CALIPER"
+   style="position:fixed;top:14px;right:14px;z-index:9999;display:inline-flex;align-items:center;gap:7px;
+          padding:7px 13px;border-radius:11px;text-decoration:none;font:600 12px/1 system-ui,sans-serif;
+          letter-spacing:.02em;color:#e8e4de;background:rgba(22,20,18,.82);border:1px solid rgba(255,255,255,.16);
+          backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 6px 20px rgba(0,0,0,.4)">
+  <span aria-hidden="true">&#8592;</span> CALIPER
+</a>
+<div id="hud">
+  <h1>Tower Geometry Comparison (32×32m Footprint)</h1>
+  <p>Left: Baseline Procedural (Stacked Boxes) &nbsp;|&nbsp; Right: Modular Kitbash Exemplar (Extrusions, Colonnade, Lantern Crown, Spire)</p>
+</div>
+<div class="label-container">
+  <div class="label-card">
+    <b>Baseline Procedural Tower</b>
+    <span>170 Triangles &middot; Stacked Boxes &middot; Flat Roof</span>
+  </div>
+  <div class="label-card">
+    <b>Modular Kitbash Exemplar</b>
+    <span>5,596 Triangles &middot; Colonnade &middot; Curtain Glass &middot; Ziggurat Crown</span>
+  </div>
+</div>
+<canvas id="c"></canvas>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { HDRLoader } from "./vendor/three/addons/loaders/HDRLoader.js";
+import { bldTower } from "./buildings.js";
+import { buildKitbashTowerExemplar } from "./kitbash-exemplar.js";
+import { getFacadeMaterial } from "./facade-textures.js";
+
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio || 1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.88;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8fb4cf);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.5, 2000);
+
+// Lighting
+const sun = new THREE.DirectionalLight(0xfff0d0, 3.2);
+sun.position.set(80, 140, 100);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 10;
+sun.shadow.camera.far = 400;
+sun.shadow.camera.left = -60;
+sun.shadow.camera.right = 60;
+sun.shadow.camera.top = 60;
+sun.shadow.camera.bottom = -60;
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+
+const hemi = new THREE.HemisphereLight(0xd8e6f2, 0x3d4852, 0.6);
+scene.add(hemi);
+
+// Load HDRI Environment
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+const hdrLoader = new HDRLoader();
+hdrLoader.load("./vendor/hdri/kloofendal_48d_partly_cloudy_1k.hdr", (hdrTex) => {
+  const envMap = pmrem.fromEquirectangular(hdrTex).texture;
+  scene.environment = envMap;
+  scene.environmentIntensity = 0.95;
+  hdrTex.dispose();
+  pmrem.dispose();
+  window.__hdrReady = true;
+});
+
+// Ground Plaza Plinth
+const groundGeo = new THREE.PlaneGeometry(160, 160);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x485058, roughness: 0.85, metalness: 0.05 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// PBR Material
+const mat = getFacadeMaterial("contemporary", { vertexColors: true });
+
+// 1. BASELINE PROCEDURAL TOWER (Left: X = -22)
+const baseModel = bldTower("tower-comparison", { cellW: 4, cellD: 4, profile: "crown" }, THREE);
+const baseGeo = baseModel.lod[0].createGeometry(THREE);
+const baseMesh = new THREE.Mesh(baseGeo, mat);
+baseMesh.position.set(-22, 0, 0);
+baseMesh.castShadow = true;
+baseMesh.receiveShadow = true;
+scene.add(baseMesh);
+
+// 2. MODULAR KITBASH TOWER EXEMPLAR (Right: X = +22)
+const kitbashModel = buildKitbashTowerExemplar({
+  wallColor: 0xd8d0c2,
+  roofColor: 0x3d4852,
+  glassColor: 0x1a3347,
+  trimColor: 0xb5a995,
+}, THREE);
+const kitbashGeo = kitbashModel.createGeometry(THREE);
+const kitbashMesh = new THREE.Mesh(kitbashGeo, mat);
+kitbashMesh.position.set(22, 0, 0);
+kitbashMesh.castShadow = true;
+kitbashMesh.receiveShadow = true;
+scene.add(kitbashMesh);
+
+// Camera Views
+const params = new URLSearchParams(location.search);
+const view = params.get("view") || "air";
+
+if (view === "street") {
+  // Eye-level view looking up at podium colonnade and vertical shafts
+  camera.position.set(0, 4, 48);
+  camera.lookAt(0, 36, 0);
+} else {
+  // Elevated 3/4 aerial view showcasing full silhouette and crown
+  camera.position.set(0, 85, 125);
+  camera.lookAt(0, 44, 0);
+}
+
+window.addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+let frames = 0;
+function render() {
+  requestAnimationFrame(render);
+  renderer.render(scene, camera);
+  if (++frames === 15 && (!window.__hdrReady || true)) {
+    console.log("COMPARISON_RENDER " + JSON.stringify({
+      calls: renderer.info.render.calls,
+      tris: renderer.info.render.triangles,
+      baseTris: baseGeo.index ? baseGeo.index.count / 3 : baseGeo.attributes.position.count / 3,
+      kitbashTris: kitbashGeo.index ? kitbashGeo.index.count / 3 : kitbashGeo.attributes.position.count / 3,
+    }));
+    window.__ready = true;
+  }
+}
+render();
+</script>
+</body>
+</html>

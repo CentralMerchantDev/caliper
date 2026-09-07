@@ -293,6 +293,7 @@ export function buildWorld(THREE, renderer, scene, layers = []) {
   // misbehaves, being able to remove one subsystem at a time is the difference
   // between a diagnosis and a guess.
   const params = typeof location !== "undefined" ? new URLSearchParams(location.search) : null;
+  const isNight = Boolean(params && (params.get("night") === "1" || params.get("tod") === "night"));
   const SKIP = new Set((params ? params.get("skip") || "" : "").split(","));
   // ?seed=<name> -- I1: the renderer now builds a world instance instead of
   // the bare module-default plan/terrain, so which seed it builds is a real
@@ -391,9 +392,9 @@ export function buildWorld(THREE, renderer, scene, layers = []) {
   const sky = new Sky();
   sky.scale.setScalar(WORLD.HORIZON * 6);
   const su = sky.material.uniforms;
-  su.turbidity.value = 1.45;
-  su.rayleigh.value = 0.88;
-  su.mieCoefficient.value = 0.0022;   // the sun disc glow: at 0.0042 it blew a hole in every view it appeared in
+  su.turbidity.value = isNight ? 10.0 : 1.45;
+  su.rayleigh.value = isNight ? 0.05 : 0.88;
+  su.mieCoefficient.value = isNight ? 0.0005 : 0.0022;   // the sun disc glow: at 0.0042 it blew a hole in every view it appeared in
   su.mieDirectionalG.value = 0.82;
   const phi = THREE.MathUtils.degToRad(90 - LOOK.sunElevation);
   const theta = THREE.MathUtils.degToRad(LOOK.sunAzimuth);
@@ -401,7 +402,7 @@ export function buildWorld(THREE, renderer, scene, layers = []) {
   su.sunPosition.value.copy(sunPos);
   scene.add(sky);
 
-  scene.fog = new THREE.FogExp2(LOOK.fogColor, LOOK.fogDensity);
+  scene.fog = new THREE.FogExp2(isNight ? 0x080e18 : LOOK.fogColor, isNight ? LOOK.fogDensity * 1.4 : LOOK.fogDensity);
 
   // THE SKY GETS CLOUDS, STARS AND A MOON, AND IT IS BUILT HERE.
   //
@@ -416,7 +417,7 @@ export function buildWorld(THREE, renderer, scene, layers = []) {
   const citySky = createCitySky(THREE, scene);
   // Daytime defaults at construction, so a bare render that never ticks the
   // day/night loop still shows a sky rather than an empty one.
-  citySky.update(sunPos, 0, 0, null);
+  citySky.update(sunPos, isNight ? 1.0 : 0.0, 0, null);
 
   // Environment map from the sky itself, so glass and water reflect the actual
   // sky rather than a grey studio.
@@ -508,7 +509,7 @@ function half(h) {
           }
           if (ok) {
             scene.environment = rt.texture;
-            scene.environmentIntensity = isHdr ? 0.95 : 0.6;
+            scene.environmentIntensity = isNight ? 0.18 : (isHdr ? 0.95 : 0.6);
             stats.envSource = isHdr ? "hdri" : "canvas";
           } else {
             rt.dispose();
@@ -543,7 +544,7 @@ function half(h) {
     }
   }
 
-  const sun = new THREE.DirectionalLight(0xfff0d0, 3.5);
+  const sun = new THREE.DirectionalLight(isNight ? 0x88aacc : 0xfff0d0, isNight ? 0.25 : 3.5);
   sun.position.copy(sunPos).multiplyScalar(6000);
   sun.castShadow = true;
   sun.shadow.mapSize.set(4096, 4096);
@@ -556,14 +557,14 @@ function half(h) {
 
   // A cool fill from the opposite side. One sun crushes every shaded face to
   // near-black, which is what makes a render look heavy and lifeless.
-  const fill = new THREE.DirectionalLight(0x8fb8e4, 0.42);
+  const fill = new THREE.DirectionalLight(isNight ? 0x334466 : 0x8fb8e4, isNight ? 0.1 : 0.42);
   fill.position.set(-sunPos.x * 4000, 2200, -sunPos.z * 4000);
   scene.add(fill);
   // Ambient was carrying too much of the image. A sun of 3.1 against 1.34 of
   // ambient fill leaves almost no difference between a lit face and a shaded
   // one, which is what made the city look flat and chalky no matter what the
   // palette did.
-  scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x6a6752, 0.48));
+  scene.add(new THREE.HemisphereLight(isNight ? 0x182436 : 0xcfe6ff, isNight ? 0x080c14 : 0x6a6752, isNight ? 0.2 : 0.48));
 
   // ---------------------------------------------------------------------------
   // TERRAIN
@@ -1570,7 +1571,7 @@ varying vec3 vSeaWorld;`)
       const usesVertexColour = !!(geo0 && geo0.attributes.color);
       const char = g.options?.character || spec.character || "heritage";
       const wallColor = (!usesVertexColour && spec.material && spec.material.wall) || 0x9a9a94;
-      const mat = getFacadeMaterial(char, { vertexColors: usesVertexColour, wallColor });
+      const mat = getFacadeMaterial(char, { vertexColors: usesVertexColour, wallColor, night: isNight });
 
       const entry = { spec, geo0, geo1, geo2, mat };
       variantGeomCache.set(g.key, entry);
