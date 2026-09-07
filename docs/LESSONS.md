@@ -336,3 +336,59 @@ green. The fix is explicitly NOT "add BufferGeometryUtils to the sandbox"
 — that would have widened exactly the surface K3's audit spent effort
 narrowing. It is "say what IS there," which is both the safer fix and the
 one that gives the model what it actually needed to succeed the first time.
+
+---
+
+### 2026-09-07 · A test file I wrote called a global that this harness does not provide, and it silently contributed zero tests
+
+**WHAT WAS MISSED** `test/roadkit.test.ts` (written to gate
+`BOARD-CONVERSION-PLAN.md` P0.1/P0.2) used bare `test(...)` and
+`expect(...)`, Jest/Vitest-style, with no imports. This project's harness
+(`test/run.mjs`) has no such globals — every other file in `test/`
+explicitly does `import { test } from "node:test"; import assert from
+"node:assert/strict"`. I never checked an existing file's *import lines*
+before writing mine, only grepped for `test(`/`describe(` bodies, so I
+never saw the missing piece. Running the full suite (`node test/run.mjs`)
+afterward reported a normal-looking summary — "# test files: 105", a
+clean pass/fail count — with my 6 new tests simply absent from it, not
+flagged as an error.
+
+**WHY IT GOT THROUGH** I read the first full-suite run's output as "P0.1
+verified, gate met" because the overall counts looked sane and the
+specific pre-existing failures I expected (seed pins, origin-stability)
+were exactly the ones present — I didn't grep for my own test titles to
+confirm they'd actually run. They hadn't. `git grep -c "roadkit"` across
+the log came back empty. This is the exact shape `CLAUDE.md`'s standard
+of proof warns about one level up: *"A green suite is not evidence a
+control exists. It is evidence that nothing currently disagrees with
+it."* Here nothing disagreed because nothing ran.
+
+**How this was actually caught**: not by audit, by trying to reconcile
+"6 new tests added" against a total-test-count delta that didn't add up
+(614 → 615, not 614 → 620), then bundling and running the file standalone
+(`node --test test/.built/roadkit.test.mjs`), which threw `ReferenceError:
+test is not defined` immediately — the file had never registered anything.
+Exactly why the *combined*-process run didn't crash outright and instead
+produced a clean-looking summary was not fully chased down (a genuine open
+question about `test/run.mjs`'s per-file isolation, not resolved here) —
+the practical fix took priority once the real cause (missing imports) was
+confirmed.
+
+**THE CONTROL** Not yet built. The fix applied was direct — added the
+missing imports, rewrote all six cases to `node:assert/strict`, reran
+standalone (`node --test`, 6/6 pass) and then through the real harness
+(`node test/run.mjs`), confirming all six titles now appear with `✔`. That
+proves *this* file, not the general case. A real control would be
+`test/run.mjs` itself asserting that every built file's test count
+increases by at least 1 (node:test's own per-file summary already reports
+this internally) — so a file that builds and imports cleanly but registers
+zero tests fails the run loudly instead of vanishing into a normal-looking
+total. Not written tonight; scope was the road kit, not the harness.
+
+**STATUS** **OPEN.** The one instance is fixed and reverified (`node
+test/run.mjs` → the 6 roadkit cases present and passing, full suite
+973/978, the 5 failures all pre-existing and named in
+`docs/audits/P0-ROADKIT.md`). The general control — a per-file
+zero-tests-registered check in `test/run.mjs` — does not exist yet and
+this entry stays open until it does and has been watched red against a
+reintroduced case of this same bug.
