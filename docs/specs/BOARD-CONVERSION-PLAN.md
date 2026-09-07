@@ -328,7 +328,7 @@ The current generator stamps a rectangular grid at fixed avenue/street spacing
 across each settlement's bounding box. **That pattern is the complaint.**
 Converting it to pieces without changing it would preserve it exactly.
 
-- [ ] **P2.1** Road hierarchy, from the planning research Mark supplied.
+- [x] **P2.1** Road hierarchy, from the planning research Mark supplied.
       Arterials connect settlement centres to each other and to the regional
       network. Collectors feed arterials. Local streets feed collectors. Junction
       class is determined by what meets what.
@@ -336,6 +336,13 @@ Converting it to pieces without changing it would preserve it exactly.
       layout**, never a compliance engine built into the game.
       **Gate:** a written description of the hierarchy with the source for each
       rule, before any code.
+      **Done:** `docs/specs/ROAD-HIERARCHY.md`. Planning research confirmed as
+      `docs/CITY-PLANNING-SPEC.md` (the only sourced planning doc in the repo,
+      named in the commit that created it). No new road classes — the 4
+      tiers map onto the 7 existing `ROADS` classes; widths use
+      `PLACEMENT-CONTRACT.md` Part 0's standard table, not `ROAD_STANDARDS`'
+      real values. Junction-class-by-what-meets-what is a table with a
+      source per row (§1.6 conflict points/corner radii/60° minimum angle).
 - [ ] **P2.2** Lay arterials as piece chains between centres, following terrain,
       using `ROAD_STANDARDS` for width and `grade.js` for gradient.
       **Gate:** every join socket-verified through the P0 verifier. Zero

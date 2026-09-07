@@ -1,0 +1,36 @@
+BOARD-CONVERSION-PLAN.md P2.1: the road hierarchy, with sources, before any code
+
+What this is: the written hierarchy description P2.1 requires before any
+P2 code lands. docs/specs/ROAD-HIERARCHY.md.
+
+The planning research is docs/CITY-PLANNING-SPEC.md -- confirmed, not
+assumed: it is the only sourced planning-standards document in the repo
+(grepped docs/ and public/ for AASHTO/ITE/arterial/collector/functional
+classification), and the commit that created it (fac2d39, Mark) states
+directly it was built for exactly this purpose ("research how real cities
+are actually laid out before building any more").
+
+No new road classes. The four tiers (regional/arterial/collector/local)
+map onto the 7 existing ROADS classes (FREEWAY/RAMP unchanged and
+hand-authored; BOULEVARD=arterial; AVENUE=collector; STREET/LANE/ALLEY=
+local). What changes is how a road of each class gets PLACED, not what
+classes exist. Widths come from PLACEMENT-CONTRACT.md Part 0's standard
+table (8/16/24/32/64m), not roadkit.js's ROAD_STANDARDS real values or
+city-plan.js's own ROADS table -- both cited, neither treated as the
+placement rule's source.
+
+Junction class is a table, one row per combination that can actually
+occur (arterial x arterial, arterial x collector, freeway/ramp x
+arterial, collector x local, local x local), each with a cited reason
+(CITY-PLANNING-SPEC.md Sec1.6: conflict points, corner radii, the 60
+degree minimum approach angle).
+
+Named explicitly, not left implied: freeway/regional alignment stays
+hand-authored (Mark's own marked alignment, out of scope); terrain-
+following for arterial legs is checked against grade.js's existing
+ROAD_GRADE.BOULEVARD limit and reported, not solved with genuine
+switchback routing; full conversion of the existing 700+ road spans to
+piece chains is a size question addressed as P2.2-P2.6 proceed, not
+assumed complete because P2.1 exists.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
