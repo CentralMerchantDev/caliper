@@ -35,6 +35,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { generateWorld as generateWorldReal } from "../public/city-plan.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
+import { WORLD_SCALE } from "../public/world-scale.js";
 function findPublic(): string {
   let dir = fileURLToPath(import.meta.url);
   for (let i = 0; i < 5; i++) {
