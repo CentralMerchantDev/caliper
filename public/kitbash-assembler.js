@@ -55,7 +55,7 @@ function getMatchingParts(category, predicate) {
  */
 export function assembleBuilding(options = {}, T = THREE) {
   const {
-    foot = { w: 4, d: 4 },
+    foot = { w: 32, d: 32 },
     style = "commercial",
     seed = 42,
     lod = 0,
@@ -66,7 +66,7 @@ export function assembleBuilding(options = {}, T = THREE) {
   const pick = (arr) => arr[Math.floor(rng() * arr.length)];
 
   // For ordinary low-rise fabric, assemble single or dual-tier plain modules
-  if (style === "fabric" || foot.w <= 2 && foot.d <= 2 && rng() < 0.4) {
+  if (style === "fabric" || foot.w <= 16 && foot.d <= 16 && rng() < 0.4) {
     const fabricParts = getMatchingParts("fabric", (p) => p.foot.w <= foot.w && p.foot.d <= foot.d);
     const chosen = fabricParts.length ? pick(fabricParts) : KITBASH_PARTS["fabric-masonry-block-low"];
     const subGeos = chosen.buildGeometry(T, palette, lod);
@@ -87,16 +87,16 @@ export function assembleBuilding(options = {}, T = THREE) {
 
   // 2. Select Shaft mating with podium's top socket
   const shaftCandidates = getMatchingParts("shaft", (p) =>
-    Math.abs(p.sockets.bottom.w - topSocketPod.w) <= 1 &&
-    Math.abs(p.sockets.bottom.d - topSocketPod.d) <= 1
+    Math.abs(p.sockets.bottom.w - topSocketPod.w) <= 8 &&
+    Math.abs(p.sockets.bottom.d - topSocketPod.d) <= 8
   );
   const shaft = shaftCandidates.length ? pick(shaftCandidates) : KITBASH_PARTS["shaft-curtain-wall-straight"];
   const topSocketShaft = shaft.sockets.top;
 
   // 3. Select Crown mating with shaft's top socket
   const crownCandidates = getMatchingParts("crown", (p) =>
-    Math.abs(p.sockets.bottom.w - topSocketShaft.w) <= 1 &&
-    Math.abs(p.sockets.bottom.d - topSocketShaft.d) <= 1
+    Math.abs(p.sockets.bottom.w - topSocketShaft.w) <= 8 &&
+    Math.abs(p.sockets.bottom.d - topSocketShaft.d) <= 8
   );
   const crown = crownCandidates.length ? pick(crownCandidates) : KITBASH_PARTS["crown-plain-parapet"];
   const topSocketCrown = crown.sockets.top;

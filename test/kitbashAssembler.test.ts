@@ -6,8 +6,8 @@ import { assembleBuilding } from "../public/kitbash-assembler.js";
 test("A3.1: Assembler is strictly deterministic from seed", () => {
   const seeds = [1, 42, 999, 1337, 2026, 8888];
   for (const seed of seeds) {
-    const b1 = assembleBuilding({ foot: { w: 4, d: 4 }, seed, lod: 0 }, THREE);
-    const b2 = assembleBuilding({ foot: { w: 4, d: 4 }, seed, lod: 0 }, THREE);
+    const b1 = assembleBuilding({ foot: { w: 32, d: 32 }, seed, lod: 0 }, THREE);
+    const b2 = assembleBuilding({ foot: { w: 32, d: 32 }, seed, lod: 0 }, THREE);
 
     assert.deepEqual(b1.recipe, b2.recipe, `Seed ${seed}: recipe must match exactly`);
     assert.equal(b1.height, b2.height, `Seed ${seed}: height must match exactly`);
@@ -23,14 +23,21 @@ test("A3.2 & A3.3: Triangle distribution across 100 assembled buildings & LOD sc
   const triDist1 = [];
   const triDist2 = [];
 
+  const standards = [
+    { w: 16, d: 16 },
+    { w: 16, d: 24 },
+    { w: 24, d: 32 },
+    { w: 32, d: 32 },
+    { w: 48, d: 48 },
+  ];
+
   for (let i = 0; i < count; i++) {
     const seed = i * 17 + 7;
-    const footW = 3 + (i % 3); // 3x3, 4x4, 5x5
-    const footD = 3 + (i % 3);
+    const foot = standards[i % standards.length];
 
-    const a0 = assembleBuilding({ foot: { w: footW, d: footD }, seed, lod: 0 }, THREE);
-    const a1 = assembleBuilding({ foot: { w: footW, d: footD }, seed, lod: 1 }, THREE);
-    const a2 = assembleBuilding({ foot: { w: footW, d: footD }, seed, lod: 2 }, THREE);
+    const a0 = assembleBuilding({ foot, seed, lod: 0 }, THREE);
+    const a1 = assembleBuilding({ foot, seed, lod: 1 }, THREE);
+    const a2 = assembleBuilding({ foot, seed, lod: 2 }, THREE);
 
     triDist0.push(a0.triangleCount);
     triDist1.push(a1.triangleCount);
