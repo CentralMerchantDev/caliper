@@ -8,9 +8,20 @@
 
 import type { WorkersAIBinding } from "./modelRetrieval.ts";
 
+function wranglerCredentialsPath(): string | null {
+  const nodeProcess = (globalThis as any).process;
+  const os = nodeProcess?.getBuiltinModule?.("os");
+  const path = nodeProcess?.getBuiltinModule?.("path");
+  return os && path ? path.join(os.homedir(), ".wrangler", "config", "default.toml") : null;
+}
+
 export function createWorkersAIClient(options: { accountId?: string; apiToken?: string } = {}): WorkersAIBinding {
   let token = options.apiToken || (typeof process !== "undefined" ? process.env?.CLOUDFLARE_API_TOKEN : "") || "";
-  let accountId = options.accountId || (typeof process !== "undefined" ? process.env?.CLOUDFLARE_ACCOUNT_ID : "") || "e821c95d30cd134e043d084605f384b6";
+  const accountId = options.accountId || (typeof process !== "undefined" ? process.env?.CLOUDFLARE_ACCOUNT_ID : "") || "";
+
+  if (!accountId) {
+    throw new Error("No Cloudflare account ID found. Set CLOUDFLARE_ACCOUNT_ID or pass accountId explicitly.");
+  }
 
   if (!token && typeof process !== "undefined") {
     try {
@@ -18,7 +29,8 @@ export function createWorkersAIClient(options: { accountId?: string; apiToken?: 
       // Use dynamic require / import to avoid bundling node:fs in workers build
       const fs = (globalThis as any).process?.getBuiltinModule ? (globalThis as any).process.getBuiltinModule("fs") : null;
       if (fs) {
-        const defaultToml = fs.readFileSync("C:\\Users\\User\\.wrangler\\config\\default.toml", "utf8");
+        const credentialsPath = wranglerCredentialsPath();
+        const defaultToml = credentialsPath ? fs.readFileSync(credentialsPath, "utf8") : "";
         const match = defaultToml.match(/oauth_token\s*=\s*"([^"]+)"/);
         if (match) token = match[1];
       }
@@ -29,10 +41,6 @@ export function createWorkersAIClient(options: { accountId?: string; apiToken?: 
 
   if (!token) {
     throw new Error("No Cloudflare authentication token found. Set CLOUDFLARE_API_TOKEN or configure Wrangler credentials.");
-  }
-
-  if (typeof process !== "undefined" && process.env) {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
   }
 
   return {
@@ -54,7 +62,8 @@ export function createWorkersAIClient(options: { accountId?: string; apiToken?: 
         try {
           const fs = (globalThis as any).process?.getBuiltinModule ? (globalThis as any).process.getBuiltinModule("fs") : null;
           if (fs) {
-            const tomlPath = "C:\\Users\\User\\.wrangler\\config\\default.toml";
+            const tomlPath = wranglerCredentialsPath();
+            if (!tomlPath) throw new Error("Cannot locate the Wrangler credentials file outside Node.js.");
             const toml = fs.readFileSync(tomlPath, "utf8");
             const rMatch = toml.match(/refresh_token\s*=\s*"([^"]+)"/);
             if (rMatch) {
