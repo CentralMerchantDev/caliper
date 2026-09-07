@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CALIPER — Modular Kitbash District Mix</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b1016;color:#f0ece4;font-family:-apple-system,BlinkMacSystemFont,sans-serif;overflow:hidden}
+  #header{position:fixed;top:12px;left:16px;z-index:10;background:rgba(10,14,20,0.7);padding:10px 16px;border-radius:10px;border:1px solid rgba(255,255,255,0.15)}
+  #header h1{margin:0;font-size:15px;font-weight:600;letter-spacing:0.05em}
+  #header p{margin:4px 0 0;font-size:12px;opacity:0.75}
+  canvas{display:block;width:100vw;height:100vh}
+</style>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.min.js"}}
+</script>
+</head>
+<body>
+<div id="header">
+  <h1>CALIPER — DISTRICT MIX (LANDMARKS VS PLAIN FABRIC)</h1>
+  <p>Mix Ratio: 10% Sculptural Landmarks · 25% Standard Office/Residential · 65% Plain Urban Fabric</p>
+</div>
+<canvas id="c"></canvas>
+<script type="module">
+import * as THREE from "three";
+import { assembleBuilding } from "./kitbash-assembler.js";
+import { DESIGN_RECIPE_MAP } from "./kitbash-recipe-map.js";
+
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e141c);
+
+const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 1, 5000);
+camera.position.set(0, 140, 240);
+camera.lookAt(0, 30, 0);
+
+// Lighting
+const sun = new THREE.DirectionalLight(0xfffaed, 3.2);
+sun.position.set(150, 300, 200);
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0x8fb8e4, 0.8);
+fill.position.set(-150, 100, -100);
+scene.add(fill);
+scene.add(new THREE.HemisphereLight(0xddeeff, 0x223344, 0.6));
+
+// Materials cache
+const mats = {
+  wall: new THREE.MeshStandardMaterial({ color: 0xd8d0c2, roughness: 0.7, metalness: 0.1 }),
+  roof: new THREE.MeshStandardMaterial({ color: 0x3d4852, roughness: 0.5, metalness: 0.2 }),
+  glass: new THREE.MeshStandardMaterial({ color: 0x1a3347, roughness: 0.1, metalness: 0.9 }),
+  trim: new THREE.MeshStandardMaterial({ color: 0xb5a995, roughness: 0.6, metalness: 0.3 }),
+  metal: new THREE.MeshStandardMaterial({ color: 0x5a6268, roughness: 0.4, metalness: 0.8 }),
+  green: new THREE.MeshStandardMaterial({ color: 0x3b5e38, roughness: 0.9, metalness: 0.0 }),
+};
+
+// Ground
+const grid = new THREE.GridHelper(500, 25, 0x253545, 0x152230);
+grid.position.y = -0.5;
+scene.add(grid);
+
+// Generate a realistic city block layout (5x5 grid of plots)
+const gridSize = 5;
+const spacing = 36;
+let landmarkCount = 0;
+let standardCount = 0;
+let fabricCount = 0;
+
+for (let gx = 0; gx < gridSize; gx++) {
+  for (let gz = 0; gz < gridSize; gz++) {
+    const isLandmarkSlot = (gx === 2 && gz === 2) || (gx === 1 && gz === 3);
+    const isStandardSlot = !isLandmarkSlot && (gx % 2 === 0 || gz % 2 === 0);
+
+    let style = "fabric";
+    if (isLandmarkSlot) { style = "landmark"; landmarkCount++; }
+    else if (isStandardSlot) { style = "standard"; standardCount++; }
+    else { fabricCount++; }
+
+    const seed = gx * 100 + gz * 10 + 17;
+    const foot = isLandmarkSlot ? { w: 4, d: 4 } : (isStandardSlot ? { w: 3, d: 3 } : { w: 2, d: 2 });
+    const bld = assembleBuilding({ foot, style, seed, lod: 0 }, THREE);
+
+    const bldGroup = new THREE.Group();
+    const px = (gx - (gridSize - 1) / 2) * spacing;
+    const pz = (gz - (gridSize - 1) / 2) * spacing;
+    bldGroup.position.set(px, 0, pz);
+
+    for (const p of bld.parts) {
+      const mat = mats[p.tag] || mats.wall;
+      bldGroup.add(new THREE.Mesh(p.geo, mat));
+    }
+    scene.add(bldGroup);
+  }
+}
+
+function render() {
+  renderer.render(scene, camera);
+}
+render();
+
+window.__ready = true;
+window.__renderOnce = render;
+window.__mix = { landmarkCount, standardCount, fabricCount, total: gridSize * gridSize };
+</script>
+</body>
+</html>

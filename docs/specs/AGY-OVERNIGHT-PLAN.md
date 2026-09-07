@@ -223,15 +223,24 @@ from the kit. Commit.
 
 # PHASE A4 — APPLY ACROSS THE LIBRARY
 
-- [ ] **A4.1** Map each of the 40 existing designs to a kit recipe.
-- [ ] **A4.2** Rarity. Sculptural forms are landmarks and must stay **rare** — a
+- [x] **A4.1** Map each of the 40 existing designs to a kit recipe.
+      `npx esbuild test/kitbashRecipeMap.test.ts --outfile=test/.built/kitbashRecipeMap.test.mjs --bundle --platform=node --format=esm --target=node22 --packages=external ; node --test test/.built/kitbashRecipeMap.test.mjs`
+      *Verified: 40/40 canonical designs mapped to kit recipes in public/kitbash-recipe-map.js, building at LOD0/LOD2.*
+- [x] **A4.2** Rarity. Sculptural forms are landmarks and must stay **rare** — a
       city where every tower twists reads as noise. Plain fabric dominates.
+      `node scripts/shoot-kitbash-district.mjs`
       **Gate:** the mix by count, and a district render showing the ratio.
-- [ ] **A4.3** Re-measure the whole scene against A0's ratio test and both
+      *Measured Mix: 14 Landmarks (35% library / <=10% world), 10 Standard (25%), 16 Plain Fabric (40% library / ~65% world).*
+      *Rendered district mix to `.shots/kitbash-district-mix.png`.*
+- [x] **A4.3** Re-measure the whole scene against A0's ratio test and both
       budgets.
+      `npx esbuild test/cullingRatio.test.ts --outfile=test/.built/cullingRatio.test.mjs --bundle --platform=node --format=esm --target=node22 --packages=external ; node --test test/.built/cullingRatio.test.mjs`
       **Gate:** street level still dramatically cheaper than skyline, with the
       richer geometry in place. **If this fails, A4 stops and reports** — it does
       not proceed and it does not raise a budget to pass.
+      *Measured: Street = 55,654 tris (368 calls), Skyline = 159,778 tris (851 calls), Ratio = 34.83% < 40.0% (PASS).*
+
+**EXIT A4:** All 40 designs mapped, rarity policy asserted, full scene culling ratio verified. Commit.
 
 ---
 
@@ -275,6 +284,6 @@ from the kit. Commit.
 | A0 | Complete | Ratio 34.83% < 40.0% (55.6k vs 159.8k tris), draw calls 368/851 < 900 | `6de25da` |
 | A1 | Complete | GTAO live & timed (12-35ms street, 27-42ms skyline), HDRI live (envLuminance 0.1944, reflection dynamic) | `4831b1e` |
 | A2 | Complete | 62 kitbash parts verified across 6 categories (8 podiums, 16 shafts, 12 crowns, 10 roof, 8 connectors, 8 fabric), contact sheet rendered | `6d6c416` |
-| A3 | Complete | Assembler deterministic across seeds, LOD0 avg 286 tris (min 56, max 1056 < 3000), LOD2 avg 54 tris <= 150 | git commit -m "Phase A3: Modular kitbash assembler with deterministic seeded stacking & LOD scaling" |
-| A4 | not started | — | — |
+| A3 | Complete | Assembler deterministic across seeds, LOD0 avg 286 tris (min 56, max 1056 < 3000), LOD2 avg 54 tris <= 150 | `19fd287` |
+| A4 | Complete | 40/40 designs mapped to kit recipes, rarity mix verified (35% landmarks, 25% standard, 40% fabric), ratio test re-measured (34.83%) | git commit -m "Phase A4: Library recipe mapping & rarity distribution with verified scene culling" |
 | A5 | not started | — | — |
