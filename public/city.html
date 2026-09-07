@@ -291,6 +291,8 @@ const VIEWS = {
   "Housing close":    () => set(900, 30, 1500, 900, 0.7, 0.20),
   "Downtown skyline": () => set(0, 60, 700, 4600, 0.42, 0.22),
   "Downtown close":   () => set(200, 70, 900, 1500, 0.75, 0.17),
+  "Art Deco close":   () => set(184 / WORLD_SCALE, 60, 805 / WORLD_SCALE, 320, 0.55, 0.28),
+  "Art Deco street":  () => set(184 / WORLD_SCALE, 15, 805 / WORLD_SCALE, 110, 0.45, 0.08),
   "Street level":     () => set(0, 12, 2378, 330, 1.45, 0.045),
   "In the street":    () => set(-90, 18, 1030, 210, 0.55, 0.06),
   "Downtown corner":  () => set(-90, 18, 1030, 420, 1.75, 0.13),
@@ -515,6 +517,7 @@ if (Q.has("bare")) { for (const id of ["hud", "views", "tip", "livequarter"]) do
 // screenshot loop and any live inspection both need a way to change one thing
 // and see the result without a page reload.
 window.__camera = camera;
+window.__set = set;
 window.__renderOnce = () => { if (usePost) composer.render(); else renderer.render(scene, camera); };
 window.__scene = scene;
 window.__apply = apply;

@@ -26,7 +26,7 @@ export function tagGeometry(geom, r = 0.6, g = 0.6, b = 0.6, T = THREE) {
     }
     geom.setAttribute('color', new T.BufferAttribute(colors, 3));
   }
-  return normalizeGeometry(geom);
+  return geom;
 }
 
 export function mergeGeometries(geoms, T = THREE) {
@@ -44,6 +44,7 @@ export function mergeGeometries(geoms, T = THREE) {
   const positions = new Float32Array(totalPos * 3);
   const normals = new Float32Array(totalPos * 3);
   const colors = new Float32Array(totalPos * 3);
+  const uvs = new Float32Array(totalPos * 2);
   const indices = new (totalPos > 65535 ? Uint32Array : Uint16Array)(totalIdx);
 
   let pOffset = 0;
@@ -54,6 +55,7 @@ export function mergeGeometries(geoms, T = THREE) {
     const pos = g.attributes.position;
     const norm = g.attributes.normal;
     const col = g.attributes.color;
+    const uv = g.attributes.uv;
 
     positions.set(pos.array, pOffset * 3);
     if (norm) {
@@ -66,6 +68,14 @@ export function mergeGeometries(geoms, T = THREE) {
         colors[(pOffset + i) * 3] = 0.65;
         colors[(pOffset + i) * 3 + 1] = 0.65;
         colors[(pOffset + i) * 3 + 2] = 0.65;
+      }
+    }
+    if (uv) {
+      uvs.set(uv.array, pOffset * 2);
+    } else {
+      for (let i = 0; i < pos.count; i++) {
+        uvs[(pOffset + i) * 2] = 0.97;
+        uvs[(pOffset + i) * 2 + 1] = 0.97;
       }
     }
 
@@ -86,6 +96,7 @@ export function mergeGeometries(geoms, T = THREE) {
   merged.setAttribute('position', new T.BufferAttribute(positions, 3));
   merged.setAttribute('normal', new T.BufferAttribute(normals, 3));
   merged.setAttribute('color', new T.BufferAttribute(colors, 3));
+  merged.setAttribute('uv', new T.BufferAttribute(uvs, 2));
   merged.setIndex(new T.BufferAttribute(indices, 1));
   return normalizeGeometry(merged);
 }
@@ -139,46 +150,189 @@ export function bld_highend_alpine_chalet() {
   };
 }
 
-// bld-highend-art-deco-skyscraper
+// bld-highend-art-deco-skyscraper (Tier A Exemplar: ~800 triangles)
 export function bld_highend_art_deco_skyscraper() {
   return {
     id: 'bld-highend-art-deco-skyscraper',
     name: "Highend: Art Deco Skyscraper",
     tier: 'highend',
     category: 'buildings',
-    footprint: { w: 36.75, d: 36.75, h: 136.5 },
+    footprint: { w: 36.75, d: 36.75, h: 158 },
     lod: [
       {
         level: 0,
-        tris: 56,
+        tris: 812,
         createGeometry: (T = THREE) => {
-          const _g = (() => {
-            const b1 = new T.BoxGeometry(33.075, 40.949999999999996, 33.075); b1.translate(0, 20.474999999999998, 0); tagGeometry(b1, 0.75, 0.7, 0.6, T);
-                         const b2 = new T.BoxGeometry(27.5625, 61.425000000000004, 27.5625); b2.translate(0, 71.66250000000001, 0); tagGeometry(b2, 0.675, 0.63, 0.54, T);
-                         const b3 = new T.CylinderGeometry(9.1875, 12.862499999999999, 34.125, 8); b3.translate(0, 119.4375, 0); tagGeometry(b3, 0.85, 0.75, 0.4, T);
-                         return mergeGeometries([b1, b2, b3], T);
-          })();
-          return normalizeGeometry(tagGeometry(_g, 0.62, 0.64, 0.66, T));
+          const geoms = [];
+
+          // 1. Podium Base (w: 36, d: 36, h: 22)
+          const base1 = new T.BoxGeometry(36, 10, 36);
+          base1.translate(0, 5, 0);
+          tagGeometry(base1, 0.45, 0.43, 0.40, T);
+          geoms.push(base1);
+
+          const base2 = new T.BoxGeometry(33, 12, 33);
+          base2.translate(0, 16, 0);
+          tagGeometry(base2, 0.76, 0.74, 0.70, T);
+          geoms.push(base2);
+
+          // Entrance Portal
+          const portalFrame = new T.BoxGeometry(10, 12, 2);
+          portalFrame.translate(0, 6, 17.5);
+          tagGeometry(portalFrame, 0.72, 0.58, 0.30, T);
+          geoms.push(portalFrame);
+
+          const portalRecess = new T.BoxGeometry(6, 9, 3);
+          portalRecess.translate(0, 4.5, 17.0);
+          tagGeometry(portalRecess, 0.20, 0.20, 0.22, T);
+          geoms.push(portalRecess);
+
+          const canopy = new T.BoxGeometry(8, 0.8, 3);
+          canopy.translate(0, 7.5, 19);
+          tagGeometry(canopy, 0.35, 0.55, 0.50, T);
+          geoms.push(canopy);
+
+          // Podium Pilasters
+          for (let i = -2; i <= 2; i++) {
+            if (i !== 0) {
+              const pFront = new T.BoxGeometry(1.2, 11, 0.8);
+              pFront.translate(i * 6.5, 16, 16.8);
+              tagGeometry(pFront, 0.82, 0.80, 0.76, T);
+              geoms.push(pFront);
+
+              const pBack = new T.BoxGeometry(1.2, 11, 0.8);
+              pBack.translate(i * 6.5, 16, -16.8);
+              tagGeometry(pBack, 0.82, 0.80, 0.76, T);
+              geoms.push(pBack);
+            }
+          }
+          for (let i = -1; i <= 1; i++) {
+            const pLeft = new T.BoxGeometry(0.8, 11, 1.2);
+            pLeft.translate(-16.8, 16, i * 8);
+            tagGeometry(pLeft, 0.82, 0.80, 0.76, T);
+            geoms.push(pLeft);
+
+            const pRight = new T.BoxGeometry(0.8, 11, 1.2);
+            pRight.translate(16.8, 16, i * 8);
+            tagGeometry(pRight, 0.82, 0.80, 0.76, T);
+            geoms.push(pRight);
+          }
+
+          // 2. Lower Shaft (h: 22 to 72)
+          const shaft1 = new T.BoxGeometry(28, 50, 28);
+          shaft1.translate(0, 47, 0);
+          tagGeometry(shaft1, 0.78, 0.76, 0.72, T);
+          geoms.push(shaft1);
+
+          // Corner Buttress pylons
+          const buttressOffsets = [[-14, -14], [14, -14], [-14, 14], [14, 14]];
+          for (const [bx, bz] of buttressOffsets) {
+            const butt = new T.BoxGeometry(3.5, 46, 3.5);
+            butt.translate(bx, 45, bz);
+            tagGeometry(butt, 0.72, 0.70, 0.66, T);
+            geoms.push(butt);
+          }
+
+          // Vertical Pilasters (4 per face = 16 ribs)
+          for (const dir of [-1, 1]) {
+            for (const offset of [-8, -3, 3, 8]) {
+              const ribZ = new T.BoxGeometry(1.0, 48, 0.6);
+              ribZ.translate(offset, 47, dir * 14.2);
+              tagGeometry(ribZ, 0.85, 0.83, 0.80, T);
+              geoms.push(ribZ);
+
+              const ribX = new T.BoxGeometry(0.6, 48, 1.0);
+              ribX.translate(dir * 14.2, 47, offset);
+              tagGeometry(ribX, 0.85, 0.83, 0.80, T);
+              geoms.push(ribX);
+            }
+          }
+
+          // 3. Mid Shaft Setback (h: 72 to 105)
+          const shaft2 = new T.BoxGeometry(22, 33, 22);
+          shaft2.translate(0, 88.5, 0);
+          tagGeometry(shaft2, 0.78, 0.76, 0.72, T);
+          geoms.push(shaft2);
+
+          for (const dir of [-1, 1]) {
+            for (const offset of [-5, 0, 5]) {
+              const ribZ = new T.BoxGeometry(1.2, 32, 0.6);
+              ribZ.translate(offset, 88.5, dir * 11.2);
+              tagGeometry(ribZ, 0.85, 0.83, 0.80, T);
+              geoms.push(ribZ);
+
+              const ribX = new T.BoxGeometry(0.6, 32, 1.2);
+              ribX.translate(dir * 11.2, 88.5, offset);
+              tagGeometry(ribX, 0.85, 0.83, 0.80, T);
+              geoms.push(ribX);
+            }
+          }
+
+          // 4. Upper Shaft Setback (h: 105 to 125)
+          const shaft3 = new T.BoxGeometry(16, 20, 16);
+          shaft3.translate(0, 115, 0);
+          tagGeometry(shaft3, 0.78, 0.76, 0.72, T);
+          geoms.push(shaft3);
+
+          for (const [bx, bz] of [[-8, -8], [8, -8], [-8, 8], [8, 8]]) {
+            const pylon = new T.BoxGeometry(2.5, 18, 2.5);
+            pylon.translate(bx, 114, bz);
+            tagGeometry(pylon, 0.70, 0.68, 0.64, T);
+            geoms.push(pylon);
+          }
+
+          // 5. Crown & Spire (h: 125 to 158)
+          const crown1 = new T.BoxGeometry(13, 4, 13);
+          crown1.translate(0, 127, 0);
+          tagGeometry(crown1, 0.75, 0.73, 0.69, T);
+          geoms.push(crown1);
+
+          const crown2 = new T.BoxGeometry(10, 4, 10);
+          crown2.translate(0, 131, 0);
+          tagGeometry(crown2, 0.78, 0.76, 0.72, T);
+          geoms.push(crown2);
+
+          const crown3 = new T.BoxGeometry(7, 4, 7);
+          crown3.translate(0, 135, 0);
+          tagGeometry(crown3, 0.82, 0.80, 0.76, T);
+          geoms.push(crown3);
+
+          const lantern = new T.CylinderGeometry(3.5, 4.5, 6, 8);
+          lantern.translate(0, 140, 0);
+          tagGeometry(lantern, 0.72, 0.58, 0.30, T);
+          geoms.push(lantern);
+
+          const spireCone = new T.ConeGeometry(2.5, 12, 8);
+          spireCone.translate(0, 149, 0);
+          tagGeometry(spireCone, 0.88, 0.90, 0.92, T);
+          geoms.push(spireCone);
+
+          const mast = new T.CylinderGeometry(0.4, 0.6, 8, 8);
+          mast.translate(0, 158, 0);
+          tagGeometry(mast, 0.95, 0.95, 0.95, T);
+          geoms.push(mast);
+
+          return mergeGeometries(geoms, T);
         }
       },
       {
         level: 1,
-        tris: 24,
+        tris: 48,
         createGeometry: (T = THREE) => {
-          const _g = (() => {
-            const b1 = new T.BoxGeometry(31.2375, 81.89999999999999, 31.2375); b1.translate(0, 40.949999999999996, 0); tagGeometry(b1, 0.75, 0.7, 0.6, T);
-                         const b2 = new T.BoxGeometry(23.8875, 54.6, 23.8875); b2.translate(0, 109.2, 0); tagGeometry(b2, 0.85, 0.75, 0.4, T);
-                         return mergeGeometries([b1, b2], T);
-          })();
-          return normalizeGeometry(tagGeometry(_g, 0.60, 0.62, 0.64, T));
+          const b1 = new T.BoxGeometry(33, 22, 33); b1.translate(0, 11, 0); tagGeometry(b1, 0.76, 0.74, 0.70, T);
+          const b2 = new T.BoxGeometry(28, 50, 28); b2.translate(0, 47, 0); tagGeometry(b2, 0.78, 0.76, 0.72, T);
+          const b3 = new T.BoxGeometry(22, 33, 22); b3.translate(0, 88.5, 0); tagGeometry(b3, 0.78, 0.76, 0.72, T);
+          const b4 = new T.BoxGeometry(16, 20, 16); b4.translate(0, 115, 0); tagGeometry(b4, 0.78, 0.76, 0.72, T);
+          const b5 = new T.ConeGeometry(3.0, 25, 8); b5.translate(0, 142.5, 0); tagGeometry(b5, 0.88, 0.90, 0.92, T);
+          return mergeGeometries([b1, b2, b3, b4, b5], T);
         }
       },
       {
         level: 2,
         tris: 12,
         createGeometry: (T = THREE) => {
-          const g = new T.BoxGeometry(36.75, 136.5, 36.75);
-          g.translate(0, 68.25, 0);
+          const g = new T.BoxGeometry(36.75, 158, 36.75);
+          g.translate(0, 79, 0);
           return tagGeometry(g, 0.55, 0.57, 0.60, T);
         }
       }
@@ -9104,46 +9258,306 @@ export function bld_showstopper_alpine_chalet() {
   };
 }
 
-// bld-showstopper-art-deco-skyscraper
+// bld-showstopper-art-deco-skyscraper (Tier B Exemplar: ~3,000 triangles)
 export function bld_showstopper_art_deco_skyscraper() {
   return {
     id: 'bld-showstopper-art-deco-skyscraper',
     name: "Showstopper: Art Deco Skyscraper",
     tier: 'showstopper',
     category: 'buildings',
-    footprint: { w: 42, d: 42, h: 156 },
+    footprint: { w: 42, d: 42, h: 220 },
     lod: [
       {
         level: 0,
-        tris: 56,
+        tris: 3344,
         createGeometry: (T = THREE) => {
-          const _g = (() => {
-            const b1 = new T.BoxGeometry(37.800000000000004, 46.8, 37.800000000000004); b1.translate(0, 23.4, 0); tagGeometry(b1, 0.75, 0.7, 0.6, T);
-                         const b2 = new T.BoxGeometry(31.5, 70.2, 31.5); b2.translate(0, 81.9, 0); tagGeometry(b2, 0.675, 0.63, 0.54, T);
-                         const b3 = new T.CylinderGeometry(10.5, 14.7, 39.0, 8); b3.translate(0, 136.5, 0); tagGeometry(b3, 0.85, 0.75, 0.4, T);
-                         return mergeGeometries([b1, b2, b3], T);
-          })();
-          return normalizeGeometry(tagGeometry(_g, 0.62, 0.64, 0.66, T));
+          const geoms = [];
+
+          // 1. Base / Podium (h: 0 to 28m)
+          const plinth = new T.BoxGeometry(42, 6, 42);
+          plinth.translate(0, 3, 0);
+          tagGeometry(plinth, 0.38, 0.36, 0.34, T);
+          geoms.push(plinth);
+
+          const podMid = new T.BoxGeometry(39, 12, 39);
+          podMid.translate(0, 12, 0);
+          tagGeometry(podMid, 0.74, 0.72, 0.68, T);
+          geoms.push(podMid);
+
+          const podTop = new T.BoxGeometry(36, 10, 36);
+          podTop.translate(0, 23, 0);
+          tagGeometry(podTop, 0.78, 0.76, 0.72, T);
+          geoms.push(podTop);
+
+          // Multi-layered Stepped Archway Portal
+          for (let step = 0; step < 4; step++) {
+            const w = 15 - step * 2.2;
+            const h = 18 - step * 2.2;
+            const d = 1.2;
+            const archFrame = new T.BoxGeometry(w, h, d);
+            archFrame.translate(0, 3 + h / 2, 19.5 + step * 0.8);
+            tagGeometry(archFrame, 0.75 - step * 0.08, 0.60 - step * 0.08, 0.32 - step * 0.04, T);
+            geoms.push(archFrame);
+          }
+
+          const doorVoid = new T.BoxGeometry(5.5, 7, 2);
+          doorVoid.translate(0, 3.5, 18.5);
+          tagGeometry(doorVoid, 0.15, 0.15, 0.18, T);
+          geoms.push(doorVoid);
+
+          const marqueeCanopy = new T.BoxGeometry(10, 1.2, 4.5);
+          marqueeCanopy.translate(0, 8.5, 22.5);
+          tagGeometry(marqueeCanopy, 0.40, 0.58, 0.52, T);
+          geoms.push(marqueeCanopy);
+
+          // Podium Colonnade with fluted pilasters (20 fluted piers)
+          for (let i = -3; i <= 3; i++) {
+            if (i !== 0) {
+              const pierF = new T.BoxGeometry(1.4, 20, 1.0);
+              pierF.translate(i * 5.2, 13, 19.8);
+              tagGeometry(pierF, 0.84, 0.82, 0.78, T);
+              geoms.push(pierF);
+
+              const pierB = new T.BoxGeometry(1.4, 20, 1.0);
+              pierB.translate(i * 5.2, 13, -19.8);
+              tagGeometry(pierB, 0.84, 0.82, 0.78, T);
+              geoms.push(pierB);
+            }
+          }
+          for (let i = -2; i <= 2; i++) {
+            const pierL = new T.BoxGeometry(1.0, 20, 1.4);
+            pierL.translate(-19.8, 13, i * 6.5);
+            tagGeometry(pierL, 0.84, 0.82, 0.78, T);
+            geoms.push(pierL);
+
+            const pierR = new T.BoxGeometry(1.0, 20, 1.4);
+            pierR.translate(19.8, 13, i * 6.5);
+            tagGeometry(pierR, 0.84, 0.82, 0.78, T);
+            geoms.push(pierR);
+          }
+
+          // 4 Corner Pylons & Stepped Obelisks
+          for (const [bx, bz] of [[-18, -18], [18, -18], [-18, 18], [18, 18]]) {
+            const pylonBase = new T.BoxGeometry(4.5, 8, 4.5);
+            pylonBase.translate(bx, 28, bz);
+            tagGeometry(pylonBase, 0.70, 0.68, 0.65, T);
+            geoms.push(pylonBase);
+
+            const obelisk = new T.CylinderGeometry(0.8, 2.0, 8, 8);
+            obelisk.translate(bx, 36, bz);
+            tagGeometry(obelisk, 0.82, 0.75, 0.45, T);
+            geoms.push(obelisk);
+          }
+
+          // 2. Lower Shaft (h: 28 to 85m)
+          const shaft1 = new T.BoxGeometry(32, 57, 32);
+          shaft1.translate(0, 56.5, 0);
+          tagGeometry(shaft1, 0.78, 0.76, 0.72, T);
+          geoms.push(shaft1);
+
+          for (const [bx, bz] of [[-15, -15], [15, -15], [-15, 15], [15, 15]]) {
+            const chamfer = new T.BoxGeometry(5, 55, 5);
+            chamfer.translate(bx, 55.5, bz);
+            tagGeometry(chamfer, 0.72, 0.70, 0.66, T);
+            geoms.push(chamfer);
+          }
+
+          // 24 Full-Height Fluted Vertical Ribs (6 ribs per face)
+          for (const dir of [-1, 1]) {
+            for (const offset of [-11, -6.6, -2.2, 2.2, 6.6, 11]) {
+              const ribZ = new T.BoxGeometry(1.0, 56, 0.6);
+              ribZ.translate(offset, 56.5, dir * 16.3);
+              tagGeometry(ribZ, 0.86, 0.84, 0.80, T);
+              geoms.push(ribZ);
+
+              const ribX = new T.BoxGeometry(0.6, 56, 1.0);
+              ribX.translate(dir * 16.3, 56.5, offset);
+              tagGeometry(ribX, 0.86, 0.84, 0.80, T);
+              geoms.push(ribX);
+            }
+          }
+
+          // Spandrel Panels (4 floors x 4 offsets = 32 spandrels)
+          for (const floor of [0, 1, 2, 3]) {
+            const yFloor = 38 + floor * 12;
+            for (const dir of [-1, 1]) {
+              for (const offset of [-6.6, -2.2, 2.2, 6.6]) {
+                const spandrelZ = new T.BoxGeometry(2.4, 1.4, 0.35);
+                spandrelZ.translate(offset, yFloor, dir * 16.1);
+                tagGeometry(spandrelZ, 0.65, 0.52, 0.32, T);
+                geoms.push(spandrelZ);
+
+                const spandrelX = new T.BoxGeometry(0.35, 1.4, 2.4);
+                spandrelX.translate(dir * 16.1, yFloor, offset);
+                tagGeometry(spandrelX, 0.65, 0.52, 0.32, T);
+                geoms.push(spandrelX);
+              }
+            }
+          }
+
+          // 3. Mid Tower Setback (h: 85 to 125m)
+          const shaft2 = new T.BoxGeometry(25, 40, 25);
+          shaft2.translate(0, 105, 0);
+          tagGeometry(shaft2, 0.78, 0.76, 0.72, T);
+          geoms.push(shaft2);
+
+          // 16 Mid Tower Vertical Ribs (4 per face)
+          for (const dir of [-1, 1]) {
+            for (const offset of [-7.5, -2.5, 2.5, 7.5]) {
+              const ribZ = new T.BoxGeometry(1.1, 39, 0.7);
+              ribZ.translate(offset, 105, dir * 12.8);
+              tagGeometry(ribZ, 0.88, 0.86, 0.82, T);
+              geoms.push(ribZ);
+
+              const ribX = new T.BoxGeometry(0.7, 39, 1.1);
+              ribX.translate(dir * 12.8, 105, offset);
+              tagGeometry(ribX, 0.88, 0.86, 0.82, T);
+              geoms.push(ribX);
+            }
+          }
+
+          for (const [bx, bz] of [[-12, -12], [12, -12], [-12, 12], [12, 12]]) {
+            const wing = new T.BoxGeometry(3.5, 36, 3.5);
+            wing.translate(bx, 103, bz);
+            tagGeometry(wing, 0.70, 0.68, 0.65, T);
+            geoms.push(wing);
+          }
+
+          // Mid Spandrels (2 bands x 2 bays)
+          for (const floor of [0, 1]) {
+            const yFloor = 95 + floor * 15;
+            for (const dir of [-1, 1]) {
+              for (const offset of [-2.5, 2.5]) {
+                const spZ = new T.BoxGeometry(2.6, 1.5, 0.4);
+                spZ.translate(offset, yFloor, dir * 12.7);
+                tagGeometry(spZ, 0.65, 0.52, 0.32, T);
+                geoms.push(spZ);
+
+                const spX = new T.BoxGeometry(0.4, 1.5, 2.6);
+                spX.translate(dir * 12.7, yFloor, offset);
+                tagGeometry(spX, 0.65, 0.52, 0.32, T);
+                geoms.push(spX);
+              }
+            }
+          }
+
+          // 4. Upper Tower & Crown (h: 125 to 220m)
+          const shaft3 = new T.BoxGeometry(18, 17, 18);
+          shaft3.translate(0, 133.5, 0);
+          tagGeometry(shaft3, 0.80, 0.78, 0.74, T);
+          geoms.push(shaft3);
+
+          // Upper vertical ribs (4 per face = 16 ribs)
+          for (const dir of [-1, 1]) {
+            for (const offset of [-6, -2, 2, 6]) {
+              const ribZ = new T.BoxGeometry(1.0, 16, 0.6);
+              ribZ.translate(offset, 133.5, dir * 9.3);
+              tagGeometry(ribZ, 0.88, 0.86, 0.82, T);
+              geoms.push(ribZ);
+
+              const ribX = new T.BoxGeometry(0.6, 16, 1.0);
+              ribX.translate(dir * 9.3, 133.5, offset);
+              tagGeometry(ribX, 0.88, 0.86, 0.82, T);
+              geoms.push(ribX);
+            }
+          }
+
+          // 6-Tier Stepped Ziggurat Crown
+          for (let t = 0; t < 6; t++) {
+            const size = 16 - t * 2.2;
+            const h = 2.5;
+            const tier = new T.BoxGeometry(size, h, size);
+            tier.translate(0, 142 + t * 2.5 + h / 2, 0);
+            const metalness = t / 5;
+            tagGeometry(tier, 0.78 + metalness * 0.12, 0.76 + metalness * 0.14, 0.72 + metalness * 0.20, T);
+            geoms.push(tier);
+
+            // Chevron Sunburst arches/fins on each tier (4 fins per tier)
+            for (const dir of [-1, 1]) {
+              const finZ = new T.BoxGeometry(size * 0.7, h * 0.85, 0.5);
+              finZ.translate(0, 142 + t * 2.5 + h / 2, dir * (size / 2 + 0.3));
+              tagGeometry(finZ, 0.90, 0.92, 0.95, T);
+              geoms.push(finZ);
+
+              const finX = new T.BoxGeometry(0.5, h * 0.85, size * 0.7);
+              finX.translate(dir * (size / 2 + 0.3), 142 + t * 2.5 + h / 2, 0);
+              tagGeometry(finX, 0.90, 0.92, 0.95, T);
+              geoms.push(finX);
+            }
+          }
+
+          // Fluted Lantern Chamber (segs = 16, 2 tiers)
+          const lantern1 = new T.CylinderGeometry(4.5, 6.0, 5, 16);
+          lantern1.translate(0, 159.5, 0);
+          tagGeometry(lantern1, 0.75, 0.60, 0.30, T);
+          geoms.push(lantern1);
+
+          const lantern2 = new T.CylinderGeometry(3.5, 4.5, 5, 16);
+          lantern2.translate(0, 164.5, 0);
+          tagGeometry(lantern2, 0.82, 0.70, 0.35, T);
+          geoms.push(lantern2);
+
+          // 8 Corner Eagle Gargoyles / Radiating Fins around Lantern
+          for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const gx = Math.cos(angle) * 5.5;
+            const gz = Math.sin(angle) * 5.5;
+            const gargoyle = new T.ConeGeometry(0.7, 3.5, 6);
+            gargoyle.rotateZ(Math.PI / 4 * Math.cos(angle));
+            gargoyle.rotateX(Math.PI / 4 * Math.sin(angle));
+            gargoyle.translate(gx, 162, gz);
+            tagGeometry(gargoyle, 0.92, 0.92, 0.95, T);
+            geoms.push(gargoyle);
+          }
+
+          // 4-Stage Chrome Spire & Radiating Mast
+          const spireBase = new T.CylinderGeometry(2.0, 3.5, 12, 16);
+          spireBase.translate(0, 173, 0);
+          tagGeometry(spireBase, 0.90, 0.92, 0.96, T);
+          geoms.push(spireBase);
+
+          const spireMid1 = new T.CylinderGeometry(1.2, 2.0, 12, 16);
+          spireMid1.translate(0, 185, 0);
+          tagGeometry(spireMid1, 0.92, 0.94, 0.97, T);
+          geoms.push(spireMid1);
+
+          const spireMid2 = new T.ConeGeometry(1.2, 14, 12);
+          spireMid2.translate(0, 198, 0);
+          tagGeometry(spireMid2, 0.95, 0.96, 0.99, T);
+          geoms.push(spireMid2);
+
+          const spireTip = new T.CylinderGeometry(0.2, 0.5, 12, 8);
+          spireTip.translate(0, 211, 0);
+          tagGeometry(spireTip, 0.98, 0.98, 1.0, T);
+          geoms.push(spireTip);
+
+          const beacon = new T.SphereGeometry(0.8, 12, 12);
+          beacon.translate(0, 217.5, 0);
+          tagGeometry(beacon, 1.0, 0.88, 0.35, T);
+          geoms.push(beacon);
+
+          return mergeGeometries(geoms, T);
         }
       },
       {
         level: 1,
-        tris: 24,
+        tris: 56,
         createGeometry: (T = THREE) => {
-          const _g = (() => {
-            const b1 = new T.BoxGeometry(35.699999999999996, 93.6, 35.699999999999996); b1.translate(0, 46.8, 0); tagGeometry(b1, 0.75, 0.7, 0.6, T);
-                         const b2 = new T.BoxGeometry(27.3, 62.400000000000006, 27.3); b2.translate(0, 124.80000000000001, 0); tagGeometry(b2, 0.85, 0.75, 0.4, T);
-                         return mergeGeometries([b1, b2], T);
-          })();
-          return normalizeGeometry(tagGeometry(_g, 0.60, 0.62, 0.64, T));
+          const b1 = new T.BoxGeometry(39, 28, 39); b1.translate(0, 14, 0); tagGeometry(b1, 0.74, 0.72, 0.68, T);
+          const b2 = new T.BoxGeometry(32, 57, 32); b2.translate(0, 56.5, 0); tagGeometry(b2, 0.78, 0.76, 0.72, T);
+          const b3 = new T.BoxGeometry(25, 40, 25); b3.translate(0, 105, 0); tagGeometry(b3, 0.78, 0.76, 0.72, T);
+          const b4 = new T.BoxGeometry(18, 17, 18); b4.translate(0, 133.5, 0); tagGeometry(b4, 0.80, 0.78, 0.74, T);
+          const b5 = new T.ConeGeometry(3.5, 30, 8); b5.translate(0, 157, 0); tagGeometry(b5, 0.90, 0.92, 0.96, T);
+          const b6 = new T.CylinderGeometry(0.5, 0.8, 25, 8); b6.translate(0, 184.5, 0); tagGeometry(b6, 0.98, 0.98, 1.0, T);
+          return mergeGeometries([b1, b2, b3, b4, b5, b6], T);
         }
       },
       {
         level: 2,
         tris: 12,
         createGeometry: (T = THREE) => {
-          const g = new T.BoxGeometry(42, 156, 42);
-          g.translate(0, 78.0, 0);
+          const g = new T.BoxGeometry(42, 220, 42);
+          g.translate(0, 110, 0);
           return tagGeometry(g, 0.55, 0.57, 0.60, T);
         }
       }
