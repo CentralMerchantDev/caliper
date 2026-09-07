@@ -2044,6 +2044,41 @@ export function generateSettlement(s, polyByLandmass, demandAt = null, seed = DE
   const roads = [], blocks = [], plots = [];
   const b = s.bounds;
 
+  // ROAD SPACING MUST FOLLOW DENSITY, OR SPARSE READS AS UNFINISHED.
+  //
+  // s.av/s.st (avenue/street spacing) used to be read directly, with no
+  // reference to s.scale/s.core/s.edge -- the block-EXISTENCE roll below
+  // (settlementDensity) already thins which blocks get buildings, and the
+  // "roads must go where the town is" trim further down already shortens a
+  // road to the extent of the blocks it serves. Neither changes how many
+  // PARALLEL streets a settlement gets, only how sparse the buildings along
+  // them are and how long each street runs. So a settlement turned down to
+  // scale: 0.12 (WORLD-REBALANCE-BRIEF.md §3's barrier island) still laid
+  // out a full block grid at 180 m spacing, just built on 12% of it -- which
+  // from the air is not a sparse beach town, it is a complete street network
+  // over empty ground, the single most visible "city that failed to
+  // generate" pattern the brief warns about. Measured: the barrier island
+  // ran 4.3 plots per road where every other developed landmass ran 17-35
+  // (mainland 17.2, downtown 25.1, heron-isle 35.2).
+  //
+  // avEff/stEff widen with scale via an inverse power -- 1 at scale: 1
+  // (unaffected: every settlement that does not declare scale gets exactly
+  // its declared av/st, unchanged), wider as scale falls toward 0. The
+  // exponent (0.45) is chosen empirically against the barrier island's own
+  // plots-per-road ratio, not derived: the barrier crescent is built from
+  // many small ~1200 m segments, each nearly its own settlement, and how
+  // many of them can even fit two rows of blocks at a given spacing is a
+  // step function, not a smooth curve -- 0.5 gave a worse ratio than 0.45,
+  // and 0.6 gave worse again, because at those spacings whole segments
+  // stopped fitting a second row of blocks at all rather than thinning
+  // gracefully. Swept 0.25 through 0.8 in test/roadsFollowDensity.test.ts's
+  // own investigation; 0.45 was the local best, not a global guarantee for
+  // every future geometry this touches.
+  const densityScale = s.scale === undefined ? 1 : s.scale;
+  const spacingScale = 1 / Math.pow(Math.max(0.02, densityScale), 0.45);
+  const avEff = s.av * spacingScale;
+  const stEff = s.st * spacingScale;
+
   // A ROAD HIERARCHY, not one mesh.
   //
   // Every road here used to be an AVENUE or a STREET at a fixed spacing, which
@@ -2072,10 +2107,10 @@ export function generateSettlement(s, polyByLandmass, demandAt = null, seed = DE
   // Recorded per position so the inset is derived from the road that exists
   // rather than from the class it might have been.
   const nsHalf = new Map(), ewHalf = new Map();
-  const nAv = Math.max(1, Math.round(s.av ? (b.xMax - b.xMin) / s.av : 1));
+  const nAv = Math.max(1, Math.round(avEff ? (b.xMax - b.xMin) / avEff : 1));
   let ai = 0;
-  for (let x = b.xMin; x <= b.xMax; x += s.av, ai++) {
-    const spacingUp = Math.max(1, Math.round(800 / s.av));       // ~800 m -> arterial
+  for (let x = b.xMin; x <= b.xMax; x += avEff, ai++) {
+    const spacingUp = Math.max(1, Math.round(800 / avEff));       // ~800 m -> arterial
     const arterial = ai % spacingUp === 0;
     const cls = arterial ? "BOULEVARD" : "AVENUE";
     roads.push({ id:`${s.id}-av${Math.round(x)}`, axis:"ns", class: cls,
@@ -2083,8 +2118,8 @@ export function generateSettlement(s, polyByLandmass, demandAt = null, seed = DE
     nsHalf.set(x, ROADS[cls].row / 2);
   }
   let si = 0;
-  for (let z = b.zMin; z <= b.zMax; z += s.st, si++) {
-    const spacingUp = Math.max(1, Math.round(800 / s.st));
+  for (let z = b.zMin; z <= b.zMax; z += stEff, si++) {
+    const spacingUp = Math.max(1, Math.round(800 / stEff));
     const arterial = si % spacingUp === 0;
     const cls = arterial ? "AVENUE" : "STREET";
     roads.push({ id:`${s.id}-st${Math.round(z)}`, axis:"ew", class: cls,
@@ -2102,14 +2137,14 @@ export function generateSettlement(s, polyByLandmass, demandAt = null, seed = DE
   const corridorRoads = roads.filter((r) => CORRIDOR_CLASSES.has(r.class));
   const centres = settlementCentres(s);
 
-  for (let x = b.xMin; x < b.xMax - s.av * 0.5; x += s.av) {
-    for (let z = b.zMin; z < b.zMax - s.st * 0.5; z += s.st) {
+  for (let x = b.xMin; x < b.xMax - avEff * 0.5; x += avEff) {
+    for (let z = b.zMin; z < b.zMax - stEff * 0.5; z += stEff) {
       // Each edge is set back by the road ON THAT EDGE, which may be a promoted
       // arterial and wider than its neighbours.
       const xMin = x + (nsHalf.get(x) ?? WIDEST_HALF);
-      const xMax = x + s.av - (nsHalf.get(x + s.av) ?? WIDEST_HALF);
+      const xMax = x + avEff - (nsHalf.get(x + avEff) ?? WIDEST_HALF);
       const zMin = z + (ewHalf.get(z) ?? WIDEST_HALF);
-      const zMax = z + s.st - (ewHalf.get(z + s.st) ?? WIDEST_HALF);
+      const zMax = z + stEff - (ewHalf.get(z + stEff) ?? WIDEST_HALF);
       if (xMax - xMin < 10 || zMax - zMin < 10) continue;
       if (!rectIsBuildable(xMin, xMax, zMin, zMax, SHORE_MARGIN, poly)) continue;
       // A settlement may carve a hole for another that sits inside it -- a town
@@ -2153,7 +2188,7 @@ export function generateSettlement(s, polyByLandmass, demandAt = null, seed = DE
   //
   // A street exists to reach buildings. So each one is trimmed to the extent of
   // the blocks it actually serves, and a street that serves none is not built.
-  const HALF = Math.max(s.av, s.st);
+  const HALF = Math.max(avEff, stEff);
   const served = [];
   for (const r of roads) {
     const ew = r.axis === "ew";
@@ -2168,7 +2203,7 @@ export function generateSettlement(s, polyByLandmass, demandAt = null, seed = DE
     if (lo === Infinity) continue;                  // serves nothing: not a road
     // a short tail past the last block, so the grid does not stop dead on a
     // building line -- real edges trail off
-    const tail = Math.min(s.av, s.st) * 0.6;
+    const tail = Math.min(avEff, stEff) * 0.6;
     served.push({ ...r, from: Math.max(r.from, lo - tail), to: Math.min(r.to, hi + tail) });
   }
 

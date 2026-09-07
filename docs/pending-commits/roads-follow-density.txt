@@ -1,0 +1,64 @@
+Roads must follow density -- the barrier island's empty street grid was the
+countryside problem, not ground texture
+
+Mark, on the countryside render: "it is yours, in city-plan.js, and it is
+roads, not ground material." Measured and confirmed exactly right.
+generateSettlement() read s.av/s.st (avenue/street spacing) directly, with
+no reference to s.scale/s.core/s.edge. The block-existence roll already
+thins which blocks get buildings, and a separate pass already trims a road
+to the extent of the blocks it serves -- but neither changes how many
+PARALLEL streets a settlement lays out, only how sparse the buildings along
+them are and how long each street runs. So the barrier island, turned down
+to scale: 0.12-0.19 for docs/pending-commits/step3-rebalance-density.txt,
+still laid out a full urban block grid at 180 m spacing and built on a
+fraction of it -- a complete street network over empty ground, which is
+what a render actually caught, not a texture question.
+
+    landmass    roads   plots   plots/road
+    mainland      641   11056     17.2
+    downtown       51    1282     25.1
+    heron-isle     20     704     35.2
+    barrier       345    1486      4.3   <- before this commit
+    barrier        67     578      8.6   <- after
+
+FIX: generateSettlement computes avEff/stEff from the settlement's own
+av/st widened by an inverse power of its density scale (1 at scale: 1,
+unchanged for every settlement that never declares one; wider as scale
+falls toward 0) and uses those for every road/block-spacing calculation
+instead of s.av/s.st directly. The exponent (0.45) is empirical, not
+derived: the barrier crescent is built from many small ~1200 m segments,
+each nearly its own settlement, and how many can fit a second row of blocks
+at a given spacing is a step function, not a smooth curve -- 0.5 gave a
+worse ratio than 0.45, 0.6 worse again, because whole segments stopped
+fitting a second row rather than thinning gracefully. Swept 0.25 through
+0.8 (see the comment at the definition) before settling here.
+
+ACCEPTANCE TEST, per Mark's own instruction ("build that as a check -- it
+is the measurement that would have caught this before it reached a
+render"): test/roadsFollowDensity.test.ts. A floor of 8 plots/road across
+every landmass with enough roads to judge (>=10, excluding tiny islands
+like gull-isle-vlg at n=4 where the ratio is noise, and excluding pure
+regional connectors -- freeways, bridges, the coast road -- which serve no
+plots by design and are not a settlement's own street network). 8 clears
+every genuinely developed landmass by a wide margin and sits well above the
+pre-fix defect (4.3), so it catches "roads decoupled from density again",
+not "the rebalance's density calibration moved." A second test holds
+mainland and downtown to a real urban ratio (>15), so the floor test cannot
+pass by every landmass collapsing toward it together.
+
+Watched red first: git show HEAD:public/city-plan.js (the actual
+pre-this-commit state) against this test reproduces the exact defect --
+`barrier: 4.3 plots/road (1486 plots, 345 roads)` -- then green again with
+the fix restored.
+
+THE OTHER HALF, NAMED, NOT MINE: bare ground reading as farmland/forest
+rather than blank is a real, secondary part of the same countryside
+complaint, and it is agy's (ground material/texture), not city-plan.js's.
+Noted in docs/audits/VISUAL-RUN-QUESTIONS.md for the handoff; not blocking.
+
+How it is known to work: node test/run.mjs and npx tsc --noEmit follow.
+Renders of the barrier island and the countryside gap follow once those are
+clean, alongside downtown-from-the-air at two tower counts for Mark to pick
+between (his call, not settled here) and the bld-terrace share finding
+(33% -> 42.1% of the world, worth surfacing even though the top end
+improved).
