@@ -469,6 +469,14 @@ Converting it to pieces without changing it would preserve it exactly.
       grade-limit findings are marked in red. A named limitation: regional
       ties are straight lines with no water-crossing awareness. See
       `docs/audits/P2-ARTERIAL.md`.
+      **[!] BLOCKED on coordination (P2 finish, item 5):** `city-render.js`
+      is `sandbox-spike-agy`'s file (the worktree split exists specifically
+      so two lanes are not editing the same checkout — `docs/BUILD-LOOP.md`
+      STEP 8). Not edited here. A full handoff — what three piece layers
+      exist to render, what the ribbon technique currently does (confirmed:
+      roughly a dozen call sites across a 4,012-line file, not one function
+      to swap), and a proposed interface for agy to pull rather than this
+      lane to push — is written up in `docs/audits/P2-RENDER-HANDOFF.md`.
 
 **EXIT P2, HONEST STATE:** the arterial layer is real, fully socket-verified,
 connected by construction and by measurement, and rendered. Collectors and
