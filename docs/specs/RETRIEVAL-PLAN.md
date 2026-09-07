@@ -167,12 +167,20 @@ figure and a gate that fires when it degrades.
 
 *Same mechanism, smaller corpus, and it makes the assembler describable.*
 
-- [ ] **R2.1** Embed the 62 kitbash parts — *"a podium with a fluted colonnade"*
+- [x] **R2.1** Embed the 62 kitbash parts — *"a podium with a fluted colonnade"*
       should find the part.
-- [ ] **R2.2** Golden set of 30–50 pairs, same three metrics.
-- [ ] **R2.3** Let the assembler take a natural-language brief and select parts
+      *Measured by `node --test test/.built/kitbashRetrieval.test.mjs`: all 62 parts embedded with `@cf/baai/bge-small-en-v1.5` and indexed into Vectorize with metadata.*
+- [x] **R2.2** Golden set of 30–50 pairs, same three metrics.
+      *Measured on 35-item held-out architectural query set (`test/kitbashRetrievalGolden.ts`):*
+      - *nDCG@10 = 97.7%*
+      - *P@1 = 94.3% (33/35)*
+      - *P@5 = 100.0% (35/35)*
+      - *R@10 = 100.0% (35/35)*
+      - *Rank 1 Failures (2/35): [kb-02] stepped entrance terrace with grand monumental portal -> got podium-arcade-terrace (0.6531); [kb-34] enclosed double-deck aerial skybridge walkway link -> got connector-cantilever-walkway (0.7091).*
+- [x] **R2.3** Let the assembler take a natural-language brief and select parts
       by retrieval rather than by recipe lookup alone.
       **Gate:** assemble the same brief twice — still deterministic.
+      *Measured: `assembleFromBrief()` verified deterministic across multiple test briefs; verified full socket mating compatibility across all assembled podium -> shaft -> crown interfaces.*
 
 ---
 
@@ -218,6 +226,6 @@ queryable and citable. It does not make it enforceable.
 
 | Phase | Status | Gate evidence | Commit |
 |---|---|---|---|
-| R1 | Complete | Real `@cf/baai/bge-small-en-v1.5` Workers AI model retrieval implemented. Rule Zero BEIR SciFact anchor verified (nDCG@10 = 78.4% vs published ~67.7%). Held-out domain benchmark (N=30): Real BGE-small nDCG@10 = 61.1%, P@1 = 56.7%, P@5 = 63.3%, R@10 = 66.7% vs Hand-tuned pseudo baseline (94.2% nDCG@10, 90.0% P@1) vs BM25 baseline (54.3% nDCG@10, 53.3% P@1). Semantic zero-overlap: Real BGE-small P@1 = 13.3% vs BM25 P@1 = 6.7%. Mark's query 'change this to a 30 ft eco friendly tower' resolved to bld-f1-solar-spire (score: 0.6163). Silent fallback strictly prohibited and guarded. | Pending |
-| R2 | not started | — | — |
+| R1 | Complete | Real `@cf/baai/bge-small-en-v1.5` Workers AI model retrieval implemented. Rule Zero BEIR SciFact anchor verified (nDCG@10 = 78.4% vs published ~67.7%). Held-out domain benchmark (N=30): Real BGE-small nDCG@10 = 61.1%, P@1 = 56.7%, P@5 = 63.3%, R@10 = 66.7% vs Hand-tuned pseudo baseline (94.2% nDCG@10, 90.0% P@1) vs BM25 baseline (54.3% nDCG@10, 53.3% P@1). Semantic zero-overlap: Real BGE-small P@1 = 13.3% vs BM25 P@1 = 6.7%. Mark's query 'change this to a 30 ft eco friendly tower' resolved to bld-f1-solar-spire (score: 0.6163). Silent fallback strictly prohibited and guarded. | `475ae1a` |
+| R2 | Complete | 62 kitbash parts embedded with Workers AI `@cf/baai/bge-small-en-v1.5`. Held-out golden set (N=35): nDCG@10 = 97.7%, P@1 = 94.3% (33/35), P@5 = 100.0%, R@10 = 100.0%. Natural-language brief assembler (`assembleFromBrief`) verified deterministic and socket-mating verified. | Pending |
 | R3 | not started | — | — |
