@@ -52,6 +52,114 @@ around the files, and every division is answered across all four horizon states.
 
 ## Phase 0 — Grounding Protocol
 
+> **AMENDED 2026-09-07 — Step 0 added, and the audit now has trigger points.**
+> Mark:
+>
+> > before we set any sort of numbers, we should be looking for benchmarks to
+> > measure against the industry standards … rather than measuring against
+> > things that really produce nothing and have no real value at the end of the
+> > day if they pass, because asking something that doesn't really matter is
+> > inevitable to pass but doesn't show anything
+>
+> > it should be set to run at specific times within the overall initial plan …
+> > so once a certain benchmark is reached, the plan knows that it's time to run
+> > the audit. That should be a checkpoint within it.
+
+---
+
+### Step 0 · The External Anchor — BORROW THE BENCHMARK, DO NOT INVENT ONE
+
+**This runs before Step 1, and before any audit criterion is written.**
+
+An audit that checks a system against criteria the same project invented can
+only report that the project agrees with itself. It is unfalsifiable by
+construction, and it will pass.
+
+**The evidence, from this project, in two days:**
+
+| Reported | Actual | How it passed |
+|---|---|---|
+| 13,200 distinct triangles | 153,060 | number typed into a report |
+| Draw calls: 1, triangles: 1 | ~470 / 75,682 | counter read after a post-process quad |
+| Retrieval precision@1 = 100% | lexical scorer, weights tuned to the set | golden set written by the same author |
+| Retrieval precision@1 = 90% | hand-written `SEMANTIC_CLUSTERS` table, no model | `ai` parameter optional, tests passed none |
+
+**Every one satisfied its gate.** Each gate named a number, and something was
+built that produced that number. **A public benchmark cannot be satisfied that
+way** — a hand-authored cluster table scores near-random on SciFact, because it
+has no training and generalises to nothing beyond the words someone typed in.
+One external run catches in minutes what four internal gates did not.
+
+**The order, for every measurement this audit will examine:**
+
+1. **Find the published standard and its known figures first.** Retrieval →
+   **BEIR** / **MTEB**, metric **nDCG@10**. Embedding models → their published
+   MTEB scores. Frame time → real engine targets. Mutation testing → published
+   mutation-score norms.
+2. **Reproduce the published number before trusting the harness.** If the
+   pipeline cannot land near a known figure on a standard set, the
+   implementation is wrong and no project-specific number from it means
+   anything.
+3. **Only then** measure the project-specific thing, and report it **beside**
+   the external anchor rather than alone.
+4. **State what the project measure adds** that the public one does not.
+5. **Where no published standard exists, say so explicitly and derive the
+   number in writing.** Naming an invented threshold as invented is honest; the
+   failure is presenting it as though it were borrowed.
+
+**Audit finding to carry forward:** every budget in this project was chosen, not
+derived. The 200,000 distinct-triangle ceiling was 7× headroom over a single
+measurement. The 900 draw-call limit was a comment inside a test. The 12M drawn
+ceiling has no cited source at all. None of these is necessarily wrong — but
+none has ever been checked against anything outside this repository, and the
+audit should say so rather than measure against them as if they were standards.
+
+---
+
+### WHEN THIS AUDIT RUNS — checkpoints, not a schedule
+
+UMAA is expensive and blunt. Run continuously it becomes noise; run never it
+becomes decoration. It is triggered by **state in the plan**, not by the clock.
+
+**Trigger on any of these:**
+
+1. **A new KIND of measurement appears.** The first time a phase reports a
+   category of number the project has not reported before — a retrieval score, a
+   frame time, an accuracy figure — audit before that number is trusted or
+   repeated. Every one of the four fabrications above was a first-of-its-kind
+   number.
+2. **A number is about to leave the repository.** Before anything goes onto the
+   public page, the résumé, or a deploy. External claims get audited first,
+   without exception.
+3. **A control exists that has never been watched red.** A gate that has only
+   ever been seen green is not known to be a gate. Audit it, or break it
+   deliberately and watch.
+4. **Three consecutive phases close green.** A run of clean passes is when drift
+   accumulates unobserved. This is the most common trigger and the easiest to
+   skip.
+5. **A phase is reported complete that changed few or no files.** Compare the
+   claim against `git diff --stat`. An eight-phase report over fourteen lines of
+   code has happened here once already.
+6. **Mark reports something the measurements say is fine.** His eye disagreeing
+   with a green suite means the suite is measuring the wrong thing, and that is
+   an audit, not a debate.
+
+**Where the current plans hit these triggers:**
+
+| Plan | Checkpoint | Trigger |
+|---|---|---|
+| `RETRIEVAL-PLAN.md` | R1 exit | 1 — first retrieval score; **2** — it is résumé-bound |
+| `BOARD-CONVERSION-PLAN.md` | P1 exit | 3 — `canPlace` and reversibility are new controls |
+| `BOARD-CONVERSION-PLAN.md` | P2.4 | 1 — first full-network connectivity figure |
+| `AGY-OVERNIGHT-PLAN.md` | A5 exit | 3 — the visual regression gate |
+| Any | before a résumé number ships | 2 |
+
+**The audit records its own trigger.** Which of the six fired, and what state in
+the plan fired it, goes at the top of the audit report. An audit that cannot say
+why it ran was probably run out of habit.
+
+---
+
 ### Step 1 · The Epistemic Anchor (the immutable law)
 
 CALIPER has **no statute**. There is no Building Code equivalent, which means the

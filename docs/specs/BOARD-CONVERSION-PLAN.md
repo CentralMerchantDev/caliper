@@ -488,6 +488,28 @@ lands.*
 
 ---
 
+## AUDIT CHECKPOINTS
+
+**The plan calls the audit; the audit does not run on a clock.** Triggers and
+protocol are in `docs/UMAA-CALIPER.md` under "When this audit runs", and every
+audit starts at **Step 0 — borrow the benchmark, do not invent one.**
+
+| Checkpoint | Trigger | Why here |
+|---|---|---|
+| **P1 exit** | 3 — a control never watched red | `canPlace` and place→remove reversibility are new controls the whole board rests on |
+| **P2.4** | 1 — a new kind of measurement | first full-network connectivity figure; currently 52 components and 38 stranded |
+| **P3 exit** | 3 | the no-floating-edge assertion, world-wide |
+| **Before any number ships** | 2 | résumé, public page, or deploy — no exceptions |
+| **After three green phases** | 4 | a run of clean passes is when drift accumulates unseen |
+
+**Also audit, unscheduled, when:** a phase is reported complete that changed few
+or no files (compare against `git diff --stat`), or when Mark reports something
+the measurements say is fine. His eye disagreeing with a green suite means the
+suite is measuring the wrong thing.
+
+**The audit records which trigger fired**, at the top of its report. An audit
+that cannot say why it ran was run out of habit.
+
 ## RULES FOR THE OVERNIGHT RUN
 
 These replace Mark's eye while he is asleep. They are not optional.
