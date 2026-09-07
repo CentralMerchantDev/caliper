@@ -1,0 +1,73 @@
+BOARD-CONVERSION-PLAN.md P2 finish, item 3: full-network connectivity
+as a hard gate -- 52 components/38 stranded to 1 component/0 stranded,
+without touching a single existing road
+
+What this is: buildConnectivityBridges() in public/road-network.js adds
+NEW connector pieces on top of the existing 1,357-road network -- the
+generated world must stay byte-identical at seed 0 (docs/BUILD-LOOP.md
+STEP 8's own standing guard), so this closes the gate additively, the
+same pattern P2.2 and P2.3 already used, rather than editing
+generateWorld()'s own road generation. Full evidence:
+docs/audits/P2-CONNECTIVITY.md.
+
+Watched red first: node scripts/measure-roads.mjs -> still 52
+components, 38 stranded, of 1,357 roads, unchanged (P2.2/P2.3 do not
+move existing road positions, so this number could not have moved
+either).
+
+Method: a single GLOBAL minimum spanning tree over all 52 components'
+nearest real endpoint pairs (not one MST per landmass -- the giant
+1,053-road component already spans multiple landmasses itself via
+hand-authored bridges/highways, so a global MST naturally merges
+everything into one component, which trivially satisfies "one
+component per landmass" for every landmass at once, without needing to
+tag all 52 components to a landmass correctly first). Each MST edge
+becomes a real connector: straight if already axis-aligned, a
+Manhattan dogleg otherwise.
+
+A real bug, watched red before being called fixed: the first
+measurement only brought 52 components down to 41, not 1 -- most of
+the 51 bridges did nothing. Cause: a connector terminated at its
+target's endpoint using whatever axis the dogleg naturally wanted;
+scripts/measure-roads.mjs's own crosses() check (used here
+deliberately, for an apples-to-apples before/after comparison) returns
+false for ANY same-axis pair by definition, so a same-axis touch went
+completely undetected regardless of literally sharing a coordinate.
+Fixed with a short perpendicular stub at every connection point,
+guaranteed to register by construction rather than by axis luck.
+
+Gate, measured (node -e "...buildConnectivityBridges(roads)...", also
+test/connectivityBridges.test.ts): 52 components -> 1, 38 stranded ->
+0. GATE MET. Named, not fabricated: connectors are not socket-verified
+against the existing spans they reach (no socket exists on an
+unconverted span to check against) and use a uniform STREET class
+regardless of length -- the two longest (3,434 m, 2,359 m) almost
+certainly cross open water and would need a real bridge, not a street,
+same class of limitation already named for the arterial layer's own
+regional ties.
+
+Tests: test/connectivityBridges.test.ts, four cases -- the 52/38
+baseline pinned (watched red), the gate itself (1 component, 0
+stranded), the exact property the same-axis bug broke (every stub
+registers a real crossing), and that bridge distances are real
+measured numbers, not fabricated. npx tsc --noEmit clean.
+
+Full suite: node test/run.mjs -> 1,027 of 1,029 pass, 2 fail -- both
+the pre-existing known-red pins (originStability, planSeed), nothing
+else. All 4 test/connectivityBridges.test.ts cases pass. The run
+appeared stalled for an extended stretch in an unrelated A5 visual-
+regression rendering section (agy's phase, not this pass's own files);
+investigated rather than assumed dead -- Get-CimInstance confirmed the
+two processes involved were this run's own `node test/run.mjs` and its
+own spawned child for test/kitbashRetrieval.test.ts (a file that
+appeared, uncommitted, in this same checkout mid-run, someone else's
+concurrent work). An attempt to kill it as apparently-hung was
+correctly refused (unverifiable against a tracked job id on a shared
+checkout) -- left running, and it went on to finish cleanly on its
+own.
+
+Stopping here for item 3's own record. Per docs/UMAA-CALIPER.md's own
+trigger table, P2.4 is an audit checkpoint (trigger 1, first full-
+network connectivity figure) -- running that next, before item 4.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

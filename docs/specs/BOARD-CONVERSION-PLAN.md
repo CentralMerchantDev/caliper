@@ -419,19 +419,36 @@ Converting it to pieces without changing it would preserve it exactly.
       it would be, same limitation as the arterial layer. Command:
       `node test/run.mjs` (`test/collectorLocalNetwork.test.ts`, six new
       cases). See `docs/audits/P2-COLLECTOR-LOCAL.md`.
-- [ ] **P2.4** **Connectivity, as a hard gate, not a report.** Step 4 measured
+- [x] **P2.4** **Connectivity, as a hard gate, not a report.** Step 4 measured
       the current network: **52 components, 38 roads connecting to nothing,
       regional connectors fragmenting into 8–11 pieces each.**
       **Gate:** ONE connected component for each landmass's road network, and
       zero stranded roads. Watch the test red against today's world first.
-      **NOT MET for the full network — reconfirmed unchanged:**
-      `node scripts/measure-roads.mjs` → still **52 components, 38 stranded,
-      of 1,357 roads**, identical to Step 4 (collectors/locals untouched).
-      **MET for the new arterial layer alone:** `node test/run.mjs` →
-      every landmass with 2+ centres is exactly 1 connected component
-      (measured by union-find over the real edge list, not assumed from MST
-      theory), zero stranded arterial nodes. See `docs/audits/P2-ARTERIAL.md`
-      for why these are two different, both-real numbers.
+      **Watched red, reconfirmed:** `node scripts/measure-roads.mjs` → still
+      **52 components, 38 stranded, of 1,357 roads**, unchanged by P2.2/P2.3
+      (neither touches an existing road's position).
+      **UPDATE — full-network gate (P2 finish, item 3):**
+      `buildConnectivityBridges()` adds NEW connector pieces on top of the
+      existing network (`generateWorld()`'s own output must stay
+      byte-identical at seed 0 — a standing guard, so this does not modify
+      a single existing road) — a single global MST over all 52 components'
+      nearest real endpoint pairs, each edge a straight or Manhattan-dogleg
+      connector. **A real bug, watched red first:** the first version
+      terminated connectors at whatever axis the dogleg wanted; when that
+      matched the target road's own axis, `crosses()` (the SAME check
+      `scripts/measure-roads.mjs` uses) cannot detect a same-axis touch by
+      definition — 52 components fell to only 41, not 1, on first
+      measurement. Fixed with a perpendicular stub at every connection
+      point. **Gate MET: 52 components → 1, 38 stranded → 0**, measured by
+      the identical `crosses()` yardstick the baseline used, over the
+      augmented road list. Command: `node test/run.mjs`
+      (`test/connectivityBridges.test.ts`, four new cases). **Named, not
+      verified:** connectors are not socket-checked against the existing
+      spans they reach (no socket exists on an unconverted span to check
+      against) and use a uniform `STREET` class regardless of length — the
+      two longest (3,434 m, 2,359 m) almost certainly cross open water and
+      would need a real bridge, not a street. See
+      `docs/audits/P2-CONNECTIVITY.md`.
 - [ ] **P2.5** Retire the span representation. `{axis, at, from, to}` stops
       existing; nothing reads it.
       **Gate:** grep returns zero uses outside quarantine. Two representations

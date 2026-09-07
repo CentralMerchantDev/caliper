@@ -924,3 +924,138 @@ export function buildCollectorLocalNetwork(roads, { convertClasses = ["AVENUE", 
     },
   };
 }
+
+// =============================================================================
+// FULL-NETWORK CONNECTIVITY -- BOARD-CONVERSION-PLAN.md P2 finish, item 3
+// (P2.4 as a hard gate).
+//
+// scripts/measure-roads.mjs watched this red: 52 connected components, 38
+// stranded roads, of 1,357. This does not touch a single existing road
+// (generateWorld()'s own output must stay byte-identical at seed 0, a
+// standing guard -- see docs/BUILD-LOOP.md STEP 8) -- it adds NEW connector
+// pieces, additively, exactly the same pattern the arterial and collector/
+// local layers already use. `crosses()` here is DELIBERATELY the same
+// perpendicular-only definition scripts/measure-roads.mjs itself uses, not
+// this file's own more general `computeCutCoords` -- so "before" and
+// "after" are measured by the identical yardstick, not two different ones
+// that happen to both produce a number.
+// =============================================================================
+
+function roadsCross(a, b, eps = 1e-6) {
+  if (a.axis === b.axis) return false;
+  const ns = a.axis === "ns" ? a : b, ew = a.axis === "ns" ? b : a;
+  return ns.at >= ew.from - eps && ns.at <= ew.to + eps && ew.at >= ns.from - eps && ew.at <= ns.to + eps;
+}
+
+function connectedComponents(roads) {
+  const n = roads.length;
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (roadsCross(roads[i], roads[j])) { const ri = find(i), rj = find(j); if (ri !== rj) parent[ri] = rj; }
+    }
+  }
+  const byRoot = new Map();
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    if (!byRoot.has(r)) byRoot.set(r, []);
+    byRoot.get(r).push(i);
+  }
+  return [...byRoot.values()];
+}
+
+/**
+ * NEW connector pieces that merge the network's separate components (and
+ * stranded roads) into as few components as this pass's bridging can
+ * manage, WITHOUT changing a single existing road. A single GLOBAL minimum
+ * spanning tree over all components' nearest real endpoint pairs -- not
+ * one MST per landmass -- because the giant component (1,053 of 1,357
+ * roads, 77.6%) already spans multiple landmasses itself (bridges and
+ * highways cross between them by design); a global MST naturally merges
+ * everything into ONE component, which trivially satisfies "one connected
+ * component per landmass" for every landmass at once, rather than
+ * requiring landmass tags to be assigned correctly to every one of 52
+ * components first (a real source of error this avoids, not a shortcut
+ * taken to dodge it). Each connector is a real, axis-aligned piece
+ * (straight, or a Manhattan dogleg where the nearest pair is not already
+ * axis-aligned) -- geometrically real, socket-chained internally, but NOT
+ * socket-verified against the EXISTING span it reaches, because an
+ * unconverted `{axis,at,from,to}` span carries no socket to verify
+ * against. Named, not fabricated -- same disposition as this file's own
+ * `collectorFeedsArterialContacts`.
+ */
+export function buildConnectivityBridges(roads, { connectorClass = "STREET" } = {}) {
+  const components = connectedComponents(roads);
+  if (components.length <= 1) return { bridges: [], augmentedRoads: roads.slice(), componentsBefore: components.length };
+
+  function nearestPairBetween(idxsA, idxsB) {
+    let best = null;
+    for (const ia of idxsA) {
+      for (const [ax, az] of roadEndpoints(roads[ia])) {
+        for (const ib of idxsB) {
+          for (const [bx, bz] of roadEndpoints(roads[ib])) {
+            const d = Math.hypot(ax - bx, az - bz);
+            if (!best || d < best.d) best = { d, ax, az, bx, bz, ia, ib };
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  /** A short perpendicular stub at (x, z), guaranteed to register a
+   *  crossing with `road` under `roadsCross()` regardless of whether the
+   *  connector's own leg happens to share `road`'s axis. Found necessary
+   *  by measurement, not assumed: the first version terminated a
+   *  connector's leg directly at the target's endpoint, using WHATEVER
+   *  axis the dogleg naturally wanted -- when that leg's axis matched the
+   *  target road's own axis (same-axis touch, e.g. two "ns" roads meeting
+   *  end to end), `roadsCross()` returns false for ANY same-axis pair by
+   *  definition, so the touch went undetected. 52 components only fell to
+   *  41 on the first measurement, not 1, because most of the 51 bridges
+   *  silently failed this way at one or both ends. A perpendicular stub,
+   *  same axis logic `crosses()` already trusts, cannot hit this case. */
+  function stubFor(road, x, z, half = 3) {
+    return road.axis === "ns"
+      ? { id: `bridge-stub-${++stubId}`, axis: "ew", at: z, from: x - half, to: x + half, class: connectorClass }
+      : { id: `bridge-stub-${++stubId}`, axis: "ns", at: x, from: z - half, to: z + half, class: connectorClass };
+  }
+
+  const inTree = new Set([0]);
+  const cache = new Map();
+  const bridges = [];
+  const augmented = roads.slice();
+  let bridgeId = 0, stubId = 0;
+  while (inTree.size < components.length) {
+    let best = null;
+    for (const ci of inTree) {
+      for (let cj = 0; cj < components.length; cj++) {
+        if (inTree.has(cj)) continue;
+        const key = ci < cj ? `${ci}_${cj}` : `${cj}_${ci}`;
+        let pair = cache.get(key);
+        if (!pair) { pair = nearestPairBetween(components[ci], components[cj]); cache.set(key, pair); }
+        if (!best || pair.d < best.d) best = { ...pair, cj };
+      }
+    }
+    inTree.add(best.cj);
+    const { ax, az, bx, bz, d, ia, ib } = best;
+    augmented.push(stubFor(roads[ia], ax, az));
+    augmented.push(stubFor(roads[ib], bx, bz));
+    bridgeId++;
+    if (Math.abs(ax - bx) < 1e-6) {
+      augmented.push({ id: `bridge-connector-${bridgeId}`, axis: "ns", at: ax, from: Math.min(az, bz), to: Math.max(az, bz), class: connectorClass });
+      bridges.push({ id: `bridge-connector-${bridgeId}`, distM: d, legs: 1, ax, az, bx, bz });
+    } else if (Math.abs(az - bz) < 1e-6) {
+      augmented.push({ id: `bridge-connector-${bridgeId}`, axis: "ew", at: az, from: Math.min(ax, bx), to: Math.max(ax, bx), class: connectorClass });
+      bridges.push({ id: `bridge-connector-${bridgeId}`, distM: d, legs: 1, ax, az, bx, bz });
+    } else {
+      // Manhattan dogleg: (ax,az) -> (ax,bz) -> (bx,bz), two axis-aligned legs.
+      augmented.push({ id: `bridge-connector-${bridgeId}a`, axis: "ns", at: ax, from: Math.min(az, bz), to: Math.max(az, bz), class: connectorClass });
+      augmented.push({ id: `bridge-connector-${bridgeId}b`, axis: "ew", at: bz, from: Math.min(ax, bx), to: Math.max(ax, bx), class: connectorClass });
+      bridges.push({ id: `bridge-connector-${bridgeId}`, distM: d, legs: 2, ax, az, bx, bz });
+    }
+  }
+
+  return { bridges, augmentedRoads: augmented, componentsBefore: components.length };
+}
