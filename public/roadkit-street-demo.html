@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Roadkit street demo — one street, end to end</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #0d121a; }
+  #hud {
+    position: absolute; top: 8px; left: 8px; z-index: 10;
+    font: 12px/1.4 monospace; color: #c9d1d9; background: rgba(13,18,26,0.85);
+    padding: 8px 12px; border-radius: 4px; max-width: 480px;
+  }
+  #hud .ok { color: #39d353; }
+  #hud .fail { color: #f85149; }
+</style>
+</head>
+<body>
+<div id="hud">loading…</div>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.min.js"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { buildDemoStreet } from "./roadkit-street-demo.js";
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d121a);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.5, 3000);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const dl = new THREE.DirectionalLight(0xffffff, 1.1);
+dl.position.set(80, 160, 60);
+scene.add(dl);
+scene.add(new THREE.HemisphereLight(0x7cc4ff, 0x1f242d, 0.5));
+
+const gridHelper = new THREE.GridHelper(400, 50, 0x30363d, 0x161b22);
+gridHelper.position.y = -0.02;
+scene.add(gridHelper);
+
+const matRoad = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.8, metalness: 0.1 });
+const matCrossing = new THREE.MeshStandardMaterial({ color: 0xd29922, roughness: 0.7, metalness: 0.0 });
+const matJunction = new THREE.MeshStandardMaterial({ color: 0x58a6ff, roughness: 0.7, metalness: 0.1 });
+
+const { placements, verification } = buildDemoStreet();
+
+let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+for (const p of placements) {
+  const group = new THREE.Group();
+  group.position.set(p.x, 0, p.z);
+  group.rotation.y = (p.rotY * Math.PI) / 180;
+
+  const geom = p.model.lod[0].createGeometry(THREE);
+  const mat = p.label.includes("crossing") ? matCrossing : p.label.includes("intersection") ? matJunction : matRoad;
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  group.add(mesh);
+
+  // Socket markers -- small arrows showing where each piece thinks its
+  // own connectors are, so a screenshot can be checked by eye too.
+  for (const s of p.model.sockets) {
+    const arrow = new THREE.ArrowHelper(
+      new THREE.Vector3(Math.sin((s.bearing * Math.PI) / 180), 0, Math.cos((s.bearing * Math.PI) / 180)),
+      new THREE.Vector3(s.at[0], 0.5, s.at[2]),
+      3, 0x39d353, 1, 0.8,
+    );
+    group.add(arrow);
+  }
+
+  scene.add(group);
+  minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+  minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+}
+
+const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+camera.position.set(cx - 40, 90, cz - 70);
+camera.lookAt(cx, 0, cz);
+
+const hud = document.getElementById("hud");
+const allOk = verification.every((v) => v.dimensionalOk && v.positionOk && v.bearingOk);
+hud.innerHTML = `<b>One street, end to end -- ${placements.length} pieces, ${verification.length} joins</b><br>` +
+  verification.map((v) => {
+    const ok = v.dimensionalOk && v.positionOk && v.bearingOk;
+    return `<span class="${ok ? "ok" : "fail"}">${ok ? "✓" : "✗"}</span> ${v.from} → ${v.to} ` +
+      `(pos ${v.positionErrorM.toFixed(3)}m, bearing ${v.bearingDiffFrom180.toFixed(3)}°)`;
+  }).join("<br>") +
+  `<br><b class="${allOk ? "ok" : "fail"}">${allOk ? "ALL JOINS VERIFIED" : "VERIFICATION FAILED"}</b>`;
+
+window.__streetDemoReady = true;
+window.__streetDemoVerification = verification;
+
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
