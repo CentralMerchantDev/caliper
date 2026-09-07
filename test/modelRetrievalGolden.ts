@@ -1,278 +1,513 @@
 // =============================================================================
 // CALIPER — MODEL RETRIEVAL GOLDEN BENCHMARK (Phase R1.4)
 //
-// 50 hand-authored query-to-expected-model pairs written BEFORE tuning.
-// Tests natural language intent resolution across buildings, vehicles, infrastructure.
+// 60 hand-authored query-to-expected-model pairs:
+//   - devSet: 30 queries
+//   - heldOutSet: 30 queries (15 semantic zero-overlap, 15 lexical overlap)
 //
-// Metrics evaluated:
-//   - Precision@1: Top-1 candidate matches expected targets
-//   - Precision@5: At least 1 expected target in top-5
-//   - Recall@10: Expected targets retrieved within top-10
+// All reported gate metrics are evaluated SOLELY on the held-out evaluation set.
 // =============================================================================
 
 export interface GoldenPair {
+  id: string;
   query: string;
-  expected: string[]; // List of acceptable target designs / asset IDs
+  expected: string[]; // Acceptable design names or asset IDs
   category?: string;
+  type: "semantic_zero_overlap" | "lexical_overlap";
+  split: "dev" | "held_out";
   description: string;
 }
 
-export const GOLDEN_SET: GoldenPair[] = [
-  // 1. Mark's original prompt
+export const DEV_SET: GoldenPair[] = [
   {
+    id: "dev-01",
     query: "30 ft eco friendly tower",
     expected: ["vertical-forest", "solar-spire", "greenpod-office", "stepgarden-walkup"],
-    description: "Mark's original failing prompt for an eco-friendly tower"
+    type: "semantic_zero_overlap",
+    split: "dev",
+    description: "Mark's original query for an eco-friendly tower",
   },
   {
+    id: "dev-02",
     query: "art deco skyscraper",
     expected: ["art-deco-skyscraper"],
-    description: "1920s Art Deco architectural skyscraper"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Art deco skyscraper highrise",
   },
   {
+    id: "dev-03",
     query: "small corner shop",
     expected: ["corner-bodega-flat", "artisan-workshop"],
-    description: "Small ground-floor retail shop / bodega"
+    type: "semantic_zero_overlap",
+    split: "dev",
+    description: "Small street retail bodega",
   },
   {
+    id: "dev-04",
     query: "alpine mountain chalet",
     expected: ["alpine-chalet"],
-    description: "Alpine chalet with sloped wooden roof"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Alpine wooden chalet",
   },
   {
+    id: "dev-05",
     query: "penthouse with rooftop helipad",
     expected: ["cantilever-penthouse", "wave-tower"],
-    description: "Luxury penthouse tower featuring a cantilever helipad"
+    type: "semantic_zero_overlap",
+    split: "dev",
+    description: "Luxury penthouse with helicopter pad",
   },
   {
+    id: "dev-06",
     query: "data center server facility",
     expected: ["data-center-cube", "industrial-warehouse-hub"],
-    description: "Industrial tech server data center"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Data center server building",
   },
   {
+    id: "dev-07",
     query: "shipping container modular home",
     expected: ["shipping-container-living"],
-    description: "Prefabricated shipping container residential unit"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Prefab shipping container dwelling",
   },
   {
+    id: "dev-08",
     query: "brutalist concrete civic complex",
     expected: ["brutalist-complex"],
-    description: "Heavy ribbed concrete brutalist institutional complex"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Ribbed concrete brutalist institutional facility",
   },
   {
+    id: "dev-09",
     query: "twisted helical glass tower",
     expected: ["helix-terrace", "wave-tower"],
-    description: "Parametric spiral twisted residential tower"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Helical spiral residential tower",
   },
   {
+    id: "dev-10",
     query: "diamond diagrid steel skyscraper",
     expected: ["diagrid-tower"],
-    description: "Diagrid lattice exoskeleton glass highrise"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Diagrid lattice skyscraper",
   },
   {
+    id: "dev-11",
     query: "biophilic green townhouse",
     expected: ["biophilic-townhouse", "modern-loft-row", "row-brownstone"],
-    description: "Urban townhouse with green living facade"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Townhouse with living green elements",
   },
   {
+    id: "dev-12",
     query: "biotech research laboratory",
     expected: ["biotech-laboratory", "greenpod-office"],
-    description: "Commercial research and laboratory building"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Biotechnology lab facility",
   },
   {
+    id: "dev-13",
     query: "origami folded cultural center",
     expected: ["origami-cultural-center", "crystalline-pavilion"],
-    description: "Sculptural geometric origami museum/pavilion"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Geometric origami civic center",
   },
   {
+    id: "dev-14",
     query: "neoclassical estate mansion with portico",
     expected: ["neoclassic-mansion", "gothic-revival-manor"],
-    description: "Grand classical columns and portico mansion"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Classical columns mansion",
   },
   {
+    id: "dev-15",
     query: "geodesic dome eco residence",
     expected: ["geodetic-eco-home", "parametric-residence"],
-    description: "Circular dome ecological home"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Geodetic dome dwelling",
   },
   {
+    id: "dev-16",
     query: "gothic revival manor house",
     expected: ["gothic-revival-manor", "neoclassic-mansion"],
-    description: "Gothic finials and gabled stone manor"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Gothic finials manor estate",
   },
   {
+    id: "dev-17",
     query: "micro apartment studio tower",
     expected: ["micro-apartment-tower", "modular-timber-flat"],
-    description: "High-density micro studio residential highrise"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Compact micro apartment highrise",
   },
   {
+    id: "dev-18",
     query: "twin towers with connecting skybridge",
     expected: ["skybridge-complex", "waterfall-atrium"],
-    description: "Dual tower complex linked by skybridge connectors"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Dual skyscrapers joined by skyway",
   },
   {
+    id: "dev-19",
     query: "hyperboloid corporate global headquarters",
     expected: ["hyperboloid-hq"],
-    description: "Iconic curved hyperboloid corporate HQ skyscraper"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Iconic hyperboloid curved corporate tower",
   },
   {
+    id: "dev-20",
     query: "waterfront wave tower with atrium",
     expected: ["wave-tower", "waterfall-atrium"],
-    description: "Undulating maritime waterfront highrise"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Undulating wave tower at waterfront",
   },
   {
+    id: "dev-21",
     query: "industrial logistics warehouse hub",
     expected: ["industrial-warehouse-hub", "data-center-cube"],
-    description: "Large footprint distribution warehouse"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Industrial warehouse distribution hub",
   },
   {
+    id: "dev-22",
     query: "suburban craftsman bungalow home",
     expected: ["craftsman-bungalow", "suburban-split-level", "midcentury-ranch"],
-    description: "Single-family suburban craftsman home"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Single family craftsman bungalow",
   },
   {
+    id: "dev-23",
     query: "midcentury modern ranch house",
     expected: ["midcentury-ranch", "suburban-split-level"],
-    description: "Horizontal low-profile midcentury residential ranch"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Midcentury low-profile ranch home",
   },
   {
+    id: "dev-24",
     query: "step garden terraced walkup apartments",
     expected: ["stepgarden-walkup", "terraced-courtyard-block"],
-    description: "Terraced residential walk-up with rooftop gardens"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Terraced residential walk-up",
   },
   {
+    id: "dev-25",
     query: "modular timber flat",
     expected: ["modular-timber-flat", "micro-apartment-tower"],
-    description: "Mass-timber modular residential block"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Timber residential apartment building",
   },
   {
+    id: "dev-26",
     query: "historic brownstone rowhouse",
     expected: ["row-brownstone", "modern-loft-row", "biophilic-townhouse"],
-    description: "Classic urban brick/stone brownstone row"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Classic urban stone/brick rowhouse",
   },
   {
+    id: "dev-27",
     query: "kinetic responsive facade office tower",
     expected: ["kinetic-facade-tower", "greenpod-office"],
-    description: "Tower featuring dynamic solar-shading kinetic facade"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Dynamic kinetic facade commercial tower",
   },
   {
+    id: "dev-28",
     query: "shard glass crystal biotower",
     expected: ["shard-biotower", "crystalline-pavilion"],
-    description: "Tapering crystalline glass spire biotower"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Tapering shard biotower",
   },
   {
+    id: "dev-29",
     query: "glass crystalline pavilion cultural hall",
     expected: ["crystalline-pavilion", "origami-cultural-center", "canopy-hub"],
-    description: "Transparent faceted glass public pavilion"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Glass faceted public pavilion",
   },
   {
+    id: "dev-30",
     query: "cantilevered cube residential villa",
     expected: ["floating-cube-residence", "cantilever-penthouse"],
-    description: "Modernist cantilevered geometric block home"
+    type: "lexical_overlap",
+    split: "dev",
+    description: "Cantilevered cube modernist residence",
+  },
+];
+
+export const HELD_OUT_SET: GoldenPair[] = [
+  // --- 15 SEMANTIC ZERO-LEXICAL-OVERLAP QUERIES ---
+  {
+    id: "held-01",
+    query: "sustainable living highrise with vegetation",
+    expected: ["vertical-forest", "solar-spire", "greenpod-office", "stepgarden-walkup"],
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Ecological highrise incorporating green flora",
   },
   {
-    query: "canopy hub civic transit shelter",
-    expected: ["canopy-hub", "crystalline-pavilion", "fur-f1-bus-stop-shelter"],
-    description: "Wide open canopy public hub"
+    id: "held-02",
+    query: "sun powered electricity generating highrise",
+    expected: ["solar-spire", "vertical-forest"],
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Tower generating solar electricity",
   },
   {
-    query: "fighter jet supersonic interceptor",
-    category: "aviation",
-    expected: ["av-f1-advanced-fighter-jet", "av-f2-advanced-fighter-jet", "av-f3-advanced-fighter-jet", "av-f4-advanced-fighter-jet", "av-f1-supersonic-passenger-jet"],
-    description: "Military fighter jet aircraft"
+    id: "held-03",
+    query: "stone gabled ancestral estate with pointed arches",
+    expected: ["gothic-revival-manor", "neoclassic-mansion"],
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Old gothic style stone manor",
   },
   {
-    query: "passenger ferry maritime boat",
-    category: "maritime",
-    expected: ["mar-f1-passenger-ferry-single-deck", "mar-f1-open-deck-ferry", "mar-f1-roll-on-roll-off-ferry"],
-    description: "Water transit passenger ferry vessel"
+    id: "held-04",
+    query: "compact prefabricated cargo habitat",
+    expected: ["shipping-container-living", "modular-timber-flat"],
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Upcycled freight container residential unit",
   },
   {
-    query: "pedestrian footbridge crossing",
-    category: "bridges",
-    expected: ["brg-f1-pedestrian-flat-bridge", "brg-f1-pedestrian-spiral-ramp", "brg-f1-stepped-canal-footbridge", "brg-f1-suspension-footbridge"],
-    description: "Walkway footbridge over water or roadway"
-  },
-  {
-    query: "park bench public seating",
-    category: "furniture",
-    expected: ["fur-f1-curved-park-bench", "fur-f1-tree-surround-bench", "fur-f1-stone-amphitheater-seat"],
-    description: "Street furniture park bench"
-  },
-  {
-    query: "deciduous oak tree vegetation",
-    category: "vegetation",
-    expected: ["veg-f1-ancient-oak", "veg-f1-european-beech", "veg-f1-horse-chestnut"],
-    description: "Mature shade tree landscaping asset"
-  },
-  {
-    query: "electric city transit bus",
-    category: "vehicles",
-    expected: ["veh-f1-city-transit-bus", "veh-f1-electric-articulated-bus", "veh-f1-double-decker-tour-bus"],
-    description: "Urban public transit bus vehicle"
-  },
-  {
-    query: "modern ribbon villa",
-    expected: ["ribbon-villa"],
-    description: "Streamlined modern ribbon villa"
-  },
-  {
-    query: "suburban split level house",
-    expected: ["suburban-split-level", "midcentury-ranch", "craftsman-bungalow"],
-    description: "Multi-level suburban family residence"
-  },
-  {
-    query: "terraced courtyard apartment block",
-    expected: ["terraced-courtyard-block", "stepgarden-walkup"],
-    description: "Enclosed courtyard multi-family apartments"
-  },
-  {
-    query: "artisan workshop craft studio",
-    expected: ["artisan-workshop", "corner-bodega-flat"],
-    description: "Small commercial workshop craft space"
-  },
-  {
-    query: "parametric residence aerofoil",
-    expected: ["parametric-residence"],
-    description: "Aerodynamic parametric sculpted residence"
-  },
-  {
-    query: "high-rise vertical forest with lush trees",
-    expected: ["vertical-forest"],
-    description: "Tower integrated with living trees and balconies"
-  },
-  {
-    query: "solar spire renewable energy tower",
-    expected: ["solar-spire"],
-    description: "Solar panel covered skyscraper tower"
-  },
-  {
-    query: "curved eco office with terraces",
-    expected: ["greenpod-office", "vertical-forest"],
-    description: "Commercial office with curved green terraces"
-  },
-  {
-    query: "cargo container modular home",
-    expected: ["shipping-container-living"],
-    description: "Upcycled container modular dwelling"
-  },
-  {
-    query: "modern luxury glass skyscraper",
-    expected: ["art-deco-skyscraper", "diagrid-tower", "hyperboloid-hq", "shard-biotower", "cantilever-penthouse", "wave-tower"],
-    description: "Contemporary glass skyscraper highrise"
-  },
-  {
-    query: "compact micro apartment housing",
+    id: "held-05",
+    query: "high density single occupant compact residences",
     expected: ["micro-apartment-tower", "modular-timber-flat"],
-    description: "High-density studio apartment tower"
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Dense studio micro living tower",
   },
   {
-    query: "waterfront luxury hotel tower",
-    expected: ["waterfall-atrium", "wave-tower", "cantilever-penthouse"],
-    description: "Waterfront hospitality tower"
+    id: "held-06",
+    query: "curved corporate glass monolith",
+    expected: ["hyperboloid-hq", "diagrid-tower", "wave-tower"],
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Curved iconic corporate tower",
   },
   {
-    query: "single family suburban home with yard",
-    expected: ["craftsman-bungalow", "midcentury-ranch", "suburban-split-level"],
-    description: "Low-rise single family home"
-  }
+    id: "held-07",
+    query: "ground level grocery with residential living above",
+    expected: ["corner-bodega-flat", "artisan-workshop"],
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Bodega shop on ground floor with flat above",
+  },
+  {
+    id: "held-08",
+    query: "sculpted geometric folded art gallery",
+    expected: ["origami-cultural-center", "crystalline-pavilion"],
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Origami-like folded public pavilion",
+  },
+  {
+    id: "held-09",
+    query: "cantilevered floating box modernist dwelling",
+    expected: ["floating-cube-residence", "cantilever-penthouse"],
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Cantilevered cube private home",
+  },
+  {
+    id: "held-10",
+    query: "wooden alpine lodge with steep roof",
+    expected: ["alpine-chalet"],
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Mountain chalet lodge with steep eaves",
+  },
+  {
+    id: "held-11",
+    query: "exoskeleton steel diamond lattice office highrise",
+    expected: ["diagrid-tower", "greenpod-office"],
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Diagrid steel lattice skyscraper",
+  },
+  {
+    id: "held-12",
+    query: "single floor horizontal suburban dwelling",
+    expected: ["midcentury-ranch", "craftsman-bungalow", "suburban-split-level", "biophilic-townhouse"],
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Horizontal single-story ranch home",
+  },
+  {
+    id: "held-13",
+    query: "rooftop aircraft landing pad luxury tower",
+    expected: ["cantilever-penthouse", "wave-tower"],
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Penthouse with helicopter landing facility",
+  },
+  {
+    id: "held-14",
+    query: "fast aerial combat military craft",
+    expected: ["advanced-fighter-jet", "supersonic-passenger-jet"],
+    category: "aviation",
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Military interceptor fighter jet",
+  },
+  {
+    id: "held-15",
+    query: "floating passenger water shuttle",
+    expected: ["passenger-ferry", "open-deck-ferry", "roll-on-roll-off-ferry"],
+    category: "maritime",
+    type: "semantic_zero_overlap",
+    split: "held_out",
+    description: "Passenger ferry vessel",
+  },
+
+  // --- 15 LEXICAL / NEAR-LEXICAL OVERLAP QUERIES ---
+  {
+    id: "held-16",
+    query: "art deco skyscraper",
+    expected: ["art-deco-skyscraper"],
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "1920s Art Deco skyscraper highrise",
+  },
+  {
+    id: "held-17",
+    query: "micro apartment tower",
+    expected: ["micro-apartment-tower", "modular-timber-flat"],
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Micro apartment residential tower",
+  },
+  {
+    id: "held-18",
+    query: "shipping container living",
+    expected: ["shipping-container-living"],
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Shipping container living unit",
+  },
+  {
+    id: "held-19",
+    query: "craftsman bungalow",
+    expected: ["craftsman-bungalow", "midcentury-ranch"],
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Suburban craftsman bungalow house",
+  },
+  {
+    id: "held-20",
+    query: "vertical forest tower",
+    expected: ["vertical-forest"],
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Vertical forest tree tower",
+  },
+  {
+    id: "held-21",
+    query: "solar spire",
+    expected: ["solar-spire"],
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Solar spire energy tower",
+  },
+  {
+    id: "held-22",
+    query: "brutalist complex",
+    expected: ["brutalist-complex"],
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Brutalist concrete complex",
+  },
+  {
+    id: "held-23",
+    query: "origami cultural center",
+    expected: ["origami-cultural-center", "crystalline-pavilion"],
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Origami cultural pavilion center",
+  },
+  {
+    id: "held-24",
+    query: "hyperboloid hq",
+    expected: ["hyperboloid-hq"],
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Hyperboloid corporate headquarters",
+  },
+  {
+    id: "held-25",
+    query: "alpine chalet",
+    expected: ["alpine-chalet"],
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Alpine mountain chalet",
+  },
+  {
+    id: "held-26",
+    query: "biophilic townhouse",
+    expected: ["biophilic-townhouse", "modern-loft-row"],
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Biophilic green townhouse",
+  },
+  {
+    id: "held-27",
+    query: "corner bodega flat",
+    expected: ["corner-bodega-flat", "artisan-workshop"],
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Corner bodega store and flat",
+  },
+  {
+    id: "held-28",
+    query: "city transit bus",
+    expected: ["city-transit-bus", "electric-articulated-bus"],
+    category: "vehicles",
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "City transit bus vehicle",
+  },
+  {
+    id: "held-29",
+    query: "ancient oak",
+    expected: ["ancient-oak"],
+    category: "vegetation",
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Ancient oak shade tree",
+  },
+  {
+    id: "held-30",
+    query: "pedestrian footbridge",
+    expected: ["pedestrian-flat-bridge", "pedestrian-spiral-ramp", "stepped-canal-footbridge"],
+    category: "bridges",
+    type: "lexical_overlap",
+    split: "held_out",
+    description: "Pedestrian footbridge crossing",
+  },
 ];

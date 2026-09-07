@@ -1321,13 +1321,14 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
       const fitsH = url.searchParams.get("fitsH") ? parseFloat(url.searchParams.get("fitsH")!) : undefined;
 
       const fits = fitsW !== undefined && fitsD !== undefined ? { w: fitsW, d: fitsD, h: fitsH } : undefined;
-      const results = findModels(q, {
+      const results = await findModels(q, {
         registry: ASSET_REGISTRY,
         category,
         tier,
         fits,
         limit,
-        rerank: true,
+        vectorizeIndex: env.VECTORIZE_MODELS,
+        ai: env.AI,
       });
 
       return json({ query: q, total: results.length, results });

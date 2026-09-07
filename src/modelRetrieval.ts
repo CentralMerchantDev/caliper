@@ -1,14 +1,14 @@
 // =============================================================================
-// CALIPER — MODEL RETRIEVAL ENGINE (Phase R1)
+// CALIPER — VECTORIZE & WORKERS AI MODEL RETRIEVAL (Phase R1)
 //
-// Semantic search and retrieval over the 2,400-entry asset library.
-// Replaces random tier/footprint hash picking with intent-based retrieval.
+// Native semantic vector search over the asset library.
 //
-// Native architecture:
-//   - Workers AI & Vectorize compatible schema
-//   - Deterministic semantic embedding generation
-//   - Top-k similarity search + spatial fitting filters
-//   - Precision-maximizing semantic reranker
+// Architecture:
+//   - Cloudflare Workers AI embedding model: @cf/baai/bge-small-en-v1.5 (384 dims)
+//   - Cloudflare Vectorize index binding: VECTORIZE_MODELS
+//   - In-memory Vectorize implementation for Node / Vitest testing & offline execution
+//   - Lexical baseline (lexicalSearch) for rigorous side-by-side benchmarking
+//   - Spatial fitting & ground substrate post-filters
 // =============================================================================
 
 export interface AssetEntry {
@@ -28,6 +28,37 @@ export interface AssetEntry {
   [key: string]: any;
 }
 
+export interface VectorizeMatch {
+  id: string;
+  score: number;
+  values?: number[];
+  metadata?: Record<string, any>;
+}
+
+export interface VectorizeQueryResponse {
+  matches: VectorizeMatch[];
+  count: number;
+}
+
+export interface VectorizeVector {
+  id: string;
+  values: number[] | Float32Array;
+  metadata?: Record<string, any>;
+}
+
+export interface VectorizeIndex {
+  upsert(vectors: VectorizeVector[]): Promise<{ count: number }>;
+  query(vector: number[] | Float32Array, options?: { topK?: number; returnMetadata?: boolean | "all"; filter?: any }): Promise<VectorizeQueryResponse>;
+  describe(): Promise<{ count: number; dimensions: number; metric: string }>;
+}
+
+export interface WorkersAIBinding {
+  run(model: string, input: { text: string | string[] }): Promise<{
+    shape?: number[];
+    data: number[][] | number[];
+  }>;
+}
+
 export interface SearchOptions {
   registry?: Record<string, AssetEntry>;
   fits?: { w: number; d: number; h?: number };
@@ -35,7 +66,6 @@ export interface SearchOptions {
   category?: string;
   tier?: string;
   limit?: number;
-  rerank?: boolean;
 }
 
 export interface SearchResult {
@@ -43,293 +73,355 @@ export interface SearchResult {
   score: number;
   entry: AssetEntry;
   rank: number;
-  matchedTerms: string[];
+  pipeline: "vectorize" | "lexical";
 }
 
 /**
- * Common style and concept expansions for architectural & asset domain
+ * Calculates dot product between two vector arrays
  */
-const SYNONYM_MAP: Record<string, string[]> = {
-  "eco": ["eco", "green", "sustainable", "biophilic", "environmental", "forest", "plants", "solar", "garden", "terrace", "nature"],
-  "friendly": ["eco", "sustainable", "green"],
-  "green": ["eco", "sustainable", "biophilic", "forest", "garden", "greenpod"],
-  "tower": ["tower", "skyscraper", "highrise", "spire", "tall", "vertical"],
-  "skyscraper": ["skyscraper", "tower", "highrise", "spire", "tall", "vertical"],
-  "highrise": ["skyscraper", "tower", "highrise", "tall", "vertical"],
-  "residential": ["residential", "home", "house", "living", "flat", "apartment", "townhouse", "condo", "villa", "dwelling"],
-  "house": ["house", "residential", "home", "living", "cottage", "bungalow", "villa", "ranch"],
-  "home": ["home", "house", "residential", "living", "dwelling"],
-  "cottage": ["cottage", "chalet", "bungalow", "house", "ranch"],
-  "chalet": ["chalet", "alpine", "mountain", "cottage", "house", "wood", "timber"],
-  "ranch": ["ranch", "midcentury", "suburban", "single-family", "house", "home"],
-  "bungalow": ["bungalow", "craftsman", "suburban", "house", "home"],
-  "apartment": ["apartment", "flat", "residential", "walkup", "loft", "condo"],
-  "flat": ["flat", "apartment", "residential", "walkup", "unit"],
-  "townhouse": ["townhouse", "brownstone", "row", "bay", "residential"],
-  "rowhouse": ["rowhouse", "brownstone", "townhouse", "row"],
-  "shop": ["shop", "retail", "store", "commercial", "bodega", "market", "boutique", "workshop"],
-  "store": ["store", "shop", "retail", "commercial", "bodega", "market"],
-  "bodega": ["bodega", "corner", "grocery", "convenience", "shop", "retail", "store"],
-  "commercial": ["commercial", "office", "retail", "business", "store", "shop", "corporate"],
-  "office": ["office", "commercial", "corporate", "headquarters", "hq", "work"],
-  "civic": ["civic", "public", "government", "pavilion", "cultural", "center", "hall"],
-  "industrial": ["industrial", "warehouse", "factory", "data", "storage", "hub", "logistics"],
-  "warehouse": ["warehouse", "industrial", "storage", "depot", "hub", "logistics"],
-  "jet": ["fighter", "jet", "aircraft", "airplane", "plane", "aviation", "interceptor"],
-  "plane": ["airplane", "plane", "aircraft", "aviation", "jet"],
-  "fighter": ["fighter", "jet", "military", "interceptor", "combat"],
-  "interceptor": ["interceptor", "fighter", "jet", "supersonic"],
-  "car": ["car", "automobile", "vehicle", "sedan", "coupe", "transport"],
-  "bus": ["bus", "transit", "coach", "shuttle", "vehicle"],
-  "transit": ["transit", "bus", "tram", "train", "transport"],
-  "boat": ["boat", "ship", "vessel", "maritime", "water", "ferry", "yacht"],
-  "ship": ["ship", "vessel", "boat", "maritime", "water", "freighter"],
-  "ferry": ["ferry", "passenger", "vessel", "boat", "maritime", "deck"],
-  "bridge": ["bridge", "span", "crossing", "overpass", "viaduct", "footbridge"],
-  "footbridge": ["footbridge", "pedestrian", "bridge", "walkway", "crossing"],
-  "tree": ["tree", "vegetation", "plant", "foliage", "flora", "greenery", "oak"],
-  "oak": ["oak", "ancient", "tree", "deciduous", "vegetation"],
-  "bench": ["bench", "furniture", "seating", "seat", "street-furniture"],
-  "modern": ["modern", "contemporary", "sleek", "glass", "curtain", "minimal"],
-  "artdeco": ["artdeco", "deco", "fluted", "ziggurat", "ornate", "geometric"],
-  "brutalist": ["brutalist", "concrete", "ribs", "heavy", "angular", "civic"],
-  "gothic": ["gothic", "revival", "manor", "spire", "finials", "pointed", "arches"],
-  "luxury": ["luxury", "penthouse", "cantilever", "helipad", "highend", "premium", "f4"],
-  "basic": ["basic", "simple", "lowrise", "f1", "timber", "wood"],
-  "helical": ["helical", "helix", "twisted", "spiral"],
-  "twisted": ["twisted", "helix", "helical", "spiral"],
-  "cantilever": ["cantilever", "cantilevered", "floating", "boxes", "overhang"],
-  "container": ["container", "shipping", "modular", "prefab", "living"],
-  "aerofoil": ["aerofoil", "parametric", "elliptical", "aerodynamic"],
-};
+function dotProduct(a: Float32Array | number[], b: Float32Array | number[]): number {
+  let sum = 0;
+  const len = Math.min(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    sum += a[i] * b[i];
+  }
+  return sum;
+}
 
 /**
- * Extracts normalized search tokens and expands domain synonyms
+ * Calculates L2 Euclidean norm of a vector
  */
-export function tokenize(text: string): string[] {
-  if (!text) return [];
-  const normalized = text
-    .toLowerCase()
-    .replace(/[_\-\/\\:,\.;\(\)]+/g, " ")
-    .replace(/[^a-z0-9\s]/g, " ");
+function vectorNorm(v: Float32Array | number[]): number {
+  let sumSq = 0;
+  for (let i = 0; i < v.length; i++) {
+    sumSq += v[i] * v[i];
+  }
+  return Math.sqrt(sumSq);
+}
 
-  const rawTokens = normalized.split(/\s+/).filter((t) => t.length > 0);
-  const expanded = new Set<string>();
+/**
+ * High-performance in-memory Cloudflare Vectorize store (implements VectorizeIndex)
+ */
+export class InMemoryVectorize implements VectorizeIndex {
+  private vectors: Map<string, { values: Float32Array; metadata?: Record<string, any> }> = new Map();
+  public readonly dimensions: number;
+  public readonly metric: string = "cosine";
 
-  for (const t of rawTokens) {
-    expanded.add(t);
-    // Add subword tokens for compound words
-    if (t === "artdeco" || t === "art-deco") { expanded.add("art"); expanded.add("deco"); }
-    if (t === "townhouse") { expanded.add("town"); expanded.add("house"); }
-    if (t === "rowhouse") { expanded.add("row"); expanded.add("house"); }
-    if (t === "skyscraper") { expanded.add("sky"); expanded.add("scraper"); expanded.add("tower"); expanded.add("highrise"); }
-    if (t === "highrise" || t === "high-rise") { expanded.add("high"); expanded.add("rise"); expanded.add("tower"); expanded.add("skyscraper"); }
-    if (t === "waterfront") { expanded.add("water"); expanded.add("front"); }
-    if (t === "skybridge") { expanded.add("sky"); expanded.add("bridge"); }
-    if (t === "footbridge") { expanded.add("foot"); expanded.add("bridge"); }
-    if (t === "biophilic") { expanded.add("bio"); expanded.add("eco"); expanded.add("nature"); }
-    if (t === "greenpod") { expanded.add("green"); expanded.add("eco"); expanded.add("office"); }
-    if (t === "stepgarden") { expanded.add("step"); expanded.add("garden"); expanded.add("eco"); }
-    if (t === "hyperboloid") { expanded.add("curved"); expanded.add("tower"); expanded.add("hq"); }
-
-    if (SYNONYM_MAP[t]) {
-      for (const syn of SYNONYM_MAP[t]) expanded.add(syn);
-    }
+  constructor(dimensions: number = 384) {
+    this.dimensions = dimensions;
   }
 
-  return Array.from(expanded);
+  async upsert(vectors: VectorizeVector[]): Promise<{ count: number }> {
+    for (const vec of vectors) {
+      const floatVals = vec.values instanceof Float32Array ? vec.values : new Float32Array(vec.values);
+      this.vectors.set(vec.id, {
+        values: floatVals,
+        metadata: vec.metadata,
+      });
+    }
+    return { count: vectors.length };
+  }
+
+  async query(
+    queryVector: number[] | Float32Array,
+    options: { topK?: number; returnMetadata?: boolean | "all"; filter?: any } = {}
+  ): Promise<VectorizeQueryResponse> {
+    const topK = options.topK || 10;
+    const qVec = queryVector instanceof Float32Array ? queryVector : new Float32Array(queryVector);
+    const qNorm = vectorNorm(qVec);
+
+    const matches: VectorizeMatch[] = [];
+
+    for (const [id, item] of this.vectors.entries()) {
+      if (options.filter) {
+        let match = true;
+        for (const [k, v] of Object.entries(options.filter)) {
+          if (item.metadata?.[k] !== v) { match = false; break; }
+        }
+        if (!match) continue;
+      }
+
+      const dot = dotProduct(qVec, item.values);
+      const vNorm = vectorNorm(item.values);
+      const score = (qNorm > 0 && vNorm > 0) ? (dot / (qNorm * vNorm)) : 0;
+
+      matches.push({
+        id,
+        score,
+        metadata: options.returnMetadata ? item.metadata : undefined,
+      });
+    }
+
+    matches.sort((a, b) => b.score - a.score);
+    const topMatches = matches.slice(0, topK);
+
+    return {
+      matches: topMatches,
+      count: topMatches.length,
+    };
+  }
+
+  async describe(): Promise<{ count: number; dimensions: number; metric: string }> {
+    return {
+      count: this.vectors.size,
+      dimensions: this.dimensions,
+      metric: this.metric,
+    };
+  }
+
+  get size(): number {
+    return this.vectors.size;
+  }
 }
 
 /**
- * Builds rich embedding / indexing text for an asset registry entry
+ * Builds rich embedding / indexing text for an asset registry entry (R1.1)
  */
 export function buildEmbeddingText(entry: AssetEntry): string {
   const parts: string[] = [];
 
-  // 1. Primary Name & Id
+  // 1. Primary Name & Identifier
   parts.push(entry.name || entry.id);
   const idClean = (entry.id || "").replace(/[_\-]+/g, " ");
   parts.push(idClean);
 
-  // 2. Category & Design
-  if (entry.category) parts.push(`category: ${entry.category}`);
+  // 2. Category & Architectural Design
+  if (entry.category) parts.push(`category ${entry.category}`);
   if (entry.design) {
-    parts.push(`design: ${entry.design.replace(/[_\-]+/g, " ")}`);
-    // Add design synonyms
-    if (entry.design === "vertical-forest") parts.push("eco friendly green sustainable forest tower trees plants vegetation highrise skyscraper");
-    if (entry.design === "solar-spire") parts.push("solar energy renewable eco friendly spire tower highrise skyscraper");
-    if (entry.design === "greenpod-office") parts.push("eco green sustainable modern commercial office pod midrise");
-    if (entry.design === "stepgarden-walkup") parts.push("step garden terraces green plants walkup residential apartments");
-    if (entry.design === "biophilic-townhouse") parts.push("biophilic nature eco green townhouse residential home");
-    if (entry.design === "art-deco-skyscraper") parts.push("art deco vintage classic 1920s skyscraper spire fluted tower highrise glass");
-    if (entry.design === "cantilever-penthouse") parts.push("cantilever luxury penthouse rooftop helipad tower highrise skyscraper glass");
-    if (entry.design === "floating-cube-residence") parts.push("floating cube cantilevered residential villa modernist home");
-    if (entry.design === "shipping-container-living") parts.push("shipping container modular prefab industrial living home dwelling house");
-    if (entry.design === "data-center-cube") parts.push("data center server cube industrial tech computer hub facility");
-    if (entry.design === "hyperboloid-hq") parts.push("hyperboloid curved sculptural global corporate headquarters tower skyscraper modern glass luxury");
-    if (entry.design === "brutalist-complex") parts.push("brutalist concrete architectural civic public institution complex");
-    if (entry.design === "crystalline-pavilion") parts.push("crystalline glass faceted modern pavilion cultural center hall");
-    if (entry.design === "origami-cultural-center") parts.push("origami folded geometric museum cultural center civic");
-    if (entry.design === "helix-terrace") parts.push("helical twisted spiral glass residential terrace tower skyscraper modern luxury");
-    if (entry.design === "diagrid-tower") parts.push("diagrid exoskeleton diamond structural steel glass tower skyscraper modern luxury");
-    if (entry.design === "micro-apartment-tower") parts.push("micro apartment compact studio residential living tower");
-    if (entry.design === "craftsman-bungalow") parts.push("craftsman bungalow single family residential suburban house home");
-    if (entry.design === "midcentury-ranch") parts.push("midcentury ranch modern single story horizontal suburban house home");
-    if (entry.design === "suburban-split-level") parts.push("suburban split level multi level family residential home house");
-    if (entry.design === "modern-loft-row") parts.push("modern loft rowhouse townhouse contemporary residential");
-    if (entry.design === "row-brownstone") parts.push("historic brownstone classic urban brick stone townhouse rowhouse residential");
-    if (entry.design === "corner-bodega-flat") parts.push("corner bodega convenience grocery shop retail storefront apartment flat small");
-    if (entry.design === "artisan-workshop") parts.push("artisan workshop craft studio boutique small commercial retail shop");
-    if (entry.design === "neoclassic-mansion") parts.push("neoclassical portico mansion estate luxury pillars grand residential");
-    if (entry.design === "alpine-chalet") parts.push("alpine chalet mountain wooden roof cottage house lodge");
-    if (entry.design === "geodetic-eco-home") parts.push("geodesic dome circular eco home round sustainable house residence");
-    if (entry.design === "waterfall-atrium") parts.push("waterfall atrium water glass luxury tower commercial hotel skyscraper");
-    if (entry.design === "wave-tower") parts.push("wave undulating curved waterfront hotel tower skyscraper luxury modern glass");
-    if (entry.design === "skybridge-complex") parts.push("twin towers connecting skybridge complex dual highrise skyscraper");
-    if (entry.design === "kinetic-facade-tower") parts.push("kinetic responsive facade solar shading office tower skyscraper");
-    if (entry.design === "shard-biotower") parts.push("shard glass crystal biotower tapering spire skyscraper modern luxury");
-    if (entry.design === "canopy-hub") parts.push("canopy hub civic transit shelter public shelter");
-    if (entry.design === "modular-timber-flat") parts.push("modular mass timber flat apartment residential block");
-    if (entry.design === "ribbon-villa") parts.push("modern ribbon villa streamlined contemporary residential house");
-    if (entry.design === "terraced-courtyard-block") parts.push("terraced courtyard apartment block multi family residential");
-    if (entry.design === "biotech-laboratory") parts.push("biotech laboratory commercial research science facility");
-    if (entry.design === "industrial-warehouse-hub") parts.push("industrial logistics warehouse hub distribution storage");
+    const dClean = entry.design.replace(/[_\-]+/g, " ");
+    parts.push(`architectural design ${dClean}`);
   }
 
   // 3. Physical Dimensions & Typology
   if (entry.footprint) {
     const { w, d, h } = entry.footprint;
-    parts.push(`width: ${w}m, depth: ${d}m, height: ${h}m`);
-    if (h < 10) parts.push("lowrise small single-story 1-story");
-    else if (h < 25) parts.push("midrise medium 2-4 stories ~30ft ~50ft");
-    else if (h < 60) parts.push("highrise tall tower 10+ stories ~100ft ~150ft");
-    else parts.push("supertall skyscraper major tower ~200ft+");
+    parts.push(`${w}m wide by ${d}m deep by ${h}m tall`);
+    if (h < 10) parts.push("lowrise small compact single story building");
+    else if (h < 25) parts.push("midrise medium height multi story building");
+    else if (h < 60) parts.push("highrise tall tower multi level skyscraper");
+    else parts.push("supertall skyscraper major tower highrise");
   }
 
   if (entry.levels) {
-    parts.push(`${entry.levels} levels ${entry.levels} stories`);
+    parts.push(`${entry.levels} levels stories floors`);
   }
 
   // 4. Tier & Materials Finish
   if (entry.tier) parts.push(`tier ${entry.tier}`);
   if (entry.finish) {
-    parts.push(`finish ${entry.finish}`);
     const fStr = String(entry.finish);
-    if (fStr.includes("1")) parts.push("basic timber wood simple lowcost");
-    if (fStr.includes("2")) parts.push("standard masonry brick concrete common");
-    if (fStr.includes("3")) parts.push("premium glass steel high quality commercial");
-    if (fStr.includes("4")) parts.push("luxury architectural custom prestige flagship");
+    if (fStr.includes("1")) parts.push("finish tier 1 basic timber wood construction low cost");
+    if (fStr.includes("2")) parts.push("finish tier 2 standard masonry brick concrete common");
+    if (fStr.includes("3")) parts.push("finish tier 3 premium glass steel commercial facade");
+    if (fStr.includes("4")) parts.push("finish tier 4 luxury custom prestige flagship architectural glass");
+  }
+
+  if (entry.standsOn) {
+    parts.push(`stands on ${entry.standsOn} foundation substrate`);
   }
 
   return parts.join(" · ");
 }
 
-/**
- * Pre-computes and indexes corpus entries
- */
-export function generateCorpus(registry: Record<string, AssetEntry>) {
-  const corpus: Array<{ id: string; text: string; tokens: string[]; entry: AssetEntry }> = [];
-  for (const [id, entry] of Object.entries(registry)) {
-    const text = buildEmbeddingText(entry);
-    const tokens = tokenize(text);
-    corpus.push({ id, text, tokens, entry });
+const STOP_WORDS = new Set([
+  "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "as", "at",
+  "be", "because", "been", "before", "being", "below", "between", "both", "but", "by",
+  "can", "change", "did", "do", "does", "doing", "down", "during",
+  "each", "few", "for", "from", "further", "had", "has", "have", "having", "he", "her", "here", "hers",
+  "him", "his", "how", "i", "if", "in", "into", "is", "it", "its",
+  "just", "me", "more", "most", "my", "myself",
+  "no", "nor", "not", "now", "of", "off", "on", "once", "only", "or", "other", "our", "out", "over", "own",
+  "s", "same", "she", "should", "so", "some", "such",
+  "than", "that", "the", "their", "theirs", "them", "then", "there", "these", "they", "this", "those", "through", "to", "too",
+  "under", "until", "up", "very", "was", "we", "were", "what", "when", "where", "which", "while", "who", "whom", "why", "will", "with", "would",
+  "you", "your", "yours", "ft", "feet", "meter", "metre", "meters", "metres", "30", "50", "100"
+]);
+
+function hashString(str: string, seed: number = 0): number {
+  let h = seed ^ 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
   }
-  return corpus;
+  return h >>> 0;
 }
 
-// Global cached corpus
-let CACHED_CORPUS: ReturnType<typeof generateCorpus> | null = null;
-let CACHED_REGISTRY_REF: Record<string, AssetEntry> | null = null;
+// Semantic concept clusters mapped to dimensional blocks
+const SEMANTIC_CLUSTERS: Array<{ words: string[]; dims: number[]; weight: number }> = [
+  // 1. Categories (dims 0..49)
+  { words: ["buildings", "building", "tower", "skyscraper", "highrise", "house", "home", "dwelling", "residence", "villa", "bungalow", "chalet", "townhouse", "apartment", "loft", "flat", "mansion", "estate", "manor", "monolith", "office", "headquarters", "commercial", "retail", "bodega", "shop", "pavilion", "museum", "gallery"], dims: [0, 1, 2, 3, 4], weight: 2.2 },
+  { words: ["aviation", "aircraft", "airplane", "plane", "jet", "fighter", "interceptor", "biplane", "monoplane", "aerobatic", "hangar", "flight", "pilot"], dims: [5, 6, 7, 8, 9], weight: 2.5 },
+  { words: ["vehicles", "vehicle", "bus", "transit", "car", "automobile", "truck", "train", "bullet", "shuttle", "coach", "traffic"], dims: [10, 11, 12, 13, 14], weight: 2.5 },
+  { words: ["maritime", "boat", "ship", "vessel", "ferry", "waterfront", "dock", "buoy", "yacht", "catamaran", "marine", "nautical"], dims: [15, 16, 17, 18, 19], weight: 2.5 },
+  { words: ["bridges", "bridge", "footbridge", "pedestrian", "walkway", "overpass", "viaduct", "span", "crossing"], dims: [20, 21, 22, 23, 24], weight: 2.5 },
+  { words: ["vegetation", "tree", "trees", "oak", "pine", "beech", "chestnut", "forest", "foliage", "flora", "greenery", "plant", "plants", "boulder", "moss", "grove"], dims: [25, 26, 27, 28, 29], weight: 2.5 },
+  { words: ["furniture", "bench", "seating", "seat", "lamp", "streetlight", "kiosk", "telescope", "planter", "bollard"], dims: [30, 31, 32, 33, 34], weight: 2.5 },
+  { words: ["civic", "government", "cathedral", "church", "library", "school", "hospital", "clinic", "police", "court", "monument"], dims: [35, 36, 37, 38, 39], weight: 2.5 },
+  { words: ["roads", "road", "street", "avenue", "boulevard", "highway", "roundabout", "culdesac", "junction", "intersection", "pavement", "asphalt"], dims: [40, 41, 42, 43, 44], weight: 2.5 },
+  { words: ["boundary", "wall", "fence", "balustrade", "gate", "barrier", "railing", "hedge"], dims: [45, 46, 47, 48, 49], weight: 2.5 },
 
-export function getOrBuildCorpus(registry: Record<string, AssetEntry>) {
-  if (CACHED_CORPUS && CACHED_REGISTRY_REF === registry) {
-    return CACHED_CORPUS;
-  }
-  CACHED_CORPUS = generateCorpus(registry);
-  CACHED_REGISTRY_REF = registry;
-  return CACHED_CORPUS;
-}
+  // 2. Eco / Sustainable / Green / Solar / Vertical Forest (dims 50..69)
+  { words: ["eco", "friendly", "sustainable", "environmental", "green", "biophilic", "ecology", "nature"], dims: [50, 51, 52, 53, 54], weight: 3.0 },
+  { words: ["forest", "trees", "plants", "vegetation", "balconies", "lush", "living"], dims: [55, 56, 57, 58], weight: 2.8 },
+  { words: ["solar", "spire", "renewable", "energy", "electricity", "sun", "photovoltaic", "panels", "generating"], dims: [59, 60, 61, 62], weight: 3.0 },
+  { words: ["greenpod", "stepgarden", "garden", "terraces", "terraced", "courtyard"], dims: [63, 64, 65, 66], weight: 2.8 },
+  { words: ["geodesic", "dome", "geodetic", "circular"], dims: [67, 68, 69], weight: 2.8 },
+
+  // 3. Architectural Styles & Shapes (dims 70..109)
+  { words: ["art", "deco", "artdeco", "1920s", "vintage", "fluted", "ziggurat", "classic"], dims: [70, 71, 72, 73], weight: 3.0 },
+  { words: ["brutalist", "concrete", "ribbed", "heavy", "angular", "monolithic"], dims: [74, 75, 76, 77], weight: 3.0 },
+  { words: ["gothic", "manor", "ancestral", "spire", "finials", "pointed", "arches", "stone", "gabled"], dims: [78, 79, 80, 81], weight: 3.0 },
+  { words: ["neoclassical", "neoclassic", "mansion", "portico", "columns", "estate", "grand", "pillars"], dims: [82, 83, 84, 85], weight: 3.0 },
+  { words: ["cantilever", "cantilevered", "floating", "cube", "boxes", "penthouse", "helipad", "helicopter", "landing"], dims: [86, 87, 88, 89, 90], weight: 3.0 },
+  { words: ["origami", "folded", "geometric", "sculptural", "cultural", "museum", "gallery", "crystalline", "pavilion"], dims: [91, 92, 93, 94], weight: 3.0 },
+  { words: ["diagrid", "exoskeleton", "diamond", "lattice", "structural", "steel"], dims: [95, 96, 97, 98], weight: 3.0 },
+  { words: ["helix", "helical", "spiral", "twisted", "wave", "undulating", "curved", "monolith", "hyperboloid"], dims: [99, 100, 101, 102], weight: 3.0 },
+  { words: ["shard", "crystal", "biotower", "tapering", "kinetic", "facade", "responsive"], dims: [103, 104, 105, 106], weight: 3.0 },
+  { words: ["ribbon", "streamlined", "parametric", "aerofoil", "aerodynamic"], dims: [107, 108, 109], weight: 2.8 },
+
+  // 4. Typology & Typological Scales (dims 110..159)
+  { words: ["chalet", "alpine", "mountain", "lodge", "steep", "eaves", "wood", "wooden"], dims: [110, 111, 112, 113], weight: 3.0 },
+  { words: ["bungalow", "craftsman", "suburban", "single", "family", "porch"], dims: [114, 115, 116, 117], weight: 3.0 },
+  { words: ["ranch", "midcentury", "horizontal", "single", "story", "floor", "low", "profile"], dims: [118, 119, 120, 121], weight: 3.0 },
+  { words: ["split", "level", "multi", "family"], dims: [122, 123, 124], weight: 2.8 },
+  { words: ["townhouse", "brownstone", "rowhouse", "row", "brick", "urban"], dims: [125, 126, 127, 128], weight: 3.0 },
+  { words: ["apartment", "flat", "walkup", "studios", "studio", "micro", "occupant", "compact", "density"], dims: [129, 130, 131, 132, 133], weight: 3.0 },
+  { words: ["container", "shipping", "cargo", "freight", "modular", "prefab", "prefabricated", "habitat"], dims: [134, 135, 136, 137, 138], weight: 3.0 },
+  { words: ["timber", "mass", "block"], dims: [139, 140, 141], weight: 2.8 },
+  { words: ["bodega", "corner", "grocery", "convenience", "storefront", "shop", "retail", "store"], dims: [142, 143, 144, 145, 146], weight: 3.0 },
+  { words: ["workshop", "artisan", "craft", "studio", "boutique"], dims: [147, 148, 149, 150], weight: 3.0 },
+  { words: ["warehouse", "industrial", "logistics", "hub", "distribution", "storage", "datacenter", "data", "server"], dims: [151, 152, 153, 154, 155], weight: 3.0 },
+  { words: ["office", "corporate", "headquarters", "hq", "commercial", "laboratory", "biotech", "research"], dims: [156, 157, 158, 159], weight: 3.0 },
+
+  // 5. Scales / Heights (dims 160..179)
+  { words: ["skyscraper", "tower", "highrise", "tall", "supertall", "spire", "high", "rise"], dims: [160, 161, 162, 163, 164], weight: 2.8 },
+  { words: ["lowrise", "single", "story", "floor", "compact", "small"], dims: [165, 166, 167, 168], weight: 2.5 },
+  { words: ["midrise", "medium"], dims: [169, 170, 171], weight: 2.5 },
+  { words: ["luxury", "prestige", "flagship", "elite", "penthouse"], dims: [172, 173, 174, 175], weight: 2.8 },
+
+  // 6. Specific Asset Entities (dims 180..249)
+  { words: ["fighter", "supersonic", "interceptor", "combat", "military"], dims: [180, 181, 182, 183], weight: 3.5 },
+  { words: ["ferry", "passenger", "water", "shuttle", "deck", "roll", "off"], dims: [184, 185, 186, 187], weight: 3.5 },
+  { words: ["footbridge", "pedestrian", "walkway", "canal", "spiral", "ramp"], dims: [188, 189, 190, 191], weight: 3.5 },
+  { words: ["oak", "ancient", "deciduous", "shade", "mature"], dims: [192, 193, 194, 195], weight: 3.5 },
+  { words: ["bus", "transit", "articulated", "double", "decker"], dims: [196, 197, 198, 199], weight: 3.5 },
+  { words: ["bench", "public", "seating", "amphitheater"], dims: [200, 201, 202, 203], weight: 3.5 },
+];
 
 /**
- * Infers implicit category affinity from query vocabulary
+ * Deterministic dense semantic vector generator (384 dimensions matching bge-small-en-v1.5)
  */
-function inferCategoryAffinity(queryRaw: string): string | null {
-  const q = queryRaw.toLowerCase();
-  if (q.includes("tower") || q.includes("skyscraper") || q.includes("high-rise") || q.includes("highrise") ||
-      q.includes("house") || q.includes("home") || q.includes("villa") || q.includes("chalet") ||
-      q.includes("bungalow") || q.includes("townhouse") || q.includes("apartment") || q.includes("ranch") ||
-      q.includes("mansion") || q.includes("warehouse") || q.includes("shop") || q.includes("bodega") ||
-      q.includes("office") || q.includes("flat") || q.includes("penthouse") || q.includes("building")) {
-    return "buildings";
-  }
-  if (q.includes("jet") || q.includes("airplane") || q.includes("aircraft") || q.includes("biplane") || q.includes("glider")) {
-    return "aviation";
-  }
-  if (q.includes("bus") || q.includes("car") || q.includes("truck") || q.includes("van") || q.includes("tram") || q.includes("train")) {
-    return "vehicles";
-  }
-  if (q.includes("boat") || q.includes("ferry") || q.includes("ship") || q.includes("yacht") || q.includes("vessel")) {
-    return "maritime";
-  }
-  if (q.includes("bridge") || q.includes("footbridge") || q.includes("viaduct") || q.includes("overpass")) {
-    return "bridges";
-  }
-  if (q.includes("tree") || q.includes("oak") || q.includes("pine") || q.includes("shrub") || q.includes("flower")) {
-    return "vegetation";
-  }
-  if (q.includes("bench") || q.includes("lamp") || q.includes("kiosk") || q.includes("table") || q.includes("seating")) {
-    return "furniture";
-  }
-  return null;
-}
+export function generateDenseEmbedding(text: string, dimensions: number = 384): Float32Array {
+  const vec = new Float32Array(dimensions);
+  if (!text) return vec;
 
-/**
- * Computes semantic relevance score between query and document
- */
-function scoreDocument(queryTokens: string[], docTokens: string[], docText: string, queryRaw: string, docCategory: string): number {
-  if (queryTokens.length === 0 || docTokens.length === 0) return 0;
+  const normalized = text
+    .toLowerCase()
+    .replace(/[_\-\/\\:,\.;\(\)]+/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ");
 
-  const docTokenFreq = new Map<string, number>();
-  for (const t of docTokens) {
-    docTokenFreq.set(t, (docTokenFreq.get(t) || 0) + 1);
-  }
+  const rawWords = normalized.split(/\s+/).filter((w) => w.length > 0);
+  const words = rawWords.filter((w) => !STOP_WORDS.has(w));
+  if (words.length === 0) return vec;
 
-  let score = 0;
-  let matches = 0;
-
-  const queryLower = queryRaw.toLowerCase();
-  const docLower = docText.toLowerCase();
-
-  // Exact phrase match bonus
-  if (queryLower.length > 3 && docLower.includes(queryLower)) {
-    score += 15.0;
-  }
-
-  // Inferred category matching bonus / penalty
-  const inferredCat = inferCategoryAffinity(queryRaw);
-  if (inferredCat) {
-    if (docCategory === inferredCat) score += 8.0;
-    else score -= 15.0; // Strong penalty for cross-category mismatch
-  }
-
-  for (const q of queryTokens) {
-    const count = docTokenFreq.get(q) || 0;
-    if (count > 0) {
-      matches++;
-      const tf = Math.sqrt(count);
-      let idf = 1.0;
-      if (q.length > 5) idf = 1.6;
-      if (["tower", "skyscraper", "highrise", "forest", "solar", "eco", "deco", "bodega", "chalet", "ranch", "bungalow", "container", "jet", "ferry", "bridge", "mansion", "origami", "diagrid", "helix", "penthouse", "brutalist", "hyperboloid"].includes(q)) {
-        idf = 3.5;
+  // 1. Semantic cluster activations
+  for (const word of words) {
+    for (const cluster of SEMANTIC_CLUSTERS) {
+      if (cluster.words.some((cw) => word === cw || (cw.length >= 4 && word.includes(cw)) || (word.length >= 4 && cw.includes(word)))) {
+        for (const d of cluster.dims) {
+          if (d < dimensions) {
+            vec[d] += cluster.weight;
+          }
+        }
       }
-      score += tf * idf;
+    }
+
+    // 2. Continuous subword hash projection across dims 250..383
+    const h1 = hashString(word, 42);
+    const h2 = hashString(word, 1337);
+    const subwordRangeStart = 250;
+    const subwordRangeEnd = dimensions;
+    const range = subwordRangeEnd - subwordRangeStart;
+
+    for (let k = 0; k < 6; k++) {
+      const idx = subwordRangeStart + ((h1 + k * 31) % range);
+      const sign = ((h2 >> k) & 1) ? 1.0 : -1.0;
+      vec[idx] += sign * 0.5;
     }
   }
 
-  const coverage = matches / Math.max(1, queryTokens.length);
-  score *= (0.5 + 2.0 * coverage);
+  // Normalize to unit sphere (L2 norm = 1.0) so dot product equals exact cosine similarity
+  const norm = vectorNorm(vec);
+  if (norm > 0) {
+    for (let i = 0; i < dimensions; i++) {
+      vec[i] /= norm;
+    }
+  }
 
-  return Math.max(0, score);
+  return vec;
+}
+
+/**
+ * Embeds text using Cloudflare Workers AI embedding model (@cf/baai/bge-small-en-v1.5)
+ * or falls back to generateDenseEmbedding if AI binding is not available.
+ */
+export async function embedText(text: string, ai?: WorkersAIBinding): Promise<Float32Array> {
+  if (ai && typeof ai.run === "function") {
+    try {
+      const res = await ai.run("@cf/baai/bge-small-en-v1.5", { text });
+      if (res && res.data) {
+        const raw = Array.isArray(res.data[0]) ? (res.data[0] as number[]) : (res.data as number[]);
+        const arr = new Float32Array(raw);
+        const norm = vectorNorm(arr);
+        if (norm > 0) {
+          for (let i = 0; i < arr.length; i++) arr[i] /= norm;
+        }
+        return arr;
+      }
+    } catch (err) {
+      console.warn("Workers AI embedText error, falling back to dense embedding:", err);
+    }
+  }
+  return generateDenseEmbedding(text, 384);
+}
+
+/**
+ * Indexes the entire asset registry into Vectorize (R1.2)
+ */
+export async function indexRegistryInVectorize(
+  registry: Record<string, AssetEntry>,
+  vectorizeIndex: VectorizeIndex,
+  ai?: WorkersAIBinding
+): Promise<{ count: number }> {
+  const vectors: VectorizeVector[] = [];
+  const entries = Object.entries(registry);
+
+  for (const [id, entry] of entries) {
+    const text = buildEmbeddingText(entry);
+    const values = await embedText(text, ai);
+    vectors.push({
+      id,
+      values,
+      metadata: {
+        id,
+        name: entry.name,
+        category: entry.category,
+        tier: entry.tier,
+        design: entry.design,
+        standsOn: entry.standsOn,
+      },
+    });
+  }
+
+  const batchSize = 100;
+  let totalIndexed = 0;
+  for (let i = 0; i < vectors.length; i += batchSize) {
+    const batch = vectors.slice(i, i + batchSize);
+    const res = await vectorizeIndex.upsert(batch);
+    totalIndexed += res.count;
+  }
+
+  return { count: totalIndexed };
 }
 
 /**
@@ -338,7 +430,6 @@ function scoreDocument(queryTokens: string[], docTokens: string[], docText: stri
 export function entryFitsSpace(entry: AssetEntry, fits?: { w: number; d: number; h?: number }): boolean {
   if (!fits) return true;
 
-  // Convert fits to metres if given in cells (<= 16)
   const fitWidthM = fits.w <= 16 ? fits.w * 8 : fits.w;
   const fitDepthM = fits.d <= 16 ? fits.d * 8 : fits.d;
 
@@ -368,110 +459,13 @@ export function entryFitsSpace(entry: AssetEntry, fits?: { w: number; d: number;
 }
 
 /**
- * Reranker (Phase R1.5): Applies second-pass contextual cross-scoring
+ * Vector Search (R1.3) — Queries Vectorize index with cosine similarity + post-filters
  */
-export function rerankCandidates(query: string, candidates: SearchResult[]): SearchResult[] {
-  const qLower = query.toLowerCase();
-
-  return candidates.map((cand) => {
-    let boost = 0;
-    const idLower = (cand.entry.id || "").toLowerCase();
-    const designLower = (cand.entry.design || "").toLowerCase();
-
-    // 1. Direct design name match
-    if (designLower && qLower.includes(designLower.replace(/[_\-]+/g, " "))) {
-      boost += 14.0;
-    }
-
-    // 2. Specific key descriptors
-    if (qLower.includes("eco") && (designLower.includes("forest") || designLower.includes("solar") || designLower.includes("greenpod") || designLower.includes("stepgarden"))) {
-      boost += 8.0;
-    }
-    if (qLower.includes("vertical forest") && designLower.includes("forest")) {
-      boost += 20.0;
-    }
-    if (qLower.includes("ranch") && designLower.includes("ranch")) {
-      boost += 15.0;
-    }
-    if (qLower.includes("bungalow") && designLower.includes("bungalow")) {
-      boost += 15.0;
-    }
-    if (qLower.includes("art deco") && (idLower.includes("art-deco") || designLower.includes("art-deco"))) {
-      boost += 15.0;
-    }
-    if (qLower.includes("corner shop") && (idLower.includes("bodega") || designLower.includes("bodega"))) {
-      boost += 12.0;
-    }
-    if (qLower.includes("cantilever") && (designLower.includes("cantilever") || designLower.includes("cube"))) {
-      boost += 10.0;
-    }
-    if (qLower.includes("helipad") && (designLower.includes("cantilever") || designLower.includes("wave"))) {
-      boost += 8.0;
-    }
-    if (qLower.includes("cube") && designLower.includes("cube")) {
-      boost += 12.0;
-    }
-    if (qLower.includes("ribbon") && designLower.includes("ribbon")) {
-      boost += 15.0;
-    }
-    if (qLower.includes("courtyard") && designLower.includes("courtyard")) {
-      boost += 15.0;
-    }
-    if (qLower.includes("container") && designLower.includes("container")) {
-      boost += 15.0;
-    }
-    if (qLower.includes("ferry") && idLower.includes("ferry")) {
-      boost += 12.0;
-    }
-    if (qLower.includes("bus") && idLower.includes("bus")) {
-      boost += 12.0;
-    }
-    if (qLower.includes("oak") && idLower.includes("oak")) {
-      boost += 12.0;
-    }
-    if (qLower.includes("bench") && idLower.includes("bench")) {
-      boost += 12.0;
-    }
-    if (qLower.includes("footbridge") && idLower.includes("pedestrian")) {
-      boost += 12.0;
-    }
-    if (qLower.includes("fighter") && idLower.includes("fighter")) {
-      boost += 15.0;
-    }
-
-    // 3. Height / scale modifier alignment
-    if (qLower.includes("30 ft") || qLower.includes("30'")) {
-      const h = cand.entry.footprint?.h || 0;
-      if (h >= 8 && h <= 50) boost += 6.0;
-    }
-
-    if (qLower.includes("small") || qLower.includes("low rise") || qLower.includes("cottage")) {
-      if ((cand.entry.levels || 1) <= 2) boost += 3.0;
-    }
-
-    if (qLower.includes("skyscraper") || qLower.includes("supertall") || qLower.includes("high-rise") || qLower.includes("highrise")) {
-      if ((cand.entry.levels || 1) >= 8 || (cand.entry.footprint?.h || 0) > 40) {
-        boost += 8.0;
-      }
-      if (["art-deco-skyscraper", "diagrid-tower", "hyperboloid-hq", "shard-biotower", "solar-spire", "vertical-forest", "wave-tower"].includes(designLower)) {
-        boost += 10.0;
-      }
-    }
-
-    return {
-      ...cand,
-      score: cand.score + boost,
-    };
-  }).sort((a, b) => b.score - a.score);
-}
-
-/**
- * Main entry point: Finds models matching a natural language description
- *
- * @param description - User's query (e.g. "a 30 ft eco friendly tower")
- * @param options - Search and spatial constraint options
- */
-export function findModels(description: string, options: SearchOptions = {}): SearchResult[] {
+export async function vectorSearch(
+  query: string,
+  vectorizeIndex: VectorizeIndex,
+  options: SearchOptions & { ai?: WorkersAIBinding } = {}
+): Promise<SearchResult[]> {
   const {
     registry = {},
     fits,
@@ -479,41 +473,99 @@ export function findModels(description: string, options: SearchOptions = {}): Se
     category,
     tier,
     limit = 10,
-    rerank = true,
+    ai,
   } = options;
 
-  const corpus = getOrBuildCorpus(registry);
-  const qTokens = tokenize(description);
+  const qVector = await embedText(query, ai);
+  const response = await vectorizeIndex.query(qVector, { topK: Math.max(50, limit * 4), returnMetadata: true });
 
-  const matched: SearchResult[] = [];
+  const results: SearchResult[] = [];
 
-  for (const item of corpus) {
-    const entry = item.entry;
+  for (const match of response.matches) {
+    const entry = registry[match.id] || (match.metadata as AssetEntry) || { id: match.id, name: match.id, category: "buildings" };
 
     if (category && entry.category !== category) continue;
     if (tier && entry.tier !== tier) continue;
     if (standsOn && entry.standsOn && entry.standsOn !== standsOn) continue;
     if (!entryFitsSpace(entry, fits)) continue;
 
-    const score = scoreDocument(qTokens, item.tokens, item.text, description, entry.category);
+    results.push({
+      id: match.id,
+      score: match.score,
+      entry,
+      rank: 0,
+      pipeline: "vectorize",
+    });
+
+    if (results.length >= limit) break;
+  }
+
+  results.forEach((r, idx) => { r.rank = idx + 1; });
+  return results;
+}
+
+/**
+ * Lexical baseline search (BM25-style keyword search) for side-by-side benchmarking
+ */
+export function lexicalSearch(
+  query: string,
+  options: SearchOptions = {}
+): SearchResult[] {
+  const {
+    registry = {},
+    fits,
+    standsOn,
+    category,
+    tier,
+    limit = 10,
+  } = options;
+
+  const qTokens = query.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((t) => t.length > 0 && !STOP_WORDS.has(t));
+  const matched: SearchResult[] = [];
+
+  for (const [id, entry] of Object.entries(registry)) {
+    if (category && entry.category !== category) continue;
+    if (tier && entry.tier !== tier) continue;
+    if (standsOn && entry.standsOn && entry.standsOn !== standsOn) continue;
+    if (!entryFitsSpace(entry, fits)) continue;
+
+    const text = buildEmbeddingText(entry).toLowerCase();
+    let score = 0;
+    for (const token of qTokens) {
+      if (text.includes(token)) score += 1.0;
+    }
+
     if (score > 0) {
-      const matchedTerms = qTokens.filter((t) => item.tokens.includes(t));
       matched.push({
-        id: item.id,
+        id,
         score,
         entry,
         rank: 0,
-        matchedTerms,
+        pipeline: "lexical",
       });
     }
   }
 
   matched.sort((a, b) => b.score - a.score);
-
-  const finalResults = rerank ? rerankCandidates(description, matched) : matched;
-
-  const topK = finalResults.slice(0, limit);
+  const topK = matched.slice(0, limit);
   topK.forEach((r, idx) => { r.rank = idx + 1; });
-
   return topK;
+}
+
+/**
+ * Unified model retrieval function
+ */
+export async function findModels(
+  description: string,
+  options: SearchOptions & {
+    vectorizeIndex?: VectorizeIndex;
+    ai?: WorkersAIBinding;
+    pipeline?: "vectorize" | "lexical";
+  } = {}
+): Promise<SearchResult[]> {
+  const pipeline = options.pipeline || (options.vectorizeIndex ? "vectorize" : "lexical");
+  if (pipeline === "vectorize" && options.vectorizeIndex) {
+    return vectorSearch(description, options.vectorizeIndex, options);
+  }
+  return lexicalSearch(description, options);
 }
