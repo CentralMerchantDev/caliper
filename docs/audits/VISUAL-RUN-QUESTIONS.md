@@ -1,4 +1,4 @@
-﻿# CALIPER — Visual Run Questions & Decisions for Mark
+# CALIPER — Visual Run Questions & Decisions for Mark
 
 **Date:** 2026-09-06  
 **Status:** Live Log for Phases V1–V8
@@ -73,11 +73,22 @@ approximation, is Mark/agy's call, not resolved here.
 
 ---
 
-## 3. PHASES V2–V8 (NOT STARTED)
-- V2: Props enrichment — NOT STARTED
-- V3: Building silhouettes & near-band massing — NOT STARTED
-- V4: Ground plane & street surfaces — NOT STARTED
-- V5: Material & character palettes — NOT STARTED
-- V6: Dynamic life & animation — NOT STARTED
-- V7: Distance-banded LOD — NOT STARTED
-- V8: Regression gate & closeout — NOT STARTED
+---
+
+## 4. STRUCTURAL REPETITION IN `bldTownhouse` (Recorded for Review)
+
+- **Finding:** `bldTownhouse` in `public/buildings.js` hardcodes `footW = 16` and `footD = 24` (2×3 cells), meaning all 5,342 townhouses placed across the city share identical dimensions. No texture variation can fully hide identical footprint geometry repeating across miles of streetscape.
+- **Why It Is Not Fixed In This Step:** Changing `bldTownhouse`'s footprint or adding parametric width variation right now directly impacts plot carving, which is actively owned by the CLI lane during the rebalance.
+- **Proposal for Post-Rebalance:**
+  1. Parameterize `bldTownhouse` width across whole-cell variants (e.g. 2 cells = 16m, 3 cells = 24m, 4 cells = 32m, matching `PLOT_CLASSES.TOWNHOUSE` [8, 32]m bounds).
+  2. Allow `layout.js` to assign 2-cell, 3-cell, and 4-cell townhouse models based on carved plot width.
+  3. Wire library townhouse variants (`bld-*-townhouse` across tiers) once world generation draws from the library.
+
+---
+
+## 5. CURRENT PHASE STATUS
+- Phase V1: Facade Texturing — LANDED (280b029)
+- Phase V2: Prop & Generator Geometry — COMPLETED / GATED (4f80434)
+- Corrections: Roof UV Remap (no windows on roofs) & Live Phase-Delta Gate — LANDED (ab3589b)
+- Model Library Reachability (Populated 2,400 models at build time) — LANDED (9d1693b)
+- Library Model Enrichment (Steps 2 & 3 of LIBRARY-AS-SOURCE.md) — Awaiting Mark's Review

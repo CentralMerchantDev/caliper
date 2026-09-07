@@ -83,7 +83,11 @@ for (const v of VIEWS) {
     if (m.type() === "error") errors.push("CONSOLE " + m.text());
     else if (!statsPrinted && m.text().startsWith("WORLD ")) console.log("  " + m.text().slice(0, 600));
   });
-  const url = `http://127.0.0.1:${PORT}/city.html?bare=1&dpr=1${knobs}${STILL}&view=${encodeURIComponent(v)}`;
+  const overrideQuery = process.env.SHOOT_OVERRIDE_PLOT
+    ? `&debugOverridePlot=${encodeURIComponent(process.env.SHOOT_OVERRIDE_PLOT)}` +
+      (process.env.SHOOT_OVERRIDE_MODEL ? `&debugOverrideModel=${encodeURIComponent(process.env.SHOOT_OVERRIDE_MODEL)}` : "")
+    : "";
+  const url = `http://127.0.0.1:${PORT}/city.html?bare=1&dpr=1${knobs}${STILL}${overrideQuery}&view=${encodeURIComponent(v)}`;
   const t0 = Date.now();
   await page.goto(url, { waitUntil: "load", timeout: 120000 });
   try {

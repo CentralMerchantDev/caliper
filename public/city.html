@@ -159,8 +159,17 @@ const camera = new THREE.PerspectiveCamera(num("fov", 33), innerWidth / innerHei
 // scripts/shoot.mjs can photograph "one building visibly different,
 // everything else unchanged" without needing I6's live persistence wired.
 const debugPlot = Q.get("debugOverridePlot");
+const debugModel = Q.get("debugOverrideModel");
 const debugLayers = debugPlot
-  ? [layerFrom({ id: "debug-i2-check", author: "i2-visual-check", edits: [{ address: debugPlot, op: "retint", payload: { color: 0xff00ff } }] })]
+  ? [layerFrom({
+      id: "debug-library-check",
+      author: "library-visual-check",
+      edits: [{
+        address: debugPlot,
+        op: debugModel ? "replace" : "retint",
+        payload: debugModel ? { modelId: debugModel } : { color: 0xff00ff }
+      }]
+    })]
   : [];
 
 let W;
