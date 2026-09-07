@@ -8,11 +8,15 @@
 import { KITBASH_PARTS, resolvePalette, CELL_M } from "../public/kitbash-parts.js";
 import {
   InMemoryVectorize,
-  VectorizeIndexLike,
-  WorkersAIBinding,
   embedText,
   embedTextBatch,
 } from "./modelRetrieval.ts";
+import type { WorkersAIBinding } from "./modelRetrieval.ts";
+
+export interface VectorizeIndex {
+  upsert(vectors: any[]): Promise<{ count: number }>;
+  query(vector: number[] | Float32Array, options?: any): Promise<any>;
+}
 
 export interface KitbashPartDef {
   id: string;
@@ -62,7 +66,7 @@ export function buildKitbashEmbeddingText(part: KitbashPartDef): string {
  */
 export async function indexKitbashParts(
   parts: Record<string, KitbashPartDef>,
-  vectorize: VectorizeIndexLike,
+  vectorize: VectorizeIndex,
   ai: WorkersAIBinding
 ): Promise<number> {
   const entries = Object.values(parts);
@@ -96,7 +100,7 @@ export async function indexKitbashParts(
  */
 export async function findKitbashParts(
   query: string,
-  vectorize: VectorizeIndexLike,
+  vectorize: VectorizeIndex,
   options: {
     ai: WorkersAIBinding;
     parts?: Record<string, KitbashPartDef>;
@@ -177,7 +181,7 @@ export async function findKitbashParts(
  */
 export async function assembleFromBrief(
   brief: string,
-  vectorize: VectorizeIndexLike,
+  vectorize: VectorizeIndex,
   options: {
     ai: WorkersAIBinding;
     foot?: { w: number; d: number };
