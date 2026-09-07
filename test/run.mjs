@@ -15,7 +15,20 @@ const testDir = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(testDir, ".built");
 mkdirSync(outDir, { recursive: true });
 
-const testFiles = readdirSync(testDir).filter((f) => f.endsWith(".test.ts") && !f.endsWith(".workers.test.ts"));
+const discoveredTestFiles = readdirSync(testDir).filter((f) => f.endsWith(".test.ts") && !f.endsWith(".workers.test.ts"));
+const requestedFiles = process.argv.slice(2);
+const testFiles = requestedFiles.length === 0
+  ? discoveredTestFiles
+  : requestedFiles.map((requested) => {
+      const file = path.basename(requested);
+      if (requested !== file && path.resolve(requested) !== path.join(testDir, file)) {
+        throw new Error(`Requested test must be a file in ${testDir}: ${requested}`);
+      }
+      if (!discoveredTestFiles.includes(file)) {
+        throw new Error(`Requested test is not a runnable .test.ts file: ${requested}`);
+      }
+      return file;
+    });
 
 // ONE THREE.JS IN THE PROCESS, NOT ONE PER BUNDLE.
 //

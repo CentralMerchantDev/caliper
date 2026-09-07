@@ -33,14 +33,16 @@ import {
 const registry = ASSET_REGISTRY as Record<string, AssetEntry>;
 const registryCount = Object.keys(registry).length;
 
-// Initialize real Cloudflare Workers AI client
-const ai = createWorkersAIClient();
+const SPEND_SKIP_REASON = "SKIP live Workers AI inference: CALIPER_ALLOW_SPEND=1 is required";
+const spendAllowed = process.env.CALIPER_ALLOW_SPEND === "1";
+const liveTest = spendAllowed ? test : (name: string, fn: () => unknown) => test(`${name} — ${SPEND_SKIP_REASON}`, { skip: SPEND_SKIP_REASON }, fn);
+const ai = spendAllowed ? createWorkersAIClient() : null as never;
 
 // =============================================================================
 // RULE ZERO: REPRODUCE PUBLISHED BENCHMARK (BEIR SciFact nDCG@10 Anchor)
 // =============================================================================
 
-test("Rule Zero — External Anchor: Reproduce published BEIR SciFact benchmark numbers", async () => {
+liveTest("Rule Zero — External Anchor: Reproduce published BEIR SciFact benchmark numbers", async () => {
   console.log("\n=============================================================================");
   console.log("   RULE ZERO: BEIR SCIFACT BENCHMARK VALIDATION (@cf/baai/bge-small-en-v1.5)");
   console.log("=============================================================================");
@@ -169,7 +171,7 @@ test("R1.1 — Embedding text exists for every registry entry and contains key a
   }
 });
 
-test("R1.2 — Index all entries into Vectorize with real Workers AI embeddings", async () => {
+liveTest("R1.2 — Index all entries into Vectorize with real Workers AI embeddings", async () => {
   const vectorizeIndex = new InMemoryVectorize(384);
   const result = await indexRegistryInVectorize(registry, vectorizeIndex, ai);
 
@@ -182,7 +184,7 @@ test("R1.2 — Index all entries into Vectorize with real Workers AI embeddings"
   assert.equal(result.embedder, "workers-ai:bge-small-en-v1.5");
 });
 
-test("R1.3 — Vector search returns cosine similarity scores in [-1, 1] and respects spatial constraints", async () => {
+liveTest("R1.3 — Vector search returns cosine similarity scores in [-1, 1] and respects spatial constraints", async () => {
   const vectorizeIndex = new InMemoryVectorize(384);
   await indexRegistryInVectorize(registry, vectorizeIndex, ai);
 
@@ -276,7 +278,7 @@ function evaluateDomainBenchmark(
   };
 }
 
-test("R1.4 & R1.5 — Three-Column Domain Benchmark: Real BGE-small vs Hand-Tuned Pseudo vs BM25", async () => {
+liveTest("R1.4 & R1.5 — Three-Column Domain Benchmark: Real BGE-small vs Hand-Tuned Pseudo vs BM25", async () => {
   // 1. Index with Real Workers AI
   const realIndex = new InMemoryVectorize(384);
   await indexRegistryInVectorize(registry, realIndex, ai);
@@ -343,7 +345,7 @@ test("R1.4 & R1.5 — Three-Column Domain Benchmark: Real BGE-small vs Hand-Tune
   }
 });
 
-test("R1.6 — Mark's original prompt: 'change this to a 30 ft eco friendly tower'", async () => {
+liveTest("R1.6 — Mark's original prompt: 'change this to a 30 ft eco friendly tower'", async () => {
   const vectorizeIndex = new InMemoryVectorize(384);
   await indexRegistryInVectorize(registry, vectorizeIndex, ai);
 
@@ -364,7 +366,7 @@ test("R1.6 — Mark's original prompt: 'change this to a 30 ft eco friendly towe
   assert.equal(results[0].embedder, "workers-ai:bge-small-en-v1.5");
 });
 
-test("R1.7 — Fallback & Silent Degradation Guardrail", async () => {
+liveTest("R1.7 — Fallback & Silent Degradation Guardrail", async () => {
   // Test 1: embedText without AI must reject
   await assert.rejects(async () => {
     // @ts-ignore
