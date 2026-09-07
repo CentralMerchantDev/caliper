@@ -62,6 +62,138 @@ of truth with nothing between them — one level further down, and it is why onl
 
 ---
 
+## PART 0 — THE GRID IS 1 METRE, GROUPED 4 AND 16
+
+**Mark's decision, 2026-09-07.** This supersedes every "whole 8 m cell"
+statement later in this document and in `BOARD-CONVERSION-PLAN.md`.
+
+> a cell should be bigger and smaller if that makes sense … for example
+> 16 × 16 then subdivided into quadrants that are 4 × 4 with cells that are
+> 1 × 1. The cells then are actually 1 × 1 but grouped into larger cells that
+> are large enough for say a road and a building — but also that you can build
+> across more than one cell, so that the boundary of the larger cell doesn't
+> stop a building. It can span both, as long as there is room for it and it
+> matches the rules
+
+### The three scales
+
+| Name | Size | What it is for |
+|---|---|---|
+| **ATOM** | **1 × 1 m** | The real unit. Every footprint, every socket, every address is a whole number of these. |
+| **QUADRANT** | 4 × 4 m | A lane, a parking bay, a footway. A convenient grouping. |
+| **BLOCK** | 16 × 16 m | A small building, a two-lane street with footways. A convenient grouping. |
+
+**The groupings organise and index. They do not constrain placement.** A
+building spans as many blocks as it needs. Nothing refuses because a boundary
+was crossed — only because there was not enough room, or the ground was wrong.
+
+### Why this is right, and why 8 m was not
+
+The 8 m cell forced every real-world dimension to be rounded. `ROAD_STANDARDS`
+carries genuine widths — a STREET is 18 m, a FREEWAY 62 m — and neither is a
+multiple of 8, so `P0.4` snapped them **outward**: an 18 m street reserving 24 m
+of ground. Six metres wasted on every street in a world with streets every
+hundred metres.
+
+At 1 m, **an 18 m street is 18 atoms.** The standards keep their real values and
+simply fit.
+
+**It also closes the three findings P0 had to leave open.** `rampMerge`,
+`rampDiverge` and `railSwitch` each carry a connector socket at a genuine
+lane-width or track-gauge offset, which could not be forced onto an 8 m boundary
+without falsifying `ROAD_STANDARDS` — dimensions that file's own header says
+never scale. At 1 m they land exactly. **The finer grid is not a compromise; it
+is the fix for a defect the coarser one created.**
+
+### The cost, measured rather than feared
+
+26 km at 1 m is 676 million atoms. That is free, for two reasons already true of
+this codebase:
+
+- **`grid.js` stores nothing.** Its own header: *"Nothing here stores a cell.
+  Every function below is integer arithmetic on a coordinate, so the whole world
+  is addressable at no cost and only the cells something actually occupies are
+  ever recorded."*
+- **`world-registry.js` answers by rectangle, not by cell.** `overlapsRect(xMin,
+  xMax, zMin, zMax, …)` takes metres. Testing whether a 48 × 48 m tower fits is
+  one rectangle query, not 2,304 lookups.
+
+### What changes, and what does not
+
+| | |
+|---|---|
+| `grid.js` `CELL = 8` | Stops being the atom. Becomes a named grouping alongside 4 and 16. The `DIVISION` ladder down to 0.5 m is replaced by the 1 / 4 / 16 hierarchy. |
+| `buildings.js`'s 8 m module | **Unchanged.** A house is still 16 × 24 m — now expressed as 16 × 24 atoms rather than 2 × 3 cells. |
+| `roadkit.js` `MODULE_M = 8` | Stays as a piece *length* module. Widths return to `ROAD_STANDARDS`' real values. |
+| `P0.4`'s `snapCellsOutward` | **Reverted.** It was lossy and the need for it is gone. |
+| Footprint sizes | **A standard set of 8 m module multiples, plus named exceptions.** See below. |
+
+### STANDARD SIZES — Mark's decision, and why
+
+> having standard sized building types and then some exceptions to it is the
+> best way — means that you can lay out the world and know it's going to work
+> out the best, the most stuff is going to fit. If it's all random then you can
+> end up with a lot of weird empty spaces … if certain things need to not be
+> exactly to real scale, but slightly mis-scaled to fit this, that's fine. It's
+> going to be unnoticeable.
+
+**Arbitrary footprints produce slivers.** A block interior of 82 m divides into
+neither 16s nor 24s, and whatever is left over is a gap nothing fits. Standard
+sizes are what make the board tile.
+
+**TWO NUMBERS, DOING DIFFERENT JOBS.** These are not the same thing and
+conflating them is what the old 8 m cell got wrong:
+
+- **The ATOM is 1 m** — the addressing unit. Every position, socket and prop
+  sits on a whole metre. This is what lets `rampMerge`'s angled connector land
+  exactly, and it is why nothing is ever force-rounded.
+- **The MODULE is 8 m** — the standard *increment* for footprints and road
+  widths, chosen so everything tiles. A deliberate design decision, not a
+  rounding imposed by the grid.
+
+**Standard building footprints:**
+
+| Metres | Modules | What |
+|---|---|---|
+| 8 × 8 | 1 × 1 | kiosk, garage, corner shop |
+| 8 × 16 | 1 × 2 | terrace unit — matches `buildings.js`'s existing 8 m unit |
+| 16 × 16 | 2 × 2 | house, small building |
+| 16 × 24 | 2 × 3 | townhouse, villa |
+| 24 × 32 | 3 × 4 | walk-up, small apartment |
+| 32 × 32 | 4 × 4 | mid-rise |
+| 48 × 48 | 6 × 6 | tower |
+| 64 × 64 | 8 × 8 | large tower |
+
+**Standard road widths** — also module multiples, so block interiors divide
+evenly:
+
+| Class | Real ROW | Standard |
+|---|---|---|
+| ALLEY / LANE | ~10 m | **8 m** |
+| STREET | 18 m | **16 m** |
+| AVENUE | ~26 m | **24 m** |
+| BOULEVARD | ~34 m | **32 m** |
+| FREEWAY | 62 m | **64 m** |
+
+Mark: *"nobody's going to fault us for that. That's not the point of any of
+this."* Correct — and a 16 m street reading as 16 rather than 18 is invisible,
+while a world full of 2 m slivers is not.
+
+**EXCEPTIONS ARE NAMED, NOT ARBITRARY.** Stadium, airport, convention centre,
+cathedral, port sheds, rail platforms. Each declares its own footprint
+individually, in whole metres. Rare by nature. A handful of named one-offs is
+fine; an unbounded set of arbitrary sizes is what this rule exists to prevent.
+
+**A design that wants a size not on the list rounds to the nearest standard.**
+5 × 7 modules becomes 6 × 8. That is the slight mis-scaling Mark has explicitly
+accepted, and it is what keeps every piece swappable for every other piece of
+its size.
+
+**Every "whole cell" in this document and in the board plan now means "whole
+atom" — a whole metre.**
+
+---
+
 ## PART 1 — SPACE, NOT TYPE
 
 **Superseded 2026-09-06, by Mark, before the first version was built on.** The

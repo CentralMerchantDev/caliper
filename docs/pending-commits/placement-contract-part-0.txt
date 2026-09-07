@@ -1,0 +1,34 @@
+Commit PLACEMENT-CONTRACT.md Part 0 -- the grid is 1 metre, grouped 4 and 16
+
+Mark's decision, given directly in chat: the board's real addressing unit
+is the 1 m ATOM, not the 8 m CELL. QUADRANT (4 m) and BLOCK (16 m) are
+named groupings for indexing only and do not constrain placement -- a
+building may span more than one block, refused only for lack of room or
+wrong ground, never for crossing a boundary.
+
+Two numbers doing different jobs, not one conflated with the other: the
+ATOM (1 m) is the addressing unit; the MODULE (8 m) is the standard
+increment for footprints and road widths, a deliberate design choice for
+tiling, not a rounding the grid imposes.
+
+Why this is right and 8 m was not: the 8 m cell forced every real-world
+ROAD_STANDARDS dimension to round outward (an 18 m street reserving 24 m
+of ground). At 1 m, an 18 m street is 18 atoms -- the standards keep their
+real values and simply fit. It also closes findings P0 had to leave open:
+rampMerge/rampDiverge/railSwitch each carry a connector socket at a
+genuine lane-width or track-gauge offset that could not be forced onto an
+8 m boundary without falsifying ROAD_STANDARDS itself.
+
+The cost is measured, not assumed: 26 km at 1 m is 676 million atoms,
+free because grid.js stores nothing (pure integer arithmetic on a
+coordinate) and world-registry.js answers by rectangle, not by cell.
+
+What changes: grid.js's CELL=8 stops being the atom and becomes a named
+grouping alongside 4 and 16 (the module-size role roadkit.js's MODULE_M
+already plays). P0.4's snapCellsOutward is reverted. Footprints come from
+a standard size table (8 building sizes, 5 road-class widths) plus named
+exceptions, not from rounding outward.
+
+Committed as Mark wrote it -- no wording changed.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
