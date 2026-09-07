@@ -539,6 +539,11 @@ export function planPlot(plot, index, count, verdict, fits = null) {
   if (typeof fits === "function") {
     const asked = fits(typology, situation);
     if (asked && typeof asked === "object") Object.assign(options, asked);
+    else if (situation.fits) {
+      const cellW = Math.max(1, Math.floor(situation.fits.w / 8));
+      const cellD = Math.max(1, Math.floor(situation.fits.d / 8));
+      Object.assign(options, { cellW, cellD });
+    }
   }
 
   return {

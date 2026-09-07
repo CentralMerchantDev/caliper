@@ -35,9 +35,18 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { generateWorld as generateWorldReal } from "../public/city-plan.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
-import { WORLD_SCALE } from "../public/world-scale.js";
-
-const REPO_PUBLIC = join(fileURLToPath(new URL("..", import.meta.url)), "public");
+function findPublic(): string {
+  let dir = fileURLToPath(import.meta.url);
+  for (let i = 0; i < 5; i++) {
+    dir = join(dir, "..");
+    const candidate = join(dir, "public");
+    try {
+      if (readFileSync(join(candidate, "world-scale.js"))) return candidate;
+    } catch {}
+  }
+  return join(process.cwd(), "public");
+}
+const REPO_PUBLIC = findPublic();
 
 /** A second, disposable copy of public/, with world-scale.js's WORLD_SCALE
  *  patched to a different value -- the only way to actually regenerate the

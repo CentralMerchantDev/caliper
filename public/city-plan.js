@@ -1821,7 +1821,7 @@ const CORRIDOR_CLASSES = new Set(["BOULEVARD", "AVENUE"]);
  * taller than its surroundings. Without them a suburb is an undifferentiated
  * mat, which is the other half of why these places read as wallpaper.
  */
-function settlementCentres(s) {
+export function settlementCentres(s) {
   const b = s.bounds;
   const w = b.xMax - b.xMin, d = b.zMax - b.zMin;
   // roughly one centre per 1.6 km of the longer dimension, at least one
