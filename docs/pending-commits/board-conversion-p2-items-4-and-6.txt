@@ -1,0 +1,78 @@
+P2 finish, items 4 and 6: both named BLOCKED, with the measured reason --
+not silently skipped, and item 6's attempted fix reverted after a real
+regression was found
+
+ITEM 4 (P2.5, retire the span representation): scoped, not attempted.
+P2.3's completion did not unblock this the way the plan originally
+assumed -- the arterial and collector/local piece layers are ADDITIVE,
+alongside the {axis,at,from,to} span array, not a replacement for it;
+world.roads is unchanged by any of this pass's work. A full read-only
+scoping pass found 11 producer sites in city-plan.js and roughly 30
+consumer call sites across ~9 other files (heaviest: city-render.js's
+~9 independent road-drawing loops; also board-adapter.js's structural
+dependency for the editable/mutation layer, and grade.js). Two
+producers are frozen, shared-by-reference singletons that must stay
+that way; several derive road ids from the shape's own coordinates,
+entangling it with determinism. Genuinely blocked on the render-path
+lane boundary -- the heaviest consumer is sandbox-spike-agy's active
+file. Full scope and what a real migration would require next:
+docs/audits/P2-SPAN-RETIREMENT.md.
+
+ITEM 6 (snap plot origins to whole metres): attempted, a real fix was
+built and measured, and then REVERTED after finding a serious
+regression -- reported here rather than shipped quietly.
+
+Rounding generateBlocks()'s and generateSettlement()'s block bounds to
+the metre (the actual root cause -- coordinates lost their whole-
+metre-ness at WORLD_SCALE's float multiplication) reached the stated
+goal exactly: 15,818 of 15,818 plots round-tripped cleanly through
+atomOf/atomOrigin, 100%, up from 200 of 16,209.
+
+But it broke something else, found by measuring rather than assumed
+safe: city-wide placed buildings fell from 17,105 to roughly 9,700
+(43%). Root cause, confirmed directly by counting rows per block, not
+guessed at: a rounded block.depth crosses subdivideBlock()'s exact
+two-row threshold (depth >= 2*cls.minD + 8) for most blocks that were
+previously just above it -- 1,078 two-row / 184 one-row blocks before,
+210 two-row / 976 one-row after. Block count and class-mix stayed
+within noise (2,534 -> 2,533 blocks, per-class counts flat), so this
+is specifically the second-row collapse, not a class-selection shift.
+
+Three rounding strategies were tried and measured, not just the first
+one that came to mind: independent per-edge rounding (the above
+result), outward rounding (floor/ceil, tried specifically to stop
+blocks from ever shrinking below a threshold) -- which was far WORSE,
+3,246 total plots, because it makes ADJACENT blocks overlap instead --
+and width-preserving rounding (round one edge, then the width, to
+halve the theoretical worst-case error). All three produced
+essentially the same placement collapse, which is the actual finding:
+the problem is not which rounding method is used, it is that
+block.depth sits very close to this exact threshold for a large
+fraction of the world's blocks (a tuning coincidence in the
+avEff/stEff density-scaling math P2.3's own comment already names),
+making the world fragile to ANY perturbation of that size, not just
+a badly-chosen one.
+
+Reverted rather than shipped: a 43% drop in the city's own buildings
+is not an acceptable trade for address correctness, and finding out
+WHY block depths cluster at this threshold -- and fixing it without
+changing the density tuning itself -- needs more time than this pass
+has. public/city-plan.js, test/boardAdapter.test.ts,
+src/citySummary.generated.ts and test/testCount.generated.json are
+all confirmed byte-identical to HEAD (git diff --stat, empty) --
+nothing shipped that was not fully verified working.
+
+BOARD-CONVERSION-PLAN.md updated for both items with the measured
+reason, per docs/BUILD-LOOP.md's own provision for a step that cannot
+be done this pass -- named, not silently dropped, per Mark's own
+"if blocked, write the question down and move to the next independent
+item" instruction.
+
+npx tsc --noEmit clean (excluding unrelated, untracked, in-progress
+retrieval files from another concurrent lane in this shared checkout).
+
+P2 is now fully addressed: P2.1/P2.2/P2.3/P2.4 done and gated, P2.5/P2
+finish-item-6 blocked with measured reasons, P2.6 blocked on
+coordination with a written handoff. Proceeding to P3.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

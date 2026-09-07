@@ -449,14 +449,26 @@ Converting it to pieces without changing it would preserve it exactly.
       two longest (3,434 m, 2,359 m) almost certainly cross open water and
       would need a real bridge, not a street. See
       `docs/audits/P2-CONNECTIVITY.md`.
-- [ ] **P2.5** Retire the span representation. `{axis, at, from, to}` stops
-      existing; nothing reads it.
+- [!] **P2.5** BLOCKED. Retire the span representation. `{axis, at, from,
+      to}` stops existing; nothing reads it.
       **Gate:** grep returns zero uses outside quarantine. Two representations
       is the pattern that has cost this project three times.
-      **NOT DONE, blocked on P2.3's collector/local conversion.** The
-      arterial layer never used the span shape at all (its pieces are
-      `{id, footprint, sockets, lod}` from the start) — but ~1,357 existing
-      uses remain live in `city-plan.js`. Named, not quarantined or forced.
+      **UPDATE — scope measured (P2 finish, item 4):** P2.3's completion did
+      NOT unblock this the way the plan originally assumed — P2.2/P2.3's
+      piece layers are ADDITIVE, alongside the span array, not a
+      replacement for it; `world.roads` is unchanged. A full scoping pass
+      (read-only) found **11 producer sites** in `city-plan.js` and
+      **~30 consumer call sites across ~9 other files** (heaviest:
+      `city-render.js`'s ~9 independent road-drawing loops, plus
+      `board-adapter.js`'s structural dependency for the editable/mutation
+      layer, plus `grade.js`). Two producers are frozen, shared-by-reference
+      singletons (`HIGHWAYS`/`FREEWAYS`) that must stay that way; several
+      producers derive road `id`s from the shape's own coordinates,
+      entangling it with determinism, not just geometry. **Genuinely blocked
+      on the render-path lane boundary** — the heaviest consumer is
+      `sandbox-spike-agy`'s active file, the same boundary P2.6 is blocked
+      on. Full scope, and what a real migration would require next, in
+      `docs/audits/P2-SPAN-RETIREMENT.md`.
 - [ ] **P2.6** `city-render.js` draws roads from the kit, not from ribbons.
       **Gate:** `roadkit.js` is imported by the render path — today it is not
       imported at all.
@@ -477,6 +489,37 @@ Converting it to pieces without changing it would preserve it exactly.
       roughly a dozen call sites across a 4,012-line file, not one function
       to swap), and a proposed interface for agy to pull rather than this
       lane to push — is written up in `docs/audits/P2-RENDER-HANDOFF.md`.
+- [!] **P2 finish, item 6** BLOCKED. Snap plot origins to whole metres,
+      during the regeneration this pass already does. Watched red first:
+      200 of 16,209 plots round-tripped cleanly through
+      `atomOf`/`atomOrigin` (PLACEMENT-CONTRACT.md's "carved on whole
+      cells" claim did not hold).
+      **Attempted, measured a serious regression, reverted rather than
+      shipped.** Rounding `generateBlocks()`'s and `generateSettlement()`'s
+      block bounds to the metre (where they are actually decided —
+      coordinates lost their whole-metre-ness at `WORLD_SCALE`'s float
+      multiplication) DID reach 100% round-trip (15,818 of 15,818 plots),
+      but measured a large, real side effect: city-wide placed buildings
+      fell from 17,105 to ~9,700 (43%), because a ROUNDED `block.depth`
+      crosses `subdivideBlock()`'s exact two-row threshold
+      (`depth >= 2*cls.minD + 8`) for most blocks that were previously just
+      above it — confirmed directly by counting rows per block (1,078
+      two-row / 184 one-row before, 210 two-row / 976 one-row after — a
+      near-total collapse of the second row, not a class-distribution
+      shift; block count and class mix were within noise, 2,534→2,533 and
+      per-class counts flat). Three rounding strategies were tried
+      (nearest-per-edge, outward/floor-ceil — far WORSE, 3,246 plots total,
+      from adjacent-block overlap — and width-preserving nearest); all
+      three produced essentially the same placement collapse, so the cause
+      is the fact of moving `block.depth` at all near this threshold, not
+      the specific rounding method. **Reverted rather than shipped** — a
+      43% drop in the city's own buildings is not an acceptable trade for
+      address correctness, and root-causing why so many blocks sit exactly
+      at this threshold (a tuning coincidence in `avEff`/`stEff`'s density
+      scaling, per P2.3's own comment on that same spacing math) needs more
+      time than this pass has. Named as genuinely blocked, per
+      `docs/BUILD-LOOP.md`'s own provision for a step that cannot be done
+      this pass, not silently dropped.
 
 **EXIT P2, HONEST STATE:** the arterial layer is real, fully socket-verified,
 connected by construction and by measurement, and rendered. Collectors and
