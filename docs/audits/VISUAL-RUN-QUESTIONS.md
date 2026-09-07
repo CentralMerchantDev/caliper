@@ -128,3 +128,19 @@ only axis considered so far, not style ("Art Deco Skyscraper" vs "Alpine
 Chalet") -- a villa plot can currently draw a model named "Wave Tower" as
 long as its tier and footprint both fit. Real, not a stub, but a first pass
 on suitability, named as one.
+
+---
+
+## 7. FINISH TIER CONSOLIDATION (6 -> 4) & CLI LANE HANDOFF
+
+**For the CLI lane / layout.js maintenance:**
+
+Per `docs/specs/LIBRARY-STRUCTURE.md`, the 6 legacy finish tiers (`basic`, `standard`, `mid`, `midhigh`, `highend`, `luxury`) have been consolidated into **4 standardized finishes**:
+- `f1` (Basic / Utilitarian)
+- `f2` (Standard / Municipal) — subsumes legacy `standard` and `midhigh`
+- `f3` (Premium / Commercial) — corresponds to legacy `mid` / `highend`
+- `f4` (Elite / Showcase) — corresponds to legacy `luxury`
+
+### Compatibility & Handoff
+- Backward-compatible legacy aliases (e.g. `bld-basic-*`, `bld-luxury-*`) are preserved in `public/asset-registry.js` and `public/tier-models.js`, so existing lookups never fail.
+- `public/layout.js` exports `LIBRARY_TIERS_FOR_CLASS` mapping classes to tier strings. To complete the migration, the CLI lane can update `LIBRARY_TIERS_FOR_CLASS` arrays from legacy strings to the standardized `['f1', 'f2', 'f3', 'f4']` finish identifiers.

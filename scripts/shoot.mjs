@@ -102,13 +102,24 @@ for (const v of VIEWS) {
     console.log("stats", JSON.stringify(s, null, 1).replace(/\n\s*/g, " "));
     statsPrinted = true;
   }
-  await page.waitForTimeout(150);
   const name = v.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const renderInfo = await page.evaluate(() => {
+    if (window.__renderer && window.__renderer.info) {
+      return {
+        calls: window.__renderer.info.render.calls,
+        triangles: window.__renderer.info.render.triangles,
+        points: window.__renderer.info.render.points,
+        lines: window.__renderer.info.render.lines,
+      };
+    }
+    return null;
+  });
   // Read the WebGL canvas directly. page.screenshot() goes through the browser
   // compositor, which under SwiftShader never returns for a scene this size.
   const dataUrl = await page.evaluate(() => document.querySelector("canvas").toDataURL("image/png"));
   fs.writeFileSync(path.join(OUT, name + ".png"), Buffer.from(dataUrl.split(",")[1], "base64"));
-  console.log(`  ${name}.png   ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  const infoStr = renderInfo ? ` [calls: ${renderInfo.calls}, tris: ${renderInfo.triangles}]` : "";
+  console.log(`  ${name}.png   ${((Date.now() - t0) / 1000).toFixed(1)}s${infoStr}`);
   await page.close().catch(() => {});
 }
 

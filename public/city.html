@@ -520,6 +520,7 @@ window.__camera = camera;
 window.__set = set;
 window.__renderOnce = () => { if (usePost) composer.render(); else renderer.render(scene, camera); };
 window.__scene = scene;
+window.__renderer = renderer;
 window.__apply = apply;
 
 let t = 0, frames = 0;
