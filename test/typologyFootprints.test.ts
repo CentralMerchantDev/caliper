@@ -31,7 +31,7 @@ test("every TYPOLOGY_FOOTPRINT_CELLS entry declares whole cells", () => {
   }
 });
 
-test("PLOT_CLASSES bounds were only ever widened from the pre-contract numbers, never narrowed", () => {
+test("PLOT_CLASSES bounds were only ever widened from the pre-contract numbers, never narrowed -- except two bounds, named, that measurably had to", () => {
   // The metric bounds this repo shipped with before PLACEMENT-CONTRACT.md --
   // frozen here as a record, not re-exported, so this test still means
   // something after PLOT_CLASSES itself changes again.
@@ -48,10 +48,27 @@ test("PLOT_CLASSES bounds were only ever widened from the pre-contract numbers, 
     FARM:      { minW: 160, maxW: 460, minD: 120, maxD: 340 },
     HANGAR:    { minW: 90,  maxW: 220, minD: 70,  maxD: 150 },
   };
+  // NAMED EXCEPTIONS, not a silent pass. The commit that fixed 756fd95's
+  // snap regression (docs/pending-commits/fix-756fd95-snap-regression.txt)
+  // found, by measuring node scripts/measure-layout.mjs one class at a
+  // time, that TOWER and VILLA regress below their pre-756fd95 plot counts
+  // at the mechanical floor-min/ceil-max bound and only recover at the
+  // NEAREST cell -- which narrows a bound relative to the old metric number
+  // (TOWER 45-90 -> 48-88 on both sides, VILLA's maxW 34->32). See the
+  // comment on PLOT_CLASSES itself in city-plan.js for the full
+  // measurement. Every other class either widened with no cost, or
+  // (MIDRISE's width, TERRACE's depth) stayed at its exact original value
+  // because widening it AT ALL regressed it -- both already exempt below by
+  // simply not moving.
+  const NARROWS_BUT_VERIFIED_NOT_TO_REGRESS = new Set(["TOWER.minW", "TOWER.maxW", "VILLA.maxW"]);
   for (const [name, old] of Object.entries(PRE_CONTRACT) as [string, any][]) {
     const cls = (PLOT_CLASSES as any)[name];
-    assert.ok(cls.minW <= old.minW, `${name}.minW grew from ${old.minW} to ${cls.minW} -- a plot that used to qualify no longer does`);
-    assert.ok(cls.maxW >= old.maxW, `${name}.maxW shrank from ${old.maxW} to ${cls.maxW} -- a plot that used to qualify no longer does`);
+    if (!NARROWS_BUT_VERIFIED_NOT_TO_REGRESS.has(`${name}.minW`)) {
+      assert.ok(cls.minW <= old.minW, `${name}.minW grew from ${old.minW} to ${cls.minW} -- a plot that used to qualify no longer does`);
+    }
+    if (!NARROWS_BUT_VERIFIED_NOT_TO_REGRESS.has(`${name}.maxW`)) {
+      assert.ok(cls.maxW >= old.maxW, `${name}.maxW shrank from ${old.maxW} to ${cls.maxW} -- a plot that used to qualify no longer does`);
+    }
     assert.ok(cls.minD <= old.minD, `${name}.minD grew from ${old.minD} to ${cls.minD} -- a plot that used to qualify no longer does`);
     assert.ok(cls.maxD >= old.maxD, `${name}.maxD shrank from ${old.maxD} to ${cls.maxD} -- a plot that used to qualify no longer does`);
   }

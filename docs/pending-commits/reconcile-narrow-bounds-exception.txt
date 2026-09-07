@@ -1,0 +1,34 @@
+Reconcile the snap-regression fix against the earlier "never narrowed" test
+-- named exceptions, not a silently patched-over conflict
+
+The previous commit (772fd77) fixed 756fd95's count regression by moving
+TOWER and VILLA's width bounds to the nearest cell rather than the
+mechanical floor-min/ceil-max, because measurement showed the mechanical
+version still under-counted both classes. That choice directly contradicted
+test/typologyFootprints.test.ts's "bounds were only ever widened, never
+narrowed" test from an earlier commit (654fa41) -- TOWER.minW moved from 45
+to 48 (up, not down) and TOWER.maxW/VILLA.maxW moved down from their
+mechanically-widened values, both narrowing relative to the pre-contract
+metric numbers. node test/run.mjs caught this immediately as a real, red
+failure; it was not caught before committing 772fd77 because that commit's
+own test run happened between two of this session's file-tree resets and
+was re-verified against a stale copy.
+
+Two of the four bounds that had drifted to a narrowing value (CIVIC.minW,
+WAREHOUSE.minW) turned out not to need it -- re-tested with the plain
+floor-min widening instead of nearest-cell, both still matched the
+pre-756fd95 baseline exactly, so both reverted to the non-narrowing form.
+Only TOWER (both bounds) and VILLA.maxW are genuinely narrower than the old
+metric numbers, verified by the same one-class-at-a-time measurement as the
+previous commit.
+
+The "never narrowed" test now carries a named exception set for exactly
+those three, with the reasoning inline and a pointer to the measurement
+commit -- not a loosened assertion, a documented one. PLOT_CLASSES' own
+comment in city-plan.js is expanded to state which classes needed which
+treatment and why, so the next reader does not have to re-derive it.
+
+How it is known to work: node scripts/measure-layout.mjs unchanged from the
+previous commit's own table (bld-tower 55, bld-midrise 857, bld-office 328,
+bld-business-park 5, plots 20,059 -- all still at or above the pre-756fd95
+baseline). node test/run.mjs and npx tsc --noEmit both clean.

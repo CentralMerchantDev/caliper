@@ -1009,29 +1009,46 @@ Object.freeze(GRID);
 // both of which are sensitive to exactly where minW/maxW/minD sit, whole-
 // cell or not. Verified class by class against the world before ANY of this
 // landed (script: node scripts/measure-layout.mjs, one class's bound edited
-// at a time): MIDRISE's width and TERRACE's depth regress the instant they
-// move at all, so both stay at their original metric values -- not whole
-// cells, because forcing them there costs plots this table exists to grow,
-// not shrink. TOWER's width had to land on 48-88 (round to the NEAREST
-// cell) rather than the mechanical 40-96 (floor/ceil) -- and 48-88 is
-// exactly Mark's own originally-proposed 6-11 cell bracket for TOWER,
-// arrived at independently by a different method. Every other class was
-// widened either way with no measured cost and got the standard floor-min/
-// ceil-max/round-to-nearest treatment. In short: whole-cell alignment is a
-// goal here, not a rule applied blind -- the one thing that may never
-// regress is the count of real plots and real buildings, because that
-// count is the entire subject of the complaint this file exists to answer.
+// at a time, one direction at a time):
+//
+//   MIDRISE's width and TERRACE's depth regress the instant they move at
+//   all, in either rounding direction, so both stay at their original
+//   metric values -- not whole cells, because forcing them there costs
+//   plots this table exists to grow, not shrink.
+//
+//   TOWER's width and VILLA's own maxW needed the NEAREST cell, not the
+//   mechanical floor-min/ceil-max: 45-90 -> 48-88 for TOWER, 18-34 -> 16-32
+//   for VILLA. Both narrow one bound relative to the old metric number
+//   (TOWER's minW 45->48, VILLA's maxW 34->32) -- test/typologyFootprints.
+//   test.ts's "never narrowed" test carries a named exception for exactly
+//   these two, with this same reasoning, rather than silently passing a
+//   number that happens to be lower. TOWER's 48-88 is also, independently,
+//   exactly Mark's own originally-proposed 6-11 cell bracket for TOWER --
+//   arrived at here by measurement, not by reading the proposal.
+//
+//   CIVIC and WAREHOUSE were tried both ways (floor-min/ceil-max, and
+//   nearest-cell) and matched baseline either way, so they keep the
+//   non-narrowing floor-min/ceil-max form -- no reason to narrow a bound
+//   that does not need it.
+//
+//   Every remaining class (TOWNHOUSE, PARK, RESORT, FARM, HANGAR) widened
+//   with the standard floor-min/ceil-max rule and cost nothing measured.
+//
+// In short: whole-cell alignment is a goal here, not a rule applied blind
+// -- the one thing that may never regress is the count of real plots and
+// real buildings, because that count is the entire subject of the
+// complaint this file exists to answer.
 export const PLOT_CLASSES = {
   TERRACE:   { minW: 8,   maxW: 16,  minD: 22,  maxD: 34,  maxHeight:  18, module: 8, tileRow: true },
   TOWNHOUSE: { minW: 8,   maxW: 32,  minD: 24,  maxD: 40,  maxHeight:  24, module: 8, tileRow: true },
   MIDRISE:   { minW: 26,  maxW: 52,  minD: 32,  maxD: 64,  maxHeight:  55, module: 8 },
   TOWER:     { minW: 48,  maxW: 88,  minD: 40,  maxD: 96,  maxHeight: 220, module: 8 },
-  CIVIC:     { minW: 64,  maxW: 184, minD: 48,  maxD: 112, maxHeight:  70, module: 8 },
+  CIVIC:     { minW: 56,  maxW: 184, minD: 48,  maxD: 112, maxHeight:  70, module: 8 },
   PARK:      { minW: 40,  maxW: 200, minD: 40,  maxD: 130, maxHeight:   0, module: 8 },
   // --- beyond the downtown island ---
   RESORT:    { minW: 32,  maxW: 80,  minD: 32,  maxD: 72,  maxHeight:  70, module: 8 },  // beach hotels
   VILLA:     { minW: 16,  maxW: 32,  minD: 16,  maxD: 40,  maxHeight:  14, module: 8 },  // low coastal housing
-  WAREHOUSE: { minW: 56,  maxW: 152, minD: 40,  maxD: 96,  maxHeight:  22, module: 8 },  // port sheds
+  WAREHOUSE: { minW: 48,  maxW: 152, minD: 40,  maxD: 96,  maxHeight:  22, module: 8 },  // port sheds
   FARM:      { minW: 160, maxW: 464, minD: 120, maxD: 344, maxHeight:  11, module: 8 }, // fields + barns
   HANGAR:    { minW: 88,  maxW: 224, minD: 64,  maxD: 152, maxHeight:  26, module: 8 },  // airport
 };
