@@ -145,6 +145,11 @@ process.stdout.write(JSON.stringify({
   refusedCount: placements.filter((p) => p.refused).length,
   buildingSelfOverlaps,
   buildingPlotOverlaps,
+  // P3.1, a blind-audit finding: buildingCount + unbuilt-plotCount must sum
+  // to every real plot -- a plot must never have neither a "plot" piece
+  // nor a "building" piece (a placement reported successful that produces
+  // no piece at all).
+  vanishedPlots: world.plots.length - buildingPieces.length - plotPieces.length,
   digest,
   ids: pieces.map((p) => p.id),
 }));

@@ -7,6 +7,39 @@ PARTIAL — the piece half is real and gated; the "lands on a road piece"
 half is measured and found NOT met with the road-piece layers this project
 has built so far.**
 
+## P3-exit blind audit — two real findings, both fixed
+
+Run per `docs/AUDIT-PROTOCOL.md`, UMAA trigger 3 ("the no-floating-edge
+assertion... covering the whole world").
+
+**CRITICAL, fixed:** `test/bridgePieces.test.ts`'s own bearing-opposition
+check was inverted — it hand-rolled a formula that compared the raw
+bearing DIFFERENCE against 180 directly (`diff = |((b0-b1+540)%360)-180|`,
+asserted `< 1e-6`), where a genuinely correctly-opposed pair produces that
+difference AT 180, not near 0. The test was red on every real, correct
+bridge, and — the more serious half — was structurally incapable of
+catching the actual defect: two sockets facing the SAME direction (the
+literal floating edge this test exists to catch) would have produced
+`diff ≈ 0` and PASSED. Fixed by extracting `verifySocketMating`'s own
+canonical bearing-opposition formula (`target = sockA.bearing + 180`,
+compare `sockB.bearing` against it) rather than re-deriving one
+independently. `verifySocketMating` itself is not called directly, because
+it also requires position coincidence — correct for two ADJACENT pieces'
+touching sockets, wrong for one bridge's own two ends, hundreds of metres
+apart.
+
+**MEDIUM, fixed:** `verifyBridgeEnds` picked only the single nearest
+candidate node by raw XZ distance and tried just that one. A closer
+candidate whose own socket does not actually mate (wrong bearing) would
+report "no match," hiding a real, slightly-farther candidate that DOES
+mate. Currently latent (today's real distances are hundreds to thousands
+of metres regardless, so no existing measurement changes), but a real
+logic gap for whenever two piece-network nodes both land near one bridge
+end. Fixed: every candidate within tolerance is tried, closest first, and
+the first that actually mates wins. `test/bridgePieces.test.ts`'s new case
+constructs exactly this scenario and confirms the fix finds the correct,
+farther-ranked match.
+
 ## What was built
 
 `public/road-network.js`'s `buildBridgePieces(BRIDGES, {heightAt})` calls

@@ -246,7 +246,19 @@ function bridgePieces(world) {
  *  unconditionally included, no buildings), unchanged. Trees and props are
  *  not included -- see the file header. */
 export function piecesFromWorld(world, placements = null) {
-  const builtPlotIds = placements ? new Set(placements.filter((p) => !p.refused).map((p) => p.plotId)) : null;
+  // Derived from what buildingPieces() ACTUALLY built, not from "not
+  // refused" -- found by a blind audit, not assumed equivalent:
+  // buildingPieces() has its own skip conditions (a plot with no
+  // `buildable` rect, or a degenerate w<=0/d<=0 one) that layout.js's own
+  // `planPlot()` does not treat as refused (it falls back to the plot's
+  // raw bounds instead). The two disagreeing meant a plot could vanish
+  // from the board entirely -- no "plot" piece (builtPlotIds said it was
+  // built) and no "building" piece (buildingPieces() itself skipped it) --
+  // a placement reported as successful producing no piece at all.
+  // Currently latent (0 of 17,105 real placements hit it, measured), but
+  // structurally guaranteed not to recur this way: the SAME function's own
+  // output decides both what plotPieces() excludes and what gets added.
   const buildings = placements ? buildingPieces(world, placements) : [];
+  const builtPlotIds = placements ? new Set(buildings.map((p) => p.id.slice("bld-".length))) : null;
   return [...plotPieces(world, builtPlotIds), ...roadPieces(world), ...bridgePieces(world), ...buildings];
 }

@@ -38,12 +38,28 @@ test("P3.3: every built bridge piece carries two real, world-space, mateable soc
       assert.ok(Number.isFinite(s.bearing), `${b.id} socket missing a real bearing`);
       assert.ok(s.width > 0 && s.lanes > 0, `${b.id} socket missing real width/lanes`);
     }
-    // The two sockets face opposite directions along the bridge's own line
-    // -- the same bearing-opposition verifySocketMating checks everywhere
-    // else in this project, checked here directly against the piece's own
-    // two ends rather than assumed from bridgeSpan()'s own doc comment.
-    const diff = Math.abs(((b.model.sockets[0].bearing - b.model.sockets[1].bearing + 540) % 360) - 180);
-    assert.ok(diff < 1e-6, `${b.id}'s own two end sockets are not bearing-opposed (${diff} deg off)`);
+    // The two sockets face opposite directions along the bridge's own line.
+    // NOT `verifySocketMating(s0, s1)` directly -- that function ALSO
+    // requires position coincidence (it verifies two ADJACENT pieces'
+    // touching sockets), which does not apply to a single bridge's own two
+    // ends, hundreds of metres apart; calling it directly throws a
+    // "position mismatch" on every real bridge regardless of bearing.
+    // This extracts just `verifySocketMating`'s own bearing-opposition
+    // half (`target = sockA.bearing + 180`, compare `sockB.bearing`
+    // against it) rather than re-deriving a formula independently. A
+    // first version of this test DID re-derive one independently and got
+    // the sign backwards (compared the raw bearing DIFFERENCE against 180
+    // directly, asserting it near zero) -- a genuinely correct, opposed
+    // pair produces that difference AT 180, not near 0, so the test was
+    // inverted: it would have PASSED two sockets facing the SAME direction
+    // (the literal floating-edge defect this test exists to catch) and
+    // FAILED every real, correct bridge. Caught by a blind audit re-
+    // deriving the canonical check from `verifySocketMating`'s own source
+    // rather than trusting the comment beside the old formula.
+    const [s0, s1] = b.model.sockets;
+    const target = (s0.bearing + 180) % 360;
+    const bearingDiff = Math.abs(((s1.bearing - target + 540) % 360) - 180);
+    assert.ok(bearingDiff < 1e-6, `${b.id}'s own two end sockets are not bearing-opposed (${bearingDiff} deg off)`);
   }
 });
 
@@ -64,4 +80,21 @@ test("P3.3: verifyBridgeEnds correctly matches a socket placed exactly at a brid
   const empty = verifyBridgeEnds(built, [], 50);
   assert.equal(empty.length, built.length * 2, "one verification attempt per bridge end");
   assert.ok(empty.every((r) => !r.ok && r.reason === "no-road-piece-within-tolerance"), "with no candidate nodes at all, every end must be refused by name, not silently passed");
+});
+
+test("P3.3: verifyBridgeEnds tries every candidate within tolerance, not just the single nearest one", () => {
+  // A blind-audit finding: the first version picked the candidate closest
+  // by raw XZ distance and tried only that one. A closer candidate whose
+  // own socket does not actually mate (wrong bearing) would be reported as
+  // the match attempt, hiding a real, slightly-farther candidate that DOES
+  // mate. Constructed here rather than relied on from real data (the real
+  // world currently has no matching candidates at all, so this scenario
+  // cannot be observed there).
+  const { built } = buildBridgePieces(BRIDGES, { heightAt });
+  const sample = built[0];
+  const [s0] = sample.model.sockets;
+  const closeButWrong = { x: s0.at[0], z: s0.at[2], socket: { at: s0.at, bearing: s0.bearing, width: s0.width, lanes: s0.lanes, kind: "road" } };
+  const farButRight = { x: s0.at[0] + 3, z: s0.at[2] + 3, socket: { at: s0.at, bearing: (s0.bearing + 180) % 360, width: s0.width, lanes: s0.lanes, kind: "road" } };
+  const result = verifyBridgeEnds([sample], [closeButWrong, farButRight], 10);
+  assert.ok(result.some((r) => r.ok), `expected the correctly-mating candidate to be found despite ranking farther by raw distance, got: ${JSON.stringify(result)}`);
 });

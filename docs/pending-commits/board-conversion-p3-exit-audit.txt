@@ -1,0 +1,64 @@
+P3-exit audit checkpoint (UMAA trigger 3, the no-floating-edge
+assertion) -- one CRITICAL fix, two MEDIUM fixes, all measured
+
+A fresh, blind agent (no conversation history) audited P3.1/P3.2/P3.3
+per docs/AUDIT-PROTOCOL.md, triggered by the plan's own P3-exit text:
+"the no-floating-edge assertion is a new control covering the whole
+world." Full findings appended to docs/audits/P3-BRIDGES.md and
+docs/audits/P3-BUILDINGS-AND-PROPS.md.
+
+CRITICAL, fixed: test/bridgePieces.test.ts's own bearing-opposition
+check was inverted at the moment it was written -- it compared the raw
+bearing difference between two sockets against 180 directly and
+asserted it near zero, when a genuinely correctly-opposed pair
+produces that difference AT 180. The test was red on every real,
+correct bridge (measured: fails on the first of 8 real bridges,
+immediately), and was structurally incapable of catching the actual
+defect -- two sockets facing the SAME direction would have passed.
+Fixed by extracting verifySocketMating's own canonical bearing formula
+rather than re-deriving one independently, and specifically NOT
+calling verifySocketMating itself directly (it also requires position
+coincidence, correct for two adjacent pieces' touching sockets, wrong
+for one bridge's own two ends hundreds of metres apart). Reconfirmed:
+all 8 real bridges now correctly pass.
+
+MEDIUM, fixed: public/board-adapter.js's piecesFromWorld() derived
+which plots to exclude from "not refused" in planCity()'s placements,
+but buildingPieces() has its own, stricter skip conditions that
+planCity() does not treat as a refusal -- the two could disagree,
+letting a plot vanish from the board entirely (neither a plot piece
+nor a building piece). Measured as currently latent (0 of 17,105 real
+cases) before fixing, not assumed safe. Fixed by deriving the
+exclusion set from what buildingPieces() actually built, so the two
+cannot disagree by construction. New test asserts vanishedPlots===0
+via scripts/_board-adapter-probe.mjs's own count.
+
+MEDIUM, fixed: public/road-network.js's verifyBridgeEnds() tried only
+the single nearest candidate node by raw distance -- a closer but
+incompatible candidate could hide a real, slightly-farther match.
+Latent on real data today (no current match exists regardless), fixed
+by trying every candidate within tolerance, closest first. New test
+constructs the exact scenario and confirms the fix.
+
+LOW, reconfirmed not a defect: the audit's own independent script
+reproduced a different overlap count (1,922) than this project's
+documented 2,735. Re-derived with fresh, careful code and reconfirmed
+2,735 exactly -- the documented figure stands. Appended to
+AUDIT-PROTOCOL.md section 7 as a still-open protocol gap (neither
+side's script was checked against the other's method).
+
+Also appended to AUDIT-PROTOCOL.md section 7: the CRITICAL finding's
+own lesson -- a hand-rolled reimplementation of an existing shared
+check needs to be diffed against that check's own source, not just
+checked for internal consistency; and calling a shared verifier
+wholesale without reading what ELSE it checks is its own, different
+failure mode (found here too, in the fix's first attempt).
+
+npx tsc --noEmit clean. Every fix independently re-verified against
+real running code via targeted scripts (not just the new assertions
+themselves) before this commit.
+
+AUDIT CHECKPOINT closed. Per Mark's explicit instruction, stopping
+here at the P3 exit for review -- not proceeding into new work.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

@@ -669,3 +669,68 @@ no `node_modules` again — the fourth time this exact provisioning gap
 appears in this file (2026-09-03, 2026-09-04 ×2). The auditor's own
 workaround (verify a sibling checkout at the identical commit, run there)
 remains sound, but the underlying gap is still unfixed at the source.
+
+### 2026-09-07 (later) · P3 exit — a test's own correctness check was itself wrong, and a green suite hid it
+
+**What it caught, that re-reading the code (not the test) would have
+missed:** a bearing-opposition assertion in `test/bridgePieces.test.ts`
+was inverted at the moment it was written — it compared the raw bearing
+difference between two sockets against 180° directly and asserted it near
+ZERO, when a genuinely correctly-opposed pair produces that difference AT
+180, not near zero. The auditor found this not by reading the formula and
+spotting the sign error by inspection, but by re-bundling and RUNNING the
+test on an unmodified checkout: it failed on the very first real bridge,
+with a correct piece, immediately after being introduced. **A CRITICAL
+finding that was already red before the auditor changed anything** — the
+2026-09-03 entry's standing instruction ("run the full, unmutated suite
+first... treat any pre-existing failure as a CRITICAL finding in its own
+right") already covers this shape, and it worked exactly as designed here,
+just scoped to three files instead of the whole suite. Worth restating
+because of WHERE it happened: this was not old, unattended code — it was
+written and committed in the same working session as the audit that found
+it, by the same author, and the author's own manual verification (run
+earlier, informally, against different sample data) had not caught it
+before commit.
+
+**The deeper lesson, worth generalising:** the broken assertion was a
+hand-rolled reimplementation of a check (`verifySocketMating`'s own
+bearing-opposition math) that already exists, correctly, elsewhere in the
+same codebase. Calling the shared function directly was ALSO tried and
+was ALSO wrong, for a different reason — `verifySocketMating` additionally
+requires position coincidence, correct for two adjacent pieces' touching
+sockets, wrong for one piece's own two ends far apart — so the fix was to
+extract just the bearing-opposition HALF of the canonical formula, not to
+call the shared function wholesale. Two different wrong instincts (re-derive
+independently; call the shared checker as a black box without reading what
+else it checks) both produced a broken test, and the correct answer needed
+actually reading `verifySocketMating`'s own source rather than either
+extreme. Worth adding to §2.2: **when a test reimplements part of an
+existing verification function's logic, the auditor should re-derive that
+same partial formula from the ORIGINAL function's source and diff it
+against the test's own version, rather than only checking that the test's
+formula looks internally consistent.**
+
+**Two further real, but lower-severity, findings in the same pass:** (1) a
+plot could vanish from the board entirely — neither a "plot" piece nor a
+"building" piece — because two functions (`plotPieces()`'s exclusion set
+and `buildingPieces()`'s own skip conditions) used different criteria for
+"was this plot actually built," found latent (0 of 17,105 real cases) but
+fixed by deriving one from the other rather than trusting them to agree by
+convention; (2) `verifyBridgeEnds()` tried only the single nearest
+candidate node by raw distance, which could report "no match" while a
+real, slightly-farther match existed — also latent on real data, fixed by
+trying every in-tolerance candidate. Both are the same shape as this
+file's own repeated lesson (2026-09-04, componentsBefore): **an assumption
+that two independently-computed things will agree is not the same claim as
+verifying they do.**
+
+**Still open:** the auditor's own re-derivation of the "2,735 buildings
+overlapped" headline count produced a different number (1,922) via an
+independently-written script; re-checked afterward with fresh, careful
+code and reconfirmed 2,735 exactly, so the documented figure stands — but
+neither this entry nor the audit report explains WHY the auditor's own
+script differed. A protocol gap, not yet closed: when an auditor's
+independent reproduction of a number disagrees with the documented one,
+neither side's script should be trusted over the other without finding
+the actual difference in method — "reconfirmed by a third measurement"
+is not the same as "found where the second one went wrong."

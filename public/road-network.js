@@ -1122,18 +1122,37 @@ export function verifyBridgeEnds(built, nodes, toleranceM = 5) {
   const results = [];
   for (const b of built) {
     for (const sock of b.model.sockets) {
-      let nearest = null, nearestD = Infinity;
-      for (const n of nodes) {
-        const d = Math.hypot(n.x - sock.at[0], n.z - sock.at[2]);
-        if (d < nearestD) { nearestD = d; nearest = n; }
-      }
-      if (!nearest || nearestD > toleranceM) {
+      // Every node within tolerance is tried, not just the single nearest
+      // one -- a blind-audit finding: the closest candidate by raw XZ
+      // distance is not necessarily the one whose bearing actually
+      // opposes this socket (two candidates can sit at different
+      // distances with only the farther one facing the right way), so
+      // trying only the nearest could report "no match" when a real,
+      // slightly-farther match exists. Currently latent on real data (no
+      // built bridge end is within any layer's tolerance at all, so this
+      // never changes today's reported count) but wrong in general, fixed
+      // rather than left for the day two piece-network nodes both land
+      // near the same bridge end.
+      const candidates = nodes
+        .map((n) => ({ n, d: Math.hypot(n.x - sock.at[0], n.z - sock.at[2]) }))
+        .filter((c) => c.d <= toleranceM)
+        .sort((a, b2) => a.d - b2.d);
+      if (!candidates.length) {
+        const nearestD = nodes.length ? Math.min(...nodes.map((n) => Math.hypot(n.x - sock.at[0], n.z - sock.at[2]))) : Infinity;
         results.push({ bridgeId: b.id, ok: false, reason: "no-road-piece-within-tolerance", nearestD });
         continue;
       }
-      let error = null;
-      try { verifySocketMating(sock, nearest.socket); } catch (e) { error = e.message; }
-      results.push({ bridgeId: b.id, ok: !error, error, nearestD });
+      let matched = null;
+      for (const c of candidates) {
+        let error = null;
+        try { verifySocketMating(sock, c.n.socket); } catch (e) { error = e.message; }
+        if (!error) { matched = c; break; }
+      }
+      if (matched) {
+        results.push({ bridgeId: b.id, ok: true, error: null, nearestD: matched.d });
+      } else {
+        results.push({ bridgeId: b.id, ok: false, error: "no candidate within tolerance actually mates", nearestD: candidates[0].d });
+      }
     }
   }
   return results;

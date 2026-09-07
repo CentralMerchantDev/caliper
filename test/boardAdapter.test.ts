@@ -107,6 +107,18 @@ test("P3.1: buildings are real pieces, present in non-trivial numbers", () => {
   assert.ok(A.buildingCount <= A.placementCount, `${A.buildingCount} building pieces exceeds ${A.placementCount} placements -- more pieces than plots planCity() actually placed on`);
 });
 
+test("P3.1: no plot vanishes from the board -- every plot gets either a \"plot\" piece or a \"building\" piece, never neither", () => {
+  // A blind audit finding, not assumed impossible: buildingPieces() has its
+  // own skip conditions (no `buildable` rect, or a degenerate w<=0/d<=0
+  // one) that did not match what counted as "built" for excluding a plot's
+  // own "plot" piece -- a plot could have vanished from the board entirely,
+  // a placement reported successful that produced no piece at all. Fixed
+  // by deriving the exclusion set from what buildingPieces() actually
+  // built, not from "not refused". Currently latent on the real world
+  // (0 of 17,105), asserted here so it cannot regress silently.
+  assert.equal(A.vanishedPlots, 0, `${A.vanishedPlots} plots have neither a plot piece nor a building piece`);
+});
+
 test("P3.1: no two building pieces overlap each other -- the double-reservation board.js's canPlace would refuse", () => {
   // A REAL bug, found by measuring, not assumed clean: the first version
   // used atomsFor() (which CEILS a width) for the building's far edge

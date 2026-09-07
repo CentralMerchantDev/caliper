@@ -2,6 +2,29 @@
 
 Evidence for `docs/specs/BOARD-CONVERSION-PLAN.md` P3.1 and P3.2.
 
+## P3-exit blind audit — one real finding, fixed
+
+Run per `docs/AUDIT-PROTOCOL.md`, UMAA trigger 3. **MEDIUM, fixed:**
+`piecesFromWorld()`'s `builtPlotIds` (which plots `plotPieces()` excludes)
+was computed from "not refused" in `placements`, but `buildingPieces()`
+has its OWN, stricter skip conditions (no `buildable` rect, or a
+degenerate w≤0/d≤0 one) that `planCity()` does not treat as a refusal —
+`layout.js`'s own `planPlot()` falls back to the plot's raw bounds in that
+case instead. The two disagreeing meant a plot could vanish from the board
+entirely: no "plot" piece (excluded, because it counted as "built") and no
+"building" piece (`buildingPieces()` itself skipped it) — a placement
+reported successful that produced no piece at all, the exact "verified-vs-
+reported" shape this project's own thesis exists to prevent. Measured as
+currently latent (0 of 17,105 real placements hit it) before being fixed,
+not assumed safe. Fixed: `builtPlotIds` is now derived from what
+`buildingPieces()` actually built, so the two functions cannot disagree by
+construction. `test/boardAdapter.test.ts`'s new P3.1 case asserts
+`vanishedPlots === 0` via `scripts/_board-adapter-probe.mjs`'s own count.
+
+The independent re-derivation of "2,735 buildings overlapped" was
+re-checked directly against fresh code (not the audit's own script) and
+reproduced exactly — the figure stands.
+
 ## P3.1 — buildings
 
 **"Mostly adoption" did not hold on direct reading, checked before writing
