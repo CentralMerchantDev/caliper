@@ -302,7 +302,7 @@ These replace Mark's eye while he is asleep. They are not optional.
 
 | Phase | Status | Gate evidence | Commit |
 |---|---|---|---|
-| P0 | done, 3 open findings named | `node test/run.mjs` 973/978 pass (5 pre-existing, unrelated); `node scripts/verify-roadkit.mjs` 34/34, 0 failing, 3 named open; `npx tsc --noEmit` clean; `docs/audits/P0-ROADKIT.md` | (filled in below after commit) |
+| P0 | done, 3 open findings named | `node test/run.mjs` 973/978 pass (5 pre-existing, unrelated); `node scripts/verify-roadkit.mjs` 34/34, 0 failing, 3 named open; `npx tsc --noEmit` clean; `docs/audits/P0-ROADKIT.md` | `f0a0372` |
 | P1 | not started | — | — |
 | P2 | not started | — | — |
 | P3 | not started | — | — |
