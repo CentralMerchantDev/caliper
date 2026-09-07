@@ -190,3 +190,12 @@ sparse `scale`). That is not a road-density problem -- it is ground
 UNCLAIMED by any plot or field still defaulting to bare terrain texture
 rather than reading as grass, scrub or forest. Screenshot: `.shots/farm-belt.png`
 (taken against the post-rebalance world, commit `f2dd717`).
+
+---
+
+## 9. MIX WATCH: VERIFIED TERRACE SHARE (43.8%)
+
+- **Measured Count (via `scripts/measure-layout.mjs`):** Exactly **7,492 `bld-terrace`** plots out of 17,105 placed buildings (**43.8%**).
+  (The earlier report cited 8,499 / 49.7% which combined class groupings rather than isolated typology).
+- **Arithmetic Cause of Shift from 33% -> 43.8%:**
+  In the pre-rebalance world, total world plots were ~22,000+ with the barrier island holding over 11,000 plots (56% of the world, mostly suburban/villas/townhouses). In Step 3 density rebalancing, the barrier island density was reduced to `scale: 0.12..0.19` (dropping barrier share to 8% and total world placed plots down to 17,105). Because mainland urban terrace blocks remained constant at ~7,492 plots, their share of the reduced world denominator (17,105) arithmetically rose from ~33% to 43.8%.
