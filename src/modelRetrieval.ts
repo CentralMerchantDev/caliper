@@ -7,8 +7,9 @@
 //   - Cloudflare Workers AI embedding model: @cf/baai/bge-small-en-v1.5 (384 dims)
 //   - Cloudflare Vectorize index binding: VECTORIZE_MODELS
 //   - In-memory Vectorize implementation for Node / Vitest testing & offline execution
-//   - Lexical baseline (lexicalSearch) for rigorous side-by-side benchmarking
-//   - Spatial fitting & ground substrate post-filters
+//   - Mandatory WorkersAIBinding: silent fallback is strictly forbidden (throws on missing AI)
+//   - Named baseline: handTunedPseudoEmbedding (requested explicitly by name)
+//   - Lexical baseline (lexicalSearch) for BM25 comparison
 // =============================================================================
 
 export interface AssetEntry {
@@ -73,7 +74,8 @@ export interface SearchResult {
   score: number;
   entry: AssetEntry;
   rank: number;
-  pipeline: "vectorize" | "lexical";
+  pipeline: "vectorize" | "pseudo" | "lexical";
+  embedder?: string;
 }
 
 /**
@@ -223,6 +225,65 @@ export function buildEmbeddingText(entry: AssetEntry): string {
   return parts.join(" · ");
 }
 
+/**
+ * Embeds text using Cloudflare Workers AI embedding model (@cf/baai/bge-small-en-v1.5).
+ * REQUIRES an active WorkersAIBinding. Throws immediately if ai binding is missing.
+ */
+export async function embedText(text: string, ai: WorkersAIBinding): Promise<Float32Array> {
+  if (!ai || typeof ai.run !== "function") {
+    throw new Error(
+      "embedText requires an active WorkersAIBinding. Silent fallback is prohibited per Rule Zero. " +
+      "Provide a valid WorkersAIBinding (e.g. env.AI or createWorkersAIClient()) or explicitly invoke handTunedPseudoEmbedding if testing baseline."
+    );
+  }
+
+  const res = await ai.run("@cf/baai/bge-small-en-v1.5", { text });
+  if (!res || !res.data) {
+    throw new Error(`Workers AI returned empty response for text: "${text.slice(0, 50)}..."`);
+  }
+
+  const raw = Array.isArray(res.data[0]) ? (res.data[0] as number[]) : (res.data as number[]);
+  const arr = new Float32Array(raw);
+  const norm = vectorNorm(arr);
+  if (norm > 0) {
+    for (let i = 0; i < arr.length; i++) arr[i] /= norm;
+  }
+  return arr;
+}
+
+/**
+ * Batch embeds an array of texts using Workers AI (@cf/baai/bge-small-en-v1.5).
+ */
+export async function embedTextBatch(texts: string[], ai: WorkersAIBinding): Promise<Float32Array[]> {
+  if (!ai || typeof ai.run !== "function") {
+    throw new Error("embedTextBatch requires an active WorkersAIBinding.");
+  }
+  if (texts.length === 0) return [];
+
+  const res = await ai.run("@cf/baai/bge-small-en-v1.5", { text: texts });
+  if (!res || !res.data) {
+    throw new Error(`Workers AI returned empty response for batch of ${texts.length} texts`);
+  }
+
+  const results: Float32Array[] = [];
+  const rawArrays = Array.isArray(res.data[0]) ? (res.data as number[][]) : [res.data as number[]];
+
+  for (const raw of rawArrays) {
+    const arr = new Float32Array(raw);
+    const norm = vectorNorm(arr);
+    if (norm > 0) {
+      for (let i = 0; i < arr.length; i++) arr[i] /= norm;
+    }
+    results.push(arr);
+  }
+
+  return results;
+}
+
+// =============================================================================
+// NAMED BASELINE: Hand-Tuned Pseudo-Embedding (Exposed by explicit request only)
+// =============================================================================
+
 const STOP_WORDS = new Set([
   "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "as", "at",
   "be", "because", "been", "before", "being", "below", "between", "both", "but", "by",
@@ -246,9 +307,7 @@ function hashString(str: string, seed: number = 0): number {
   return h >>> 0;
 }
 
-// Semantic concept clusters mapped to dimensional blocks
 const SEMANTIC_CLUSTERS: Array<{ words: string[]; dims: number[]; weight: number }> = [
-  // 1. Categories (dims 0..49)
   { words: ["buildings", "building", "tower", "skyscraper", "highrise", "house", "home", "dwelling", "residence", "villa", "bungalow", "chalet", "townhouse", "apartment", "loft", "flat", "mansion", "estate", "manor", "monolith", "office", "headquarters", "commercial", "retail", "bodega", "shop", "pavilion", "museum", "gallery"], dims: [0, 1, 2, 3, 4], weight: 2.2 },
   { words: ["aviation", "aircraft", "airplane", "plane", "jet", "fighter", "interceptor", "biplane", "monoplane", "aerobatic", "hangar", "flight", "pilot"], dims: [5, 6, 7, 8, 9], weight: 2.5 },
   { words: ["vehicles", "vehicle", "bus", "transit", "car", "automobile", "truck", "train", "bullet", "shuttle", "coach", "traffic"], dims: [10, 11, 12, 13, 14], weight: 2.5 },
@@ -259,15 +318,11 @@ const SEMANTIC_CLUSTERS: Array<{ words: string[]; dims: number[]; weight: number
   { words: ["civic", "government", "cathedral", "church", "library", "school", "hospital", "clinic", "police", "court", "monument"], dims: [35, 36, 37, 38, 39], weight: 2.5 },
   { words: ["roads", "road", "street", "avenue", "boulevard", "highway", "roundabout", "culdesac", "junction", "intersection", "pavement", "asphalt"], dims: [40, 41, 42, 43, 44], weight: 2.5 },
   { words: ["boundary", "wall", "fence", "balustrade", "gate", "barrier", "railing", "hedge"], dims: [45, 46, 47, 48, 49], weight: 2.5 },
-
-  // 2. Eco / Sustainable / Green / Solar / Vertical Forest (dims 50..69)
   { words: ["eco", "friendly", "sustainable", "environmental", "green", "biophilic", "ecology", "nature"], dims: [50, 51, 52, 53, 54], weight: 3.0 },
   { words: ["forest", "trees", "plants", "vegetation", "balconies", "lush", "living"], dims: [55, 56, 57, 58], weight: 2.8 },
   { words: ["solar", "spire", "renewable", "energy", "electricity", "sun", "photovoltaic", "panels", "generating"], dims: [59, 60, 61, 62], weight: 3.0 },
   { words: ["greenpod", "stepgarden", "garden", "terraces", "terraced", "courtyard"], dims: [63, 64, 65, 66], weight: 2.8 },
   { words: ["geodesic", "dome", "geodetic", "circular"], dims: [67, 68, 69], weight: 2.8 },
-
-  // 3. Architectural Styles & Shapes (dims 70..109)
   { words: ["art", "deco", "artdeco", "1920s", "vintage", "fluted", "ziggurat", "classic"], dims: [70, 71, 72, 73], weight: 3.0 },
   { words: ["brutalist", "concrete", "ribbed", "heavy", "angular", "monolithic"], dims: [74, 75, 76, 77], weight: 3.0 },
   { words: ["gothic", "manor", "ancestral", "spire", "finials", "pointed", "arches", "stone", "gabled"], dims: [78, 79, 80, 81], weight: 3.0 },
@@ -278,8 +333,6 @@ const SEMANTIC_CLUSTERS: Array<{ words: string[]; dims: number[]; weight: number
   { words: ["helix", "helical", "spiral", "twisted", "wave", "undulating", "curved", "monolith", "hyperboloid"], dims: [99, 100, 101, 102], weight: 3.0 },
   { words: ["shard", "crystal", "biotower", "tapering", "kinetic", "facade", "responsive"], dims: [103, 104, 105, 106], weight: 3.0 },
   { words: ["ribbon", "streamlined", "parametric", "aerofoil", "aerodynamic"], dims: [107, 108, 109], weight: 2.8 },
-
-  // 4. Typology & Typological Scales (dims 110..159)
   { words: ["chalet", "alpine", "mountain", "lodge", "steep", "eaves", "wood", "wooden"], dims: [110, 111, 112, 113], weight: 3.0 },
   { words: ["bungalow", "craftsman", "suburban", "single", "family", "porch"], dims: [114, 115, 116, 117], weight: 3.0 },
   { words: ["ranch", "midcentury", "horizontal", "single", "story", "floor", "low", "profile"], dims: [118, 119, 120, 121], weight: 3.0 },
@@ -292,14 +345,10 @@ const SEMANTIC_CLUSTERS: Array<{ words: string[]; dims: number[]; weight: number
   { words: ["workshop", "artisan", "craft", "studio", "boutique"], dims: [147, 148, 149, 150], weight: 3.0 },
   { words: ["warehouse", "industrial", "logistics", "hub", "distribution", "storage", "datacenter", "data", "server"], dims: [151, 152, 153, 154, 155], weight: 3.0 },
   { words: ["office", "corporate", "headquarters", "hq", "commercial", "laboratory", "biotech", "research"], dims: [156, 157, 158, 159], weight: 3.0 },
-
-  // 5. Scales / Heights (dims 160..179)
   { words: ["skyscraper", "tower", "highrise", "tall", "supertall", "spire", "high", "rise"], dims: [160, 161, 162, 163, 164], weight: 2.8 },
   { words: ["lowrise", "single", "story", "floor", "compact", "small"], dims: [165, 166, 167, 168], weight: 2.5 },
   { words: ["midrise", "medium"], dims: [169, 170, 171], weight: 2.5 },
   { words: ["luxury", "prestige", "flagship", "elite", "penthouse"], dims: [172, 173, 174, 175], weight: 2.8 },
-
-  // 6. Specific Asset Entities (dims 180..249)
   { words: ["fighter", "supersonic", "interceptor", "combat", "military"], dims: [180, 181, 182, 183], weight: 3.5 },
   { words: ["ferry", "passenger", "water", "shuttle", "deck", "roll", "off"], dims: [184, 185, 186, 187], weight: 3.5 },
   { words: ["footbridge", "pedestrian", "walkway", "canal", "spiral", "ramp"], dims: [188, 189, 190, 191], weight: 3.5 },
@@ -309,9 +358,9 @@ const SEMANTIC_CLUSTERS: Array<{ words: string[]; dims: number[]; weight: number
 ];
 
 /**
- * Deterministic dense semantic vector generator (384 dimensions matching bge-small-en-v1.5)
+ * Hand-tuned pseudo-embedding generator (Named baseline for comparison)
  */
-export function generateDenseEmbedding(text: string, dimensions: number = 384): Float32Array {
+export function handTunedPseudoEmbedding(text: string, dimensions: number = 384): Float32Array {
   const vec = new Float32Array(dimensions);
   if (!text) return vec;
 
@@ -324,7 +373,6 @@ export function generateDenseEmbedding(text: string, dimensions: number = 384): 
   const words = rawWords.filter((w) => !STOP_WORDS.has(w));
   if (words.length === 0) return vec;
 
-  // 1. Semantic cluster activations
   for (const word of words) {
     for (const cluster of SEMANTIC_CLUSTERS) {
       if (cluster.words.some((cw) => word === cw || (cw.length >= 4 && word.includes(cw)) || (word.length >= 4 && cw.includes(word)))) {
@@ -336,7 +384,6 @@ export function generateDenseEmbedding(text: string, dimensions: number = 384): 
       }
     }
 
-    // 2. Continuous subword hash projection across dims 250..383
     const h1 = hashString(word, 42);
     const h2 = hashString(word, 1337);
     const subwordRangeStart = 250;
@@ -350,7 +397,6 @@ export function generateDenseEmbedding(text: string, dimensions: number = 384): 
     }
   }
 
-  // Normalize to unit sphere (L2 norm = 1.0) so dot product equals exact cosine similarity
   const norm = vectorNorm(vec);
   if (norm > 0) {
     for (let i = 0; i < dimensions; i++) {
@@ -361,44 +407,64 @@ export function generateDenseEmbedding(text: string, dimensions: number = 384): 
   return vec;
 }
 
-/**
- * Embeds text using Cloudflare Workers AI embedding model (@cf/baai/bge-small-en-v1.5)
- * or falls back to generateDenseEmbedding if AI binding is not available.
- */
-export async function embedText(text: string, ai?: WorkersAIBinding): Promise<Float32Array> {
-  if (ai && typeof ai.run === "function") {
-    try {
-      const res = await ai.run("@cf/baai/bge-small-en-v1.5", { text });
-      if (res && res.data) {
-        const raw = Array.isArray(res.data[0]) ? (res.data[0] as number[]) : (res.data as number[]);
-        const arr = new Float32Array(raw);
-        const norm = vectorNorm(arr);
-        if (norm > 0) {
-          for (let i = 0; i < arr.length; i++) arr[i] /= norm;
-        }
-        return arr;
-      }
-    } catch (err) {
-      console.warn("Workers AI embedText error, falling back to dense embedding:", err);
-    }
-  }
-  return generateDenseEmbedding(text, 384);
-}
+// =============================================================================
+// REGISTRY INDEXING PIPELINES
+// =============================================================================
 
 /**
- * Indexes the entire asset registry into Vectorize (R1.2)
+ * Indexes the entire asset registry into Vectorize using real Workers AI embeddings (R1.2).
+ * REQUIRES an active WorkersAIBinding.
  */
 export async function indexRegistryInVectorize(
   registry: Record<string, AssetEntry>,
   vectorizeIndex: VectorizeIndex,
-  ai?: WorkersAIBinding
-): Promise<{ count: number }> {
-  const vectors: VectorizeVector[] = [];
-  const entries = Object.entries(registry);
+  ai: WorkersAIBinding
+): Promise<{ count: number; embedder: string }> {
+  if (!ai || typeof ai.run !== "function") {
+    throw new Error("indexRegistryInVectorize requires an active WorkersAIBinding.");
+  }
 
-  for (const [id, entry] of entries) {
+  const entries = Object.entries(registry);
+  const batchSize = 50;
+  let totalIndexed = 0;
+
+  for (let i = 0; i < entries.length; i += batchSize) {
+    const chunk = entries.slice(i, i + batchSize);
+    const texts = chunk.map(([_, entry]) => buildEmbeddingText(entry));
+    const vectorsData = await embedTextBatch(texts, ai);
+
+    const vectors: VectorizeVector[] = chunk.map(([id, entry], idx) => ({
+      id,
+      values: vectorsData[idx],
+      metadata: {
+        id,
+        name: entry.name,
+        category: entry.category,
+        tier: entry.tier,
+        design: entry.design,
+        standsOn: entry.standsOn,
+        embedder: "workers-ai:bge-small-en-v1.5",
+      },
+    }));
+
+    const res = await vectorizeIndex.upsert(vectors);
+    totalIndexed += res.count;
+  }
+
+  return { count: totalIndexed, embedder: "workers-ai:bge-small-en-v1.5" };
+}
+
+/**
+ * Indexes registry using the hand-tuned pseudo-embedding baseline (Explicitly named baseline)
+ */
+export async function indexRegistryWithPseudo(
+  registry: Record<string, AssetEntry>,
+  vectorizeIndex: VectorizeIndex
+): Promise<{ count: number; embedder: string }> {
+  const vectors: VectorizeVector[] = [];
+  for (const [id, entry] of Object.entries(registry)) {
     const text = buildEmbeddingText(entry);
-    const values = await embedText(text, ai);
+    const values = handTunedPseudoEmbedding(text, 384);
     vectors.push({
       id,
       values,
@@ -409,6 +475,7 @@ export async function indexRegistryInVectorize(
         tier: entry.tier,
         design: entry.design,
         standsOn: entry.standsOn,
+        embedder: "hand-tuned-pseudo",
       },
     });
   }
@@ -421,7 +488,7 @@ export async function indexRegistryInVectorize(
     totalIndexed += res.count;
   }
 
-  return { count: totalIndexed };
+  return { count: totalIndexed, embedder: "hand-tuned-pseudo" };
 }
 
 /**
@@ -459,12 +526,12 @@ export function entryFitsSpace(entry: AssetEntry, fits?: { w: number; d: number;
 }
 
 /**
- * Vector Search (R1.3) — Queries Vectorize index with cosine similarity + post-filters
+ * Vector Search (R1.3) — Queries Vectorize index using real Workers AI embedding
  */
 export async function vectorSearch(
   query: string,
   vectorizeIndex: VectorizeIndex,
-  options: SearchOptions & { ai?: WorkersAIBinding } = {}
+  options: SearchOptions & { ai: WorkersAIBinding; requireRealEmbeddings?: boolean }
 ): Promise<SearchResult[]> {
   const {
     registry = {},
@@ -474,9 +541,65 @@ export async function vectorSearch(
     tier,
     limit = 10,
     ai,
+    requireRealEmbeddings = true,
   } = options;
 
+  if (!ai || typeof ai.run !== "function") {
+    throw new Error("vectorSearch requires an active WorkersAIBinding. Silent fallback is prohibited.");
+  }
+
   const qVector = await embedText(query, ai);
+  const response = await vectorizeIndex.query(qVector, { topK: Math.max(50, limit * 4), returnMetadata: true });
+
+  const results: SearchResult[] = [];
+
+  for (const match of response.matches) {
+    const embedder = match.metadata?.embedder || "unknown";
+    if (requireRealEmbeddings && embedder !== "workers-ai:bge-small-en-v1.5") {
+      throw new Error(`Evaluation failure: match [${match.id}] was indexed with '${embedder}', expected 'workers-ai:bge-small-en-v1.5'`);
+    }
+
+    const entry = registry[match.id] || (match.metadata as AssetEntry) || { id: match.id, name: match.id, category: "buildings" };
+
+    if (category && entry.category !== category) continue;
+    if (tier && entry.tier !== tier) continue;
+    if (standsOn && entry.standsOn && entry.standsOn !== standsOn) continue;
+    if (!entryFitsSpace(entry, fits)) continue;
+
+    results.push({
+      id: match.id,
+      score: match.score,
+      entry,
+      rank: 0,
+      pipeline: "vectorize",
+      embedder,
+    });
+
+    if (results.length >= limit) break;
+  }
+
+  results.forEach((r, idx) => { r.rank = idx + 1; });
+  return results;
+}
+
+/**
+ * Pseudo-Vector Search (Named baseline)
+ */
+export async function pseudoVectorSearch(
+  query: string,
+  vectorizeIndex: VectorizeIndex,
+  options: SearchOptions = {}
+): Promise<SearchResult[]> {
+  const {
+    registry = {},
+    fits,
+    standsOn,
+    category,
+    tier,
+    limit = 10,
+  } = options;
+
+  const qVector = handTunedPseudoEmbedding(query, 384);
   const response = await vectorizeIndex.query(qVector, { topK: Math.max(50, limit * 4), returnMetadata: true });
 
   const results: SearchResult[] = [];
@@ -494,7 +617,8 @@ export async function vectorSearch(
       score: match.score,
       entry,
       rank: 0,
-      pipeline: "vectorize",
+      pipeline: "pseudo",
+      embedder: "hand-tuned-pseudo",
     });
 
     if (results.length >= limit) break;
@@ -560,12 +684,15 @@ export async function findModels(
   options: SearchOptions & {
     vectorizeIndex?: VectorizeIndex;
     ai?: WorkersAIBinding;
-    pipeline?: "vectorize" | "lexical";
+    pipeline?: "vectorize" | "pseudo" | "lexical";
   } = {}
 ): Promise<SearchResult[]> {
-  const pipeline = options.pipeline || (options.vectorizeIndex ? "vectorize" : "lexical");
-  if (pipeline === "vectorize" && options.vectorizeIndex) {
-    return vectorSearch(description, options.vectorizeIndex, options);
+  const pipeline = options.pipeline || (options.vectorizeIndex && options.ai ? "vectorize" : "lexical");
+  if (pipeline === "vectorize" && options.vectorizeIndex && options.ai) {
+    return vectorSearch(description, options.vectorizeIndex, { ...options, ai: options.ai });
+  }
+  if (pipeline === "pseudo" && options.vectorizeIndex) {
+    return pseudoVectorSearch(description, options.vectorizeIndex, options);
   }
   return lexicalSearch(description, options);
 }

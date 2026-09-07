@@ -108,6 +108,45 @@ function buildEmbeddingText(entry) {
   }
   return parts.join(" \xB7 ");
 }
+async function embedText(text, ai) {
+  if (!ai || typeof ai.run !== "function") {
+    throw new Error(
+      "embedText requires an active WorkersAIBinding. Silent fallback is prohibited per Rule Zero. Provide a valid WorkersAIBinding (e.g. env.AI or createWorkersAIClient()) or explicitly invoke handTunedPseudoEmbedding if testing baseline."
+    );
+  }
+  const res = await ai.run("@cf/baai/bge-small-en-v1.5", { text });
+  if (!res || !res.data) {
+    throw new Error(`Workers AI returned empty response for text: "${text.slice(0, 50)}..."`);
+  }
+  const raw = Array.isArray(res.data[0]) ? res.data[0] : res.data;
+  const arr = new Float32Array(raw);
+  const norm = vectorNorm(arr);
+  if (norm > 0) {
+    for (let i = 0; i < arr.length; i++) arr[i] /= norm;
+  }
+  return arr;
+}
+async function embedTextBatch(texts, ai) {
+  if (!ai || typeof ai.run !== "function") {
+    throw new Error("embedTextBatch requires an active WorkersAIBinding.");
+  }
+  if (texts.length === 0) return [];
+  const res = await ai.run("@cf/baai/bge-small-en-v1.5", { text: texts });
+  if (!res || !res.data) {
+    throw new Error(`Workers AI returned empty response for batch of ${texts.length} texts`);
+  }
+  const results = [];
+  const rawArrays = Array.isArray(res.data[0]) ? res.data : [res.data];
+  for (const raw of rawArrays) {
+    const arr = new Float32Array(raw);
+    const norm = vectorNorm(arr);
+    if (norm > 0) {
+      for (let i = 0; i < arr.length; i++) arr[i] /= norm;
+    }
+    results.push(arr);
+  }
+  return results;
+}
 var STOP_WORDS = /* @__PURE__ */ new Set([
   "a",
   "about",
@@ -247,7 +286,6 @@ function hashString(str, seed = 0) {
   return h >>> 0;
 }
 var SEMANTIC_CLUSTERS = [
-  // 1. Categories (dims 0..49)
   { words: ["buildings", "building", "tower", "skyscraper", "highrise", "house", "home", "dwelling", "residence", "villa", "bungalow", "chalet", "townhouse", "apartment", "loft", "flat", "mansion", "estate", "manor", "monolith", "office", "headquarters", "commercial", "retail", "bodega", "shop", "pavilion", "museum", "gallery"], dims: [0, 1, 2, 3, 4], weight: 2.2 },
   { words: ["aviation", "aircraft", "airplane", "plane", "jet", "fighter", "interceptor", "biplane", "monoplane", "aerobatic", "hangar", "flight", "pilot"], dims: [5, 6, 7, 8, 9], weight: 2.5 },
   { words: ["vehicles", "vehicle", "bus", "transit", "car", "automobile", "truck", "train", "bullet", "shuttle", "coach", "traffic"], dims: [10, 11, 12, 13, 14], weight: 2.5 },
@@ -258,13 +296,11 @@ var SEMANTIC_CLUSTERS = [
   { words: ["civic", "government", "cathedral", "church", "library", "school", "hospital", "clinic", "police", "court", "monument"], dims: [35, 36, 37, 38, 39], weight: 2.5 },
   { words: ["roads", "road", "street", "avenue", "boulevard", "highway", "roundabout", "culdesac", "junction", "intersection", "pavement", "asphalt"], dims: [40, 41, 42, 43, 44], weight: 2.5 },
   { words: ["boundary", "wall", "fence", "balustrade", "gate", "barrier", "railing", "hedge"], dims: [45, 46, 47, 48, 49], weight: 2.5 },
-  // 2. Eco / Sustainable / Green / Solar / Vertical Forest (dims 50..69)
   { words: ["eco", "friendly", "sustainable", "environmental", "green", "biophilic", "ecology", "nature"], dims: [50, 51, 52, 53, 54], weight: 3 },
   { words: ["forest", "trees", "plants", "vegetation", "balconies", "lush", "living"], dims: [55, 56, 57, 58], weight: 2.8 },
   { words: ["solar", "spire", "renewable", "energy", "electricity", "sun", "photovoltaic", "panels", "generating"], dims: [59, 60, 61, 62], weight: 3 },
   { words: ["greenpod", "stepgarden", "garden", "terraces", "terraced", "courtyard"], dims: [63, 64, 65, 66], weight: 2.8 },
   { words: ["geodesic", "dome", "geodetic", "circular"], dims: [67, 68, 69], weight: 2.8 },
-  // 3. Architectural Styles & Shapes (dims 70..109)
   { words: ["art", "deco", "artdeco", "1920s", "vintage", "fluted", "ziggurat", "classic"], dims: [70, 71, 72, 73], weight: 3 },
   { words: ["brutalist", "concrete", "ribbed", "heavy", "angular", "monolithic"], dims: [74, 75, 76, 77], weight: 3 },
   { words: ["gothic", "manor", "ancestral", "spire", "finials", "pointed", "arches", "stone", "gabled"], dims: [78, 79, 80, 81], weight: 3 },
@@ -275,7 +311,6 @@ var SEMANTIC_CLUSTERS = [
   { words: ["helix", "helical", "spiral", "twisted", "wave", "undulating", "curved", "monolith", "hyperboloid"], dims: [99, 100, 101, 102], weight: 3 },
   { words: ["shard", "crystal", "biotower", "tapering", "kinetic", "facade", "responsive"], dims: [103, 104, 105, 106], weight: 3 },
   { words: ["ribbon", "streamlined", "parametric", "aerofoil", "aerodynamic"], dims: [107, 108, 109], weight: 2.8 },
-  // 4. Typology & Typological Scales (dims 110..159)
   { words: ["chalet", "alpine", "mountain", "lodge", "steep", "eaves", "wood", "wooden"], dims: [110, 111, 112, 113], weight: 3 },
   { words: ["bungalow", "craftsman", "suburban", "single", "family", "porch"], dims: [114, 115, 116, 117], weight: 3 },
   { words: ["ranch", "midcentury", "horizontal", "single", "story", "floor", "low", "profile"], dims: [118, 119, 120, 121], weight: 3 },
@@ -288,12 +323,10 @@ var SEMANTIC_CLUSTERS = [
   { words: ["workshop", "artisan", "craft", "studio", "boutique"], dims: [147, 148, 149, 150], weight: 3 },
   { words: ["warehouse", "industrial", "logistics", "hub", "distribution", "storage", "datacenter", "data", "server"], dims: [151, 152, 153, 154, 155], weight: 3 },
   { words: ["office", "corporate", "headquarters", "hq", "commercial", "laboratory", "biotech", "research"], dims: [156, 157, 158, 159], weight: 3 },
-  // 5. Scales / Heights (dims 160..179)
   { words: ["skyscraper", "tower", "highrise", "tall", "supertall", "spire", "high", "rise"], dims: [160, 161, 162, 163, 164], weight: 2.8 },
   { words: ["lowrise", "single", "story", "floor", "compact", "small"], dims: [165, 166, 167, 168], weight: 2.5 },
   { words: ["midrise", "medium"], dims: [169, 170, 171], weight: 2.5 },
   { words: ["luxury", "prestige", "flagship", "elite", "penthouse"], dims: [172, 173, 174, 175], weight: 2.8 },
-  // 6. Specific Asset Entities (dims 180..249)
   { words: ["fighter", "supersonic", "interceptor", "combat", "military"], dims: [180, 181, 182, 183], weight: 3.5 },
   { words: ["ferry", "passenger", "water", "shuttle", "deck", "roll", "off"], dims: [184, 185, 186, 187], weight: 3.5 },
   { words: ["footbridge", "pedestrian", "walkway", "canal", "spiral", "ramp"], dims: [188, 189, 190, 191], weight: 3.5 },
@@ -301,7 +334,7 @@ var SEMANTIC_CLUSTERS = [
   { words: ["bus", "transit", "articulated", "double", "decker"], dims: [196, 197, 198, 199], weight: 3.5 },
   { words: ["bench", "public", "seating", "amphitheater"], dims: [200, 201, 202, 203], weight: 3.5 }
 ];
-function generateDenseEmbedding(text, dimensions = 384) {
+function handTunedPseudoEmbedding(text, dimensions = 384) {
   const vec = new Float32Array(dimensions);
   if (!text) return vec;
   const normalized = text.toLowerCase().replace(/[_\-\/\\:,\.;\(\)]+/g, " ").replace(/[^a-z0-9\s]/g, " ");
@@ -337,31 +370,40 @@ function generateDenseEmbedding(text, dimensions = 384) {
   }
   return vec;
 }
-async function embedText(text, ai) {
-  if (ai && typeof ai.run === "function") {
-    try {
-      const res = await ai.run("@cf/baai/bge-small-en-v1.5", { text });
-      if (res && res.data) {
-        const raw = Array.isArray(res.data[0]) ? res.data[0] : res.data;
-        const arr = new Float32Array(raw);
-        const norm = vectorNorm(arr);
-        if (norm > 0) {
-          for (let i = 0; i < arr.length; i++) arr[i] /= norm;
-        }
-        return arr;
-      }
-    } catch (err) {
-      console.warn("Workers AI embedText error, falling back to dense embedding:", err);
-    }
-  }
-  return generateDenseEmbedding(text, 384);
-}
 async function indexRegistryInVectorize(registry, vectorizeIndex, ai) {
-  const vectors = [];
+  if (!ai || typeof ai.run !== "function") {
+    throw new Error("indexRegistryInVectorize requires an active WorkersAIBinding.");
+  }
   const entries = Object.entries(registry);
-  for (const [id, entry] of entries) {
+  const batchSize = 50;
+  let totalIndexed = 0;
+  for (let i = 0; i < entries.length; i += batchSize) {
+    const chunk = entries.slice(i, i + batchSize);
+    const texts = chunk.map(([_, entry]) => buildEmbeddingText(entry));
+    const vectorsData = await embedTextBatch(texts, ai);
+    const vectors = chunk.map(([id, entry], idx) => ({
+      id,
+      values: vectorsData[idx],
+      metadata: {
+        id,
+        name: entry.name,
+        category: entry.category,
+        tier: entry.tier,
+        design: entry.design,
+        standsOn: entry.standsOn,
+        embedder: "workers-ai:bge-small-en-v1.5"
+      }
+    }));
+    const res = await vectorizeIndex.upsert(vectors);
+    totalIndexed += res.count;
+  }
+  return { count: totalIndexed, embedder: "workers-ai:bge-small-en-v1.5" };
+}
+async function indexRegistryWithPseudo(registry, vectorizeIndex) {
+  const vectors = [];
+  for (const [id, entry] of Object.entries(registry)) {
     const text = buildEmbeddingText(entry);
-    const values = await embedText(text, ai);
+    const values = handTunedPseudoEmbedding(text, 384);
     vectors.push({
       id,
       values,
@@ -371,7 +413,8 @@ async function indexRegistryInVectorize(registry, vectorizeIndex, ai) {
         category: entry.category,
         tier: entry.tier,
         design: entry.design,
-        standsOn: entry.standsOn
+        standsOn: entry.standsOn,
+        embedder: "hand-tuned-pseudo"
       }
     });
   }
@@ -382,7 +425,7 @@ async function indexRegistryInVectorize(registry, vectorizeIndex, ai) {
     const res = await vectorizeIndex.upsert(batch);
     totalIndexed += res.count;
   }
-  return { count: totalIndexed };
+  return { count: totalIndexed, embedder: "hand-tuned-pseudo" };
 }
 function entryFitsSpace(entry, fits) {
   if (!fits) return true;
@@ -408,7 +451,7 @@ function entryFitsSpace(entry, fits) {
   }
   return true;
 }
-async function vectorSearch(query, vectorizeIndex, options = {}) {
+async function vectorSearch(query, vectorizeIndex, options) {
   const {
     registry = {},
     fits,
@@ -416,9 +459,50 @@ async function vectorSearch(query, vectorizeIndex, options = {}) {
     category,
     tier,
     limit = 10,
-    ai
+    ai,
+    requireRealEmbeddings = true
   } = options;
+  if (!ai || typeof ai.run !== "function") {
+    throw new Error("vectorSearch requires an active WorkersAIBinding. Silent fallback is prohibited.");
+  }
   const qVector = await embedText(query, ai);
+  const response = await vectorizeIndex.query(qVector, { topK: Math.max(50, limit * 4), returnMetadata: true });
+  const results = [];
+  for (const match of response.matches) {
+    const embedder = match.metadata?.embedder || "unknown";
+    if (requireRealEmbeddings && embedder !== "workers-ai:bge-small-en-v1.5") {
+      throw new Error(`Evaluation failure: match [${match.id}] was indexed with '${embedder}', expected 'workers-ai:bge-small-en-v1.5'`);
+    }
+    const entry = registry[match.id] || match.metadata || { id: match.id, name: match.id, category: "buildings" };
+    if (category && entry.category !== category) continue;
+    if (tier && entry.tier !== tier) continue;
+    if (standsOn && entry.standsOn && entry.standsOn !== standsOn) continue;
+    if (!entryFitsSpace(entry, fits)) continue;
+    results.push({
+      id: match.id,
+      score: match.score,
+      entry,
+      rank: 0,
+      pipeline: "vectorize",
+      embedder
+    });
+    if (results.length >= limit) break;
+  }
+  results.forEach((r, idx) => {
+    r.rank = idx + 1;
+  });
+  return results;
+}
+async function pseudoVectorSearch(query, vectorizeIndex, options = {}) {
+  const {
+    registry = {},
+    fits,
+    standsOn,
+    category,
+    tier,
+    limit = 10
+  } = options;
+  const qVector = handTunedPseudoEmbedding(query, 384);
   const response = await vectorizeIndex.query(qVector, { topK: Math.max(50, limit * 4), returnMetadata: true });
   const results = [];
   for (const match of response.matches) {
@@ -432,7 +516,8 @@ async function vectorSearch(query, vectorizeIndex, options = {}) {
       score: match.score,
       entry,
       rank: 0,
-      pipeline: "vectorize"
+      pipeline: "pseudo",
+      embedder: "hand-tuned-pseudo"
     });
     if (results.length >= limit) break;
   }
@@ -480,9 +565,12 @@ function lexicalSearch(query, options = {}) {
   return topK;
 }
 async function findModels(description, options = {}) {
-  const pipeline = options.pipeline || (options.vectorizeIndex ? "vectorize" : "lexical");
-  if (pipeline === "vectorize" && options.vectorizeIndex) {
-    return vectorSearch(description, options.vectorizeIndex, options);
+  const pipeline = options.pipeline || (options.vectorizeIndex && options.ai ? "vectorize" : "lexical");
+  if (pipeline === "vectorize" && options.vectorizeIndex && options.ai) {
+    return vectorSearch(description, options.vectorizeIndex, { ...options, ai: options.ai });
+  }
+  if (pipeline === "pseudo" && options.vectorizeIndex) {
+    return pseudoVectorSearch(description, options.vectorizeIndex, options);
   }
   return lexicalSearch(description, options);
 }
@@ -490,10 +578,13 @@ export {
   InMemoryVectorize,
   buildEmbeddingText,
   embedText,
+  embedTextBatch,
   entryFitsSpace,
   findModels,
-  generateDenseEmbedding,
+  handTunedPseudoEmbedding,
   indexRegistryInVectorize,
+  indexRegistryWithPseudo,
   lexicalSearch,
+  pseudoVectorSearch,
   vectorSearch
 };
