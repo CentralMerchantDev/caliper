@@ -1,0 +1,46 @@
+World rebalance, step 4: the road network measured, not re-planned
+
+WORLD-DENSITY-FINDINGS.md §5: "there is no junction list, no adjacency, no
+connected-component check anywhere in the plan... a road that reaches
+nothing looks exactly like one that does." Mark's own words: "random roads
+that are not connected, have no interconnectivity." This is the
+measurement that finds out whether that is still true, built from the
+axis-aligned spans generateWorld() already returns -- two roads of
+different axes meet if each one's fixed coordinate falls inside the
+other's span, which is the whole geometric content of a junction the plan
+never states. Every road is a node; two that cross are adjacent;
+connected components over that graph answer the question directly.
+
+scripts/measure-roads.mjs, committed so the numbers are re-takeable:
+
+    world: 1357 roads
+    junctions: 4511 crossing pairs
+    connected components: 52
+    largest component: 1053 roads (77.6% of the network)
+    stranded (cross nothing): 38 roads (2.8%) -- 15 AVENUE, 10 BOULEVARD,
+        7 RAMP, 5 STREET, 1 FREEWAY
+    18 settlements have their OWN roads split across more than one
+        component (freeway/approach/coast-road/link -- the regional
+        connectors -- split worst, across 8-11 components each; several
+        ordinary settlements, e.g. coastal-2, coastal-7, split across 3-4)
+
+THE FINDING: Mark's complaint is real but not total. Most of the network
+(77.6%) genuinely is one connected whole -- not "random, disconnected
+roads" everywhere -- but nearly a quarter of it (22.4%, roughly 300 roads
+across 51 separate components) sits outside that one component, and 38
+roads connect to literally nothing. The regional connectors (freeway,
+approach, coast-road, link) are the most fragmented category by component
+count, which matters more than an ordinary settlement's internal split:
+they exist specifically to join settlements together, so a freeway broken
+into 11 pieces is not delivering the one thing a freeway is for. 18
+settlements (a third of all 55) have their own local streets split
+internally, meaning within a single town the street grid alone does not
+guarantee you can drive from one part to another.
+
+NOT STARTED, PER THE BRIEF: no road was added, removed, or moved to
+produce these numbers, and none should be inferred from them. Re-planning
+the network is explicitly out of scope for this pass.
+
+How it is known to work: node scripts/measure-roads.mjs, run against the
+current committed world. No source file changed; this is a new,
+independent measurement script only.
