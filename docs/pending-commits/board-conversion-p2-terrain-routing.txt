@@ -1,0 +1,95 @@
+BOARD-CONVERSION-PLAN.md P2 finish, item 1: the grade problem --
+terrain-following arterial routing, and the bend-mating bug it exposed
+
+What was wrong: the arterial layer's straight-line routing put 30 of 80
+edges over BOULEVARD's 6% grade limit, one barrier-crescent edge
+averaging 100.7% -- a cliff face, not a road. Named at the time
+(docs/audits/P2-ARTERIAL.md) as out of scope; now brought into scope per
+Mark's explicit instruction to route along the terrain rather than just
+report the violation.
+
+Real roads climb by taking a longer path -- more horizontal run for the
+same rise. routeTerrainFollowing() recursively displaces a segment's
+midpoint sideways, trying several lateral offsets each side, keeping
+whichever most reduces the worst sampled grade across the two resulting
+halves, recursing up to depth 5. Named honestly in its own comment as a
+bounded heuristic, not a real shortest-feasible-path search (no A* over
+the height field).
+
+A REAL BUG, caught by measurement before being reported as fixed, not
+after: the first working version of this router did lower grade findings,
+but broke socket verification -- 70 of 2,287 joins failed with "bearing
+not opposed" the moment a real heightAt was passed in (0 failures with
+heightAt omitted, because the existing test suite never exercised that
+path -- test/roadNetwork.test.ts now does, see below). Cause: a straight
+piece is a straight box: its two end faces are always parallel. Two
+straight pieces meeting at different headings can never satisfy
+verifySocketMating's bearing-opposition check by direct abutment, no
+matter how the trim math is done. Fixed by building a real 2-leg
+standardJunction() bend piece at every interior waypoint the router
+introduces -- the same piece and the same trim-by-radius pattern already
+used at real graph nodes, applied one level further in. Watched red
+(70/2287) before the fix, green (0/2294) after, on the same command.
+
+A second bug in the same area, from the previous session and re-fixed
+here after the working tree lost the uncommitted edit once already this
+pass (see below): trimming a junction's own edge endpoint along the
+DIRECT node-to-node bearing stops matching where the junction's real
+socket sits once the router has bent the first or last leg away from
+that direct line. Fixed by routing FIRST on the true, untrimmed
+endpoints, and trimming the resulting waypoint path's own first/last leg
+along ITS OWN actual direction afterward (trimRouteForJunctions).
+
+Grade distribution, before and after, same command
+(node road-network.js's buildArterialNetwork({heightAt}), heightAt from
+terrain.js's makeHeightAt(new LandField(16))):
+
+  BEFORE (straight-line, docs/audits/P2-ARTERIAL.md): 30 of 80 edges over
+  BOULEVARD's 6% limit; worst two: barrier 43->42 at 113.5%,
+  barrier 12->13 at 100.7%.
+
+  AFTER (terrain-following): 21 of 80 edges over limit; worst two:
+  barrier 14->15 at 48.9%, barrier 43->42 at 42.9%. 9 edges brought under
+  the limit; every remaining offender's own worst grade roughly halved
+  or better where it moved at all.
+
+  Gate not fully met: 21 edges remain over limit, not zero. Named, not
+  hidden -- every one is on docs/audits/P2-ARTERIAL.md's own list, all on
+  the barrier crescent, kingsley-isle, or mainland's steepest terrain.
+  Reason, honestly bounded: routeTerrainFollowing is a depth-5 heuristic
+  search over lateral offsets, not a real shortest-feasible-path router;
+  the barrier landmass in particular is a thin crescent with little
+  lateral room for a longer detour to find. A real fix would need a true
+  pathfinding search over the height field (A*), named as future work in
+  the router's own doc comment, not attempted here.
+
+Gate MET: junction and join verification. 72/72 junctions ok, 0/2294
+verified joins fail, under REAL terrain (previously only ever measured
+with heightAt omitted, which is a different and easier code path).
+
+Tests: test/roadNetwork.test.ts gained two cases exercising the real
+heightAt path for the first time -- "zero unmated joins (the bend-
+junction fix)" and "terrain-following routing reduces (does not merely
+report) over-grade edges", the second asserting against the 30-edge
+before-baseline so a future regression that silently stops routing would
+fail loudly rather than pass by omission. npx tsc --noEmit clean.
+
+A THIRD instance of the shared-worktree risk CLAUDE.md already names,
+now with a confirmed cause rather than a guess: `git status` mid-session
+showed public/model-retrieval.js, src/index.ts, src/modelRetrieval.ts,
+and two retrieval test files modified, uncommitted, in this exact
+checkout -- agy's retrieval work (docs/specs/RETRIEVAL-PLAN.md), actively
+in progress here at the same time this commit's own work was done. That
+is almost certainly what reverted this file's uncommitted edit to its
+last-committed state mid-session (git diff --stat showed empty against
+HEAD, with no intervening commit touching this file) -- not a mystery, a
+second agent in the same tree, exactly as the standing rule warns. This
+commit stages ONLY public/road-network.js and test/roadNetwork.test.ts,
+by explicit path, not `git add -A`, so as not to sweep up or disturb
+agy's own uncommitted work.
+
+Stopping here, item 1 of Mark's ordered list, for review before item 2
+(collectors and locals) -- not claiming the grade gate fully met when 21
+of 80 edges still are not.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
