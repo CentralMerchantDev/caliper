@@ -502,6 +502,6 @@ These replace Mark's eye while he is asleep. They are not optional.
 |---|---|---|---|
 | P0 | done; P0.4 superseded by PLACEMENT-CONTRACT.md Part 0 (snap reverted), 2 of 3 open findings now closed at 1 m, 1 new finding (5 fractional-metre pieces) | `node scripts/verify-roadkit.mjs` (post-revert); `docs/audits/P0-ROADKIT.md` SUPERSEDED section | `f0a0372`, revert in `90844af` |
 | P1 | done, real numbers led with | `node test/run.mjs` 998/1004 pass (6 pre-existing, unrelated); `node scripts/_board-adapter-probe.mjs` 16,935 pieces, 0 field violations, 0 dup ids; plot atom round-trip 200/16,209 (16,009 miss, real but sub-metre); road atom alignment 334/707; `npx tsc --noEmit` clean; `docs/audits/P1-BOARD.md` | `0408fdc` (Part 0), `90844af` |
-| P2 | not started | — | — |
+| P2 | PARTIAL — arterial layer only. P2.1/P2.2 done; P2.3/P2.4 met at arterial level, not full network; P2.5 not done; P2.6 partial (arterial map render, not full renderer) | `node test/run.mjs` 1005/1009 pass (4 pre-existing); arterial: 2,034 joins/0 fail, 72 junctions/0 fail, 1 component per landmass (measured); full network: still 52 components/38 stranded (`node scripts/measure-roads.mjs`, unchanged); 30/80 edges over grade; `docs/audits/P2-ARTERIAL.md` | `7cd7de6` (P2.1), `ca8ad3d` |
 | P3 | not started | — | — |
 | P4 | not started | — | — |
