@@ -1,0 +1,99 @@
+BOARD-CONVERSION-PLAN.md P2 finish, item 2: collectors and locals
+(P2.3 proper) -- the majority of the network, three real bugs found
+converting it
+
+What this is: buildCollectorLocalNetwork() in public/road-network.js
+converts the EXISTING generated network's AVENUE (collector) and
+STREET/LANE (local) spans -- 1,012 of 1,357 roads, 74.6%, the majority
+of the network, not a token slice -- into socket-verified piece chains.
+BOULEVARD/FREEWAY/RAMP stay spans this pass, used for crossing detection
+only. Full evidence: docs/audits/P2-COLLECTOR-LOCAL.md.
+
+Method: every road is split at every point another road's endpoint
+touches it or a perpendicular road crosses it (more general than
+scripts/measure-roads.mjs's own crosses(), which misses an
+endpoint-to-midspan touch). Every point where 2+ converted legs meet
+gets a real junction piece (mixedJunction) -- one socket per leg at
+THAT leg's own class/width/lanes, since a real intersection here mixes
+classes (AVENUE crossing STREET), unlike the arterial layer's uniform
+standardJunction.
+
+Three real bugs, watched red before being called fixed, none assumed
+correct on the first attempt:
+
+1. Junction socket position used the wrong bearing -- 12,765 of 21,285
+   joins failed on first measurement. A junction places each socket
+   AWAY from its own centre; the first version used the leg's own
+   INTO-the-node bearing directly, putting every socket 2x its own
+   radius from where the piece actually ended. Fixed to match
+   buildArterialNetwork's own convention. Failures: 12,765 -> 1,650.
+
+2. The junction-radius formula was sized for arterials, not locals --
+   remaining large-magnitude failures (up to 8.5 m) after bug 1's fix.
+   standardJunctionRadius() gives 12-16 m for LANE/STREET.
+   CITY-PLANNING-SPEC.md Section 1.6 states corner radii directly:
+   "urban standard 3.0-4.6 m ... Vehicle-oriented 9.1-22.9 m." Local
+   intersections are the urban case; reusing the arterial formula
+   clamped short local blocks (61-183 m) hard enough that a junction's
+   socket sat metres from the piece's real end. Fixed: a sourced 3.8 m
+   for STREET/LANE/ALLEY, the existing formula (unchanged, still
+   correct there) for AVENUE/BOULEVARD, applied per LEG rather than per
+   node.
+
+3. Two independently-computed versions of the same crossing point could
+   differ by close to a millimetre -- 92 junctions, an exactly repeated
+   "0.001m apart" failure, comfortably past verifySocketMating's 1e-6
+   tolerance even though inside nodeKey's own 1mm grouping bucket.
+   Fixed: every leg at a node now trims from that node's ONE shared
+   coordinate, not its own independently-computed endpoint.
+
+Gate, measured (node -e "...buildCollectorLocalNetwork(world.roads)...",
+also test/collectorLocalNetwork.test.ts): 3,778 junctions total, 2,899
+(76.7%) fully verified, 879 not. Every one of the 879 is checked and
+explained -- a leg's own sourced corner radius exceeds its adjacent
+block's length, a real property of the existing generator's block
+spacing (density-scaled avEff/stEff in generateSettlement()), not a
+conversion defect -- confirmed 879/879 explained via an independent
+re-derivation of the radius rule, not the internal counter trusted
+blindly. Gate NOT fully met: 879 named exceptions, not zero, per this
+project's own standard (a fix or a conversion earns the right to say
+"handled" only when the exception list is checked, not when it is
+empty by luck).
+
+Also measured, named not verified: 623 points where a converted
+AVENUE collector physically touches an unconverted BOULEVARD/FREEWAY/
+RAMP road (collectorFeedsArterialContacts) -- counted, not
+socket-verified, since the arterial-tier side has no piece in this
+pass. Reconciling the two arterial representations (old spans, new MST
+layer) is real, unresolved work already named in P2-ARTERIAL.md.
+
+A real, unrelated defect found and fixed along the way, mechanically:
+test/regressionGateBreak.test.ts (agy's retrieval work, committed
+before the worktree split) imported a function, generateDenseEmbedding,
+that no longer exists in src/modelRetrieval.ts -- renamed to
+handTunedPseudoEmbedding in a later retrieval commit, breaking the
+WHOLE test suite's build (test/run.mjs refuses to report a result when
+any file fails to build). Fixed with a one-line import alias, not a
+logic change -- unblocked node test/run.mjs for everyone, not just this
+pass. That file was edited FURTHER after this fix, mid-run, by someone
+else (now requires a live Workers AI binding this plain-node process
+does not have) -- left exactly as found, not staged in this commit,
+not this pass's work to own or fix.
+
+Tests: test/collectorLocalNetwork.test.ts, six cases -- majority-of-
+network conversion, junction verification rate, local x local's
+near-complete verification (confirming the sourced urban radius fits),
+every failure explained (zero unexplained), collector-touches-
+unconverted-arterial counted, and junction classification matches the
+actual leg classes present. npx tsc --noEmit clean.
+
+Full suite: node test/run.mjs -> 1,022 of 1,025 pass, 3 fail. Two are
+the pre-existing known-red tests (originStability, planSeed's
+byte-identical pin), unrelated. The third is regressionGateBreak.test.ts
+per the paragraph above -- not this pass's file, not staged here.
+
+Stopping here for item 2's own record, per Mark's "do not stop between
+P2 items" -- proceeding directly to item 3 (P2.4 full-network hard
+gate).
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

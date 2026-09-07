@@ -143,6 +143,90 @@ function junctionKind(degree) {
   return "intersection4Way-or-roundabout"; // 4+: named, not resolved to a specific piece here
 }
 
+/** CITY-PLANNING-SPEC.md §1.6's corner-radius figures, directly: "urban
+ *  standard 3.0-4.6 m ... Vehicle-oriented 9.1-22.9 m." A local leg
+ *  (STREET/LANE/ALLEY) gets the urban figure; a collector/arterial leg
+ *  keeps `standardJunctionRadius` (the vehicle-oriented case, already
+ *  built and accepted for the arterial layer in P2.2). PER LEG, not per
+ *  node: a node's radius used to be one value shared by every leg there,
+ *  sized by the biggest class present -- which forced a short local block
+ *  to absorb a collector's full clearance on both ends and, measured, hit
+ *  a wall short blocks (61-183 m per docs/specs/ROAD-HIERARCHY.md) could
+ *  not actually hold; 698 of 3,778 junctions failed by 10-20 m, 402 more
+ *  by 5-10 m -- clamped by `maxTrim` well short of what the junction still
+ *  expected. Each leg now trims and sockets at its OWN class's radius. */
+function legRadius(cls) {
+  return TIER[cls] === 3 ? 3.8 : standardJunctionRadius(cls); // CITY-PLANNING-SPEC.md §1.6
+}
+
+/** A junction where legs of DIFFERENT classes -- and now different radii --
+ *  meet. One socket per leg, each leg's OWN class/width/lanes/radius
+ *  (verifySocketMating checks width/lanes per pair, so a mismatched pair
+ *  fails loudly rather than silently mating at the wrong width). Footprint
+ *  is a box sized to the WIDEST leg's radius, for a bounding shape only --
+ *  each socket still sits at its OWN leg's radius, not the box's half-size. */
+function mixedJunction(legs) {
+  const sizeM = 2 * Math.max(...legs.map((l) => legRadius(l.cls)));
+  const sockets = legs.map((l) => {
+    const width = STANDARD_WIDTH[l.cls] || STANDARD_WIDTH.STREET;
+    const lanes = (ROAD_STANDARDS[l.cls] || ROAD_STANDARDS.STREET).lanes;
+    const r = l.bearing * D2R;
+    const radius = legRadius(l.cls);
+    return { at: [Math.sin(r) * radius, 0, Math.cos(r) * radius], bearing: l.bearing, width, lanes, kind: "road" };
+  });
+  return {
+    id: `mixed-junction-${legs.map((l) => l.cls.toLowerCase()).sort().join("-")}-${legs.length}way`,
+    kind: "hard",
+    roadClass: legs.reduce((a, b) => (TIER[a] <= TIER[b.cls] ? a : b.cls), legs[0].cls),
+    footprint: { w: sizeM, d: sizeM },
+    height: 0.35,
+    clearance: 0,
+    origin: "base-centre",
+    standsOn: ["open"],
+    sockets,
+    lod: [
+      {
+        level: 0,
+        tris: 12,
+        createGeometry: (T = THREE) => {
+          const core = new T.BoxGeometry(sizeM, 0.25, sizeM);
+          core.translate(0, 0.125, 0);
+          return core;
+        },
+      },
+    ],
+  };
+}
+
+/** Tier order, lower is more important -- REGIONAL(0) > ARTERIAL(1) >
+ *  COLLECTOR(2) > LOCAL(3), docs/specs/ROAD-HIERARCHY.md's "THE FOUR
+ *  TIERS" table. Used to pick the junction-table ROW for a node: the two
+ *  most important tiers present decide the piece, per "junction class is
+ *  determined by what meets what." */
+const TIER = { FREEWAY: 0, RAMP: 0, BOULEVARD: 1, AVENUE: 2, STREET: 3, LANE: 3, ALLEY: 3 };
+const TIER_NAME = ["regional", "arterial", "collector", "local"];
+
+/** Which named roadkit.js piece docs/specs/ROAD-HIERARCHY.md's junction
+ *  table assigns for the classes actually present at a node -- a citation
+ *  of that table's row, not a new rule. Same limitation as
+ *  standardJunction()/junctionKind(): the piece SELECTED is recorded, the
+ *  uniform box shape is what actually gets built (piece selection is open
+ *  work, named in docs/audits/P2-ARTERIAL.md). */
+function classifyMixedJunction(legClasses, legCount) {
+  const tiers = [...new Set(legClasses.map((c) => TIER[c] ?? 3))].sort((a, b) => a - b);
+  const t0 = tiers[0], t1 = tiers.length > 1 ? tiers[1] : tiers[0];
+  const pair = `${TIER_NAME[t0]}x${TIER_NAME[t1]}`;
+  let piece;
+  if (pair === "regionalxarterial" || (t0 === 0 && t1 === 1)) piece = "rampMerge/rampDiverge";
+  else if (t0 === 0) piece = "rampMerge/rampDiverge (regional touches a non-arterial class -- an anomaly, named not assumed correct)";
+  else if (t0 === 1 && t1 === 1) piece = legCount >= 3 ? "roundaboutModern" : "intersection4Way";
+  else if (t0 === 1 && t1 === 2) piece = legCount >= 4 ? "intersection4Way" : "intersection3Way";
+  else if (t0 === 2 && t1 === 2) piece = legCount >= 4 ? "intersection4Way" : "intersection3Way"; // collector x collector -- not a table row; extended by the same pattern as the adjacent tiers, named as an extension
+  else if (t0 === 2 && t1 === 3) piece = legCount >= 4 ? "intersection4Way" : "intersection3Way";
+  else piece = legCount >= 4 ? "intersection4Way" : "intersection3Way"; // local x local
+  return { pair, piece };
+}
+
 /** Chain standard-width straight segments between exactly two world points,
  *  turtle-graphics style (same technique as roadkit-street-demo.js's
  *  buildDemoStreet, P0), verified through roadkit.js's OWN
@@ -609,4 +693,234 @@ export function buildArterialNetwork({ heightAt = null } = {}) {
   }
 
   return { landmasses, verification: allVerification };
+}
+
+// =============================================================================
+// COLLECTORS AND LOCALS — P2.3 proper (BOARD-CONVERSION-PLAN.md P2 finish,
+// item 2).
+//
+// The arterial layer above (BOULEVARD, ~80 MST edges) is a NEW network,
+// hand-built over settlement centres. Collectors (AVENUE) and locals
+// (STREET/LANE/ALLEY) are the EXISTING ~1,357-road generated network
+// (`generateWorld(heightAt).roads`, `{id, axis, at, from, to, class}`
+// axis-aligned spans) -- converting THAT geometry to socket-verified piece
+// chains, not inventing a new layout. FREEWAY/RAMP/BOULEVARD stay spans,
+// untouched this pass (named under "what this does not verify," below);
+// they are still used for CROSSING DETECTION, so a collector that touches
+// one is counted, not silently ignored.
+//
+// docs/specs/ROAD-HIERARCHY.md's junction table: "junction class is
+// determined by what meets what." A real intersection here can mix
+// classes (an AVENUE crossing a STREET), which the arterial layer's
+// uniform-class standardJunction() cannot represent -- mixedJunction(),
+// above, gives each leg its OWN width/lanes so verifySocketMating's
+// width/lanes check is real rather than trivially satisfied.
+// =============================================================================
+
+function roadEndpoints(r) {
+  return r.axis === "ns" ? [[r.at, r.from], [r.at, r.to]] : [[r.from, r.at], [r.to, r.at]];
+}
+function coordAlong(r, x, z) { return r.axis === "ns" ? z : x; }
+function pointAt(r, c) { return r.axis === "ns" ? [r.at, c] : [c, r.at]; }
+function dedupeSorted(coordSet, eps = 1e-3) {
+  const s = [...coordSet].sort((a, b) => a - b);
+  const out = [];
+  for (const c of s) { if (!out.length || c - out[out.length - 1] > eps) out.push(c); }
+  return out;
+}
+function nodeKey(x, z) { return `${Math.round(x * 1000)}_${Math.round(z * 1000)}`; }
+
+/**
+ * Every point where two of `roads` meet -- a perpendicular mid-span
+ * crossing OR one road's endpoint touching another (the shape
+ * `connectStranded()`-style stub connectors use). Not just
+ * `scripts/measure-roads.mjs`'s perpendicular-only `crosses()`: an
+ * endpoint touching another road's middle (a T where the through road
+ * does not itself end) is a real junction too, and was previously
+ * uncounted. O(n^2) pairwise, same cost class already accepted for the
+ * same road count in `measure-roads.mjs`.
+ */
+function computeCutCoords(roads, eps = 1e-3) {
+  const cutSets = roads.map((r) => new Set([r.from, r.to]));
+  for (let i = 0; i < roads.length; i++) {
+    const a = roads[i];
+    for (let j = i + 1; j < roads.length; j++) {
+      const b = roads[j];
+      if (a.axis === b.axis) {
+        if (Math.abs(a.at - b.at) > eps) continue;
+        for (const [ex, ez] of roadEndpoints(b)) {
+          const c = coordAlong(a, ex, ez);
+          if (c >= a.from - eps && c <= a.to + eps) cutSets[i].add(c);
+        }
+        for (const [ex, ez] of roadEndpoints(a)) {
+          const c = coordAlong(b, ex, ez);
+          if (c >= b.from - eps && c <= b.to + eps) cutSets[j].add(c);
+        }
+      } else {
+        const ns = a.axis === "ns" ? a : b, ew = a.axis === "ns" ? b : a;
+        if (ns.at >= ew.from - eps && ns.at <= ew.to + eps && ew.at >= ns.from - eps && ew.at <= ns.to + eps) {
+          cutSets[i].add(coordAlong(a, ns.at, ew.at));
+          cutSets[j].add(coordAlong(b, ns.at, ew.at));
+        }
+      }
+    }
+  }
+  return roads.map((_, i) => dedupeSorted(cutSets[i], eps));
+}
+
+/**
+ * Convert the existing generated road network's collector/local spans into
+ * socket-verified piece chains. `roads` is `generateWorld(heightAt).roads`
+ * (or any array of `{id, axis, at, from, to, class}`) -- the CALLER
+ * generates the world; this file only converts. FREEWAY/RAMP/BOULEVARD are
+ * used for crossing detection (so a collector touching one is counted) but
+ * not converted to pieces this pass -- named under `unconvertedTouches`.
+ */
+export function buildCollectorLocalNetwork(roads, { convertClasses = ["AVENUE", "STREET", "LANE", "ALLEY"] } = {}) {
+  const convertSet = new Set(convertClasses);
+  const roadById = new Map(roads.map((r) => [r.id, r]));
+  const cuts = computeCutCoords(roads);
+
+  // PASS 1 -- every sub-edge (road, between two consecutive cut points),
+  // and every LEG it contributes to the node at each of its own two ends
+  // (raw/untrimmed: bearing and node key only, no piece built yet -- a
+  // node's junction radius depends on every leg meeting it, which is not
+  // known until every road has been walked once).
+  const rawSubEdges = []; // {roadId, cls, converted, ax, az, bx, bz, startKey, endKey}
+  const nodeInfo = new Map(); // key -> {x, z, legs: [{roadId, cls, converted, end:'start'|'end', subEdgeIndex}]}
+  function touchNode(key, x, z, leg) {
+    if (!nodeInfo.has(key)) nodeInfo.set(key, { x, z, legs: [] });
+    nodeInfo.get(key).legs.push(leg);
+  }
+  for (let i = 0; i < roads.length; i++) {
+    const r = roads[i];
+    const converted = convertSet.has(r.class);
+    const coords = cuts[i];
+    for (let k = 0; k < coords.length - 1; k++) {
+      const [ax, az] = pointAt(r, coords[k]);
+      const [bx, bz] = pointAt(r, coords[k + 1]);
+      if (Math.hypot(bx - ax, bz - az) < 1e-3) continue;
+      const startKey = nodeKey(ax, az), endKey = nodeKey(bx, bz);
+      const idx = rawSubEdges.length;
+      rawSubEdges.push({ roadId: r.id, cls: r.class, converted, ax, az, bx, bz, startKey, endKey });
+      touchNode(startKey, ax, az, { roadId: r.id, cls: r.class, converted, end: "start", subEdgeIndex: idx });
+      touchNode(endKey, bx, bz, { roadId: r.id, cls: r.class, converted, end: "end", subEdgeIndex: idx });
+    }
+  }
+
+  // A node's converted-leg degree only -- to decide WHETHER an end is a
+  // real junction (2+ converted legs) at all. The RADIUS itself is now
+  // per-leg (`legRadius`, above), not per-node -- see that function's own
+  // comment for why a single node-wide radius was wrong.
+  const nodeConvertedDegree = new Map();
+  for (const [key, info] of nodeInfo) {
+    nodeConvertedDegree.set(key, info.legs.filter((l) => l.converted).length);
+  }
+
+  // PASS 2 -- build each CONVERTED sub-edge's real piece chain, trimmed at
+  // each end by THAT LEG'S OWN radius (0 if that node is not a real
+  // junction for the converted layer) -- same route-then-trim discipline
+  // as the arterial layer's own edges, generalised to N cuts per road
+  // instead of 2, and to a per-leg rather than per-node radius.
+  const edges = [];
+  let allVerification = [];
+  const nodeLegSockets = new Map(); // key -> [{bearing, socket, cls, roadId}]
+  function pushLeg(key, leg) {
+    if (!nodeLegSockets.has(key)) nodeLegSockets.set(key, []);
+    nodeLegSockets.get(key).push(leg);
+  }
+
+  let clampedEnds = 0;
+  for (const se of rawSubEdges) {
+    if (!se.converted) continue;
+    // Trim from each END NODE's own single canonical (x, z) -- `nodeInfo`'s,
+    // not this sub-edge's own `se.ax/az/bx/bz`. Two roads' independently
+    // computed versions of "the same" crossing point can differ by close to
+    // a millimetre (city-plan.js's own generator rounds coordinates at
+    // different points for different callers) -- close enough that
+    // `nodeKey`'s 1 mm bucket correctly treats them as one node, but not
+    // close enough for `verifySocketMating`'s 1e-6 m tolerance. Found as a
+    // real, exactly-repeated "0.001m apart" failure, not assumed. Using one
+    // shared coordinate per node makes every leg agree exactly, by
+    // construction, rather than merely narrowing the drift.
+    const p0 = nodeInfo.get(se.startKey), p1 = nodeInfo.get(se.endKey);
+    const ax = p0.x, az = p0.z, bx = p1.x, bz = p1.z;
+    const dx = bx - ax, dz = bz - az;
+    const len0 = Math.hypot(dx, dz);
+    const ux = len0 > 1e-6 ? dx / len0 : 0, uz = len0 > 1e-6 ? dz / len0 : 0;
+    const ownRadius = legRadius(se.cls);
+    const rStart = (nodeConvertedDegree.get(se.startKey) || 0) >= 2 ? ownRadius : 0;
+    const rEnd = (nodeConvertedDegree.get(se.endKey) || 0) >= 2 ? ownRadius : 0;
+    const maxTrim = Math.max(len0 - 1e-3, 0) / 2;
+    if (rStart > maxTrim || rEnd > maxTrim) clampedEnds++; // named below, not hidden
+    const ts = Math.min(rStart, maxTrim), te = Math.min(rEnd, maxTrim);
+    const sax = ax + ux * ts, saz = az + uz * ts;
+    const sbx = bx - ux * te, sbz = bz - uz * te;
+
+    const run = chainSingleLegRun(se.cls, sax, saz, sbx, sbz);
+    allVerification = allVerification.concat(run.verification.map((v) => ({ ...v, roadId: se.roadId, cls: se.cls })));
+    edges.push({ roadId: se.roadId, cls: se.cls, ax: se.ax, az: se.az, bx: se.bx, bz: se.bz, pieceCount: run.placements.length });
+
+    // The junction places each socket AWAY from its own centre, in the
+    // direction the leg physically extends -- the OPPOSITE of the leg's
+    // own captured socket, which faces INTO the node (that is what makes
+    // them mate). Using the socket's own bearing directly here (a bug
+    // caught by measurement, not assumed correct) put every junction
+    // socket exactly 2x its own radius from where the trimmed piece
+    // actually ends -- every position check failed by precisely that
+    // amount. Same convention buildArterialNetwork's own node-socket push
+    // already uses for its exit-end leg.
+    if (run.entrySocket0) pushLeg(se.startKey, { bearing: (run.entrySocket0.bearing + 180) % 360, socket: run.entrySocket0, cls: se.cls, roadId: se.roadId });
+    if (run.exitSocketEnd) pushLeg(se.endKey, { bearing: (run.exitSocketEnd.bearing + 180) % 360, socket: run.exitSocketEnd, cls: se.cls, roadId: se.roadId });
+  }
+
+  // PASS 3 -- a real junction piece at every node with 2+ converted legs,
+  // one socket per leg at that leg's OWN class/width, verified against the
+  // leg's own trimmed-run socket -- mixedJunction(), not standardJunction(),
+  // because a node here is not guaranteed uniform class the way an
+  // all-BOULEVARD arterial node was.
+  const junctions = [];
+  let unconvertedTouches = 0;
+  let collectorFeedsArterialContacts = 0;
+  for (const [key, info] of nodeInfo) {
+    const legs = nodeLegSockets.get(key) || [];
+    const hasUnconverted = info.legs.some((l) => !l.converted);
+    if (hasUnconverted) {
+      unconvertedTouches++;
+      const hasCollector = legs.some((l) => l.cls === "AVENUE");
+      const unconvertedIsArterialTier = info.legs.some((l) => !l.converted && TIER[l.cls] <= 1);
+      if (hasCollector && unconvertedIsArterialTier) collectorFeedsArterialContacts++;
+    }
+    if (legs.length < 2) continue;
+
+    const junctionModel = mixedJunction(legs.map((l) => ({ bearing: l.bearing, cls: l.cls })));
+    const results = [];
+    for (let li = 0; li < legs.length; li++) {
+      const jSocket = transformSocket(junctionModel.sockets[li], { x: info.x, z: info.z, rotationDeg: 0 });
+      let error = null;
+      try { verifySocketMating(jSocket, legs[li].socket); } catch (e) { error = e.message; }
+      results.push({ ok: !error, error });
+    }
+    allVerification = allVerification.concat(results.map((v) => ({ ...v, junctionNode: key })));
+    const { pair, piece } = classifyMixedJunction(legs.map((l) => l.cls), legs.length);
+    junctions.push({
+      key, x: info.x, z: info.z, legCount: legs.length,
+      legClasses: legs.map((l) => l.cls), tierPair: pair, piece,
+      model: junctionModel, allOk: results.every((v) => v.ok),
+      touchesUnconverted: hasUnconverted,
+    });
+  }
+
+  return {
+    edges, junctions, verification: allVerification,
+    stats: {
+      roadsConsidered: roads.length,
+      roadsConverted: roads.filter((r) => convertSet.has(r.class)).length,
+      subEdges: edges.length,
+      junctionNodes: junctions.length,
+      unconvertedTouches,
+      collectorFeedsArterialContacts,
+      clampedEnds,
+    },
+  };
 }

@@ -389,15 +389,36 @@ Converting it to pieces without changing it would preserve it exactly.
       differ.
       **Gate:** every junction in the world is a named piece. Zero implicit
       crossings.
-      **NOT DONE for collectors/locals** — the existing ~1,357 spans are
-      untouched. **Partial, at the arterial level (a P2.2 spillover, not
-      this gate's own scope):** every node where 2+ arterial legs meet gets
-      a real junction piece, verified against every leg — **72 junctions, 72
-      fully verified, 0 failures** (`node test/run.mjs`). Piece SELECTION
-      per `docs/specs/ROAD-HIERARCHY.md`'s table (which real roadkit.js
-      piece for which combination) is not built — one uniform junction shape
-      stands in, labelled with what kind it would be. See
-      `docs/audits/P2-ARTERIAL.md`.
+      **Arterial level (P2.2 spillover):** every node where 2+ arterial
+      legs meet gets a real junction piece, verified against every leg —
+      **72 junctions, 72 fully verified, 0 failures** (`node test/run.mjs`).
+      **UPDATE — collectors and locals (P2 finish, item 2):**
+      `buildCollectorLocalNetwork()` converts the EXISTING generated
+      network's `AVENUE`/`STREET`/`LANE` spans (**1,012 of 1,357 roads,
+      74.6%** — `BOULEVARD`/`FREEWAY`/`RAMP` stay spans, used for crossing
+      detection only) into socket-verified piece chains, real
+      per-leg-class junctions at every crossing. **Three real bugs found
+      and fixed by measurement, not assumed correct:** (1) junction socket
+      position used the wrong bearing, 12,765 of 21,285 joins failed on
+      first measurement, fixed to match `buildArterialNetwork`'s own
+      convention; (2) the arterial-scale junction-radius formula does not
+      belong on local streets — `CITY-PLANNING-SPEC.md` §1.6's own
+      published corner-radius figures ("urban standard 3.0-4.6 m ...
+      vehicle-oriented 9.1-22.9 m") used per leg instead, per class; (3) two
+      independently-computed versions of the same crossing point could
+      differ by close to a millimetre, fixed by trimming every leg at a
+      node from that node's one shared coordinate. **Gate: 2,899 of 3,778
+      junctions (76.7%) fully verified, 22,587 joins checked, 1,076 fail.**
+      **Every one of the 879 unverified junctions is checked and explained**
+      — a leg's own sourced corner radius exceeds its adjacent block's
+      length (a real property of the existing generator's block spacing,
+      not a conversion defect), confirmed 879/879, zero unexplained.
+      **Gate not fully met** — 879 named exceptions, not zero. Piece
+      SELECTION (per `docs/specs/ROAD-HIERARCHY.md`'s table) still not
+      built — one uniform junction box stands in, labelled with what kind
+      it would be, same limitation as the arterial layer. Command:
+      `node test/run.mjs` (`test/collectorLocalNetwork.test.ts`, six new
+      cases). See `docs/audits/P2-COLLECTOR-LOCAL.md`.
 - [ ] **P2.4** **Connectivity, as a hard gate, not a report.** Step 4 measured
       the current network: **52 components, 38 roads connecting to nothing,
       regional connectors fragmenting into 8–11 pieces each.**
