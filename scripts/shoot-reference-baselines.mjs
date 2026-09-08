@@ -46,6 +46,12 @@ const views = [
   { name: "The harbour", slug: "the-harbour" },
   { name: "Waterfront", slug: "waterfront" },
   { name: "Heritage quarter", slug: "heritage-quarter" },
+  // P3.5.3: none of the six baselines above frames the container port, the
+  // one defect Mark could actually see and could not judge from any
+  // existing angle. "Container port" is an existing preset in city.html's
+  // own VIEWS object (under "THE REGION") -- reused, not invented, and the
+  // same camera scripts/measure-floating.mjs's threshold is derived from.
+  { name: "Container port", slug: "container-port" },
 ];
 
 console.log("\n=== A5.1 SHOOTING FIXED-CAMERA BASELINE RENDERS ===");

@@ -150,6 +150,24 @@ test("P3.1: refused placements are not adopted as pieces", () => {
 });
 
 // ---------------------------------------------------------------------------
+// P4.1 — boardPiecesById: what the renderer's own pick handler looks a
+// clicked building up in, given its plotId.
+// ---------------------------------------------------------------------------
+
+test("P4.1: boardPiecesById indexes every real piece, by id, with no loss", () => {
+  assert.ok(A.boardLookup.sizeMatchesPieceCount, `Map size (${A.boardLookup.size}) does not match the real piece count (${A.pieceCount}) -- some id collided or was dropped`);
+});
+
+test("P4.1: a real building's own bld-<plotId> id resolves to the exact piece piecesFromWorld produced for it", () => {
+  assert.equal(A.boardLookup.sampleFound, true, "a real building id was not found in the lookup Map at all");
+  assert.equal(A.boardLookup.sampleMatches, true, "the looked-up piece does not deep-equal the piece piecesFromWorld actually produced -- boardPiecesById must not construct a different record");
+});
+
+test("P4.1: an id that is not on the board resolves to nothing, not a false positive", () => {
+  assert.equal(A.boardLookup.missingId, false, "a made-up id must not resolve to a real piece");
+});
+
+// ---------------------------------------------------------------------------
 // P1.5 — determinism
 // ---------------------------------------------------------------------------
 

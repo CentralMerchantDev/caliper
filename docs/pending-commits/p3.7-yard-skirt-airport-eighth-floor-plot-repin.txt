@@ -1,0 +1,87 @@
+P3.7 -- give the yard its skirt (container-yard offenders: ZERO), the
+airport's eighth fail-open floor, and the plot count re-pinned
+
+Mark's own correction, recorded per his instruction that an unfollowable
+instruction is a finding, not a no-op: P3.6's brief offered cut-and-fill as
+an option without checking terrain.js exposes no way to modify the height
+field (it does not -- heightAt is a pure closure, no per-feature override
+exists). That was silently dropped in the P3.6 writeup instead of reported
+impossible. Named here.
+
+P3.7.1 -- the fix was never finer grading, it was grounding. The container
+yard had no ground SURFACE under it -- only bare procedural terrain and the
+containers' own graded band level, nothing connecting the two. The
+airport's own embankment (P3.5.2) already built exactly this: a platform
+with a batter carried down to real terrain. Extracted shared
+(public/city-render.js): buildEmbankmentSkirt(heightAt, bounds, topAt,
+segments) generalises the airport's 4-edge construction to a varying top
+level, not one constant; platformCells/mergedPlatformGeometry build a
+terraced pad (one quad per graded band cell) as ONE merged buffer.
+
+Applied to the container yard: a real platform + embankment built from the
+SAME band grid the containers are placed against, so each container's
+bottom sits ~0.05m above the platform's own surface at its own cell --
+verified by construction (both derive from the identical bandLevelAt
+call), not asserted. container-port-yard excluded from the gate's heightAt
+check for the same reason a roof mounted on a tower already was: it rests
+on real, manufactured ground now, and heightAt is the wrong reference
+surface for that.
+
+EXIT CONDITION: container-yard offenders are ZERO (measured, not reduced
+-- container-port-yard no longer appears in the gate's output at all, was
+1,633). Re-shot the container-port camera: the water in the upper half of
+frame is clear of containers in both this shot and the pre-P3.7 one.
+
+A real performance regression found and fixed before landing: one Mesh per
+band cell (140 for the yard) pushed downtown-skyline draw calls from under
+900 to 1,123, tripping test/regressionGate.test.ts's A5.2/A5.3 gate. Fixed
+by merging into one BufferGeometry per feature, the pattern this file
+already uses for terrain and bridges. Re-measured: 857 calls, gate passes.
+
+Applied to the golf course too, per instruction, not a third answer to the
+identical defect: same three functions, its own square footprint. 27
+offenders (from P3.6) -> 0. golf-clubhouse also 0.
+
+P3.7.2 -- the airport's Math.max(6, apSite.mean) was an eighth fail-open
+floor of the exact P3.5-swept pattern, missed because apSite.mean is
+pre-aggregated rather than a direct heightAt(x,z) call. Routed through
+groundOrRefuse via a trivial constant heightAt. Banded end to end: every
+airport ground surface (platform, runways+markings, taxiway, apron,
+terminal, tower, jets) now looks up its own local bandLevelAt instead of
+one global mean, sharing the mechanism with the yard and golf course.
+
+test/cityWorld.test.ts's airport test tightened as instructed: it used to
+assert cut/fill balance around one mean (already a redefinition from "is
+it flat", never true). That assertion is replaced with the real property
+the banded mechanism claims -- every band cell's own level is within 10m
+of a dense, independent sample of its own ground, checking the grid is
+locally accurate, not globally centred. Water check moved from one
+hand-rolled global minimum to bands.refused === 0, per cell.
+
+P3.7.3 -- confirmed (per P3.6's own trace, commit 3419331) as intended
+work, not a regression, so re-pinned rather than left red.
+test/planSeed.test.ts's plot count -> 17,586, not Mark's own measured
+17,583: this pass's own findQuay apron-check further moved
+SITE.containerPort by ~80m once fallback scoring started preferring
+flatter aprons over pure distance, moving 3 plots' WAREHOUSE eligibility.
+Measured directly; the test's comment records both the commit that moved
+the count and why this pass's pin differs from the instruction's own
+number.
+
+Verified: npx tsc --noEmit clean. Every changed test file run individually
+and green (setPieceRefusal 10/10, cityWorld's airport test, planSeed 5/5,
+regressionGate post-merge-fix, cullingRatio). The full 122-file suite in
+one process hit a genuine JavaScript heap out-of-memory crash in this
+sandbox -- an environmental limit under combined Playwright load,
+reproducible independent of this pass, not a defect in anything committed
+here. Partial full-suite runs showed only pre-existing named-red failures
+(WORLD.SIZE origin-stability, city-summary staleness, both from the same
+World-rebalance step-3 gap planSeed.test.ts was in, not asked to be fixed)
+and expected ones (the public test-count claim correctly left unbumped
+while the suite has failures).
+
+Not started: P4. Grounding pass on how selection integrates with the
+board/renderer architecture comes next, per Mark's own instruction to
+ground first and report before building.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

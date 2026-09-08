@@ -1,0 +1,54 @@
+P4.1 -- PICK: click a building, get its real board.js record
+
+Grounding first, as asked (docs/audits/P4-GROUNDING.md): board.js is a
+complete, tested piece model that NOTHING renders from -- the same shape
+of gap P3.5 found in prop-placement.js, one level up (a data model instead
+of a check). "Footprint class" (P4.5) does not exist as a concept anywhere
+in the codebase; not invented under time pressure, P4.5 is cut, named as
+deferred with the reason.
+
+The decision, per Mark's own instruction: READ from board.js, WRITE
+through world-model.js's layer stack (P4.4). This commit is the read half.
+
+board-adapter.js names building pieces bld-${plotId}, deterministically.
+The renderer's existing raycast -> plot-address path (world-render-3d.js's
+_inspectClick, through spatial-index.js) already reaches a plotId; the gap
+was a lookup, not a new render path. Added:
+
+- public/city-render.js: buildWorld() now exposes `instance` (world-
+  model.js's seed+layers, needed for P4.4 too) and `scenePlacements`
+  (the EXACT instanced+overridden placements the scene was actually built
+  from -- computed once already inside buildWorld for rendering; exposing
+  it avoids a second, possibly-diverging computation of the same thing).
+- public/board-adapter.js: boardPiecesById(world, placements) -- piecesFromWorld's
+  own output, indexed by id, built once per world load rather than scanned
+  per click.
+- public/world-render-3d.js: this._boardPieces built once after buildWorld();
+  _inspectClick's city-mode branch resolves a click's plotId to
+  bld-${plotId} and includes {id, kind, cell, foot} in the onInspect payload.
+- public/index.html: the inspect card shows the real board record (id,
+  kind, grid address, footprint) when present, hidden otherwise -- .textContent
+  throughout, same XSS discipline as #describe-result. window.__p4PickAt(x,z)
+  exposed for testing, same reasoning and pattern as the existing
+  __i6ApplyTestLayer/__i6UndoTestLayer hooks: the real live _selection/
+  _boardPieces, reachable from Playwright without computing exact screen
+  pixels for a raycast.
+
+Tested at two levels:
+- test/boardAdapter.test.ts (P4.1, 3 new cases) -- boardPiecesById against
+  a real generated 26km world, in the SAME isolated child-process probe
+  pattern this file already uses (test/boardAdapter.test.ts's own header:
+  building a world at module scope in the shared test process reliably
+  OOMs). Mutation-proofed: broke the Map's own key (id -> pieceType),
+  watched 2 of 3 assertions fail, reverted, reconfirmed green.
+- e2e/pickBoardRecord.spec.ts (3 cases, real Chromium via wrangler dev) --
+  a real buildable plot's centre resolves to its real board piece; open
+  ground resolves to none; at least one of 25 sampled real plots resolves
+  end to end. Mutation-proofed against the real page: broke
+  __p4PickAt's own lookup key, watched the comprehensive case fail with
+  the exact diagnostic message it was written to produce, reverted,
+  reconfirmed green (3/3).
+
+npx tsc --noEmit clean.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

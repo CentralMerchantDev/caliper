@@ -1,0 +1,106 @@
+P3.5 -- the floating-edge gate: measured, then fixed, three of four items
+closed, one found already solved by other means
+
+Mark measured the container port's mean-Y bug himself and named it, the
+station's single-sample placement, and seven Math.max(<const>, heightAt(...))
+fail-open floors, before any fix landed. Threshold anchor: VISIBILITY (one
+device pixel at the nearest of the six baseline cameras plus a new
+"Container port" view), not construction tolerance -- the only anchor tied
+to what he actually complained about, chosen and the rejected alternative
+recorded in docs/audits/P3.5-FLOATING.md.
+
+scripts/measure-floating.mjs runs the real renderer (city.html via
+Playwright/SwiftShader, not a reimplementation) and checks every real
+mesh/instance's world bounding-box bottom against heightAt beneath it. Two
+real bugs in the gate itself, found and fixed before its output was
+trusted: (1) a scan camera far from a feature left that feature's LOD on its
+empty culling placeholder, so `.visible` silently hid the very offenders the
+gate exists to catch -- fixed by always reading LOD level 0, not whichever
+level happened to be camera-visible; (2) the container port's cranes
+appeared to float 52-60m, which turned out to be the gate's own allow-list
+missing the "mounted on a taller part of the same structure" case for the
+crane's own jib/cab -- not a scene defect. Mutation proof, watched red
+before any scene fix: 46,192 offenders, container yard clearly and severely
+represented (2,022 instances, worst gaps landing exactly on the single
+averaged Y Mark's diagnosis named).
+
+Fixed, measured before and after:
+
+1. Container yard: heightAt has no per-feature override, so the terrain
+   itself cannot be cut and filled from the renderer. Per Mark's own
+   documented fallback, the yard now follows the ground in a 2D grid
+   (~150m across the quay x ~35m inland; a first 1D attempt left a real
+   cross-slope unaddressed). 2,022 -> 1,679 offenders, worst gap 23.9m ->
+   18.0m. Not clean -- the residual at the yard's outer edge is named open,
+   not chased further.
+
+2. Station: SITE.station's declared envelope is now assessed with
+   footprint.js's assessFootprint, the same check the 17,105 plot buildings
+   already get, verdict decides the Y the same way buildOfPlacements already
+   does -- no special geometry. A refuse verdict now records to
+   stats.setPieceRefused and builds nothing.
+
+3. The seven Math.max(<const>, heightAt(...)) fail-open floors: replaced
+   with groundOrRefuse(heightAt, x, z), extracted as one pure, exported,
+   THREE-free function specifically because city-render.js's own
+   scene-building cannot run in the node suite (needs a GPU,
+   test/rendererStatic.test.ts's own documented constraint) -- the DECISION
+   is unit-tested even though the renderer it feeds is not.
+   test/setPieceRefusal.test.ts, four cases, watched red for real: the
+   function's body was mechanically reverted to the exact
+   Math.max(DRY_ENOUGH, h) pattern it replaced, the suite run, confirmed red
+   ("0.6 !== null"), then reverted back and reconfirmed green. Confirmed
+   end-to-end in the real renderer too: `stats.setPieceRefused` lists 8 real
+   boardwalk segments refused for landing on water in an actual build, not
+   just the unit test.
+
+4. public/prop-placement.js -- re-grounded before touching it, and the
+   premise was stale: public/city-render.js already has a working prop
+   occupancy check (claimProp/propGrid, deliberately NOT built on
+   world-registry.js's overlapsReserved, for a real reason its own comment
+   states -- a road's registry reservation covers its full width, which
+   would make a legitimate prop-on-a-footway placement look like a
+   collision). It already catches the exact "27 lamp posts standing inside
+   a bin or a bench" defect prop-manifest.js's header names, for
+   lamps/bins/benches/shelters. prop-placement.js itself is still unused
+   outside its own test, exactly as briefed -- but wiring it in now would
+   mean tearing out a working, already-measured mechanism to install a
+   materially similar one. Not done; named as open that claimProp does not
+   yet cover trees/cars/parasols/containers/boats.
+
+Two real defects this same gate found independently, matching the exact
+shape of the fixed bugs, named but explicitly NOT in this pass's four-item
+scope: golf-course/golf-clubhouse's own single-mean-over-a-1,520m-footprint
+(its own comment claims the identical wrong thing the container yard's
+did), and 14 bridge-span offenders (possibly the pier-touchdown gap
+docs/audits/P3-BRIDGES.md already names as open from P3.3).
+
+P3.5.3: re-shot the six baselines plus a new seventh view, "Container
+port" -- an existing city.html preset, reused rather than invented, and the
+same camera the gate's own threshold is derived from -- since none of the
+six could previously judge the one defect Mark could actually see.
+
+Gate still fails after this pass (45,833 offenders, down from 46,192) --
+expected and stated plainly: P3.5's job was the four named fixes, measured,
+not a green gate. 44,092 small-prop offenders and the two newly-found
+defects were never in this pass's scope to zero out.
+
+Housekeeping, caused by adding four new tests: test/testCount.generated.json
+regenerated (948 -> 1055 node tests); CLAUDE.md's own verification line
+updated to match. public/index.html's public claim was deliberately left at
+948 by gen-test-count.mjs's own refusal logic -- it will not claim a passing
+count while the suite has failures, and the suite's three node failures are
+pre-existing, already committed red on purpose in earlier work (the
+origin-stability and plan-seed properties), not something this pass touches
+or is meant to fix.
+
+npx tsc --noEmit clean. Full suite: same three pre-existing failures as
+before this pass, plus the now-exposed (previously masked by a coincidental
+count match) public-claim mismatch described above -- no new failure
+introduced by anything in this commit.
+
+Not started: P4 (pick/highlight/isolate/move/replace). Explicitly scoped
+work of its own, five features each needing its own red-first test --
+reported to Mark rather than rushed.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

@@ -262,3 +262,12 @@ export function piecesFromWorld(world, placements = null) {
   const builtPlotIds = placements ? new Set(buildings.map((p) => p.id.slice("bld-".length))) : null;
   return [...plotPieces(world, builtPlotIds), ...roadPieces(world), ...bridgePieces(world), ...buildings];
 }
+
+/**
+ * P4.1 -- piecesFromWorld's own output, indexed by id, for O(1) lookup on a
+ * click rather than a fresh scan of the whole board per pick. Pure; the
+ * caller decides when to (re)build it (once per world load, not per click).
+ */
+export function boardPiecesById(world, placements = null) {
+  return new Map(piecesFromWorld(world, placements).map((p) => [p.id, p]));
+}

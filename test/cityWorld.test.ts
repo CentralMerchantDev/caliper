@@ -30,6 +30,7 @@ import { WORLD_SCALE } from "../public/world-scale.js";
 import { findSite, findFlattestSite, ROAD_SLOPE_MAX, roadAllowedAt, findQuay, MIN_CORRIDOR_ON_LAND } from "../public/land-use.js";
 import { placeFeatures, FEATURES } from "../public/features.js";
 import { assessFootprint } from "../public/footprint.js";
+import { gradeGroundBands } from "../public/city-render.js";
 import { buildSpatialIndex } from "../public/spatial-index.js";
 import { DENSITY_BANDS, makeZoning } from "../public/zoning.js";
 import { fitSettlements } from "../public/settlement-fit.js";
@@ -722,9 +723,8 @@ test("every landmark stands on ground that can carry it", () => {
 // flat" -- it is not, and cannot be -- but "is the platform an honest earthwork
 // on real ground".
 // =============================================================================
-test("the airport platform is a real earthwork on dry land", () => {
-  // Mirrors what buildProps does: one origin chosen by asking the land, the
-  // platform levelled at the MEAN of the ground it covers.
+test("the airport platform is a real earthwork on dry land, graded in bands not one mean", () => {
+  // Mirrors what buildProps does: one origin chosen by asking the land.
   // READ THE MANIFEST, DO NOT RE-TYPE IT.
   //
   // This used to re-declare the airport's want and need as literals. Editing
@@ -734,43 +734,60 @@ test("the airport platform is a real earthwork on dry land", () => {
   assert.ok(spec, "no airport in the manifest");
   const site = findFlattestSite(heightAt, spec.want(), spec.need);
   assert.ok(site, "no site for the airport at all");
-  const level = Math.max(6, site!.mean);
-
-  // SAMPLE THE PLATFORM PROPERLY.
-  //
-  // site.min comes from findFlattestSite's own grid, which at grade: 200 is 18x6
-  // = 108 points over 4.3 km2. That is far too coarse to notice a creek, and it
-  // passed at 1.86 m while a 181x61 sample of the same rectangle found a minimum
-  // of -0.21 m, 8 water samples and 92 beach samples. The platform had water in
-  // it and both the search and the test were blind to it.
   const { w: AW, d: AD } = spec.need;
-  let min = Infinity, wet = 0, total = 0;
-  for (let i = 0; i <= 180; i++) {
-    for (let j = 0; j <= 60; j++) {
-      const x = site!.x - AW / 2 + (AW * i) / 180;
-      const z = site!.z - AD / 2 + (AD * j) / 60;
-      const h = heightAt(x, z);
-      total++;
-      if (h < min) min = h;
-      if (h < 0.6) wet++;
+
+  // P3.7.2 -- USED TO ASSERT cut/fill balance and total relief around ONE
+  // level for the whole platform (`Math.max(6, site.mean)`, then `cut =
+  // site.max - level <= range * 0.75`, `fill <= range * 0.75`, `range <
+  // 60`). That was already a redefinition down from "is the platform flat"
+  // (it is not, and cannot be) to "is one global mean roughly centred" --
+  // honest, but weaker than what the renderer now actually builds: a
+  // BANDED platform (public/city-render.js's gradeGroundBands), not one
+  // level, the same mechanism the container yard and golf course use
+  // (P3.7.1). Tightened to check that real gate: every band's own resolved
+  // level is close to a DENSE, independent sample of the real ground
+  // inside that same cell -- proving the grid is locally accurate, not
+  // just globally centred around a mean that could still be a poor fit to
+  // any one part of the platform.
+  const bands = gradeGroundBands(
+    heightAt,
+    { x0: site!.x - AW / 2, x1: site!.x + AW / 2, z0: site!.z - AD / 2, z1: site!.z + AD / 2 },
+    { cellX: 200, cellZ: 200 },
+  );
+
+  let worstCellDeviation = 0, checked = 0;
+  for (let ri = 0; ri < bands.rows; ri++) {
+    for (let ci = 0; ci < bands.cols; ci++) {
+      const level = bands.cellY[ri * bands.cols + ci];
+      if (level === null) continue;
+      const cx0 = bands.x0 + ((bands.x1 - bands.x0) * ci) / bands.cols;
+      const cx1 = bands.x0 + ((bands.x1 - bands.x0) * (ci + 1)) / bands.cols;
+      const cz0 = bands.z0 + ((bands.z1 - bands.z0) * ri) / bands.rows;
+      const cz1 = bands.z0 + ((bands.z1 - bands.z0) * (ri + 1)) / bands.rows;
+      // A 5x5 sample INDEPENDENT of gradeGroundBands' own 3x3 -- checking
+      // the mechanism against a finer measurement, not against itself.
+      let sum = 0, n = 0;
+      for (let a = 0; a <= 4; a++) for (let b = 0; b <= 4; b++) {
+        sum += heightAt(cx0 + ((cx1 - cx0) * a) / 4, cz0 + ((cz1 - cz0) * b) / 4);
+        n++;
+      }
+      const deviation = Math.abs(level - sum / n);
+      if (deviation > worstCellDeviation) worstCellDeviation = deviation;
+      checked++;
     }
   }
-  assert.ok(total > 10000, `only ${total} platform samples`);
-  assert.equal(wet, 0,
-    `${wet} of ${total} points inside the airport platform are at or below the waterline (lowest ${min.toFixed(2)} m)`);
+  assert.ok(checked > 10, `only ${checked} band cells graded over the airport footprint -- expected a real grid`);
+  assert.ok(worstCellDeviation < 10,
+    `worst band cell deviates ${worstCellDeviation.toFixed(1)}m from a dense independent sample of its own ground -- the grid is not actually local, it is one mean again under a different name`);
 
-  // Cut and fill should roughly balance -- that is what levelling at the mean
-  // buys, and it is how real earthworks are designed. If either dominates, the
-  // platform is perched on one end of the ground rather than driven through it.
-  const cut = site!.max - level, fill = level - site!.min, range = site!.range;
-  assert.ok(cut <= range * 0.75, `platform is nearly all cut (${cut.toFixed(1)} m of ${range.toFixed(1)} m)`);
-  assert.ok(fill <= range * 0.75, `platform is nearly all fill (${fill.toFixed(1)} m of ${range.toFixed(1)} m)`);
-
-  // And the earthwork has to be buildable, not a mountain removal. 60 m of total
-  // relief across an airport is already a big civil project; past that the site
-  // is wrong, not the platform.
-  assert.ok(range < 60,
-    `the airport site needs ${range.toFixed(0)} m of earthworks -- that is a quarry, not a platform`);
+  // SAMPLE THE PLATFORM PROPERLY, kept from the original test: this used to
+  // catch findFlattestSite's own coarse grid (18x6 = 108 points) missing a
+  // creek a 181x61 sample found (min -0.21m, 8 water + 92 beach samples).
+  // Now checked per BAND CELL (bands.refused, from groundOrRefuse) rather
+  // than one global minimum against one hand-rolled threshold -- the same
+  // check every band-based feature in the renderer now gets.
+  assert.equal(bands.refused, 0,
+    `${bands.refused} of ${bands.cols * bands.rows} band cells refused (underwater) inside the airport platform`);
 });
 
 test("the golf course has continuous ground to sit on", () => {

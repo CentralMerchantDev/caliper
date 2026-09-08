@@ -1580,7 +1580,7 @@ body.inspecting-mobile #nav-compass-pad {
           <button type="button" id="portfolio-btn" class="btn-pill active-emerald" title="View Mark Fraser Architectural & AI Portfolio">📁 Portfolio</button>
           <button type="button" id="resume-btn" class="btn-pill" title="View Professional Resume">📄 Resume</button>
           <button type="button" id="datum-btn" class="btn-pill" title="Open Datum AEC AI App Preview">📐 Datum App</button>
-          <a href="mailto:mark@fhinc.ca" class="btn-pill" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px" title="Direct Contact Mark Fraser (Applied AI & 18 Yrs AEC)">✉ Contact</a>
+          <a href="mailto:mark@centraldesigns.ca" class="btn-pill" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px" title="Direct Contact Mark Fraser (Applied AI & 18 Yrs AEC)">✉ Contact</a>
         </div>
       </div>
       <div class="menu" data-menu="how">
@@ -1864,6 +1864,17 @@ body.inspecting-mobile #nav-compass-pad {
     <p style="margin:2px 0"><strong>Type:</strong> <span id="inspect-type">Civic Esplanade</span></p>
     <p style="margin:2px 0"><strong>Occupants:</strong> <span id="inspect-occupants">Citizens & Visitors</span></p>
     <p style="margin:2px 0"><strong>Contents:</strong> <span id="inspect-contents">Compass plaza, stone pavers, palms, street lamps</span></p>
+    <!-- P4.1: PICK -- the real board.js record for whatever building this
+         click resolved to, not a renderer-local restatement of the same
+         facts. Hidden (not removed) when the pick has no board piece
+         (open ground, a non-building plot) -- see the JS below, which sets
+         display:none rather than leaving stale text visible. -->
+    <div id="inspect-board" class="mono" style="margin-top:6px;padding:6px 8px;background:rgba(16,185,129,0.08);border-radius:6px;border:1px solid rgba(16,185,129,0.25);font-size:11px;color:var(--ink);display:none">
+      <div><strong>Piece:</strong> <span id="inspect-board-id"></span></div>
+      <div><strong>Kind:</strong> <span id="inspect-board-kind"></span></div>
+      <div><strong>Grid address:</strong> <span id="inspect-board-cell"></span></div>
+      <div><strong>Footprint:</strong> <span id="inspect-board-foot"></span></div>
+    </div>
     <div style="margin-top:8px;padding:8px;background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1)">
       <div style="display:flex;align-items:center;gap:6px">
         <span id="inspect-npc-avatar" style="font-size:18px">🏛️</span>
@@ -2103,7 +2114,7 @@ body.inspecting-mobile #nav-compass-pad {
         <li>TypeScript, Node.js & Distributed KV/DO</li>
       </ul>
       <div style="padding:12px;background:rgba(16,185,129,0.12);border-radius:8px;border:1px solid rgba(16,185,129,0.3);color:#d1fae5;font-size:13px">
-        📄 Full PDF and references on request — <a href="mailto:mark@fhinc.ca" style="color:var(--sky)">mark@fhinc.ca</a>.
+        📄 Full PDF and references on request — <a href="mailto:mark@centraldesigns.ca" style="color:var(--sky)">mark@centraldesigns.ca</a>.
       </div>
     </div>
   </div>
@@ -2572,6 +2583,20 @@ const renderer3d = new WorldRenderer(canvas3d, {
     $('#inspect-occupants').textContent = info.occupants || 'Roaming';
     $('#inspect-contents').textContent = info.contents || 'Standard fixtures';
 
+    // P4.1: PICK. info.board is the real board.js record (or null -- open
+    // ground, a plot with no building, a non-building pick). .textContent
+    // throughout, same discipline as #describe-result above.
+    const boardCard = $('#inspect-board');
+    if (info.board) {
+      $('#inspect-board-id').textContent = info.board.id;
+      $('#inspect-board-kind').textContent = info.board.kind;
+      $('#inspect-board-cell').textContent = `i=${info.board.cell.i}, j=${info.board.cell.j}, k=${info.board.cell.k}`;
+      $('#inspect-board-foot').textContent = `${info.board.foot.w} × ${info.board.foot.d} atoms`;
+      boardCard.style.display = 'block';
+    } else {
+      boardCard.style.display = 'none';
+    }
+
     const npc = NPC_PROFILES[info.parcelId] || NPC_PROFILES.town;
     $('#inspect-npc-avatar').textContent = npc.avatar;
     $('#inspect-npc-name').textContent = npc.name;
@@ -2647,6 +2672,19 @@ window.__i6LayerIds = function __i6LayerIds() {
   const city = renderer3d._impl && renderer3d._impl._city;
   if (!city) return [];
   return city.instance.layers.layers().map((l) => l.id);
+};
+// P4.1/P4.4: EXPOSED FOR TESTING, same reasoning as __i6ApplyTestLayer above
+// -- the real _selection.pick()/_boardPieces lookup against the real live
+// world, reachable from Playwright without needing to compute the exact
+// screen pixel a building's raycast hit would land on. Not a second,
+// simplified re-implementation of the pick logic: this calls the SAME
+// impl fields _inspectClick itself reads.
+window.__p4PickAt = function __p4PickAt(x, z) {
+  const impl = renderer3d._impl;
+  if (!impl || !impl._selection) return { addr: null, piece: null };
+  const addr = impl._selection.pick(x, z);
+  const piece = addr && addr.onPlot && impl._boardPieces ? impl._boardPieces.get(`bld-${addr.plotId}`) || null : null;
+  return { addr, piece };
 };
 // ON LOAD: apply whatever this browser has already persisted, so a reload
 // genuinely shows what was there before it -- the other half of "survives

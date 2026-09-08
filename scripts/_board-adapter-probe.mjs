@@ -18,7 +18,7 @@
 // 110-file test run.
 import { createHash } from "node:crypto";
 import { generateWorld } from "../public/city-plan.js";
-import { piecesFromWorld } from "../public/board-adapter.js";
+import { piecesFromWorld, boardPiecesById } from "../public/board-adapter.js";
 import { atomOf, atomOrigin } from "../public/grid.js";
 import { planCity } from "../public/layout.js";
 import { assessFootprint } from "../public/footprint.js";
@@ -130,6 +130,19 @@ const buildingPlotOverlaps = countOverlaps(buildingPieces, plotPieces);
 // isolated build (see the test file: it spawns this script twice).
 const digest = createHash("sha256").update(JSON.stringify(pieces)).digest("hex");
 
+// P4.1 -- boardPiecesById is what the renderer's own pick handler looks a
+// clicked building up in; checked here (same isolated process, same real
+// 26 km world) rather than rebuilding a second world in the test process.
+const byId = boardPiecesById(world, placements);
+const sampleBuilding = buildingPieces[0] || null;
+const boardLookup = {
+  size: byId.size,
+  sizeMatchesPieceCount: byId.size === pieces.length,
+  sampleFound: sampleBuilding ? byId.has(sampleBuilding.id) : null,
+  sampleMatches: sampleBuilding ? JSON.stringify(byId.get(sampleBuilding.id)) === JSON.stringify(sampleBuilding) : null,
+  missingId: byId.has("bld-not-a-real-plot-id"),
+};
+
 process.stdout.write(JSON.stringify({
   pieceCount: pieces.length,
   fieldViolations: fieldViolations.slice(0, 20),
@@ -152,4 +165,5 @@ process.stdout.write(JSON.stringify({
   vanishedPlots: world.plots.length - buildingPieces.length - plotPieces.length,
   digest,
   ids: pieces.map((p) => p.id),
+  boardLookup,
 }));
