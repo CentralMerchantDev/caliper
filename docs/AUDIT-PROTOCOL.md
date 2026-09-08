@@ -183,6 +183,53 @@ instance and neither exit audit asked whether the forbidden property still
 existed elsewhere. Two lanes producing the same miss in the same week makes
 this a pattern, not two unrelated mistakes.
 
+### Failure pattern E: capability built beside an existing capability
+
+A capability is built without first searching the repository for an existing
+implementation of the same property. The new work can be correct in isolation
+and still make the system worse because it duplicates, bypasses, or fails to
+wire the stronger mechanism already present. Before building a capability,
+search the repository for one that already does it. If one exists and is not
+used, record the reason.
+
+Four findings in one week have this shape:
+
+- `board.js` was built and tested as the model but was not connected to the
+  renderer; commit `2a793c8` had to add the first real renderer-to-board read.
+- `prop-placement.js` was built and tested but remained unwired, recorded in
+  commit `6625ac5`.
+- the airport had an embankment mechanism while the container yard did not
+  share it; commits `fe4b3bb` and `3eff050` closed the yard instance only after
+  independent review exposed the missing reuse.
+- `facade-textures.js` already provided facade atlases, but the kit built by
+  commit `770267a` did not use them and instead modelled a weaker window system
+  from scratch.
+
+### Rule Zero also governs the bar, not only the reported result
+
+An unsourced ceiling is a fabrication, exactly like an unsourced measurement.
+A constraint on scope, size, cost, or ambition needs a source the same way a
+result does. Statements such as "fabric parts only", "do not exceed N
+triangles", or "landmarks are out of scope" claim that the constrained result
+is sufficient. Without evidence, that is guessing. The brief for commit
+`770267a` restricted the work to fabric parts with no stated evidential reason.
+That constraint came from the reviewer, not from a source, and its visual cost
+exceeded the cost of any measurement error found in this project.
+
+Work judged by eye needs a named reference, shot in the same frame. When the
+standard is visual, the brief must name the artefact the result must match or
+beat, and the result must be rendered under the same camera, lighting, and
+background so the comparison is like for like. Shipping a visual result with
+no reference, or in a frame of its own devising, is the visual equivalent of
+an unanchored benchmark. The reference for the corrective pass after `770267a`
+is `.shots/kitbash-tower-air.png`; the separate
+`.shots/kitbash-fabric-after.png` contact sheet was the non-comparable failure.
+
+Both properties follow from Rule Zero: borrow the standard; do not invent it.
+Rule Zero applies to the bar set for the work as well as the number reported
+afterwards. This makes under-delivery auditable rather than rewarding a small,
+provable claim merely because it avoids overclaiming.
+
 ---
 
 ## 7. Notes and gaps — where this protocol has failed

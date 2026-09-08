@@ -3,6 +3,20 @@ import assert from "node:assert/strict";
 import * as THREE from "../public/vendor/three/three.module.min.js";
 import { assembleBuilding } from "../public/kitbash-assembler.js";
 
+test("assembler preserves facade materials explicitly supplied by parts", () => {
+  const fabric = assembleBuilding({ foot: { w: 16, d: 16 }, style: "fabric", seed: 7, lod: 0 }, THREE);
+  assert.ok(fabric.parts.some((item) => item.facadeCharacter && Array.isArray(item.material) && item.material[0]?.map?.isTexture),
+    "fabric assembly must retain the part's selected facade family and atlas");
+});
+
+test("assembler maps landmark walls and curtain glazing with the shared facade system", () => {
+  const landmark = assembleBuilding({ foot: { w: 48, d: 48 }, style: "landmark", seed: 42, lod: 0 }, THREE);
+  const facadeSurfaces = landmark.parts.filter((item) => item.tag === "wall" || item.tag === "glass");
+  assert.ok(facadeSurfaces.length > 0, "landmark sample must expose a facade surface");
+  assert.ok(facadeSurfaces.every((item) => item.material?.map?.isTexture),
+    "landmark wall and glass surfaces must not fall back to flat black materials");
+});
+
 test("A3.1: Assembler is strictly deterministic from seed", () => {
   const seeds = [1, 42, 999, 1337, 2026, 8888];
   for (const seed of seeds) {
