@@ -193,6 +193,10 @@ liveTest("R2.4 and R2.5 — report dense, lexical, pseudo, and RRF retrieval sep
     console.log(`${name}: full P@1 ${full.hits}/${HELD_OUT_SET.length}, nDCG@10 ${(full.ndcg10 * 100).toFixed(1)}%; ` +
       `qualified zero-overlap P@1 ${zero.hits}/${qualifiedZeroOverlap.length}, nDCG@10 ${(zero.ndcg10 * 100).toFixed(1)}%`);
   }
+  const fullDense = score(HELD_OUT_SET, rankings.dense);
+  const fullHybrid = score(HELD_OUT_SET, rankings.hybrid);
+  assert.ok(fullDense.ndcg10 > fullHybrid.ndcg10,
+    "this RRF result must be reported again if it ceases to be worse than dense alone");
   console.log("Qualified zero-overlap split: n=5; too small for conclusions.");
 
   const expandedRankings = {
@@ -217,4 +221,8 @@ liveTest("R2.4 and R2.5 — report dense, lexical, pseudo, and RRF retrieval sep
     const result = score(qualifiedBlindExpansion, ranking);
     console.log(`${name}: blind zero-overlap P@1 ${result.hits}/${qualifiedBlindExpansion.length}, nDCG@10 ${(result.ndcg10 * 100).toFixed(1)}%`);
   }
+  const expandedDense = score(qualifiedBlindExpansion, expandedRankings.dense);
+  const expandedHybrid = score(qualifiedBlindExpansion, expandedRankings.hybrid);
+  assert.ok(expandedDense.ndcg10 > expandedHybrid.ndcg10,
+    "the expanded RRF result must be reported again if it ceases to be worse than dense alone");
 });

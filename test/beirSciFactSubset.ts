@@ -78,3 +78,7 @@ export function computeNDCGAtK(rankedDocIds: string[], goldRelevantDocIds: strin
   for (let index = 0; index < Math.min(k, goldSet.size); index++) idealDcg += 1 / Math.log2(index + 2);
   return dcg / idealDcg;
 }
+
+export function excludeIdenticalDocumentId(queryId: string, rankedDocIds: string[]): string[] {
+  return rankedDocIds.filter((documentId) => documentId !== queryId);
+}
