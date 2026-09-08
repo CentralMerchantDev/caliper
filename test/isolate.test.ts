@@ -91,6 +91,17 @@ test("P4.3: the selected piece is never reported as its own neighbour", () => {
   assert.equal(R.neighbourGeometryChecks.selectionExcludedFromItsOwnNeighbours, true);
 });
 
+test("P4.3: every reported neighbour is a building -- roads and bridges from the same local query are excluded, matching the pass's own stated buildings-only scope", () => {
+  // A blind audit (docs/AUDIT-PROTOCOL.md) found roads leaking into
+  // `neighbours` before this filter existed: boardPieces carries every
+  // piece kind, and inCells() answers by rectangle, not by kind. This test
+  // would not be meaningful if the local query never found a non-building
+  // piece to filter in the first place -- nonBuildingHitsExisted confirms
+  // it did (real roads/bridges genuinely stand near the sampled building).
+  assert.equal(R.neighbourGeometryChecks.nonBuildingHitsExisted, true, "the probe's own local query found no non-building piece near the sample -- this test cannot prove the filter does anything; pick a denser sample");
+  assert.equal(R.neighbourGeometryChecks.allNeighboursAreBuildings, true, `a non-building piece (road/bridge) was reported as a neighbour -- ${R.neighbourGeometryChecks.rawHitCount} raw hits vs ${R.neighbourGeometryChecks.neighbourCount} building neighbours`);
+});
+
 test("P4.3: a building thousands of metres away is correctly excluded -- guards against a margin/rectangle bug that returns everything", () => {
   assert.equal(R.farIsExcluded, true);
 });
@@ -146,4 +157,21 @@ test("P4.3 (wiring): a new pick restores any active isolate -- an isolate does n
 test("P4.3 (wiring): WorldRenderer exposes isolate()/restoreIsolate() that delegate to the real implementation, not a stub", () => {
   assert.match(RENDER_3D, /isolate\(\)\s*\{\s*return\s+this\._impl\._isolate\s*\?\s*this\._impl\._isolate\(\)\s*:\s*null;/, "WorldRenderer.isolate() no longer delegates to the real _impl._isolate()");
   assert.match(RENDER_3D, /restoreIsolate\(\)\s*\{\s*if\s*\(this\._impl\._restoreIsolateState\)\s*this\._impl\._restoreIsolateState\(\);/, "WorldRenderer.restoreIsolate() no longer delegates to the real _impl._restoreIsolateState()");
+});
+
+test("P4.3 (wiring): a P4.4-moved piece not in the kept set is hidden by isolate, and restored -- a blind audit found applyIsolate cannot see it at all (it lives in a standalone Mesh, not buildingInstanceIndex)", () => {
+  // Cannot be tested by constructing a real Renderer3D (needs a GPU, per
+  // test/rendererStatic.test.ts's own documented limitation) or by calling
+  // applyIsolate directly (the fix is deliberately NOT inside it -- see
+  // _isolate()'s own comment for why: keeping the pure isolate.js module
+  // ignorant of P4.4's move-specific state). Read from source instead.
+  const isolateStart = RENDER_3D_CODE_ONLY.indexOf("_isolate() {");
+  const isolateBody = RENDER_3D_CODE_ONLY.slice(isolateStart, isolateStart + 2200);
+  assert.match(isolateBody, /this\._movedPieces/, "_isolate() no longer accounts for pieces moved earlier via P4.4");
+  assert.match(isolateBody, /keepIds\.has\(`bld-\$\{movedPlotId\}`\)/, "_isolate() no longer checks a moved piece against the real keepIds before hiding it");
+  assert.match(isolateBody, /entry\.standalone\.visible\s*=\s*false/, "_isolate() no longer hides a moved piece's standalone mesh");
+
+  const restoreStart = RENDER_3D_CODE_ONLY.indexOf("_restoreIsolateState() {");
+  const restoreBody = RENDER_3D_CODE_ONLY.slice(restoreStart, restoreStart + 600);
+  assert.match(restoreBody, /standalone\.visible\s*=\s*true/, "_restoreIsolateState() no longer restores a hidden moved piece's visibility");
 });

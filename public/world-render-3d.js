@@ -6665,6 +6665,21 @@ class Renderer3D {
       THREE: city.THREE, scene: this.scene, buildingInstanceIndex: city.buildingInstanceIndex, keepIds,
     });
     this._isolatedPlotId = plotId;
+    // A blind audit found that a piece moved earlier this session (P4.4,
+    // this._movedPieces) is invisible to applyIsolate entirely -- it lives
+    // in a standalone Mesh applyIsolate never sees, not in
+    // buildingInstanceIndex, so it stayed visible through an isolate that
+    // was not its own. Hidden here as a separate step, restored in
+    // _restoreIsolateState below; the moved piece's OWN position/material
+    // are untouched, only its visibility.
+    this._hiddenMovedPieces = [];
+    if (this._movedPieces) {
+      for (const [movedPlotId, entry] of this._movedPieces) {
+        if (keepIds.has(`bld-${movedPlotId}`)) continue;
+        this._hiddenMovedPieces.push(entry.standalone);
+        entry.standalone.visible = false;
+      }
+    }
     return { selected, neighbours };
   }
 
@@ -6673,6 +6688,10 @@ class Renderer3D {
    *  (test/isolate.test.ts, a real Three.js scene-graph fingerprint, not an
    *  object count). Safe to call with nothing isolated (a no-op). */
   _restoreIsolateState() {
+    if (this._hiddenMovedPieces) {
+      for (const standalone of this._hiddenMovedPieces) standalone.visible = true;
+      this._hiddenMovedPieces = null;
+    }
     if (!this._isolateState) return;
     restoreIsolate(this.scene, this._isolateState);
     this._isolateState = null;

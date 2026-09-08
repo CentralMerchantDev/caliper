@@ -81,9 +81,22 @@ export function neighboursOf(plotId, boardPieces, { heightAt = null, inWorld = n
   const i = Math.floor(box.xMin), j = Math.floor(box.zMin);
   const w = Math.ceil(box.xMax - box.xMin), d = Math.ceil(box.zMax - box.zMin);
   const hits = board.inCells(i, j, w, d, selected.cell.k);
-  const neighbours = hits.filter((p) => p.id !== selected.id);
+  // BUILDINGS ONLY, matching this pass's own stated scope (docs/audits/
+  // P4-GROUNDING.md, commit 0fe2a3a's own message) -- a blind audit found
+  // this filter missing: boardPieces carries roads and bridges too
+  // (board-adapter.js's piecesFromWorld), and inCells() answers "what
+  // occupies this rectangle" without regard to piece kind, so an
+  // unfiltered result reported real roads as "neighbours" (measured: 41 of
+  // 200 sampled buildings had at least one road in the array). Harmless to
+  // the RENDER mechanism, which only ever reads buildingInstanceIndex
+  // (buildings only already), but wrong DATA for any caller reading
+  // neighbours directly.
+  const neighbours = hits.filter((p) => p.id !== selected.id && p.id.startsWith("bld-"));
   const keepIds = new Set([selected.id, ...neighbours.map((p) => p.id)]);
-  return { selected, neighbours, keepIds, localCount, placedCount };
+  // rawHitCount: evidence the buildings-only filter above does real work --
+  // exported so a caller/test can confirm the local query actually found
+  // non-building pieces to filter, not just that none happened to appear.
+  return { selected, neighbours, keepIds, localCount, placedCount, rawHitCount: hits.length };
 }
 
 /**

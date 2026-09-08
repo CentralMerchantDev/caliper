@@ -1,0 +1,70 @@
+P4 exit blind audit (UMAA trigger 3) -- three real findings fixed, one
+documented as a known coverage gap
+
+TRIGGER: docs/UMAA-CALIPER.md trigger 3, "a control exists that has never
+been watched red" -- the six mutation-tested controls landed in this
+session's P4.3/P4.4/P4.6 commits had each been watched red by the same
+person who wrote them. A fresh agent, given only the changed files and
+docs/AUDIT-PROTOCOL.md, with no conversation history and no hint of what
+was suspected wrong, ran independently.
+
+FOUND, VERIFIED, FIXED:
+
+1. HIGH -- public/move-piece.js's tryMove() self-collision exemption
+   (board.js's `{ ignoreId: selected.id }`) had no regression coverage.
+   Measured directly by the auditor: with ignoreId removed entirely, the
+   full 8-test P4.4 suite still passed, because no existing case moved a
+   piece against its OWN old position (only against a DIFFERENT real
+   building). Fixed: scripts/_move-piece-probe.mjs gained a real case (a
+   2 m move, guaranteed to overlap most of the piece's own current
+   footprint) and test/movePiece.test.ts asserts it succeeds. Watched red
+   for real: removing ignoreId now correctly fails exactly this test.
+
+2. MEDIUM -- public/isolate.js's neighboursOf() reported roads and bridges
+   as "neighbours", contradicting this pass's own stated buildings-only
+   scope (commit 0fe2a3a's own message). Measured directly: 41 of 200
+   sampled buildings had at least one road in their neighbour list. Harmless
+   to the render mechanism (applyIsolate only ever reads
+   buildingInstanceIndex, buildings-only already) but wrong DATA for any
+   caller reading neighbours directly. Fixed: neighbours now filtered to
+   `bld-`-prefixed ids. test/isolate.test.ts gained a check that also
+   confirms the local query genuinely found a non-building piece to filter
+   (nonBuildingHitsExisted) -- a filter with nothing to filter would pass
+   vacuously otherwise. Watched red for real.
+
+3. MEDIUM -- a piece moved earlier in a session (P4.4) stayed visible
+   through an UNRELATED isolate (P4.3): applyIsolate only ever reads
+   buildingInstanceIndex, and a moved piece lives in its own standalone
+   Mesh outside it entirely, invisible to the isolate mechanism. Fixed as a
+   deliberate separate step in _isolate()/_restoreIsolateState()
+   (world-render-3d.js), not inside the pure public/isolate.js module --
+   keeping that module ignorant of P4.4-specific state, matching P4.3's own
+   commit message's reasoning for keeping decision and mechanism separate.
+   Watched red for real -- and the FIRST attempt at this specific mutation
+   used `if (false) { ... }` to disable the block, which left the code TEXT
+   unchanged and let the wiring test SURVIVE wrongly (the same
+   comment-vs-code trap already recorded once this session for a different
+   control, now recorded a second time in test/mutations.json's own note
+   for this entry, since two independent recurrences in one session makes
+   it a pattern worth restating rather than assuming learned).
+
+4. LOW -- a comment in scripts/_isolate-probe.mjs claimed keepIds was built
+   from "the selected piece from part 1"; the code never referenced it.
+   Fixed: comment corrected to describe what the code actually does.
+
+NOT FIXED, NAMED: the auditor's own report lists what was checked and found
+clean, and what was not covered (no full-suite run, no Playwright render,
+`board-region.js`'s localBoard has no dedicated test file of its own beyond
+being exercised indirectly through the two probes) -- recorded here rather
+than re-derived, per docs/AUDIT-PROTOCOL.md §4's "what was checked and
+found clean" convention.
+
+All four fixes watched red for real (three via test/mutations.json entries
+added in this commit; the fourth -- the comment fix -- has no behaviour to
+watch red). `npx tsc --noEmit` clean. Regression: test/isolate.test.ts,
+test/movePiece.test.ts, test/rendererStatic.test.ts,
+test/pickSelection.test.ts, test/boardAdapter.test.ts,
+test/generatedClaimsAreCurrent.test.ts, test/publicClaims.test.ts,
+test/claudeMdIsCurrent.test.ts -- 53 tests, all pass.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

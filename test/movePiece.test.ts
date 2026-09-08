@@ -60,6 +60,19 @@ test("P4.4: a move to real, genuinely free ground succeeds and reports the real 
   assert.ok(Number.isFinite(R.success.destWorld.x) && Number.isFinite(R.success.destWorld.z), "a successful move must report a real, finite world position");
 });
 
+test("P4.4: a piece may move a short distance that overlaps its OWN current footprint -- board.js's ignoreId, not a self-refusal", () => {
+  // A blind audit (docs/AUDIT-PROTOCOL.md) found this had no regression
+  // coverage: with `{ ignoreId: selected.id }` removed from the real
+  // tryMove, the full 8-test suite still passed, because "occupied" above
+  // moves a DIFFERENT piece onto a real building and never tests a piece
+  // against its own old position. This closes that gap directly: a 2 m
+  // move (destCell.i + 2), which necessarily overlaps most of the piece's
+  // own current footprint, must succeed -- a missing ignoreId would refuse
+  // it as "occupied" against itself.
+  assert.ok(R.selfCollision, "the probe could not find a real building for which a 2 m move succeeds -- see the probe's own search loop");
+  assert.equal(R.selfCollision.ok, true);
+});
+
 test("P4.4: moveEditFor() builds world-model.js's own move-op shape exactly -- address/op/payload.x/payload.z, nothing more, nothing renamed", () => {
   const edit = R.success.edit;
   assert.equal(edit.address, R.success.plotId);

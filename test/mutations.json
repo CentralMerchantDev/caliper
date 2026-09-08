@@ -941,6 +941,33 @@
       "find": "  if (claimedBuildings !== buildingsPlaced) {",
       "replace": "  if (false && claimedBuildings !== buildingsPlaced) {",
       "expect": "a deliberately staled building count is named, by claim, not silently absorbed"
+    },
+    {
+      "id": "isolate-neighbours-buildings-only",
+      "guards": "P4.3 neighboursOf() reports only buildings as neighbours -- roads and bridges from the same local board query are excluded, matching this pass's own stated buildings-only scope.",
+      "note": "Found by a blind audit (docs/AUDIT-PROTOCOL.md), not written in first: the original neighboursOf() had no piece-kind filter at all. Verified by hand this session (same host-memory reason as the other entries): removing the filter correctly turned exactly the buildings-only test red, reverted, reconfirmed green.",
+      "file": "public/isolate.js",
+      "find": "  const neighbours = hits.filter((p) => p.id !== selected.id && p.id.startsWith(\"bld-\"));",
+      "replace": "  const neighbours = hits.filter((p) => p.id !== selected.id);",
+      "expect": "every reported neighbour is a building -- roads and bridges from the same local query are excluded, matching the pass's own stated buildings-only scope"
+    },
+    {
+      "id": "move-self-collision-ignoreId",
+      "guards": "P4.4 tryMove() lets a piece move a short distance that overlaps its own current footprint (board.js's ignoreId), rather than refusing it as occupied against itself.",
+      "note": "Found by a blind audit: the original P4.4 test suite (8/8) still passed with ignoreId removed entirely, because no existing case tested a piece against its OWN old position. Verified by hand this session: removing ignoreId correctly turned exactly the self-collision test red, reverted, reconfirmed green. IMPORTANT for whoever re-verifies this one: mutating with `if (false && ...)`-style disabling leaves the code TEXT unchanged and can make a wiring/regex-based test SURVIVE wrongly (found directly, on the isolate-new-pick-restores and move-self-collision-adjacent checks in this same session) -- this mutation is a real value substitution (`{ ignoreId: selected.id }` -> `{}`), not a disabled condition, so it is safe against that trap, but the general lesson is worth restating here.",
+      "file": "public/move-piece.js",
+      "find": "    { ignoreId: selected.id },",
+      "replace": "    {},",
+      "expect": "a piece may move a short distance that overlaps its OWN current footprint -- board.js's ignoreId, not a self-refusal"
+    },
+    {
+      "id": "isolate-hides-moved-pieces",
+      "guards": "P4.3 isolate hides a P4.4-moved piece (a standalone Mesh applyIsolate cannot see, since it lives outside buildingInstanceIndex) when that piece is not in the kept set, and restores its visibility afterward.",
+      "note": "Found by a blind audit: a piece moved earlier in a session stayed visible through an unrelated isolate, because applyIsolate only ever reads buildingInstanceIndex. Fixed as a separate step in _isolate()/_restoreIsolateState(), deliberately outside the pure public/isolate.js module. Verified by hand this session: DELETING the added block (not disabling it with `if (false)`, which left the text intact and let the wiring test SURVIVE wrongly on the first attempt -- caught before landing) correctly turned exactly this wiring test red, reverted, reconfirmed green.",
+      "file": "public/world-render-3d.js",
+      "find": "    this._hiddenMovedPieces = [];\n    if (this._movedPieces) {\n      for (const [movedPlotId, entry] of this._movedPieces) {\n        if (keepIds.has(`bld-${movedPlotId}`)) continue;\n        this._hiddenMovedPieces.push(entry.standalone);\n        entry.standalone.visible = false;\n      }\n    }",
+      "replace": "    this._hiddenMovedPieces = [];",
+      "expect": "a P4.4-moved piece not in the kept set is hidden by isolate, and restored -- a blind audit found applyIsolate cannot see it at all"
     }
   ]
 }

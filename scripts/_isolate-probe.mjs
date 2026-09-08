@@ -86,6 +86,15 @@ const neighbourGeometryChecks = {
     return dx <= NEIGHBOUR_MARGIN_M && dz <= NEIGHBOUR_MARGIN_M;
   }),
   selectionExcludedFromItsOwnNeighbours: !bestResult.neighbours.some((n) => n.id === bestResult.selected.id),
+  // A blind audit found roads/bridges leaking into `neighbours` (boardPieces
+  // carries every piece kind; inCells() answers by rectangle, not by kind).
+  // Checked directly, not assumed fixed: every reported neighbour must be a
+  // building, AND the local population searched must genuinely have
+  // contained at least one non-building piece -- otherwise a filter that
+  // does nothing would pass this check by having nothing to filter.
+  allNeighboursAreBuildings: bestResult.neighbours.every((n) => n.id.startsWith("bld-")),
+  rawHitCount: bestResult.rawHitCount,
+  nonBuildingHitsExisted: bestResult.rawHitCount > bestResult.neighbours.length + 1, // +1 for the selection itself
 };
 
 // A far-away control: a building nowhere near bestPlotId must NOT appear as
@@ -145,9 +154,11 @@ function fingerprint() {
   };
 }
 
-// Pick keepIds = the selected piece from part 1 (if it's in this mesh
-// sample) plus a couple of its real siblings from the SAME typology group,
-// so at least one standalone mesh is genuinely promoted.
+// keepIds is independent of part 1's own selection (bestPlotId) -- a blind
+// audit correctly caught an earlier comment here claiming otherwise. Any
+// real typology group's first few members is enough to exercise the
+// mechanism (at least one standalone mesh genuinely promoted); which real
+// pieces they are does not matter to what this fingerprint checks.
 const anyGroup = [...byType.values()][0];
 const keepIds = new Set(anyGroup.slice(0, Math.min(3, anyGroup.length)).map((p) => p.id));
 

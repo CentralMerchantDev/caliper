@@ -51,6 +51,26 @@ for (let i = 0; i < Math.min(300, buildings.length) && !successResult; i++) {
   }
 }
 
+// --- 1b. SELF-COLLISION: a tiny move that overlaps the piece's OWN current
+// footprint must succeed (board.js's ignoreId, tryMove's whole reason for
+// placing the selected piece into the local board unfiltered rather than
+// excluding it) -- a blind audit found this had no regression test: with
+// `{ ignoreId: selected.id }` removed from the real tryMove, the existing
+// suite still passed 8/8, because the "occupied" test moves a DIFFERENT
+// piece onto a real building, never a piece onto its own old position.
+let selfCollisionResult = null, selfCollisionPlotId = null;
+for (let i = 0; i < Math.min(50, buildings.length) && !selfCollisionResult; i++) {
+  const piece = buildings[i];
+  const plotId = piece.id.slice("bld-".length);
+  // 2 atoms: large enough to be a real, distinct destination cell; small
+  // enough that the new footprint overlaps most of the old one, which is
+  // exactly the case a missing ignoreId would refuse as "occupied" against
+  // itself.
+  const dest = { i: piece.cell.i + 2, j: piece.cell.j };
+  const r = tryMove(plotId, dest, boardPieces, { heightAt, inWorld });
+  if (r.ok) { selfCollisionResult = r; selfCollisionPlotId = plotId; }
+}
+
 // --- 2. REFUSED "occupied": move building A onto building B's own cell ---
 const a = buildings[0];
 const aPlotId = a.id.slice("bld-".length);
@@ -78,4 +98,5 @@ process.stdout.write(JSON.stringify({
   occupied: occupiedResult ? { ok: false, reason: occupiedResult.reason, blockedBy: occupiedResult.blockedBy } : null,
   offMap: { ok: offMapResult.ok, reason: offMapResult.reason },
   notFound: { ok: notFoundResult.ok, reason: notFoundResult.reason },
+  selfCollision: selfCollisionResult ? { ok: true, plotId: selfCollisionPlotId } : null,
 }));
