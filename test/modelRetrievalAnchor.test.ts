@@ -7,6 +7,7 @@ import { createWorkersAIClient } from "../src/clientWorkersAI.ts";
 import { embedText, embedTextBatch } from "../src/modelRetrieval.ts";
 import {
   Bm25Index,
+  SCIFACT_DATA_AVAILABLE,
   SCIFACT_DOCS,
   SCIFACT_QRELS,
   SCIFACT_QUERIES,
@@ -18,7 +19,11 @@ const BM25_TOLERANCE = 0.015;
 const QUERY_PREFIX = "Represent this sentence for searching relevant passages: ";
 const SPEND_SKIP_REASON = "SKIP live Workers AI inference: CALIPER_ALLOW_SPEND=1 is required";
 const spendAllowed = process.env.CALIPER_ALLOW_SPEND === "1";
-const liveTest = spendAllowed ? test : (name: string, fn: () => unknown) => test(`${name} — ${SPEND_SKIP_REASON}`, { skip: SPEND_SKIP_REASON }, fn);
+const missingDataReason = process.env.CALIPER_SCIFACT_UNAVAILABLE || "BEIR SciFact data is missing; run node test/fetchBeirSciFact.mjs with network access";
+const datasetTest = SCIFACT_DATA_AVAILABLE ? test : (name: string, fn: () => unknown) => test(`${name} — SKIP ${missingDataReason}`, { skip: missingDataReason }, fn);
+const liveTest = !SCIFACT_DATA_AVAILABLE
+  ? datasetTest
+  : spendAllowed ? test : (name: string, fn: () => unknown) => test(`${name} — ${SPEND_SKIP_REASON}`, { skip: SPEND_SKIP_REASON }, fn);
 const cacheFile = path.join(process.cwd(), ".wrangler", "scifact-bge-small-v1.5-embeddings.json");
 
 interface EmbeddingCache {
@@ -98,14 +103,14 @@ async function loadOrCreateEmbeddings(): Promise<EmbeddingCache> {
   return cache;
 }
 
-test("authentic BEIR SciFact data has the published evaluation shape", () => {
+datasetTest("authentic BEIR SciFact data has the published evaluation shape", () => {
   assert.equal(SCIFACT_DOCS.length, 5_183);
   assert.equal(SCIFACT_QUERIES.length, 300);
   assert.equal(new Set(SCIFACT_QRELS.map((qrel) => qrel.queryId)).size, 300);
   assert.ok(SCIFACT_QRELS.length > SCIFACT_QUERIES.length, "real qrels are not a one-to-one sequential map");
 });
 
-test("full SciFact BM25 reproduces the BEIR paper nDCG@10", () => {
+datasetTest("full SciFact BM25 reproduces the BEIR paper nDCG@10", () => {
   const index = new Bm25Index(SCIFACT_DOCS);
   const qrels = qrelsByQuery();
   const measured = SCIFACT_QUERIES.reduce((sum, query) => {

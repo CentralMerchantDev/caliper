@@ -1,5 +1,9 @@
 // Authentic BEIR SciFact loader and evaluation helpers.
-// Dataset source: https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip
+// AllenAI source: https://allenai.org/data/scifact
+// BEIR archive: https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip
+// BEIR paper: https://arxiv.org/abs/2104.08663
+// License: CC BY-NC 2.0, https://creativecommons.org/licenses/by-nc/2.0/
+// Data is fetched on demand and checksum-verified, not redistributed here.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -13,9 +17,11 @@ function readJsonLines<T>(file: string): T[] {
 }
 
 const dataDirectory = path.join(process.cwd(), "test", "beir-scifact");
-const rawDocs = readJsonLines<{ _id: string; title: string; text: string }>(path.join(dataDirectory, "corpus.jsonl"));
-const rawQueries = readJsonLines<{ _id: string; text: string }>(path.join(dataDirectory, "queries.jsonl"));
-const qrelLines = fs.readFileSync(path.join(dataDirectory, "qrels", "test.tsv"), "utf8").trim().split(/\r?\n/).slice(1);
+const requiredFiles = [path.join(dataDirectory, "corpus.jsonl"), path.join(dataDirectory, "queries.jsonl"), path.join(dataDirectory, "qrels", "test.tsv")];
+export const SCIFACT_DATA_AVAILABLE = requiredFiles.every((file) => fs.existsSync(file));
+const rawDocs = SCIFACT_DATA_AVAILABLE ? readJsonLines<{ _id: string; title: string; text: string }>(requiredFiles[0]) : [];
+const rawQueries = SCIFACT_DATA_AVAILABLE ? readJsonLines<{ _id: string; text: string }>(requiredFiles[1]) : [];
+const qrelLines = SCIFACT_DATA_AVAILABLE ? fs.readFileSync(requiredFiles[2], "utf8").trim().split(/\r?\n/).slice(1) : [];
 
 export const SCIFACT_QRELS: SciFactQrel[] = qrelLines.map((line) => {
   const [queryId, docId, score] = line.split("\t");

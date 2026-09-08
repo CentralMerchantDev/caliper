@@ -30,6 +30,15 @@ const testFiles = requestedFiles.length === 0
       return file;
     });
 
+if (testFiles.some((file) => file === "modelRetrievalAnchor.test.ts" || file === "modelRetrievalDataset.test.ts")) {
+  const { ensureSciFactDataset } = await import("./fetchBeirSciFact.mjs");
+  const sciFact = await ensureSciFactDataset();
+  if (!sciFact.available) {
+    process.env.CALIPER_SCIFACT_UNAVAILABLE = sciFact.reason;
+    console.log(`SKIP SciFact evaluation: ${sciFact.reason}`);
+  }
+}
+
 // ONE THREE.JS IN THE PROCESS, NOT ONE PER BUNDLE.
 //
 // Each test file is bundled on its own and then all of them are imported into

@@ -5,6 +5,36 @@
 **Metric:** nDCG@10  
 **Dataset source:** [BEIR SciFact archive](https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip)
 
+## Dataset attribution and integrity
+
+SciFact was created by AllenAI and is available from the
+[AllenAI SciFact source](https://allenai.org/data/scifact). The evaluation uses
+the copy distributed at the exact BEIR archive URL above and cites the
+[BEIR paper](https://arxiv.org/abs/2104.08663). SciFact is licensed under
+[CC BY-NC 2.0](https://creativecommons.org/licenses/by-nc/2.0/), which requires
+attribution and permits non-commercial use only. BEIR does not grant a separate
+license for the datasets it distributes.
+
+The repository no longer redistributes SciFact. The runner fetches the archive
+on demand and accepts it only when its SHA-256 checksum is
+`536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165`. This
+checksum was computed from
+`https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip`
+on 2026-09-07 and is pinned in `test/fetchBeirSciFact.mjs`. A mismatch stops
+extraction and evaluation. If the archive cannot be downloaded, SciFact tests
+report a named skip with the fetch command; they never use a substitute fixture.
+
+Checksum mutation run, verbatim:
+
+```text
+RED: one-byte-corrupted SciFact archive rejected: checksum mismatch
+GREEN: published SciFact archive accepted: SHA-256 536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165
+```
+
+Committing the corpus asks a reader to trust that those bytes are the real BEIR
+SciFact; a pinned checksum proves it. This is both the stronger control and the
+smaller repository.
+
 ## Outcome
 
 This lane produced the first earned retrieval number in this workstream. The
@@ -60,8 +90,9 @@ BM25 66.5% or BGE 71.275% result accurately.
 
 The fabricated fixture was moved intact to
 `_TO-DELETE/fabricated-scifact-anchor/test/beirSciFactSubset.ts`. The replacement
-loads all 5,183 published corpus documents, all 300 test queries, and the
-published test qrels.
+fetches and loads all 5,183 published corpus documents, all 300 test queries,
+and the published test qrels. The formerly tracked dataset files were preserved
+under `_TO-DELETE/redistributed-cc-by-nc-scifact/` for review.
 
 ## Mutation proof
 
