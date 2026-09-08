@@ -32,10 +32,18 @@ export function createWorkersAIClient(options: { accountId?: string; apiToken?: 
         const credentialsPath = wranglerCredentialsPath();
         const defaultToml = credentialsPath ? fs.readFileSync(credentialsPath, "utf8") : "";
         const match = defaultToml.match(/oauth_token\s*=\s*"([^"]+)"/);
-        if (match) token = match[1];
+        const expirationMatch = defaultToml.match(/expiration_time\s*=\s*"([^"]+)"/);
+        if (match && expirationMatch) {
+          const expirationTime = Date.parse(expirationMatch[1]);
+          if (!Number.isFinite(expirationTime) || expirationTime <= Date.now()) {
+            throw new Error("Wrangler OAuth token is expired. Run `npx wrangler login` before live inference.");
+          }
+          token = match[1];
+        }
       }
-    } catch {
-      // Ignore if file is not found
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("Wrangler OAuth token is expired")) throw error;
+      // A missing or unreadable file is handled by the explicit missing-token error below.
     }
   }
 
@@ -48,7 +56,7 @@ export function createWorkersAIClient(options: { accountId?: string; apiToken?: 
       const texts = Array.isArray(input.text) ? input.text : [input.text];
       const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
 
-      let res = await fetch(url, {
+      const res = await fetch(url, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -56,51 +64,6 @@ export function createWorkersAIClient(options: { accountId?: string; apiToken?: 
         },
         body: JSON.stringify({ text: texts }),
       });
-
-      if (res.status === 401 && typeof process !== "undefined") {
-        // Attempt automatic refresh of OAuth token
-        try {
-          const fs = (globalThis as any).process?.getBuiltinModule ? (globalThis as any).process.getBuiltinModule("fs") : null;
-          if (fs) {
-            const tomlPath = wranglerCredentialsPath();
-            if (!tomlPath) throw new Error("Cannot locate the Wrangler credentials file outside Node.js.");
-            const toml = fs.readFileSync(tomlPath, "utf8");
-            const rMatch = toml.match(/refresh_token\s*=\s*"([^"]+)"/);
-            if (rMatch) {
-              const rToken = rMatch[1];
-              const params = new URLSearchParams({
-                grant_type: "refresh_token",
-                refresh_token: rToken,
-                client_id: "54d11594-84e4-41aa-b438-e81b8fa78ee7",
-              });
-              const rRes = await fetch("https://dash.cloudflare.com/oauth2/token", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: params.toString(),
-              });
-              if (rRes.ok) {
-                const rJson = (await rRes.json()) as any;
-                if (rJson.access_token) {
-                  token = rJson.access_token;
-                  const newToml = `oauth_token = "${rJson.access_token}"\nexpiration_time = "${new Date(Date.now() + (rJson.expires_in || 3600) * 1000).toISOString()}"\nrefresh_token = "${rJson.refresh_token || rToken}"\nscopes = [ "user:read", "offline_access", "account:read", "workers:write", "workers_kv:write", "workers_routes:write", "workers_scripts:write", "workers_tail:read", "d1:write", "pages:write", "zone:read", "ssl_certs:write", "ai:write", "ai-search:write", "ai-search:run", "websearch.run", "agent-memory:write", "queues:write", "pipelines:write", "secrets_store:write", "artifacts:write", "flagship:write", "containers:write", "cloudchamber:write", "connectivity:admin", "email_routing:write", "email_sending:write", "browser:write", "challenge-widgets.write" ]\n`;
-                  fs.writeFileSync(tomlPath, newToml, "utf8");
-                  // Retry original request with refreshed token
-                  res = await fetch(url, {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ text: texts }),
-                  });
-                }
-              }
-            }
-          }
-        } catch {
-          // Fall through to error handler
-        }
-      }
 
       if (!res.ok) {
         const errBody = await res.text();

@@ -36,3 +36,20 @@ test("Workers AI client contains no machine-specific user path", () => {
   const clientSource = fs.readFileSync(path.join(process.cwd(), "src", "clientWorkersAI.ts"), "utf8");
   assert.doesNotMatch(clientSource, /[A-Za-z]:\\\\Users\\\\/);
 });
+
+test("Workers AI authentication failure is reported after one request without a hidden retry", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestCount = 0;
+  globalThis.fetch = async () => {
+    requestCount++;
+    return new Response('{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}', { status: 401 });
+  };
+
+  try {
+    const client = createWorkersAIClient({ accountId: "account", apiToken: "expired-token" });
+    await assert.rejects(() => client.run("@cf/baai/bge-small-en-v1.5", { text: "probe" }), /Workers AI HTTP 401/);
+    assert.equal(requestCount, 1, "a 401 must not trigger an automatic retry or token refresh");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
