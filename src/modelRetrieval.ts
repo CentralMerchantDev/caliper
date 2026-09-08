@@ -676,6 +676,30 @@ export function lexicalSearch(
   return topK;
 }
 
+export function stemRetrievalToken(token: string): string {
+  if (token.length > 5 && token.endsWith("ing")) return token.slice(0, -3);
+  if (token.length > 4 && token.endsWith("ied")) return `${token.slice(0, -3)}y`;
+  if (token.length > 4 && token.endsWith("ed")) return token.slice(0, -2);
+  if (token.length > 4 && token.endsWith("ly")) return token.slice(0, -2);
+  if (token.length > 4 && token.endsWith("es")) return token.slice(0, -2);
+  if (token.length > 3 && token.endsWith("s")) return token.slice(0, -1);
+  return token;
+}
+
+export function retrievalContentTokens(text: string): Set<string> {
+  return new Set(
+    (text.toLowerCase().match(/[a-z0-9]+/g) || [])
+      .filter((token) => !STOP_WORDS.has(token))
+      .map(stemRetrievalToken)
+  );
+}
+
+export function hasZeroTokenOverlap(query: string, targetText: string): boolean {
+  const queryTokens = retrievalContentTokens(query);
+  const targetTokens = retrievalContentTokens(targetText);
+  return [...queryTokens].every((token) => !targetTokens.has(token));
+}
+
 /**
  * Unified model retrieval function
  */

@@ -261,7 +261,7 @@ export const DEV_SET: GoldenPair[] = [
   },
 ];
 
-export const HELD_OUT_SET: GoldenPair[] = [
+export const ZERO_OVERLAP_CANDIDATES: GoldenPair[] = [
   // --- 15 SEMANTIC ZERO-LEXICAL-OVERLAP QUERIES ---
   {
     id: "held-01",
@@ -385,7 +385,9 @@ export const HELD_OUT_SET: GoldenPair[] = [
     split: "held_out",
     description: "Passenger ferry vessel",
   },
+];
 
+export const LEXICAL_OVERLAP_SET: GoldenPair[] = [
   // --- 15 LEXICAL / NEAR-LEXICAL OVERLAP QUERIES ---
   {
     id: "held-16",
@@ -511,3 +513,5 @@ export const HELD_OUT_SET: GoldenPair[] = [
     description: "Pedestrian footbridge crossing",
   },
 ];
+
+export const HELD_OUT_SET: GoldenPair[] = [...ZERO_OVERLAP_CANDIDATES, ...LEXICAL_OVERLAP_SET];
