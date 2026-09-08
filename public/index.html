@@ -2684,7 +2684,37 @@ window.__p4PickAt = function __p4PickAt(x, z) {
   if (!impl || !impl._selection) return { addr: null, piece: null };
   const addr = impl._selection.pick(x, z);
   const piece = addr && addr.onPlot && impl._boardPieces ? impl._boardPieces.get(`bld-${addr.plotId}`) || null : null;
+  // P4.2: mirror _inspectClick's own set/clear-highlight call exactly, so
+  // this test hook exercises the real highlight path, not a divergent
+  // reimplementation of when it fires.
+  if (piece) impl._setHighlight(addr.plotId); else impl._clearHighlight();
   return { addr, piece };
+};
+// P4.2: EXPOSED FOR TESTING -- reports the live highlight state (which
+// plotId, whether the individual highlight Mesh is really in the scene,
+// and the hidden instance's own current matrix) without reaching into
+// impl internals from the test file itself.
+window.__p4HighlightState = function __p4HighlightState() {
+  const impl = renderer3d._impl;
+  const h = impl && impl._highlight;
+  if (!h) return { active: false };
+  return {
+    active: true,
+    plotId: h.plotId,
+    meshInScene: impl.scene.children.includes(h.highlightMesh),
+    meshName: h.highlightMesh.name,
+    instanceIsZeroScale: (() => {
+      // Direct element check, not Matrix4.decompose() -- decompose divides
+      // each basis column by its own length to extract rotation, which is
+      // 0/0 on a fully degenerate (all-zero) matrix and does not reliably
+      // report scale (0,0,0) back out. The raw elements are unambiguous:
+      // every one of the 12 linear-part entries is exactly 0 for a matrix
+      // built by makeScale(0,0,0).
+      const m = new (impl._city.THREE).Matrix4();
+      h.mesh.getMatrixAt(h.index, m);
+      return m.elements.slice(0, 12).every((v) => v === 0);
+    })(),
+  };
 };
 // ON LOAD: apply whatever this browser has already persisted, so a reload
 // genuinely shows what was there before it -- the other half of "survives
