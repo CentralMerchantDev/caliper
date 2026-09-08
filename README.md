@@ -11,6 +11,42 @@ what that costs per correct answer rather than per token.
 **Live:** https://caliper.markfrasertoronto.workers.dev — read the results, or run one
 cycle yourself.
 
+## What is actually in here
+
+Three things, and the third is the point.
+
+**A world.** 26 km of coast generated from one plan: 17,108 buildings placed and 478
+refused, 54 settlements, roads whose gradients are capped by class, and a terrain check
+that rejects any footprint reaching water or cliff. Nothing was placed by hand.
+
+**A pipeline that refuses.** Plain-English change requests are grounded against the real
+source, parked at a human gate, executed in a fresh isolate, and reviewed by a different
+vendor's model. Gate 2 never auto-approves.
+
+**A method for not fooling myself, and a record of the times it caught me.** Every claim on
+the live page is generated from the thing it describes, and a test fails when they drift.
+1,087 tests. 98 deliberate defects injected into the guardrails, all 98 caught, checked
+identifier by identifier rather than against a summary line.
+
+That last one is worth the click. [`docs/AUDIT-PROTOCOL.md`](docs/AUDIT-PROTOCOL.md) names
+the failure patterns this project keeps finding — a check that cannot fail, two sources of
+truth with nothing binding them, absence read as success, and a fix applied to the instances
+someone enumerated while the one nobody wrote down survives. Each was named after it had
+already happened here.
+
+The sharpest example is in [`docs/audits/R2-RETRIEVAL-ANCHOR.md`](docs/audits/R2-RETRIEVAL-ANCHOR.md).
+This project's rule is *borrow a published benchmark, never invent one*. The artefact built
+to satisfy that rule turned out to be hand-written: a fixture labelled "BEIR SciFact" that
+claimed 100 abstracts, held 50, and mapped every query to its own paraphrase — so a lookup
+table scored the same as a neural retriever. It was replaced with the real 5,183-document
+corpus, and the harness was only trusted after it reproduced the published BM25 figure at
+**66.271%** against **66.500%**. A shuffled embedder takes it to 0.000%, so the gate can
+still fail.
+
+The rule against fabricated benchmarks had been implemented by fabricating a benchmark. That
+is the kind of thing this repository exists to catch, and the audits record the ones it
+caught late as carefully as the ones it caught early.
+
 ## The pipeline
 
 The live page leads with a second thing: a change pipeline. A visitor types a change in plain
