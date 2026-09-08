@@ -30,12 +30,17 @@ const testFiles = requestedFiles.length === 0
       return file;
     });
 
-if (testFiles.some((file) => file === "modelRetrievalAnchor.test.ts" || file === "modelRetrievalDataset.test.ts")) {
-  const { ensureSciFactDataset } = await import("./fetchBeirSciFact.mjs");
-  const sciFact = await ensureSciFactDataset();
-  if (!sciFact.available) {
-    process.env.CALIPER_SCIFACT_UNAVAILABLE = sciFact.reason;
-    console.log(`SKIP SciFact evaluation: ${sciFact.reason}`);
+const requiredBeirDatasets = new Set();
+if (testFiles.some((file) => file === "modelRetrievalAnchor.test.ts" || file === "modelRetrievalDataset.test.ts")) requiredBeirDatasets.add("scifact");
+if (testFiles.some((file) => file === "modelRetrievalDiscrimination.test.ts" || file === "modelRetrievalDataset.test.ts")) requiredBeirDatasets.add("arguana");
+if (requiredBeirDatasets.size > 0) {
+  const { ensureBeirDataset } = await import("./fetchBeirDataset.mjs");
+  for (const datasetId of requiredBeirDatasets) {
+    const result = await ensureBeirDataset(datasetId);
+    if (!result.available) {
+      process.env[`CALIPER_${datasetId.toUpperCase()}_UNAVAILABLE`] = result.reason;
+      console.log(`SKIP ${datasetId} evaluation: ${result.reason}`);
+    }
   }
 }
 

@@ -4,6 +4,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { Bm25Index, computeNDCGAtK, excludeIdenticalDocumentId, type SciFactDoc } from "./beirSciFactSubset.ts";
 
+// ArguAna Counterargs by Henning Wachsmuth, Shahbaz Syed, and Benno Stein.
+// Primary source and license: https://zenodo.org/records/3973258, CC BY 4.0.
+// Paper: https://aclanthology.org/P18-1023/
+// BEIR archive: https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/arguana.zip
+// Data is fetched by test/fetchBeirDataset.mjs and checksum-verified, not redistributed here.
+
 interface Query { id: string; text: string }
 
 function readJsonLines<T>(file: string): T[] {
@@ -11,25 +17,29 @@ function readJsonLines<T>(file: string): T[] {
 }
 
 const dataDirectory = path.join(process.cwd(), "test", "beir-arguana");
-const documents: SciFactDoc[] = readJsonLines<{ _id: string; title: string; text: string }>(path.join(dataDirectory, "corpus.jsonl"))
+const requiredFiles = [path.join(dataDirectory, "corpus.jsonl"), path.join(dataDirectory, "queries.jsonl"), path.join(dataDirectory, "qrels", "test.tsv")];
+const dataAvailable = requiredFiles.every((file) => fs.existsSync(file));
+const missingDataReason = process.env.CALIPER_ARGUANA_UNAVAILABLE || "BEIR ArguAna data is missing; run node test/fetchBeirDataset.mjs arguana with network access";
+const datasetTest = dataAvailable ? test : (name: string, fn: () => unknown) => test(`${name} — SKIP ${missingDataReason}`, { skip: missingDataReason }, fn);
+const documents: SciFactDoc[] = (dataAvailable ? readJsonLines<{ _id: string; title: string; text: string }>(requiredFiles[0]) : [])
   .map((doc) => ({ id: doc._id, title: doc.title, text: doc.text }));
-const queries: Query[] = readJsonLines<{ _id: string; text: string }>(path.join(dataDirectory, "queries.jsonl"))
+const queries: Query[] = (dataAvailable ? readJsonLines<{ _id: string; text: string }>(requiredFiles[1]) : [])
   .map((query) => ({ id: query._id, text: query.text }));
 const qrels = new Map(
-  fs.readFileSync(path.join(dataDirectory, "qrels", "test.tsv"), "utf8").trim().split(/\r?\n/).slice(1)
+  (dataAvailable ? fs.readFileSync(requiredFiles[2], "utf8").trim().split(/\r?\n/).slice(1) : [])
     .map((line) => {
       const [queryId, documentId] = line.split("\t");
       return [queryId, [documentId]] as const;
     })
 );
 
-test("authentic BEIR ArguAna data has its published evaluation shape", () => {
+datasetTest("authentic BEIR ArguAna data has its published evaluation shape", () => {
   assert.equal(documents.length, 8_674);
   assert.equal(queries.length, 1_406);
   assert.equal(qrels.size, 1_406);
 });
 
-test("full ArguAna BM25 is rejected because current self-exclusion does not reproduce the paper-era result", () => {
+datasetTest("full ArguAna BM25 is rejected because current self-exclusion does not reproduce the paper-era result", () => {
   const index = new Bm25Index(documents);
   const measured = queries.reduce((sum, query) => {
     const scoredRanking = excludeIdenticalDocumentId(query.id, index.rank(query.text));
@@ -39,7 +49,7 @@ test("full ArguAna BM25 is rejected because current self-exclusion does not repr
   assert.ok(Math.abs(measured - 0.315) > 0.015, `ArguAna should remain rejected until it reproduces 31.500%; measured ${(measured * 100).toFixed(3)}%`);
 });
 
-test("ArguAna scoring excludes the query document from raw candidates", () => {
+datasetTest("ArguAna scoring excludes the query document from raw candidates", () => {
   const query = queries[0];
   const index = new Bm25Index(documents);
   const rawCandidates = index.rank(query.text);

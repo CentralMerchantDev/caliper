@@ -239,12 +239,11 @@ queryable and citable. It does not make it enforceable.
    `.dev.vars` before starting Node so `CLOUDFLARE_ACCOUNT_ID` and
    `NODE_USE_SYSTEM_CA=1` are present. The latter uses the operating-system CA
    store; never set `NODE_TLS_REJECT_UNAUTHORIZED=0`.
-8. SciFact is fetched from the published BEIR archive rather than redistributed.
-   The fetcher must verify SHA-256
-   `536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165`
-   before extraction. A mismatch fails; an unavailable download produces a
-   named skip and never falls back to a fixture. SciFact is CC BY-NC 2.0 and
-   requires attribution.
+8. SciFact and ArguAna are fetched from their published BEIR archives rather
+   than redistributed. The shared fetcher verifies their repository-pinned
+   SHA-256 checksums before extraction. A mismatch fails; an unavailable
+   download produces a named skip and never falls back to a fixture. SciFact is
+   CC BY-NC 2.0; ArguAna is CC BY 4.0; both require attribution.
 
 ## RECORD
 

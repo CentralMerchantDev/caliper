@@ -3,7 +3,7 @@
 // BEIR archive: https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip
 // BEIR paper: https://arxiv.org/abs/2104.08663
 // License: CC BY-NC 2.0, https://creativecommons.org/licenses/by-nc/2.0/
-// Data is fetched on demand and checksum-verified, not redistributed here.
+// Data is fetched by test/fetchBeirDataset.mjs and checksum-verified, not redistributed here.
 
 import fs from "node:fs";
 import path from "node:path";

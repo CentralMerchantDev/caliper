@@ -20,7 +20,7 @@ on demand and accepts it only when its SHA-256 checksum is
 `536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165`. This
 checksum was computed from
 `https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip`
-on 2026-09-07 and is pinned in `test/fetchBeirSciFact.mjs`. A mismatch stops
+on 2026-09-07 and is pinned in `test/fetchBeirDataset.mjs`. A mismatch stops
 extraction and evaluation. If the archive cannot be downloaded, SciFact tests
 report a named skip with the fetch command; they never use a substitute fixture.
 
@@ -34,6 +34,53 @@ GREEN: published SciFact archive accepted: SHA-256 536e14446a0ba56ed1398ab1055f3
 Committing the corpus asks a reader to trust that those bytes are the real BEIR
 SciFact; a pinned checksum proves it. This is both the stronger control and the
 smaller repository.
+
+ArguAna Counterargs was created by Henning Wachsmuth, Shahbaz Syed, and
+Benno Stein. Its [primary Zenodo record](https://zenodo.org/records/3973258)
+declares the dataset under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+and requests citation of their 2018 ACL paper,
+[Retrieval of the Best Counterargument without Prior Topic Knowledge](https://aclanthology.org/P18-1023/).
+The evaluation fetches the BEIR-formatted archive from
+`https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/arguana.zip`
+and requires SHA-256
+`cfdf79adce27a401b3cd3ea267903134dbfab2c6afeb95d7fe5724a00bf7557b`.
+ArguAna is fetched and checksum-verified rather than redistributed. Its three
+formerly tracked files are preserved under
+`_TO-DELETE/redistributed-cc-by-4-arguana/` for review.
+
+ArguAna checksum mutation run, verbatim:
+
+```text
+RED: one-byte-corrupted ArguAna archive rejected: checksum mismatch
+GREEN: published ArguAna archive accepted: SHA-256 cfdf79adce27a401b3cd3ea267903134dbfab2c6afeb95d7fe5724a00bf7557b
+```
+
+R2.6 fixed one enumerated dataset instance and left the larger ArguAna instance
+tracked. R2.7 generalizes both the fetcher and the check: a repository test now
+rejects any tracked `.jsonl` file or any tracked path inside a `qrels` directory
+under `test/`.
+
+Class-level tracking check before R2.7, verbatim:
+
+```text
+✖ Git does not track corpus-shaped evaluation data under test
+AssertionError [ERR_ASSERTION]: tracked corpus-shaped evaluation data:
+test/beir-arguana/corpus.jsonl
+test/beir-arguana/qrels/test.tsv
+test/beir-arguana/queries.jsonl
+tests 1
+pass 0
+fail 1
+```
+
+After untracking ArguAna, verbatim:
+
+```text
+✔ Git does not track corpus-shaped evaluation data under test
+tests 1
+pass 1
+fail 0
+```
 
 ## Outcome
 

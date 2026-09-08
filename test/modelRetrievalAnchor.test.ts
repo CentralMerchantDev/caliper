@@ -19,7 +19,7 @@ const BM25_TOLERANCE = 0.015;
 const QUERY_PREFIX = "Represent this sentence for searching relevant passages: ";
 const SPEND_SKIP_REASON = "SKIP live Workers AI inference: CALIPER_ALLOW_SPEND=1 is required";
 const spendAllowed = process.env.CALIPER_ALLOW_SPEND === "1";
-const missingDataReason = process.env.CALIPER_SCIFACT_UNAVAILABLE || "BEIR SciFact data is missing; run node test/fetchBeirSciFact.mjs with network access";
+const missingDataReason = process.env.CALIPER_SCIFACT_UNAVAILABLE || "BEIR SciFact data is missing; run node test/fetchBeirDataset.mjs scifact with network access";
 const datasetTest = SCIFACT_DATA_AVAILABLE ? test : (name: string, fn: () => unknown) => test(`${name} — SKIP ${missingDataReason}`, { skip: missingDataReason }, fn);
 const liveTest = !SCIFACT_DATA_AVAILABLE
   ? datasetTest
