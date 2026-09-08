@@ -8,9 +8,41 @@
 
 import type { WorkersAIBinding } from "./modelRetrieval.ts";
 
+function wranglerCredentialsPath(): string | null {
+  const nodeProcess = (globalThis as any).process;
+  const os = nodeProcess?.getBuiltinModule?.("os");
+  const path = nodeProcess?.getBuiltinModule?.("path");
+  return os && path ? path.join(os.homedir(), ".wrangler", "config", "default.toml") : null;
+}
+
+export function parseWranglerOauthToken(config: string, now = Date.now()): string | null {
+  const tokenMatch = config.match(/oauth_token\s*=\s*"([^"]+)"/);
+  if (!tokenMatch) return null;
+
+  const expirationMatch = config.match(/expiration_time\s*=\s*"([^"]+)"/);
+  if (!expirationMatch) {
+    throw new Error("Wrangler OAuth token was found, but its expiration_time is missing. Run `npx wrangler login` before live inference.");
+  }
+
+  const expirationTime = Date.parse(expirationMatch[1]);
+  if (!Number.isFinite(expirationTime) || expirationTime <= now) {
+    throw new Error("Wrangler OAuth token is expired. Run `npx wrangler login` before live inference.");
+  }
+  return tokenMatch[1];
+}
+
+function isCertificateVerificationError(error: unknown): boolean {
+  const code = (error as { cause?: { code?: string }; code?: string })?.cause?.code || (error as { code?: string })?.code;
+  return new Set(["SELF_SIGNED_CERT_IN_CHAIN", "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "DEPTH_ZERO_SELF_SIGNED_CERT", "CERT_HAS_EXPIRED"]).has(code || "");
+}
+
 export function createWorkersAIClient(options: { accountId?: string; apiToken?: string } = {}): WorkersAIBinding {
   let token = options.apiToken || (typeof process !== "undefined" ? process.env?.CLOUDFLARE_API_TOKEN : "") || "";
-  let accountId = options.accountId || (typeof process !== "undefined" ? process.env?.CLOUDFLARE_ACCOUNT_ID : "") || "e821c95d30cd134e043d084605f384b6";
+  const accountId = options.accountId || (typeof process !== "undefined" ? process.env?.CLOUDFLARE_ACCOUNT_ID : "") || "";
+
+  if (!accountId) {
+    throw new Error("No Cloudflare account ID found. Set CLOUDFLARE_ACCOUNT_ID or pass accountId explicitly.");
+  }
 
   if (!token && typeof process !== "undefined") {
     try {
@@ -18,12 +50,13 @@ export function createWorkersAIClient(options: { accountId?: string; apiToken?: 
       // Use dynamic require / import to avoid bundling node:fs in workers build
       const fs = (globalThis as any).process?.getBuiltinModule ? (globalThis as any).process.getBuiltinModule("fs") : null;
       if (fs) {
-        const defaultToml = fs.readFileSync("C:\\Users\\User\\.wrangler\\config\\default.toml", "utf8");
-        const match = defaultToml.match(/oauth_token\s*=\s*"([^"]+)"/);
-        if (match) token = match[1];
+        const credentialsPath = wranglerCredentialsPath();
+        const defaultToml = credentialsPath ? fs.readFileSync(credentialsPath, "utf8") : "";
+        token = parseWranglerOauthToken(defaultToml) || "";
       }
-    } catch {
-      // Ignore if file is not found
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Wrangler OAuth token")) throw error;
+      // A missing or unreadable file is handled by the explicit missing-token error below.
     }
   }
 
@@ -31,66 +64,29 @@ export function createWorkersAIClient(options: { accountId?: string; apiToken?: 
     throw new Error("No Cloudflare authentication token found. Set CLOUDFLARE_API_TOKEN or configure Wrangler credentials.");
   }
 
-  if (typeof process !== "undefined" && process.env) {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-  }
-
   return {
     async run(model: string, input: { text: string | string[] }) {
       const texts = Array.isArray(input.text) ? input.text : [input.text];
       const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
 
-      let res = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ text: texts }),
-      });
-
-      if (res.status === 401 && typeof process !== "undefined") {
-        // Attempt automatic refresh of OAuth token
-        try {
-          const fs = (globalThis as any).process?.getBuiltinModule ? (globalThis as any).process.getBuiltinModule("fs") : null;
-          if (fs) {
-            const tomlPath = "C:\\Users\\User\\.wrangler\\config\\default.toml";
-            const toml = fs.readFileSync(tomlPath, "utf8");
-            const rMatch = toml.match(/refresh_token\s*=\s*"([^"]+)"/);
-            if (rMatch) {
-              const rToken = rMatch[1];
-              const params = new URLSearchParams({
-                grant_type: "refresh_token",
-                refresh_token: rToken,
-                client_id: "54d11594-84e4-41aa-b438-e81b8fa78ee7",
-              });
-              const rRes = await fetch("https://dash.cloudflare.com/oauth2/token", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: params.toString(),
-              });
-              if (rRes.ok) {
-                const rJson = (await rRes.json()) as any;
-                if (rJson.access_token) {
-                  token = rJson.access_token;
-                  const newToml = `oauth_token = "${rJson.access_token}"\nexpiration_time = "${new Date(Date.now() + (rJson.expires_in || 3600) * 1000).toISOString()}"\nrefresh_token = "${rJson.refresh_token || rToken}"\nscopes = [ "user:read", "offline_access", "account:read", "workers:write", "workers_kv:write", "workers_routes:write", "workers_scripts:write", "workers_tail:read", "d1:write", "pages:write", "zone:read", "ssl_certs:write", "ai:write", "ai-search:write", "ai-search:run", "websearch.run", "agent-memory:write", "queues:write", "pipelines:write", "secrets_store:write", "artifacts:write", "flagship:write", "containers:write", "cloudchamber:write", "connectivity:admin", "email_routing:write", "email_sending:write", "browser:write", "challenge-widgets.write" ]\n`;
-                  fs.writeFileSync(tomlPath, newToml, "utf8");
-                  // Retry original request with refreshed token
-                  res = await fetch(url, {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ text: texts }),
-                  });
-                }
-              }
-            }
-          }
-        } catch {
-          // Fall through to error handler
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ text: texts }),
+        });
+      } catch (error) {
+        if (isCertificateVerificationError(error)) {
+          throw new Error(
+            "Workers AI TLS certificate verification failed. Set NODE_USE_SYSTEM_CA=1 before starting Node so it uses the operating-system CA store; never disable certificate verification.",
+            { cause: error }
+          );
         }
+        throw error;
       }
 
       if (!res.ok) {

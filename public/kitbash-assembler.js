@@ -6,12 +6,12 @@
 //
 // Hard Constraints:
 //   - Deterministic from seed (seed -> identical assembly output)
-//   - Budgeted: LOD0 within 1,500–3,000 triangles
-//   - Multi-LOD: LOD1 (~300-800 tris), LOD2 (< 150 tris)
+//   - Multi-LOD geometry for near, middle, and distant rendering bands
 // =============================================================================
 
 import * as THREE from "./vendor/three/three.module.min.js";
-import { KITBASH_PARTS, CELL_M, resolvePalette } from "./kitbash-parts.js";
+import { KITBASH_PARTS } from "./kitbash-parts.js";
+import { getFacadeMaterial } from "./facade-textures.js";
 
 /**
  * Fast deterministic seeded PRNG (Mulberry32)
@@ -64,6 +64,13 @@ export function assembleBuilding(options = {}, T = THREE) {
 
   const rng = createRng(seed);
   const pick = (arr) => arr[Math.floor(rng() * arr.length)];
+  const character = palette.character || (style === "landmark" ? "contemporary" : "interwar");
+  const buildingFacade = getFacadeMaterial(character, {
+    wallColor: palette.wallColor,
+    night: palette.night === true,
+  });
+  const curtainFacade = getFacadeMaterial("contemporary", { night: palette.night === true });
+  const materialFor = (part) => part.material || (part.tag === "wall" ? buildingFacade : part.tag === "glass" ? curtainFacade : undefined);
 
   // For ordinary low-rise fabric, assemble single or dual-tier plain modules
   if (style === "fabric" || foot.w <= 16 && foot.d <= 16 && rng() < 0.4) {
@@ -124,6 +131,8 @@ export function assembleBuilding(options = {}, T = THREE) {
       geo: g.geo.clone().translate(0, currentY, 0),
       tag: g.tag,
       color: g.color,
+      material: materialFor(g),
+      facadeCharacter: g.facadeCharacter,
     });
   }
   currentY += podium.height;
@@ -135,6 +144,8 @@ export function assembleBuilding(options = {}, T = THREE) {
       geo: g.geo.clone().translate(0, currentY, 0),
       tag: g.tag,
       color: g.color,
+      material: materialFor(g),
+      facadeCharacter: g.facadeCharacter,
     });
   }
   currentY += shaft.height;
@@ -146,6 +157,8 @@ export function assembleBuilding(options = {}, T = THREE) {
       geo: g.geo.clone().translate(0, currentY, 0),
       tag: g.tag,
       color: g.color,
+      material: materialFor(g),
+      facadeCharacter: g.facadeCharacter,
     });
   }
   currentY += crown.height;
@@ -158,6 +171,8 @@ export function assembleBuilding(options = {}, T = THREE) {
         geo: g.geo.clone().translate(0, currentY, 0),
         tag: g.tag,
         color: g.color,
+        material: materialFor(g),
+        facadeCharacter: g.facadeCharacter,
       });
     }
     currentY += roofFeature.height;

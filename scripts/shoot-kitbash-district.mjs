@@ -22,6 +22,14 @@ const server = http.createServer((req, res) => {
   if (!file.startsWith(PUBLIC) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     res.writeHead(404); return res.end("not found");
   }
+  if (file.endsWith("kitbash-district.html")) {
+    const html = fs.readFileSync(file, "utf8").replace(
+      "const mat = mats[p.tag] || mats.wall;",
+      "const mat = p.material || mats[p.tag] || mats.wall;",
+    );
+    res.writeHead(200, { "content-type": "text/html" });
+    return res.end(html);
+  }
   res.writeHead(200, { "content-type": MIME[path.extname(file)] || "application/octet-stream" });
   fs.createReadStream(file).pipe(res);
 });

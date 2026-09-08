@@ -12,10 +12,11 @@
 // Every part conforms strictly to PLACEMENT-CONTRACT.md:
 //   - Footprint in whole cells: foot: { w, d } (each cell = 8m)
 //   - Declared mating sockets: sockets: { bottom: { w, d }, top: { w, d } }
-//   - Multi-LOD geometry generation (LOD0: detailed, LOD1: simplified, LOD2: <150 tris)
+//   - Multi-LOD geometry generation (LOD0: detailed, LOD1: simplified, LOD2: distant)
 // =============================================================================
 
 import * as THREE from "./vendor/three/three.module.min.js";
+import { getFacadeMaterial } from "./facade-textures.js";
 
 export const CELL_M = 8;
 
@@ -69,6 +70,7 @@ export function resolvePalette(palette = {}) {
     trim: palette.trimColor || 0xb5a995,   // bronze / sandstone accents
     metal: palette.metalColor || 0x5a6268, // structural steel
     green: palette.greenColor || 0x3b5e38, // landscaped foliage
+    night: palette.night === true,
   };
 }
 
@@ -1208,6 +1210,66 @@ registerPart({
 // 6. ORDINARY FABRIC (Plain Background Masses 5m-28m)
 // =============================================================================
 
+function fabricFacadeMaterial(character, repeatX, repeatY, night = false) {
+  const material = getFacadeMaterial(character, { night }).clone();
+  for (const key of ["map", "roughnessMap", "metalnessMap", "normalMap", "emissiveMap"]) {
+    material[key] = material[key].clone();
+    material[key].repeat.set(repeatX, repeatY);
+    material[key].needsUpdate = true;
+  }
+  return material;
+}
+
+function facadePart(geo, material, character) {
+  geo.userData.facadeCharacter = character;
+  const cap = material.clone();
+  cap.map = null;
+  cap.roughnessMap = null;
+  cap.metalnessMap = null;
+  cap.normalMap = null;
+  cap.emissiveMap = null;
+  cap.roughness = 0.82;
+  cap.metalness = 0.04;
+  const materials = [material, material, cap, cap, material, material];
+  geo.userData.facadeMaterial = materials;
+  return { geo, tag: "wall", material: materials, facadeCharacter: character };
+}
+
+function buildFabricBlock(T, pal, {
+  W, D, H, baseH = 2.8, lod = 0, character = "heritage", repeatX = 0.5, repeatY = 0.5, topBandH = 0.38,
+}) {
+  if (lod >= 2) {
+    return [{ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall }];
+  }
+  const parts = [];
+  const parapetH = Math.min(0.8, H * 0.12);
+  const shaftTop = H - parapetH;
+  const shaftW = W - 0.4;
+  const shaftD = D - 0.6;
+  const shaftH = shaftTop - baseH;
+  const facadeMaterial = fabricFacadeMaterial(character, repeatX, repeatY, !!pal.night);
+
+  // Base, middle, and top are separate masses. The middle is set inward.
+  parts.push(facadePart(new T.BoxGeometry(W, baseH, D - 0.1).translate(0, baseH / 2, -0.05), facadeMaterial, character));
+  parts.push(facadePart(new T.BoxGeometry(shaftW, shaftH, shaftD).translate(0, baseH + shaftH / 2, -0.2), facadeMaterial, character));
+
+  // Courses project beyond the atlas-mapped wall and cast real horizontal shadows.
+  const courseCount = lod === 1 ? 1 : Math.max(1, Math.round(repeatY * 4) - 1);
+  for (let course = 1; course <= courseCount; course++) {
+    const y = baseH + shaftH * (course / (courseCount + 1));
+    parts.push({ geo: new T.BoxGeometry(W - 0.12, 0.24, D - 0.08).translate(0, y, -0.04), tag: "trim", color: pal.trim });
+  }
+
+  // A contained cornice and four-sided parapet terminate the wall below H.
+  parts.push({ geo: new T.BoxGeometry(W - 0.08, topBandH, D - 0.08).translate(0, shaftTop - topBandH / 2, -0.04), tag: "trim", color: pal.trim });
+  const parapetThickness = 0.28;
+  parts.push({ geo: new T.BoxGeometry(W - 0.08, parapetH, parapetThickness).translate(0, H - parapetH / 2, D / 2 - parapetThickness / 2 - 0.04), tag: "roof", color: pal.roof });
+  parts.push({ geo: new T.BoxGeometry(W - 0.08, parapetH, parapetThickness).translate(0, H - parapetH / 2, -D / 2 + parapetThickness / 2 + 0.04), tag: "roof", color: pal.roof });
+  parts.push({ geo: new T.BoxGeometry(parapetThickness, parapetH, D - 0.64).translate(W / 2 - parapetThickness / 2 - 0.04, H - parapetH / 2, 0), tag: "roof", color: pal.roof });
+  parts.push({ geo: new T.BoxGeometry(parapetThickness, parapetH, D - 0.64).translate(-W / 2 + parapetThickness / 2 + 0.04, H - parapetH / 2, 0), tag: "roof", color: pal.roof });
+  return parts;
+}
+
 registerPart({
   id: "fabric-masonry-block-low",
   name: "Low-Rise Masonry Block",
@@ -1218,10 +1280,7 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 12;
-    const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
-    parts.push({ geo: new T.BoxGeometry(W + 0.4, 0.8, D + 0.4).translate(0, H - 0.4, 0), tag: "roof", color: pal.roof });
-    return parts;
+    return buildFabricBlock(T, pal, { W, D, H, baseH: 3.0, lod, character: "heritage", repeatX: 0.45, repeatY: 0.28 });
   }
 });
 
@@ -1235,9 +1294,7 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 23.0, H = 22;
-    const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
-    return parts;
+    return buildFabricBlock(T, pal, { W, D, H, baseH: 3.2, lod, character: "interwar", repeatX: 0.48, repeatY: 0.95, topBandH: 0.75 });
   }
 });
 
@@ -1251,8 +1308,14 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 28;
-    const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
+    const parts = buildFabricBlock(T, pal, { W, D, H, baseH: 4.0, lod, character: "postwar", repeatX: 0.9, repeatY: 0.72 });
+    if (lod < 2) {
+      // One deep, atlas-lined facade recess distinguishes the slab without
+      // rebuilding every atlas window as geometry.
+      const material = fabricFacadeMaterial("postwar", 0.72, 0.72, !!pal.night);
+      parts.push(facadePart(new T.BoxGeometry(W * 0.68, H * 0.58, 0.18).translate(0, H * 0.53, D / 2 - 0.72), material, "postwar"));
+      parts.push({ geo: new T.BoxGeometry(W * 0.74, 0.38, 0.72).translate(0, H * 0.83, D / 2 - 0.38), tag: "trim", color: pal.trim });
+    }
     return parts;
   }
 });
@@ -1267,10 +1330,7 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 5;
-    const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
-    parts.push({ geo: new T.BoxGeometry(W * 0.85, 3.0, 1.0).translate(0, 2.0, D / 2), tag: "glass", color: pal.glass });
-    return parts;
+    return buildFabricBlock(T, pal, { W, D, H, baseH: 0.7, lod, character: "heritage", repeatX: 0.42, repeatY: 0.18 });
   }
 });
 
@@ -1284,8 +1344,15 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 2;
+    if (lod >= 2) return [{ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "roof", color: pal.roof }];
     const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "roof", color: pal.roof });
+    const facadeMaterial = fabricFacadeMaterial("contemporary", 0.35, 0.18, pal.night);
+    parts.push({ geo: new T.BoxGeometry(W - 0.5, 0.32, D - 0.5).translate(0, 0.16, 0), tag: "roof", color: pal.roof });
+    const t = 0.32;
+    parts.push(facadePart(new T.BoxGeometry(W, H - 0.32, t).translate(0, 0.32 + (H - 0.32) / 2, D / 2 - t / 2), facadeMaterial, "contemporary"));
+    parts.push(facadePart(new T.BoxGeometry(W, H - 0.32, t).translate(0, 0.32 + (H - 0.32) / 2, -D / 2 + t / 2), facadeMaterial, "contemporary"));
+    parts.push(facadePart(new T.BoxGeometry(t, H - 0.32, D - 0.64).translate(W / 2 - t / 2, 0.32 + (H - 0.32) / 2, 0), facadeMaterial, "contemporary"));
+    parts.push(facadePart(new T.BoxGeometry(t, H - 0.32, D - 0.64).translate(-W / 2 + t / 2, 0.32 + (H - 0.32) / 2, 0), facadeMaterial, "contemporary"));
     return parts;
   }
 });
@@ -1300,8 +1367,16 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 6;
+    if (lod >= 2) return [{ geo: new T.CylinderGeometry(W * 0.35, W * 0.5, H, 4).rotateY(Math.PI / 4).translate(0, H / 2, 0), tag: "roof", color: pal.roof }];
     const parts = [];
-    parts.push({ geo: new T.CylinderGeometry(W * 0.35, W * 0.5, H, 4).rotateY(Math.PI / 4).translate(0, H / 2, 0), tag: "roof", color: pal.roof });
+    const facadeMaterial = fabricFacadeMaterial("heritage", 0.3, 0.25, pal.night);
+    parts.push({ geo: new T.BoxGeometry(W - 0.08, 0.45, D - 0.08).translate(0, 0.225, 0), tag: "trim", color: pal.trim });
+    parts.push({ geo: new T.CylinderGeometry(W * 0.35, W * 0.48, H - 0.45, 4).rotateY(Math.PI / 4).translate(0, 0.45 + (H - 0.45) / 2, 0), tag: "roof", color: pal.roof });
+    const dormers = lod === 1 ? [-3.2, 3.2] : [-4.5, 0, 4.5];
+    for (const x of dormers) {
+      parts.push(facadePart(new T.BoxGeometry(2.3, 2.2, 1.2).translate(x, 2.7, D / 2 - 0.5), facadeMaterial, "heritage"));
+      parts.push({ geo: new T.BoxGeometry(1.35, 1.2, 0.12).translate(x, 2.65, D / 2 + 0.06), tag: "glass", color: pal.glass });
+    }
     return parts;
   }
 });
@@ -1316,9 +1391,10 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 7.5, D = 15.0, H = 14;
-    const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
-    parts.push({ geo: new T.BoxGeometry(W * 0.6, H * 0.75, 1.2).translate(0, H * 0.45, D / 2 + 0.6), tag: "glass", color: pal.glass });
+    const parts = buildFabricBlock(T, pal, { W, D, H, baseH: 2.6, lod, character: "heritage", repeatX: 0.32, repeatY: 0.56 });
+    if (lod < 2) {
+      parts.push({ geo: new T.BoxGeometry(W * 0.58, H * 0.58, 0.55).translate(0, H * 0.48, D / 2 - 0.18), tag: "trim", color: pal.trim });
+    }
     return parts;
   }
 });
@@ -1333,8 +1409,15 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 16;
-    const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
+    const parts = buildFabricBlock(T, pal, { W, D, H, baseH: 2.8, lod, character: "postwar", repeatX: 0.58, repeatY: 0.72 });
+    if (lod < 2) {
+      const balconyCount = lod === 1 ? 2 : 3;
+      for (let level = 1; level <= balconyCount; level++) {
+        const y = 2.8 + level * 3.1;
+        parts.push({ geo: new T.BoxGeometry(W * 0.68, 0.22, 1.25).translate(0, y, D / 2 - 0.64), tag: "trim", color: pal.trim });
+        parts.push({ geo: new T.BoxGeometry(W * 0.68, 0.55, 0.12).translate(0, y + 0.38, D / 2 - 0.08), tag: "metal", color: pal.metal });
+      }
+    }
     return parts;
   }
 });

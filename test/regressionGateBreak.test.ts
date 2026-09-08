@@ -19,9 +19,12 @@ import { createWorkersAIClient } from "../src/clientWorkersAI.ts";
 import { HELD_OUT_SET, GoldenPair } from "./modelRetrievalGolden.ts";
 
 const registry = ASSET_REGISTRY as Record<string, AssetEntry>;
-const ai = createWorkersAIClient();
+const SPEND_SKIP_REASON = "SKIP live Workers AI inference: CALIPER_ALLOW_SPEND=1 is required";
+const spendAllowed = process.env.CALIPER_ALLOW_SPEND === "1";
+const liveTest = spendAllowed ? test : (name: string, fn: () => unknown) => test(`${name} — ${SPEND_SKIP_REASON}`, { skip: SPEND_SKIP_REASON }, fn);
+const ai = spendAllowed ? createWorkersAIClient() : null as never;
 
-test("R1.7 Gate Trip Verification — Degraded embeddings trip the gate RED", async () => {
+liveTest("R1.7 Gate Trip Verification — Degraded embeddings trip the gate RED", async () => {
   const degradedVectorize = new InMemoryVectorize(384);
 
   // Deliberately index garbage / degraded embeddings (e.g. truncated single-character embeddings)

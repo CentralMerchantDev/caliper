@@ -6,6 +6,8 @@ node_modules/
 test/.built/
 test/.mutate-results.json
 test/.mutresolve.json
+test/beir-scifact/
+test/beir-arguana/
 PROCESS-ALIGNMENT.md
 
 # --- working artefacts, never part of the project ---------------------------

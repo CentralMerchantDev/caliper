@@ -28,12 +28,15 @@ import { computeNDCGAtK } from "./beirSciFactSubset.ts";
 
 const parts = KITBASH_PARTS as Record<string, KitbashPartDef>;
 const partCount = Object.keys(parts).length;
-const ai = createWorkersAIClient();
+const SPEND_SKIP_REASON = "SKIP live Workers AI inference: CALIPER_ALLOW_SPEND=1 is required";
+const spendAllowed = process.env.CALIPER_ALLOW_SPEND === "1";
+const liveTest = spendAllowed ? test : (name: string, fn: () => unknown) => test(`${name} — ${SPEND_SKIP_REASON}`, { skip: SPEND_SKIP_REASON }, fn);
+const ai = spendAllowed ? createWorkersAIClient() : null as never;
 
 // Shared index
 let kitbashVectorize: InMemoryVectorize;
 
-test("R2.1 — Embed all 62 kitbash parts with Workers AI and index into Vectorize", async () => {
+liveTest("R2.1 — Embed all 62 kitbash parts with Workers AI and index into Vectorize", async () => {
   assert.equal(partCount, 62, `Expected 62 kitbash parts, found ${partCount}`);
 
   // Verify non-empty embedding text for all parts
@@ -51,7 +54,7 @@ test("R2.1 — Embed all 62 kitbash parts with Workers AI and index into Vectori
   assert.equal(kitbashVectorize.vectors.size, 62, "Vectorize store size must match part count");
 });
 
-test("R2.2 — Measure retrieval quality on 35-item held-out golden set", async () => {
+liveTest("R2.2 — Measure retrieval quality on 35-item held-out golden set", async () => {
   if (!kitbashVectorize) {
     kitbashVectorize = new InMemoryVectorize(384);
     await indexKitbashParts(parts, kitbashVectorize, ai);
@@ -123,7 +126,7 @@ test("R2.2 — Measure retrieval quality on 35-item held-out golden set", async 
   assert.ok(meanNDCG >= 70.0, `Expected nDCG@10 >= 70.0%, got ${meanNDCG.toFixed(1)}%`);
 });
 
-test("R2.3 — Natural-language brief assembler determinism and socket mating", async () => {
+liveTest("R2.3 — Natural-language brief assembler determinism and socket mating", async () => {
   if (!kitbashVectorize) {
     kitbashVectorize = new InMemoryVectorize(384);
     await indexKitbashParts(parts, kitbashVectorize, ai);

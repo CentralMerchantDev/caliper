@@ -26,13 +26,16 @@ import {
 } from "./planningCorpusGolden.ts";
 import { computeNDCGAtK } from "./beirSciFactSubset.ts";
 
-const ai = createWorkersAIClient();
+const SPEND_SKIP_REASON = "SKIP live Workers AI inference: CALIPER_ALLOW_SPEND=1 is required";
+const spendAllowed = process.env.CALIPER_ALLOW_SPEND === "1";
+const liveTest = spendAllowed ? test : (name: string, fn: () => unknown) => test(`${name} — ${SPEND_SKIP_REASON}`, { skip: SPEND_SKIP_REASON }, fn);
+const ai = spendAllowed ? createWorkersAIClient() : null as never;
 const docText = fs.readFileSync("docs/CITY-PLANNING-SPEC.md", "utf8");
 const chunks = chunkPlanningSpec(docText);
 
 let planningVectorize: InMemoryVectorize;
 
-test("R3.1 — Chunk CITY-PLANNING-SPEC and index into planning Vectorize index", async () => {
+liveTest("R3.1 — Chunk CITY-PLANNING-SPEC and index into planning Vectorize index", async () => {
   assert.ok(chunks.length >= 25, `Expected >= 25 chunks, got ${chunks.length}`);
 
   // Verify chunk structure
@@ -49,7 +52,7 @@ test("R3.1 — Chunk CITY-PLANNING-SPEC and index into planning Vectorize index"
   assert.equal(planningVectorize.vectors.size, chunks.length, "Vectorize store size must match chunk count");
 });
 
-test("R3.2 & R3.3 — Golden set evaluation with citations (30 questions)", async () => {
+liveTest("R3.2 & R3.3 — Golden set evaluation with citations (30 questions)", async () => {
   if (!planningVectorize) {
     planningVectorize = new InMemoryVectorize(384);
     await indexPlanningCorpus(chunks, planningVectorize, ai);
@@ -131,7 +134,7 @@ test("R3.2 & R3.3 — Golden set evaluation with citations (30 questions)", asyn
   assert.ok(meanNDCG >= 70.0, `Expected nDCG@10 >= 70.0%, got ${meanNDCG.toFixed(1)}%`);
 });
 
-test("R3.4 — Abstention Gate: 5 unanswerable questions must all abstain (5/5)", async () => {
+liveTest("R3.4 — Abstention Gate: 5 unanswerable questions must all abstain (5/5)", async () => {
   if (!planningVectorize) {
     planningVectorize = new InMemoryVectorize(384);
     await indexPlanningCorpus(chunks, planningVectorize, ai);
