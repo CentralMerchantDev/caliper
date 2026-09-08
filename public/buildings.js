@@ -978,6 +978,121 @@ function mergeGeometries(parts, palette = {}, T = THREE) {
   return merged;
 }
 
+
+// cspell:words lerp tris midrise
+// Architectural trim follows the largest wall mass, including its offset and
+// foundation elevation. Plot dimensions are only a clamp: using them as facade
+// dimensions suspends trim in the setbacks of villas and tower shafts.
+function mergeWithMassingDepth(parts, palette, T, footW, footD, detailed) {
+  const candidates = parts.filter(({ geo, tag }) => {
+    const p = geo.parameters;
+    return tag === "wall" && geo.type === "BoxGeometry" &&
+      p.width > 4 && p.depth > 4 && p.height >= 4;
+  });
+  candidates.sort((a, b) => {
+    const volume = ({ geo: { parameters: p } }) => p.width * p.height * p.depth;
+    return volume(b) - volume(a);
+  });
+  if (!candidates.length) throw new Error("Building has no wall mass for architectural trim");
+  const wall = candidates[0].geo;
+  wall.computeBoundingBox();
+  const b = wall.boundingBox.clone();
+  const joinedWalls = [wall];
+  // Terrace rows are adjacent equal-height wall boxes. Join only touching
+  // boxes, never the separated shafts of a slab tower or detached outbuildings.
+  for (const { geo } of candidates.slice(1)) {
+    geo.computeBoundingBox();
+    const next = geo.boundingBox;
+    if (Math.abs(next.min.y - b.min.y) < 0.01 && Math.abs(next.max.y - b.max.y) < 0.01 &&
+        Math.abs(next.min.z - b.min.z) < 0.01 && Math.abs(next.max.z - b.max.z) < 0.01 &&
+        next.min.x <= b.max.x + 0.01 && next.max.x >= b.min.x - 0.01) {
+      b.union(next);
+      joinedWalls.push(geo);
+    }
+  }
+  const cx = (b.min.x + b.max.x) / 2;
+  // Party-wall rows already fill the plot width, so outward trim is clamped.
+  // Recess the wall plane inside that envelope to retain real end-wall reveals.
+  const inset = 0.6;
+  const scaleX = (b.max.x - b.min.x - inset * 2) / (b.max.x - b.min.x);
+  for (const geo of joinedWalls) {
+    const positions = geo.attributes.position;
+    for (let i = 0; i < positions.count; i++) {
+      positions.setX(i, cx + (positions.getX(i) - cx) * scaleX);
+    }
+    positions.needsUpdate = true;
+    geo.computeBoundingBox();
+  }
+  const H = b.max.y - b.min.y;
+  // Broad industrial halls need deep eaves; ordinary fabric needs a cornice,
+  // not a canopy projecting across the street-level camera.
+  const broadHall = H <= 12 && Math.min(footW, footD) >= 48;
+  const projection = broadHall ? Math.min(2.4, Math.min(footW, footD) * 0.05) : 0.45;
+  const left = Math.max(-footW / 2, b.min.x - projection);
+  const right = Math.min(footW / 2, b.max.x + projection);
+  const back = Math.max(-footD / 2, b.min.z - projection);
+  const front = Math.min(footD / 2, b.max.z + projection);
+  const W = right - left, D = front - back;
+  const x = (left + right) / 2, z = (back + front) / 2;
+  const trim = new T.Color(palette.wall).lerp(new T.Color(palette.roof), 0.35).getHex();
+  const add = (w, h, d, px, py, pz) => {
+    const geo = new T.BoxGeometry(w, h, d);
+    geo.translate(px, py, pz);
+    // Plain atlas patch: no window rows painted across a cornice or sill.
+    parts.push({ geo, tag: "roof", color: trim });
+  };
+  // A broad base and ground-floor entablature leave the shaft recessed.
+  const ground = Math.min(4, H * 0.3);
+  add(W, 0.65, D, x, b.min.y + 0.325, z);
+  add(W, 0.38, D, x, b.min.y + ground, z);
+  if (detailed) {
+    for (const fraction of [0.5, 0.75]) {
+      add(W, 0.24, D, x, b.min.y + H * fraction, z);
+    }
+  }
+  add(W, 0.45, D, x, b.max.y - 0.225, z);
+
+  // Pitched roofs keep their silhouette. Quoins deepen their wall corners;
+  // flat roofs get a hollow, four-sided parapet instead of another roof box.
+  const pitched = parts.some(({ geo, tag }) => {
+    if (tag !== "roof" || geo.type === "BoxGeometry") return false;
+    geo.computeBoundingBox();
+    return geo.boundingBox.max.y > b.max.y;
+  });
+  const t = 0.35;
+  if (pitched) {
+    const q = projection + t;
+    for (const px of [left + q / 2, right - q / 2]) {
+      for (const pz of [back + q / 2, front - q / 2]) {
+        add(q, H, q, px, b.min.y + H / 2, pz);
+      }
+    }
+  } else {
+    const y = b.max.y + 0.4;
+    add(W, 0.8, t, x, y, front - t / 2);
+    add(W, 0.8, t, x, y, back + t / 2);
+    add(t, 0.8, D - 2 * t, left + t / 2, y, z);
+    add(t, 0.8, D - 2 * t, right - t / 2, y, z);
+  }
+  if (detailed) {
+    // A tower's largest wall can be its upper shaft. Its entrance still
+    // belongs to the lowest substantial wall (the podium), not that shaft.
+    const entry = candidates.reduce((lowest, { geo }) =>
+      geo.boundingBox.min.y < lowest.min.y ? geo.boundingBox : lowest, wall.boundingBox);
+    const entryX = (entry.min.x + entry.max.x) / 2;
+    const portalW = Math.min(3.6, (entry.max.x - entry.min.x) * 0.35);
+    const portalH = Math.min(3.5, (entry.max.y - entry.min.y) * 0.3);
+    const portalFront = Math.min(footD / 2, entry.max.z + 0.45);
+    const portalZ = (entry.max.z + portalFront) / 2;
+    const portalD = portalFront - entry.max.z + 0.1;
+    for (const px of [entryX - portalW / 2, entryX + portalW / 2]) {
+      add(0.3, portalH, portalD, px, entry.min.y + portalH / 2, portalZ);
+    }
+    add(portalW + 0.3, 0.3, portalD, entryX, entry.min.y + portalH, portalZ);
+  }
+  return mergeGeometries(parts, palette, T);
+}
+
 export const CHARACTER_SETS = ["heritage", "interwar", "postwar", "contemporary"];
 
 function applyFoundation(parts, footW, footD, foundation = "slab", T = THREE) {
@@ -1179,7 +1294,7 @@ export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
     chimPot2.translate(mainOffset + mainBW * 0.32 + 0.3, baseOffset + bodyH + roofH + 1.2, -bD * 0.2);
     parts.push({ geo: chim, tag: "wall" }, { geo: chimCap, tag: "roof" }, { geo: chimPot1, tag: "roof" }, { geo: chimPot2, tag: "roof" });
 
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
   function buildLOD1(geomT = T) {
@@ -1200,7 +1315,7 @@ export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
       { geo: porchMass, tag: "wall" },
       { geo: chimMass, tag: "wall" }
     );
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, false);
   }
 
   function buildLOD2(geomT = T) {
@@ -1222,8 +1337,8 @@ export function bldVilla(seed = "villa-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, roofStyle, corner, foundation, character, hasPorch, garageType, hasBay, hasDormers, hasChimney },
     lod: [
-      { level: 0, tris: 700, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: 50, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 0, tris: 844, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 134, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
@@ -1357,7 +1472,7 @@ export function bldTerrace(seed = "terrace-0", options = {}, T = THREE) {
       ridge.translate(0, baseOffset + bodyH + roofH + 0.1, 0);
       parts.push({ geo: pitched, tag: "roof" }, { geo: ridge, tag: "roof" });
     }
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
   function buildLOD1(geomT = T) {
@@ -1376,7 +1491,7 @@ export function bldTerrace(seed = "terrace-0", options = {}, T = THREE) {
       { geo: chimLine, tag: "wall" },
       { geo: stoopLine, tag: "wall" }
     );
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, false);
   }
 
   function buildLOD2(geomT = T) {
@@ -1398,8 +1513,8 @@ export function bldTerrace(seed = "terrace-0", options = {}, T = THREE) {
     material: mat,
     params: { units, storeys, roofStyle, corner, position, foundation, character, hasBasement, hasStringCourse, hasDormers },
     lod: [
-      { level: 0, tris: 480, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: 50, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 0, tris: 624, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 134, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
@@ -1530,7 +1645,7 @@ export function bldTownhouse(seed = "townhouse-0", options = {}, T = THREE) {
     chimCap.translate(-bW * 0.32, baseOffset + bodyH + 2.45, -bD * 0.2);
     parts.push({ geo: chim, tag: "wall" }, { geo: chimCap, tag: "roof" });
 
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
   function buildLOD1(geomT = T) {
@@ -1549,7 +1664,7 @@ export function bldTownhouse(seed = "townhouse-0", options = {}, T = THREE) {
       { geo: stoopMass, tag: "wall" },
       { geo: roofPar, tag: "roof" }
     );
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, false);
   }
 
   function buildLOD2(geomT = T) {
@@ -1571,8 +1686,8 @@ export function bldTownhouse(seed = "townhouse-0", options = {}, T = THREE) {
     material: mat,
     params: { storeys, stoopHeightTier, bayStyle, hasRoofDeck, hasRearExtension, corniceTier, corner, position, foundation, character },
     lod: [
-      { level: 0, tris: 320, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: 50, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 0, tris: 464, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 134, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
@@ -1682,7 +1797,7 @@ export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
       { geo: roofDeck, tag: "roof" }
     );
 
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
   function buildLOD1(geomT = T) {
@@ -1701,7 +1816,7 @@ export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
       { geo: lift, tag: "wall" },
       { geo: roof, tag: "roof" }
     );
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, false);
   }
 
   function buildLOD2(geomT = T) {
@@ -1723,8 +1838,8 @@ export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, podiumType, hasSetback, cornerTreatment, corner, foundation, character },
     lod: [
-      { level: 0, tris: 320, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: 50, createGeometry: (geomT) => buildLOD1(geomT || T) }, // midrise-lod1
+      { level: 0, tris: 464, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 134, createGeometry: (geomT) => buildLOD1(geomT || T) }, // midrise-lod1
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
@@ -1818,7 +1933,7 @@ export function bldShop(seed = "shop-0", options = {}, T = THREE) {
     vent.translate(-bW * 0.25, baseOffset + bodyH + 0.6, -bD * 0.2);
     parts.push({ geo: par, tag: "wall" }, { geo: parCap, tag: "roof" }, { geo: vent, tag: "roof" });
 
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
   function buildLOD1(geomT = T) {
@@ -1834,7 +1949,7 @@ export function bldShop(seed = "shop-0", options = {}, T = THREE) {
       { geo: sign, tag: "wall" },
       { geo: par, tag: "roof" }
     );
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, false);
   }
 
   function buildLOD2(geomT = T) {
@@ -1856,8 +1971,8 @@ export function bldShop(seed = "shop-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, hasAwning, isCornerUnit, corner, foundation, character },
     lod: [
-      { level: 0, tris: 180, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 0, tris: 324, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
@@ -1941,7 +2056,7 @@ export function bldOffice(seed = "office-0", options = {}, T = THREE) {
     chiller2.translate(bW * 0.15, baseOffset + bodyH + 0.9, 0);
     parts.push({ geo: screen, tag: "roof" }, { geo: chiller1, tag: "roof" }, { geo: chiller2, tag: "roof" });
 
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
   function buildLOD1(geomT = T) {
@@ -1957,7 +2072,7 @@ export function bldOffice(seed = "office-0", options = {}, T = THREE) {
       { geo: canopy, tag: "wall" },
       { geo: screen, tag: "roof" }
     );
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, false);
   }
 
   function buildLOD2(geomT = T) {
@@ -1979,8 +2094,8 @@ export function bldOffice(seed = "office-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, hasCoreBulge, corner, foundation, character },
     lod: [
-      { level: 0, tris: 200, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 0, tris: 344, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
@@ -2110,7 +2225,7 @@ export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
       coping.translate(0, baseOffset + bodyH + 1.15, 0);
       parts.push({ geo: par, tag: "wall" }, { geo: coping, tag: "roof" });
     }
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
   function buildLOD1(geomT = T) {
@@ -2126,7 +2241,7 @@ export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
       { geo: stair, tag: "wall" },
       { geo: roof, tag: "roof" }
     );
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, false);
   }
 
   function buildLOD2(geomT = T) {
@@ -2148,8 +2263,8 @@ export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, stairPosition, roofStyle, hasGarden, corner, position, foundation, character },
     lod: [
-      { level: 0, tris: 500, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 0, tris: 644, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
@@ -2233,7 +2348,7 @@ export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
       parts.push({ geo: vent, tag: "roof" });
     }
 
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
   function buildLOD1(geomT = T) {
@@ -2249,7 +2364,7 @@ export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
       { geo: roof, tag: "roof" },
       { geo: annex, tag: "wall" }
     );
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, false);
   }
 
   function buildLOD2(geomT = T) {
@@ -2270,8 +2385,8 @@ export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, roofStyle },
     lod: [
-      { level: 0, tris: 240, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 0, tris: 384, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
@@ -2342,7 +2457,7 @@ export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
     cowl.translate(bW * 0.35, baseOffset + bodyH + roofH + 1.2, -bD * 0.35);
     parts.push({ geo: flue, tag: "wall" }, { geo: cowl, tag: "roof" });
 
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
   function buildLOD1(geomT = T) {
@@ -2358,7 +2473,7 @@ export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
       { geo: roof, tag: "roof" },
       { geo: roller, tag: "wall" }
     );
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, false);
   }
 
   function buildLOD2(geomT = T) {
@@ -2379,8 +2494,8 @@ export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, roofStyle },
     lod: [
-      { level: 0, tris: 170, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 0, tris: 314, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
@@ -2490,7 +2605,7 @@ export function bldTower(seed = "tower-0", options = {}, T = THREE) {
       parts.push({ geo: plant, tag: "roof" }, { geo: antenna, tag: "roof" });
     }
 
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
   function buildLOD1(geomT = T) {
@@ -2507,7 +2622,7 @@ export function bldTower(seed = "tower-0", options = {}, T = THREE) {
       { geo: pod, tag: "wall" },
       { geo: crown, tag: "roof" }
     );
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, false);
   }
 
   function buildLOD2(geomT = T) {
@@ -2528,8 +2643,8 @@ export function bldTower(seed = "tower-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, profile },
     lod: [
-      { level: 0, tris: 160, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 0, tris: 304, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
@@ -2609,7 +2724,7 @@ export function bldHighStreetTerrace(seed = "highstreet-0", options = {}, T = TH
     chimCap.translate(uW * 0.35, bodyH + 2.9, -uD * 0.2);
     parts.push({ geo: chim, tag: "wall" }, { geo: chimCap, tag: "roof" });
 
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
   function buildLOD1(geomT = T) {
@@ -2625,7 +2740,7 @@ export function bldHighStreetTerrace(seed = "highstreet-0", options = {}, T = TH
       { geo: shop, tag: "wall" },
       { geo: roof, tag: "roof" }
     );
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, false);
   }
 
   function buildLOD2(geomT = T) {
@@ -2645,8 +2760,8 @@ export function bldHighStreetTerrace(seed = "highstreet-0", options = {}, T = TH
     standsOn: ["plot", "open"],
     material: mat,
     lod: [
-      { level: 0, tris: 450, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 0, tris: 594, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
@@ -2708,7 +2823,7 @@ export function bldBusinessParkBlock(seed = "buspark-0", options = {}, T = THREE
       { geo: hvac2, tag: "roof" }
     );
 
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
   function buildLOD1(geomT = T) {
@@ -2725,7 +2840,7 @@ export function bldBusinessParkBlock(seed = "buspark-0", options = {}, T = THREE
       { geo: atrium, tag: "wall" },
       { geo: roofScreen, tag: "roof" }
     );
-    return mergeGeometries(parts, mat, geomT);
+    return mergeWithMassingDepth(parts, mat, geomT, footW, footD, false);
   }
 
   function buildLOD2(geomT = T) {
@@ -2745,8 +2860,8 @@ export function bldBusinessParkBlock(seed = "buspark-0", options = {}, T = THREE
     standsOn: ["plot", "open"],
     material: mat,
     lod: [
-      { level: 0, tris: 150, createGeometry: (geomT) => buildLOD0(geomT || T) },
-      { level: 1, tris: 40, createGeometry: (geomT) => buildLOD1(geomT || T) },
+      { level: 0, tris: 294, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
   };
