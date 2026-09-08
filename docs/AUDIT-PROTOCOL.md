@@ -165,6 +165,24 @@ a control catches the failure you thought of, and says nothing about the one you
 did not.** That is why §1 exists. The two techniques cover different halves and
 neither substitutes for the other.
 
+### Failure pattern D: enumerated-instance fix
+
+A defect is found in N places, all N named places are fixed, and the N+1th
+survives because nobody wrote the defect down as a property. Every check passes
+because the checks were derived from the same finite list as the fix. The
+remedy is to state the defect as a property and test that property across the
+class, rather than testing only the known instances.
+
+This occurred twice in the same week. The retrieval lane's R2.6 commits
+`4a30409` and `d71fb84` removed one redistributed BEIR dataset but left a larger
+second dataset tracked; independent review found it after the lane's exit
+audit. The world lane's commits `6625ac5` and `fe4b3bb` removed seven
+`Math.max(<constant>, heightAt(...))` fail-open floors but left an eighth at the
+airport; independent review found that too. Both fixes covered every enumerated
+instance and neither exit audit asked whether the forbidden property still
+existed elsewhere. Two lanes producing the same miss in the same week makes
+this a pattern, not two unrelated mistakes.
+
 ---
 
 ## 7. Notes and gaps — where this protocol has failed
