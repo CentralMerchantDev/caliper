@@ -94,8 +94,8 @@ const FOV_DEG = 33; // public/city.html's own default PerspectiveCamera fov
 //   - "building" -- the 17,105 plot buildings; this is exactly the
 //     population Mark measured as CLEAN (lowest ground 0.60 m) and the gate
 //     needs to reconfirm that, not wave it through.
-//   - "container-port-yard" / "container-port-crane" -- the primary target
-//     of this whole gate.
+//   - "container-port-crane" -- still checked directly against heightAt;
+//     cranes stand on the quay itself, not the graded yard.
 //   - "station" / "stadium" / "cathedral" -- Mark's own single-sample
 //     concern; stadium/cathedral measured fine (0.1 m relief), station is
 //     the second target. All three stay IN the check.
@@ -106,6 +106,8 @@ const FOV_DEG = 33; // public/city.html's own default PerspectiveCamera fov
 const ALLOW_ABOVE_GROUND = [
   { test: (o) => o.name === "city-sky", reason: "public/sky.js's own sky group (stars/cloud layer) -- pre-existing name, not one added by this pass; a sky layer by definition is not ground-relative" },
   { test: (o) => /^env:/.test(o.name || ""), reason: "terrain surface, its skirt, ground-fabric water areas, or road/bridge-deck geometry -- these ARE the ground or are graded to their own profile, not point-samplable objects resting on it (the same 'one sample misrepresents an extended surface' problem this gate exists to catch elsewhere, so checking them here would be circular or wrong, not informative)" },
+  { test: (o) => o.name === "container-port-yard", reason: "P3.7.1 -- rests on env:container-yard-platform, a real graded/skirted pad built from the SAME bandLevelAt(x,z) call used to place the container itself, so the two agree by construction (verified: container bottom sits ~0.05m above the pad's own surface at every placed position, the same paving-thickness offset every other surface in this renderer uses). heightAt is the wrong reference surface for an object resting on manufactured ground, the same reasoning as a roof resting on a tower." },
+  { test: (o) => /^golf-course$|^golf-clubhouse$/.test(o.name || ""), reason: "P3.7.1 -- same mechanism as container-port-yard: rests on env:golf-course-platform, built from the SAME bandLevelAt(x,z) call used to place each golf feature, verified to agree by construction the same way." },
   { test: (o) => /-boat-afloat$/.test(o.name || ""), reason: "boats afloat (marina moorings, open-bay sail, container ships on approach) -- draught means partly BELOW the water surface by design, and heightAt is land terrain, not water level" },
   { test: (o) => /^marina-pontoon$/.test(o.name || ""), reason: "floating pontoon dock, rides the water level, not the seabed heightAt underneath it" },
   { test: (o) => /^golf-course-pond$/.test(o.name || ""), reason: "sits at its own water level, not the seabed/ground heightAt underneath it -- same reasoning as the sea and marina pontoons" },

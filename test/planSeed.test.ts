@@ -46,20 +46,31 @@ test("the default plan is byte-identical to the one before the plan was seeded",
   // discipline test/worldSeed.test.ts used for the ground:
   //   node -e 'generateWorld(makeHeightAt(new LandField(16))) -> fingerprint'
   //
-  // NAMED, EXPECTED RED as of docs/pending-commits/fix-756fd95-snap-regression
-  // and reconcile-narrow-bounds-exception (772fd77, a8a0d28): PLOT_CLASSES
-  // going whole-cell moved the real plot count from 19,874 to 20,059, and this
-  // pin -- correctly -- says so. NOT re-pinned here because
-  // WORLD-REBALANCE-BRIEF.md's own step 3 re-pins the plan ONCE, at the end of
-  // the rebalance, once the count is done moving -- re-pinning now would mean
-  // doing it twice, and the second pin would be the only one anyone ever
-  // checks. CLOSES at the end of step 3: new PRE_SEED hash, new plot count,
-  // and a comment here naming the commit that did it. If this comment is
-  // still here and step 3 has landed, that is a dropped step, not a
-  // tolerated one.
-  const PRE_SEED = "a88cfd0397e923e71eeb59b06b6448dc1f0749032ddca161702dbe8deb20b1a1";
+  // P3.7.3 -- RE-PINNED. This was left red on purpose since commit cdc2640
+  // ("Name the two red tests, at the point where they fail"), which moved
+  // the plot count 19,874 -> 20,059 for PLOT_CLASSES going whole-cell
+  // (772fd77, a8a0d28) and said explicitly: re-pin ONCE, at the end of the
+  // rebalance, not now, or the second pin becomes the only one anyone ever
+  // checks. Commit 3419331, "World rebalance, step 3, part 1"
+  // (2026-09-06 23:00:32, WORLD-REBALANCE-BRIEF.md §3), cut the barrier
+  // island's plot share 56.0% -> 8.0% and demoted several TOWER/MIDRISE
+  // settlements -- intended work, not a regression, and it moved the count
+  // again, to 17,583. Traced and reported in docs/audits/P3.5-FLOATING.md's
+  // P3.6 section without being fixed there, per Mark's own instruction not
+  // to chase it that pass; re-pinned here in P3.7.3 because the count is
+  // now confirmed as the intended result of intended work, not a mystery.
+  //
+  // The pin below is 17,586, not 17,583: P3.6.1/P3.7.1's own container-port
+  // site-relocation fix (public/land-use.js's findQuay, apron-aware
+  // fallback scoring) moved SITE.containerPort itself by a further ~80m
+  // once the apron check was added, which shifted 3 plots' WAREHOUSE
+  // eligibility (port/airport-proximity zoning) -- measured directly
+  // (`node -e '...generateWorld... -> world.plots.length'`), not assumed.
+  // A different world lane's future change WILL move this again; when it
+  // does, re-measure and re-pin with the same discipline, do not guess.
+  const PRE_SEED = "a0ec85bb9cfdc63933fde1e949ca71e1e7c769f768204aac813c1eabfdb1c3ad";
   const world = generateWorld(heightAt);
-  assert.equal(world.plots.length, 19874, "plot count moved -- the pin below is no longer describing this city");
+  assert.equal(world.plots.length, 17586, "plot count moved -- the pin below is no longer describing this city");
   assert.equal(
     fingerprint(world),
     PRE_SEED,

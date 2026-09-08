@@ -26,6 +26,18 @@ import assert from "node:assert/strict";
 import { groundOrRefuse, gradeGroundBands, bandLevelAt } from "../public/city-render.js";
 import { DRY_ENOUGH } from "../public/footprint.js";
 
+// P3.7.2 -- the airport's `Math.max(6, apSite.mean)` was an EIGHTH
+// fail-open floor of exactly this pattern, missed by the P3.5 sweep
+// because apSite.mean is a pre-aggregated value, not a direct heightAt(x,z)
+// call, so it did not visually match the other seven. Routed through
+// groundOrRefuse the same way, via a trivial constant-returning heightAt --
+// city-render.js's own call site is `groundOrRefuse(() => apSite.mean, AX,
+// AZ)`, exercised here the same way.
+test("P3.7.2: the airport's own call pattern (a constant-mean heightAt) still refuses when wet", () => {
+  const constantMeanHeightAt = () => 0.4; // an underwater mean
+  assert.equal(groundOrRefuse(constantMeanHeightAt, -5000, -1000), null, "an airport site whose mean is underwater must refuse, not float at a hardcoded 6m");
+});
+
 test("P3.5.2: a site below DRY_ENOUGH is refused, not floated", () => {
   const wetHeightAt = () => 0.3; // underwater -- below DRY_ENOUGH (0.6)
   assert.equal(groundOrRefuse(wetHeightAt, 100, 200), null, "a site at 0.3m (wet) must refuse, not return a floored height");

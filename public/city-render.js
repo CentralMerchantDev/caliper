@@ -326,6 +326,106 @@ export function bandLevelAt(bands, x, z) {
   return bands.cellY[ri * bands.cols + ci];
 }
 
+/**
+ * P3.7.1 -- the airport's own embankment already does what P3.5.2/P3.6 asked
+ * of the container yard: a real earthwork, not a decal. Extracted so the
+ * container yard and the golf course get the SAME mechanism the airport
+ * already had, not a third different answer to the same defect.
+ *
+ * Geometry only -- returns plain vertex arrays, not THREE objects, so this
+ * stays testable without a GPU (mirroring gradeGroundBands). The caller
+ * builds the actual Mesh with its own material/name.
+ *
+ * `topAt(x, z)` is the platform's own top level at a point -- a constant
+ * function for a single-level platform (the airport, historically) or
+ * `(x, z) => bandLevelAt(bands, x, z)` for a terraced one (the yard, the
+ * golf course, and the airport once P3.7.2 bands it too). Returns null for
+ * an edge segment where either endpoint's topAt is null (a refused cell --
+ * no platform there, so no skirt to draw down from).
+ *
+ * @param {Function} heightAt
+ * @param {{x0:number,x1:number,z0:number,z1:number}} bounds
+ * @param {Function} topAt  (x:number, z:number) => number|null
+ * @param {number} [segments]
+ * @returns {Array<{positions:number[]}>} one entry per one of the 4 edges that produced any geometry
+ */
+export function buildEmbankmentSkirt(heightAt, bounds, topAt, segments = 28) {
+  const { x0, x1, z0, z1 } = bounds;
+  const edges = [
+    { from: [x0, z0], to: [x1, z0] },
+    { from: [x0, z1], to: [x1, z1] },
+    { from: [x0, z0], to: [x0, z1] },
+    { from: [x1, z0], to: [x1, z1] },
+  ];
+  const out = [];
+  for (const e of edges) {
+    const v = [];
+    for (let i = 0; i < segments; i++) {
+      const t0 = i / segments, t1 = (i + 1) / segments;
+      const ex0 = e.from[0] + (e.to[0] - e.from[0]) * t0, ez0 = e.from[1] + (e.to[1] - e.from[1]) * t0;
+      const ex1 = e.from[0] + (e.to[0] - e.from[0]) * t1, ez1 = e.from[1] + (e.to[1] - e.from[1]) * t1;
+      const top0 = topAt(ex0, ez0), top1 = topAt(ex1, ez1);
+      if (top0 === null || top1 === null) continue; // a refused cell has no platform here to skirt
+      const bot0 = Math.min(top0, heightAt(ex0, ez0)) - 0.4;
+      const bot1 = Math.min(top1, heightAt(ex1, ez1)) - 0.4;
+      // Two triangles, DoubleSide relied on by the caller rather than a
+      // winding fixed per-edge -- see the airport's own original comment on
+      // why (the four edges' windings are not uniform under a shared `along`
+      // parameterisation, and fixing that by hand invites it to regress).
+      v.push(ex0, top0, ez0, ex1, top1, ez1, ex0, bot0, ez0);
+      v.push(ex1, top1, ez1, ex1, bot1, ez1, ex0, bot0, ez0);
+    }
+    if (v.length) out.push({ positions: v });
+  }
+  return out;
+}
+
+/**
+ * The graded platform itself: one flat quad per non-refused band cell, at
+ * that cell's own level -- a terraced pad, not one infinite plane, which is
+ * what "graded rather than sampled" actually looks like as geometry.
+ * @param {ReturnType<typeof gradeGroundBands>} bands
+ * @returns {Array<{x0:number,x1:number,z0:number,z1:number,y:number}>}
+ */
+export function platformCells(bands) {
+  const out = [];
+  for (let ri = 0; ri < bands.rows; ri++) {
+    for (let ci = 0; ci < bands.cols; ci++) {
+      const y = bands.cellY[ri * bands.cols + ci];
+      if (y === null) continue;
+      out.push({
+        x0: bands.x0 + ((bands.x1 - bands.x0) * ci) / bands.cols,
+        x1: bands.x0 + ((bands.x1 - bands.x0) * (ci + 1)) / bands.cols,
+        z0: bands.z0 + ((bands.z1 - bands.z0) * ri) / bands.rows,
+        z1: bands.z0 + ((bands.z1 - bands.z0) * (ri + 1)) / bands.rows,
+        y,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * The same terraced platform as platformCells, but as ONE flat vertex
+ * array instead of one descriptor per cell -- found necessary the first
+ * time this landed: a Mesh per cell (140 for the container yard, ~100 for
+ * the golf course) pushed the downtown skyline draw-call count from under
+ * 900 to 1,123, tripping test/regressionGate.test.ts's own A5.2/A5.3 gate.
+ * One merged BufferGeometry, one Mesh, the same pattern city-render.js
+ * already uses for terrain tiles and bridge spans.
+ * @param {ReturnType<typeof gradeGroundBands>} bands
+ * @returns {number[]} flat [x,y,z, x,y,z, ...] triangle list
+ */
+export function mergedPlatformGeometry(bands) {
+  const v = [];
+  for (const cell of platformCells(bands)) {
+    const { x0, x1, z0, z1, y } = cell;
+    v.push(x0, y, z0, x1, y, z0, x1, y, z1);
+    v.push(x1, y, z1, x0, y, z1, x0, y, z0);
+  }
+  return v;
+}
+
 export function buildWorldState(seed = DEFAULT_SEED, layers = []) {
   const instance = createWorld({ seed, layers });
   const field = instance.land;
@@ -2656,6 +2756,49 @@ function buildProps(api) {
     stats.containerYardBands = yardBands.cellY.map((v) => (v === null ? null : +v.toFixed(1)));
     stats.containerYardCellsRefused = yardBands.refused;
 
+    // P3.7.1 -- THE AIRPORT ALREADY DID THIS. THE YARD DID NOT.
+    //
+    // Grading each container to its own band's level closed most of the gap
+    // (P3.6.1) but left containers resting on nothing visible -- there was no
+    // yard SURFACE, only the bare hillside underneath and the containers
+    // floating at their graded Y regardless of what the real ground did in
+    // between. The airport's own embankment (public/city-render.js,
+    // "env:airport-embankment") already builds a real earthwork: a platform,
+    // with a batter carried down to true terrain at its edges. That is what a
+    // container terminal on sloping ground actually is, and it is the fix,
+    // not a finer grid or an unreachable relocation (P3.6.1).
+    //
+    // A terraced pad, one quad per graded cell (buildEmbankmentSkirt's
+    // sibling, platformCells) -- not one infinite plane, because the whole
+    // point is that the yard is NOT one level -- plus a skirt around the
+    // footprint's outer perimeter carrying each edge cell's own level down to
+    // real heightAt, exactly the airport's technique, generalised to a
+    // varying top instead of one constant (buildEmbankmentSkirt).
+    const yardPaveMat = M(0x9a9488, 0.96);
+    const yardSkirtMat = M2(0x8a7d5c, 0.97);
+    {
+      // ONE merged mesh, not one per cell (140 of them tripped the A5.2/A5.3
+      // draw-call gate the first time this landed) -- mergedPlatformGeometry,
+      // shared with the golf course and the airport below.
+      const pg = new THREE.BufferGeometry();
+      pg.setAttribute("position", new THREE.Float32BufferAttribute(mergedPlatformGeometry(yardBands), 3));
+      pg.computeVertexNormals();
+      const pave = new THREE.Mesh(pg, yardPaveMat);
+      pave.name = "env:container-yard-platform"; // a graded, terraced pad by design -- see the airport's identical "env:airport-platform"
+      pave.position.y = 0.05;
+      pave.receiveShadow = true;
+      scene.add(pave);
+    }
+    for (const edge of buildEmbankmentSkirt(heightAt, yardBands, (x, z) => bandLevelAt(yardBands, x, z))) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(edge.positions, 3));
+      g.computeVertexNormals();
+      const m = new THREE.Mesh(g, yardSkirtMat);
+      m.name = "env:container-yard-embankment"; // carries the graded pad down to real terrain, per-point, on all four sides -- the airport's own mechanism, shared
+      m.receiveShadow = true;
+      scene.add(m);
+    }
+
     const portCenterZ = _q.z + _qs * 300;
     const portLOD = new THREE.LOD();
     portLOD.name = "container-port-yard";
@@ -2987,6 +3130,31 @@ function buildProps(api) {
     stats.golf = golfDry.length
       ? { base: +(golfDry.reduce((a, b) => a + b, 0) / golfDry.length).toFixed(1), relief: +(golfHi - golfLo).toFixed(1), cellsRefused: golfBands.refused }
       : { base: null, relief: null, cellsRefused: golfBands.refused };
+    // P3.7.1 -- the same earthwork the container yard now gets, not a third
+    // different answer to the same defect: a terraced pad plus a skirt
+    // carrying each edge cell down to real terrain, shared via
+    // platformCells/buildEmbankmentSkirt.
+    const golfPaveMat = M(0x5c8a3c, 0.97);
+    const golfSkirtMat = M2(0x51763a, 0.97);
+    {
+      const pg = new THREE.BufferGeometry();
+      pg.setAttribute("position", new THREE.Float32BufferAttribute(mergedPlatformGeometry(golfBands), 3));
+      pg.computeVertexNormals();
+      const pave = new THREE.Mesh(pg, golfPaveMat);
+      pave.name = "env:golf-course-platform"; // graded/terraced pad, same reasoning as the airport's and the yard's
+      pave.position.y = 0.02;
+      pave.receiveShadow = true;
+      scene.add(pave);
+    }
+    for (const edge of buildEmbankmentSkirt(heightAt, golfBands, (x, z) => bandLevelAt(golfBands, x, z))) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(edge.positions, 3));
+      g.computeVertexNormals();
+      const m = new THREE.Mesh(g, golfSkirtMat);
+      m.name = "env:golf-course-embankment";
+      m.receiveShadow = true;
+      scene.add(m);
+    }
     // the rough: one big soft footprint
     const base = new THREE.Mesh(new THREE.CircleGeometry(760, 22), rough);
     base.name = "golf-course";
@@ -3096,59 +3264,60 @@ function buildProps(api) {
     // end and floating over air at the other. Relocation alone cannot fix that:
     // the flattest dry 3.4 km run anywhere in this world varies by 11.3 m.
     //
-    // Which is what real airports discovered. They are graded platforms: cut into
-    // the high side, built out on the low side, embankments down to the land
-    // around them. The level is the MEAN of the ground covered, so cut and fill
-    // roughly balance the way real earthworks are designed.
-    const ay = Math.max(6, apSite.mean);
+    // P3.7.2 -- `Math.max(6, apSite.mean)` was an eighth fail-open floor of
+    // exactly the pattern the P3.5 sweep removed seven of (absence read as
+    // success: "no real mean" would have read as "+6 m"), missed because
+    // apSite.mean is a pre-aggregated value, not a direct heightAt(x, z)
+    // call, so it did not look like the other seven at a glance. Routed
+    // through groundOrRefuse the same way, via a trivial constant heightAt.
+    const apMean = groundOrRefuse(() => apSite.mean, AX, AZ);
+    if (apMean === null) { stats.setPieceRefused.push({ id: "airport", reason: "site is underwater" }); break airport; }
+    // And it was the SAME mean-Y defect as the yard and the golf course,
+    // survivable only because the embankment hid the consequence: the whole
+    // platform sat at one level while the ground under it varied by tens of
+    // metres. Banded the same way, sharing the same mechanism end to end
+    // (P3.7.1) -- gradeGroundBands over the platform's own AP_W x AP_D
+    // footprint, a terraced pad (platformCells) instead of one plane, and
+    // the embankment skirt now follows each edge cell's own level
+    // (buildEmbankmentSkirt) instead of one constant `ay`.
+    const apBands = gradeGroundBands(heightAt, { x0: AX - AP_W / 2, x1: AX + AP_W / 2, z0: AZ - AP_D / 2, z1: AZ + AP_D / 2 }, { cellX: 200, cellZ: 200 });
+    const apDry = apBands.cellY.filter((v) => v !== null);
+    const apLo = apDry.length ? Math.min(...apDry) : null, apHi = apDry.length ? Math.max(...apDry) : null;
+    // ay stays as the platform's own MEAN -- reported for continuity and used
+    // as the fallback level for features whose own cell refused -- but every
+    // ground surface below now looks up its own local band, not this one
+    // number, the same as the yard and the golf course.
+    const ay = apMean;
     stats.airportPlatform = {
-      level: +ay.toFixed(1), cut: +(apSite.max - ay).toFixed(1),
-      fill: +(ay - apSite.min).toFixed(1), range: +apSite.range.toFixed(1),
-      moved: Math.round(apSite.moved),
+      level: +ay.toFixed(1), cut: apHi !== null ? +(apHi - ay).toFixed(1) : null,
+      fill: apLo !== null ? +(ay - apLo).toFixed(1) : null, range: apDry.length ? +(apHi - apLo).toFixed(1) : null,
+      moved: Math.round(apSite.moved), cellsRefused: apBands.refused,
     };
+    const apLevelAt = (x, z) => { const v = bandLevelAt(apBands, x, z); return v === null ? ay : v; };
 
     // the platform, and an embankment skirt carrying it down to the terrain
     {
-      const pad = new THREE.Mesh(new THREE.PlaneGeometry(AP_W, AP_D), M(0x7c8b63, 0.97));
-      pad.name = "env:airport-platform"; // a graded plateau by design (cut/fill balanced to apSite.mean), not a placed object resting on one ground point
-      pad.rotation.x = -Math.PI / 2;
-      pad.position.set(AX, ay + 0.05, AZ);
+      const apPaveMat = M(0x7c8b63, 0.97);
+      const pg = new THREE.BufferGeometry();
+      pg.setAttribute("position", new THREE.Float32BufferAttribute(mergedPlatformGeometry(apBands), 3));
+      pg.computeVertexNormals();
+      const pad = new THREE.Mesh(pg, apPaveMat);
+      pad.name = "env:airport-platform"; // a graded plateau by design, not a placed object resting on one ground point
+      pad.position.y = 0.05;
       pad.receiveShadow = true;
       scene.add(pad);
-      const SK = 28;
-      for (const f of [{ fx: 0, fz: -1, len: AP_W, at: AP_D / 2 },
-                       { fx: 0, fz: 1, len: AP_W, at: AP_D / 2 },
-                       { fx: -1, fz: 0, len: AP_D, at: AP_W / 2 },
-                       { fx: 1, fz: 0, len: AP_D, at: AP_W / 2 }]) {
+      // TWO OF THE FOUR SKIRTS WERE WOUND INSIDE-OUT AND DID NOT RENDER, in
+      // the original single-constant version of this skirt -- see git
+      // history for the diagnosis. buildEmbankmentSkirt (shared, P3.7.1)
+      // keeps the DoubleSide fix: not depending on winding is the durable
+      // answer for a strip only ever seen from outside anyway.
+      const apSkirtMat = M2(0x6f7d58, 0.98);
+      for (const edge of buildEmbankmentSkirt(heightAt, apBands, (x, z) => bandLevelAt(apBands, x, z))) {
         const g = new THREE.BufferGeometry();
-        const v = [];
-        const along = (t) => (f.fx === 0 ? [AX + t, AZ + f.fz * f.at] : [AX + f.fx * f.at, AZ + t]);
-        for (let i = 0; i < SK; i++) {
-          const [x0, z0] = along(-f.len / 2 + (f.len * i) / SK);
-          const [x1, z1] = along(-f.len / 2 + (f.len * (i + 1)) / SK);
-          const h0 = Math.min(ay, heightAt(x0, z0)) - 0.4;
-          const h1 = Math.min(ay, heightAt(x1, z1)) - 0.4;
-          v.push(x0, ay, z0, x1, ay, z1, x0, h0, z0);
-          v.push(x1, ay, z1, x1, h1, z1, x0, h0, z0);
-        }
-        g.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+        g.setAttribute("position", new THREE.Float32BufferAttribute(edge.positions, 3));
         g.computeVertexNormals();
-        // TWO OF THE FOUR SKIRTS WERE WOUND INSIDE-OUT AND DID NOT RENDER.
-        //
-        // `along` always advances t in +x for the two z-faces and +z for the two
-        // x-faces, with a fixed winding order -- so the fz:-1 and fx:+1 faces get
-        // outward normals and the fz:+1 and fx:-1 faces get inward ones. With
-        // the default FrontSide material the north and west skirts were
-        // invisible from outside, and the platform showed an open edge with
-        // terrain visible under it on two of its four sides.
-        //
-        // DoubleSide rather than reversing t for two of the four: the winding
-        // here is derived from a shared `along` helper, so fixing it by hand
-        // means two special cases that the next edit to that helper can quietly
-        // undo. Not depending on the winding is the more durable answer for a
-        // strip that is only ever seen from outside anyway.
-        const m = new THREE.Mesh(g, M2(0x6f7d58, 0.98));
-        m.name = "env:airport-embankment"; // carries the graded platform down to real terrain, per-point, on all four sides -- already does what P3.5.2 asks of the container yard
+        const m = new THREE.Mesh(g, apSkirtMat);
+        m.name = "env:airport-embankment"; // carries the graded platform down to real terrain, per-point, on all four sides
         m.receiveShadow = true;
         scene.add(m);
       }
@@ -3159,45 +3328,49 @@ function buildProps(api) {
     for (const [dz, len] of [[450, 3400], [-150, 2800]]) {
       const r = new THREE.Mesh(new THREE.PlaneGeometry(len, 60), rwMat);
       r.name = "env:airport-platform";
-      r.rotation.x = -Math.PI / 2; r.position.set(AX, ay + 0.5, AZ + dz); r.receiveShadow = true; scene.add(r);
+      r.rotation.x = -Math.PI / 2; r.position.set(AX, apLevelAt(AX, AZ + dz) + 0.5, AZ + dz); r.receiveShadow = true; scene.add(r);
       for (let x = -len / 2 + 90; x < len / 2 - 90; x += 140) {
         const m = new THREE.Mesh(new THREE.PlaneGeometry(70, 3), mkMat);
         m.name = "env:airport-platform";
-        m.rotation.x = -Math.PI / 2; m.position.set(AX + x, ay + 0.56, AZ + dz); scene.add(m);
+        m.rotation.x = -Math.PI / 2; m.position.set(AX + x, apLevelAt(AX + x, AZ + dz) + 0.56, AZ + dz); scene.add(m);
       }
     }
     const taxi = new THREE.Mesh(new THREE.PlaneGeometry(3200, 26), apMat);
     taxi.name = "env:airport-platform";
-    taxi.rotation.x = -Math.PI / 2; taxi.position.set(AX, ay + 0.48, AZ + 150); scene.add(taxi);
+    taxi.rotation.x = -Math.PI / 2; taxi.position.set(AX, apLevelAt(AX, AZ + 150) + 0.48, AZ + 150); scene.add(taxi);
     const apron = new THREE.Mesh(new THREE.PlaneGeometry(900, 420), apMat);
     apron.name = "env:airport-platform";
-    apron.rotation.x = -Math.PI / 2; apron.position.set(AX - 700, ay + 0.46, AZ - 400); apron.receiveShadow = true; scene.add(apron);
+    apron.rotation.x = -Math.PI / 2; apron.position.set(AX - 700, apLevelAt(AX - 700, AZ - 400) + 0.46, AZ - 400); apron.receiveShadow = true; scene.add(apron);
     // the terminal: a pier with jetways, so the apron reads as an airport rather
     // than a car park with aeroplanes on it
+    const termY = apLevelAt(AX - 700, AZ - 130);
     const term = new THREE.Mesh(RB(520, 16, 78, 1.4), M(0xe8ecef, 0.6, 0.15));
-    term.position.set(AX - 700, ay + 8, AZ - 130); term.castShadow = term.receiveShadow = true; scene.add(term);
+    term.position.set(AX - 700, termY + 8, AZ - 130); term.castShadow = term.receiveShadow = true; scene.add(term);
     const troof = new THREE.Mesh(RB(540, 2.2, 92, 0.8), M(0xb9c2c8, 0.5, 0.3));
     troof.name = "airport-terminal-roof"; // mounted on top of the terminal, not the ground
-    troof.position.set(AX - 700, ay + 17, AZ - 130); troof.castShadow = true; scene.add(troof);
+    troof.position.set(AX - 700, termY + 17, AZ - 130); troof.castShadow = true; scene.add(troof);
     for (let i = 0; i < 6; i++) {
+      const jx = AX - 920 + i * 92, jz = AZ - 240, jy = apLevelAt(jx, jz);
       const jet = new THREE.Mesh(RB(6, 4, 46, 0.6), M(0xd4d9dc, 0.6, 0.2));
-      jet.position.set(AX - 920 + i * 92, ay + 7, AZ - 240); jet.castShadow = true; scene.add(jet);
+      jet.position.set(jx, jy + 7, jz); jet.castShadow = true; scene.add(jet);
     }
     // control tower
+    const twY = apLevelAt(AX - 1100, AZ - 30);
     const tw = new THREE.Mesh(new THREE.CylinderGeometry(5, 7, 42, 10), M(0xeae4d6, 0.8));
-    tw.position.set(AX - 1100, ay + 21, AZ - 30); tw.castShadow = true; scene.add(tw);
+    tw.position.set(AX - 1100, twY + 21, AZ - 30); tw.castShadow = true; scene.add(tw);
     const cab = new THREE.Mesh(RB(15, 8, 15, 1.2), M(0x9fc4dd, 0.3, 0.4));
     cab.name = "airport-tower-cab"; // mounted on top of the control tower mast, not the ground
-    cab.position.set(AX - 1100, ay + 45, AZ - 30); cab.castShadow = true; scene.add(cab);
+    cab.position.set(AX - 1100, twY + 45, AZ - 30); cab.castShadow = true; scene.add(cab);
     for (let i = 0; i < 16; i++) {
       const x = AX - 1100 + rnd("ap" + i) * 820;
       const z = AZ - 570 + Math.floor(rnd("aq" + i) * 3) * 110;
+      const py = apLevelAt(x, z);
       const body = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 42, 12), M(0xf8f8f6, 0.45, 0.25));
-      body.rotation.z = Math.PI / 2; body.position.set(x, ay + 6, z); body.castShadow = true; scene.add(body);
+      body.rotation.z = Math.PI / 2; body.position.set(x, py + 6, z); body.castShadow = true; scene.add(body);
       const wing = new THREE.Mesh(RB(9, 1.3, 40, 0.4), M(0xecebe7, 0.45, 0.25));
-      wing.position.set(x, ay + 5, z); wing.castShadow = true; scene.add(wing);
+      wing.position.set(x, py + 5, z); wing.castShadow = true; scene.add(wing);
       const tail = new THREE.Mesh(RB(1.2, 13, 9, 0.4), M(0xd94f3d, 0.6));
-      tail.position.set(x - 18, ay + 13, z); tail.castShadow = true; scene.add(tail);
+      tail.position.set(x - 18, py + 13, z); tail.castShadow = true; scene.add(tail);
     }
   }
 
