@@ -15,6 +15,22 @@ function wranglerCredentialsPath(): string | null {
   return os && path ? path.join(os.homedir(), ".wrangler", "config", "default.toml") : null;
 }
 
+export function parseWranglerOauthToken(config: string, now = Date.now()): string | null {
+  const tokenMatch = config.match(/oauth_token\s*=\s*"([^"]+)"/);
+  if (!tokenMatch) return null;
+
+  const expirationMatch = config.match(/expiration_time\s*=\s*"([^"]+)"/);
+  if (!expirationMatch) {
+    throw new Error("Wrangler OAuth token was found, but its expiration_time is missing. Run `npx wrangler login` before live inference.");
+  }
+
+  const expirationTime = Date.parse(expirationMatch[1]);
+  if (!Number.isFinite(expirationTime) || expirationTime <= now) {
+    throw new Error("Wrangler OAuth token is expired. Run `npx wrangler login` before live inference.");
+  }
+  return tokenMatch[1];
+}
+
 export function createWorkersAIClient(options: { accountId?: string; apiToken?: string } = {}): WorkersAIBinding {
   let token = options.apiToken || (typeof process !== "undefined" ? process.env?.CLOUDFLARE_API_TOKEN : "") || "";
   const accountId = options.accountId || (typeof process !== "undefined" ? process.env?.CLOUDFLARE_ACCOUNT_ID : "") || "";
@@ -31,18 +47,10 @@ export function createWorkersAIClient(options: { accountId?: string; apiToken?: 
       if (fs) {
         const credentialsPath = wranglerCredentialsPath();
         const defaultToml = credentialsPath ? fs.readFileSync(credentialsPath, "utf8") : "";
-        const match = defaultToml.match(/oauth_token\s*=\s*"([^"]+)"/);
-        const expirationMatch = defaultToml.match(/expiration_time\s*=\s*"([^"]+)"/);
-        if (match && expirationMatch) {
-          const expirationTime = Date.parse(expirationMatch[1]);
-          if (!Number.isFinite(expirationTime) || expirationTime <= Date.now()) {
-            throw new Error("Wrangler OAuth token is expired. Run `npx wrangler login` before live inference.");
-          }
-          token = match[1];
-        }
+        token = parseWranglerOauthToken(defaultToml) || "";
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes("Wrangler OAuth token is expired")) throw error;
+      if (error instanceof Error && error.message.startsWith("Wrangler OAuth token")) throw error;
       // A missing or unreadable file is handled by the explicit missing-token error below.
     }
   }

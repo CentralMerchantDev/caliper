@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { createWorkersAIClient } from "../src/clientWorkersAI.ts";
+import { createWorkersAIClient, parseWranglerOauthToken } from "../src/clientWorkersAI.ts";
 
 function sourceFiles(directory: string): string[] {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -52,4 +52,12 @@ test("Workers AI authentication failure is reported after one request without a 
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("Workers AI client distinguishes a missing OAuth expiry from a missing token", () => {
+  assert.throws(
+    () => parseWranglerOauthToken('oauth_token = "present"'),
+    /OAuth token was found, but its expiration_time is missing/
+  );
+  assert.equal(parseWranglerOauthToken(""), null);
 });
