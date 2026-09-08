@@ -1034,7 +1034,35 @@ function mergeWithMassingDepth(parts, palette, T, footW, footD, detailed) {
   const front = Math.min(footD / 2, b.max.z + projection);
   const W = right - left, D = front - back;
   const x = (left + right) / 2, z = (back + front) / 2;
-  const trim = new T.Color(palette.wall).lerp(new T.Color(palette.roof), 0.35).getHex();
+  // Trim samples the atlas's reserved plain patch (facade-textures.js's
+  // "Reserved Plain / Roof Patch"), which is a deliberately flat, matte,
+  // texture-free #ffffff swatch that exists so vertex color alone carries a
+  // rooftop's tone when seen from a distance or an oblique angle. It was not
+  // designed to sit close-range on a vertical wall plane next to fully
+  // detailed, much darker window glass. The atlas has no separate UV region
+  // that is both textured AND free of window/mullion pixels: `stoneTrim`
+  // (facade-textures.js) is only ever painted as thin bands inside the
+  // ordinary windowed wall texture, not as its own patch, and mapping trim
+  // to the "wall" tag directly would paste fragments of window grid across
+  // the cornice. That is a real gap in the atlas, not routed around here.
+  //
+  // Given the flat patch is what's available, the trim's tone is derived
+  // from the wall (not lightened toward roof, as the old
+  // wall.lerp(roof, 0.35) did) and darkened. The darkening factor was
+  // measured, not guessed: the plain patch gets full PBR sun/ambient
+  // lighting, so scaling the raw albedo does not translate 1:1 into
+  // rendered brightness -- multiplyScalar(0.55) only pulled the rendered
+  // street-level band from ~68% to ~61% average pixel brightness (sampled
+  // with `sharp` from .shots/k6-after/street-level.png), still triple the
+  // ~20% of the window glass beside it. 0.28 was chosen by calibrating
+  // against a genuine, already-accepted reference in the same frame: an
+  // adjacent building's own unmodified roof mass, going through this exact
+  // plain-patch pipeline under the same lighting, renders at ~27% average
+  // brightness. multiplyScalar(0.28) lands the trim at ~37% -- close to
+  // that reference and no longer the single brightest surface in the shot,
+  // without crushing it to black (which would make it unreadable as a
+  // distinct stone course rather than absent).
+  const trim = new T.Color(palette.wall).multiplyScalar(0.28).getHex();
   const add = (w, h, d, px, py, pz) => {
     const geo = new T.BoxGeometry(w, h, d);
     geo.translate(px, py, pz);

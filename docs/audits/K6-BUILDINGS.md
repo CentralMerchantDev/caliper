@@ -36,6 +36,12 @@ retains conspicuous water banding, bright repeated trees, and very sparse
 ground between buildings. Those existing defects remain visible in the
 unmodified cameras and are not solved by facade depth.
 
+**Update, later pass:** the trim's colour (not the camera) was diagnosed and
+fixed. See "The street-level band was a lighting problem, not a camera
+problem" below. The `street-level.png` and `downtown-close.png` links above
+now show that fix; the other five camera pairs are unchanged from this
+paragraph.
+
 The material references inspected were `kitbash-tower-air.png` and
 `kitbash-tower-street.png` in `C:/Code/sandbox-spike/.shots/`. Their frames
 show more convincing material contrast and finer depth than this city. They
@@ -363,3 +369,91 @@ above) — neither of which this fix touches or was meant to.
 ```text
 node test/run.mjs regressionGate.test.ts cullingRatio.test.ts
 ```
+
+## The street-level band was a lighting problem, not a camera problem
+
+My own verdict on `.shots/k6-before/street-level.png` vs the first
+`.shots/k6-after/street-level.png` agreed with the previous agent's: worse.
+The new parapet/string-course trim read as a flat, uniformly pale horizontal
+band with no shading gradient, no window texture, and no cue that it was a
+protruding element — a stripe, not architecture. The camera was not moved;
+it is part of the fixed seven-camera comparison set and moving it would
+invalidate every other before/after pair in this document.
+
+**Where the flatness comes from.** `public/buildings.js`'s trim boxes are
+tagged `"roof"`, which routes them to `facade-textures.js`'s "Reserved Plain
+/ Roof Patch" — a deliberately flat, texture-free `#ffffff` diffuse swatch
+(with matte roughness and a flat normal) that exists so a plain vertex color
+alone carries a rooftop's tone when seen from a distance or an oblique
+angle. It is not a bypass of the atlas material system: `getFacadeMaterial`
+supplies the exact same map/roughnessMap/normalMap/emissiveMap set used by
+every other building surface, sampled at this one reserved UV region. The
+defect is that K6 put close-range, eye-level cornice and string-course
+geometry through a patch designed for distant rooftops.
+
+**Checked for a better-fitting atlas region first, per the brief.** The
+atlas's `FACADE_FAMILIES` table (`facade-textures.js`) does define a
+`stoneTrim` color per architectural character, correctly intended for
+exactly this purpose. It is not available as its own UV patch, though: it
+is only ever painted as an 8px spandrel band and window sills *inside* the
+ordinary windowed wall texture (`generateFacadeAtlas`, floor-divider and
+sill drawing). Mapping trim geometry to the `"wall"` UV tag directly (to
+reach that texture) would paste fragments of the window/mullion grid across
+a cornice box, which is exactly what the existing `"no window rows painted
+across a cornice or sill"` comment in `buildings.js` was already avoiding.
+**So: the atlas has no UV region that is both textured and free of
+window/mullion pixels — a real, stated gap, not routed around silently.**
+Closing it properly would mean adding a new reserved patch to
+`generateFacadeAtlas` (a plain `stoneTrim`-toned swatch with its own
+roughness, alongside the existing plain-roof and glass patches); that is
+atlas surgery affecting every building in the world, and out of scope for
+this pass. It is a legitimate follow-up, not a decision made here.
+
+**The color fix, and what changed it.** The old trim color,
+`wall.lerp(roof, 0.35)`, is biased toward the lighter of its two inputs; for
+the palettes checked (`WALLS.MIDRISE`, `WALLS.TOWER`) walls run pale
+(0xe8e4dc, 0x9fc4dd), so the 35%-toward-roof blend still landed pale. The
+fix derives the trim from the wall alone, darkened — `wall.multiplyScalar(f)`
+— per the brief's direction not to lerp toward a near-white constant. The
+darkening factor was measured, not assumed:
+
+| Step | What | Measured (avg RGB, `sharp` sample of the rendered band, `.shots/k6-after/street-level.png`) | Avg brightness |
+|---|---|---|---:|
+| Before this fix | `wall.lerp(roof, 0.35)` | (177, 172, 173) | ~68% |
+| First attempt | `wall.multiplyScalar(0.55)` | (158, 149, 147) | ~61% |
+| Calibration reference | adjacent building's own **unscaled** roof mass, same plain-patch pipeline, same lighting, sampled from the same frame | (42, 66, 99) | ~27% |
+| Final | `wall.multiplyScalar(0.28)` | (100, 93, 93) | ~37% |
+
+The plain patch receives full PBR sun/ambient lighting, so scaling the raw
+albedo does not translate 1:1 into rendered brightness: halving the albedo
+(0.55) only pulled the rendered band from 68% to 61% — still roughly triple
+the ~20% average brightness of the window glass beside it, and still, by
+eye, the palest thing in the frame. Rather than pick a second guess, the
+final factor (0.28) was calibrated against a genuine, already-accepted
+reference measured in the same frame under the same lighting: an adjacent
+building's own unmodified, unscaled roof mass. That is a real signal for
+"a flat-shaded, PBR-lit surface that already reads as acceptable in this
+exact scene," not a number invented to make one screenshot look better.
+
+**My verdict on the result:** `.shots/k6-after/street-level.png` now shows
+the band as a muted grey-taupe tone, close in weight to the sky and the
+neighbouring roof mass, not a glaring pale slab — a visible string course
+rather than an artifact. It is not a full pass against
+`kitbash-tower-street.png`'s reference material depth (§0's cited standard
+for this world): the band is still a flat, untextured color, because the
+underlying atlas gap above is unresolved. I am calling this **improved, not
+solved** — the same honest, partial-credit standard the rest of this
+document uses elsewhere. `downtown-close.png` was re-shot alongside it as
+instructed; at that camera's distance the change is visually negligible
+(rooftop trim already read as thin dark lines at that scale, before and
+after), which is expected and not evidence of a problem — it is the flat
+patch behaving exactly as it was originally designed to at rooftop distance.
+The other five camera pairs in the table above were not re-shot and are
+unchanged from the earlier pass.
+
+Verification: `node test/run.mjs buildingLODAndColors.test.ts
+buildingExplicitSize.test.ts layoutGeometry.test.ts` (all 14 pass, including
+AS1's per-vertex wall/roof color check) and `npx tsc --noEmit` both pass
+after the color change. Trim *geometry* (box counts, dimensions) is
+untouched, so the triangle/draw-call counts and the frustum-culling gate
+above are unaffected by this fix and were not re-measured.
