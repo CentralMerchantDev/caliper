@@ -61,3 +61,21 @@ test("Workers AI client distinguishes a missing OAuth expiry from a missing toke
   );
   assert.equal(parseWranglerOauthToken(""), null);
 });
+
+test("Workers AI client turns certificate failures into an actionable system-CA error", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    const error = new TypeError("fetch failed") as TypeError & { cause: { code: string } };
+    error.cause = { code: "SELF_SIGNED_CERT_IN_CHAIN" };
+    throw error;
+  };
+  try {
+    const client = createWorkersAIClient({ accountId: "account", apiToken: "token" });
+    await assert.rejects(
+      () => client.run("@cf/baai/bge-small-en-v1.5", { text: "probe" }),
+      /Set NODE_USE_SYSTEM_CA=1.*never disable certificate verification/
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -31,6 +31,11 @@ export function parseWranglerOauthToken(config: string, now = Date.now()): strin
   return tokenMatch[1];
 }
 
+function isCertificateVerificationError(error: unknown): boolean {
+  const code = (error as { cause?: { code?: string }; code?: string })?.cause?.code || (error as { code?: string })?.code;
+  return new Set(["SELF_SIGNED_CERT_IN_CHAIN", "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "DEPTH_ZERO_SELF_SIGNED_CERT", "CERT_HAS_EXPIRED"]).has(code || "");
+}
+
 export function createWorkersAIClient(options: { accountId?: string; apiToken?: string } = {}): WorkersAIBinding {
   let token = options.apiToken || (typeof process !== "undefined" ? process.env?.CLOUDFLARE_API_TOKEN : "") || "";
   const accountId = options.accountId || (typeof process !== "undefined" ? process.env?.CLOUDFLARE_ACCOUNT_ID : "") || "";
@@ -64,14 +69,25 @@ export function createWorkersAIClient(options: { accountId?: string; apiToken?: 
       const texts = Array.isArray(input.text) ? input.text : [input.text];
       const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ text: texts }),
-      });
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ text: texts }),
+        });
+      } catch (error) {
+        if (isCertificateVerificationError(error)) {
+          throw new Error(
+            "Workers AI TLS certificate verification failed. Set NODE_USE_SYSTEM_CA=1 before starting Node so it uses the operating-system CA store; never disable certificate verification.",
+            { cause: error }
+          );
+        }
+        throw error;
+      }
 
       if (!res.ok) {
         const errBody = await res.text();
