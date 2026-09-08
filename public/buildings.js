@@ -866,6 +866,22 @@ export { pick };
 // PARAMETERISED BUILDING GENERATORS (Standing Charter Section 2)
 // =============================================================================
 
+// Reserved textured trim patch in facade-textures.js's generated atlas (size
+// 1024, the default and only size getFacadeMaterial ever requests). Sits
+// immediately left of the existing flat plain/roof patch (which stays at its
+// original pixels and its original hardcoded sample point below, untouched),
+// mirrored top and bottom the same way that patch is, to avoid a wrap seam.
+// A 10px margin inside the patch's 64px square on every side keeps bilinear
+// filtering from bleeding in neighbouring atlas content at the edges.
+export const TRIM_PATCH_U0 = 906 / 1024;
+export const TRIM_PATCH_USPAN = 44 / 1024;
+export const TRIM_PATCH_V0 = 970 / 1024;
+export const TRIM_PATCH_VSPAN = 44 / 1024;
+// Tiling density for trim UVs, in patch-repeats per world metre of vertex
+// position (not a measured value -- a texture-tiling density choice, the
+// same kind of judgment call as any tileable material's texel scale).
+const TRIM_UV_TEXELS_PER_METRE = 0.6;
+
 function mergeGeometries(parts, palette = {}, T = THREE) {
   const clean = [];
   for (const p of parts) {
@@ -920,6 +936,7 @@ function mergeGeometries(parts, palette = {}, T = THREE) {
 
     const isWall = item.tag === "wall";
     const isGlass = item.tag === "glass";
+    const isTrim = item.tag === "trim";
     if (isWall) {
       if (g.attributes.uv) {
         uvArray.set(g.attributes.uv.array, posOffset * 2);
@@ -930,9 +947,39 @@ function mergeGeometries(parts, palette = {}, T = THREE) {
         uvArray[(posOffset + i) * 2 + 0] = 0.03;
         uvArray[(posOffset + i) * 2 + 1] = 0.97;
       }
+    } else if (isTrim) {
+      // Reserved TEXTURED trim patch: real stone/concrete grain, distinct
+      // from the flat plain/roof patch below. Architectural trim built by
+      // mergeWithMassingDepth (cornices, string courses, parapets, quoins)
+      // is always a plain, UNSUBDIVIDED BoxGeometry -- which only carries
+      // UV values at each face's four 0/1 corners, nothing between them.
+      // The first version of this branch remapped that box UV directly and
+      // tiled it with an integer repeat; every repeat of an integer multiple
+      // of 0 or 1 is still an integer, so the "tiling" collapsed every
+      // corner straight back to one point -- caught by this fix's own test
+      // (trimAtlasPatch.test.ts) asserting more than one distinct UV, which
+      // failed at 1 against this exact code. World-space vertex position
+      // varies continuously across a box's surface where its UV does not,
+      // so it is used directly as the tiling coordinate instead -- real
+      // per-vertex variation without subdividing the box, which would have
+      // changed its triangle count (AS3) and this pass's own K6 budget.
+      // Genuine roof/coping/eaves/dormer geometry elsewhere in this file is
+      // untouched: it still carries tag "roof" and still falls through to
+      // the flat patch below, at its original, unmoved UV point.
+      for (let i = 0; i < p.count; i++) {
+        const vx = p.getX(i), vy = p.getY(i), vz = p.getZ(i);
+        const su = (vx * 0.35 + vy * 0.61 + vz * 0.47) * TRIM_UV_TEXELS_PER_METRE;
+        const sv = (vx * 0.53 - vy * 0.29 + vz * 0.71) * TRIM_UV_TEXELS_PER_METRE;
+        const tu = su - Math.floor(su);
+        const tv = sv - Math.floor(sv);
+        uvArray[(posOffset + i) * 2 + 0] = TRIM_PATCH_U0 + tu * TRIM_PATCH_USPAN;
+        uvArray[(posOffset + i) * 2 + 1] = TRIM_PATCH_V0 + tv * TRIM_PATCH_VSPAN;
+      }
     } else {
-      // Non-wall parts (roof, coping, eaves, chimCap, dormerRoof, pergolas, etc.):
-      // Remap UVs into the reserved plain patch (0.97, 0.97) so facade windows are not mapped onto roofs.
+      // Non-wall, non-trim parts (roof, coping, eaves, chimCap, dormerRoof,
+      // pergolas, etc.): remap UVs into the reserved FLAT plain patch
+      // (0.97, 0.97) so facade windows are not mapped onto roofs. Unchanged
+      // by the trim patch above -- same pixels, same UV point as before.
       for (let i = 0; i < p.count; i++) {
         uvArray[(posOffset + i) * 2 + 0] = 0.97;
         uvArray[(posOffset + i) * 2 + 1] = 0.97;
@@ -1034,40 +1081,38 @@ function mergeWithMassingDepth(parts, palette, T, footW, footD, detailed) {
   const front = Math.min(footD / 2, b.max.z + projection);
   const W = right - left, D = front - back;
   const x = (left + right) / 2, z = (back + front) / 2;
-  // Trim samples the atlas's reserved plain patch (facade-textures.js's
-  // "Reserved Plain / Roof Patch"), which is a deliberately flat, matte,
-  // texture-free #ffffff swatch that exists so vertex color alone carries a
-  // rooftop's tone when seen from a distance or an oblique angle. It was not
-  // designed to sit close-range on a vertical wall plane next to fully
-  // detailed, much darker window glass. The atlas has no separate UV region
-  // that is both textured AND free of window/mullion pixels: `stoneTrim`
-  // (facade-textures.js) is only ever painted as thin bands inside the
-  // ordinary windowed wall texture, not as its own patch, and mapping trim
-  // to the "wall" tag directly would paste fragments of window grid across
-  // the cornice. That is a real gap in the atlas, not routed around here.
+  // K7.1 CLOSED THE ATLAS GAP THE PARAGRAPH BELOW USED TO DESCRIBE.
   //
-  // Given the flat patch is what's available, the trim's tone is derived
-  // from the wall (not lightened toward roof, as the old
-  // wall.lerp(roof, 0.35) did) and darkened. The darkening factor was
-  // measured, not guessed: the plain patch gets full PBR sun/ambient
-  // lighting, so scaling the raw albedo does not translate 1:1 into
-  // rendered brightness -- multiplyScalar(0.55) only pulled the rendered
-  // street-level band from ~68% to ~61% average pixel brightness (sampled
-  // with `sharp` from .shots/k6-after/street-level.png), still triple the
-  // ~20% of the window glass beside it. 0.28 was chosen by calibrating
-  // against a genuine, already-accepted reference in the same frame: an
-  // adjacent building's own unmodified roof mass, going through this exact
-  // plain-patch pipeline under the same lighting, renders at ~27% average
-  // brightness. multiplyScalar(0.28) lands the trim at ~37% -- close to
-  // that reference and no longer the single brightest surface in the shot,
-  // without crushing it to black (which would make it unreadable as a
-  // distinct stone course rather than absent).
-  const trim = new T.Color(palette.wall).multiplyScalar(0.28).getHex();
+  // Trim used to sample the atlas's flat, texture-free "Reserved Plain /
+  // Roof Patch" -- built for a distant rooftop, not close-range vertical
+  // trim -- and carried its whole tone through a heavily darkened,
+  // wall-derived vertex color (measured and calibrated against that flat
+  // white patch: see git history and docs/audits/K6-BUILDINGS.md's "The
+  // street-level band was a lighting problem, not a camera problem"). That
+  // was a real, working fix for a real gap, and the gap is why it was
+  // needed: the atlas had no UV region that was both textured and free of
+  // window/mullion pixels.
+  //
+  // facade-textures.js now has one: a reserved, GRAINED trim patch, painted
+  // per character from that character's own `stoneTrim` value (so a
+  // heritage cornice and a contemporary one read as different stone), tagged
+  // "trim" below instead of "roof" so it is routed there instead of the flat
+  // patch. Real per-vertex UVs, not one hardcoded point -- see mergeGeometries'
+  // isTrim branch. Genuine roof/coping/eaves/dormer geometry elsewhere in
+  // this file is untouched: still tag "roof", still the flat patch, same as
+  // before K6.
+  //
+  // Vertex color is now a LIGHT tint toward the wall, not the wall itself
+  // darkened -- the atlas patch carries the actual stone tone and its own
+  // grain, so multiplying it by an already-darkened vertex color would
+  // compound into something muddier than either alone. 82% neutral means
+  // the atlas dominates; 18% wall keeps buildings of the same character
+  // from all showing one identical cornice.
+  const trim = new T.Color(0xffffff).lerp(new T.Color(palette.wall), 0.18).getHex();
   const add = (w, h, d, px, py, pz) => {
     const geo = new T.BoxGeometry(w, h, d);
     geo.translate(px, py, pz);
-    // Plain atlas patch: no window rows painted across a cornice or sill.
-    parts.push({ geo, tag: "roof", color: trim });
+    parts.push({ geo, tag: "trim", color: trim });
   };
   // A broad base and ground-floor entablature leave the shaft recessed.
   const ground = Math.min(4, H * 0.3);

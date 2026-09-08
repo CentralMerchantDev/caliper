@@ -275,6 +275,58 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
     ectx.fillRect(patchX, patchY, patchSize, patchSize);
   }
 
+  // 6b. Reserved TEXTURED Trim Patch (K7.1) -- immediately left of the plain
+  // patch above, same two mirrored rows, same size. Closes the gap
+  // docs/audits/K6-BUILDINGS.md named: architectural trim (cornices, string
+  // courses, parapets -- built by buildings.js's mergeWithMassingDepth) had
+  // no atlas region that was both textured and free of window/mullion
+  // pixels. `stoneTrim` already existed per character for exactly this
+  // purpose but was only ever painted as thin in-texture spandrel bands.
+  // This gives it a patch of its own: a real, visible value grain plus
+  // coursing joints, not a flat solid multiplied by vertex color the way
+  // the plain patch above works. Painted with deterministic sine-based
+  // pseudo-noise (matching this file's existing window-lit-pattern
+  // convention above), not Math.random -- atlas generation stays
+  // reproducible run to run.
+  {
+    const trimPatchSize = 64;
+    const trimPatchX = size - patchSize * 2; // directly left of the plain/roof patch, never overlapping it
+    const tr = parseInt(spec.stoneTrim.slice(1, 3), 16);
+    const tg = parseInt(spec.stoneTrim.slice(3, 5), 16);
+    const tb = parseInt(spec.stoneTrim.slice(5, 7), 16);
+    const clampByte = (v) => Math.max(0, Math.min(255, Math.round(v)));
+    const grainCell = 4;
+    for (const patchY of [0, size - trimPatchSize]) {
+      for (let py = 0; py < trimPatchSize; py += grainCell) {
+        for (let px = 0; px < trimPatchSize; px += grainCell) {
+          const n = Math.sin(px * 12.9898 + py * 78.233) * 43758.5453;
+          const grain = (n - Math.floor(n)) - 0.5; // deterministic pseudo-random in [-0.5, 0.5)
+          const shade = 1 + grain * 0.22; // +/-11% value variation per grain cell
+          dctx.fillStyle = `rgb(${clampByte(tr * shade)}, ${clampByte(tg * shade)}, ${clampByte(tb * shade)})`;
+          dctx.fillRect(trimPatchX + px, patchY + py, grainCell, grainCell);
+        }
+      }
+      // Coursing joints: a stone or concrete cornice reads as coursed
+      // blocks, not a smooth slab.
+      dctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+      for (let cy = 16; cy < trimPatchSize; cy += 16) {
+        dctx.fillRect(trimPatchX, patchY + cy, trimPatchSize, 1);
+      }
+
+      rctx.fillStyle = `rgb(${Math.round(spec.roughnessTrim * 255)}, ${Math.round(spec.roughnessTrim * 255)}, ${Math.round(spec.roughnessTrim * 255)})`;
+      rctx.fillRect(trimPatchX, patchY, trimPatchSize, trimPatchSize);
+
+      mctx.fillStyle = `rgb(${wallMetalByte}, ${wallMetalByte}, ${wallMetalByte})`;
+      mctx.fillRect(trimPatchX, patchY, trimPatchSize, trimPatchSize);
+
+      nctx.fillStyle = "rgb(128, 128, 255)";
+      nctx.fillRect(trimPatchX, patchY, trimPatchSize, trimPatchSize);
+
+      ectx.fillStyle = "#000000";
+      ectx.fillRect(trimPatchX, patchY, trimPatchSize, trimPatchSize);
+    }
+  }
+
   // 7. Reserved Dedicated Glass / Curtain Wall Patch (Bottom-Left and Top-Left in UV space)
   // Maps to UV (0.03, 0.97) for glass facades, curtain wall panels, and structural glazing.
   for (const patchY of [0, size - patchSize]) {

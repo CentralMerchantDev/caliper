@@ -457,3 +457,116 @@ AS1's per-vertex wall/roof color check) and `npx tsc --noEmit` both pass
 after the color change. Trim *geometry* (box counts, dimensions) is
 untouched, so the triangle/draw-call counts and the frustum-culling gate
 above are unaffected by this fix and were not re-measured.
+
+## K7.1 — the atlas gap closed, verified at the code level, NOT verified visually
+
+Mark asked for the gap identified above (no atlas region both textured and
+free of window/mullion pixels) to be closed rather than left as a named
+follow-up. Closed at the code level; **the visual re-shoot this section
+would normally lead with could not be run** — see "What is not done" at the
+end of this section, and do not read the rest of it as a visual pass.
+
+**Blast radius, established before changing anything, per the brief's own
+instruction.** `git grep` for the atlas's reserved-patch UV coordinates
+(`0.97`, `0.03`) across `public/` found exactly one dependent: the UV-remap
+block in `buildings.js`'s `mergeGeometries` (the only place these numbers
+are hardcoded). It hardcodes single UV **points**, not computed ranges, for
+every `"roof"`- and `"glass"`-tagged part in the file — every pitched roof,
+coping, eave, chimney cap, dormer roof, pergola, and (until this pass) every
+trim box, across all twelve building typologies. No test pins the exact
+pixel content or UV coordinates of either existing patch; `phaseDelta.test.ts`'s
+`measureLiveTextures` only checks that the four atlases' PBR maps exist, at
+a different canvas size (256, vs production's 1024) than the numbers below
+assume, but never inspects layout. That is the honest answer requested: one
+real dependent, hardcoded, easy to see, easy to avoid disturbing.
+
+**What was added, not moved.** A new reserved patch sits immediately left of
+the existing flat plain/roof patch (`facade-textures.js`, size 1024): at
+`x:[896,960)`, mirrored at `y:[0,64)` and `y:[960,1024)`, the same
+top/bottom mirroring the existing patches already use to avoid a wrap seam.
+The **existing** plain/roof patch (`x:[960,1024)`) and glass patch
+(`x:[0,64)`) are byte-for-byte unchanged, at their original UV points —
+genuine roof/coping/eaves/dormer/pergola geometry across every other
+typology still samples exactly what it did before this pass. Ordinary
+`"wall"`-tagged geometry's default box UV already spans the *entire* 0..1
+atlas per face today, meaning every ordinary wall face already touches the
+two existing corner patches at their corners, in a small, apparently-accepted
+way — this is the existing design's own tradeoff, not a new one introduced
+here; the new patch continues that same, already-accepted class of effect at
+the same 64px scale, adjacent to one of the patches already doing it.
+
+**Per-character colour, closing item 2.** The new patch is painted from
+`spec.stoneTrim` inside `generateFacadeAtlas(character, size)`, which already
+runs once per character — heritage, interwar, postwar and contemporary each
+get their own reserved patch, at the identical UV coordinates, painted from
+that character's own stone tone. `buildings.js` does not need to know which
+character it will be rendered with for this to work, the same way it never
+needed to know which character's `glassColor` would end up sampled at the
+existing glass patch.
+
+**Real texture, closing item 3, and what it does NOT yet do.** The patch
+carries deterministic sine-based grain (matching this file's existing
+window-lit-pattern convention, not `Math.random` — atlas generation stays
+reproducible) at a 4px cell size, plus three horizontal coursing joints, so
+it is visibly not a flat solid when sampled at more than one point. **The
+first implementation could sample it at only one point anyway:**
+`buildings.js`'s trim boxes are plain, unsubdivided `BoxGeometry`s, which
+only carry UV values at each face's four 0/1 corners — remapping that UV
+with an integer repeat factor (as first written) sends both 0 and 1 to the
+same fractional remainder, so the "tiled" mapping collapsed every corner
+back to one point, identically to the bug this whole pass exists to fix.
+This was caught by the red-first test itself, not by re-reading the code —
+see below. The fix reads each vertex's actual world position instead of the
+box's coarse corner UV, and tiles from that, which varies continuously
+across a box's surface where the UV does not.
+
+**Watched red first, item 4, against a real bug.** `test/trimAtlasPatch.test.ts`
+asserts three things through `bld-office`'s real LOD0 geometry, which
+carries both K7's trim (tag `"trim"`) and genuine roof geometry (tag
+`"roof"`, its canopy/screen/chiller units) in one merged buffer: (1) some
+UVs land inside the new trim patch's rectangle, (2) more than one *distinct*
+UV does, and (3) the untouched flat patch's original point (0.97, 0.97) is
+still present, from the roof-tagged parts. Run with `git stash` isolating
+just the two source-file changes (the untracked test file stays): against
+today's committed code the build itself fails —
+`No matching export in "public/buildings.js" for import "TRIM_PATCH_U0"` —
+a harder red than an assertion failure, since the constants do not exist at
+all yet. Restored the stash and re-ran: assertion (2) failed at "found 1"
+against the FIRST version of the fix (the integer-repeat bug above) — a
+second, independent red, this time from real code that builds and runs but
+does the wrong thing. Fixed to position-based tiling; all three assertions
+pass. `node test/run.mjs buildingLODAndColors.test.ts buildingExplicitSize.test.ts
+layoutGeometry.test.ts trimAtlasPatch.test.ts` — 15/15 green, including AS1
+through AS4. `node test/run.mjs phaseDelta.test.ts` (the file that generates
+atlases directly) — 4/4 green. `npx tsc --noEmit` — clean.
+
+**Vertex colour, a design change beyond the four numbered items.** The
+patch's own `stoneTrim` colour and grain now carry the trim's tone. Keeping
+K6's `wall.multiplyScalar(0.28)` vertex tint on top would have multiplied
+two independently-toned colours together and compounded darker than either
+alone — the calibration that number was measured against assumed a pure
+white patch, which no longer exists here. Vertex colour is now a light
+18%-toward-wall tint over 82% neutral, so the atlas dominates the look and
+buildings of one character do not all show one identical cornice. This is a
+reasoned design choice, not a measurement, and it is recorded as one.
+
+**What is NOT done.** This machine's memory did not clear the 4 GB floor the
+host rule sets for any render, checked five times over roughly ten minutes
+(3.5, 3.6, 3.9, 4.0, then falling to 3.0, 2.6, 2.9 GB) while the other lane
+worked on `main`. Per that rule, no render was attempted below the floor,
+including the single 4.0 GB reading — treated as not clearing it, not as a
+green light. **The street-level and downtown-close re-shoot this fix was
+supposed to end with did not happen.** Nothing above is a visual claim: the
+patch has not been seen rendered, only proven, in Node, to (a) exist, at the
+right UV coordinates, per character, (b) carry real grain in its source
+canvas, and (c) be sampled by trim geometry with genuine per-vertex
+variation rather than a collapsed point. Whether it actually reads as stone
+at street-level distance, whether the coursing joints are visible or too
+subtle, and whether `TRIM_UV_TEXELS_PER_METRE = 0.6` tiles at a sane
+frequency on a real cornice are all open questions a render would answer and
+this session could not ask. `test/testCount.generated.json` was also not
+regenerated — `gen-test-count.mjs` runs the full suite, including the
+browser-heavy gates, which carries the same memory risk as the re-shoot and
+was withheld for the same reason. **This section is a code-level pass, not
+a visual one, and should not be read as the second half of "improved, not
+solved" above being resolved.**
