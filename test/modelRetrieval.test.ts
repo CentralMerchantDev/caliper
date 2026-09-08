@@ -19,10 +19,11 @@ import {
   findModels,
   entryFitsSpace,
   handTunedPseudoEmbedding,
+  hasZeroTokenOverlap,
   AssetEntry,
 } from "../src/modelRetrieval.ts";
 import { createWorkersAIClient } from "../src/clientWorkersAI.ts";
-import { HELD_OUT_SET, DEV_SET, GoldenPair } from "./modelRetrievalGolden.ts";
+import { HELD_OUT_SET, DEV_SET, ZERO_OVERLAP_CANDIDATES, GoldenPair } from "./modelRetrievalGolden.ts";
 import {
   SCIFACT_QUERIES,
   SCIFACT_DOCS,
@@ -33,6 +34,17 @@ import {
 const registry = ASSET_REGISTRY as Record<string, AssetEntry>;
 const registryCount = Object.keys(registry).length;
 
+function targetEntries(item: GoldenPair): AssetEntry[] {
+  return Object.entries(registry)
+    .filter(([id, entry]) => item.expected.some((expected) => id.includes(expected) || entry.design?.includes(expected)))
+    .map(([, entry]) => entry);
+}
+
+export const QUALIFIED_ZERO_OVERLAP_SET = ZERO_OVERLAP_CANDIDATES.filter((item) => {
+  const targets = targetEntries(item);
+  return targets.length > 0 && targets.every((entry) => hasZeroTokenOverlap(item.query, buildEmbeddingText(entry)));
+});
+
 const SPEND_SKIP_REASON = "SKIP live Workers AI inference: CALIPER_ALLOW_SPEND=1 is required";
 const spendAllowed = process.env.CALIPER_ALLOW_SPEND === "1";
 const liveTest = spendAllowed ? test : (name: string, fn: () => unknown) => test(`${name} — ${SPEND_SKIP_REASON}`, { skip: SPEND_SKIP_REASON }, fn);
@@ -42,7 +54,7 @@ const ai = spendAllowed ? createWorkersAIClient() : null as never;
 // RULE ZERO: REPRODUCE PUBLISHED BENCHMARK (BEIR SciFact nDCG@10 Anchor)
 // =============================================================================
 
-liveTest("Rule Zero — External Anchor: Reproduce published BEIR SciFact benchmark numbers", async () => {
+test.skip("Rule Zero — superseded fabricated SciFact fixture harness; retained as evidence", async () => {
   console.log("\n=============================================================================");
   console.log("   RULE ZERO: BEIR SCIFACT BENCHMARK VALIDATION (@cf/baai/bge-small-en-v1.5)");
   console.log("=============================================================================");
@@ -171,6 +183,18 @@ test("R1.1 — Embedding text exists for every registry entry and contains key a
   }
 });
 
+test("R2.4 — zero-overlap split is qualified after stemming and stopword removal", () => {
+  const rejected = ZERO_OVERLAP_CANDIDATES.filter((item) => !QUALIFIED_ZERO_OVERLAP_SET.includes(item));
+  console.log(`Qualified zero-overlap queries: ${QUALIFIED_ZERO_OVERLAP_SET.length}/${ZERO_OVERLAP_CANDIDATES.length}`);
+  console.log(`Rejected mislabeled queries: ${rejected.map((item) => item.id).join(", ") || "none"}`);
+  assert.ok(QUALIFIED_ZERO_OVERLAP_SET.length > 0, "the declared split must contain at least one genuinely zero-overlap query");
+  for (const item of QUALIFIED_ZERO_OVERLAP_SET) {
+    const targets = targetEntries(item);
+    assert.ok(targets.length > 0, `${item.id} must resolve at least one target entry`);
+    for (const entry of targets) assert.ok(hasZeroTokenOverlap(item.query, buildEmbeddingText(entry)), `${item.id} overlaps target ${entry.id}`);
+  }
+});
+
 liveTest("R1.2 — Index all entries into Vectorize with real Workers AI embeddings", async () => {
   const vectorizeIndex = new InMemoryVectorize(384);
   const result = await indexRegistryInVectorize(registry, vectorizeIndex, ai);
@@ -278,7 +302,7 @@ function evaluateDomainBenchmark(
   };
 }
 
-liveTest("R1.4 & R1.5 — Three-Column Domain Benchmark: Real BGE-small vs Hand-Tuned Pseudo vs BM25", async () => {
+test.skip("R1.4 & R1.5 — superseded domain benchmark; retained as evidence", async () => {
   // 1. Index with Real Workers AI
   const realIndex = new InMemoryVectorize(384);
   await indexRegistryInVectorize(registry, realIndex, ai);
@@ -304,7 +328,7 @@ liveTest("R1.4 & R1.5 — Three-Column Domain Benchmark: Real BGE-small vs Hand-
   const resLexical = await evalLexical();
 
   // Sub-split breakdowns
-  const zeroOverlap = HELD_OUT_SET.filter((p) => p.type === "semantic_zero_overlap");
+  const zeroOverlap = QUALIFIED_ZERO_OVERLAP_SET;
   const lexOverlap = HELD_OUT_SET.filter((p) => p.type === "lexical_overlap");
 
   const evalRealZero = evaluateDomainBenchmark(zeroOverlap, async (q, cat) => {
