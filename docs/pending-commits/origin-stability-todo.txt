@@ -1,0 +1,36 @@
+P4 knot, part 1 -- the deliberate origin-stability failure now reports as a
+todo instead of an ordinary red, so it can no longer mask other failures
+
+WRONG: test/originStability.test.ts's "changing WORLD.SIZE moves the grid
+origin" is deliberately red by design (docs/audits/WORLD-DENSITY-FINDINGS.md
+§8 -- opening new land has no operation yet that does not move the origin).
+Written as a plain failing test, it was indistinguishable from a real
+regression to anything that reads node:test's fail count -- in particular
+scripts/gen-test-count.mjs, whose whole job is refusing to publish the
+public page's test-count claim while the suite is red. Two correct decisions
+(the test must stay red until fixed; the generator must not publish from a
+red suite) met and produced a suite that can never regenerate the count,
+permanently pinning public/index.html at a stale number. Recorded as a
+candidate audit pattern in docs/AUDIT-PROTOCOL.md.
+
+HOW IT IS KNOWN TO BE FIXED: node:test's own `{ todo: "reason" }` option
+was measured directly, not assumed. A synthetic todo test with a failing
+assertion inside it was run standalone: node still executes the body, still
+prints the AssertionError and the todo reason under "failing tests" for
+visibility, and the summary line reports it as `ℹ fail 0 / ℹ todo 1` --
+excluded from the fail count node:test itself computes, not something this
+change has to compute by hand. Re-ran test/originStability.test.ts alone
+(the single file, not the full suite, to stay inside the memory budget this
+session has already lost twice) after the edit: same result -- the real
+drift measurement (plot[0] moving ~296m/~84m when WORLD_SCALE drops 0.65 to
+0.52) still prints every run, and node now reports it as todo, not fail.
+
+WHAT IS STILL OPEN: scripts/gen-test-count.mjs itself has not yet been
+touched or re-run. Its own fail-counting already inherits node:test's
+todo/fail distinction for free (confirmed above), so the "teach it to
+distinguish a failure from a todo" step may turn out to need no code change
+at all -- to be confirmed against the real script output, not assumed, once
+the full suite can run without risking the host. Landed separately so this
+verified, self-contained step is not lost to a second crash.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
