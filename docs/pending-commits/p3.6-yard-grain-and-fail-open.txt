@@ -1,0 +1,94 @@
+P3.6 -- the yard's grain derived (not picked), a reintroduced fail-open
+caught in the same commit that removed seven others, golf-course fixed
+with the shared mechanism, the bridge-span gap traced to a known cause
+
+Independent verification of P3.5 held: zero Math.max(<const>,
+heightAt(...)) floors remained, groundOrRefuse real and in use at five
+sites, the yard genuinely a 2D grid, claimProp real and live at four call
+sites. Refusing to wire in prop-placement.js on a stale premise was the
+right call under a second read too.
+
+P3.6.1 -- the yard's cell size was chosen by analogy ("matching the
+along-quay spacing cranes already use"), not derived. Measured directly:
+10m-dense sampling of the real footprint, slope between adjacent samples
+both axes -- relief 58.0m (matching Mark's own figure), mean slope 0.043,
+p90 0.105, p95 0.113, p99 0.118, max 0.198. cell <= T/threshold at the
+gate's own ~1.5m near-camera threshold: p99 needs 12.7m, max needs 7.6m --
+single-digit metres, exactly as predicted, and grading a container yard
+that fine does not read as a graded slab. The premise -- close this by
+grading finer -- is wrong, which is itself the finding, not a failure to
+find the right constant.
+
+Site relocation was tried for real, not asserted: findQuay (land-use.js)
+now scores the apron behind the berth using findFlattestSite's own
+min/max-over-a-grid measure, and refuses a berth whose apron exceeds
+footprint.js's own STEP.TERRACE_MAX (15m, transferred, not invented).
+Measured directly against the real terrain: no site within any radius up
+to 20,000m fully satisfies both deep water and a gradeable apron. The one
+materially better site (23.8m relief vs 58.0m here) is 11.28km away --
+past any radius the world can afford to search: radius:20000 was tested
+directly and the page failed to load, Playwright's own 120s navigation
+timeout tripping mid-generation, because findQuay's search cost is
+quadratic in radius. features.js's radius stays at 1,500; findQuay's
+fallback-scoring (returns its best candidate with yardOk/yardRange rather
+than null) ships and runs on every build, but does not change the built
+site at the radius that is actually safe to search live.
+
+Container yard offenders: NOT zero. 1,633 remain (was 2,022 before P3.6,
+1,679 after the grid alone), worst gap 13.5m (was 23.9m, then 18.0m). Real,
+substantial, measured improvement; zero is unreachable this pass for the
+reason measured above, not silently accepted as "improved" -- full
+before/after numbers and the T/threshold table are in
+docs/audits/P3.5-FLOATING.md.
+
+P3.6.2 -- yardCellY's own fallback (`cnt ? sum/cnt : ri>0 ?
+yardCellY[idx-yardCols] : 2`) was absence read as success again, in the
+SAME commit that removed seven other instances of it. Fixed: the yard
+grading is now gradeGroundBands/bandLevelAt (public/city-render.js),
+extracted pure and THREE-free for the same reason groundOrRefuse is -- a
+cell with no dry sample is null, refused, never a fabricated number.
+test/setPieceRefusal.test.ts gained five cases. Watched red for real: the
+cell resolution was mechanically reverted to the exact old ternary, three
+assertions failed with `2 !== null` on precisely the cases that matter,
+then reverted back and reconfirmed green (9/9).
+
+P3.6.3 -- golf-course/golf-clubhouse carried the identical defect and got
+the identical fix, on purpose: gradeGroundBands is shared (not a second
+answer to the same defect), called on the course's own square footprint
+instead of the port's rectangle. Every golf feature now looks up its own
+position's graded level. 27 -> 17 offenders, worst gap 52.1m -> 9.72m;
+golf-clubhouse no longer appears in the offenders list at all. Found and
+fixed in the same pass: a pre-existing `stats.golf = 9` was silently
+overwriting the richer stats object a few lines above -- unrelated to
+P3.6, discovered while wiring the new stats, renamed to stats.golfFairways.
+
+The 14 bridge-span offenders: measured directly (every real merged bridge
+mesh's own bbox vs heightAt at its centre) and traced to
+docs/audits/P3-BRIDGES.md's own already-recorded open item 3 ("Pier/
+abutment sub-geometry... not turned into its own verified sub-pieces") --
+the same physical crossing's concrete and steel layers show different
+gaps at the same location, the signature of a merged, profiled structure
+checked at one centre point. Same known cause, already on record. Left as
+Mark's own instruction for the known-gap case says to.
+
+Separately, traced without fixing, as asked: test/planSeed.test.ts's real
+plot count (17,583) against its stale pin (19,874) -- commit 3419331,
+"World rebalance, step 3, part 1" (2026-09-06 23:00:32, on main, an
+ancestor of this work), cut the barrier island's plot share 56.0% -> 8.0%
+and demoted several TOWER/MIDRISE settlements. The test's own comment
+(written in cdc2640) predicted this exactly: "If this comment is still
+here and step 3 has landed, that is a dropped step, not a tolerated one."
+Step 3 has landed; the pin was never updated. Not fixed here.
+
+npx tsc --noEmit clean. Full suite: the same four pre-existing failures as
+before this pass (two named-red World-rebalance properties, the stale
+public test-count claim gen-test-count.mjs correctly refuses to update
+while the suite is red, and the city-summary staleness check from the same
+World-rebalance gap) -- no new failure from anything in this commit.
+test/testCount.generated.json regenerated (1055 -> 1060); CLAUDE.md's
+verification line updated to match.
+
+Not started: P4. Reported to Mark rather than begun without confirmation,
+given its own scope (five features, each with its own red-first test).
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

@@ -1,4 +1,5 @@
 import { gradeRun, RAIL_ALIGNMENT } from "./grade.js";
+import { STEP } from "./footprint.js";
 // =============================================================================
 // THE LAND REGISTRY
 //
@@ -397,9 +398,30 @@ export function findQuay(heightAt, want, opts = {}) {
     // It now tries both and keeps whichever finds a berth, so the dead branch is
     // live and the quay follows the coast rather than the axis it was written on.
     along = null,
+    // P3.6.1 -- A QUAY IS DEEP WATER AND DRY FRONTAGE. NEITHER SAYS ANYTHING
+    // ABOUT WHAT IS BEHIND IT.
+    //
+    // The container port used to be sited on water depth alone, and the yard
+    // behind the berth was never examined -- measured after the fact
+    // (docs/audits/P3.5-FLOATING.md): 58 m of relief across the yard
+    // footprint, and closing that by grading the render alone would need
+    // single-digit-metre cells, which is not what a graded slab looks like.
+    // The apron a real terminal is built on is chosen, not made flat by
+    // force after the fact.
+    //
+    // yardWidth/yardDepth: 0 (the default) skips this check entirely, so
+    // every OTHER caller of findQuay -- there are none today, but the
+    // option is opt-in on purpose -- is unaffected. yardMaxRelief reuses
+    // footprint.js's own STEP.TERRACE_MAX (15 m, "a cliff, nothing should
+    // be built") rather than inventing a second ceiling: the same
+    // reasoning applies to a large flat installation as to a single
+    // building's footprint -- above it, no amount of terracing reads as
+    // "graded ground" rather than "built into a hillside".
+    yardWidth = 0, yardDepth = 0, yardGrade = 120, yardMaxRelief = STEP.TERRACE_MAX,
   } = opts;
 
   let best = null;
+  let bestFallback = null;
   const orientations = along ? [along] : ["ew", "ns"];
 
   const score = (cx, cz, along) => {
@@ -430,9 +452,49 @@ export function findQuay(heightAt, want, opts = {}) {
       }
       const frac = total ? ok / total : 0;
       if (frac < 0.8) continue;
+
+      // The apron behind the berth: sampled on its own grid (same measure
+      // findFlattestSite already uses -- min/max over a sampled rectangle --
+      // not a second implementation of "how flat is this"). Water inside the
+      // footprint inflates the range like any other relief would, which is
+      // correct: a tidal creek through the yard is exactly as disqualifying
+      // as a hillside through it.
+      let yardRange = 0;
+      if (yardWidth && yardDepth) {
+        let yMin = Infinity, yMax = -Infinity;
+        const yn = Math.max(2, Math.round(yardWidth / yardGrade));
+        const zn = Math.max(2, Math.round(yardDepth / yardGrade));
+        for (let yi = 0; yi <= yn; yi++) {
+          const alongOff = -yardWidth / 2 + (yardWidth * yi) / yn;
+          for (let zi = 0; zi <= zn; zi++) {
+            const inland = 70 + (yardDepth * zi) / zn; // matches the renderer's own 70..560m span behind the quay
+            const yx = ew ? cx + alongOff : cx + side * inland;
+            const yz = ew ? cz + side * inland : cz + alongOff;
+            const h = heightAt(yx, yz);
+            if (h < yMin) yMin = h;
+            if (h > yMax) yMax = h;
+          }
+        }
+        yardRange = yMax - yMin;
+      }
+
       const dist = Math.hypot(cx - want.x, cz - want.z);
-      const cand = { x: cx, z: cz, along, landSide: side, depth: deepest, length, frac, moved: dist };
-      if (!best || dist < best.moved) best = cand;
+      const cand = { x: cx, z: cz, along, landSide: side, depth: deepest, length, frac, moved: dist, yardRange };
+
+      // A REFUSAL NEEDS ITS OWN NUMBERS, NOT JUST NULL.
+      //
+      // If no site anywhere satisfies both deep water AND a gradeable apron,
+      // that is itself the finding -- "this world cannot host a container
+      // terminal" -- and it needs the same numbers a success would carry,
+      // not silence. So every quay-legal candidate (deep water + dry
+      // frontage) is tracked as a fallback by its OWN best apron, even when
+      // it fails yardMaxRelief; a real answer is returned either way, with
+      // `yardOk` saying which kind it is.
+      if (!yardWidth || !yardDepth || yardRange <= yardMaxRelief) {
+        if (!best || dist < best.moved) best = { ...cand, yardOk: true };
+      } else if (!bestFallback || yardRange < bestFallback.yardRange) {
+        bestFallback = { ...cand, yardOk: false };
+      }
     }
   };
 
@@ -444,7 +506,7 @@ export function findQuay(heightAt, want, opts = {}) {
       for (const o of orientations) score(want.x + Math.cos(a) * r, want.z + Math.sin(a) * r, o);
     }
   }
-  return best;
+  return best || bestFallback;
 }
 
 /**

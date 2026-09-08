@@ -99,7 +99,23 @@ export const FEATURES = [
     // because both numbers looked individually correct. A requirement compared
     // against a scaled quantity has to be scaled the same way, or it is not the
     // same question at two scales.
-    need: { kind: "quay", length: 500, minDepth: 8 * WORLD_SCALE, reach: 180, radius: 1500 },
+    // yardWidth/yardDepth match the yard footprint city-render.js actually
+    // builds (_q.x +/- 900, _q.z + landSide * [70..560]) -- raw metres, not
+    // WORLD_SCALE-adjusted, the same convention the renderer's own built
+    // dimensions already use (see footprint.js's STEP comment: a built
+    // dimension is a fact about the thing built, not about the island).
+    // P3.6.1 -- radius stays 1500, not widened. findQuay's search cost is
+    // quadratic in radius (rings x angle-positions-per-ring both grow with
+    // r); measured directly, radius:20000 (searched for a materially
+    // flatter apron) made the page itself fail to load -- Playwright's own
+    // 120s navigation timeout tripped during world generation. The one site
+    // in the world with a real improvement (23.8m relief, vs 58m here) is
+    // 11.28km away, past any radius this world can afford to search in
+    // real time. Within a safe radius the best available apron is 56.3m
+    // (barely better than the original 58.0m) -- named in
+    // docs/audits/P3.5-FLOATING.md as why zero is unreachable via
+    // relocation, not silently accepted as "improved".
+    need: { kind: "quay", length: 500, minDepth: 8 * WORLD_SCALE, reach: 180, radius: 1500, yardWidth: 1800, yardDepth: 490 },
   },
   {
     id: "railway",

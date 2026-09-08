@@ -265,6 +265,67 @@ export function groundOrRefuse(heightAt, x, z) {
   return h < DRY_ENOUGH ? null : h;
 }
 
+/**
+ * P3.6.1/P3.6.2/P3.6.3 -- a rectangular footprint graded in a 2D grid,
+ * extracted pure and THREE-free for the same reason groundOrRefuse is:
+ * city-render.js's scene-building cannot run in the node test suite, but
+ * the grading DECISION does not need a GPU. Shared by the container yard
+ * and the golf course -- both carried the identical "single mean over a
+ * wide footprint" defect (docs/audits/P3.5-FLOATING.md), and a shared
+ * defect gets one fix, not two different ones.
+ *
+ * A single mean over the container yard's 1,800 x 490 m footprint (what
+ * this replaced) put 2,022 of its own rendered instances more than one
+ * visible pixel from the real ground beneath them. A 1D strip banded only
+ * by depth-from-quay still averaged away a real cross-slope. This is a 2D
+ * grid, each cell graded to its own local mean via groundOrRefuse -- a
+ * cell with no dry sample point is `null`, refused, not a fabricated
+ * number or a borrowed neighbour's (P3.6.2: the previous version fell back
+ * to a hardcoded 2 m, absence read as success again, in the same commit
+ * that removed seven other instances of exactly that).
+ *
+ * @param {Function} heightAt
+ * @param {{x0:number,x1:number,z0:number,z1:number}} bounds  the footprint to grade
+ * @param {{cellX?:number, cellZ?:number}} [opts]
+ * @returns {{cols:number, rows:number, x0:number, x1:number, z0:number, z1:number, cellY:(number|null)[], refused:number}}
+ */
+export function gradeGroundBands(heightAt, bounds, opts = {}) {
+  const { cellX = 150, cellZ = 35 } = opts;
+  const { x0, x1, z0, z1 } = bounds;
+  const cols = Math.max(1, Math.round(Math.abs(x1 - x0) / cellX));
+  const rows = Math.max(1, Math.round(Math.abs(z1 - z0) / cellZ));
+  const cellY = new Array(cols * rows).fill(null);
+  let refused = 0;
+  for (let ri = 0; ri < rows; ri++) {
+    const bz0 = z0 + ((z1 - z0) * ri) / rows;
+    const bz1 = z0 + ((z1 - z0) * (ri + 1)) / rows;
+    for (let ci = 0; ci < cols; ci++) {
+      const bx0 = x0 + ((x1 - x0) * ci) / cols;
+      const bx1 = x0 + ((x1 - x0) * (ci + 1)) / cols;
+      let sum = 0, cnt = 0;
+      for (const x of [bx0, (bx0 + bx1) / 2, bx1]) {
+        for (const z of [bz0, (bz0 + bz1) / 2, bz1]) {
+          const g = groundOrRefuse(heightAt, x, z);
+          if (g !== null) { sum += g; cnt++; }
+        }
+      }
+      const idx = ri * cols + ci;
+      if (cnt) cellY[idx] = sum / cnt;
+      else refused++;
+    }
+  }
+  return { cols, rows, x0, x1, z0, z1, cellY, refused };
+}
+
+/** Look up a graded band's level at a world point, or null if that cell was refused. */
+export function bandLevelAt(bands, x, z) {
+  const tx = (x - bands.x0) / (bands.x1 - bands.x0);
+  const tz = (z - bands.z0) / (bands.z1 - bands.z0);
+  const ci = Math.min(bands.cols - 1, Math.max(0, Math.floor(tx * bands.cols)));
+  const ri = Math.min(bands.rows - 1, Math.max(0, Math.floor(tz * bands.rows)));
+  return bands.cellY[ri * bands.cols + ci];
+}
+
 export function buildWorldState(seed = DEFAULT_SEED, layers = []) {
   const instance = createWorld({ seed, layers });
   const field = instance.land;
@@ -2586,41 +2647,14 @@ function buildProps(api) {
     // the yard's outer edge, meaning the relief here varies across x as much
     // as it does moving inland -- a strip that only bands by depth-from-quay
     // still averages away a real slope running the other way. So this is a
-    // 2D grid, not a 1D strip: ~150 m across the quay, ~35 m moving inland
-    // (matching the along-quay spacing cranes already use, and the original
-    // single sample's own inland grain), each cell graded to its own local
-    // mean.
-    const YARD_CELL_X = 150, YARD_CELL_Z = 35;
-    const yardX0 = _q.x - 900, yardX1 = _q.x + 900;
-    const yardZ0 = _q.z + _qs * 70, yardZ1 = _q.z + _qs * 560;
-    const yardCols = Math.max(1, Math.round((yardX1 - yardX0) / YARD_CELL_X));
-    const yardRows = Math.max(1, Math.round(Math.abs(yardZ1 - yardZ0) / YARD_CELL_Z));
-    const yardCellY = new Array(yardCols * yardRows).fill(2);
-    for (let ri = 0; ri < yardRows; ri++) {
-      const bz0 = yardZ0 + ((yardZ1 - yardZ0) * ri) / yardRows;
-      const bz1 = yardZ0 + ((yardZ1 - yardZ0) * (ri + 1)) / yardRows;
-      for (let ci = 0; ci < yardCols; ci++) {
-        const bx0 = yardX0 + ((yardX1 - yardX0) * ci) / yardCols;
-        const bx1 = yardX0 + ((yardX1 - yardX0) * (ci + 1)) / yardCols;
-        let sum = 0, cnt = 0;
-        for (const x of [bx0, (bx0 + bx1) / 2, bx1]) {
-          for (const z of [bz0, (bz0 + bz1) / 2, bz1]) {
-            const h = heightAt(x, z);
-            if (h >= 1) { sum += h; cnt++; }
-          }
-        }
-        const idx = ri * yardCols + ci;
-        yardCellY[idx] = cnt ? sum / cnt : ri > 0 ? yardCellY[idx - yardCols] : 2;
-      }
-    }
-    const yardLevelAt = (x, z) => {
-      const tx = (x - yardX0) / (yardX1 - yardX0), tz = (z - yardZ0) / (yardZ1 - yardZ0);
-      const ci = Math.min(yardCols - 1, Math.max(0, Math.floor(tx * yardCols)));
-      const ri = Math.min(yardRows - 1, Math.max(0, Math.floor(tz * yardRows)));
-      return yardCellY[ri * yardCols + ci];
-    };
-    stats.containerYardLevel = +(yardCellY.reduce((a, b) => a + b, 0) / yardCellY.length).toFixed(1);
-    stats.containerYardBands = yardCellY.map((v) => +v.toFixed(1));
+    // 2D grid, not a 1D strip (public/city-render.js's own `gradeGroundBands`,
+    // extracted and unit-tested -- test/setPieceRefusal.test.ts -- and shared
+    // with the golf course below, which carried the identical defect).
+    const yardBands = gradeGroundBands(heightAt, { x0: _q.x - 900, x1: _q.x + 900, z0: _q.z + _qs * 70, z1: _q.z + _qs * 560 });
+    const yardDry = yardBands.cellY.filter((v) => v !== null);
+    stats.containerYardLevel = yardDry.length ? +(yardDry.reduce((a, b) => a + b, 0) / yardDry.length).toFixed(1) : null;
+    stats.containerYardBands = yardBands.cellY.map((v) => (v === null ? null : +v.toFixed(1)));
+    stats.containerYardCellsRefused = yardBands.refused;
 
     const portCenterZ = _q.z + _qs * 300;
     const portLOD = new THREE.LOD();
@@ -2632,7 +2666,8 @@ function buildProps(api) {
         if (rnd("ct" + x + z) < 0.42) continue;
         // Still refuse to stack in the water -- the yard is level, not blind.
         if (heightAt(x, z) < 1) continue;
-        const g = yardLevelAt(x, z);
+        const g = bandLevelAt(yardBands, x, z);
+        if (g === null) continue; // this cell's own ground refused -- do not place, do not guess
         const stack = 1 + Math.floor(rnd("cs" + x + z) * 4);
         for (let k = 0; k < stack && n < 2200; k++) {
           d.position.set(x - _q.x, g + 1.4 + k * 2.7, z - portCenterZ); d.scale.set(1, 1, 1); d.updateMatrix();
@@ -2940,54 +2975,70 @@ function buildProps(api) {
     // moved: 0 for a site with 108 m of relief -- a true statement about a
     // constraint nobody set.
     //
-    // Graded rather than sampled: the mean over the footprint, so the course
-    // sits IN the ground rather than on one point of it, and the residual is
-    // reported so a reader can see how much earth this implies.
-    let gySum = 0, gyN = 0, gyLo = Infinity, gyHi = -Infinity;
-    for (let a = 0; a < 8; a++) {
-      for (const rr of [0, 260, 520, 760]) {
-        const px = CX + Math.cos((a / 8) * Math.PI * 2) * rr;
-        const pz = CZ + Math.sin((a / 8) * Math.PI * 2) * rr;
-        const h = heightAt(px, pz);
-        gySum += h; gyN++;
-        if (h < gyLo) gyLo = h;
-        if (h > gyHi) gyHi = h;
-      }
-    }
-    const gy = Math.max(3, gySum / gyN);
-    stats.golf = { base: +gy.toFixed(1), relief: +(gyHi - gyLo).toFixed(1), cut: +(gyHi - gy).toFixed(1), fill: +(gy - gyLo).toFixed(1) };
+    // P3.6.3 -- carried the identical defect the container yard did (a
+    // single mean over a wide footprint), fixed the same way, on purpose:
+    // gradeGroundBands, the same shared function, not a second answer to
+    // the same defect. The course is a 1,520 m disc, CX +/- 760 in both
+    // axes (no along/inland asymmetry the way the quay has), so a square
+    // grid is passed directly.
+    const golfBands = gradeGroundBands(heightAt, { x0: CX - 760, x1: CX + 760, z0: CZ - 760, z1: CZ + 760 }, { cellX: 150, cellZ: 150 });
+    const golfDry = golfBands.cellY.filter((v) => v !== null);
+    const golfLo = golfDry.length ? Math.min(...golfDry) : null, golfHi = golfDry.length ? Math.max(...golfDry) : null;
+    stats.golf = golfDry.length
+      ? { base: +(golfDry.reduce((a, b) => a + b, 0) / golfDry.length).toFixed(1), relief: +(golfHi - golfLo).toFixed(1), cellsRefused: golfBands.refused }
+      : { base: null, relief: null, cellsRefused: golfBands.refused };
     // the rough: one big soft footprint
     const base = new THREE.Mesh(new THREE.CircleGeometry(760, 22), rough);
-    base.name = "golf-course"; // same single-mean-Y-over-a-wide-footprint shape as the container yard (P3.5-FLOATING.md) -- named, not fixed, this pass
-    base.rotation.x = -Math.PI / 2; base.position.set(CX, gy + 0.35, CZ); base.receiveShadow = true; scene.add(base);
+    base.name = "golf-course";
+    { const g = bandLevelAt(golfBands, CX, CZ); if (g !== null) { base.rotation.x = -Math.PI / 2; base.position.set(CX, g + 0.35, CZ); base.receiveShadow = true; scene.add(base); } }
     // fairways: nine mown strips at varied angles
     for (let i = 0; i < 9; i++) {
       const a = rnd("gf" + i) * Math.PI * 2;
       const r = 180 + rnd("gr" + i) * 420;
       const fx = CX + Math.cos(a) * r * 0.6, fz = CZ + Math.sin(a) * r * 0.6;
-      const strip = new THREE.Mesh(new THREE.PlaneGeometry(70 + rnd("gw" + i) * 40, 300 + rnd("gl" + i) * 220), fair);
-      strip.name = "golf-course";
-      strip.rotation.x = -Math.PI / 2; strip.rotation.z = a;
-      strip.position.set(fx, gy + 0.42, fz); strip.receiveShadow = true; scene.add(strip);
+      const fg = bandLevelAt(golfBands, fx, fz);
+      if (fg !== null) {
+        const strip = new THREE.Mesh(new THREE.PlaneGeometry(70 + rnd("gw" + i) * 40, 300 + rnd("gl" + i) * 220), fair);
+        strip.name = "golf-course";
+        strip.rotation.x = -Math.PI / 2; strip.rotation.z = a;
+        strip.position.set(fx, fg + 0.42, fz); strip.receiveShadow = true; scene.add(strip);
+      }
       // a green with a bunker beside it
-      const gr = new THREE.Mesh(new THREE.CircleGeometry(26, 12), fair);
-      gr.name = "golf-course";
-      gr.rotation.x = -Math.PI / 2; gr.position.set(fx + Math.cos(a) * 150, gy + 0.5, fz + Math.sin(a) * 150); scene.add(gr);
-      const bk = new THREE.Mesh(new THREE.CircleGeometry(15, 10), sand);
-      bk.name = "golf-course";
-      bk.rotation.x = -Math.PI / 2; bk.position.set(fx + Math.cos(a + 1) * 172, gy + 0.46, fz + Math.sin(a + 1) * 172); scene.add(bk);
+      const grX = fx + Math.cos(a) * 150, grZ = fz + Math.sin(a) * 150;
+      const grG = bandLevelAt(golfBands, grX, grZ);
+      if (grG !== null) {
+        const gr = new THREE.Mesh(new THREE.CircleGeometry(26, 12), fair);
+        gr.name = "golf-course";
+        gr.rotation.x = -Math.PI / 2; gr.position.set(grX, grG + 0.5, grZ); scene.add(gr);
+      }
+      const bkX = fx + Math.cos(a + 1) * 172, bkZ = fz + Math.sin(a + 1) * 172;
+      const bkG = bandLevelAt(golfBands, bkX, bkZ);
+      if (bkG !== null) {
+        const bk = new THREE.Mesh(new THREE.CircleGeometry(15, 10), sand);
+        bk.name = "golf-course";
+        bk.rotation.x = -Math.PI / 2; bk.position.set(bkX, bkG + 0.46, bkZ); scene.add(bk);
+      }
     }
     // a water hazard and the clubhouse
-    const pond = new THREE.Mesh(new THREE.CircleGeometry(88, 16), water);
-    pond.name = "golf-course-pond"; // sits at its own water level, not heightAt
-    pond.rotation.x = -Math.PI / 2; pond.position.set(CX + 240, gy + 0.44, CZ - 180); scene.add(pond);
-    const club = new THREE.Mesh(RB(62, 10, 30, 0.8), M(0xf2ece0, 0.85));
-    club.name = "golf-clubhouse";
-    club.position.set(CX - 520, gy + 5, CZ + 380); club.castShadow = true; scene.add(club);
-    const croof = new THREE.Mesh(new THREE.ConeGeometry(44, 9, 4), M(0x8a5a3c, 0.85));
-    croof.name = "golf-clubhouse-roof"; // mounted on top of the clubhouse, not the ground
-    croof.position.set(CX - 520, gy + 14, CZ + 380); croof.rotation.y = Math.PI / 4; croof.castShadow = true; scene.add(croof);
-    stats.golf = 9;
+    { const g = bandLevelAt(golfBands, CX + 240, CZ - 180);
+      if (g !== null) {
+        const pond = new THREE.Mesh(new THREE.CircleGeometry(88, 16), water);
+        pond.name = "golf-course-pond"; // sits at its own water level, not heightAt
+        pond.rotation.x = -Math.PI / 2; pond.position.set(CX + 240, g + 0.44, CZ - 180); scene.add(pond);
+      } }
+    { const g = bandLevelAt(golfBands, CX - 520, CZ + 380);
+      if (g !== null) {
+        const club = new THREE.Mesh(RB(62, 10, 30, 0.8), M(0xf2ece0, 0.85));
+        club.name = "golf-clubhouse";
+        club.position.set(CX - 520, g + 5, CZ + 380); club.castShadow = true; scene.add(club);
+        const croof = new THREE.Mesh(new THREE.ConeGeometry(44, 9, 4), M(0x8a5a3c, 0.85));
+        croof.name = "golf-clubhouse-roof"; // mounted on top of the clubhouse, not the ground
+        croof.position.set(CX - 520, g + 14, CZ + 380); croof.rotation.y = Math.PI / 4; croof.castShadow = true; scene.add(croof);
+      } }
+    // Was `stats.golf = 9`, silently overwriting the base/relief object set
+    // above with a fairway count -- a pre-existing collision, found while
+    // fixing P3.6.3, not introduced by it.
+    stats.golfFairways = 9;
   }
 
   // --- airport ---
