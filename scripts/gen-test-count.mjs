@@ -13,28 +13,64 @@
 // result, commit it, and let a test compare the page against it.
 //
 //   node scripts/gen-test-count.mjs
+//
+// RUNNING AND RECORDING WERE ONE STEP, WHICH DOUBLED THE SUITE'S OWN MEMORY
+// COST AGAINST ITSELF.
+//
+// execFileSync captures a child's entire stdout into one in-memory string
+// (encoding: "utf8", not streamed) and forwards this process's own env --
+// including NODE_OPTIONS -- to it. A heap cap meant to bound ONE process
+// therefore bounds this script AND its child independently: a 3072 MB cap
+// authorises 3072 MB twice, 6 GB combined, which is worse than no cap at all
+// on a host with less than that free. Measured directly: the parent and
+// child both climbed past 1 GB combined inside 25 seconds under a 3072 MB
+// cap, against the single `node test/run.mjs` process this script wraps
+// taking eight minutes to reach 1.3 GB on its own.
+//
+// So running the suite and recording what it measured are now two things a
+// caller can do separately. --node-log <path> reads a file already holding
+// test/run.mjs's captured stdout (produced by running it once, alone, output
+// redirected straight to disk -- one process, no parent buffering it a
+// second time) instead of spawning and capturing the suite itself. Default
+// behaviour (no flag) is unchanged: this script still runs the suite itself,
+// exactly as it always has, so no existing caller breaks.
 import { execFileSync } from "node:child_process";
 import { writeFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+function flagValue(name) {
+  const i = process.argv.indexOf(name);
+  return i === -1 ? null : process.argv[i + 1];
+}
+const nodeLogPath = flagValue("--node-log");
+const workerLogPath = flagValue("--worker-log");
+
 let out = "";
-try {
-  out = execFileSync(process.execPath, [join(ROOT, "test", "run.mjs")], {
-    cwd: ROOT,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-    env: process.env,
-  });
-} catch (e) {
-  // A failing suite still prints its totals, and we want them: the point is to
-  // record what the runner observed, not to require a green run.
-  out = String(e.stdout || "");
+if (nodeLogPath) {
+  out = readFileSync(resolve(process.cwd(), nodeLogPath), "utf8");
   if (!out) {
-    console.error("the suite produced no output at all -- refusing to write a count");
+    console.error(`--node-log ${nodeLogPath} was empty -- refusing to write a count that was not measured.`);
     process.exit(1);
+  }
+} else {
+  try {
+    out = execFileSync(process.execPath, [join(ROOT, "test", "run.mjs")], {
+      cwd: ROOT,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      env: process.env,
+    });
+  } catch (e) {
+    // A failing suite still prints its totals, and we want them: the point is to
+    // record what the runner observed, not to require a green run.
+    out = String(e.stdout || "");
+    if (!out) {
+      console.error("the suite produced no output at all -- refusing to write a count");
+      process.exit(1);
+    }
   }
 }
 
@@ -72,15 +108,19 @@ if (tests === null || pass === null || fail === null) {
 // vitest runs under a different runner, which is a reason to invoke it
 // differently, not a reason to take its numbers on trust.
 let vout = "";
-try {
-  vout = execFileSync(process.execPath, [join(ROOT, "node_modules", "vitest", "vitest.mjs"), "run"], {
-    cwd: ROOT,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-    env: process.env,
-  });
-} catch (e) {
-  vout = String(e.stdout || "") + String(e.stderr || "");
+if (workerLogPath) {
+  vout = readFileSync(resolve(process.cwd(), workerLogPath), "utf8");
+} else {
+  try {
+    vout = execFileSync(process.execPath, [join(ROOT, "node_modules", "vitest", "vitest.mjs"), "run"], {
+      cwd: ROOT,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      env: process.env,
+    });
+  } catch (e) {
+    vout = String(e.stdout || "") + String(e.stderr || "");
+  }
 }
 // vitest colours its summary, so strip the escapes before matching.
 const vplain = vout.replace(/\[[0-9;]*m/g, "");
