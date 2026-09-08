@@ -1841,6 +1841,9 @@ varying vec3 vSeaWorld;`)
   // is really on screen, instead of computing buildScenePlacements a
   // second time and risking the two disagreeing.
   let scenePlacements = null;
+  // P4.2 -- populated inside the buildings block below; declared here so it
+  // survives past that block's own scope onto the returned api.
+  const buildingInstanceIndex = new Map();
   if (!SKIP.has("buildings")) {
     // -------------------------------------------------------------------------
     // THE CITY IS LAID OUT BY RULES, THEN BUILT FROM THE LIBRARY.
@@ -1885,6 +1888,17 @@ varying vec3 vSeaWorld;`)
       refused++;
       refusedWhy[r.reason] = (refusedWhy[r.reason] || 0) + 1;
     }
+
+    // P4.2 -- HIGHLIGHT without a material swap on the shared batch needs
+    // to know WHICH InstancedMesh and WHICH instance index a given plotId
+    // landed in -- nothing tracked this before P4 (confirmed in
+    // docs/audits/P4-GROUNDING.md's own research: no userData, no
+    // instance-index array anywhere in the instanced building path).
+    // `mesh` here is LOD0 (finest detail, what a close-up click actually
+    // sees) -- LOD1/LOD2 share the same instance index by construction
+    // (populated in the same loop, same `i`), so LOD0 alone is enough to
+    // look the instance's own matrix back up. (Declared outside this
+    // block -- see above -- so it survives onto the returned api.)
 
     // DISTANCE-BANDED LOD & SPATIAL CHUNKING (Phase V7)
     //
@@ -1989,6 +2003,7 @@ varying vec3 vSeaWorld;`)
           im0.setMatrixAt(i, dummy.matrix);
           if (im1 !== im0) im1.setMatrixAt(i, dummy.matrix);
           if (im2 !== im0 && im2 !== im1) im2.setMatrixAt(i, dummy.matrix);
+          buildingInstanceIndex.set(p.plotId, { mesh: im0, index: i, geometry: geo0 });
           i++;
 
           placed++;
@@ -2440,7 +2455,7 @@ varying vec3 vSeaWorld;`)
   // and so P4.4's move op has a live handle to the same layer stack
   // buildScenePlacements already reads (apply-layers.js). Not previously
   // exposed because nothing outside this module needed it before P4.
-  const api = { scene, field, heightAt, plan, world, instance, scenePlacements, masses, stats, sun, sunDir: sunPos.clone(), sky, citySky, sea, wn, LOOK, THREE, renderer, settAt, SETT, SETT_BY_ID, bridgeSpans, placedBuildings, CHUNK_SIZE, useChunking };
+  const api = { scene, field, heightAt, plan, world, instance, scenePlacements, buildingInstanceIndex, masses, stats, sun, sunDir: sunPos.clone(), sky, citySky, sea, wn, LOOK, THREE, renderer, settAt, SETT, SETT_BY_ID, bridgeSpans, placedBuildings, CHUNK_SIZE, useChunking };
   if (!SKIP.has("props")) buildProps(api);
   stats.buildMs = Math.round(performance.now() - t0);
   return api;

@@ -6574,6 +6574,62 @@ class Renderer3D {
   }
 
 
+  /**
+   * P4.2 -- HIGHLIGHT, without a material swap on the shared instanced
+   * batch. An InstancedMesh draws every instance from the SAME geometry
+   * and material (instance-groups.js's own header, quoted in
+   * docs/audits/P4-GROUNDING.md) -- retinting the whole mesh would tint
+   * every OTHER building sharing that variant too. So the selected
+   * instance is pulled OUT: its own slot in the InstancedMesh is hidden
+   * (scaled to zero, not deleted -- InstancedMesh has no "remove one"),
+   * and a real individual Mesh, sharing the same geometry but its own
+   * emissive material, is drawn in its place at the SAME matrix
+   * (city.buildingInstanceIndex, built once per world load -- P4.2's own
+   * addition to buildWorld). Restoring is the exact reverse, not a
+   * rebuild: the instance's original matrix was saved before being
+   * zeroed, so `_clearHighlight` puts back the identical transform, not
+   * an approximation of it.
+   */
+  _setHighlight(plotId) {
+    this._clearHighlight();
+    const city = this._city;
+    if (!city || !city.buildingInstanceIndex) return;
+    const entry = city.buildingInstanceIndex.get(plotId);
+    if (!entry) return;
+    const { mesh, index, geometry } = entry;
+    const THREE = city.THREE;
+    const matrix = new THREE.Matrix4();
+    mesh.getMatrixAt(index, matrix);
+
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    mesh.setMatrixAt(index, zero);
+    mesh.instanceMatrix.needsUpdate = true;
+
+    const highlightMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8, emissive: 0x0ea5e9, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.1,
+    });
+    const highlightMesh = new THREE.Mesh(geometry, highlightMat);
+    highlightMesh.applyMatrix4(matrix);
+    highlightMesh.name = "p4-highlight";
+    highlightMesh.castShadow = true;
+    this.scene.add(highlightMesh);
+
+    this._highlight = { plotId, mesh, index, matrix, highlightMesh, material: highlightMat };
+  }
+
+  /** Restore the exact original instance transform and remove the
+   *  individual highlight mesh -- the reverse of _setHighlight, run before
+   *  every new selection and on isolate/deselect. */
+  _clearHighlight() {
+    if (!this._highlight) return;
+    const { mesh, index, matrix, highlightMesh, material } = this._highlight;
+    mesh.setMatrixAt(index, matrix);
+    mesh.instanceMatrix.needsUpdate = true;
+    this.scene.remove(highlightMesh);
+    material.dispose();
+    this._highlight = null;
+  }
+
   _inspectClick(e) {
     if (!this.nextWorld || !this.onInspect) return;
     const rect = this.canvas.getBoundingClientRect();
@@ -6653,6 +6709,11 @@ class Renderer3D {
       // (`bld-${plotId}`) -- not a second id scheme.
       const piece = addr && addr.onPlot && this._boardPieces ? this._boardPieces.get(`bld-${addr.plotId}`) || null : null;
       this._selectedPiece = piece;
+      // P4.2 -- highlight the newly selected piece's own building, if it
+      // has one; clear any previous highlight first either way (a new
+      // pick, even one with no piece, deselects the last one).
+      if (piece) this._setHighlight(addr.plotId);
+      else this._clearHighlight();
       if (this.onInspect) {
         this.onInspect({
           parcelId: addr && addr.plotId ? addr.plotId : "city",
