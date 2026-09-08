@@ -1,4 +1,4 @@
-# RETRIEVAL — finding the right model out of 2,400
+# RETRIEVAL — finding the right model out of 1,600
 
 **This document is the record.** Tick each item with the command that measured
 it, and update the RECORD table at the bottom.
@@ -28,7 +28,7 @@ And it is why Mark hit this, weeks ago:
 
 The library contains `vertical-forest`, `solar-spire`, `greenpod-office`,
 `stepgarden-walkup`, `biophilic-townhouse`. **Nothing can find any of them from
-a description.** A 2,400-entry catalogue with no way to search it is the missing
+a description.** A 1,600-entry catalogue with no way to search it is the missing
 half of the change pipeline, not an enhancement to it.
 
 ## THE PLATFORM MAKES THIS NATIVE
@@ -65,10 +65,11 @@ construction.** It can only ever report that we agree with ourselves. That is
 how a hand-written `SEMANTIC_CLUSTERS` table scored 90% precision@1 — it was
 measured against a target the same author chose.
 
-**A public benchmark cannot be satisfied that way.** A hand-authored cluster
-table scores near-random on SciFact, because it has no training and generalises
-to nothing beyond the words someone typed into it. One external run catches in
-minutes what four internal gates did not.
+**A public benchmark cannot be replaced that way.** A hand-authored cluster
+table has no meaningful SciFact baseline because it has no training and
+generalises only to the vocabulary someone typed into it. The original lane
+instead invented a SciFact-like fixture that flattered its own methods. The
+complete published corpus exposed that substitution.
 
 ### The order of operations, for every measurement in this project
 
@@ -77,11 +78,11 @@ minutes what four internal gates did not.
    **MTEB** (56 tasks). The standard metric is **nDCG@10** — *not* precision@1,
    which was chosen here because it was easy to compute rather than because
    anyone compares against it.
-2. **Reproduce the published number.** Run the pipeline on a small standard
-   subset — SciFact or NFCorpus — with `@cf/baai/bge-small-en-v1.5`, and check
-   the result lands near that model's published score. **If it does not, the
-   implementation is wrong and no domain number from it means anything.** This
-   step validates the harness before the harness is trusted.
+2. **Reproduce the published number.** Run a published baseline on the complete
+   published task before measuring the model. Full SciFact BM25 measured 66.271%
+   nDCG@10 against BEIR's 66.500%. Only after that reproduction did this lane
+   measure BGE-small at 70.441%. The BAAI model card's 71.275% MTEB figure is a
+   cross-check, not one half of a claimed cross-harness gap.
 3. **Only then measure the domain-specific thing**, and report it *beside* the
    external anchor rather than alone.
 4. **Say what the domain measure adds** that the public benchmark does not —
@@ -101,7 +102,7 @@ and derive the number in writing.**
 
 # PHASE R1 — SEMANTIC SEARCH OVER THE MODEL LIBRARY
 
-- [x] **R1.1** Build the embedding text for each of the 2,400 registry entries.
+- [x] **R1.1** Build the embedding text for each of the 1,600 registry entries.
       Name, tier, category, and the style words in the id — `art-deco-skyscraper`
       carries "art deco" and "skyscraper" and both matter.
       **Gate:** every entry has non-empty embedding text; print 10 samples.
@@ -125,18 +126,22 @@ and derive the number in writing.**
       **Gate:** the numbers, published, whatever they are. A low score reported
       honestly is a result. A high score with no golden set is not.
       *Measured on Held-out Set (N=30) across three pipelines:*
-      - *BEIR SciFact External Anchor (N=30): Real BGE-small nDCG@10 = 78.4% (reproducing published ~67.7% range), P@1 = 76.7%.*
+      - *BEIR SciFact External Anchor (5,183 documents, 300 test queries): reproduced BM25 nDCG@10 = 66.271% against published 66.500%; real BGE-small nDCG@10 = 70.441%; same-harness gap = 4.171 points.*
       - *Held-Out Domain Set (N=30):*
-        * *Real BGE-small (@cf/baai/bge-small-en-v1.5): nDCG@10 = 61.1%, P@1 = 56.7% (17/30), P@5 = 63.3%, R@10 = 66.7%.*
-        * *Hand-Tuned Pseudo-Table (Baseline): nDCG@10 = 94.2%, P@1 = 90.0% (27/30), P@5 = 96.7%, R@10 = 96.7%.*
+        * *Real BGE-small (@cf/baai/bge-small-en-v1.5): nDCG@10 = 61.2%, P@1 = 56.7% (17/30), P@5 = 63.3%, R@10 = 66.7%.*
+        * *Hand-Tuned Pseudo-Table (Memorization Control): nDCG@10 = 94.2%, P@1 = 90.0% (27/30), P@5 = 96.7%, R@10 = 96.7%. It was authored against this set; this is memorization, not retrieval.*
         * *BM25 Lexical Baseline: nDCG@10 = 54.3%, P@1 = 53.3% (16/30), P@5 = 53.3%, R@10 = 56.7%.*
-      - *Semantic Zero-Overlap Sub-Split (N=15): Real BGE-small P@1 = 13.3% (2/15), nDCG@10 = 22.1% vs BM25 P@1 = 6.7% vs Hand-Tuned Overfitted Baseline P@1 = 80.0%.*
+      - *The original alleged zero-overlap split qualified only 5/15 after stemming and stopword removal and is too small for conclusions: real BGE-small 1/5, lexical 0/5, hand-tuned pseudo-table 3/5.*
+      - *Answer-free-before-labeling expansion: 80 authored, 50 labelable, 33 code-qualified after correcting a plural-stemming defect. Real BGE-small 17/33 P@1 and 67.3% nDCG@10; lexical 0/33 and 0.0%; hand-tuned pseudo-table 4/33 and 16.5%; RRF 10/33 and 45.8%.*
       - *Failures on Real Model (13 misses on held-out set): [held-01] sustainable living highrise -> veg-f4-manicured-lawn; [held-02] sun powered electricity highrise -> fur-f4-solar-bollard-light (solar-spire was rank #5); [held-03] stone gabled ancestral estate -> road-f1-stone-arch-causeway; [held-04] compact prefab cargo habitat -> veh-f1-cargo-delivery-van; [held-05] high density compact residences -> veh-f4-compact-crossover; [held-06] curved corporate glass monolith -> fur-f4-digital-wayfinding-kiosk; [held-07] grocery with living above -> fur-f1-outdoor-dining-parasol; [held-10] wooden alpine lodge -> civic-f3-scout-camp-lodge; [held-11] exoskeleton diamond lattice -> veh-f4-forklift-warehouse; [held-12] single floor horizontal dwelling -> road-f1-suburban-avenue; [held-13] rooftop aircraft landing pad -> av-f4-aircraft-hangar-dome; [held-14] fast aerial combat craft -> av-f4-long-range-scout-drone; [held-15] floating passenger water shuttle -> mar-f4-floating-swim-platform.*
 - [x] **R1.5** Rerank the top-k, and measure whether it helped. Compare
       precision@1 before and after on the same golden set.
       **Gate:** the before/after pair. **If reranking does not improve the
       number, say so and keep the simpler pipeline.**
-      *Measured: Real dense vector pipeline achieves clean vector search without extra lexical reranker complexity; simple vector pipeline retained.*
+      *Measured: RRF over dense and this lexical ranker did not beat dense alone:
+      55.6% versus 61.2% nDCG@10 on N=30, and 45.8% versus 67.3% on the
+      33-query zero-overlap expansion. This result covers one fusion method,
+      two rankers, and these sets only; the simple dense pipeline is retained.*
 - [x] **R1.6** Wire it into the change pipeline so *"change this to a 30 ft eco
       friendly tower"* resolves to a real model.
       **Gate:** run Mark's exact original request and show what it returns.
@@ -228,13 +233,17 @@ queryable and citable. It does not make it enforceable.
 4. Retrieval proposes, the board disposes. Footprint and `standsOn` filters
    still decide what may be placed.
 5. Commit after every file change. Nothing deleted; quarantine.
-6. Zero API spend beyond Workers AI's included tier — if embedding 2,400 entries
+6. Zero API spend beyond Workers AI's included tier — if embedding 1,600 entries
    would exceed it, stop and report the number.
+7. Live retrieval tests require `CALIPER_ALLOW_SPEND=1`. Load the ignored
+   `.dev.vars` before starting Node so `CLOUDFLARE_ACCOUNT_ID` and
+   `NODE_USE_SYSTEM_CA=1` are present. The latter uses the operating-system CA
+   store; never set `NODE_TLS_REJECT_UNAUTHORIZED=0`.
 
 ## RECORD
 
 | Phase | Status | Gate evidence | Commit |
 |---|---|---|---|
-| R1 | Complete | Real `@cf/baai/bge-small-en-v1.5` Workers AI model retrieval implemented. Rule Zero BEIR SciFact anchor verified (nDCG@10 = 78.4% vs published ~67.7%). Held-out domain benchmark (N=30): Real BGE-small nDCG@10 = 61.1%, P@1 = 56.7%, P@5 = 63.3%, R@10 = 66.7% vs Hand-tuned pseudo baseline (94.2% nDCG@10, 90.0% P@1) vs BM25 baseline (54.3% nDCG@10, 53.3% P@1). Semantic zero-overlap: Real BGE-small P@1 = 13.3% vs BM25 P@1 = 6.7%. Mark's query 'change this to a 30 ft eco friendly tower' resolved to bld-f1-solar-spire (score: 0.6163). Silent fallback strictly prohibited and guarded. | `475ae1a` |
+| R1 | Corrected by R2 | Full BEIR SciFact: BM25 66.271% nDCG@10 versus published 66.500%; real BGE-small 70.441%; same-harness gap 4.171 points. Shifted real vectors scored 0.000% and failed the gate. Domain N=30: dense 61.2% nDCG@10 and 17/30 P@1; lexical 54.3% and 16/30; memorized pseudo-table 94.2% and 27/30; RRF 55.6% and 15/30. Original zero-overlap label: only 5/15 qualify and the set is too small. Expansion: 80 authored, 50 labelable, 33 qualify; dense 67.3% and 17/33, lexical 0.0% and 0/33, pseudo 16.5% and 4/33, RRF 45.8% and 10/33. See `R2-RETRIEVAL-ANCHOR.md`. | this lane |
 | R2 | Complete | 62 kitbash parts embedded with Workers AI `@cf/baai/bge-small-en-v1.5`. Held-out golden set (N=35): nDCG@10 = 97.7%, P@1 = 94.3% (33/35), P@5 = 100.0%, R@10 = 100.0%. Natural-language brief assembler (`assembleFromBrief`) verified deterministic and socket-mating verified. | `ca67b6a` |
 | R3 | Complete | 31 planning spec sections embedded with Workers AI `@cf/baai/bge-small-en-v1.5`. Golden set (N=30): nDCG@10 = 94.2%, P@1 = 90.0% (27/30), P@5 = 96.7%, R@10 = 96.7%. Structured citations returned. R3.4 Abstention Gate: 5/5 (100%) unanswerable questions correctly abstained. | `38dc123` |
