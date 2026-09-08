@@ -1836,6 +1836,11 @@ varying vec3 vSeaWorld;`)
   // Filled by the building pass, consumed by the contact-shadow pass in
   // buildProps. One shadow per building that exists, at the base it stands on.
   const placedBuildings = [];
+  // P4.1 -- the SAME placements the scene was actually drawn from, exposed
+  // so a caller can derive real board pieces (board-adapter.js) for what
+  // is really on screen, instead of computing buildScenePlacements a
+  // second time and risking the two disagreeing.
+  let scenePlacements = null;
   if (!SKIP.has("buildings")) {
     // -------------------------------------------------------------------------
     // THE CITY IS LAID OUT BY RULES, THEN BUILT FROM THE LIBRARY.
@@ -1875,6 +1880,7 @@ varying vec3 vSeaWorld;`)
     // disagreeing.
     const { instanced, overridden, refusals: layoutRefusals, footByPlot } =
       buildScenePlacements({ instance, world, heightAt });
+    scenePlacements = { instanced, overridden, footByPlot };
     for (const r of layoutRefusals) {
       refused++;
       refusedWhy[r.reason] = (refusedWhy[r.reason] || 0) + 1;
@@ -2428,7 +2434,13 @@ varying vec3 vSeaWorld;`)
   }
   stats.trees = stats.trees || 0;
 
-  const api = { scene, field, heightAt, plan, world, masses, stats, sun, sunDir: sunPos.clone(), sky, citySky, sea, wn, LOOK, THREE, renderer, settAt, SETT, SETT_BY_ID, bridgeSpans, placedBuildings, CHUNK_SIZE, useChunking };
+  // P4.1 -- `instance` (world-model.js's seed+layers result) exposed so a
+  // caller can derive the real board pieces (board-adapter.js's
+  // piecesFromWorld) for the SAME placements this render actually drew,
+  // and so P4.4's move op has a live handle to the same layer stack
+  // buildScenePlacements already reads (apply-layers.js). Not previously
+  // exposed because nothing outside this module needed it before P4.
+  const api = { scene, field, heightAt, plan, world, instance, scenePlacements, masses, stats, sun, sunDir: sunPos.clone(), sky, citySky, sea, wn, LOOK, THREE, renderer, settAt, SETT, SETT_BY_ID, bridgeSpans, placedBuildings, CHUNK_SIZE, useChunking };
   if (!SKIP.has("props")) buildProps(api);
   stats.buildMs = Math.round(performance.now() - t0);
   return api;

@@ -16,6 +16,7 @@ import * as THREE from "three";
 import { WORLD_SCALE } from "./world-scale.js";
 import { WORLD } from "./city-plan.js";
 import { createSelection } from "./selection.js";
+import { boardPiecesById } from "./board-adapter.js";
 
 /**
  * TUNED VALUES, NAMED SO A TEST CAN READ THEM.
@@ -1797,6 +1798,16 @@ class Renderer3D {
 
     const city = buildWorld(THREE, this.renderer, this.scene);
     this._city = city;
+
+    // P4.1 -- the REAL board record for a clicked building, not a
+    // renderer-local approximation of the same facts. board.js is not the
+    // render source of truth (docs/audits/P4-GROUNDING.md, Finding 1) --
+    // this reads it, once per world load, from the SAME placements the
+    // scene was actually drawn from (city.scenePlacements), not a second,
+    // possibly-diverging computation.
+    this._boardPieces = city.scenePlacements
+      ? boardPiecesById(city.world, [...city.scenePlacements.instanced, ...city.scenePlacements.overridden])
+      : new Map();
 
     // WHAT IS AT THIS POINT, AND WHAT IS IT PART OF.
     //
@@ -6635,6 +6646,13 @@ class Renderer3D {
       const addr = this._selection ? this._selection.pick(pt.x, pt.z) : null;
       const where = this._index ? this._index.describeAt(pt.x, pt.z) : "somewhere in the city";
       this._lastPickedPoint = { x: pt.x, z: pt.z };
+      // P4.1 -- the real board record for a clicked plot's building, if it
+      // has one: id, kind (pieceType), grid address (cell), and the
+      // footprint it was built from. `whereIs`-equivalent lookup by the
+      // SAME id board-adapter.js's buildingPieces() assigns
+      // (`bld-${plotId}`) -- not a second id scheme.
+      const piece = addr && addr.onPlot && this._boardPieces ? this._boardPieces.get(`bld-${addr.plotId}`) || null : null;
+      this._selectedPiece = piece;
       if (this.onInspect) {
         this.onInspect({
           parcelId: addr && addr.plotId ? addr.plotId : "city",
@@ -6646,6 +6664,9 @@ class Renderer3D {
           contents: addr && addr.onPlot
             ? `Up to ${addr.maxHeight} m. Buildable envelope ${Math.round(addr.buildable.xMax - addr.buildable.xMin)} × ${Math.round(addr.buildable.zMax - addr.buildable.zMin)} m. Block ${addr.blockId}.`
             : `At (${Math.round(pt.x)}, ${Math.round(pt.z)}) — ${addr && addr.nearestPlotId ? `nearest plot ${addr.nearestPlotId}, about ${addr.nearestDistance} m away` : "no plot nearby"}.`,
+          board: piece
+            ? { id: piece.id, kind: piece.pieceType, cell: piece.cell, foot: piece.foot }
+            : null,
         });
       }
       return;
