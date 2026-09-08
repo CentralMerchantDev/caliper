@@ -799,3 +799,63 @@ independent reproduction of a number disagrees with the documented one,
 neither side's script should be trusted over the other without finding
 the actual difference in method — "reconfirmed by a third measurement"
 is not the same as "found where the second one went wrong."
+
+### 2026-09-08 · Candidate pattern F: two correct controls disable each other
+
+**What was found, and by whom:** not by an audit pass — by trying to close a
+routine finding and discovering the fix had no path to land. `test/originStability.test.ts`
+is deliberately red by design (docs/audits/WORLD-DENSITY-FINDINGS.md §8: opening
+new land has no operation yet that does not move the grid origin, and the test
+exists to keep that fact visible until one does). `scripts/gen-test-count.mjs`
+refuses to publish the public page's test-count claim while any test is red,
+because the claim it writes says the suite *passes*. Each control is correct
+in isolation and each was reviewed and accepted on its own merits. Composed,
+they deadlock: the suite can never be green, so the generator can never run,
+so `public/index.html` was pinned at a stale count (948, against a measured
+1087) with no mechanical way to correct it — not because anyone disagreed
+with either rule, but because neither rule's author checked what the other
+rule does to a suite the first rule guarantees will never fully pass.
+
+**Why this is a new shape, not a restatement of D or E:** pattern D (enumerated-
+instance fix) is one control with an incomplete blast radius. Pattern E
+(capability built beside an existing one) is a control nobody wired to another.
+This is neither — both controls are complete, both are wired, both are individually
+correct, and the failure only exists in their *composition*. Stated generally:
+**when a system has a control that guarantees a state will hold (here: "this
+test must never turn green") and a second control that gates on that same
+state never occurring (here: "never publish while anything is red"), the two
+together forbid the second control from ever firing, permanently — and neither
+control's own review would catch it, because each looks correct read alone.**
+The fix is not to weaken either control; it is to give the deliberately-red
+case a distinct status the gate can name and exempt without exempting real
+failures, which is what `node:test`'s built-in `{ todo }` status was for
+(commit `82cec4e`) — the gate already excludes `todo` from its fail count
+without needing to be taught to, because `node:test` itself already tracks
+the distinction the two controls needed and neither one had been told about.
+
+**The auditor's question this adds:** when a control's own name or comment
+says a red result is *permanent by design* (not "currently broken", but
+"will never pass"), check every OTHER control in the codebase that gates on
+"the suite is green" or "nothing is red" — not just whether the permanent-red
+control itself is honestly documented (§2.1 already asks that), but whether
+anything downstream silently loses the ability to ever fire because of it.
+
+### 2026-09-08 (same day) · A pipe that reports success for a process that died is the same shape as a test that cannot fail
+
+A backgrounded `node test/run.mjs 2>&1 | tee out.log | tail -80` was expected to
+run the full suite; instead the child `node` process crashed silently partway
+through (heap pressure — see the standing "worktree-has-no-node_modules"-
+adjacent host note about this sandbox's memory limits) and never printed a
+summary. The task-completion notification nonetheless reported "exit code 0",
+because in a shell pipeline the reported exit status is the *last* command's
+(`tail`, which succeeded reading whatever partial log existed) — not the
+producing command's. Caught only because the summary lines (`ℹ tests`/`ℹ
+pass`/`ℹ fail`) were grepped for and found completely absent, which should
+never happen on a real completed run. **Worth adding to §3 (verify the
+instrument, do not trust it):** a piped or backgrounded command's reported
+exit code is not evidence the pipeline's first stage succeeded — check for
+the producing command's own expected terminal output (a summary line, a
+sentinel, an explicit `${PIPESTATUS[0]}`/`$pipestatus[0]`) before treating a
+"completed" notification as "completed successfully". Same shape as §2.2's
+"a test that cannot fail": a status check that reports the wrong process's
+outcome will report green regardless of what the real target did.
