@@ -897,3 +897,34 @@ substitute judgement for instruction; it is specifically the same
 measure-before-you-build discipline this whole document is named for,
 turned toward the brief's own factual premises rather than only its
 deliverable.
+
+### 2026-09-08 (later still) · A disabling mutation that leaves the text intact is not a mutation
+
+Three times in one session (P4.3's isolate-new-pick-restores control, the
+exit audit's fix for isolate-hides-moved-pieces, and a first attempt at
+watching the ignoreId control red before switching to a real value
+substitution): a "break this on purpose" mutation was written as
+`// commented out` or `if (false) { ... block ... }` rather than an actual
+deletion or value change, and the wiring/regex-based test that was supposed
+to go red SURVIVED wrongly, because the test matches raw source TEXT, and
+neither a comment nor a dead `if (false)` branch removes the text — only
+whether it executes. §5.3 already says a mutation that did not APPLY
+(landed in the wrong place, matched zero or multiple times) is
+INCONCLUSIVE, not a pass; this is the same failure one level more subtle —
+the mutation applies, exactly once, exactly where intended, and STILL
+proves nothing, because "present in the file" and "reachable by the
+interpreter" are different properties and a source-regex check can only see
+the first. **The rule, stated so it can be checked**: when watching a
+control red by editing source (as opposed to running it through
+`scripts/mutate.mjs`, which mutates for real), the edit must remove or
+change EXECUTABLE effect — delete the line, change a value, invert a
+condition's real behaviour — never wrap it in a disabled branch or a
+comment, even temporarily. Both this session's near-misses were caught only
+because the mutation was watched red and unexpectedly stayed green, which
+is the protocol working as designed (§6: a green suite after a real attempt
+to break something is itself informative) — but three near-misses in one
+session, by the same author, on a lesson already written down once mid-
+session, means the lesson needs to be checkable, not just written: worth a
+standing item in whatever review a mutation entry gets before landing —
+does the `find`/`replace` pair in test/mutations.json actually remove or
+invert behaviour, or does it only comment it out?
