@@ -20,6 +20,7 @@ import {
   entryFitsSpace,
   handTunedPseudoEmbedding,
   hasZeroTokenOverlap,
+  stemRetrievalToken,
   AssetEntry,
 } from "../src/modelRetrieval.ts";
 import { createWorkersAIClient } from "../src/clientWorkersAI.ts";
@@ -184,6 +185,8 @@ test("R1.1 — Embedding text exists for every registry entry and contains key a
 });
 
 test("R2.4 — zero-overlap split is qualified after stemming and stopword removal", () => {
+  assert.equal(stemRetrievalToken("residences"), stemRetrievalToken("residence"));
+  assert.equal(stemRetrievalToken("fires"), stemRetrievalToken("fire"));
   const rejected = ZERO_OVERLAP_CANDIDATES.filter((item) => !QUALIFIED_ZERO_OVERLAP_SET.includes(item));
   console.log(`Qualified zero-overlap queries: ${QUALIFIED_ZERO_OVERLAP_SET.length}/${ZERO_OVERLAP_CANDIDATES.length}`);
   console.log(`Rejected mislabeled queries: ${rejected.map((item) => item.id).join(", ") || "none"}`);

@@ -26,7 +26,7 @@ const SPEND_SKIP_REASON = "SKIP live Workers AI inference: CALIPER_ALLOW_SPEND=1
 const spendAllowed = process.env.CALIPER_ALLOW_SPEND === "1";
 const liveTest = spendAllowed ? test : (name: string, fn: () => unknown) => test(`${name} — ${SPEND_SKIP_REASON}`, { skip: SPEND_SKIP_REASON }, fn);
 
-interface Cache { fingerprint: string; documentVectors: number[][]; queryVectors: number[][]; blindQueryVectors?: number[][] }
+interface Cache { fingerprint: string; documentVectors: number[][]; queryVectors: number[][]; blindQueryVectors?: number[][]; blindQueryIds?: string[] }
 interface Ranked { id: string; entry: AssetEntry }
 
 function fingerprint(): string {
@@ -55,7 +55,9 @@ test("R2.4 — blind zero-overlap expansion has at least 30 code-qualified queri
   console.log(`Candidates with later target labels: ${BLIND_LABELED_CANDIDATES.length}`);
   console.log(`Candidates qualifying after stemming and stopword removal: ${qualifiedBlindExpansion.length}`);
   console.log(`Qualification attrition: ${BLIND_LABELED_CANDIDATES.length - qualifiedBlindExpansion.length}/${BLIND_LABELED_CANDIDATES.length}`);
-  assert.ok(qualifiedBlindExpansion.length >= 30, `expected at least 30 qualified blind queries, got ${qualifiedBlindExpansion.length}`);
+  assert.equal(BLIND_QUERY_CANDIDATES.length, 80);
+  assert.equal(BLIND_LABELED_CANDIDATES.length, 50);
+  assert.equal(qualifiedBlindExpansion.length, 33);
 });
 
 function cosine(left: number[], right: number[]): number {
@@ -123,9 +125,21 @@ async function loadOrCreateCache(): Promise<Cache> {
         cache.blindQueryVectors.push(Array.from(await embedText(`${QUERY_PREFIX}${item.query}`, ai)));
         calls++;
       }
-      assert.equal(calls, 38, "the cache extension must make exactly 38 authorized query calls");
+      assert.equal(calls, qualifiedBlindExpansion.length, "the cache extension must embed every qualified query exactly once");
+      cache.blindQueryIds = qualifiedBlindExpansion.map((item) => item.id);
       fs.writeFileSync(cacheFile, JSON.stringify(cache), "utf8");
-      console.log("Extended domain cache with 38 qualified blind-query vectors; calls 38/38");
+      console.log(`Extended domain cache with ${calls} qualified blind-query vectors; calls ${calls}/${calls}`);
+    }
+    if (!cache.blindQueryIds && cache.blindQueryVectors.length === 38) {
+      // Cache v1 was produced before the plural-stemming correction. Five
+      // vehicle-category queries were then excluded; retain their IDs solely
+      // to bind the remaining cached vectors to the requests that produced them.
+      const rejectedVehicleIds = new Set(["blind-56", "blind-57", "blind-58", "blind-59", "blind-60"]);
+      cache.blindQueryIds = BLIND_LABELED_CANDIDATES
+        .filter((item) => qualifiedBlindExpansion.includes(item) || rejectedVehicleIds.has(item.id))
+        .map((item) => item.id);
+      assert.equal(cache.blindQueryIds.length, cache.blindQueryVectors.length);
+      fs.writeFileSync(cacheFile, JSON.stringify(cache), "utf8");
     }
     return cache;
   }
@@ -147,8 +161,9 @@ async function loadOrCreateCache(): Promise<Cache> {
     blindQueryVectors.push(Array.from(await embedText(`${QUERY_PREFIX}${item.query}`, ai)));
     calls++;
   }
-  assert.equal(calls, 84, "a cold domain run requires 84 inference calls");
-  const cache = { fingerprint: expectedFingerprint, documentVectors, queryVectors, blindQueryVectors };
+  assert.equal(calls, 46 + qualifiedBlindExpansion.length, "a cold domain run must embed each document batch and query exactly once");
+  const cache: Cache = { fingerprint: expectedFingerprint, documentVectors, queryVectors, blindQueryVectors };
+  cache.blindQueryIds = qualifiedBlindExpansion.map((item) => item.id);
   fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
   fs.writeFileSync(cacheFile, JSON.stringify(cache), "utf8");
   return cache;
@@ -186,9 +201,12 @@ liveTest("R2.4 and R2.5 — report dense, lexical, pseudo, and RRF retrieval sep
     pseudo: new Map<string, Ranked[]>(),
     hybrid: new Map<string, Ranked[]>(),
   };
-  assert.equal(cache.blindQueryVectors?.length, qualifiedBlindExpansion.length);
-  qualifiedBlindExpansion.forEach((item, index) => {
-    const dense = denseRank(cache.blindQueryVectors![index], item, cache.documentVectors);
+  assert.equal(cache.blindQueryVectors?.length, cache.blindQueryIds?.length);
+  const blindVectorsById = new Map(cache.blindQueryIds!.map((id, index) => [id, cache.blindQueryVectors![index]]));
+  qualifiedBlindExpansion.forEach((item) => {
+    const queryVector = blindVectorsById.get(item.id);
+    assert.ok(queryVector, `missing cached query vector for ${item.id}`);
+    const dense = denseRank(queryVector, item, cache.documentVectors);
     const lexical = lexicalRank(item);
     expandedRankings.dense.set(item.id, dense);
     expandedRankings.lexical.set(item.id, lexical);

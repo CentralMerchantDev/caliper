@@ -681,7 +681,8 @@ export function stemRetrievalToken(token: string): string {
   if (token.length > 4 && token.endsWith("ied")) return `${token.slice(0, -3)}y`;
   if (token.length > 4 && token.endsWith("ed")) return token.slice(0, -2);
   if (token.length > 4 && token.endsWith("ly")) return token.slice(0, -2);
-  if (token.length > 4 && token.endsWith("es")) return token.slice(0, -2);
+  if (token.length > 4 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
+  if (token.length > 4 && /(?:sses|xes|zes|ches|shes)$/.test(token)) return token.slice(0, -2);
   if (token.length > 3 && token.endsWith("s")) return token.slice(0, -1);
   return token;
 }
