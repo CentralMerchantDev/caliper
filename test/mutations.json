@@ -914,6 +914,24 @@
       "find": "      this._restoreIsolateState();\n      if (this.onInspect) {",
       "replace": "      if (this.onInspect) {",
       "expect": "a new pick restores any active isolate -- an isolate does not silently survive picking something else"
+    },
+    {
+      "id": "move-refusal-reaches-onMoveRefused",
+      "guards": "P4.4 _moveSelected() surfaces a refused move to the player via onMoveRefused -- never only a console log.",
+      "note": "Verified by hand this session (same host-memory reason as the P4.3 entries above). First attempt at this mutation used too wide a source window and matched the SEPARATE onMoveRefused call in the could-not-persist branch further down, so removing only the refusal-path call SURVIVED wrongly -- caught before landing; the wiring test now anchors on `if (!result.ok)` itself with a narrow 200-char window, and this mutation correctly goes red.",
+      "file": "public/world-render-3d.js",
+      "find": "    if (!result.ok) {\n      if (this.onMoveRefused) this.onMoveRefused({ reason: result.reason, blockedBy: result.blockedBy || null, plotId });\n      return result;\n    }",
+      "replace": "    if (!result.ok) {\n      return result;\n    }",
+      "expect": "a refused move reaches a caller-visible callback, not console.log"
+    },
+    {
+      "id": "move-edit-shape-exact",
+      "guards": "moveEditFor() builds world-model.js's own move op shape exactly -- address/op/payload.x/payload.z, nothing renamed or added.",
+      "note": "Verified by hand this session, same reason as above.",
+      "file": "public/move-piece.js",
+      "find": "  return { address: moveResult.plotId, op: \"move\", payload: { x: moveResult.destWorld.x, z: moveResult.destWorld.z } };",
+      "replace": "  return { address: moveResult.plotId, op: \"move\", payload: { x: moveResult.destWorld.x, z: moveResult.destWorld.z, extra: 1 } };",
+      "expect": "moveEditFor() builds world-model.js's own move-op shape exactly -- address/op/payload.x/payload.z, nothing more, nothing renamed"
     }
   ]
 }

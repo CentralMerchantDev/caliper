@@ -18,6 +18,8 @@ import { WORLD } from "./city-plan.js";
 import { createSelection } from "./selection.js";
 import { boardPiecesById } from "./board-adapter.js";
 import { neighboursOf, applyIsolate, restoreIsolate } from "./isolate.js";
+import { tryMove, moveEditFor } from "./move-piece.js";
+import { layerFrom } from "./world-model.js";
 import { inWorld } from "./grid.js";
 
 /**
@@ -1170,13 +1172,16 @@ class AudioSynth {
 }
 
 class Renderer3D {
-  constructor(canvas, { reducedMotion = false, onInspect = null, city = false } = {}) {
+  constructor(canvas, { reducedMotion = false, onInspect = null, onMoveRefused = null, city = false } = {}) {
     this.canvas = canvas;
     /** Build the 40 km city as the base scene instead of the four-house
      *  village. See _buildCityBase. */
     this._cityMode = !!city;
     this.reducedMotion = reducedMotion;
     this.onInspect = onInspect;
+    /** P4.4 -- a refused move's ONLY path to the player; see _moveSelected's
+     *  own header for why this must never be a console log. */
+    this.onMoveRefused = onMoveRefused;
     this.prevWorld = null;
     this.nextWorld = null;
     this._simMeshes = [];
@@ -6674,6 +6679,87 @@ class Renderer3D {
     this._isolatedPlotId = null;
   }
 
+  /**
+   * P4.4 MOVE -- drag the current selection to a new grid address.
+   * board.js's own canPlace ({ok:false, reason, blockedBy}) is the ONLY
+   * authority on whether this fits (public/move-piece.js's tryMove) -- this
+   * method does not re-decide that, it wires the existing refusal to a
+   * cursor and, on success, emits the real world-model.js `move` edit
+   * (public/apply-and-persist.js's own layerFrom()/world.layers.add()
+   * pattern).
+   *
+   * A refusal calls `this.onMoveRefused({reason, blockedBy, plotId})` --
+   * NEVER a console log; Mark's own brief: "a refusal the player cannot
+   * read is the same as no refusal." An occupied destination and a
+   * destination whose footprint does not fit report DIFFERENT reasons
+   * (board.js's own "occupied" vs "off-map"/"ground"), not one generic "no".
+   *
+   * The moved piece is repositioned live in THIS scene too (the same
+   * promote-out-of-the-instanced-batch technique P4.2/P4.3 already use, at
+   * the NEW position instead of the saved one) -- an approximation, named
+   * as one: the Y used here is heightAt(x,z), the bare ground height, not
+   * footprint.js's own terrace/verdict-aware base a full rebuild would
+   * compute. The real, authoritative position is the emitted layer edit
+   * itself; this is a live preview of it, not a second source of truth.
+   */
+  _moveSelected(destCell) {
+    const piece = this._selectedPiece;
+    const city = this._city;
+    if (!piece || !city || !this._boardPieces) return null;
+    const plotId = piece.id.slice("bld-".length);
+    const result = tryMove(plotId, destCell, this._boardPieces, { heightAt: city.heightAt, inWorld });
+    if (!result.ok) {
+      if (this.onMoveRefused) this.onMoveRefused({ reason: result.reason, blockedBy: result.blockedBy || null, plotId });
+      return result;
+    }
+
+    const edit = moveEditFor(result);
+    const layer = layerFrom({ id: `move-${plotId}-${Date.now()}`, author: "visitor-drag", edits: [edit] });
+    const added = city.instance && city.instance.layers ? city.instance.layers.add(layer) : { ok: false, reason: "no-layer-stack" };
+    if (!added.ok) {
+      if (this.onMoveRefused) this.onMoveRefused({ reason: added.reason || "could-not-persist", blockedBy: null, plotId });
+      return { ok: false, reason: added.reason || "could-not-persist", plotId };
+    }
+
+    this._liveRepositionMoved(plotId, result.destWorld);
+    return result;
+  }
+
+  /** Live-preview half of _moveSelected -- pull the piece's instance out of
+   *  its shared batch (P4.2/P4.3's own technique) and draw it as a
+   *  standalone Mesh at the new world position, permanently (not restored
+   *  by _clearHighlight/_restoreIsolateState, which only ever touch their
+   *  OWN temporary promotions). A piece moved more than once in the same
+   *  session is simply re-promoted from wherever it currently stands. */
+  _liveRepositionMoved(plotId, destWorld) {
+    const city = this._city;
+    if (!city || !city.buildingInstanceIndex) return;
+    if (!this._movedPieces) this._movedPieces = new Map();
+    const already = this._movedPieces.get(plotId);
+    if (already) {
+      const y = city.heightAt(destWorld.x, destWorld.z);
+      already.standalone.position.set(destWorld.x, y, destWorld.z);
+      return;
+    }
+    const entry = city.buildingInstanceIndex.get(plotId);
+    if (!entry) return;
+    const { mesh, index, geometry } = entry;
+    const THREE = city.THREE;
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    mesh.setMatrixAt(index, zero);
+    mesh.instanceMatrix.needsUpdate = true;
+
+    const material = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0.02 });
+    const standalone = new THREE.Mesh(geometry, material);
+    const y = city.heightAt(destWorld.x, destWorld.z);
+    standalone.position.set(destWorld.x, y, destWorld.z);
+    standalone.name = "p4-moved";
+    standalone.castShadow = true;
+    standalone.receiveShadow = true;
+    this.scene.add(standalone);
+    this._movedPieces.set(plotId, { mesh, index, geometry, material, standalone });
+  }
+
   _inspectClick(e) {
     if (!this.nextWorld || !this.onInspect) return;
     const rect = this.canvas.getBoundingClientRect();
@@ -8347,6 +8433,16 @@ export class WorldRenderer {
    *  (public/board.js's record: id, pieceType, cell, foot, ...), or null. */
   getSelectedPiece() {
     return this._impl._selectedPiece || null;
+  }
+
+  /** P4.4 -- drag the current selection to {i, j[, k, rotation]}. Returns
+   *  board.js's own tryMove() result ({ok:true,...} or
+   *  {ok:false, reason, blockedBy}); a refusal ALSO reaches onMoveRefused,
+   *  set on this instance, for the UI -- the return value is for a caller
+   *  that wants it directly (e.g. to end a drag gesture), not the only path
+   *  a refusal travels. No-op (returns null) in the 2D fallback. */
+  moveSelected(destCell) {
+    return this._impl._moveSelected ? this._impl._moveSelected(destCell) : null;
   }
 
   pressNavKey(key) {

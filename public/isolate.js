@@ -47,7 +47,8 @@
 // (a ground sample per foot cell) and not worth paying at world scale for a
 // single click's neighbour query.
 // =============================================================================
-import { footCellRect, createBoard } from "./board.js";
+import { footCellRect } from "./board.js";
+import { localBoard } from "./board-region.js";
 
 /** grid.js's own display/indexing grouping -- see file header for why this,
  *  not plan.blockId, is the right unit for a visual isolate margin. */
@@ -73,37 +74,16 @@ export function neighboursOf(plotId, boardPieces, { heightAt = null, inWorld = n
 
   const selFoot = footCellRect(selected);
   const m = NEIGHBOUR_MARGIN_M;
-  const bx0 = selFoot.xMin - m, bx1 = selFoot.xMax + m;
-  const bz0 = selFoot.zMin - m, bz1 = selFoot.zMax + m;
+  const box = { xMin: selFoot.xMin - m, xMax: selFoot.xMax + m, zMin: selFoot.zMin - m, zMax: selFoot.zMax + m };
 
-  // Coarse prefilter: bounds which pieces are worth placing into the local
-  // board below. Uses board.js's own footCellRect for the per-piece
-  // rectangle -- not a re-derived one -- so the only geometry invented here
-  // is the margin box itself, not the piece-overlap test.
-  const local = [];
-  for (const p of boardPieces.values()) {
-    const r = footCellRect(p);
-    if (r.xMax <= bx0 || r.xMin >= bx1 || r.zMax <= bz0 || r.zMin >= bz1) continue;
-    local.push(p);
-  }
+  const { board, localCount, placedCount } = localBoard(box, boardPieces, { heightAt, inWorld });
 
-  const board = createBoard({ heightAt, inWorld });
-  // Best-effort: this is real adapted data (board-adapter.js's own
-  // footprint-proxy approximation, per its header), not guaranteed to pass
-  // board.js's own stricter canPlace on every piece -- a piece that does not
-  // place is simply invisible to the neighbour query, not a crash. Named
-  // rather than silently swallowed: callers can inspect placedCount below.
-  let placedCount = 0;
-  for (const p of local) {
-    if (board.place(p).ok) placedCount++;
-  }
-
-  const i = Math.floor(bx0), j = Math.floor(bz0);
-  const w = Math.ceil(bx1 - bx0), d = Math.ceil(bz1 - bz0);
+  const i = Math.floor(box.xMin), j = Math.floor(box.zMin);
+  const w = Math.ceil(box.xMax - box.xMin), d = Math.ceil(box.zMax - box.zMin);
   const hits = board.inCells(i, j, w, d, selected.cell.k);
   const neighbours = hits.filter((p) => p.id !== selected.id);
   const keepIds = new Set([selected.id, ...neighbours.map((p) => p.id)]);
-  return { selected, neighbours, keepIds, localCount: local.length, placedCount };
+  return { selected, neighbours, keepIds, localCount, placedCount };
 }
 
 /**
