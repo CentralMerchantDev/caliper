@@ -1,0 +1,28 @@
+docs/AUDIT-PROTOCOL.md -- record "a brief is a claim too": Mark's own P4
+knot-fix instruction was wrong, checked instead of built, and the check
+found a different real defect the brief never named
+
+WRONG, in the brief rather than the code: the P4 knot-fix instructions said
+to "teach gen-test-count.mjs to distinguish a FAILURE from a todo," on the
+premise that it could not already do this. That premise was false --
+node:test's own `{ todo }` support already excludes a todo test from both
+the `ℹ fail` summary count and the failing-tests line the generator's regex
+reads, confirmed by running a synthetic todo test standalone and by
+capturing the real suite's output before and after the origin-stability
+conversion (commit 82cec4e). No code was written for a distinction that
+already existed for free.
+
+HOW IT IS KNOWN TO BE FIXED: not by building the requested feature, but by
+verifying its premise first, the same discipline this protocol's §0/§2.1
+already apply to a system's own claims about itself, applied here to an
+instruction's claim before any code existed to check against. The five
+minutes that check cost is why the session found the generator's real
+defect instead -- execFileSync buffering a child's entire stdout in memory
+while forwarding NODE_OPTIONS to it, authorising a heap cap twice rather
+than once -- which the brief never named and which was the actual cause of
+that session's repeated near-crashes (commit 0c97e45).
+
+Recorded so the next brief -- mine or anyone's -- gets the same check before
+the same kind of unbuilt feature.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

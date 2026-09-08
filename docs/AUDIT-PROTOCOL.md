@@ -859,3 +859,41 @@ sentinel, an explicit `${PIPESTATUS[0]}`/`$pipestatus[0]`) before treating a
 "completed" notification as "completed successfully". Same shape as §2.2's
 "a test that cannot fail": a status check that reports the wrong process's
 outcome will report green regardless of what the real target did.
+
+### 2026-09-08 (later still) · A brief is a claim too
+
+Mark's own brief for the P4 knot fix instructed: "Teach gen-test-count.mjs to
+distinguish a FAILURE from a todo. A todo is not a failing suite." That
+instruction was wrong. `node:test`'s own `{ todo }` support already excludes
+a todo test from both the `ℹ fail` summary count and the failing-tests line
+this script's regex reads — measured directly, not assumed, by running a
+synthetic todo test standalone and by capturing the real suite's output both
+before and after the conversion. No code was written to "teach" the
+generator this distinction, because the generator already had it, for free,
+inherited from the test runner underneath it. What the same investigation
+found instead was a real, different, unbriefed defect: the generator's
+`execFileSync` call buffers its child's entire stdout in memory and forwards
+`NODE_OPTIONS` to it, so a heap cap meant to bound one process bounds two
+independently — the actual cause of that session's repeated near-crashes,
+and the thing actually worth fixing.
+
+**Every entry in this section so far has been about verifying a RESULT —
+code, a test, a comment, a measured number — against reality. This is the
+same discipline aimed one level earlier, at the INSTRUCTION itself.** Rule
+Zero (§0) already says not to invent a benchmark and not to trust one the
+system invented for itself; a task brief is exactly this kind of unverified
+claim, just phrased as an imperative rather than an assertion. "X does not
+already do this" is a testable statement before it is a plan, and treating
+it as one — check it against the actual dependency, in this case a five-line
+standalone `node -e` experiment against the exact `node:test` version in
+use — took less effort than the code the brief asked for would have, and
+found a CRITICAL the brief never named. **Worth stating as an explicit step,
+ahead of implementation: before building what an instruction asks for,
+check whether the thing it says is missing is actually missing** — the same
+way §2.1 already asks whether a comment's claim about the code is true,
+applied to the comment's author's claim about the world before any code
+exists to check it against. This is not a licence to second-guess scope or
+substitute judgement for instruction; it is specifically the same
+measure-before-you-build discipline this whole document is named for,
+turned toward the brief's own factual premises rather than only its
+deliverable.
