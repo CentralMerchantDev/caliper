@@ -932,6 +932,15 @@
       "find": "  return { address: moveResult.plotId, op: \"move\", payload: { x: moveResult.destWorld.x, z: moveResult.destWorld.z } };",
       "replace": "  return { address: moveResult.plotId, op: \"move\", payload: { x: moveResult.destWorld.x, z: moveResult.destWorld.z, extra: 1 } };",
       "expect": "moveEditFor() builds world-model.js's own move-op shape exactly -- address/op/payload.x/payload.z, nothing more, nothing renamed"
+    },
+    {
+      "id": "generated-claims-buildings-mismatch-detected",
+      "guards": "P4.6's buildingsClaimMismatch actually detects a mismatch between the page's claim and the generated building count, rather than always reporting clean.",
+      "note": "Verified by hand this session (same host-memory reason as the other entries added alongside this one). A disabled-condition mutation (`if (false && ...)`) correctly turned the SYNTHETIC test red (which calls the function directly with a deliberately wrong value) while the real-data gate test stayed green, since the real page and the real generated file currently agree either way -- the synthetic test is the one this specific mutation is checkable against, and is the one recorded here.",
+      "file": "src/generatedClaimChecks.ts",
+      "find": "  if (claimedBuildings !== buildingsPlaced) {",
+      "replace": "  if (false && claimedBuildings !== buildingsPlaced) {",
+      "expect": "a deliberately staled building count is named, by claim, not silently absorbed"
     }
   ]
 }

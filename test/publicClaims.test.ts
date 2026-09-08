@@ -48,6 +48,7 @@ import { WORLD } from "../public/city-plan.js";
 import { CONTROL_LIMITS } from "../src/controlLayer.ts";
 import { MAX_PLAN_REPLIES } from "../src/changePipeline.ts";
 import { CITY_STATS } from "../src/citySummary.generated.ts";
+import { settlementsClaimMismatch, buildingsClaimMismatch, nodeTestsClaimMismatch, workerTestsClaimMismatch } from "../src/generatedClaimChecks.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 function repoRoot(): string {
@@ -146,43 +147,29 @@ test("the placeholder city stats are reachable numbers, not decoration", () => {
   // page to scripts/measure-layout.mjs's own output. A generated figure
   // exists now (CITY_STATS.buildingsPlaced) precisely so this can be an
   // equality instead of a band, the same pattern claim-node-tests already
-  // uses below.
-  assert.equal(
-    buildings, CITY_STATS.buildingsPlaced,
-    `the page claims ${buildings.toLocaleString()} buildings; the world this build actually places ` +
-    `has ${CITY_STATS.buildingsPlaced.toLocaleString()} (of ${CITY_STATS.plots.toLocaleString()} plots, ` +
-    `${CITY_STATS.buildingsRefused.toLocaleString()} refused). Update #city-stat-buildings in ` +
-    `public/index.html, or run \`node scripts/gen-city-summary.mjs\` if the world has changed.`
-  );
+  // uses below -- buildingsClaimMismatch (src/generatedClaimChecks.ts),
+  // reused by P4.6's own consolidated gate too.
+  const buildingsMismatch = buildingsClaimMismatch(buildings, CITY_STATS.buildingsPlaced);
+  assert.equal(buildingsMismatch, null, buildingsMismatch ?? "");
 
   const summary = readFileSync(join(ROOT, "src", "citySummary.generated.ts"), "utf8");
   const mismatch = settlementsClaimMismatch(settlements, summary);
   assert.equal(mismatch, null, mismatch ?? "");
 });
 
-/**
- * PART 7b/E8: this used to be `if (settMatch) { assert... }` -- a regex
- * that stops matching (the summary's prose is reworded, a typo lands in
- * gen-city-summary.mjs) silently SKIPPED the whole comparison instead of
- * failing it. That is the exact fail-open shape J4's own tolerance-band
- * defect had: a check that looks present but stops asserting anything the
- * moment its one precondition quietly breaks.
- *
- * Extracted as a pure function, rather than inlined in the test above, so
- * the "the regex cannot match" branch is directly testable with a synthetic
- * string -- today's real citySummary.generated.ts always matches, so a
- * mutation against only the real file would SURVIVE by construction and
- * prove nothing about whether the fail-open path is actually closed.
- *
- * Returns null when the claim checks out, or a message naming what failed.
- */
-export function settlementsClaimMismatch(claimedSettlements: number, summaryText: string): string | null {
-  const settMatch = summaryText.match(/(\d+)\s+settlements/i);
-  if (!settMatch) return "could not read a settlement count out of citySummary.generated.ts -- has its wording changed?";
-  const real = Number(settMatch[1]);
-  if (claimedSettlements !== real) return `the page says ${claimedSettlements} settlements; the generated summary says ${real}`;
-  return null;
-}
+// PART 7b/E8: this used to be `if (settMatch) { assert... }` -- a regex that
+// stops matching (the summary's prose is reworded, a typo lands in
+// gen-city-summary.mjs) silently SKIPPED the whole comparison instead of
+// failing it. That is the exact fail-open shape J4's own tolerance-band
+// defect had. settlementsClaimMismatch itself now lives in
+// src/generatedClaimChecks.ts, extracted as a pure function so the "the
+// regex cannot match" branch is directly testable with a synthetic string,
+// and so test/generatedClaimsAreCurrent.test.ts's P4.6 consolidated gate can
+// call the SAME comparison rather than a second one -- importing it from a
+// .test.ts file instead double-ran this file's own tests when both files
+// bundled together (test/run.mjs bundles each .test.ts file, and a relative
+// test-to-test import inlines the whole imported file, registrations and
+// all); moving it out of test/ is the fix, not a style preference.
 
 test("J4/E8 (synthetic): an unreadable settlement count fails loudly, it does not silently pass", () => {
   const unreadable = settlementsClaimMismatch(54, "this summary text has no number followed by the word settlements at all");
@@ -258,12 +245,10 @@ test("the test counts on the page are the test counts", () => {
   assert.ok(Number.isFinite(claimedNode), "#claim-node-tests is missing from the page");
   assert.ok(Number.isFinite(claimedWorker), "#claim-worker-tests is missing from the page");
 
-  assert.equal(
-    claimedNode, generated.nodeTests,
-    `the page claims ${claimedNode} Node tests; the last recorded run measured ` +
-    `${generated.nodeTests}. Update #claim-node-tests in public/index.html, or run ` +
-    `\`node scripts/gen-test-count.mjs\` if the suite has changed.`
-  );
+  // nodeTestsClaimMismatch (src/generatedClaimChecks.ts) -- reused by P4.6's
+  // own consolidated gate too, one comparison not two.
+  const nodeMismatch = nodeTestsClaimMismatch(claimedNode, generated.nodeTests);
+  assert.equal(nodeMismatch, null, nodeMismatch ?? "");
 
   // AND THE GENERATED FILE MUST NOT BE WILDLY STALE ITSELF. The static count is
   // a strict lower bound, so a generated number below it proves the artefact
@@ -333,12 +318,10 @@ test("the test counts on the page are the test counts", () => {
     `Run: node scripts/gen-test-count.mjs`
   );
 
-  assert.equal(
-    claimedWorker, generated.workerTests,
-    `the page claims ${claimedWorker} Worker tests; the last recorded vitest run ` +
-    `measured ${generated.workerTests}. Update #claim-worker-tests in ` +
-    `public/index.html, or run \`node scripts/gen-test-count.mjs\`.`
-  );
+  // workerTestsClaimMismatch (src/generatedClaimChecks.ts) -- reused by
+  // P4.6's own consolidated gate too, one comparison not two.
+  const workerMismatch = workerTestsClaimMismatch(claimedWorker, generated.workerTests);
+  assert.equal(workerMismatch, null, workerMismatch ?? "");
 
   // THE PAGE SAYS THESE ARE "RUN AGAINST THIS REPOSITORY". THAT IS A CLAIM
   // ABOUT EXECUTION, AND IT IS THE ONE THAT WAS FALSE.

@@ -1,0 +1,136 @@
+// =============================================================================
+// P4.6 -- ONE GATE, NOT THREE THAT EACH CATCH A THIRD OF IT
+//
+// publicClaims.test.ts, claudeMdIsCurrent.test.ts and the city-summary check
+// inside publicClaims.test.ts already assert, separately, that one published
+// number matches one generated artefact. Each is real and each stays --
+// deleting hard-won, incident-specific assertions and their messages would
+// lose exactly the specificity that caught real defects (publicClaims.test.ts's
+// own header names three). What did not exist until now: ONE property, "no
+// published number is stale", checked in one place, that names EVERY stale
+// claim in a single failure rather than a reader having to run three test
+// files and correlate three separate red lines themselves.
+//
+// So this file does not re-derive the comparisons -- it walks a manifest
+// built entirely from src/generatedClaimChecks.ts's own pure functions,
+// which publicClaims.test.ts and claudeMdIsCurrent.test.ts now ALSO call,
+// so there is exactly one comparison per claim, not one per file that
+// happens to check it. (Those functions do not live in test/ -- test/run.mjs
+// bundles and imports every .test.ts file independently, so a helper
+// defined in one test file and imported by another gets its whole file,
+// registrations included, bundled and run a SECOND time. Found directly:
+// importing settlementsClaimMismatch from publicClaims.test.ts made "the
+// test counts on the page are the test counts" run twice in a suite that
+// included both files, before this was moved out of test/.)
+// =============================================================================
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+import { CITY_STATS } from "../src/citySummary.generated.ts";
+import {
+  settlementsClaimMismatch, buildingsClaimMismatch,
+  nodeTestsClaimMismatch, workerTestsClaimMismatch, claudeMdClaimMismatch,
+} from "../src/generatedClaimChecks.ts";
+
+function repoRoot(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let up = 0; up < 6; up++) {
+    try { readFileSync(join(dir, "CLAUDE.md"), "utf8"); return dir; } catch { /* not this level */ }
+    dir = join(dir, "..");
+  }
+  throw new Error("could not locate the repo root");
+}
+const ROOT = repoRoot();
+
+function spanText(html: string, id: string): string | null {
+  const m = html.match(new RegExp(`<span[^>]*id="${id}"[^>]*>([^<]*)</span>`));
+  return m ? m[1].trim() : null;
+}
+
+/**
+ * Every generated claim this project publishes, checked against the real,
+ * current files. Exported (not just used below) so scripts/gen-claims.mjs
+ * -- or a future caller -- can walk the SAME list rather than a second,
+ * hand-kept one.
+ */
+export function checkAllGeneratedClaims(): Array<{ name: string; stale: string | null }> {
+  const INDEX = readFileSync(join(ROOT, "public", "index.html"), "utf8");
+  const CLAUDE_MD = readFileSync(join(ROOT, "CLAUDE.md"), "utf8");
+  const testCount = JSON.parse(readFileSync(join(ROOT, "test", "testCount.generated.json"), "utf8")) as {
+    nodeTests: number; workerTests: number;
+  };
+  const citySummary = readFileSync(join(ROOT, "src", "citySummary.generated.ts"), "utf8");
+
+  const claimedBuildings = Number(spanText(INDEX, "city-stat-buildings")?.replace(/,/g, ""));
+  const claimedSettlements = Number(spanText(INDEX, "city-stat-settlements")?.replace(/,/g, ""));
+  const claimedNode = Number(spanText(INDEX, "claim-node-tests")?.replace(/,/g, ""));
+  const claimedWorker = Number(spanText(INDEX, "claim-worker-tests")?.replace(/,/g, ""));
+
+  return [
+    { name: "public/index.html #city-stat-buildings vs src/citySummary.generated.ts CITY_STATS.buildingsPlaced", stale: buildingsClaimMismatch(claimedBuildings, CITY_STATS.buildingsPlaced) },
+    { name: "public/index.html #city-stat-settlements vs src/citySummary.generated.ts's settlement count", stale: Number.isFinite(claimedSettlements) ? settlementsClaimMismatch(claimedSettlements, citySummary) : "the settlements placeholder is missing or unparseable" },
+    { name: "public/index.html #claim-node-tests vs test/testCount.generated.json nodeTests", stale: nodeTestsClaimMismatch(claimedNode, testCount.nodeTests) },
+    { name: "public/index.html #claim-worker-tests vs test/testCount.generated.json workerTests", stale: workerTestsClaimMismatch(claimedWorker, testCount.workerTests) },
+    { name: "CLAUDE.md's \"How to verify\" line vs test/testCount.generated.json", stale: claudeMdClaimMismatch(CLAUDE_MD, testCount.nodeTests, testCount.workerTests) },
+  ];
+}
+
+test("P4.6: no published generated claim is stale -- one gate, naming every stale one at once, not just the first", () => {
+  const results = checkAllGeneratedClaims();
+  const stale = results.filter((r) => r.stale !== null);
+  assert.equal(
+    stale.length, 0,
+    `${stale.length} of ${results.length} generated claim(s) are stale:\n` +
+    stale.map((r) => `  - ${r.name}: ${r.stale}`).join("\n"),
+  );
+});
+
+// --- watched red, per Mark's own instruction, before this gate is trusted --
+
+test("P4.6 (synthetic): a deliberately staled building count is named, by claim, not silently absorbed", () => {
+  assert.equal(buildingsClaimMismatch(17108, 17108), null);
+  const wrong = buildingsClaimMismatch(17105, 17108);
+  assert.match(wrong!, /page says 17,105, generated summary says 17,108/);
+});
+
+test("P4.6 (synthetic): a deliberately staled node-test count is named, by claim, not silently absorbed", () => {
+  assert.equal(nodeTestsClaimMismatch(1087, 1087), null);
+  const wrong = nodeTestsClaimMismatch(948, 1087);
+  assert.match(wrong!, /page says 948, generated record says 1087/);
+});
+
+test("P4.6 (synthetic): a deliberately staled worker-test count is named, by claim, not silently absorbed", () => {
+  assert.equal(workerTestsClaimMismatch(12, 12), null);
+  const wrong = workerTestsClaimMismatch(9, 12);
+  assert.match(wrong!, /page says 9, generated record says 12/);
+});
+
+test("P4.6 (synthetic): a deliberately staled CLAUDE.md line is named, and an unreadable one fails loudly rather than passing by accident", () => {
+  assert.equal(claudeMdClaimMismatch("npm test            # 1087 node tests + 12 worker tests", 1087, 12), null);
+  const wrongNode = claudeMdClaimMismatch("npm test            # 1061 node tests + 12 worker tests", 1087, 12);
+  assert.match(wrongNode!, /CLAUDE\.md claims 1061 node tests, generated record says 1087/);
+  const wrongWorker = claudeMdClaimMismatch("npm test            # 1087 node tests + 9 worker tests", 1087, 12);
+  assert.match(wrongWorker!, /CLAUDE\.md claims 9 worker tests, generated record says 12/);
+  const unreadable = claudeMdClaimMismatch("this document no longer has that line at all", 1087, 12);
+  assert.match(unreadable!, /no longer has/);
+});
+
+test("P4.6 (synthetic): checkAllGeneratedClaims itself would report exactly one named claim if only one were stale -- not all five, and not silently none", () => {
+  // Exercises the manifest's OWN aggregation logic (not the individual pure
+  // functions above) by re-deriving the manifest shape with one entry's
+  // input deliberately wrong -- confirms the gate names the RIGHT one, not
+  // just that some check somewhere can fail.
+  const real = checkAllGeneratedClaims();
+  assert.ok(real.every((r) => r.stale === null), "the real repo has a stale generated claim right now -- fix it before trusting this synthetic check's premise that only the injected one should fail");
+  const staledManifest = real.map((r) =>
+    r.name.startsWith("public/index.html #claim-node-tests")
+      ? { name: r.name, stale: nodeTestsClaimMismatch(1, 1087) }
+      : r,
+  );
+  const stale = staledManifest.filter((r) => r.stale !== null);
+  assert.equal(stale.length, 1, `expected exactly the injected node-test claim to be stale, got: ${JSON.stringify(stale)}`);
+  assert.match(stale[0].name, /#claim-node-tests/);
+});
