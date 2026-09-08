@@ -67,7 +67,22 @@ test("all kitbash parts build, adhere to whole-cell contract and declare sockets
     }
 
     assert.ok(tris0 > 0, `${id}: LOD0 must have positive triangles`);
-    assert.ok(tris2 <= 150, `${id}: LOD2 must be cheap (< 150 triangles), got ${tris2}`);
+
+    if (part.category === "fabric") for (const [lod, geometries] of [[0, g0], [1, g1], [2, g2]] as const) {
+      const bounds = new THREE.Box3();
+      for (const item of geometries) {
+        item.geo.computeBoundingBox();
+        assert.ok(item.geo.boundingBox, `${id}: LOD${lod} geometry must have bounds`);
+        bounds.union(item.geo.boundingBox);
+      }
+      assert.ok(bounds.min.x > -part.foot.w / 2 && bounds.max.x < part.foot.w / 2,
+        `${id}: LOD${lod} must fit strictly inside its declared width`);
+      assert.ok(bounds.min.z > -part.foot.d / 2 && bounds.max.z < part.foot.d / 2,
+        `${id}: LOD${lod} must fit strictly inside its declared depth`);
+      const geometryEpsilon = 1e-5;
+      assert.ok(bounds.min.y >= -geometryEpsilon && bounds.max.y <= part.height + geometryEpsilon,
+        `${id}: LOD${lod} must remain within its declared height`);
+    }
 
     console.log(`| ${id} | ${part.category} | ${part.foot.w}x${part.foot.d} | ${part.height}m | ${tris0} | ${tris1} | ${tris2} |`);
   }

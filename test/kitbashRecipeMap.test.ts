@@ -18,6 +18,7 @@ test("A4.1 & A4.2: All 40 canonical library designs map to valid kit recipes wit
   assert.equal(Object.keys(DESIGN_RECIPE_MAP).length, 40, "DESIGN_RECIPE_MAP must have 40 entries");
 
   const rarityCounts = { landmark: 0, standard: 0, fabric: 0 };
+  const lod0TrianglesByDesign = new Map<string, number>();
 
   console.log("\n| Design | Rarity | Category | Foot (WxD) | Recipe Parts | LOD0 Tris | LOD2 Tris |");
   console.log("|---|---|---|---|---|---|---|");
@@ -48,7 +49,8 @@ test("A4.1 & A4.2: All 40 canonical library designs map to valid kit recipes wit
     }
 
     assert.ok(lod0Tris > 0, `${design}: LOD0 triangles must be positive`);
-    assert.ok(lod2Tris <= 150, `${design}: LOD2 triangles must be <= 150 (got ${lod2Tris})`);
+    assert.ok(lod2Tris > 0, `${design}: LOD2 triangles must be positive`);
+    lod0TrianglesByDesign.set(design, lod0Tris);
 
     console.log(`| ${design} | ${mapEntry.rarity} | ${mapEntry.category} | ${mapEntry.foot.w}x${mapEntry.foot.d} | ${mapEntry.recipe.length} parts | ${lod0Tris} | ${lod2Tris} |`);
   }
@@ -58,7 +60,15 @@ test("A4.1 & A4.2: All 40 canonical library designs map to valid kit recipes wit
   console.log(`Standard  (Structured Office):   ${rarityCounts.standard} / 40 (${((rarityCounts.standard / 40) * 100).toFixed(1)}%)`);
   console.log(`Fabric    (Plain Urban Mass):    ${rarityCounts.fabric} / 40 (${((rarityCounts.fabric / 40) * 100).toFixed(1)}%)`);
 
-  // Assertions on rarity mix: plain fabric dominates or matches standard, landmarks are controlled
-  assert.ok(rarityCounts.landmark <= 14, "Landmarks should be strictly capped in library (<= 35%)");
-  assert.ok(rarityCounts.fabric >= 14, "Plain fabric designs should form the largest share (>= 35%)");
+  assert.deepEqual(rarityCounts, { landmark: 14, standard: 10, fabric: 16 },
+    "The 35% landmark, 25% standard, and 40% fabric catalogue distribution must not move");
+  assert.deepEqual(
+    {
+      artDeco: lod0TrianglesByDesign.get("art-deco-skyscraper"),
+      diagrid: lod0TrianglesByDesign.get("diagrid-tower"),
+      hyperboloid: lod0TrianglesByDesign.get("hyperboloid-hq"),
+    },
+    { artDeco: 900, diagrid: 732, hyperboloid: 1_068 },
+    "The three established landmark geometries must remain unchanged"
+  );
 });

@@ -1208,6 +1208,58 @@ registerPart({
 // 6. ORDINARY FABRIC (Plain Background Masses 5m-28m)
 // =============================================================================
 
+function buildFabricBlock(T, pal, { W, D, H, bays = 3, floors = 3, baseH = 2.8, lod = 0 }) {
+  if (lod >= 2) {
+    return [{ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall }];
+  }
+  const parts = [];
+  const parapetH = Math.min(0.8, H * 0.12);
+  const shaftTop = H - parapetH;
+  const shaftW = W - 0.4;
+  const shaftD = D - 0.6;
+  const shaftH = shaftTop - baseH;
+  const front = D / 2 - 0.12;
+
+  // Base, middle, and top are separate masses. The middle is set inward.
+  parts.push({ geo: new T.BoxGeometry(W, baseH, D - 0.1).translate(0, baseH / 2, -0.05), tag: "wall", color: pal.trim });
+  parts.push({ geo: new T.BoxGeometry(shaftW, shaftH, shaftD).translate(0, baseH + shaftH / 2, -0.2), tag: "wall", color: pal.wall });
+
+  // Glazing sits behind projecting piers and sill bands, creating real reveals.
+  const usableW = shaftW - 1.0;
+  const bayW = usableW / bays;
+  const floorH = shaftH / floors;
+  for (let bay = 0; bay < bays; bay++) {
+    const x = -usableW / 2 + bayW * (bay + 0.5);
+    for (let floor = 0; floor < floors; floor++) {
+      const y = baseH + floorH * (floor + 0.5);
+      parts.push({
+        geo: new T.BoxGeometry(bayW * 0.56, floorH * 0.48, 0.12).translate(x, y, front - 0.42),
+        tag: "glass",
+        color: pal.glass,
+      });
+    }
+  }
+  const pierCount = lod === 1 ? Math.min(3, bays + 1) : bays + 1;
+  for (let pier = 0; pier < pierCount; pier++) {
+    const x = -usableW / 2 + usableW * (pier / (pierCount - 1));
+    parts.push({ geo: new T.BoxGeometry(0.28, shaftH, 0.5).translate(x, baseH + shaftH / 2, front - 0.18), tag: "wall", color: pal.wall });
+  }
+  const courseCount = lod === 1 ? Math.min(2, floors - 1) : floors - 1;
+  for (let course = 1; course <= courseCount; course++) {
+    const y = baseH + shaftH * (course / floors);
+    parts.push({ geo: new T.BoxGeometry(W - 0.12, 0.24, D - 0.08).translate(0, y, -0.04), tag: "trim", color: pal.trim });
+  }
+
+  // A contained cornice and four-sided parapet terminate the wall below H.
+  parts.push({ geo: new T.BoxGeometry(W - 0.08, 0.38, D - 0.08).translate(0, shaftTop - 0.19, -0.04), tag: "trim", color: pal.trim });
+  const parapetThickness = 0.28;
+  parts.push({ geo: new T.BoxGeometry(W - 0.08, parapetH, parapetThickness).translate(0, H - parapetH / 2, D / 2 - parapetThickness / 2 - 0.04), tag: "roof", color: pal.roof });
+  parts.push({ geo: new T.BoxGeometry(W - 0.08, parapetH, parapetThickness).translate(0, H - parapetH / 2, -D / 2 + parapetThickness / 2 + 0.04), tag: "roof", color: pal.roof });
+  parts.push({ geo: new T.BoxGeometry(parapetThickness, parapetH, D - 0.64).translate(W / 2 - parapetThickness / 2 - 0.04, H - parapetH / 2, 0), tag: "roof", color: pal.roof });
+  parts.push({ geo: new T.BoxGeometry(parapetThickness, parapetH, D - 0.64).translate(-W / 2 + parapetThickness / 2 + 0.04, H - parapetH / 2, 0), tag: "roof", color: pal.roof });
+  return parts;
+}
+
 registerPart({
   id: "fabric-masonry-block-low",
   name: "Low-Rise Masonry Block",
@@ -1218,10 +1270,7 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 12;
-    const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
-    parts.push({ geo: new T.BoxGeometry(W + 0.4, 0.8, D + 0.4).translate(0, H - 0.4, 0), tag: "roof", color: pal.roof });
-    return parts;
+    return buildFabricBlock(T, pal, { W, D, H, bays: 3, floors: 2, baseH: 3.0, lod });
   }
 });
 
@@ -1235,9 +1284,7 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 23.0, H = 22;
-    const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
-    return parts;
+    return buildFabricBlock(T, pal, { W, D, H, bays: 3, floors: 5, baseH: 3.2, lod });
   }
 });
 
@@ -1251,9 +1298,7 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 23.0, D = 23.0, H = 28;
-    const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
-    return parts;
+    return buildFabricBlock(T, pal, { W, D, H, bays: 5, floors: 6, baseH: 4.0, lod });
   }
 });
 
@@ -1267,10 +1312,7 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 5;
-    const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
-    parts.push({ geo: new T.BoxGeometry(W * 0.85, 3.0, 1.0).translate(0, 2.0, D / 2), tag: "glass", color: pal.glass });
-    return parts;
+    return buildFabricBlock(T, pal, { W, D, H, bays: 3, floors: 1, baseH: 0.7, lod });
   }
 });
 
@@ -1284,8 +1326,14 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 2;
+    if (lod >= 2) return [{ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "roof", color: pal.roof }];
     const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "roof", color: pal.roof });
+    parts.push({ geo: new T.BoxGeometry(W - 0.5, 0.32, D - 0.5).translate(0, 0.16, 0), tag: "roof", color: pal.roof });
+    const t = 0.32;
+    parts.push({ geo: new T.BoxGeometry(W, H - 0.32, t).translate(0, 0.32 + (H - 0.32) / 2, D / 2 - t / 2), tag: "wall", color: pal.trim });
+    parts.push({ geo: new T.BoxGeometry(W, H - 0.32, t).translate(0, 0.32 + (H - 0.32) / 2, -D / 2 + t / 2), tag: "wall", color: pal.trim });
+    parts.push({ geo: new T.BoxGeometry(t, H - 0.32, D - 0.64).translate(W / 2 - t / 2, 0.32 + (H - 0.32) / 2, 0), tag: "wall", color: pal.trim });
+    parts.push({ geo: new T.BoxGeometry(t, H - 0.32, D - 0.64).translate(-W / 2 + t / 2, 0.32 + (H - 0.32) / 2, 0), tag: "wall", color: pal.trim });
     return parts;
   }
 });
@@ -1300,8 +1348,15 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 6;
+    if (lod >= 2) return [{ geo: new T.CylinderGeometry(W * 0.35, W * 0.5, H, 4).rotateY(Math.PI / 4).translate(0, H / 2, 0), tag: "roof", color: pal.roof }];
     const parts = [];
-    parts.push({ geo: new T.CylinderGeometry(W * 0.35, W * 0.5, H, 4).rotateY(Math.PI / 4).translate(0, H / 2, 0), tag: "roof", color: pal.roof });
+    parts.push({ geo: new T.BoxGeometry(W - 0.08, 0.45, D - 0.08).translate(0, 0.225, 0), tag: "trim", color: pal.trim });
+    parts.push({ geo: new T.CylinderGeometry(W * 0.35, W * 0.48, H - 0.45, 4).rotateY(Math.PI / 4).translate(0, 0.45 + (H - 0.45) / 2, 0), tag: "roof", color: pal.roof });
+    const dormers = lod === 1 ? [-3.2, 3.2] : [-4.5, 0, 4.5];
+    for (const x of dormers) {
+      parts.push({ geo: new T.BoxGeometry(2.3, 2.2, 1.2).translate(x, 2.7, D / 2 - 0.5), tag: "wall", color: pal.wall });
+      parts.push({ geo: new T.BoxGeometry(1.35, 1.2, 0.12).translate(x, 2.65, D / 2 + 0.06), tag: "glass", color: pal.glass });
+    }
     return parts;
   }
 });
@@ -1316,9 +1371,10 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 7.5, D = 15.0, H = 14;
-    const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
-    parts.push({ geo: new T.BoxGeometry(W * 0.6, H * 0.75, 1.2).translate(0, H * 0.45, D / 2 + 0.6), tag: "glass", color: pal.glass });
+    const parts = buildFabricBlock(T, pal, { W, D, H, bays: 2, floors: 3, baseH: 2.6, lod });
+    if (lod < 2) {
+      parts.push({ geo: new T.BoxGeometry(W * 0.58, H * 0.58, 0.55).translate(0, H * 0.48, D / 2 - 0.18), tag: "trim", color: pal.trim });
+    }
     return parts;
   }
 });
@@ -1333,8 +1389,15 @@ registerPart({
   buildGeometry: (T = THREE, p = {}, lod = 0) => {
     const pal = resolvePalette(p);
     const W = 15.0, D = 15.0, H = 16;
-    const parts = [];
-    parts.push({ geo: new T.BoxGeometry(W, H, D).translate(0, H / 2, 0), tag: "wall", color: pal.wall });
+    const parts = buildFabricBlock(T, pal, { W, D, H, bays: 3, floors: 4, baseH: 2.8, lod });
+    if (lod < 2) {
+      const balconyCount = lod === 1 ? 2 : 3;
+      for (let level = 1; level <= balconyCount; level++) {
+        const y = 2.8 + level * 3.1;
+        parts.push({ geo: new T.BoxGeometry(W * 0.68, 0.22, 1.25).translate(0, y, D / 2 - 0.64), tag: "trim", color: pal.trim });
+        parts.push({ geo: new T.BoxGeometry(W * 0.68, 0.55, 0.12).translate(0, y + 0.38, D / 2 - 0.08), tag: "metal", color: pal.metal });
+      }
+    }
     return parts;
   }
 });
