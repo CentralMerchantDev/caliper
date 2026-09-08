@@ -38,7 +38,7 @@ import { applyLayers } from "./apply-layers.js";
 import { partitionForInstancing } from "./instance-groups.js";
 import { resolveOverrideModels } from "./resolve-models.js";
 import { createModelRegistry } from "./model-registry.js";
-import { assessFootprint } from "./footprint.js";
+import { assessFootprint, DRY_ENOUGH } from "./footprint.js";
 import { propFootprint } from "./prop-manifest.js";
 // The join to the asset lane's model library. prop-manifest decides what a prop
 // CLAIMS; this decides what it LOOKS LIKE, and prop-models.js is the table that
@@ -247,6 +247,24 @@ function foamTexture(THREE) {
  * only exposes the latter. generateCityPlan(seed) is memoised by seed
  * (A2b), so calling it again here is a cache hit, not a second generation.
  */
+/**
+ * A set piece's site, or a refusal. Absence read as success used to be the
+ * pattern here -- Math.max(<const>, heightAt(x, z)) turns "no ground" into
+ * "+<const> m of ground", floating a crane, a clubhouse, a boardwalk span
+ * or a stadium over open water. This is the explicit decision that
+ * replaced it at every one of the seven sites P3.5.2 named: null means
+ * refuse and do not build, a number is real ground to build on.
+ *
+ * Pure and THREE-free on purpose -- city-render.js's own scene-building
+ * functions need a GPU (see test/rendererStatic.test.ts) and cannot run in
+ * the node test suite, but the DECISION a site is wet or dry does not need
+ * one, so it is extracted here where it can actually be unit-tested.
+ */
+export function groundOrRefuse(heightAt, x, z) {
+  const h = heightAt(x, z);
+  return h < DRY_ENOUGH ? null : h;
+}
+
 export function buildWorldState(seed = DEFAULT_SEED, layers = []) {
   const instance = createWorld({ seed, layers });
   const field = instance.land;
@@ -290,6 +308,10 @@ export function buildScenePlacements({ instance, world, heightAt }) {
 export function buildWorld(THREE, renderer, scene, layers = []) {
   const t0 = performance.now();
   const stats = {};
+  // Set pieces (cranes, marina buildings/boats, boardwalk spans, landmarks)
+  // that land on water: refused here, not floated on a Math.max floor. One
+  // shared list so every site records the same way.
+  stats.setPieceRefused = [];
 
   if (!THREE.LOD.prototype._urbanOcclusionInstalled) {
     THREE.LOD.prototype._urbanOcclusionInstalled = true;
@@ -442,6 +464,7 @@ export function buildWorld(THREE, renderer, scene, layers = []) {
   // it, tuned so a 3 km city is untouched and a 15 km mountain is half sky.
   // ---------------------------------------------------------------------------
   const sky = new Sky();
+  sky.name = "env:sky-dome";
   sky.scale.setScalar(WORLD.HORIZON * 6);
   const su = sky.material.uniforms;
   su.turbidity.value = isNight ? 10.0 : 1.45;
@@ -1003,6 +1026,7 @@ varying vec3 vSeaWorld;`)
     g.computeBoundingSphere();
 
     let mesh = new THREE.Mesh(g, withPerPixelShoreline(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0 })));
+    mesh.name = "env:terrain";
     mesh.receiveShadow = true;
     // The COARSE grid does not cast. At 200 m a triangle is far bigger than any
     // shadow-map texel it lands in, so it self-shadows: the sea bed showed hard
@@ -1113,6 +1137,7 @@ varying vec3 vSeaWorld;`)
       sg.computeVertexNormals();
       sg.computeBoundingSphere();
       const sm = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, side: THREE.DoubleSide }));
+      sm.name = "env:terrain-skirt";
       targetParent.add(sm);
     }
     return W * H;
@@ -1266,6 +1291,7 @@ varying vec3 vSeaWorld;`)
       new THREE.PlaneGeometry(WORLD.SIZE * WORLD.ABYSS_SPAN, WORLD.SIZE * WORLD.ABYSS_SPAN),
       new THREE.MeshStandardMaterial({ color: 0x16334a, roughness: 1 })
     );
+    abyss.name = "env:abyss-plane";
     abyss.rotation.x = -Math.PI / 2; abyss.position.y = -175; scene.add(abyss);
   }
 
@@ -1282,6 +1308,7 @@ varying vec3 vSeaWorld;`)
     })
   );
   if (!SKIP.has("water")) {
+    sea.name = "env:sea-plane";
     sea.rotation.x = -Math.PI / 2; sea.position.y = LOOK.seaLevel; sea.renderOrder = 2;
     scene.add(sea);
     giveWaterItsDepth(sea);
@@ -1317,6 +1344,7 @@ varying vec3 vSeaWorld;`)
       }));
       surfMesh.renderOrder = 3;
       const surfLOD = new THREE.LOD();
+      surfLOD.name = "env:water-fabric";
       surfLOD.position.copy(center);
       surfLOD.isGroundFabric = true;
       surfLOD.addLevel(surfMesh, 0);
@@ -1627,6 +1655,7 @@ varying vec3 vSeaWorld;`)
         totalEarthTris += eTris;
         totalRoadTris += wTris + rTris + mTris;
         lod.isGroundFabric = true;
+        lod.name = "env:road"; // includes bridge-deck geometry, graded to bridgeProfile not raw heightAt
         lod.addLevel(group, 0);
         lod.addLevel(new THREE.Mesh(emptyRoadGeo, dummyRoadMat), 4800);
         scene.add(lod);
@@ -1958,6 +1987,7 @@ varying vec3 vSeaWorld;`)
         }
       }
       const targetObj = lodObj || new THREE.Mesh(geo, mat);
+      targetObj.name = "building";
       targetObj.castShadow = true;
       targetObj.receiveShadow = true;
       const move = p.override && p.override.move;
@@ -2505,6 +2535,7 @@ function buildProps(api) {
         const m = new THREE.Mesh(flat, new THREE.MeshStandardMaterial({ color: colour, roughness: rough, metalness: metal }));
         m.castShadow = true; m.receiveShadow = true;
         const bLOD = new THREE.LOD();
+        bLOD.name = "bridge-span"; // spans a gap on piers by design -- heightAt beneath is the valley/water it crosses, not its reference elevation
         bLOD.position.copy(center);
         bLOD.addLevel(m, 0);
         bLOD.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 4500);
@@ -2528,39 +2559,83 @@ function buildProps(api) {
     const _q = SITE.containerPort;
     if (!_q) break port;
     const _qs = _q.landSide;
-    // A PAVED YARD IS FLAT. THIS FOLLOWED fbm NOISE, PER CONTAINER.
+    // A PAVED YARD IS FLAT. THIS FOLLOWED fbm NOISE, PER CONTAINER, THEN A
+    // SINGLE MEAN LEVEL FOR THE WHOLE 1,800 x 490 m FOOTPRINT.
     //
-    // Every one of the 2,200 containers took its own heightAt, so a 1,800 x 490 m
-    // hardstanding undulated with the micro-relief term whose entire job is to
-    // stop natural ground being flat. Container yards are graded slabs -- that is
-    // the whole point of them -- and this is the same category error the roads
-    // had, on a surface where it reads even more obviously because the stacks are
-    // regular.
+    // Measured before this fix (scripts/measure-floating.mjs,
+    // docs/audits/P3.5-FLOATING.md): the single mean put 2,022 of the yard's
+    // own rendered container instances more than one visible pixel from the
+    // real ground beneath them, worst case 23.9 m, because the ground under
+    // this footprint runs 1 m to 58 m. The comment this replaced claimed the
+    // mean made the yard "sit in the ground rather than on one point of it"
+    // -- a mean does the opposite of that: it guarantees roughly half the
+    // footprint is on the wrong side of it.
     //
-    // One level for the yard, taken as the mean over its footprint rather than a
-    // single sample, so it sits in the ground rather than on one point of it.
-    let yardSum = 0, yardN = 0;
-    for (let x = _q.x - 900; x <= _q.x + 900; x += 150)
-      for (let z = _q.z + _qs * 70; _qs > 0 ? z <= _q.z + _qs * 560 : z >= _q.z + _qs * 560; z += _qs * 90) {
-        const h = heightAt(x, z);
-        if (h >= 1) { yardSum += h; yardN++; }
+    // heightAt is a pure function shared by roads, buildings and everything
+    // else in the world; there is no per-feature override of it from the
+    // renderer, so the terrain itself cannot be cut and filled here without
+    // a new shared mechanism this pass does not build (named, not pursued --
+    // see docs/audits/P3.5-FLOATING.md). Per Mark's own documented fallback
+    // for exactly that case: the yard follows the ground in BANDS instead of
+    // one plane. Real terminals are graded in terraces, not an infinite
+    // slab -- cut and fill balance within each terrace, not across the
+    // whole site.
+    //
+    // ONE dimension of banding was not enough: the worst residuals after the
+    // first pass (measured) all sat at the SAME handful of x positions near
+    // the yard's outer edge, meaning the relief here varies across x as much
+    // as it does moving inland -- a strip that only bands by depth-from-quay
+    // still averages away a real slope running the other way. So this is a
+    // 2D grid, not a 1D strip: ~150 m across the quay, ~35 m moving inland
+    // (matching the along-quay spacing cranes already use, and the original
+    // single sample's own inland grain), each cell graded to its own local
+    // mean.
+    const YARD_CELL_X = 150, YARD_CELL_Z = 35;
+    const yardX0 = _q.x - 900, yardX1 = _q.x + 900;
+    const yardZ0 = _q.z + _qs * 70, yardZ1 = _q.z + _qs * 560;
+    const yardCols = Math.max(1, Math.round((yardX1 - yardX0) / YARD_CELL_X));
+    const yardRows = Math.max(1, Math.round(Math.abs(yardZ1 - yardZ0) / YARD_CELL_Z));
+    const yardCellY = new Array(yardCols * yardRows).fill(2);
+    for (let ri = 0; ri < yardRows; ri++) {
+      const bz0 = yardZ0 + ((yardZ1 - yardZ0) * ri) / yardRows;
+      const bz1 = yardZ0 + ((yardZ1 - yardZ0) * (ri + 1)) / yardRows;
+      for (let ci = 0; ci < yardCols; ci++) {
+        const bx0 = yardX0 + ((yardX1 - yardX0) * ci) / yardCols;
+        const bx1 = yardX0 + ((yardX1 - yardX0) * (ci + 1)) / yardCols;
+        let sum = 0, cnt = 0;
+        for (const x of [bx0, (bx0 + bx1) / 2, bx1]) {
+          for (const z of [bz0, (bz0 + bz1) / 2, bz1]) {
+            const h = heightAt(x, z);
+            if (h >= 1) { sum += h; cnt++; }
+          }
+        }
+        const idx = ri * yardCols + ci;
+        yardCellY[idx] = cnt ? sum / cnt : ri > 0 ? yardCellY[idx - yardCols] : 2;
       }
-    const yardY = yardN ? yardSum / yardN : 2;
-    stats.containerYardLevel = +yardY.toFixed(1);
+    }
+    const yardLevelAt = (x, z) => {
+      const tx = (x - yardX0) / (yardX1 - yardX0), tz = (z - yardZ0) / (yardZ1 - yardZ0);
+      const ci = Math.min(yardCols - 1, Math.max(0, Math.floor(tx * yardCols)));
+      const ri = Math.min(yardRows - 1, Math.max(0, Math.floor(tz * yardRows)));
+      return yardCellY[ri * yardCols + ci];
+    };
+    stats.containerYardLevel = +(yardCellY.reduce((a, b) => a + b, 0) / yardCellY.length).toFixed(1);
+    stats.containerYardBands = yardCellY.map((v) => +v.toFixed(1));
 
     const portCenterZ = _q.z + _qs * 300;
     const portLOD = new THREE.LOD();
-    portLOD.position.set(_q.x, yardY, portCenterZ);
+    portLOD.name = "container-port-yard";
+    portLOD.position.set(_q.x, 0, portCenterZ);
 
     for (let x = _q.x - 900; x < _q.x + 900 && n < 2200; x += 16)
       for (let z = _q.z + _qs * 70; _qs > 0 ? z < _q.z + _qs * 560 : z > _q.z + _qs * 560; z += _qs * 4) {
         if (rnd("ct" + x + z) < 0.42) continue;
         // Still refuse to stack in the water -- the yard is level, not blind.
         if (heightAt(x, z) < 1) continue;
-        const g = yardY;
+        const g = yardLevelAt(x, z);
         const stack = 1 + Math.floor(rnd("cs" + x + z) * 4);
         for (let k = 0; k < stack && n < 2200; k++) {
-          d.position.set(x - _q.x, 1.4 + k * 2.7, z - portCenterZ); d.scale.set(1, 1, 1); d.updateMatrix();
+          d.position.set(x - _q.x, g + 1.4 + k * 2.7, z - portCenterZ); d.scale.set(1, 1, 1); d.updateMatrix();
           inst.setMatrixAt(n, d.matrix);
           inst.setColorAt(n, c.setHex(cc[Math.floor(rnd("cc" + x + z + k) * cc.length) % cc.length]));
           n++;
@@ -2585,14 +2660,20 @@ function buildProps(api) {
       // === null) continue;` that survived that change was a guard that could
       // never fire, left behind by the search it used to protect.)
       const quayZ = _q.z + _qs * 30;
-      const g = new THREE.Group(), gy = Math.max(2, heightAt(x, quayZ));
+      const craneH = groundOrRefuse(heightAt, x, quayZ);
+      // This one crane is skipped, not the whole quay.
+      if (craneH === null) { stats.setPieceRefused.push({ id: `container-port-crane@${x}`, reason: "site is underwater" }); continue; }
+      const g = new THREE.Group(), gy = craneH;
+      g.name = "container-port-crane";
       for (const dx of [-24, 24]) for (const dz of [-17, 17]) {
         const leg = new THREE.Mesh(RB(3, 56, 3, 0.3), M(0xe0673a, 0.75));
         leg.position.set(dx, 28, dz); leg.castShadow = true; g.add(leg);
       }
       const beam = new THREE.Mesh(RB(136, 5, 6, 0.4), M(0xe0673a, 0.75));
+      beam.name = "container-port-crane-boom"; // mounted atop the 56m leg lattice, not the ground
       beam.position.set(26, 58, 0); beam.castShadow = true; g.add(beam);
       const house = new THREE.Mesh(RB(13, 9, 13, 0.5), M(0xf0ece2, 0.8));
+      house.name = "container-port-crane-cab"; // mounted atop the 56m leg lattice, not the ground
       house.position.set(0, 64, 0); g.add(house);
       g.position.set(x, gy, quayZ); scene.add(g);
     }
@@ -2877,6 +2958,7 @@ function buildProps(api) {
     stats.golf = { base: +gy.toFixed(1), relief: +(gyHi - gyLo).toFixed(1), cut: +(gyHi - gy).toFixed(1), fill: +(gy - gyLo).toFixed(1) };
     // the rough: one big soft footprint
     const base = new THREE.Mesh(new THREE.CircleGeometry(760, 22), rough);
+    base.name = "golf-course"; // same single-mean-Y-over-a-wide-footprint shape as the container yard (P3.5-FLOATING.md) -- named, not fixed, this pass
     base.rotation.x = -Math.PI / 2; base.position.set(CX, gy + 0.35, CZ); base.receiveShadow = true; scene.add(base);
     // fairways: nine mown strips at varied angles
     for (let i = 0; i < 9; i++) {
@@ -2884,20 +2966,26 @@ function buildProps(api) {
       const r = 180 + rnd("gr" + i) * 420;
       const fx = CX + Math.cos(a) * r * 0.6, fz = CZ + Math.sin(a) * r * 0.6;
       const strip = new THREE.Mesh(new THREE.PlaneGeometry(70 + rnd("gw" + i) * 40, 300 + rnd("gl" + i) * 220), fair);
+      strip.name = "golf-course";
       strip.rotation.x = -Math.PI / 2; strip.rotation.z = a;
       strip.position.set(fx, gy + 0.42, fz); strip.receiveShadow = true; scene.add(strip);
       // a green with a bunker beside it
       const gr = new THREE.Mesh(new THREE.CircleGeometry(26, 12), fair);
+      gr.name = "golf-course";
       gr.rotation.x = -Math.PI / 2; gr.position.set(fx + Math.cos(a) * 150, gy + 0.5, fz + Math.sin(a) * 150); scene.add(gr);
       const bk = new THREE.Mesh(new THREE.CircleGeometry(15, 10), sand);
+      bk.name = "golf-course";
       bk.rotation.x = -Math.PI / 2; bk.position.set(fx + Math.cos(a + 1) * 172, gy + 0.46, fz + Math.sin(a + 1) * 172); scene.add(bk);
     }
     // a water hazard and the clubhouse
     const pond = new THREE.Mesh(new THREE.CircleGeometry(88, 16), water);
+    pond.name = "golf-course-pond"; // sits at its own water level, not heightAt
     pond.rotation.x = -Math.PI / 2; pond.position.set(CX + 240, gy + 0.44, CZ - 180); scene.add(pond);
     const club = new THREE.Mesh(RB(62, 10, 30, 0.8), M(0xf2ece0, 0.85));
+    club.name = "golf-clubhouse";
     club.position.set(CX - 520, gy + 5, CZ + 380); club.castShadow = true; scene.add(club);
     const croof = new THREE.Mesh(new THREE.ConeGeometry(44, 9, 4), M(0x8a5a3c, 0.85));
+    croof.name = "golf-clubhouse-roof"; // mounted on top of the clubhouse, not the ground
     croof.position.set(CX - 520, gy + 14, CZ + 380); croof.rotation.y = Math.PI / 4; croof.castShadow = true; scene.add(croof);
     stats.golf = 9;
   }
@@ -2971,6 +3059,7 @@ function buildProps(api) {
     // the platform, and an embankment skirt carrying it down to the terrain
     {
       const pad = new THREE.Mesh(new THREE.PlaneGeometry(AP_W, AP_D), M(0x7c8b63, 0.97));
+      pad.name = "env:airport-platform"; // a graded plateau by design (cut/fill balanced to apSite.mean), not a placed object resting on one ground point
       pad.rotation.x = -Math.PI / 2;
       pad.position.set(AX, ay + 0.05, AZ);
       pad.receiveShadow = true;
@@ -3008,6 +3097,7 @@ function buildProps(api) {
         // undo. Not depending on the winding is the more durable answer for a
         // strip that is only ever seen from outside anyway.
         const m = new THREE.Mesh(g, M2(0x6f7d58, 0.98));
+        m.name = "env:airport-embankment"; // carries the graded platform down to real terrain, per-point, on all four sides -- already does what P3.5.2 asks of the container yard
         m.receiveShadow = true;
         scene.add(m);
       }
@@ -3017,21 +3107,26 @@ function buildProps(api) {
     // tarmac is what a wide-body needs to get airborne, on any size of island.
     for (const [dz, len] of [[450, 3400], [-150, 2800]]) {
       const r = new THREE.Mesh(new THREE.PlaneGeometry(len, 60), rwMat);
+      r.name = "env:airport-platform";
       r.rotation.x = -Math.PI / 2; r.position.set(AX, ay + 0.5, AZ + dz); r.receiveShadow = true; scene.add(r);
       for (let x = -len / 2 + 90; x < len / 2 - 90; x += 140) {
         const m = new THREE.Mesh(new THREE.PlaneGeometry(70, 3), mkMat);
+        m.name = "env:airport-platform";
         m.rotation.x = -Math.PI / 2; m.position.set(AX + x, ay + 0.56, AZ + dz); scene.add(m);
       }
     }
     const taxi = new THREE.Mesh(new THREE.PlaneGeometry(3200, 26), apMat);
+    taxi.name = "env:airport-platform";
     taxi.rotation.x = -Math.PI / 2; taxi.position.set(AX, ay + 0.48, AZ + 150); scene.add(taxi);
     const apron = new THREE.Mesh(new THREE.PlaneGeometry(900, 420), apMat);
+    apron.name = "env:airport-platform";
     apron.rotation.x = -Math.PI / 2; apron.position.set(AX - 700, ay + 0.46, AZ - 400); apron.receiveShadow = true; scene.add(apron);
     // the terminal: a pier with jetways, so the apron reads as an airport rather
     // than a car park with aeroplanes on it
     const term = new THREE.Mesh(RB(520, 16, 78, 1.4), M(0xe8ecef, 0.6, 0.15));
     term.position.set(AX - 700, ay + 8, AZ - 130); term.castShadow = term.receiveShadow = true; scene.add(term);
     const troof = new THREE.Mesh(RB(540, 2.2, 92, 0.8), M(0xb9c2c8, 0.5, 0.3));
+    troof.name = "airport-terminal-roof"; // mounted on top of the terminal, not the ground
     troof.position.set(AX - 700, ay + 17, AZ - 130); troof.castShadow = true; scene.add(troof);
     for (let i = 0; i < 6; i++) {
       const jet = new THREE.Mesh(RB(6, 4, 46, 0.6), M(0xd4d9dc, 0.6, 0.2));
@@ -3041,6 +3136,7 @@ function buildProps(api) {
     const tw = new THREE.Mesh(new THREE.CylinderGeometry(5, 7, 42, 10), M(0xeae4d6, 0.8));
     tw.position.set(AX - 1100, ay + 21, AZ - 30); tw.castShadow = true; scene.add(tw);
     const cab = new THREE.Mesh(RB(15, 8, 15, 1.2), M(0x9fc4dd, 0.3, 0.4));
+    cab.name = "airport-tower-cab"; // mounted on top of the control tower mast, not the ground
     cab.position.set(AX - 1100, ay + 45, AZ - 30); cab.castShadow = true; scene.add(cab);
     for (let i = 0; i < 16; i++) {
       const x = AX - 1100 + rnd("ap" + i) * 820;
@@ -3121,12 +3217,14 @@ function buildProps(api) {
     const boats = [];
     const spineLen = MARINA.r * 1.7;
     const spine = new THREE.Mesh(RB(spineLen, 1.4, 6, 0.4), pon);
+    spine.name = "marina-pontoon";
     spine.position.set(MARINA.x, 1.2, MARINA.z); spine.receiveShadow = true;
     spine.castShadow = true; scene.add(spine);
     for (let i = -spineLen / 2 + 20; i <= spineLen / 2 - 20; i += 24) {
       for (const dir of [-1, 1]) {
         const fl = MARINA.r * 0.52;
         const f = new THREE.Mesh(RB(4.5, 1.3, fl, 0.35), pon);
+        f.name = "marina-pontoon";
         f.position.set(MARINA.x + i, 1.2, MARINA.z + dir * (fl / 2 + 3));
         f.receiveShadow = true; f.castShadow = true; scene.add(f);
         for (const side of [-1, 1]) for (let k = 0; k < 3; k++) {
@@ -3162,24 +3260,30 @@ function buildProps(api) {
       inst.instanceMatrix.needsUpdate = cabs.instanceMatrix.needsUpdate = masts.instanceMatrix.needsUpdate = true;
       inst.castShadow = cabs.castShadow = masts.castShadow = true;
       inst.computeBoundingSphere(); cabs.computeBoundingSphere(); masts.computeBoundingSphere();
+      inst.name = cabs.name = masts.name = "marina-boat-afloat";
       scene.add(inst, cabs, masts);
       stats.marinaBoats = boats.length;
     }
     // --- the quay: clubhouse, hardstanding, fuel dock ---
-    {
+    marinaQuay: {
       const qz = MARINA.z - MARINA.r - 40, qx = MARINA.x + 30;
-      const gy = Math.max(2, heightAt(qx, qz));
+      const quayH = groundOrRefuse(heightAt, qx, qz);
+      if (quayH === null) { stats.setPieceRefused.push({ id: "marina-clubhouse", reason: "site is underwater" }); break marinaQuay; }
+      const gy = quayH;
       const club = new THREE.Mesh(RB(58, 11, 26, 0.8), M(0xf2ece0, 0.85));
-      club.position.set(qx, gy + 5.5, qz); club.castShadow = true; club.receiveShadow = true; scene.add(club);
+      club.name = "marina-clubhouse"; club.position.set(qx, gy + 5.5, qz); club.castShadow = true; club.receiveShadow = true; scene.add(club);
       const roof = new THREE.Mesh(RB(62, 1.4, 30, 0.5), M(0x4d8fa6, 0.8));
-      roof.position.set(qx, gy + 11.6, qz); roof.castShadow = true; scene.add(roof);
+      roof.name = "marina-clubhouse-roof"; roof.position.set(qx, gy + 11.6, qz); roof.castShadow = true; scene.add(roof);
       const deck = new THREE.Mesh(RB(70, 0.6, 14, 0.3), teak);
-      deck.position.set(qx, gy + 0.5, qz + 22); deck.receiveShadow = true; scene.add(deck);
+      deck.name = "marina-clubhouse-deck"; deck.position.set(qx, gy + 0.5, qz + 22); deck.receiveShadow = true; scene.add(deck);
       // boats out of the water on the hardstanding
       for (let i = 0; i < 9; i++) {
         const hx = qx - 90 + (i % 5) * 22, hz = qz + Math.floor(i / 5) * 18;
-        const g2 = Math.max(2, heightAt(hx, hz));
+        const hardH = groundOrRefuse(heightAt, hx, hz);
+        if (hardH === null) { stats.setPieceRefused.push({ id: `marina-hauled-out-boat@${i}`, reason: "site is underwater" }); continue; }
+        const g2 = hardH;
         const b = new THREE.Mesh(RB(4.4, 2.4, 12, 0.7), hull);
+        b.name = "marina-hauled-out-boat";
         b.position.set(hx, g2 + 2.6, hz); b.castShadow = true; scene.add(b);
       }
     }
@@ -3244,6 +3348,7 @@ function buildProps(api) {
         color: w.kind === "river" ? 0x2f6f86 : 0x2a7d94,
         roughness: 0.12, metalness: 0.34, transparent: true, opacity: 0.92,
       }));
+      mesh.name = "env:waterway"; // a river/canal surface follows its own carved channel bed, not raw heightAt
       mesh.receiveShadow = true;
       scene.add(mesh);
     }
@@ -3264,6 +3369,7 @@ function buildProps(api) {
     const len = PIER.to - PIER.from;
 
     const deck = new THREE.Mesh(RB(PIER.width, 2.2, len, 0.4), deckM);
+    deck.name = "pier";
     deck.position.set(PIER.x, 6.2, (PIER.from + PIER.to) / 2);
     deck.castShadow = deck.receiveShadow = true;
     scene.add(deck);
@@ -3285,6 +3391,7 @@ function buildProps(api) {
     piles.count = pi;
     piles.instanceMatrix.needsUpdate = true;
     piles.castShadow = true; piles.computeBoundingSphere();
+    piles.name = "pier";
     scene.add(piles);
 
     // The pavilion at the seaward end.
@@ -3293,22 +3400,22 @@ function buildProps(api) {
     // height of 11 read from the beach as a flat red disc floating over the
     // water, not a building. A roof needs to be steeper than it is wide.
     const hall = new THREE.Mesh(RB(PIER.head.w, 15, PIER.head.d, 0.8), wallM);
-    hall.position.set(PIER.x, 14.6, PIER.head.z);
+    hall.name = "pier"; hall.position.set(PIER.x, 14.6, PIER.head.z);
     hall.castShadow = hall.receiveShadow = true;
     scene.add(hall);
     // a hipped roof: four sides, taller than it is broad, with real eaves
     const roof = new THREE.Mesh(new THREE.ConeGeometry(PIER.head.w * 0.62, 22, 4), roofM);
-    roof.position.set(PIER.x, 32, PIER.head.z);
+    roof.name = "pier"; roof.position.set(PIER.x, 32, PIER.head.z);
     roof.rotation.y = Math.PI / 4;
     roof.castShadow = true;
     scene.add(roof);
     // a smaller hall halfway out, so the pier has something along its length
     const mid = new THREE.Mesh(RB(30, 9, 34, 0.6), wallM);
-    mid.position.set(PIER.x, 11.6, PIER.from + (PIER.to - PIER.from) * 0.42);
+    mid.name = "pier"; mid.position.set(PIER.x, 11.6, PIER.from + (PIER.to - PIER.from) * 0.42);
     mid.castShadow = true;
     scene.add(mid);
     const midRoof = new THREE.Mesh(new THREE.ConeGeometry(24, 12, 4), roofM);
-    midRoof.position.set(PIER.x, 22, PIER.from + (PIER.to - PIER.from) * 0.42);
+    midRoof.name = "pier"; midRoof.position.set(PIER.x, 22, PIER.from + (PIER.to - PIER.from) * 0.42);
     midRoof.rotation.y = Math.PI / 4;
     midRoof.castShadow = true;
     scene.add(midRoof);
@@ -3320,12 +3427,12 @@ function buildProps(api) {
       const steel = M(0xe8e4d8, 0.55, 0.35);
       for (const off of [-5, 5]) {
         const rim = new THREE.Mesh(new THREE.TorusGeometry(28, 1.6, 6, 30), steel);
-        rim.position.set(wx + off, wy, wz);
+        rim.name = "pier"; rim.position.set(wx + off, wy, wz);
         rim.castShadow = true;
         scene.add(rim);
       }
       const hub = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 12, 8), steel);
-      hub.rotation.z = Math.PI / 2;
+      hub.name = "pier"; hub.rotation.z = Math.PI / 2;
       hub.position.set(wx, wy, wz);
       scene.add(hub);
       const spokeG = new THREE.BoxGeometry(0.6, 56, 0.6);
@@ -3346,10 +3453,12 @@ function buildProps(api) {
       spokes.instanceMatrix.needsUpdate = cabs.instanceMatrix.needsUpdate = true;
       spokes.castShadow = cabs.castShadow = true;
       spokes.computeBoundingSphere(); cabs.computeBoundingSphere();
+      spokes.name = cabs.name = "pier";
       scene.add(spokes, cabs);
       // the legs it stands on
       for (const sx of [-16, 16]) {
         const leg = new THREE.Mesh(RB(2.2, 40, 2.2, 0.3), steel);
+        leg.name = "pier";
         leg.position.set(wx + sx, wy - 22, wz);
         leg.castShadow = true;
         scene.add(leg);
@@ -3380,7 +3489,7 @@ function buildProps(api) {
     // gradeRun does not fit here (the boardwalk is a polyline, not an axis-aligned
     // run), so the same idea is applied directly: sample the whole line first,
     // then smooth it. One pass, and the deck stops undulating.
-    const bwRaw = BOARDWALK.points.map(([px, pz]) => Math.max(1.2, heightAt(px, pz)));
+    const bwRaw = BOARDWALK.points.map(([px, pz]) => heightAt(px, pz));
     const bwY = bwRaw.map((_, i) => {
       let sum = 0, n = 0;
       for (let j = Math.max(0, i - 2); j <= Math.min(bwRaw.length - 1, i + 2); j++) { sum += bwRaw[j]; n++; }
@@ -3389,6 +3498,12 @@ function buildProps(api) {
 
     for (let i = 0; i < BOARDWALK.points.length - 1; i++) {
       const [ax, az] = BOARDWALK.points[i], [bx, bz] = BOARDWALK.points[i + 1];
+      // Absence read as success: a point below DRY_ENOUGH used to be floored
+      // to 1.2 m and built over anyway. Refuse this segment instead.
+      if (bwRaw[i] < DRY_ENOUGH || bwRaw[i + 1] < DRY_ENOUGH) {
+        stats.setPieceRefused.push({ id: `boardwalk@${i}`, reason: "site is underwater" });
+        continue;
+      }
       const len = Math.hypot(bx - ax, bz - az);
       const mx = (ax + bx) / 2, mz = (az + bz) / 2;
       // The mean of the two ENDS of this segment, off the smoothed profile --
@@ -3396,12 +3511,14 @@ function buildProps(api) {
       // choosing its own height from its own midpoint.
       const g = (bwY[i] + bwY[i + 1]) / 2;
       const seg = new THREE.Mesh(RB(BOARDWALK.width, 1.1, len * 1.04, 0.3), plank);
+      seg.name = "boardwalk";
       seg.position.set(mx, g + 0.9, mz);
       seg.rotation.y = -Math.atan2(bz - az, bx - ax) + Math.PI / 2;
       seg.receiveShadow = true;
       scene.add(seg);
       // the seaward railing, so it reads as a promenade rather than a path
       const r = new THREE.Mesh(RB(0.5, 1.5, len * 1.04, 0.2), rail);
+      r.name = "boardwalk-railing"; // sits ON the deck, not the ground -- its reference surface is the boardwalk
       r.position.set(mx + Math.cos(seg.rotation.y) * (BOARDWALK.width / 2), g + 2.1, mz - Math.sin(seg.rotation.y) * (BOARDWALK.width / 2));
       r.rotation.y = seg.rotation.y;
       scene.add(r);
@@ -3419,9 +3536,11 @@ function buildProps(api) {
       if (heightAt(x, z) > -3) continue;
       const s = 0.8 + rnd("bs" + i) * 1.2;
       const b = new THREE.Mesh(RB(16 * s, 3 * s, 5 * s, 0.6), hull);
+      b.name = "coastal-boat-afloat";
       b.position.set(x, 1.1, z); b.rotation.y = rnd("br" + i) * 6.28; b.castShadow = true; scene.add(b);
       if (rnd("bt" + i) > 0.45) {
         const m2 = new THREE.Mesh(new THREE.ConeGeometry(3.2 * s, 13 * s, 3), sail);
+        m2.name = "coastal-boat-afloat";
         m2.position.set(x, 8 * s, z); m2.rotation.y = b.rotation.y; m2.castShadow = true; scene.add(m2);
       }
     }
@@ -3429,8 +3548,10 @@ function buildProps(api) {
       const x = wm(-9000) + rnd("sx" + i) * wm(12000), z = wm(-2600) + rnd("sz" + i) * wm(900);
       if (heightAt(x, z) > -6) continue;
       const b = new THREE.Mesh(RB(190, 16, 30, 1.5), cargo);
+      b.name = "coastal-boat-afloat";
       b.position.set(x, 5, z); b.castShadow = true; scene.add(b);
       const sup = new THREE.Mesh(RB(22, 20, 26, 0.8), M(0xf0ece2, 0.8));
+      sup.name = "coastal-boat-afloat";
       sup.position.set(x - 70, 22, z); sup.castShadow = true; scene.add(sup);
     }
   }
@@ -3553,7 +3674,11 @@ function buildProps(api) {
       const _st = SITE.stadium;
       // No legal site within range: build nothing rather than build it in the sea.
       if (!_st) break stadium;
-      const sx = _st.x, sz = _st.z, gy = Math.max(2, heightAt(sx, sz));
+      const sx = _st.x, sz = _st.z, stH = groundOrRefuse(heightAt, sx, sz);
+      // placeFeatures' own site search is coarser than this single point --
+      // refuse explicitly rather than float, the same as the plot buildings.
+      if (stH === null) { stats.setPieceRefused.push({ id: "stadium", reason: "site is underwater" }); break stadium; }
+      const gy = stH;
       const RX = 150, RZ = 118, N = 28;
       const grp = new THREE.Group();
       for (let i = 0; i < N; i++) {
@@ -3569,6 +3694,7 @@ function buildProps(api) {
       pitch.rotation.x = -Math.PI / 2; pitch.scale.set(RX * 0.82, 1, RZ * 0.82);
       pitch.position.set(0, 0.5, 0); pitch.receiveShadow = true; grp.add(pitch);
       const lod = new THREE.LOD();
+      lod.name = "stadium";
       lod.position.set(sx, gy, sz);
       lod.addLevel(grp, 0);
       lod.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 6000);
@@ -3581,7 +3707,21 @@ function buildProps(api) {
       const _sn = SITE.station;
       // No legal site within range: build nothing rather than build it in the sea.
       if (!_sn) break station;
-      const sx = _sn.x, sz = _sn.z, gy = Math.max(2, heightAt(sx, sz));
+      const sx = _sn.x, sz = _sn.z;
+      // The same footprint assessment every plot building gets (public/footprint.js),
+      // not a single centre sample -- features.js's own "site" need for the
+      // station is w:240, d:120 (public/features.js), so that is the envelope
+      // assessed here too, not a hand-derived one from the mesh.
+      const stationFoot = assessFootprint(heightAt, { xMin: sx - 120, xMax: sx + 120, zMin: sz - 60, zMax: sz + 60 }, waterwayAt);
+      // A verdict placeFeatures' own coarser site search cannot see: refuse
+      // rather than float, the same "no ground, no building" the plot
+      // buildings already enforce.
+      if (stationFoot.verdict === "refuse") {
+        stats.featuresUnplaced.push("station");
+        stats.stationRefused = stationFoot.reason;
+        break station;
+      }
+      const gy = stationFoot.verdict === "terrace" ? stationFoot.base + stationFoot.range : stationFoot.base;
       const grp = new THREE.Group();
       const shed = new THREE.Mesh(new THREE.CylinderGeometry(46, 46, 210, 14, 1, false, 0, Math.PI), steel);
       shed.rotation.z = Math.PI / 2; shed.position.set(0, 4, 0);
@@ -3591,9 +3731,11 @@ function buildProps(api) {
       const tower = new THREE.Mesh(RB(20, 76, 20, 0.8), M(0xefe6d4, 0.85));
       tower.position.set(-58, 38, -96); tower.castShadow = true; grp.add(tower);
       const cap = new THREE.Mesh(new THREE.ConeGeometry(16, 26, 4), M(0x4f7a6a, 0.85));
+      cap.name = "station-cap"; // mounted on top of the tower, not the ground
       cap.rotation.y = Math.PI / 4; cap.position.set(-58, 89, -96);
       cap.castShadow = true; grp.add(cap);
       const lod = new THREE.LOD();
+      lod.name = "station";
       lod.position.set(sx, gy, sz);
       lod.addLevel(grp, 0);
       lod.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 5000);
@@ -3606,21 +3748,27 @@ function buildProps(api) {
       const _cd = SITE.cathedral;
       // No legal site within range: build nothing rather than build it in the sea.
       if (!_cd) break cathedral;
-      const sx = _cd.x, sz = _cd.z, gy = Math.max(2, heightAt(sx, sz));
+      const sx = _cd.x, sz = _cd.z, cdH = groundOrRefuse(heightAt, sx, sz);
+      if (cdH === null) { stats.setPieceRefused.push({ id: "cathedral", reason: "site is underwater" }); break cathedral; }
+      const gy = cdH;
       const grp = new THREE.Group();
       const nave = new THREE.Mesh(RB(34, 30, 110, 0.6), M(0xeee6d2, 0.9));
       nave.position.set(0, 15, 0); nave.castShadow = true; grp.add(nave);
       const roof = new THREE.Mesh(new THREE.CylinderGeometry(19, 19, 112, 10, 1, false, 0, Math.PI), M(0x5e7d6c, 0.85));
+      roof.name = "cathedral-roof"; // mounted on top of the nave, not the ground
       roof.rotation.z = Math.PI / 2; roof.position.set(0, 30, 0); roof.castShadow = true; grp.add(roof);
       const dome = new THREE.Mesh(new THREE.SphereGeometry(24, 16, 10, 0, 6.283, 0, 1.57), M(0x5e7d6c, 0.6, 0.2));
+      dome.name = "cathedral-dome"; // mounted on top of the nave, not the ground
       dome.position.set(0, 34, 0); dome.castShadow = true; grp.add(dome);
       for (const dz of [-46, 46]) {
         const t = new THREE.Mesh(RB(14, 74, 14, 0.5), M(0xeee6d2, 0.9));
         t.position.set(0, 37, dz); t.castShadow = true; grp.add(t);
         const sp = new THREE.Mesh(new THREE.ConeGeometry(10, 30, 4), M(0x5e7d6c, 0.85));
+        sp.name = "cathedral-spire"; // mounted on top of a tower, not the ground
         sp.rotation.y = Math.PI / 4; sp.position.set(0, 89, dz); sp.castShadow = true; grp.add(sp);
       }
       const lod = new THREE.LOD();
+      lod.name = "cathedral";
       lod.position.set(sx, gy, sz);
       lod.addLevel(grp, 0);
       lod.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 5000);
@@ -3634,8 +3782,10 @@ function buildProps(api) {
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 6, 180, 6), steel);
       mast.position.set(0, 90, 0); mast.castShadow = true; grp.add(mast);
       const pod = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 14, 12), M(0xe8e2d4, 0.7));
+      pod.name = "broadcast-mast-pod"; // mounted partway up the mast, not the ground
       pod.position.set(0, 128, 0); pod.castShadow = true; grp.add(pod);
       const lod = new THREE.LOD();
+      lod.name = "broadcast-mast";
       lod.position.set(mx, gy, mz);
       lod.addLevel(grp, 0);
       lod.addLevel(new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ visible: false })), 8000);
