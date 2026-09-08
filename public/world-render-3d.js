@@ -17,6 +17,8 @@ import { WORLD_SCALE } from "./world-scale.js";
 import { WORLD } from "./city-plan.js";
 import { createSelection } from "./selection.js";
 import { boardPiecesById } from "./board-adapter.js";
+import { neighboursOf, applyIsolate, restoreIsolate } from "./isolate.js";
+import { inWorld } from "./grid.js";
 
 /**
  * TUNED VALUES, NAMED SO A TEST CAN READ THEM.
@@ -6630,6 +6632,48 @@ class Renderer3D {
     this._highlight = null;
   }
 
+  /**
+   * P4.3 ISOLATE -- hide every other building, keep the current selection
+   * and its immediate neighbours (public/isolate.js's neighboursOf, within
+   * one grid.js BLOCK of the selection's own footprint -- see that file's
+   * header for why that unit and not plan.blockId or an invented radius).
+   * Mechanism: applyIsolate() hides every OTHER InstancedMesh batch wholesale
+   * (cheap, one `.visible = false` per batch) and draws a standalone Mesh for
+   * the kept set at its saved matrix -- instance-groups.js's own
+   * instanced/overridden split, applied at isolate time rather than only at
+   * scene-build time, and NOT per-instance zero-scaling across the whole
+   * batch the way that would be if it mutated shared InstancedMesh state at
+   * isolate scale. Returns the neighbour result (for the UI to report what
+   * was kept), or null if there is no current selection.
+   */
+  _isolate() {
+    this._restoreIsolateState();
+    const piece = this._selectedPiece;
+    const city = this._city;
+    if (!piece || !city || !city.buildingInstanceIndex || !this._boardPieces) return null;
+    const plotId = piece.id.slice("bld-".length);
+    const { selected, neighbours, keepIds } = neighboursOf(plotId, this._boardPieces, {
+      heightAt: city.heightAt, inWorld,
+    });
+    if (!selected) return null;
+    this._isolateState = applyIsolate({
+      THREE: city.THREE, scene: this.scene, buildingInstanceIndex: city.buildingInstanceIndex, keepIds,
+    });
+    this._isolatedPlotId = plotId;
+    return { selected, neighbours };
+  }
+
+  /** The reverse of _isolate() -- exact, see public/isolate.js's
+   *  restoreIsolate for what "exact" means and how it is checked
+   *  (test/isolate.test.ts, a real Three.js scene-graph fingerprint, not an
+   *  object count). Safe to call with nothing isolated (a no-op). */
+  _restoreIsolateState() {
+    if (!this._isolateState) return;
+    restoreIsolate(this.scene, this._isolateState);
+    this._isolateState = null;
+    this._isolatedPlotId = null;
+  }
+
   _inspectClick(e) {
     if (!this.nextWorld || !this.onInspect) return;
     const rect = this.canvas.getBoundingClientRect();
@@ -6714,6 +6758,10 @@ class Renderer3D {
       // pick, even one with no piece, deselects the last one).
       if (piece) this._setHighlight(addr.plotId);
       else this._clearHighlight();
+      // P4.3 -- a new pick, even one with no piece, exits isolate too. Restore
+      // BEFORE deciding what to show next, not after -- isolating around the
+      // OLD selection while inspecting the new one would be a stale isolate.
+      this._restoreIsolateState();
       if (this.onInspect) {
         this.onInspect({
           parcelId: addr && addr.plotId ? addr.plotId : "city",
@@ -8280,6 +8328,25 @@ export class WorldRenderer {
    *  2D fallback -- city mode's picking has no 2D equivalent. */
   getSelection() {
     return this._impl._selection || null;
+  }
+
+  /** P4.3 -- hide everything but the current selection and its immediate
+   *  neighbours. Returns {selected, neighbours} or null if nothing is
+   *  currently picked; no-op (not an error) in the 2D fallback. */
+  isolate() {
+    return this._impl._isolate ? this._impl._isolate() : null;
+  }
+
+  /** P4.3 -- the exact reverse of isolate(); also called automatically by a
+   *  new pick or a deselect, so a caller need not always pair this itself. */
+  restoreIsolate() {
+    if (this._impl._restoreIsolateState) this._impl._restoreIsolateState();
+  }
+
+  /** P4.3/P4.4 -- the board piece behind the current selection, if any
+   *  (public/board.js's record: id, pieceType, cell, foot, ...), or null. */
+  getSelectedPiece() {
+    return this._impl._selectedPiece || null;
   }
 
   pressNavKey(key) {

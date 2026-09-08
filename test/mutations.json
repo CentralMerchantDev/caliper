@@ -887,6 +887,33 @@
       "find": "    let offeredDemolition = false;\n    if (here.blockedBy && here.blockedBy.length) {\n      const clearable = here.blockedBy.filter((b) => b.clearable);\n      if (clearable.length === here.blockedBy.length) {\n        const names = clearable.map((b) => `${b.kind}${b.id ? \" \" + b.id : \"\"}`).join(\", \");\n        alternatives.push(`demolish ${names} to make room here, and make it ${article(label)} there`);\n        offeredDemolition = true;\n      }\n    }\n    // NEITHER ALTERNATIVE APPLIES. Say so, rather than leaving the player\n    // with a refusal and nothing to act on -- the grounding contract this\n    // whole file composes with requires an alternative even here.\n    if (!found && !offeredDemolition) {\n      alternatives.push(`nowhere nearby has room, and nothing here can be cleared to make it`);\n    }\n  }",
       "replace": "    alternatives.push(`make it a smaller ${bare(label)} that fits where it already is`);\n  }",
       "expect": "a refusal offers something of the SAME KIND -- a location with room, or a demolition list -- never a substitute"
+    },
+    {
+      "id": "isolate-neighbour-self-exclusion",
+      "guards": "P4.3 neighboursOf() never reports the selected piece as its own neighbour.",
+      "note": "Verified by hand this session (host memory constraints made a full `node scripts/mutate.mjs --id ...` pass too risky to run alongside -- see docs/AUDIT-PROTOCOL.md's own 2026-09-03 scratch-copy fallback for the identical situation): edited, ran test/isolate.test.ts alone, watched exactly this test go red and no other, reverted, reconfirmed green. `npm run mutate --id isolate-neighbour-self-exclusion` still needs a real run once the full suite is safe to run again.",
+      "file": "public/isolate.js",
+      "find": "  const neighbours = hits.filter((p) => p.id !== selected.id);",
+      "replace": "  const neighbours = hits;",
+      "expect": "the selected piece is never reported as its own neighbour"
+    },
+    {
+      "id": "isolate-restore-visibility",
+      "guards": "P4.3 restoreIsolate() puts every hidden InstancedMesh batch's visibility back exactly as it was.",
+      "note": "Verified by hand this session, same reason as isolate-neighbour-self-exclusion above: watched exactly the restore-byte-identical test go red, reverted, reconfirmed green.",
+      "file": "public/isolate.js",
+      "find": "  for (const { mesh, wasVisible } of state.hiddenMeshes) mesh.visible = wasVisible;",
+      "replace": "  for (const { mesh, wasVisible } of state.hiddenMeshes) { /* removed */ }",
+      "expect": "restore is byte-identical -- every batch's visibility, material identity, and FULL instance-matrix array match exactly, not just a count"
+    },
+    {
+      "id": "isolate-new-pick-restores",
+      "guards": "a new pick always restores any active P4.3 isolate before showing the new selection -- an isolate cannot silently survive picking something else.",
+      "note": "Verified by hand this session, same reason as above. First attempt at this exact mutation (commenting out the call rather than deleting it) SURVIVED wrongly -- the wiring test's regex matched the call's own text still present inside the comment. Caught before landing; the wiring test now strips line comments before matching (test/isolate.test.ts's stripLineComments), and this mutation (a real deletion) correctly goes red.",
+      "file": "public/world-render-3d.js",
+      "find": "      this._restoreIsolateState();\n      if (this.onInspect) {",
+      "replace": "      if (this.onInspect) {",
+      "expect": "a new pick restores any active isolate -- an isolate does not silently survive picking something else"
     }
   ]
 }
