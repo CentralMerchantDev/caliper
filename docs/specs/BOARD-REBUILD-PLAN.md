@@ -799,28 +799,110 @@ was used instead to control for this and produced the consistent ~111 s
 -> ~40 s figures above. Absolute single-run numbers on this host should
 not be trusted in isolation; the ~2.7x ratio is the trustworthy result.
 
+## B2.6 — persist the board. The architecture that makes any of it reachable
+
+Approved 2026-09-08 (Mark): "The board is a pure function of the seed --
+already a stated property, pinned by SHA-256. Recomputing a pure function
+per visitor is doing work whose answer is already known." Same move as
+`scripts/gen-city-summary.mjs` already makes for `generateWorld()`
+("The city cannot be generated inside the Worker... it is DETERMINISTIC,
+so it can be summarised once, here, and checked in") -- applied to the
+real board this time, not a summary. B0.1's own origin-stability work
+(B2.1/B2.3) is what makes this safe: a persisted board's coordinates stay
+valid when the world grows, because they were never derived from landform
+bounds in the first place. Persisting would have been unsafe before that.
+
+**WHAT WAS BUILT:**
+
+- `scripts/gen-board.mjs` -- the offline generation step. Calls
+  `generateBoard(heightAt, DEFAULT_SEED, { useSampling: true })` (B2.5's
+  proven-equivalent fast path) and writes `public/board.generated.json`.
+  Not a Worker, not a request -- a build step, run by hand or CI, matching
+  `gen-city-summary.mjs`'s own precedent exactly.
+- `public/board-load.js` -- the load path. `loadBoard(payload, heightAt)`
+  reconstructs a real `board.js` instance by replaying every persisted
+  piece through `place(piece, { groundVerified: true })` (B2.5's own
+  opt-in), paying only the SPACE check (measured well under a second for
+  the whole board during generation itself) -- the ground question was
+  already answered once, by the generation that produced this file, and is
+  not re-asked. `fetchBoard(heightAt, url)` is the real client entry point:
+  `fetch()` the static asset, parse, load.
+- `npm run gen:board` -- one command, cannot drift from the seed it
+  claims to represent (the script reads `noise.js`'s own `DEFAULT_SEED`,
+  not a hand-typed number).
+
+**SIZE MEASURED BEFORE THE TRANSPORT WAS CHOSEN, PER MARK'S OWN
+INSTRUCTION**: 35,365 pieces serialise to **7,915,668 bytes raw,
+263,598 bytes gzipped (3.3%)**. **Static asset, through the existing
+`ASSETS` binding, chosen over KV**: `wrangler.jsonc`'s own `assets` block
+already serves `public/` directly, with `"/"` and everything not
+explicitly routed to the Worker going to the Asset Worker -- a static
+`board.generated.json` there is served edge-cached, gzipped, with ZERO
+Worker invocation at all, not even the 30 s CPU-time question applies.
+263 KB gzipped loads fast on a phone; KV's ~25 MB per-value ceiling was
+never the binding constraint, and KV would need a Worker route to serve
+it (adding latency and putting the file back through a CPU-time-limited
+request path for no reason a static asset does not already solve).
+
+**GATE, WATCHED RED (`test/boardLoad.test.ts`):** the committed
+`board.generated.json` is asserted byte-identical to a fresh
+`generateBoard()` call (drift detection, the same discipline
+`test/publicClaims.test.ts` already applies to the public page's own
+numbers); `loadBoard()`'s own reconstructed board is asserted to answer
+real queries (`whereIs`) identically to the fresh generation; and a THIRD
+test deliberately corrupts one persisted piece's `cell.i` and asserts the
+loaded board now DISAGREES with the fresh one -- the equivalence check
+proven to have teeth, not just measured to currently pass. All three
+green.
+
+**THE RED CPU GATE KEPT, NOT DELETED, PER MARK'S OWN INSTRUCTION -- AND A
+STRONGER ONE ADDED BESIDE IT**: B2.5's own timing assertion
+(`generateBoard()` < 30,000 ms) is unchanged and still honestly red (this
+session, ~35-291 s depending on this host's own memory pressure -- see
+B2.5's own section). A new, second gate does not depend on a clock at
+all: `test/boardGenerator.test.ts`'s new case reads `src/` (the Worker's
+own live request-handling code -- `public/` is client-side and not
+subject to Cloudflare's CPU-time limit at all, so out of scope for what
+this specifically protects) and asserts NO file there imports
+`generateBoard` from `board-generator.js`, by source, the same static
+technique `terrainLandmassOwnership.test.ts` already uses. Mutation-tested
+by hand: a scratch file importing `generateBoard` was added to `src/`,
+confirmed caught by name, deleted (never committed). Mark's own words:
+"a stronger gate than a time limit, and it cannot be satisfied by a
+faster machine." Currently green -- `src/` has never called
+`generateBoard` at all (B2.1's own decision not to wire it there).
+
+**NOT DONE, ON PURPOSE, LEFT FOR B3**: wiring `public/world.js`'s
+`createWorld()` (or the actual page bootstrap) to call `fetchBoard()`.
+`world.js`'s only real consumer is `public/city-render.js`, explicitly
+outside this pass's own routing (listed under "replaced outright" in this
+doc's own "what dies, what lives") -- `createWorld()` is also a
+SYNCHRONOUS API today, used by dozens of tests, and `fetchBoard()` is
+inherently async (`fetch()`); changing that contract is a real design
+decision for whoever builds B3's actual bootstrap, not something to guess
+at here. What B2.6 delivers is the proven, tested, fast (~200 ms)
+machinery B3 needs to make that decision from, not the decision itself.
+
 ## Still open, named rather than silently dropped
 
-- **The 30 s ceiling is not yet met** (B2.5, above) -- ~35-46 s measured,
-  down from ~111 s, real but insufficient. Needs either a further
-  optimisation pass or (more likely, architecturally correct) generation
-  moved out of the live request path entirely, matching `LandField`'s own
-  memoisation precedent. Not wired into `public/world.js`'s `createWorld()`
-  for exactly this reason: every test calling `createWorld()` would pay
-  whatever the cost currently is. `.plan` is untouched, per B2.1's own
-  stated assumption for exactly this case.
-- **Bridges connecting settled islands** (B2.6, next): not yet built.
+- **The 30 s ceiling is not yet met** by `generateBoard()` itself (B2.5) --
+  now moot for the live path (B2.6 means nothing in `src/` ever calls it),
+  but still real for the offline build step, and still asserted honestly.
+- **`world.js`/the page bootstrap is not yet wired to `fetchBoard()`**
+  (B2.6, above) -- real, undone integration work, B3's own job.
+- **Bridges connecting settled islands** (B2.7, next): not yet built.
 - **B2.4** (re-pinning the 34 old-world-pin failures): explicitly last,
   per Mark's own instruction, once the generator makes the world coherent
-  end to end -- still not started, and should not be, until wiring and
-  bridges land.
+  end to end -- still not started, and should not be, until bridges land.
 
 `npx tsc --noEmit` clean throughout. Full targeted regression
 (`test/terrainLandmassOwnership`, `worldAliasing`, `landCoverage`,
 `worldSeed`, `boardGenerator`, `originStability`, `ground`,
-`waterwayGround`, `board`, `boardAdapter`): 93 tests, 89 pass, 3 fail --
-2 already-catalogued `road-network.js` old-world pins, untouched by this
-pass, plus B2.5's own honest red (above), 0 unexplained.
+`waterwayGround`, `board`, `boardAdapter`, `boardLoad`): 97 tests, 93
+pass, 3 fail, 1 todo -- 2 already-catalogued `road-network.js` old-world
+pins, plus B2.5's own honest red; the 1 `todo` is `originStability`'s own
+pre-existing, unchanged, deliberately-red city-plan.js finding (not
+counted as a failure by `node:test` itself). 0 unexplained.
 
 ## B2–B6
 

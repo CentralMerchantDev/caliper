@@ -1067,6 +1067,15 @@
       "find": "  for (let dj = 0; dj < d; dj++) {\n    if (!standsSet.has(groundKindAt(heightAt, iMin, jMin + dj))) return false;\n    if (!standsSet.has(groundKindAt(heightAt, iMin + w - 1, jMin + dj))) return false;\n  }\n  for (let di = stride; di < w - 1; di += stride) {",
       "replace": "  for (let di = stride; di < w - 1; di += stride) {",
       "expect": "sampledGroundOk agrees with the exhaustive check on every real candidate -- zero dangerous disagreements (sampled=ok, exhaustive=refused)"
+    },
+    {
+      "id": "b2-6-no-live-route-generates-the-board",
+      "guards": "the B2.6 static gate genuinely detects a live route (src/) importing generateBoard -- not a tautology that only ever finds zero because it never looks.",
+      "note": "Verified by hand this session: added a scratch file src/_scratch-violation.ts importing generateBoard from ../public/board-generator.js, confirmed the gate's own scan (re-run standalone against the real src/ directory) reported it by name, then deleted the scratch file (never committed) and reconfirmed zero. This is the control that stands in for the B2.5 timing gate once generation moves offline -- Mark's own words: 'a stronger gate than a time limit, and it cannot be satisfied by a faster machine.'",
+      "file": "test/boardGenerator.test.ts",
+      "find": "    const m = src.match(/import\\s*\\{([^}]*)\\}\\s*from\\s*[\"'][^\"']*board-generator(?:\\.js)?[\"']/);\n    if (m && /\\bgenerateBoard\\b/.test(m[1])) found.push(f);",
+      "replace": "    // disabled",
+      "expect": "no file in src/ imports generateBoard -- the request path must not generate"
     }
   ]
 }

@@ -21,9 +21,26 @@
 // =============================================================================
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { generateBoard, SETTLEMENT_TABLE, settlementBoundaries } from "../public/board-generator.js";
 import { LandField, makeHeightAt, landmassPolygonsWorld } from "../public/terrain.js";
 import { atomOf, atomOrigin, ATOM } from "../public/grid.js";
+
+// Walk up from this file's own built location (test/.built/) to the repo
+// root, the same technique terrainLandmassOwnership.test.ts's own
+// repoRoot() uses, for the same reason (test/run.mjs's build step changes
+// import.meta.url's depth relative to a fixed "../.." guess).
+function repoRoot(): string {
+  let dir = fileURLToPath(import.meta.url);
+  for (let up = 0; up < 6; up++) {
+    dir = join(dir, "..");
+    try { readFileSync(join(dir, "CLAUDE.md"), "utf8"); return dir; } catch { /* not this level */ }
+  }
+  throw new Error("boardGenerator.test.ts: could not locate the repo root");
+}
+const SRC_DIR = join(repoRoot(), "src");
 
 /** Shoelace, world m² -- the same measurement landCoverage.test.ts's own
  *  gate and terrain.js's own area-correction use, so a boundary's stated
@@ -184,4 +201,38 @@ test("B2.5 gate: generation time, against Cloudflare's own default Worker CPU-ti
     `generateBoard() took ${timed.stats.totalMs.toFixed(0)} ms, over the ${CEILING_MS} ms ceiling -- ` +
     `this is expected to be red until the board is generated once per seed and persisted (matching world.js's own LandField memoisation), not regenerated live per request; see docs/specs/BOARD-REBUILD-PLAN.md's B2.5 section`,
   );
+});
+
+// B2.6 -- THE STRONGER GATE. KEPT ALONGSIDE THE TIMING GATE ABOVE, NOT IN
+// PLACE OF IT (Mark, 2026-09-08: "KEEP THE RED CPU GATE. Do not delete it
+// because generation moved offline. Change what it guards: the request
+// path must not generate... That is a stronger gate than a time limit,
+// and it cannot be satisfied by a faster machine.").
+//
+// The timing gate above measures a number that varies with the host and
+// can be gamed by a faster machine or a lucky run. This one cannot: it
+// reads src/ (the Worker's own live request-handling code, not
+// public/ -- client-side/browser code is not subject to Cloudflare's own
+// CPU-time limit at all, so it is out of scope for what this gate
+// protects) and asserts no file there imports generateBoard from
+// board-generator.js, by source, the same static technique
+// terrainLandmassOwnership.test.ts already uses for city-plan.js's own
+// LANDMASSES imports.
+test("B2.6 gate: no file in src/ (the Worker's own live request path) imports generateBoard -- the request path must not generate", () => {
+  const found: string[] = [];
+  let entries: string[];
+  try {
+    entries = readdirSync(SRC_DIR);
+  } catch (e) {
+    throw new Error(`B2.6 gate: could not read src/ to check it -- ${e}`);
+  }
+  for (const f of entries) {
+    if (!/\.(ts|js|mjs)$/.test(f)) continue;
+    const src = readFileSync(join(SRC_DIR, f), "utf8");
+    const m = src.match(/import\s*\{([^}]*)\}\s*from\s*["'][^"']*board-generator(?:\.js)?["']/);
+    if (m && /\bgenerateBoard\b/.test(m[1])) found.push(f);
+  }
+  assert.deepEqual(found, [],
+    `src/ file(s) import generateBoard from board-generator.js: ${found.join(", ")} -- ` +
+    `the board must be generated offline (scripts/gen-board.mjs) and loaded (public/board-load.js), never generated inside a live Worker request`);
 });
