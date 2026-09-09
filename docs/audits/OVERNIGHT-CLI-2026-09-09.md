@@ -518,3 +518,155 @@ Buildings are currently still drawn as plain boxes by `board-render.js`
 
 Every item above is a decision or a measurement, not a question —
 nothing here should cost a stopping point on its own.
+
+---
+
+## RUN 3 — the cross-lane handoff, the visual window, and closing C1 for real
+
+`docs/briefs/RUN3-CLI-2026-09-09.md`. Grounded against RUN 2's own
+commits and this document before starting, per the brief's own
+instruction.
+
+### Item 0 — the facade handoff (49854d9)
+
+The brief's own "three lines" claim was half right: the one-line diff
+(`variantSeed: g.seed` into `city-render.js`'s real `getFacadeMaterial`
+call) applied cleanly, but b1-land had NO `FACADE_VARIANTS`/
+`pickVariant`/variant-aware `getFacadeMaterial` at all — pulled
+`public/facade-textures.js` and `test/facadeVariants.test.ts` verbatim
+from codex-lane, then found and fixed two real bugs in the pulled test
+itself (an un-removed `{ todo }` gate; counting logic hardcoded to one
+template string regardless of seed). Result: 12 distinct facade
+materials genuinely reachable from a real placement, confirmed, not 4.
+
+### Item 1 — the visual window, taken early (18007b8)
+
+`scripts/shoot.mjs` renders `public/city.html`, which has its OWN
+bootstrap — calls `buildWorld()` directly, never touches
+`world-render-3d.js`'s `WorldRenderer`. B3/B4's own work (RUN 2) had
+literally never been exercised by this project's own visual-
+verification tool. Wired identical `fetchBoard`/`buildBoardScene`/
+`scatterTrees` calls into `city.html`; confirmed 35,365 real pieces and
+400 real trees drawn, zero errors. The resulting screenshot
+(`.shots/downtown-close.png`) showed exactly what an additive,
+un-styled overlay looks like: correctly positioned grey/blue board
+boxes visibly interpenetrating the old world's own detailed buildings —
+reported plainly, a bad render honestly reported being a result.
+Drawing all ~35,000 un-instanced pieces also measurably broke two
+standing performance gates (culling ratio, draw calls) — fixed by
+gating board-drawing behind an explicit `?board=1`, off by default, in
+both real bootstraps; reconfirmed both gates green with the flag off.
+**The window closes there** — per the brief's own instruction to record
+when, so BLD's own code-only work could resume.
+
+### Item 8 — the C5 decision, recorded not resolved (f99d149)
+
+B2.5's CPU-time gate compares an offline build step (B2.6 already moved
+generation off the live request path) against a live-request ceiling
+that no longer applies to it. The real replacement gate this item asks
+for already exists (B2.6's own static `src/` scan). Left the gate
+exactly as found — converting it to `{ todo }` would contradict Mark's
+own RUN2-recorded reasoning against exactly that; inventing a new
+threshold has no source. Decision #3 in `docs/DECISIONS-FOR-MARK.md`.
+
+### Item 6 — C2, the dead-exports allowlist split by mechanism (87ee76b)
+
+`docs/audits/C2-DEAD-EXPORTS-BREAKDOWN.md` + `scripts/analyze-dead-
+exports-breakdown.mjs`. Confirmed first that no raw allowlist count
+(2,761) appears on any public surface. Found one real, individually
+traced example of the classifier's own blind spot (a same-file dispatch
+table the import-graph walker cannot see): `public/buildings.js`'s
+`bldHighStreetTerrace`/`bldBusinessParkBlock`, sitting in `building()`'s
+own typology map, `building()` itself confirmed product-reachable.
+Mechanical split: product 0, demo-only 37, test-only 210, unreachable
+735, data-reachable CANDIDATE 1,779 (an upper bound, named as such, not
+a confirmed count). A real off-by-one in the tool itself
+(`allOccurrences - declCount > 1` excluded the very example that
+motivated writing it) found and fixed before trusting the output.
+
+### Item 5 — C1 to a real, verified state (a8f5e14)
+
+The brief: the one SURVIVED mutation was confirmed real (no `node:test`
+assertion existed for it) and needed a decision — write the missing
+control, or record why it cannot be written. Wrote it, and its sibling
+(the brief only named one of the two mutations in the same state).
+Both `b2-5-ground-verified-opt-in-is-load-bearing` (`public/board.js` —
+a heightAt call-counting control, replacing a hand-timed wall-clock
+measurement) and `b2-5-sampled-ground-perimeter-is-load-bearing`
+(`public/board-generator.js` — a synthetic-heightAt control isolating
+the west/east perimeter scan specifically) are now real, automated,
+CAUGHT controls. `sampledGroundOk` exported for the second (was
+private); a resulting dead-exports check run surfaced 2 MORE pre-
+existing allowlist gaps (`facade-textures.js`'s `FACADE_VARIANTS`/
+`pickVariant`, missed since Item 0's pull), fixed alongside. A real
+incident during this work: a 300 s shell timeout killed a mutation run
+mid-mutation and left `board-generator.js` mutated on disk — caught by
+re-reading the file before trusting anything else, fixed by hand,
+verified byte-identical against the lock's own recorded hash. **The
+README's own "1 survived or inconclusive" sentence was NOT updated** —
+`scripts/mutate.mjs`'s whole-suite baseline (the only path that
+regenerates the evidence README is pinned against) is itself blocked by
+Item 2's own finding below, so the sentence now understates real
+progress rather than overstates it. Named in Decision #4's addendum,
+not silently left.
+
+### Item 2 — B4, a second real prop wired, roads and building typologies scoped but not attempted (a8f5e14)
+
+`scatterStreetLamps()`: a real second manifest id (`lampPost`, the
+plain-alias path, not `VARIED`'s seeded-generator path `tree` already
+used) along real road pieces, test-first, mutation-tested, gated
+identically to Item 1's board layer. **Investigated, and deliberately
+did not attempt, the brief's other two B4 asks:**
+
+- Roads from `roadkit` — board-generator.js's roads are a fixed 9 m;
+  roadkit's own closest class (LANE) is 10 m, no exact match. A real,
+  undecided design question (extend roadkit with a matching class, or
+  change generation), not solved unilaterally.
+- Building typologies from the kit — `buildings.js`'s own typology
+  functions size themselves internally; two of twelve
+  (`bldHighStreetTerrace`, `bldBusinessParkBlock`) have hard-coded
+  footprints with NO override at all, checked in source. A naive wiring
+  would silently overhang the plot for those two — the exact defect
+  `layout.js`'s own `typologyFor`/`fits` mechanism exists to prevent. A
+  safe port needs an equivalent fits-safe selection, built and tested
+  for the new pipeline, which is real, separate, multi-step work.
+
+**A real, pre-existing standing-gate defect found while verifying this
+item, unrelated to it:** `test/cullingRatio.test.ts` AND
+`test/regressionGate.test.ts` both report the "Downtown skyline" view as
+reading near-zero triangles/draw-calls when a real `shoot.mjs` render of
+the identical view shows a full, correct city. Confirmed via `git
+stash` against the last real commit that this predates everything in
+this run. Load-sensitive (worse when run alongside other heavy
+processes) — consistent with a `renderer.info` reset race rather than a
+one-off fluke, but the exact mechanism was not fully traced. Full
+writeup, working theory, and options in `docs/DECISIONS-FOR-MARK.md` #4.
+**This is why roads-from-roadkit was not attempted either** — perf-
+sensitive board work cannot be reliably verified while the perf gates
+themselves are reporting numbers that do not match the pixels.
+
+### Items 3, 4, 7 — correctly still blocked
+
+All three depend on B4 being genuinely green (Item 3's quarantine, Item
+4's B2.8 re-pin, Item 7's countryside per the plan's own "no phase
+starts before the previous gate is green"). B4 remains real but partial
+— attempting any of these now would be building on a foundation this
+run already found reasons not to trust yet, not a missed opportunity.
+
+### What to do next, in order, and why
+
+1. **Decide docs/DECISIONS-FOR-MARK.md #4** — is the culling-ratio/
+   regressionGate telemetry bug worth root-causing now, or queued? It
+   blocks both roads-from-roadkit (perf cannot be verified) and a real
+   `mutate.mjs --all` run (README's own claim cannot be regenerated).
+2. **Decide the roadkit road-width mismatch** (extend roadkit with a
+   9 m class, or change `ROAD_WIDTH`) — the real blocker on B4's
+   roads-from-roadkit slice.
+3. **Design a fits-safe typology selection for the new pipeline** —
+   the real blocker on B4's buildings-from-the-kit slice; `layout.js`'s
+   own mechanism is the reference, not the reusable code (it is being
+   quarantined).
+4. **Once B4 is actually green**, Items 3, 4, 7 unblock in that order.
+
+Every item above is a decision or a measurement, not a question —
+nothing here should cost a stopping point on its own.
