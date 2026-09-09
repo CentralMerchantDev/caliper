@@ -1336,3 +1336,48 @@ was found, with its category now on record instead of merely implied.
 **38 + 2 `mutationEvidence` + 1 B2.5 honest gate = 41**, the real,
 current total, verified against tonight's own `node test/run.mjs` run
 (1,141 tests: 1,084 pass / 41 fail / 1 todo / 15 skipped).
+
+### RUN 2 — a real correction to this section's own sequencing assumption
+
+Written after B2.7 landed (`501f0a9`), when this section's own
+instruction ("re-pin now that B2.7 has landed") turned out to be
+incomplete, found by reading the 38's own real import lines, not by
+running anything: `test/instanceGroups.test.ts` imports
+`partitionForInstancing` from `public/instance-groups.js` and `planCity`/
+`groupByVariant` from `public/layout.js`; `test/layout.test.ts` imports
+`generateWorld`/`PLOT_CLASSES` from `public/city-plan.js` directly;
+`test/roadNetwork.test.ts` imports `buildArterialNetwork` from
+`public/road-network.js`. **None of these three files has a
+board-generator.js equivalent yet** — `layout.js`'s plot-to-building
+assignment, `instance-groups.js`'s partitioning, and `road-network.js`'s
+arterial joining are themselves scheduled for quarantine in **B6**, and
+their real replacements (roads from `roadkit`, buildings from the kit,
+"wired by construction") are **B4's** job, not yet built.
+
+**The corrected dependency, stated plainly:** B2.7 alone unblocks only
+the crossing/bridge-shaped failures (`cityJoin`'s bridge-end test, both
+`connectivityBridges` failures, `cityWorld`'s "every bridge lands on dry
+ground" case) — and those are not merely unblocked, they are **already
+superseded**: `test/bridgeGenerator.test.ts` (commit `501f0a9`) proves
+the identical property (dry, road-legal, correctly-owned anchors at both
+ends) against the REAL new archipelago, more strictly than the old
+assertion ever did (the old test could not see docks/boat routes at
+all). The other ~30 of the 38 — everything routed through `layout.js`,
+`instance-groups.js`, `road-network.js`'s arterial code, or
+`city-plan.js`'s plot/building arrays directly — cannot be genuinely
+re-pinned until **B4** builds their real replacements. Re-pinning them
+now would mean writing a test against a capability that does not exist
+yet, which is not re-pinning, it is inventing a second requirement B4
+would then have to satisfy on top of its own.
+
+**What this run actually did, honestly scoped to what B2.7 alone
+unblocks:** confirmed `test/bridgeGenerator.test.ts` already covers the
+bridge-shaped properties for the new world (§B2.7 above). The old
+`cityWorld`/`cityJoin`/`connectivityBridges` assertions for those same
+properties are left exactly as red as found — not re-pinned in place,
+because their own import chain (`generateWorld()`) is retired in B6, not
+patched — with this note as the record of why, so B4/B6's own exit
+does not have to rediscover it. **Re-sequenced: B2.8's remaining ~30
+tests move to AFTER B4, not directly after B2.7** — the plan's own
+phase order already had B4 after B2.8, but the DEPENDENCY (B2.8 needs
+B4's outputs to re-pin against) was not previously stated; it is now.
