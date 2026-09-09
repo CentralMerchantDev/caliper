@@ -1076,6 +1076,42 @@
       "find": "    const m = src.match(/import\\s*\\{([^}]*)\\}\\s*from\\s*[\"'][^\"']*board-generator(?:\\.js)?[\"']/);\n    if (m && /\\bgenerateBoard\\b/.test(m[1])) found.push(f);",
       "replace": "    // disabled",
       "expect": "no file in src/ imports generateBoard -- the request path must not generate"
+    },
+    {
+      "id": "b2-7-classify-crossing-uses-real-ceiling",
+      "guards": "classifyCrossing genuinely splits bridge-vs-boat at roadkit.js's real 800 m buildable ceiling, not the old world's 9,000 m 'plausible' cutoff this plan's own blind review corrected.",
+      "note": "Verified this session: forcing every gap to classify as a bridge regardless of distance is exactly the defect the blind review found in the first B2.7 draft (reusing 9,000 m, which answers 'is this geographically plausible' not 'can roadkit.js build it') -- caught directly by the unit test asserting 801m/9000m both classify as boat.",
+      "file": "public/bridge-generator.js",
+      "find": "  return edge.d <= BRIDGE_MAX_SPAN_M ? \"bridge\" : \"boat\";",
+      "replace": "  return \"bridge\";",
+      "expect": "classifyCrossing splits at roadkit.js's own real 800 m buildable ceiling"
+    },
+    {
+      "id": "b2-7-anchor-walk-checks-correct-boundary",
+      "guards": "walkAnchor genuinely requires the found ground to be INSIDE the boundary the anchor is FOR, not merely dry ground belonging to any landmass -- mechanism 1's own historically real bug (gen-bridges.mjs: 'barrier-redcliff came back with both ends on the mainland').",
+      "note": "Verified this session: dropping the inPolygon check lets an anchor walk wander onto a neighbouring landmass (most anchors are close enough to their own boundary that this survives on many edges, but the dedicated gate test's own boundaryId cross-check catches it on the real archipelago).",
+      "file": "public/bridge-generator.js",
+      "find": "    if (!inPolygon(x, z, boundaryPolygon)) continue;",
+      "replace": "    // disabled",
+      "expect": "every bridge and every dock lands on dry, road-legal ground belonging to the boundary it serves"
+    },
+    {
+      "id": "b2-7-dock-ids-are-per-pair-not-per-boundary",
+      "guards": "a boundary with boat routes to two different partners gets two DISTINCT dock ids, not one shared dock reused across routes -- board.js's own place() refuses a duplicate id outright.",
+      "note": "Verified this session: dropping the partner-boundary suffix from a dock's own id makes every route touching the same boundary collide on the same id. Caught, but not by the dedicated 'no duplicate ids' test itself -- board.js's own place() silently absorbs the collision (refusing the second, colliding piece) before that assertion ever sees a duplicate, so the ids that DO survive into `built` are never duplicated. Caught instead by the two tests whose own dock count/pairing depends on BOTH ends of every route surviving: a boundary with 2+ routes loses one dock outright, breaking its partner's routeTo reference and the real-built-connectivity count. Recorded here as its own finding, the same shape as the 2026-09-09 worldAliasing entry (AUDIT-PROTOCOL.md SS7): the manifest's own `expect` must name a test that ACTUALLY goes red, not the test whose title best describes the property in prose.",
+      "file": "public/bridge-generator.js",
+      "find": "  const idA = `dock-${edge.aId}-${edge.bId}`;",
+      "replace": "  const idA = `dock-${edge.aId}`;",
+      "expect": "the REAL BUILT pieces -- not just the abstract graph -- connect all 12 boundaries, zero refused"
+    },
+    {
+      "id": "b2-7-bridge-refusal-falls-back-to-boat",
+      "guards": "a bridge candidate that bridgeSpan() or board.place() refuses becomes a boat route instead of silently dropping the connection -- this plan's own named fallback rule.",
+      "note": "Verified this session: skipping the dock fallback on a bridge refusal turns that edge into a real, reported refusal rather than a redirected boat route. SURVIVED on a first attempt scored only against the default archipelago's own connectivity gate -- the real data has exactly one bridge candidate and it never fails, so the fallback branch this mutation touches never executes against that data, and the mutation is invisible to any test that only calls buildCrossingPieces on the unmodified default boundaries. Caught for real once a dedicated test pre-occupied the one real bridge's own exact footprint on a fresh board (forcing board.place() to refuse it for a genuine reason) and asserted the occupied candidate still produces zero refused crossings and more dock pieces than before.",
+      "file": "public/bridge-generator.js",
+      "find": "    if (!tryDockFallback()) {\n      refused.push({ edgeKey, edge, reason: `bridge refused (${result.ok ? \"board placement\" : result.reason}) and no fallback dock anchor` });\n    }",
+      "replace": "    refused.push({ edgeKey, edge, reason: `bridge refused (${result.ok ? \"board placement\" : result.reason}) and no fallback dock anchor` });",
+      "expect": "a bridge candidate the BOARD refuses (occupied cell) redirects to a real boat route"
     }
   ]
 }
