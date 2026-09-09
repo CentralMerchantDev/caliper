@@ -1418,6 +1418,138 @@ html, body {
 .nav-bare .nav-strip-modes button { flex: 1; padding: 6px 4px; }
 .nav-bare .nav-strip-modes button { padding: 6px 9px; font-size: 11.5px; }
 
+/* =============================================================================
+   THE NAVIGATION WHEEL -- U4, camera ACTIONS only
+   =============================================================================
+   Same family of object as the pad above, not a foreign widget: the literal
+   --nav-radius/--nav-shadow VALUES (redeclared here rather than inherited --
+   #nav-wheel is a sibling of #nav-compass-pad in the markup, not a
+   descendant, so the custom properties scoped to .nav-pad.nav-bare do not
+   reach it) and the same --card/--line/--sky palette every other instrument
+   on this page uses.
+
+   The four camera MODES (Orbit/Walk/Drive/Fly) deliberately are not on this
+   wheel -- they stay in the button row above. A mode switch and an action
+   wheel sharing one radial is how these controls get confusing; this wheel
+   is six ACTIONS (orbit/pan/zoom/focus/north/rewind), all available in
+   whichever mode is current.
+
+   HALF-CIRCLE, NOT A FULL RING. The wheel is anchored at the screen's left
+   edge, above the pad it belongs to (using --nav-pad-height, the same
+   measured value U1 made the inspect card actually govern by). A full 360°
+   ring at that anchor would put its leftmost segments past the edge of the
+   viewport, off-screen. Six segments across a 180° arc opening rightward,
+   away from the edge, keeps every segment reachable and is a legitimate
+   edge-mounted adaptation of the reference (AutoCAD's own wheel becomes a
+   half-wheel when it would otherwise run off a docked toolbar edge), not an
+   arbitrary shortcut. */
+.nav-wheel {
+  --nav-radius: 11px;
+  --nav-shadow: 0 4px 14px rgba(42, 32, 26, 0.14);
+  position: fixed;
+  left: 18px;
+  bottom: calc(var(--nav-pad-height, 320px) + 18px + 12px);
+  z-index: 91;
+}
+.nav-wheel-hub {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--nav-shadow);
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-wheel-hub:hover { background: var(--sky); color: var(--card); }
+.nav-wheel.open .nav-wheel-hub { background: var(--sky); color: var(--card); }
+
+.nav-wheel-legend-btn {
+  position: absolute;
+  left: 30px;
+  top: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--nav-shadow);
+  color: var(--ink2);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+}
+.nav-wheel-legend {
+  position: absolute;
+  left: 50px;
+  top: -8px;
+  min-width: 150px;
+  padding: 8px 10px;
+  border-radius: var(--nav-radius);
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--nav-shadow);
+  font-size: 10.5px;
+  color: var(--ink);
+  z-index: 3;
+}
+.nav-wheel-legend b { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sky); margin-bottom: 4px; }
+.nav-wheel-legend div { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.nav-wheel-legend span { font-family: var(--mono); color: var(--ink); }
+.nav-wheel-legend i { color: var(--ink2); font-style: normal; text-align: right; }
+
+.nav-wheel-ring {
+  position: absolute;
+  left: 22px;
+  top: 22px;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.nav-wheel-seg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--nav-shadow);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translate(0, 0) scale(0.4);
+  transition: transform 0.16s ease, opacity 0.16s ease, background 0.15s ease, color 0.15s ease;
+  pointer-events: none;
+}
+.nav-wheel-seg:hover, .nav-wheel-seg.armed { background: var(--sky); color: var(--card); }
+.nav-wheel-seg:disabled { opacity: 0.35 !important; cursor: default; }
+
+/* The open/closed position of each segment (a half-circle arc, top to
+   bottom, opening rightward from the hub -- see index.html's comment above
+   #nav-wheel for why a full ring does not fit there) is set directly as
+   inline style by nav-wheel.js's setOpen(), not by a CSS class rule here.
+   An earlier version used `.nav-wheel.open .nav-wheel-seg[data-nav-action=
+   "x"]`, which Element.matches() confirmed as selector-correct in a real
+   browser but which never actually painted -- verified by screenshot, cause
+   not fully isolated. Inline style removes that gap entirely: what JS sets
+   is what getComputedStyle (and the screenshot) shows, with no separate
+   cascade to go wrong. */
+
 /* --- readout: heading, pitch, range ---------------------------------------
    Navigating blind is most of why this was hard. These are live numbers, in
    the world's own units, not decoration. */
@@ -1801,6 +1933,34 @@ html, body {
   </div>
 
   <div class="nav-pad-hint" id="nav-pad-hint">Drag to orbit · scroll to zoom · arrows below</div>
+</div>
+
+<!-- U4 -- the navigation wheel. Mark: 18 years of Revit and AutoCAD daily, so
+     the SteeringWheel's vocabulary is what his hands already know. Segments
+     are camera ACTIONS (orbit/pan/zoom/focus/north/rewind); the four camera
+     MODES deliberately stay off it and stay in the button row above -- a
+     mode switch and an action wheel mixed into one radial is how these
+     controls get confusing (Mark's own framing), so they are two instruments,
+     not one. Every label and tooltip below is generated from
+     public/nav-bindings.js's NAV_BINDINGS by nav-wheel.js at load, not typed
+     here by hand -- the markup gives each segment an id to fill, not text to
+     trust. Positioned off --nav-pad-height, same measured mechanism U1 made
+     the inspect card actually use, so it sits just clear of the pad above it
+     rather than a second guessed offset. -->
+<div id="nav-wheel" class="nav-wheel" role="group" aria-label="Camera action wheel">
+  <button type="button" id="nav-wheel-hub" class="nav-wheel-hub" aria-expanded="false" aria-label="Open the camera action wheel">◎</button>
+  <!-- Only for what the wheel itself cannot show: WASD-family movement keys,
+       which are per-mode, not a camera action. The wheel's own six segments
+       are labelled and tappable, so they need no separate legend entry. -->
+  <button type="button" id="nav-wheel-legend-btn" class="nav-wheel-legend-btn" aria-label="Keyboard shortcuts for the current mode" title="Keyboard shortcuts">?</button>
+  <div class="nav-wheel-ring" aria-hidden="true">
+    <button type="button" class="nav-wheel-seg" data-nav-action="orbit"></button>
+    <button type="button" class="nav-wheel-seg" data-nav-action="pan"></button>
+    <button type="button" class="nav-wheel-seg" data-nav-action="zoom"></button>
+    <button type="button" class="nav-wheel-seg" data-nav-action="focus"></button>
+    <button type="button" class="nav-wheel-seg" data-nav-action="north"></button>
+    <button type="button" class="nav-wheel-seg" data-nav-action="rewind"></button>
+  </div>
 </div>
 
 <!-- Street-Level Interactive HUD -->
@@ -5062,6 +5222,7 @@ function connect(url) {
 import { createMenus, createCommandCentre } from "./menus.js";
 import { createWorkbench } from "./workbench.js";
 import { createNavigation } from "./navigate.js";
+import { createNavWheel } from "./nav-wheel.js";
 const menus = createMenus(document);
 createCommandCentre(document, menus);
 createWorkbench(document);
@@ -5069,8 +5230,12 @@ createWorkbench(document);
    page's own module did not finish, which is worth SAYING rather than quietly
    shipping a world you cannot navigate -- the first version of this line was a
    bare `if`, which would have skipped the whole feature in silence. */
-if (window.renderer3d) createNavigation(window.renderer3d, document);
-else console.error("navigation not started: window.renderer3d is missing");
+if (window.renderer3d) {
+  createNavigation(window.renderer3d, document);
+  createNavWheel(window.renderer3d, document);
+} else {
+  console.error("navigation not started: window.renderer3d is missing");
+}
 </script>
 </body>
 </html>

@@ -1,0 +1,122 @@
+U4 -- the navigation wheel, built not proposed, with two bugs the
+screenshot process caught that reading the code would not have
+
+Mark's decision: build the radial wheel, not another written proposal.
+18 years of Revit/AutoCAD gave him the SteeringWheel's vocabulary already;
+this project is also a portfolio artefact, where a distinctive, well-made
+control is visible craft and a button pad is not.
+
+WHAT'S ON THE WHEEL, AND WHY. Six segments: orbit, pan, zoom, focus, north,
+rewind -- all camera ACTIONS. The four camera MODES (Orbit/Walk/Drive/Fly)
+deliberately stay in the existing button row and are not wheel segments:
+mixing a mode switch and an action wheel in one radial is the confusion
+Mark's own brief named, solved by keeping them two instruments instead of
+force-fitting AutoCAD's eight-segment set (which has no equivalent for a
+mode switch either -- SteeringWheel lives inside one navigation state at a
+time). Continuous actions (orbit/pan/zoom) are click-and-drag FROM the
+segment, the actual SteeringWheel convention; discrete actions (focus/north/
+rewind) fire on a plain click. Orbit and zoom drive the renderer's existing
+rotateCamera/pitchCamera/zoomCamera. Pan and rewind needed two small,
+additive methods on the CAUTION file (public/world-render-3d.js, B3 is
+replacing it): panCamera(dx,dy), extracted from the existing shift-drag pan
+math rather than re-derived, and getPose()/setPose() for the history stack,
+returning plain numbers (not three.js objects) so nav-bindings.js's tests
+need no three import. Both are additive wrappers mirroring rotateCamera's
+existing shape, not a rewrite of anything the mouse-drag path already does.
+
+THE BINDING TABLE. public/nav-bindings.js's NAV_BINDINGS is the one place a
+gesture and its name live. The wheel's segment tooltips, #nav-pad-hint's
+text, and the "?" legend's keyboard-only list all read from it -- verified
+directly: hintText() was missing the word "pan" on first write (gestureHint
+described the gesture but never named it), caught by
+test/navBindings.test.ts's own assertion, not by inspection. The "?" legend
+carries only what the wheel cannot: WASD-family movement, which is per-mode,
+not a camera action, so it has no wheel segment to begin with.
+
+REWIND. Linear, ~20 entries, browser-back style. "Settles" is defined:
+onSettle fires once a pose has stopped changing for 400ms, with the pose
+captured being the one immediately BEFORE that run of changes began, so one
+continuous drag is one history entry, not one per polled frame. The classic
+bug Mark named -- rewind pushes the camera, which the settle-tracker sees as
+a move and pushes right back onto the stack the rewind just popped, so the
+control appears to do nothing past the first click -- is closed by
+`skipNextPush`: rewind() arms it, the next push() (the settle-echo of the
+rewind's own camera move) is swallowed once, and nothing after that is
+affected. Tested directly, including that the suppression is exactly
+one-shot (a genuine subsequent move right after a rewind still records) --
+this is the property most likely to look right by accident and wrong under
+use, so it got two tests, not one.
+
+WATCHED RED FIRST, BY HAND, TWICE: reverting the skipNextPush guard failed
+exactly the two tests naming that property and no others; reverting a wheel
+segment's data-nav-action to a camera mode ("walk") failed exactly the
+"no camera MODE is a wheel segment" test. Both restored, byte-identical,
+reconfirmed green.
+
+TWO BUGS THE SCREENSHOT CAUGHT THAT READING THE CODE DID NOT:
+
+1. THE WHEEL'S POSITION ASSUMED THE PAD NEVER MOVES. public/workbench.js
+   registers #nav-compass-pad (key: "nav", home: "left") and sets its own
+   inline left/top, which wins over the stylesheet's `left:18px; bottom:
+   18px` the wheel's first version calc()'d against. First screenshot: the
+   wheel landed inside the pad's own footprint instead of above it, because
+   the pad was docked somewhere the calc() never accounted for. Same
+   principle U1 already established for height (measure the pad, don't
+   predict its geometry) extended to position: nav-wheel.js now reads
+   #nav-compass-pad's live getBoundingClientRect() and places the wheel
+   directly off it, re-measured on ResizeObserver, window resize, and a
+   250ms poll (a workbench drag moves the pad without resizing it, which a
+   ResizeObserver alone cannot see). NOT YET FIXED, flagged rather than
+   silently expanded into this change: U1's inspect-card positioning makes
+   the identical assumption (a fixed bottom-left corner) and may have the
+   same latent bug whenever workbench has redocked the pad -- worth its own
+   pass, not folded into U4's diff.
+
+2. THE OPEN-STATE CSS RULE SELECTOR-MATCHED AND NEVER PAINTED. The first
+   wheel version positioned each open segment with
+   `.nav-wheel.open .nav-wheel-seg[data-nav-action="x"] { transform: ...}`.
+   A real browser confirmed the selector was correct --
+   `element.matches(".nav-wheel.open .nav-wheel-seg")` returned true, the
+   `open` class was confirmed present on the root -- but
+   `getComputedStyle(seg).transform` still reported the closed state
+   (`scale(0.4)`) regardless. Cause not fully isolated (a specificity or
+   cascade interaction with something elsewhere in a very large stylesheet
+   is the leading guess, not confirmed). Rather than keep debugging an
+   elusive cascade issue, the six segment positions moved to inline style
+   set directly by setOpen() in nav-wheel.js -- one fewer moving part
+   between "the state is open" and "the segment is visibly there," and
+   exactly the kind of thing this project's own screenshot discipline
+   exists to catch rather than trust a green unit suite for: nothing in
+   test/navWheel.test.ts's string-level checks could have seen a rule that
+   matches but does not paint.
+
+WHAT'S VERIFIED AND WHAT ISN'T, PLAINLY: test/navBindings.test.ts (11) and
+test/navWheel.test.ts (4) pass, red-first proven for the two properties
+named above. npx tsc --noEmit clean. The JS-driven inline-style fix for bug
+2 has NOT yet been re-confirmed by screenshot -- host free memory sat at
+3.5-4.2 GB through this session's second half (this project's own 4 GB
+floor), wrangler dev crashed repeatedly under it exactly as
+playwright.config.ts's own comment already documents, and two long waits
+did not clear it. The desktop screenshots taken BEFORE this fix confirm the
+POSITION bug is fixed (wheel sits cleanly above the pad, hint text correctly
+lists all six gestures including pan). They do NOT confirm the OPEN-STATE
+paint bug is fixed, because they were taken against the version that had
+just found it. Reporting this as pending, not as done -- a screenshot taken
+against the wrong version is not evidence for the fixed one.
+
+What's still open, named rather than left implicit:
+- Re-confirm the open-state fix by screenshot once memory allows (the
+  concrete next step, not started).
+- U1's inspect-card position may share the "assumes the pad's CSS-default
+  corner" bug this commit found and fixed for the wheel -- not fixed here.
+- The wheel's half-circle assumes the pad (and therefore the wheel) sits
+  near the screen's left edge; a workbench drag to the right side is not
+  accounted for.
+- Phone-viewport screenshots were captured (position-only, pre-open-fix) but
+  not yet re-taken against the current code.
+- No mutation-test entry added to test/mutations.json for this session's two
+  manual red-first checks (done by hand: stash/edit/run/restore, verified
+  byte-identical) -- worth adding if this becomes permanent.
+- U2's mobile grounding (screenshot at a real phone viewport, portrait and
+  landscape, of index.html generally) is still separately pending on the
+  same memory constraint, unrelated to U4.

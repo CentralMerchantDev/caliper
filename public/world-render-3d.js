@@ -7148,6 +7148,52 @@ class Renderer3D {
     this._targetCamDist = this._camDist;
   }
 
+  /**
+   * U4/nav-wheel.js's Pan wedge -- the same plane-of-the-current-view math
+   * _bindOrbitControls' mouse-drag pan already uses (extracted, not
+   * duplicated by re-deriving it: az from _orbit.base + _orbit.delta, right/
+   * forward from that heading, scaled by _camDist so panning still feels
+   * proportional at any zoom level), but incremental per call rather than
+   * assign-from-a-captured-drag-start -- callable repeatedly with small
+   * per-frame dx/dy the way zoomCamera above is called repeatedly with small
+   * factors, so a wedge-drag can drive it without the renderer needing to
+   * track a second "pan drag start" state alongside the canvas's own.
+   */
+  panCamera(dx, dy) {
+    if (this._isDroneTour) this.stopDroneTour();
+    const az = this._orbit.base + this._orbit.delta;
+    const rightX = Math.cos(az), rightZ = -Math.sin(az);
+    const fwdX = -Math.sin(az), fwdZ = -Math.cos(az);
+    const reach = (this._camDist || 48) * 1.1;
+    this._lookAt.x -= (dx * rightX + dy * fwdX) * reach;
+    this._lookAt.z -= (dx * rightZ + dy * fwdZ) * reach;
+    this._targetLookAt.copy(this._lookAt);
+  }
+
+  /** U4/nav-wheel.js's Rewind wedge. Plain numbers, not three.js objects, so
+   *  a pose can sit in nav-bindings.js's history without that module (or its
+   *  tests) needing to import three. */
+  getPose() {
+    return {
+      lookAtX: this._lookAt.x,
+      lookAtZ: this._lookAt.z,
+      delta: this._orbit.delta,
+      pitch: this._orbit.pitch,
+      camDist: this._camDist,
+    };
+  }
+  setPose(pose) {
+    if (!pose) return;
+    if (this._isDroneTour) this.stopDroneTour();
+    this._lookAt.x = pose.lookAtX;
+    this._lookAt.z = pose.lookAtZ;
+    this._targetLookAt.copy(this._lookAt);
+    this._orbit.delta = pose.delta;
+    this._orbit.pitch = pose.pitch;
+    this._camDist = pose.camDist;
+    this._targetCamDist = pose.camDist;
+  }
+
   setTimeOfDay(todKey) {
     if (todKey === "day") this._overrideHour = 12;
     else if (todKey === "dusk") this._overrideHour = 19.5;
@@ -8490,6 +8536,15 @@ export class WorldRenderer {
   }
   zoomCamera(factor) {
     if (this._impl.zoomCamera) this._impl.zoomCamera(factor);
+  }
+  panCamera(dx, dy) {
+    if (this._impl.panCamera) this._impl.panCamera(dx, dy);
+  }
+  getPose() {
+    return this._impl.getPose ? this._impl.getPose() : null;
+  }
+  setPose(pose) {
+    if (this._impl.setPose) this._impl.setPose(pose);
   }
   setTimeOfDay(todKey) {
     if (this._impl.setTimeOfDay) this._impl.setTimeOfDay(todKey);
