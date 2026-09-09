@@ -77,6 +77,88 @@ export const FACADE_FAMILIES = {
 };
 
 /**
+ * Intra-character atlas variety. `getFacadeMaterial`'s cache keys on
+ * character alone (plus a vertex-colour/day-night flag) -- four textures for
+ * the entire world, traced in docs/audits/K6-BUILDINGS.md and
+ * docs/audits/OVERNIGHT-BLD-2026-09-09.md as the actual cause of "the same
+ * window grid... still dominates." `characterFor` (public/layout.js) chooses
+ * character per BLOCK on purpose, not per building -- ANTI-CLONE 1 there
+ * explains why (random-per-building averages a whole city into one texture
+ * at the scale it's viewed from). So the fix here is NOT more characters; it
+ * is more grids WITHIN a character, so a block still reads as one coherent
+ * era while its individual buildings stop sharing one bitmap.
+ *
+ * Variant 0 of every character is BYTE-IDENTICAL to this file's values
+ * before this table existed (floors 8, cols 8, 18% margins, cross mullion,
+ * 8px spandrel) -- the default variant when no `variantSeed` is supplied, so
+ * every existing caller keeps its exact current output.
+ *
+ * `mullion`: "cross" (vertical + horizontal, today's only style), "single"
+ * (vertical only), "double" (two vertical piers, no horizontal), or "none"
+ * (bare glazing, curtain-wall). `spandrel`: the floor-dividing band's pixel
+ * height at the 1024px atlas size non-default variants share, unscaled.
+ *
+ * 1980-2000 stays excluded by construction: every variant is a real,
+ * era-appropriate development of one of the four already-approved
+ * characters, never a fifth character or a blend between postwar and
+ * contemporary. test/facadeVariants.test.ts asserts the character count
+ * directly so this cannot silently regress.
+ */
+export const FACADE_VARIANTS = {
+  heritage: [
+    { name: "sash-grid", floors: 8, cols: 8, winMarginXFrac: 0.18, winMarginYFrac: 0.18, mullion: "cross", spandrel: 8 },
+    { name: "tall-sash", floors: 6, cols: 7, winMarginXFrac: 0.22, winMarginYFrac: 0.12, mullion: "single", spandrel: 14 },
+    { name: "narrow-bay", floors: 9, cols: 9, winMarginXFrac: 0.26, winMarginYFrac: 0.22, mullion: "cross", spandrel: 10 },
+  ],
+  interwar: [
+    { name: "classic-grid", floors: 8, cols: 8, winMarginXFrac: 0.18, winMarginYFrac: 0.18, mullion: "cross", spandrel: 8 },
+    { name: "deco-pier", floors: 10, cols: 6, winMarginXFrac: 0.16, winMarginYFrac: 0.10, mullion: "double", spandrel: 10 },
+    { name: "classical-masonry", floors: 7, cols: 7, winMarginXFrac: 0.20, winMarginYFrac: 0.16, mullion: "single", spandrel: 12 },
+  ],
+  postwar: [
+    { name: "standard-grid", floors: 8, cols: 8, winMarginXFrac: 0.18, winMarginYFrac: 0.18, mullion: "cross", spandrel: 8 },
+    { name: "ribbon-window", floors: 8, cols: 10, winMarginXFrac: 0.08, winMarginYFrac: 0.22, mullion: "single", spandrel: 6 },
+    { name: "concrete-grid", floors: 6, cols: 6, winMarginXFrac: 0.14, winMarginYFrac: 0.14, mullion: "cross", spandrel: 16 },
+  ],
+  contemporary: [
+    { name: "standard-curtain", floors: 8, cols: 8, winMarginXFrac: 0.18, winMarginYFrac: 0.18, mullion: "cross", spandrel: 8 },
+    { name: "full-curtain-wall", floors: 12, cols: 6, winMarginXFrac: 0.04, winMarginYFrac: 0.04, mullion: "none", spandrel: 3 },
+    { name: "composite-panel", floors: 9, cols: 9, winMarginXFrac: 0.10, winMarginYFrac: 0.10, mullion: "single", spandrel: 5 },
+  ],
+};
+
+/**
+ * Deterministic in [0, 1) from a string -- no Math.random, matching this
+ * file's existing reproducibility rule. FNV-1a, not a plain polynomial
+ * accumulator: a `h = h*31 + charCode` hash barely changes between strings
+ * that differ only in a trailing digit (`"x|sample-8"` vs `"x|sample-9"`
+ * differ by 1 before the final modulo), and real building seeds are
+ * exactly that shape (`"terrace-0"`, `"terrace-1"`, ...) -- caught by
+ * test/facadeVariants.test.ts's own distribution check going red against
+ * the weaker hash first, not assumed safe from reading the formula alone.
+ */
+function hash01(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h / 4294967296;
+}
+
+/**
+ * Picks one variant for (character, variantSeed), deterministically. No
+ * variantSeed -> variant 0, so every caller that does not yet pass one keeps
+ * today's exact output (backward compatible by construction, not by review).
+ */
+export function pickVariant(character, variantSeed) {
+  const variants = FACADE_VARIANTS[character] || FACADE_VARIANTS.heritage;
+  if (!variantSeed) return variants[0];
+  const idx = Math.floor(hash01(`${character}|${variantSeed}`) * variants.length);
+  return variants[idx];
+}
+
+/**
  * Creates an offscreen canvas or node canvas wrapper.
  */
 function createCanvas(w, h) {
@@ -112,9 +194,10 @@ function createCanvas(w, h) {
 /**
  * Procedurally draws a complete facade atlas tile.
  */
-export function generateFacadeAtlas(character = "heritage", size = 1024) {
+export function generateFacadeAtlas(character = "heritage", size = 1024, variantSeed = "") {
   const spec = FACADE_FAMILIES[character] || FACADE_FAMILIES.heritage;
-  
+  const variant = pickVariant(character, variantSeed);
+
   // 1. Diffuse (Color) Canvas
   const diffCanvas = createCanvas(size, size);
   const dctx = diffCanvas.getContext("2d");
@@ -155,8 +238,9 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
   ectx.fillStyle = "#000000";
   ectx.fillRect(0, 0, size, size);
 
-  const floors = 8;
-  const cols = 8;
+  const floors = variant.floors;
+  const cols = variant.cols;
+  const spandrelPx = variant.spandrel;
   const cellH = size / floors;
   const cellW = size / cols;
 
@@ -167,22 +251,22 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
 
     // Floor dividing spandrel
     dctx.fillStyle = spec.stoneTrim;
-    dctx.fillRect(0, y, size, 8);
+    dctx.fillRect(0, y, size, spandrelPx);
     rctx.fillStyle = `rgb(${Math.round(spec.roughnessTrim * 255)},${Math.round(spec.roughnessTrim * 255)},${Math.round(spec.roughnessTrim * 255)})`;
-    rctx.fillRect(0, y, size, 8);
+    rctx.fillRect(0, y, size, spandrelPx);
     mctx.fillStyle = `rgb(${wallMetalByte},${wallMetalByte},${wallMetalByte})`;
-    mctx.fillRect(0, y, size, 8);
+    mctx.fillRect(0, y, size, spandrelPx);
 
     // Spandrel top/bottom normal bevel
     nctx.fillStyle = "rgb(128, 180, 255)"; // slight upward normal
-    nctx.fillRect(0, y, size, 2);
+    nctx.fillRect(0, y, size, Math.min(2, spandrelPx));
     nctx.fillStyle = "rgb(128, 80, 255)";  // slight downward normal
-    nctx.fillRect(0, y + 6, size, 2);
+    nctx.fillRect(0, y + Math.max(0, spandrelPx - 2), size, Math.min(2, spandrelPx));
 
     for (let c = 0; c < cols; c++) {
       const x = c * cellW;
-      const winMarginX = cellW * 0.18;
-      const winMarginY = cellH * 0.18;
+      const winMarginX = cellW * variant.winMarginXFrac;
+      const winMarginY = cellH * variant.winMarginYFrac;
       const winW = cellW - winMarginX * 2;
       const winH = cellH - winMarginY * 2;
       const winX = x + winMarginX;
@@ -224,16 +308,25 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
       nctx.fillStyle = "rgb(128, 80, 255)";
       nctx.fillRect(winX, winY + winH - 1, winW, 3);
 
-      // Window Mullions (structural crossbars in diffuse + normal)
-      dctx.fillStyle = spec.windowFrame;
-      dctx.fillRect(winX + winW / 2 - 1, winY, 2, winH);
-      dctx.fillRect(winX, winY + winH * 0.4 - 1, winW, 2);
-
-      // Mullion normal bevels
-      nctx.fillStyle = "rgb(160, 128, 255)";
-      nctx.fillRect(winX + winW / 2 - 1, winY, 1, winH);
-      nctx.fillStyle = "rgb(96, 128, 255)";
-      nctx.fillRect(winX + winW / 2, winY, 1, winH);
+      // Window Mullions (structural crossbars in diffuse + normal). Style
+      // varies by variant.mullion -- "cross" reproduces this file's
+      // original single-vertical-plus-horizontal bar exactly (default
+      // variant 0, so today's output is unchanged byte-for-byte).
+      if (variant.mullion !== "none") {
+        const piers = variant.mullion === "double" ? [winW / 3, (winW * 2) / 3] : [winW / 2];
+        for (const px of piers) {
+          dctx.fillStyle = spec.windowFrame;
+          dctx.fillRect(winX + px - 1, winY, 2, winH);
+          nctx.fillStyle = "rgb(160, 128, 255)";
+          nctx.fillRect(winX + px - 1, winY, 1, winH);
+          nctx.fillStyle = "rgb(96, 128, 255)";
+          nctx.fillRect(winX + px, winY, 1, winH);
+        }
+        if (variant.mullion === "cross") {
+          dctx.fillStyle = spec.windowFrame;
+          dctx.fillRect(winX, winY + winH * 0.4 - 1, winW, 2);
+        }
+      }
 
       // Window Sill
       dctx.fillStyle = spec.stoneTrim;
@@ -273,6 +366,58 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
     // Emissive: Pure black (no window glow on roofs)
     ectx.fillStyle = "#000000";
     ectx.fillRect(patchX, patchY, patchSize, patchSize);
+  }
+
+  // 6b. Reserved TEXTURED Trim Patch (K7.1) -- immediately left of the plain
+  // patch above, same two mirrored rows, same size. Closes the gap
+  // docs/audits/K6-BUILDINGS.md named: architectural trim (cornices, string
+  // courses, parapets -- built by buildings.js's mergeWithMassingDepth) had
+  // no atlas region that was both textured and free of window/mullion
+  // pixels. `stoneTrim` already existed per character for exactly this
+  // purpose but was only ever painted as thin in-texture spandrel bands.
+  // This gives it a patch of its own: a real, visible value grain plus
+  // coursing joints, not a flat solid multiplied by vertex color the way
+  // the plain patch above works. Painted with deterministic sine-based
+  // pseudo-noise (matching this file's existing window-lit-pattern
+  // convention above), not Math.random -- atlas generation stays
+  // reproducible run to run.
+  {
+    const trimPatchSize = 64;
+    const trimPatchX = size - patchSize * 2; // directly left of the plain/roof patch, never overlapping it
+    const tr = parseInt(spec.stoneTrim.slice(1, 3), 16);
+    const tg = parseInt(spec.stoneTrim.slice(3, 5), 16);
+    const tb = parseInt(spec.stoneTrim.slice(5, 7), 16);
+    const clampByte = (v) => Math.max(0, Math.min(255, Math.round(v)));
+    const grainCell = 4;
+    for (const patchY of [0, size - trimPatchSize]) {
+      for (let py = 0; py < trimPatchSize; py += grainCell) {
+        for (let px = 0; px < trimPatchSize; px += grainCell) {
+          const n = Math.sin(px * 12.9898 + py * 78.233) * 43758.5453;
+          const grain = (n - Math.floor(n)) - 0.5; // deterministic pseudo-random in [-0.5, 0.5)
+          const shade = 1 + grain * 0.22; // +/-11% value variation per grain cell
+          dctx.fillStyle = `rgb(${clampByte(tr * shade)}, ${clampByte(tg * shade)}, ${clampByte(tb * shade)})`;
+          dctx.fillRect(trimPatchX + px, patchY + py, grainCell, grainCell);
+        }
+      }
+      // Coursing joints: a stone or concrete cornice reads as coursed
+      // blocks, not a smooth slab.
+      dctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+      for (let cy = 16; cy < trimPatchSize; cy += 16) {
+        dctx.fillRect(trimPatchX, patchY + cy, trimPatchSize, 1);
+      }
+
+      rctx.fillStyle = `rgb(${Math.round(spec.roughnessTrim * 255)}, ${Math.round(spec.roughnessTrim * 255)}, ${Math.round(spec.roughnessTrim * 255)})`;
+      rctx.fillRect(trimPatchX, patchY, trimPatchSize, trimPatchSize);
+
+      mctx.fillStyle = `rgb(${wallMetalByte}, ${wallMetalByte}, ${wallMetalByte})`;
+      mctx.fillRect(trimPatchX, patchY, trimPatchSize, trimPatchSize);
+
+      nctx.fillStyle = "rgb(128, 128, 255)";
+      nctx.fillRect(trimPatchX, patchY, trimPatchSize, trimPatchSize);
+
+      ectx.fillStyle = "#000000";
+      ectx.fillRect(trimPatchX, patchY, trimPatchSize, trimPatchSize);
+    }
   }
 
   // 7. Reserved Dedicated Glass / Curtain Wall Patch (Bottom-Left and Top-Left in UV space)
@@ -333,20 +478,25 @@ export function generateFacadeAtlas(character = "heritage", size = 1024) {
   emissiveMap.wrapS = THREE.RepeatWrapping;
   emissiveMap.wrapT = THREE.RepeatWrapping;
 
-  return { map, roughnessMap, metalnessMap, normalMap, emissiveMap, character, spec };
+  return { map, roughnessMap, metalnessMap, normalMap, emissiveMap, character, spec, variant };
 }
 
-/** Cache of created materials per character */
+/** Cache of created materials per character (and, now, per atlas variant) */
 const _materialCache = new Map();
 
 /**
- * Returns a PBR MeshStandardMaterial equipped with facade texture maps for a given character.
+ * Returns a PBR MeshStandardMaterial equipped with facade texture maps for a
+ * given character. `options.variantSeed`, if supplied, selects one of that
+ * character's intra-character atlas variants (see FACADE_VARIANTS above);
+ * omitted, this is byte-identical to this function's behaviour before
+ * variants existed -- every existing caller that does not pass it keeps
+ * exactly the material it got before.
  */
 export function getFacadeMaterial(character = "heritage", options = {}) {
-  const key = `${character}-${options.vertexColors ? "vc" : options.wallColor || "default"}-${options.night ? "night" : "day"}`;
+  const key = `${character}-${options.vertexColors ? "vc" : options.wallColor || "default"}-${options.night ? "night" : "day"}-${options.variantSeed || ""}`;
   if (_materialCache.has(key)) return _materialCache.get(key);
 
-  const atlas = generateFacadeAtlas(character);
+  const atlas = generateFacadeAtlas(character, 1024, options.variantSeed);
   const mat = new THREE.MeshStandardMaterial({
     map: atlas.map,
     roughnessMap: atlas.roughnessMap,

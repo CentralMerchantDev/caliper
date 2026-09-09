@@ -1166,6 +1166,24 @@
       "find": "  if (Number(claimedOther) !== otherCount) return `README.md claims ${claimedOther} survived or inconclusive, generated summary implies ${otherCount} (total ${generatedTotal} - caught ${generatedCaught} - never-run ${generatedNeverRun}) -- run node scripts/gen-mutation-summary.mjs`;",
       "replace": "  // disabled",
       "expect": "a SURVIVED or INCONCLUSIVE mutation result (neither caught nor never-run) cannot silently vanish from the claim's own arithmetic"
+    },
+    {
+      "id": "facade-handoff-city-render-passes-variant-seed",
+      "guards": "public/city-render.js's real getFacadeMaterial call genuinely passes g.seed as variantSeed -- the one-line cross-lane fix (docs/CROSS-LANE-REQUESTS.md #1) that makes BLD's 12 built variants reachable from a real placement at all.",
+      "note": "Verified this session: removing variantSeed from the real call SURVIVED against the dynamic GATE test -- that test recomputes pickVariant(char, group.seed) independently from groupByVariant's own output and never reads what city-render.js's real call actually received, so it cannot see this specific regression at all (a real gap found by mutation-testing it, not assumed). Caught instead by a new, dedicated static check added the same session, which greps city-render.js's own source for the literal variantSeed: g.seed text -- the same technique test/boardRender.test.ts's own B3 gate uses for a forbidden import, aimed here at a required one.",
+      "file": "public/city-render.js",
+      "find": "        variantSeed: g.seed,",
+      "replace": "        variantSeed: undefined,",
+      "expect": "public/city-render.js's real getFacadeMaterial call still passes variantSeed"
+    },
+    {
+      "id": "facade-gate-counts-real-picked-variants-not-a-fixed-template",
+      "guards": "the facade GATE's own counting logic genuinely measures distinct (character, picked-variant) pairs reached by real placements -- not a fixed string template that could never measure more than 4 regardless of what city-render.js actually passes, the real bug found and fixed this session in the file pulled from codex-lane.",
+      "note": "Verified this session: reverting to the fixed `${char}-vc-day-` template (BLD's own original, unedited version) makes the gate wrongly report 4 even with variantSeed correctly wired -- caught directly by the dedicated gate test itself going red on its own count.",
+      "file": "test/facadeVariants.test.ts",
+      "find": "    const variant = pickVariant(char, group.seed);\n    keys.add(`${char}-${variant.name}`);",
+      "replace": "    keys.add(`${char}-vc-day-`);",
+      "expect": "GATE: distinct facade materials reachable from real placements, well above four"
     }
   ]
 }
