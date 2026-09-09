@@ -33,13 +33,27 @@ function fingerprint(field: any, step = 311): string {
 }
 
 test("the default world is byte-identical to the one before seeding existed", () => {
-  // Captured from the pre-seed implementation and pinned here. If this fails,
-  // seeding moved the ground, and every measured number in docs/ is now wrong.
-  const PRE_SEED = "418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96";
+  // Captured from the pre-seed implementation and pinned here. If this fails
+  // for a reason OTHER than a deliberate, planned terrain redesign, seeding
+  // moved the ground and every measured number in docs/ is now wrong.
+  //
+  // RE-PINNED 2026-09-08, B1 STEP B: the previous pin
+  // (418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96) was
+  // the OLD world -- 42% water, one mainland consuming the whole land
+  // budget, 391.9 km2 dry land, 96% of it carrying nothing
+  // (docs/specs/BOARD-REBUILD-PLAN.md). This value is the NEW archipelago:
+  // ~68.2% water, ~215.2 km2 dry land, 32 islands. This is the correct
+  // outcome of a deliberate, planned redesign (see test/landCoverage.test.ts
+  // for the real coverage/size-distribution gate), not a guard violation --
+  // the guard exists to catch ACCIDENTAL drift from unrelated changes.
+  // docs/BUILD-LOOP.md's own Step 8 no longer quotes this hash directly, for
+  // the same reason: a process document should not carry a data value a
+  // legitimate future phase is expected to change.
+  const PRE_SEED = "eba1936a865a9a90a262bf3c22ae7073bdf73b880f65cf786f2a131578257730";
   assert.equal(
     fingerprint(new LandField(16)),
     PRE_SEED,
-    "the default terrain moved -- every figure measured against this world is now wrong",
+    "the default terrain moved -- if this was not a deliberate terrain redesign, every figure measured against this world is now wrong",
   );
   assert.equal(DEFAULT_SEED, 0);
 });

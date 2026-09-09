@@ -18,36 +18,42 @@ import { WORLD } from "./city-plan.js";
 import { WATERWAYS } from "./waterways.js";
 
 // =============================================================================
-// LAND MASSES -- B1, STEP A: THE DEPENDENCY BREAK, NOT YET THE REDESIGN
+// LAND MASSES -- B1 STEP B: THE ARCHIPELAGO
 //
-// docs/specs/BOARD-REBUILD-PLAN.md: "terrain.js imports LANDMASSES from
-// city-plan.js -- the file slated for deletion" (Mark, 2026-09-08). This
-// section moves LANDMASSES, its spline helpers and landmassPolygonsDesign()
-// out of city-plan.js and into terrain.js, so terrain.js no longer depends
-// on a file B2 replaces wholesale.
+// docs/specs/BOARD-REBUILD-PLAN.md, approved 2026-09-08 with three
+// corrections. Step A (a prior commit) moved LANDMASSES out of city-plan.js
+// verbatim, unchanged, so this step is a pure shape redesign with no
+// dependency risk mixed in. This step replaces that copied-verbatim data.
 //
-// COPIED VERBATIM FROM city-plan.js, ON PURPOSE, NOT YET REDESIGNED. Mark's
-// own instruction: "Breaking that dependency is step one, before any shape
-// changes" -- separating "moving code" from "changing what the code does"
-// so a refactor bug and a design bug are never the same commit. The new
-// archipelago (~65% water, tunable LAND_SCALE, the shapes in the approved
-// B1 plan) replaces the data below in the NEXT step, watched red against
-// today's 42% water / 391.9 km² dry land before it lands.
+// WHY PROCEDURAL, NOT HAND-TRACED. Today's islands are Mark's own pen
+// strokes, isolated by colour and traced to metres -- real art this file has
+// no business reinventing badly. The NEW archipelago has no such reference:
+// nobody drew it. Hand-typing forty irregular control points per island
+// with no source to check them against is how a "traced" comment ends up
+// describing a guess. So every new landmass below is DETERMINISTIC and
+// AREA-EXACT instead: an organic, irregular outline generated from an id
+// (hashed for reproducible jitter — see organicIsland), a centre, and a
+// target WORLD-space area, radially corrected so the polygon's own measured
+// area (not the base circle) matches the target. Same seed in, same
+// outline out, always, and the number in the data IS the number that
+// results — not a comment that might drift from it, which is the exact
+// defect this whole plan exists to close.
 //
-// city-plan.js keeps its OWN copy of all of this (LANDMASSES, COAST_DESIGN,
-// the spline helpers, landmassPolygonsDesign) -- city-render.js and other
-// files outside this pass's routing (public/buildings.js,
-// public/road-network.js, ...) still read it, and city-plan.js itself is
-// not being touched by this pass. This is a deliberate, temporary,
-// explicitly-named duplication for the length of the rebuild, not a second
-// source of truth nobody decided to have -- the two copies are expected to
-// diverge the moment the next step (the shape redesign) lands here, and
-// city-plan.js's own copy is quarantined, not deleted, when B2 replaces it.
+// DESIGN SPACE vs WORLD SPACE, restated because it is easy to get backwards
+// and this file's own header does not repeat it here: WORLD-space distance
+// = DESIGN-space distance * WORLD_SCALE (0.65), so WORLD-space AREA =
+// DESIGN-space area * WORLD_SCALE^2 (0.4225). Every target area below is
+// WORLD-space km2 -- the number a visitor's own 26 km world would measure,
+// matching docs/specs/BOARD-REBUILD-PLAN.md's own figures (391.9 km2 dry
+// land today, plots totalling 14.98 km2 -- both world-space, confirmed by
+// direct measurement: scripts/measure-land.mjs reproduces 41.8%/393.2 km2
+// against TODAY's unchanged shapes, within grid-resolution rounding of the
+// plan's own cited 42%/391.9). organicIsland() takes a world-space area and
+// does the ^2 conversion internally so nobody has to hand-multiply by
+// 0.4225 seventeen times and get one of them wrong.
 // =============================================================================
 
-/** Freezes an object and everything reachable from it. Copied from
- *  city-plan.js's own private helper, for the same reason LANDMASSES itself
- *  is frozen there: nothing should mutate authored world geometry at runtime. */
+/** Freezes an object and everything reachable from it. */
 function deepFreeze(obj) {
   Object.freeze(obj);
   if (obj && typeof obj === "object") {
@@ -56,11 +62,185 @@ function deepFreeze(obj) {
   return obj;
 }
 
-// The downtown island's outline, in DESIGN metres -- traced from Mark's own
-// drawn layout (city-plan.js's own header, COAST_DESIGN). landmassPolygonsDesign()
-// below reads this directly for the "downtown" mass rather than a `points`
-// field on it, matching city-plan.js's own LANDMASSES entry for downtown.
-const COAST_DESIGN = [
+/**
+ * ~65% water TO START, per Mark's own instruction: a tunable parameter, not
+ * a baked constant, because he will move it by eye once he can see it. Every
+ * landmass polygon below is scaled toward its OWN centroid by this factor at
+ * generation time (see landmassPolygonsDesign) -- relative position and
+ * character survive; only size moves. AUTHORED AT 1.0, NOT DERIVED BY
+ * SCALING TODAY'S MAP DOWN (Mark's explicit correction): the shapes below
+ * are sized to their real targets already, so 1.0 is the true default, not
+ * a placeholder waiting to be tuned down from something else.
+ */
+export const LAND_SCALE = 1.0;
+
+const WORLD_SIZE_DESIGN = 40000; // matches city-plan.js's WORLD.SIZE before WORLD_SCALE
+
+/** WORLD-space km2 -> DESIGN-space m2, the one place this conversion is
+ *  written down. */
+function designAreaM2(worldAreaKm2) {
+  return (worldAreaKm2 * 1e6) / (WORLD_SCALE * WORLD_SCALE);
+}
+
+/** Twice the signed area -- used here (as well as by landmassPolygonsDesign
+ *  below) to area-correct a generated polygon before it is ever placed in
+ *  LANDMASSES, so the number in the layout table is the number that
+ *  results, not an estimate. */
+function polygonAreaM2(poly) {
+  let a = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    a += poly[j][0] * poly[i][1] - poly[i][0] * poly[j][1];
+  }
+  return Math.abs(a) / 2;
+}
+
+/**
+ * A deterministic, organic, AREA-EXACT closed polygon, in DESIGN metres, for
+ * a landmass with no hand-drawn reference. `id` seeds the jitter (hash01, so
+ * the same id always produces the same outline -- reproducible, not random),
+ * `cxWorld`/`czWorld` is the centre in WORLD metres (this file's own
+ * convention for placing new content, matching how a camera position or a
+ * bridge anchor is normally reasoned about), `worldAreaKm2` is the target
+ * WORLD-space area. Two octaves of hashed per-point radius jitter (not one)
+ * so the outline is not a simple sine wobble -- see the barrier island's own
+ * traced outline for what an actually organic coast looks like; this is a
+ * cheaper, honest approximation of that character, not an attempt to fake
+ * hand-tracing.
+ */
+function organicIsland(id, cxWorld, czWorld, worldAreaKm2, { points = 16, jitter = 0.34 } = {}) {
+  const cx = cxWorld / WORLD_SCALE, cz = czWorld / WORLD_SCALE;
+  const targetM2 = designAreaM2(worldAreaKm2);
+  const baseR = Math.sqrt(targetM2 / Math.PI);
+  let poly = [];
+  for (let i = 0; i < points; i++) {
+    const angle = (i / points) * Math.PI * 2;
+    const j1 = hash01(`${id}-r1-${i}`) - 0.5;
+    const j2 = hash01(`${id}-r2-${Math.floor(i / 2)}`) - 0.5;
+    const r = baseR * (1 + jitter * j1 + jitter * 0.5 * j2);
+    poly.push([cx + Math.cos(angle) * r, cz + Math.sin(angle) * r]);
+  }
+  // Area-correct: the jittered polygon's own area is never exactly the base
+  // circle's, so scale every point radially from the centre until the REAL
+  // measured area (polygonAreaM2, the same function the gate test uses)
+  // matches the target -- one measurement, trusted, rather than an estimate
+  // reported as though it were exact.
+  const k = Math.sqrt(targetM2 / polygonAreaM2(poly));
+  return poly.map(([x, z]) => [cx + (x - cx) * k, cz + (z - cz) * k]);
+}
+
+/**
+ * An open, organic coastline run (for the mainland, which -- like the
+ * islands above -- has no hand-drawn reference for its NEW shape) from
+ * (x0,z0) to (x1,z1) in WORLD metres, `nPoints` points, each offset
+ * perpendicular to the run by hashed jitter. Unlike organicIsland this does
+ * not close the shape or correct its area -- the mainland's own LANDMASSES
+ * entry appends its own closing corners afterward, exactly as today's
+ * mainland does (splineOpen only smooths the coast run; corners are raw).
+ */
+function organicCoastlineDesign(id, x0World, z0World, x1World, z1World, nPoints, jitterWorld) {
+  const x0 = x0World / WORLD_SCALE, z0 = z0World / WORLD_SCALE;
+  const x1 = x1World / WORLD_SCALE, z1 = z1World / WORLD_SCALE;
+  const jitter = jitterWorld / WORLD_SCALE;
+  const dx = x1 - x0, dz = z1 - z0;
+  const len = Math.hypot(dx, dz);
+  const nx = -dz / len, nz = dx / len; // unit perpendicular
+  const out = [];
+  for (let i = 0; i < nPoints; i++) {
+    const t = i / (nPoints - 1);
+    const px = x0 + dx * t, pz = z0 + dz * t;
+    const j = hash01(`${id}-c-${i}`) * 2 - 1; // -1..1
+    out.push([px + nx * j * jitter, pz + nz * j * jitter]);
+  }
+  return out;
+}
+
+// -----------------------------------------------------------------------------
+// THE MAINLAND -- west edge, per Mark's approved orientation. A coastal
+// strip facing the archipelago (east), farmland behind it, the range behind
+// that -- three bands, one connected landmass (they are not separated by
+// water, so they are not separate landmasses; see MAINLAND_ZONES).
+//
+// SIZE, STATED AS DATA, PER MARK'S CORRECTION 2: "State explicitly in the
+// shape data how much of the mainland is settleable, and gate it." 110 km2
+// total, of which 12% (13.2 km2) is the settleable coastal strip -- a THIN
+// strip, not a second downtown, which is the whole condition Mark set for
+// accepting a mainland this size: "defensible IF that 110 km2 is genuinely
+// countryside... If it drifts into settlement, you have rebuilt today's
+// problem at a smaller scale." The other 88% (farmland + range) carries no
+// plots at all in this plan.
+// -----------------------------------------------------------------------------
+const MAINLAND_TOTAL_KM2 = 110;
+export const MAINLAND_ZONES = Object.freeze([
+  // Nearest the coast (east edge of the mainland strip, facing the
+  // archipelago) to furthest inland (west edge, the world backdrop).
+  // fraction is of MAINLAND_TOTAL_KM2, and the three sum to 1 exactly --
+  // asserted in test/landCoverage.test.ts, not just claimed here.
+  { id: "coastal-strip", identity: "the mainland's own thin settled edge -- the only part of the mainland this plan settles", fraction: 0.12, settleable: true },
+  { id: "farmland", identity: "farmland behind the coast -- open, worked, not built on", fraction: 0.55, settleable: false },
+  { id: "range", identity: "the range -- tall, framing the mainland from behind, not occupying it", fraction: 0.33, settleable: false },
+]);
+deepFreeze(
+  (() => {
+    const sum = MAINLAND_ZONES.reduce((s, z) => s + z.fraction, 0);
+    if (Math.abs(sum - 1) > 1e-9) throw new Error(`MAINLAND_ZONES fractions sum to ${sum}, not 1`);
+    return null;
+  })(),
+);
+
+// Coast runs roughly north-south along the west edge, facing east toward
+// downtown and the archipelago. worldZ spans most of the world's own north-
+// south extent (23,000 m of WORLD.SIZE's 26,000); worldX depth (5,000 m)
+// solved from MAINLAND_TOTAL_KM2 / that length, then organically varied.
+const MAINLAND_COAST_X0W = -8000, MAINLAND_COAST_Z0W = -11500;
+const MAINLAND_COAST_X1W = -8000, MAINLAND_COAST_Z1W = 11500;
+const MAINLAND_DEPTH_W = 5000; // west-east, world metres, coast to the range's own inland edge
+const MAINLAND_COAST_POINTS = organicCoastlineDesign(
+  "mainland-coast", MAINLAND_COAST_X0W, MAINLAND_COAST_Z0W, MAINLAND_COAST_X1W, MAINLAND_COAST_Z1W,
+  18, 900,
+);
+// The range's own inland edge and the world backdrop, closing the polygon --
+// same pattern as today's mainland: raw corners, not splined (a spline
+// through 30 km corners overshoots and swallows the world).
+const MAINLAND_INLAND_XW = MAINLAND_COAST_X0W - MAINLAND_DEPTH_W;
+const MAINLAND_POINTS_DESIGN = [
+  ...MAINLAND_COAST_POINTS,
+  [MAINLAND_INLAND_XW / WORLD_SCALE, MAINLAND_COAST_Z1W / WORLD_SCALE],
+  [(-WORLD_SIZE_DESIGN * 0.9), (WORLD_SIZE_DESIGN * 0.9)],
+  [(-WORLD_SIZE_DESIGN * 0.9), -(WORLD_SIZE_DESIGN * 0.9)],
+  [MAINLAND_INLAND_XW / WORLD_SCALE, MAINLAND_COAST_Z0W / WORLD_SCALE],
+];
+const MAINLAND_COAST_COUNT = MAINLAND_COAST_POINTS.length;
+
+// -----------------------------------------------------------------------------
+// THE RANGE -- repositioned to sit behind (west of) the NEW mainland's own
+// inland edge, per Mark's brief ("a tall range framing"). This spine drove
+// height, not shape, before this pass and still does (distToSpine, below) --
+// only its position moves, to follow the mainland it is meant to frame.
+// Centred on the range band's own midpoint (MAINLAND_ZONES' third band).
+// -----------------------------------------------------------------------------
+const RANGE_SPINE_X_W = MAINLAND_INLAND_XW + (MAINLAND_DEPTH_W * MAINLAND_ZONES[2].fraction) / 2;
+const RANGE_SPINE = [
+  [RANGE_SPINE_X_W - 300, MAINLAND_COAST_Z0W].map((v, i) => (i === 0 ? v : v) / WORLD_SCALE),
+  [RANGE_SPINE_X_W, -6000 / WORLD_SCALE],
+  [RANGE_SPINE_X_W + 250, -1000 / WORLD_SCALE],
+  [RANGE_SPINE_X_W - 200, 4500 / WORLD_SCALE],
+  [RANGE_SPINE_X_W, 9000 / WORLD_SCALE],
+  [RANGE_SPINE_X_W - 150, MAINLAND_COAST_Z1W / WORLD_SCALE],
+].map(([x, z]) => [x / WORLD_SCALE, z]);
+const RANGE = { width: 5000, height: 1620 };
+
+// -----------------------------------------------------------------------------
+// DOWNTOWN -- kept where it already sits (Mark: "that position works and
+// nothing in the brief asks to move it"), grown from its own real measured
+// area (6.34 km2 world today -- the DESIGN-space "15.0 km2" comment on the
+// old data was never a world-space figure, confirmed by direct measurement)
+// to ~22 km2, the largest ISLAND, dense, the skyline. Mark's pen strokes
+// (COAST_DESIGN) are kept and SCALED around their own centroid, not
+// redrawn -- the harbour bite, the headland, the marina inlet and the ocean
+// beach are real, deliberate character worth keeping, not a shape to
+// reinvent from scratch the way the unnamed new islands are.
+// -----------------------------------------------------------------------------
+const COAST_DESIGN_RAW = [
   [737, 646], [1172, 674], [1581, 784], [1664, 1087],
   [1937, 1417], [2346, 1555], [2754, 1472], [3079, 1196],
   [3433, 1113], [3814, 1278], [4088, 1526], [3706, 1416],
@@ -75,196 +255,105 @@ const COAST_DESIGN = [
   [31, 1033], [411, 867],
 ];
 
-// Every land mass, control points in DESIGN metres. Copied verbatim from
-// city-plan.js's own LANDMASSES -- see this section's own header. Areas
-// (km2, in each entry's own comment) are as measured there.
+// downtown's outline, area-scaled around its own centroid from Mark's
+// authored COAST_DESIGN_RAW to the new ~22 km2 world-space target -- the
+// SAME area-correction technique organicIsland uses (measure, then scale
+// to match exactly), applied to hand-drawn points instead of generated
+// ones.
+const DOWNTOWN_TARGET_KM2 = 22;
+const COAST_DESIGN = (() => {
+  const cx = COAST_DESIGN_RAW.reduce((s, [x]) => s + x, 0) / COAST_DESIGN_RAW.length;
+  const cz = COAST_DESIGN_RAW.reduce((s, [, z]) => s + z, 0) / COAST_DESIGN_RAW.length;
+  const rawAreaM2 = polygonAreaM2(COAST_DESIGN_RAW);
+  const targetM2 = designAreaM2(DOWNTOWN_TARGET_KM2);
+  const k = Math.sqrt(targetM2 / rawAreaM2);
+  return COAST_DESIGN_RAW.map(([x, z]) => [cx + (x - cx) * k, cz + (z - cz) * k]);
+})();
+
+// -----------------------------------------------------------------------------
+// THE SCATTER -- named islands, per Mark's brief: suburb-sized, resort-
+// sized, mountain-and-cliff, wooded, cottage islands carrying one house
+// each, plus the headroom spend (Mark's correction 1: "spend the headroom
+// on MORE islands, not bigger ones... skerries, a lighthouse rock, a
+// sandbar, two or three more wooded"). Positions are hand-placed (not
+// procedural -- an archipelago's LAYOUT is a design decision, only the
+// individual outlines have no reference to trace), east and south of the
+// mainland, fanning around downtown per the approved orientation, each
+// kept far enough from its neighbours that organicIsland's own generated
+// radius cannot overlap the next one.
+//
+// kind is used downstream for character/density (B2), not by terrain.js's
+// own height field beyond baseHeight -- named here so B2 has real ground to
+// build density decisions on, per Mark's "every large empty area gets an
+// identity" (islands are not "empty", but the same discipline: state what a
+// place IS, in the data, rather than leaving it to be inferred later).
+// -----------------------------------------------------------------------------
+const ISLAND_LAYOUT = [
+  // -- the four named characters Mark's brief asked for --
+  { id: "suburb-isle", name: "Suburb Island", kind: "suburb", baseHeight: 8, cxWorld: 5200, czWorld: -1500, areaKm2: 15 },
+  { id: "resort-isle", name: "Resort Island", kind: "resort", baseHeight: 7, cxWorld: 10000, czWorld: 3000, areaKm2: 11 },
+  { id: "highland-isle", name: "Highland Island", kind: "highland", baseHeight: 16, cxWorld: -2000, czWorld: 9500, areaKm2: 13 },
+  { id: "wooded-isle-a", name: "Wooded Island", kind: "wooded", baseHeight: 9, cxWorld: 8500, czWorld: 7500, areaKm2: 5.5 },
+  // -- the headroom spend: 2-3 more wooded, per Mark's own menu --
+  { id: "wooded-isle-b", name: "Fernshore Island", kind: "wooded", baseHeight: 9, cxWorld: -3500, czWorld: 6500, areaKm2: 6 },
+  { id: "wooded-isle-c", name: "Pinehaven Island", kind: "wooded", baseHeight: 9, cxWorld: 11500, czWorld: -3000, areaKm2: 4 },
+  // -- more headroom, spent on VARIETY (count/character), not size --
+  { id: "fishing-isle", name: "Fishing Island", kind: "fishing", baseHeight: 7, cxWorld: -4500, czWorld: -4500, areaKm2: 5 },
+  { id: "farm-isle", name: "Farm Island", kind: "farm", baseHeight: 8, cxWorld: 2500, czWorld: 6000, areaKm2: 4 },
+  { id: "vineyard-isle", name: "Vineyard Island", kind: "vineyard", baseHeight: 8, cxWorld: 500, czWorld: -5500, areaKm2: 6 },
+  { id: "quarry-isle", name: "Quarry Island", kind: "quarry", baseHeight: 10, cxWorld: 10500, czWorld: -6500, areaKm2: 5 },
+  // -- cottage islands, one mansion each --
+  { id: "cottage-isle-1", name: "Cottage Cay", kind: "cottage", baseHeight: 6, cxWorld: 1500, czWorld: -3200, areaKm2: 0.5 },
+  { id: "cottage-isle-2", name: "Wren Cay", kind: "cottage", baseHeight: 6, cxWorld: 7000, czWorld: -1200, areaKm2: 0.5 },
+  { id: "cottage-isle-3", name: "Marlin Cay", kind: "cottage", baseHeight: 6, cxWorld: -1000, czWorld: 4500, areaKm2: 0.5 },
+  // -- carrying nothing, per Mark's own menu --
+  { id: "sandbar", name: "The Sandbar", kind: "sandbar", baseHeight: 2, cxWorld: 3200, czWorld: 2800, areaKm2: 0.3 },
+  { id: "lighthouse-rock", name: "Lighthouse Rock", kind: "rock", baseHeight: 12, cxWorld: 12800, czWorld: 0, areaKm2: 0.08 },
+];
+
+// Skerries -- carrying nothing, procedurally scattered (not hand-placed:
+// Mark's own framing, "an archipelago reads by count and variety", is
+// exactly the case a generator earns its keep, the same reasoning as
+// organicIsland's own outlines). Placed in an annulus clear of the named
+// islands and the mainland: inner radius past the downtown/suburb core,
+// outer radius short of the world edge. Deterministic (id-hashed angle,
+// radius and area), not random -- the same world every build.
+const SKERRY_COUNT = 22;
+const SKERRY_INNER_R = 8500, SKERRY_OUTER_R = 12200; // world metres from origin
+const SKERRIES = Array.from({ length: SKERRY_COUNT }, (_, i) => {
+  const id = `skerry-${i + 1}`;
+  const angle = (i / SKERRY_COUNT) * Math.PI * 2 + hash01(`${id}-a`) * (Math.PI / SKERRY_COUNT);
+  const r = SKERRY_INNER_R + hash01(`${id}-r`) * (SKERRY_OUTER_R - SKERRY_INNER_R);
+  const cxWorld = Math.cos(angle) * r, czWorld = Math.sin(angle) * r;
+  // Skewed toward the mainland's own west edge, where the annulus above
+  // would otherwise place skerries ON the mainland (a real archipelago does
+  // not have loose rocks inside its own continent) -- excluded rather than
+  // clamped, so the count stays honest about how many actually generated.
+  if (cxWorld < MAINLAND_COAST_X0W + 1500) return null;
+  const areaKm2 = 0.12 + hash01(`${id}-area`) * 0.45;
+  return { id, name: null, kind: "skerry", baseHeight: 3, cxWorld, czWorld, areaKm2 };
+}).filter(Boolean);
+
+/** Every land mass, control points (or a generator call) in DESIGN metres. */
 const LANDMASSES = [
   {
-    // 108.3 km2, traced from the drawn layout
-    id: "barrier", name: "Ocean Barrier Island", kind: "beach-strip", baseHeight: 9,
-    points: [
-      [-6497, 1617], [-4916, 2278], [-3470, 3048], [-2267, 4288],
-      [-1364, 5473], [240, 5086], [1794, 5718], [3480, 5552],
-      [4699, 4365], [6004, 4088], [7692, 4308], [9212, 3534],
-      [10734, 3064], [11871, 1906], [13451, 2263], [14977, 2675],
-      [16261, 3804], [16484, 4934], [16627, 6533], [15651, 7306],
-      [14021, 7804], [12307, 7750], [10564, 7531], [8934, 8056],
-      [7165, 8030], [5503, 7590], [3789, 7509], [2020, 7565],
-      [305, 7319], [-1142, 6355], [-2203, 6356], [-784, 7264],
-      [-2419, 6714], [-4108, 6412], [-5655, 7103], [-7368, 7352],
-      [-9110, 7326], [-10177, 5976], [-11866, 5730], [-13413, 6420],
-      [-14641, 5815], [-13667, 4573], [-12419, 3745], [-10898, 3192],
-      [-9291, 3522], [-7963, 2418],
-    ],
-  },
-  {
-    id: "downtown", name: "Downtown Island", kind: "city", baseHeight: 10,
-    // outline supplied from COAST_DESIGN -- traced from the drawn layout, 15.0 km2
-  },
-  {
-    // 7.3 km2, traced from the drawn layout
-    id: "fairlight-isle", name: "Fairlight Island", kind: "island", baseHeight: 9,
-    points: [
-      [6367, 118], [6639, 228], [6912, 283], [7211, 338],
-      [7484, 393], [7783, 420], [8083, 475], [8355, 530],
-      [8654, 557], [8954, 529], [9225, 447], [9497, 364],
-      [9769, 336], [10068, 363], [10287, 528], [10233, 721],
-      [9934, 777], [9690, 915], [9473, 1136], [9420, 1411],
-      [9231, 1577], [8931, 1632], [8687, 1770], [8471, 1991],
-      [8226, 2102], [7927, 2129], [7627, 2074], [7355, 1992],
-      [7056, 1992], [6784, 2075], [6512, 2213], [6268, 2296],
-      [6050, 2269], [5859, 2048], [5613, 1856], [5341, 1828],
-      [5041, 1801], [5176, 1580], [5311, 1360], [5283, 1056],
-      [5118, 808], [5117, 505], [5252, 312], [5524, 229],
-      [5823, 174], [6122, 146],
-    ],
-  },
-  {
-    // 4.8 km2, traced from the drawn layout
-    id: "kingsley-isle", name: "Kingsley Island", kind: "island", baseHeight: 9,
-    points: [
-      [-5011, -672], [-4766, -645], [-4521, -645], [-4276, -618],
-      [-4058, -563], [-3867, -453], [-3676, -342], [-3485, -205],
-      [-3321, -67], [-3347, 181], [-3455, 374], [-3590, 567],
-      [-3589, 788], [-3479, 981], [-3397, 1201], [-3368, 1449],
-      [-3531, 1560], [-3722, 1450], [-3940, 1422], [-4158, 1312],
-      [-4349, 1230], [-4567, 1147], [-4731, 1009], [-4814, 789],
-      [-5005, 596], [-5169, 486], [-5414, 486], [-5631, 514],
-      [-5876, 542], [-6094, 487], [-6285, 404], [-6530, 349],
-      [-6721, 267], [-6939, 156], [-7130, 74], [-7212, -147],
-      [-7268, -367], [-7050, -422], [-6833, -423], [-6588, -423],
-      [-6370, -451], [-6153, -506], [-5908, -534], [-5691, -589],
-      [-5473, -617], [-5228, -644],
-    ],
-  },
-  {
-    // 4.2 km2, traced from the drawn layout
-    id: "cormorant-isle", name: "Cormorant Island", kind: "island", baseHeight: 9,
-    points: [
-      [-14534, -664], [-14344, -637], [-14126, -637], [-14098, -472],
-      [-14097, -279], [-14124, -86], [-14150, 80], [-14149, 245],
-      [-14148, 438], [-14066, 603], [-13929, 741], [-13765, 879],
-      [-13629, 1017], [-13546, 1182], [-13518, 1347], [-13545, 1568],
-      [-13598, 1733], [-13734, 1899], [-13842, 2037], [-13923, 2175],
-      [-14058, 2313], [-14193, 2478], [-14356, 2533], [-14520, 2506],
-      [-14684, 2396], [-14820, 2286], [-14903, 2093], [-14958, 1927],
-      [-15040, 1735], [-15177, 1597], [-15314, 1487], [-15477, 1404],
-      [-15587, 1266], [-15615, 1073], [-15561, 908], [-15480, 715],
-      [-15400, 549], [-15346, 384], [-15320, 191], [-15348, -2],
-      [-15403, -168], [-15349, -361], [-15241, -498], [-15078, -554],
-      [-14888, -609], [-14698, -637],
-    ],
-  },
-  {
-    // 4.1 km2, traced from the drawn layout
-    id: "westbay-isle", name: "Westbay Island", kind: "island", baseHeight: 8,
-    points: [
-      [-10812, -1743], [-10594, -1715], [-10376, -1716], [-10185, -1661],
-      [-9994, -1523], [-9830, -1385], [-9694, -1247], [-9530, -1082],
-      [-9366, -944], [-9202, -834], [-9011, -752], [-8820, -669],
-      [-8629, -587], [-8466, -504], [-8356, -311], [-8246, -146],
-      [-8110, 20], [-8081, 240], [-8080, 461], [-8079, 681],
-      [-8215, 792], [-8433, 819], [-8623, 819], [-8841, 820],
-      [-9032, 737], [-9114, 572], [-9278, 406], [-9469, 379],
-      [-9686, 379], [-9849, 379], [-10067, 352], [-10258, 297],
-      [-10340, 132], [-10396, -89], [-10424, -282], [-10534, -447],
-      [-10507, -613], [-10617, -806], [-10781, -971], [-10945, -1081],
-      [-11108, -1191], [-11299, -1274], [-11490, -1356], [-11327, -1494],
-      [-11192, -1605], [-11002, -1687],
-    ],
-  },
-  {
-    // 3.1 km2, traced from the drawn layout
-    id: "bayview-isle", name: "Bayview Island", kind: "island", baseHeight: 9,
-    points: [
-      [919, -1118], [1164, -1118], [1355, -1036], [1518, -926],
-      [1682, -788], [1873, -705], [2064, -623], [2282, -595],
-      [2500, -596], [2717, -651], [2935, -679], [3125, -706],
-      [3342, -762], [3560, -790], [3778, -790], [3995, -762],
-      [4105, -625], [4160, -432], [4161, -266], [4080, -101],
-      [3890, 37], [3755, 175], [3592, 341], [3402, 286],
-      [3211, 231], [3020, 148], [2802, 93], [2611, 38],
-      [2394, 11], [2176, -16], [1958, -16], [1740, 11],
-      [1523, 39], [1332, 12], [1141, -71], [978, -208],
-      [814, -374], [650, -539], [486, -622], [268, -594],
-      [78, -483], [23, -649], [186, -759], [376, -897],
-      [539, -1008], [729, -1090],
-    ],
-  },
-  {
-    // 2.4 km2, traced from the drawn layout
-    id: "heron-isle", name: "Heron Island", kind: "island", baseHeight: 8,
-    points: [
-      [-12138, -336], [-12029, -198], [-11974, -88], [-11973, 78],
-      [-11891, 216], [-11891, 326], [-11781, 436], [-11672, 436],
-      [-11617, 546], [-11562, 684], [-11480, 794], [-11398, 932],
-      [-11370, 1097], [-11342, 1235], [-11314, 1401], [-11368, 1539],
-      [-11476, 1676], [-11612, 1704], [-11748, 1815], [-11856, 1925],
-      [-11883, 2063], [-11909, 2228], [-12045, 2173], [-12182, 2063],
-      [-12291, 1980], [-12373, 1843], [-12456, 1705], [-12511, 1567],
-      [-12511, 1429], [-12485, 1264], [-12431, 1126], [-12486, 988],
-      [-12595, 878], [-12732, 740], [-12841, 630], [-12951, 547],
-      [-13087, 465], [-13169, 327], [-13088, 189], [-13035, 51],
-      [-12953, -32], [-12817, -4], [-12654, -32], [-12491, -87],
-      [-12383, -170], [-12274, -280],
-    ],
-  },
-  {
-    // 1.3 km2, traced from the drawn layout
-    id: "redcliff-isle", name: "Redcliff Island", kind: "island", baseHeight: 8,
-    points: [
-      [14558, 415], [14722, 414], [14858, 442], [14994, 497],
-      [15104, 607], [15186, 690], [15295, 772], [15377, 910],
-      [15459, 1020], [15514, 1131], [15596, 1241], [15678, 1379],
-      [15734, 1516], [15816, 1599], [15952, 1627], [16061, 1654],
-      [16170, 1764], [16279, 1847], [16388, 1902], [16498, 2012],
-      [16498, 2150], [16499, 2288], [16472, 2426], [16391, 2508],
-      [16255, 2536], [16146, 2453], [16091, 2343], [16009, 2233],
-      [15900, 2123], [15790, 2040], [15681, 1958], [15572, 1875],
-      [15463, 1792], [15353, 1682], [15298, 1572], [15216, 1462],
-      [15107, 1352], [14998, 1269], [14888, 1159], [14779, 1076],
-      [14643, 993], [14533, 911], [14424, 828], [14397, 718],
-      [14369, 580], [14450, 442],
-    ],
-  },
-  {
-    // 0.6 km2, traced from the drawn layout
-    id: "gull-isle", name: "Gull Island", kind: "island", baseHeight: 7,
-    points: [
-      [-1935, -454], [-1799, -454], [-1690, -454], [-1581, -427],
-      [-1472, -427], [-1363, -400], [-1255, -400], [-1119, -400],
-      [-1010, -372], [-928, -400], [-819, -400], [-710, -372],
-      [-601, -373], [-492, -345], [-383, -318], [-274, -290],
-      [-193, -235], [-219, -125], [-273, -14], [-327, 41],
-      [-436, 68], [-545, 69], [-654, 69], [-763, 69],
-      [-872, 41], [-954, -41], [-1035, -97], [-1117, -152],
-      [-1227, -234], [-1308, -262], [-1444, -262], [-1553, -262],
-      [-1662, -261], [-1771, -234], [-1880, -206], [-1988, -178],
-      [-2070, -178], [-2206, -206], [-2288, -233], [-2370, -288],
-      [-2479, -343], [-2479, -426], [-2370, -399], [-2261, -426],
-      [-2153, -426], [-2017, -427],
-    ],
-  },
-  {
     id: "mainland", name: "Mainland Coast", kind: "mainland", baseHeight: 14,
-    coastCount: 52,
-    points: [
-      [-22142, 1602], [-21852, 2730], [-21822, 3999], [-21115, 4957],
-      [-20506, 6001], [-19658, 6781], [-18564, 6832], [-17881, 5900],
-      [-17483, 4806], [-16418, 4414], [-16255, 3279], [-16419, 2057],
-      [-16542, 795], [-16571, -361], [-15878, -1353], [-14811, -1551],
-      [-13756, -1494], [-12562, -1667], [-11460, -2253], [-10394, -2885],
-      [-9398, -2314], [-8252, -2239], [-7136, -2423], [-6089, -1848],
-      [-4985, -1925], [-3806, -1676], [-2670, -1346], [-1506, -1658],
-      [-422, -2193], [772, -2326], [1945, -2101], [3077, -1581],
-      [4248, -1313], [5434, -1065], [6660, -887], [7766, -473],
-      [9019, -478], [10212, -697], [11396, -978], [12573, -1225],
-      [13696, -1280], [14774, -1218], [15889, -773], [16936, -162],
-      [17652, 840], [17901, 1993], [18071, 3245], [18645, 4350],
-      [19257, 5311], [19944, 6228], [20805, 6969], [21921, 7429],
-      [ 31500, -34500], [-31500, -34500],
-    ],
+    coastCount: MAINLAND_COAST_COUNT,
+    points: MAINLAND_POINTS_DESIGN,
+    zones: MAINLAND_ZONES,
+    totalAreaKm2: MAINLAND_TOTAL_KM2,
   },
+  { id: "downtown", name: "Downtown Island", kind: "city", baseHeight: 10 },
+  // outline supplied from COAST_DESIGN, Mark's own pen strokes, scaled to
+  // its own new target -- see COAST_DESIGN's own comment.
+  ...ISLAND_LAYOUT.map((isl) => ({
+    id: isl.id, name: isl.name, kind: isl.kind, baseHeight: isl.baseHeight,
+    points: organicIsland(isl.id, isl.cxWorld, isl.czWorld, isl.areaKm2),
+  })),
+  ...SKERRIES.map((sk) => ({
+    id: sk.id, name: sk.name, kind: sk.kind, baseHeight: sk.baseHeight,
+    points: organicIsland(sk.id, sk.cxWorld, sk.czWorld, sk.areaKm2, { points: 9, jitter: 0.4 }),
+  })),
 ];
 deepFreeze(LANDMASSES);
 
@@ -315,9 +404,22 @@ function signedArea2(poly) {
   return a;
 }
 
-/** Every land mass as a smoothed polygon, in DESIGN metres. Copied from
- *  city-plan.js's own landmassPolygonsDesign, verbatim -- see this
- *  section's own header for why. */
+/** Scale every point of `poly` toward its own centroid by `k` -- LAND_SCALE's
+ *  own mechanism: relative position and character survive, only size moves.
+ *  Applied per mass, around THAT mass's centroid, not the world's, so
+ *  scaling the water knob does not also drag every island toward the
+ *  origin. */
+function scaleAroundCentroid(poly, k) {
+  if (k === 1) return poly;
+  const cx = poly.reduce((s, [x]) => s + x, 0) / poly.length;
+  const cz = poly.reduce((s, [, z]) => s + z, 0) / poly.length;
+  return poly.map(([x, z]) => [cx + (x - cx) * k, cz + (z - cz) * k]);
+}
+
+/** Every land mass as a smoothed polygon, in DESIGN metres, scaled by
+ *  LAND_SCALE (Mark's own tunable water-fraction knob -- see LAND_SCALE's
+ *  own comment for why it defaults to 1.0 and is not derived from today's
+ *  map). */
 export function landmassPolygonsDesign(samplesPerSegment = 10) {
   return LANDMASSES.map((lm) => {
     let polygon;
@@ -328,6 +430,7 @@ export function landmassPolygonsDesign(samplesPerSegment = 10) {
       polygon = splinePolygon(lm.id === "downtown" ? COAST_DESIGN : lm.points, samplesPerSegment);
     }
     if (signedArea2(polygon) > 0) polygon.reverse();
+    polygon = scaleAroundCentroid(polygon, LAND_SCALE);
     return { ...lm, polygon };
   });
 }
@@ -407,14 +510,11 @@ import { WORLD_SCALE, sm, toDesign, sFields } from "./world-scale.js";
 // clamp/smooth/smoother were byte-identical re-declarations of noise.js's, in a
 // file that already imports from it -- the same duplication the header above
 // says was removed. Imported now.
-import { hash2, valueNoise, fbm, clamp, smooth, smoother, DEFAULT_SEED, seedToInt } from "./noise.js";
+import { hash2, valueNoise, fbm, hash01, clamp, smooth, smoother, DEFAULT_SEED, seedToInt } from "./noise.js";
 
-/** The alpine spine: a polyline, so the range is a range and not a scatter. */
-const RANGE_SPINE = [
-  [-21000, -16400], [-15000, -14300], [-9000, -13100], [-2500, -13500],
-  [ 3500, -14600], [ 10000, -15900], [ 17000, -17400], [ 22000, -18600],
-];
-const RANGE = { width: 5000, height: 1620 };
+// RANGE_SPINE/RANGE moved earlier in this file (B1 step B) -- repositioned
+// to run behind the NEW mainland's own west edge rather than the old
+// embayment's north arm. See that declaration's own comment for why.
 
 /**
  * Named summits on or just off the spine, so the skyline has peaks rather than

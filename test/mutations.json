@@ -988,13 +988,31 @@
       "expect": "terrain.js exports its own landmassPolygonsDesign, not a re-export of city-plan.js's"
     },
     {
-      "id": "b1-terrain-landmass-data-identical-to-original",
-      "guards": "terrain.js's copied-verbatim LANDMASSES data (B1 step A, before the archipelago redesign) produces byte-identical polygons to city-plan.js's original -- a pure move proven, not assumed.",
-      "note": "Verified by hand this session: corrupting one coordinate in gull-isle's control points correctly turned exactly the identity test red, reverted, reconfirmed green. EXPECTED TO BECOME OBSOLETE the moment B1 step B (the archipelago redesign) lands -- see test/terrainLandmassOwnership.test.ts's own header. Remove this entry in the same commit that removes or rewrites that test.",
+      "id": "b1-ownership-list-tracks-real-importers",
+      "guards": "test/terrainLandmassOwnership.test.ts's transformed third check (B1 step B: 'assert nothing reads city-plan.js's copy', not yet true, so tracked as an explicit named list instead -- Mark's own instruction) actually compares the list, rather than trivially passing.",
+      "note": "REPLACES the b1-terrain-landmass-data-identical-to-original entry this superseded (that mutation's own find target, a gull-isle coordinate, no longer exists -- the island is now procedurally generated). Verified by hand this session: removing one real entry from KNOWN_STATIC_IMPORTERS correctly turned exactly this test red, reverted, reconfirmed green.",
+      "file": "test/terrainLandmassOwnership.test.ts",
+      "find": "  const KNOWN_STATIC_IMPORTERS = [\n    \"public/road-network.js\",\n    \"scripts/_render-arterial-data.mjs\",",
+      "replace": "  const KNOWN_STATIC_IMPORTERS = [\n    \"scripts/_render-arterial-data.mjs\",",
+      "expect": "the exact, current set of files still reading city-plan.js's LANDMASSES/landmassPolygonsDesign directly is named and tracked"
+    },
+    {
+      "id": "b1-island-count-gate-real",
+      "guards": "the B1 gate's island-count assertion (>= 20) actually reacts to a real reduction in the archipelago, not a tautology.",
+      "note": "Verified by hand this session: setting SKERRY_COUNT to 0 correctly turned exactly the island-count test red (measured 10 islands, below the 20 floor), reverted, reconfirmed green (32 islands).",
       "file": "public/terrain.js",
-      "find": "      [-1935, -454], [-1799, -454], [-1690, -454], [-1581, -427],",
-      "replace": "      [-1935, -999], [-1799, -454], [-1690, -454], [-1581, -427],",
-      "expect": "terrain.js's own landmassPolygonsDesign() currently produces the IDENTICAL polygon set city-plan.js's original does"
+      "find": "const SKERRY_COUNT = 22;",
+      "replace": "const SKERRY_COUNT = 0;",
+      "expect": "island count and variety -- an archipelago reads by count, not by area alone"
+    },
+    {
+      "id": "b1-mainland-settleable-fraction-capped",
+      "guards": "the B1 gate's mainland settleable-fraction cap (<= 0.2) actually catches a mainland that drifts toward settlement, per Mark's own correction 2.",
+      "note": "Verified by hand this session: raising coastal-strip's fraction from 0.12 to 0.45 (compensating farmland down to keep the three bands summing to 1) correctly turned exactly this test red, reverted, reconfirmed green.",
+      "file": "public/terrain.js",
+      "find": "  { id: \"coastal-strip\", identity: \"the mainland's own thin settled edge -- the only part of the mainland this plan settles\", fraction: 0.12, settleable: true },\n  { id: \"farmland\", identity: \"farmland behind the coast -- open, worked, not built on\", fraction: 0.55, settleable: false },",
+      "replace": "  { id: \"coastal-strip\", identity: \"the mainland's own thin settled edge -- the only part of the mainland this plan settles\", fraction: 0.45, settleable: true },\n  { id: \"farmland\", identity: \"farmland behind the coast -- open, worked, not built on\", fraction: 0.22, settleable: false },",
+      "expect": "the mainland's own settleable fraction is a stated, small number, not left to be inferred"
     }
   ]
 }

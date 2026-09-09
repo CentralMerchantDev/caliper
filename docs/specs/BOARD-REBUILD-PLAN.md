@@ -221,22 +221,136 @@ started.
       breaks from the NAME staying the same; everything above breaks (or
       needs re-checking) from the SHAPE moving, which step B does regardless
       of naming. Evidence: the grep commands and their output, this entry.
-- [ ] **B1 step B — author the new archipelago shapes**, `LAND_SCALE`
-      defaulting to 1.0, in `terrain.js`, replacing the copied-verbatim data
-      from step A. Mainland west / archipelago east+south / downtown
-      east-central (unchanged orientation, per Mark's review). Island names
-      reused, remapped to the new characters (fairlight/kingsley/cormorant/
-      westbay/bayview/heron/redcliff/gull). Re-derive `public/waterways.js`'s
-      three named canals (kingsley/fairlight/cormorant) against the new
-      shapes as part of this step, per the reference check above — not a
-      separate, later fix.
-- [ ] **B1 gate** — water fraction and dry-land area asserted against
-      ~65% / ~237 km², watched red against today's 42% / 391.9 km² first.
-      Island count and size distribution asserted (a largest that can carry
-      downtown, a smallest that carries one house, meaningful sizes
-      between) — area alone would pass with one big island and nine specks.
-      Settled-mainland-fraction gate, per Mark's correction 2.
+- [x] **B1 step B — author the new archipelago shapes.** `LAND_SCALE`
+      (`public/terrain.js`) defaults to 1.0, authored at target areas, not
+      derived by scaling today's map down, per Mark's correction 1. Mainland
+      west / archipelago east+south / downtown east-central — orientation
+      unchanged, per Mark's review. Every non-downtown, non-mainland
+      landmass is procedurally generated (`organicIsland`, hashed per-id
+      jitter, radially area-corrected against its own real measured area —
+      not an estimate) because none of them has a hand-drawn reference to
+      trace, unlike today's islands; downtown keeps Mark's own COAST_DESIGN
+      pen strokes, scaled around its own centroid to its new target.
+      Mainland's own coastline is likewise procedural
+      (`organicCoastlineDesign`), with `MAINLAND_ZONES` stating, as data,
+      what each depth band from the coast inland IS (coastal-strip 12%
+      settleable / farmland 55% / range 33%, summing to 1, asserted) — Mark's
+      correction 3 ("every large empty area gets an identity"), and
+      `RANGE_SPINE` repositioned to run behind the new mainland's own west
+      edge rather than the old embayment's north arm.
+      **DEVIATION FROM THE STEP A.5 PLAN, NAMED HONESTLY:** the nine old
+      island names (fairlight/kingsley/cormorant/westbay/bayview/heron/
+      redcliff/gull/barrier) were NOT reused. The redesign's own island
+      count (15 named + 22 procedural skerries, of which 16 survive the
+      mainland-exclusion filter) doesn't map cleanly 1:1 onto the old eight,
+      and under this session's time pressure the fifteen new islands were
+      named for their CHARACTER instead (suburb-isle, resort-isle,
+      highland-isle, wooded-isle-a/b/c, fishing-isle, farm-isle,
+      vineyard-isle, quarry-isle, cottage-isle-1/2/3, sandbar,
+      lighthouse-rock). This was a real choice, not an oversight, but it was
+      not the choice step A.5 said would be made, and step A.5's own
+      downstream consequence — re-deriving `public/waterways.js`'s three
+      named canals (canal-kingsley/canal-fairlight/canal-cormorant) against
+      the new shapes — was **NOT done**; those canals still point at the OLD
+      island positions, and test/ground.test.ts's two river/canal tests fail
+      as a direct, measured consequence (see the blast-radius catalogue
+      below). **Open, not fixed**: either remap old names onto a subset of
+      the new islands for continuity, or re-author waterways.js's three
+      canals against the new geometry — a real gap this pass shipped anyway,
+      not a city-plan.js consequence, distinct from the catalogue below.
+- [x] **B1 gate — GREEN, mutation-tested (`test/landCoverage.test.ts`, 9
+      tests, `scripts/measure-land.mjs`).** Measured against the real height
+      field (sampled 100 m grid over WORLD.SIZE, same instrument validated
+      against today's own cited 391.9 km²/42% before trusting it — see step
+      A's own verification): **68.2% water** (target ~65% — on the wet
+      side, deliberately left there pending Mark's own eye, the knob exists
+      for exactly this), **215.2 km² dry land** (down from 393.2 km²
+      measured against the pre-redesign world), **32 islands** (up from 10
+      — Mark's correction 1, "spend the headroom on more islands, not
+      bigger ones," landing exactly as intended), **largest 22.04 km²
+      (downtown, confirmed the largest)**, **smallest 0.08 km² (a rock)**,
+      mainland's real in-world-bounds contribution **~108.9 km²** against
+      its own stated 110 km² target, settleable fraction **0.12**, capped
+      well under the 0.2 Mark's correction 2 asked for. Watched red first,
+      twice, against the git history rather than memory: the test FILE
+      refused to build against the committed step-A world (`MAINLAND_ZONES`
+      does not exist there), and `scripts/measure-land.mjs` run standalone
+      against that same world measured 41.8%/393.2 km²/10 islands — outside
+      every band on every axis. Three real mutations watched red and
+      reverted (`test/mutations.json`): SKERRY_COUNT to 0 (island-count gate
+      catches it), the coastal-strip fraction raised to 0.45 (settleable-
+      fraction cap catches it), and the ownership-list transformation below.
+      **The plan-specific world-hash guard (docs/BUILD-LOOP.md Step 8,
+      `test/worldSeed.test.ts`) was deliberately re-pinned**, not left red:
+      the terrain moved on purpose. `docs/BUILD-LOOP.md` itself no longer
+      quotes the hash directly (found stale the moment this redesign
+      changed it — a data value duplicated into a process document, the
+      same failure pattern this project's own docs name elsewhere) —
+      re-pointed to read the live constant in `test/worldSeed.test.ts`
+      instead.
+      **`test/terrainLandmassOwnership.test.ts`'s byte-identity check was
+      TRANSFORMED, not deleted, per Mark's explicit instruction** ("the
+      property you actually want was never 'the two copies agree', it was
+      'there is one source of truth'"): it now names the EXACT, current set
+      of files still statically importing LANDMASSES/landmassPolygonsDesign
+      from city-plan.js directly (public/road-network.js,
+      scripts/_render-arterial-data.mjs, and four test files — plus
+      scripts/gen-mainland.mjs's own dynamic import, checked separately,
+      since a static regex cannot safely resolve a runtime-built import
+      path) — a tripwire, not yet an empty-list assertion, since emptying
+      that list is B2/B3's job. `npx tsc --noEmit` clean throughout.
 
-### B2–B6
+## MAJOR FINDING — city-plan.js's own world generation is now incoherent
+against the new terrain, exactly as the plan's own phase order predicts
 
-Not started. Each gets its own ledger entries when B1's gate is green.
+Not a defect in this pass's own work — recorded as evidence, per Mark's own
+instruction, not as damage. `city-plan.js`'s `generateWorld()` is untouched
+(outside this pass's routing; it is replaced, not repaired, in B2) and still
+lays plots out against its own old `COAST`/`LANDMASSES`. That geometry no
+longer corresponds to where land actually is in the new height field.
+Measured directly: **43,412 plots** (up from 17,586), **440 roads** (down
+from 1,402/1,357).
+
+**Blast-radius run**: the 30 test files that depend on `generateWorld`/
+`LandField` (`NODE_OPTIONS=--max-old-space-size=2560 node test/run.mjs
+<files>`, host memory checked first per this session's standing rule) —
+**286 tests, 248 pass, 37 fail, 1 todo** (originStability, unaffected,
+working as designed). Catalogue, not fixes, per Mark's own instruction:
+
+**NOT an old-world pin — real findings, this pass's own gaps (3 tests):**
+- `test/worldAliasing.test.ts` "two worlds with DIFFERENT seeds share only
+  the declared allow-list": 442 objects now aliased across differently-
+  seeded worlds. Plausible cause, not yet root-caused precisely: the new
+  `MAINLAND_ZONES` field is a frozen, module-level, shared-by-reference
+  table attached to the mainland's LANDMASSES entry, the same sharing
+  pattern the rest of LANDMASSES already has and is already allow-listed
+  for — `zones` itself is very likely simply missing from
+  `allowedShared()`, not yet added.
+- `test/ground.test.ts` "a river has a level surface, a sloping bed, and
+  dry banks" and "a river's surface is its own, not the sea's": the
+  DEVIATION named above — waterways.js's canals were not re-derived against
+  the new island shapes.
+
+**Old-world pins / cascading consequences of city-plan.js's unmodified
+geometry (34 tests):** `test/cityConnectivity.test.ts` (2),
+`test/cityJoin.test.ts` (3), `test/cityWorld.test.ts` (18),
+`test/connectivityBridges.test.ts` (2), `test/ground.test.ts` (2, the
+road-standing-on-a-slope pair, distinct from the river pair above),
+`test/instanceGroups.test.ts` (1), `test/layout.test.ts` (1),
+`test/planSeed.test.ts` (1), `test/roadNetwork.test.ts` (1),
+`test/umaaFindings.test.ts` (1) — all trace to the same root cause: plots,
+bridges, settlements, and the airport/railway/port sites are still placed
+against the old geometry. Headline: **72.1% of plots fall in water**; no
+airport, railway or port site resolves at all. Every one of these is a
+correctly-red pin describing a world that no longer exists, not a defect to
+chase — re-pinning is B2's job, once the new generator makes the world
+coherent again, so it happens once rather than twice.
+
+## B2–B6
+
+B2 (the generator) starts next, on this same branch (`b1-land`) — not
+`main`. **main stays green, deployable and truthful while the rebuild is in
+flight** (Mark's own instruction, given after this session found the
+city-plan.js incoherence above): a world with new land and an old generator
+is not a state anyone should be able to deploy by accident. B1 and B2 merge
+to main together, as one coherent world, when B2's own gate is green.
