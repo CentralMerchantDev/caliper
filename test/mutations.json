@@ -1021,7 +1021,7 @@
       "file": "test/worldAliasing.test.ts",
       "find": "    ...TERRAIN_LANDMASSES.filter((lm) => lm.points).map((lm) => ({",
       "replace": "    ...[].filter((lm) => lm.points).map((lm) => ({",
-      "expect": "different-seed worlds share only the declared allow-list -- terrain.js's own LANDMASSES.points included, since Step A moved land ownership there"
+      "expect": "two worlds with DIFFERENT seeds share only the declared allow-list (WORLD -- never land)"
     },
     {
       "id": "b2-0-worldaliasing-mainland-zones-on-allowlist",
@@ -1030,7 +1030,7 @@
       "file": "test/worldAliasing.test.ts",
       "find": "    {\n      label: \"MAINLAND_ZONES (public/terrain.js)\",\n      value: MAINLAND_ZONES,\n      reason: \"a flat, frozen spec of the mainland's own depth-band fractions (Object.freeze); the mainland's LANDMASSES entry embeds it as `.zones` by reference, for every seed -- one frozen table, not one per world, same category as WORLD.\",\n    },\n",
       "replace": "",
-      "expect": "different-seed worlds share only the declared allow-list -- MAINLAND_ZONES included, since the mainland's LANDMASSES entry embeds it by reference"
+      "expect": "two worlds with DIFFERENT seeds share only the declared allow-list (WORLD -- never land)"
     },
     {
       "id": "b2-settlement-table-wooded-exclusion-real",
