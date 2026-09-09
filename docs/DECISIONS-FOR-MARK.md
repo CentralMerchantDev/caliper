@@ -294,3 +294,28 @@ work left the tree byte-identical to before the check
 
 **Reversibility:** trivial to act on later either way — nothing was
 changed tonight for this to revert.
+
+**A consequence found afterward, worth recording here rather than as its
+own entry:** this red result also blocks `scripts/mutate.mjs`'s own
+whole-suite baseline check (it refuses to score any mutation against a
+red baseline, correctly, by design) — so RUN3 item 5's real, verified
+fixes (the SURVIVED mutation and its sibling, both now CAUGHT, confirmed
+via the scoped `scripts/_mutcheck.mjs` runner against just their own
+test files) could not be re-recorded through the AUTHORITATIVE whole-
+suite path (`mutate.mjs --all` → `test/.mutate-results.json` →
+`scripts/gen-mutation-summary.mjs` → the README sentence
+`test/publicClaims.test.ts` pins). Rather than hand-edit README's
+"1 survived or inconclusive" sentence without the generated evidence
+behind it — the exact fabrication pattern this project's own claims
+discipline exists to prevent — that sentence was left exactly as it
+was tonight. **It is now understating real progress, not overstating
+it** (the true count is better than what it says), which is the safe
+direction to be wrong in but is still wrong, and stays wrong until
+either decision #4 above is resolved (unblocking a real
+`mutate.mjs --all` run) or `test/cullingRatio.test.ts`/
+`test/regressionGate.test.ts` are added to `scripts/expected-red.mjs`'s
+own allowlist — a real, separate decision (does a load-sensitive
+telemetry bug belong in the same "honestly, permanently red" category
+B2.5's CPU gate does, or is it different enough to need its own
+category) that this run did not have grounds to make unilaterally
+either.
