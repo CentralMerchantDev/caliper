@@ -87,9 +87,22 @@ test("the ring is positioned off the hub's own live position, not a second guess
   // The same "measure, don't predict" principle U1 established for height
   // and this file's own earlier version established for the pad's rect,
   // now expressed against the hub itself: since the hub is a normal flow
-  // child of the pad (previous test), its getBoundingClientRect() is
-  // correct by construction wherever the pad renders, with nothing
-  // separate to go stale.
+  // child of the pad (previous test), its live position is correct by
+  // construction wherever the pad renders, with nothing separate to go
+  // stale. The measurement itself now lives in the shared
+  // public/live-position.js (trackLiveRect) rather than being hand-written
+  // here a second time -- this asserts the wheel actually calls it, not
+  // that it reimplements ResizeObserver+resize+poll on its own again.
   const src = readFileSync(path.join(repoRoot(), "public", "nav-wheel.js"), "utf8");
-  assert.match(src, /hub\.getBoundingClientRect\(\)/, "the ring does not measure the hub's live position");
+  assert.match(src, /from ["']\.\/live-position\.js["']/, "nav-wheel.js does not import the shared live-position tracker");
+  assert.match(src, /trackLiveRect\(hub,/, "the ring does not track the hub's live position via trackLiveRect");
+});
+
+test("live-position.js is a real module with the shared tracking function, not a name that stopped existing", () => {
+  // Cheap, direct guard against the import above silently resolving to
+  // nothing -- importsResolve.test.ts already checks this repo-wide, but a
+  // second, local check here fails closer to the point anyone would look
+  // when this specific pairing breaks.
+  const src = readFileSync(path.join(repoRoot(), "public", "live-position.js"), "utf8");
+  assert.match(src, /export function trackLiveRect/, "public/live-position.js does not export trackLiveRect");
 });

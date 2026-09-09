@@ -16,6 +16,7 @@
  * reveals itself on hover does not exist on a phone.
  */
 import { NAV_BINDINGS, keyboardOnlyBindings, hintText, createPoseHistory, createSettleTracker } from "./nav-bindings.js";
+import { trackLiveRect } from "./live-position.js";
 
 const ICONS = { orbit: "↻", pan: "✥", zoom: "🔍", focus: "🎯", north: "N", rewind: "↺" };
 const DRAG_PX = 6; // below this, a press-release on a segment is a click, not a drag
@@ -82,18 +83,15 @@ export function createNavWheel(renderer, doc = document) {
   // (index.html), so its getBoundingClientRect() already reflects wherever
   // the pad actually renders (workbench.js can dock it anywhere) with no
   // separate measurement to go stale -- it is a normal flow child, not a
-  // second thing tracking the first.
-  function positionRing() {
-    const r = hub.getBoundingClientRect();
+  // second thing tracking the first. trackLiveRect (public/live-position.js)
+  // is the extracted form of this "measure, don't guess" pattern -- U1's
+  // #parcel-inspect-card needs the identical treatment against the pad
+  // itself, and a third hand-written copy of ResizeObserver+resize+poll
+  // would be this project's own failure pattern E aimed at itself.
+  const ringTracker = trackLiveRect(hub, (r) => {
     root.style.left = `${Math.round(r.left + r.width / 2)}px`;
     root.style.top = `${Math.round(r.top + r.height / 2)}px`;
-  }
-  positionRing();
-  if (typeof ResizeObserver === "function") new ResizeObserver(positionRing).observe(hub);
-  on(window, "resize", positionRing);
-  // A workbench drag moves the hub (inside the pad) without resizing it,
-  // which a ResizeObserver alone cannot see -- polled alongside the
-  // pose-history settle tracker below rather than adding a second timer.
+  });
 
   let live = doc.getElementById("nav-live");
   let ownsLive = false;
@@ -212,7 +210,6 @@ export function createNavWheel(renderer, doc = document) {
   const pollTimer = setInterval(() => {
     const pose = renderer.getPose ? renderer.getPose() : null;
     if (pose) settler.update(pose, performance.now());
-    positionRing(); // a workbench drag moves the hub without resizing it
   }, 250);
 
   /* ------------------------------------------------------------- discrete */
@@ -355,6 +352,7 @@ export function createNavWheel(renderer, doc = document) {
   return {
     destroy() {
       clearInterval(pollTimer);
+      ringTracker.stop();
       for (const [target, type, fn] of listeners) target.removeEventListener(type, fn);
       listeners.length = 0;
       closeLegend();

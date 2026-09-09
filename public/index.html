@@ -512,14 +512,18 @@ html, body {
 .gate-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 
 /* Inspection Card */
-/* MEASURED, NOT GUESSED.
+/* MEASURED, NOT GUESSED -- twice now.
    `bottom: 130px` was a guess at how tall the navigation pad is. The pad is
    taller than that when expanded, so the inspector opened ON TOP of it and the
    navigation vanished the moment you clicked anything -- Mark: "gets hidden when
    you click on any target, this should open below it not on top of it".
-   --nav-pad-height is written by a ResizeObserver on the pad itself, so this
-   tracks the real height through collapse, expand and every nav mode instead
-   of assuming one. The fallback is only for the frames before the observer runs. */
+   --nav-pad-height (a ResizeObserver on the pad, still published for anything
+   else that reads it) fixed the HEIGHT half of that guess. `left: 20px` and
+   this calc()'s implicit "the pad sits at the bottom-left corner" was the
+   other half, still a guess -- workbench.js can dock the pad anywhere. The
+   values below are now only the fallback for the few frames before the
+   bottom module script's call into live-position.js's tracker overrides
+   both `left` and `bottom` with the pad's actual measured position. */
 .inspect-card {
   position: fixed;
   left: 20px;
@@ -977,8 +981,10 @@ html, body {
      bottom-calc -- two paths deciding where the same card sits is exactly
      the "one of them moves" collision this section already names once, just
      between two rules instead of two panels. left/right/width/max-height
-     still narrow for the mobile column; vertical clearance is the base
-     rule's --nav-pad-height calc, same as desktop. */
+     still narrow for the mobile column (deliberately full-width here rather
+     than pad-relative -- a corner-aligned card is a desktop affordance);
+     vertical clearance is the bottom module script's trackLiveRect value
+     (no `!important` bottom override here to fight it), same as desktop. */
   .inspect-card {
     left: 8px !important;
     right: 8px !important;
@@ -5269,6 +5275,7 @@ import { createMenus, createCommandCentre } from "./menus.js";
 import { createWorkbench } from "./workbench.js";
 import { createNavigation } from "./navigate.js";
 import { createNavWheel } from "./nav-wheel.js";
+import { trackLiveRect } from "./live-position.js";
 const menus = createMenus(document);
 createCommandCentre(document, menus);
 createWorkbench(document);
@@ -5281,6 +5288,33 @@ if (window.renderer3d) {
   createNavWheel(window.renderer3d, document);
 } else {
   console.error("navigation not started: window.renderer3d is missing");
+}
+
+/* U1 -- the inspector's clearance from the nav pad was a static calc()
+   against --nav-pad-height, which only ever captured the pad's HEIGHT.
+   public/workbench.js can dock the pad anywhere on screen (found, and
+   fixed, for the wheel's own identical assumption twice already this
+   session -- see docs/pending-commits for both) -- .inspect-card's CSS
+   `left: 20px` and its bottom-calc both silently assumed the pad's
+   CSS-default bottom-left corner, which is not where a dragged pad sits.
+   trackLiveRect (public/live-position.js, the shared extraction of the
+   pattern the wheel already uses to anchor to its own hub) replaces the
+   guess with the pad's actual measured position, tracked continuously so a
+   drag mid-session does not strand the card either. Needs no renderer, so
+   it runs unconditionally, not inside the `if` above. */
+const navPadEl = document.getElementById('nav-compass-pad');
+const inspectCardEl = document.getElementById('parcel-inspect-card');
+if (navPadEl && inspectCardEl) {
+  trackLiveRect(navPadEl, (padRect) => {
+    inspectCardEl.style.left = `${Math.round(padRect.left)}px`;
+    // `bottom` (grows upward), not `top`: the card's own height varies with
+    // its content, and a bottom anchor keeps its BOTTOM edge a fixed
+    // clearance above the pad's top regardless, the same reason the
+    // original --nav-pad-height calc used `bottom` too. window.innerHeight
+    // minus the pad's live top edge already reflects wherever
+    // env(safe-area-inset-bottom) pushed the pad -- nothing separate to add.
+    inspectCardEl.style.bottom = `${Math.round(window.innerHeight - padRect.top + 12)}px`;
+  });
 }
 </script>
 </body>

@@ -125,6 +125,24 @@ test("the inspector opens BELOW the pad, never on top of it", () => {
   );
 });
 
+test("the inspector's LEFT and BOTTOM are measured from the pad's live position, not assumed", () => {
+  // --nav-pad-height (checked above) only ever fixed the height half of the
+  // original guess. `left: 20px` and the bottom-calc's implicit "the pad
+  // sits at its CSS-default bottom-left corner" was the other half, and it
+  // was still a guess: public/workbench.js can dock the pad anywhere on
+  // screen. This is the same "measure, don't predict" property, now
+  // checked for position -- via the shared public/live-position.js
+  // (trackLiveRect), not a second hand-written ResizeObserver+resize+poll
+  // block, which is what U4's wheel needed the identical fix twice before
+  // this was extracted.
+  assert.match(html, /from ["']\.\/live-position\.js["']/, "index.html does not import the shared live-position tracker");
+  assert.match(
+    html,
+    /trackLiveRect\(navPadEl,/,
+    "the inspector's position is not tracked off the pad's live rect",
+  );
+});
+
 test("no other stylesheet in public/ reintroduces a nav radius behind this one's back", () => {
   // index.html is not the only page. A second file styling .nav-strip with its
   // own numbers would undo this quietly, and only on that page.
