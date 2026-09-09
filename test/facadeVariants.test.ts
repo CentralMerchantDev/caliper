@@ -21,6 +21,7 @@ import {
   pickVariant,
   tintHex,
   spandrelTreatment,
+  floorLayout,
 } from "../public/facade-textures.js";
 import { buildWorldState, buildScenePlacements } from "../public/city-render.js";
 import { groupByVariant } from "../public/layout.js";
@@ -63,6 +64,44 @@ test("RUN3: spandrelTreatment gives metal variants real PBR values, not just a d
 
   const omitted = spandrelTreatment({}, spec, 10);
   assert.deepEqual(omitted, stone, "omitting spandrelMaterial must default to stone -- every RUN2 variant relies on this");
+});
+
+test("RUN4: floorLayout gives every floor an equal share when groundFloorMult is omitted, matching this file's original size/floors behaviour", () => {
+  const floors = 8, size = 1024;
+  const { top, height } = floorLayout({}, floors, size);
+  const expectedH = size / floors;
+  for (let f = 0; f < floors; f++) {
+    assert.equal(height(f), expectedH, `floor ${f} height should be size/floors when groundFloorMult is omitted`);
+    assert.equal(top(f), f * expectedH, `floor ${f} top should be f * size/floors when groundFloorMult is omitted`);
+  }
+});
+
+test("RUN4: floorLayout gives the ground floor (the last index) real extra height when groundFloorMult > 1, and every floor still tiles exactly to `size`", () => {
+  const floors = 8, size = 1024, groundFloorMult = 1.6;
+  const { top, height } = floorLayout({ groundFloorMult }, floors, size);
+  const upperFloorH = height(0);
+  const groundFloorH = height(floors - 1);
+  assert.ok(groundFloorH > upperFloorH, `ground floor (${groundFloorH}) should be taller than an upper floor (${upperFloorH})`);
+  assert.ok(Math.abs(groundFloorH / upperFloorH - groundFloorMult) < 1e-9, "ground floor should be exactly groundFloorMult times an upper floor's height");
+  // Every floor's [top, top+height) span must tile the atlas exactly, no
+  // gaps and no overlap -- the property that actually matters for
+  // painting, not just that the ground floor number looks bigger.
+  for (let f = 0; f < floors - 1; f++) {
+    assert.ok(Math.abs((top(f) + height(f)) - top(f + 1)) < 1e-9, `floor ${f} must end exactly where floor ${f + 1} begins`);
+  }
+  assert.ok(Math.abs((top(floors - 1) + height(floors - 1)) - size) < 1e-9, "the ground floor must end exactly at the atlas edge");
+});
+
+test("RUN4: at least one variant per character has real storey-height variation (a taller ground floor), applied to an existing variant, not a new 17th one", () => {
+  // Deliberately NOT adding a fifth variant per character here -- item 2's
+  // own caution (a seventeenth variant is worth less than knowing whether
+  // the existing ones read as variety at all) applies just as much to a
+  // sixth. This adds depth to already-existing, already-counted variants.
+  for (const char of CHARACTERS) {
+    assert.equal(FACADE_VARIANTS[char].length, 4, `${char} should still have exactly 4 variants -- this axis extends existing ones, it does not add a new one`);
+    const hasGroundFloorVariation = FACADE_VARIANTS[char].some((v) => (v.groundFloorMult ?? 1) !== 1);
+    assert.ok(hasGroundFloorVariation, `${char} has no variant with a storey-height (groundFloorMult) variation`);
+  }
 });
 
 test("RUN3: at least one variant per character varies glass/frame tint or spandrel material, not just floor count and mullion", () => {
