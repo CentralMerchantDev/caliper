@@ -118,8 +118,19 @@ landmarks already speak (hyperboloid, helix, wave, diagrid).
 
 ## Phases
 
-Each has a gate watched red before it is trusted. No phase starts before the
-previous gate is green.
+**This section is canonical for phase numbering.** Where any other document
+disagrees, this one wins and the other is corrected. `docs/OVERNIGHT-RUN.md`
+once numbered a "B6 — quarantine" and a "B7 — farmland" that do not exist here,
+while omitting B6 — the interface, which does; a lane reading both would have
+ticked the wrong box. Reconciled 2026-09-09.
+
+Each phase has a gate watched red before it is trusted. No phase starts before
+the previous gate is green. **Quarantine is never a phase** — it is an exit
+condition of the phase that makes the quarantined file unreachable, named below
+on the phase that owns it.
+
+The live per-item checklist, with commit hashes, is
+[`COMPLETION-PLAN.md`](COMPLETION-PLAN.md).
 
 ### B1 — the land
 New landmass definitions in `terrain.js`. Archipelago, ~65% water, mainland,
@@ -134,22 +145,40 @@ round-trip asserted. **Coverage measured inside settlement boundaries** — the
 number nobody has ever measured, and the reason 3.82% went unnoticed.
 
 ### B3 — the render path
-Draws board pieces. The old renderer is quarantined when this is green.
+Draws board pieces. `createWorld()` is synchronous today and `fetchBoard()` is
+inherently async — B2.6 left that bootstrap decision open, and it is made here.
 *Gate:* fails if the render path reads anything but the board.
+*Exit condition:* `city-render.js` quarantined to `_TO-DELETE/`, because nothing
+reaches it any more.
 
 ### B4 — the kits wire by construction
 Roads from `roadkit`. Buildings from the kit. Trees from `propModel`. Props from
 the manifest. Not integration — the only way a piece can exist.
 *Gate:* the dead-export check. Watched red: it must list `propModel` today.
+*Exit conditions:* `city-plan.js` and `layout.js` quarantined; `board-adapter.js`
+quarantined **only once** B2's pieces are what `world-render-3d.js` reads, never
+before — it is live today on P4.1's picking path.
 
 ### B5 — the visual pass
 Judged by eye against the reference shots: junctions visible, buildings sitting
 on ground, trees varied, ground not bare, islands reading as paradise.
+*Gate:* a named reference shot in the same frame, per K5.5 — a visual claim with
+no reference is a fabrication like an unsourced measurement.
 
 ### B6 — the interface
 Mobile first — the world fills the screen, landscape works, the prompt box is
 findable, touch works. Then middle-mouse pan, the inspector clearing the nav, the
 navigation widget.
+*Gate:* measured on a real viewport, not asserted against a stylesheet string.
+`test/navPad.test.ts` once asserted that a CSS substring appeared in the HTML and
+called that a behaviour check.
+
+### B7 — the countryside
+Farmland behind the mainland, the range framing rather than occupying, and the
+greenery the `contemporary` character is supposed to carry — planting, water,
+and the sculptural language the kit's landmarks already speak.
+*Gate:* settled land stays inside 20–40 km² while the countryside fills the rest,
+so this cannot be satisfied by quietly spreading the city outward.
 
 ## Standing gates
 
@@ -164,8 +193,13 @@ navigation widget.
 ## How the work is done
 
 `docs/BUILD-LOOP.md`, literally, by number, for every item. Step 2 — plan in
-writing and stop for review — is mandatory and is the step my briefs have been
-letting lanes skip. Step 6 — mutate and prove CAUGHT — is the one that has earned
+writing before touching code — is mandatory and is the step my briefs have been
+letting lanes skip. **On an unattended run its review is the blind subagent, not
+Mark**: once the audit comes back and its findings are folded in, the lane is at
+Step 3 and keeps going. Read literally as "stop for review", this sentence ended
+the 2026-09-09 run forty-five minutes in with a good plan and nothing built —
+see `docs/OVERNIGHT-RUN.md`'s WHEN YOU MAY STOP. Step 6 — mutate and prove
+CAUGHT — is the one that has earned
 its place most.
 
 `docs/UMAA-CALIPER.md` is **canonical** for the audit: Phase 0 grounding, Step 0's
