@@ -1,0 +1,44 @@
+B3 -- the render path, core module. public/board-render.js (new):
+one mesh per real board.js piece, position and size read entirely from
+the piece's own cell/foot/levels (grid.js's atomOrigin/heightOf), colour
+by pieceType. Deliberately minimal -- a box per piece is B3's own scope
+("draw board pieces and nothing else"); real facades/roofs/kit geometry
+is B4's job.
+
+Also wires B2.7's bridge/dock pieces into scripts/gen-board.mjs, so the
+next `npm run gen:board` run persists them onto the committed board --
+they did not exist in the currently-committed public/board.generated.json
+(generated before B2.7 landed).
+
+THE GATE (docs/briefs/RUN2-CLI-2026-09-09.md's own wording): "fails if
+the render path reads anything but the board." test/boardRender.test.ts
+(new, 7 tests):
+- a static scan of board-render.js's own real `import ... from`
+  statements (not a substring search over the whole file, which would
+  false-positive on this file's own header comment explaining what it
+  does NOT read -- caught directly, fixed before trusting the check);
+  refuses city-plan.js/layout.js/city-render.js/layout-fits.js.
+- a functional check against the REAL committed board.generated.json
+  (35,365 pieces today): one mesh per piece, no synthetic fixture.
+- position/size read from the piece's own cell/foot/levels, not a
+  second, independently-computed geometry.
+- an unrecognised pieceType still gets a mesh (a visible gap, not a
+  silent skip); a piece with no pieceType is skipped, not thrown.
+
+MUTATION-TESTED, 2 controls, both CAUGHT for real (test/mutations.json):
+the building-height-from-real-levels check, and the import-scan's own
+real-vs-substring distinction. The second SURVIVED against the wrong
+named test on a first attempt (the same "expect must name a test that
+ACTUALLY goes red" lesson from tonight's earlier worldAliasing/dock-id
+findings, recurring a third time) -- fixed by pointing `expect` at the
+test that genuinely goes red.
+
+npx tsc --noEmit clean. node test/run.mjs test/boardRender.test.ts:
+7/7 green.
+
+NOT YET DONE, next step: wiring buildBoardScene into
+public/world-render-3d.js's _buildCityBase (currently calls
+city-render.js's buildWorld(), which still reads layout.js/city-plan.js)
+so the live page actually draws from the board. This commit lands the
+render module and its gate on their own, complete and tested, before
+that riskier wiring step.

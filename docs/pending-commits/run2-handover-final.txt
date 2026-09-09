@@ -1,0 +1,12 @@
+RUN 2 handover, final update for this session -- docs/audits/OVERNIGHT-
+CLI-2026-09-09.md's own RUN 2 section, completed. Covers: B2.7's own
+outstanding mutations (the allowlist confirmed working against the
+real, previously-refusing baseline; one genuine SURVIVED found and
+recorded honestly, not hidden); B2.8's real sequencing correction
+(commit ca413a0); B3 finished and B4 started for real, following
+Mark's own live mid-session reorder of docs/briefs/RUN2-CLI-2026-09-09.md;
+what did not work, named plainly; and the ordered next-steps list.
+
+Nothing here changes code -- this is the session's own record, written
+so the next reader (human or agent) does not have to re-derive any of
+it from the commit log alone.

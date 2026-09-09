@@ -1,0 +1,48 @@
+The published claim -- fixed. docs/briefs/RUN2-CLI-2026-09-09.md item 8:
+"The README and the live page say '98 deliberate defects injected, all
+98 caught.' That is now false... If the generated-claims gate does not
+already catch this, that gate has a hole -- find it, and fix the claim
+either way."
+
+THE HOLE, CONFIRMED DIRECTLY: no test file read README.md at all --
+`grep -n "README" test/*.test.ts` returned nothing before this commit.
+The one gate this project has for exactly this class of drift
+(test/generatedClaimsAreCurrent.test.ts's own "no published generated
+claim is stale") never saw README.md's own sentence, so it could drift
+indefinitely with nothing to catch it -- the same "declared value in a
+second place, nothing binding them" pattern AUDIT-PROTOCOL.md's own
+Failure pattern B already names elsewhere in this project.
+
+FIXED: src/generatedClaimChecks.ts gained mutationClaimMismatch(),
+the same pure-function pattern every other generated claim on this page
+already uses -- parses README.md's own sentence, compares against
+test/mutationSummary.generated.json's real manifestCount/caught/
+neverRun.length. Wired into checkAllGeneratedClaims()'s own unified
+manifest, so it runs under the same "one gate, naming every stale claim
+at once" umbrella as the other five checks, not a second, parallel
+mechanism.
+
+README.md's own sentence rewritten: "98 deliberate defects injected...
+all 98 caught" could only ever express one state (full coverage) --
+replaced with three real numbers (injected/caught/never-run) so it can
+say what is actually true, including partial coverage, without lying by
+omission. Currently: "127 deliberate defects injected into the
+guardrails, 117 caught and re-verified, 10 named and not yet run" --
+matching test/mutationSummary.generated.json exactly, verified by the
+gate itself, not just eyeballed.
+
+MUTATION-TESTED, 1 control, CAUGHT: disabling the total-count comparison
+inside mutationClaimMismatch is caught directly by the dedicated
+synthetic test.
+
+VERIFIED: node test/run.mjs against generatedClaimsAreCurrent.test.ts,
+publicClaims.test.ts, claudeMdIsCurrent.test.ts -- 15 of 15 pass.
+npx tsc --noEmit clean.
+
+NAMED, NOT A GAP IN THIS FIX: the numbers above will need one more sync
+once the in-flight boardGenerator.test.ts mutation run (started before
+this commit, still running) returns, and again once B2.8 unblocks the
+isolate.test.ts-side 5. The GATE itself does not need touching again --
+it reads the real file every time; only the hand-written sentence in
+README.md needs re-syncing when the manifest changes, exactly like
+every other generated claim on this page already does.
