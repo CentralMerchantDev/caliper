@@ -407,6 +407,164 @@ targeted set, not assumed unaffected**: `test/worldSeed.test.ts`'s own
 that guard too — re-pinned a second time, same deliberate-redesign exception
 already claimed for B1 step B, not a second one invented for convenience.
 
+## B2.1 — the generator's contract. PLAN, NOT YET IMPLEMENTED. STOP FOR REVIEW.
+
+BUILD-LOOP.md Step 2, mandatory. Nothing below is built yet.
+
+### What already exists, that this brief's own wording could be read past
+
+Read directly before writing this, because the brief's "New file. Emits
+board pieces" describes B2's *task*, not a blank slate — `board.js` (388
+lines), `board-adapter.js` (273 lines) and `board-region.js` (41 lines)
+already exist, from an earlier phase (`BOARD-CONVERSION-PLAN.md` P1–P4,
+predating this rebuild plan). **B2 does not invent the piece record.**
+`board.js` already defines it, already validates it (`assertValidPiece`),
+already does placement (`place`/`canPlace`/`replace`/`move`/`remove`) against
+`world-registry.js`'s real reservation store, with real ground/space/
+stacking checks (`standsOn`, `surface`, `k`-level stacking). That machinery
+is exactly what "carried across as components" (this doc's own §"What dies,
+what lives") already names for `board.js`. **B2's actual job is narrower and
+more specific than "build the board machinery": generate the real pieces —
+roads, plots, buildings, at real density, on the real B1 archipelago — and
+call `board.js`'s existing `place()` with them, directly, procedurally, no
+adapter in between.**
+
+This makes `board-adapter.js` and `board-region.js`'s adapter half obsolete
+the moment B2 lands, not something B2 needs to preserve. `board-adapter.js`
+converts `city-plan.js`'s `generateWorld()` OLD output (plots/roads/bridges,
+continuous-float positions) into board pieces; its own header already names
+the exact defect this causes (`test/boardAdapter.test.ts`: 305/17,586 plots
+round-trip through `atomOf`/`atomOrigin` cleanly, because the float position
+was never atom-aligned to begin with — a snap AFTER generation, the same
+class of defect this doc's own §"Why" names for `WORLD.SIZE`). This doc's
+own §"What dies, what lives" already lists `public/city-plan.js` under
+"Replaced outright"; `board-adapter.js`/`board-region.js` are named in
+NEITHER list there — a real gap in that doc, flagged here rather than
+silently resolved: once `city-plan.js` is quarantined, `board-adapter.js`
+has nothing left to adapt FROM, and should be quarantined alongside it, not
+left importing a dead module. **Flagged for Mark's decision, not assumed.**
+`board-region.js` (P4.3/P4.4's `isolate.js`/`move-piece.js`) reads whatever
+piece map it is handed — once that map is B2's real pieces instead of
+`board-adapter.js`'s, it needs no change of its own.
+
+### What B2 emits
+
+Real `board.js` pieces (`{ id, pieceType, cell: {i,j,k}, rotation,
+foot: {w,d}, levels, clear: {w,d}, standsOn, surface }`), placed by calling
+the existing `createBoard().place()` directly — no intermediate plot/road
+data structure that a later step converts. `pieceType` values: `road`
+(carriageway segments + junction pieces), `plot` (an unbuilt, reserved lot —
+kept, matching `board-adapter.js`'s own "an unbuilt plot still gets its own
+piece" reasoning), `building` (one piece per building, `standsOn: ["plot"]`
+is wrong per `board.js`'s own land-use vocabulary — real value is whichever
+of water/beach/cliff/steep/reserved/buildable the plot's own ground
+resolves to), `bridge`. Trees/props are explicitly OUT of B2's scope — this
+doc's own phase table gives them to B4 (kit wiring) and P3.2 named the same
+gap already; B2 does not invent instance data for a system that has no real
+placed-piece precedent yet.
+
+### Settlement boundaries and density follow each island's B1 character, not uniform-then-filtered
+
+B1's own `LANDMASSES` (`public/terrain.js`) already carries a `kind` per
+landmass — `mainland`, `city` (downtown), `suburb`, `resort`, `highland`,
+`wooded` (×3), `fishing`, `farm`, `vineyard`, `quarry`, `cottage` (×3),
+`sandbar`, `rock`, `skerry` — B1's own "honest reasons for density" as data,
+already sitting there unused by any generator. B2.1's rule: **`kind` decides
+whether an island is settled at all, and if so, at what density and which
+`CHARACTER_SETS` era**, decided once, per island, before any road or plot is
+laid — not a uniform grid generated everywhere and then thinned:
+
+| `kind` | settled? | density | era (`CHARACTER_SETS`) |
+|---|---|---|---|
+| `city` (downtown) | yes, whole island | highest | `contemporary` + `heritage` mixed, the skyline |
+| `suburb` | yes, whole island | medium-high | `postwar` + `contemporary` |
+| `resort` | yes, whole island | medium | `contemporary` |
+| `highland` | yes, partial (the brief's own "mountain-and-cliff") | low, cliffside estates | `heritage` + `interwar` |
+| `fishing`/`farm`/`vineyard`/`quarry` | yes, one small working cluster | very low | `interwar` + `heritage` |
+| `wooded` | no | — | — |
+| `cottage` | yes, exactly one building | one house | `heritage` |
+| `sandbar`/`rock`/`skerry` | no | — | — |
+| `mainland` | yes, `coastal-strip` zone ONLY (12% of the mainland, per `MAINLAND_ZONES` — `farmland`/`range`, 88%, explicitly `settleable: false`) | low-medium, coastal | mixed |
+
+For each settled island (or the mainland's `coastal-strip` band), B2
+computes an explicit **settlement boundary** — a polygon inset from the
+landmass's own real coastline (`landmassPolygonsDesign()`), not a bounding
+box — before laying anything inside it. B2.2 owns the exact coverage
+fraction (20–40% INSIDE the boundary) and total-settled-area target
+(20–40 km²); B2.1 only commits to boundaries existing and being derived
+from each island's own real generated shape, per landmass, so a suburb's
+boundary cannot leak onto a neighbouring wooded island's ground.
+
+### Roads, with real junctions
+
+Per settled boundary: a deterministic block subdivision (a street grid
+scaled to the island's own extent, block size a function of density tier —
+tighter blocks for `city`/`suburb`, looser for `resort`/`highland`), where
+**road centrelines and their crossings are computed as an explicit graph
+first** (nodes = junctions, edges = carriageway spans between them), and
+pieces are emitted FROM that graph: one `road` piece per edge span, one
+`road` piece per junction node (a distinct piece, not an implicit
+overlap of two crossing spans — matching `board.js`'s own "two pieces
+cannot occupy the same ground" rule, which an implicit crossing would
+violate). This is the concrete design choice this contract is asking Mark
+to confirm before 17,000 buildings' worth of infrastructure gets built on
+it — a simpler shape than a full road-network solver, chosen because it is
+verifiable by construction (the graph IS the junction list; there is no
+separate "did two segments cross" detection to get wrong later, the class
+of bug `road-network.js`'s own history already has entries for).
+
+### Grid alignment BY CONSTRUCTION, not by later assertion
+
+The 43% placed-building drop from a prior snapping attempt (named in Mark's
+own brief) was snapping CONTINUOUS float coordinates to the grid AFTER a
+layout algorithm had already chosen them, in `board-adapter.js`'s own
+style — the same defect `test/boardAdapter.test.ts` already measures
+(305/17,586). B2's rule: **every position B2's own layout math produces is
+already an integer atom index (`grid.js`'s `atomOf`/`i,j`), from the first
+line of the block-subdivision algorithm, not a float later converted.**
+World metres (`atomOrigin`/`atomCentre`) are computed FROM `(i, j)` only
+when B2 needs to sample real terrain (`heightAt`, `classifyAt`) — never the
+reverse. There is nothing to snap because nothing is ever produced off-grid.
+
+### Origin stability BY CONSTRUCTION, not by later assertion
+
+Root cause, read directly from `test/originStability.test.ts`'s own
+comments, not assumed: `city-plan.js`'s `GRID.ORIGIN_X`/`ORIGIN_Z` are
+`ISLAND.xMin`/`zMin` — an origin DERIVED from a landform extent, which
+moves whenever `WORLD_SCALE` (and therefore the landform) does. `grid.js`'s
+own `atomOf(x, z) = { i: floor(x/ATOM), j: floor(z/ATOM) }` has **zero**
+dependency on `WORLD.SIZE` or any landmass bound — world `(0, 0)` is always
+atom `(0, 0)`, however large the world grows. B2's rule: **never derive a
+coordinate origin, offset, or anchor from island/mainland bounds, `WORLD.SIZE`,
+or any landform extent — call `atomOf`/`atomOrigin`/`atomCentre` on absolute
+world metres exclusively, for every piece, every road span, every junction.**
+This is not new machinery B2 has to build; it is not repeating
+`city-plan.js`'s one mistake. If honoured, `test/originStability.test.ts`'s
+own assertion (today `todo`, a known-red report) should be able to move to a
+real, passing assertion in B2.3 for B2's OWN pieces, and briefly
+reintroducing an `ISLAND.xMin`-style offset is the mutation that proves it
+still can fail.
+
+### What B2.1 is explicitly NOT deciding (later steps' own scope, named so it is not silently assumed here)
+
+- The exact coverage fraction and settled-area math — B2.2.
+- Moving `originStability`/grid-round-trip from report to assertion, and the
+  "no world state outside the board" check — B2.3.
+- Re-pinning the 34 old-world-pin test failures — B2.4, last, not first.
+- Whether `board-adapter.js`/`board-region.js` are quarantined alongside
+  `city-plan.js` or kept for some transition window — flagged above,
+  Mark's call.
+- Whether `world.js`'s `.plan` field is replaced outright by B2's board, or
+  a new `.board` field is added alongside it until B3 (the render path)
+  is ready to read only the board — this contract assumes the latter (add
+  `.board`, leave `.plan` alone until B3 flips the read side), since B3 is
+  a separate, later gate ("fails if the render path reads anything but the
+  board") and a big-bang cutover of `.plan` itself is not asked for by this
+  brief. **Flagged for Mark's confirmation, not assumed silently.**
+
+**STOP HERE.** Nothing above is implemented. Waiting for Mark's review
+before Step 3 (test-first) starts.
+
 ## B2–B6
 
 B2 (the generator) starts next, on this same branch (`b1-land`) — not
