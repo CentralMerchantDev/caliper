@@ -725,6 +725,17 @@ gating existing geometry blocks behind the flags already computed for
 exactly this purpose. Proposed as the lead item for whoever works item 2 of
 `docs/briefs/RUN2-BLD-2026-09-09.md` next.
 
+**Items 2–5 below are SUPERSEDED, 2026-09-09 RUN2** by the flag-gating fix
+above and by re-reading the real functions in full. Item 3's specific claim
+("five real silhouettes... hip/gable/ell/flat/semi") does not apply to the
+real `bldTownhouse` at all — it has no such form-switch; that was the dead
+`townhouse()`'s shape, not this one's. `bldVilla` and `bldMidrise` (item 4's
+"not read in full") have now been read in full, in this same RUN2 session,
+as part of the flag-gating fix. Left below, unedited, as a record of what
+was believed at the time — not corrected line-by-line a second time, per
+this file's own practice of adding a dated correction rather than rewriting
+history.
+
 **2. Terrace (49.68% of all placements, the single largest share) has the
 richest massing already built** — bays, shopfront/stoop split, projecting
 bay windows, three roof forms, party-wall chimneys (`buildings.js:328-386`)
