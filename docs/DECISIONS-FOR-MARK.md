@@ -139,3 +139,72 @@ was done the first time.
 reversible. Option 2 is new, reviewable code in two scripts; reversible
 but not free. Option 3 (the current state) costs nothing to leave or to
 change later.
+
+---
+
+## 3. B2.5's CPU-time gate (RUN3 item 8) — get under 30 s, or retire it? Neither, on its own — the comparison itself may now be a category error
+
+**Ground-checked, 2026-09-09:** `test/boardGenerator.test.ts`'s B2.5 case
+compares `generateBoard()`'s own wall-clock time against 30,000 ms —
+Cloudflare's documented default Worker CPU-time ceiling for a single
+request. That ceiling answers "is this safe to run inside a live
+request." **B2.6 already moved generation OFF the live request path
+entirely** (`scripts/gen-board.mjs`, an offline build step, run by hand
+or CI, never inside a Worker) and built the actual replacement gate this
+item asks for — a static scan (`test/boardGenerator.test.ts`'s own B2.6
+case) asserting nothing in `src/` imports `generateBoard` at all. That
+gate is real, green, and — per Mark's own words recorded when B2.6
+landed — "a stronger gate than a time limit, and it cannot be satisfied
+by a faster machine."
+
+**So the real question is not "get under 30 s or retire the gate."** It
+is: does an OFFLINE, run-once-per-seed build step need to fit inside a
+LIVE-REQUEST CPU ceiling at all? Framed that way, comparing the two may
+itself be the defect — not the 40–291 s measurement, and not the gate's
+existence, but the specific number it is held against.
+
+**Why this is not simply resolved by converting it to `{ todo }`
+(RUN2's own precedent for a permanent, honest red):** Mark's own
+reasoning against `{ todo }` for mutation-harness purposes, recorded in
+Decision #2 above, was explicit — "a `todo` status reads to a casual
+reader as 'not yet built' rather than 'known limitation, real and
+current.'" That reasoning is not scoped only to the mutation harness; it
+would apply just as much to converting the gate's own status here. This
+run does not have grounds to override that stated preference
+unilaterally, and Rule Zero (`docs/UMAA-CALIPER.md`) forbids inventing a
+replacement threshold (a "reasonable CI build time," a "reasonable
+developer wait") with no source to back it — the same discipline that
+makes the current 30 s number traceable is exactly what makes a
+made-up replacement untrustworthy.
+
+**Options:**
+1. **Leave the assertion exactly as it is, comparing to 30,000 ms**,
+   accepting that the number it is compared against describes a
+   constraint this code no longer runs under — an honest-but-slightly-
+   wrong comparison, at least clearly labelled as such.
+2. **Remove the numeric assertion; keep the measurement as reported
+   information only** — `console.log`/a comment recording the real
+   time every run, no pass/fail threshold at all, since B2.6's static
+   gate is what actually guards the failure mode that matters (a live
+   request calling this).
+3. **Replace 30,000 ms with a sourced, different ceiling** appropriate
+   to an offline build step (a CI timeout, a "developer's patience for
+   a local command" figure) — but only if Mark can name where that
+   number comes from; inventing one here would repeat the exact
+   fabrication pattern `docs/AUDIT-PROTOCOL.md`'s own Rule Zero section
+   was written to stop.
+
+**Recommendation: Option 1 stands for tonight** — the least irreversible
+choice, and the one that changes nothing about what is measured or
+reported. The gate stays red, honestly, exactly as Mark last reviewed
+it; this entry exists so the REASON it is being left alone is on record
+(a real, considered "not solved by this run," not silence), rather than
+either quietly converting it or quietly leaving it with no note at all.
+
+**What was done in the meantime:** nothing touched
+`test/boardGenerator.test.ts`'s B2.5 case, `public/board-generator.js`,
+or `scripts/gen-board.mjs`. The gate stays exactly as found: red,
+measured, unchanged.
+
+**Reversibility:** trivial either way — a threshold comparison in one
+test file, changeable in one commit whenever Mark picks an option.
