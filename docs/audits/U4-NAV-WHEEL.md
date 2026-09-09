@@ -61,6 +61,62 @@ specificity or ordering interaction with some other, unidentified rule
 elsewhere in this file's roughly 5,200 lines of inline `<style>` — but this is
 a guess, not a finding, and is recorded as such.
 
+### Time-boxed follow-up, 2026-09-09 overnight (`codex-lane`) — still UNEXPLAINED, two things added
+
+Per the overnight brief, time-boxed hard: no browser was available (memory
+below the 4 GB floor all session — see `docs/audits/OVERNIGHT-BLD-2026-09-09.md`),
+so this pass was pure static text analysis of `public/index.html`, nothing
+run or rendered.
+
+**The offending rule no longer exists to re-test.** `grep` for
+`.nav-wheel.open` and `nav-wheel-seg\[data-nav-action` across the whole file
+found exactly one hit: a comment (around line 1557) recording the history,
+not live code. The wedge redesign fully replaced the class-based open-state
+rule with inline styles set from `nav-wheel.js`'s `setOpen()`, as "The
+workaround" section above already says. This closes off the most direct
+path to explaining the original bug — it cannot be re-triggered without
+deliberately reintroducing CSS that the codebase has already, separately,
+moved past, which is not a good trade for a UNEXPLAINED item explicitly
+named as the least valuable place to spend a night.
+
+**One hypothesis ruled out.** The "leading, unconfirmed guess" above was a
+specificity or ordering interaction with "some other, unidentified rule
+elsewhere in this file." A full-file grep for every selector touching any
+`.nav-wheel*` class found exactly one declaration site each for
+`.nav-wheel`, `.nav-wheel-legend`, `.nav-wheel-ring`, `.nav-wheel-seg`, and
+`.nav-wheel-seg-label` — no second rule anywhere in the file's ~5,200-line
+style block targets any of them. If the guess was right, the conflicting
+rule was never a *second, findable* rule in this file; it would have to
+have been engine-internal (a default user-agent style, or the exact
+SwiftShader/headless-Chromium behaviour named as never checked below).
+
+**One piece of corroborating (not conclusive) evidence, for the next
+person.** The wedge redesign's own CSS (`public/index.html`, `.nav-wheel-seg`
+rule, ~line 1520) sets `transform-box: view-box` with a comment explaining
+why: "transform-box: view-box makes scale() originate from that SAME
+coordinate-space point for every wedge, rather than each wedge's own
+bounding box (fill-box's default, which would scale each wedge from a
+DIFFERENT corner and visibly misalign them)." That is a second, independently-
+discovered instance of an SVG element's CSS `transform`/`transform-origin`
+resolving against a surprising coordinate space (`fill-box` instead of the
+expected `view-box`) in this exact file, on this exact family of elements
+(SVG wedges inside `#nav-wheel`), found and fixed *after* the original
+UNEXPLAINED bug without anyone connecting the two at the time. It does not
+prove the original bug had the same cause — the original rule used
+`translate()`+`scale()` on what may not even have been the same element
+type (the six-dot version predates the SVG wedge redesign, per this file's
+own note that the section "does not describe code that no longer exists"),
+and `transform-box` defaulting differently would more plausibly explain a
+WRONG position than a computed style that never changes at all. Recorded as
+a lead, not a finding: SVG transform coordinate-space handling is the
+single most concrete, project-specific pattern now on record for whoever
+next hits a CSS rule that matches but does not visibly apply on this file's
+SVG elements.
+
+**Still not run, for the same reason as before**: `document.styleSheets`
+iteration in a real browser, and a real (non-headless) browser comparison —
+both need a browser this session did not have memory for.
+
 ### What was NOT checked, for the next person who hits this
 
 - Whether the same rule painted correctly in a real (non-headless, non-
@@ -125,9 +181,15 @@ than only in conversation, so it survives to whoever picks this up.
   the prompt box findable, touch gestures (including the `touch-action` gap
   on `#world-canvas` found and reported, never fixed this session).
 - **Bug 2 (the CSS rule that selector-matched and never painted) stays
-  UNEXPLAINED**, per the section above — worked around by moving to inline
-  styles, cause never isolated. Nothing new to add tonight.
+  UNEXPLAINED, updated 2026-09-09 overnight** — see "Time-boxed follow-up"
+  above: the offending rule no longer exists to re-test (fully superseded
+  by inline styles), a full-file grep ruled out a second, findable CSS rule
+  as the cause, and one corroborating lead was found (the wedge redesign's
+  own `.nav-wheel-seg` CSS independently hit and fixed a related SVG
+  `transform-box` coordinate-space surprise on the same element family).
+  Still not closed; still worked around, not fixed.
 - **`docs/LESSONS.md`'s "a regex over source matches your comments too"
-  entry stays OPEN** — the one instance (`test/navPad.test.ts`) is fixed,
-  the general control (a comment-stripping helper for this suite's raw-
-  source `assert.match` checks) does not exist yet.
+  entry is now CLOSED, 2026-09-09 overnight** (`bac6c1b`) — a shared
+  `test/stripSourceComments.ts` helper, swept into nine files, watched red
+  for real against a mutation of `public/nav-wheel.js` (a file other than
+  the one that found the bug), per the entry's own closing condition.
