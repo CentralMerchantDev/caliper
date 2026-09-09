@@ -1,0 +1,19 @@
+docs/specs/COMPLETION-PLAN.md updated with tonight's real state -- Mark's
+own newly-created canonical checklist ("tick here"), found live mid-
+session alongside the RUN2 brief's own reorder.
+
+PART 1: B2.7 ticked [x] (implemented, tested, mutated, 501f0a9). B2.8
+[!] with the real B4 dependency named (ca413a0). B3 [!] -- landed
+additively, visual result explicitly unverified (memory below floor all
+session). B4 [!] -- propModel wired and product-reachable, roadkit/
+buildings-typology/full manifest still open.
+
+PART 3: C1's real numbers (119/129, 1 SURVIVED, 9 never run) and the
+allowlist fix confirmed working, not just built. C2 -- the allowlist
+now exists for this branch (seeded fresh, not copied). C4 -- the
+mutation-evidence surface of the claim reconciliation ticked [x], the
+other three surfaces (live page, DATUM, resume) named as still
+untouched, not silently implied done. C5 -- unaffected by this run,
+named as still open.
+
+No code changed by this commit -- checklist only.

@@ -42,19 +42,30 @@ this list.
 ```
 [x] B1     The land -- archipelago, 68.2% water, 215.2 km2, 32 islands
 [x] B2.1-6 The generator, coverage inside settlements, persisted board  27cca18
-[!] B2.7   Bridges and boat routes -- PLANNED + BLIND-REVIEWED, NOT BUILT  95cf588
-[!] B2.8   Re-pin the 38 old-world tests -- CATEGORIZED 38/38, NOT RE-PINNED  76e8d61
-[ ] B3     The render path -- draws board pieces, nothing else
-             exit: city-render.js quarantined
-[ ] B4     The kits wire by construction -- roadkit, kit, propModel, manifest
-             exit: city-plan.js, layout.js, and board-adapter.js quarantined
+[x] B2.7   Bridges and boat routes -- IMPLEMENTED, tested, mutated       501f0a9
+[!] B2.8   Re-pin the 38 old-world tests -- CATEGORIZED 38/38; ~4 bridge-
+             shaped ones already superseded by bridgeGenerator.test.ts;
+             the remaining ~30 need B4 first (their own old-world import
+             chain -- layout.js/instance-groups.js/road-network.js -- is
+             what B4 replaces), re-sequenced in writing                ca413a0
+[!] B3     The render path -- draws board pieces, additively, alongside
+             the still-running old path (picking/spatial-index/sun-sky
+             not yet rebuilt against the board). Visual result UNVERIFIED
+             (memory below floor all session; scripts/shoot.mjs not run
+             -- do this first next session).           6dcfda3 / bac86b0
+             exit: city-render.js quarantined -- NOT YET, on purpose
+[!] B4     The kits wire by construction -- propModel wired live and
+             product-reachable (dead-exports gate watched red, confirmed,
+             re-greened); roadkit/buildings-typology/full props manifest
+             still open                                c785e29 / 547b721
 [ ] B5     The visual pass -- judged against named reference shots (K5.5)
 [ ] B7     The countryside -- farmland, the range, greenery
 ```
 
-**B3 is the item that makes the world visible again.** Everything above it is
-correctness debt; everything below it is polish. If only one thing lands, this
-is the one.
+**B3 is the item that makes the world visible again.** Landed additively
+tonight; the visual result itself has not been looked at (memory-constrained
+all session). Everything above it is correctness debt; everything below it
+is polish.
 
 ---
 
@@ -89,21 +100,40 @@ is the one.
 ## PART 3 — CORRECTNESS DEBT
 
 ```
-[!] C1  Mutation evidence 109/119. The 10 blocked by the pattern-F deadlock
-          between _mutcheck.mjs's red-baseline refusal and B2.5's honest red.
-          Fix: teach the harness a named-honest-red allowlist. Target 119/119.
-[ ] C2  The dead-export allowlist holds 2,801 entries. NO NUMBER FROM IT MAY BE
-          PUBLISHED until broken down by mechanism: product / demo-only /
-          test-only / unreachable / data-reachable (string key selects from a
-          registry). UMAA trigger 2.
+[!] C1  Mutation evidence 119/129, 1 SURVIVED (confirmed real -- no node:test
+          assertion for it exists), 9 NEVER RUN. The allowlist fix
+          (scripts/expected-red.mjs) is BUILT and CONFIRMED working against
+          the real deadlock -- d00aea5. Still not run: b2-6-no-live-route
+          (same expensive file), b2-5-ground-verified-opt-in (needs a manual
+          paired-timing run), 5 isolate.test.ts-scoped (blocked on B2.8/B4).
+          2 more (wooded-exclusion, mainland-boundary) had a stale `expect`
+          string -- fixed, not yet re-run (each run costs ~15+ min on this
+          host). Target 129/129 (or fewer if the SURVIVED one needs its own
+          decision, not just a re-run).
+[ ] C2  The dead-export allowlist now exists for b1-land (seeded fresh, NOT
+          copied from codex-lane): test/deadExports.allowlist.json,
+          2,762 entries (37 demo-only, 211 test-only, 2,514 unreachable) --
+          c785e29. Auto-generated reasons, not yet reviewed one-by-one for
+          product/demo/test/unreachable breakdown-by-mechanism this item
+          asks for. propModel already promoted out of it (547b721) by real
+          wiring, not by editing the allowlist by hand.
 [ ] C3  All seven standing gates green simultaneously. This has never happened.
-[ ] C4  The claim reconciliation. Every published number appears on up to four
-          surfaces -- the live page, the README, DATUM, the resume -- and they
-          disagree today. Generated where the machinery exists, once, at the end.
-          Known stale: "98 deliberate defects, all 98 caught" is now 109 of 119.
-[ ] C5  B2.5's CPU-time gate: honestly red at 39.7s against 30s. Either the
-          generation gets under the ceiling or the gate is retired with a
-          written reason. Not left red forever without a decision.
+[x] C4  The claim reconciliation, mutation-evidence surface: README.md's
+          "98 deliberate defects, all 98 caught" fixed to name all four real
+          states (injected/caught/never-run/survived-or-inconclusive), gated
+          by src/generatedClaimChecks.ts's mutationClaimMismatch, mutation-
+          tested twice (the count check, and the "SURVIVED cannot silently
+          vanish from the arithmetic" check -- the same shape of gap this
+          run's own ground-check found in the overnight brief's "1,141
+          tests" line, generalised and closed here too)      9b717a9 / 547b721
+          Other three surfaces (live page beyond this one sentence, DATUM,
+          resume) NOT reconciled -- untouched, out of this run's scope.
+[ ] C5  B2.5's CPU-time gate: honestly red at ~40-291s against 30s (varies
+          with this host's own memory pressure, measured repeatedly).
+          Unaffected by this run -- generation still happens offline
+          (B2.6), so nothing in src/ is exposed to the ceiling regardless.
+          Still not formally retired or fixed; the allowlist (C1) works
+          around it for mutation-testing purposes without resolving it.
 ```
 
 ---
