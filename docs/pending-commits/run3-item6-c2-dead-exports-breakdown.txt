@@ -1,0 +1,55 @@
+RUN3 Item 6 -- C2, the dead-exports allowlist broken down by real
+mechanism. docs/specs/COMPLETION-PLAN.md's own wording: "No number from
+this may be published anywhere until it is split by real mechanism:
+product, demo-only, test-only, unreachable, and the fifth class --
+data-reachable, where a string key selects from a registry and the import
+graph cannot see it."
+
+CONFIRMED FIRST, NOT ASSUMED: no raw count from
+test/deadExports.allowlist.json (2,761 entries) appears anywhere on a
+public-facing surface today -- `grep -rn "2,76\|2761\|2762"` across
+README.md and public/index.html returns nothing.
+
+BUILT: scripts/analyze-dead-exports-breakdown.mjs. For every allowlist
+entry the import-graph walk (scripts/lib/module-graph.mjs) already calls
+"unreachable", it checks whether the export's bare identifier appears
+anywhere ELSE in its own file beyond the declaration line -- a class the
+import-graph walker structurally cannot see: a plain object literal
+inside one file holding a LOCAL reference to a function declared in the
+SAME file, never an import/export edge.
+
+VERIFIED AGAINST ONE REAL, TRACED EXAMPLE, NOT JUST PLAUSIBLE-LOOKING
+OUTPUT: public/buildings.js's own bldHighStreetTerrace and
+bldBusinessParkBlock sit in building()'s own typology dispatch object;
+building() is confirmed product-reachable (docs/MODULE-MAP.md: "called
+from public/city-render.js", which public/index.html and
+public/city.html both import). Both were sitting in the allowlist marked
+"unreachable" before this pass, which is exactly as wrong as it sounds.
+
+A REAL BUG IN THIS TOOL, FOUND AND FIXED BEFORE TRUSTING ITS OUTPUT: the
+first version required TWO occurrences beyond the declaration
+(`allOccurrences - declCount > 1`), which excluded the very
+bldHighStreetTerrace example that motivated writing it -- a single
+dispatch-table reference is exactly ONE additional occurrence, not two.
+Caught by testing the tool against the one case already known to be
+real, not by code review. Fixed to `> 0`.
+
+RESULT, MECHANICAL PASS ONLY (docs/audits/C2-DEAD-EXPORTS-BREAKDOWN.md
+has the full table and reasoning): product 0, demo-only 37, test-only
+210, data-reachable CANDIDATE 1,779, unreachable (no second reference at
+all) 735. Total 2,761.
+
+HONESTLY BOUNDED, NOT OVERSTATED: 1,779 is a ceiling, not a headline --
+"referenced a second time in its own file" is necessary but not
+sufficient; a private helper called only by other dead code would trip
+the same heuristic. A proper second pass (does the CONTAINING reference
+itself reach a product entry point) is real, scoped future work, named
+in the document, not attempted tonight. The allowlist's own per-entry
+`reason` strings were not individually rewritten to reflect this finding
+-- left as-is rather than mass-edited under time pressure with an
+unconfirmed classification.
+
+VERIFIED: node scripts/analyze-dead-exports-breakdown.mjs reproduces the
+same 0/37/210/1,779/735 split; no README/live-page/docs change made
+since no number from this was published before and none is published
+now.
