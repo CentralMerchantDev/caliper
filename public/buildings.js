@@ -2596,11 +2596,34 @@ export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
       parts.push({ geo: winL, tag: "wall" }, { geo: winR, tag: "wall" });
     }
 
-    const roof = new geomT.BoxGeometry(bW * 0.98, roofH, bD * 0.98);
-    roof.translate(0, baseOffset + bodyH + roofH / 2, 0);
+    // roofStyle was computed but ungated before this fix -- every workshop
+    // got the identical flat-box roof regardless of "monopitch"/"gabled"
+    // (docs/audits/K6-BUILDINGS.md's workshop survey). "monopitch" leans
+    // the same box, matching a real lean-to roof's single slope; "gabled"
+    // adds a real ridge cap, the same box+ridge idiom this file's other
+    // pitched-roof branches already use (e.g. bldTerrace's "pitched" form).
+    if (roofStyle === "monopitch") {
+      const roof = new geomT.BoxGeometry(bW * 0.98, roofH, bD * 0.98);
+      // Rotating a box that spans up to 56 m deep (bldWorkshop's real MAX
+      // cellD) by too large an angle pushes its top corner's Y extent past
+      // the declared totalH budget -- caught directly by
+      // test/buildingExplicitSize.test.ts's real MAX-option-range check,
+      // not assumed safe from a hand-picked angle. 0.05 rad keeps the worst
+      // case (half-depth ~23.3 m) within the fixed +1.8 m clearance
+      // totalH already budgets, measured directly, not just derived.
+      roof.rotateX(-0.05);
+      roof.translate(0, baseOffset + bodyH + roofH / 2, 0);
+      parts.push({ geo: roof, tag: "roof" });
+    } else {
+      const roof = new geomT.BoxGeometry(bW * 0.98, roofH * 0.7, bD * 0.98);
+      roof.translate(0, baseOffset + bodyH + (roofH * 0.7) / 2, 0);
+      const ridge = new geomT.BoxGeometry(bW * 0.3, roofH * 0.3, bD * 1.0);
+      ridge.translate(0, baseOffset + bodyH + roofH * 0.7 + (roofH * 0.3) / 2, 0);
+      parts.push({ geo: roof, tag: "roof" }, { geo: ridge, tag: "roof" });
+    }
     const skylight = new geomT.BoxGeometry(bW * 0.5, 0.8, bD * 0.4);
     skylight.translate(0, baseOffset + bodyH + roofH + 0.4, 0);
-    parts.push({ geo: roof, tag: "roof" }, { geo: skylight, tag: "roof" });
+    parts.push({ geo: skylight, tag: "roof" });
 
     const flue = new geomT.BoxGeometry(0.8, bodyH + roofH + 1.0, 0.8);
     flue.translate(bW * 0.35, (baseOffset + bodyH + roofH + 1.0) / 2, -bD * 0.35);

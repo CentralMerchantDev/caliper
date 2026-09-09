@@ -771,11 +771,22 @@ four) in full: both are clean — `bldShop`'s `hasAwning`/`isCornerUnit` and
 `bldOffice`'s `hasCoreBulge` already correctly gate real geometry. The
 defect is not universal. It does recur once more: `bldWorkshop`'s
 `roofStyle` (`"monopitch"`/`"gabled"`) is computed and reported in `params`
-but the roof is always the same flat box regardless. Not fixed tonight —
-workshop is 0.18% of placements (31 of 17,108), and this document's own
-placement-weighted logic already says everything under ~3% share is
-correctly lower priority than finishing higher-share work. Named here so
-it is not silently missed, not queued as urgent. `bldBusinessParkBlock`
+but the roof is always the same flat box regardless. Not fixed that
+session — workshop is 0.18% of placements (31 of 17,108), correctly lower
+priority than finishing higher-share work, named rather than silently
+missed.
+
+**FIXED, 2026-09-09 RUN3** — cheap once the pattern already existed
+elsewhere in this file: `"monopitch"` now leans the same roof box (a small
+rotation, matching a real lean-to roof's single slope); `"gabled"` adds a
+real ridge cap, the same box+ridge idiom this file's other pitched-roof
+branches already use. **Watched red twice**: the flag-gating mutation
+(caught by the one corresponding test, no collateral damage), and a real
+regression the existing footprint-bounds test caught on its own — the
+first rotation angle (0.12 rad) pushed the roof's top corner past the
+declared height budget at `bldWorkshop`'s real MAX footprint (56 m deep),
+measured directly rather than assumed safe; reduced to 0.05 rad, remeasured
+within bounds at both MIN and MAX. `bldBusinessParkBlock`
 (0.08% share, 14 placements) is a different, more extreme case worth
 recording separately: it takes no seed-derived randomization at all —
 every business park building in the world is geometrically identical. Also

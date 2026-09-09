@@ -46,6 +46,10 @@ const CASES = [
   { typology: "bld-townhouse", flag: "hasRearExtension", holdConstant: { bayStyle: "none", hasRoofDeck: false } },
   { typology: "bld-midrise", flag: "podiumType", values: ["flush", "retail"], holdConstant: { cornerTreatment: "square" } },
   { typology: "bld-midrise", flag: "cornerTreatment", values: ["square", "chamfer"], holdConstant: { corner: "left", podiumType: "flush" } },
+  // RUN3 item 3: bldWorkshop's roofStyle, found and correctly deprioritized
+  // in RUN2 (0.18% of placements), fixed now that it is cheap -- both
+  // styles already existed as an idiom elsewhere in this file.
+  { typology: "bld-workshop", flag: "roofStyle", values: ["monopitch", "gabled"], holdConstant: {} },
 ];
 
 for (const c of CASES) {
@@ -82,6 +86,8 @@ test("new shapes (cantilever bay, curved corner, arcade podium) stay strictly in
     ["bld-midrise", { cornerTreatment: "curved", corner: "right", cellW: 6, cellD: 8 }],
     ["bld-midrise", { podiumType: "arcade", cellW: 3, cellD: 4 }],
     ["bld-midrise", { podiumType: "arcade", cellW: 6, cellD: 8 }],
+    ["bld-workshop", { roofStyle: "monopitch" }],
+    ["bld-workshop", { roofStyle: "gabled" }],
   ];
   for (const [typology, options] of cases) {
     const spec = building(typology, "bounds-check-seed", options, THREE);
