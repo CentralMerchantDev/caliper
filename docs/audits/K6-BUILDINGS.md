@@ -570,3 +570,105 @@ browser-heavy gates, which carries the same memory risk as the re-shoot and
 was withheld for the same reason. **This section is a code-level pass, not
 a visual one, and should not be read as the second half of "improved, not
 solved" above being resolved.**
+
+## Checklist, extended — "reads as basic," past K6/K7.1 (2026-09-09, `codex-lane`)
+
+Mark's standing complaint is that the buildings read as basic. Per the
+overnight brief: extended from this document's own measurements-and-priority
+section, not from a fresh guess. Ordered by the same placement-weighted logic
+that section already uses (terrace/townhouse/villa/midrise are 92.74% of
+17,108 placements) and grounded by reading `public/buildings.js` and
+`public/facade-textures.js` before writing anything below — no browser was
+available tonight (memory below the 4 GB floor), so nothing here is
+implemented; this is a prioritized list for whoever picks it up next,
+including whether that is this lane again once memory clears.
+
+**1. The shared atlas is the real ceiling on "basic," and it sits underneath
+every item K6/K7.1 already fixed.** `generateFacadeAtlas` (`facade-textures.js:115`)
+draws exactly one 1024×1024 window-grid texture per architectural character
+— heritage, interwar, postwar, contemporary, **four textures for the entire
+26 km, 17,108-building world** — and `getFacadeMaterial`'s `_materialCache`
+(`facade-textures.js:392,398`) keys on character (plus a wall-colour/night
+flag), so every building sharing a character receives the literal same
+`THREE.CanvasTexture`. The 8×8 window grid, the mullion positions, and the
+lit-window pattern (`isLit = Math.sin(f * 13.7 + c * 19.3) > 0.1`,
+`facade-textures.js:243` — a pure function of floor/column index, nothing
+building-specific) are therefore bit-for-bit identical on every heritage
+building in the world, before RepeatWrapping tiles it across whatever size
+box it lands on. **Traced to the actual caller, not left as an inference
+from `facade-textures.js` alone**: `public/city-render.js:1930-1932` builds
+the cache key from `g.options?.character || spec.character || "heritage"`
+plus a vertex-colour/day-night flag, and `getFacadeMaterial` falls back any
+character string not in `FACADE_FAMILIES` (exactly four keys) to heritage
+(`facade-textures.js:116`) — so four is not merely today's observed count,
+it is the mathematical ceiling regardless of how many distinct character
+values city-plan assigns. This is the exact thing this document's own K6 verdict
+named without tracing to a cause: *"The buildings now have stronger
+terminations, but the same window grid and repeated roof trim still
+dominate"* (top of this file). K6/K7.1's massing depth and trim atlas work
+were real and are not undone by this finding — they added genuine geometric
+variety on top of a texture that has none, which is why the improvement
+reads as partial rather than as solving the complaint. **This is the
+highest-priority item precisely because it sits under all four dominant
+typologies (92.74% of placements) at once, rather than under any one of
+them** — fixing it once improves terrace, townhouse, villa, and midrise
+simultaneously, where every other item below improves one typology at a
+time. Concretely buildable, smallest first: (a) seed the lit-window pattern
+per-building (mix a per-building hash into the `isLit` sine, the same
+`rnd(s + ...)` pattern already used throughout `buildings.js`) so lit windows
+differ building to building at night without touching geometry at all; (b)
+generate 2–3 atlas variants per character (different window proportions,
+mullion spacing, or floor count) and pick among them the same way
+`pickLocal` already picks among `WALLS.TERRACE` colours, so a street shows a
+handful of distinct window patterns instead of one stretched everywhere.
+Both are extensions of patterns already proven correct elsewhere in these
+same two files, not new mechanisms.
+
+**2. Terrace (49.68% of all placements, the single largest share) has the
+richest massing already built** — bays, shopfront/stoop split, projecting
+bay windows, three roof forms, party-wall chimneys (`buildings.js:328-386`)
+— **but every bay on every terrace still samples the same shared atlas**,
+so item 1 pays off here first and most. Past that: `pickLocal(WALLS.TERRACE,
+...)` (line 336) already varies wall colour per bay; there is no equivalent
+variety in window-frame colour or glass tint, both of which live in
+`FACADE_FAMILIES` as a single fixed value per character
+(`facade-textures.js:23-24` etc.) rather than per-bay.
+
+**3. Townhouse (26.07%) already has five real silhouettes** (hip/gable/ell/
+flat/semi, `buildings.js:398-449`) — the widest structural variety of any
+typology in the file. The gap here is not shape, it is the ground plane:
+none of the five forms places a visible front door, path, or driveway
+distinct from the "garage" box already conditionally added (`r3 > 0.72`,
+line 448) — a suburb of correctly-varied rooflines still reads as floating
+volumes without a path connecting each one to the street it fronts.
+
+**4. Villa (8.65%) and Midrise (8.34%) were not read in full this pass** —
+time-boxed, named rather than silently skipped, per the brief's own
+discipline. `villa()` (`buildings.js:451`) was read as far as its roof-form
+switch (flat/courtyard/hipped, matching this file's own header comment) and
+not further; `midrise()` (`buildings.js:277`) and `midriseCourtyard()`
+(`buildings.js:300`) were read in full and already have a stepped-top-floor
+variant and a real four-wing courtyard form. Whoever picks up items 2–3
+above should read `villa()` to its end first, the same discipline this
+checklist tried to hold for the two typologies it did cover.
+
+**5. Everything below 2.91% of placements (office, high-street terrace,
+shop, tower, workshop, business park, warehouse, apartment walk-up —
+combined 7.26%) is correctly lower priority by this document's own
+placement-weighted logic**, tower's visual prominence at district distance
+notwithstanding — item 1 (the shared atlas) still dominates their read at
+distance the same way it does the four majority typologies, so it remains
+the right thing to fix first regardless of which typology a viewer's eye
+lands on.
+
+**What this checklist is not.** It is not a design opinion about what would
+look nicer — every item above is traced to a specific line of already-
+written code or a specific measured placement share, per the brief's
+instruction to extend from the measurements rather than from a guess. It is
+not implemented. It is not visually verified, because nothing was rendered
+tonight. Item 1 is the one item on this list that would be worth measuring
+even without a full render — `node scripts/measure-k6-buildings.mjs` already
+reports per-typology triangle counts and could be extended to report atlas
+key cardinality (how many distinct `_materialCache` keys exist across a real
+world) as a cheap, Node-only number confirming the "four textures total"
+claim above precisely, before any render is attempted.
