@@ -223,3 +223,298 @@ Full detail in `docs/DECISIONS-FOR-MARK.md`. Summary:
   the tree wins, correct forward, don't rewrite history), but flagged in
   both the B2.7 and B2.8 sections added tonight so a future reader isn't
   the one to discover the mismatch cold.
+
+---
+
+## RUN 2 — implementing what RUN 1 only planned
+
+`docs/briefs/RUN2-CLI-2026-09-09.md`, following `docs/OVERNIGHT-RUN.md`'s
+new "WHEN YOU MAY STOP" section (a finished plan is not a stopping
+condition). Updated as this run progresses, not only at the end.
+
+### B2.7 — implemented, tested, mutated, real
+
+`public/bridge-generator.js` (new) + `test/bridgeGenerator.test.ts` (new,
+11 tests, watched red on the missing module first). Adapts
+`scripts/gen-bridges.mjs`'s own nearest-gap/MST/redundant-edge algorithm to
+the real 12 settled boundaries, classifying each edge at `roadkit.js`'s own
+real 800 m buildable ceiling (not the old world's 9,000 m). Bridge pieces
+convert `bridgeSpan()`'s real socket geometry into `board.js` pieces; boat
+routes are a pair of `"dock"` pieces per boundary, carrying `routeTo`/
+`routeId` fields ON the piece itself (inside the board, per Standing
+Gate 5), not a separate table.
+
+**A real defect found and fixed during implementation, not by review**:
+the plan's own anchor-walk design (a single fixed cross-axis coordinate,
+mirroring `gen-bridges.mjs` literally) failed 10 of 11 real edges outright
+— measured directly, "no dry anchor on both boundaries" for every boat
+route — because a small cottage island's own footprint often never
+crosses the fixed line two distant boundaries' midpoint produces. Fixed
+by switching to a radial walk (away from the other boundary's own near
+point, along the real 2D direction between them, not locked to one axis)
+— re-measured: 11/11 edges now realize as real pieces (1 bridge, 10 boat
+routes / 20 docks), 0 refused.
+
+**Mutation-tested, 4 controls, all CAUGHT for real** (`test/mutations.json`):
+the 800 m classification threshold, the correct-boundary anchor check,
+dock id uniqueness, and the bridge-refusal-to-boat fallback. The fallback
+mutation SURVIVED on its first attempt — the real archipelago's one
+bridge candidate never fails, so the code path was never exercised by any
+existing test — fixed by adding a deterministic test that pre-occupies
+the real bridge's own exact footprint on a fresh board, forcing a genuine
+`board.place()` refusal and confirming the fallback actually fires. The
+dock-id mutation was CAUGHT by two DIFFERENT tests than the one first
+named in its own `expect` field — `board.js`'s own duplicate-id refusal
+silently absorbs the collision before the dedicated "no duplicate ids"
+test ever sees one — recorded as its own finding, the same shape as RUN
+1's `worldAliasing` `expect`-string lesson.
+
+Guard check: `node test/run.mjs test/worldSeed.test.ts test/board.test.ts
+test/boardGenerator.test.ts` — 29 of 30 pass, the one failure is B2.5's
+own pre-existing, unrelated CPU-time gate. `npx tsc --noEmit` clean.
+**Commit: `501f0a9`.**
+
+### Mid-run: Mark reordered the brief, live
+
+`docs/briefs/RUN2-CLI-2026-09-09.md` was edited mid-session (confirmed via
+`git diff` on a routine status check, not announced) to insert B3 (the
+render path) as item 0, ahead of everything else: *"Everything below this
+line waits until the world can be seen."* Reordered work to match
+immediately — B2.7 was already complete and committed, so it was not
+re-opened; the mutation-harness/B2.8/published-claim items already
+underway were paused, not abandoned, and resumed after B3 reached a real,
+committed state.
+
+### B3 — the render path: built, tested, wired live; visual result unverified
+
+`public/board-render.js` (new, commit `6dcfda3`): one mesh per real
+`board.js` piece, position/size from the piece's own `cell`/`foot`/
+`levels` (`grid.js`'s `atomOrigin`/`heightOf`), coloured by `pieceType`.
+Deliberately minimal — a box per piece, matching this run's own "draw
+board pieces and nothing else" scope; real facades/kit geometry is B4's
+job. `test/boardRender.test.ts` (7 tests): a static import-scan gate
+("reads nothing but the board" — no `city-plan.js`/`layout.js`/
+`city-render.js`), verified against the REAL committed
+`board.generated.json` (35,365 pieces, one mesh each), and position/size
+assertions against real `atomOrigin`/`heightOf` output. 2 mutations,
+both CAUGHT.
+
+Wired into the live page, commit `bac86b0`: `public/world-render-3d.js`'s
+`_buildCityBase` (already async) now also `await fetchBoard(...)`s the
+real board and draws it via `buildBoardScene`, ADDITIVELY — `buildWorld()`
+(the old plot/road path) still runs too, since replacing it outright
+would also mean rebuilding picking, the spatial index, and sun/sky in
+the same pass, which this run's own "partial credit" scope did not ask
+for tonight. 70 of 70 tests exercising `world-render-3d.js` directly
+still pass, including the static reference/declaration-order checks that
+would have caught a syntax error in the edit.
+
+**Left honestly unverified: the actual visual result.** Free memory sat
+at 1.6–3.1 GB for this entire stretch (measured repeatedly via
+`Get-CimInstance Win32_OperatingSystem`), below this project's own 4 GB
+floor throughout — `scripts/shoot.mjs` (Playwright + headless Chromium)
+was judged too much additional memory pressure to risk on top of that,
+so it was not run. What is unit-verified (real positions/sizes from real
+data) is not the same claim as "someone looked at a screenshot" —
+CLAUDE.md's own distinction, kept rather than blurred. **Next session's
+first move should be `node scripts/shoot.mjs` the moment memory allows.**
+
+Also named, not yet done: `public/board.generated.json` (committed,
+35,365 pieces) predates B2.7 and has zero bridges/docks yet.
+`scripts/gen-board.mjs` was updated to include them (commit `6dcfda3`)
+but re-running it (~40–170 s, itself memory-hungry) was deferred for the
+same reason as the shoot.mjs render.
+
+### The mutation-harness deadlock — Option 2 (the allowlist), decided and implemented
+
+Per `docs/DECISIONS-FOR-MARK.md` #2, Mark's own instruction in RUN2:
+"take the allowlist." `scripts/expected-red.mjs` (new): a named,
+documented `Map` of test titles expected to stay red — one entry today,
+B2.5's own CPU-time gate title, copied verbatim from
+`test/boardGenerator.test.ts` and asserted to match it by a dedicated
+test (`test/expectedRed.test.ts`, 5 tests). Wired into both
+`scripts/_mutcheck.mjs` and `scripts/mutate.mjs`'s own baseline checks —
+one list, read by both, so they cannot drift into two answers to the
+same question. 2 mutations, both CAUGHT (one on a corrected `expect`
+string — the THIRD time tonight the same "expect must name the test
+that actually goes red" lesson recurred; see `AUDIT-PROTOCOL.md` §7).
+
+Confirmed working: `test/boardGenerator.test.ts`'s own baseline, which
+`_mutcheck.mjs` refused outright before this fix ("baseline: RED...
+refusing to score mutations against a red baseline"), is being re-run
+against the allowlist as this section is written (a multi-minute
+operation — each of the file's remaining mutations re-runs the whole
+file, and that file's own B2.5 case calls the ~40–170 s `generateBoard()`
+each time). Result to follow in this same section once it returns.
+
+The `isolate.test.ts`-side 5 mutations are correctly NOT unblocked by
+this fix — that file's red is an old-world pin (B2.8's job), not a
+permanent gate like B2.5's, and adding it to the allowlist would misuse
+a mechanism meant for genuinely-permanent conditions.
+
+### The published claim — fixed
+
+`README.md`'s "98 deliberate defects injected, all 98 caught" was false
+(and unchecked by anything — confirmed directly: no test file read
+`README.md` at all). `src/generatedClaimChecks.ts` gained
+`mutationClaimMismatch` (the same pure-function pattern every other
+generated claim on this page already uses), wired into
+`test/generatedClaimsAreCurrent.test.ts`'s own unified gate. `README.md`'s
+sentence rewritten to name all three real numbers (injected/caught/never
+run) instead of one collapsed "all N caught" that cannot express partial
+coverage honestly. 1 mutation, CAUGHT. The exact numbers in the sentence
+will need one more sync once the in-flight `boardGenerator.test.ts`
+mutation run above returns and B2.8 unblocks the `isolate.test.ts`-side
+5 — tracked, not forgotten.
+
+**Later the same run**, a second real gap in this same claim was found
+and closed: `mutationClaimMismatch`'s own arithmetic had the identical
+shape as the "1,141 tests" gap this run's own ground-check found in the
+overnight brief — `caught + neverRun` does not have to equal the
+manifest total (a SURVIVED or INCONCLUSIVE result is neither), and this
+run genuinely produced one (below). Fixed: `README.md`'s sentence and
+the check itself now name all four numbers — injected, caught,
+never-run, and survived-or-inconclusive — so a fourth state can never
+again silently vanish from the claim. 1 more mutation, CAUGHT.
+
+### B2.7's own outstanding mutations — the allowlist confirmed working, plus a real SURVIVED found
+
+The long-running `_mutcheck.mjs test/boardGenerator.test.ts public/board-
+generator.js` run (started while the allowlist fix above was being
+verified) finished. Its own baseline reported GREEN — confirming the
+allowlist genuinely unblocks the deadlock on real, previously-refusing
+data, not just in a synthetic test. Of its 3 mutations:
+
+- Two (`b2-settlement-table-wooded-exclusion-real`,
+  `b2-mainland-boundary-inland-direction-real`) went INCONCLUSIVE —
+  **the fourth occurrence tonight** of the same "manifest `expect` field
+  is a paraphrase of the title, not a copy of it" lesson
+  (`AUDIT-PROTOCOL.md` §7). Both fixed in `test/mutations.json`.
+  **Not yet re-run to confirm CAUGHT** — each run of this file costs
+  tens of minutes on this host (the mutated `wooded: settled: true`
+  case alone added enough new settlement work that this single run took
+  roughly 45 minutes for 3 mutations) — named as real, bounded,
+  understood remaining work, not a gap in understanding of what is
+  wrong.
+- One (`b2-5-sampled-ground-perimeter-is-load-bearing`) genuinely
+  **SURVIVED** — confirmed directly, not just inferred from its own
+  manifest note, that no `node:test` assertion exists for this control
+  at all; it was always a manual, statistical (`verifySampling`)
+  comparison. Recorded honestly as SURVIVED in
+  `test/mutationSummary.generated.json`, not hidden as NEVER RUN or
+  miscounted as CAUGHT.
+
+Current real state: **119 of 129 CAUGHT, 1 SURVIVED, 9 NEVER RUN**.
+Still not run at all: `b2-6-no-live-route-generates-the-board` (self-
+mutation against the same expensive file), `b2-5-ground-verified-opt-
+in-is-load-bearing` (needs the same manual paired-timing procedure as
+the SURVIVED one above), and the 5 `isolate.test.ts`-scoped mutations
+(correctly blocked on B2.8/B4, not this allowlist).
+
+### B2.8 — a real correction to this run's own sequencing assumption
+
+Before attempting any re-pin, checked the 38's own real import lines
+rather than trusting RUN2's own "re-pin now that B2.7 has landed"
+instruction. It does not hold for most of them:
+`test/instanceGroups.test.ts`, `test/layout.test.ts` and
+`test/roadNetwork.test.ts` import `partitionForInstancing`/`planCity`/
+`generateWorld`/`buildArterialNetwork` directly from
+`public/instance-groups.js`, `public/layout.js`, `public/city-plan.js`
+and `public/road-network.js` — none of which has a `board-generator.js`
+equivalent yet. Those four files are themselves scheduled for
+quarantine in **B6**; their real replacements are **B4's** job, not yet
+fully built. B2.7 alone unblocks only the crossing/bridge-shaped
+failures, and those are **already superseded** by
+`test/bridgeGenerator.test.ts`'s own real coverage. **Re-sequenced,
+written into `docs/specs/BOARD-REBUILD-PLAN.md` directly**: the
+remaining ~30 of the 38 move to after B4, not directly after B2.7 — the
+plan's own phase order already had B4 after B2.8; the DEPENDENCY was
+not previously stated in writing. It is now. Commit `ca413a0`.
+
+### B3 finished, B4 started for real — Mark's mid-run reorder, followed
+
+Mid-session, `docs/briefs/RUN2-CLI-2026-09-09.md` was edited live (found
+via a routine `git status`/`git diff`, not announced) to insert B3 as
+item 0: *"Everything below this line waits until the world can be
+seen."* Work reordered immediately.
+
+**B3 — done, commits `6dcfda3` (module) and `bac86b0` (wired live).**
+`public/board-render.js`: one mesh per real `board.js` piece, position/
+size from the piece's own `cell`/`foot`/`levels`. Wired into
+`public/world-render-3d.js`'s `_buildCityBase` (already async — one
+more `await fetchBoard()` needed no new architecture). **Additive, not
+a replacement, named as a real scoping choice**: `buildWorld()` (the
+old plot/road path) still runs too — replacing it outright would also
+mean rebuilding picking, the spatial index, and sun/sky in the same
+pass. **Visual result left honestly unverified**: free memory sat at
+1.6–3.1 GB this entire session (below the 4 GB floor throughout,
+repeatedly measured) — `scripts/shoot.mjs` (Playwright + headless
+Chromium) was judged too much additional memory risk and was never run.
+What is verified is real positions/sizes from real data, unit-tested;
+what is not verified is whether anyone has looked at a screenshot.
+**This is the single most important thing to do first next session.**
+
+**B4 — started for real, one complete slice landed, commits `c785e29`
+(the gate) and `547b721` (the wiring).** RUN2's own B4 gate
+("the dead-export check... it must list propModel today") assumed a
+control that did not exist on this branch — confirmed directly, neither
+`test/deadExports.test.ts` nor its allowlist existed here. Pulled the
+generic test file from `codex-lane` (same pattern as Item Zero: the
+*logic* travels, the *data* does not) and seeded a fresh
+`test/deadExports.allowlist.json` for b1-land's own real classification
+(2,762 entries, auto-generated with real per-entry reasons). Confirmed
+`propModel` listed as test-only, exactly as the brief claimed. Then
+built `scatterTrees()` (`public/board-render.js`) — a real,
+deliberately-bounded call to `propModel("tree", ...)`, wired live —
+and watched the SAME gate genuinely go red ("propModel -- now product-
+reachable... remove this line") before removing the now-stale allowlist
+entry. **This is the gate working exactly as designed, watched red for
+a real reason.**
+
+**B4's remaining, explicit scope**: roads from `roadkit`, full
+building typology/character selection from `buildings.js`'s own 12
+typologies, and props from the manifest beyond this one tree call.
+Buildings are currently still drawn as plain boxes by `board-render.js`
+(B3's own scope, unchanged) — the highest-value next step for B4.
+
+### What did not work, named plainly
+
+- **`npm run mutate` (the documented `--all` command) still cannot run**
+  against this branch's own known-red state — every mutation run
+  tonight went through the per-file `_mutcheck.mjs` instead, matching
+  the existing 98 (now 119) entries' own precedent.
+- **The fixed-cross-axis anchor walk in the first B2.7 implementation
+  attempt failed 10 of 11 real edges outright** before being replaced
+  with a radial walk — a real, measured failure during BUILD-LOOP Step
+  4 (implement), not found by review.
+- **The `_mutcheck.mjs` run against `test/boardGenerator.test.ts` took
+  roughly 45 minutes for 3 mutations** — `generateBoard()`'s own cost
+  scales with how much land ends up settled, and the `wooded: settled:
+  true` mutation genuinely adds a lot of it. Worth knowing before
+  scheduling more work against this specific file.
+- **The allowlist seeding script's `via` values leak this host's own
+  absolute path** (`C:\Code\sandbox-spike\...`) into a committed file —
+  cosmetic, not a correctness gap, but a clone on a different machine
+  would seed differently-formatted entries. Named, not fixed, in
+  `scripts/lib/module-graph.mjs`'s own `via` reporting.
+
+### What to do next, in order, and why
+
+1. **`node scripts/shoot.mjs`** the moment memory allows — the single
+   biggest unverified claim standing.
+2. **Regenerate `public/board.generated.json`** (`npm run gen:board`) —
+   it still predates B2.7 and has zero bridges/docks. `scripts/gen-
+   board.mjs` was already updated to include them.
+3. **Re-run the 2 fixed-`expect` mutations** to confirm real CAUGHT
+   (`b2-settlement-table-wooded-exclusion-real`,
+   `b2-mainland-boundary-inland-direction-real`), plus
+   `b2-6-no-live-route-generates-the-board`.
+4. **Continue B4**: roads from `roadkit`, buildings from the real 12
+   typologies, more of the props manifest.
+5. **Then B2.8's remaining ~30**, now that B4 exists to re-pin against.
+6. **Then B6** (quarantine `city-plan.js`/`city-render.js`/`layout.js`/
+   `board-adapter.js`), **B7**, and the two still-blocked-on-B2.8
+   mutation clusters.
+
+Every item above is a decision or a measurement, not a question —
+nothing here should cost a stopping point on its own.
