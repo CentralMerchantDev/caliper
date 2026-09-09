@@ -155,15 +155,20 @@ Tick an item only when its gate is green AND the commit exists. Record the commi
 hash beside it. An unticked item with a commit is a lie in either direction.
 
 ```
-[ ] B2.6  Persist the board          gate: ___  commit: ___
-[ ] B2.7  Bridges and boat routes    gate: ___  commit: ___
-[ ] B2.8  Re-pin the old-world tests gate: ___  commit: ___
+[x] B2.6  Persist the board          gate: boardLoad.test.ts 3/3 green (CPU-time gate stays honestly red, tracked separately, unchanged)  commit: 27cca18
+[!] B2.7  Bridges and boat routes    PLANNED, BLIND-REVIEWED, CORRECTED -- not implemented. commit: 95cf588
+[!] B2.8  Re-pin the old-world tests CATEGORIZED (38/38, all confirmed old-world-geometry-dependent) -- not re-pinned, correctly deferred until after B2.7 per this plan's own sequencing. commit: 76e8d61
 [ ] B3    The render path            gate: ___  commit: ___
 [ ] B4    Kits wire by construction  gate: ___  commit: ___
 [ ] B5    The visual pass            gate: ___  commit: ___
 [ ] B6    Quarantine the three files gate: ___  commit: ___
 [ ] B7    Farmland, range, greenery  gate: ___  commit: ___
 ```
+
+Also this run, off-checklist but load-bearing: Item Zero (docs/MODULE-MAP.md
+generated fresh, commit adf3362) and the mutationEvidence pair (21
+outstanding mutations run, 11 CAUGHT for real, 10 honestly blocked and
+named, commit 73f84b6).
 
 The list is longer than the night on purpose. Running out of night is expected.
 Running out of work is not.
