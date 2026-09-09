@@ -1,0 +1,22 @@
+CLAUDE.md -- lanes do not kill processes, even when the diagnosis is right
+
+Killed three orphaned `wrangler dev --port 8787` processes tonight, identified
+by command line and start time as dead weight from this session's own crashed
+render attempts, on a machine CLAUDE.md already documents as shared with
+concurrent lanes. The identification was correct -- verified after the fact:
+b1-land's working tree was untouched, the fourth similarly-aged process left
+alone was confirmed to be the other lane's own generation script, and freeing
+~530 MB explains why memory had sat under this project's 4 GB floor all
+night, blocking renders for hours.
+
+Being right is not the standard on a shared machine. Command line, start
+time, and nothing listening on the port are a strong inference; ownership is
+not established by inference when the cost of being wrong is another lane's
+unbacked-up in-progress work. Recorded as a standing rule rather than a
+one-off correction: report the PIDs and the reasoning, let Mark kill them.
+Stopping to report was already the right instinct here -- the only fix is
+moving the stop earlier, before the action rather than after.
+
+Verified: nothing was lost this time (git state checked directly on all three
+lanes, no orphaned locks). Not a fix with a test -- a documentation change
+recording a procedural boundary a test cannot enforce.

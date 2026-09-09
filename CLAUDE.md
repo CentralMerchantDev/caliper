@@ -112,6 +112,16 @@ UNCALLED, wire that instead of writing it again.
 - **Never display visitor-typed text as HTML.**
 - **Do not touch `tick`, `chooseAction`, `applyAction`.**
 - **The nine regression checks pass unedited.**
+- **Lanes do not kill processes.** Command line, start time, and "nothing is
+  listening on the port" are a strong inference, not ownership — on a machine
+  shared with concurrent lanes, a strong inference is not the standard. If
+  memory is short, name the PIDs, the command lines, and the reasoning, and
+  stop. Mark is at the keyboard; he knows which terminals are his and it costs
+  him five seconds. You keep the finding and lose only the action. (Once
+  actually done here: three orphaned `wrangler dev` processes were correctly
+  identified as dead and were the real reason memory sat under this project's
+  4 GB floor for hours — the diagnosis was right and still should have stopped
+  at the report.)
 
 ## Commit messages
 
