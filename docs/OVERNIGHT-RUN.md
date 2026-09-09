@@ -88,6 +88,29 @@ Every subagent gets this, verbatim, in its brief. No exceptions.
 
 ---
 
+## THE THREE MOMENTS OF A SUBAGENT
+
+The contract above is what the agent is told. This is what YOU do around it.
+
+**AT DISPATCH.** Hand over, in writing: the contract verbatim; the task in one
+sentence; the explicit list of files it may touch; the gate it must satisfy,
+including what red looks like; the attempt budget as a number; and the documents
+it must read first. A brief that does not name its gate is a request for an
+opinion, and you will get one.
+
+**MID-FLIGHT.** Do not interrupt to steer. If an agent returns early saying the
+brief is wrong, that is the system working — read the finding, decide, and
+re-dispatch with a corrected brief rather than arguing it back on course. An
+agent that has spent its budget is finished, whatever state the work is in.
+
+**ON RETURN.** A report is a claim. Before you accept it: confirm the commit
+exists and its diff matches the report; re-run the gate yourself rather than
+trusting the pasted output; check the mutation genuinely produces red; and read
+sections 5 and 6 first, because what failed is where tomorrow's work is. If
+either is empty on real work, send it back. Only then tick the ledger.
+
+---
+
 ## THE HUB'S OWN RULES
 
 - **A subagent's report is a claim.** Verify it against the repository before
