@@ -968,6 +968,33 @@
       "find": "    this._hiddenMovedPieces = [];\n    if (this._movedPieces) {\n      for (const [movedPlotId, entry] of this._movedPieces) {\n        if (keepIds.has(`bld-${movedPlotId}`)) continue;\n        this._hiddenMovedPieces.push(entry.standalone);\n        entry.standalone.visible = false;\n      }\n    }",
       "replace": "    this._hiddenMovedPieces = [];",
       "expect": "a P4.4-moved piece not in the kept set is hidden by isolate, and restored -- a blind audit found applyIsolate cannot see it at all"
+    },
+    {
+      "id": "b1-terrain-no-longer-imports-landmasses",
+      "guards": "terrain.js does not import landmassPolygonsDesign or LANDMASSES from city-plan.js -- the dependency B1 exists to break, since city-plan.js is slated for replacement in B2.",
+      "note": "Verified by hand this session (host memory constraints, per docs/BUILD-LOOP.md's own long-run discipline). First attempt at this mutation added an ALIASED import (`landmassPolygonsDesign as _reimported`); the test's original exact-name array check SURVIVED wrongly, because an aliased entry does not equal the bare name after a naive comma-split. Caught before landing: the test now does a substring/word-boundary match against the whole import clause, not an exact-membership check, and this mutation now correctly goes red.",
+      "file": "public/terrain.js",
+      "find": "import { WORLD } from \"./city-plan.js\";",
+      "replace": "import { WORLD, landmassPolygonsDesign as _reimported } from \"./city-plan.js\";",
+      "expect": "terrain.js no longer imports landmassPolygonsDesign or LANDMASSES from city-plan.js"
+    },
+    {
+      "id": "b1-terrain-exports-own-landmasses",
+      "guards": "terrain.js exports its own landmassPolygonsDesign rather than only using it internally or re-exporting city-plan.js's.",
+      "note": "Verified by hand this session. Removing `export` correctly turned both the export-presence test AND the identity test red (the identity test's own dynamic import reads undefined off the module namespace) -- both recorded as one mutation since they share a single root cause.",
+      "file": "public/terrain.js",
+      "find": "export function landmassPolygonsDesign(samplesPerSegment = 10) {",
+      "replace": "function landmassPolygonsDesign(samplesPerSegment = 10) {",
+      "expect": "terrain.js exports its own landmassPolygonsDesign, not a re-export of city-plan.js's"
+    },
+    {
+      "id": "b1-terrain-landmass-data-identical-to-original",
+      "guards": "terrain.js's copied-verbatim LANDMASSES data (B1 step A, before the archipelago redesign) produces byte-identical polygons to city-plan.js's original -- a pure move proven, not assumed.",
+      "note": "Verified by hand this session: corrupting one coordinate in gull-isle's control points correctly turned exactly the identity test red, reverted, reconfirmed green. EXPECTED TO BECOME OBSOLETE the moment B1 step B (the archipelago redesign) lands -- see test/terrainLandmassOwnership.test.ts's own header. Remove this entry in the same commit that removes or rewrites that test.",
+      "file": "public/terrain.js",
+      "find": "      [-1935, -454], [-1799, -454], [-1690, -454], [-1581, -427],",
+      "replace": "      [-1935, -999], [-1799, -454], [-1690, -454], [-1581, -427],",
+      "expect": "terrain.js's own landmassPolygonsDesign() currently produces the IDENTICAL polygon set city-plan.js's original does"
     }
   ]
 }

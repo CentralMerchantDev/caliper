@@ -14,8 +14,323 @@
 // on where the ground is.
 // =============================================================================
 
-import { landmassPolygonsDesign, WORLD } from "./city-plan.js";
+import { WORLD } from "./city-plan.js";
 import { WATERWAYS } from "./waterways.js";
+
+// =============================================================================
+// LAND MASSES -- B1, STEP A: THE DEPENDENCY BREAK, NOT YET THE REDESIGN
+//
+// docs/specs/BOARD-REBUILD-PLAN.md: "terrain.js imports LANDMASSES from
+// city-plan.js -- the file slated for deletion" (Mark, 2026-09-08). This
+// section moves LANDMASSES, its spline helpers and landmassPolygonsDesign()
+// out of city-plan.js and into terrain.js, so terrain.js no longer depends
+// on a file B2 replaces wholesale.
+//
+// COPIED VERBATIM FROM city-plan.js, ON PURPOSE, NOT YET REDESIGNED. Mark's
+// own instruction: "Breaking that dependency is step one, before any shape
+// changes" -- separating "moving code" from "changing what the code does"
+// so a refactor bug and a design bug are never the same commit. The new
+// archipelago (~65% water, tunable LAND_SCALE, the shapes in the approved
+// B1 plan) replaces the data below in the NEXT step, watched red against
+// today's 42% water / 391.9 km² dry land before it lands.
+//
+// city-plan.js keeps its OWN copy of all of this (LANDMASSES, COAST_DESIGN,
+// the spline helpers, landmassPolygonsDesign) -- city-render.js and other
+// files outside this pass's routing (public/buildings.js,
+// public/road-network.js, ...) still read it, and city-plan.js itself is
+// not being touched by this pass. This is a deliberate, temporary,
+// explicitly-named duplication for the length of the rebuild, not a second
+// source of truth nobody decided to have -- the two copies are expected to
+// diverge the moment the next step (the shape redesign) lands here, and
+// city-plan.js's own copy is quarantined, not deleted, when B2 replaces it.
+// =============================================================================
+
+/** Freezes an object and everything reachable from it. Copied from
+ *  city-plan.js's own private helper, for the same reason LANDMASSES itself
+ *  is frozen there: nothing should mutate authored world geometry at runtime. */
+function deepFreeze(obj) {
+  Object.freeze(obj);
+  if (obj && typeof obj === "object") {
+    for (const v of Object.values(obj)) deepFreeze(v);
+  }
+  return obj;
+}
+
+// The downtown island's outline, in DESIGN metres -- traced from Mark's own
+// drawn layout (city-plan.js's own header, COAST_DESIGN). landmassPolygonsDesign()
+// below reads this directly for the "downtown" mass rather than a `points`
+// field on it, matching city-plan.js's own LANDMASSES entry for downtown.
+const COAST_DESIGN = [
+  [737, 646], [1172, 674], [1581, 784], [1664, 1087],
+  [1937, 1417], [2346, 1555], [2754, 1472], [3079, 1196],
+  [3433, 1113], [3814, 1278], [4088, 1526], [3706, 1416],
+  [3326, 1582], [3001, 1858], [3057, 2216], [3438, 2354],
+  [3846, 2298], [3929, 2656], [4039, 2877], [3632, 3015],
+  [3306, 3263], [2981, 3567], [2711, 3870], [2330, 3953],
+  [1922, 4009], [1487, 4009], [1106, 4037], [698, 4010],
+  [289, 3983], [-119, 3955], [-555, 3901], [-909, 3736],
+  [-1237, 3433], [-1538, 3102], [-1648, 2716], [-1705, 2303],
+  [-1951, 1944], [-2252, 1614], [-2172, 1255], [-1956, 897],
+  [-1548, 841], [-1113, 868], [-786, 841], [-378, 951],
+  [31, 1033], [411, 867],
+];
+
+// Every land mass, control points in DESIGN metres. Copied verbatim from
+// city-plan.js's own LANDMASSES -- see this section's own header. Areas
+// (km2, in each entry's own comment) are as measured there.
+const LANDMASSES = [
+  {
+    // 108.3 km2, traced from the drawn layout
+    id: "barrier", name: "Ocean Barrier Island", kind: "beach-strip", baseHeight: 9,
+    points: [
+      [-6497, 1617], [-4916, 2278], [-3470, 3048], [-2267, 4288],
+      [-1364, 5473], [240, 5086], [1794, 5718], [3480, 5552],
+      [4699, 4365], [6004, 4088], [7692, 4308], [9212, 3534],
+      [10734, 3064], [11871, 1906], [13451, 2263], [14977, 2675],
+      [16261, 3804], [16484, 4934], [16627, 6533], [15651, 7306],
+      [14021, 7804], [12307, 7750], [10564, 7531], [8934, 8056],
+      [7165, 8030], [5503, 7590], [3789, 7509], [2020, 7565],
+      [305, 7319], [-1142, 6355], [-2203, 6356], [-784, 7264],
+      [-2419, 6714], [-4108, 6412], [-5655, 7103], [-7368, 7352],
+      [-9110, 7326], [-10177, 5976], [-11866, 5730], [-13413, 6420],
+      [-14641, 5815], [-13667, 4573], [-12419, 3745], [-10898, 3192],
+      [-9291, 3522], [-7963, 2418],
+    ],
+  },
+  {
+    id: "downtown", name: "Downtown Island", kind: "city", baseHeight: 10,
+    // outline supplied from COAST_DESIGN -- traced from the drawn layout, 15.0 km2
+  },
+  {
+    // 7.3 km2, traced from the drawn layout
+    id: "fairlight-isle", name: "Fairlight Island", kind: "island", baseHeight: 9,
+    points: [
+      [6367, 118], [6639, 228], [6912, 283], [7211, 338],
+      [7484, 393], [7783, 420], [8083, 475], [8355, 530],
+      [8654, 557], [8954, 529], [9225, 447], [9497, 364],
+      [9769, 336], [10068, 363], [10287, 528], [10233, 721],
+      [9934, 777], [9690, 915], [9473, 1136], [9420, 1411],
+      [9231, 1577], [8931, 1632], [8687, 1770], [8471, 1991],
+      [8226, 2102], [7927, 2129], [7627, 2074], [7355, 1992],
+      [7056, 1992], [6784, 2075], [6512, 2213], [6268, 2296],
+      [6050, 2269], [5859, 2048], [5613, 1856], [5341, 1828],
+      [5041, 1801], [5176, 1580], [5311, 1360], [5283, 1056],
+      [5118, 808], [5117, 505], [5252, 312], [5524, 229],
+      [5823, 174], [6122, 146],
+    ],
+  },
+  {
+    // 4.8 km2, traced from the drawn layout
+    id: "kingsley-isle", name: "Kingsley Island", kind: "island", baseHeight: 9,
+    points: [
+      [-5011, -672], [-4766, -645], [-4521, -645], [-4276, -618],
+      [-4058, -563], [-3867, -453], [-3676, -342], [-3485, -205],
+      [-3321, -67], [-3347, 181], [-3455, 374], [-3590, 567],
+      [-3589, 788], [-3479, 981], [-3397, 1201], [-3368, 1449],
+      [-3531, 1560], [-3722, 1450], [-3940, 1422], [-4158, 1312],
+      [-4349, 1230], [-4567, 1147], [-4731, 1009], [-4814, 789],
+      [-5005, 596], [-5169, 486], [-5414, 486], [-5631, 514],
+      [-5876, 542], [-6094, 487], [-6285, 404], [-6530, 349],
+      [-6721, 267], [-6939, 156], [-7130, 74], [-7212, -147],
+      [-7268, -367], [-7050, -422], [-6833, -423], [-6588, -423],
+      [-6370, -451], [-6153, -506], [-5908, -534], [-5691, -589],
+      [-5473, -617], [-5228, -644],
+    ],
+  },
+  {
+    // 4.2 km2, traced from the drawn layout
+    id: "cormorant-isle", name: "Cormorant Island", kind: "island", baseHeight: 9,
+    points: [
+      [-14534, -664], [-14344, -637], [-14126, -637], [-14098, -472],
+      [-14097, -279], [-14124, -86], [-14150, 80], [-14149, 245],
+      [-14148, 438], [-14066, 603], [-13929, 741], [-13765, 879],
+      [-13629, 1017], [-13546, 1182], [-13518, 1347], [-13545, 1568],
+      [-13598, 1733], [-13734, 1899], [-13842, 2037], [-13923, 2175],
+      [-14058, 2313], [-14193, 2478], [-14356, 2533], [-14520, 2506],
+      [-14684, 2396], [-14820, 2286], [-14903, 2093], [-14958, 1927],
+      [-15040, 1735], [-15177, 1597], [-15314, 1487], [-15477, 1404],
+      [-15587, 1266], [-15615, 1073], [-15561, 908], [-15480, 715],
+      [-15400, 549], [-15346, 384], [-15320, 191], [-15348, -2],
+      [-15403, -168], [-15349, -361], [-15241, -498], [-15078, -554],
+      [-14888, -609], [-14698, -637],
+    ],
+  },
+  {
+    // 4.1 km2, traced from the drawn layout
+    id: "westbay-isle", name: "Westbay Island", kind: "island", baseHeight: 8,
+    points: [
+      [-10812, -1743], [-10594, -1715], [-10376, -1716], [-10185, -1661],
+      [-9994, -1523], [-9830, -1385], [-9694, -1247], [-9530, -1082],
+      [-9366, -944], [-9202, -834], [-9011, -752], [-8820, -669],
+      [-8629, -587], [-8466, -504], [-8356, -311], [-8246, -146],
+      [-8110, 20], [-8081, 240], [-8080, 461], [-8079, 681],
+      [-8215, 792], [-8433, 819], [-8623, 819], [-8841, 820],
+      [-9032, 737], [-9114, 572], [-9278, 406], [-9469, 379],
+      [-9686, 379], [-9849, 379], [-10067, 352], [-10258, 297],
+      [-10340, 132], [-10396, -89], [-10424, -282], [-10534, -447],
+      [-10507, -613], [-10617, -806], [-10781, -971], [-10945, -1081],
+      [-11108, -1191], [-11299, -1274], [-11490, -1356], [-11327, -1494],
+      [-11192, -1605], [-11002, -1687],
+    ],
+  },
+  {
+    // 3.1 km2, traced from the drawn layout
+    id: "bayview-isle", name: "Bayview Island", kind: "island", baseHeight: 9,
+    points: [
+      [919, -1118], [1164, -1118], [1355, -1036], [1518, -926],
+      [1682, -788], [1873, -705], [2064, -623], [2282, -595],
+      [2500, -596], [2717, -651], [2935, -679], [3125, -706],
+      [3342, -762], [3560, -790], [3778, -790], [3995, -762],
+      [4105, -625], [4160, -432], [4161, -266], [4080, -101],
+      [3890, 37], [3755, 175], [3592, 341], [3402, 286],
+      [3211, 231], [3020, 148], [2802, 93], [2611, 38],
+      [2394, 11], [2176, -16], [1958, -16], [1740, 11],
+      [1523, 39], [1332, 12], [1141, -71], [978, -208],
+      [814, -374], [650, -539], [486, -622], [268, -594],
+      [78, -483], [23, -649], [186, -759], [376, -897],
+      [539, -1008], [729, -1090],
+    ],
+  },
+  {
+    // 2.4 km2, traced from the drawn layout
+    id: "heron-isle", name: "Heron Island", kind: "island", baseHeight: 8,
+    points: [
+      [-12138, -336], [-12029, -198], [-11974, -88], [-11973, 78],
+      [-11891, 216], [-11891, 326], [-11781, 436], [-11672, 436],
+      [-11617, 546], [-11562, 684], [-11480, 794], [-11398, 932],
+      [-11370, 1097], [-11342, 1235], [-11314, 1401], [-11368, 1539],
+      [-11476, 1676], [-11612, 1704], [-11748, 1815], [-11856, 1925],
+      [-11883, 2063], [-11909, 2228], [-12045, 2173], [-12182, 2063],
+      [-12291, 1980], [-12373, 1843], [-12456, 1705], [-12511, 1567],
+      [-12511, 1429], [-12485, 1264], [-12431, 1126], [-12486, 988],
+      [-12595, 878], [-12732, 740], [-12841, 630], [-12951, 547],
+      [-13087, 465], [-13169, 327], [-13088, 189], [-13035, 51],
+      [-12953, -32], [-12817, -4], [-12654, -32], [-12491, -87],
+      [-12383, -170], [-12274, -280],
+    ],
+  },
+  {
+    // 1.3 km2, traced from the drawn layout
+    id: "redcliff-isle", name: "Redcliff Island", kind: "island", baseHeight: 8,
+    points: [
+      [14558, 415], [14722, 414], [14858, 442], [14994, 497],
+      [15104, 607], [15186, 690], [15295, 772], [15377, 910],
+      [15459, 1020], [15514, 1131], [15596, 1241], [15678, 1379],
+      [15734, 1516], [15816, 1599], [15952, 1627], [16061, 1654],
+      [16170, 1764], [16279, 1847], [16388, 1902], [16498, 2012],
+      [16498, 2150], [16499, 2288], [16472, 2426], [16391, 2508],
+      [16255, 2536], [16146, 2453], [16091, 2343], [16009, 2233],
+      [15900, 2123], [15790, 2040], [15681, 1958], [15572, 1875],
+      [15463, 1792], [15353, 1682], [15298, 1572], [15216, 1462],
+      [15107, 1352], [14998, 1269], [14888, 1159], [14779, 1076],
+      [14643, 993], [14533, 911], [14424, 828], [14397, 718],
+      [14369, 580], [14450, 442],
+    ],
+  },
+  {
+    // 0.6 km2, traced from the drawn layout
+    id: "gull-isle", name: "Gull Island", kind: "island", baseHeight: 7,
+    points: [
+      [-1935, -454], [-1799, -454], [-1690, -454], [-1581, -427],
+      [-1472, -427], [-1363, -400], [-1255, -400], [-1119, -400],
+      [-1010, -372], [-928, -400], [-819, -400], [-710, -372],
+      [-601, -373], [-492, -345], [-383, -318], [-274, -290],
+      [-193, -235], [-219, -125], [-273, -14], [-327, 41],
+      [-436, 68], [-545, 69], [-654, 69], [-763, 69],
+      [-872, 41], [-954, -41], [-1035, -97], [-1117, -152],
+      [-1227, -234], [-1308, -262], [-1444, -262], [-1553, -262],
+      [-1662, -261], [-1771, -234], [-1880, -206], [-1988, -178],
+      [-2070, -178], [-2206, -206], [-2288, -233], [-2370, -288],
+      [-2479, -343], [-2479, -426], [-2370, -399], [-2261, -426],
+      [-2153, -426], [-2017, -427],
+    ],
+  },
+  {
+    id: "mainland", name: "Mainland Coast", kind: "mainland", baseHeight: 14,
+    coastCount: 52,
+    points: [
+      [-22142, 1602], [-21852, 2730], [-21822, 3999], [-21115, 4957],
+      [-20506, 6001], [-19658, 6781], [-18564, 6832], [-17881, 5900],
+      [-17483, 4806], [-16418, 4414], [-16255, 3279], [-16419, 2057],
+      [-16542, 795], [-16571, -361], [-15878, -1353], [-14811, -1551],
+      [-13756, -1494], [-12562, -1667], [-11460, -2253], [-10394, -2885],
+      [-9398, -2314], [-8252, -2239], [-7136, -2423], [-6089, -1848],
+      [-4985, -1925], [-3806, -1676], [-2670, -1346], [-1506, -1658],
+      [-422, -2193], [772, -2326], [1945, -2101], [3077, -1581],
+      [4248, -1313], [5434, -1065], [6660, -887], [7766, -473],
+      [9019, -478], [10212, -697], [11396, -978], [12573, -1225],
+      [13696, -1280], [14774, -1218], [15889, -773], [16936, -162],
+      [17652, 840], [17901, 1993], [18071, 3245], [18645, 4350],
+      [19257, 5311], [19944, 6228], [20805, 6969], [21921, 7429],
+      [ 31500, -34500], [-31500, -34500],
+    ],
+  },
+];
+deepFreeze(LANDMASSES);
+
+/** Catmull-Rom through a CLOSED set of control points. Copied from
+ *  city-plan.js's own splinePolygon. */
+function splinePolygon(p, samplesPerSegment = 10) {
+  const n = p.length;
+  const out = [];
+  const at = (i) => p[((i % n) + n) % n];
+  for (let i = 0; i < n; i++) {
+    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+    for (let s = 0; s < samplesPerSegment; s++) {
+      const t = s / samplesPerSegment, t2 = t * t, t3 = t2 * t;
+      out.push([
+        0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+        0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3),
+      ]);
+    }
+  }
+  return out;
+}
+
+/** Catmull-Rom through an OPEN run of points -- the ends are held, not
+ *  wrapped. Copied from city-plan.js's own splineOpen. */
+function splineOpen(p, samplesPerSegment = 10) {
+  const out = [];
+  const at = (i) => p[Math.max(0, Math.min(p.length - 1, i))];
+  for (let i = 0; i < p.length - 1; i++) {
+    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+    for (let s = 0; s < samplesPerSegment; s++) {
+      const t = s / samplesPerSegment, t2 = t * t, t3 = t2 * t;
+      out.push([
+        0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+        0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3),
+      ]);
+    }
+  }
+  out.push(p[p.length - 1].slice());
+  return out;
+}
+
+/** Twice the signed area. Copied from city-plan.js's own signedArea2. */
+function signedArea2(poly) {
+  let a = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    a += poly[j][0] * poly[i][1] - poly[i][0] * poly[j][1];
+  }
+  return a;
+}
+
+/** Every land mass as a smoothed polygon, in DESIGN metres. Copied from
+ *  city-plan.js's own landmassPolygonsDesign, verbatim -- see this
+ *  section's own header for why. */
+export function landmassPolygonsDesign(samplesPerSegment = 10) {
+  return LANDMASSES.map((lm) => {
+    let polygon;
+    if (lm.kind === "mainland") {
+      const n = lm.coastCount || lm.points.length;
+      polygon = [...splineOpen(lm.points.slice(0, n), samplesPerSegment), ...lm.points.slice(n).map((q) => q.slice())];
+    } else {
+      polygon = splinePolygon(lm.id === "downtown" ? COAST_DESIGN : lm.points, samplesPerSegment);
+    }
+    if (signedArea2(polygon) > 0) polygon.reverse();
+    return { ...lm, polygon };
+  });
+}
 
 // -----------------------------------------------------------------------------
 // Deterministic noise. Integer hash -> value noise -> fbm. No dependencies, no

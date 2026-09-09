@@ -1,0 +1,65 @@
+B1 step A -- terrain.js no longer depends on city-plan.js for LANDMASSES,
+proven byte-identical before any shape changes land
+
+WRONG: terrain.js imported landmassPolygonsDesign and, through it,
+LANDMASSES from city-plan.js -- one of the three files
+docs/specs/BOARD-REBUILD-PLAN.md names for wholesale replacement in B2.
+Flagged in plan review as the most important finding: a file about to be
+deleted cannot remain a dependency of the file that survives it.
+
+WHAT WAS BUILT: LANDMASSES, COAST_DESIGN, the Catmull-Rom spline helpers
+(splinePolygon/splineOpen/signedArea2) and landmassPolygonsDesign() itself
+moved into public/terrain.js, copied VERBATIM from public/city-plan.js --
+deliberately not yet redesigned, per Mark's own instruction: "Breaking that
+dependency is step one, before any shape changes," separating a refactor
+bug from a design bug. city-plan.js keeps its own copy for now --
+city-render.js and other not-yet-rebuilt consumers (outside this pass's
+routing) still read it, and city-plan.js itself is untouched by this
+commit. This is a deliberate, named, temporary duplication for the length
+of the rebuild, not an undecided second source of truth: the two copies
+are expected to diverge the moment the next step (the archipelago
+redesign) lands in terrain.js, and city-plan.js's own copy is quarantined,
+not deleted, when B2 replaces it.
+
+HOW IT IS KNOWN TO BE FIXED, MEASURED NOT ASSERTED:
+
+- test/terrainLandmassOwnership.test.ts: terrain.js's source no longer
+  imports landmassPolygonsDesign/LANDMASSES from city-plan.js (checked
+  against the whole import clause, not exact-name array membership --
+  see the mutation note below for why that distinction mattered), and
+  terrain.js's own copy produces a BYTE-IDENTICAL polygon set to
+  city-plan.js's original (deep-equal, not a summary statistic) -- proof
+  this is a pure move, not a silent redesign.
+- test/worldSeed.test.ts (the plan-specific guard from docs/BUILD-LOOP.md
+  Step 8): the default world's terrain fingerprint is unchanged --
+  sha256 418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96,
+  proven at the actual heightAt level (tens of thousands of samples), not
+  just at the polygon-data level.
+- Three mutations watched red for real, then reverted (test/mutations.json):
+  re-adding the city-plan.js import, removing terrain.js's own export, and
+  corrupting one real coordinate. The FIRST attempt at the import mutation
+  used an aliased import (`landmassPolygonsDesign as _reimported`) and the
+  test's original exact-name check SURVIVED it wrongly -- an aliased entry
+  is not string-equal to the bare name after a naive comma-split. Caught
+  before landing; the test now does a word-boundary match against the
+  whole import clause, and the same mutation now correctly goes red.
+- Regression: test/rendererStatic.test.ts (no dangling identifiers in the
+  touched file), test/worldExtent.test.ts, test/waterwayGround.test.ts --
+  16 tests, all pass unchanged. `npx tsc --noEmit` clean.
+  scripts/_isolate-probe.mjs re-run end to end against a real generated
+  world: unchanged real output.
+
+LEDGER: docs/specs/BOARD-REBUILD-PLAN.md gained a PART 7 (it had none) and
+this step is ticked there with its own evidence, per docs/BUILD-LOOP.md
+Step 9. The plan file itself is committed here for the first time --
+it was untracked when this session began.
+
+WHAT IS STILL OPEN: the archipelago redesign itself (B1 step B) -- new
+shapes at the approved sizes/characters, LAND_SCALE defaulting to 1.0 (not
+derived by scaling today's shapes down, per Mark's correction), the
+island-name-reference check Mark asked for before finalising the
+name-to-character mapping, and the B1 gate (water fraction, dry-land area,
+island count/size distribution, settled-mainland-fraction), watched red
+against today's 42% / 391.9 km² first.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
