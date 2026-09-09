@@ -22,6 +22,13 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
+// I1 (docs/BUILD-LOOP.md Step 2 plan, approved 2026-09-08): findImportClauses,
+// moduleScriptBlocks and findExportedNames moved to scripts/lib/module-graph.mjs
+// so the new dead-export gate (test/deadExports.test.ts) and MODULE-MAP.md
+// generator (scripts/gen-module-map.mjs) can share this file's parser instead
+// of each writing their own. Verified byte-identical output across all 109
+// files in public/ and src/ before the move landed -- see the commit message.
+import { findImportClauses, findExportedNames, moduleScriptBlocks } from "../scripts/lib/module-graph.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 function repoRoot(): string {
@@ -34,89 +41,6 @@ function repoRoot(): string {
 }
 const ROOT = repoRoot();
 const PUBLIC = join(ROOT, "public");
-
-type ImportClause =
-  | { kind: "namespace"; path: string }
-  | { kind: "side-effect"; path: string }
-  | { kind: "bindings"; path: string; default: boolean; named: string[] };
-
-/**
- * Every `import ... from "..."` statement in `source`, pure and exported
- * for its own direct test. Deliberately regex-based, matching this
- * project's other source scanners (test/claimSpansAreChecked.test.ts,
- * test/thinkingDisabledOnEveryCall.test.ts) rather than a full parser --
- * this codebase's own import statements are simple and single-line, and a
- * cheap scanner that is watched red against a real break is worth more
- * than an unbuilt "proper" one.
- */
-export function findImportClauses(source: string): ImportClause[] {
-  const clauses: ImportClause[] = [];
-  const re = /^\s*import\s+(.+?)\s+from\s+["']([^"']+)["']/gm;
-  for (const m of source.matchAll(re)) {
-    const [, clause, path] = m;
-    const trimmed = clause.trim();
-    const nsMatch = trimmed.match(/^\*\s*as\s+[A-Za-z_$][\w$]*$/);
-    if (nsMatch) {
-      clauses.push({ kind: "namespace", path });
-      continue;
-    }
-    const braceMatch = trimmed.match(/^(?:([A-Za-z_$][\w$]*)\s*,\s*)?\{([^}]*)\}$/);
-    if (braceMatch) {
-      const named = braceMatch[2]
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((s) => s.split(/\s+as\s+/)[0].trim()); // `X as Y` -- the export's real name is X
-      clauses.push({ kind: "bindings", path, default: !!braceMatch[1], named });
-      continue;
-    }
-    const defaultOnly = trimmed.match(/^[A-Za-z_$][\w$]*$/);
-    if (defaultOnly) {
-      clauses.push({ kind: "bindings", path, default: true, named: [] });
-      continue;
-    }
-    // No clause at all (`import "./x.js"`) never matches the `from` regex
-    // above, so nothing else reaches here -- an unrecognised clause shape
-    // is intentionally left unclassified rather than guessed at.
-  }
-  return clauses;
-}
-
-/**
- * Every `<script type="module">...</script>` block's text content, so HTML
- * pages are scanned the same way .js files are.
- */
-function moduleScriptBlocks(html: string): string[] {
-  const blocks: string[] = [];
-  for (const m of html.matchAll(/<script\b[^>]*\btype=["']module["'][^>]*>([\s\S]*?)<\/script>/gi)) {
-    blocks.push(m[1]);
-  }
-  return blocks;
-}
-
-/**
- * Every name a module actually exports, pure and exported for its own
- * direct test. `hasDefault` is tracked separately since a default import
- * checks a different thing than a named one.
- */
-export function findExportedNames(source: string): { named: Set<string>; hasDefault: boolean } {
-  const named = new Set<string>();
-  let hasDefault = false;
-  for (const m of source.matchAll(/^export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) named.add(m[1]);
-  for (const m of source.matchAll(/^export\s+(?:async\s+)?function\s*\*?\s+([A-Za-z_$][\w$]*)/gm)) named.add(m[1]);
-  for (const m of source.matchAll(/^export\s+class\s+([A-Za-z_$][\w$]*)/gm)) named.add(m[1]);
-  if (/^export\s+default\b/m.test(source)) hasDefault = true;
-  for (const m of source.matchAll(/^export\s*\{([^}]*)\}/gm)) {
-    for (const raw of m[1].split(",")) {
-      const piece = raw.trim();
-      if (!piece) continue;
-      const exportedName = piece.split(/\s+as\s+/).pop()!.trim(); // `{ A as B }` -- consumers import B
-      if (exportedName === "default") hasDefault = true;
-      else named.add(exportedName);
-    }
-  }
-  return { named, hasDefault };
-}
 
 export interface ImportProblem {
   importer: string;
