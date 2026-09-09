@@ -346,6 +346,67 @@ correctly-red pin describing a world that no longer exists, not a defect to
 chase — re-pinning is B2's job, once the new generator makes the world
 coherent again, so it happens once rather than twice.
 
+## B2.0 — the two self-identified gaps, closed before the generator
+
+Both of B1's own open gaps (named above, not city-plan.js's) closed, red
+first, on `b1-land`:
+
+**Gap 1 — waterways.js's seven waterways re-derived against the real B1
+archipelago**, not just the three named canals: the four mainland rivers
+(river-west/mid/east/far-e) were ALSO authored against the old mainland
+geometry and were self-identified as broken beyond Mark's own brief (a
+point-in-polygon check showed them running through open sea). All seven
+repositioned; every point verified inside its real target landmass's own
+generated polygon (point-in-polygon), not assumed. Three canals renamed to
+the B1 islands they now actually run through (canal-suburb/resort/vineyard —
+kingsley/fairlight/cormorant no longer exist). River mouths' x is the real
+generated mainland coastline's own x at that river's z (sampled from the
+polygon, since the coastline is organic, not a hand-picked constant — three
+of four rivers failed with a fixed constant, found by trying it and watching
+it fail). `river-mid` alone took eight iterations against
+`test/ground.test.ts`'s real-world cross-section test (walks +X from the
+channel's own midpoint, asserts depth falls monotonically to a dry bank):
+the first seven, at world z −2800, all sloped the wrong way in +X no matter
+what x was tried at that same z — chasing "the least-bad x at that z" was
+the wrong axis of freedom. Fixed by sweeping BOTH x and z with a clean
+`heightAt` grid (off the cut-radius of every other waterway) for a spot
+where elevation rises monotonically over +X; world z −4500, x −9200 does,
+by 14.9 m over 100 m — verified against the actual test logic, and inside
+the real mainland polygon, before being written down. `test/ground.test.ts`
+and `test/waterwayGround.test.ts` both green on every waterway-specific
+test; the two remaining failures in that file (a thing standing on a
+road-defined slope) are the already-catalogued road-network.js old-world
+pins, untouched by this gap.
+
+**Gap 2 — `test/worldAliasing.test.ts`'s allow-list extended to
+`public/terrain.js`'s own `LANDMASSES`**: root-caused, not just guessed.
+`public/terrain.js`'s `LANDMASSES` was module-private; every `LandField`'s
+`.masses` comes from `landmassPolygonsDesign()`'s `{ ...lm, polygon }`,
+which shares each mass's `.points` (and, for the mainland entry, `.zones` —
+`MAINLAND_ZONES` itself) by reference across every seed, same category as
+the WORLD/HIGHWAYS entries already on the list — but the test only ever
+imported the OLD `LANDMASSES` from `city-plan.js`, which no `LandField` has
+read since Step A. Fixed: `LANDMASSES` exported from `terrain.js`; the test
+imports it alongside `MAINLAND_ZONES` and adds both to `allowedShared()`
+with the same reasoning already applied to the city-plan.js entries.
+
+**Mutation-tested, both gaps** (`test/mutations.json`:
+`b2-0-worldaliasing-terrain-landmasses-on-allowlist`,
+`b2-0-worldaliasing-mainland-zones-on-allowlist`) — verified by hand: gutting
+the new `TERRAIN_LANDMASSES` allow-list entry turned the different-seed test
+red (438 unexplained shared objects, first one `array(22)`); separately
+removing only the `MAINLAND_ZONES` entry (leaving `.points` allowed) also
+turned it red on its own (4 unexplained, `array(3)` — proving `.zones` is a
+genuinely distinct reachable field, not already covered by `.points`).
+Both reverted, reconfirmed green. `npx tsc --noEmit` clean throughout.
+
+**A THIRD thing moved as a direct consequence, caught by re-running the full
+targeted set, not assumed unaffected**: `test/worldSeed.test.ts`'s own
+`PRE_SEED` fingerprint hash. Waterways are cut into the height field
+(`waterwayCut`), so repositioning all seven in gap 1 moved the ground under
+that guard too — re-pinned a second time, same deliberate-redesign exception
+already claimed for B1 step B, not a second one invented for convenience.
+
 ## B2–B6
 
 B2 (the generator) starts next, on this same branch (`b1-land`) — not

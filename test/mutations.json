@@ -1013,6 +1013,24 @@
       "find": "  { id: \"coastal-strip\", identity: \"the mainland's own thin settled edge -- the only part of the mainland this plan settles\", fraction: 0.12, settleable: true },\n  { id: \"farmland\", identity: \"farmland behind the coast -- open, worked, not built on\", fraction: 0.55, settleable: false },",
       "replace": "  { id: \"coastal-strip\", identity: \"the mainland's own thin settled edge -- the only part of the mainland this plan settles\", fraction: 0.45, settleable: true },\n  { id: \"farmland\", identity: \"farmland behind the coast -- open, worked, not built on\", fraction: 0.22, settleable: false },",
       "expect": "the mainland's own settleable fraction is a stated, small number, not left to be inferred"
+    },
+    {
+      "id": "b2-0-worldaliasing-terrain-landmasses-on-allowlist",
+      "guards": "worldAliasing.test.ts's different-seed test genuinely checks terrain.js's own LANDMASSES[...].points for unreviewed sharing, rather than the allow-list entry being decorative.",
+      "note": "Verified by hand this session: replacing TERRAIN_LANDMASSES with [] in the allow-list's own filter/map (so none of terrain.js's landmass outlines are declared shared) correctly turned the different-seed test red (438 unexplained shared objects, first one array(22)), reverted, reconfirmed green.",
+      "file": "test/worldAliasing.test.ts",
+      "find": "    ...TERRAIN_LANDMASSES.filter((lm) => lm.points).map((lm) => ({",
+      "replace": "    ...[].filter((lm) => lm.points).map((lm) => ({",
+      "expect": "different-seed worlds share only the declared allow-list -- terrain.js's own LANDMASSES.points included, since Step A moved land ownership there"
+    },
+    {
+      "id": "b2-0-worldaliasing-mainland-zones-on-allowlist",
+      "guards": "worldAliasing.test.ts's different-seed test separately catches MAINLAND_ZONES sharing, not just LANDMASSES.points -- `.zones` is a distinct reachable field on the mainland's own LANDMASSES entry.",
+      "note": "Verified by hand this session: removing the MAINLAND_ZONES allow-list entry alone (leaving the LANDMASSES.points entries in place) correctly turned the different-seed test red (4 unexplained shared objects, first one array(3) -- MAINLAND_ZONES' own three bands), reverted, reconfirmed green.",
+      "file": "test/worldAliasing.test.ts",
+      "find": "    {\n      label: \"MAINLAND_ZONES (public/terrain.js)\",\n      value: MAINLAND_ZONES,\n      reason: \"a flat, frozen spec of the mainland's own depth-band fractions (Object.freeze); the mainland's LANDMASSES entry embeds it as `.zones` by reference, for every seed -- one frozen table, not one per world, same category as WORLD.\",\n    },\n",
+      "replace": "",
+      "expect": "different-seed worlds share only the declared allow-list -- MAINLAND_ZONES included, since the mainland's LANDMASSES entry embeds it by reference"
     }
   ]
 }

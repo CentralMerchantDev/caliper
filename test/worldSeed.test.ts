@@ -49,7 +49,16 @@ test("the default world is byte-identical to the one before seeding existed", ()
   // docs/BUILD-LOOP.md's own Step 8 no longer quotes this hash directly, for
   // the same reason: a process document should not carry a data value a
   // legitimate future phase is expected to change.
-  const PRE_SEED = "eba1936a865a9a90a262bf3c22ae7073bdf73b880f65cf786f2a131578257730";
+  //
+  // RE-PINNED AGAIN, 2026-09-08, B2.0: the terrain height field includes
+  // each waterway's own cut (public/terrain.js's waterwayCut), so
+  // re-deriving public/waterways.js's seven rivers/canals against the real
+  // B1 archipelago (B2.0's own gap, see docs/specs/BOARD-REBUILD-PLAN.md's
+  // B2.0 section) moved the ground under this fingerprint too -- the same
+  // deliberate-redesign exception this comment already claims, not a second
+  // one invented for convenience: the shape of the land did not change, only
+  // where the seven channels are cut into it.
+  const PRE_SEED = "5e6b13741e4000dd7efdfed25d4439262814b733b0f246b03a3c0c59c2e29986";
   assert.equal(
     fingerprint(new LandField(16)),
     PRE_SEED,

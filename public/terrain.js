@@ -334,8 +334,12 @@ const SKERRIES = Array.from({ length: SKERRY_COUNT }, (_, i) => {
   return { id, name: null, kind: "skerry", baseHeight: 3, cxWorld, czWorld, areaKm2 };
 }).filter(Boolean);
 
-/** Every land mass, control points (or a generator call) in DESIGN metres. */
-const LANDMASSES = [
+/** Every land mass, control points (or a generator call) in DESIGN metres.
+ *  Exported (B2.0) so callers outside this module -- test/worldAliasing.test.ts
+ *  in particular -- can name the real, current source table on their own
+ *  allow-list instead of the one still sitting in city-plan.js, which no
+ *  LandField has read from since Step A. */
+export const LANDMASSES = [
   {
     id: "mainland", name: "Mainland Coast", kind: "mainland", baseHeight: 14,
     coastCount: MAINLAND_COAST_COUNT,
