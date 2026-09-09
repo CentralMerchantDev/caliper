@@ -1112,6 +1112,24 @@
       "find": "    if (!tryDockFallback()) {\n      refused.push({ edgeKey, edge, reason: `bridge refused (${result.ok ? \"board placement\" : result.reason}) and no fallback dock anchor` });\n    }",
       "replace": "    refused.push({ edgeKey, edge, reason: `bridge refused (${result.ok ? \"board placement\" : result.reason}) and no fallback dock anchor` });",
       "expect": "a bridge candidate the BOARD refuses (occupied cell) redirects to a real boat route"
+    },
+    {
+      "id": "b3-mesh-height-from-real-levels",
+      "guards": "a building piece's own mesh height comes from grid.js's heightOf(levels), not a second, hardcoded storey height that could silently disagree with every other piece on the board.",
+      "note": "Verified this session: hardcoding a constant height instead of reading the piece's own levels field is caught directly by the dedicated position/size gate test, which asserts the mesh height equals heightOf(5) for a 5-level test fixture.",
+      "file": "public/board-render.js",
+      "find": "  if (piece.pieceType === \"building\") return heightOf(piece.levels);",
+      "replace": "  if (piece.pieceType === \"building\") return 12;",
+      "expect": "a mesh's own position and size come from its piece's real cell/foot/levels"
+    },
+    {
+      "id": "b3-import-scan-only-matches-real-imports",
+      "guards": "the B3 render-path gate's own import scan genuinely parses `import ... from \"path\"` statements -- not a stand-in that returns a fixed sentinel regardless of the file's real content.",
+      "note": "Verified this session: replacing the real regex with a fixed-sentinel stand-in (returns a made-up module name whenever the literal word \"import\" appears anywhere) breaks the dedicated real-import guardrail test -- the sentinel name never matches any real forbidden path via .endsWith(), so a file that genuinely imports the forbidden module would wrongly report clean. INCONCLUSIVE on a first attempt naming the comment-only guardrail test instead: that fixture's own prose (\"this module does not read city-plan.js...\") never contains the literal word \"import\", so the mutated stand-in returns [] for it regardless, same shape as the 2026-09-09 worldAliasing/dock-id lesson (AUDIT-PROTOCOL.md SS7) -- the manifest's own `expect` now names the test that actually goes red.",
+      "file": "test/boardRender.test.ts",
+      "find": "  return [...src.matchAll(/^\\s*import\\b[^;]*\\bfrom\\s*[\"']([^\"']+)[\"']/gm)].map((m) => m[1]);",
+      "replace": "  return src.includes(\"import\") ? [\"__any__\"] : [];",
+      "expect": "the check above actually fails on a real import of the forbidden path, not just passing by construction"
     }
   ]
 }

@@ -34,6 +34,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const P = path.join(ROOT, "public");
 const terrain = await import(pathToFileURL(path.join(P, "terrain.js")).href);
 const generator = await import(pathToFileURL(path.join(P, "board-generator.js")).href);
+const bridges = await import(pathToFileURL(path.join(P, "bridge-generator.js")).href);
 const noise = await import(pathToFileURL(path.join(P, "noise.js")).href);
 
 const seed = noise.DEFAULT_SEED;
@@ -43,6 +44,18 @@ console.log(`gen-board: generating for seed ${JSON.stringify(seed)} (useSampling
 const t0 = Date.now();
 const G = generator.generateBoard(heightAt, seed, { useSampling: true });
 console.log(`gen-board: generated ${G.pieces.length} pieces in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+
+// B2.7: bridges and boat routes, placed onto the SAME board instance (so
+// they are checked for occupancy against every road/plot/building already
+// placed above), connecting the same settlement boundaries the generator
+// itself just built.
+const t1 = Date.now();
+const crossings = bridges.buildCrossingPieces(G.boundaries, heightAt, G.board);
+console.log(`gen-board: B2.7 crossings -- ${crossings.built.length} pieces (${crossings.built.filter((p) => p.pieceType === "bridge").length} bridges, ${crossings.built.filter((p) => p.pieceType === "dock").length} docks), ${crossings.refused.length} refused, in ${((Date.now() - t1) / 1000).toFixed(1)} s`);
+if (crossings.refused.length > 0) {
+  console.error("gen-board: B2.7 refused crossings:", crossings.refused.map((r) => r.reason));
+}
+G.pieces.push(...crossings.built);
 
 // SERIALISED SHAPE: pieces + boundaries only -- `board` (the live
 // board.js instance) is not data, it is behaviour, and is reconstructed
