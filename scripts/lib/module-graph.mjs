@@ -174,6 +174,14 @@ export function findExportedNames(source) {
 //     zero occurrences in this codebase today; the dead-export gate asserts
 //     that stays true (fails loud if one appears) rather than trusting this
 //     comment to still be correct later.
+//   - A bare side-effect import (`import "./x.js";`, no binding clause at
+//     all) is invisible to findImportClauses -- the regex requires a `from`
+//     clause, and a side-effect import has none. Found while building
+//     buildForwardDependencyGraph (a file loaded only this way would show no
+//     dependency edge at all). Checked directly: zero occurrences in
+//     public/*.js, public/*.html or src/*.ts today (every real page in this
+//     codebase imports at least one named binding from its own script,
+//     including every HTML entry point declareEntryPoints relies on).
 // =============================================================================
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
@@ -351,4 +359,235 @@ export function isTestPath(path) {
 /** A path relative to `root`, with forward slashes, for stable, OS-independent output. */
 export function displayPath(root, path) {
   return relative(root, path).split("\\").join("/");
+}
+
+// =============================================================================
+// REACHABILITY, NOT IMPORT COUNTING -- added after a blind audit found two
+// real false negatives (namespace-member-access, named re-exports) in
+// buildReverseMap, and Mark's own review of the fix found a THIRD, structural
+// one: "does anything import this" and "is this reachable from the renderer"
+// are different questions that can disagree. roadkit.js's junction and
+// roundabout ARE imported -- by public/roadkit-street-demo.js, a demo page
+// nothing else imports. An export imported only by a module nothing reaches
+// is still dead; import counting alone cannot see that.
+//
+// This computes, for every file, which of three declared entry-point classes
+// can reach it via the forward import graph (the module dependency graph,
+// not buildReverseMap's export-level caller graph): PRODUCT (wrangler.jsonc's
+// "main", plus public/index.html and public/city.html -- what a visitor's
+// browser or the Worker itself actually loads), DEMO (every other HTML page
+// in public/), and TEST (everything under test/, which needs no declared
+// root -- every test file is trivially runnable on its own).
+//
+// A file's reachability, combined with buildReverseMap's export-level caller
+// list, classifies each export as "product" (reachable from a product entry
+// point -- passes without justification), "demo-only" (has a caller, but
+// that caller is only ever reached from a demo page -- exactly the
+// roadkit.js shape), "test-only" (reachable only from test/), or
+// "unreachable" (no caller at all, or every caller is itself unreachable
+// from anywhere).
+// =============================================================================
+
+import { basename } from "node:path";
+
+/**
+ * Every file another file in `files` directly depends on -- ANY import
+ * clause kind (named, namespace, default) plus re-export chains, because
+ * file-level reachability only needs to know THAT A depends on B, not which
+ * specific binding A uses (buildReverseMap's credit() answers that separate,
+ * export-level question).
+ */
+export function buildForwardDependencyGraph(files) {
+  const byResolvedPath = new Map(files.map((f) => [resolve(f.path), f]));
+  const deps = new Map(files.map((f) => [f.path, new Set()]));
+  for (const file of files) {
+    const chunks = file.isHtml ? moduleScriptBlocks(file.source) : [file.source];
+    for (const chunk of chunks) {
+      const targets = [];
+      for (const clause of findImportClauses(chunk)) targets.push(clause.path);
+      for (const reExport of findReExportClauses(chunk)) targets.push(reExport.path);
+      for (const specifier of targets) {
+        if (!specifier.startsWith(".")) continue; // bare specifier -- out of scope
+        const target = resolveImportTarget(file.path, specifier, byResolvedPath);
+        if (!target) continue;
+        if (target.path === file.path) continue;
+        deps.get(file.path).add(target.path);
+      }
+    }
+  }
+  return deps;
+}
+
+/** Breadth-first closure: every file reachable from `rootPaths` by following `forwardDeps` edges, including the roots themselves. */
+export function reachableFilesFrom(rootPaths, forwardDeps) {
+  const seen = new Set();
+  const queue = [...rootPaths];
+  while (queue.length) {
+    const p = queue.pop();
+    if (seen.has(p)) continue;
+    seen.add(p);
+    const deps = forwardDeps.get(p);
+    if (deps) for (const d of deps) if (!seen.has(d)) queue.push(d);
+  }
+  return seen;
+}
+
+/**
+ * The three entry-point root sets, declared explicitly rather than inferred:
+ * PRODUCT is wrangler's own "main" plus the two pages a visitor's browser
+ * loads; DEMO is every OTHER html page in publicDir; TEST is every file
+ * loadModuleFiles found under testDir (trivially -- a test file needs no
+ * importer to be a real root, it is one by being a test).
+ *
+ * `wranglerText` is read as text, not parsed as JSON -- wrangler.jsonc has
+ * comments, and this project's convention throughout this file is a cheap,
+ * targeted scanner over a full parser. Scoped to what this config actually
+ * declares today: `"main"` and `durable_objects.bindings[].class_name`.
+ */
+export function declareEntryPoints({ files, repoRoot, wranglerText, productHtmlNames = ["index.html", "city.html"] }) {
+  const product = new Set();
+  const demo = new Set();
+  const test = new Set();
+
+  const mainMatch = wranglerText && wranglerText.match(/"main"\s*:\s*"([^"]+)"/);
+  if (mainMatch) {
+    const mainPath = join(repoRoot, ...mainMatch[1].split("/"));
+    const mainFile = files.find((f) => resolve(f.path) === resolve(mainPath));
+    if (mainFile) product.add(mainFile.path);
+  }
+
+  for (const file of files) {
+    if (isTestPath(file.path)) { test.add(file.path); continue; }
+    if (!file.isHtml) continue;
+    (productHtmlNames.includes(basename(file.path)) ? product : demo).add(file.path);
+  }
+
+  return { product, demo, test };
+}
+
+/**
+ * Every name wrangler.jsonc declares as a binding's `class_name` -- read
+ * directly by the platform (Cloudflare's runtime binds the class named
+ * here), not through any import a JS module graph could see. SpendCounterDO
+ * is why this exists: CALIPER's bound spend-cap Durable Object, found dead
+ * by a graph that had never heard of wrangler.jsonc.
+ */
+export function wranglerDeclaredNames(wranglerText) {
+  const names = new Set();
+  for (const m of wranglerText.matchAll(/"class_name"\s*:\s*"([^"]+)"/g)) names.add(m[1]);
+  return names;
+}
+
+/**
+ * `${filePath}:${exportName}` keys the PLATFORM reaches directly -- never
+ * through a JS import, so no forward-graph walk could ever see them, no
+ * matter how correct the walk is. Two shapes, both found the same way (an
+ * export that IS the entry point itself has no caller to be reachable
+ * through):
+ *
+ *   - The file wrangler's own "main" names: its `default` export is the
+ *     Workers fetch handler contract -- the platform calls it directly.
+ *     Without this, src/index.ts's OWN `default` (and its re-exported
+ *     SpendCounterDO binding) measured "unreachable" despite index.ts being
+ *     a declared PRODUCT ROOT itself -- found measuring the real repository
+ *     the first time this ran, not anticipated in the design.
+ *   - Every `durable_objects.bindings[].class_name`: found in whichever file
+ *     actually defines a class or const of that name (via findExportedNames
+ *     over every file, not assumed to be wherever wrangler happens to be
+ *     read alongside).
+ */
+export function platformReachableExports(files, wranglerText, repoRoot) {
+  const keys = new Set();
+  const mainMatch = wranglerText.match(/"main"\s*:\s*"([^"]+)"/);
+  if (mainMatch) {
+    const mainPath = join(repoRoot, ...mainMatch[1].split("/"));
+    const mainFile = files.find((f) => resolve(f.path) === resolve(mainPath));
+    if (mainFile) keys.add(`${mainFile.path}:default`);
+  }
+  const classNames = wranglerDeclaredNames(wranglerText);
+  if (classNames.size > 0) {
+    for (const file of files) {
+      if (file.isHtml) continue;
+      const { named } = findExportedNames(file.source);
+      for (const className of classNames) {
+        if (named.has(className)) keys.add(`${file.path}:${className}`);
+      }
+    }
+  }
+  return keys;
+}
+
+/**
+ * Classify every export buildReverseMap found, using file-level reachability
+ * instead of a raw caller count. `reverse` is buildReverseMap's own output;
+ * `fileReachability` is `{product, demo, test}` file-path Sets (from
+ * reachableFilesFrom, run once per class against declareEntryPoints' roots).
+ * `platformKeys` (platformReachableExports' output, optional) are
+ * `filePath:exportName` pairs the platform itself reaches -- checked first,
+ * since nothing in the JS graph could ever contradict a platform binding.
+ *
+ * Priority is platform > product > demo > test > unreachable: an export
+ * reachable from BOTH a demo page and product code is product-reachable,
+ * full stop -- "demo-only" specifically means the ONLY path in is through a
+ * demo page. An export with callers, none of which are themselves reachable
+ * from any declared entry point, is unreachable too -- a caller that
+ * nothing loads does not make what it calls loaded either.
+ */
+export function classifyReachability(reverse, fileReachability, platformKeys = new Set()) {
+  const { product, demo, test } = fileReachability;
+  const classified = new Map();
+  for (const [filePath, exportsByName] of reverse) {
+    const byName = new Map();
+    for (const [name, entry] of exportsByName) {
+      const callers = new Set([...entry.callers, ...entry.testCallers]);
+      let state = "unreachable";
+      let via = null;
+      if (platformKeys.has(`${filePath}:${name}`)) {
+        state = "product";
+        via = "wrangler.jsonc";
+      }
+      if (state !== "product") {
+        for (const caller of callers) {
+          if (product.has(caller)) { state = "product"; via = caller; break; }
+        }
+      }
+      if (state !== "product") {
+        for (const caller of callers) {
+          if (demo.has(caller)) { state = "demo-only"; via = caller; break; }
+        }
+      }
+      if (state === "unreachable") {
+        for (const caller of callers) {
+          if (test.has(caller)) { state = "test-only"; via = caller; break; }
+        }
+      }
+      byName.set(name, { state, via, callers });
+    }
+    classified.set(filePath, byName);
+  }
+  return classified;
+}
+
+/**
+ * The full pipeline, in one call: load files, build both graphs, declare
+ * entry points, classify every export. test/deadExports.test.ts (the gate)
+ * and scripts/gen-module-map.mjs (the document) both need exactly this
+ * sequence in exactly this order; this is the one place it is written,
+ * so neither has to re-derive "forward graph, then entry points, then
+ * platform keys, then reverse map, then classify" and risk the two drifting
+ * out of step with each other.
+ */
+export function classifyRepoReachability({ publicDir, srcDir, testDir, repoRoot, wranglerText, productHtmlNames }) {
+  const files = loadModuleFiles({ publicDir, srcDir, testDir });
+  const forwardDeps = buildForwardDependencyGraph(files);
+  const { product, demo, test } = declareEntryPoints({ files, repoRoot, wranglerText, ...(productHtmlNames ? { productHtmlNames } : {}) });
+  const fileReachability = {
+    product: reachableFilesFrom(product, forwardDeps),
+    demo: reachableFilesFrom(demo, forwardDeps),
+    test: reachableFilesFrom(test, forwardDeps),
+  };
+  const platformKeys = platformReachableExports(files, wranglerText, repoRoot);
+  const reverse = buildReverseMap(files, isTestPath);
+  const classified = classifyReachability(reverse, fileReachability, platformKeys);
+  return { files, classified };
 }

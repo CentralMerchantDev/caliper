@@ -19,7 +19,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildReverseMap, isTestPath, loadModuleFiles, findReExportClauses } from "../scripts/lib/module-graph.mjs";
+import {
+  buildReverseMap, isTestPath, loadModuleFiles, findReExportClauses,
+  buildForwardDependencyGraph, reachableFilesFrom, declareEntryPoints,
+  wranglerDeclaredNames, classifyReachability, platformReachableExports,
+} from "../scripts/lib/module-graph.mjs";
 
 test("buildReverseMap: an export called from a real (non-test) file is a caller", () => {
   const files = [
@@ -178,6 +182,163 @@ test("findReExportClauses: `X as Y` reports the source's real name X, not the lo
   const src = `export { A, B as C } from "./x.js";\nexport { D };`;
   const clauses = findReExportClauses(src);
   assert.deepEqual(clauses, [{ path: "./x.js", named: ["A", "B"] }]);
+});
+
+// REACHABILITY, NOT IMPORT COUNTING -- Mark's own correction, after his
+// review of the audit fix found a third gap: "does anything import this"
+// and "is this reachable from the renderer" are different questions.
+// roadkit.js's junction/roundabout have a caller (roadkit-street-demo.js) --
+// but that caller is a demo page nothing else imports, so the junction
+// pieces are not reachable from anything a visitor or the Worker actually
+// runs. These tests build the exact shape of that finding synthetically.
+
+test("buildForwardDependencyGraph: a file's dependency set includes named-import, namespace-import and re-export targets, not itself", () => {
+  const files = [
+    { path: "/repo/public/a.js", source: `export function f() {}`, isHtml: false },
+    { path: "/repo/public/b.js", source: `export function g() {}`, isHtml: false },
+    { path: "/repo/public/c.js", source: `export function h() {}`, isHtml: false },
+    {
+      path: "/repo/public/consumer.js",
+      source: `import { f } from "./a.js";\nimport * as B from "./b.js";\nexport { h } from "./c.js";`,
+      isHtml: false,
+    },
+  ];
+  const deps = buildForwardDependencyGraph(files);
+  assert.deepEqual([...deps.get("/repo/public/consumer.js")].sort(), ["/repo/public/a.js", "/repo/public/b.js", "/repo/public/c.js"]);
+  assert.deepEqual([...deps.get("/repo/public/a.js")], [], "a.js depends on nothing -- its own dependency set must not include consumer.js");
+});
+
+test("reachableFilesFrom: transitive closure over the forward graph, including the roots themselves", () => {
+  const deps = new Map([
+    ["/repo/root.js", new Set(["/repo/mid.js"])],
+    ["/repo/mid.js", new Set(["/repo/leaf.js"])],
+    ["/repo/leaf.js", new Set()],
+    ["/repo/orphan.js", new Set()],
+  ]);
+  const reached = reachableFilesFrom(["/repo/root.js"], deps);
+  assert.deepEqual([...reached].sort(), ["/repo/leaf.js", "/repo/mid.js", "/repo/root.js"]);
+  assert.ok(!reached.has("/repo/orphan.js"), "a file nothing on the path from a root depends on must not appear");
+});
+
+test("declareEntryPoints: wrangler's \"main\" and public/index.html + public/city.html are PRODUCT; every other html page is DEMO; test/ files are TEST", () => {
+  const files = [
+    { path: "/repo/src/index.ts", source: `export default {};`, isHtml: false },
+    { path: "/repo/public/index.html", source: `<html></html>`, isHtml: true },
+    { path: "/repo/public/city.html", source: `<html></html>`, isHtml: true },
+    { path: "/repo/public/roadkit-street-demo.html", source: `<html></html>`, isHtml: true },
+    { path: "/repo/test/foo.test.ts", source: `export function helper() {}`, isHtml: false },
+  ];
+  const { product, demo, test } = declareEntryPoints({
+    files, repoRoot: "/repo", wranglerText: `{ "main": "src/index.ts" }`,
+  });
+  assert.deepEqual([...product].sort(), ["/repo/public/city.html", "/repo/public/index.html", "/repo/src/index.ts"]);
+  assert.deepEqual([...demo], ["/repo/public/roadkit-street-demo.html"]);
+  assert.deepEqual([...test], ["/repo/test/foo.test.ts"]);
+});
+
+test("wranglerDeclaredNames: every durable_objects class_name, the SpendCounterDO shape", () => {
+  const text = `{ "durable_objects": { "bindings": [ { "name": "SPEND_COUNTER", "class_name": "SpendCounterDO" } ] } }`;
+  assert.deepEqual([...wranglerDeclaredNames(text)], ["SpendCounterDO"]);
+});
+
+// Found measuring the REAL repository, not anticipated by the design: the
+// file wrangler's own "main" names is itself a declared PRODUCT ROOT, but
+// its own `default` export had no CALLER to be reachable through (the
+// Workers runtime invokes it directly, never via a JS import) -- so
+// src/index.ts's own `default`, and the SpendCounterDO binding it
+// re-exports, both measured "unreachable" on the first real run despite
+// index.ts being the most load-bearing file in the whole product class.
+test("platformReachableExports: the file named by wrangler's \"main\" has its own `default` export marked platform-reachable", () => {
+  const files = [{ path: "/repo/src/index.ts", source: `export default { fetch() {} };`, isHtml: false }];
+  const keys = platformReachableExports(files, `{ "main": "src/index.ts" }`, "/repo");
+  assert.ok(keys.has("/repo/src/index.ts:default"));
+});
+
+test("platformReachableExports: a durable_objects class_name is marked platform-reachable in whichever file actually defines it", () => {
+  const files = [
+    { path: "/repo/src/spendCounterDOClass.ts", source: `export class SpendCounterDO {}`, isHtml: false },
+    { path: "/repo/src/index.ts", source: `export { SpendCounterDO } from "./spendCounterDOClass";`, isHtml: false },
+  ];
+  const wranglerText = `{ "durable_objects": { "bindings": [ { "class_name": "SpendCounterDO" } ] } }`;
+  const keys = platformReachableExports(files, wranglerText, "/repo");
+  assert.ok(keys.has("/repo/src/spendCounterDOClass.ts:SpendCounterDO"), "the DEFINING file must be marked, not just any file that happens to also export the name");
+});
+
+test("classifyReachability: a platform-reachable export is \"product\" even with zero JS callers -- the src/index.ts default-export shape", () => {
+  const files = [{ path: "/repo/src/index.ts", source: `export default { fetch() {} };`, isHtml: false }];
+  const reverse = buildReverseMap(files, isTestPath);
+  const platformKeys = platformReachableExports(files, `{ "main": "src/index.ts" }`, "/repo");
+  const classified = classifyReachability(reverse, { product: new Set(), demo: new Set(), test: new Set() }, platformKeys);
+  const entry = classified.get("/repo/src/index.ts").get("default");
+  assert.equal(entry.state, "product");
+  assert.equal(entry.via, "wrangler.jsonc");
+});
+
+test("classifyReachability: the exact roadkit.js/junction shape -- called only from a demo page reachable from nothing else is demo-only, not product", () => {
+  const files = [
+    { path: "/repo/public/roadkit.js", source: `export function junction() {}`, isHtml: false },
+    {
+      path: "/repo/public/roadkit-street-demo.js",
+      source: `import * as ROADKIT from "./roadkit.js";\nROADKIT.junction();`,
+      isHtml: false,
+    },
+    // The real roadkit-street-demo.html imports a NAMED binding from its
+    // script, not a bare side-effect `import "./x.js";` -- checked directly
+    // against the file, matching this fixture to it rather than an invented
+    // shape (a bare side-effect import has no `from` clause at all and is a
+    // separate, checked-zero-occurrences gap; see this file's own header).
+    { path: "/repo/public/roadkit-street-demo.html", source: `<script type="module">import { buildDemoStreet } from "./roadkit-street-demo.js";\nbuildDemoStreet();</script>`, isHtml: true },
+    { path: "/repo/public/index.html", source: `<html></html>`, isHtml: true },
+  ];
+  const forwardDeps = buildForwardDependencyGraph(files);
+  const { product, demo } = declareEntryPoints({ files, repoRoot: "/repo", wranglerText: `{}` });
+  const fileReachability = {
+    product: reachableFilesFrom(product, forwardDeps),
+    demo: reachableFilesFrom(demo, forwardDeps),
+    test: new Set(),
+  };
+  const reverse = buildReverseMap(files, isTestPath);
+  const classified = classifyReachability(reverse, fileReachability);
+  const junctionEntry = classified.get("/repo/public/roadkit.js").get("junction");
+  assert.equal(junctionEntry.state, "demo-only", `expected demo-only, got ${junctionEntry.state}`);
+});
+
+test("classifyReachability: an export reachable from BOTH a demo page and product code is \"product\", not \"demo-only\"", () => {
+  const files = [
+    { path: "/repo/public/shared.js", source: `export function util() {}`, isHtml: false },
+    { path: "/repo/public/demo.js", source: `import { util } from "./shared.js";\nutil();`, isHtml: false },
+    { path: "/repo/public/demo.html", source: `<script type="module">import "./demo.js";</script>`, isHtml: true },
+    { path: "/repo/public/index.html", source: `<script type="module">import { util } from "./shared.js";\nutil();</script>`, isHtml: true },
+  ];
+  const forwardDeps = buildForwardDependencyGraph(files);
+  const { product, demo } = declareEntryPoints({ files, repoRoot: "/repo", wranglerText: `{}` });
+  const fileReachability = {
+    product: reachableFilesFrom(product, forwardDeps),
+    demo: reachableFilesFrom(demo, forwardDeps),
+    test: new Set(),
+  };
+  const reverse = buildReverseMap(files, isTestPath);
+  const classified = classifyReachability(reverse, fileReachability);
+  assert.equal(classified.get("/repo/public/shared.js").get("util").state, "product");
+});
+
+test("classifyReachability: a caller that is itself unreachable from any entry point does not make what it calls reachable -- the road-network.js shape", () => {
+  const files = [
+    { path: "/repo/public/lonely-defined.js", source: `export function fn() {}`, isHtml: false },
+    // orphan.js is never imported by anything -- not product, not demo, not test.
+    { path: "/repo/public/orphan.js", source: `import { fn } from "./lonely-defined.js";\nfn();`, isHtml: false },
+    { path: "/repo/public/index.html", source: `<html></html>`, isHtml: true },
+  ];
+  const forwardDeps = buildForwardDependencyGraph(files);
+  const { product, demo } = declareEntryPoints({ files, repoRoot: "/repo", wranglerText: `{}` });
+  const fileReachability = {
+    product: reachableFilesFrom(product, forwardDeps),
+    demo: reachableFilesFrom(demo, forwardDeps),
+    test: new Set(),
+  };
+  const reverse = buildReverseMap(files, isTestPath);
+  const classified = classifyReachability(reverse, fileReachability);
+  assert.equal(classified.get("/repo/public/lonely-defined.js").get("fn").state, "unreachable");
 });
 
 function mkTmpTestDir() {

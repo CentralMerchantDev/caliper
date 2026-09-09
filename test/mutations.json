@@ -27,16 +27,25 @@
       "file": "public/_deadExportMutationFixture.js",
       "find": "// from this file. docs/BUILD-LOOP.md Step 6.",
       "replace": "// from this file. docs/BUILD-LOOP.md Step 6.\n\nexport function __deadExportMutationProbe__() { return 1; }",
-      "expect": "every export in public/ and src/ has a real"
+      "expect": "every export in public/ and src/ is product-reachable"
     },
     {
-      "id": "module-map-generator-marks-uncalled-exports",
-      "guards": "renderModuleMap (scripts/gen-module-map.mjs) marks every uncalled export with **UNCALLED** in the generated document, not just in memory",
-      "note": "Targets the generator script itself, not a shared production file -- removing the UNCALLED marker from the fully-dead branch only (line ~89) while leaving the test-only branch (line ~84) untouched, so this is a partial mutation on purpose: it proves the smoke test's assertion is actually exercised by the fully-dead path, not only coincidentally satisfied by the test-only path elsewhere in the same output.",
+      "id": "module-map-generator-marks-non-product-exports",
+      "guards": "renderModuleMap (scripts/gen-module-map.mjs) marks every non-product export with its DEMO-ONLY/TEST-ONLY/UNREACHABLE state in the generated document, not just in memory",
+      "note": "Targets the generator script itself, not a shared production file. Updated when the generator was rewritten for reachability (Mark's review, same day as I2/I3): the old single **UNCALLED** marker no longer exists, replaced by STATE_LABEL[entry.state]; this mutation removes that lookup from the emitted line, leaving the product branch (which never uses STATE_LABEL) untouched on purpose, so the smoke test's assertion is proven to exercise the non-product path specifically.",
       "file": "scripts/gen-module-map.mjs",
-      "find": "lines.push(`- \\`${name}\\` -- **UNCALLED**${reason ? ` -- *${reason}*` : \"\"}`);",
-      "replace": "lines.push(`- \\`${name}\\`${reason ? ` -- *${reason}*` : \"\"}`);",
-      "expect": "every module with exports gets a section, every export line names its callers or UNCALLED"
+      "find": "          `- \\`${name}\\` -- ${STATE_LABEL[entry.state]}${via ? ` (via \\`${via}\\`)` : \"\"}` +",
+      "replace": "          `- \\`${name}\\`${via ? ` (via \\`${via}\\`)` : \"\"}` +",
+      "expect": "product/demo-only/test-only/unreachable are all distinguishable in the text"
+    },
+    {
+      "id": "demo-caller-is-not-product",
+      "guards": "classifyReachability must classify an export whose ONLY caller is reachable from a demo page as demo-only, never product -- the exact roadkit.js junction/roundabout distinction this whole reachability upgrade exists for (Mark's correction: import counting and reachability can disagree)",
+      "note": "Targets classifyReachability's own demo-crediting branch in scripts/lib/module-graph.mjs (this task's own file). Changing the assigned state string from demo-only to product is the precise bug that made the FIRST version of this gate report roadkit.js's junction/roundabout as confirming they were fully uncalled, when they were actually reachable -- just only from a demo page.",
+      "file": "scripts/lib/module-graph.mjs",
+      "find": "          if (demo.has(caller)) { state = \"demo-only\"; via = caller; break; }",
+      "replace": "          if (demo.has(caller)) { state = \"product\"; via = caller; break; }",
+      "expect": "called only from a demo page reachable from nothing else is demo-only, not product"
     },
     {
       "id": "namespace-member-access-credits-the-target-export",
