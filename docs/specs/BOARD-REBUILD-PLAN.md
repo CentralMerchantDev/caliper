@@ -1245,3 +1245,60 @@ flight** (Mark's own instruction, given after this session found the
 city-plan.js incoherence above): a world with new land and an old generator
 is not a state anyone should be able to deploy by accident. B1 and B2 merge
 to main together, as one coherent world, when B2's own gate is green.
+
+## B2.8 — the 38 old-world pins, categorized tonight, re-pinned later on purpose
+
+`docs/briefs/OVERNIGHT-CLI-2026-09-09.md`'s own instruction: for each of
+the 38 currently-failing tests, decide and record which of three it is —
+a pin whose number moved, a test whose subject no longer exists, or a
+genuine defect the new land exposed. **Decided, not fixed** — this
+document's own established sequencing ("re-pinning the old-world-pin
+test failures — B2.8, last, not first... once the generator makes the
+world coherent again, so it happens once rather than twice") still
+applies, and B2.7 (bridges/boats) has not been implemented yet. Fixing
+any of these 38 now, before B2.7 lands, would mean doing it twice.
+
+**34 of the 38** are exactly this document's own B2.0 blast-radius
+catalogue, above: `cityWorld` (20), `cityJoin` (3), `cityConnectivity`
+(2), `connectivityBridges` (2), `ground` (2, the road-standing-on-a-
+slope pair — distinct from the two river/canal `ground` failures B2.0
+already closed), `instanceGroups` (1), `layout` (1), `planSeed` (1),
+`roadNetwork` (1), `umaaFindings` (1) — all trace to the same root cause
+already named there: `city-plan.js`'s `generateWorld()` is still laying
+plots, roads, bridges and feature sites out against its own OLD
+`COAST`/`LANDMASSES`, incoherent with the new archipelago's real
+`heightAt`. **Category: a test whose subject (the old world's specific
+geometry) no longer exists**, not a genuine new defect and not a simple
+number-drift — re-pinning any one of these before B2's generator
+replaces `generateWorld()` end to end would mean re-pinning it again the
+moment that happens.
+
+**The other 4, investigated fresh tonight** (a fresh subagent, blind to
+this document's own reasoning, ran `node test/run.mjs` against exactly
+these three files and read the real failure output and the real source,
+per `docs/AUDIT-PROTOCOL.md`'s own blind-review discipline) —
+`worldOccupancy` (2), `isolate` (1), `supervisedGenerateScript` (1) —
+were never named in the original B2.0 catalogue (which only reconciled
+32/34 of its own stated total against `generateWorld`/`LandField`
+dependents, not against every currently-failing file). **Confirmed the
+same category, not a new one**: `git log` shows `public/world-registry.js`,
+`public/isolate.js`, `public/world-render-3d.js`, `public/ground.js`,
+`public/transform.js`, and `scripts/run-generate-request.js` all last
+touched at commits predating the B1 archipelago redesign — none of them
+has been edited since. `worldOccupancy`'s railway/road-count failures and
+`isolate`'s buildings-only-neighbour failure both trace to the identical
+already-measured symptom (`placeFeatures` resolving no airport/railway/
+port site, roads collapsed from ~1,400 to ~419-440) rather than any logic
+defect in the files their own titles suggest. `supervisedGenerateScript`'s
+failure is a refusal-decision that moved because the specific plot id's
+real ground changed underneath it, not a script defect — ground now
+APPROVES a request the test's own fixture assumed it would refuse.
+
+**Recorded, not loosened**: no assertion in any of the 38 was weakened,
+retimed, or made vacuous to pass — per this run's own standing rule
+("Never loosen an assertion to make it pass. A test that is now vacuous
+is worse than a test that is red"), every one stays exactly as red as it
+was found, with its category now on record instead of merely implied.
+**38 + 2 `mutationEvidence` + 1 B2.5 honest gate = 41**, the real,
+current total, verified against tonight's own `node test/run.mjs` run
+(1,141 tests: 1,084 pass / 41 fail / 1 todo / 15 skipped).
