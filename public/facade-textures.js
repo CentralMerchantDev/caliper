@@ -104,26 +104,39 @@ export const FACADE_FAMILIES = {
  * contemporary. test/facadeVariants.test.ts asserts the character count
  * directly so this cannot silently regress.
  */
+// `spandrelMaterial` ("stone", the default, or "metal") and `glassTint`/
+// `frameTint` (RGB multipliers, default 1 = unchanged) are RUN3's second
+// pass at this table: RUN2 shipped real variety in floor count, window
+// proportion and mullion style, but every variant of a character still
+// drew its spandrel band and window glass/frame in that ONE character's
+// single fixed colour (docs/audits/K6-BUILDINGS.md's item 2 named this
+// gap explicitly: "no equivalent variety in window-frame colour or glass
+// tint"). Omitted on every RUN2 variant on purpose, so they default to
+// "stone"/1/1 -- byte-identical to RUN2's own output, not just RUN1's.
 export const FACADE_VARIANTS = {
   heritage: [
     { name: "sash-grid", floors: 8, cols: 8, winMarginXFrac: 0.18, winMarginYFrac: 0.18, mullion: "cross", spandrel: 8 },
     { name: "tall-sash", floors: 6, cols: 7, winMarginXFrac: 0.22, winMarginYFrac: 0.12, mullion: "single", spandrel: 14 },
     { name: "narrow-bay", floors: 9, cols: 9, winMarginXFrac: 0.26, winMarginYFrac: 0.22, mullion: "cross", spandrel: 10 },
+    { name: "soot-aged", floors: 8, cols: 8, winMarginXFrac: 0.20, winMarginYFrac: 0.16, mullion: "cross", spandrel: 9, glassTint: 0.72, frameTint: 0.65 },
   ],
   interwar: [
     { name: "classic-grid", floors: 8, cols: 8, winMarginXFrac: 0.18, winMarginYFrac: 0.18, mullion: "cross", spandrel: 8 },
     { name: "deco-pier", floors: 10, cols: 6, winMarginXFrac: 0.16, winMarginYFrac: 0.10, mullion: "double", spandrel: 10 },
     { name: "classical-masonry", floors: 7, cols: 7, winMarginXFrac: 0.20, winMarginYFrac: 0.16, mullion: "single", spandrel: 12 },
+    { name: "verdigris-trim", floors: 9, cols: 7, winMarginXFrac: 0.17, winMarginYFrac: 0.13, mullion: "double", spandrel: 8, spandrelMaterial: "metal", glassTint: 1.12 },
   ],
   postwar: [
     { name: "standard-grid", floors: 8, cols: 8, winMarginXFrac: 0.18, winMarginYFrac: 0.18, mullion: "cross", spandrel: 8 },
     { name: "ribbon-window", floors: 8, cols: 10, winMarginXFrac: 0.08, winMarginYFrac: 0.22, mullion: "single", spandrel: 6 },
     { name: "concrete-grid", floors: 6, cols: 6, winMarginXFrac: 0.14, winMarginYFrac: 0.14, mullion: "cross", spandrel: 16 },
+    { name: "metal-spandrel", floors: 8, cols: 8, winMarginXFrac: 0.16, winMarginYFrac: 0.18, mullion: "single", spandrel: 10, spandrelMaterial: "metal", frameTint: 0.85 },
   ],
   contemporary: [
     { name: "standard-curtain", floors: 8, cols: 8, winMarginXFrac: 0.18, winMarginYFrac: 0.18, mullion: "cross", spandrel: 8 },
     { name: "full-curtain-wall", floors: 12, cols: 6, winMarginXFrac: 0.04, winMarginYFrac: 0.04, mullion: "none", spandrel: 3 },
     { name: "composite-panel", floors: 9, cols: 9, winMarginXFrac: 0.10, winMarginYFrac: 0.10, mullion: "single", spandrel: 5 },
+    { name: "dark-reflective", floors: 10, cols: 7, winMarginXFrac: 0.06, winMarginYFrac: 0.06, mullion: "none", spandrel: 4, spandrelMaterial: "metal", glassTint: 0.55 },
   ],
 };
 
@@ -144,6 +157,39 @@ function hash01(s) {
     h = Math.imul(h, 0x01000193) >>> 0;
   }
   return h / 4294967296;
+}
+
+/**
+ * Scales a "#rrggbb" colour by `factor`, clamped to a valid byte per
+ * channel. Exported and unit-tested directly (test/facadeVariants.test.ts):
+ * this file's own createCanvas() Node fallback makes every canvas drawing
+ * call a no-op, so nothing about what generateFacadeAtlas actually PAINTS
+ * can be verified by running it in this test harness -- the pure colour
+ * math is the one part of RUN3's tint/spandrel-material feature that CAN
+ * be checked directly, and it is, rather than leaving the whole feature
+ * structurally untestable and calling that acceptable.
+ */
+export function tintHex(hex, factor) {
+  const clampByte = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  return `rgb(${clampByte(r * factor)}, ${clampByte(g * factor)}, ${clampByte(b * factor)})`;
+}
+
+/**
+ * The spandrel band's PBR treatment for a variant: real metal values
+ * (lower roughness, high metalness) for `spandrelMaterial: "metal"`,
+ * unchanged stone values otherwise. Exported and unit-tested directly for
+ * the same reason as `tintHex` above -- it is a pure decision, computed
+ * once per atlas, that canvas drawing calls cannot make independently
+ * checkable in this harness.
+ */
+export function spandrelTreatment(variant, spec, wallMetalByte) {
+  const isMetal = variant.spandrelMaterial === "metal";
+  return {
+    diffuse: isMetal ? "rgb(90, 92, 96)" : spec.stoneTrim,
+    roughByte: Math.round((isMetal ? 0.35 : spec.roughnessTrim) * 255),
+    metalByte: isMetal ? 200 : wallMetalByte,
+  };
 }
 
 /**
@@ -244,17 +290,26 @@ export function generateFacadeAtlas(character = "heritage", size = 1024, variant
   const cellH = size / floors;
   const cellW = size / cols;
 
+  // Per-variant colour treatment (RUN3): "stone"/1/1 on every RUN2 variant,
+  // by omission, so their output is unchanged. `spandrelMaterial: "metal"`
+  // gives the floor-dividing band real metal PBR values instead of stone's
+  // (lower roughness, real metalness), not just a different diffuse colour.
+  const { diffuse: spandrelDiffuse, roughByte: spandrelRoughByte, metalByte: spandrelMetalByte } =
+    spandrelTreatment(variant, spec, wallMetalByte);
+  const windowFrameDiffuse = tintHex(spec.windowFrame, variant.frameTint ?? 1);
+  const glassDiffuse = tintHex(spec.glassColor, variant.glassTint ?? 1);
+
   for (let f = 0; f < floors; f++) {
     const y = f * cellH;
     const isGroundFloor = f === floors - 1;
     const isTopFloor = f === 0;
 
     // Floor dividing spandrel
-    dctx.fillStyle = spec.stoneTrim;
+    dctx.fillStyle = spandrelDiffuse;
     dctx.fillRect(0, y, size, spandrelPx);
-    rctx.fillStyle = `rgb(${Math.round(spec.roughnessTrim * 255)},${Math.round(spec.roughnessTrim * 255)},${Math.round(spec.roughnessTrim * 255)})`;
+    rctx.fillStyle = `rgb(${spandrelRoughByte},${spandrelRoughByte},${spandrelRoughByte})`;
     rctx.fillRect(0, y, size, spandrelPx);
-    mctx.fillStyle = `rgb(${wallMetalByte},${wallMetalByte},${wallMetalByte})`;
+    mctx.fillStyle = `rgb(${spandrelMetalByte},${spandrelMetalByte},${spandrelMetalByte})`;
     mctx.fillRect(0, y, size, spandrelPx);
 
     // Spandrel top/bottom normal bevel
@@ -273,7 +328,7 @@ export function generateFacadeAtlas(character = "heritage", size = 1024, variant
       const winY = y + winMarginY;
 
       // Window Frame
-      dctx.fillStyle = spec.windowFrame;
+      dctx.fillStyle = windowFrameDiffuse;
       dctx.fillRect(winX - 3, winY - 3, winW + 6, winH + 6);
       rctx.fillStyle = `rgb(${Math.round(spec.roughnessTrim * 255)},${Math.round(spec.roughnessTrim * 255)},${Math.round(spec.roughnessTrim * 255)})`;
       rctx.fillRect(winX - 3, winY - 3, winW + 6, winH + 6);
@@ -281,7 +336,7 @@ export function generateFacadeAtlas(character = "heritage", size = 1024, variant
       mctx.fillRect(winX - 3, winY - 3, winW + 6, winH + 6);
 
       // Window Glass
-      dctx.fillStyle = spec.glassColor;
+      dctx.fillStyle = glassDiffuse;
       dctx.fillRect(winX, winY, winW, winH);
 
       // Roughness: Glass is very smooth (glossy specular reflection)
@@ -315,7 +370,7 @@ export function generateFacadeAtlas(character = "heritage", size = 1024, variant
       if (variant.mullion !== "none") {
         const piers = variant.mullion === "double" ? [winW / 3, (winW * 2) / 3] : [winW / 2];
         for (const px of piers) {
-          dctx.fillStyle = spec.windowFrame;
+          dctx.fillStyle = windowFrameDiffuse;
           dctx.fillRect(winX + px - 1, winY, 2, winH);
           nctx.fillStyle = "rgb(160, 128, 255)";
           nctx.fillRect(winX + px - 1, winY, 1, winH);
@@ -323,7 +378,7 @@ export function generateFacadeAtlas(character = "heritage", size = 1024, variant
           nctx.fillRect(winX + px, winY, 1, winH);
         }
         if (variant.mullion === "cross") {
-          dctx.fillStyle = spec.windowFrame;
+          dctx.fillStyle = windowFrameDiffuse;
           dctx.fillRect(winX, winY + winH * 0.4 - 1, winW, 2);
         }
       }

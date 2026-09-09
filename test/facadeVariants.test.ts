@@ -19,6 +19,8 @@ import {
   generateFacadeAtlas,
   getFacadeMaterial,
   pickVariant,
+  tintHex,
+  spandrelTreatment,
 } from "../public/facade-textures.js";
 import { buildWorldState, buildScenePlacements } from "../public/city-render.js";
 import { groupByVariant } from "../public/layout.js";
@@ -31,13 +33,58 @@ test("exactly four architectural characters exist, in both tables -- the 1980-20
     "FACADE_VARIANTS must cover exactly the four approved characters, not a fifth era filling the postwar/contemporary gap");
 });
 
-test("each character has real variety -- at least 3 variants, 12+ total, well above the 4 atlases this replaces", () => {
+test("each character has real variety -- at least 4 variants, 16+ total, well above the 4 atlases this replaces", () => {
   let total = 0;
   for (const char of CHARACTERS) {
-    assert.ok(FACADE_VARIANTS[char].length >= 3, `${char} has only ${FACADE_VARIANTS[char].length} variants`);
+    assert.ok(FACADE_VARIANTS[char].length >= 4, `${char} has only ${FACADE_VARIANTS[char].length} variants`);
     total += FACADE_VARIANTS[char].length;
   }
-  assert.ok(total >= 12, `only ${total} total variants across all characters`);
+  assert.ok(total >= 16, `only ${total} total variants across all characters`);
+});
+
+test("RUN3: tintHex scales an RGB colour and clamps to valid bytes", () => {
+  assert.equal(tintHex("#804020", 1), "rgb(128, 64, 32)");
+  assert.equal(tintHex("#804020", 0.5), "rgb(64, 32, 16)");
+  assert.equal(tintHex("#804020", 2), "rgb(255, 128, 64)", "must clamp at 255, not overflow or wrap");
+  assert.equal(tintHex("#000000", 5), "rgb(0, 0, 0)", "zero stays zero regardless of factor");
+});
+
+test("RUN3: spandrelTreatment gives metal variants real PBR values, not just a different diffuse colour", () => {
+  const spec = { stoneTrim: "#d4cbbe", roughnessTrim: 0.75 };
+  const stone = spandrelTreatment({ spandrelMaterial: "stone" }, spec, 10);
+  assert.equal(stone.diffuse, spec.stoneTrim);
+  assert.equal(stone.roughByte, Math.round(0.75 * 255));
+  assert.equal(stone.metalByte, 10, "stone must pass through the wall's own metalness byte unchanged");
+
+  const metal = spandrelTreatment({ spandrelMaterial: "metal" }, spec, 10);
+  assert.notEqual(metal.diffuse, spec.stoneTrim, "metal must not reuse the stone diffuse colour");
+  assert.ok(metal.roughByte < stone.roughByte, "metal must be smoother (lower roughness) than stone");
+  assert.ok(metal.metalByte > stone.metalByte, "metal must be more metallic than the wall's own metalness byte");
+
+  const omitted = spandrelTreatment({}, spec, 10);
+  assert.deepEqual(omitted, stone, "omitting spandrelMaterial must default to stone -- every RUN2 variant relies on this");
+});
+
+test("RUN3: at least one variant per character varies glass/frame tint or spandrel material, not just floor count and mullion", () => {
+  // RUN2 shipped floor count, window proportion, and mullion style. RUN3
+  // closes docs/audits/K6-BUILDINGS.md item 2's own named remaining gap:
+  // "no equivalent variety in window-frame colour or glass tint."
+  for (const char of CHARACTERS) {
+    const variesColour = FACADE_VARIANTS[char].some(
+      (v) => v.spandrelMaterial === "metal" || (v.glassTint ?? 1) !== 1 || (v.frameTint ?? 1) !== 1,
+    );
+    assert.ok(variesColour, `${char} has no variant with spandrel material or glass/frame tint variety`);
+  }
+});
+
+test("RUN3: glassTint/frameTint/spandrelMaterial default to unchanged on every RUN2 variant (variant 0-2), preserving RUN2's exact output", () => {
+  for (const char of CHARACTERS) {
+    for (const v of FACADE_VARIANTS[char].slice(0, 3)) {
+      assert.equal(v.spandrelMaterial ?? "stone", "stone", `${char}/${v.name} should default to a stone spandrel`);
+      assert.equal(v.glassTint ?? 1, 1, `${char}/${v.name} should default to no glass tint`);
+      assert.equal(v.frameTint ?? 1, 1, `${char}/${v.name} should default to no frame tint`);
+    }
+  }
 });
 
 test("variant 0 of every character is byte-identical to this file's values before variants existed", () => {
