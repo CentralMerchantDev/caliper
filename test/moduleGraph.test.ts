@@ -16,7 +16,10 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildReverseMap, isTestPath } from "../scripts/lib/module-graph.mjs";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildReverseMap, isTestPath, loadModuleFiles } from "../scripts/lib/module-graph.mjs";
 
 test("buildReverseMap: an export called from a real (non-test) file is a caller", () => {
   const files = [
@@ -95,3 +98,52 @@ test("isTestPath: recognises a file under a test/ segment on both path separator
   assert.equal(isTestPath("/repo/src/grounding.ts"), false);
   assert.equal(isTestPath("/repo/public/contest/widget.js"), false, "a directory that merely CONTAINS \"test\" as a substring is not a test/ path");
 });
+
+// A REAL BUG, found while building I3 (the MODULE-MAP.md generator): the
+// gate and generator only ever passed loadModuleFiles a publicDir and a
+// srcDir, so buildReverseMap never saw a SINGLE test/ file's own import
+// clauses -- decideGroundingOutcome, imported by three real test files,
+// rendered identically to an export nothing anywhere imports, because
+// nothing had scanned test/grounding.test.ts's source at all. The gate's
+// own PASS/FAIL was unaffected (an export with zero real callers needs an
+// allowlist entry whether or not a test also happens to import it), but the
+// test-only-vs-fully-dead DISTINCTION this whole task was motivated by
+// (docs/AUDIT-LEDGER.md line 90) silently stopped working. These two tests
+// cover the fix directly, not just the surrounding gate behaviour.
+test("buildReverseMap: a file under test/ is scanned for its OWN imports (so test-only callers are found), but its OWN exports are not tracked", () => {
+  const files = [
+    { path: "/repo/src/grounding.ts", source: `export function decideGroundingOutcome() {}`, isHtml: false },
+    {
+      path: "/repo/test/grounding.test.ts",
+      source: `import { decideGroundingOutcome } from "../src/grounding";\ndecideGroundingOutcome();\nexport function helperNobodyImports() {}`,
+      isHtml: false,
+    },
+  ];
+  const map = buildReverseMap(files, isTestPath);
+  const srcEntry = map.get("/repo/src/grounding.ts").get("decideGroundingOutcome");
+  assert.deepEqual([...srcEntry.callers], []);
+  assert.deepEqual([...srcEntry.testCallers], ["/repo/test/grounding.test.ts"]);
+  assert.equal(map.has("/repo/test/grounding.test.ts"), false, "a test file's own exports must not become gate findings");
+});
+
+test("loadModuleFiles: testDir is scanned for .ts files, excluding the .built/ esbuild output directory", () => {
+  const files = loadModuleFiles({
+    publicDir: null,
+    srcDir: null,
+    testDir: mkTmpTestDir(),
+  });
+  const paths = files.map((f) => f.path.split("\\").join("/"));
+  assert.ok(paths.some((p) => p.endsWith("/real.test.ts")), "a real .ts source file under testDir must be loaded");
+  assert.ok(!paths.some((p) => p.includes("/.built/")), ".built/ is esbuild's bundle output, not source, and must be skipped");
+});
+
+function mkTmpTestDir() {
+  // A real, tiny directory on disk -- loadModuleFiles reads the filesystem
+  // directly (readdirSync/statSync), so this cannot be tested with an
+  // in-memory fixture the way buildReverseMap's own tests are.
+  const dir = mkdtempSync(join(tmpdir(), "module-graph-test-"));
+  writeFileSync(join(dir, "real.test.ts"), `export function realHelper() {}`);
+  mkdirSync(join(dir, ".built"));
+  writeFileSync(join(dir, ".built", "real.test.mjs"), `export function realHelper() {}`);
+  return dir;
+}

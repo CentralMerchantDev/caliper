@@ -30,6 +30,15 @@
       "expect": "every export in public/ and src/ has a real"
     },
     {
+      "id": "module-map-generator-marks-uncalled-exports",
+      "guards": "renderModuleMap (scripts/gen-module-map.mjs) marks every uncalled export with **UNCALLED** in the generated document, not just in memory",
+      "note": "Targets the generator script itself, not a shared production file -- removing the UNCALLED marker from the fully-dead branch only (line ~89) while leaving the test-only branch (line ~84) untouched, so this is a partial mutation on purpose: it proves the smoke test's assertion is actually exercised by the fully-dead path, not only coincidentally satisfied by the test-only path elsewhere in the same output.",
+      "file": "scripts/gen-module-map.mjs",
+      "find": "lines.push(`- \\`${name}\\` -- **UNCALLED**${reason ? ` -- *${reason}*` : \"\"}`);",
+      "replace": "lines.push(`- \\`${name}\\`${reason ? ` -- *${reason}*` : \"\"}`);",
+      "expect": "every module with exports gets a section, every export line names its callers or UNCALLED"
+    },
+    {
       "id": "ground-edge-is-far-enough-out",
       "guards": "the modelled ground extends far enough that its own outer edge is beyond the range where the sea bed still reads through the water -- the original tray was visible because the ground stopped at 19.5 km, not because it had an edge at all",
       "note": "This entry SURVIVED once, and correctly. Its expect still named 'the ground reaches further than the water', a test renamed when the seabed-ring invariant was fixed. The mutation turned the suite red, but not on the named test, and the runner refused to score that as a pass. An expect is a reference to a test name, and renaming a test silently breaks it -- which is now checked at startup.",

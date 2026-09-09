@@ -33,6 +33,7 @@ function readOrNull(path) {
 
 const TRACKED = [
   { label: "src/citySummary.generated.ts", path: join(ROOT, "src", "citySummary.generated.ts") },
+  { label: "docs/MODULE-MAP.md", path: join(ROOT, "docs", "MODULE-MAP.md") },
   { label: "test/testCount.generated.json", path: join(ROOT, "test", "testCount.generated.json") },
   { label: "public/index.html", path: join(ROOT, "public", "index.html") },
 ];
@@ -40,6 +41,17 @@ const before = TRACKED.map((t) => readOrNull(t.path));
 
 console.log("Regenerating src/citySummary.generated.ts (scripts/gen-city-summary.mjs)...");
 execFileSync(process.execPath, [join(ROOT, "scripts", "gen-city-summary.mjs")], { cwd: ROOT, stdio: "inherit" });
+
+// I3 (docs/BUILD-LOOP.md Step 2 plan, approved 2026-09-08): not a "claim" in
+// the sense the other two generators are (nothing on public/index.html reads
+// from it, so generatedClaimsAreCurrent.test.ts's page-claim manifest does
+// not cover it) -- an internal developer artefact instead, listing every
+// export in public/ and src/ and who calls it. Tracked here anyway so "one
+// command regenerates everything generated" stays true, and so a stale
+// docs/MODULE-MAP.md shows up in "what changed" below rather than silently
+// drifting from the gate it shares its data with (test/deadExports.test.ts).
+console.log("\nRegenerating docs/MODULE-MAP.md (scripts/gen-module-map.mjs)...");
+execFileSync(process.execPath, [join(ROOT, "scripts", "gen-module-map.mjs")], { cwd: ROOT, stdio: "inherit" });
 
 console.log("\nRegenerating test/testCount.generated.json and public/index.html's test-count claim (scripts/gen-test-count.mjs)...");
 const passthroughFlags = ["--node-log", "--worker-log"];

@@ -150,7 +150,7 @@ import { dirname, join, resolve, relative } from "node:path";
  * generator, not hand-wired). Same shape test/importsResolve.test.ts's own
  * `loadPublicFiles()` already used: `{ path, source, isHtml }`.
  */
-export function loadModuleFiles({ publicDir, srcDir }) {
+export function loadModuleFiles({ publicDir, srcDir, testDir }) {
   const out = [];
   function walk(dir, { skipDirNames = [], extensions, excludeSuffixes = [] }) {
     if (!existsSync(dir)) return;
@@ -168,6 +168,14 @@ export function loadModuleFiles({ publicDir, srcDir }) {
   }
   if (publicDir) walk(publicDir, { skipDirNames: ["vendor"], extensions: [".js", ".html"] });
   if (srcDir) walk(srcDir, { skipDirNames: [], extensions: [".ts"], excludeSuffixes: [".generated.ts"] });
+  // `.built` is esbuild's own output directory (test/run.mjs bundles every
+  // .test.ts file there before running it) -- walking it would scan every
+  // test file's entire dependency tree, INLINED, as though it were this
+  // file's own source, multiplying every import and export by however many
+  // bundles happen to include it. Test SOURCE files are what buildReverseMap
+  // needs to see (to know what a test imports, so it can be classified as a
+  // test caller rather than invisible); the built output is not source.
+  if (testDir) walk(testDir, { skipDirNames: [".built"], extensions: [".ts"], excludeSuffixes: [] });
   return out;
 }
 
@@ -224,6 +232,15 @@ export function buildReverseMap(files, isTestPathFn) {
   const reverse = new Map();
   for (const file of files) {
     if (file.isHtml) continue; // HTML pages import; they do not export
+    // A file under test/ is scanned below for what it IMPORTS (so its
+    // imports can be classified as test callers), but its OWN exports are
+    // not tracked here -- test infrastructure (helper exports like
+    // findUnresolvedImports) is not a capability this gate audits, and
+    // callers.length passing `files` including test/ (needed so
+    // decideGroundingOutcome's own shape -- "tested in 4 places, called
+    // from 0" -- is visible at all) must not turn every test file's own
+    // exports into gate findings as a side effect.
+    if (isTestPathFn(file.path)) continue;
     const { named, hasDefault } = findExportedNames(file.source);
     const exportsByName = new Map();
     for (const name of named) exportsByName.set(name, { callers: new Set(), testCallers: new Set() });

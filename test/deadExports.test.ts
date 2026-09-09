@@ -48,6 +48,7 @@ function repoRoot(): string {
 const ROOT = repoRoot();
 const PUBLIC = join(ROOT, "public");
 const SRC = join(ROOT, "src");
+const TEST = join(ROOT, "test");
 const ALLOWLIST_PATH = join(ROOT, "test", "deadExports.allowlist.json");
 
 interface AllowlistFile {
@@ -86,7 +87,7 @@ test("no `export * from` anywhere in public/ or src/ -- the reverse map does not
 });
 
 test("every export in public/ and src/ has a real (non-test) caller, or a written reason in test/deadExports.allowlist.json", () => {
-  const files = loadModuleFiles({ publicDir: PUBLIC, srcDir: SRC });
+  const files = loadModuleFiles({ publicDir: PUBLIC, srcDir: SRC, testDir: TEST });
   const map = buildReverseMap(files, isTestPath);
   const allowlist = loadAllowlist();
 
@@ -113,7 +114,7 @@ test("every export in public/ and src/ has a real (non-test) caller, or a writte
 });
 
 test("every test/deadExports.allowlist.json entry still names a currently-uncalled export, and gives a real reason", () => {
-  const files = loadModuleFiles({ publicDir: PUBLIC, srcDir: SRC });
+  const files = loadModuleFiles({ publicDir: PUBLIC, srcDir: SRC, testDir: TEST });
   const map = buildReverseMap(files, isTestPath);
   const allowlist = loadAllowlist();
 
