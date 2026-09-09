@@ -102,3 +102,66 @@ test("changing WORLD.SIZE moves the grid origin -- written to report this, not t
     rmSync(dirSmaller, { recursive: true, force: true });
   }
 });
+
+// B2.3: THE SAME PROPERTY, AS A REAL PASSING ASSERTION FOR B2's OWN
+// GENERATOR, NOT A TODO.
+//
+// docs/specs/BOARD-REBUILD-PLAN.md's B2.1 contract: never derive a
+// coordinate origin from island/mainland bounds or WORLD.SIZE -- call
+// grid.js's atomOf/atomOrigin/atomCentre on absolute world metres
+// exclusively.
+//
+// WHAT THIS DOES NOT CLAIM, FOUND WHILE WRITING IT: a first version of
+// this test compared every PLACED PIECE (roads, buildings) between the two
+// scales and expected zero to move. That is a stronger, different, and
+// actually FALSE claim -- measured directly: heightAt(-9244, -7972) is
+// 125.95 m at WORLD_SCALE 0.65 and 1,306.96 m at 0.52. WORLD_SCALE reshapes
+// the real terrain height field at a fixed world position by design
+// (world-scale.js's own header: "the same city covers far more of it" by
+// shrinking the LAND, not by a camera zoom that leaves it identical) --
+// so a road or building whose placement depends on real slope/elevation
+// CANNOT be expected to land the same way at a different scale, and
+// promising that would contradict WORLD_SCALE's own documented purpose.
+// That is not what B2.1's contract promised either: it promised no
+// coordinate ORIGIN is derived from landform bounds, not that the whole
+// generated city is scale-invariant.
+//
+// THE PROPERTY THAT IS TRUE, AND IS WHAT THE CONTRACT ACTUALLY PROMISED:
+// every settlement BOUNDARY -- pure geometry (a landmass's own real
+// coastline, grid.js's atomOf/atomOrigin, no heightAt dependency at all) --
+// is identical whether WORLD_SCALE is 0.65 or 0.52. Checked directly
+// against public/board-generator.js's own settlementBoundaries(), the
+// function every piece's own atom grid is anchored against. This is not
+// asserted for city-plan.js's own plots (the test above stays exactly as
+// it is, still red-on-purpose, still describing a real, unfixed defect in
+// a generator B2 replaces) -- only for B2's own boundaries.
+test("B2's own settlement boundaries: changing WORLD.SIZE does not move a single vertex -- a REAL passing assertion, not a todo", async () => {
+  const dirSmaller = patchedWorldAt(WORLD_SCALE * 0.8);
+  try {
+    const { settlementBoundaries: boundariesSmaller } =
+      await import(pathToFileURL(join(dirSmaller, "board-generator.js")).href);
+    const { settlementBoundaries: boundariesReal } = await import("../public/board-generator.js");
+
+    const real = boundariesReal();
+    const smaller = boundariesSmaller();
+    assert.ok(real.length >= 5, `sanity: expected several settled landmasses, got ${real.length}`);
+    assert.equal(real.length, smaller.length, "a different number of settlement boundaries exists at a different WORLD_SCALE");
+
+    const smallerById = new Map(smaller.map((b) => [b.id, b]));
+    let maxDelta = 0, worst = null;
+    for (const b of real) {
+      const other = smallerById.get(b.id);
+      assert.ok(other, `boundary "${b.id}" does not exist at the smaller scale`);
+      assert.equal(b.polygon.length, other.polygon.length, `"${b.id}" has a different vertex count at the smaller scale`);
+      for (let i = 0; i < b.polygon.length; i++) {
+        const d = Math.hypot(b.polygon[i][0] - other.polygon[i][0], b.polygon[i][1] - other.polygon[i][1]);
+        if (d > maxDelta) { maxDelta = d; worst = { id: b.id, i, real: b.polygon[i], smaller: other.polygon[i] }; }
+      }
+    }
+    assert.ok(maxDelta < 1e-6,
+      `a settlement boundary vertex moved ${maxDelta.toFixed(3)} m when WORLD_SCALE changed ${WORLD_SCALE} -> ${WORLD_SCALE * 0.8}: ${JSON.stringify(worst)} -- ` +
+      `a saved build's settlement geometry would be silently wrong after opening new land`);
+  } finally {
+    rmSync(dirSmaller, { recursive: true, force: true });
+  }
+});

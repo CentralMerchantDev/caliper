@@ -260,14 +260,40 @@ const COAST_DESIGN_RAW = [
 // SAME area-correction technique organicIsland uses (measure, then scale
 // to match exactly), applied to hand-drawn points instead of generated
 // ones.
+//
+// REPOSITIONED AROUND A FIXED WORLD ANCHOR, NOT ITS OWN RAW CENTROID --
+// found by B2's own origin-stability gate (test/originStability.test.ts),
+// which measures every settled landmass's boundary under two different
+// WORLD_SCALE values and requires zero drift. Eleven of twelve were
+// already exact; downtown alone moved (up to 328 m). Root cause: every
+// OTHER landmass here is positioned from a WORLD-space cxWorld/czWorld,
+// converted to design space as cxWorld/WORLD_SCALE (see organicIsland) --
+// that division is what makes the position cancel out exactly when
+// multiplied back by WORLD_SCALE later (world-scale.js's sm()), regardless
+// of what WORLD_SCALE actually is. COAST_DESIGN_RAW's own average was used
+// directly as that centre instead -- a raw DESIGN-space number with no
+// WORLD_SCALE relationship at all, so sm(rawCentroid) = rawCentroid *
+// WORLD_SCALE, which moves whenever WORLD_SCALE does. Fixed the same way
+// every other landmass already works: an explicit WORLD anchor
+// (DOWNTOWN_CX_WORLD/CZ_WORLD, computed once at this file's own default
+// WORLD_SCALE so today's already-gated 22 km2/6.67 km2-boundary result is
+// unchanged) divided by WORLD_SCALE for the design-space centre the scaled
+// shape is placed around.
 const DOWNTOWN_TARGET_KM2 = 22;
+const DOWNTOWN_CX_WORLD = 791.0782608695652; // COAST_DESIGN_RAW's own raw centroid * 0.65 (this file's WORLD_SCALE at the time downtown was drawn) -- "kept where it already sits" (Mark), now literally, at every scale
+const DOWNTOWN_CZ_WORLD = 1440.9934782608698;
 const COAST_DESIGN = (() => {
-  const cx = COAST_DESIGN_RAW.reduce((s, [x]) => s + x, 0) / COAST_DESIGN_RAW.length;
-  const cz = COAST_DESIGN_RAW.reduce((s, [, z]) => s + z, 0) / COAST_DESIGN_RAW.length;
+  const cx = DOWNTOWN_CX_WORLD / WORLD_SCALE, cz = DOWNTOWN_CZ_WORLD / WORLD_SCALE;
+  const rawCx = COAST_DESIGN_RAW.reduce((s, [x]) => s + x, 0) / COAST_DESIGN_RAW.length;
+  const rawCz = COAST_DESIGN_RAW.reduce((s, [, z]) => s + z, 0) / COAST_DESIGN_RAW.length;
   const rawAreaM2 = polygonAreaM2(COAST_DESIGN_RAW);
   const targetM2 = designAreaM2(DOWNTOWN_TARGET_KM2);
   const k = Math.sqrt(targetM2 / rawAreaM2);
-  return COAST_DESIGN_RAW.map(([x, z]) => [cx + (x - cx) * k, cz + (z - cz) * k]);
+  // Scale around the RAW shape's own centroid (preserves its own drawn
+  // proportions), then translate the result onto the fixed world-anchored
+  // design centre -- two separate operations, not one scale-around-cx,
+  // because the anchor and the raw shape's own centre are different points.
+  return COAST_DESIGN_RAW.map(([x, z]) => [cx + (x - rawCx) * k, cz + (z - rawCz) * k]);
 })();
 
 // -----------------------------------------------------------------------------
@@ -437,6 +463,18 @@ export function landmassPolygonsDesign(samplesPerSegment = 10) {
     polygon = scaleAroundCentroid(polygon, LAND_SCALE);
     return { ...lm, polygon };
   });
+}
+
+/** Every land mass as a smoothed polygon, in WORLD metres -- B2's own need
+ *  (grid.js's ATOM/board.js/land-use.js all work in real world metres, not
+ *  design metres). `sm()` (world-scale.js) is the one place that conversion
+ *  is defined; this only applies it, per landmass, to landmassPolygonsDesign()'s
+ *  own output, rather than each caller re-deriving the mapping for itself. */
+export function landmassPolygonsWorld(samplesPerSegment = 10) {
+  return landmassPolygonsDesign(samplesPerSegment).map((lm) => ({
+    ...lm,
+    polygon: lm.polygon.map(([x, z]) => [sm(x), sm(z)]),
+  }));
 }
 
 // -----------------------------------------------------------------------------

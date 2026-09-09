@@ -582,6 +582,147 @@ still can fail.
 **STOP HERE.** Nothing above is implemented. Waiting for Mark's review
 before Step 3 (test-first) starts.
 
+## B2.2/B2.3 — implemented and gated. `public/board-generator.js`, `test/boardGenerator.test.ts`
+
+APPROVED 2026-09-08 (Mark): board-adapter.js/board-region.js ruled on
+directly (see "what dies, what lives" above); both B2.1 mechanisms
+approved on the "construct what you want, do not filter for it and hope"
+ground (docs/AUDIT-PROTOCOL.md's own new entry on that principle).
+
+**WATCHED RED FIRST**: `test/boardGenerator.test.ts` and the new
+`test/originStability.test.ts` case were written and run against a
+nonexistent `public/board-generator.js` -- both refused to build ("Cannot
+find module"), the same standing rule `test/landCoverage.test.ts` already
+used.
+
+**WHAT WAS BUILT**: `SETTLEMENT_TABLE`, a table keyed by
+`terrain.js`'s own `LANDMASSES.kind` -- settled/density/era/boundary
+size/block size/plot size/levels, decided once per island, before any road
+or plot is laid. Settlement boundaries are a real inset of each island's
+own generated coastline (`islandBoundary`, area ~ k²) or, for the mainland,
+a strip along the real coastline at `MAINLAND_ZONES`' own coastal-strip
+depth (`mainlandBoundary`). Roads are an explicit junction graph
+(`junctionGraph`): nodes are atom-aligned grid intersections inside the
+boundary on real, road-legal ground; edges are checked at their own
+midpoint too; one road PIECE per node, one per edge span, non-overlapping
+by construction (edges stop short of each junction's own footprint).
+Blocks are subdivided into plots, each checked with `footprint.js`'s real
+`assessFootprint` (real slope, real water, real waterway) before a building
+piece is placed. Cottage islands bypass the whole road/block/plot
+machinery -- one building at the island's own centroid, because it is a
+cottage island, not because a road grid happened to leave one plot.
+
+**MEASURED (default seed, `LandField(16)`, `public/board-generator.js`'s
+own `generateBoard`)**:
+
+- **16,193 buildings, 15,825 roads**, 32,018 pieces total.
+- **Settled land: 28.2 km²** -- inside the 20-40 km² target
+  (`docs/specs/BOARD-REBUILD-PLAN.md`'s own §"Why").
+- **Coverage inside each settlement boundary: 24.0-39.0%** across every
+  settled, non-`oneHouse` boundary (mainland 28.6%, downtown 37.2%,
+  suburb 39.0%, resort 38.5%, highland 37.6%, fishing 24.0%, farm 37.2%,
+  vineyard 36.2%, quarry 25.8%) -- inside the 20-40% target on every one,
+  not merely on average. Cottage islands excluded from this gate on
+  purpose: one house on a whole island is a design decision (`oneHouse`),
+  not a density outcome, and the percentage does not describe it -- their
+  own gate ("exactly one building") is the right one.
+- **Grid round-trip: 100%**, by construction -- every piece's `cell.i/j/k`
+  is an integer atom index from the first line of the layout math, never a
+  continuous position rounded afterward (contrast `test/boardAdapter.test.ts`'s
+  own measured 305/17,586 for the OLD adapted plots).
+- **originStability: a real, passing assertion, not a todo** -- see
+  below.
+
+**TWO REAL BUGS FOUND BY THE GATE ITSELF, NOT BY INSPECTION, EACH FIXED AND
+RE-VERIFIED**:
+
+1. **The mainland boundary was constructed from the WRONG END of its own
+   polygon array.** `landmassPolygonsDesign()`'s own `if (signedArea2(polygon) > 0) polygon.reverse()`
+   (a winding-direction fix applied to every landmass) can reverse the
+   whole coastline+corners array; a first version of this file sliced the
+   array's first N points expecting the coastline and got the four raw
+   inland corners instead -- a ~0 km² self-intersecting "boundary" with a
+   46,800 m bounding box that produced 100,717 road pieces against 21
+   buildings before this was caught. Fixed by selecting the coastline by
+   its own known coordinate range instead of array position.
+2. **The mainland's inland offset ran the wrong direction, out to sea.**
+   `MAINLAND_INLAND_XW` (-13000) is LESS than `MAINLAND_COAST_X0W` (-8000)
+   in `terrain.js`'s own construction -- inland is -X, not +X. A first
+   version offset +X and built a boundary that was 1,397 of 1,402 sampled
+   points WATER, measured directly by the gate's own real-ground check, not
+   assumed. Fixed by reversing the offset sign.
+
+**BLOCK SIZING WAS ALSO TUNED AGAINST MEASURED COVERAGE, NOT GUESSED**: an
+early version picked `blockAtoms` close to `plotAtoms`, leaving almost no
+room inside a block for even one plot (21 buildings against 100,717 roads).
+Re-sized for 2-3 plots per block side; measured coverage then ran
+38.5-46.5% (above the 20-40% band) at `CLEAR=2`; `CLEAR=3` (plus a small
+nudge to `city`'s own `plotAtoms`, whose tier alone still ran 40.9%)
+measured 24.0-39.0% -- inside the band on every settled boundary.
+
+## originStability: a real, passing assertion for B2's own pieces
+
+Also found by the gate, not assumed: a first version of this test compared
+every PLACED PIECE between two `WORLD_SCALE` values and required zero to
+move -- a stronger, and actually FALSE, claim. Measured directly:
+`heightAt(-9244, -7972)` is 125.95 m at `WORLD_SCALE` 0.65 and 1,306.96 m
+at 0.52. `WORLD_SCALE` reshapes the real terrain height field at a fixed
+world position BY DESIGN (`world-scale.js`'s own header: the LAND shrinks,
+not a camera zoom that leaves it identical) -- a road or building whose
+placement depends on real slope cannot be expected to land the same way at
+a different scale, and B2.1's contract never promised that; it promised no
+coordinate ORIGIN is derived from landform bounds. The property that IS
+true, and is what the contract actually promised: every settlement
+BOUNDARY -- pure geometry, `atomOf`/`atomOrigin`, no `heightAt` dependency
+at all -- is identical under both scales. `test/originStability.test.ts`'s
+new case asserts this directly against `board-generator.js`'s own
+`settlementBoundaries()`: **max vertex delta 0.000 m across all twelve
+settled boundaries**, `WORLD_SCALE` 0.65 vs 0.52.
+
+Finding it this cleanly it, `downtown` alone moved up to 328 m under the
+FIRST version of this test, before the false-claim correction above --
+root-caused, not patched around: every OTHER landmass positions itself from
+a WORLD-space `cxWorld`/`czWorld` divided by `WORLD_SCALE` for its
+design-space centre (`organicIsland`'s own pattern), which cancels out
+exactly when multiplied back by `WORLD_SCALE` later, regardless of what
+`WORLD_SCALE` is. `COAST_DESIGN` (downtown's hand-drawn outline) used its
+own raw, uncompensated centroid instead -- a fix in `public/terrain.js`
+itself (`DOWNTOWN_CX_WORLD`/`CZ_WORLD`, an explicit fixed world anchor,
+computed once at this file's own default `WORLD_SCALE` so today's already-
+gated 22 km²/6.67 km²-boundary result is byte-identical to before),
+verified: downtown's own polygon area and first vertex are unchanged at the
+default scale, and its own boundary now shows 0.000 m delta too.
+
+## Still open, named rather than silently dropped
+
+- **Performance**: `generateBoard()` measures ~100-110 s per call.
+  `board.js`'s own `canPlace` checks EVERY foot cell of a placed piece
+  individually (not a sample) -- correct, existing, tested behaviour this
+  pass does not touch -- and a road span's foot (tens of metres by
+  `ROAD_WIDTH`) can cost hundreds of `classifyAt` calls, each calling
+  `slopeAt` for four more `heightAt` calls at distinct offsets that rarely
+  repeat (a capped memoisation cache was tried; measured no material
+  improvement, since most calls are genuinely unique -- kept anyway as a
+  safety cap after an uncapped version hit V8's own ~16.7M-entry `Map`
+  ceiling and crashed mid-run). NOT wired into `public/world.js`'s
+  `createWorld()` because of this: every test calling `createWorld()`
+  (dozens across the suite) would pay the cost. `.plan` is untouched, per
+  B2.1's own stated assumption for exactly this case. A real, separate
+  performance pass, not silently deferred.
+- **Bridges connecting settled islands** (B2.1's own task list, item 4):
+  not yet built. The brief's own "bridges AND BOATS" already allows some
+  islands to be boat-only; which get a bridge is real, undone design work.
+- **B2.4** (re-pinning the 34 old-world-pin failures): explicitly last,
+  per Mark's own instruction, once the generator makes the world coherent
+  end to end -- still not started, and should not be, until wiring and
+  bridges land.
+
+`npx tsc --noEmit` clean throughout. Full targeted regression
+(`test/terrainLandmassOwnership`, `worldAliasing`, `landCoverage`,
+`worldSeed`, `boardGenerator`, `originStability`, `ground`,
+`waterwayGround`): 65 tests, 63 pass, 2 fail -- both the already-catalogued
+`road-network.js` old-world pins, untouched by this pass.
+
 ## B2–B6
 
 B2 (the generator) starts next, on this same branch (`b1-land`) — not

@@ -1031,6 +1031,24 @@
       "find": "    {\n      label: \"MAINLAND_ZONES (public/terrain.js)\",\n      value: MAINLAND_ZONES,\n      reason: \"a flat, frozen spec of the mainland's own depth-band fractions (Object.freeze); the mainland's LANDMASSES entry embeds it as `.zones` by reference, for every seed -- one frozen table, not one per world, same category as WORLD.\",\n    },\n",
       "replace": "",
       "expect": "different-seed worlds share only the declared allow-list -- MAINLAND_ZONES included, since the mainland's LANDMASSES entry embeds it by reference"
+    },
+    {
+      "id": "b2-settlement-table-wooded-exclusion-real",
+      "guards": "the B2 gate's 'wooded/sandbar/rock/skerry islands carry no settlement at all' assertion actually reacts to SETTLEMENT_TABLE, not a tautology.",
+      "note": "Verified by hand this session: marking wooded settled (with a real density/boundary/block/plot config, matching every other settled kind's shape) correctly turned exactly the wooded-exclusion test red, and only that test -- the other 7 tests in test/boardGenerator.test.ts stayed green -- reverted, reconfirmed green (8/8).",
+      "file": "public/board-generator.js",
+      "find": "  wooded:    { settled: false },",
+      "replace": "  wooded:    { settled: true, boundaryK: 0.3, blockAtoms: 65, plotAtoms: 28, levels: 2 },",
+      "expect": "wooded/sandbar/rock/skerry islands carry no settlement at all -- a real, data-driven exclusion, not an assumption"
+    },
+    {
+      "id": "b2-mainland-boundary-inland-direction-real",
+      "guards": "the B2 gate's coverage-inside-boundary assertion catches a mainland settlement boundary built in the wrong direction (out to sea instead of onto land).",
+      "note": "Verified by hand this session: reversing the inland offset sign (the exact bug this file's own comment on mainlandBoundary describes finding, in the other direction) correctly turned the coverage test red -- the settlement-boundaries gate test itself did NOT catch it (boundary geometry is still WORLD_SCALE-invariant either direction, so origin stability is a different, orthogonal property from correctness of direction), which is itself informative: coverage is the control that actually verifies the boundary sits on buildable land. Reverted, reconfirmed green (8/8, plus originStability's own new case unaffected).",
+      "file": "public/board-generator.js",
+      "find": "  const inland = coastPolyline.map(([x, z]) => [x - stripDepth, z]);",
+      "replace": "  const inland = coastPolyline.map(([x, z]) => [x + stripDepth, z]);",
+      "expect": "coverage is measured INSIDE each settlement boundary, 20-40%, not world-wide -- the mainland boundary sits on real land, not open sea"
     }
   ]
 }
