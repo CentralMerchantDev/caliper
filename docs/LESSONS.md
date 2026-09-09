@@ -513,3 +513,56 @@ GB through this work, this project's own 4 GB floor, so a 1087-test full
 run (documented elsewhere as OOM-risking at module scope) was deferred
 rather than attempted below the floor; the 64 tests above are every test
 in every file this change touched.
+
+---
+
+### 2026-09-09 · A hand-written string hash passed by eye and failed on the exact input shape this codebase actually uses
+
+**WHAT WAS MISSED** `public/facade-textures.js`'s new `pickVariant`
+(RUN2 item 1, facade atlas variety) needed a deterministic
+`character + variantSeed → [0, N)` selector. The first version was a plain
+polynomial accumulator, `h = h*31 + charCode`, `% 100000`. Written, read
+back, and it looked fine — a standard textbook string hash. It was not
+tested against the actual shape of a real seed until the test that would
+prove it worked was written.
+
+**WHY IT GOT THROUGH, then didn't** `test/facadeVariants.test.ts`'s
+distribution check (`SAMPLE_SEEDS = "sample-0".."sample-39"`) went red on
+its first real run: `postwar: 40 sample seeds only ever reached 1 distinct
+variant`. A polynomial hash that only accumulates by `*31 + charCode`
+barely changes between strings differing in one trailing digit —
+`"postwar|sample-8"` and `"postwar|sample-9"` differ by exactly 1 before
+the final `% 100000`, so both land in the same third of `[0,1)` almost
+every time. This is not a corner case for this codebase: every `bld*`
+function's own default seed is exactly this shape (`"terrace-0"`,
+`"terrace-1"`, ...), and `layout.js`'s real per-plot seeds are built the
+same sequential way. A hash that looks fine on scattered test strings and
+fails specifically on the input pattern the codebase actually produces is
+worse than one that fails everywhere — it would have shipped clustering
+almost every real building onto variant 0 anyway, silently defeating the
+entire feature while `each character has at least 3 variants` and every
+other structural test still passed green.
+
+**THE CONTROL** [`test/facadeVariants.test.ts`](../test/facadeVariants.test.ts)'s
+`"different variant seeds reach different variants"` test, run against
+40 sequentially-suffixed sample seeds per character — not scattered random
+strings, the exact repetitive shape real seeds take. `hash01` was replaced
+with FNV-1a (`h ^= charCode; h = Math.imul(h, 0x01000193)`), which mixes
+every byte through a multiplication rather than only adding it, and the
+same test now reaches 2–3 distinct variants per character across the same
+40 samples. Watched red first (the polynomial version), fixed, watched
+green — not assumed safe from reading the replacement formula's reputation
+either.
+
+**STATUS** **CLOSED.** Found by the test on its first real run, not by
+audit or by a deliberately-planted mutation — the ordinary case CLAUDE.md's
+standard of proof describes ("write the test first... watched failing") is
+also the case that already caught this. `git diff` on
+`public/facade-textures.js` before committing confirmed only `hash01`'s
+body changed, nothing else. **General lesson, stated for the next hash
+someone writes by hand in this codebase**: a hash function is not verified
+by reading its formula or by trying it on a handful of unrelated strings —
+verify it against the actual, often repetitive/sequential shape of the
+real inputs it will receive (`"x-0"`, `"x-1"`, ...), because that is
+exactly the shape naive accumulator hashes are weakest against, and it is
+exactly the shape seeds, ids, and keys take throughout this project.
