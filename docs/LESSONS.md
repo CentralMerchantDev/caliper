@@ -392,3 +392,68 @@ test/run.mjs` → the 6 roadkit cases present and passing, full suite
 zero-tests-registered check in `test/run.mjs` — does not exist yet and
 this entry stays open until it does and has been watched red against a
 reintroduced case of this same bug.
+
+---
+
+### 2026-09-09 · A mutation test's own regex matched a comment describing the code, not only the code
+
+**WHAT WAS MISSED** `test/navPad.test.ts`'s new assertion for U1's
+live-position fix checked `assert.match(html, /trackLiveRect\(navPadEl,/, ...)`
+— meant to confirm `index.html`'s bottom module script actually calls the
+shared tracker against the pad. The mutation-test proof (rename the call to
+`trackLiveRectXXX`) was run to watch it fail before trusting it, following
+this project's own standing rule. It did not fail. The regex was still
+satisfied — by a comment, six lines above the real call, that described the
+mechanism in near-identical call syntax: `"...bottom module script's
+trackLiveRect(navPadEl, ...) call overrides both..."`. A test written to
+prove a specific line of code exists was, in practice, proving a *sentence
+about* that code exists, and the two had silently become different claims
+the moment someone (this session, this same lane) wrote a comment that
+happened to look like the thing it described.
+
+**WHY IT GOT THROUGH** The mutation-test discipline was followed correctly
+— red-first was actually attempted, not skipped — and it still passed
+green on the first attempt, because the *assertion itself* could not tell
+code from prose about code. This is a sharper case of the exact pattern
+this session's own audit work was, at the same time, writing up elsewhere
+in this file and in commit messages: a check that reads as proving a
+property while actually proving something adjacent and weaker. Committing
+runs of red-first discipline correctly is not sufficient if the assertion
+underneath it has a blind spot the discipline itself cannot see.
+
+**How this was actually caught**: by the discipline working exactly as
+designed — the mutation was applied, the test was run, and it passed when
+it should not have. That mismatch was the signal, not a separate
+inspection. Read `git grep`-style for every place `trackLiveRect(navPadEl,`
+appears in the file and found two: the real call, and the comment.
+
+**THE CONTROL** Reworded the comment to describe the mechanism without
+reproducing its call syntax (`"...call into live-position.js's tracker
+overrides..."` instead of the literal `trackLiveRect(navPadEl, ...)`
+phrase). Re-ran the same mutation: now correctly caught. This fixes the one
+instance. **Not yet built**: a general check that a source-matching test's
+regex does not ALSO match inside a comment block near the real call — e.g.
+stripping `/* ... */` and `//` comment spans from the haystack before
+matching, in a shared test helper every string-based `assert.match(html,
+...)` check in this suite could use instead of matching raw source. This
+project's own tests do this kind of raw-source string matching often
+(`navPad.test.ts`, `navWheel.test.ts`, and others) — the same blind spot
+plausibly already exists elsewhere, unfound, because it was never looked
+for as a category.
+
+**STANDING WARNING, recorded per Mark's instruction because this is now the
+fifth time in one week a mutation check has caught a test rather than
+code**: A REGEX OVER SOURCE MATCHES YOUR COMMENTS TOO. Any assertion of the
+shape `assert.match(sourceText, /literalCodePattern/)` is a claim about the
+FILE'S TEXT, not about the CODE — and a comment that describes code well is,
+to a regex, indistinguishable from the code it describes. Writing the
+comment in different words than the call it documents is not pedantry; it
+is the only thing that keeps the assertion honest.
+
+**STATUS** **OPEN.** The one instance (`test/navPad.test.ts`) is fixed and
+reverified (mutation `CAUGHT`, restored, green). The general control — a
+comment-stripping helper for source-text assertions, and a sweep of this
+suite's existing raw-source `assert.match` checks against it — does not
+exist yet. This entry stays open until it does and has been watched red
+against a reintroduced case of this same bug in a *different* file than
+the one that found it.
