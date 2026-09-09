@@ -1130,6 +1130,24 @@
       "find": "  return [...src.matchAll(/^\\s*import\\b[^;]*\\bfrom\\s*[\"']([^\"']+)[\"']/gm)].map((m) => m[1]);",
       "replace": "  return src.includes(\"import\") ? [\"__any__\"] : [];",
       "expect": "the check above actually fails on a real import of the forbidden path, not just passing by construction"
+    },
+    {
+      "id": "expected-red-does-not-rubber-stamp-everything",
+      "guards": "unexpectedFailures genuinely filters against the named EXPECTED_RED allowlist -- it does not silently treat every failure as expected, which would hide a real regression behind the same mechanism meant to unblock a known one.",
+      "note": "Verified this session: making unexpectedFailures return an empty array unconditionally (a 'rubber stamp' bug) is caught directly by the dedicated test asserting a genuinely unexpected failure survives the filter.",
+      "file": "scripts/expected-red.mjs",
+      "find": "  return failingTitles.filter((t) => !EXPECTED_RED.has(t));",
+      "replace": "  return [];",
+      "expect": "unexpectedFailures strips only the documented entries, naming everything else"
+    },
+    {
+      "id": "mutation-claim-checks-total-not-just-caught",
+      "guards": "mutationClaimMismatch genuinely checks the total-defects-injected number against the generated manifest count, not just the caught/never-run figures -- a stale total could otherwise hide a shrinking or growing manifest.",
+      "note": "Verified this session: disabling the total-count comparison is caught directly by the dedicated synthetic test asserting a wrong total is named by claim.",
+      "file": "src/generatedClaimChecks.ts",
+      "find": "  if (Number(claimedTotal) !== generatedTotal) return `README.md claims ${claimedTotal} defects injected, generated summary says ${generatedTotal} -- run node scripts/gen-mutation-summary.mjs`;",
+      "replace": "  // disabled",
+      "expect": "a deliberately staled mutation-evidence sentence is named, by claim, not silently absorbed"
     }
   ]
 }

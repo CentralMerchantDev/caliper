@@ -104,20 +104,27 @@ and it is red... not hidden by loosening the assertion").
    9 blocked mutations are recorded as blocked-with-reason rather than
    silently reported as CAUGHT or quietly dropped from the manifest.
 
-**Recommendation: Option 3 stands until Mark decides between 1 and 2** —
-this is exactly the shape of decision `docs/BUILD-LOOP.md` Step 2 asks to
-be planned in writing and reviewed before being acted on, not resolved
-unilaterally by whoever hits the deadlock next, and unlike the
-`test/testCategoryScoped.ts` decision above, either fix here touches a
-gate whose exact wording and status Mark chose deliberately once already
-this week.
+**DECIDED PROVISIONALLY, Mark, via `docs/briefs/RUN2-CLI-2026-09-09.md`:
+Option 2, the allowlist** — "preserves the honest red AND unblocks the
+controls, where converting the gate to `{todo}` would hide a real
+measurement." **Implemented**, this run: `scripts/expected-red.mjs` (new)
+— a named, documented `Map` of test titles expected to stay red, each
+entry carrying its own reason, read by both `scripts/_mutcheck.mjs` and
+`scripts/mutate.mjs` (one list, not two that could drift). Currently
+carries exactly one entry, B2.5's own CPU-time gate title, copied
+verbatim from `test/boardGenerator.test.ts` and asserted to match it by
+a dedicated test (`test/expectedRed.test.ts`, 5 tests, mutation-tested:
+`expected-red-does-not-rubber-stamp-everything`, CAUGHT). **Reversible
+in one commit**, as promised: delete the entry (or the whole file) and
+both scripts return to their original, stricter behaviour with no other
+code to touch.
 
-**What was done in the meantime:** nothing touched `board-generator.js`,
-`board.js`, `isolate.js`, `world-render-3d.js`, or either test file. The
-9 blocked mutations are recorded as `NEVER RUN` in the honestly-regenerated
-`test/mutationSummary.generated.json` (109 of 119 CAUGHT, 10 never run —
-the 9 here plus 1 unrelated, see below), not silently reported CAUGHT and
-not deleted from the manifest.
+**What was done:** `board-generator.js`/`board.js`/`test/boardGenerator.test.ts`
+were not touched — the fix lives entirely in the two scripts and the new
+allowlist module, exactly as Option 2 promised. The `isolate.test.ts`-side
+5 mutations are NOT unblocked by this fix (that file's own red is an
+old-world pin, not a permanent gate like B2.5's — a different problem,
+correctly not added to this allowlist) and wait on B2.8's re-pin instead.
 
 **The 10th, separate from this decision:** `b2-5-ground-verified-opt-in-
 is-load-bearing` (`public/board.js`) is not blocked by the deadlock above

@@ -32,6 +32,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { acquireLock, releaseLock, sha } from "./mutate-lock.mjs";
+import { unexpectedFailures } from "./expected-red.mjs";
 
 const [testFile, sourceFile, specFile] = process.argv.slice(2);
 if (!testFile || !sourceFile || !specFile) {
@@ -86,8 +87,13 @@ function run() {
     // against an EMPTY failed-test list and printed "red, but not on ...: "
     // with nothing after the colon. That is INCONCLUSIVE dressed as a result:
     // the run really was red, but which test failed was never actually read.
-    const failed = [...out.matchAll(/^✖ (.+?) \([\d.]+m?s\)$/gm)].map((m) => m[1]);
-    return { ok: false, failed };
+    const failed = unexpectedFailures([...out.matchAll(/^✖ (.+?) \([\d.]+m?s\)$/gm)].map((m) => m[1]));
+    // scripts/expected-red.mjs: a named, documented, honestly-red test (B2.5's
+    // own CPU-time gate) is not a broken tree -- Candidate pattern F, second
+    // instance (docs/AUDIT-PROTOCOL.md §7, 2026-09-09). Every OTHER failure
+    // still counts; `ok` is true here ONLY when the allowlist accounts for
+    // everything that failed.
+    return { ok: failed.length === 0, failed };
   }
 }
 
