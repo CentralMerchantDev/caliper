@@ -27,14 +27,24 @@ export function stripSourceComments(src: string): string {
   // in this suite index into the result with indexOf()/slice() and expect
   // those offsets to still line up with the original source.
   const noBlockComments = src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
-  // Then `//` line comments, truncating each line at the comment start -- the
-  // same behaviour test/isolate.test.ts and test/movePiece.test.ts already
-  // had and relied on before this helper existed.
+  // Then `//` line comments -- also blanked in place (padded with spaces to
+  // the line's original length), NOT truncated. Truncating was this
+  // function's original behaviour (matching test/isolate.test.ts's and
+  // test/movePiece.test.ts's pre-existing helper) and it quietly broke the
+  // offset-preservation guarantee stated above: shortening a line shifts
+  // every position after it, so a position found by searching the RAW text
+  // (test/pickSelection.test.ts does this on purpose, to find a comment
+  // used as a navigation anchor) no longer lines up with the same position
+  // in the STRIPPED text. Caught by that exact test going wrong -- not a
+  // hypothetical -- when it tried to slice() the stripped text at an offset
+  // found in the raw text and got the wrong region. Padding instead of
+  // truncating keeps every line's length identical, so an offset is valid
+  // in both strings, which is what every docstring already claimed.
   return noBlockComments
     .split("\n")
     .map((line) => {
       const i = line.indexOf("//");
-      return i === -1 ? line : line.slice(0, i);
+      return i === -1 ? line : line.slice(0, i) + " ".repeat(line.length - i);
     })
     .join("\n");
 }

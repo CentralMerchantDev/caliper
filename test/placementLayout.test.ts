@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 
 import { SIM_BASELINE_SOURCE } from "../src/simBaseline.ts";
 import { BUILDING_W, BUILDING_D, BUILDING_TYPE_SCALE, GRID_UNIT_X, GRID_UNIT_Z } from "../public/world-render-3d.js";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 function loadWorld(source: string) {
   return new Function(`${source}\nreturn { initialWorld };`)().initialWorld();
@@ -113,7 +114,11 @@ test("SHIP.md item 3: the four buildings sit on a consistent grid module, not sc
 // reformat. A test that checks a string is not checking the property.
 async function loadMasterplan() {
   const fs = await import("node:fs");
-  const src = fs.readFileSync("public/world-render-3d.js", "utf-8");
+  // Stripped -- see test/stripSourceComments.ts and docs/LESSONS.md's "a
+  // regex over source matches your comments too" entry. This src is both
+  // eval'd (ZONE/terrainHeightAt, extracted below) and presence-checked
+  // (the tramTrackGroup assertion further down); stripping protects both.
+  const src = stripSourceComments(fs.readFileSync("public/world-render-3d.js", "utf-8"));
   const zone = src.match(/export const ZONE = \{[\s\S]*?\n\};/);
   const fn = src.match(/function terrainHeightAt\(x, z\) \{[\s\S]*?\n\}/);
   assert.ok(zone, "ZONE block must exist in the renderer -- it is the single source of masterplan truth");

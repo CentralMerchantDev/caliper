@@ -40,6 +40,26 @@ test("strips a multi-line /* */ block comment and keeps line count stable", () =
   assert.match(out, /const b = 2;/);
 });
 
+test("a // comment is blanked, not truncated -- every offset after it stays valid in both the raw and stripped text", () => {
+  // The real bug, found by test/pickSelection.test.ts, not invented for
+  // this test: an earlier version truncated the commented line
+  // (`line.slice(0, i)`), which shortens it and silently shifts every
+  // position downstream. A caller that finds an anchor position by
+  // searching the RAW text (pickSelection.test.ts does this on purpose,
+  // to find a comment used as a landmark) and then slices the STRIPPED
+  // text at that same offset got the wrong region once anything before it
+  // had a // comment removed rather than blanked.
+  const src = [
+    'const a = 1; // a comment that used to get truncated away',
+    'const NEEDLE = "found me";',
+  ].join('\n');
+  const stripped = stripSourceComments(src);
+  assert.equal(stripped.length, src.length, 'stripping must not change the string length');
+  const rawIdx = src.indexOf('NEEDLE');
+  assert.equal(stripped.slice(rawIdx, rawIdx + 6), 'NEEDLE',
+    'an offset found in the raw text must land on the same content in the stripped text');
+});
+
 test("leaves real, uncommented code untouched", () => {
   const src = 'trackLiveRect(hub, (r) => { doThing(r); });';
   assert.equal(stripSourceComments(src), src);

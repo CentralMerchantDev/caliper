@@ -27,6 +27,7 @@ import { dirname, join } from "node:path";
 import { buildWorldState } from "../public/city-render.js";
 import { buildSpatialIndex } from "../public/spatial-index.js";
 import { createSelection } from "../public/selection.js";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 function findPublic(): string {
@@ -39,6 +40,15 @@ function findPublic(): string {
   throw new Error("could not locate public/ from " + HERE);
 }
 const RENDER_3D = readFileSync(join(findPublic(), "world-render-3d.js"), "utf8");
+// A code-only view for the assert.match calls below, so a comment cannot
+// satisfy them in place of the real call (test/stripSourceComments.ts,
+// docs/LESSONS.md's "a regex over source matches your comments too" entry).
+// Kept alongside the raw RENDER_3D, not in place of it: the anchor search
+// just below this deliberately looks for a COMMENT ("CITY MODE PICKS
+// AGAINST THE SCENE" is a section-header comment, not code), and
+// stripSourceComments blanks comment text character-for-character rather
+// than removing it, so offsets found in one string are valid in the other.
+const RENDER_3D_CODE_ONLY = stripSourceComments(RENDER_3D);
 
 test("I3 (data): a pick at a real plot's centre selects that plot's real id, and it stays selected", () => {
   const { world } = buildWorldState("pick-selection-seed");
@@ -63,13 +73,17 @@ test("I3 (data): a pick at a real plot's centre selects that plot's real id, and
 
 test("I3 (wiring): the real click handler resolves through the persisted selection, not the index directly", () => {
   assert.match(
-    RENDER_3D,
+    RENDER_3D_CODE_ONLY,
     /this\._selection\s*=\s*createSelection\(this\._index\)/,
     "world-render-3d.js no longer constructs a selection over the spatial index -- a later describe/generate step would have nothing to read",
   );
+  // The anchor is a real comment (a section header), searched for in the
+  // RAW text on purpose -- stripping would blank the very text being
+  // searched for. Offsets are valid in either string (stripSourceComments
+  // blanks comments in place rather than removing them).
   const pickHandlerStart = RENDER_3D.indexOf("CITY MODE PICKS AGAINST THE SCENE");
   assert.ok(pickHandlerStart > -1, "could not find the city-mode pick handler by its own comment -- it may have moved or been renamed");
-  const cityModeBlock = RENDER_3D.slice(pickHandlerStart, pickHandlerStart + 1200);
+  const cityModeBlock = RENDER_3D_CODE_ONLY.slice(pickHandlerStart, pickHandlerStart + 1200);
   assert.match(
     cityModeBlock,
     /this\._selection\s*\?\s*this\._selection\.pick\(pt\.x,\s*pt\.z\)/,

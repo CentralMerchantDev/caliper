@@ -566,3 +566,60 @@ verify it against the actual, often repetitive/sequential shape of the
 real inputs it will receive (`"x-0"`, `"x-1"`, ...), because that is
 exactly the shape naive accumulator hashes are weakest against, and it is
 exactly the shape seeds, ids, and keys take throughout this project.
+
+---
+
+### 2026-09-09 · A helper's own docstring claimed an offset-preservation guarantee that was only ever true for half of what it strips
+
+**WHAT WAS MISSED** `test/stripSourceComments.ts` (closed above, `bac6c1b`)
+documents that it "blanks" comments rather than deleting them specifically
+"so existing `indexOf()`/`slice()` offsets downstream keep working." That
+was true for `/* */` block comments (replaced character-for-character with
+spaces) and false for `//` line comments, which the same function
+*truncated* (`line.slice(0, i)`) — shortening the line, which shifts every
+position after it. Every caller written against this helper so far
+(`navPad`, `navWheel`, `isolate`, `movePiece`, `lookPipeline`,
+`describeRequestUI`, `evidence-forwarding`, `threeIsSingle`, `repoHygiene`)
+only ever computed offsets by searching the *already-stripped* text and
+using them within that same string, so the bug had no way to surface.
+
+**WHY IT GOT THROUGH** RUN2 item 4 (finishing the comment-stripping sweep
+as a category) added `test/pickSelection.test.ts`, whose existing
+`I3 (wiring)` test does something none of the nine prior callers needed:
+it finds an anchor position by searching the RAW text for a section-header
+*comment* (`"CITY MODE PICKS AGAINST THE SCENE"` — the anchor has to be
+a comment, since that is what the real file uses to mark the section), then
+slices the *stripped* text at that same offset to check the code beneath
+it. This is exactly the offset-correlation the docstring already promised
+and nothing had tested. The test failed immediately with "could not find
+the city-mode pick handler by its own comment" (because stripping had
+blanked the very anchor text being searched for in the raw string — fixed
+by searching the raw text on purpose, which is correct) and then, once
+that was fixed, failed a second time in a way that pointed straight at the
+real bug: the sliced region was empty/misaligned, because a `//` comment
+earlier in the 5,000-line file had truncated a line and shifted every
+offset downstream of it in the stripped copy relative to the raw one.
+
+**THE CONTROL** `stripSourceComments`'s line-comment branch now pads with
+spaces to the original line length instead of truncating
+(`line.slice(0, i) + " ".repeat(line.length - i)`), matching the block-
+comment branch's already-correct behaviour. A new direct unit test in
+`test/stripSourceComments.test.ts` asserts the property by name: stripping
+must not change the string's overall length, and a position found in the
+raw text must reference the same content in the stripped text. Watched red
+first, for real, twice over: the failing padding formula was reverted to
+the original truncating one and both the new unit test AND
+`test/pickSelection.test.ts`'s real-file test failed together for the
+matching reason; restored (`md5sum` matched) and reverified green, along
+with the other ten files that already used this helper (78/78 green,
+confirming the length-preserving change is not merely locally safe but
+does not alter any existing caller's result either).
+
+**STATUS** **CLOSED.** Found by writing a new, legitimate use of an
+existing helper, not by an audit — the same shape as the hash entry just
+above it: a control's own claim about itself was untested for the one
+case that would have exercised it, and the very next real caller did.
+**General lesson**: a "should still work the same way" docstring claim
+about a shared helper is a hypothesis, not a fact, until a second, different
+kind of caller actually exercises the part of the claim the first caller
+never needed.
