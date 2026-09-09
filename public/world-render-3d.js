@@ -17,6 +17,8 @@ import { WORLD_SCALE } from "./world-scale.js";
 import { WORLD } from "./city-plan.js";
 import { createSelection } from "./selection.js";
 import { boardPiecesById } from "./board-adapter.js";
+import { fetchBoard } from "./board-load.js";
+import { buildBoardScene } from "./board-render.js";
 import { neighboursOf, applyIsolate, restoreIsolate } from "./isolate.js";
 import { tryMove, moveEditFor } from "./move-piece.js";
 import { layerFrom } from "./world-model.js";
@@ -1805,6 +1807,42 @@ class Renderer3D {
 
     const city = buildWorld(THREE, this.renderer, this.scene);
     this._city = city;
+
+    // B3 (docs/briefs/RUN2-CLI-2026-09-09.md, reordered ahead of
+    // everything else): draw the REAL persisted board
+    // (public/board.generated.json, B2/B2.7's own real pieces) via
+    // public/board-render.js -- the render path named in
+    // docs/specs/BOARD-REBUILD-PLAN.md as the tenth capability built
+    // beside the renderer and never drawn.
+    //
+    // BOOTSTRAP DECISION, WRITTEN DOWN (B2.6 left this open): createWorld()
+    // is synchronous; fetchBoard() is inherently async (fetch()). This
+    // method (_buildCityBase) is ALREADY async -- it already `await
+    // import()`s city-render.js and awaits two animation frames above --
+    // so awaiting fetchBoard() here needs no new architecture, only this
+    // one more await in a place that was already one.
+    //
+    // ADDITIVE, NOT A REPLACEMENT, NAMED AS A SCOPING CHOICE: buildWorld()
+    // above is not removed. Its return value (`city`) is still what
+    // picking (P4.1's boardPiecesById two lines down), the spatial index,
+    // selection, and sun/sky all key off -- replacing it outright would
+    // mean rebuilding all four in the same pass, which this run's own
+    // "partial credit" allowance (RUN2-CLI-2026-09-09.md) does not ask
+    // for tonight. The board's own pieces are added as a SECOND group in
+    // the same scene instead, so the real board is genuinely visible
+    // (not a placeholder, not hidden behind a flag) while the swap that
+    // retires city-render.js waits for B4 (kits) and B6 (quarantine).
+    // A failure here is caught and logged, not thrown -- the board is a
+    // real addition, not yet load-bearing for anything else this method
+    // sets up, so a fetch failure must not break city mode entirely.
+    try {
+      const boardData = await fetchBoard(city.heightAt);
+      this._boardScene = buildBoardScene(THREE, boardData.pieces);
+      this.scene.add(this._boardScene);
+      console.log(`B3: board render path drew ${boardData.pieces.length} real pieces from public/board.generated.json`);
+    } catch (e) {
+      console.error("B3: failed to fetch/draw the real board (city geometry above is unaffected):", e);
+    }
 
     // P4.1 -- the REAL board record for a clicked building, not a
     // renderer-local approximation of the same facts. board.js is not the
