@@ -1,0 +1,159 @@
+RUN3 items 2 and 5, committed together because both were built in the
+same sitting and share two evidence files (test/mutations.json,
+test/deadExports.allowlist.json) that do not split cleanly by item.
+
+=== PART A -- Item 5: C1's mutation harness, closed to a real, verified
+state instead of a summary line ===
+
+docs/briefs/RUN3-CLI-2026-09-09.md: the one SURVIVED mutation was
+"confirmed real -- no node:test assertion exists for it -- and needs a
+decision: write the missing control, or record why it cannot be
+written."
+
+WROTE THE MISSING CONTROLS, BOTH OF THEM -- the brief named one
+(b2-5-ground-verified-opt-in-is-load-bearing) as the confirmed SURVIVED
+case, but its own sibling (b2-5-sampled-ground-perimeter-is-load-bearing)
+was in the same state for the same reason (verified by hand-timing only,
+no node:test assertion) and got the same real fix rather than being left
+half-done.
+
+b2-5-ground-verified-opt-in-is-load-bearing (public/board.js): a new
+test in test/board.test.ts counts heightAt calls instead of measuring
+wall-clock time -- canPlace's exhaustive GROUND loop calls heightAt at
+least once per foot cell (>=4 for a 2x2 foot); groundVerified:true makes
+at most the one call SPACE's own never-skipped groundYFor still makes.
+Removing the `!groundVerified &&` guard makes the skipped path's call
+count rise to match the exhaustive path -- CAUGHT, confirmed by
+scripts/_mutcheck.mjs, not asserted from reading the diff.
+
+b2-5-sampled-ground-perimeter-is-load-bearing (public/board-generator.js):
+sampledGroundOk exported (was private) specifically for this control,
+noted in test/deadExports.allowlist.json since the import-graph walker
+cannot see its own internal callers in the same file. A synthetic
+heightAt places a single WATER atom exactly on the west edge, strictly
+between the footprint's own north/south rows and off the interior stride
+grid, so only the west/east perimeter scan can see it -- removing that
+scan makes sampledGroundOk wrongly accept it. CAUGHT, confirmed the same
+way.
+
+Both original hand-verified measurements (the real ~167.6s/~40s timing
+pair; the real-archipelago 1-of-39,118 disagreement) are preserved in
+test/mutations.json's own notes for history, not discarded.
+
+RE-RUN, NOT JUST TRUSTED FROM AN EARLIER SESSION: the two mutations the
+brief said were "fixed, needing a re-run" (b2-settlement-table-wooded-
+exclusion-real, b2-mainland-boundary-inland-direction-real) both ran
+clean this session -- CAUGHT, against a GREEN baseline, via
+scripts/_mutcheck.mjs test/boardGenerator.test.ts public/board-generator.js
+test/mutations.json.
+
+A REAL INCIDENT DURING THIS WORK, NAMED RATHER THAN QUIETLY FIXED: a
+first mutation run was wrapped in a 300 s shell timeout that did not
+account for board-generator.js's own test file carrying B2.5's ~90 s
+CPU-time gate PER mutation rebuild -- the process was killed mid-mutation
+and left public/board-generator.js on disk with the mainland-boundary
+inland-direction mutation still applied (`x + stripDepth` instead of
+`x - stripDepth`). Caught immediately by re-reading the file before
+trusting anything else, not by a later test failure -- fixed by hand,
+verified byte-identical against _mutcheck.mjs's own lock marker hash
+before touching the file again. The lock's own stale-marker recovery
+(scripts/mutate-lock.mjs's markerFileMatches()) then cleared itself
+correctly on the next real run, exactly as it was built to. Re-run
+without the timeout wrapper afterward.
+
+A REAL, PRE-EXISTING ALLOWLIST GAP FOUND ALONG THE WAY: exporting
+sampledGroundOk and running test/deadExports.test.ts surfaced 3
+unlisted exports, not 1 -- public/facade-textures.js's FACADE_VARIANTS
+and pickVariant were ALSO missing allowlist entries, a gap pre-existing
+since RUN3 item 0's facade-textures.js pull from codex-lane, invisible
+until this test was actually run again this session. All three added
+with real reasons (the import-graph walker's own documented blindness
+to same-file internal calls -- see the allowlist's own new entries and
+the pre-existing generateFacadeAtlas entry they now match).
+
+VERIFIED: node test/run.mjs test/board.test.ts and test/boardGenerator.test.ts
+both green (board-generator.js's own B2.5 timing gate stays the one
+expected, named, permanent red -- unaffected by this work). node
+test/run.mjs test/deadExports.test.ts -- 4/4 green after the allowlist
+fix.
+
+=== PART B -- Item 2: B4, a real second prop from the manifest, wired by
+construction ===
+
+docs/specs/BOARD-REBUILD-PLAN.md's B4: "Roads from roadkit. Buildings
+from the kit. Trees from propModel. Props from the manifest." Trees
+(propModel's VARIED path) landed in RUN2; this adds the manifest's OTHER
+resolution path -- a plain props.js alias, not a seeded generator family
+-- along real road pieces.
+
+WHAT THIS IS: public/board-render.js's new scatterStreetLamps(), calling
+propModel("lampPost", ...) (resolves through props.js's own
+`MODELS["lampPost"] = MODELS["lamp-street"]` alias) for one lamp per
+40th road piece (bounded, named as deliberately modest, the same pattern
+scatterTrees already established for trees).
+
+WHAT THIS IS NOT: the brief's full B4 ask also names roads from roadkit
+and building typologies from the kit -- neither is done by this commit.
+Investigated both before choosing this slice instead of a rushed attempt
+at either:
+
+  - ROADS FROM ROADKIT: board-generator.js's own road pieces are a fixed
+    9 m wide (ROAD_WIDTH); roadkit.js's own ROAD_STANDARDS classes are
+    LANE (10 m, closest) or STREET (18 m) -- no exact match. Wiring
+    roadkit.straight() onto a 9 m piece means either accepting a real
+    width mismatch or changing ROAD_WIDTH, a generation-affecting choice
+    this run did not have grounds to make unilaterally. Named here, not
+    solved.
+  - BUILDING TYPOLOGIES FROM THE KIT: public/buildings.js's own building()
+    dispatcher sizes each typology INTERNALLY from its own seed/cellW/
+    cellD -- some typologies (bldVilla, bldTower, bldWarehouse,
+    bldWorkshop) accept a cellW/cellD override, but two (bldHighStreet-
+    Terrace, bldBusinessParkBlock) have HARD-CODED footprints with no
+    override at all, checked directly in the source, not assumed. A
+    naive "pass the piece's own foot as cellW/cellD" wiring would
+    silently overhang the plot for those two and possibly others whose
+    clamp ranges don't cover a given plot size -- exactly the "17.4% of
+    buildings overhung their own plot" defect public/layout.js's own
+    typologyFor/fits mechanism was built to prevent (docs comment in
+    that file). Building an equivalent fits-safe selection for the NEW
+    pipeline, tested and mutation-verified, plus checking the perf impact
+    of real per-typology geometry across ~17,600 buildings (unmerged
+    LOD0 parts, likely re-triggering the same culling/draw-call
+    regression RUN3 item 1 found and gated), is real, separate,
+    multi-step work -- not attempted under time pressure tonight.
+
+VERIFIED, TEST-FIRST: test/boardRender.test.ts gained 5 new tests before
+implementation existed (watched red: "scatterStreetLamps is not a
+function"), covering the real kit call, maxLamps bound, non-road pieces
+being ignored, and -- the one non-obvious property -- correct
+orientation-aware positioning: a road SPAN piece is long in exactly one
+of foot.w/foot.d depending on whether board-generator.js built it as a
+north/south or east/west span; offsetting along a single fixed axis
+(copying scatterTrees's own pattern unchanged) would place a lamp
+hundreds of metres off a long span's own length. A dedicated test using
+a 320 m-long span piece asserts the lamp lands near the span's own
+midpoint, beside its own 9 m width -- not at a fixed offset from origin.
+
+GATED THE SAME WAY AS THE REST OF THE BOARD RENDER: wired into both
+public/city.html and public/world-render-3d.js immediately beside the
+existing scatterTrees() call, inside the same `?board=1`-gated block
+RUN3 item 1 already built -- off by default, on only when the board
+layer is explicitly requested.
+
+A REAL, PRE-EXISTING GATE DEFECT FOUND WHILE VERIFYING THIS CHANGE,
+UNRELATED TO IT: test/cullingRatio.test.ts and test/regressionGate.test.ts
+both report the "Downtown skyline" view as reading a near-empty
+triangle/draw-call count when it visibly is not (a real screenshot,
+.shots/downtown-skyline.png, shows a full, correct skyline). Confirmed
+via git stash against the last real commit that this predates every
+change in this commit. Full writeup and options in
+docs/DECISIONS-FOR-MARK.md #4 -- not fixed here, root-cause not fully
+traced, named rather than silently worked around.
+
+MUTATION-TESTED: a new control (inverting the long-axis orientation
+check) CAUGHT, alongside the two pre-existing board-render.js controls,
+both still CAUGHT, via scripts/_mutcheck.mjs test/boardRender.test.ts
+public/board-render.js test/mutations.json.
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs test/boardRender.test.ts
+-- 18/18 green.

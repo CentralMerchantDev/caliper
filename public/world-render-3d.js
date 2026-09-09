@@ -18,7 +18,7 @@ import { WORLD } from "./city-plan.js";
 import { createSelection } from "./selection.js";
 import { boardPiecesById } from "./board-adapter.js";
 import { fetchBoard } from "./board-load.js";
-import { buildBoardScene, scatterTrees } from "./board-render.js";
+import { buildBoardScene, scatterTrees, scatterStreetLamps } from "./board-render.js";
 import { neighboursOf, applyIsolate, restoreIsolate } from "./isolate.js";
 import { tryMove, moveEditFor } from "./move-piece.js";
 import { layerFrom } from "./world-model.js";
@@ -1856,7 +1856,14 @@ class Renderer3D {
       // than one tree per building.
       this._boardTrees = scatterTrees(THREE, boardData.pieces);
       this.scene.add(this._boardTrees);
-      console.log(`B3/B4: board render path drew ${boardData.pieces.length} real pieces and ${this._boardTrees.children.length} real trees from public/board.generated.json`);
+      // B4: a real street lamp, from propModel("lampPost", ...) -- the
+      // manifest's OTHER resolution path (a plain props.js alias, not a
+      // VARIED generator family) -- scattered beside a modest fraction of
+      // the real road pieces; see board-render.js's own
+      // scatterStreetLamps() header for the positioning reasoning.
+      this._boardLamps = scatterStreetLamps(THREE, boardData.pieces);
+      this.scene.add(this._boardLamps);
+      console.log(`B3/B4: board render path drew ${boardData.pieces.length} real pieces, ${this._boardTrees.children.length} real trees and ${this._boardLamps.children.length} real street lamps from public/board.generated.json`);
     } catch (e) {
       console.error("B3/B4: failed to fetch/draw the real board (city geometry above is unaffected):", e);
     }

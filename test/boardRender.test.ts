@@ -16,7 +16,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import * as THREE from "../public/vendor/three/three.module.min.js";
-import { buildBoardScene, meshForPiece, scatterTrees } from "../public/board-render.js";
+import { buildBoardScene, meshForPiece, scatterTrees, scatterStreetLamps } from "../public/board-render.js";
 import { loadBoard } from "../public/board-load.js";
 import { atomOrigin, heightOf } from "../public/grid.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
@@ -152,6 +152,74 @@ test("B4 gate: propModel is genuinely reachable from a real render path, not mer
   const src = readFileSync(join(ROOT, "public", "board-render.js"), "utf8");
   assert.match(src, /import\s*\{[^}]*\bpropModel\b[^}]*\}\s*from\s*["']\.\/prop-models\.js["']/, "board-render.js no longer imports propModel -- the B4 gate's own claim would be false");
   assert.match(src, /propModel\(/, "board-render.js imports propModel but never calls it");
+});
+
+// -----------------------------------------------------------------------------
+// RUN3 item 2 (B4) -- a second real prop, from the manifest's OWN "lampPost"
+// id, along real road pieces. propModel("tree", ...) alone did not exercise
+// the manifest's non-VARIED path (P.MODELS resolved by name, not a seeded
+// generator family) -- lampPost does, the same alias public/props.js's own
+// foot already declares ("MODELS['lampPost'] = MODELS['lamp-street']").
+// -----------------------------------------------------------------------------
+
+/** A road SPAN piece, long along i/x (foot.w) and ROAD_WIDTH-narrow along
+ *  j/z (foot.d) -- board-generator.js's own north/south span shape. */
+function makeRoadSpanPiece(id: string, i: number, j: number, lengthAtoms = 40): any {
+  return {
+    id, pieceType: "road", cell: { i, j, k: 0 }, rotation: 0,
+    foot: { w: lengthAtoms, d: 9 }, levels: 1, clear: { w: 0, d: 0 }, standsOn: ["buildable"], surface: "road",
+  };
+}
+
+test("B4 gate: scatterStreetLamps calls the REAL propModel('lampPost', ...) -- a real, non-VARIED manifest id, not a placeholder box", () => {
+  const pieces = Array.from({ length: 80 }, (_, n) => makeRoadSpanPiece(`r-${n}`, n * 40, 0));
+  const group = scatterStreetLamps(THREE, pieces, { everyNth: 10, maxLamps: 400 });
+  assert.equal(group.children.length, 8, "expected one lamp per 10th road piece (80/10), got a different count");
+  for (const lampGroup of group.children) {
+    assert.ok(lampGroup.userData.propId.startsWith("lamp-"), `expected a real prop-models.js lamp id, got "${lampGroup.userData.propId}"`);
+    assert.ok(lampGroup.children.length > 0, "a lamp's own group must contain real geometry parts, not be empty");
+    for (const mesh of lampGroup.children) {
+      assert.ok(mesh.geometry.attributes.position.count > 0, "a lamp part must carry real geometry, not an empty buffer");
+    }
+  }
+});
+
+test("B4 gate: scatterStreetLamps positions the lamp beside the road's own narrow (width) edge, at the span's own midpoint along its length -- not off the end of a long span", () => {
+  // A 320 m-long span (foot.w=320, foot.d=9, the north/south span shape
+  // board-generator.js itself builds): the lamp must sit just past the
+  // road's own 9 m width, at the piece's own midpoint along its 320 m
+  // length -- not hundreds of metres away along that length, which is
+  // exactly the defect a naive "offset by the LONG dimension" mistake
+  // (copying scatterTrees's own single-axis offset unchanged) would
+  // produce for a piece this shape.
+  const piece = makeRoadSpanPiece("r-long", 0, 0, 320);
+  const group = scatterStreetLamps(THREE, [piece], { everyNth: 1, maxLamps: 10 });
+  assert.equal(group.children.length, 1);
+  const lamp = group.children[0];
+  const origin = atomOrigin(0, 0);
+  assert.ok(Math.abs(lamp.position.x - (origin.x + 160)) < 1, "expected the lamp near the span's own midpoint along its length, not its origin corner");
+  const zOffset = lamp.position.z - origin.z;
+  assert.ok(zOffset >= 9 && zOffset <= 12, `expected the lamp just past the road's own 9 m width (roughly 9-12 m from origin.z), got z offset ${zOffset}`);
+});
+
+test("B4 gate: scatterStreetLamps respects maxLamps -- it does not scatter thousands of meshes unbounded", () => {
+  const pieces = Array.from({ length: 500 }, (_, n) => makeRoadSpanPiece(`r-${n}`, n * 40, 0));
+  const group = scatterStreetLamps(THREE, pieces, { everyNth: 1, maxLamps: 10 });
+  assert.equal(group.children.length, 10, "expected the scatter to stop at maxLamps");
+});
+
+test("B4 gate: scatterStreetLamps ignores non-road pieces -- buildings and bridges do not grow lamp posts", () => {
+  const pieces = [
+    { id: "bldg-1", pieceType: "building", cell: { i: 0, j: 0, k: 0 }, foot: { w: 20, d: 20 } },
+    { id: "bridge-1", pieceType: "bridge", cell: { i: 10, j: 0, k: 0 }, foot: { w: 9, d: 100 } },
+  ];
+  const group = scatterStreetLamps(THREE, pieces, { everyNth: 1, maxLamps: 400 });
+  assert.equal(group.children.length, 0, "expected zero lamps when no road pieces are present");
+});
+
+test("B4 gate: scatterStreetLamps is a real render-path call, not merely test-only -- board-render.js itself imports and calls propModel('lampPost', ...)", () => {
+  const src = readFileSync(join(ROOT, "public", "board-render.js"), "utf8");
+  assert.match(src, /propModel\(\s*["']lampPost["']/, "board-render.js does not call propModel(\"lampPost\", ...) -- scatterStreetLamps is not wired to the real manifest id");
 });
 
 // -----------------------------------------------------------------------------

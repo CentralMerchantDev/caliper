@@ -208,3 +208,89 @@ measured, unchanged.
 
 **Reversibility:** trivial either way — a threshold comparison in one
 test file, changeable in one commit whenever Mark picks an option.
+
+---
+
+## 4. `test/cullingRatio.test.ts` AND `test/regressionGate.test.ts` both report the skyline view as almost empty (12 triangles / 100% culling ratio) when it is visibly not. A real defect, found by accident, not caused by tonight's work — root-cause not fully traced. Fix now, or queue?
+
+**Ground-checked, 2026-09-09 (CLI lane, overnight), found while verifying
+RUN3 item 2's own street-lamp addition did not regress the standing
+performance gates:** `node test/run.mjs test/cullingRatio.test.ts` fails:
+`Culling failed: Street level draws 393466.7% of skyline triangles
+(47,216 vs 12)`. `node test/run.mjs test/regressionGate.test.ts` fails
+the SAME way — `Culling ratio must be < 40%, got 100.00%` — so this is
+not one test's own bug, it is at least two gates sharing whatever
+mechanism reads render stats. **Confirmed NOT caused by anything this
+run touched, for both gates separately** — `git stash`ed every
+uncommitted change back to the last real commit (`f99d149`) and re-ran
+each test in isolation: identical failures, same numbers. The stash was
+restored both times; nothing else was changed as a result of this check.
+
+**Confirmed the render itself is fine, only the MEASUREMENT is wrong:**
+`node scripts/shoot.mjs "Downtown skyline"` — the project's own real,
+looked-at verification tool — produced a full, correct, richly detailed
+skyline (`.shots/downtown-skyline.png`: dozens of towers, streets, trees,
+harbour, boats, a stadium), while that exact same render's own reported
+stats line read `[calls: 1, tris: 12]`. The pixels are right; the number
+is not.
+
+**A working theory, not a proof:** `public/city.html`'s render loop
+(`window.__getRenderStats()`, around line 601) reads
+`renderer.info.render.{calls,triangles}` (or a manually-captured
+`sceneRenderInfo` snapshot when post-processing is on) once
+`window.__ready` flips true. Three.js resets `renderer.info.render` at
+the start of every `renderer.render()`/composer sub-pass call, so any
+render invoked between the frame that actually drew the city and the
+frame the test's `page.evaluate()` happens to sample can leave that
+counter reflecting only the LAST, near-trivial pass (or a stale
+snapshot) rather than the frame that produced the image on screen. This
+would explain why **the failure is load-sensitive, not constant**: a
+run of this test alongside other heavy processes tonight (the RUN3 item
+5 mutation harness, running concurrently) showed BOTH views collapse to
+`12 vs 12`; run in isolation, only skyline stayed stuck at `12` while
+street read a correct `47,216`. That pattern — worse under contention,
+never fully absent — fits a timing race in the stats-capture path, not
+a one-off fluke and not a deterministic logic bug either. **This is a
+theory sized from the evidence above, not a confirmed root cause** — the
+exact line where the wrong number gets latched has not been isolated.
+
+**Why this was not fixed tonight:** root-causing a three.js
+`WebGLRenderer.info` reset race precisely enough to fix it, without
+guessing, is a real, separate investigation — instrumenting the
+composer's own pass sequence, or the `still`/`window.__ready` frame-count
+interaction, then writing a regression test that would have caught the
+wrong fix as readily as the wrong original. Attempting a guessed fix
+under time pressure and calling it done would be exactly the "reported
+unverified work as verified" failure this project's own standard exists
+to catch.
+
+**Options:**
+1. **Leave it exactly as found, named here, for a future session to
+   root-cause properly** — the render itself is confirmed correct by an
+   independent tool (`shoot.mjs`), so visitors are not seeing a broken
+   city; only this one automated gate's own number is untrustworthy.
+2. **Queue a targeted investigation as its own next step**, scoped
+   narrowly to instrumenting `renderer.info` resets around the composer
+   pipeline and the `still` frame loop in `public/city.html`, with a
+   regression test asserting the reported stats match a known-good
+   reference count for a fixed, non-post-processed scene — the gate
+   cannot be trusted to catch a REAL culling regression while its own
+   measurement is this fragile.
+3. **Disable/quarantine the gate immediately** as unreliable — rejected:
+   it is evidence of a real defect (an untrustworthy measurement), and
+   removing the messenger would just delete the record that the
+   telemetry needs fixing, the same "absence read as success" pattern
+   `docs/AUDIT-PROTOCOL.md` already names.
+
+**Recommendation: Option 1 for tonight, Option 2 as the real next step**
+— the least irreversible choice that does not pretend a guessed fix is
+a verified one. Left exactly as found; not touched.
+
+**What was done in the meantime:** nothing in `public/city.html`,
+`test/cullingRatio.test.ts`, or `test/regressionGate.test.ts` was
+changed. The stash-and-restore used to isolate this from tonight's own
+work left the tree byte-identical to before the check
+(`git status` confirmed clean before, matching after).
+
+**Reversibility:** trivial to act on later either way — nothing was
+changed tonight for this to revert.

@@ -217,15 +217,17 @@ window.__world = W;
 window.__boardReady = false;
 if (Q.get("board") === "1") try {
   const { fetchBoard } = await import("./board-load.js");
-  const { buildBoardScene, scatterTrees } = await import("./board-render.js");
+  const { buildBoardScene, scatterTrees, scatterStreetLamps } = await import("./board-render.js");
   const boardData = await fetchBoard(W.heightAt);
   window.__board = buildBoardScene(THREE, boardData.pieces);
   scene.add(window.__board);
   window.__boardTrees = scatterTrees(THREE, boardData.pieces);
   scene.add(window.__boardTrees);
+  window.__boardLamps = scatterStreetLamps(THREE, boardData.pieces);
+  scene.add(window.__boardLamps);
   window.__boardPieceCount = boardData.pieces.length;
   window.__boardReady = true;
-  console.log(`B3/B4: city.html drew ${boardData.pieces.length} real board pieces and ${window.__boardTrees.children.length} real trees from public/board.generated.json`);
+  console.log(`B3/B4: city.html drew ${boardData.pieces.length} real board pieces, ${window.__boardTrees.children.length} real trees and ${window.__boardLamps.children.length} real street lamps from public/board.generated.json`);
 } catch (e) {
   console.error("B3/B4: failed to fetch/draw the real board on city.html (buildWorld's own scene above is unaffected):", e);
 }

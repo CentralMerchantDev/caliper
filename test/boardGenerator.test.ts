@@ -24,7 +24,8 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { generateBoard, SETTLEMENT_TABLE, settlementBoundaries } from "../public/board-generator.js";
+import { generateBoard, SETTLEMENT_TABLE, settlementBoundaries, sampledGroundOk } from "../public/board-generator.js";
+import { USE } from "../public/land-use.js";
 import { LandField, makeHeightAt, landmassPolygonsWorld } from "../public/terrain.js";
 import { atomOf, atomOrigin, ATOM } from "../public/grid.js";
 
@@ -201,6 +202,32 @@ test("B2.5 gate: generation time, against Cloudflare's own default Worker CPU-ti
     `generateBoard() took ${timed.stats.totalMs.toFixed(0)} ms, over the ${CEILING_MS} ms ceiling -- ` +
     `this is expected to be red until the board is generated once per seed and persisted (matching world.js's own LandField memoisation), not regenerated live per request; see docs/specs/BOARD-REBUILD-PLAN.md's B2.5 section`,
   );
+});
+
+// RUN3 C1: sampledGroundOk's full-perimeter scan is load-bearing -- a
+// deterministic replacement for b2-5-sampled-ground-perimeter-is-load-
+// bearing, which was previously verified by hand only (a real-archipelago
+// disagreement count, no node:test assertion -- confirmed SURVIVED against
+// the automated suite this run). This builds a synthetic heightAt with a
+// single WATER atom placed exactly on the west edge, strictly between the
+// footprint's own north/south rows and off the interior stride grid, so
+// only the west/east perimeter scan (not the north/south scan, not the
+// interior sample) can see it. slopeAt samples 24m either side of any
+// point it is asked about; every atom this test queries is well inside
+// that radius of every other, so the single WATER dip cannot distort a
+// neighbour's own slope reading -- the water/beach checks that would
+// classify it run on the exact queried point's own height, before slope
+// is even computed.
+test("RUN3 C1: sampledGroundOk's west/east perimeter scan catches a boundary the north/south scan and the interior stride grid both miss", () => {
+  const iMin = 100, jMin = 100, w = 8, d = 8, stride = 3;
+  const badI = iMin, badJ = jMin + 3; // west edge (di=0), strictly interior in dj (not 0, not d-1=7)
+  assert.notEqual(badJ, jMin, "sanity: bad atom must not sit on the north row the other loop already covers");
+  assert.notEqual(badJ, jMin + d - 1, "sanity: bad atom must not sit on the south row the other loop already covers");
+  const badX = badI + 0.5, badZ = badJ + 0.5; // atomCentre(i, j) = (i+0.5, j+0.5), ATOM=1
+  const heightAtSynthetic = (x: number, z: number) => (x === badX && z === badZ ? -5 : 10);
+
+  const ok = sampledGroundOk(heightAtSynthetic, iMin, jMin, w, d, new Set([USE.BUILDABLE]), stride);
+  assert.equal(ok, false, "a WATER atom sitting on the west edge must be caught by the full-perimeter scan -- if this is true, the perimeter scan did not actually run");
 });
 
 // B2.6 -- THE STRONGER GATE. KEPT ALONGSIDE THE TIMING GATE ABOVE, NOT IN

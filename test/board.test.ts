@@ -230,3 +230,51 @@ test("a placed piece's cell round-trips through atomOf/atomOrigin unchanged", ()
   const back = atomOf(origin.x, origin.z);
   assert.deepEqual(back, { i: p.cell.i, j: p.cell.j });
 });
+
+// ---------------------------------------------------------------------------
+// RUN3-CLI-2026-09-09, item 5 -- b2-5-ground-verified-opt-in-is-load-bearing
+// was never a node:test assertion (its own test/mutations.json note said so
+// plainly: "verified BY HAND... a real timing measurement"), so it could
+// never be run through scripts/_mutcheck.mjs at all -- confirmed directly,
+// this session, by trying: `_mutcheck.mjs test/boardGenerator.test.ts
+// public/board.js` reported NEVER RUN, and B2.5's own real property
+// ("generateBoard({useSampling:true}) stays fast") is inherently a wall-
+// clock measurement, which this host's own documented 35-291s variance
+// under memory pressure (docs/specs/BOARD-REBUILD-PLAN.md's B2.5 section)
+// makes a genuinely bad node:test assertion regardless of cost.
+//
+// THE DECISION (RUN3 item 5: "write the missing control, or record why it
+// cannot be written"): written, by testing the MECHANISM instead of its
+// timing CONSEQUENCE. canPlace's own `groundVerified` skip
+// (public/board.js:272, `if (!groundVerified && standsOn && ...)`) is a
+// real, deterministic branch -- counting real heightAt() calls made during
+// the GROUND check specifically (via classifyAt/slopeAt, both of which
+// call heightAt) proves the branch is genuinely taken, with no dependency
+// on wall-clock time or this host's own memory pressure at all.
+// ---------------------------------------------------------------------------
+test("RUN3 C1: canPlace's groundVerified opt-in genuinely skips the ground check's own heightAt calls -- a deterministic proxy for B2.5's timing claim, not a clock", () => {
+  let calls = 0;
+  const countingHeightAt = (x, z) => { calls++; return FLAT_LAND(x, z); };
+  const board = createBoard({ heightAt: countingHeightAt });
+
+  calls = 0;
+  const exhaustive = board.canPlace(piece({ id: "exhaustive-check", cell: { i: 50, j: 50, k: 0 } }));
+  assert.ok(exhaustive.ok, "the exhaustive check itself must accept flat, buildable land");
+  const exhaustiveCalls = calls;
+  assert.ok(exhaustiveCalls > 0, "expected the exhaustive ground check to call heightAt at least once -- if it made zero calls, this proxy proves nothing");
+
+  calls = 0;
+  const skipped = board.canPlace(piece({ id: "skipped-check", cell: { i: 60, j: 60, k: 0 } }), { groundVerified: true });
+  assert.ok(skipped.ok, "groundVerified:true must still accept a piece SPACE would allow");
+  const skippedCalls = calls;
+
+  // SPACE (never skipped) calls groundYFor() once for the piece's own
+  // vertical extent -- one legitimate heightAt call, unrelated to ground
+  // verification. The exhaustive GROUND loop below calls kindBelow (and
+  // therefore heightAt) once per FOOT cell -- 4 for this piece's 2x2 foot
+  // -- so the real, measurable claim is "many fewer calls when skipped",
+  // not "exactly zero".
+  assert.ok(skippedCalls <= 1, `expected groundVerified:true to make at most the one SPACE-check heightAt call, not the per-cell GROUND loop's own calls, got ${skippedCalls}`);
+  assert.ok(exhaustiveCalls >= 4, `expected the exhaustive GROUND loop to call heightAt at least once per foot cell (4 for a 2x2 foot), got ${exhaustiveCalls} -- if this is low, the loop itself may not be running`);
+  assert.ok(exhaustiveCalls > skippedCalls, `expected the exhaustive path (${exhaustiveCalls} calls) to call heightAt strictly more than the skipped path (${skippedCalls}) -- if not, groundVerified is not actually skipping anything`);
+});

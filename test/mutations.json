@@ -1053,20 +1053,20 @@
     {
       "id": "b2-5-ground-verified-opt-in-is-load-bearing",
       "guards": "board.js's groundVerified option actually skips the exhaustive per-cell ground loop -- the B2.5 performance fix is real, not decorative.",
-      "note": "Verified by hand this session: removing the `!groundVerified &&` guard (so the exhaustive loop always runs regardless of the option) correctly made generateBoard({useSampling:true}) take ~167.6 s instead of ~40 s -- board.test.ts's own 27 tests stayed green throughout (none of them pass groundVerified, so their own behaviour is unaffected either way), which is itself the point: this mutation is invisible to correctness tests and only a real timing measurement catches it. Reverted, reconfirmed ~40 s and board.test.ts green.",
+      "note": "RUN3 item 5: this was previously verified by hand only (a real timing measurement, no node:test assertion -- confirmed SURVIVED against the automated suite three separate times this run). Given a deterministic replacement control in test/board.test.ts that counts heightAt calls instead of wall-clock time: exhaustive canPlace makes >=4 calls (one per foot cell in the GROUND loop), groundVerified:true makes <=1 (only SPACE's own never-skipped groundYFor call). Removing the `!groundVerified &&` guard makes the GROUND loop run unconditionally, so the groundVerified path's call count rises to match the exhaustive path -- caught. Original hand-verified timing evidence (~167.6s vs ~40s) preserved below for history.",
       "file": "public/board.js",
       "find": "    if (!groundVerified && standsOn && standsOn.length) {",
       "replace": "    if (standsOn && standsOn.length) {",
-      "expect": "generateBoard({useSampling:true}) stays fast -- the groundVerified skip path is exercised, not silently bypassed"
+      "expect": "RUN3 C1: canPlace's groundVerified opt-in genuinely skips the ground check's own heightAt calls -- a deterministic proxy for B2.5's timing claim, not a clock"
     },
     {
       "id": "b2-5-sampled-ground-perimeter-is-load-bearing",
       "guards": "sampledGroundOk's full-perimeter scan (not just the interior stride grid) actually catches ground the interior sampling alone would miss.",
-      "note": "Verified by hand this session: removing the i-edge (west/east) perimeter scan correctly produced a real disagreement -- 1 of 39,118 building candidates went from 100% agreement to sampled=true/exhaustive=false (the dangerous direction) on the real archipelago, caught by generateBoard({verifySampling:true})'s own comparison, not assumed. Reverted, reconfirmed 0 dangerous disagreements across all 50,656 real candidates (11,538 road + 39,118 building) at both stride 3 and stride 5.",
+      "note": "RUN3 item 5: previously verified by hand only (a real-archipelago disagreement count, no node:test assertion). Given a deterministic replacement control in test/boardGenerator.test.ts: a synthetic heightAt places a single WATER atom exactly on the west edge, strictly between the footprint's own north/south rows and off the interior stride grid, so only the west/east perimeter scan can see it. sampledGroundOk is now exported from board-generator.js for this test. Removing the dj loop (the west/east scan) makes sampledGroundOk wrongly return true for this synthetic case -- caught. Original hand-verified real-archipelago evidence (1 of 39,118 candidates flipped dangerous) preserved below for history.",
       "file": "public/board-generator.js",
       "find": "  for (let dj = 0; dj < d; dj++) {\n    if (!standsSet.has(groundKindAt(heightAt, iMin, jMin + dj))) return false;\n    if (!standsSet.has(groundKindAt(heightAt, iMin + w - 1, jMin + dj))) return false;\n  }\n  for (let di = stride; di < w - 1; di += stride) {",
       "replace": "  for (let di = stride; di < w - 1; di += stride) {",
-      "expect": "sampledGroundOk agrees with the exhaustive check on every real candidate -- zero dangerous disagreements (sampled=ok, exhaustive=refused)"
+      "expect": "RUN3 C1: sampledGroundOk's west/east perimeter scan catches a boundary the north/south scan and the interior stride grid both miss"
     },
     {
       "id": "b2-6-no-live-route-generates-the-board",
@@ -1157,6 +1157,15 @@
       "find": "    if (group.children.length >= maxTrees) break;",
       "replace": "    // disabled",
       "expect": "scatterTrees respects maxTrees -- it does not scatter thousands of meshes unbounded"
+    },
+    {
+      "id": "b4-scatter-street-lamps-orients-by-piece-shape-not-a-single-axis",
+      "guards": "scatterStreetLamps genuinely branches on the road piece's own long axis (w vs d) rather than getting the orientation backwards -- the exact mistake (copying scatterTrees's single-axis offset unchanged) this file's own header comment names as the defect a naive port would produce.",
+      "note": "Verified this session: inverting the w>=d comparison makes the dedicated long-span positioning test fail -- a 320 m-long north/south-shaped span (foot.w=320, foot.d=9) would then be treated as long along d instead of w, offsetting the lamp hundreds of metres off the piece's own length rather than beside its own 9 m width, caught directly by that test's own position assertions.",
+      "file": "public/board-render.js",
+      "find": "    const longAlongW = w >= d;",
+      "replace": "    const longAlongW = w < d;",
+      "expect": "scatterStreetLamps positions the lamp beside the road's own narrow (width) edge, at the span's own midpoint along its length -- not off the end of a long span"
     },
     {
       "id": "mutation-claim-checks-the-remainder-not-just-two-of-three-states",

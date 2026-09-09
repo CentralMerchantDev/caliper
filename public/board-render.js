@@ -126,3 +126,55 @@ export function scatterTrees(THREE, pieces, { maxTrees = 400, everyNth = 25 } = 
   }
   return group;
 }
+
+/**
+ * B4 -- "props from the manifest": a real street lamp, from
+ * public/prop-models.js's own propModel("lampPost", ...), the manifest's
+ * OTHER resolution path -- not a VARIED generator family like tree/car/
+ * person, but a plain alias through props.js's own MODELS table
+ * ("MODELS['lampPost'] = MODELS['lamp-street']"), exercised here for the
+ * first time by a real render path rather than a test fixture alone.
+ *
+ * One lamp per `everyNth`-th road piece (default every 40th), bounded by
+ * `maxLamps` -- the same deliberately modest, named-as-such pattern
+ * scatterTrees already established, not a claim of realistic street-lamp
+ * spacing.
+ *
+ * POSITIONED BY THE PIECE'S OWN SHAPE, NOT A SINGLE FIXED AXIS: a road
+ * piece is long in exactly one of foot.w/foot.d (board-generator.js's own
+ * north/south spans are long in w, east/west spans long in d -- this file
+ * reads neither constant, only the piece's own foot, per B3's own "reads
+ * nothing but the board" gate) and ROAD_WIDTH-narrow in the other. The
+ * lamp sits just past the NARROW edge, at the piece's own midpoint along
+ * its LONG edge -- offsetting along the long dimension instead (copying
+ * scatterTrees's single-axis pattern unchanged) would place a lamp
+ * hundreds of metres from the road on a long span, off the piece
+ * entirely; caught by this file's own test before it shipped.
+ */
+export function scatterStreetLamps(THREE, pieces, { maxLamps = 400, everyNth = 40 } = {}) {
+  const group = new THREE.Group();
+  group.name = "board-street-lamps";
+  let seen = 0;
+  for (const piece of pieces) {
+    if (!piece || piece.pieceType !== "road") continue;
+    seen += 1;
+    if (seen % everyNth !== 0) continue;
+    if (group.children.length >= maxLamps) break;
+    const model = propModel("lampPost", piece.cell.i * 31 + piece.cell.j);
+    const parts = model.lod[0].createGeometry(THREE);
+    const partList = Array.isArray(parts) ? parts : [parts];
+    const material = new THREE.MeshStandardMaterial({ color: 0x2a2a2a });
+    const lampGroup = new THREE.Group();
+    for (const geo of partList) lampGroup.add(new THREE.Mesh(geo, material));
+    const origin = atomOrigin(piece.cell.i, piece.cell.j);
+    const { w, d } = piece.foot;
+    const longAlongW = w >= d;
+    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.w / 2 + 0.3;
+    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;
+    lampGroup.position.set(x, 0, z);
+    lampGroup.userData.pieceId = piece.id;
+    lampGroup.userData.propId = model.id;
+    group.add(lampGroup);
+  }
+  return group;
+}

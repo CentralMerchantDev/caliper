@@ -142,7 +142,9 @@ function groundKindAt(heightAt, i, j) {
  * interior AND between stride points could be missed, which is exactly
  * what the real-sample verification checks for rather than assumes away.
  */
-function sampledGroundOk(heightAt, iMin, jMin, w, d, standsSet, stride) {
+// exported for test/boardGenerator.test.ts (RUN3 C1 -- a deterministic
+// mechanism control for b2-5-sampled-ground-perimeter-is-load-bearing)
+export function sampledGroundOk(heightAt, iMin, jMin, w, d, standsSet, stride) {
   for (let di = 0; di < w; di++) {
     if (!standsSet.has(groundKindAt(heightAt, iMin + di, jMin))) return false;
     if (!standsSet.has(groundKindAt(heightAt, iMin + di, jMin + d - 1))) return false;
