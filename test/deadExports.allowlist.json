@@ -164,7 +164,6 @@
     "public/prop-manifest.js:modelFor": "test-only -- reachable only via C:\\Code\\sandbox-spike\\test\\landCompleteness.test.ts. Seeded by the B4 dead-exports gate setup, RUN2-CLI-2026-09-09.",
     "public/prop-manifest.js:hardPropIds": "test-only -- reachable only via C:\\Code\\sandbox-spike\\test\\propManifest.test.ts. Seeded by the B4 dead-exports gate setup, RUN2-CLI-2026-09-09.",
     "public/prop-models.js:VARIED": "test-only -- reachable only via C:\\Code\\sandbox-spike\\test\\propModels.test.ts. Seeded by the B4 dead-exports gate setup, RUN2-CLI-2026-09-09.",
-    "public/prop-models.js:propModel": "test-only -- reachable only via C:\\Code\\sandbox-spike\\test\\propModels.test.ts. Seeded by the B4 dead-exports gate setup, RUN2-CLI-2026-09-09.",
     "public/prop-models.js:disposePropGeometry": "test-only -- reachable only via C:\\Code\\sandbox-spike\\test\\phaseDelta.test.ts. Seeded by the B4 dead-exports gate setup, RUN2-CLI-2026-09-09.",
     "public/prop-models.js:modelCoverage": "test-only -- reachable only via C:\\Code\\sandbox-spike\\test\\propModels.test.ts. Seeded by the B4 dead-exports gate setup, RUN2-CLI-2026-09-09.",
     "public/prop-placement.js:createPropRegistry": "test-only -- reachable only via C:\\Code\\sandbox-spike\\test\\propPlacement.test.ts. Seeded by the B4 dead-exports gate setup, RUN2-CLI-2026-09-09.",

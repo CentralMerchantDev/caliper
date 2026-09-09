@@ -18,7 +18,7 @@ import { WORLD } from "./city-plan.js";
 import { createSelection } from "./selection.js";
 import { boardPiecesById } from "./board-adapter.js";
 import { fetchBoard } from "./board-load.js";
-import { buildBoardScene } from "./board-render.js";
+import { buildBoardScene, scatterTrees } from "./board-render.js";
 import { neighboursOf, applyIsolate, restoreIsolate } from "./isolate.js";
 import { tryMove, moveEditFor } from "./move-piece.js";
 import { layerFrom } from "./world-model.js";
@@ -1839,9 +1839,16 @@ class Renderer3D {
       const boardData = await fetchBoard(city.heightAt);
       this._boardScene = buildBoardScene(THREE, boardData.pieces);
       this.scene.add(this._boardScene);
-      console.log(`B3: board render path drew ${boardData.pieces.length} real pieces from public/board.generated.json`);
+      // B4 ("kits wire by construction"): a real tree, from
+      // public/prop-models.js's own propModel(), scattered beside a modest
+      // fraction of the real building pieces -- see board-render.js's own
+      // scatterTrees() header for why this is deliberately bounded rather
+      // than one tree per building.
+      this._boardTrees = scatterTrees(THREE, boardData.pieces);
+      this.scene.add(this._boardTrees);
+      console.log(`B3/B4: board render path drew ${boardData.pieces.length} real pieces and ${this._boardTrees.children.length} real trees from public/board.generated.json`);
     } catch (e) {
-      console.error("B3: failed to fetch/draw the real board (city geometry above is unaffected):", e);
+      console.error("B3/B4: failed to fetch/draw the real board (city geometry above is unaffected):", e);
     }
 
     // P4.1 -- the REAL board record for a clicked building, not a

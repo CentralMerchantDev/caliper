@@ -65,12 +65,23 @@ export function workerTestsClaimMismatch(claimedWorker: number, generatedWorkerT
  * a hand-typed number with no expiry.
  */
 export function mutationClaimMismatch(readmeText: string, generatedTotal: number, generatedCaught: number, generatedNeverRun: number): string | null {
-  const m = readmeText.match(/(\d+)\s+deliberate defects injected into the guardrails,\s+(\d+)\s+caught and re-verified,\s+(\d+)\s+named and not yet run/i);
-  if (!m) return "README.md no longer has a \"N deliberate defects injected... caught and re-verified... named and not yet run\" sentence";
-  const [, claimedTotal, claimedCaught, claimedNeverRun] = m;
+  // caught + neverRun does NOT have to equal the total -- a SURVIVED or
+  // INCONCLUSIVE result is neither, and a sentence naming only two of three
+  // real states can look internally consistent while silently omitting the
+  // third. The exact "individually-correct numbers that do not sum to the
+  // stated total" gap this run's own ground-check found in
+  // docs/briefs/OVERNIGHT-CLI-2026-09-09.md's "1,141 tests" line -- fixed
+  // here by requiring the sentence to name the remainder explicitly
+  // (0 when there is none), rather than letting the sentence go quiet
+  // about a state it has no clause for.
+  const otherCount = generatedTotal - generatedCaught - generatedNeverRun;
+  const m = readmeText.match(/(\d+)\s+deliberate defects injected into the guardrails,\s+(\d+)\s+caught and re-verified,\s+(\d+)\s+named and not yet run,\s+(\d+)\s+survived or inconclusive/i);
+  if (!m) return "README.md no longer has a \"N deliberate defects injected... caught and re-verified... named and not yet run... survived or inconclusive\" sentence";
+  const [, claimedTotal, claimedCaught, claimedNeverRun, claimedOther] = m;
   if (Number(claimedTotal) !== generatedTotal) return `README.md claims ${claimedTotal} defects injected, generated summary says ${generatedTotal} -- run node scripts/gen-mutation-summary.mjs`;
   if (Number(claimedCaught) !== generatedCaught) return `README.md claims ${claimedCaught} caught, generated summary says ${generatedCaught} -- run node scripts/gen-mutation-summary.mjs`;
   if (Number(claimedNeverRun) !== generatedNeverRun) return `README.md claims ${claimedNeverRun} never run, generated summary says ${generatedNeverRun} -- run node scripts/gen-mutation-summary.mjs`;
+  if (Number(claimedOther) !== otherCount) return `README.md claims ${claimedOther} survived or inconclusive, generated summary implies ${otherCount} (total ${generatedTotal} - caught ${generatedCaught} - never-run ${generatedNeverRun}) -- run node scripts/gen-mutation-summary.mjs`;
   return null;
 }
 

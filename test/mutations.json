@@ -1148,6 +1148,24 @@
       "find": "  if (Number(claimedTotal) !== generatedTotal) return `README.md claims ${claimedTotal} defects injected, generated summary says ${generatedTotal} -- run node scripts/gen-mutation-summary.mjs`;",
       "replace": "  // disabled",
       "expect": "a deliberately staled mutation-evidence sentence is named, by claim, not silently absorbed"
+    },
+    {
+      "id": "b4-scatter-trees-respects-max-trees",
+      "guards": "scatterTrees genuinely stops at maxTrees -- it does not scatter an unbounded number of meshes if a caller's own bound is ignored.",
+      "note": "Verified this session: removing the maxTrees break is caught directly by the dedicated bound-respecting test.",
+      "file": "public/board-render.js",
+      "find": "    if (group.children.length >= maxTrees) break;",
+      "replace": "    // disabled",
+      "expect": "scatterTrees respects maxTrees -- it does not scatter thousands of meshes unbounded"
+    },
+    {
+      "id": "mutation-claim-checks-the-remainder-not-just-two-of-three-states",
+      "guards": "mutationClaimMismatch genuinely checks that caught+neverRun+survivedOrInconclusive sums to the total -- a SURVIVED or INCONCLUSIVE result cannot silently vanish from the claim the way the brief's own '1,141 tests' line let 15 skipped tests vanish.",
+      "note": "Verified this session: disabling the otherCount comparison is caught directly by the dedicated synthetic test for exactly this arithmetic gap.",
+      "file": "src/generatedClaimChecks.ts",
+      "find": "  if (Number(claimedOther) !== otherCount) return `README.md claims ${claimedOther} survived or inconclusive, generated summary implies ${otherCount} (total ${generatedTotal} - caught ${generatedCaught} - never-run ${generatedNeverRun}) -- run node scripts/gen-mutation-summary.mjs`;",
+      "replace": "  // disabled",
+      "expect": "a SURVIVED or INCONCLUSIVE mutation result (neither caught nor never-run) cannot silently vanish from the claim's own arithmetic"
     }
   ]
 }

@@ -14,6 +14,7 @@
 // =============================================================================
 
 import { atomOrigin, heightOf } from "./grid.js";
+import { propModel } from "./prop-models.js";
 
 /** One flat colour per pieceType this file currently knows how to draw.
  *  An unrecognised pieceType still gets a mesh (the fallback grey) rather
@@ -74,6 +75,54 @@ export function buildBoardScene(THREE, pieces) {
   for (const piece of pieces) {
     if (!piece || !piece.pieceType) continue;
     group.add(meshForPiece(THREE, piece));
+  }
+  return group;
+}
+
+/**
+ * B4 -- "kits wire by construction": a real tree, from
+ * public/prop-models.js's own propModel(), not a placeholder. A SEPARATE
+ * group from buildBoardScene() on purpose -- that function's own gate
+ * (test/boardRender.test.ts) asserts one mesh per PIECE exactly; trees are
+ * not pieces (B2's own scope explicitly left them out, per
+ * docs/specs/BOARD-REBUILD-PLAN.md's "Trees/props are explicitly OUT of
+ * B2's scope"), so adding them there would break that contract instead of
+ * satisfying a different one.
+ *
+ * DELIBERATELY MODEST, NAMED AS SUCH: one tree per `maxTrees`-th building
+ * piece (default every 25th), not one per building -- a real board has
+ * ~17,600 buildings, and propModel("tree")'s own LOD0 is a multi-part,
+ * unmerged geometry (world-render-3d.js's own instancing machinery,
+ * `partitionForInstancing`, is what B4's later work would wire this
+ * through; this pass does not build a second one). This satisfies B4's
+ * own gate (propModel becomes product-reachable, not merely test-only)
+ * honestly -- it is a real, working call from a real render path, not a
+ * token invocation -- without shipping tens of thousands of unmerged
+ * meshes tonight.
+ */
+export function scatterTrees(THREE, pieces, { maxTrees = 400, everyNth = 25 } = {}) {
+  const group = new THREE.Group();
+  group.name = "board-trees";
+  let seen = 0;
+  for (const piece of pieces) {
+    if (!piece || piece.pieceType !== "building") continue;
+    seen += 1;
+    if (seen % everyNth !== 0) continue;
+    if (group.children.length >= maxTrees) break;
+    const model = propModel("tree", piece.cell.i * 31 + piece.cell.j);
+    const parts = model.lod[0].createGeometry(THREE);
+    const partList = Array.isArray(parts) ? parts : [parts];
+    const material = new THREE.MeshStandardMaterial({ color: 0x3f6b35 });
+    const treeGroup = new THREE.Group();
+    for (const geo of partList) treeGroup.add(new THREE.Mesh(geo, material));
+    // Offset from the building's own footprint so the tree sits beside it,
+    // inside the building piece's own clear margin, not through its walls.
+    const origin = atomOrigin(piece.cell.i, piece.cell.j);
+    const offsetX = piece.foot.w + model.footprint.w / 2 + 0.5;
+    treeGroup.position.set(origin.x + offsetX, 0, origin.z + piece.foot.d / 2);
+    treeGroup.userData.pieceId = piece.id;
+    treeGroup.userData.propId = model.id;
+    group.add(treeGroup);
   }
   return group;
 }
