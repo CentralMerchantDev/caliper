@@ -2,8 +2,10 @@
 
 ## UNEXPLAINED: a CSS rule that selector-matched and never painted
 
-**Status: UNEXPLAINED. Worked around, not fixed. If this recurs elsewhere, this
-note is what makes it findable.**
+**Status: CLOSED, permanently UNEXPLAINED, 2026-09-09 RUN3.** Worked around,
+not fixed, and no further investigation is planned — see "Closed, 2026-09-09
+RUN3" at the end of this section for why closing it this way is the correct
+call, not a concession.
 
 ### What was observed
 
@@ -144,6 +146,58 @@ segment is visibly there" to disagree), not only a workaround — but the
 underlying CSS cascade failure was never explained, and moving away from the
 failing mechanism is not the same claim as understanding why it failed.
 
+### Closed, 2026-09-09 RUN3 — an honest permanent UNEXPLAINED, not a third attempt
+
+Two sessions have now investigated this and neither isolated a cause.
+`docs/briefs/RUN3-BLD-2026-09-09.md` asked for exactly this: a plain,
+permanent UNEXPLAINED close, with what was ruled out stated once, clearly,
+rather than a third night spent on the least valuable open item this
+project has.
+
+**What is ruled out, gathered in one place:**
+- A selector-logic or DOM-structure mistake — `element.matches()` confirmed
+  true against both the general and the exact per-attribute selector.
+- A class-name typo — the root's `className` was read directly and matched
+  the expected string exactly.
+- A duplicate or shadowed element being measured instead of the real one —
+  `querySelectorAll` found exactly one match for the tested segment.
+- Malformed CSS (unbalanced braces, a stray `!important`) — the source text
+  was read character by character.
+- A second, findable CSS rule elsewhere in the file's ~5,200-line style
+  block targeting the same classes and winning the cascade — a full-file
+  grep for every selector touching any `.nav-wheel*` class found exactly
+  one declaration site each; there is no second rule to be the culprit.
+- The original bug being re-testable at all — the class-based rule it
+  described no longer exists in the codebase; the wedge redesign replaced
+  it with inline styles before this could be re-isolated, and reintroducing
+  removed, already-superseded CSS solely to chase a low-value bug is not a
+  good trade.
+
+**What is NOT ruled out, named so the boundary is honest, not implied
+total:** whether the same rule painted correctly in a real, non-headless,
+non-SwiftShader browser; whether `document.styleSheets` iteration would
+have surfaced an engine-internal or user-agent rule the DOM inspector view
+would not; whether the CSS transition itself interfered with the computed
+value read. All three need a real browser session this project's memory
+floor never allowed across either investigation, and none was pursued
+further per this closing brief's own instruction.
+
+**The one lead on record, restated plainly**: the wedge redesign's own
+`.nav-wheel-seg` CSS independently hit and fixed a related SVG
+`transform-box` coordinate-space surprise (`fill-box` vs the expected
+`view-box`) on the same family of elements, after the original bug and
+without anyone connecting the two at the time. Not proof — the failure
+modes differ (a wrong position vs. a computed style that never changes at
+all) and the original rule predates the SVG redesign — but it is the most
+concrete, project-specific pattern on record if this recurs.
+
+**This closes as CLOSED / PERMANENTLY UNEXPLAINED**, not as FIXED. The
+workaround (inline styles, above) is real, load-bearing, and staying. No
+further nights are planned against this specific bug; if the same class of
+symptom (a selector-matched rule that never visibly applies) recurs
+elsewhere in this codebase, this section — and the `transform-box` lead
+specifically — is where to start, not where to stop.
+
 ---
 
 ## Outstanding, at the point this lane stopped for the night (2026-09-09)
@@ -180,14 +234,11 @@ than only in conversation, so it survives to whoever picks this up.
   "the largest item" — is still fully open: world-fills-screen, landscape,
   the prompt box findable, touch gestures (including the `touch-action` gap
   on `#world-canvas` found and reported, never fixed this session).
-- **Bug 2 (the CSS rule that selector-matched and never painted) stays
-  UNEXPLAINED, updated 2026-09-09 overnight** — see "Time-boxed follow-up"
-  above: the offending rule no longer exists to re-test (fully superseded
-  by inline styles), a full-file grep ruled out a second, findable CSS rule
-  as the cause, and one corroborating lead was found (the wedge redesign's
-  own `.nav-wheel-seg` CSS independently hit and fixed a related SVG
-  `transform-box` coordinate-space surprise on the same element family).
-  Still not closed; still worked around, not fixed.
+- **Bug 2 (the CSS rule that selector-matched and never painted) is CLOSED,
+  permanently UNEXPLAINED, 2026-09-09 RUN3** — see "Closed, 2026-09-09
+  RUN3" above for the full accounting of what was ruled out across two
+  sessions. Not fixed; not going to be investigated further. Worked around
+  (inline styles) and staying that way.
 - **`docs/LESSONS.md`'s "a regex over source matches your comments too"
   entry is now CLOSED, 2026-09-09 overnight** (`bac6c1b`) — a shared
   `test/stripSourceComments.ts` helper, swept into nine files, watched red
