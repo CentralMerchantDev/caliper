@@ -1,0 +1,25 @@
+docs/AUDIT-PROTOCOL.md -- record that a disabling mutation (comment-out,
+if(false)) leaves source text intact and can make a regex-based wiring
+test survive wrongly, recurring three times in one session
+
+WRONG, in the protocol rather than in any one control: §5.3 already covers
+a mutation that does not apply (wrong location, zero or multiple matches)
+as INCONCLUSIVE, not a pass. It did not cover a mutation that applies
+exactly once, exactly where intended, and STILL proves nothing, because a
+source-text regex check cannot distinguish "present in the file" from
+"reachable by the interpreter" -- commenting a line out or wrapping it in
+`if (false) { ... }` removes neither.
+
+This recurred three times in this session alone (recorded in test/
+mutations.json's own notes for isolate-new-pick-restores and isolate-
+hides-moved-pieces, and caught a third time before landing on the ignoreId
+control), by the same author, the second and third time after the lesson
+had already been learned once and written into a commit message -- proof
+that writing it in one commit message was not enough to make it stick,
+which is exactly the reason this file's §7 exists.
+
+Recorded as a standing check: when watching a control red by hand-editing
+source, the edit must remove or invert EXECUTABLE effect, never wrap it in
+a disabled branch or comment.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

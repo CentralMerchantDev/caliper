@@ -1,0 +1,26 @@
+docs/AUDIT-PROTOCOL.md -- record candidate pattern F (two correct controls
+disable each other) and the pipe-exit-code lesson from today's crashed run
+
+WRONG, as a gap in the protocol rather than in the code: neither §7 nor any
+earlier pattern (A-E) named the shape found while trying to close the
+origin-stability/gen-test-count.mjs knot -- two independently correct
+controls (a test that must never turn green by design; a generator that
+refuses to publish while anything is red) composing into a permanent
+deadlock that neither control's own review would catch, because each reads
+correctly in isolation. Named here as candidate pattern F, distinguished
+explicitly from D (incomplete blast radius) and E (unwired capability),
+neither of which is this shape.
+
+Also recorded: a backgrounded `node ... | tee | tail` pipeline reported
+"exit code 0" after the producing `node` process crashed silently mid-run
+with no summary printed, because the exit code shown was `tail`'s, not
+node's. Same shape as this protocol's own §2.2 ("a test that cannot fail")
+one level out -- a status check reporting the wrong process's outcome.
+Added to §3 as a named check: confirm the producing command's own expected
+terminal output before trusting a pipeline's reported exit code.
+
+Not a code change -- no test to watch red/green. Landed on its own so it is
+not lost if the pending memory-constrained full-suite run crashes the host
+again.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

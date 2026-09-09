@@ -799,3 +799,132 @@ independent reproduction of a number disagrees with the documented one,
 neither side's script should be trusted over the other without finding
 the actual difference in method — "reconfirmed by a third measurement"
 is not the same as "found where the second one went wrong."
+
+### 2026-09-08 · Candidate pattern F: two correct controls disable each other
+
+**What was found, and by whom:** not by an audit pass — by trying to close a
+routine finding and discovering the fix had no path to land. `test/originStability.test.ts`
+is deliberately red by design (docs/audits/WORLD-DENSITY-FINDINGS.md §8: opening
+new land has no operation yet that does not move the grid origin, and the test
+exists to keep that fact visible until one does). `scripts/gen-test-count.mjs`
+refuses to publish the public page's test-count claim while any test is red,
+because the claim it writes says the suite *passes*. Each control is correct
+in isolation and each was reviewed and accepted on its own merits. Composed,
+they deadlock: the suite can never be green, so the generator can never run,
+so `public/index.html` was pinned at a stale count (948, against a measured
+1087) with no mechanical way to correct it — not because anyone disagreed
+with either rule, but because neither rule's author checked what the other
+rule does to a suite the first rule guarantees will never fully pass.
+
+**Why this is a new shape, not a restatement of D or E:** pattern D (enumerated-
+instance fix) is one control with an incomplete blast radius. Pattern E
+(capability built beside an existing one) is a control nobody wired to another.
+This is neither — both controls are complete, both are wired, both are individually
+correct, and the failure only exists in their *composition*. Stated generally:
+**when a system has a control that guarantees a state will hold (here: "this
+test must never turn green") and a second control that gates on that same
+state never occurring (here: "never publish while anything is red"), the two
+together forbid the second control from ever firing, permanently — and neither
+control's own review would catch it, because each looks correct read alone.**
+The fix is not to weaken either control; it is to give the deliberately-red
+case a distinct status the gate can name and exempt without exempting real
+failures, which is what `node:test`'s built-in `{ todo }` status was for
+(commit `82cec4e`) — the gate already excludes `todo` from its fail count
+without needing to be taught to, because `node:test` itself already tracks
+the distinction the two controls needed and neither one had been told about.
+
+**The auditor's question this adds:** when a control's own name or comment
+says a red result is *permanent by design* (not "currently broken", but
+"will never pass"), check every OTHER control in the codebase that gates on
+"the suite is green" or "nothing is red" — not just whether the permanent-red
+control itself is honestly documented (§2.1 already asks that), but whether
+anything downstream silently loses the ability to ever fire because of it.
+
+### 2026-09-08 (same day) · A pipe that reports success for a process that died is the same shape as a test that cannot fail
+
+A backgrounded `node test/run.mjs 2>&1 | tee out.log | tail -80` was expected to
+run the full suite; instead the child `node` process crashed silently partway
+through (heap pressure — see the standing "worktree-has-no-node_modules"-
+adjacent host note about this sandbox's memory limits) and never printed a
+summary. The task-completion notification nonetheless reported "exit code 0",
+because in a shell pipeline the reported exit status is the *last* command's
+(`tail`, which succeeded reading whatever partial log existed) — not the
+producing command's. Caught only because the summary lines (`ℹ tests`/`ℹ
+pass`/`ℹ fail`) were grepped for and found completely absent, which should
+never happen on a real completed run. **Worth adding to §3 (verify the
+instrument, do not trust it):** a piped or backgrounded command's reported
+exit code is not evidence the pipeline's first stage succeeded — check for
+the producing command's own expected terminal output (a summary line, a
+sentinel, an explicit `${PIPESTATUS[0]}`/`$pipestatus[0]`) before treating a
+"completed" notification as "completed successfully". Same shape as §2.2's
+"a test that cannot fail": a status check that reports the wrong process's
+outcome will report green regardless of what the real target did.
+
+### 2026-09-08 (later still) · A brief is a claim too
+
+Mark's own brief for the P4 knot fix instructed: "Teach gen-test-count.mjs to
+distinguish a FAILURE from a todo. A todo is not a failing suite." That
+instruction was wrong. `node:test`'s own `{ todo }` support already excludes
+a todo test from both the `ℹ fail` summary count and the failing-tests line
+this script's regex reads — measured directly, not assumed, by running a
+synthetic todo test standalone and by capturing the real suite's output both
+before and after the conversion. No code was written to "teach" the
+generator this distinction, because the generator already had it, for free,
+inherited from the test runner underneath it. What the same investigation
+found instead was a real, different, unbriefed defect: the generator's
+`execFileSync` call buffers its child's entire stdout in memory and forwards
+`NODE_OPTIONS` to it, so a heap cap meant to bound one process bounds two
+independently — the actual cause of that session's repeated near-crashes,
+and the thing actually worth fixing.
+
+**Every entry in this section so far has been about verifying a RESULT —
+code, a test, a comment, a measured number — against reality. This is the
+same discipline aimed one level earlier, at the INSTRUCTION itself.** Rule
+Zero (§0) already says not to invent a benchmark and not to trust one the
+system invented for itself; a task brief is exactly this kind of unverified
+claim, just phrased as an imperative rather than an assertion. "X does not
+already do this" is a testable statement before it is a plan, and treating
+it as one — check it against the actual dependency, in this case a five-line
+standalone `node -e` experiment against the exact `node:test` version in
+use — took less effort than the code the brief asked for would have, and
+found a CRITICAL the brief never named. **Worth stating as an explicit step,
+ahead of implementation: before building what an instruction asks for,
+check whether the thing it says is missing is actually missing** — the same
+way §2.1 already asks whether a comment's claim about the code is true,
+applied to the comment's author's claim about the world before any code
+exists to check it against. This is not a licence to second-guess scope or
+substitute judgement for instruction; it is specifically the same
+measure-before-you-build discipline this whole document is named for,
+turned toward the brief's own factual premises rather than only its
+deliverable.
+
+### 2026-09-08 (later still) · A disabling mutation that leaves the text intact is not a mutation
+
+Three times in one session (P4.3's isolate-new-pick-restores control, the
+exit audit's fix for isolate-hides-moved-pieces, and a first attempt at
+watching the ignoreId control red before switching to a real value
+substitution): a "break this on purpose" mutation was written as
+`// commented out` or `if (false) { ... block ... }` rather than an actual
+deletion or value change, and the wiring/regex-based test that was supposed
+to go red SURVIVED wrongly, because the test matches raw source TEXT, and
+neither a comment nor a dead `if (false)` branch removes the text — only
+whether it executes. §5.3 already says a mutation that did not APPLY
+(landed in the wrong place, matched zero or multiple times) is
+INCONCLUSIVE, not a pass; this is the same failure one level more subtle —
+the mutation applies, exactly once, exactly where intended, and STILL
+proves nothing, because "present in the file" and "reachable by the
+interpreter" are different properties and a source-regex check can only see
+the first. **The rule, stated so it can be checked**: when watching a
+control red by editing source (as opposed to running it through
+`scripts/mutate.mjs`, which mutates for real), the edit must remove or
+change EXECUTABLE effect — delete the line, change a value, invert a
+condition's real behaviour — never wrap it in a disabled branch or a
+comment, even temporarily. Both this session's near-misses were caught only
+because the mutation was watched red and unexpectedly stayed green, which
+is the protocol working as designed (§6: a green suite after a real attempt
+to break something is itself informative) — but three near-misses in one
+session, by the same author, on a lesson already written down once mid-
+session, means the lesson needs to be checkable, not just written: worth a
+standing item in whatever review a mutation entry gets before landing —
+does the `find`/`replace` pair in test/mutations.json actually remove or
+invert behaviour, or does it only comment it out?

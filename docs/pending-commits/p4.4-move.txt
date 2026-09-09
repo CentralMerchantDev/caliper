@@ -1,0 +1,81 @@
+P4.4 MOVE -- drag a piece to a new grid address, wiring board.js's existing
+canPlace refusal to a cursor and to the player, refusal path tested first
+
+WHAT WAS BUILT: public/move-piece.js's tryMove() -- a pure query, no
+mutation -- asks a real, small, local board.js instance (the same
+public/board-region.js localBoard() helper P4.3's neighboursOf now shares,
+extracted rather than duplicated per this project's own standing rule
+against a second answer to the same need) whether a piece would fit at a
+destination cell. It does not re-decide fit: board.js's own canPlace
+({ok:false, reason, blockedBy}) is the only authority, exactly as
+Mark's brief named it ("wiring an existing refusal to a cursor, not writing
+a new one"). moveEditFor() turns a successful result into world-model.js's
+own exact move-op shape ({address, op:"move", payload:{x,z}}), matched to
+layout.js's own placement.x/z convention (footprint centre, `(xMin+xMax)/2`)
+so an overridden piece's render position means what a normal one's already
+does.
+
+world-render-3d.js's new _moveSelected(): calls tryMove, and on refusal
+calls `this.onMoveRefused({reason, blockedBy, plotId})` -- NEVER a console
+log, checked directly (test asserts no console.log/warn/error appears in
+the method at all). On success it builds the real layer edit via
+world-model.js's layerFrom() (public/apply-and-persist.js's own reference
+pattern) and adds it to the real world.layers stack, then live-repositions
+the piece in the current scene using P4.2/P4.3's own promote-out-of-the-
+instanced-batch technique -- named as an approximation, not hidden: the Y
+used for the live preview is heightAt(x,z), the bare ground height, not
+footprint.js's own terrace/verdict-aware base a full rebuild computes. The
+emitted layer edit is the authoritative position (city-render.js's own
+override-move render path, already wired, reads it exactly); the live
+reposition is a preview of it, not a second source of truth.
+
+REFUSAL TESTED FIRST, AND DIFFERENTLY, PER THE BRIEF: scripts/_move-piece-
+probe.mjs (same isolated-child-process pattern as P4.3's own probe, same
+documented OOM reason) finds three real, distinct refusals against the real
+26 km world -- moving building A onto building B's own real cell
+("occupied", with a real blockedBy naming B), moving off the edge of the
+world ("off-map"), and moving a plotId not on the board at all
+("not-found") -- and asserts occupied and off-map read as DIFFERENT reasons,
+not one generic refusal. Only after those three does the success case run:
+a real free destination found by trying tryMove() itself against real
+nearby offsets, not an invented coordinate.
+
+HOW IT IS KNOWN TO BE FIXED, MEASURED NOT ASSERTED:
+
+- All three refusal shapes and the success shape reproduced against the
+  real world; test/movePiece.test.ts asserts on the probe's real output.
+- Two mutations watched red for real, then reverted: removing the
+  onMoveRefused call in the refusal branch, and corrupting moveEditFor's
+  exact payload shape. The FIRST mutation attempt at the onMoveRefused
+  wiring check used too wide a source window and matched the SEPARATE
+  onMoveRefused call in the could-not-persist branch further down the same
+  method -- SURVIVED wrongly, caught before landing, fixed by anchoring the
+  wiring test on `if (!result.ok)` itself with a narrow window rather than
+  "anywhere in the method". A third mutation attempt (disabling the fit
+  check entirely) was tried first and abandoned: it made the probe's own
+  occupied-search loop run unbounded (every one of ~17,000 buildings
+  reports ok:true, so the loop never finds its target and the probe hits
+  its own 120s timeout) -- reverted immediately, no lasting effect, and
+  named here as a real cost lesson about mutating a control whose own test
+  harness searches for a real counterexample, not just a fixed case. All
+  three (two landed, the abandoned one) recorded in test/mutations.json;
+  `npm run mutate` re-verification deferred to when the full suite is safe
+  to run again, same reason as P4.3's own commit.
+- Targeted regression: test/rendererStatic.test.ts (no dangling identifiers/
+  TDZ in the touched renderer files), test/isolate.test.ts,
+  test/pickSelection.test.ts, test/boardAdapter.test.ts,
+  test/instanceGroups.test.ts, test/cityRenderScenePlacements.test.ts,
+  test/board.test.ts -- 55 tests total, all still pass unchanged.
+
+SCOPE, NAMED: buildings only, matching Pick/Move's own established scope
+(docs/audits/P4-GROUNDING.md) -- roads/props/bridges have no board.js
+mutation path yet. No UI drag gesture (mousedown/mousemove/mouseup with a
+ghost preview) was built this pass -- the brief's own emphasis was the
+refusal reaching the player and the existing canPlace being reused, both of
+which are real and tested; moveSelected(destCell) is a real, tested, public
+WorldRenderer method ready for a drag handler to call. This session did not
+touch public/buildings.js, public/facade-textures.js, public/prop-models.js,
+public/props.js, or C:\Code\sandbox-spike-codex -- the other Claude lane's
+files this session, confirmed by git status before this commit.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

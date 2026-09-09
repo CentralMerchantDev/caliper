@@ -1,0 +1,40 @@
+P4.7 water banding -- diagnosed with code-level evidence, fix deliberately
+deferred rather than shipped unverified
+
+WHAT WAS FOUND: public/city-render.js's sea surface (a single two-triangle
+PlaneGeometry spanning WORLD.SIZE * WORLD.SEA_SPAN, tens of km) carries a
+normal map (waterNormalTexture(), city-render.js:199-213) built from a
+handful of low-frequency, anisotropic sine/cosine terms and tiled 120x120
+via RepeatWrapping, applied to a near-mirror material (roughness: 0.055,
+metalness: 0.5, city-render.js:1462-1469). A periodic normal-map pattern
+under a highly specular material on a huge flat plane, viewed from the
+elevated/distant cameras most of this project's own presets use, is a
+textbook cause of visible periodic banding in the reflected highlight --
+full reasoning, and the two alternative causes named in the brief
+(precision loss on the plane, depth-buffer quantisation) ruled out by
+reading the actual geometry/shader code rather than assumed clean, in
+docs/audits/P4.7-WATER-BANDING.md.
+
+WHY NO CODE CHANGED: fixing this with confidence needs a real render to
+confirm the diagnosis against an actual frame and confirm a candidate fix
+actually clears it, not just moves it. This host has crashed on memory
+three times today; this session's own standing rule is not to start a
+multi-camera render below 4 GB free, and free memory did not clear that
+threshold for the remainder of the time available this pass. Per Mark's own
+instruction for exactly this situation ("if it is not fixable without a
+bigger change, say that and leave it") -- the constraint here is
+verification capacity, not the size of the change, but the response is the
+same: name it precisely, do not ship an unverified guess. This project's
+own standard, restated in docs/AUDIT-PROTOCOL.md §0/§6, is never to report
+unverified work as verified; a plausible-sounding fix with no frame to
+confirm it against is exactly the shape of defect that standard exists to
+stop.
+
+WHAT IS NEXT, NAMED EXPLICITLY: docs/audits/P4.7-WATER-BANDING.md's own
+final section -- shoot a real elevated view once memory allows, try
+reducing specular sensitivity first (cheapest, most diagnostic), then a
+non-round repeat count, then a rebuilt noise texture if banding persists,
+re-shooting the SAME view after each change for a real before/after
+comparison.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

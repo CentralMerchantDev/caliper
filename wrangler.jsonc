@@ -1,105 +1,109 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "caliper",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-08-20",
-  "compatibility_flags": ["nodejs_compat"],
-  "observability": {
-    "enabled": true
-  },
-  // Dynamic Workers: lets this Worker spin up isolated sub-Workers at
-  // runtime from a code string. This is the primitive under test.
-  "worker_loaders": [
-    {
-      "binding": "LOADER"
-    }
-  ],
-  // Spend tracking for the Claude generation calls only. Not reachable
-  // from anything inside the sandbox — the sandbox gets an empty env.
-  "kv_namespaces": [
-    {
-      "binding": "SPEND_KV",
-      "id": "f787686ed1944cbf88804507ba5635a7"
-    }
-  ],
-  // FINISH.md section 5: "the spend counter must be atomic ... a cap that
-  // can be raced is not a cap." One global instance (src/index.ts always
-  // calls idFromName("global")) so every concurrent request checks and
-  // commits against the same serialized counter -- KV's eventual
-  // consistency made a genuine race possible; a Durable Object's one-
-  // request-at-a-time-per-instance guarantee closes it structurally, not
-  // by adding more checking.
-  "durable_objects": {
-    "bindings": [
-      {
-        "name": "SPEND_COUNTER",
-        "class_name": "SpendCounterDO"
-      }
-    ]
-  },
-  "migrations": [
-    {
-      "tag": "v1-spend-counter",
-      "new_sqlite_classes": ["SpendCounterDO"]
-    }
-  ],
-  "ai": {
-    "binding": "AI"
-  },
-  "vectorize": [
-    {
-      "binding": "VECTORIZE_MODELS",
-      "index_name": "caliper-models"
-    },
-    {
-      "binding": "VECTORIZE_PLANNING",
-      "index_name": "caliper-planning"
-    }
-  ],
-  "vars": {
-    "LIVE_RUN_ENABLED": "true",
-    // Hard spend cap in USD across all generation calls, enforced in code
-    // (see src/spendCap.ts), not just documented here. Sized to comfortably
-    // cover a full matrix sweep across every task, model, and repetition
-    // with headroom -- this is a ceiling, not a target.
-    "SPEND_CAP_USD": "10.00"
-  },
-  // The page (public/index.html) is served as a static asset; only the API
-  // paths it calls (and the /run, /matrix-* routes used to build and verify
-  // the results) go to the Worker. Everything else -- including "/" -- is
-  // the Asset Worker.
-  "assets": {
-    "directory": "./public",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": [
-      "/api",
-      "/tasks",
-      "/run",
-      "/live-run",
-      "/matrix-run",
-      "/matrix-results",
-      "/security-check",
-      "/spend",
-      "/pipeline-budget",
-      "/live-status",
-      "/recent-runs",
-      "/world-edit-selftest",
-      "/sim-selftest",
-      "/world-source",
-      "/spend-counter-selftest",
-      "/change-instructions",
-      "/change-run",
-      "/change-stop",
-      "/change-resume",
-      "/change-history",
-      "/change-plan-decision",
-      "/change-plan-reply",
-      "/change-review-decision",
-      "/change-error-decision",
-      "/change-answer",
-      "/api/search-models",
-      "/api/explain-layout"
-    ]
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "caliper",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-08-20",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true
+	},
+	// Dynamic Workers: lets this Worker spin up isolated sub-Workers at
+	// runtime from a code string. This is the primitive under test.
+	"worker_loaders": [
+		{
+			"binding": "LOADER"
+		}
+	],
+	// Spend tracking for the Claude generation calls only. Not reachable
+	// from anything inside the sandbox — the sandbox gets an empty env.
+	"kv_namespaces": [
+		{
+			"binding": "SPEND_KV",
+			"id": "f787686ed1944cbf88804507ba5635a7"
+		}
+	],
+	// FINISH.md section 5: "the spend counter must be atomic ... a cap that
+	// can be raced is not a cap." One global instance (src/index.ts always
+	// calls idFromName("global")) so every concurrent request checks and
+	// commits against the same serialized counter -- KV's eventual
+	// consistency made a genuine race possible; a Durable Object's one-
+	// request-at-a-time-per-instance guarantee closes it structurally, not
+	// by adding more checking.
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "SPEND_COUNTER",
+				"class_name": "SpendCounterDO"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1-spend-counter",
+			"new_sqlite_classes": [
+				"SpendCounterDO"
+			]
+		}
+	],
+	"ai": {
+		"binding": "AI"
+	},
+	"vectorize": [
+		{
+			"binding": "VECTORIZE_MODELS",
+			"index_name": "caliper-models"
+		},
+		{
+			"binding": "VECTORIZE_PLANNING",
+			"index_name": "caliper-planning"
+		}
+	],
+	"vars": {
+		"LIVE_RUN_ENABLED": "true",
+		// Hard spend cap in USD across all generation calls, enforced in code
+		// (see src/spendCap.ts), not just documented here. Sized to comfortably
+		// cover a full matrix sweep across every task, model, and repetition
+		// with headroom -- this is a ceiling, not a target.
+		"SPEND_CAP_USD": "10.00"
+	},
+	// The page (public/index.html) is served as a static asset; only the API
+	// paths it calls (and the /run, /matrix-* routes used to build and verify
+	// the results) go to the Worker. Everything else -- including "/" -- is
+	// the Asset Worker.
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": [
+			"/api",
+			"/tasks",
+			"/run",
+			"/live-run",
+			"/matrix-run",
+			"/matrix-results",
+			"/security-check",
+			"/spend",
+			"/pipeline-budget",
+			"/live-status",
+			"/recent-runs",
+			"/world-edit-selftest",
+			"/sim-selftest",
+			"/world-source",
+			"/spend-counter-selftest",
+			"/change-instructions",
+			"/change-run",
+			"/change-stop",
+			"/change-resume",
+			"/change-history",
+			"/change-plan-decision",
+			"/change-plan-reply",
+			"/change-review-decision",
+			"/change-error-decision",
+			"/change-answer",
+			"/api/search-models",
+			"/api/explain-layout"
+		]
+	}
 }

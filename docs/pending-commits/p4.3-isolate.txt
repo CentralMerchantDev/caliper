@@ -1,0 +1,92 @@
+P4.3 ISOLATE -- hide everything but the selection and its immediate
+neighbours, restore exactly, checked against a real fingerprint not a count
+
+WHAT WAS BUILT: public/isolate.js, two halves, split the way grid.js's
+groundOrRefuse/gradeGroundBands already are and for the identical reason
+(test/rendererStatic.test.ts's own header: three.js needs a GPU, so nothing
+in this suite builds a real renderer scene) -- the DECISION
+(neighboursOf) needs no Three.js at all and is exported pure; the MECHANISM
+(planIsolate/applyIsolate/restoreIsolate) is Three.js object manipulation
+that needs no GPU either (confirmed directly: InstancedMesh/Matrix4/Mesh
+construction and mutation work in plain node, only .render() needs a real
+context), so it is exported pure too, callable from world-render-3d.js's new
+_isolate()/_restoreIsolateState() and independently testable without one.
+
+THE NEIGHBOUR RULE, CHOSEN AND JUSTIFIED (not guessed): within one BLOCK
+(grid.js's own named 16 m indexing/display grouping -- its own header states
+plainly "QUADRANT and BLOCK are named groupings for indexing/display ONLY")
+of the selection's own footprint, found via a real board.js
+createBoard()/inCells() query -- not a hand-rolled rectangle scan repeating
+board.js's own geometry. plan.blockId (the city plan's separate zoning
+grouping) was the other real candidate and was rejected: it groups by
+settlement structure, not visual proximity, and would make "neighbours" mean
+anywhere from one plot to hundreds depending which block was clicked. A
+coarse bounding-box prefilter (using board.js's own exported footCellRect,
+not a re-derived one) keeps the local board population small -- a handful of
+pieces, not the world's 18,000+, whose per-piece canPlace validation cost is
+real and not worth paying at world scale for one click.
+
+THE MECHANISM: hide every OTHER InstancedMesh batch wholesale (one
+`.visible = false` per batch), draw a standalone Mesh at its saved matrix for
+each kept (selection + neighbour) piece -- P4.2's own _setHighlight
+technique, generalised from one instance to the kept set, and explicitly NOT
+per-instance zero-scaling across a whole batch (Mark's brief: "rather than
+hiding by mutating shared InstancedMesh state"). Scope: buildings only,
+matching Pick/Move's own established buildings-only scope
+(docs/audits/P4-GROUNDING.md) -- terrain/roads/props/sky remain, giving the
+isolated building real context instead of floating in a void, named here as
+a deliberate choice, not left implicit. A UI trigger button is not part of
+this pass: P4.3's own brief named the neighbour rule and the restore
+assertion as "the hard part", not UI polish, and P4.4's brief explicitly and
+repeatedly demands a UI-visible refusal -- that is where this session's
+remaining time is spent instead. isolate()/restoreIsolate() are real, tested,
+public WorldRenderer methods, ready for a caller.
+
+HOW IT IS KNOWN TO BE FIXED, MEASURED NOT ASSERTED:
+
+- scripts/_isolate-probe.mjs builds ONE real 26 km world in its own process
+  (test/boardAdapter.test.ts's own established pattern, for the identical
+  documented reason: building it at module scope in the shared 130-file
+  suite has crashed this project with a V8 OOM before). Real neighbour
+  query against a real plotId: 3 real neighbours found, all within margin,
+  the selection excluded from its own neighbour set, a building thousands
+  of metres away correctly excluded.
+- The restore fingerprint hashes every batch's visibility flag, material
+  uuid, and FULL instance-matrix array -- not a count, which Mark's own
+  brief named as the exact weak form to avoid ("the easiest assertion in
+  this plan to write in a form that cannot fail"). Real Three.js objects,
+  real plotIds/positions from the same real world; the InstancedMesh
+  batching-by-pieceType is a documented ANALOG of city-render.js's own
+  batching (which needs the real renderer this suite cannot build), not a
+  literal reproduction -- test/isolate.test.ts's own header states plainly
+  what this catches and what it does not.
+- Watched red for real, three separate mutations, each reverted after:
+  self-exclusion removed (only that test failed), restore-visibility
+  skipped (only that test failed), and the new-pick-restores wiring call
+  removed. The THIRD one caught a real gap in the test itself first: an
+  initial attempt at that mutation commented the call out rather than
+  deleting it, and the wiring test's raw-source regex matched the call's
+  own text still sitting inside the comment -- SURVIVED wrongly. Fixed by
+  stripping line comments before matching (test/isolate.test.ts's
+  stripLineComments) before trusting the mutation again; the real deletion
+  now correctly goes red. All three recorded in test/mutations.json,
+  `npm run mutate --id ...` re-verification deferred to when the full suite
+  is safe to run again (this host has crashed on memory three times today;
+  a single isolated-probe run and targeted file runs were used throughout,
+  per this session's host rule).
+- Targeted regression check: test/rendererStatic.test.ts (no dangling
+  identifiers/TDZ in the touched renderer files), test/pickSelection.test.ts,
+  test/boardAdapter.test.ts, test/instanceGroups.test.ts,
+  test/cityRenderScenePlacements.test.ts all still pass unchanged.
+
+WHAT IS STILL OPEN: no UI trigger button (named above); a real
+Playwright/SwiftShader end-to-end fingerprint (the same real renderer a
+visitor's browser builds, following scripts/measure-floating.mjs's own
+established pattern) was considered and deliberately not attempted this
+pass -- this project's own "How to verify" already treats such scripts as
+separate from `npm test`, and launching a browser is exactly the class of
+heavier operation this session's host rule gates behind a free-memory check,
+which was below threshold for most of this session. Named as a real,
+additional layer of evidence not yet gathered, not silently assumed covered.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
