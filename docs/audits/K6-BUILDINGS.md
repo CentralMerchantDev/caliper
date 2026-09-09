@@ -802,3 +802,37 @@ reports per-typology triangle counts and could be extended to report atlas
 key cardinality (how many distinct `_materialCache` keys exist across a real
 world) as a cheap, Node-only number confirming the "four textures total"
 claim above precisely, before any render is attempted.
+
+## The connectors gap — closed, 2026-09-09 RUN3
+
+RUN2 found the entire "connector" kitbash category (8 of 62 parts) had zero
+executable path to any geometry, built `assembleNamedDesign`, and closed 2
+of the 8 with real, structurally-justified additions. RUN3's brief asked to
+finish it or state plainly which parts have a genuine structural reason to
+stay unused.
+
+**Checked mechanically, not by re-reading from memory** (`test/
+kitbashNamedDesigns.test.ts`'s new RUN3 test): a connector joins two
+structural volumes, and the only two mechanical signals in this registry
+for "this design has two volumes" are a shaft part whose name implies a
+paired form, or a recipe naming more than one shaft part. Exactly one shaft
+name qualifies — `shaft-twin-atrium` — and no recipe among the 40 designs
+uses more than one shaft part at all. Every one of the three designs using
+`shaft-twin-atrium` (`canopy-hub`, `skybridge-complex`, `waterfall-atrium`)
+already carries exactly one connector.
+
+**The remaining 5 connector variants
+(`connector-skybridge-straight-single`, `connector-skybridge-curved-arch`,
+`connector-skybridge-truss-diagonal`, `connector-podium-bridge-covered`,
+`connector-sky-concourse`) have no candidate design to attach to without
+inventing new content** — a new design, or restructuring an existing one to
+have a second volume it does not currently have. Both are creative/design
+decisions, not code gaps; building them was correctly out of scope for
+"authoring work that closes a real code gap," the same restraint RUN2
+already exercised. **This is the honest, final state of the finding**: 3 of
+8 connectors reachable and real, 5 of 8 correctly, provably unreachable
+because there is nothing for them to connect — not because anyone forgot
+to wire them in. The mechanical check that established this is now a
+permanent test (not a one-time audit) — if a future design ever adds a
+second paired shaft, the test goes red and names it as new candidate
+content, rather than this conclusion quietly going stale.

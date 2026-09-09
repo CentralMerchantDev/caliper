@@ -108,3 +108,39 @@ test("GATE: registry coverage across both real paths -- assembleBuilding's rando
   // honestly in docs/audits rather than forced into an arbitrary design.
   assert.ok(reached.size >= 57, `only ${reached.size}/${all.length} parts reachable via an executed path -- expected the fix to raise this from the pre-fix 54`);
 });
+
+test("RUN3 item 3: the 5 remaining unused connectors have no design that could sensibly use them -- checked mechanically, not asserted from memory", () => {
+  // A connector joins two structural volumes. The only mechanical signal
+  // in this registry for "this design has two volumes" is a shaft-category
+  // part with a plural/paired name, or a recipe naming more than one shaft.
+  // Both checked directly: exactly one shaft name implies a paired form
+  // (shaft-twin-atrium), no recipe uses more than one shaft part at all,
+  // and every design using shaft-twin-atrium (canopy-hub, skybridge-complex,
+  // waterfall-atrium) already has a connector (RUN2, RUN3). If a future
+  // design changes this -- a new twin-form shaft, or two shafts in one
+  // recipe -- this test goes red and names it as new, real candidate
+  // content, rather than the finding staying true by nobody re-checking it.
+  const twinShaftIds = Object.values(KITBASH_PARTS)
+    .filter((p) => p.category === "shaft" && /twin|paired|dual/i.test(p.name))
+    .map((p) => p.id);
+  assert.deepEqual(twinShaftIds, ["shaft-twin-atrium"],
+    "a new paired-volume shaft exists -- the design(s) using it are new candidates for an unused connector");
+
+  const multiShaftDesigns = Object.values(DESIGN_RECIPE_MAP).filter(
+    (d) => d.recipe.filter((id) => KITBASH_PARTS[id]?.category === "shaft").length > 1,
+  );
+  assert.deepEqual(multiShaftDesigns.map((d) => d.design), [],
+    "a design now has more than one shaft part -- it is a new candidate for an unused connector");
+
+  const twinAtriumDesigns = Object.values(DESIGN_RECIPE_MAP)
+    .filter((d) => d.recipe.includes("shaft-twin-atrium"))
+    .map((d) => d.design)
+    .sort();
+  assert.deepEqual(twinAtriumDesigns, ["canopy-hub", "skybridge-complex", "waterfall-atrium"]);
+  for (const designId of twinAtriumDesigns) {
+    const connectorCount = DESIGN_RECIPE_MAP[designId].recipe.filter(
+      (id) => KITBASH_PARTS[id]?.category === "connector",
+    ).length;
+    assert.equal(connectorCount, 1, `${designId} has a paired volume but ${connectorCount} connectors`);
+  }
+});
