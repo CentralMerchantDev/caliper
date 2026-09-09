@@ -904,6 +904,339 @@ pins, plus B2.5's own honest red; the 1 `todo` is `originStability`'s own
 pre-existing, unchanged, deliberately-red city-plan.js finding (not
 counted as a failure by `node:test` itself). 0 unexplained.
 
+## B2.7 — bridges and boat routes. PLAN, NOT YET IMPLEMENTED. STOP FOR REVIEW.
+
+BUILD-LOOP.md Step 2, mandatory. Written by the CLI lane, overnight,
+2026-09-09, following `docs/briefs/OVERNIGHT-CLI-2026-09-09.md`'s
+instruction to plan in writing and hand the plan to a blind reviewer before
+any code changes. Nothing below is built yet.
+
+**REVISED after a blind subagent review of the first draft, same night.**
+The review found four real defects in that draft, all corrected below, not
+patched over: (1) the draft's 9000 m "too far to bridge" threshold answers
+"is this gap geographically plausible", not "can `roadkit.js` actually
+build across it" — the real, already-measured, in-repo buildable ceiling
+is **800 m single-span** (`public/road-network.js`'s own comment: "11 of
+19 real bridges exceed it" in the OLD world), and reusing 9000 m was
+reusing the answer to the wrong question. (2) the draft's `grep -rin
+"boat\|ferry\|dock" public/` claim of "no hits" was false — the review
+ran the same command and found real boat/dock-named kit entries in
+`public/asset-registry.js` (`av-f1-amphibious-flying-boat`,
+`mar-f1-floating-drydock`, etc.); corrected below. (3) `bridgeChain`
+was mischaracterized as composing `bridgeAbutment`/`bridgePier`/
+`bridgeDeckSpan` into real pieces — it does not; it returns a numeric
+layout PLAN, and `scripts/verify-roadkit.mjs` says so directly. Only
+`bridgeSpan` is exercised by any file under `test/`. (4) the boat
+route's "route record… carried alongside the board's pieces, not inside
+one" broke this document's own Standing Gate 5 ("no world state outside
+the board"), unflagged. Corrected below by keeping the relationship as a
+field on the dock piece itself, inside the board.
+
+### What already exists, read directly before writing this
+
+Two DIFFERENT mechanisms already carry the word "bridge" in this
+repository, and B2.7 is neither of them unmodified:
+
+1. **`scripts/gen-bridges.mjs`** (tracked, committed, `350d25e`) — a
+   standalone generator, never imported by anything (`grep -rn
+   "gen-bridges"` outside itself: no hits). It derives landmass-to-landmass
+   crossings from the geometry itself: nearest-point gap between every pair
+   of landmass polygons, a minimum spanning tree over those gaps so every
+   mass is reachable, then a second pass adding redundant SHORT crossings
+   (gap ≤ 3000 m, degree cap 5 per mass) "so the network is a grid rather
+   than a chain hanging off one crossing." Gaps over **9000 m are skipped
+   outright as "too far to bridge"** — a real, reasoned threshold already
+   chosen for this exact problem, not one this plan needs to invent. Each
+   chosen crossing is anchored by walking inland from the gap until the
+   ground is dry (`heightAt >= 4.0`), road-legal
+   (`landUse.roadAllowedAt(...).ok`), AND provably inside the polygon of
+   the mass the bridge is FOR (not merely inside *some* dry mass — the
+   file's own comment records a real defect this caught: a crossing
+   between two islands that touched neither, both ends having wandered
+   onto the mainland instead). Its output is a printed `BRIDGES` array
+   (`{id, axis, x, a, b, type, class}`), meant to be hand-pasted into
+   `city-plan.js` — it generates DATA for the old, straight-line world,
+   not board pieces, and reads `plan.landmassPolygons`, the OLD
+   generator's polygons, not `terrain.js`'s new `landmassPolygonsDesign()`.
+   Also confirmed this revision: `buildBridgePieces` (same file, line
+   1095) converts a `BRIDGES`-shaped entry into `{id, class, spanM,
+   typology, model}` — `model` is `bridgeSpan`'s own raw socket-geometry
+   result, NOT a `board.js` piece (`cell`/`foot`/`clear`/`levels`/
+   `standsOn`/`surface` are absent). B2.7 can reuse this file's
+   built/refused reporting SHAPE, but still has to write its own
+   socket-result → board-piece conversion; nothing existing does that
+   conversion today.
+2. **`public/road-network.js`'s `buildConnectivityBridges`** (tested by
+   `test/connectivityBridges.test.ts`, currently one of B2.8's old-world
+   pins: "52 components, 38 stranded") — operates on an already-built ROAD
+   graph, finding disconnected road components and stitching STUBS between
+   them. This is the wrong shape for B2: B2's roads are built per
+   settlement boundary, independently, from an explicit junction graph
+   (`board-generator.js`'s own `junctionGraph`) — there is no single
+   partially-connected road graph with dangling stubs to stitch, there are
+   N wholly separate island road grids that were never told about each
+   other. Reusing `buildConnectivityBridges` here would be Failure pattern
+   E in the other direction: forcing a mechanism built for one shape
+   (stub-stitching within one graph) onto a different shape (connecting N
+   independent graphs) rather than adapting the mechanism that already
+   fits (mechanism 1's landmass-gap approach).
+
+**On "B2.8's old-world pins" and its count:** this document's own B2.0
+catalogue above states "34 tests" for the old-world-pin set but its own
+listed per-file breakdown there sums to 32, and does not include
+`worldOccupancy`, `isolate`, or `supervisedGenerateScript` at all — both
+counts are now stale. The overnight brief's fresh count, run and verified
+against a real `node test/run.mjs` execution tonight (2026-09-09, 1,141
+tests: 1,084 pass / 41 fail / 1 todo / 15 skipped), is **38** old-world
+pins, itemised per file, plus 2 `mutationEvidence` failures and B2.5's
+own honest-red gate (38 + 2 + 1 = 41, the real, current total). **38,
+and the name B2.8** (matching `docs/OVERNIGHT-RUN.md`'s own checklist),
+are what the rest of this section uses; the plan's own earlier "34"/"B2.4"
+text is left as written above rather than silently edited to agree — the
+same "correct the ledger, say so in the commit" rule `docs/BUILD-LOOP.md`
+Step 1 states, not a retroactive rewrite of what B2.0 actually measured
+at the time.
+
+**REAL GAPS MEASURED, not carried over unmeasured** (this revision, using
+`board-generator.js`'s own `settlementBoundaries()` against the actual B1
+archipelago): nearest-point distance between every one of the 12 settled
+boundaries' own polygons, all 66 pairs. **Only 1 of 66 pairs (suburb-isle
+↔ cottage-isle-2, 358 m) falls inside the real, measured 800 m
+single-span buildable ceiling.** 42 of 66 fall inside the OLD world's
+9000 m "plausible" cutoff — a number that was never a buildability limit
+to begin with, which is exactly why the old world's own bridge output
+violated its own piece library's real ceiling 11 of 19 times (recorded
+directly above, in `road-network.js`'s own comment). Reusing 9000 m here
+would have repeated that exact defect one level up.
+
+**B2.7's actual job, corrected: adapt mechanism 1's algorithm — nearest-gap,
+MST over the 12 settled boundaries, a redundant-short-edge pass, the
+dry-AND-correct-boundary anchor walk — to read B1's real
+`landmassPolygonsDesign()` output and B2's real settled boundaries
+(`settlementBoundaries()`), classify each resulting edge by the REAL
+buildable ceiling (≤ 800 m: bridge; > 800 m: boat route), and EMIT REAL
+`board.js` PIECES via `place()`, not a printed table for hand-pasting.**
+The MST guarantees full reachability by construction regardless of how
+any individual edge is classified — bridge-vs-boat is a rendering/
+mechanism choice made AFTER the graph already connects everything, not a
+precondition for connectivity. Given the real gap distribution above,
+**boat routes will be the common case, not the exception** — the
+opposite of the first draft's assumption, and worth stating plainly
+rather than letting the "bridge" framing imply otherwise.
+
+### What counts as "connected" for B2.7's purposes
+
+Not every landmass — only the **12 settled boundaries**
+`board-generator.js`'s `settlementBoundaries()` already produces
+(mainland, downtown, suburb, resort, highland, fishing, farm, vineyard,
+quarry, cottage×3). Wooded/sandbar/rock/skerry landmasses are
+deliberately unsettled (B2.1's own `SETTLEMENT_TABLE`) and connecting them
+would build infrastructure serving nobody — the same "construct what you
+want" principle B2.1 was approved on, applied here: the node set for the
+MST is the settled-boundary list, not every polygon in `LANDMASSES`.
+
+### Bridge vs. boat: the real buildable ceiling, not the old "plausible" number
+
+**Gaps ≤ 800 m between two settled boundaries: a bridge**, via
+`bridgeSpan` (the one function this codebase actually tests end to end).
+**Gaps > 800 m: a boat route.** 800 m is not invented for this plan — it
+is `road-network.js`'s own already-measured single-piece ceiling, the
+exact number that already told this project 11 of the OLD world's 19
+bridges could not really be built the way they were declared. The
+redundant-short-edge pass mechanism 1 also ran (originally ≤ 3000 m) is
+re-thresholded to the same ≤ 800 m bridge-buildability limit here, for
+the same reason: a "redundant" edge that cannot actually be built is not
+redundancy, it is a second copy of the same defect.
+
+### What B2.7 emits for a bridge
+
+A **new `board.js` pieceType, `"bridge"`** (already named as a valid value
+in B2.1's own contract above, never yet emitted by anything).
+`board.js`'s own piece validation (`assertValidPiece`) does not enumerate
+allowed `pieceType` strings — confirmed by reading `board.js` directly,
+not assumed — so this needs no schema change, only a real caller.
+Anchors are found the same way mechanism 1 already proves out: walk
+inland from the gap's nearest points until the ground is dry, road-legal,
+and inside the correct settled boundary's own polygon (not merely inside
+*a* boundary) — mechanism 1's own dry-anchor bug (both ends landing on the
+mainland) is exactly the failure this reused check already guards
+against, so it is carried across, not re-derived from nothing. The deck
+geometry comes from `public/roadkit.js`'s `bridgeSpan` **only** — the one
+bridge function any test file actually exercises
+(`test/bridgePieces.test.ts` → `buildBridgePieces`, both in
+`public/road-network.js`). `bridgeChain` is NOT reused: it returns a
+numeric layout PLAN of abutment/pier/span entries, not composed pieces
+(`scripts/verify-roadkit.mjs`'s own comment: "`bridgeChain()` is excluded
+— it returns a chain PLAN"), and `bridgeAbutment`/`bridgePier`/
+`bridgeDeckSpan`/`bridgeApproachRamp`/`bridgeArch`/`bridgeCableStayed`
+are exercised by no file under `test/` at all — reusing them here would
+be building on an untested foundation while calling it "existing and
+tested." Converting `bridgeSpan`'s own socket-geometry result
+(world-metre positions) into a real board piece (`cell`/`foot` as
+integer atoms) is new code B2.7 has to write — `buildBridgePieces` does
+not do this conversion (checked directly: its own return shape carries
+`spanM`/`typology`/`model`, no `cell` or `foot` at all) — but the
+CONVERSION is the only new geometry code, not the span-building itself.
+
+### What B2.7 emits for a boat route — kept deliberately minimal, and said so
+
+**Correction from the first draft:** `grep -rin "boat\|ferry\|dock"
+public/` does NOT return zero hits — `public/asset-registry.js` already
+carries boat-and-dock-NAMED kit models (`av-f1-amphibious-flying-boat`,
+`mar-f1-floating-drydock`, `mar-f1-floating-fuel-dock`, and others). These
+are aviation/marine PROP models for the existing kit library, not transit
+infrastructure, and none of them is wired to any board-placement or
+route-generation logic — `grep` for a board piece, a route generator, or
+a dock-as-infrastructure concept (as opposed to a dock-as-decorative-prop
+kit entry) still returns nothing. The correct, narrower claim: no
+GENERATION or CONNECTIVITY capability for boats/docks exists yet, but B3
+or B4 should check this registry before modelling a boat from scratch,
+because a real asset may already fit.
+
+Kept to the smallest thing that is honestly useful, matching B2's own
+precedent of separating "the real static data" (B2) from "render/animate
+it" (B3): B2.7 emits, per boat-route pair, **two `board.js` pieces of a
+new pieceType `"dock"`**, one per settled boundary. Unlike a bridge
+anchor, a dock's own purpose is to sit AT the water's edge, not set back
+from it — so the anchor walk for a dock is NOT identical to the bridge
+case, despite the first draft's claim that it was: it starts at the
+boundary's own nearest-shoreline point and walks the SHORTEST distance
+inland needed to find ground that is dry, road-legal, and inside the
+correct boundary (a walk bounded much tighter than a bridge anchor's,
+since a dock that ends up far from the shore it is meant to serve has
+failed its one job). **The route relationship lives ON the dock piece
+itself, not beside the board**: `board.js`'s `assertValidPiece` (checked
+directly, `public/board.js:72-97`) validates only the required fields
+and does not reject extra ones, so each dock piece carries its own
+`routeTo` field (the id of the dock piece at the other end) and a shared
+`routeId` — inside the board, satisfying Standing Gate 5 ("no world
+state outside the board"), where the first draft's separate "route
+record… carried alongside the board's pieces" did not. **Dock ids are
+per-pair, not per-boundary** (`dock-{boundaryId}-{partnerBoundaryId}`):
+a boundary with boat routes to two different partners gets two distinct
+dock pieces, since `board.js` refuses a duplicate id outright and nothing
+requires a boundary to have only one waterfront connection.
+**Explicitly OUT of B2.7's scope, named so it is not silently assumed
+built:** the boat itself (a rendered, animated vessel — `asset-registry.js`'s
+existing boat/dock-named kit entries are a real starting point for
+whoever builds this, named above so it is not rediscovered from zero),
+any travel-time or scheduling logic, and any gameplay hook for boarding
+one. B3 (the render path) or a later phase decides whether a boat is
+drawn as a moving prop, an instanced animation, or something else — B2.7
+only proves the two ends exist, are real, and are the right distance
+apart.
+
+### What happens to a gap the MST or redundancy pass chooses that later refuses to build
+
+Named because the first draft left it silent: since bridge-vs-boat is
+decided by measured distance BEFORE any geometry is attempted, and
+`bridgeSpan` itself can still refuse a ≤ 800 m gap for a reason distance
+alone does not predict (no dry-and-correctly-owned anchor on one side, a
+road-legality refusal, an occupied-cell collision) — a refused "bridge"
+candidate becomes a boat route instead, using the same dock-anchor logic,
+rather than silently dropping the connection or blocking the whole gate.
+This keeps the MST's own reachability guarantee intact regardless of
+which individual edges `bridgeSpan` accepts, and it is reported (built
+vs. redirected vs. refused-with-no-fallback, the same three-way split
+`buildBridgePieces` already uses as a reporting SHAPE, reused for its
+shape only, not its piece format, per the correction above).
+
+### Grid alignment and origin stability, by the same construction B2 already uses
+
+No new risk here if built the same way B2.1/B2.3 already were: dock and
+bridge-anchor positions come from `atomOf` on absolute world metres
+(never from `ISLAND.xMin`-style bounds), exactly as B2.1's own rule
+requires of every other piece. This is not new machinery to design; it is
+the existing rule applied to two new pieceTypes.
+
+### The gate, each line with the mutation that gives it teeth
+
+- **Connectivity**: after B2.7, every one of the 12 settled boundaries
+  reaches every other one via bridges and/or boat routes — a graph
+  reachability check over the union of (accepted bridge edges, redirected
+  and pure boat-route edges), asserted as ONE connected component,
+  the direct successor to `test/connectivityBridges.test.ts`'s old-world
+  "one connected component, zero stranded" property, re-expressed for
+  settled boundaries instead of road components. Distinct from "a bridge
+  was placed somewhere" (which the vacuous-pass concern below names) —
+  this checks the graph, not the piece count. **Mutation**: drop the MST
+  edge for one boundary entirely from the emitted edge list (simulating
+  the algorithm silently skipping a node) — the reachability check must
+  go from 1 component to 2 and name the stranded boundary; if it stays
+  green, the check is not really walking the graph.
+- **Every bridge and every dock lands on dry, road-legal ground belonging
+  to the boundary it serves** — mechanism 1's own hard-won anchor check,
+  asserted directly against the new pieces, not re-discovered by trial.
+  **Mutation**: remove the `massOf(sa) === wantId` / correct-boundary
+  check from the anchor walk (mechanism 1's own historically real bug —
+  "barrier-redcliff came back with both ends on the mainland") — the
+  check must catch at least one anchor landing on the wrong boundary
+  on the real archipelago, not merely on a synthetic fixture.
+- **The connectivity gate cannot pass vacuously**: because a "bridge" can
+  legitimately redirect to a boat route (the fallback named above), a
+  gate that only counts "connectivity achieved" without also asserting
+  the RIGHT NUMBER of bridge pieces exist could pass even if every single
+  bridge candidate silently redirected to a boat and zero bridges were
+  ever actually built — same shape as this project's own §7 2026-09-07
+  `componentsBefore` lesson (an intermediate value the final gate cannot
+  see past). **Assert the intermediate count directly**: given the
+  measured real distribution above (1 of 66 pairs ≤ 800 m), the gate
+  pins the exact expected bridge-vs-boat split for the default seed
+  (measured when this is implemented, not guessed here) — a change that
+  makes every candidate redirect to boats must be visible as "0 bridges
+  built" failing that pinned count, not hidden inside a passing
+  connectivity check.
+- **Grid/origin**: bridge and dock pieces pass the same
+  `test/originStability.test.ts`-style check B2's other pieces already
+  pass (boundary geometry identical across `WORLD_SCALE`, never checked
+  against `heightAt`-dependent placement — the same distinction B2.3
+  already drew). **Mutation**: derive a dock or bridge anchor's atom
+  index from `ISLAND.xMin`-style landform bounds instead of `atomOf` on
+  absolute world metres (B2.1's own named mutation, applied to the two
+  new pieceTypes) — must reproduce a nonzero vertex delta across two
+  `WORLD_SCALE` values.
+- **No boat pieces on land, no bridge anchors in water** — the inverse of
+  the dry-anchor check, asserted as its own case since B2.5's own history
+  (100,717 road pieces from a mis-sliced boundary) shows a boundary bug
+  can pass every OTHER check while still being wrong. **Mutation**: skip
+  the dry-ground check specifically for dock anchors (leave it intact for
+  bridges) — must be caught by this case specifically, distinguishing it
+  from the bridge-side anchor check above.
+- **No duplicate dock ids**: a boundary with boat routes to more than one
+  partner produces one dock piece per pair (`dock-{boundaryId}-
+  {partnerBoundaryId}`), not one shared dock reused across routes.
+  **Mutation**: key dock ids by boundary alone, dropping the partner
+  suffix — `board.js`'s own duplicate-id refusal (`place()`) must fire on
+  the second route touching a boundary that already has one, and the
+  gate must name which boundary and which two routes collided.
+
+### What B2.7 is explicitly NOT deciding
+
+- Whether a boat route ever gets a third or fourth waypoint (a real ferry
+  route that stops at more than two docks) — this plan's route data
+  (a `routeTo`/`routeId` pair of fields on two dock pieces) is pairwise
+  only; a multi-stop route is a real future need, not decided here.
+- How `bridgeSpan`'s own continuous world-metre socket output is
+  decomposed into one-or-more atom-grid-aligned `board.js` pieces beyond
+  the two anchors — B2.1's grid-alignment rule ("every position is
+  already an integer atom index from the first line of the layout math")
+  applies, but the exact decomposition (one piece for the whole span vs.
+  one per some fixed atom length) is an implementation decision for
+  whoever writes the conversion code, not fixed here.
+- The rendering/animation of either bridges (already partially covered by
+  `roadkit.js`'s own tested `bridgeSpan` geometry, so lower risk) or
+  boats (entirely undecided, though `asset-registry.js`'s existing
+  boat/dock-named kit models are a real starting point, named above) —
+  B3's job.
+- Whether `test/connectivityBridges.test.ts` itself is retired,
+  rewritten to target the new settled-boundary graph, or left as a named,
+  dated old-world pin until B2.8 — B2.8's own job, explicitly sequenced
+  AFTER B2.7 per this document's own phase order.
+
+**STOP HERE.** Nothing above is implemented. Waiting for blind subagent
+review (this run's stand-in for Mark's own review, per
+`docs/OVERNIGHT-RUN.md`) before BUILD-LOOP Step 3 (test-first) starts.
+
 ## B2–B6
 
 B2 (the generator) starts next, on this same branch (`b1-land`) — not
