@@ -1049,6 +1049,24 @@
       "find": "  const inland = coastPolyline.map(([x, z]) => [x - stripDepth, z]);",
       "replace": "  const inland = coastPolyline.map(([x, z]) => [x + stripDepth, z]);",
       "expect": "coverage is measured INSIDE each settlement boundary, 20-40%, not world-wide -- the mainland boundary sits on real land, not open sea"
+    },
+    {
+      "id": "b2-5-ground-verified-opt-in-is-load-bearing",
+      "guards": "board.js's groundVerified option actually skips the exhaustive per-cell ground loop -- the B2.5 performance fix is real, not decorative.",
+      "note": "Verified by hand this session: removing the `!groundVerified &&` guard (so the exhaustive loop always runs regardless of the option) correctly made generateBoard({useSampling:true}) take ~167.6 s instead of ~40 s -- board.test.ts's own 27 tests stayed green throughout (none of them pass groundVerified, so their own behaviour is unaffected either way), which is itself the point: this mutation is invisible to correctness tests and only a real timing measurement catches it. Reverted, reconfirmed ~40 s and board.test.ts green.",
+      "file": "public/board.js",
+      "find": "    if (!groundVerified && standsOn && standsOn.length) {",
+      "replace": "    if (standsOn && standsOn.length) {",
+      "expect": "generateBoard({useSampling:true}) stays fast -- the groundVerified skip path is exercised, not silently bypassed"
+    },
+    {
+      "id": "b2-5-sampled-ground-perimeter-is-load-bearing",
+      "guards": "sampledGroundOk's full-perimeter scan (not just the interior stride grid) actually catches ground the interior sampling alone would miss.",
+      "note": "Verified by hand this session: removing the i-edge (west/east) perimeter scan correctly produced a real disagreement -- 1 of 39,118 building candidates went from 100% agreement to sampled=true/exhaustive=false (the dangerous direction) on the real archipelago, caught by generateBoard({verifySampling:true})'s own comparison, not assumed. Reverted, reconfirmed 0 dangerous disagreements across all 50,656 real candidates (11,538 road + 39,118 building) at both stride 3 and stride 5.",
+      "file": "public/board-generator.js",
+      "find": "  for (let dj = 0; dj < d; dj++) {\n    if (!standsSet.has(groundKindAt(heightAt, iMin, jMin + dj))) return false;\n    if (!standsSet.has(groundKindAt(heightAt, iMin + w - 1, jMin + dj))) return false;\n  }\n  for (let di = stride; di < w - 1; di += stride) {",
+      "replace": "  for (let di = stride; di < w - 1; di += stride) {",
+      "expect": "sampledGroundOk agrees with the exhaustive check on every real candidate -- zero dangerous disagreements (sampled=ok, exhaustive=refused)"
     }
   ]
 }

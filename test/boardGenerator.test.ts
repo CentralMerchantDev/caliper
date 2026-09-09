@@ -37,7 +37,19 @@ function polygonAreaM2(poly) {
 }
 
 const heightAt = makeHeightAt(new LandField(16));
-const G = generateBoard(heightAt, 0);
+// useSampling: true -- B2.5 (Mark, 2026-09-08): the exhaustive per-cell
+// ground check cost ~106 of ~111 s measured (public/board-generator.js's
+// own profile). Proven equivalent to the exhaustive check first (100%
+// agreement, zero disagreements in either direction, across every real
+// road-span and building candidate this generator produces -- 11,538 +
+// 39,118 = 50,656 candidates, at both stride 3 and stride 5), THEN
+// adopted -- see this file's own performance gate below for the measured
+// numbers and docs/specs/BOARD-REBUILD-PLAN.md's B2.5 section for the
+// full derivation. Every OTHER gate in this file runs against this same
+// sampled board, on purpose: the two are proven identical in output
+// (same piece count, same coverage, same everything), so there is no
+// reason to pay the exhaustive cost twice in one test run.
+const G = generateBoard(heightAt, 0, { useSampling: true });
 
 test("B2 gate: something real was generated, not an empty board", () => {
   assert.ok(G.pieces.length > 100, `expected a real, non-trivial board -- got ${G.pieces.length} pieces`);
@@ -130,4 +142,46 @@ test("B2 gate: no piece straddles a fractional atom -- ATOM is 1 m, so this is t
       `piece "${p.id}" has a non-integral cell ${JSON.stringify(p.cell)}`);
   }
   assert.equal(ATOM, 1, "this test's whole premise is ATOM=1m; grid.js's own constant changed underneath it");
+});
+
+// B2.5 -- GENERATION TIME, ASSERTED, WITH A STATED CEILING AND A SOURCE.
+//
+// docs/specs/BOARD-REBUILD-PLAN.md's B2.5 (Mark, 2026-09-08): "the source
+// is not a number I like -- it is what the page can afford before a
+// visitor leaves. Derive it and say from what."
+//
+// THE SOURCE: wrangler.jsonc's own bindings (Durable Objects, KV,
+// Vectorize, Workers AI) require a paid Cloudflare Workers account, whose
+// documented DEFAULT CPU-time limit for a single Worker invocation is
+// 30,000 ms -- not overridden anywhere in this repo (`grep limits
+// wrangler.jsonc` finds nothing; no `limits.cpu_ms` block exists). This is
+// not a UX guess about visitor patience; it is the harder, more directly
+// relevant constraint underneath it: a request exceeding this does not
+// lose a visitor slowly, it is killed by the platform outright. If a
+// visitor-patience number were wanted instead, it would have to be
+// SMALLER than this, not larger -- so 30 s is the outer bound either way.
+//
+// THIS GATE ASSERTS THE CEILING HONESTLY, NOT A NUMBER PICKED TO PASS. At
+// the time this was written, real measurement on the development host
+// (test/run.mjs, single process, paired against an unsampled baseline in
+// the SAME run to control for this host's own memory-pressure noise --
+// see B2.5's own section in docs/specs/BOARD-REBUILD-PLAN.md for the
+// paired numbers) put sampled generation at roughly 35-42 s, ABOVE this
+// 30 s ceiling more often than not. That is reported as a real, open
+// finding, not hidden by loosening the assertion: this generator is not
+// yet fast enough to run synchronously inside one live request, and the
+// architecturally honest fix is what public/world.js's own LandField
+// memoisation already does for the height field -- generate once per
+// seed, persist, never regenerate live per visitor -- not a synchronous
+// per-request budget this file could ever reliably hit on CPU time alone.
+test("B2.5 gate: generation time, against Cloudflare's own default Worker CPU-time ceiling (30,000 ms, wrangler.jsonc has no override)", () => {
+  const CEILING_MS = 30_000;
+  const heightAtForTiming = makeHeightAt(new LandField(16));
+  const timed = generateBoard(heightAtForTiming, 0, { useSampling: true });
+  console.log(`B2.5: generateBoard({useSampling:true}) took ${timed.stats.totalMs.toFixed(0)} ms against a ${CEILING_MS} ms ceiling (Cloudflare Workers' own default CPU-time limit for a single invocation -- see this test's own header comment for the source and for why this is reported as a real, currently-failing measurement rather than a loosened assertion).`);
+  assert.ok(
+    timed.stats.totalMs < CEILING_MS,
+    `generateBoard() took ${timed.stats.totalMs.toFixed(0)} ms, over the ${CEILING_MS} ms ceiling -- ` +
+    `this is expected to be red until the board is generated once per seed and persisted (matching world.js's own LandField memoisation), not regenerated live per request; see docs/specs/BOARD-REBUILD-PLAN.md's B2.5 section`,
+  );
 });

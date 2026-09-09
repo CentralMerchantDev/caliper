@@ -693,25 +693,123 @@ gated 22 km²/6.67 km²-boundary result is byte-identical to before),
 verified: downtown's own polygon area and first vertex are unchanged at the
 default scale, and its own boundary now shows 0.000 m delta too.
 
+## B2.5 — the 100 seconds. Profiled first, per Mark's own instruction not to optimise on his hypothesis
+
+Mark, 2026-09-08: "Ground it before fixing: profile and report WHERE the
+time goes... do not optimise on my hypothesis. If the road spans are not
+the cost, that is a finding and my paragraph above is wrong."
+
+**MEASURED, `public/board-generator.js`'s own `.stats`, default seed:**
+
+| phase | ms | share |
+|---|---|---|
+| road span placement | 39,406 | 35% |
+| **building placement** | **66,679** | **60%** |
+| road junction-node placement | 3,882 | 3.5% |
+| assessFootprint pre-check | 704 | 0.6% |
+| boundary + junction-graph construction | 197 | 0.2% |
+| **total** | **111,022** | |
+
+`heightAt` called 77,105,992 times (1,293,394 cache hits). **The
+hypothesis was half right**: road spans are a real, substantial cost
+(35%), exactly the mechanism Mark named -- but building placement is
+LARGER (60%), even though each building footprint (~150-300 cells) is far
+smaller than a road span (up to ~700 cells), because there are far more
+of them and `board.js`'s exhaustive per-cell check runs identically for
+both. A naive memoisation cache does not help either: measured directly,
+tracking every queried `(x, z)` pair, unique coordinates alone exceeded
+16.7M (a `Set` hit the same V8 ceiling the earlier cache did) against
+77.1M total calls -- most calls are for genuinely distinct points, so
+there is little redundancy to cache away.
+
+**THE FIX, in order of Mark's own three directions:**
+
+1. `public/board.js` gained one additive, opt-in option:
+   `canPlace`/`place(piece, { groundVerified: true })` skips the
+   exhaustive per-foot-cell ground loop, trusting a caller that has
+   already verified ground by a different, proven-equivalent method.
+   Default `false` -- every existing caller is unaffected; `board.test.ts`
+   and `boardAdapter.test.ts` (27 + tests) pass unchanged, none of them
+   pass the new option. SPACE (occupancy) is NEVER skipped, only ever the
+   GROUND half of the check.
+2. `public/board-generator.js` gained `sampledGroundOk()`: the FULL
+   PERIMETER of a foot rectangle at native (1-atom) resolution, plus a
+   stride-spaced interior grid -- not every interior cell. The perimeter
+   is never sampled: a cliff or water edge cutting through a footprint is
+   a connected boundary, and a convex rectangle's own edge is where such a
+   boundary is caught with certainty; only a feature small enough to sit
+   entirely inside the interior, between stride points, could be missed.
+3. **Proven equivalent BEFORE being adopted, per Mark's own explicit
+   requirement**: `generateBoard(..., { verifySampling: true })` runs
+   BOTH checks for every real road-span and building candidate this
+   generator actually produces and records agreement. Measured on the
+   real archipelago: **100% agreement, zero disagreements in either
+   direction, across 11,538 road candidates and 39,118 building
+   candidates (50,656 total), at both stride 3 and stride 5.** Only then
+   was `useSampling: true` adopted for production use.
+
+**MUTATION-TESTED, both controls**: removing `board.js`'s `groundVerified`
+guard (so the exhaustive loop always runs) made timing regress to ~167.6 s
+-- invisible to every correctness test (`board.test.ts` stayed green,
+since none of its own tests pass the option), caught only by timing,
+which is why it is measured, not assumed. Removing `sampledGroundOk`'s
+own i-edge perimeter scan produced a REAL disagreement: 1 of 39,118
+building candidates went from agreeing to a dangerous mismatch (sampled
+approved, exhaustive would refuse) -- proof the full perimeter is load-
+bearing, not decoration. Both reverted, reconfirmed.
+
+**MEASURED RESULT** (paired, same-process, controlling for this
+development host's own memory-pressure noise -- see below): exhaustive
+~111-113 s, sampled ~40-41 s. **A real, reproducible ~2.7x speedup**,
+identical output (same 35,365 pieces, same coverage, same everything --
+sampling changes HOW ground is verified, never WHAT gets built).
+
+**THE CEILING, derived and sourced, not picked to pass** (Mark: "derive
+it and say from what"): `wrangler.jsonc`'s own bindings (Durable Objects,
+KV, Vectorize, Workers AI) require a paid Cloudflare Workers account,
+whose documented default CPU-time limit for a single Worker invocation is
+**30,000 ms** -- not overridden anywhere in this repo (no `limits.cpu_ms`
+block exists). This is the harder, more directly relevant constraint
+underneath "what a visitor will wait for": a request exceeding it is
+killed by the platform outright, not merely abandoned slowly. A
+visitor-patience number, if wanted instead, would have to be SMALLER, not
+larger -- so 30 s is the outer bound either way.
+
+**THIS GATE IS ASSERTED HONESTLY, AND IT IS RED.** `test/boardGenerator.test.ts`'s
+new B2.5 case asserts `< 30,000 ms` against Cloudflare's own ceiling and
+currently fails -- measured ~35-46 s on this development host (noise
+discussed below), above the ceiling more often than not, even after the
+~2.7x fix. **This is reported as a real, open finding, not hidden by
+loosening the assertion.** The honest conclusion: this generator is not
+yet fast enough to run synchronously inside one live request, and the
+architecturally correct fix is what `public/world.js`'s own `LandField`
+memoisation already does for the height field, for the same reason --
+generate once per seed, persist, never regenerate live per visitor --
+not a further round of micro-optimising the hot path in search of a
+synchronous per-request budget this measurement suggests may not be
+reachable there at all.
+
+**MEASUREMENT NOISE, NAMED**: single standalone measurements on this
+development host varied enormously for IDENTICAL code (35 s to 172 s
+across separate process invocations), correlating with this host's own
+documented low/fluctuating free memory (observed 3.2-3.7 GB throughout
+this session, below the project's own 4 GB standing floor). A paired,
+same-process comparison (baseline then sampled, twice each, one process)
+was used instead to control for this and produced the consistent ~111 s
+-> ~40 s figures above. Absolute single-run numbers on this host should
+not be trusted in isolation; the ~2.7x ratio is the trustworthy result.
+
 ## Still open, named rather than silently dropped
 
-- **Performance**: `generateBoard()` measures ~100-110 s per call.
-  `board.js`'s own `canPlace` checks EVERY foot cell of a placed piece
-  individually (not a sample) -- correct, existing, tested behaviour this
-  pass does not touch -- and a road span's foot (tens of metres by
-  `ROAD_WIDTH`) can cost hundreds of `classifyAt` calls, each calling
-  `slopeAt` for four more `heightAt` calls at distinct offsets that rarely
-  repeat (a capped memoisation cache was tried; measured no material
-  improvement, since most calls are genuinely unique -- kept anyway as a
-  safety cap after an uncapped version hit V8's own ~16.7M-entry `Map`
-  ceiling and crashed mid-run). NOT wired into `public/world.js`'s
-  `createWorld()` because of this: every test calling `createWorld()`
-  (dozens across the suite) would pay the cost. `.plan` is untouched, per
-  B2.1's own stated assumption for exactly this case. A real, separate
-  performance pass, not silently deferred.
-- **Bridges connecting settled islands** (B2.1's own task list, item 4):
-  not yet built. The brief's own "bridges AND BOATS" already allows some
-  islands to be boat-only; which get a bridge is real, undone design work.
+- **The 30 s ceiling is not yet met** (B2.5, above) -- ~35-46 s measured,
+  down from ~111 s, real but insufficient. Needs either a further
+  optimisation pass or (more likely, architecturally correct) generation
+  moved out of the live request path entirely, matching `LandField`'s own
+  memoisation precedent. Not wired into `public/world.js`'s `createWorld()`
+  for exactly this reason: every test calling `createWorld()` would pay
+  whatever the cost currently is. `.plan` is untouched, per B2.1's own
+  stated assumption for exactly this case.
+- **Bridges connecting settled islands** (B2.6, next): not yet built.
 - **B2.4** (re-pinning the 34 old-world-pin failures): explicitly last,
   per Mark's own instruction, once the generator makes the world coherent
   end to end -- still not started, and should not be, until wiring and
@@ -720,8 +818,9 @@ default scale, and its own boundary now shows 0.000 m delta too.
 `npx tsc --noEmit` clean throughout. Full targeted regression
 (`test/terrainLandmassOwnership`, `worldAliasing`, `landCoverage`,
 `worldSeed`, `boardGenerator`, `originStability`, `ground`,
-`waterwayGround`): 65 tests, 63 pass, 2 fail -- both the already-catalogued
-`road-network.js` old-world pins, untouched by this pass.
+`waterwayGround`, `board`, `boardAdapter`): 93 tests, 89 pass, 3 fail --
+2 already-catalogued `road-network.js` old-world pins, untouched by this
+pass, plus B2.5's own honest red (above), 0 unexplained.
 
 ## B2–B6
 

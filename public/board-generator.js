@@ -93,6 +93,11 @@ const HALF_ROAD = Math.floor(ROAD_WIDTH / 2);
 // non-oneHouse boundary -- inside the band on every one, mainland included.
 const CLEAR = 3;
 
+/** The one standsOn value every road/building piece declares -- a real Set,
+ *  shared, so sampledGroundOk's own .has() calls don't rebuild one per
+ *  candidate. */
+const BUILDABLE_SET = new Set([USE.BUILDABLE]);
+
 /** Shoelace, world m². Local, not imported -- this file's own boundary
  *  construction needs it before anything is placed, same function every
  *  other area-honest module in this project already carries locally
@@ -110,6 +115,48 @@ function centroidOf(poly) {
   const cx = poly.reduce((s, [x]) => s + x, 0) / poly.length;
   const cz = poly.reduce((s, [, z]) => s + z, 0) / poly.length;
   return { x: cx, z: cz };
+}
+
+/** Mirrors public/board.js's own kindBelow(i, j, 0) exactly -- classifyAt at
+ *  the cell's own atom centre, no `reserved` predicate (this generator's
+ *  board is created with none). The candidate for a per-cell answer BOTH
+ *  the sampled and exhaustive ground checks below share, so any agreement
+ *  or disagreement measured between them is about WHICH CELLS are looked
+ *  at, never about a different definition of "buildable" underneath. */
+function groundKindAt(heightAt, i, j) {
+  const { x, z } = atomCentre(i, j);
+  return classifyAt(heightAt, x, z, null).use;
+}
+
+/**
+ * A SAMPLED ground check over a foot rectangle: the FULL PERIMETER at
+ * native (1-atom) resolution, plus a stride-spaced interior grid -- not
+ * every interior cell. A DIFFERENT check from board.js's own exhaustive
+ * per-cell one (docs/specs/BOARD-REBUILD-PLAN.md's B2.5), adopted only
+ * after being measured to agree with it on every real piece this
+ * generator actually produces (see the B2.5 section of that document for
+ * the numbers). The perimeter is never sampled, on purpose: a cliff or
+ * water edge cutting through a footprint is a connected boundary, and a
+ * convex rectangle's own edge is where such a boundary is caught with
+ * certainty; only a feature small enough to fit entirely inside the
+ * interior AND between stride points could be missed, which is exactly
+ * what the real-sample verification checks for rather than assumes away.
+ */
+function sampledGroundOk(heightAt, iMin, jMin, w, d, standsSet, stride) {
+  for (let di = 0; di < w; di++) {
+    if (!standsSet.has(groundKindAt(heightAt, iMin + di, jMin))) return false;
+    if (!standsSet.has(groundKindAt(heightAt, iMin + di, jMin + d - 1))) return false;
+  }
+  for (let dj = 0; dj < d; dj++) {
+    if (!standsSet.has(groundKindAt(heightAt, iMin, jMin + dj))) return false;
+    if (!standsSet.has(groundKindAt(heightAt, iMin + w - 1, jMin + dj))) return false;
+  }
+  for (let di = stride; di < w - 1; di += stride) {
+    for (let dj = stride; dj < d - 1; dj += stride) {
+      if (!standsSet.has(groundKindAt(heightAt, iMin + di, jMin + dj))) return false;
+    }
+  }
+  return true;
 }
 
 /** Ray-casting point-in-polygon, world metres. */
@@ -209,8 +256,9 @@ function nextId(prefix) {
   return `${prefix}-${pieceSeq}`;
 }
 
-function placeRoadGraph(board, boundaryId, graph, heightAt) {
+function placeRoadGraph(board, boundaryId, graph, heightAt, stats) {
   const placed = [];
+  let t = now();
   for (const node of graph.nodes) {
     const piece = {
       id: nextId(`road-j-${boundaryId}`), pieceType: "road", boundaryId,
@@ -221,8 +269,9 @@ function placeRoadGraph(board, boundaryId, graph, heightAt) {
     const r = board.place(piece);
     if (r.ok) placed.push(piece);
   }
+  stats.roadNodePlaceMs += now() - t; t = now();
+  let spanCellsTotal = 0;
   for (const edge of graph.edges) {
-    const spanFrom = Math.min(edge.a.i, edge.b.i, edge.a.j, edge.b.j); // placeholder, replaced below
     let piece;
     if (edge.axis === "i") {
       const iLo = Math.min(edge.a.i, edge.b.i) + HALF_ROAD + 1, iHi = Math.max(edge.a.i, edge.b.i) - HALF_ROAD;
@@ -243,15 +292,66 @@ function placeRoadGraph(board, boundaryId, graph, heightAt) {
         standsOn: [USE.BUILDABLE], surface: "road",
       };
     }
-    const r = board.place(piece);
+    spanCellsTotal += piece.foot.w * piece.foot.d;
+
+    if (stats.verifySampling) {
+      const sampled = sampledGroundOk(heightAt, piece.cell.i, piece.cell.j, piece.foot.w, piece.foot.d, BUILDABLE_SET, stats.verifyStride);
+      const check = board.canPlace(piece);
+      const exhaustiveGroundOk = check.ok || check.reason !== "ground";
+      recordSamplingComparison(stats, "road", sampled, exhaustiveGroundOk, piece);
+    }
+
+    const r = stats.useSampling
+      ? placeWithSampledGround(board, piece, heightAt, BUILDABLE_SET, stats.verifyStride, stats)
+      : board.place(piece);
     if (r.ok) placed.push(piece);
   }
+  stats.roadSpanPlaceMs += now() - t;
+  stats.roadSpanCells += spanCellsTotal;
   return placed;
+}
+
+/** Place a piece whose ground has already been verified by sampledGroundOk
+ *  -- skips board.js's own exhaustive per-cell re-check (board.js's own
+ *  `groundVerified` option, added for exactly this), still pays SPACE in
+ *  full, always. Refuses without reserving if the SAMPLED check itself
+ *  says no -- the exhaustive check is never run at all in that case,
+ *  which is the entire saving. */
+function placeWithSampledGround(board, piece, heightAt, standsSet, stride, stats) {
+  let t = now();
+  const ok = sampledGroundOk(heightAt, piece.cell.i, piece.cell.j, piece.foot.w, piece.foot.d, standsSet, stride);
+  stats.sampledCheckMs = (stats.sampledCheckMs || 0) + (now() - t);
+  if (!ok) return { ok: false, reason: "ground" };
+  t = now();
+  const r = board.place(piece, { groundVerified: true });
+  stats.spaceCheckMs = (stats.spaceCheckMs || 0) + (now() - t);
+  return r;
+}
+
+/** Accumulates real-sample agreement between the sampled and exhaustive
+ *  ground checks, by piece kind -- docs/specs/BOARD-REBUILD-PLAN.md's
+ *  B2.5: "prove the two agree on a real sample before adopting it." The
+ *  DANGEROUS direction is sampled=true, exhaustive=false (a piece the fast
+ *  check would have approved that the real ground refuses) -- tracked and
+ *  reported separately, and named explicitly if it is ever non-zero,
+ *  rather than averaged into a single agreement percentage that could
+ *  hide it. */
+function recordSamplingComparison(stats, kind, sampled, exhaustive, piece) {
+  stats.samplingChecked[kind] = (stats.samplingChecked[kind] || 0) + 1;
+  if (sampled === exhaustive) {
+    stats.samplingAgree[kind] = (stats.samplingAgree[kind] || 0) + 1;
+    return;
+  }
+  if (sampled && !exhaustive) {
+    stats.samplingDangerous.push({ kind, piece: piece.id, cell: piece.cell, foot: piece.foot });
+  } else {
+    stats.samplingConservative[kind] = (stats.samplingConservative[kind] || 0) + 1;
+  }
 }
 
 /** Plots and buildings inside one block interior (the atom rectangle
  *  between four road edges, already inset by the road's own half-width). */
-function placeBlockBuildings(board, boundaryId, boundary, block, plotAtoms, levels, heightAt) {
+function placeBlockBuildings(board, boundaryId, boundary, block, plotAtoms, levels, heightAt, stats) {
   const placed = [];
   for (let i = block.iMin; i + plotAtoms <= block.iMax; i += plotAtoms) {
     for (let j = block.jMin; j + plotAtoms <= block.jMax; j += plotAtoms) {
@@ -261,7 +361,9 @@ function placeBlockBuildings(board, boundaryId, boundary, block, plotAtoms, leve
       const far = atomOrigin(i + plotAtoms - CLEAR, j + plotAtoms - CLEAR);
       const env = { xMin: origin.x, xMax: far.x, zMin: origin.z, zMax: far.z };
       if (env.xMax <= env.xMin || env.zMax <= env.zMin) continue;
+      let t = now();
       const verdict = assessFootprint(heightAt, env, waterwayAt);
+      stats.footprintMs += now() - t;
       if (verdict.verdict === "refuse") continue;
       const piece = {
         id: nextId(`bldg-${boundaryId}`), pieceType: "building", boundaryId,
@@ -270,7 +372,19 @@ function placeBlockBuildings(board, boundaryId, boundary, block, plotAtoms, leve
         clear: { w: CLEAR, d: CLEAR },
         standsOn: [USE.BUILDABLE], surface: "roof",
       };
-      const r = board.place(piece);
+
+      if (stats.verifySampling) {
+        const sampled = sampledGroundOk(heightAt, piece.cell.i, piece.cell.j, piece.foot.w, piece.foot.d, BUILDABLE_SET, stats.verifyStride);
+        const check = board.canPlace(piece);
+        const exhaustiveGroundOk = check.ok || check.reason !== "ground";
+        recordSamplingComparison(stats, "building", sampled, exhaustiveGroundOk, piece);
+      }
+
+      t = now();
+      const r = stats.useSampling
+        ? placeWithSampledGround(board, piece, heightAt, BUILDABLE_SET, stats.verifyStride, stats)
+        : board.place(piece);
+      stats.buildingPlaceMs += now() - t;
       if (r.ok) placed.push(piece);
     }
   }
@@ -336,6 +450,8 @@ export function settlementBoundaries(polysWorld = landmassPolygonsWorld()) {
   return out;
 }
 
+const now = () => performance.now();
+
 /**
  * The real board: every settled landmass's roads, plots and buildings,
  * placed by calling public/board.js's own place() directly.
@@ -345,9 +461,39 @@ export function settlementBoundaries(polysWorld = landmassPolygonsWorld()) {
  *        deterministic from the archipelago's own data) -- accepted so
  *        callers matching public/world.js's createWorld(seed) signature do
  *        not need a special case for this generator.
+ * @param {object} [opts]
+ * @param {boolean} [opts.useSampling] B2.5: place with sampledGroundOk's own
+ *        pre-verified ground (public/board.js's `groundVerified` option),
+ *        skipping the exhaustive per-cell re-check for pieces the sampled
+ *        check has already approved. Default false -- opt-in, matches the
+ *        exhaustive-only behaviour every earlier commit measured.
+ * @param {boolean} [opts.verifySampling] B2.5: for every road span and
+ *        building candidate, run BOTH the sampled and exhaustive ground
+ *        checks and record agreement in `.stats` -- "prove the two agree
+ *        on a real sample before adopting it" (Mark, 2026-09-08). Costs
+ *        roughly double the exhaustive-only running time (both checks run);
+ *        meant for producing the real-sample proof, not for every call.
+ * @param {number} [opts.verifyStride] sampledGroundOk's own interior stride,
+ *        in atoms. Default 3.
+ *
+ * `.stats` on the return value is a real profile, by phase and by piece
+ * kind, not a guess -- B2.5 (Mark, 2026-09-08): "ground it before fixing:
+ * profile and report WHERE the time goes... do not optimise on my
+ * hypothesis." See docs/specs/BOARD-REBUILD-PLAN.md's B2.5 section for the
+ * measured breakdown this produced and the fix it justified.
  */
-export function generateBoard(heightAtRaw, seed = 0) {
+export function generateBoard(heightAtRaw, seed = 0, opts = {}) {
+  const { useSampling = false, verifySampling = false, verifyStride = 3 } = opts;
   pieceSeq = 0;
+  const stats = {
+    totalMs: 0, boundaryMs: 0, graphMs: 0,
+    roadNodePlaceMs: 0, roadSpanPlaceMs: 0, roadSpanCells: 0,
+    footprintMs: 0, buildingPlaceMs: 0,
+    heightAtRawCalls: 0, heightAtCacheHits: 0,
+    useSampling, verifySampling, verifyStride,
+    samplingChecked: {}, samplingAgree: {}, samplingConservative: {}, samplingDangerous: [],
+  };
+  const tStart = now();
   // Memoised once per call, by exact (x, z) -- classifyAt/roadAllowedAt and
   // assessFootprint's own grid sampling repeatedly probe the SAME atom
   // centres from different code paths, and LandField's heightAt is not
@@ -364,15 +510,23 @@ export function generateBoard(heightAtRaw, seed = 0) {
   const cache = new Map();
   const CACHE_LIMIT = 2_000_000;
   const heightAt = (x, z) => {
-    if (cache.size >= CACHE_LIMIT) return heightAtRaw(x, z);
+    if (cache.size >= CACHE_LIMIT) { stats.heightAtRawCalls++; return heightAtRaw(x, z); }
     const key = `${x},${z}`;
     let v = cache.get(key);
-    if (v === undefined) { v = heightAtRaw(x, z); cache.set(key, v); }
+    if (v === undefined) {
+      v = heightAtRaw(x, z);
+      cache.set(key, v);
+      stats.heightAtRawCalls++;
+    } else {
+      stats.heightAtCacheHits++;
+    }
     return v;
   };
   const board = createBoard({ heightAt });
+  let t = now();
   const polysWorld = landmassPolygonsWorld();
   const boundaries = settlementBoundaries(polysWorld);
+  stats.boundaryMs = now() - t;
   const pieces = [];
 
   for (const b of boundaries) {
@@ -389,8 +543,10 @@ export function generateBoard(heightAtRaw, seed = 0) {
       if (j < jMin) jMin = j; if (j > jMax) jMax = j;
     }
 
+    t = now();
     const graph = junctionGraph(b.polygon, { iMin, iMax, jMin, jMax }, rule.blockAtoms, heightAt);
-    pieces.push(...placeRoadGraph(board, b.id, graph, heightAt));
+    stats.graphMs += now() - t;
+    pieces.push(...placeRoadGraph(board, b.id, graph, heightAt, stats));
 
     // Blocks: the atom rectangle between four adjacent junction nodes,
     // whichever exist -- a block with a missing corner (coastline cut a
@@ -402,10 +558,11 @@ export function generateBoard(heightAtRaw, seed = 0) {
           jMin: j + HALF_ROAD + 1, jMax: j + rule.blockAtoms - HALF_ROAD,
         };
         if (block.iMax <= block.iMin || block.jMax <= block.jMin) continue;
-        pieces.push(...placeBlockBuildings(board, b.id, b.polygon, block, rule.plotAtoms, rule.levels, heightAt));
+        pieces.push(...placeBlockBuildings(board, b.id, b.polygon, block, rule.plotAtoms, rule.levels, heightAt, stats));
       }
     }
   }
 
-  return { board, pieces, boundaries };
+  stats.totalMs = now() - tStart;
+  return { board, pieces, boundaries, stats };
 }

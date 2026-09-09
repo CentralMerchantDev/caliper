@@ -228,8 +228,29 @@ export function createBoard({ heightAt = null, inWorld = null, reserved = null }
    * caller ask "does a piece fit where THIS existing piece already stands"
    * (a resize or replace) without the piece's own reservation refusing
    * itself.
+   *
+   * `groundVerified` (default false -- every existing caller is unaffected):
+   * SKIPS the exhaustive per-foot-cell GROUND loop below, for a caller that
+   * has ALREADY established ground validity by a different, proven-
+   * equivalent method and does not need this function to re-derive it.
+   * Added for docs/specs/BOARD-REBUILD-PLAN.md's B2.5 (Mark, 2026-09-08):
+   * a generator placing tens of thousands of pieces pays this loop's real
+   * cost (classifyAt -> slopeAt, several heightAt calls) PER CELL of EVERY
+   * foot, including large road-span footprints, measured directly at ~106
+   * of ~111 s in public/board-generator.js's own profile
+   * (roadSpanPlaceMs + buildingPlaceMs). "The board is a spatial index --
+   * partition the space, query the partition, never scan the set" (this
+   * project's own architecture note) -- a caller with its own sampled,
+   * proven-equivalent ground check is the partition query; re-scanning
+   * every cell here on top of it is the same defect this file exists to
+   * prevent one layer up. SPACE is still checked, always, exactly as
+   * before -- occupancy is never something a caller may claim to have
+   * pre-verified, since it can change between the caller's own check and
+   * this call in a way ground cannot. `board.test.ts`'s own tests are
+   * unaffected (none pass this option, so every one exercises the exact
+   * behaviour that existed before this option did).
    */
-  function canPlace({ cell, rotation = 0, foot, clear = { w: 0, d: 0 }, levels = 1, standsOn }, { ignoreId = null } = {}) {
+  function canPlace({ cell, rotation = 0, foot, clear = { w: 0, d: 0 }, levels = 1, standsOn }, { ignoreId = null, groundVerified = false } = {}) {
     const probe = {
       id: "__probe__", pieceType: "__probe__", cell, rotation, foot, clear, levels,
       standsOn: standsOn && standsOn.length ? standsOn : ["__unspecified__"], surface: "none",
@@ -246,8 +267,9 @@ export function createBoard({ heightAt = null, inWorld = null, reserved = null }
     }
 
     // GROUND: every cell of the FOOT (not the clear margin) must be a kind
-    // this piece declares it can stand on.
-    if (standsOn && standsOn.length) {
+    // this piece declares it can stand on. Skipped when groundVerified is
+    // true -- see this function's own header comment for why that is safe.
+    if (!groundVerified && standsOn && standsOn.length) {
       const { w: fw, d: fd } = orientedWD(foot, rotation);
       const standsSet = new Set(standsOn);
       for (let di = 0; di < fw; di++) {
@@ -261,7 +283,9 @@ export function createBoard({ heightAt = null, inWorld = null, reserved = null }
       }
     }
 
-    // SPACE: the foot+clear rectangle, at this piece's vertical extent, must be free.
+    // SPACE: the foot+clear rectangle, at this piece's vertical extent, must
+    // be free. NEVER skipped -- groundVerified only ever stands in for the
+    // GROUND half of this function's own contract.
     const { iMin, iMax, jMin, jMax } = checkedCellBounds(probe);
     const r = atomRect(iMin, jMin, iMax - iMin, jMax - jMin);
     const { yMin, yMax } = verticalExtent(probe, groundYFor(probe));
@@ -279,13 +303,16 @@ export function createBoard({ heightAt = null, inWorld = null, reserved = null }
    * Place a new piece. Refuses (does not reserve) if canPlace says no --
    * this function is itself the authority deciding the ground is committed,
    * matching world-registry.js's own reserve() contract.
+   *
+   * `groundVerified` -- see canPlace's own comment. Default false; forwarded
+   * unchanged, not re-decided here.
    */
-  function place(piece) {
+  function place(piece, { groundVerified = false } = {}) {
     assertValidPiece(piece);
     if (byId.has(piece.id)) {
       return { ok: false, reason: "duplicate-id", detail: `a piece with id "${piece.id}" is already placed` };
     }
-    const fit = canPlace(piece);
+    const fit = canPlace(piece, { groundVerified });
     if (!fit.ok) return fit;
 
     const rect = footCellRect(piece);
