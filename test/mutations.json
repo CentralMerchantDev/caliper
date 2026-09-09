@@ -1039,7 +1039,7 @@
       "file": "public/board-generator.js",
       "find": "  wooded:    { settled: false },",
       "replace": "  wooded:    { settled: true, boundaryK: 0.3, blockAtoms: 65, plotAtoms: 28, levels: 2 },",
-      "expect": "wooded/sandbar/rock/skerry islands carry no settlement at all -- a real, data-driven exclusion, not an assumption"
+      "expect": "wooded/sandbar/rock/skerry islands carry no settlement at all"
     },
     {
       "id": "b2-mainland-boundary-inland-direction-real",
@@ -1048,7 +1048,7 @@
       "file": "public/board-generator.js",
       "find": "  const inland = coastPolyline.map(([x, z]) => [x - stripDepth, z]);",
       "replace": "  const inland = coastPolyline.map(([x, z]) => [x + stripDepth, z]);",
-      "expect": "coverage is measured INSIDE each settlement boundary, 20-40%, not world-wide -- the mainland boundary sits on real land, not open sea"
+      "expect": "coverage is measured INSIDE each settlement boundary, 20-40%, not world-wide"
     },
     {
       "id": "b2-5-ground-verified-opt-in-is-load-bearing",
