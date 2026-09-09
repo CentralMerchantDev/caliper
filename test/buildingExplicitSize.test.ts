@@ -10,6 +10,10 @@ import {
   bldWarehouse,
   bldWorkshop,
   bldTower,
+  bldTerrace,
+  bldTownhouse,
+  bldHighStreetTerrace,
+  bldBusinessParkBlock,
   building
 } from "../public/buildings.js";
 
@@ -166,5 +170,62 @@ test("MUTATION GUARD: options.cellW must never be ignored by any typology", () =
       Math.abs(w1 - w2) > 2.0,
       `MUTATION DETECTED: ${typo.name} geometry did not scale with options.cellW (w1=${w1}, w2=${w2})`
     );
+  }
+});
+
+// RUN4 item 3: the four typologies that don't take cellW/cellD (they size
+// by `units`, or not at all) were never covered by the MIN/MAX bounds check
+// above -- not because anyone decided they didn't need it, but because the
+// loop above is keyed on a dimension they don't have. A rotation-shaped
+// overshoot (RUN3's real bldWorkshop regression) or any other bounds defect
+// in these four would have gone uncaught indefinitely. Audited by hand
+// first (8 seeds each, all within bounds, before writing this) so this test
+// documents a real, checked property rather than a hopeful one.
+// Option sets force every optional feature flag ON at least once, rather
+// than hoping a plain seed sweep happens to roll it -- caught directly
+// while writing this test: an 8-seed sweep of plain { units: 1 } never
+// once rolled bldTerrace's hasDormers true, so a genuine, deliberately
+// planted out-of-bounds mutation on the dormer's own geometry passed this
+// test clean. A seed sweep alone is not proof of coverage; naming the
+// flag explicitly is.
+const NO_CELL_OPTION_TYPOLOGIES: { typology: string; fn: (seed?: string, options?: any, T?: typeof THREE) => any; optionSets: any[] }[] = [
+  { typology: "bld-terrace", fn: bldTerrace, optionSets: [
+    { units: 1 }, { units: 5 },
+    { units: 1, hasBasement: true, hasStringCourse: true, hasDormers: true },
+    { units: 5, hasBasement: true, hasStringCourse: true, hasDormers: true },
+  ] },
+  { typology: "bld-townhouse", fn: bldTownhouse, optionSets: [
+    {}, { bayStyle: "cantilever", hasRoofDeck: true, hasRearExtension: true },
+  ] },
+  // bldHighStreetTerrace ignores `units` entirely (fixed 16x24 footprint,
+  // no optional flags) -- checked by reading the function, not assumed;
+  // one option set is genuinely all there is to cover.
+  { typology: "bld-highstreet-terrace", fn: bldHighStreetTerrace, optionSets: [{}] },
+  { typology: "bld-business-park", fn: bldBusinessParkBlock, optionSets: [{}] },
+];
+
+test("the four typologies without cellW/cellD (terrace, townhouse, high-street terrace, business park) also fit strictly inside their own declared footprint", () => {
+  for (const { typology, fn, optionSets } of NO_CELL_OPTION_TYPOLOGIES) {
+    for (const options of optionSets) {
+      for (let seed = 0; seed < 8; seed++) {
+        const spec = fn(`bounds-seed-${seed}`, options, THREE);
+        const { w: footW, d: footD } = spec.footprint;
+        const height = spec.height;
+        for (let lodIdx = 0; lodIdx < spec.lod.length; lodIdx++) {
+          const geom = spec.lod[lodIdx].createGeometry(THREE);
+          geom.computeBoundingBox();
+          const bb = geom.boundingBox!;
+          geom.dispose();
+          assert.ok(bb.min.x >= -footW / 2 - 0.05 && bb.max.x <= footW / 2 + 0.05,
+            `${typology} ${JSON.stringify(options)} seed ${seed} LOD${lodIdx}: x extent [${bb.min.x}, ${bb.max.x}] outside footprint width ${footW}`);
+          assert.ok(bb.min.z >= -footD / 2 - 0.05 && bb.max.z <= footD / 2 + 0.05,
+            `${typology} ${JSON.stringify(options)} seed ${seed} LOD${lodIdx}: z extent [${bb.min.z}, ${bb.max.z}] outside footprint depth ${footD}`);
+          assert.ok(bb.min.y >= -0.05,
+            `${typology} ${JSON.stringify(options)} seed ${seed} LOD${lodIdx}: geometry dips below ground (${bb.min.y})`);
+          assert.ok(bb.max.y <= height + 0.5,
+            `${typology} ${JSON.stringify(options)} seed ${seed} LOD${lodIdx}: max.y (${bb.max.y}) exceeds declared height ${height}`);
+        }
+      }
+    }
   }
 });
