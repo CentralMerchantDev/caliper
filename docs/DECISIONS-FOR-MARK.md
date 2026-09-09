@@ -7,7 +7,7 @@ meantime, and how expensive it is to reverse.
 
 ---
 
-## 1. `test/testCategoryScoped.ts` — untracked, spends real money if run. Keep, move, or formalise?
+## 1. `test/testCategoryScoped.ts` — untracked, spends real money if run. Keep, move, or formalise? RESOLVED (moved).
 
 **Ground-checked, 2026-09-09 (CLI lane, overnight):** the file is a standalone
 script, not a `node:test` file — no `test(...)` registrations, top-level
@@ -51,12 +51,27 @@ that already exists — building it before Mark confirms the retrieval question
 is still open would risk Failure pattern E (a second, weaker mechanism next
 to one that already works).
 
-**What was done in the meantime:** nothing. The file was read, not run, not
-moved, not deleted, per Rule Zero and "nothing is deleted." It remains
-untracked in `test/testCategoryScoped.ts`, exactly as found.
+**RESOLVED, 2026-09-09 (CLI lane, RUN3 tail): Option 2, executed.** Moved
+(plain `mv`, not `git mv` — the file was untracked, so git had nothing to
+rename) to `scripts/experiments/category-scoped-retrieval.ts`, keeping the
+`.ts` extension rather than the `.mjs` this entry originally suggested —
+the file imports two OTHER `.ts` files directly by their real filenames
+(`src/modelRetrieval.ts`, `src/clientWorkersAI.ts`), which is only valid
+because the entry file is itself `.ts` (Node's native TypeScript-stripping
+import resolution); renaming the entry to `.mjs` while leaving those
+`.ts` imports as-is would have been an untested, unverifiable functional
+change disguised as a file move. All four relative imports were updated
+for the new, one-level-deeper path (`../public/...` → `../../public/...`,
+`../src/...` → `../../src/...`, `./modelRetrievalGolden.ts` →
+`../../test/modelRetrievalGolden.ts`) and each target file's existence
+was confirmed directly (`ls`) at its new relative path. **Not executed**
+— running it would spend real Workers AI money, which this run has no
+authorisation for, so the move's correctness rests on the confirmed
+import paths, not on a real run's output.
 
 **Reversibility:** trivially reversible either way — it is a single file,
-untracked, with no dependents. `git mv` is a one-line undo.
+now tracked at its new path, with no dependents. `git rm` + restoring the
+original content at the old path is a one-line undo, same as before.
 
 ---
 
