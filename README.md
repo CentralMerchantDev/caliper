@@ -25,8 +25,8 @@ vendor's model. Gate 2 never auto-approves.
 
 **A method for not fooling myself, and a record of the times it caught me.** Every claim on
 the live page is generated from the thing it describes, and a test fails when they drift.
-1,087 tests. 98 deliberate defects injected into the guardrails, all 98 caught, checked
-identifier by identifier rather than against a summary line.
+1,087 tests. 127 deliberate defects injected into the guardrails, 117 caught and re-verified,
+10 named and not yet run, checked identifier by identifier rather than against a summary line.
 
 That last one is worth the click. [`docs/AUDIT-PROTOCOL.md`](docs/AUDIT-PROTOCOL.md) names
 the failure patterns this project keeps finding — a check that cannot fail, two sources of

@@ -54,6 +54,26 @@ export function workerTestsClaimMismatch(claimedWorker: number, generatedWorkerT
   return null;
 }
 
+/**
+ * RUN2-CLI-2026-09-09: README.md said "98 deliberate defects injected...,
+ * all 98 caught" with nothing checking it against the real manifest --
+ * the exact "declared value in a second place, nothing binding them"
+ * pattern this project's own docs (AUDIT-PROTOCOL.md's Failure pattern B)
+ * name elsewhere. Confirmed directly before writing this: no test file
+ * read README.md at all. This closes that hole the same way every other
+ * generated claim on this page already is -- read the real manifest, not
+ * a hand-typed number with no expiry.
+ */
+export function mutationClaimMismatch(readmeText: string, generatedTotal: number, generatedCaught: number, generatedNeverRun: number): string | null {
+  const m = readmeText.match(/(\d+)\s+deliberate defects injected into the guardrails,\s+(\d+)\s+caught and re-verified,\s+(\d+)\s+named and not yet run/i);
+  if (!m) return "README.md no longer has a \"N deliberate defects injected... caught and re-verified... named and not yet run\" sentence";
+  const [, claimedTotal, claimedCaught, claimedNeverRun] = m;
+  if (Number(claimedTotal) !== generatedTotal) return `README.md claims ${claimedTotal} defects injected, generated summary says ${generatedTotal} -- run node scripts/gen-mutation-summary.mjs`;
+  if (Number(claimedCaught) !== generatedCaught) return `README.md claims ${claimedCaught} caught, generated summary says ${generatedCaught} -- run node scripts/gen-mutation-summary.mjs`;
+  if (Number(claimedNeverRun) !== generatedNeverRun) return `README.md claims ${claimedNeverRun} never run, generated summary says ${generatedNeverRun} -- run node scripts/gen-mutation-summary.mjs`;
+  return null;
+}
+
 export function claudeMdClaimMismatch(claudeMdText: string, generatedNodeTests: number, generatedWorkerTests: number): string | null {
   const m = claudeMdText.match(/npm test\s+# (\d+) node tests \+ (\d+) worker tests/);
   if (!m) return "CLAUDE.md's \"How to verify\" section no longer has an `npm test # N node tests + M worker tests` line";
