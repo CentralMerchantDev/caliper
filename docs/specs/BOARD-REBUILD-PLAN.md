@@ -191,14 +191,45 @@ started.
       `418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96`).
       All three mutations in this step watched red then reverted (import
       re-added, export removed, one coordinate corrupted).
+- [x] **B1 step A.5 — the island-name reference check Mark asked for**,
+      before finalising the name-to-character mapping. `grep`, each of the
+      nine names, across `public/`, `src/`, `test/`, `docs/`, outside the
+      landmass table. Real hits, not the landmass table itself:
+        - `public/waterways.js` (**this pass's own routing**) — three canals
+          keyed by name and positionally coupled to the current island
+          shapes: `canal-kingsley`, `canal-fairlight`, `canal-cormorant`.
+          Step B must re-derive or re-check these canals' coordinates
+          against the NEW shapes, not just leave the old numbers standing
+          under a name that still resolves.
+        - `public/city-live-world.js` (not this pass's routing) — a
+          hardcoded quest/spawn anchor keyed to `"cormorant-isle"`'s current
+          centroid. Will need its own update once B1's redesign moves that
+          centroid; named here so it is not silently missed at the B2/B3
+          boundary, not fixed now (out of this pass's routing).
+        - `public/ground.js` (routing unclear — not named in either list) —
+          a comment citing `canal-cormorant` as "the narrowest water in the
+          world," a claim about a specific number that will need
+          re-measuring once the canal moves.
+        - `docs/VISUAL-BUILD-PLAN.md` — planning prose, low risk, not code.
+        - `src/citySummary.generated.ts` — regenerates from the real world;
+          self-corrects, not a dependency.
+      "gull" and "barrier" false-positived on unrelated substrings
+      ("gully", "barrier" in road-network/roadkit's own generic vocabulary)
+      once checked directly — not real references to the islands by those
+      names outside the landmass table itself.
+      **Conclusion: reusing the names is still correct** — nothing above
+      breaks from the NAME staying the same; everything above breaks (or
+      needs re-checking) from the SHAPE moving, which step B does regardless
+      of naming. Evidence: the grep commands and their output, this entry.
 - [ ] **B1 step B — author the new archipelago shapes**, `LAND_SCALE`
       defaulting to 1.0, in `terrain.js`, replacing the copied-verbatim data
       from step A. Mainland west / archipelago east+south / downtown
       east-central (unchanged orientation, per Mark's review). Island names
       reused, remapped to the new characters (fairlight/kingsley/cormorant/
-      westbay/bayview/heron/redcliff/gull) — pending the reference check
-      Mark asked for (grep for each name outside the landmass table before
-      finalising the mapping).
+      westbay/bayview/heron/redcliff/gull). Re-derive `public/waterways.js`'s
+      three named canals (kingsley/fairlight/cormorant) against the new
+      shapes as part of this step, per the reference check above — not a
+      separate, later fix.
 - [ ] **B1 gate** — water fraction and dry-land area asserted against
       ~65% / ~237 km², watched red against today's 42% / 391.9 km² first.
       Island count and size distribution asserted (a largest that can carry

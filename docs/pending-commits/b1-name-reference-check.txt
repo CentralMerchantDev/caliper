@@ -1,0 +1,27 @@
+B1 -- the island-name reference check Mark asked for, done and recorded in
+the ledger before finalising the name-to-character mapping
+
+Grepped all nine current island names across public/, src/, test/, docs/,
+outside the landmass table itself. Two real, load-bearing hits: public/
+waterways.js (this pass's own routing) keys three canals to island names
+and is positionally coupled to their current shapes (canal-kingsley,
+canal-fairlight, canal-cormorant); public/city-live-world.js (not this
+pass's routing) hardcodes a quest anchor to cormorant-isle's current
+centroid. public/ground.js carries a comment citing canal-cormorant's width
+as a fact that will need re-measuring once the canal moves. "gull" and
+"barrier" false-positived on unrelated substrings ("gully", roadkit's own
+generic "barrier" vocabulary) once checked directly.
+
+Conclusion: reusing the names is still correct -- nothing found breaks from
+the NAME staying the same; everything found breaks (or needs re-checking)
+from the SHAPE moving, which B1 step B does regardless of naming. Recorded
+in docs/specs/BOARD-REBUILD-PLAN.md's ledger so waterways.js's three named
+canals get re-derived against the new shapes AS PART OF step B, not
+discovered as a separate bug later, and so city-live-world.js's anchor is
+named as a real B2/B3-boundary follow-up rather than silently missed.
+
+No code changed -- a grounding investigation only, per docs/BUILD-LOOP.md
+Step 1 (re-ground before the next step) and Mark's explicit instruction to
+check references before finalising the mapping.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
