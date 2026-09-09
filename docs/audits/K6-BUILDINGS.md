@@ -676,6 +676,42 @@ function by function:
   `hasSetback` is the one flag in this function that genuinely works — it
   correctly branches to a real, different two-tier massing.
 
+**FIXED, 2026-09-09 RUN2 (`codex-lane`), for all four functions above.**
+Every flag named above is now (a) overridable via `options`, matching every
+sibling parameter these functions already support, and (b) actually gates
+its corresponding geometry. The door itself stays unconditional in
+`bldVilla` (a house always has an entrance; `hasPorch` now gates only the
+covered porch structure — floor, roof, columns — around it). `bayStyle` is
+a real three-way branch now: `"none"` omits the bay, `"full"` reproduces
+the original geometry exactly, `"cantilever"` is a genuinely different
+shape (an upper-floor projection on brackets, nothing below it). `podiumType`
+`"flush"` now omits the podium entirely (the tower rises straight, matching
+its name); `"arcade"` is a real, different shape (a recessed, colonnaded
+ground floor with corner columns); `"retail"` reproduces the original.
+`cornerTreatment` `"square"` now means what it says (no extra corner
+geometry); `"curved"` is a real different shape (a quarter-cylinder).
+`test/buildingFeatureFlags.test.ts` proves each flag changes the built
+geometry (not just triangle count, which cannot distinguish `"full"` from
+`"cantilever"` — both are 3 boxes; a vertex-position fingerprint does) and
+that the new shapes stay inside their declared footprints. Watched red for
+real: `bldVilla`'s `if (hasPorch)` was reverted to `if (true)`, and exactly
+the one corresponding test failed, no others — restored byte-identical
+(`md5sum` matched) and reverified green. `npx tsc --noEmit` clean;
+`node test/run.mjs buildingLODAndColors.test.ts buildingExplicitSize.test.ts
+layoutGeometry.test.ts trimAtlasPatch.test.ts phaseDelta.test.ts
+buildingFeatureFlags.test.ts` — 32/32 green, confirming AS1–AS4 and K7.1
+still hold. **Measured, not assumed, before trusting it**: this gating
+widens the achievable LOD0 triangle range per typology (a villa with every
+flag off now measures fewer triangles than before), which was checked
+against `test/buildingLODAndColors.test.ts`'s AS3 budget-ceiling/floor —
+already a single-seed spot check, not an exhaustive one, and `units` alone
+(1–5 for terrace) already produced a wider swing than this fix adds before
+tonight. AS3 passes on its own fixed seed unchanged; a full per-typology
+triangle-budget recalibration across the flag state space is a separate,
+pre-existing gap (the declared budgets were never exhaustively verified
+against the full options space), not something this fix introduces, and is
+named here rather than silently left implied as solved.
+
 **Why this is worth more than a note.** Every building of a typology
 sharing a `corner`/`roofStyle`/`foundation` roll already looks dimensionally
 different (this part of the original checklist's instinct was right, just
