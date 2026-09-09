@@ -254,6 +254,25 @@ a one-off fluke and not a deterministic logic bug either. **This is a
 theory sized from the evidence above, not a confirmed root cause** — the
 exact line where the wrong number gets latched has not been isolated.
 
+**Three candidate causes ruled out, so the next investigation does not
+re-check them:** (1) a second, stray `THREE.WebGLRenderer` instance
+(e.g. a minimap/gizmo canvas) whose stats `window.__renderer` might be
+pointing at by mistake -- only one `new THREE.WebGLRenderer(` call
+exists in `public/city.html`, and `window.__renderer` is assigned from
+it directly. (2) an independent render call inside `buildWorld()`
+(`public/city-render.js`) racing the page's own loop -- that file has
+no `.render(` or `requestAnimationFrame` calls at all; it only builds
+the scene graph, never draws it. (3) the `sceneRenderInfo` capture hook
+itself being structurally wrong -- read directly: it wraps
+`mainRenderPass.render`, calls the original render first, then snapshots
+`r.info.render` immediately after, before any later composer pass (bloom,
+AO, output) can reset it -- the mechanism designed to dodge exactly the
+reset race in (this decision's own theory) reads as correct on
+inspection. None of the three explains the 12-triangle reading by
+itself, which is why the working theory above still stands as the best
+remaining lead, not a wrong one that further reading would have
+disproved quickly.
+
 **Why this was not fixed tonight:** root-causing a three.js
 `WebGLRenderer.info` reset race precisely enough to fix it, without
 guessing, is a real, separate investigation — instrumenting the
