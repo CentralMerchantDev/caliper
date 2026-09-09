@@ -20,25 +20,45 @@ import { NAV_BINDINGS, keyboardOnlyBindings, hintText, createPoseHistory, create
 const ICONS = { orbit: "↻", pan: "✥", zoom: "🔍", focus: "🎯", north: "N", rewind: "↺" };
 const DRAG_PX = 6; // below this, a press-release on a segment is a click, not a drag
 
-// Half-circle arc, top to bottom, opening rightward from the hub (away from
-// the screen's left edge -- see index.html's comment above #nav-wheel for
-// why a full 360deg ring does not fit there): 6 points across -90deg..90deg
-// at 76px radius. Applied directly as inline style from setOpen() below,
-// not via a CSS class -- an earlier version relied on a
-// `.nav-wheel.open .nav-wheel-seg[data-nav-action="x"]` rule that a real
-// browser confirmed selector-matched (Element.matches() returned true) but
-// never actually painted, verified by screenshot and getComputedStyle
-// together, cause not fully isolated. Setting transform/opacity directly is
-// one fewer moving part between "the state is open" and "the segment is
-// visibly there", and is what a screenshot could actually confirm.
-const OPEN_OFFSET = {
-  orbit: [0, -76],
-  pan: [44.7, -61.5],
-  zoom: [72.3, -23.5],
-  focus: [72.3, 23.5],
-  north: [44.7, 61.5],
-  rewind: [0, 76],
-};
+// REAL PIE WEDGES, not six floating dots. Mark's review of the dot version:
+// "segments are where they should be" and "this reads as a wheel" are
+// different claims -- the property that makes a SteeringWheel legible is a
+// visible disc, visible divisions between choices, and a label on each one
+// BEFORE it's touched. Six equal 30deg wedges across the same -90..90deg
+// half-circle the dot version used (opening rightward from the hub, away
+// from the screen's left edge -- see index.html's comment above #nav-wheel
+// for why a full 360deg ring does not fit there), computed once here rather
+// than hand-typed as SVG path strings: six-way pie arithmetic by hand is
+// exactly the kind of thing a person gets subtly wrong and a machine does
+// not.
+const OUTER_R = 140; // Mark: "if the labels do not fit at this radius, the
+// radius is too small" -- a sizing decision, not a reason to drop labels.
+const LABEL_R = 98; // inside the outer edge, where the wedge is still wide
+const ORDER = ["orbit", "pan", "zoom", "focus", "north", "rewind"];
+const WEDGE_SPAN = 180 / ORDER.length; // 30deg each, spanning the full half-circle
+
+function polar(r, angleDeg) {
+  const a = (angleDeg * Math.PI) / 180;
+  return [r * Math.cos(a), r * Math.sin(a)];
+}
+
+/** SVG path `d` for one pie slice, from the shared centre (0,0) at radius r,
+ *  boundaries a1..a2 in degrees (a2 > a1, span < 180 so the arc's own
+ *  large-arc-flag stays 0). */
+function wedgePath(r, a1, a2) {
+  const [x1, y1] = polar(r, a1);
+  const [x2, y2] = polar(r, a2);
+  return `M 0 0 L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 0 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+}
+
+const WEDGES = {};
+ORDER.forEach((id, i) => {
+  const a1 = -90 + i * WEDGE_SPAN;
+  const a2 = a1 + WEDGE_SPAN;
+  const mid = (a1 + a2) / 2;
+  const [lx, ly] = polar(LABEL_R, mid);
+  WEDGES[id] = { a1, a2, mid, path: wedgePath(OUTER_R, a1, a2), labelX: lx, labelY: ly };
+});
 
 export function createNavWheel(renderer, doc = document) {
   const root = doc.getElementById("nav-wheel");
@@ -107,15 +127,34 @@ export function createNavWheel(renderer, doc = document) {
 
   const bindingById = new Map(NAV_BINDINGS.map((b) => [b.id, b]));
   const segEls = new Map();
+  const labelEls = new Map();
   for (const seg of root.querySelectorAll(".nav-wheel-seg")) {
     const id = seg.dataset.navAction;
     const binding = bindingById.get(id);
+    const w = WEDGES[id];
+    if (w) seg.setAttribute("d", w.path);
     if (binding) {
-      seg.textContent = ICONS[id] || binding.label[0];
-      seg.title = `${binding.label} -- ${binding.gestureHint}`;
+      // SVG elements have no .title property; a <title> child is the SVG
+      // equivalent of a native tooltip, additional to the always-visible
+      // label text (which is the actual fix for "readable before touching"
+      // -- the tooltip is a bonus for anyone who does hover).
+      const tip = doc.createElementNS("http://www.w3.org/2000/svg", "title");
+      tip.textContent = `${binding.label} -- ${binding.gestureHint}`;
+      seg.appendChild(tip);
       seg.setAttribute("aria-label", binding.label);
     }
     segEls.set(id, seg);
+  }
+  for (const label of root.querySelectorAll(".nav-wheel-seg-label")) {
+    const id = label.dataset.navAction;
+    const binding = bindingById.get(id);
+    const w = WEDGES[id];
+    if (w) {
+      label.setAttribute("x", w.labelX.toFixed(2));
+      label.setAttribute("y", w.labelY.toFixed(2));
+    }
+    if (binding) label.textContent = `${ICONS[id] || ""} ${binding.label}`.trim();
+    labelEls.set(id, label);
   }
 
   /* ------------------------------------------------------------ open/close */
@@ -125,10 +164,13 @@ export function createNavWheel(renderer, doc = document) {
     root.classList.toggle("open", open); // hook for any future CSS on the ring itself
     hub.setAttribute("aria-expanded", String(open));
     for (const [id, seg] of segEls) {
-      const [ox, oy] = OPEN_OFFSET[id] || [0, 0];
       seg.style.opacity = open ? "1" : "0";
-      seg.style.pointerEvents = open ? "auto" : "none";
-      seg.style.transform = open ? `translate(${ox}px, ${oy}px) scale(1)` : "translate(0, 0) scale(0.4)";
+      seg.style.pointerEvents = open && !seg.classList.contains("disabled") ? "auto" : "none";
+      seg.style.transform = open ? "scale(1)" : "scale(0.4)";
+    }
+    for (const label of labelEls.values()) {
+      label.style.opacity = open ? "1" : "0";
+      label.style.transform = open ? "scale(1)" : "scale(0.4)";
     }
   }
   on(hub, "click", () => setOpen(!open));
@@ -152,7 +194,11 @@ export function createNavWheel(renderer, doc = document) {
   const history = createPoseHistory({ max: 20 });
   const rewindSeg = segEls.get("rewind");
   function refreshRewindEnabled() {
-    if (rewindSeg) rewindSeg.disabled = history.length === 0;
+    // SVG elements have no .disabled property -- a class does the same job,
+    // and setOpen() already checks it when deciding pointer-events.
+    if (!rewindSeg) return;
+    rewindSeg.classList.toggle("disabled", history.length === 0);
+    if (open) rewindSeg.style.pointerEvents = history.length === 0 ? "none" : "auto";
   }
   refreshRewindEnabled();
 
@@ -260,7 +306,7 @@ export function createNavWheel(renderer, doc = document) {
   for (const [id, seg] of segEls) {
     if (DISCRETE[id]) {
       on(seg, "click", () => {
-        if (seg.disabled) return;
+        if (seg.classList.contains("disabled")) return;
         DISCRETE[id]();
       });
     } else {

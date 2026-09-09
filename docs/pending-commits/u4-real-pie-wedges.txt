@@ -1,0 +1,76 @@
+U4 -- real pie wedges, not six labelled dots; hint text contrast fixed
+
+Mark's review of the previous commit's screenshot, again not a passing test:
+"six small unlabelled icons in an arc... your diagnostics are right --
+segOpacity 1, real translate values, positions correct. But 'the segments
+are where they should be' and 'this reads as a wheel' are different claims."
+Correct, and the second time this session a measurement-true, judgment-
+optimistic report has needed correcting -- worth recording plainly rather
+than only fixing quietly.
+
+What makes AutoCAD's wheel legible, per Mark's own breakdown, is three
+things a floating labelled dot cannot carry regardless of how correctly it
+is positioned: a visible ring/disc that reads as one object, visible
+divisions between the six choices, and a label on each BEFORE it is
+touched. All three needed the segments to BE the visible shape, not sit
+near one.
+
+Replaced the six <button> dots with six SVG <path> pie wedges plus six
+<text> labels, geometry computed once in nav-wheel.js
+(WEDGES/wedgePath/polar) rather than hand-typed as path strings -- six-way
+pie arithmetic by hand is exactly the kind of thing a person gets subtly
+wrong and a machine does not. Outer radius raised from the dot version's
+76px to 140px specifically because Mark's instruction was "if the labels do
+not fit at this radius, the radius is too small" -- a sizing decision, not
+grounds to drop the labels -- which at 140px gives each 30deg wedge roughly
+70px of arc width at the label's placement radius (98px out), enough for
+one short word (Orbit, Rewind, Focus, ...) at a readable size. Same half-
+circle span as before (-90deg to 90deg, opening rightward from the hub, for
+the reason already recorded: a full ring at a hub near the screen's left
+edge runs its leftmost segments off-screen).
+
+SVG carries pointer events the same as any other element, so the click/
+drag wiring built for the button version needed no new event model -- only
+three call sites that used HTMLButtonElement-only APIs SVG elements do not
+have: `.title` (SVG's equivalent is a <title> child, added per segment,
+additional to the always-visible label text which is the actual fix for
+"readable before touching") and `.disabled` (replaced with a `.disabled`
+class, checked in both the click handler and setOpen()'s pointer-events
+assignment). Found by reading the code against SVG's actual API, not by
+running it and hitting a TypeError.
+
+The open/closed transform for both wedges and labels scales from a shared
+origin using `transform-box: view-box; transform-origin: 0 0` -- every
+wedge's path already starts at that same coordinate-space point (the
+hub-anchor), so this is the one setting that makes all six converge to the
+same point on close rather than each shrinking from its own bounding box's
+corner (fill-box's default), which would have visibly misaligned them
+mid-transition.
+
+HINT TEXT CONTRAST, STILL: "very low contrast and cramped against the
+panel." The mono-font fix from the prior commit was necessary and confirmed
+correct by Mark; contrast was a separate, second defect in the same
+element. .nav-pad-hint was the only text in the pad with no backing
+surface of its own -- every .nav-strip has `background: var(--card)`; the
+hint relied on a text-shadow against whatever the 3D scene happens to show
+behind it, at --muted (a token meant for de-emphasized text, not the pad's
+own generated readout). Now --ink (the pad's highest-contrast text colour)
+on a real background chip matching .nav-strip's own treatment -- the same
+mechanism the rest of the pad already uses for contrast, not a text-shadow
+asked to do it alone.
+
+Verified: npx tsc --noEmit clean. node test/run.mjs navWheel.test.ts
+navBindings.test.ts navPad.test.ts -- 22/22 pass, unchanged from the prior
+commit (the existing "segment markup matches a wheel binding" assertion
+still holds: it counts data-nav-action occurrences regardless of whether
+they're on a <path> or a <text>, and both still exist per segment).
+
+What's still open: the open state has not been re-shot against this
+version. Host memory read 2.9 GB at the point this needed a render --
+further below this project's 4 GB floor than at any earlier point this
+session. Per Mark's explicit instruction, panels should be closed
+(#tour-toggle-btn, "put the panels away") for the next screenshot rather
+than left open behind the wheel, which was its own defect in the prior
+screenshot (illegible against the "How it works" copy) separate from the
+wheel's own form. Not calling U4 done until that render lands and Mark has
+seen it.

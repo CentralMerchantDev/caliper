@@ -1489,50 +1489,72 @@ html, body {
 .nav-wheel-legend span { font-family: var(--mono); color: var(--ink); }
 .nav-wheel-legend i { color: var(--ink2); font-style: normal; text-align: right; }
 
+/* REAL PIE WEDGES. Mark's review of the icon-arc version: "six small
+   unlabelled icons in an arc... none of the property that makes a
+   SteeringWheel legible." That property is a visible disc, visible
+   divisions, and a label per segment BEFORE it is touched -- none of which
+   a floating dot can carry no matter how correctly it is positioned.
+   140px outer radius (up from the icon version's 76px, deliberately: Mark's
+   instruction was "if the labels do not fit at this radius, the radius is
+   too small," a sizing decision, not a reason to drop the labels) gives
+   each 30deg wedge roughly 70px of arc width at the label's placement
+   radius, room for one short word (Orbit, Rewind, ...) at a readable size.
+   The <path> `d` and <text> x/y for all six are computed once by
+   nav-wheel.js (WEDGES/wedgePath, precomputed pie geometry, not hand-typed
+   arithmetic here) and set as attributes, not left to CSS. */
 .nav-wheel-ring {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 0;
-  height: 0;
+  left: -4px;
+  top: -150px;
+  width: 154px;
+  height: 300px;
+  overflow: visible;
   pointer-events: none;
 }
 .nav-wheel-seg {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 40px;
-  height: 40px;
-  margin: -20px 0 0 -20px;
-  border-radius: 50%;
-  background: var(--card);
-  border: 1px solid var(--line);
-  box-shadow: var(--nav-shadow);
-  color: var(--ink);
-  font-size: 15px;
-  line-height: 1;
+  fill: var(--card);
+  stroke: var(--line);
+  stroke-width: 1.5;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   opacity: 0;
-  transform: translate(0, 0) scale(0.4);
-  transition: transform 0.16s ease, opacity 0.16s ease, background 0.15s ease, color 0.15s ease;
+  /* Every wedge's path starts at the shared centre point (0,0 in the SVG's
+     own coordinate space -- see wedgePath in nav-wheel.js). transform-box:
+     view-box makes scale() originate from that SAME coordinate-space point
+     for every wedge, rather than each wedge's own bounding box (fill-box's
+     default, which would scale each wedge from a DIFFERENT corner and
+     visibly misalign them during the open/close transition). */
+  transform-box: view-box;
+  transform-origin: 0px 0px;
+  transform: scale(0.4);
+  transition: transform 0.16s ease, opacity 0.16s ease, fill 0.15s ease;
   pointer-events: none;
 }
-.nav-wheel-seg:hover, .nav-wheel-seg.armed { background: var(--sky); color: var(--card); }
-.nav-wheel-seg:disabled { opacity: 0.35 !important; cursor: default; }
+.nav-wheel-seg:hover, .nav-wheel-seg.armed { fill: var(--sky); }
+.nav-wheel-seg.disabled { opacity: 0.35 !important; cursor: default; pointer-events: none !important; }
+.nav-wheel-seg-label {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  fill: var(--ink);
+  text-anchor: middle;
+  dominant-baseline: middle;
+  opacity: 0;
+  pointer-events: none;
+  transform-box: view-box;
+  transform-origin: 0px 0px;
+  transform: scale(0.4);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
 
-/* The open/closed position of each segment (a half-circle arc, top to
-   bottom, opening rightward from the hub -- see index.html's comment above
-   #nav-wheel for why a full ring does not fit there) is set directly as
-   inline style by nav-wheel.js's setOpen(), not by a CSS class rule here.
-   An earlier version used `.nav-wheel.open .nav-wheel-seg[data-nav-action=
-   "x"]`, which Element.matches() confirmed as selector-correct in a real
-   browser but which never actually painted -- verified by screenshot, cause
-   not fully isolated. Inline style removes that gap entirely: what JS sets
-   is what getComputedStyle (and the screenshot) shows, with no separate
-   cascade to go wrong. */
+/* The open/closed state of each wedge and label (opacity + scale) is set
+   directly as inline style by nav-wheel.js's setOpen(), not by a CSS class
+   rule here. An earlier version used `.nav-wheel.open .nav-wheel-seg[data-
+   nav-action="x"]`, which Element.matches() confirmed as selector-correct in
+   a real browser but which never actually painted -- verified by
+   screenshot, cause not fully isolated (docs/audits/U4-NAV-WHEEL.md).
+   Inline style removes that gap entirely: what JS sets is what
+   getComputedStyle (and the screenshot) shows, with no separate cascade to
+   go wrong. */
 
 /* --- readout: heading, pitch, range ---------------------------------------
    Navigating blind is most of why this was hard. These are live numbers, in
@@ -1614,10 +1636,20 @@ html, body {
 
 /* --- actions -------------------------------------------------------------- */
 .nav-bare .nav-strip-actions button { padding: 5px 8px; font-size: 10.5px; }
+/* Mark: "very low contrast and cramped against the panel." Correct -- this
+   was the only text in the pad with no backing surface of its own (every
+   .nav-strip has `background: var(--card)`; the hint just had a light
+   text-shadow against whatever the 3D scene behind it happens to be), and
+   --muted at 10px is meant for de-emphasized text, not the pad's own
+   generated instrument readout. --ink plus a real background chip matches
+   how the rest of the pad actually achieves contrast, rather than asking a
+   text-shadow to do it alone. */
 .nav-bare .nav-pad-hint {
-  max-width: 210px; padding: 0 2px;
-  font-size: 10px; line-height: 1.35; color: var(--muted);
-  text-shadow: 0 1px 3px var(--paper);
+  max-width: 232px; padding: 4px 6px;
+  font-size: 10px; line-height: 1.4; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--nav-radius, 11px);
+  box-shadow: var(--nav-shadow, 0 4px 14px rgba(42, 32, 26, 0.14));
 }
 .nav-bare.is-collapsed .nav-readout,
 .nav-bare.is-collapsed .nav-dial,
@@ -1938,24 +1970,43 @@ html, body {
      stay off it and stay in the button row inside the pad -- a mode switch
      and an action wheel mixed into one radial is how these controls get
      confusing (Mark's own framing), so they are two instruments, not one.
-     Every label and tooltip is generated from public/nav-bindings.js's
-     NAV_BINDINGS by nav-wheel.js at load, not typed here by hand -- the
-     markup gives each segment an id to fill, not text to trust. This ring
-     is position:fixed and anchored, in JS, to #nav-wheel-hub's own live
-     getBoundingClientRect() -- the hub now renders wherever the pad's action
-     row actually is (workbench can dock the pad anywhere), so anchoring to
-     the hub's real position is correct by construction, with no separate
-     "where is the pad" calculation to go stale the way the pad-height-based
-     one did. -->
+
+     REAL PIE WEDGES, NOT SIX LOOSE ICONS. "Segments are where they should
+     be" and "this reads as a wheel" turned out to be different claims --
+     the first version passed every position check and still read, on
+     Mark's own review, as "six small unlabelled icons in an arc... none of
+     the property that makes a SteeringWheel legible." That property lives
+     in the wedges and their labels: a visible disc, visible divisions
+     between the six choices, and each one named before it's touched. SVG
+     <path> wedges carry all three at once and still take pointer events
+     like any other element, so the click/drag wiring nav-wheel.js already
+     has needed no new event model, only a different element to attach it
+     to. Paths and label positions are computed once in nav-wheel.js
+     (WEDGES/wedgePath), not hand-typed here -- six-way pie geometry by hand
+     is exactly the kind of arithmetic a person gets subtly wrong and a
+     machine does not.
+
+     This ring is position:fixed and anchored, in JS, to #nav-wheel-hub's
+     own live getBoundingClientRect() -- the hub now renders wherever the
+     pad's action row actually is (workbench can dock the pad anywhere), so
+     anchoring to the hub's real position is correct by construction, with
+     no separate "where is the pad" calculation to go stale the way the
+     pad-height-based one did. -->
 <div id="nav-wheel" class="nav-wheel" role="group" aria-label="Camera action wheel segments">
-  <div class="nav-wheel-ring" aria-hidden="true">
-    <button type="button" class="nav-wheel-seg" data-nav-action="orbit"></button>
-    <button type="button" class="nav-wheel-seg" data-nav-action="pan"></button>
-    <button type="button" class="nav-wheel-seg" data-nav-action="zoom"></button>
-    <button type="button" class="nav-wheel-seg" data-nav-action="focus"></button>
-    <button type="button" class="nav-wheel-seg" data-nav-action="north"></button>
-    <button type="button" class="nav-wheel-seg" data-nav-action="rewind"></button>
-  </div>
+  <svg class="nav-wheel-ring" aria-hidden="true" viewBox="-4 -150 154 300">
+    <path class="nav-wheel-seg" data-nav-action="orbit"></path>
+    <path class="nav-wheel-seg" data-nav-action="pan"></path>
+    <path class="nav-wheel-seg" data-nav-action="zoom"></path>
+    <path class="nav-wheel-seg" data-nav-action="focus"></path>
+    <path class="nav-wheel-seg" data-nav-action="north"></path>
+    <path class="nav-wheel-seg" data-nav-action="rewind"></path>
+    <text class="nav-wheel-seg-label" data-nav-action="orbit"></text>
+    <text class="nav-wheel-seg-label" data-nav-action="pan"></text>
+    <text class="nav-wheel-seg-label" data-nav-action="zoom"></text>
+    <text class="nav-wheel-seg-label" data-nav-action="focus"></text>
+    <text class="nav-wheel-seg-label" data-nav-action="north"></text>
+    <text class="nav-wheel-seg-label" data-nav-action="rewind"></text>
+  </svg>
 </div>
 
 <!-- Street-Level Interactive HUD -->
