@@ -624,6 +624,71 @@ handful of distinct window patterns instead of one stretched everywhere.
 Both are extensions of patterns already proven correct elsewhere in these
 same two files, not new mechanisms.
 
+**CORRECTION, 2026-09-09 RUN2 (`codex-lane`), to items 2–5 below — read
+before trusting anything past item 1.** Items 2 through 5 as originally
+written analyzed `public/buildings.js`'s `terrace()`, `townhouse()`,
+`villa()`, `midrise()`/`midriseCourtyard()` (lines 187–786) as though they
+were the live geometry. **They are not.** `MODULE-MAP.md` already flagged
+`emitBuilding` (the only exported entry point that reaches them, via an
+`ARCHETYPE` dispatch table) as **TEST-ONLY** — its sole caller is
+`test/cityWorld.test.ts`. The real, rendered world calls
+`building(typology, seed, options)` (`buildings.js:2943`), which dispatches
+only to the twelve `bld*` functions (`bldVilla`, `bldTerrace`,
+`bldTownhouse`, `bldMidrise`, etc., from line 1193) — a second, separate,
+kit-style geometry system, character-aware and atlas-textured, that this
+document's own K6/K7.1 sections were already correctly working against
+(`bld-office`'s LOD0 is named explicitly in K7.1 above). Item 1's finding
+(four atlases total) is unaffected by this error — it concerns
+`facade-textures.js` and its real caller in `city-render.js`, not which
+`buildings.js` function runs. Items 2–5's specific claims about "already
+has real procedural variety" are not reliable and are superseded by the
+finding below, found while re-reading the REAL functions to correct this.
+
+**What re-reading the real `bld*` functions found instead, across the four
+dominant typologies (92.74% of placements): several genuinely-randomized
+style parameters are computed, stored in the returned spec's `params`, and
+then never consulted by the geometry that builds LOD0.** Checked by hand,
+function by function:
+
+- `bldVilla` (`buildings.js:1193`): `hasPorch`, `hasBay`, `hasDormers`,
+  `hasChimney` are all computed (e.g. `hasPorch = r5 > 0.25`) but the porch,
+  bay window, both dormers, and chimney are added **unconditionally** in
+  `buildLOD0` — every villa gets all four features regardless of the roll.
+  Only `roofStyle` and `garageType` (`"attached"`) actually gate different
+  geometry.
+- `bldTerrace` (`buildings.js:1423`): `hasBasement`, `hasStringCourse`,
+  `hasDormers` are computed and never referenced again anywhere in the
+  function — the string course and the per-unit dormer are unconditional.
+  Only `roofStyle`, `isShop`-equivalent unit logic, and corner-end trim
+  actually branch.
+- `bldTownhouse` (`buildings.js:1599`): `bayStyle` (`"none"/"full"/
+  "cantilever"`) is computed but the bay geometry is added unconditionally
+  regardless of `"none"` — every townhouse has a bay window. `hasRoofDeck`
+  only changes `roofH` by 0.2 m; the rooftop pergola geometry itself is
+  unconditional either way. `hasRearExtension` is computed; the rear
+  extension is unconditional. Only `corniceTier` (`"dentil"` vs. default)
+  actually changes a real dimension (cornice thickness, 0.7 vs 0.5 m).
+- `bldMidrise` (`buildings.js:1772`): `podiumType` (`"retail"/"arcade"/
+  "flush"`) is computed but the podium box is unconditional and identical
+  regardless. `cornerTreatment` (`"chamfer"/"curved"/"square"`) is computed
+  but the corner geometry only checks `corner === "left"/"right"` — it
+  always builds a chamfer, never curved or square, regardless of the roll.
+  `hasSetback` is the one flag in this function that genuinely works — it
+  correctly branches to a real, different two-tier massing.
+
+**Why this is worth more than a note.** Every building of a typology
+sharing a `corner`/`roofStyle`/`foundation` roll already looks dimensionally
+different (this part of the original checklist's instinct was right, just
+attributed to the wrong function) — but every building of that typology
+also has the *exact same set of architectural features present*, always: a
+villa is never porch-less, a townhouse never lacks its rear extension and
+rooftop pergola, a midrise's corner is always a chamfer. That is a second,
+independent, previously-unnamed contributor to "reads as basic" — on top of
+item 1's shared-atlas finding — and it is real code work, not texture work:
+gating existing geometry blocks behind the flags already computed for
+exactly this purpose. Proposed as the lead item for whoever works item 2 of
+`docs/briefs/RUN2-BLD-2026-09-09.md` next.
+
 **2. Terrace (49.68% of all placements, the single largest share) has the
 richest massing already built** — bays, shopfront/stoop split, projecting
 bay windows, three roof forms, party-wall chimneys (`buildings.js:328-386`)
