@@ -132,6 +132,40 @@ either is empty on real work, send it back. Only then tick the ledger.
 
 ---
 
+## WHEN YOU MAY STOP — AND A FINISHED PLAN IS NOT ONE OF THEM
+
+Written after the 2026-09-09 run, in which this lane planned B2.7, had the plan
+blind-reviewed, corrected four real defects, committed it, and then **stopped**.
+Forty-five minutes against a night. The plan was never built. Nothing in this
+document said to implement it, so nothing was implemented.
+
+**BUILD-LOOP Step 2's "stop for review" is satisfied by the blind reviewer.**
+On an unattended run there is no second gate. The moment the blind audit comes
+back and its findings are folded in, you are at Step 3 and you keep going —
+write the test, implement, verify, mutate, measure, commit. A phase is finished
+when its gate is green and committed, not when its plan is good.
+
+The only legal stopping conditions:
+
+1. **Every item on your checklist is green and committed.** If this happens,
+   the checklist was too short — say so in the handover and keep going on the
+   most valuable thing you can name.
+2. **A blocker no decision can clear tonight** — a missing credential, a
+   physical resource, an external service that is down. Memory pressure is not
+   this: rotate to work that fits.
+3. **The repository is in a state where continuing would destroy work.**
+4. **Your context is genuinely exhausted.** Write the handover first.
+
+Everything else is a decision, and decisions go in the queue while you carry on
+with the next item. "I would like Mark's view on this" is never a reason to
+stop; it is a reason to write in `docs/DECISIONS-FOR-MARK.md`, take the least
+irreversible path, and continue.
+
+If you find yourself about to end a run, check this list first. If your reason
+is not on it, you are not finished.
+
+---
+
 ## THE DECISION QUEUE — NEVER BLOCK
 
 When something is Mark's to decide, **do not stop and wait.** Append to
@@ -155,15 +189,20 @@ Tick an item only when its gate is green AND the commit exists. Record the commi
 hash beside it. An unticked item with a commit is a lie in either direction.
 
 ```
-[ ] B2.6  Persist the board          gate: ___  commit: ___
-[ ] B2.7  Bridges and boat routes    gate: ___  commit: ___
-[ ] B2.8  Re-pin the old-world tests gate: ___  commit: ___
+[x] B2.6  Persist the board          gate: boardLoad.test.ts 3/3 green (CPU-time gate stays honestly red, tracked separately, unchanged)  commit: 27cca18
+[!] B2.7  Bridges and boat routes    PLANNED, BLIND-REVIEWED, CORRECTED -- not implemented. commit: 95cf588
+[!] B2.8  Re-pin the old-world tests CATEGORIZED (38/38, all confirmed old-world-geometry-dependent) -- not re-pinned, correctly deferred until after B2.7 per this plan's own sequencing. commit: 76e8d61
 [ ] B3    The render path            gate: ___  commit: ___
 [ ] B4    Kits wire by construction  gate: ___  commit: ___
 [ ] B5    The visual pass            gate: ___  commit: ___
 [ ] B6    Quarantine the three files gate: ___  commit: ___
 [ ] B7    Farmland, range, greenery  gate: ___  commit: ___
 ```
+
+Also this run, off-checklist but load-bearing: Item Zero (docs/MODULE-MAP.md
+generated fresh, commit adf3362) and the mutationEvidence pair (21
+outstanding mutations run, 11 CAUGHT for real, 10 honestly blocked and
+named, commit 73f84b6).
 
 The list is longer than the night on purpose. Running out of night is expected.
 Running out of work is not.
