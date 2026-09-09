@@ -49,9 +49,15 @@ export function findImportClauses(source) {
   for (const m of source.matchAll(re)) {
     const [, clause, path] = m;
     const trimmed = clause.trim();
-    const nsMatch = trimmed.match(/^\*\s*as\s+[A-Za-z_$][\w$]*$/);
+    const nsMatch = trimmed.match(/^\*\s*as\s+([A-Za-z_$][\w$]*)$/);
     if (nsMatch) {
-      clauses.push({ kind: "namespace", path });
+      // `alias` is the local binding a namespace import creates
+      // (`import * as ROADKIT from "./roadkit.js"` -> "ROADKIT"). Added for
+      // buildReverseMap, below, which needs it to find `ROADKIT.member(...)`
+      // usage elsewhere in the file; findUnresolvedImports (which already
+      // consumed this clause shape before this field existed) never reads
+      // it, so this is additive, not a breaking change to that checker.
+      clauses.push({ kind: "namespace", path, alias: nsMatch[1] });
       continue;
     }
     const braceMatch = trimmed.match(/^(?:([A-Za-z_$][\w$]*)\s*,\s*)?\{([^}]*)\}$/);
@@ -72,6 +78,36 @@ export function findImportClauses(source) {
     // No clause at all (`import "./x.js"`) never matches the `from` regex
     // above, so nothing else reaches here -- an unrecognised clause shape
     // is intentionally left unclassified rather than guessed at.
+  }
+  return clauses;
+}
+
+/**
+ * Every `export { X, Y as Z } from "path"` statement -- a re-export chain,
+ * which is also, implicitly, an IMPORT of X and Y from path. Distinct from
+ * `export { X, Y as Z };` (no `from` clause), which names bindings already
+ * declared or imported in THIS file and imports nothing.
+ *
+ * Found necessary by a blind audit, not anticipated when buildReverseMap was
+ * first written: src/index.ts re-exports SpendCounterDO this way
+ * (`export { SpendCounterDO } from "./spendCounterDOClass"`) so wrangler can
+ * bind it as a Durable Object class (wrangler.jsonc's own `class_name`).
+ * Without recognising this as an import, src/spendCounterDOClass.ts -- the
+ * file that actually DEFINES CALIPER's spend-cap enforcement -- read as
+ * fully dead, and the dead-export gate's own seeded allowlist told a reader
+ * to "wire or remove" it.
+ */
+export function findReExportClauses(source) {
+  const clauses = [];
+  const re = /^export\s*\{([^}]*)\}\s*from\s+["']([^"']+)["']/gms;
+  for (const m of source.matchAll(re)) {
+    const [, names, path] = m;
+    const named = names
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => s.split(/\s+as\s+/)[0].trim()); // `{ A as B } from "..."` -- the source file's real export is A
+    clauses.push({ path, named });
   }
   return clauses;
 }
@@ -248,25 +284,59 @@ export function buildReverseMap(files, isTestPathFn) {
     reverse.set(file.path, exportsByName);
   }
 
+  // Shared by every crediting path below (named import, namespace member
+  // access, re-export chain) so "does this target/name exist, which bucket
+  // does this importer belong in" is answered once, the same way, every
+  // time -- not reimplemented per crediting shape, which is exactly how the
+  // namespace path was missed the first time (buildReverseMap originally
+  // had this logic inlined once, for named imports only, and nobody wrote
+  // it a second time for the namespace-import case that turned out to need
+  // it too).
+  function credit(targetPath, exportName, importerPath) {
+    const exportsByName = reverse.get(targetPath);
+    if (!exportsByName) return; // target has no exports at all (e.g. an .html file, defensively)
+    const entry = exportsByName.get(exportName);
+    if (!entry) return; // name the import checker already flags separately
+    (isTestPathFn(importerPath) ? entry.testCallers : entry.callers).add(importerPath);
+  }
+
   for (const file of files) {
     const chunks = file.isHtml ? moduleScriptBlocks(file.source) : [file.source];
     for (const chunk of chunks) {
       for (const clause of findImportClauses(chunk)) {
-        if (clause.kind === "namespace" || clause.kind === "side-effect") continue;
+        if (clause.kind === "side-effect") continue;
         if (!clause.path.startsWith(".")) continue; // bare specifier (e.g. "three") -- out of scope
         const target = resolveImportTarget(file.path, clause.path, byResolvedPath);
         if (!target) continue; // an unresolved import is importsResolve.test.ts's finding, not this one's
         if (resolve(target.path) === resolve(file.path)) continue; // a file referencing its own export is not a caller
-        const exportsByName = reverse.get(target.path);
-        if (!exportsByName) continue; // target has no exports at all (e.g. an .html file, defensively)
+
+        if (clause.kind === "namespace") {
+          // `import * as ALIAS from "./x.js"` -- `ALIAS.member(...)`
+          // anywhere else in this chunk credits x.js's `member` export, the
+          // same as a named import would. Found necessary by a blind audit:
+          // public/roadkit-street-demo.js and others call every roadkit.js
+          // piece this way (`ROADKIT.straight(...)`, `ROADKIT.curve(...)`,
+          // ...) -- 16 real, called exports read as fully dead without
+          // this, including junction/roundabout, the two this task's own
+          // Step 6 sanity check relied on being genuinely uncalled. They
+          // were not; the scanner just could not see how they were reached.
+          const memberRe = new RegExp(`\\b${clause.alias}\\.([A-Za-z_$][\\w$]*)`, "g");
+          for (const mm of chunk.matchAll(memberRe)) credit(target.path, mm[1], file.path);
+          continue;
+        }
+
         const names = [];
         if (clause.default) names.push("default");
         names.push(...clause.named);
-        for (const name of names) {
-          const entry = exportsByName.get(name);
-          if (!entry) continue; // names the import checker already flags separately
-          (isTestPathFn(file.path) ? entry.testCallers : entry.callers).add(file.path);
-        }
+        for (const name of names) credit(target.path, name, file.path);
+      }
+
+      for (const reExport of findReExportClauses(chunk)) {
+        if (!reExport.path.startsWith(".")) continue;
+        const target = resolveImportTarget(file.path, reExport.path, byResolvedPath);
+        if (!target) continue;
+        if (resolve(target.path) === resolve(file.path)) continue;
+        for (const name of reExport.named) credit(target.path, name, file.path);
       }
     }
   }

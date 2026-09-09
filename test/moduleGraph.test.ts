@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildReverseMap, isTestPath, loadModuleFiles } from "../scripts/lib/module-graph.mjs";
+import { buildReverseMap, isTestPath, loadModuleFiles, findReExportClauses } from "../scripts/lib/module-graph.mjs";
 
 test("buildReverseMap: an export called from a real (non-test) file is a caller", () => {
   const files = [
@@ -135,6 +135,49 @@ test("loadModuleFiles: testDir is scanned for .ts files, excluding the .built/ e
   const paths = files.map((f) => f.path.split("\\").join("/"));
   assert.ok(paths.some((p) => p.endsWith("/real.test.ts")), "a real .ts source file under testDir must be loaded");
   assert.ok(!paths.some((p) => p.includes("/.built/")), ".built/ is esbuild's bundle output, not source, and must be skipped");
+});
+
+// TWO REAL FALSE NEGATIVES, found by a blind audit at this task's own phase
+// boundary (docs/BUILD-LOOP.md Step 10), not anticipated when buildReverseMap
+// was first written. Both are the DANGEROUS direction of error for a
+// dead-export gate: reporting something genuinely called as dead, which
+// tells a reader to "wire or remove" a capability that is already load-
+// bearing. The audit found src/index.ts's re-export of SpendCounterDO
+// (CALIPER's bound spend-cap Durable Object, wrangler.jsonc's own
+// `class_name`) reading as fully dead, and 16 real public/roadkit.js
+// exports -- including junction and roundabout, the two this task's own
+// Step 6 sanity check relied on being genuinely uncalled -- reading as dead
+// because public/roadkit-street-demo.js and others call them through
+// `import * as ROADKIT from "./roadkit.js"; ROADKIT.straight(...)` rather
+// than a named import.
+test("buildReverseMap: `ALIAS.member(...)` after `import * as ALIAS from \"./x.js\"` credits x.js's `member` export -- the roadkit-street-demo.js shape", () => {
+  const files = [
+    { path: "/repo/public/kit.js", source: `export function straight() {}\nexport function curve() {}`, isHtml: false },
+    {
+      path: "/repo/public/demo.js",
+      source: `import * as ROADKIT from "./kit.js";\nconst a = ROADKIT.straight("STREET", 2);\n// curve is never called here`,
+      isHtml: false,
+    },
+  ];
+  const map = buildReverseMap(files, isTestPath);
+  assert.deepEqual([...map.get("/repo/public/kit.js").get("straight").callers], ["/repo/public/demo.js"]);
+  assert.deepEqual([...map.get("/repo/public/kit.js").get("curve").callers], [], "a namespace import existing must not credit EVERY export of its target -- only the ones actually member-accessed");
+});
+
+test("buildReverseMap: `export { X } from \"./x.js\"` credits x.js's X with a real caller -- the src/index.ts/SpendCounterDO shape", () => {
+  const files = [
+    { path: "/repo/src/spendCounterDOClass.ts", source: `export class SpendCounterDO {}`, isHtml: false },
+    { path: "/repo/src/index.ts", source: `export { SpendCounterDO } from "./spendCounterDOClass";`, isHtml: false },
+  ];
+  const map = buildReverseMap(files, isTestPath);
+  const entry = map.get("/repo/src/spendCounterDOClass.ts").get("SpendCounterDO");
+  assert.deepEqual([...entry.callers], ["/repo/src/index.ts"], "the file that DEFINES the export must show the re-exporting file as a real caller");
+});
+
+test("findReExportClauses: `X as Y` reports the source's real name X, not the local alias Y; a from-less export list is not a re-export", () => {
+  const src = `export { A, B as C } from "./x.js";\nexport { D };`;
+  const clauses = findReExportClauses(src);
+  assert.deepEqual(clauses, [{ path: "./x.js", named: ["A", "B"] }]);
 });
 
 function mkTmpTestDir() {

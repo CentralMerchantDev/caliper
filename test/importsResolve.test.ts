@@ -127,7 +127,9 @@ import "./side-effect.js";
   // `D as E` imports the export named D, bound locally as E -- the name
   // that must exist on the target is D, not the local alias E.
   assert.deepEqual(clauses.filter((c) => c.path === "./z.js")[0], { kind: "bindings", path: "./z.js", default: true, named: ["C", "D"] });
-  assert.deepEqual(clauses.filter((c) => c.path === "./w.js")[0], { kind: "namespace", path: "./w.js" });
+  // `alias` (the local binding NS is bound to) was added for buildReverseMap
+  // (scripts/lib/module-graph.mjs) -- see that file's own header for why.
+  assert.deepEqual(clauses.filter((c) => c.path === "./w.js")[0], { kind: "namespace", path: "./w.js", alias: "NS" });
 });
 
 test("findExportedNames: const/function/class/export-list/default are all recognised", () => {

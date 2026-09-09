@@ -39,6 +39,24 @@
       "expect": "every module with exports gets a section, every export line names its callers or UNCALLED"
     },
     {
+      "id": "namespace-member-access-credits-the-target-export",
+      "guards": "buildReverseMap credits `x.js`'s export when it is reached as `ALIAS.member(...)` after `import * as ALIAS from \"./x.js\"`, not only through a named import -- found by a blind audit: public/roadkit-street-demo.js's real ROADKIT.straight(...)/ROADKIT.curve(...)/etc calls, without this, made 16 genuinely-called roadkit.js exports read as fully dead",
+      "note": "Removes the `alias` field the namespace clause capture adds, targeting scripts/lib/module-graph.mjs (this task's own new file, not a shared production one another lane might be mid-edit on). Without `alias`, the member-access regex built from it becomes `/\\bundefined\\.(...)/`, which matches nothing real -- a structural break, not a disabled branch (per docs/AUDIT-PROTOCOL.md's own lesson this session: a commented-out or if(false)-wrapped mutation leaves source text intact and can survive wrongly).",
+      "file": "scripts/lib/module-graph.mjs",
+      "find": "    const nsMatch = trimmed.match(/^\\*\\s*as\\s+([A-Za-z_$][\\w$]*)$/);\n    if (nsMatch) {",
+      "replace": "    const nsMatch = trimmed.match(/^\\*\\s*as\\s+([A-Za-z_$][\\w$]*)$/);\n    if (nsMatch) { nsMatch[1] = undefined;",
+      "expect": "credits x.js's `member` export -- the roadkit-street-demo.js shape"
+    },
+    {
+      "id": "named-reexport-credits-the-source-file",
+      "guards": "buildReverseMap credits the file a `export { X } from \"./x.js\"` statement names as X's real source with a caller -- found by a blind audit: src/index.ts's real re-export of SpendCounterDO (wrangler.jsonc's bound Durable Object class_name), without this, made src/spendCounterDOClass.ts -- the file that actually defines CALIPER's spend cap -- read as fully dead",
+      "note": "Targets findReExportClauses' own regex in scripts/lib/module-graph.mjs (this task's own new file). Requiring an impossible literal prefix is a real structural break (the function always returns []), not a disabled branch.",
+      "file": "scripts/lib/module-graph.mjs",
+      "find": "const re = /^export\\s*\\{([^}]*)\\}\\s*from\\s+[\"']([^\"']+)[\"']/gms;",
+      "replace": "const re = /^export_NEVER_MATCHES\\s*\\{([^}]*)\\}\\s*from\\s+[\"']([^\"']+)[\"']/gms;",
+      "expect": "credits x.js's X with a real caller -- the src/index.ts/SpendCounterDO shape"
+    },
+    {
       "id": "ground-edge-is-far-enough-out",
       "guards": "the modelled ground extends far enough that its own outer edge is beyond the range where the sea bed still reads through the water -- the original tray was visible because the ground stopped at 19.5 km, not because it had an edge at all",
       "note": "This entry SURVIVED once, and correctly. Its expect still named 'the ground reaches further than the water', a test renamed when the seabed-ring invariant was fixed. The mutation turned the suite red, but not on the named test, and the runner refused to score that as a pass. An expect is a reference to a test name, and renaming a test silently breaks it -- which is now checked at startup.",
