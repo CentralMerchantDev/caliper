@@ -1184,6 +1184,24 @@
       "find": "    const variant = pickVariant(char, group.seed);\n    keys.add(`${char}-${variant.name}`);",
       "replace": "    keys.add(`${char}-vc-day-`);",
       "expect": "GATE: distinct facade materials reachable from real placements, well above four"
+    },
+    {
+      "id": "city-html-board-gate-defaults-off",
+      "guards": "public/city.html only draws the ~35,000 un-instanced board pieces when ?board=1 is explicitly requested -- removing the gate would ship the measured cullingRatio/regressionGate regression to every ordinary page load.",
+      "note": "Verified this session: making the board block unconditional (no `if` at all) is caught directly by the dedicated static gate test.",
+      "file": "public/city.html",
+      "find": "if (Q.get(\"board\") === \"1\") try {",
+      "replace": "if (true) try {",
+      "expect": "public/city.html only draws board pieces when ?board=1 is explicitly requested"
+    },
+    {
+      "id": "world-render-3d-board-gate-no-early-return",
+      "guards": "world-render-3d.js's own board-drawing gate uses `if (boardRequested) try {...}`, never an early `return` -- an early return would skip P4.1's board-record wiring, the spatial index, and selection for every city-mode load, not just when the gate is off.",
+      "note": "Verified this session: this is the exact mistake made and caught during implementation, before it was ever committed -- reintroducing `if (!boardRequested) return;` in place of the real gate is caught directly by the dedicated static test's own doesNotMatch assertion.",
+      "file": "public/world-render-3d.js",
+      "find": "    const boardRequested = typeof location !== \"undefined\" && new URLSearchParams(location.search).get(\"board\") === \"1\";\n    if (boardRequested) try {",
+      "replace": "    const boardRequested = typeof location !== \"undefined\" && new URLSearchParams(location.search).get(\"board\") === \"1\";\n    if (!boardRequested) return;\n    try {",
+      "expect": "public/world-render-3d.js only draws board pieces when ?board=1 is explicitly requested, and the gate does not short-circuit the rest of _buildCityBase"
     }
   ]
 }

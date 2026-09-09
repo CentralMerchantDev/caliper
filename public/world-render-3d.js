@@ -1835,7 +1835,17 @@ class Renderer3D {
     // A failure here is caught and logged, not thrown -- the board is a
     // real addition, not yet load-bearing for anything else this method
     // sets up, so a fetch failure must not break city mode entirely.
-    try {
+    //
+    // GATED BEHIND ?board=1, OFF BY DEFAULT (RUN3-CLI-2026-09-09): measured
+    // directly on public/city.html (this file's own sibling bootstrap,
+    // identical wiring) that drawing all ~35,000 un-instanced board pieces
+    // breaks two standing performance gates -- test/cullingRatio.test.ts
+    // and test/regressionGate.test.ts, both watched red. The same
+    // regression applies here (city mode shares this exact code path), so
+    // this stays off for an ordinary visitor and on only when explicitly
+    // requested. Real instancing/LOD for board pieces is B5's job.
+    const boardRequested = typeof location !== "undefined" && new URLSearchParams(location.search).get("board") === "1";
+    if (boardRequested) try {
       const boardData = await fetchBoard(city.heightAt);
       this._boardScene = buildBoardScene(THREE, boardData.pieces);
       this.scene.add(this._boardScene);

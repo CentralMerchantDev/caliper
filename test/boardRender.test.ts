@@ -153,3 +153,43 @@ test("B4 gate: propModel is genuinely reachable from a real render path, not mer
   assert.match(src, /import\s*\{[^}]*\bpropModel\b[^}]*\}\s*from\s*["']\.\/prop-models\.js["']/, "board-render.js no longer imports propModel -- the B4 gate's own claim would be false");
   assert.match(src, /propModel\(/, "board-render.js imports propModel but never calls it");
 });
+
+// -----------------------------------------------------------------------------
+// RUN3-CLI-2026-09-09 -- board-drawing is gated behind ?board=1, off by
+// default, in BOTH real bootstraps that wire it (public/city.html and
+// public/world-render-3d.js). Watched red directly this session:
+// un-instanced board pieces broke test/cullingRatio.test.ts (65.8% vs a
+// 40% ceiling) and test/regressionGate.test.ts (7,851 draw calls vs a
+// 900 ceiling). A silent removal of either gate would reintroduce that
+// regression into ordinary browsing with nothing to catch it -- these are
+// static checks for exactly that, the same technique the forbidden-import
+// check above already uses, aimed at a required condition instead.
+// -----------------------------------------------------------------------------
+
+test("GATE (static): public/city.html only draws board pieces when ?board=1 is explicitly requested", () => {
+  const src = readFileSync(join(ROOT, "public", "city.html"), "utf8");
+  assert.match(
+    src,
+    /if\s*\(\s*Q\.get\(["']board["']\)\s*===\s*["']1["']\s*\)\s*try\s*\{[\s\S]{0,200}fetchBoard/,
+    "public/city.html no longer gates its board-drawing behind ?board=1 -- the un-instanced regression this gate exists to prevent would ship to every ordinary page load",
+  );
+});
+
+test("GATE (static): public/world-render-3d.js only draws board pieces when ?board=1 is explicitly requested, and the gate does not short-circuit the rest of _buildCityBase", () => {
+  const src = readFileSync(join(ROOT, "public", "world-render-3d.js"), "utf8");
+  assert.match(
+    src,
+    /if\s*\(\s*boardRequested\s*\)\s*try\s*\{[\s\S]{0,200}fetchBoard/,
+    "public/world-render-3d.js no longer gates its board-drawing behind ?board=1",
+  );
+  // The specific bug this catches: an early `return` inside the gate would
+  // skip P4.1's board-record wiring, the spatial index, and selection --
+  // everything _buildCityBase does AFTER this block -- for every city-mode
+  // load, not just when the gate is off. `if (boardRequested) return;`
+  // is exactly that mistake; `if (boardRequested) try { ... }` is not.
+  assert.doesNotMatch(
+    src,
+    /if\s*\(\s*!boardRequested\s*\)\s*return;/,
+    "world-render-3d.js's board gate uses an early return, which would skip picking/spatial-index/selection setup for every city-mode load",
+  );
+});
