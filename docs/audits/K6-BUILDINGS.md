@@ -764,6 +764,24 @@ variant and a real four-wing courtyard form. Whoever picks up items 2–3
 above should read `villa()` to its end first, the same discipline this
 checklist tried to hold for the two typologies it did cover.
 
+**Survey, 2026-09-09 RUN2, after the flag-gating fix**: does the same
+computed-but-ungated defect recur in the remaining 8 typologies? Checked
+`bldShop` and `bldOffice` (the next two highest shares after the fixed
+four) in full: both are clean — `bldShop`'s `hasAwning`/`isCornerUnit` and
+`bldOffice`'s `hasCoreBulge` already correctly gate real geometry. The
+defect is not universal. It does recur once more: `bldWorkshop`'s
+`roofStyle` (`"monopitch"`/`"gabled"`) is computed and reported in `params`
+but the roof is always the same flat box regardless. Not fixed tonight —
+workshop is 0.18% of placements (31 of 17,108), and this document's own
+placement-weighted logic already says everything under ~3% share is
+correctly lower priority than finishing higher-share work. Named here so
+it is not silently missed, not queued as urgent. `bldBusinessParkBlock`
+(0.08% share, 14 placements) is a different, more extreme case worth
+recording separately: it takes no seed-derived randomization at all —
+every business park building in the world is geometrically identical. Also
+correctly low priority by the same logic, also named rather than left
+unrecorded.
+
 **5. Everything below 2.91% of placements (office, high-street terrace,
 shop, tower, workshop, business park, warehouse, apartment walk-up —
 combined 7.26%) is correctly lower priority by this document's own
