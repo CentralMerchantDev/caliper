@@ -146,6 +146,31 @@ for (const viewport of VIEWPORTS) {
       assertNoOverlap(await visiblePanelRects(page), "baseline");
     });
 
+    // Mark: "gets hidden when you click on any target -- this should open
+    // below it not on top of it." Before this test existed, nothing here
+    // could catch that: `body.inspecting-mobile #nav-compass-pad { display:
+    // none }` removed the pad from the page the instant the inspector opened,
+    // so `visiblePanelRects` (which skips display:none elements) never had a
+    // navPad rect to compare against inspectCard at all -- the sweep below
+    // passed by having nothing to check, not by checking it. The pad must
+    // now stay on screen, and stay clear of the card that opens over it.
+    // Scoped to this one pair, not the full assertNoOverlap sweep: the welcome
+    // card has its own pre-existing dismissOverlays() timing race (seen
+    // failing this same way before this test existed, on the unrelated
+    // "district card open" tests below) that is not this test's job to guard.
+    test("the nav pad stays visible when the inspector opens, and does not overlap it", async ({ page }) => {
+      await openInspectCard(page);
+      await page.waitForTimeout(150);
+      const rects = await visiblePanelRects(page);
+      expect("navPad" in rects, "the nav pad is not visible while the inspector is open").toBe(true);
+      expect("inspectCard" in rects, "the inspect card did not open").toBe(true);
+      expect(
+        overlaps(rects.navPad, rects.inspectCard),
+        `navPad and inspectCard overlap -- ${JSON.stringify({ navPad: rects.navPad, inspectCard: rects.inspectCard })}`,
+      ).toBe(false);
+      await closeInspectCard(page);
+    });
+
     for (const mode of ["orbit", "walk", "drive", "fly"]) {
       test(`mode=${mode}: nothing else open`, async ({ page }) => {
         await page.click(`#btn-mode-${mode}`);

@@ -517,9 +517,9 @@ html, body {
    taller than that when expanded, so the inspector opened ON TOP of it and the
    navigation vanished the moment you clicked anything -- Mark: "gets hidden when
    you click on any target, this should open below it not on top of it".
-   --nav-pad-h is written by a ResizeObserver on the pad itself, so this tracks
-   the real height through collapse, expand and every nav mode instead of
-   assuming one. The fallback is only for the frames before the observer runs. */
+   --nav-pad-height is written by a ResizeObserver on the pad itself, so this
+   tracks the real height through collapse, expand and every nav mode instead
+   of assuming one. The fallback is only for the frames before the observer runs. */
 .inspect-card {
   position: fixed;
   left: 20px;
@@ -535,15 +535,15 @@ html, body {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
-/* The nav pad and the district/NPC inspect card both want the bottom-left
-   corner; per the "one of them moves" rule, the inspect card wins (it's
-   the thing the user just asked to look at) and the nav pad hides while it
-   is open. Applies at every width -- not just the mobile breakpoint this
-   was originally scoped to -- since the same collision reproduces on
-   desktop the moment the card's content pushes past 130px tall. */
-body.inspecting-mobile #nav-compass-pad {
-  display: none !important;
-}
+/* REMOVED: `body.inspecting-mobile #nav-compass-pad { display: none !important; }`.
+   Mark: "gets hidden when you click on any target -- this should open below
+   it not on top of it." That rule was doing the first half on purpose --
+   hiding the pad, at every width -- which is the exact behaviour the
+   complaint is about, not a fix for it. The clearance above (--nav-pad-height)
+   already exists to let the inspector open below a VISIBLE pad; this was a
+   second, later mechanism solving the same collision by removing the pad
+   instead, and the two disagreed. One path now: the pad stays on screen and
+   .inspect-card's bottom-calc keeps the inspector clear of it. */
 
 .inspect-close {
   position: absolute;
@@ -965,9 +965,14 @@ body.inspecting-mobile #nav-compass-pad {
     overflow-y: auto;
     z-index: 95;
   }
+  /* NOT anchored to --topbar-bottom here. That was a second, independent
+     positioning path for the same element as the base `.inspect-card` rule's
+     bottom-calc -- two paths deciding where the same card sits is exactly
+     the "one of them moves" collision this section already names once, just
+     between two rules instead of two panels. left/right/width/max-height
+     still narrow for the mobile column; vertical clearance is the base
+     rule's --nav-pad-height calc, same as desktop. */
   .inspect-card {
-    top: calc(var(--topbar-bottom, 54px) + 10px + var(--statuscard-h, 0px)) !important;
-    bottom: auto !important;
     left: 8px !important;
     right: 8px !important;
     width: auto !important;
@@ -2853,9 +2858,10 @@ $('#dock-toggle-btn')?.addEventListener('click', () => {
 // the pad changes height when it collapses, when the mode selector wraps, and on
 // a narrow window, so no single number can be right.
 //
-// A ResizeObserver publishes the measurement as --nav-pad-h and the inspector's
-// `bottom` is derived from it. Measure the thing rather than predict it: the
-// same reason the walker raycasts for the ground instead of recomputing it.
+// A ResizeObserver publishes the measurement as --nav-pad-height and the
+// inspector's `bottom` is derived from it. Measure the thing rather than
+// predict it: the same reason the walker raycasts for the ground instead of
+// recomputing it.
 (function trackNavPadHeight() {
   const pad = document.getElementById('nav-compass-pad');
   if (!pad) return;

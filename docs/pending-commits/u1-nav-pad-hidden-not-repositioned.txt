@@ -1,0 +1,84 @@
+U1 -- the nav pad was hidden, not repositioned, and both existing tests
+watched it happen and passed
+
+Mark's complaint, quoted in test/navPad.test.ts since it was written: the
+inspector "gets hidden when you click on any target -- this should open
+below it not on top of it." Grounding this brief's claim that the test
+"cannot fail" found something worse than a weak test: the fix it guards
+never ran. Two independent mechanisms existed to keep the inspector clear of
+the nav pad, and the second one silently defeated the first.
+
+The first (real) mechanism: .inspect-card's `bottom: calc(var(--nav-pad-height,
+112px) + 30px + ...)`, fed by a ResizeObserver on #nav-compass-pad, added
+specifically to replace an earlier hardcoded `bottom: 130px` guess. This is
+correct and untouched by this commit.
+
+The second, layered on top later: `body.inspecting-mobile #nav-compass-pad {
+display: none !important; }`, added by its own account to fix a collision the
+first mechanism didn't cover on desktop, but scoped -- by its own comment --
+to apply "at every width." Every time the inspector opened, JS added
+`.inspecting-mobile` to <body> in the same statement that showed the card
+(index.html:2606-2607), which hid the pad outright. Mark's complaint describes
+this rule doing exactly what it was written to do.
+
+A third, independent bypass exists at the mobile breakpoint: `.inspect-card`
+had a `top: calc(...) !important; bottom: auto !important;` override there,
+which never used --nav-pad-height at all regardless of the other two.
+
+Why neither existing test caught it, two different ways:
+- test/navPad.test.ts:96 regex-matches the HTML source for the calc() string.
+  That string is real and present -- the test is correct about the source
+  and silent about the runtime, which is a different question.
+- e2e/panelOverlap.spec.ts's `visiblePanelRects()` (real getBoundingClientRect
+  measurement, not a string match) already listed both `navPad` and
+  `inspectCard` as panels to compare. But it skips elements with
+  `display: none` (by design, to ignore panels not currently on screen) --
+  so once the inspector opened and hid the pad via `.inspecting-mobile`, there
+  was no navPad rect left to compare inspectCard against. The sweep passed by
+  having nothing to check, not by checking it. Confirmed directly: running the
+  existing "district card open" tests against the unmodified code, navPad
+  never once appears in the rects dump.
+
+Fix: one path. Removed the `display: none` rule and the mobile `top`/
+`bottom: auto` override; --nav-pad-height's calc() now governs at every
+width, same as it always should have. Also fixed two occurrences of a stale
+comment naming the variable `--nav-pad-h` (index.html:520, 2861) when the
+real CSS custom property has always been `--nav-pad-height`.
+
+Measured, not assumed: a new e2e/panelOverlap.spec.ts test asserts the pad
+is present in visiblePanelRects() while the inspector is open (proving it
+did NOT get hidden) and that its rect does not overlap inspectCard's --
+scoped to that one pair, not the full assertNoOverlap sweep, because the
+welcome card has its own pre-existing dismissOverlays() timing race (seen
+failing the same way on the unrelated "district card open" tests, before
+and unrelated to this change) that is not this fix's job to cover.
+
+Watched red first, by hand: stashed only the index.html change, ran the new
+test against the unmodified CSS/JS. Failed on both desktop and mobile with
+"the nav pad is not visible while the inspector is open" -- the exact
+mechanism, not a coincidental failure. Restored the fix, re-ran: both pass,
+navPad present, no overlap with inspectCard. test/navPad.test.ts's existing
+six tests still pass unchanged; its string-match test is still true (the
+mechanism exists in source) and now has a comment pointing at the e2e test
+for the behavioural guarantee it cannot make itself.
+
+What's still open: the "baseline: nothing open" and the mode-sweep
+("district card open" across orbit/walk/drive/fly) cases in
+e2e/panelOverlap.spec.ts were not re-run clean after this fix -- `wrangler
+dev` crashed repeatedly under this machine's current memory pressure
+(observed 3.4-4.5 GB free through this session, the floor this project's
+discipline sets), a pre-existing instability the suite's own config comment
+already documents, not something this change caused. Structural reasoning
+for why baseline is unaffected: this commit only touches `.inspect-card`,
+whose base `display: none` is unchanged, and the removed rules only ever
+applied once `.inspecting-mobile` is added, which does not happen at
+baseline. Not a substitute for seeing it pass. Will re-run once memory
+clears. The pre-existing dismissOverlays() welcome-card race affecting the
+mode-sweep tests is a separate, real defect, not fixed here, and is in this
+lane's routing (e2e/panelOverlap.spec.ts tests public/index.html) -- worth
+its own pass.
+
+Verified: npx tsc --noEmit clean. node test/run.mjs navPad.test.ts -- 6/6
+pass. npx playwright test e2e/panelOverlap.spec.ts -g "does not overlap it"
+-- 2/2 pass (desktop + mobile), after being watched red first against the
+unmodified code.

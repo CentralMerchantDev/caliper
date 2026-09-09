@@ -99,6 +99,16 @@ test("the inspector opens BELOW the pad, never on top of it", () => {
   // pad's own measured height, published by a ResizeObserver, rather than by a
   // fixed offset that goes stale the moment the pad changes size -- which it
   // just did.
+  //
+  // WHAT THIS CANNOT DO, per the file header: this only checks that the CSS
+  // mechanism exists in the source, not that it's the thing actually governing
+  // on screen. It was not -- `body.inspecting-mobile #nav-compass-pad {
+  // display: none }` hid the pad outright whenever the inspector opened, at
+  // every width, so this passed while Mark's exact complaint was still true.
+  // The real behavioural guarantee (the pad stays visible AND the two never
+  // overlap, measured with getBoundingClientRect against a live page) is
+  // e2e/panelOverlap.spec.ts's "the nav pad stays visible when the inspector
+  // opens, and does not overlap it" -- that test is the one that can fail.
   assert.match(
     html,
     /bottom:\s*calc\(var\(--nav-pad-height/,
