@@ -48,6 +48,24 @@ and rewriting them to arrive at the same place would be the waste.
 - `buildings.js`, `facade-textures.js`, `prop-models.js`, `props.js`, the kit
 - 1,087 tests, `docs/AUDIT-PROTOCOL.md`, `docs/UMAA-CALIPER.md`,
   `docs/BUILD-LOOP.md`, and every gate that earned its place
+- `board-region.js` — a `board.js` utility (imports only from `board.js`),
+  extracted so `isolate.js`/`move-piece.js` did not each duplicate the same
+  region query (Failure pattern E, named by its own header). No dependency
+  on `city-plan.js` or the generator at all; ruled on directly (Mark,
+  2026-09-08) rather than by category, alongside `board-adapter.js` below.
+
+**`board-adapter.js` dies with `city-plan.js`, on a delay, not on the same
+day.** Ruled on directly, not by category (Mark, 2026-09-08): its own
+header says "`generateWorld()` -> a list of placed pieces," and it
+`import`s `ROADS` from `city-plan.js` directly — it exists solely to
+convert the OLD generator's output into board pieces, so the moment B2
+emits pieces directly, its entire job disappears. **Sequencing matters**:
+it is imported live today by `world-render-3d.js` (`boardPiecesById`, P4.1's
+picking path) — quarantining it before B2 supplies real pieces of its own
+would break live selection. It is quarantined to `_TO-DELETE/` only AFTER
+B2's pieces are what `world-render-3d.js` reads, not before — B2.1's own
+"what B2.1 is explicitly NOT deciding" list already named this as open;
+this is that decision, made.
 
 ## The world
 
@@ -429,22 +447,18 @@ roads, plots, buildings, at real density, on the real B1 archipelago — and
 call `board.js`'s existing `place()` with them, directly, procedurally, no
 adapter in between.**
 
-This makes `board-adapter.js` and `board-region.js`'s adapter half obsolete
-the moment B2 lands, not something B2 needs to preserve. `board-adapter.js`
-converts `city-plan.js`'s `generateWorld()` OLD output (plots/roads/bridges,
-continuous-float positions) into board pieces; its own header already names
-the exact defect this causes (`test/boardAdapter.test.ts`: 305/17,586 plots
-round-trip through `atomOf`/`atomOrigin` cleanly, because the float position
-was never atom-aligned to begin with — a snap AFTER generation, the same
-class of defect this doc's own §"Why" names for `WORLD.SIZE`). This doc's
-own §"What dies, what lives" already lists `public/city-plan.js` under
-"Replaced outright"; `board-adapter.js`/`board-region.js` are named in
-NEITHER list there — a real gap in that doc, flagged here rather than
-silently resolved: once `city-plan.js` is quarantined, `board-adapter.js`
-has nothing left to adapt FROM, and should be quarantined alongside it, not
-left importing a dead module. **Flagged for Mark's decision, not assumed.**
-`board-region.js` (P4.3/P4.4's `isolate.js`/`move-piece.js`) reads whatever
-piece map it is handed — once that map is B2's real pieces instead of
+**RESOLVED, Mark, 2026-09-08** (see this doc's own §"What dies, what
+lives" for the ruling in full): `board-adapter.js` converts `city-plan.js`'s
+`generateWorld()` OLD output (plots/roads/bridges, continuous-float
+positions) into board pieces — its own header says exactly this, and it
+`import`s `ROADS` from `city-plan.js` directly. It dies with `city-plan.js`,
+but on a delay: it is imported live today by `world-render-3d.js`
+(`boardPiecesById`, P4.1's picking path), so it is quarantined only AFTER
+B2 supplies real pieces of its own, not before — quarantining it early
+would break live selection. `board-region.js` (P4.3/P4.4's
+`isolate.js`/`move-piece.js`) imports only from `board.js`, has no
+generator dependency at all, and lives — it reads whatever piece map it is
+handed, and once that map is B2's real pieces instead of
 `board-adapter.js`'s, it needs no change of its own.
 
 ### What B2 emits
@@ -551,9 +565,12 @@ still can fail.
 - Moving `originStability`/grid-round-trip from report to assertion, and the
   "no world state outside the board" check — B2.3.
 - Re-pinning the 34 old-world-pin test failures — B2.4, last, not first.
-- Whether `board-adapter.js`/`board-region.js` are quarantined alongside
-  `city-plan.js` or kept for some transition window — flagged above,
-  Mark's call.
+- ~~Whether `board-adapter.js`/`board-region.js` are quarantined alongside
+  `city-plan.js` or kept for some transition window~~ — **RESOLVED, Mark,
+  2026-09-08, see "what dies, what lives" above**: they split.
+  `board-region.js` lives (a `board.js` utility, no generator dependency).
+  `board-adapter.js` dies, but only after B2 supplies real pieces of its
+  own — it is imported live by `world-render-3d.js`'s picking path today.
 - Whether `world.js`'s `.plan` field is replaced outright by B2's board, or
   a new `.board` field is added alongside it until B3 (the render path)
   is ready to read only the board — this contract assumes the latter (add
