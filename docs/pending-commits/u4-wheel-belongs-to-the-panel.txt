@@ -1,0 +1,83 @@
+U4 -- the wheel belongs to the panel now, not beside it; the hint font
+bug the longer text exposed; the CSS cascade bug recorded UNEXPLAINED
+
+Mark and Mark's own review of the desktop-closed screenshot, not a passing
+test, caught two real defects a green suite had nothing to say about.
+
+1. "THE HUB READS AS A STRAY ARTEFACT... nothing connects it to the panel it
+   belongs to." Correct: the previous commit's getBoundingClientRect fix
+   solved "the wheel does not land inside the pad" -- a real bug, and fixed
+   -- but never asked "does the wheel look like it belongs to the pad",
+   which is a different property and had no test. The hub and the "?" now
+   live INSIDE #nav-compass-pad's own .nav-strip-actions row, styled as
+   .nav-action-btn like Set Pivot / Marker / Save View, not as a separately
+   floating circular surface above the panel. The expanding ring (still
+   position:fixed, since it needs to float above everything while open) is
+   now anchored to the HUB's own getBoundingClientRect() rather than the
+   pad's -- simpler than the previous commit's fix, not just different: the
+   hub is a normal flow child of the pad, so its live position is correct by
+   construction wherever workbench.js has docked the pad, with nothing
+   separate left to measure or go stale.
+
+   This changed the event-handling contract in one place that needed fixing
+   on its own: the "click outside closes the wheel" listener tested
+   `root.contains(e.target)`, where root was #nav-wheel -- which used to
+   contain the hub and no longer does. Traced, not run into: a second click
+   on the hub would have fired the document-level pointerdown handler first
+   (pointerdown precedes click), closing the wheel, and the hub's own click
+   handler would then have reopened it from the now-stale `open` value --
+   closing the wheel by clicking its own hub a second time would silently
+   not have worked. Fixed by excluding the hub explicitly from that check.
+
+2. "THE HINT TYPOGRAPHY IS BROKEN... check what font stack that element is
+   inheriting; it is not the pad's." Confirmed: every other label in the pad
+   (readout, mode buttons, title) sets font-family: var(--mono) explicitly.
+   #nav-pad-hint never did, so it fell through to body's own font-family --
+   which, despite the CSS custom property being named --sans, is actually
+   'Source Serif 4', 'Iowan Old Style', Palatino, Georgia, serif. Invisible
+   at the original three-word hint; a serif face wrapping the much longer
+   generated gesture list across several lines at 9-10px is what actually
+   made this visible, not something this commit introduced from nothing --
+   the wrong font was already there. Fixed: .nav-pad-hint now declares
+   font-family: var(--mono) explicitly, matching the rest of the pad's own
+   convention, and its max-width constraint (inherited from a short 3-word
+   string) widened so the longer text has room to lay out.
+
+WATCHED RED FIRST, BY HAND: reverted the hub's id to confirm
+test/navWheel.test.ts's new "hub lives inside the pad's own action row"
+assertion fails without it (it did, on exactly that assertion) -- restored,
+byte-identical, reconfirmed green. Two of the previous commit's tests
+rewritten rather than left stale: the old "#nav-wheel is positioned off
+--nav-pad-height" assertion no longer describes what the code does (position
+is now hub-anchored, not pad-height-anchored) and is replaced with two
+assertions matching the new mechanism -- the hub's markup location, and
+nav-wheel.js's use of hub.getBoundingClientRect().
+
+BUG 2 FROM THE PRIOR COMMIT: RECORDED, NOT RE-OPENED. Per Mark's explicit
+instruction, the CSS-cascade failure (a rule that selector-matched twice
+over, on a root whose className was confirmed literally "nav-wheel open",
+and still never painted) is written up in docs/audits/U4-NAV-WHEEL.md as
+UNEXPLAINED, with exactly what was checked and what was not, rather than
+left as an unlabeled fact buried in a commit message. The inline-style
+workaround stands on its own merits (one fewer place for state and paint to
+disagree) but is not offered as an explanation of the cascade failure,
+because it is not one.
+
+Verified: npx tsc --noEmit clean. node test/run.mjs navWheel.test.ts
+navBindings.test.ts navPad.test.ts -- 22/22 pass.
+
+What's still open: the open state has never been seen by screenshot against
+THIS version (hub-in-row, JS-driven inline positioning). Host memory held at
+3.3-4.2 GB through this entire exchange, under this project's own 4 GB
+floor; wrangler dev crashed repeatedly under it exactly as
+playwright.config.ts's own comment predicts. Not calling U4 done until Mark
+has seen the open state, per explicit instruction. Phone-viewport re-render
+also still pending -- the earlier phone screenshot showing the hub colliding
+with the top bar's "More" button was against the FLOATING version; whether
+the in-panel hub resolves that collision as a side effect (Mark's own
+hypothesis) is unconfirmed until it is re-shot. U1's #parcel-inspect-card
+likely shares the "assumes the pad's CSS-default corner" bug this session
+found and fixed for the wheel twice now (position, then placement) -- still
+not fixed, still the first thing to do once U4's open state is confirmed,
+per Mark's own instruction to do both together since it is the same fix
+twice.

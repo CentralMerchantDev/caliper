@@ -69,8 +69,27 @@ test("the wheel redeclares --nav-radius and --nav-shadow rather than assuming in
   assert.match(body, /--nav-shadow:/, ".nav-wheel does not redeclare --nav-shadow");
 });
 
-test("the wheel is positioned off --nav-pad-height, not a second guessed offset", () => {
-  const i = html.indexOf(".nav-wheel {");
-  const body = html.slice(html.indexOf("{", i), html.indexOf("}", i));
-  assert.match(body, /var\(--nav-pad-height/, "the wheel does not use the measured pad height -- U1 fixed exactly this class of bug once already");
+test("the hub lives inside the pad's own action row, not floating separately above it", () => {
+  // Mark's review of the first version's screenshot: "a stray artefact...
+  // nothing connects it to the panel it belongs to." Correct placement
+  // (never overlapping the pad) and actually belonging to the pad are
+  // different properties; this asserts the second one structurally --
+  // the hub's markup must be inside .nav-strip-actions, not a sibling of
+  // #nav-compass-pad the way the first version's whole #nav-wheel was.
+  const actionsStart = html.indexOf('class="nav-strip nav-strip-actions"');
+  assert.notEqual(actionsStart, -1, "no .nav-strip-actions row found");
+  const actionsEnd = html.indexOf("</div>", actionsStart);
+  const actionsBody = html.slice(actionsStart, actionsEnd);
+  assert.match(actionsBody, /id="nav-wheel-hub"/, "the wheel hub is not inside the pad's action row");
+});
+
+test("the ring is positioned off the hub's own live position, not a second guessed offset", () => {
+  // The same "measure, don't predict" principle U1 established for height
+  // and this file's own earlier version established for the pad's rect,
+  // now expressed against the hub itself: since the hub is a normal flow
+  // child of the pad (previous test), its getBoundingClientRect() is
+  // correct by construction wherever the pad renders, with nothing
+  // separate to go stale.
+  const src = readFileSync(path.join(repoRoot(), "public", "nav-wheel.js"), "utf8");
+  assert.match(src, /hub\.getBoundingClientRect\(\)/, "the ring does not measure the hub's live position");
 });

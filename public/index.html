@@ -739,11 +739,18 @@ html, body {
   border-color: var(--sky);
 }
 .nav-pad-hint {
+  /* Every other label in this pad sets --mono explicitly (the readout, the
+     mode buttons, the title) -- this one never did, so it fell through to
+     body's own font-family, which despite the --sans token name is actually
+     'Source Serif 4' (see :root). Unnoticeable at the original three-word
+     hint; glaring once nav-bindings.js's hintText() generates the full
+     gesture list here, which is what made it visible at all. */
+  font-family: var(--mono);
   font-size: 9px;
   line-height: 1.35;
   color: var(--ink2);
   margin: 2px 0 5px;
-  max-width: 150px;
+  max-width: 100%;
   text-align: center;
 }
 .nav-pad-grid {
@@ -1443,52 +1450,28 @@ html, body {
    edge-mounted adaptation of the reference (AutoCAD's own wheel becomes a
    half-wheel when it would otherwise run off a docked toolbar edge), not an
    arbitrary shortcut. */
+/* The hub and the "?" are now .nav-action-btn itself (same row as Set Pivot/
+   Marker/Save View) -- these two rules only add the wheel-specific touches
+   (the open-state colour, the disabled-legend look does not apply here) on
+   top of that shared button styling, not a competing visual language. */
+.nav-wheel-hub.active, #nav-wheel-hub[aria-expanded="true"] { background: var(--sky); color: var(--card); border-color: var(--sky); }
+
+/* #nav-wheel now holds ONLY the expanding ring -- the hub lives in the pad's
+   own action row above. position:fixed with no left/top here: nav-wheel.js
+   sets both, anchored every time to #nav-wheel-hub's own live
+   getBoundingClientRect(), which is correct wherever the pad (and therefore
+   the hub, its own flow child) actually renders -- no separate "where is
+   the pad" measurement to go stale. */
 .nav-wheel {
   --nav-radius: 11px;
   --nav-shadow: 0 4px 14px rgba(42, 32, 26, 0.14);
   position: fixed;
-  left: 18px;
-  bottom: calc(var(--nav-pad-height, 320px) + 18px + 12px);
   z-index: 91;
-}
-.nav-wheel-hub {
-  position: relative;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--card);
-  border: 1px solid var(--line);
-  box-shadow: var(--nav-shadow);
-  color: var(--ink);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  z-index: 2;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.nav-wheel-hub:hover { background: var(--sky); color: var(--card); }
-.nav-wheel.open .nav-wheel-hub { background: var(--sky); color: var(--card); }
-
-.nav-wheel-legend-btn {
-  position: absolute;
-  left: 30px;
-  top: -6px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--card);
-  border: 1px solid var(--line);
-  box-shadow: var(--nav-shadow);
-  color: var(--ink2);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  z-index: 2;
+  pointer-events: none;
 }
 .nav-wheel-legend {
   position: absolute;
-  left: 50px;
+  left: 12px;
   top: -8px;
   min-width: 150px;
   padding: 8px 10px;
@@ -1499,6 +1482,7 @@ html, body {
   font-size: 10.5px;
   color: var(--ink);
   z-index: 3;
+  pointer-events: auto;
 }
 .nav-wheel-legend b { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sky); margin-bottom: 4px; }
 .nav-wheel-legend div { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
@@ -1507,8 +1491,8 @@ html, body {
 
 .nav-wheel-ring {
   position: absolute;
-  left: 22px;
-  top: 22px;
+  left: 0;
+  top: 0;
   width: 0;
   height: 0;
   pointer-events: none;
@@ -1923,10 +1907,24 @@ html, body {
     <button type="button" id="nav-zoom-in" class="nav-btn zoom-btn" title="Zoom In (Smooth)" aria-label="Zoom camera in">➕ Zoom In</button>
   </div>
 
+  <!-- U4 -- the wheel's hub lives IN the pad's own action row, not floating
+       above it. A first version anchored the hub off the pad's measured
+       rect and it read, by Mark's own review of the screenshot, as "a stray
+       artefact... nothing connects it to the panel it belongs to" -- correct
+       PLACEMENT (above the pad, never overlapping it) is a different claim
+       than BELONGING (rendered as part of the same instrument). This is
+       still Set Pivot / Marker / Save View's own row: one more of the
+       pad's own buttons, not a second surface beside them. -->
   <div class="nav-strip nav-strip-actions">
     <button type="button" id="nav-pick-center" class="nav-action-btn" title="Click anywhere on the map to set camera pivot point">🎯 Set Pivot</button>
     <button type="button" id="nav-clear-pivot" class="nav-action-btn" title="Clear the orbit point marker">✕ Marker</button>
     <button type="button" id="nav-save-view" class="nav-action-btn" title="Save current camera angle and zoom as default">💾 Save View</button>
+    <button type="button" id="nav-wheel-hub" class="nav-action-btn nav-wheel-hub" aria-expanded="false" aria-label="Open the camera action wheel">◎ Wheel</button>
+    <!-- Only for what the wheel itself cannot show: WASD-family movement
+         keys, which are per-mode, not a camera action. The wheel's own six
+         segments are labelled and tappable, so they need no separate legend
+         entry for those. -->
+    <button type="button" id="nav-wheel-legend-btn" class="nav-action-btn nav-wheel-legend-btn" aria-label="Keyboard shortcuts for the current mode" title="Keyboard shortcuts">?</button>
     <button type="button" id="nav-pad-toggle" title="Collapse / expand the navigation pad"
             aria-label="Collapse the navigation pad" aria-expanded="true"
             style="margin-left:auto;background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px">▾</button>
@@ -1935,24 +1933,21 @@ html, body {
   <div class="nav-pad-hint" id="nav-pad-hint">Drag to orbit · scroll to zoom · arrows below</div>
 </div>
 
-<!-- U4 -- the navigation wheel. Mark: 18 years of Revit and AutoCAD daily, so
-     the SteeringWheel's vocabulary is what his hands already know. Segments
-     are camera ACTIONS (orbit/pan/zoom/focus/north/rewind); the four camera
-     MODES deliberately stay off it and stay in the button row above -- a
-     mode switch and an action wheel mixed into one radial is how these
-     controls get confusing (Mark's own framing), so they are two instruments,
-     not one. Every label and tooltip below is generated from
-     public/nav-bindings.js's NAV_BINDINGS by nav-wheel.js at load, not typed
-     here by hand -- the markup gives each segment an id to fill, not text to
-     trust. Positioned off --nav-pad-height, same measured mechanism U1 made
-     the inspect card actually use, so it sits just clear of the pad above it
-     rather than a second guessed offset. -->
-<div id="nav-wheel" class="nav-wheel" role="group" aria-label="Camera action wheel">
-  <button type="button" id="nav-wheel-hub" class="nav-wheel-hub" aria-expanded="false" aria-label="Open the camera action wheel">◎</button>
-  <!-- Only for what the wheel itself cannot show: WASD-family movement keys,
-       which are per-mode, not a camera action. The wheel's own six segments
-       are labelled and tappable, so they need no separate legend entry. -->
-  <button type="button" id="nav-wheel-legend-btn" class="nav-wheel-legend-btn" aria-label="Keyboard shortcuts for the current mode" title="Keyboard shortcuts">?</button>
+<!-- U4 -- the wheel's expanding ring. Segments are camera ACTIONS
+     (orbit/pan/zoom/focus/north/rewind); the four camera MODES deliberately
+     stay off it and stay in the button row inside the pad -- a mode switch
+     and an action wheel mixed into one radial is how these controls get
+     confusing (Mark's own framing), so they are two instruments, not one.
+     Every label and tooltip is generated from public/nav-bindings.js's
+     NAV_BINDINGS by nav-wheel.js at load, not typed here by hand -- the
+     markup gives each segment an id to fill, not text to trust. This ring
+     is position:fixed and anchored, in JS, to #nav-wheel-hub's own live
+     getBoundingClientRect() -- the hub now renders wherever the pad's action
+     row actually is (workbench can dock the pad anywhere), so anchoring to
+     the hub's real position is correct by construction, with no separate
+     "where is the pad" calculation to go stale the way the pad-height-based
+     one did. -->
+<div id="nav-wheel" class="nav-wheel" role="group" aria-label="Camera action wheel segments">
   <div class="nav-wheel-ring" aria-hidden="true">
     <button type="button" class="nav-wheel-seg" data-nav-action="orbit"></button>
     <button type="button" class="nav-wheel-seg" data-nav-action="pan"></button>

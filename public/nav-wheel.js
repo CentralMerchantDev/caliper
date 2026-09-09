@@ -52,31 +52,28 @@ export function createNavWheel(renderer, doc = document) {
     listeners.push([target, type, fn]);
   };
 
-  // POSITION FROM WHERE THE PAD ACTUALLY IS, NOT WHERE THE STYLESHEET PUTS
-  // IT BY DEFAULT. public/workbench.js registers #nav-compass-pad (key:
-  // "nav", home: "left") and sets its own inline left/top, which wins over
-  // the CSS `left:18px; bottom:18px` the wheel's static calc() assumed --
-  // found by screenshot, not by reading the CSS: the wheel landed inside the
-  // pad's own footprint instead of above it, because the pad was docked near
-  // the top of the screen, not the bottom-left corner the calc() assumed.
-  // Same principle U1 already established for height (measure, don't
-  // predict), extended to position: read the pad's live
-  // getBoundingClientRect() and place the wheel just above it, wherever
-  // that is, tracked continuously so a workbench drag does not strand it.
-  const pad = doc.getElementById("nav-compass-pad");
-  function positionWheel() {
-    if (!pad) return;
-    const r = pad.getBoundingClientRect();
-    root.style.left = `${Math.round(r.left)}px`;
-    root.style.top = `${Math.round(r.top - 22 - 12)}px`;
-    root.style.bottom = "auto";
+  // ANCHOR THE RING TO THE HUB'S OWN LIVE POSITION, NOT A SEPARATE GUESS
+  // ABOUT WHERE THE PAD IS. A first version measured #nav-compass-pad's
+  // rect and positioned the wheel a fixed offset above it -- correct
+  // placement (never overlapping the pad), but Mark's review of the
+  // screenshot called it "a stray artefact... nothing connects it to the
+  // panel it belongs to": floating above a panel is a different property
+  // than belonging to it. The hub now lives IN the pad's own action row
+  // (index.html), so its getBoundingClientRect() already reflects wherever
+  // the pad actually renders (workbench.js can dock it anywhere) with no
+  // separate measurement to go stale -- it is a normal flow child, not a
+  // second thing tracking the first.
+  function positionRing() {
+    const r = hub.getBoundingClientRect();
+    root.style.left = `${Math.round(r.left + r.width / 2)}px`;
+    root.style.top = `${Math.round(r.top + r.height / 2)}px`;
   }
-  positionWheel();
-  if (typeof ResizeObserver === "function" && pad) new ResizeObserver(positionWheel).observe(pad);
-  on(window, "resize", positionWheel);
-  // Workbench dragging moves the pad without resizing it, which a
-  // ResizeObserver alone cannot see -- polled alongside the pose-history
-  // settle tracker below rather than adding a second timer.
+  positionRing();
+  if (typeof ResizeObserver === "function") new ResizeObserver(positionRing).observe(hub);
+  on(window, "resize", positionRing);
+  // A workbench drag moves the hub (inside the pad) without resizing it,
+  // which a ResizeObserver alone cannot see -- polled alongside the
+  // pose-history settle tracker below rather than adding a second timer.
 
   let live = doc.getElementById("nav-live");
   let ownsLive = false;
@@ -125,7 +122,7 @@ export function createNavWheel(renderer, doc = document) {
   let open = false;
   function setOpen(v) {
     open = v;
-    root.classList.toggle("open", open); // kept for the hub's hover/open background rule
+    root.classList.toggle("open", open); // hook for any future CSS on the ring itself
     hub.setAttribute("aria-expanded", String(open));
     for (const [id, seg] of segEls) {
       const [ox, oy] = OPEN_OFFSET[id] || [0, 0];
@@ -140,7 +137,14 @@ export function createNavWheel(renderer, doc = document) {
   });
   on(doc, "pointerdown", (e) => {
     if (!open) return;
-    if (e.target instanceof Node && root.contains(e.target)) return;
+    // The hub is no longer inside root -- it lives in the pad's action row
+    // now -- so root.contains() alone no longer recognizes a click on the
+    // hub itself as "inside". Without excluding it here, clicking the hub
+    // to close would fire this handler first (pointerdown precedes click),
+    // closing it, and the hub's own click handler would then immediately
+    // toggle it back open from the now-stale `open` value -- a real bug
+    // found by tracing the event order, not by running it.
+    if (e.target instanceof Node && (e.target === hub || root.contains(e.target))) return;
     setOpen(false);
   });
 
@@ -162,7 +166,7 @@ export function createNavWheel(renderer, doc = document) {
   const pollTimer = setInterval(() => {
     const pose = renderer.getPose ? renderer.getPose() : null;
     if (pose) settler.update(pose, performance.now());
-    positionWheel(); // a workbench drag moves the pad without resizing it
+    positionRing(); // a workbench drag moves the hub without resizing it
   }, 250);
 
   /* ------------------------------------------------------------- discrete */
