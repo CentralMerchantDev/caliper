@@ -21,6 +21,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 function findPublic(): string {
@@ -32,7 +33,11 @@ function findPublic(): string {
   }
   throw new Error("could not locate public/ from " + HERE);
 }
-const INDEX_HTML = readFileSync(join(findPublic(), "index.html"), "utf8");
+// Stripped so a comment describing .innerHTML/.textContent/makeDescribeRequest(
+// cannot satisfy these checks in place of the real call -- see docs/LESSONS.md.
+// This file's second test asserts an XSS-relevant property (never .innerHTML on
+// visitor-typed text), which makes this exact blind spot worth closing here.
+const INDEX_HTML = stripSourceComments(readFileSync(join(findPublic(), "index.html"), "utf8"));
 
 test("I4: the describe box is wired to makeDescribeRequest, scoped to the real persisted selection", () => {
   assert.match(

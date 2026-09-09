@@ -24,6 +24,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 function repoRoot(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
@@ -38,7 +39,13 @@ function repoRoot(): string {
   throw new Error("could not find the repository root");
 }
 
-const html = readFileSync(path.join(repoRoot(), "public", "index.html"), "utf8");
+// Stripped once, here, so every indexOf()/slice()/assert.match() below this
+// line -- including ruleBody()'s -- checks against code that actually runs,
+// not against a comment that merely describes it. See
+// test/stripSourceComments.ts and docs/LESSONS.md's "a regex over source
+// matches your comments too" entry: this file's own trackLiveRect(navPadEl,
+// check below is the one that found the bug this control exists for.
+const html = stripSourceComments(readFileSync(path.join(repoRoot(), "public", "index.html"), "utf8"));
 
 /** The body of a CSS rule, by exact selector. */
 function ruleBody(selector: string): string {
@@ -151,7 +158,7 @@ test("no other stylesheet in public/ reintroduces a nav radius behind this one's
   for (const name of readdirSync(dir)) {
     if (name === "index.html") continue;
     if (!/\.(html|css)$/.test(name)) continue;
-    const text = readFileSync(path.join(dir, name), "utf8");
+    const text = stripSourceComments(readFileSync(path.join(dir, name), "utf8"));
     for (const m of text.matchAll(/\.nav-(?:strip|readout|dial)\b[^{]*\{([^}]*)\}/g)) {
       if (/border-radius:\s*(?!var\()/.test(m[1]) || /box-shadow:\s*(?!var\()/.test(m[1])) {
         offenders.push(name);

@@ -18,6 +18,7 @@ import assert from "node:assert/strict";
 
 import { describeFailure, describePassing } from "../src/changePipeline.ts";
 import type { TestResult } from "../src/types.ts";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 test("describeFailure: a crash includes the function and the exact failing input, not just the bare error", () => {
   const result: TestResult = {
@@ -150,7 +151,7 @@ test("security probes: judges reject uninvoked/fail-open execution and classify 
 
 test("index.html SSE verification calculation: accurately sums regression and criteria passed/total", async () => {
   const fs = await import("node:fs");
-  const html = fs.readFileSync("public/index.html", "utf-8");
+  const html = stripSourceComments(fs.readFileSync("public/index.html", "utf-8"));
   assert.match(html, /Number\(d\.regressionPassed\s*\|\|\s*0\)\s*\+\s*Number\(d\.criteriaPassed\s*\|\|\s*0\)/, "must dynamically sum regressionPassed and criteriaPassed");
   assert.match(html, /Number\(d\.regressionTotal\s*\|\|\s*0\)\s*\+\s*Number\(d\.criteriaTotal\s*\|\|\s*0\)/, "must dynamically sum regressionTotal and criteriaTotal");
 });

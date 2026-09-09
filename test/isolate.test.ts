@@ -37,6 +37,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 function findPublic() {
@@ -51,19 +52,17 @@ function findPublic() {
 const RENDER_3D = readFileSync(join(findPublic(), "world-render-3d.js"), "utf8");
 
 // A regex match against raw source is satisfied by a call sitting inside a
-// `//` comment just as happily as by real code -- caught directly, while
-// writing this file's own mutation check: commenting out the real
+// comment just as happily as by real code -- caught directly, while writing
+// this file's own mutation check: commenting out the real
 // `this._restoreIsolateState();` call left the string "this._restoreIsolateState()"
 // still present two words later in the explanatory comment above it, and the
-// wiring test below passed anyway. Strip line comments before matching so a
-// wiring test here can only pass on code that actually executes.
-function stripLineComments(src) {
-  return src.split("\n").map((line) => {
-    const i = line.indexOf("//");
-    return i === -1 ? line : line.slice(0, i);
-  }).join("\n");
-}
-const RENDER_3D_CODE_ONLY = stripLineComments(RENDER_3D);
+// wiring test below passed anyway. This used to be a local, `//`-only helper
+// duplicated (byte-identical) into test/movePiece.test.ts and never applied
+// anywhere else -- including test/navPad.test.ts, where the same blind spot
+// (there, a `/* */` block comment) reproduced the identical bug independently
+// on 2026-09-09. Now shared, and extended to block comments -- see
+// test/stripSourceComments.ts and docs/LESSONS.md.
+const RENDER_3D_CODE_ONLY = stripSourceComments(RENDER_3D);
 
 function repoRoot() {
   let dir = dirname(fileURLToPath(import.meta.url));

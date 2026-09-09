@@ -19,6 +19,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 function repoRoot() {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -99,13 +100,11 @@ function findPublic() {
   throw new Error("could not locate public/ from " + HERE);
 }
 const RENDER_3D = readFileSync(join(findPublic(), "world-render-3d.js"), "utf8");
-function stripLineComments(src) {
-  return src.split("\n").map((line) => {
-    const i = line.indexOf("//");
-    return i === -1 ? line : line.slice(0, i);
-  }).join("\n");
-}
-const RENDER_3D_CODE_ONLY = stripLineComments(RENDER_3D);
+// Previously a local, `//`-only helper duplicated byte-identically from
+// test/isolate.test.ts and never applied anywhere else -- see that file's
+// header and docs/LESSONS.md for why this is now shared and covers block
+// comments too.
+const RENDER_3D_CODE_ONLY = stripSourceComments(RENDER_3D);
 
 test("P4.4 (wiring): a refused move reaches a caller-visible callback, not console.log", () => {
   assert.match(RENDER_3D_CODE_ONLY, /import\s*\{\s*tryMove,\s*moveEditFor\s*\}\s*from\s*"\.\/move-piece\.js"/, "world-render-3d.js no longer imports P4.4's real functions from public/move-piece.js");

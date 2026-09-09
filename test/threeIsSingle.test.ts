@@ -28,6 +28,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 import * as THREE_BARE from "three";
 import * as THREE_VENDORED from "../public/vendor/three/three.module.min.js";
@@ -89,7 +90,7 @@ test("the importmap sends bare three to the file the tests alias to", () => {
     "the importmap's target for \"three\" changed; test/run.mjs's alias must change with it",
   );
 
-  const runner = readFileSync(path.join(root, "test", "run.mjs"), "utf8");
+  const runner = stripSourceComments(readFileSync(path.join(root, "test", "run.mjs"), "utf8"));
   assert.match(
     runner,
     /alias:\s*\{[\s\S]*?three:\s*path\.join\([^)]*"vendor",\s*"three",\s*"three\.module\.min\.js"\)/,

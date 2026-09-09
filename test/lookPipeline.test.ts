@@ -20,9 +20,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { makeGradeShader } from "../public/colour-grade.js";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 const PUBLIC = path.join(process.cwd(), "public");
-const read = (f: string) => fs.readFileSync(path.join(PUBLIC, f), "utf8");
+// Stripped so a comment describing composer.addPass(...) or makeGradeShader()
+// cannot satisfy the checks below on its own -- see docs/LESSONS.md.
+const read = (f: string) => stripSourceComments(fs.readFileSync(path.join(PUBLIC, f), "utf8"));
 
 test("the grade exists and carries its tuned uniforms", () => {
   const g = makeGradeShader();

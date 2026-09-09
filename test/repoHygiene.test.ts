@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 function repoRoot(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
@@ -74,7 +75,10 @@ test("mutate.mjs stops when the HARNESS breaks, rather than blaming the controls
   // either, because whatever broke is still broken. Reporting each of them as
   // INCONCLUSIVE and carrying on produced a summary that read as fourteen weak
   // controls when the real finding was one broken build.
-  const mutate = readFileSync(path.join(root, "scripts", "mutate.mjs"), "utf8");
+  // Stripped -- this is exactly the "does the real control still throw"
+  // question docs/LESSONS.md's comment-matching entry is about, and mutate.mjs
+  // is the harness the whole project's standard of proof depends on.
+  const mutate = stripSourceComments(readFileSync(path.join(root, "scripts", "mutate.mjs"), "utf8"));
   assert.match(
     mutate,
     /harnessBroke/,

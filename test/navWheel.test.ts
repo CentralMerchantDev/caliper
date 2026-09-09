@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { NAV_BINDINGS } from "../public/nav-bindings.js";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 function repoRoot(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
@@ -26,7 +27,9 @@ function repoRoot(): string {
   throw new Error("could not find the repository root");
 }
 
-const html = readFileSync(path.join(repoRoot(), "public", "index.html"), "utf8");
+// Stripped once, here -- see test/stripSourceComments.ts and
+// docs/LESSONS.md's "a regex over source matches your comments too" entry.
+const html = stripSourceComments(readFileSync(path.join(repoRoot(), "public", "index.html"), "utf8"));
 const wheelBlock = (() => {
   const i = html.indexOf('id="nav-wheel"');
   assert.notEqual(i, -1, "no #nav-wheel element found");
@@ -93,7 +96,7 @@ test("the ring is positioned off the hub's own live position, not a second guess
   // public/live-position.js (trackLiveRect) rather than being hand-written
   // here a second time -- this asserts the wheel actually calls it, not
   // that it reimplements ResizeObserver+resize+poll on its own again.
-  const src = readFileSync(path.join(repoRoot(), "public", "nav-wheel.js"), "utf8");
+  const src = stripSourceComments(readFileSync(path.join(repoRoot(), "public", "nav-wheel.js"), "utf8"));
   assert.match(src, /from ["']\.\/live-position\.js["']/, "nav-wheel.js does not import the shared live-position tracker");
   assert.match(src, /trackLiveRect\(hub,/, "the ring does not track the hub's live position via trackLiveRect");
 });
@@ -103,6 +106,6 @@ test("live-position.js is a real module with the shared tracking function, not a
   // nothing -- importsResolve.test.ts already checks this repo-wide, but a
   // second, local check here fails closer to the point anyone would look
   // when this specific pairing breaks.
-  const src = readFileSync(path.join(repoRoot(), "public", "live-position.js"), "utf8");
+  const src = stripSourceComments(readFileSync(path.join(repoRoot(), "public", "live-position.js"), "utf8"));
   assert.match(src, /export function trackLiveRect/, "public/live-position.js does not export trackLiveRect");
 });

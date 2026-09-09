@@ -450,10 +450,66 @@ to a regex, indistinguishable from the code it describes. Writing the
 comment in different words than the call it documents is not pedantry; it
 is the only thing that keeps the assertion honest.
 
-**STATUS** **OPEN.** The one instance (`test/navPad.test.ts`) is fixed and
-reverified (mutation `CAUGHT`, restored, green). The general control — a
-comment-stripping helper for source-text assertions, and a sweep of this
-suite's existing raw-source `assert.match` checks against it — does not
-exist yet. This entry stays open until it does and has been watched red
-against a reintroduced case of this same bug in a *different* file than
-the one that found it.
+**STATUS** **CLOSED**, 2026-09-09 overnight (`codex-lane`). The general
+control is [`test/stripSourceComments.ts`](../test/stripSourceComments.ts):
+strips both `//` line comments and `/* */` block comments (the original
+instance's bug was a block comment specifically, which is why a `//`-only
+helper would not have been enough), blanking rather than deleting so
+existing `indexOf()`/`slice()` offsets downstream keep working.
+
+**It was not built from nothing.** While locating every raw-source
+`assert.match` check in this suite to sweep, `test/isolate.test.ts` was
+found to already carry a local, `//`-only `stripLineComments`, with a
+comment on it recording that it was written after this *exact* bug
+class defeated an unprotected check there first (a comment-out mutation
+of `this._restoreIsolateState();` left the string intact) —
+`test/movePiece.test.ts` had a byte-identical copy. Neither was shared,
+and neither reached `test/navPad.test.ts`, which is how the same bug was
+found a third time, independently, days later. Textbook Failure pattern D:
+an enumerated instance fixed twice while a sibling instance — here, the
+literal absence of a shared module — went unrecorded. Both duplicates now
+import the shared helper instead of defining their own.
+
+**Swept into:** `test/navPad.test.ts`, `test/navWheel.test.ts`,
+`test/isolate.test.ts`, `test/movePiece.test.ts`, `test/lookPipeline.test.ts`,
+`test/describeRequestUI.test.ts` (this one guards an XSS-relevant property —
+`.innerHTML` never receives visitor-typed text — so the same blind spot
+here was worth closing in both directions: a comment could have hidden a
+real regression, or wrongly failed a correct one), the one HTML-diffing
+check in `test/evidence-forwarding.test.ts`, the `test/run.mjs` alias check
+in `test/threeIsSingle.test.ts`, and the `mutate.mjs` harness checks in
+`test/repoHygiene.test.ts`. **Reviewed and deliberately excluded**, with a
+reason each: `test/publicClaims.test.ts` and
+`test/generatedClaimsAreCurrent.test.ts` match computed diff messages, not
+source-with-comments; `test/duplicateKeys.test.ts` matches an analysis
+function's return value, not raw file text; `test/reachability.test.ts`'s
+`data-menu="build"` check and `test/threeIsSingle.test.ts`'s import-spec
+scan are markup/string scans where a false match would read as an
+*extra*, wrongly-loud failure, not a silent wrongly-quiet pass — the
+opposite risk direction from what this entry is about; `.gitattributes`
+checks in `test/repoHygiene.test.ts` are immune by construction (its `#`
+comment syntax can't satisfy their `^\*`-anchored patterns).
+
+**Watched red, for real, in a file other than the one that found it.**
+`public/nav-wheel.js`'s real `trackLiveRect(hub, ...)` call (line 91) was
+renamed to `trackLiveRectDISABLED` and a comment reproducing the exact
+original call syntax was left directly above it — the AUDIT-PROTOCOL
+disabling-mutation pattern, applied here on purpose. Against that mutation:
+the **protected** `test/navWheel.test.ts` correctly failed —
+`AssertionError: the ring does not track the hub's live position via
+trackLiveRect`. Reverting the same test's check back to raw, unstripped
+`src` (temporarily, to demonstrate the counterfactual) against the
+identical mutated file produced 6/6 passing, including that exact test —
+proving the old shape of this check would have shipped the regression
+silently, in this file, not only in the one that first found the bug.
+Both files were then restored and verified byte-identical to their
+pre-mutation state (`md5sum`, matched; `git diff` on `public/nav-wheel.js`,
+empty). `node test/run.mjs stripSourceComments.test.ts navPad.test.ts
+navWheel.test.ts isolate.test.ts movePiece.test.ts lookPipeline.test.ts
+describeRequestUI.test.ts evidence-forwarding.test.ts threeIsSingle.test.ts
+repoHygiene.test.ts` — 64/64 green on the restored tree. `npx tsc --noEmit`
+clean. The full suite was not re-run tonight — host memory sat at 2.47–3.99
+GB through this work, this project's own 4 GB floor, so a 1087-test full
+run (documented elsewhere as OOM-risking at module scope) was deferred
+rather than attempted below the floor; the 64 tests above are every test
+in every file this change touched.
