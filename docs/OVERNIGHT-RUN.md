@@ -36,19 +36,55 @@ Every subagent gets this, verbatim, in its brief. No exceptions.
 >
 > **Read `docs/MODULE-MAP.md` before building anything.** Nine capabilities in
 > this repository were built that already existed or were never connected. If
-> what you are about to write already exists, use it and say so.
+> what you are about to write already exists, use it and say so. If the map does
+> not exist on this branch yet, read the source directly and say that you did.
+>
+> **You work `docs/BUILD-LOOP.md`, the same as everyone else.** Steps 2 through
+> 9 apply to you exactly as written: plan in writing before touching code, write
+> the test first, implement, verify, mutate and prove CAUGHT, measure anything
+> you are about to claim, then commit. A change whose test has never been
+> watched red is not finished, whatever the diff looks like. This is the single
+> reason every report can be compared with every other one.
+>
+> **Ground before you build.** Your brief is a claim, written by someone who has
+> not just read the file. Check its assertions against the repository first, and
+> contradict it in your report where it is wrong.
+>
+> **Every number you report is sourced, or it is a fabrication.** A ceiling, a
+> threshold or a measurement with no named origin is treated here the same way
+> an invented benchmark is. Say where it came from or do not state it.
+>
+> **Zero API spend.** `CALIPER_ALLOW_SPEND` stays unset. Never run a command
+> that bills a model provider. `test/run.mjs` once ignored its argument and ran
+> every test file, billing Workers AI on what was meant to be a single file —
+> check what a command will actually do before running it.
+>
+> **Nothing is deleted.** Quarantine to `_TO-DELETE/<reason>/` instead, git lock
+> files included. This applies to files you created yourself.
+>
+> **`git commit -F` with explicit paths, never `git add -A`.** Spell-check every
+> word you write, in code comments, commit messages and your report alike.
 >
 > **REPORT EVERYTHING, INCLUDING WHAT DID NOT WORK.** This is not optional and
-> it is not padding. What failed is often what points at the answer. Your report
-> must contain:
->   - what you did, and the commit or diff
->   - the gate, red first and then green, pasted verbatim
->   - **what you tried that did not work, and why you think it failed**
->   - **what you considered and rejected, and on what grounds**
->   - anything you noticed outside your scope that someone should look at
->   - anything you could not verify, named as unverified
+> it is not padding. What failed is often what points at the answer. Return it
+> under these exact headings, in this order, so the hub can compare one report
+> against another without re-reading both in full:
 >
-> A report of only successes is an incomplete report and will be sent back.
+>   1. **SCOPE AS RECEIVED** — the task in your own words, and whether it
+>      survived contact with the code.
+>   2. **GROUNDING** — what you checked, and every place the brief was wrong.
+>   3. **WHAT I DID** — the change, and the commit hash or the diff.
+>   4. **THE GATE** — red first, then green, both pasted verbatim, with the
+>      mutation that produced the red.
+>   5. **WHAT DID NOT WORK** — what you tried, and why you think it failed.
+>   6. **CONSIDERED AND REJECTED** — the approaches you did not take, and on
+>      what grounds.
+>   7. **OUTSIDE MY SCOPE** — anything you noticed that someone should look at.
+>   8. **UNVERIFIED** — anything you could not prove, named as unproven rather
+>      than left to be assumed.
+>
+> Sections 5 and 6 are never empty on real work. A report of only successes is
+> an incomplete report and will be sent back.
 
 ---
 
