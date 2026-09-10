@@ -197,10 +197,14 @@ const NO_CELL_OPTION_TYPOLOGIES: { typology: string; fn: (seed?: string, options
   { typology: "bld-townhouse", fn: bldTownhouse, optionSets: [
     {}, { bayStyle: "cantilever", hasRoofDeck: true, hasRearExtension: true },
   ] },
-  // bldHighStreetTerrace ignores `units` entirely (fixed 16x24 footprint,
-  // no optional flags) -- checked by reading the function, not assumed;
-  // one option set is genuinely all there is to cover.
-  { typology: "bld-highstreet-terrace", fn: bldHighStreetTerrace, optionSets: [{}] },
+  // bldHighStreetTerrace ignores `units` entirely (fixed 16x24 footprint) --
+  // checked by reading the function, not assumed. It now has its first real
+  // option, roofStyle ("parapet" shortens roofH and drops the dormers), so
+  // both values are covered rather than the single {} this comment used to
+  // describe as "genuinely all there is to cover."
+  { typology: "bld-highstreet-terrace", fn: bldHighStreetTerrace, optionSets: [
+    {}, { roofStyle: "parapet" },
+  ] },
   // hasSolarArray only removes an already-in-bounds box when false and
   // reproduces the prior always-present geometry when true -- not the same
   // defect shape as the dormer bounds gap below, covered here anyway for

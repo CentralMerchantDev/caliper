@@ -62,11 +62,13 @@ at — so this is recorded as a finding, not a stop.
                                                     commit: f4b4076
 [x] F2b Survey completed for the 4 typologies the checklist never
         individually checked (tower, warehouse, high-street terrace,
-        apartment walk-up). Tower and warehouse clean. High-street terrace
-        has zero structural options at all -- a missing-capability gap, not
-        the same defect, named below rather than built. Apartment walk-up's
+        apartment walk-up). Tower and warehouse clean. Apartment walk-up's
         hasGarden was the same computed-but-unconsulted defect a second
-        time -- closed.                             commit: (this commit)
+        time -- closed.                                  commit: c3bd9de
+[x] F2c High-street terrace's zero-structural-variation gap (1.86% of
+        placements, the highest-value item left in F2) -- closed with a
+        real roofStyle option (mansard/parapet), not just named.
+                                                    commit: (this commit)
 [x] F3  Kitbash variety -- reconfirmed CLOSED, unchanged. 8/8 real tests
         green (kitbashNamedDesigns/RecipeMap/Parts/Retrieval), 3 correctly
         skipped (zero API spend).                        (a check)
@@ -155,12 +157,9 @@ all four in full this run:
   any kind — only wall/roof colour varies by seed. Not this defect (there
   is no computed-but-ignored value to find), but a real, separate gap:
   1.86% of placements (318 buildings), the highest share of anything below
-  the four dominant typologies, with zero structural variation. Named
-  here, not fixed — closing it means designing a first option for a
-  function that has never had one, which is a real scope decision, not a
-  wire-up of something already computed. Worth prioritizing next given its
-  share is 23x business park's and worth doing right rather than folding
-  into this run's smaller, purely-mechanical fixes.
+  the four dominant typologies, with zero structural variation. Initially
+  named rather than fixed in this section — closed properly later the same
+  run once F2b's other items were done; see F2c below.
 - `bldApartmentWalkup`: `hasGarden = r6 > 0.3` computed and put in
   `params`, never referenced by any of the three LOD builders. The same
   defect, a second real instance this run. Fixed: options-overridable,
@@ -169,6 +168,28 @@ all four in full this run:
   congested with the stair core for ~70% of seeds). Full detail, the
   red-first gate, the watched-red mutation, and measured triangle counts
   are in `docs/pending-commits/run5-f2-apartment-walkup-garden.txt`.
+
+## F2c — high-street terrace's roofStyle, closed properly
+
+Rather than leave the gap above as a named-only finding, closed it the
+same run: a real, options-overridable `roofStyle` (mansard/parapet),
+reusing the exact flat-parapet+coping idiom already proven elsewhere in
+this file. A second blind plan review (fresh subagent) caught four real
+gaps before any code was written — a test-values ordering bug that would
+have failed the new test immediately rather than only under mutation
+(parapet has fewer triangles than mansard, not more, so the CASES
+`values` tuple had to be `["parapet", "mansard"]`), a missing
+`roofStyle`-dependent `roofH`/`totalH` (every sibling already varies
+these; the first draft of this plan did not), the missing `params` field,
+and a comment in `test/buildingExplicitSize.test.ts` that this change
+makes false ("one option set is genuinely all there is to cover"). All
+four folded in before writing code. Full detail, the red-first gate, the
+watched-red mutation, and measured triangle/height counts are in
+`docs/pending-commits/run5-f2-highstreet-terrace-roofstyle.txt`. Stated
+plainly there too: this changes the roof shape of ~40% of the 318
+*existing* placements, not only new ones, since the seed roll already
+existed and was previously discarded — the intended effect, not a side
+effect.
 
 ## F3 / F4 — reconfirmed, unchanged
 
@@ -239,9 +260,10 @@ that answer), item 2's own facade street-level check — does 16 variants
 actually read as variety at real camera distance — is worth doing before
 any further facade-texture work of any kind.
 
-If the floor stays down and more code-only work is wanted: `bldHighStreetTerrace`'s
-zero-structural-variation gap (named above, F2b) is the next real,
-un-superseded item in K6's own priority order — 1.86% of placements, no
-options of any kind today. Unlike this run's two fixes, it needs a genuine
-first design decision (what varies, and how) rather than a wire-up, which
-is why it was named rather than built tonight.
+If the floor stays down and more code-only work is wanted: every named
+leaf item in F2's checklist is now closed or reconfirmed clean (F2b/F2c
+above). What remains in F2 is item 1 itself — the shared four-texture
+atlas — which is F1's own blocker and cannot be reached from this lane
+without the cross-branch merge. Next code-only work would need a fresh
+pass looking beyond K6-BUILDINGS.md's existing checklist (F3/F4 are
+closed; K7.1/B6 need a browser) rather than more items within it.

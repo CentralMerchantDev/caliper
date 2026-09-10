@@ -60,6 +60,14 @@ const CASES = [
   // high-street terrace, apartment walk-up) -- computed, reported in
   // params, never consulted by any of the three LOD builders.
   { typology: "bld-apartment-walkup", flag: "hasGarden", holdConstant: {} },
+  // bldHighStreetTerrace had no structural options at all (1.86% of
+  // placements, the highest share below the four dominant typologies).
+  // "parapet" strictly removes geometry relative to "mansard" (loses the
+  // two dormers, matching bldVilla/bldTerrace's "dormers are a mansard/
+  // pitched feature, never a parapet one" convention) -- values ordered
+  // fewer-tris-first (off) to more-tris (on), matching bld-workshop's own
+  // existing entry below, not the order the two styles are named in prose.
+  { typology: "bld-highstreet-terrace", flag: "roofStyle", values: ["parapet", "mansard"], holdConstant: {} },
 ];
 
 for (const c of CASES) {
@@ -105,6 +113,7 @@ test("new shapes (cantilever bay, curved corner, arcade podium) stay strictly in
     // it cannot collide with any of the three stair positions, all of
     // which occupy the front margin only; not re-tested per stairPosition.
     ["bld-apartment-walkup", { hasGarden: true }],
+    ["bld-highstreet-terrace", { roofStyle: "parapet" }],
   ];
   for (const [typology, options] of cases) {
     const spec = building(typology, "bounds-check-seed", options, THREE);

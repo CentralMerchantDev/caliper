@@ -2852,7 +2852,16 @@ export function bldHighStreetTerrace(seed = "highstreet-0", options = {}, T = TH
   const footW = 16;
   const footD = 24;
   const bodyH = 16.0;
-  const roofH = 3.0;
+  // This function had zero structural options at all -- only wall/roof
+  // colour varied by seed, and `r3` was rolled and discarded (K6-BUILDINGS.md's
+  // checklist, this typology's own real 1.86% placement share never closed).
+  // "mansard" reproduces today's exact geometry unchanged (majority case,
+  // matching every other roofStyle rollout in this file, e.g. bldWorkshop);
+  // "parapet" is new, reusing the same flat-parapet+coping idiom bldVilla/
+  // bldApartmentWalkup already use, with roofH shortened to match -- a
+  // parapet is this file's shortest roof option everywhere else too.
+  const roofStyle = options.roofStyle || (r3 < 0.6 ? "mansard" : "parapet");
+  const roofH = roofStyle === "parapet" ? 1.2 : 3.0;
   const totalH = +(bodyH + roofH + 1.8).toFixed(2);
 
   const wallCol = WALLS.TERRACE[Math.floor(r1 * WALLS.TERRACE.length)];
@@ -2898,18 +2907,30 @@ export function bldHighStreetTerrace(seed = "highstreet-0", options = {}, T = TH
       }
     }
 
-    const lower = new geomT.BoxGeometry(uW * 1.01, roofH * 0.65, uD * 1.01);
-    lower.translate(0, bodyH + roofH * 0.325, 0);
-    const upper = new geomT.BoxGeometry(uW * 0.85, roofH * 0.35, uD * 0.85);
-    upper.translate(0, bodyH + roofH * 0.825, 0);
-    parts.push({ geo: lower, tag: "roof" }, { geo: upper, tag: "roof" });
+    if (roofStyle === "parapet") {
+      const par = new geomT.BoxGeometry(uW * 1.01, roofH * 0.65, uD * 1.01);
+      par.translate(0, bodyH + roofH * 0.325, 0);
+      const coping = new geomT.BoxGeometry(uW * 1.04, roofH * 0.2, uD * 1.04);
+      coping.translate(0, bodyH + roofH * 0.75, 0);
+      parts.push({ geo: par, tag: "wall" }, { geo: coping, tag: "roof" });
+      // Dormers are a pitched/mansard-roof feature (same convention as
+      // bldVilla's hasDormers and bldTerrace's hasDormers, both gated off
+      // for "parapet") -- they would poke through a flat parapet roof, so
+      // they are omitted here rather than kept unconditionally.
+    } else {
+      const lower = new geomT.BoxGeometry(uW * 1.01, roofH * 0.65, uD * 1.01);
+      lower.translate(0, bodyH + roofH * 0.325, 0);
+      const upper = new geomT.BoxGeometry(uW * 0.85, roofH * 0.35, uD * 0.85);
+      upper.translate(0, bodyH + roofH * 0.825, 0);
+      parts.push({ geo: lower, tag: "roof" }, { geo: upper, tag: "roof" });
 
-    for (const dx of [-uW * 0.25, uW * 0.25]) {
-      const dorm = new geomT.BoxGeometry(1.4, 1.4, 1.5);
-      dorm.translate(dx, bodyH + 0.9, uD * 0.32);
-      const dormRoof = new geomT.BoxGeometry(1.5, 0.25, 1.6);
-      dormRoof.translate(dx, bodyH + 1.65, uD * 0.32);
-      parts.push({ geo: dorm, tag: "wall" }, { geo: dormRoof, tag: "roof" });
+      for (const dx of [-uW * 0.25, uW * 0.25]) {
+        const dorm = new geomT.BoxGeometry(1.4, 1.4, 1.5);
+        dorm.translate(dx, bodyH + 0.9, uD * 0.32);
+        const dormRoof = new geomT.BoxGeometry(1.5, 0.25, 1.6);
+        dormRoof.translate(dx, bodyH + 1.65, uD * 0.32);
+        parts.push({ geo: dorm, tag: "wall" }, { geo: dormRoof, tag: "roof" });
+      }
     }
 
     const chim = new geomT.BoxGeometry(1.0, 2.8, 1.0);
@@ -2953,6 +2974,7 @@ export function bldHighStreetTerrace(seed = "highstreet-0", options = {}, T = TH
     origin: "base-centre",
     standsOn: ["plot", "open"],
     material: mat,
+    params: { roofStyle },
     lod: [
       { level: 0, tris: 594, createGeometry: (geomT) => buildLOD0(geomT || T) },
       { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
