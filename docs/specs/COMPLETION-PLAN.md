@@ -137,7 +137,7 @@ is polish.
           asks for. propModel already promoted out of it (547b721) by real
           wiring, not by editing the allowlist by hand.
 [ ] C3  All seven standing gates green simultaneously. This has never happened.
-[x] C4  The claim reconciliation, mutation-evidence surface: README.md's
+[!] C4  The claim reconciliation, mutation-evidence surface: README.md's
           "98 deliberate defects, all 98 caught" fixed to name all four real
           states (injected/caught/never-run/survived-or-inconclusive), gated
           by src/generatedClaimChecks.ts's mutationClaimMismatch, mutation-
@@ -146,7 +146,20 @@ is polish.
           run's own ground-check found in the overnight brief's "1,141
           tests" line, generalised and closed here too)      9b717a9 / 547b721
           Other three surfaces (live page beyond this one sentence, DATUM,
-          resume) NOT reconciled -- untouched, out of this run's scope.
+          resume) NOT reconciled -- untouched, out of that run's scope.
+          MOVED FROM [x], 2026-09-10: a DIFFERENT published-number surface in
+          the same "every published number is generated from the thing it
+          describes" family (this file's own header, condition 3) is red --
+          public/index.html claims 1087 tests, the real, freshly-measured
+          count is 1194 (48 real failures, most already named elsewhere in
+          this file/decision queue). Not silently fixable: the count-claim
+          test's own update path refuses to run while ANY other test fails,
+          by design (`scripts/gen-test-count.mjs`'s own narrow exemption,
+          read directly, not assumed) -- confirmed empirically this run, not
+          just reasoned about. docs/DECISIONS-FOR-MARK.md #9 has the full
+          detail and a recommendation. test/testCount.generated.json
+          regenerated honestly regardless (1194/1130/48/15/1, measured
+          `node test/run.mjs`, full log this session's own handover cites).
 [ ] C5  B2.5's CPU-time gate: honestly red at ~40-291s against 30s (varies
           with this host's own memory pressure, measured repeatedly).
           Unaffected by this run -- generation still happens offline
