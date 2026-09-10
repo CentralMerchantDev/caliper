@@ -1238,6 +1238,24 @@
       "find": "    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;",
       "replace": "    itemGroup.rotation.y = 0;",
       "expect": "B4 gate: scatterStreetFurniture positions and ROTATES an item correctly on an east/west (long-along-d) road span -- the orientation scatterStreetLamps's own technique never had to handle"
+    },
+    {
+      "id": "scatter-bus-shelters-does-not-resolve-real-id",
+      "guards": "scatterBusShelters genuinely resolves propModel('busShelter', ...) -- not a different manifest id.",
+      "note": "Verified this session: swapping to propModel(\"bin\", seed) is caught by the dedicated real-id test; a blind review predicted this would also trip the static reachability gate (the literal \"busShelter\" substring disappears too) -- confirmed, both fail together, and _mutcheck.mjs's own named-failure check (r.failed.some(n => n.includes(m.expect))) still correctly reports CAUGHT since the expected test is among the failures, not the sole one.",
+      "file": "public/board-render.js",
+      "find": "    const model = propModel(\"busShelter\", seed);",
+      "replace": "    const model = propModel(\"bin\", seed);",
+      "expect": "B4 gate: scatterBusShelters calls the REAL propModel('busShelter', ...) -- a real, non-VARIED manifest id, not a placeholder box"
+    },
+    {
+      "id": "scatter-bus-shelters-never-rotates",
+      "guards": "scatterBusShelters genuinely rotates a placed shelter 90 degrees on an east/west (long-along-d) road span -- carrying forward the fix scatterStreetFurniture's own blind review required for the bench, needed again here since a bus shelter's real footprint (3.6 x 1.4 m) is even more asymmetric.",
+      "note": "Verified this session: a first attempt at this mutation used a find string scoped by TRAILING context (the next function's own docblock comment) intending to disambiguate scatterBusShelters's own rotation line from scatterStreetFurniture's identical-looking one -- but since scatterBusShelters's docblock immediately follows scatterStreetFurniture in the file, that trailing context actually matched scatterStreetFurniture's own ending, and the mutation silently broke the WRONG function's test (INCONCLUSIVE, reported honestly by _mutcheck.mjs's own named-failure check, not a false CAUGHT). Fixed by scoping the find string with LEADING context unique to scatterBusShelters's own body (its own material colour constant, 0x557799) instead -- caught directly by the dedicated east/west-orientation test's own rotation.y assertion on the corrected attempt.",
+      "file": "public/board-render.js",
+      "find": "    const material = new THREE.MeshStandardMaterial({ color: 0x557799 });\n    const itemGroup = new THREE.Group();\n    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));\n    const origin = atomOrigin(piece.cell.i, piece.cell.j);\n    const { w, d } = piece.foot;\n    const longAlongW = w >= d;\n    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;\n    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;\n    itemGroup.position.set(x, 0, z);\n    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;",
+      "replace": "    const material = new THREE.MeshStandardMaterial({ color: 0x557799 });\n    const itemGroup = new THREE.Group();\n    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));\n    const origin = atomOrigin(piece.cell.i, piece.cell.j);\n    const { w, d } = piece.foot;\n    const longAlongW = w >= d;\n    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;\n    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;\n    itemGroup.position.set(x, 0, z);\n    itemGroup.rotation.y = 0;",
+      "expect": "B4 gate: scatterBusShelters positions and ROTATES a shelter correctly on an east/west (long-along-d) road span -- a position-only assertion cannot see a shelter facing the wrong way"
     }
   ]
 }

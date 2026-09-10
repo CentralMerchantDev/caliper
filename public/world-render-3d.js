@@ -18,7 +18,7 @@ import { WORLD } from "./city-plan.js";
 import { createSelection } from "./selection.js";
 import { boardPiecesById } from "./board-adapter.js";
 import { fetchBoard, pieceAtPoint } from "./board-load.js";
-import { buildBoardScene, scatterTrees, scatterStreetLamps, scatterStreetFurniture } from "./board-render.js";
+import { buildBoardScene, scatterTrees, scatterStreetLamps, scatterStreetFurniture, scatterBusShelters } from "./board-render.js";
 import { neighboursOf, applyIsolate, restoreIsolate } from "./isolate.js";
 import { tryMove, moveEditFor } from "./move-piece.js";
 import { layerFrom } from "./world-model.js";
@@ -1878,7 +1878,14 @@ class Renderer3D {
       // a lamp's, is not roughly symmetric).
       this._boardStreetFurniture = scatterStreetFurniture(THREE, boardData.pieces);
       this.scene.add(this._boardStreetFurniture);
-      console.log(`B3/B4: board render path drew ${boardData.pieces.length} real pieces, ${this._boardTrees.children.length} real trees, ${this._boardLamps.children.length} real street lamps and ${this._boardStreetFurniture.children.length} real street furniture items from public/board.generated.json`);
+      // B4: real bus shelters, from propModel("busShelter", ...) -- the
+      // manifest's fourth plain alias, scattered more sparsely than
+      // benches/bins (a much larger, rarer structure); see
+      // board-render.js's own scatterBusShelters() header for why this
+      // one also rotates, same reason as scatterStreetFurniture.
+      this._boardBusShelters = scatterBusShelters(THREE, boardData.pieces);
+      this.scene.add(this._boardBusShelters);
+      console.log(`B3/B4: board render path drew ${boardData.pieces.length} real pieces, ${this._boardTrees.children.length} real trees, ${this._boardLamps.children.length} real street lamps, ${this._boardStreetFurniture.children.length} real street furniture items and ${this._boardBusShelters.children.length} real bus shelters from public/board.generated.json`);
     } catch (e) {
       console.error("B3/B4: failed to fetch/draw the real board (city geometry above is unaffected):", e);
     }

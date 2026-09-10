@@ -119,9 +119,50 @@ this list.
              per docs/OVERNIGHT-RUN.md; a targeted run does not need it);
              npx tsc --noEmit clean; node scripts/_mutcheck.mjs
              test/boardRender.test.ts public/board-render.js (both new
+             mutations CAUGHT, test/mutations.json).
+             2026-09-10 (cont.): the manifest's fourth plain alias wired too
+             -- scatterBusShelters (public/board-render.js), same pattern,
+             real propModel("busShelter", ...), wired into the same
+             ?board=1-gated block. Carried forward both findings from the
+             prior step's own blind review (literal-string propModel call;
+             rotation on the east/west span, needed even more here --
+             busShelter's real footprint 3.6x1.4m is more asymmetric than
+             the bench's 1.8x0.55m); a fresh blind review of this step's own
+             plan confirmed both were correctly applied and found nothing
+             else wrong with the code, only a wording nit (this alias is
+             the fourth plain one, not third -- "tree" is a VARIED
+             generator) and named two real, pre-existing, NOT-this-step's-
+             fault gaps: (1) test/testCount.generated.json will drift
+             further from this step's own +6 tests -- NOT regenerated this
+             session, since that needs a full suite run and free memory
+             (2.64 GB) was under the 4 GB floor for that; already-tracked
+             via docs/DECISIONS-FOR-MARK.md #9, not a new problem. (2) the
+             scatter* functions place items by "every Nth road piece"
+             independently, with no cross-function collision check --
+             lamps/furniture/shelters can coincide on a shared road piece
+             (real, pre-existing since scatterStreetFurniture landed, not
+             introduced here, not attempted to fix -- would need real
+             design work against the board's own placement/reservation
+             system, per public/prop-manifest.js's own header on why that
+             system exists). One real mutation-spec bug found and fixed
+             DURING this step's own mutation testing, not by the review:
+             a first attempt at the rotation mutation used trailing-context
+             scoping that accidentally matched scatterStreetFurniture's own
+             ending (since scatterBusShelters's docblock immediately
+             follows it in the file) -- caught honestly as INCONCLUSIVE by
+             _mutcheck.mjs itself, not a false CAUGHT; fixed by scoping with
+             leading context unique to this function's own body instead.
+             Evidence: node test/run.mjs test/boardRender.test.ts (31/31
+             pass, targeted only, same memory-floor reasoning as above);
+             npx tsc --noEmit clean; node scripts/_mutcheck.mjs
+             test/boardRender.test.ts public/board-render.js (both new
              mutations CAUGHT, test/mutations.json). Roadkit/buildings-
-             typology (decisions #5/#6) and busShelter (a third manifest
-             alias, same pattern, not attempted this step) still open.
+             typology (decisions #5/#6) still open. railTie remains the
+             manifest's only unwired alias -- NOT assumed to be the same
+             decision-free pattern: rail ties are architecturally a
+             continuous strip along a railway, not discrete street
+             furniture, and may need a different approach than
+             "every Nth piece" scattering -- named, not attempted.
 [ ] B5     The visual pass -- judged against named reference shots (K5.5)
 [ ] B7     The countryside -- farmland, the range, greenery
 ```

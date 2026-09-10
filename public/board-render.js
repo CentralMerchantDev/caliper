@@ -235,3 +235,51 @@ export function scatterStreetFurniture(THREE, pieces, { maxItems = 400, everyNth
   }
   return group;
 }
+
+/**
+ * B4 -- "props from the manifest": a real bus shelter, from
+ * public/prop-models.js's own propModel("busShelter", ...), the manifest's
+ * FOURTH plain alias ("MODELS['busShelter']=MODELS['bus-shelter']",
+ * public/props.js -- "tree" is a VARIED generator, not a plain alias, so
+ * lampPost/bench/bin were the first three; railTie remains the last,
+ * unwired). One manifest id, so no alternation is needed -- but still a
+ * LITERAL string call, not a variable-fed one, matching every other
+ * reachability gate in this file.
+ *
+ * ROTATED, SAME REASON AS scatterStreetFurniture: a bus shelter's own real
+ * footprint (public/prop-manifest.js's PROPS.busShelter, w:3.6 d:1.4) is
+ * even MORE asymmetric than the bench's 1.8x0.55 -- an unrotated shelter on
+ * an east/west road span would face directly across the road, a worse
+ * version of the exact defect that step's own blind review found. Same
+ * fix, same technique: rotate 90 degrees around Y when the road's own long
+ * axis runs along d instead of w.
+ */
+export function scatterBusShelters(THREE, pieces, { maxShelters = 400, everyNth = 150 } = {}) {
+  const group = new THREE.Group();
+  group.name = "board-bus-shelters";
+  let seen = 0;
+  for (const piece of pieces) {
+    if (!piece || piece.pieceType !== "road") continue;
+    seen += 1;
+    if (seen % everyNth !== 0) continue;
+    if (group.children.length >= maxShelters) break;
+    const seed = piece.cell.i * 31 + piece.cell.j;
+    const model = propModel("busShelter", seed);
+    const parts = model.lod[0].createGeometry(THREE);
+    const partList = Array.isArray(parts) ? parts : [parts];
+    const material = new THREE.MeshStandardMaterial({ color: 0x557799 });
+    const itemGroup = new THREE.Group();
+    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));
+    const origin = atomOrigin(piece.cell.i, piece.cell.j);
+    const { w, d } = piece.foot;
+    const longAlongW = w >= d;
+    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;
+    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;
+    itemGroup.position.set(x, 0, z);
+    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;
+    itemGroup.userData.pieceId = piece.id;
+    itemGroup.userData.propId = model.id;
+    group.add(itemGroup);
+  }
+  return group;
+}

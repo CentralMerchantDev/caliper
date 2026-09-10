@@ -16,7 +16,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import * as THREE from "../public/vendor/three/three.module.min.js";
-import { buildBoardScene, meshForPiece, scatterTrees, scatterStreetLamps, scatterStreetFurniture } from "../public/board-render.js";
+import { buildBoardScene, meshForPiece, scatterTrees, scatterStreetLamps, scatterStreetFurniture, scatterBusShelters } from "../public/board-render.js";
 import { loadBoard } from "../public/board-load.js";
 import { atomOrigin, heightOf } from "../public/grid.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
@@ -323,6 +323,76 @@ test("B4 gate: scatterStreetFurniture is a real render-path call, not merely tes
   const src = readFileSync(join(ROOT, "public", "board-render.js"), "utf8");
   assert.match(src, /propModel\(\s*["']bench["']/, "board-render.js does not call propModel(\"bench\", ...) -- scatterStreetFurniture is not wired to the real manifest id");
   assert.match(src, /propModel\(\s*["']bin["']/, "board-render.js does not call propModel(\"bin\", ...) -- scatterStreetFurniture is not wired to the real manifest id");
+});
+
+// -----------------------------------------------------------------------------
+// scatterBusShelters -- the manifest's fourth plain alias
+// (MODELS["busShelter"]=MODELS["bus-shelter"], public/props.js; "tree" is a
+// VARIED generator, not a plain alias, so lampPost/bench/bin were the first
+// three -- railTie remains the last, unwired). Mirrors scatterStreetFurniture
+// exactly (commit 9525be6): one manifest id, no alternation, but the SAME
+// rotation fix carried forward -- a bus shelter's own real footprint
+// (public/prop-manifest.js's PROPS.busShelter, w:3.6 d:1.4) is even MORE
+// asymmetric than the bench's 1.8x0.55, so an unrotated shelter on an
+// east/west road span would face directly across the road, a worse version
+// of the exact defect the prior step's own blind review found.
+// -----------------------------------------------------------------------------
+
+test("B4 gate: scatterBusShelters calls the REAL propModel('busShelter', ...) -- a real, non-VARIED manifest id, not a placeholder box", () => {
+  const pieces = Array.from({ length: 80 }, (_, n) => makeRoadSpanPiece(`r-${n}`, n * 40, 0));
+  const group = scatterBusShelters(THREE, pieces, { everyNth: 10, maxShelters: 400 });
+  assert.equal(group.children.length, 8, "expected one shelter per 10th road piece (80/10), got a different count");
+  for (const shelterGroup of group.children) {
+    assert.ok(shelterGroup.userData.propId.startsWith("bus-shelter"), `expected a real prop-models.js bus-shelter id, got "${shelterGroup.userData.propId}"`);
+    assert.ok(shelterGroup.children.length > 0, "a shelter's own group must contain real geometry parts, not be empty");
+    for (const mesh of shelterGroup.children) {
+      assert.ok(mesh.geometry.attributes.position.count > 0, "a shelter part must carry real geometry, not an empty buffer");
+    }
+  }
+});
+
+test("B4 gate: scatterBusShelters positions and orients a shelter correctly on a north/south (long-along-w) road span", () => {
+  const piece = makeRoadSpanPiece("r-long-ns", 0, 0, 320);
+  const group = scatterBusShelters(THREE, [piece], { everyNth: 1, maxShelters: 10 });
+  assert.equal(group.children.length, 1);
+  const item = group.children[0];
+  const origin = atomOrigin(0, 0);
+  assert.ok(Math.abs(item.position.x - (origin.x + 160)) < 1, "expected the shelter near the span's own midpoint along its length");
+  const zOffset = item.position.z - origin.z;
+  assert.ok(zOffset >= 9 && zOffset <= 12, `expected the shelter just past the road's own 9 m width, got z offset ${zOffset}`);
+  assert.equal(item.rotation.y, 0, "on a road whose long axis runs along world X, the shelter's own length axis should already align with it -- no rotation needed");
+});
+
+test("B4 gate: scatterBusShelters positions and ROTATES a shelter correctly on an east/west (long-along-d) road span -- a position-only assertion cannot see a shelter facing the wrong way", () => {
+  const piece = makeRoadSpanPieceEW("r-long-ew", 0, 0, 320);
+  const group = scatterBusShelters(THREE, [piece], { everyNth: 1, maxShelters: 10 });
+  assert.equal(group.children.length, 1);
+  const item = group.children[0];
+  const origin = atomOrigin(0, 0);
+  assert.ok(Math.abs(item.position.z - (origin.z + 160)) < 1, "expected the shelter near the span's own midpoint along its length (now running along z)");
+  const xOffset = item.position.x - origin.x;
+  assert.ok(xOffset >= 9 && xOffset <= 12, `expected the shelter just past the road's own 9 m width (now along x), got x offset ${xOffset}`);
+  assert.ok(Math.abs(item.rotation.y - Math.PI / 2) < 1e-9, "on a road whose long axis runs along world Z, the shelter's own length axis must be rotated 90 degrees to still run parallel to the road -- an unrotated shelter here would face directly across the road");
+});
+
+test("B4 gate: scatterBusShelters respects maxShelters -- it does not scatter thousands of meshes unbounded", () => {
+  const pieces = Array.from({ length: 500 }, (_, n) => makeRoadSpanPiece(`r-${n}`, n * 40, 0));
+  const group = scatterBusShelters(THREE, pieces, { everyNth: 1, maxShelters: 10 });
+  assert.equal(group.children.length, 10, "expected the scatter to stop at maxShelters");
+});
+
+test("B4 gate: scatterBusShelters ignores non-road pieces -- buildings and bridges do not grow bus shelters", () => {
+  const pieces = [
+    { id: "bldg-1", pieceType: "building", cell: { i: 0, j: 0, k: 0 }, foot: { w: 20, d: 20 } },
+    { id: "bridge-1", pieceType: "bridge", cell: { i: 10, j: 0, k: 0 }, foot: { w: 9, d: 100 } },
+  ];
+  const group = scatterBusShelters(THREE, pieces, { everyNth: 1, maxShelters: 400 });
+  assert.equal(group.children.length, 0, "expected zero bus shelters when no road pieces are present");
+});
+
+test("B4 gate: scatterBusShelters is a real render-path call, not merely test-only -- board-render.js itself calls propModel('busShelter', ...) as a literal call, not a variable-fed one", () => {
+  const src = readFileSync(join(ROOT, "public", "board-render.js"), "utf8");
+  assert.match(src, /propModel\(\s*["']busShelter["']/, "board-render.js does not call propModel(\"busShelter\", ...) -- scatterBusShelters is not wired to the real manifest id");
 });
 
 // -----------------------------------------------------------------------------
