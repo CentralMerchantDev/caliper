@@ -553,8 +553,84 @@ summary of it) to find the next most valuable item in written order,
 skipping anything blocked by an open, undecided decision, per the brief's
 own instruction. Recorded in the next entry, not assumed from memory.
 
-### Still open, as of this entry
+### The next item, found — a real, well-scoped, DECISION-FREE B4 increment
 
-- The next item in `COMPLETION-PLAN.md`'s written order (not yet chosen).
-- Everything named "still open" in the B3 section above — real, remaining
-  scope, not a stopping condition.
+Re-read `COMPLETION-PLAN.md` fresh, in written order, skipping anything
+blocked by an open decision per the brief's own instruction:
+
+- **B2.7** — its own gate (Decision #7) is open and unanswered. Skipped, per
+  the brief's own instruction, not because it is unimportant.
+- **B2.8** — blocked on B4 by its own note in the plan. Skipped.
+- **B3** — just took a real step (above). The next real increment (switching
+  picking over, not just connecting it, or extracting sun/sky) is
+  genuinely larger, structurally different work per this session's own
+  blind mapping — not a small step to start cold at the end of a long run.
+- **B4** — checked `public/prop-models.js`'s own manifest directly (not
+  assumed): `MODELS["bench"] = MODELS["bench-slat"]` and
+  `MODELS["bin"] = MODELS["bin-round"]` are real, existing plain-alias
+  props — the EXACT same non-`VARIED` resolution path `lampPost` already
+  uses (`board-render.js`'s own `scatterStreetLamps`, live and tested).
+  Neither `bench` nor `bin` is scattered by anything yet
+  (`grep propModel\( public/board-render.js` — only `"tree"` and
+  `"lampPost"`). **This does not depend on either open B4 decision**
+  (#5 roadkit width, #6 typology selector) — it is additive prop-scattering
+  by the already-proven pattern, not roads or buildings.
+
+**This is the concrete next step for whoever picks this back up — named
+precisely so it costs zero re-derivation:** a `scatterBenches` (or combined
+`scatterStreetFurniture`) function in `public/board-render.js`, mirroring
+`scatterStreetLamps`'s own real, tested shape (piece-type filter, `everyNth`/
+`maxX` bounds, shape-aware positioning off the piece's own `foot.w`/`foot.d`
+— not copied blindly; `scatterStreetLamps`'s own header names the exact
+single-axis mistake a naive port would make), wired into `_buildCityBase`
+the same way `scatterTrees`/`scatterStreetLamps` already are, test-first,
+blind-reviewed before implementing (per the brief's own standing
+instruction), mutation-tested, following `docs/BUILD-LOOP.md` exactly as
+this session's own B3 step did.
+
+### Stopping here — condition 4, not a finished plan
+
+Per `docs/OVERNIGHT-RUN.md`'s own "WHEN YOU MAY STOP": not because
+`COMPLETION-PLAN.md` is fully green (it is not, and finding the bench/bin
+step above is not a stopping condition on its own), and not because a phase
+ended. This session has run a full orientation, resolved two concrete
+brief items end to end (the stale B3 plan line; the red test-count gate,
+including empirically confirming why it cannot be forced green), taken one
+complete, blind-reviewed, test-first, mutation-tested B3 build-loop step,
+transcribed one orphaned decision and recorded one new one, and found the
+next real, unblocked, precisely-scoped step. Four full-suite runs (one
+~23 minutes, this session's own final one included) and three subagent
+dispatches (one Explore mapping, two blind reviews) were run across this
+session. Continuing into a SECOND full build-loop cycle (plan → blind
+review → test-first → implement → mutate → measure → commit) risks starting
+real, uncommitted work this session cannot see through to a clean stopping
+point — worse than stopping here, with everything so far committed and the
+next step named precisely enough that it costs nothing to pick up cold.
+
+**Nothing here is a claim that the work is done.** `docs/specs/
+COMPLETION-PLAN.md` still has B2.7, B2.8, B3 (mostly), B4 (mostly), B5, B7
+open or partial, exactly as it did before this session, minus the two items
+this session actually closed and the one step it actually took. Read the
+ledger, not this sentence, before believing otherwise.
+
+### Commits this session, in order
+
+`bb51ecd` (decisions #8/#9 transcribed/recorded, B3 plan-line corrected),
+`e7ab89b` (test count regenerated honestly, C4 tick corrected), `5592f24`
+(B3's pieceAtPoint step, full build-loop cycle), `7f05938` (this file
+tracked). Working tree confirmed clean after each. No merge, no deploy, no
+push, `main` untouched throughout — matching the brief's own hard guards.
+
+### Still open, for the next session
+
+- **B4's next increment**: `scatterBenches`/`scatterStreetFurniture`,
+  scoped precisely above — zero re-derivation needed.
+- **B3's larger remaining scope**: switching picking over (not just
+  connecting it) and extracting sun/sky from `city-render.js`'s own
+  `buildWorld()` — both structurally larger, named as separate work by this
+  session's own blind mapping, not started.
+- **Decisions #3, #4, #5, #6, #7, #9** — genuinely open, Mark's call, not
+  blocking other work (per the brief's own "skip and take the next written
+  item" instruction, already applied this session).
+- **Decision #8** (should the Cowork schedule keep pointing at this brief)
+  — a scheduling question, not this session's to resolve either.
