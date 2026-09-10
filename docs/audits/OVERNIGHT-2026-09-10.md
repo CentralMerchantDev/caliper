@@ -837,3 +837,132 @@ review, test-first, mutate, commit. Beyond that, B4's remaining real scope
 is unchanged from RUN 6's own naming: roadkit/typology (decisions #5/#6,
 genuinely Mark's call) and B3's larger remaining scope (switching picking
 over, sun/sky extraction).
+
+---
+
+## RUN 9 — `scatterBusShelters`, the manifest's fourth plain alias
+
+Follow-up brief: `busShelter`, same decision-free pattern, mirror
+`scatterStreetFurniture` (commit `9525be6`), carry both prior findings
+forward. Commit-message path also changed this run: `$env:TEMP\
+COMMIT_MSG_b1-land.txt` (lane-specific, replacing the shared path a prior
+run found another lane's own message sitting in).
+
+**State verified fresh:** `git status` clean, `HEAD` at `66e0a52`, at-or-
+after as required. Free memory **2.64 GB** — under the 4 GB floor, per this
+run's own brief that means code-only work with targeted tests, not a stop.
+
+**Brief verified accurate before planning, not assumed:** `public/props.js:4590`,
+`MODELS["busShelter"] = MODELS["bus-shelter"]`; footprint `w:3.6, d:1.4`
+(`public/prop-manifest.js`) — even more asymmetric than the bench's
+`1.8×0.55`; `grep propModel\( public/board-render.js` confirmed nothing
+called it before this run.
+
+**Planned in writing, both prior findings carried forward deliberately**
+(literal-string `propModel` calls; rotation with its own assertion, not
+inferred from position). **Blind subagent review, fresh, before any code**:
+confirmed every factual claim in the plan against the real files, found the
+approach sound, and named three things:
+
+1. **A wording nit** — `busShelter` is the manifest's FOURTH plain alias,
+   not third (`tree` is a VARIED generator, not a plain one; `lampPost`/
+   `bench`/`bin` were the first three). Cosmetic, fixed in prose.
+2. **Real, already-tracked drift, not this step's fault**:
+   `test/testCount.generated.json` will be stale by another +6 tests.
+   Regenerating it needs a full suite run — this session's own 2.64 GB
+   floor blocks that. Already named via `docs/DECISIONS-FOR-MARK.md` #9;
+   not a new problem, not attempted here for the same memory reason RUN 8
+   didn't attempt it either.
+3. **Real, pre-existing design gap, not introduced here**: the `scatter*`
+   functions have no cross-function placement-collision check — lamps,
+   furniture, and now shelters can coincide on the same sampled road piece.
+   The reviewer traced this to exactly the shape `public/prop-manifest.js`'s
+   own header names as the ORIGINAL motivation for the real footprint/
+   registry system these `scatter*` functions bypass entirely. Named, not
+   fixed — real, separate design work against `board.js`'s own placement
+   system, not a small step.
+
+**Watched red first:** `node test/run.mjs test/boardRender.test.ts` failed
+to BUILD (`No matching export ... for import "scatterBusShelters"`) before
+the function existed.
+
+**Implemented, mirroring `scatterStreetFurniture` exactly** (one manifest
+id, no alternation needed) — same shape-aware positioning/rotation
+technique, wired into the same `?board=1`-gated block.
+
+**Measured:** `node test/run.mjs test/boardRender.test.ts` — **31/31 pass**
+(6 new tests). `npx tsc --noEmit` clean. **Deliberately not run, named
+rather than silently skipped:** full suite, `cityWorld.test.ts`,
+`regressionGate.test.ts`, any `e2e/` spec — same memory-floor reasoning as
+RUN 8.
+
+**Mutated, both CAUGHT — and a real mutation-spec bug found and fixed
+during testing itself, not by the review:**
+
+1. Swapping the resolved id to `propModel("bin", ...)` — caught by the
+   dedicated real-id test. The reviewer predicted this would ALSO trip the
+   static reachability gate (the literal `"busShelter"` substring
+   disappears too) — confirmed directly; `_mutcheck.mjs`'s own
+   named-failure check (`r.failed.some(n => n.includes(m.expect))`)
+   correctly still reports CAUGHT, since the expected test only needs to be
+   AMONG the failures, not the sole one.
+2. Disabling the rotation — **a first attempt at this mutation was itself
+   wrong.** Its `find` string was scoped by TRAILING context (the start of
+   the next function's own docblock comment), intended to uniquely target
+   `scatterBusShelters`'s own rotation line. But `scatterBusShelters`'s
+   docblock immediately follows `scatterStreetFurniture` in the file, so
+   that trailing context actually matched `scatterStreetFurniture`'s own
+   ending instead — the mutation silently landed on the WRONG function and
+   broke the WRONG test. **Reported honestly as `INCONCLUSIVE` by
+   `_mutcheck.mjs` itself** (not a false `CAUGHT`) — this is the tool
+   working exactly as designed: `named = r.failed.some(n =>
+   n.includes(m.expect))` requires the SPECIFIC named test to be among the
+   failures, and it wasn't. Diagnosed, fixed by re-scoping the `find`
+   string with LEADING context unique to `scatterBusShelters`'s own body
+   (its own material colour constant, `0x557799`) — caught correctly on the
+   second attempt. Both entries in `test/mutations.json`, the mutation-spec
+   bug and its fix named in the CAUGHT entry's own `note` field, not
+   hidden.
+
+**Ticked, committed:** `docs/specs/COMPLETION-PLAN.md`'s B4 line gained this
+step's own evidence — still `[!]`. Commit `a9ceed2`.
+
+### The manifest checked in full, per the brief's own instruction not to assume there's always another one
+
+`public/props.js`'s own `MODELS[...]=` alias table read completely (not
+just the "furniture" section): five plain aliases total — `bench`, `bin`,
+`busShelter`, `lampPost`, `railTie`. Four are now wired. **`railTie` is the
+last, but is NOT confirmed to be the same decision-free pattern** —
+`public/city-render.js` (the OLD render path) already references it
+(`stats.railTies = ties.length`), and per a separate lane's own props
+survey (found this session via the shared-then-lane-specific commit-message
+temp file, and independently re-confirmed here by reading the actual
+source rather than taken on trust from that survey alone): rail ties render
+as a continuous strip mesh in the old world, an architectural choice, not
+the "nothing scatters this yet" gap bench/bin/busShelter all were. Porting
+that to the board path is real, separate design work — not a blind mirror
+of this step's own approach.
+
+### Guards checked
+
+No merge, no deploy, no push — `main` untouched. Nothing deleted. No
+process killed — none started that needed one. Zero API spend,
+`CALIPER_ALLOW_SPEND` never set. `git commit -F
+"$env:TEMP\COMMIT_MSG_b1-land.txt"` (the new lane-specific path), content
+verified (`head -3`) immediately before every commit call, `git add` with
+explicit paths only, PowerShell throughout — no heredocs, no `&&`.
+
+### Next step, named precisely, not assumed to exist
+
+**No more free, decision-free `scatter*` increments remain in the plain-
+alias manifest.** The next real B4 work is one of: (a) `railTie` — needs its
+own investigation of what the old world's continuous-strip treatment
+actually does before any plan can be written, not a mirror of this
+session's own pattern; (b) roadkit/typology, decisions #5/#6, genuinely
+Mark's call; (c) the cross-function placement-collision gap this run's own
+blind review named (§ above) — real, separate design work against
+`board.js`'s own reservation system; (d) B3's larger remaining scope
+(switching picking over, sun/sky extraction), unchanged from RUN 6.
+Whoever picks this up next should not assume "find another manifest alias
+and mirror the pattern" is still available — this run checked, and it
+isn't.
