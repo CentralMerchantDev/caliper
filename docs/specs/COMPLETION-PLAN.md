@@ -72,7 +72,29 @@ this list.
              65.8% vs <40%, 7,851 draw calls vs <=900) -- fixed by gating
              behind ?board=1/SHOOT_BOARD=1, off by default; both gates
              reconfirmed green with it off.       6dcfda3 / bac86b0 / 18007b8
-             exit: city-render.js quarantined -- NOT YET, on purpose
+             2026-09-10: picking's own data source, closed one step -- the
+             real board is already fetched in _buildCityBase (when
+             ?board=1); it is now RETAINED (this._boardData) instead of
+             discarded after drawing, and the city-mode pick handler
+             additionally resolves the real board.js piece at a click via
+             a new pieceAtPoint() query, alongside (not replacing) the
+             existing old-world-derived addr/piece/label path -- purely
+             additive, zero effect when ?board=1 is absent. Sun/sky still
+             has no board-based equivalent at all (new, separate work, not
+             started); picking is not yet SWITCHED to the board, only
+             connected to it -- the old-world addr/districtId/className
+             shape onInspect's other fields depend on has no board-only
+             equivalent yet either. Evidence: node test/run.mjs
+             test/boardLoad.test.ts test/pickSelection.test.ts (10/10 pass,
+             including the new wiring gate); npx tsc --noEmit clean; node
+             scripts/_mutcheck.mjs test/boardLoad.test.ts
+             public/board-load.js (CAUGHT, test/mutations.json). See
+             docs/audits/OVERNIGHT-2026-09-10.md's RUN 6 section for the
+             commit.
+             exit: city-render.js quarantined -- NOT YET, on purpose. Real
+             remaining scope, unchanged by this step: switch picking over
+             (not just connect it), sun/sky extracted from buildWorld(),
+             fetchBoard() made unconditional for query purposes.
 [!] B4     The kits wire by construction -- propModel wired live and
              product-reachable (dead-exports gate watched red, confirmed,
              re-greened); roadkit/buildings-typology/full props manifest

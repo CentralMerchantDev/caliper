@@ -1211,6 +1211,15 @@
       "find": "    const boardRequested = typeof location !== \"undefined\" && new URLSearchParams(location.search).get(\"board\") === \"1\";\n    if (boardRequested) try {",
       "replace": "    const boardRequested = typeof location !== \"undefined\" && new URLSearchParams(location.search).get(\"board\") === \"1\";\n    if (!boardRequested) return;\n    try {",
       "expect": "public/world-render-3d.js only draws board pieces when ?board=1 is explicitly requested, and the gate does not short-circuit the rest of _buildCityBase"
+    },
+    {
+      "id": "piece-at-point-does-not-swap-i-j",
+      "guards": "pieceAtPoint (B3's own step toward picking reading the real board -- docs/specs/BOARD-REBUILD-PLAN.md's architecture rule) genuinely converts world x/z to atom i/j via atomOf and queries THAT cell, not a swapped one.",
+      "note": "Verified this session: a blind review of the plan (before this was implemented) flagged that a SQUARE test footprint would let an i/j swap go undetected at a symmetric point -- fixed before implementing by using an asymmetric footprint (w:20, d:8) and an offset with unequal i/j components. Swapping i/j inside pieceAtPoint (`const { i: j, j: i } = atomOf(x, z);`) is caught directly by the dedicated asymmetric-offset test.",
+      "file": "public/board-load.js",
+      "find": "  const { i, j } = atomOf(x, z);",
+      "replace": "  const { i: j, j: i } = atomOf(x, z);",
+      "expect": "pieceAtPoint: a world point anywhere inside a real piece's own multi-atom footprint resolves to that piece, at an asymmetric offset a swapped axis would miss"
     }
   ]
 }

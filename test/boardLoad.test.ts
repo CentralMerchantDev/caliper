@@ -19,7 +19,9 @@ import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
 import { generateBoard } from "../public/board-generator.js";
 import { buildCrossingPieces } from "../public/bridge-generator.js";
-import { loadBoard } from "../public/board-load.js";
+import { loadBoard, pieceAtPoint } from "../public/board-load.js";
+import { createBoard } from "../public/board.js";
+import { atomOrigin } from "../public/grid.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
 import { DEFAULT_SEED } from "../public/noise.js";
 
@@ -95,4 +97,81 @@ test("B2.6 gate: WATCHED RED -- a corrupted persisted piece produces a board tha
   assert.ok(freshPiece, "sanity: the corrupted piece's id exists in the fresh generation");
   assert.notEqual(corruptPiece.cell.i, freshPiece.cell.i,
     "corrupting a persisted piece's cell.i did not produce a mismatch against the fresh generation -- the equivalence check has no teeth");
+});
+
+// -----------------------------------------------------------------------------
+// pieceAtPoint -- the real board's own point query, wired toward B3's own
+// architecture rule ("picking... come[s] from [the board]",
+// docs/specs/BOARD-REBUILD-PLAN.md). A small, synthetic board here, not the
+// real 35k-piece one above -- this is a property of the query function
+// itself, not of the committed archipelago. Blind-reviewed before writing:
+// the review found the obvious "swap i/j" mutation would go undetected
+// against a SQUARE footprint queried at a symmetric point -- every piece
+// below uses a deliberately asymmetric footprint (w != d) and an offset
+// with unequal i/j components, so a swapped query lands outside the real
+// footprint instead of coincidentally still inside it.
+// -----------------------------------------------------------------------------
+
+const FLAT_LAND_SYNTH = () => 10; // dry, buildable, zero slope -- test/board.test.ts's own FLAT_LAND pattern
+
+test("pieceAtPoint: a world point anywhere inside a real piece's own multi-atom footprint resolves to that piece, at an asymmetric offset a swapped axis would miss", () => {
+  const board = createBoard({ heightAt: FLAT_LAND_SYNTH });
+  const piece = {
+    id: "test-road-span-1", pieceType: "road", cell: { i: 100, j: 50, k: 0 }, rotation: 0,
+    foot: { w: 20, d: 8 }, levels: 1, clear: { w: 0, d: 0 }, standsOn: ["buildable"], surface: "road",
+  };
+  const placed = board.place(piece);
+  assert.equal(placed.ok, true, `sanity: the test piece itself failed to place -- ${placed.reason}`);
+
+  // 15 atoms into the 20-wide i-axis, 2 atoms into the 8-deep j-axis --
+  // unequal offsets, so a mistake that swapped i/j inside pieceAtPoint
+  // would query cell (52, 115): far outside this piece's own footprint.
+  const origin = atomOrigin(100, 50);
+  const found = pieceAtPoint(board, origin.x + 15, origin.z + 2);
+  assert.ok(found, "pieceAtPoint found nothing at a point inside the piece's own real footprint");
+  assert.equal(found.id, "test-road-span-1");
+  assert.equal(found.pieceType, "road");
+});
+
+test("pieceAtPoint: a point exactly on the piece's own edge atom still resolves -- the boundary, not comfortably inside it", () => {
+  const board = createBoard({ heightAt: FLAT_LAND_SYNTH });
+  const piece = {
+    id: "test-road-span-2", pieceType: "road", cell: { i: 200, j: 80, k: 0 }, rotation: 0,
+    foot: { w: 20, d: 8 }, levels: 1, clear: { w: 0, d: 0 }, standsOn: ["buildable"], surface: "road",
+  };
+  assert.equal(board.place(piece).ok, true);
+  // The footprint spans i in [200, 220), j in [80, 88) -- the last VALID
+  // atom on each axis is 219 / 87, not 220 / 88 (one past the edge).
+  const origin = atomOrigin(200, 80);
+  const found = pieceAtPoint(board, origin.x + 19, origin.z + 7);
+  assert.ok(found, "pieceAtPoint found nothing at the piece's own last valid edge atom");
+  assert.equal(found.id, "test-road-span-2");
+});
+
+test("pieceAtPoint: a point one atom past the piece's own edge finds nothing there, not the piece itself", () => {
+  const board = createBoard({ heightAt: FLAT_LAND_SYNTH });
+  const piece = {
+    id: "test-road-span-2b", pieceType: "road", cell: { i: 220, j: 90, k: 0 }, rotation: 0,
+    foot: { w: 20, d: 8 }, levels: 1, clear: { w: 0, d: 0 }, standsOn: ["buildable"], surface: "road",
+  };
+  assert.equal(board.place(piece).ok, true);
+  const origin = atomOrigin(220, 90);
+  // i offset 20, j offset 7 -- one atom past the footprint's own i-edge
+  // (valid range [0,20)), still inside the j range. Must NOT resolve to
+  // this piece: a query that is off-by-one in only one axis is exactly
+  // what a correct atom-rectangle check must refuse and a sloppy
+  // "close enough" one would not.
+  const found = pieceAtPoint(board, origin.x + 20, origin.z + 7);
+  assert.equal(found, null, "pieceAtPoint resolved a point one atom past the piece's own edge to the piece anyway");
+});
+
+test("pieceAtPoint: a point over genuinely open ground returns null, not a throw", () => {
+  const board = createBoard({ heightAt: FLAT_LAND_SYNTH });
+  const piece = {
+    id: "test-road-span-3", pieceType: "road", cell: { i: 300, j: 30, k: 0 }, rotation: 0,
+    foot: { w: 20, d: 8 }, levels: 1, clear: { w: 0, d: 0 }, standsOn: ["buildable"], surface: "road",
+  };
+  assert.equal(board.place(piece).ok, true);
+  const found = pieceAtPoint(board, 5000, 5000); // nowhere near the placed piece
+  assert.equal(found, null);
 });

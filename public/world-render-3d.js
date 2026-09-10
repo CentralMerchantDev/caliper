@@ -17,7 +17,7 @@ import { WORLD_SCALE } from "./world-scale.js";
 import { WORLD } from "./city-plan.js";
 import { createSelection } from "./selection.js";
 import { boardPiecesById } from "./board-adapter.js";
-import { fetchBoard } from "./board-load.js";
+import { fetchBoard, pieceAtPoint } from "./board-load.js";
 import { buildBoardScene, scatterTrees, scatterStreetLamps } from "./board-render.js";
 import { neighboursOf, applyIsolate, restoreIsolate } from "./isolate.js";
 import { tryMove, moveEditFor } from "./move-piece.js";
@@ -1847,6 +1847,13 @@ class Renderer3D {
     const boardRequested = typeof location !== "undefined" && new URLSearchParams(location.search).get("board") === "1";
     if (boardRequested) try {
       const boardData = await fetchBoard(city.heightAt);
+      // B3 step toward the architecture rule ("picking... come[s] from
+      // [the board]"): retained past this block so the pick handler below
+      // can query it directly (board.js's own whereIs/inCells), not just
+      // draw its pieces. Still gated on ?board=1 like everything else in
+      // this block -- an ordinary page load never sets this, so the new
+      // pick-handler branch that reads it is never reached either.
+      this._boardData = boardData;
       this._boardScene = buildBoardScene(THREE, boardData.pieces);
       this.scene.add(this._boardScene);
       // B4 ("kits wire by construction"): a real tree, from
@@ -6920,6 +6927,21 @@ class Renderer3D {
       // (`bld-${plotId}`) -- not a second id scheme.
       const piece = addr && addr.onPlot && this._boardPieces ? this._boardPieces.get(`bld-${addr.plotId}`) || null : null;
       this._selectedPiece = piece;
+      // B3 step: the REAL committed board's own record at this point, not
+      // the board-adapter.js shim over the old plot/road world `piece`
+      // above already is. Only resolvable when the real board has been
+      // loaded (this._boardData, currently only when ?board=1) -- null
+      // otherwise, same as `piece` when nothing is there. Wrapped, matching
+      // this method's own fetchBoard() three lines up: a query bug here
+      // must not break picking for everything else this handler does.
+      let realBoardPiece = null;
+      if (this._boardData) {
+        try {
+          realBoardPiece = pieceAtPoint(this._boardData.board, pt.x, pt.z);
+        } catch (e) {
+          console.error("pieceAtPoint failed for a real pick (city mode is otherwise unaffected):", e);
+        }
+      }
       // P4.2 -- highlight the newly selected piece's own building, if it
       // has one; clear any previous highlight first either way (a new
       // pick, even one with no piece, deselects the last one).
@@ -6942,6 +6964,17 @@ class Renderer3D {
             : `At (${Math.round(pt.x)}, ${Math.round(pt.z)}) — ${addr && addr.nearestPlotId ? `nearest plot ${addr.nearestPlotId}, about ${addr.nearestDistance} m away` : "no plot nearby"}.`,
           board: piece
             ? { id: piece.id, kind: piece.pieceType, cell: piece.cell, foot: piece.foot }
+            : null,
+          // NOT the same thing as `board` above: `board` is board-adapter.js's
+          // shim over the OLD plot/road world (buildings only, keyed by
+          // plotId). realBoardPiece is a direct query against the REAL
+          // committed board.generated.json (any pieceType, including roads/
+          // bridges/docks) -- only populated when that board has been
+          // loaded (?board=1). Deliberately not yet surfaced in index.html's
+          // own inspect card -- this step is the data connection, not the
+          // display; B3's own remaining scope, named in COMPLETION-PLAN.md.
+          realBoardPiece: realBoardPiece
+            ? { id: realBoardPiece.id, kind: realBoardPiece.pieceType, cell: realBoardPiece.cell, foot: realBoardPiece.foot }
             : null,
         });
       }

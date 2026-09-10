@@ -25,6 +25,7 @@
 // this module actually does.
 // =============================================================================
 import { createBoard } from "./board.js";
+import { atomOf } from "./grid.js";
 
 /**
  * Reconstruct a real board.js instance from a previously-generated,
@@ -78,4 +79,30 @@ export async function fetchBoard(heightAt, url = "/board.generated.json") {
   if (!res.ok) throw new Error(`board-load: fetch(${url}) failed: ${res.status}`);
   const payload = await res.json();
   return loadBoard(payload, heightAt);
+}
+
+/**
+ * What real board piece, if any, occupies the atom under a given
+ * world-space point -- P4.1's own "the real board record for a clicked
+ * plot", generalised to ANY loaded board, not just buildings a caller has
+ * pre-indexed by plot id. One ground-level query via board.js's own
+ * inCells(), the same spatial-index method every other real occupancy or
+ * neighbour question in this codebase already answers through -- no
+ * second, parallel notion of "what is here".
+ *
+ * Ground-level only by default: a piece placed ONLY above k=0 (a rooftop
+ * item, an upper deck) is not found by the default call -- named rather
+ * than silently assumed away; nothing in this codebase currently needs an
+ * elevated pick, and a caller that later does can pass k explicitly.
+ *
+ * @param {ReturnType<typeof createBoard>} board a real board.js instance
+ * @param {number} x world-space x, metres
+ * @param {number} z world-space z, metres
+ * @param {number} [k] vertical level to query, default 0 (ground)
+ * @returns {object|null} the real piece record, or null if nothing is there
+ */
+export function pieceAtPoint(board, x, z, k = 0) {
+  const { i, j } = atomOf(x, z);
+  const hits = board.inCells(i, j, 1, 1, k);
+  return hits[0] || null;
 }
