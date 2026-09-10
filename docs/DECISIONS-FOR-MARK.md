@@ -477,3 +477,88 @@ originally built.
 
 **Reversibility:** trivial either way tonight — no code was written
 against either option, so there is nothing to undo.
+
+---
+
+## 7. Three of the 12 settled boundaries have zero crossing egress on the real, committed board. Retry the anchor search, reserve space before roads/buildings place, or leave it named?
+
+**Ground-checked, 2026-09-10 (CLI lane), found while fixing the zero-crossings
+defect a blind Codex review surfaced in `b1-land`:** that defect (the
+committed `public/board.generated.json` had 17,728 roads, 17,637 buildings,
+and zero bridges/docks — `buildCrossingPieces()` worked, its output never
+reached the shipped asset) is fixed — `npm run gen:board` regenerated the
+asset and it now carries 16 real dock pieces. But the real regeneration
+surfaced a second, more specific gap underneath the first: every existing
+`test/bridgeGenerator.test.ts` gate proves `buildCrossingPieces()` against a
+**fresh** `createBoard()` — nothing placed on it yet. `scripts/gen-board.mjs`
+places crossings onto the SAME board instance `generateBoard()` already
+filled with 35,365 roads and buildings (its own comment: real occupancy, not
+a synthetic stand-in). On the real archipelago that changes the outcome:
+the one bridge-classified edge's own candidate cell collided with an
+already-placed piece and fell back to a boat route exactly as designed (0
+bridges, not 1 — correct behaviour, not a bug); and of the resulting 22
+candidate dock placements, 6 individually collided with real occupancy and
+were refused. Three of those six sit on a boundary (`farm-isle`,
+`quarry-isle`, `resort-isle`) that has only ONE edge in the crossing graph —
+each is a leaf, with no alternate route the algorithm can fall back to. For
+those three, the refused dock was the only crossing piece that would have
+given that boundary any egress at all. **Confirmed directly, not inferred:**
+`farm-isle`/`quarry-isle`/`resort-isle` have zero bridge or dock pieces
+anywhere on their own territory in the committed board, while the other 9 of
+12 boundaries each have at least one. A new gate
+(`test/bridgeGenerator.test.ts`, "every one of the 12 settled boundaries has
+at least one real crossing piece...") asserts this and is currently, honestly
+RED — watched red on purpose, the same standard this project holds every
+other real gap to.
+
+**Why this is not the same defect Codex found, and not fixed by the same
+regeneration:** Codex's finding was "the delivered asset has zero crossings
+at all" — a total absence, fixed by running the generator that already
+existed. This finding is "the delivered asset has crossings, but three
+specific boundaries still have none of their own" — a real limitation in how
+`buildCrossingPieces()` behaves against a REAL, already-occupied board, which
+no amount of re-running the existing code changes; the algorithm has no retry
+or reservation logic for this case today.
+
+**The question:** how should a leaf boundary's own crossing survive real
+occupancy?
+
+**Options:**
+1. **Retry with a different anchor point** when a leaf boundary's own dock is
+   refused, instead of accepting the first candidate found — `walkAnchor()`
+   already walks along the boundary's own shoreline for a dry cell; extending
+   it to also probe for board-emptiness before returning would let it step
+   past the collision. Contained to `public/bridge-generator.js`; does not
+   touch `board-generator.js`'s own road/building placement at all. Real
+   design work (how far to step, when to give up) and needs its own test —
+   not implemented this run.
+2. **Reserve crossing footprints on the board BEFORE `generateBoard()` places
+   roads and buildings**, so the collision cannot happen in the first place.
+   Requires computing `crossingGraph()`/anchor candidates earlier in
+   `scripts/gen-board.mjs`'s own pipeline, which currently computes them
+   strictly after. A bigger, sequencing-level change with a wider blast
+   radius (whatever `generateBoard()` would have placed there instead now
+   can't be) — not attempted unilaterally.
+3. **Leave it named, exactly as this entry does** — the render path (B3)
+   already draws whatever pieces exist; three boundaries simply render
+   without a boat stop or bridgehead for now, a real but bounded and legible
+   gap, not a crash or a silent one. Costs nothing to leave, and the new gate
+   means nobody can re-claim "B2.7 connects all 12 boundaries" against the
+   real asset without this test going green first.
+
+**Recommendation: Option 3 stands for now, Option 1 as the real next step if
+this is worth closing before B4/B5.** Retrying the anchor search (option 1)
+is the narrower, more contained fix and does not risk re-tuning B2's own
+already-measured coverage numbers the way option 2 would; it is real,
+scoped, separate work this run did not have grounds to attempt under the
+same time pressure that produced the original defect. Left named and red
+rather than guessed at.
+
+**What was done in the meantime:** `public/bridge-generator.js` and
+`public/board-generator.js` were not touched. `docs/specs/COMPLETION-PLAN.md`'s
+own B2.7 line was moved from `[x]` to `[!]` to match: crossings are real and
+delivered, but "connects the 12 settled boundaries" is not yet true of the
+committed asset, and the plan's own rule is a tick requires both.
+
+**Reversibility:** trivial — nothing was implemented against either option,
+only a test and a status line, both easy to revisit.

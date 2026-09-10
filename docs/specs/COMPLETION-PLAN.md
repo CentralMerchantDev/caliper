@@ -42,7 +42,17 @@ this list.
 ```
 [x] B1     The land -- archipelago, 68.2% water, 215.2 km2, 32 islands
 [x] B2.1-6 The generator, coverage inside settlements, persisted board  27cca18
-[x] B2.7   Bridges and boat routes -- IMPLEMENTED, tested, mutated       501f0a9
+[!] B2.7   Bridges and boat routes -- generator IMPLEMENTED, tested, mutated
+             (501f0a9); committed asset REGENERATED 2026-09-10 after a blind
+             Codex review found it shipped zero crossings (generator worked,
+             output never reached public/board.generated.json -- fixed,
+             gate now reads the committed file, not a fixture). Regenerating
+             surfaced a further, real gap: 3 of the 12 settled boundaries
+             (farm-isle, quarry-isle, resort-isle) still have zero crossing
+             egress on the real, already-occupied board -- named, watched
+             red on purpose, docs/DECISIONS-FOR-MARK.md #7. Not [x] until
+             that gate is green too. See docs/audits/OVERNIGHT-CLI-
+             2026-09-09.md's RUN 5 section for the commit.
 [!] B2.8   Re-pin the 38 old-world tests -- CATEGORIZED 38/38; ~4 bridge-
              shaped ones already superseded by bridgeGenerator.test.ts;
              the remaining ~30 need B4 first (their own old-world import

@@ -964,3 +964,164 @@ protocol's own design, not a bug in either lane's reporting.
 `git status --short` — clean, before and after this run. No code touched;
 this run wrote to `docs/audits/OVERNIGHT-CLI-2026-09-09.md` only. No merge,
 no deploy attempted.
+
+---
+
+## RUN 5 — fixing the defect Codex found, and one more it led to
+
+Per Mark's own instruction: ground RUN 4's Codex finding directly before
+touching anything, fix it, close the hole that let it happen with a gate
+watched red then green, and re-check every other `[x]` in
+`docs/specs/COMPLETION-PLAN.md` for the same category of defect. No merge,
+no deploy, `main` untouched.
+
+### 1. Ground it
+
+Read `public/board.generated.json` directly, not through any test's own
+summary of it:
+
+```
+seed: 0
+pieces.length: 35365
+by pieceType: { road: 17728, building: 17637 }
+```
+
+Zero bridge or dock pieces. **Codex was right, exactly as stated** —
+17,728/17,637/0/0, matching its finding to the digit. `public/gen-board.mjs`
+already called `bridges.buildCrossingPieces(...)` (wired in commit `6dcfda3`,
+per the RUN 2 section above) — the generator was never broken; its output
+simply never reached the committed file, because nobody had re-run
+`npm run gen:board` since B2.7 landed.
+
+### 2. Regenerate, and count — don't trust the run
+
+`node scripts/gen-board.mjs`:
+
+```
+gen-board: generated 35365 pieces in 56.5 s
+gen-board: B2.7 crossings -- 16 pieces (0 bridges, 16 docks), 6 refused
+```
+
+**Not the "1 bridge, 10 boat routes (20 docks), 0 refused" the RUN 2 section
+above records.** That number came from testing `buildCrossingPieces()`
+against a **fresh** `createBoard()` — nothing placed on it yet.
+`scripts/gen-board.mjs` places crossings onto the SAME board instance
+`generateBoard()` already filled with 35,365 roads and buildings (its own
+comment: real occupancy, not a synthetic stand-in). On the real archipelago
+that changes the outcome for real: the one bridge-classified edge's own
+candidate cell collided with an already-placed piece, `board.place()`
+refused it, and the documented fallback (`test/bridgeGenerator.test.ts`'s
+own "a refused bridge candidate redirects to a boat route" gate) correctly
+redirected it to docks instead — 0 bridges is **correct behaviour**, not a
+regression. Of the resulting 22 candidate dock placements, 6 individually
+collided with real occupancy and were refused too.
+
+**Counted directly from the regenerated file, not from the script's own
+console output:** 16 dock pieces, 0 bridges, spread across 11 distinct
+`routeId`s (matching the 11 real edges the crossing graph produces). 9 of
+the 12 settled boundaries have at least one dock on their own territory;
+`farm-isle`, `quarry-isle`, and `resort-isle` have none — each is a leaf on
+exactly one edge in the graph, and that edge's own-side dock is one of the 6
+that got refused, with no alternate route to fall back to. **A second, real
+finding, found by verifying rather than trusting the regeneration run** —
+full writeup, options, and recommendation in `docs/DECISIONS-FOR-MARK.md`
+#7.
+
+### 3. Close the hole
+
+`test/bridgeGenerator.test.ts` gained two gates. The first, watched RED
+against the stale committed asset before regenerating (`got 0` for bridges),
+then GREEN after:
+
+> GATE: the COMMITTED public/board.generated.json — the file a visitor
+> actually loads — contains real crossing pieces, not just a generator that
+> can produce them
+
+Deliberately does **not** assert an exact bridge count — asserting "≥1
+bridge" would have been asserting a coincidence of where roads and buildings
+happened to land, not a control; a future regeneration legitimately could
+produce 0 or more depending on real occupancy. What must always be true,
+and is the actual defect Codex found, is that real crossing pieces exist at
+all in the delivered file.
+
+The second, found while writing the first and honestly left RED, not
+strengthened or hidden:
+
+> GATE (currently RED, named — docs/DECISIONS-FOR-MARK.md #7): every one of
+> the 12 settled boundaries has at least one real crossing piece on its own
+> territory in the COMMITTED board.generated.json
+
+`node test/run.mjs test/bridgeGenerator.test.ts`: 12/13 pass, the one
+failure is this gate, for the real, named reason above — not an accident,
+not a flaky run. `node test/run.mjs test/boardRender.test.ts
+test/boardGenerator.test.ts test/worldSeed.test.ts test/board.test.ts`:
+67/68 pass, the one failure is B2.5's own already-documented, already-red
+CPU-time gate (Decision #3) — unrelated to this change, unchanged by it, no
+new regressions from the larger board file (35,381 pieces now, was 35,365).
+`npx tsc --noEmit` clean.
+
+### 4. The other `[x]` items in COMPLETION-PLAN.md, checked the same way
+
+Every `[x]` line, audited for the same category — a tick backed by a test
+that proves something about a fixture the test builds itself, never about
+the thing actually delivered:
+
+- **B1** (archipelago stats) — **not this category.** `LandField`/`heightAt`
+  are computed **live**, by both the test and the real site, from the same
+  `new LandField(16)` call at the same `DEFAULT_SEED` — there is no separate
+  persisted terrain asset to drift from what the test proves. Nothing to
+  fix.
+- **B2.1-6** (the generator itself) — **not currently violated, but a real,
+  named structural risk.** `test/boardGenerator.test.ts` proves its coverage/
+  settlement claims against a **freshly called** `generateBoard()`, never
+  against the committed `public/board.generated.json`. Because this run just
+  regenerated that file with the current code, it matches today. But nothing
+  gates that match going forward — if `generateBoard()` changes again and
+  nobody runs `npm run gen:board`, the committed asset can drift silently
+  exactly the way B2.7's crossings did, and only `test/boardRender.test.ts`'s
+  loose `pieces.length > 30000` sanity check would notice, which would not
+  catch a coverage-percentage or road-width regression. **Not fixed this
+  run** — a general "committed asset matches a fresh generateBoard() call"
+  gate is real, separate work (and slow: a fresh `generateBoard()` call costs
+  40–291 s on this host), named here rather than built under this run's own
+  time pressure.
+- **BLD lane, `bac6c1b`** (shared comment-stripping helper) — **not this
+  category.** A test-infrastructure fix, mutation-tested, checked in
+  `docs/LESSONS.md`'s own terms; there is no "delivered artefact" distinct
+  from the test files it touches.
+- **BLD lane, `a349b05`** ("buildings read as basic" traced to its cause) —
+  **not this category.** The commit's own text says plainly "No
+  implementation tonight: this is a planning document" — the `[x]` claims a
+  diagnosis was written, not that anything shipped; checked against the real
+  commit, that is exactly what it is.
+- **C4** (claim reconciliation, mutation-evidence surface) —
+  **not this category.** `test/generatedClaimsAreCurrent.test.ts` reads the
+  real committed `README.md`, `public/index.html`, `CLAUDE.md`, and the real
+  generated JSON/TS artefacts directly off disk — it is already testing
+  delivery, not a fixture. (The data it checks against is itself still
+  stale for an unrelated, already-named reason — Decision #4's addendum,
+  C1 above — but that is a different, already-recorded gap, not a new
+  instance of this one.)
+
+**One real instance found, in B2.7 itself — the one this run was sent to
+fix — plus one real, adjacent, deeper instance found underneath it (Decision
+#7). One structural risk named, not fixed (B2.1-6). Everything else checked
+clean.**
+
+`docs/specs/COMPLETION-PLAN.md`'s B2.7 line moved from `[x]` to `[!]` to
+match: the committed asset now genuinely contains crossings (the literal
+defect is fixed), but "connects the 12 settled boundaries" — B2.7's own
+stated goal — is not yet true of the delivered file, and the plan's own
+rule is that a tick needs both the gate green and the commit to exist. It
+does not, yet, for the full claim.
+
+### The tree and the artefacts, confirmed
+
+`node scripts/gen-test-count.mjs` re-run after the two new tests landed, so
+the public test-count claim stays generated, not hand-edited, per
+`CLAUDE.md`'s own rule. `git status --short` clean before starting; every
+file this run touched (`test/bridgeGenerator.test.ts`,
+`public/board.generated.json`, `test/testCount.generated.json`,
+`docs/DECISIONS-FOR-MARK.md`, `docs/specs/COMPLETION-PLAN.md`, this file) is
+committed, named below. No merge, no deploy, no push — not asked for this
+run.

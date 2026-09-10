@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
 import { generateBoard } from "../public/board-generator.js";
+import { buildCrossingPieces } from "../public/bridge-generator.js";
 import { loadBoard } from "../public/board-load.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
 import { DEFAULT_SEED } from "../public/noise.js";
@@ -43,7 +44,17 @@ const PERSISTED_PATH = join(findPublic(), "board.generated.json");
 const heightAt = makeHeightAt(new LandField(16));
 const persistedRaw = readFileSync(PERSISTED_PATH, "utf8");
 const persisted = JSON.parse(persistedRaw);
+// The same two-step pipeline scripts/gen-board.mjs itself runs -- generate,
+// then place B2.7's crossings onto the SAME board instance -- not
+// generateBoard() alone. Before B2.7 existed this distinction was invisible
+// (there was nothing to add); once the committed asset genuinely started
+// carrying bridge/dock pieces (2026-09-10, closing the defect a blind Codex
+// review found), comparing against generateBoard() alone made this gate
+// falsely report drift on a byte-identical file -- fixed here rather than
+// pinning the comparison back to a pre-crossings state.
 const fresh = generateBoard(heightAt, DEFAULT_SEED, { useSampling: true });
+const freshCrossings = buildCrossingPieces(fresh.boundaries, heightAt, fresh.board);
+fresh.pieces.push(...freshCrossings.built);
 
 test("B2.6 gate: the committed board.generated.json matches the seed it claims -- no drift between the artefact and the generator", () => {
   assert.equal(persisted.seed, DEFAULT_SEED, "public/board.generated.json's own seed field does not match noise.js's DEFAULT_SEED -- regenerate with npm run gen:board");

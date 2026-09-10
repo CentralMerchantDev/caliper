@@ -14,6 +14,9 @@
 // =============================================================================
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import {
   crossingGraph,
   classifyCrossing,
@@ -29,6 +32,16 @@ import { classifyAt, roadAllowedAt, USE } from "../public/land-use.js";
 const land = new LandField(16);
 const heightAt = makeHeightAt(land);
 const boundaries = settlementBoundaries();
+
+function repoRoot(): string {
+  let dir = fileURLToPath(import.meta.url);
+  for (let up = 0; up < 6; up++) {
+    dir = join(dir, "..");
+    try { readFileSync(join(dir, "CLAUDE.md"), "utf8"); return dir; } catch { /* not this level */ }
+  }
+  throw new Error("could not locate the repo root");
+}
+const ROOT = repoRoot();
 
 function inPolygon(x: number, z: number, poly: number[][]): boolean {
   let inside = false;
@@ -232,4 +245,78 @@ test("B2.7 gate: origin stability -- the crossing graph's own edges do not depen
   for (const e of graph.edges) {
     assert.ok(ids.has(e.aId) && ids.has(e.bId), `edge references a boundary id (${e.aId}/${e.bId}) not present in settlementBoundaries()'s own output`);
   }
+});
+
+// -----------------------------------------------------------------------------
+// THE DELIVERED ASSET, NOT A FRESH ONE -- found 2026-09-10 by a blind Codex
+// review: every test above builds its own board with createBoard() and
+// proves buildCrossingPieces() works against it. None of them ever open
+// public/board.generated.json, the file public/board-load.js::fetchBoard()
+// actually serves to a visitor. Codex found that the committed asset had
+// 17,728 roads, 17,637 buildings, and ZERO bridges or docks -- the generator
+// worked, its output never reached the file that ships. This is the gate
+// that would have caught it: it reads the COMMITTED file, not a fixture, so
+// it can only pass if the real, delivered board actually contains crossings.
+// -----------------------------------------------------------------------------
+
+test("GATE: the COMMITTED public/board.generated.json -- the file a visitor actually loads -- contains real crossing pieces, not just a generator that can produce them", () => {
+  const payload = JSON.parse(readFileSync(join(ROOT, "public", "board.generated.json"), "utf8"));
+  const pieces = payload.pieces;
+  assert.ok(Array.isArray(pieces) && pieces.length > 30000, `expected tens of thousands of real pieces in the committed board, got ${Array.isArray(pieces) ? pieces.length : typeof pieces} -- reading the wrong file, or the committed board is not what it claims to be`);
+
+  const bridges = pieces.filter((p: any) => p.pieceType === "bridge");
+  const docks = pieces.filter((p: any) => p.pieceType === "dock");
+
+  // NOT "at least 1 bridge": buildCrossingPieces() is placed onto the SAME
+  // board instance generateBoard() already filled with roads and buildings
+  // (gen-board.mjs's own comment: real occupancy, not a fresh fixture). On
+  // the real archipelago the one bridge-classified edge's own candidate cell
+  // collided with an already-placed piece, board.place() refused it, and the
+  // documented fallback rule (tested above, "a refused bridge candidate
+  // redirects to a boat route") correctly redirected it to docks instead --
+  // measured directly, this run: 0 bridges, 16 docks. A future regeneration
+  // legitimately could produce 0 or 1+ bridges depending on where roads and
+  // buildings land; asserting an exact bridge count here would be asserting
+  // a coincidence, not a control. What must always be true is that SOME real
+  // crossing pieces exist -- that is the actual defect this gate exists to
+  // catch.
+  const crossingCount = bridges.length + docks.length;
+  assert.ok(crossingCount > 0, `expected real crossing pieces (bridge and/or dock) in the committed board -- got 0 bridges and 0 docks, which is the exact defect Codex found: the generator works, but its output never reached the delivered asset`);
+  assert.ok(docks.length >= 1, `expected at least 1 dock piece in the committed board, got ${docks.length}`);
+});
+
+// -----------------------------------------------------------------------------
+// A DEEPER, RELATED FINDING -- surfaced while fixing the defect above, not
+// itself the thing Codex named. crossingGraph()/buildCrossingPieces() are
+// proven (above, against a FRESH board) to connect all 12 settled boundaries
+// with zero refusals. Against the REAL, already-occupied board that
+// gen-board.mjs actually places crossings onto, that is not what happens:
+// each of the 12 boundaries is a leaf on exactly one edge in three cases
+// (farm-isle, quarry-isle, resort-isle), and for each of those three, THAT
+// boundary's own dock -- the only crossing piece that would have given it
+// any egress at all -- collided with a real building or road and was
+// refused. The other end of each of those three routes built fine, so the
+// route exists in the data, but nobody standing on farm-isle, quarry-isle,
+// or resort-isle has anywhere to board a boat: zero crossing pieces sit on
+// their own territory. This is the SAME category of gap as the one above
+// (a property proven on a fresh fixture, not proven on delivery) one level
+// deeper: the fixed gate now correctly reports "crossings exist," which is
+// true and was the literal defect, but does not claim "every settled
+// boundary has one," because on the real committed board that is currently
+// false. Recorded honestly, watched red, not silently strengthened or
+// hidden -- docs/DECISIONS-FOR-MARK.md #7.
+// -----------------------------------------------------------------------------
+
+test("GATE (currently RED, named -- docs/DECISIONS-FOR-MARK.md #7): every one of the 12 settled boundaries has at least one real crossing piece on its own territory in the COMMITTED board.generated.json", () => {
+  const payload = JSON.parse(readFileSync(join(ROOT, "public", "board.generated.json"), "utf8"));
+  const boundaryIds: string[] = payload.boundaries.map((b: any) => b.id);
+  assert.equal(boundaryIds.length, 12, `expected 12 settled boundaries in the committed board's own boundaries field, got ${boundaryIds.length}`);
+
+  const covered = new Set<string>();
+  for (const p of payload.pieces) {
+    if (p.pieceType === "dock" && p.anchor?.boundaryId) covered.add(p.anchor.boundaryId);
+    if (p.pieceType === "bridge" && Array.isArray(p.anchors)) for (const a of p.anchors) if (a.boundaryId) covered.add(a.boundaryId);
+  }
+  const missing = boundaryIds.filter((id) => !covered.has(id));
+  assert.deepEqual(missing, [], `expected every settled boundary to have its own crossing piece; missing egress on: ${missing.join(", ")} -- each is a leaf boundary whose only crossing edge had its own-side dock refused by real occupancy, with no retry. Real, current, tracked in docs/DECISIONS-FOR-MARK.md #7 -- not fixed by this gate.`);
 });
