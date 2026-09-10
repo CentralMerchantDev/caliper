@@ -353,3 +353,127 @@ telemetry bug belong in the same "honestly, permanently red" category
 B2.5's CPU gate does, or is it different enough to need its own
 category) that this run did not have grounds to make unilaterally
 either.
+
+---
+
+## 5. B4's road pieces are a fixed 9 m; roadkit's own closest class is 10 m. No exact match exists to wire "roads from roadkit" against.
+
+**Ground-checked, 2026-09-09 (CLI lane, RUN3):** `public/board-generator.js`
+builds every road piece at `ROAD_WIDTH = 9` (metres, one fixed width for
+every road, "P1 of this generator" per its own comment). `public/
+roadkit.js`'s own `ROAD_STANDARDS` table has no 9 m class: `ALLEY` is 6 m,
+`LANE` is 10 m, `STREET` is 18 m, and up. Checked directly (`grep`
+against every class's own `row` field), not assumed. Wiring
+`roadkit.straight(roadClass, modules)` onto a real 9 m piece means either
+drawing a 10 m-wide kit geometry on a 9 m-wide reserved footprint (a real,
+visible 1 m mismatch against the piece's own SPACE reservation) or
+changing `ROAD_WIDTH` itself — which regenerates every road piece in the
+committed board and is a generation-affecting decision, not a rendering
+one.
+
+**The question:** which side moves — roadkit gains a class that matches
+the generator's own 9 m, or the generator's own width changes to match an
+existing roadkit class?
+
+**Options:**
+1. **Add a new roadkit class** (e.g. `LOCAL_STREET`, 9 m, a narrower strip
+   layout than `LANE`'s 10 m) alongside the existing seven. Purely
+   additive — no existing class's `strips`/`row` changes, so nothing
+   already wired to `AVENUE`/`STREET`/`LANE`/etc. is affected. Costs
+   designing one real cross-section (verge/carriageway widths summing to
+   9 m) and one new table entry.
+2. **Change `ROAD_WIDTH` to 10** to match `LANE` exactly, and regenerate
+   `public/board.generated.json`. Touches every one of the ~11,538 real
+   road pieces already placed and measured (coverage %, block/plot sizing
+   in `SETTLEMENT_TABLE` were tuned against the current 9 m), so this is
+   NOT a free rename — it is a real re-tuning pass across B2's own
+   already-measured numbers.
+3. **Accept the 1 m mismatch** and wire roadkit's `LANE` class onto the
+   9 m piece as-is, documented as a known, small visual discrepancy.
+   Cheapest, but ships a real, visible seam (a kit road 11% wider than
+   its own reserved footprint) rather than fixing or naming a genuine
+   design gap.
+
+**Recommendation: Option 1.** It is additive (nothing else in `roadkit.js`
+changes), does not touch the already-measured B2 generation numbers, and
+produces an exact match rather than a documented compromise. Not
+implemented — designing a real 9 m cross-section is itself a content
+decision (verge/carriageway proportions), the same kind of call
+`ROAD_STANDARDS`'s existing seven classes each represent, and this run
+did not have grounds to invent one unilaterally.
+
+**What was done in the meantime:** nothing in `public/roadkit.js` or
+`public/board-generator.js` was touched. `scatterStreetLamps` (RUN3 item
+2, commit `a8f5e14`) was wired instead — a real B4 increment that does
+not depend on this question, chosen specifically because it does not.
+
+**Reversibility:** Option 1 is fully reversible (delete the new class).
+Option 2 is not free to reverse — it means re-measuring B2's own
+coverage/density numbers a second time. Option 3 is reversible but ships
+a visible defect in the meantime.
+
+---
+
+## 6. B4's building typologies size themselves internally; two of twelve have no override at all. A naive "typologies from the kit" wiring would silently overhang the plot for at least those two.
+
+**Ground-checked, 2026-09-09 (CLI lane, RUN3):** `public/buildings.js`'s
+`building(typology, seed, options)` dispatches to twelve generator
+functions (`bldVilla`, `bldTerrace`, …), each of which computes its OWN
+footprint from its own seed/options — most (checked: `bldVilla`,
+`bldTower`, `bldWarehouse`, `bldWorkshop`) accept a `cellW`/`cellD`
+override that lets a caller force a specific footprint, but two
+(`bldHighStreetTerrace`, `bldBusinessParkBlock`) have **hard-coded**
+`footW`/`footD` values with no override parameter at all — checked
+directly in their source, not assumed. `public/layout.js`'s own
+`typologyFor`/`fits` mechanism exists SPECIFICALLY because of this: its
+own comment records that without a fits-check, "3,552 of 20,472
+buildings — 17.4% — overhung the plot they were chosen for." That
+mechanism is not reusable as-is for the new board pipeline — `layout.js`
+is itself scheduled for quarantine (B4's own exit condition, RUN3 item 3,
+blocked on this) — so the new pipeline needs an equivalent, not a
+borrowed one.
+
+**The question:** build a new, fits-safe typology selector for the board
+pipeline before wiring real typologies onto building pieces, or accept a
+narrower first slice that sidesteps the two hard-coded typologies
+entirely?
+
+**Options:**
+1. **Build a real fits-safe selector for the new pipeline** — for each
+   building piece, try typologies in a defined order, ask each one
+   (via its own returned `footprint`, not a caller-side guess) whether
+   it fits the piece's own `foot.w`/`foot.d`, and place the first that
+   does; refuse (fall back to a placeholder, or skip) rather than
+   overhang. Matches the plan's own standard ("never silently spread the
+   defect further"), but is real, separate design-and-test work — not a
+   rendering change.
+2. **Wire only the ten typologies that accept a `cellW`/`cellD`
+   override**, forcing each to the piece's own footprint directly (as
+   `bldVilla`'s own contract already allows), and leave
+   `bldHighStreetTerrace`/`bldBusinessParkBlock` out of rotation until
+   option 1 exists. Narrower, but ships real kit geometry for 10 of 12
+   typologies without the overhang risk for the other 2 — the clamp
+   ranges of the ten still need checking against real plot sizes before
+   this is safe (not yet done).
+3. **Wait for option 1 before wiring any real typology** — keeps the
+   current plain-box placeholder for every building piece until a
+   fits-safe selector exists for all twelve. Safest, slowest.
+
+**Recommendation: Option 1, with option 2 as a legitimate interim step
+if a real typology pass is wanted sooner** — a partial wiring that
+silently omits two typologies is a smaller version of the exact defect
+this decision exists to avoid (an unstated gap presented as if the
+kit were fully wired), so it should be named as a real, explicit interim
+if chosen, not treated as equivalent to finishing the job. Neither
+option was implemented this run — beyond the fits question, wiring real
+per-typology geometry across the board's own ~17,600 building pieces
+(unmerged LOD0 parts, per typology) would also need its own performance
+check, which cannot currently be trusted (Decision #4 above).
+
+**What was done in the meantime:** nothing in `public/buildings.js`,
+`public/board-generator.js`, or `public/board-render.js` was touched for
+building typologies. Building pieces still render as the plain box B3
+originally built.
+
+**Reversibility:** trivial either way tonight — no code was written
+against either option, so there is nothing to undo.

@@ -655,18 +655,129 @@ run already found reasons not to trust yet, not a missed opportunity.
 
 ### What to do next, in order, and why
 
-1. **Decide docs/DECISIONS-FOR-MARK.md #4** — is the culling-ratio/
+1. **Decide `docs/DECISIONS-FOR-MARK.md` #4** — is the culling-ratio/
    regressionGate telemetry bug worth root-causing now, or queued? It
    blocks both roads-from-roadkit (perf cannot be verified) and a real
    `mutate.mjs --all` run (README's own claim cannot be regenerated).
-2. **Decide the roadkit road-width mismatch** (extend roadkit with a
-   9 m class, or change `ROAD_WIDTH`) — the real blocker on B4's
-   roads-from-roadkit slice.
-3. **Design a fits-safe typology selection for the new pipeline** —
-   the real blocker on B4's buildings-from-the-kit slice; `layout.js`'s
-   own mechanism is the reference, not the reusable code (it is being
-   quarantined).
+   Three candidate causes already ruled out (a stray second renderer, an
+   independent render loop in `city-render.js`, the `sceneRenderInfo`
+   capture hook itself) — the next pass starts past them.
+2. **Decide `docs/DECISIONS-FOR-MARK.md` #5** — the roadkit road-width
+   mismatch (extend roadkit with a 9 m class, or change `ROAD_WIDTH`) —
+   the real blocker on B4's roads-from-roadkit slice.
+3. **Decide `docs/DECISIONS-FOR-MARK.md` #6** — a fits-safe typology
+   selection for the new pipeline — the real blocker on B4's
+   buildings-from-the-kit slice; `layout.js`'s own mechanism is the
+   reference, not the reusable code (it is being quarantined).
 4. **Once B4 is actually green**, Items 3, 4, 7 unblock in that order.
 
 Every item above is a decision or a measurement, not a question —
 nothing here should cost a stopping point on its own.
+
+---
+
+## Closing this lane — completion-plan state, cross-checked against commits
+
+`docs/specs/COMPLETION-PLAN.md` is the canonical checklist ("tick here").
+Its own text predates every RUN 3 commit above; this is the reconciliation
+between what it currently claims and what is actually committed, item by
+item, so nothing here is taken on faith. Not editing that file's own
+checkboxes — a decision for whoever picks this back up, since its "tick
+an item only when its gate is green **and** the commit exists" rule
+deserves a second pair of eyes on each line, not a solo pass at the end
+of a long run.
+
+**PART 1 — B3**: the plan's own text still reads "Visual result
+UNVERIFIED … `scripts/shoot.mjs` not run — do this first next session."
+**Stale.** RUN 3 item 1 (`18007b8`) ran it. The visual result is now
+verified, real, and reported plainly: it works once wired to
+`city.html`'s own bootstrap, it shows a correct set of board pieces
+overlapping the old world's own geometry (an honest, expected symptom of
+B3's own additive, box-only scope, not a bug), and drawing it un-gated
+measurably broke two standing performance gates, fixed by the `?board=1`
+gate now in both real bootstraps. The plan's own "exit: city-render.js
+quarantined — NOT YET" line is still accurate; nothing moved that far.
+
+**PART 1 — B4**: still `[!]`, correctly. `c785e29`/`547b721` (propModel)
+gains one commit: `a8f5e14` (a second real manifest prop, `lampPost`,
+along road pieces). The two items the plan lists as "still open" —
+roads from roadkit, building typologies — are no longer just named as
+open; they are now formal decisions with options and a recommendation
+each: `docs/DECISIONS-FOR-MARK.md` #5 (roadkit's road-width mismatch) and
+#6 (a fits-safe typology selector, and why `layout.js`'s own mechanism
+cannot just be reused). Neither was resolved — both need a real choice
+before B4 can move again.
+
+**PART 3 — C1**: the plan's own text reads "119/129, 1 SURVIVED …
+Target 129/129." **The SURVIVED mutation and its previously-unrun
+sibling are now both real, automated, CAUGHT controls** — `a8f5e14`,
+verified via `scripts/_mutcheck.mjs` against their own test files.
+**But the plan's own published number cannot yet be called 129/129
+truthfully**, and this run did not try to: the authoritative path that
+would regenerate it (`scripts/mutate.mjs --all` → `test/.mutate-
+results.json` → `scripts/gen-mutation-summary.mjs` → the README sentence
+`test/publicClaims.test.ts` pins) refuses to run at all while
+`test/cullingRatio.test.ts`/`test/regressionGate.test.ts` are red
+(`docs/DECISIONS-FOR-MARK.md` #4) — a whole-suite baseline check
+correctly refusing to trust a red tree. README's own sentence was left
+exactly as it was, understating real progress rather than overstating
+it, named in Decision #4's own addendum. **The real count today, by
+direct evidence, not by the stale published sentence: two more real,
+CAUGHT, mutation-tested controls than the plan's own text says — the
+authoritative regeneration is what is still owed, not the fixes
+themselves.**
+
+**PART 3 — C2**: the plan lists this `[ ]`, "not yet reviewed." **Real
+progress, not yet complete**: `87ee76b` did a real mechanical pass —
+product 0, demo-only 37, test-only 210, unreachable 735, data-reachable
+CANDIDATE 1,779 (an explicit upper bound, not a confirmed count,
+verified against one individually-traced real example). A second pass
+(does the CONTAINING reference for each of the 1,779 itself reach a
+product entry point) is the real remaining work, named as such in
+`docs/audits/C2-DEAD-EXPORTS-BREAKDOWN.md`'s own "What is honestly still
+open" section — this moves the item from `[ ]` toward `[!]`, not to `[x]`.
+
+**PART 3 — C4**: unchanged, `[x]`, not touched this run. One caveat
+worth carrying forward: the mechanism (`src/generatedClaimChecks.ts`'s
+`mutationClaimMismatch`) is sound and still gates correctly, but the DATA
+it checks against is the same stale mutation-summary C1 above describes
+— once that regenerates, C4's own gate will need to pass again against
+the new numbers, not just today's.
+
+**PART 3 — C5**: the plan lists this `[ ]`, "still not formally retired
+or fixed." **`f99d149` records a real decision, not a fix**: the gate
+compares an offline build step against a live-request ceiling that no
+longer applies to it, the actual replacement gate already exists
+(B2.6's static scan), and converting it to `{ todo }` would contradict
+Mark's own recorded reasoning against exactly that. Left exactly as
+found, the least irreversible choice, with the full reasoning in
+`docs/DECISIONS-FOR-MARK.md` #3. This is a considered, recorded "leave
+as-is," which is a different state than the plan's own "not formally...
+fixed" implies — worth a `[!]` with that decision cited, not a
+continued `[ ]`.
+
+**Items 3, 4, 7 — unchanged, correctly still blocked.** Nothing in this
+run's own commits should have moved them; nothing did.
+
+---
+
+## The working tree, confirmed
+
+`git status --short` — clean, nothing uncommitted, nothing untracked.
+9 commits ahead of `origin/b1-land`, none of them pushed (no push was
+asked for or made). Every file this run touched is either committed or,
+where a decision was deliberately deferred, named in
+`docs/DECISIONS-FOR-MARK.md` with a recorded reason rather than left as
+a silent diff.
+
+## This lane is parked here
+
+Everything RUN 3 set out to do is either done and committed (items 0, 1,
+6, 8, 5, and a real slice of 2) or correctly blocked on a decision that
+is now written down precisely enough for someone else — or a future
+session — to act on without re-deriving it: three open decisions
+(`docs/DECISIONS-FOR-MARK.md` #4, #5, #6), a stale-in-the-safe-direction
+published mutation count (C1, above), and a stale visual-verification
+claim in the completion plan (B3, above) now corrected in this document.
+No new work was started to close this out. The other lane can take the
+memory this one has been holding.
