@@ -59,4 +59,32 @@ construction against the real `city-render.js`/`layout.js` placement path,
 not a hoped-for one. Run `node test/run.mjs facadeVariants.test.ts` and
 confirm the printed count and the `todo` line disappearing.
 
-**Status:** OPEN.
+**Status:** FULFILLED on `b1-land` (`public/city-render.js:1934`, confirmed
+directly by Mark), **not visible from `codex-lane`**, and cannot be until
+the branches merge — `codex-lane`'s own copy of `city-render.js` has no
+`variantSeed` (re-confirmed: `grep -n "variantSeed" public/city-render.js`
+finds nothing in this checkout; its last touching commit is an unrelated,
+much older one). This is not a re-opened request — do not re-file it. It
+is closed on the fulfilling side; this lane simply cannot observe that
+from its own worktree, which is the process finding below.
+
+**Process finding, worth recording here specifically.** A requesting
+lane's only way to check fulfilment (`grep`/read the target file in its
+own worktree) is structurally unable to see a fix that lands on a
+different branch — not slow, not lost, not ignored, just invisible by
+construction until a merge. Three consecutive runs (RUN2, RUN3, RUN4)
+checked this exact line in this exact worktree and correctly found
+nothing every time, and each concluded "not yet landed" when the true
+state was "landed elsewhere, unmergeable-into-view." **Whoever revises
+this protocol next should add a status the requesting lane CAN see from
+its own side** — a line in this file updated by the fulfilling lane
+itself (even before merge), or a check against a shared/merged reference
+— rather than relying on a per-branch file check that cannot, in
+principle, produce a "yes" across a branch boundary.
+
+**What this means for `test/facadeVariants.test.ts`'s own `{ todo }`
+gate**: it stays exactly as marked, correctly, on `codex-lane` — the real
+count in THIS worktree is still 4, and un-marking a gate whose own
+underlying condition is false in this branch would turn an honest `todo`
+into a real, self-inflicted failure. The gate will go green here the
+moment this branch actually has the `b1-land` commit, not before.
