@@ -2945,13 +2945,21 @@ export function bldHighStreetTerrace(seed = "highstreet-0", options = {}, T = TH
 // 12. BLD-BUSINESS-PARK
 // =============================================================================
 export function bldBusinessParkBlock(seed = "buspark-0", options = {}, T = THREE) {
+  const r1 = rnd(seed + "1"), r2 = rnd(seed + "2");
+
   const footW = 32;
   const footD = 48;
   const bodyH = 12.0;
   const totalH = 16.0;
 
-  const wallCol = WALLS.MIDRISE[1];
-  const roofCol = ROOFS.MIDRISE[0];
+  // Every business-park placement (14 of 17,108) was geometrically and
+  // materially identical -- the only typology in this file with zero
+  // seed-derived variation of any kind (K6-BUILDINGS.md's checklist,
+  // correctly deprioritized at 0.08% of placements, never closed until now).
+  const hasSolarArray = options.hasSolarArray !== undefined ? options.hasSolarArray : r2 > 0.3;
+
+  const wallCol = WALLS.MIDRISE[Math.floor(r1 * WALLS.MIDRISE.length)];
+  const roofCol = ROOFS.MIDRISE[Math.floor(r2 * ROOFS.MIDRISE.length)];
   const mat = { wall: wallCol, roof: roofCol };
 
   function buildLOD0(geomT = T) {
@@ -2983,8 +2991,6 @@ export function bldBusinessParkBlock(seed = "buspark-0", options = {}, T = THREE
 
     const roofScreen = new geomT.BoxGeometry(bW * 0.7, 2.5, bD * 0.7);
     roofScreen.translate(0, bodyH + 1.25, 0);
-    const solarArray = new geomT.BoxGeometry(12.0, 0.3, 16.0);
-    solarArray.translate(0, bodyH + 2.6, 0);
     const hvac1 = new geomT.BoxGeometry(3.5, 1.6, 3.5);
     hvac1.translate(-6.0, bodyH + 1.0, -8.0);
     const hvac2 = new geomT.BoxGeometry(3.5, 1.6, 3.5);
@@ -2992,10 +2998,15 @@ export function bldBusinessParkBlock(seed = "buspark-0", options = {}, T = THREE
 
     parts.push(
       { geo: roofScreen, tag: "roof" },
-      { geo: solarArray, tag: "roof" },
       { geo: hvac1, tag: "roof" },
       { geo: hvac2, tag: "roof" }
     );
+
+    if (hasSolarArray) {
+      const solarArray = new geomT.BoxGeometry(12.0, 0.3, 16.0);
+      solarArray.translate(0, bodyH + 2.6, 0);
+      parts.push({ geo: solarArray, tag: "roof" });
+    }
 
     return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
@@ -3033,6 +3044,7 @@ export function bldBusinessParkBlock(seed = "buspark-0", options = {}, T = THREE
     origin: "base-centre",
     standsOn: ["plot", "open"],
     material: mat,
+    params: { hasSolarArray },
     lod: [
       { level: 0, tris: 294, createGeometry: (geomT) => buildLOD0(geomT || T) },
       { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },

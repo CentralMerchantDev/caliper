@@ -50,6 +50,11 @@ const CASES = [
   // in RUN2 (0.18% of placements), fixed now that it is cheap -- both
   // styles already existed as an idiom elsewhere in this file.
   { typology: "bld-workshop", flag: "roofStyle", values: ["monopitch", "gabled"], holdConstant: {} },
+  // bldBusinessParkBlock had zero seed-derived variation of any kind
+  // (K6-BUILDINGS.md's checklist, correctly deprioritized at 0.08% of
+  // placements but never closed). hasSolarArray is the first real flag:
+  // gates the existing roof solar-panel box rather than adding new geometry.
+  { typology: "bld-business-park", flag: "hasSolarArray", holdConstant: {} },
 ];
 
 for (const c of CASES) {
@@ -88,6 +93,8 @@ test("new shapes (cantilever bay, curved corner, arcade podium) stay strictly in
     ["bld-midrise", { podiumType: "arcade", cellW: 6, cellD: 8 }],
     ["bld-workshop", { roofStyle: "monopitch" }],
     ["bld-workshop", { roofStyle: "gabled" }],
+    ["bld-business-park", { hasSolarArray: true }],
+    ["bld-business-park", { hasSolarArray: false }],
   ];
   for (const [typology, options] of cases) {
     const spec = building(typology, "bounds-check-seed", options, THREE);
@@ -102,4 +109,20 @@ test("new shapes (cantilever bay, curved corner, arcade podium) stay strictly in
       `${typology} ${JSON.stringify(options)}: z extent [${bb.min.z}, ${bb.max.z}] outside footprint depth ${footD}`);
     assert.ok(bb.min.y >= -0.05, `${typology} ${JSON.stringify(options)}: geometry dips below ground (${bb.min.y})`);
   }
+});
+
+test("bldBusinessParkBlock's wall AND roof colors both vary with seed -- not just one of the two channels", () => {
+  // Checked independently, not with an OR: a wallCol fix that leaves roofCol
+  // pinned to its old hardcoded constant (or vice versa) is exactly the
+  // "computed but never consulted" bug class this file's other CASES entries
+  // exist to catch, and an OR-based assertion would not catch a single
+  // half-wired channel.
+  const wallColors = new Set(), roofColors = new Set();
+  for (let i = 0; i < 12; i++) {
+    const spec = building("bld-business-park", `buspark-colour-${i}`, {}, THREE);
+    wallColors.add(spec.material.wall);
+    roofColors.add(spec.material.roof);
+  }
+  assert.ok(wallColors.size >= 2, `bld-business-park: wall colour did not vary across 12 seeds (always ${[...wallColors]})`);
+  assert.ok(roofColors.size >= 2, `bld-business-park: roof colour did not vary across 12 seeds (always ${[...roofColors]})`);
 });

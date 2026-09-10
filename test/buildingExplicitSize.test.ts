@@ -201,7 +201,13 @@ const NO_CELL_OPTION_TYPOLOGIES: { typology: string; fn: (seed?: string, options
   // no optional flags) -- checked by reading the function, not assumed;
   // one option set is genuinely all there is to cover.
   { typology: "bld-highstreet-terrace", fn: bldHighStreetTerrace, optionSets: [{}] },
-  { typology: "bld-business-park", fn: bldBusinessParkBlock, optionSets: [{}] },
+  // hasSolarArray only removes an already-in-bounds box when false and
+  // reproduces the prior always-present geometry when true -- not the same
+  // defect shape as the dormer bounds gap below, covered here anyway for
+  // completeness now that this typology has its first real option.
+  { typology: "bld-business-park", fn: bldBusinessParkBlock, optionSets: [
+    { hasSolarArray: true }, { hasSolarArray: false },
+  ] },
 ];
 
 test("the four typologies without cellW/cellD (terrace, townhouse, high-street terrace, business park) also fit strictly inside their own declared footprint", () => {
