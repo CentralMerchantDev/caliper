@@ -88,3 +88,62 @@ count in THIS worktree is still 4, and un-marking a gate whose own
 underlying condition is false in this branch would turn an honest `todo`
 into a real, self-inflicted failure. The gate will go green here the
 moment this branch actually has the `b1-land` commit, not before.
+
+---
+
+## 2. `public/city-render.js` — street lighting draws two inline primitives instead of the real `lamp-street` model
+
+**Requested by:** BLD lane (`codex-lane`), 2026-09-10, props/scatter survey.
+**Owner:** CLI lane (`public/city-render.js` is CLI-lane-owned per the
+overnight brief's routing table, same as entry 1 above).
+
+**Why.** `public/props.js` defines `"lamp-street"` — a complete, tested
+seven-part model (pedestal, collar, lower/upper mast, curved arm,
+luminaire head, visor; 248 LOD0 tris, real LOD1/LOD2 fallbacks), correctly
+aliased for the manifest id `lampPost` at the foot of the file and
+reachable through `propModel`/`propGeometry` in `public/prop-models.js`
+(exercised by `test/propModels.test.ts`). `city-render.js`'s own street-
+lighting block never calls it: every one of the world's lamp posts (2,407,
+per `prop-manifest.js`'s own header comment, taken directly inside the
+renderer) is built from two hand-inlined primitives —
+`new THREE.CylinderGeometry(0.22, 0.3, 9, 5)` (post) and
+`new THREE.BoxGeometry(1.6, 0.5, 0.9)` (head) — the exact bug
+`prop-models.js`'s own header names as already fixed for `bin`/`bench`/
+`busShelter` ("a bench was a BoxGeometry... so the library was merged and
+the world drew none of it") but never closed for lamps. Full detail:
+`docs/audits/PROPS-SCATTER-SURVEY-2026-09-10.md`, Finding 1.
+
+**The real wrinkle, stated up front rather than glossed over.**
+`props.js`'s `mergeGeometries` (what `lamp-street`'s `createGeometry`
+returns through) merges position/normal/index only, with no per-part
+colour or tag system. Today's inline version uses two materials — a dark
+post and an **emissive warm-yellow head** that is what makes a lamp read
+as lit at night. A direct swap to one `propGeometry("lampPost", ...)`
+call merges post+arm+head+visor into one geometry with one implied
+material, which would **lose the emissive glow** unless the model
+definition is also extended to expose the head as a separate geometry
+(the `{geo, tag}` idiom `public/buildings.js` already uses throughout) so
+the caller can keep two materials. This is a real, small design call —
+accept a uniform-material lamp, or split the geometry — not a risk-free
+mechanical swap the way entry 1's diff was. Whoever picks this up should
+decide, not assume either answer.
+
+**Roughly, not prescriptively, what changes** (the exact shape depends on
+the wrinkle above being resolved first): replace the `pg`/`hg` inline
+`CylinderGeometry`/`BoxGeometry` construction (currently around
+`city-render.js:4365,4367`) with `propGeometry("lampPost", THREE, { lod:
+0 })`, and adjust the `InstancedMesh` construction (currently two meshes,
+`inst`/`hi`, one per primitive) to match whatever geometry/material split
+is decided above.
+
+**Verification once landed.** `stats.lamps` (already set at
+`city-render.js:4410`) should be unchanged in count; the visual check is
+whether the new lamp reads as more detailed at street level without
+losing the lit-head cue at night — a render/screenshot check, memory-
+gated the same way K7.1's re-shoot is, not verifiable from this lane's
+own worktree today.
+
+**Status:** OPEN, filed this run. Not urgent in the way entry 1 is (no
+blocked gate depends on it), but real: 2,407 identical, undetailed lamp
+posts is a larger count than any single building typology fixed this
+week.

@@ -115,3 +115,66 @@ found, not touched by any commit across RUN 1, RUN 2, or tonight.
 **Reversal cost.** Zero — these are plain text files with no code
 dependency; committing or archiving them later is a single, reversible `git
 add`/`git mv` whenever Mark decides.
+
+---
+
+## 3. Trees: is a 6x draw-call multiplier worth 12 species/age variants instead of 2 shapes?
+
+**The question.** `public/city-render.js`'s tree system (street trees,
+wide-landscape woods, barrier-island palms, garden trees, park canopies —
+one shared instancing pass, very likely the largest single prop count in
+the world) draws every tree as one of exactly **two** hand-built shapes
+("broad" sphere-canopy or "conif" cone), with real per-tree scale and
+colour-tint variation but no species or age diversity. `public/prop-
+models.js`'s `VARIED.tree` already defines **12 real variants** (4
+species × 3 age classes), complete and reachable via `propModel`/
+`propGeometry` — the same mechanism already confirmed working for `bin`/
+`bench`/`busShelter`/`lampPost`'s manifest entries — but `city-render.js`
+never calls it for trees at all; it is a fully separate system. Full
+detail: `docs/audits/PROPS-SCATTER-SURVEY-2026-09-10.md`, Finding 2 (this
+same document traces `K6-BUILDINGS.md`'s own "bright repeated trees"
+verdict to this as its likely specific cause, for the first time).
+
+**Why this is a decision and not a filed cross-lane request like the lamp
+post finding (entry 2 above, `docs/CROSS-LANE-REQUESTS.md` §2).** The
+capability existing-but-unused part is identical in shape. The wiring is
+not. The tree system's instancing is two shared `InstancedMesh` pools per
+chunk per LOD (one "broad," one "conif"), each sized once from a pre-
+counted total. Real 12-way variety means either twelve `InstancedMesh`
+pools per chunk per LOD instead of two, or a different instancing
+strategy — a real draw-call/memory cost multiplier across tens of
+thousands of instances, on a world `K6-BUILDINGS.md`'s own frame-time
+table (this same week) already shows is not cleanly under its 16.7 ms
+budget at two of three reference cameras even before this change. That
+tradeoff is Mark's to weigh, not a wiring bug to close.
+
+**Options:**
+1. **Do nothing.** The two-shape system already has real scale and colour
+   variation; "bright repeated trees" may be tolerable as-is, especially
+   given the existing frame-time headroom is already thin.
+2. **Commission the wiring**, accepting the draw-call cost, scoped and
+   measured properly (a real frame-time re-check against the existing
+   16.7/33.3 ms ceilings, not assumed safe) — likely CLI-lane work, since
+   it touches `city-render.js`'s instancing structure.
+3. **A cheaper partial step**: extend the two-shape system's own
+   `offsetHSL` tinting with 1-2 more silhouette variants (e.g. a third,
+   narrower "columnar" shape) rather than the full 12-variant jump — real
+   variety added, bounded draw-call cost, but still short of what the
+   library already has built and tested.
+
+**Recommendation:** option 3 as a bounded first step if the visual
+complaint is judged worth acting on soon, with option 2 as the real fix
+if a frame-time budget check shows there's headroom for it — this
+mirrors how K6-BUILDINGS.md's own facade-atlas finding (F1) was scoped:
+smallest-first, not the whole capability at once. Not option 1 by
+default just because it's free — "bright repeated trees" is this
+project's own already-recorded complaint, not a new one raised here.
+
+**What was done in the meantime.** Nothing — this is a finding from a
+survey pass, not a change in progress. `city-render.js` was read, not
+edited (CLI-lane-owned).
+
+**Reversal cost.** N/A until a direction is chosen; whichever option is
+taken, the existing two-shape system is left in place underneath it
+(`VARIED.tree`'s 12 variants are additive, not a replacement of working
+code), so nothing here is destructive to undo.
