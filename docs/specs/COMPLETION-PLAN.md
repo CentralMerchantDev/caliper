@@ -60,9 +60,18 @@ this list.
              what B4 replaces), re-sequenced in writing                ca413a0
 [!] B3     The render path -- draws board pieces, additively, alongside
              the still-running old path (picking/spatial-index/sun-sky
-             not yet rebuilt against the board). Visual result UNVERIFIED
-             (memory below floor all session; scripts/shoot.mjs not run
-             -- do this first next session).           6dcfda3 / bac86b0
+             not yet rebuilt against the board). Visual result VERIFIED
+             2026-09-09 -- this line was stale until 2026-09-10 (RUN 3
+             item 1, 18007b8, ran scripts/shoot.mjs with SHOOT_BOARD=1 and
+             looked: .shots/downtown-close.png shows 35,365 real board
+             pieces and 400 trees drawn, correctly positioned per B3's own
+             additive scope, visibly interpenetrating the OLD world's
+             still-running geometry -- an honest, imperfect, but genuinely
+             OBSERVED result, not an unverified one. Board-drawing broke
+             two standing perf gates when tried un-gated (measured: culling
+             65.8% vs <40%, 7,851 draw calls vs <=900) -- fixed by gating
+             behind ?board=1/SHOOT_BOARD=1, off by default; both gates
+             reconfirmed green with it off.       6dcfda3 / bac86b0 / 18007b8
              exit: city-render.js quarantined -- NOT YET, on purpose
 [!] B4     The kits wire by construction -- propModel wired live and
              product-reachable (dead-exports gate watched red, confirmed,

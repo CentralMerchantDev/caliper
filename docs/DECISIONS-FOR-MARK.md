@@ -562,3 +562,133 @@ committed asset, and the plan's own rule is a tick requires both.
 
 **Reversibility:** trivial — nothing was implemented against either option,
 only a test and a status line, both easy to revisit.
+
+---
+
+## 8. Should the scheduled Cowork run keep pointing at this brief at all? (transcribed from an untracked handover its own environment could not commit)
+
+**Not this run's own finding — transcribed verbatim in substance from
+`docs/audits/OVERNIGHT-2026-09-10.md` §5, written 2026-09-10 ~07:20-07:45 EDT
+by a scheduled Cowork run that could not write to git at all** (its shell
+mounts this repository read/write but not unlink; `git`'s own lock-file
+protocol needs unlink for every commit, so the FIRST `git status` of that
+session created `.git/index.lock` and nothing could remove it afterward —
+proved, not assumed: a throwaway repo on the same mount accepted exactly one
+commit and jammed permanently on the second). That run could not append this
+to the tracked queue for the same reason it could not commit anything else,
+and said so, asking a later session to transcribe it once the lock cleared.
+**Ground-checked here, 2026-09-10 (CLI lane): the lock and its companion
+probe file (`.writetest`) do not exist on this checkout** — either they were
+specific to that other session's own mount and never touched this disk, or
+something cleared them independently; `git status`, `git fsck
+--connectivity-only` both clean. Not a live blocker for this session.
+
+**The question, as that run posed it:** the overnight brief assumes a shell
+that can run `git commit` and PowerShell. The environment that scheduled run
+executed in had neither. Should the scheduled task be repointed, adapted, or
+narrowed?
+
+**Options (that run's own, preserved):**
+1. **Repoint the schedule at the Claude Code CLI**, where every prior RUN 1-5
+   and this one executed and where PowerShell/a normal filesystem are
+   available. The brief works exactly as written, unchanged.
+2. **Approve file deletion for the Cowork sandbox** so its mount permits
+   unlink. One-time approval; after it `git` behaves normally there too. Per
+   that run: "cannot be granted mid-run... has to be granted in advance."
+3. **Narrow the Cowork schedule to read-only verification** — run gates, read
+   the plan, ground-check published numbers, write a report — and leave all
+   building to the CLI lanes. That run's own read-only half worked and found
+   a real defect (the 1087-vs-1194 test-count drift, §1/§9 below) in a few
+   minutes.
+
+**That run's recommendation, preserved: option 1, with option 3 as a genuine
+addition, not a consolation.** Not this session's call to make — a scheduling
+decision, not a code one.
+
+**What was done in the meantime:** nothing — this section only transcribes
+the question into the tracked queue, per that run's own explicit request, so
+it is not lost the way an untracked file would be. `docs/audits/
+OVERNIGHT-2026-09-10.md` itself has now been added to git by this session
+(see this session's own handover entry) rather than left permanently
+untracked.
+
+**Reversibility:** trivial — a schedule setting or a permission toggle,
+neither touches this repository's own tracked content.
+
+---
+
+## 9. `test/publicClaims.test.ts`'s own count-claim exemption cannot fire while ~40+ unrelated, already-tracked gates stay red — by design, correctly, but that means the page's number cannot be brought into agreement with the runner without either fixing all of them first or relaxing the exemption
+
+**Ground-checked, 2026-09-10 (CLI lane):** `scripts/gen-test-count.mjs`'s own
+page-update step is guarded by design: it writes `public/index.html`'s test-
+count claim only when the WHOLE suite is green, with one narrow, named
+exemption — if the *only* failing test, across both runners, is
+`"the test counts on the page are the test counts"` itself, it updates the
+page anyway, because that specific staleness is exactly what the script
+exists to fix and doing so makes the suite green. Read directly in the
+script's own source and comments (`scripts/gen-test-count.mjs`, the
+`onlyTheCountClaim` block): *"This is narrow on purpose... the way this one
+stays honest is that it cannot fire while anything else is wrong."*
+
+**The consequence, found while attempting to resolve the red
+`publicClaims.test.ts` gate this session was asked to fix:** the real,
+current suite carries roughly 40+ other failing tests that are not staleness
+at all — they are this project's own already-decided, already-tracked,
+deliberately-red controls (B2.5's CPU-time gate, decisions #3-#7 above,
+`cullingRatio`/`regressionGate`, several road-network/waterway gates named in
+this session's own full-suite log). Because the exemption requires the count-
+claim to be the *only* failure, it structurally cannot fire while any of
+those remain red — which is every day this repository has existed so far.
+**The page's stale "1087 tests" claim therefore cannot be legitimately
+brought into agreement with the generated record by running the intended
+tool, not because the tool is broken, but because it is working exactly as
+designed:** a script that updated the page while 40 unrelated things are
+failing would be manufacturing the same "green-looking evidence" the
+script's own header comment says it was written to stop.
+
+**The question:** how should the count-claim surface be told apart from "the
+suite is genuinely broken" when the gap between them is this structural and
+this permanent?
+
+**Options:**
+1. **Widen the exemption** to also permit updating the page when every OTHER
+   failure is already a named, tracked, decided-red control (cross-checked
+   against `scripts/expected-red.mjs`'s own allowlist, or an equivalent list
+   for node-side gates that are not mutation-scoped). Keeps the page's raw
+   test-COUNT honest and current without waiting on B2.5/cullingRatio/etc to
+   be resolved. Real, reviewable code — the exact kind of change Decision #2
+   above already treated with real caution ("an exemption is how a guard
+   grows a hole"), so it should not be done unilaterally.
+2. **Leave the page's number stale, exactly as it is, until the suite is
+   genuinely fully green** — the strictest reading of the gate's own intent.
+   Correct in spirit, but means the page's own test-count sentence is
+   expected to stay wrong for as long as this project carries any
+   deliberately-red gate, which per Decision #3/#4/#5/#6/#7 above is likely
+   to be a long time, possibly permanently for B2.5's own category-error
+   gate.
+3. **Change what the page claims**, so it is not a number that requires full
+   suite health to be honest — e.g. "N tests, M currently red, each named
+   below" instead of a single count implying "the suite passes." This is a
+   content change to `public/index.html`, not a test-harness change, and it
+   sidesteps the exemption question entirely by making the claim match what
+   is actually true at all times.
+
+**Recommendation: option 3.** It does not touch the deliberately narrow
+exemption logic at all (leaving that guard exactly as strict as it was
+designed to be), and it fixes the actual underlying dishonesty risk directly
+— a page that says "1087 tests, all passing" when dozens are deliberately,
+permanently red is a worse claim than a page that says "1,19X tests, N
+currently red, all named" would be. Not implemented this run: it is a
+content/copy decision about what the public page should say, the same
+category of call `docs/DECISIONS-FOR-MARK.md` already reserves for Mark
+elsewhere in this file (e.g. #3's "inventing a new threshold has no source").
+
+**What was done in the meantime:** the generated record
+(`test/testCount.generated.json`) was regenerated honestly from a real,
+complete run and committed; the page's own claim was left untouched rather
+than hand-edited or forced through the exemption. See this session's own
+handover entry for the exact numbers and the commit.
+
+**Reversibility:** all three options are reversible; option 3 is the
+cheapest to try and the cheapest to revert if Mark prefers a different
+framing.
