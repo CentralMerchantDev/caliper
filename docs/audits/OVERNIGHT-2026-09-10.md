@@ -693,3 +693,147 @@ test that names it, commit. Does not depend on either open B4 decision
 is not a blocker that clears itself by waiting inside the same session —
 per `docs/OVERNIGHT-RUN.md`'s own distinction, this is exactly the kind of
 condition a later run should re-check fresh, not a permanent stop.
+
+---
+
+## RUN 8 — `scatterStreetFurniture`, memory floor re-checked, brief's own
+   correction applied
+
+A follow-up brief corrected RUN 7's own reading of the memory floor: it
+governs the FULL suite (the 26 km world build in `cityWorld.test.ts`/
+`regressionGate.test.ts`), not targeted runs — work the item and run only
+the files the change touches, name which were and were not run. Re-checked
+first: **2.12 GB free of 15.71 GB** — still under 4 GB, but per this
+correction, not a reason to stop for a code-only item with a light,
+targeted test.
+
+**State verified fresh, not re-derived:** `git status` clean, `HEAD` at
+`6eaf5de` (RUN 7's own commit), at-or-after `4d47861` as the brief asked.
+
+**A real process finding, worth naming on its own:** `$env:TEMP\COMMIT_MSG.txt`
+is a path shared across concurrent lane sessions on this machine — found
+because another lane's own commit message (a BLD-lane props survey, not
+this session's work) was sitting in that file when this run started,
+placed there by a tool-modification notice between turns. Not this
+session's file to have written, and not touched as anyone else's content —
+overwritten fresh with this run's own message immediately before its own
+commit, and re-checked (`head -3`) right before running `git commit` to
+catch a possible second collision. Worth a standing note for any future
+session using this same pattern: **never trust this file's existing
+content is yours; always overwrite it fresh, and verify again right before
+committing.**
+
+**Read `scatterStreetLamps` in full, fresh, per the brief's own explicit
+instruction** (not from memory of RUN 6's own earlier reading). Confirmed
+directly, not assumed: `public/props.js:4588-4589` carries
+`MODELS["bench"]=MODELS["bench-slat"]` / `MODELS["bin"]=MODELS["bin-round"]`,
+and `grep propModel\( public/board-render.js` still found only `"tree"` and
+`"lampPost"` before this run's own change. The brief was right about the
+code.
+
+**Planned in writing, blind-reviewed by a fresh subagent before any code.**
+Two real, substantive findings, both fixed before writing anything:
+
+1. **The plan's own draft would have failed its own gate.** A single
+   `propModel(id, seed)` call fed by a variable `id` cannot satisfy the
+   literal-string static reachability regex this project already uses for
+   `lampPost` (`/propModel\(\s*["']lampPost["']/`) — the source text would
+   never contain `propModel("bench"` as a literal substring. Fixed to two
+   literal calls, selected by `if`/`else`, before implementing — the review
+   caught what would otherwise have been an unwritable or always-red gate,
+   the "a mutation that doesn't apply reads as a pass" trap this project's
+   own `CLAUDE.md` names explicitly, one level up (a GATE that could never
+   have matched, not a mutation).
+2. **The single most consequential finding, in the reviewer's own words:**
+   copying `scatterStreetLamps`'s positioning technique verbatim (position
+   only, never rotation) is correct for a roughly-symmetric lamp post but
+   wrong for a bench. A bench's real footprint (`public/prop-manifest.js`'s
+   `PROPS.bench`: `w:1.8, d:0.55`) is strongly asymmetric. On a real
+   east/west-oriented road span — the OTHER real orientation
+   `board-generator.js`'s roads take, which `scatterStreetLamps`'s own
+   existing test never exercises (its one long-span test is north/south
+   only) — an unrotated bench would sit with its own 1.8 m length running
+   ACROSS the road, not along it. Fixed: the placed group now rotates 90°
+   around Y on that orientation, derived by hand (Three.js's own Y-rotation
+   matrix: local X → world Z, local Z → world −X at θ=π/2) and verified
+   correct on the first implementation attempt, not by trial and error.
+
+**Watched red first, for the right reason:** `node test/run.mjs
+test/boardRender.test.ts` failed to BUILD (`No matching export ... for
+import "scatterStreetFurniture"`) before the function existed.
+
+**Implemented, matching the reviewed plan exactly, plus one more gap the
+review named** (the position test only ever exercising the first-placed
+item's own footprint, never the second's) — closed with a dedicated test
+that derives its own expected offset from `propModel("bin", ...)` directly,
+not a hand-computed magic number, so a footprint-reuse bug can't hide
+inside a loose numeric tolerance.
+
+**Measured:** `node test/run.mjs test/boardRender.test.ts` — **25/25 pass**
+(7 new tests: alternation across both real ids; north/south
+position+rotation; east/west position+ROTATION; the second item's own real
+footprint used for its own offset; `maxItems`; non-road pieces ignored; the
+static reachability gate for both literal calls). `npx tsc --noEmit` clean.
+**Deliberately not run this session, named rather than silently skipped:**
+the full suite, `test/cityWorld.test.ts`, `test/regressionGate.test.ts`, any
+Playwright/`e2e/` spec — all real memory pressure this session's own 2.12 GB
+reading does not have headroom for, per the brief's own corrected floor
+guidance (full suite only, not targeted runs).
+
+**Mutated, both CAUGHT, both entries in `test/mutations.json`:** forcing the
+alternation to always resolve `"bench"` is caught by the dedicated
+alternation test. Disabling the rotation (`itemGroup.rotation.y = 0`
+unconditionally) is caught by the dedicated east/west-orientation test's
+own `rotation.y` assertion — confirmed directly that the SAME test's
+position-only assertions do NOT catch this mutation (position math is
+unaffected by rotation), so rotation genuinely needed its own, separate
+assertion, which is what "confirm red in the test that names it, not merely
+somewhere in the suite" (this session's own brief) means in practice, not
+just in principle.
+
+**Ticked, committed:** `docs/specs/COMPLETION-PLAN.md`'s B4 line gained this
+step's own evidence — still `[!]`: roadkit/typology (decisions #5/#6) and a
+third manifest alias (`busShelter`, same pattern, not attempted) remain
+open. Commit `9525be6`.
+
+### Guards checked
+
+No merge, no deploy, no push — `main` untouched throughout, never switched
+to. Nothing deleted. No process started that would need a PID recorded — the
+mutation checks and targeted test run are the only processes this run
+spawned, all completed and exited normally. Zero API spend,
+`CALIPER_ALLOW_SPEND` never set — nothing in this change touches a
+provider. `git commit -F "$env:TEMP\COMMIT_MSG.txt"` with explicit
+`git add` paths, never `git add -A`, matching the brief's own PowerShell
+constraint (no heredocs, no `&&` — every command run as its own call).
+
+### What this run did not do, named rather than assumed clean
+
+- The full suite, `cityWorld.test.ts`, `regressionGate.test.ts`, and any
+  `e2e/` Playwright spec were not run this session — memory-floor exception
+  applied per the brief's own corrected guidance, but this means nothing
+  this session touched was re-verified against the FULL suite's own,
+  broader picture (e.g., whether `test/deadExports.test.ts` — which the
+  blind review flagged as a plausible risk if an import were forgotten —
+  actually stayed green; the two literal `propModel` calls and the new
+  export ARE both genuinely reachable per this run's own targeted checks,
+  so this is a low-probability gap, but it is a real, named one, not a
+  silent assumption).
+- `busShelter` (the manifest's third plain alias, same pattern) was not
+  wired — a natural, decision-free next increment, same shape as this one,
+  not attempted to keep this step small per `docs/BUILD-LOOP.md`'s own
+  "smallest change" principle.
+- The visual result was not looked at (`scripts/shoot.mjs` was not run,
+  same memory-pressure reasoning as RUN 7). What is verified is the real
+  positioning/rotation math, unit-tested against real footprints; what is
+  not verified is whether anyone has looked at a screenshot of a bench.
+
+### Next step, named precisely
+
+`busShelter` (`public/props.js`'s third plain alias,
+`MODELS["busShelter"]=MODELS["bus-shelter"]`) is the natural next
+decision-free B4 increment, identical shape to this one — plan, blind
+review, test-first, mutate, commit. Beyond that, B4's remaining real scope
+is unchanged from RUN 6's own naming: roadkit/typology (decisions #5/#6,
+genuinely Mark's call) and B3's larger remaining scope (switching picking
+over, sun/sky extraction).
