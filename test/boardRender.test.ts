@@ -16,10 +16,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import * as THREE from "../public/vendor/three/three.module.min.js";
-import { buildBoardScene, meshForPiece, scatterTrees, scatterStreetLamps } from "../public/board-render.js";
+import { buildBoardScene, meshForPiece, scatterTrees, scatterStreetLamps, scatterStreetFurniture } from "../public/board-render.js";
 import { loadBoard } from "../public/board-load.js";
 import { atomOrigin, heightOf } from "../public/grid.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
+import { propModel } from "../public/prop-models.js";
 
 function repoRoot(): string {
   let dir = fileURLToPath(import.meta.url);
@@ -220,6 +221,108 @@ test("B4 gate: scatterStreetLamps ignores non-road pieces -- buildings and bridg
 test("B4 gate: scatterStreetLamps is a real render-path call, not merely test-only -- board-render.js itself imports and calls propModel('lampPost', ...)", () => {
   const src = readFileSync(join(ROOT, "public", "board-render.js"), "utf8");
   assert.match(src, /propModel\(\s*["']lampPost["']/, "board-render.js does not call propModel(\"lampPost\", ...) -- scatterStreetLamps is not wired to the real manifest id");
+});
+
+// -----------------------------------------------------------------------------
+// scatterStreetFurniture -- B4's next real manifest ids, "bench" and "bin",
+// public/props.js's own plain aliases (MODELS["bench"]=MODELS["bench-slat"],
+// MODELS["bin"]=MODELS["bin-round"]), the same non-VARIED resolution path
+// lampPost already uses. UNLIKE a lamp post, a bench's own real footprint
+// (public/prop-manifest.js's PROPS.bench: w:1.8, d:0.55) is strongly
+// asymmetric -- scatterStreetLamps's own positioning technique only ever
+// sets .position, never .rotation (fine for a roughly-symmetric lamp), so
+// this function also rotates the placed group to keep the furniture's own
+// length axis parallel to the road on BOTH road-span orientations. Found by
+// a blind review of this step's own plan, before implementation, not after.
+// -----------------------------------------------------------------------------
+
+/** A road SPAN piece, long along j/z (foot.d) and ROAD_WIDTH-narrow along
+ *  i/x (foot.w) -- the east/west span shape, the OTHER real orientation
+ *  board-generator.js's own roads take (makeRoadSpanPiece above only ever
+ *  covers the north/south case, which is why scatterStreetLamps's own
+ *  rotation-free technique never had to handle this one). */
+function makeRoadSpanPieceEW(id: string, i: number, j: number, lengthAtoms = 40): any {
+  return {
+    id, pieceType: "road", cell: { i, j, k: 0 }, rotation: 0,
+    foot: { w: 9, d: lengthAtoms }, levels: 1, clear: { w: 0, d: 0 }, standsOn: ["buildable"], surface: "road",
+  };
+}
+
+test("B4 gate: scatterStreetFurniture alternates between the REAL propModel('bench', ...) and propModel('bin', ...) -- not one id repeated", () => {
+  const pieces = Array.from({ length: 80 }, (_, n) => makeRoadSpanPiece(`r-${n}`, n * 40, 0));
+  const group = scatterStreetFurniture(THREE, pieces, { everyNth: 10, maxItems: 400 });
+  assert.equal(group.children.length, 8, "expected one item per 10th road piece (80/10), got a different count");
+  const ids = group.children.map((g: any) => g.userData.propId as string);
+  assert.ok(ids.some((id) => id.startsWith("bench")), `expected at least one real bench id among ${JSON.stringify(ids)}`);
+  assert.ok(ids.some((id) => id.startsWith("bin")), `expected at least one real bin id among ${JSON.stringify(ids)}`);
+  for (const itemGroup of group.children) {
+    assert.ok(itemGroup.children.length > 0, "a street-furniture item's own group must contain real geometry parts, not be empty");
+    for (const mesh of itemGroup.children) {
+      assert.ok(mesh.geometry.attributes.position.count > 0, "a street-furniture part must carry real geometry, not an empty buffer");
+    }
+  }
+});
+
+test("B4 gate: scatterStreetFurniture positions and orients an item correctly on a north/south (long-along-w) road span", () => {
+  const piece = makeRoadSpanPiece("r-long-ns", 0, 0, 320);
+  const group = scatterStreetFurniture(THREE, [piece], { everyNth: 1, maxItems: 10 });
+  assert.equal(group.children.length, 1);
+  const item = group.children[0];
+  const origin = atomOrigin(0, 0);
+  assert.ok(Math.abs(item.position.x - (origin.x + 160)) < 1, "expected the item near the span's own midpoint along its length");
+  const zOffset = item.position.z - origin.z;
+  assert.ok(zOffset >= 9 && zOffset <= 12, `expected the item just past the road's own 9 m width, got z offset ${zOffset}`);
+  assert.equal(item.rotation.y, 0, "on a road whose long axis runs along world X, the furniture's own length axis should already align with it -- no rotation needed");
+});
+
+test("B4 gate: scatterStreetFurniture positions and ROTATES an item correctly on an east/west (long-along-d) road span -- the orientation scatterStreetLamps's own technique never had to handle", () => {
+  const piece = makeRoadSpanPieceEW("r-long-ew", 0, 0, 320);
+  const group = scatterStreetFurniture(THREE, [piece], { everyNth: 1, maxItems: 10 });
+  assert.equal(group.children.length, 1);
+  const item = group.children[0];
+  const origin = atomOrigin(0, 0);
+  assert.ok(Math.abs(item.position.z - (origin.z + 160)) < 1, "expected the item near the span's own midpoint along its length (now running along z)");
+  const xOffset = item.position.x - origin.x;
+  assert.ok(xOffset >= 9 && xOffset <= 12, `expected the item just past the road's own 9 m width (now along x), got x offset ${xOffset}`);
+  assert.ok(Math.abs(item.rotation.y - Math.PI / 2) < 1e-9, "on a road whose long axis runs along world Z, the furniture's own length axis must be rotated 90 degrees to still run parallel to the road -- a bench left unrotated here would sit sideways across the road");
+});
+
+test("B4 gate: scatterStreetFurniture uses the SECOND placed item's own real footprint (bin, not bench) for its offset math -- not the first item's shape reused for every item", () => {
+  const pieces = [makeRoadSpanPiece("r-a", 0, 0, 40), makeRoadSpanPiece("r-b", 100, 0, 40)];
+  const group = scatterStreetFurniture(THREE, pieces, { everyNth: 1, maxItems: 10 });
+  assert.equal(group.children.length, 2);
+  assert.ok(group.children[0].userData.propId.startsWith("bench"), "expected the first placed item to be a bench");
+  assert.ok(group.children[1].userData.propId.startsWith("bin"), "expected the second placed item to be a bin");
+  // The EXPECTED offset is derived from the real bin model's own footprint
+  // (not a hand-computed magic number) -- so this fails if the offset math
+  // ever hard-codes or reuses the FIRST item's (bench's) own, much wider
+  // footprint instead of the bin's own real, narrower one.
+  const binModel = propModel("bin", 100 * 31 + 0); // same seed formula the implementation itself uses
+  const expectedZOffset = 9 + binModel.footprint.d / 2 + 0.3;
+  const origin = atomOrigin(100, 0);
+  const zOffset = group.children[1].position.z - origin.z;
+  assert.ok(Math.abs(zOffset - expectedZOffset) < 0.01, `expected the bin's own real footprint (d=${binModel.footprint.d}) to produce a z offset of ~${expectedZOffset}, got ${zOffset} -- the bench's own footprint may have been reused instead`);
+});
+
+test("B4 gate: scatterStreetFurniture respects maxItems -- it does not scatter thousands of meshes unbounded", () => {
+  const pieces = Array.from({ length: 500 }, (_, n) => makeRoadSpanPiece(`r-${n}`, n * 40, 0));
+  const group = scatterStreetFurniture(THREE, pieces, { everyNth: 1, maxItems: 10 });
+  assert.equal(group.children.length, 10, "expected the scatter to stop at maxItems");
+});
+
+test("B4 gate: scatterStreetFurniture ignores non-road pieces -- buildings and bridges do not grow benches or bins", () => {
+  const pieces = [
+    { id: "bldg-1", pieceType: "building", cell: { i: 0, j: 0, k: 0 }, foot: { w: 20, d: 20 } },
+    { id: "bridge-1", pieceType: "bridge", cell: { i: 10, j: 0, k: 0 }, foot: { w: 9, d: 100 } },
+  ];
+  const group = scatterStreetFurniture(THREE, pieces, { everyNth: 1, maxItems: 400 });
+  assert.equal(group.children.length, 0, "expected zero street furniture when no road pieces are present");
+});
+
+test("B4 gate: scatterStreetFurniture is a real render-path call, not merely test-only -- board-render.js itself calls propModel('bench', ...) AND propModel('bin', ...) as literal calls, not a single id-parameterised one", () => {
+  const src = readFileSync(join(ROOT, "public", "board-render.js"), "utf8");
+  assert.match(src, /propModel\(\s*["']bench["']/, "board-render.js does not call propModel(\"bench\", ...) -- scatterStreetFurniture is not wired to the real manifest id");
+  assert.match(src, /propModel\(\s*["']bin["']/, "board-render.js does not call propModel(\"bin\", ...) -- scatterStreetFurniture is not wired to the real manifest id");
 });
 
 // -----------------------------------------------------------------------------

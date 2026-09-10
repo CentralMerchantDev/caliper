@@ -1220,6 +1220,24 @@
       "find": "  const { i, j } = atomOf(x, z);",
       "replace": "  const { i: j, j: i } = atomOf(x, z);",
       "expect": "pieceAtPoint: a world point anywhere inside a real piece's own multi-atom footprint resolves to that piece, at an asymmetric offset a swapped axis would miss"
+    },
+    {
+      "id": "scatter-street-furniture-does-not-alternate",
+      "guards": "scatterStreetFurniture genuinely alternates between propModel('bench', ...) and propModel('bin', ...) -- not stuck resolving one id regardless of how many items have already been placed.",
+      "note": "Verified this session: a blind review of the plan (before this was implemented) flagged that the plan's own single-call-with-a-variable-id design would fail the static reachability gate's literal-string regex -- fixed before implementing to use two literal propModel(\"bench\", ...) / propModel(\"bin\", ...) calls. Forcing isBench to always true is caught directly by the dedicated alternation test.",
+      "file": "public/board-render.js",
+      "find": "    const isBench = group.children.length % 2 === 0;",
+      "replace": "    const isBench = true;",
+      "expect": "B4 gate: scatterStreetFurniture alternates between the REAL propModel('bench', ...) and propModel('bin', ...) -- not one id repeated"
+    },
+    {
+      "id": "scatter-street-furniture-never-rotates",
+      "guards": "scatterStreetFurniture genuinely rotates a placed item 90 degrees on an east/west (long-along-d) road span -- the fix for the asymmetric-footprint defect a blind review found: scatterStreetLamps's own positioning technique, copied without this fix, would leave a bench pointing across the road (perpendicular, not parallel) on every east/west-oriented span, since a bench's own real footprint (1.8 x 0.55 m) is not roughly symmetric the way a lamp post's is.",
+      "note": "Verified this session: disabling the rotation (always 0) is caught directly by the dedicated east/west-orientation test's own rotation.y assertion -- the position-only assertions in that same test do NOT catch it (the offset math is unaffected by rotation), confirming rotation needed its own, separate assertion, not just a position check.",
+      "file": "public/board-render.js",
+      "find": "    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;",
+      "replace": "    itemGroup.rotation.y = 0;",
+      "expect": "B4 gate: scatterStreetFurniture positions and ROTATES an item correctly on an east/west (long-along-d) road span -- the orientation scatterStreetLamps's own technique never had to handle"
     }
   ]
 }

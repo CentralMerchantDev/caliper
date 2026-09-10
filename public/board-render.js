@@ -178,3 +178,60 @@ export function scatterStreetLamps(THREE, pieces, { maxLamps = 400, everyNth = 4
   }
   return group;
 }
+
+/**
+ * B4 -- "props from the manifest": real street furniture, from
+ * public/prop-models.js's own propModel("bench", ...) / propModel("bin",
+ * ...), the manifest's SAME plain-alias resolution path lampPost already
+ * uses ("MODELS['bench']=MODELS['bench-slat']", "MODELS['bin']=
+ * MODELS['bin-round']", public/props.js). Two literal calls, not one call
+ * fed by a variable id -- so that this function's own reachability gate
+ * (test/boardRender.test.ts, matching the existing propModel("lampPost", ...)
+ * pattern) can find both by name in the source, the same way every other
+ * such gate in this file already does.
+ *
+ * Alternates bench/bin by how many items have been placed so far
+ * (deterministic, not random -- the same board always scatters the same
+ * furniture).
+ *
+ * ROTATED, UNLIKE scatterStreetLamps: a bench's own real footprint
+ * (public/prop-manifest.js's PROPS.bench, w:1.8 d:0.55) is strongly
+ * asymmetric, built long along its own local X axis (props.js's own
+ * "bench-slat" geometry). scatterStreetLamps's positioning technique only
+ * ever sets .position, which is enough for a roughly-symmetric lamp but
+ * would leave a bench pointing across the road, not along it, on every
+ * east/west-oriented span (found by a blind review of this step's own plan
+ * before implementation). Rotating by 90 degrees around Y when the road's
+ * own long axis runs along d instead of w keeps the furniture's own length
+ * parallel to the road on BOTH real span orientations.
+ */
+export function scatterStreetFurniture(THREE, pieces, { maxItems = 400, everyNth = 60 } = {}) {
+  const group = new THREE.Group();
+  group.name = "board-street-furniture";
+  let seen = 0;
+  for (const piece of pieces) {
+    if (!piece || piece.pieceType !== "road") continue;
+    seen += 1;
+    if (seen % everyNth !== 0) continue;
+    if (group.children.length >= maxItems) break;
+    const seed = piece.cell.i * 31 + piece.cell.j;
+    const isBench = group.children.length % 2 === 0;
+    const model = isBench ? propModel("bench", seed) : propModel("bin", seed);
+    const parts = model.lod[0].createGeometry(THREE);
+    const partList = Array.isArray(parts) ? parts : [parts];
+    const material = new THREE.MeshStandardMaterial({ color: isBench ? 0x6b4a2a : 0x3a3a3a });
+    const itemGroup = new THREE.Group();
+    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));
+    const origin = atomOrigin(piece.cell.i, piece.cell.j);
+    const { w, d } = piece.foot;
+    const longAlongW = w >= d;
+    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;
+    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;
+    itemGroup.position.set(x, 0, z);
+    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;
+    itemGroup.userData.pieceId = piece.id;
+    itemGroup.userData.propId = model.id;
+    group.add(itemGroup);
+  }
+  return group;
+}

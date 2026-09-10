@@ -18,7 +18,7 @@ import { WORLD } from "./city-plan.js";
 import { createSelection } from "./selection.js";
 import { boardPiecesById } from "./board-adapter.js";
 import { fetchBoard, pieceAtPoint } from "./board-load.js";
-import { buildBoardScene, scatterTrees, scatterStreetLamps } from "./board-render.js";
+import { buildBoardScene, scatterTrees, scatterStreetLamps, scatterStreetFurniture } from "./board-render.js";
 import { neighboursOf, applyIsolate, restoreIsolate } from "./isolate.js";
 import { tryMove, moveEditFor } from "./move-piece.js";
 import { layerFrom } from "./world-model.js";
@@ -1870,7 +1870,15 @@ class Renderer3D {
       // scatterStreetLamps() header for the positioning reasoning.
       this._boardLamps = scatterStreetLamps(THREE, boardData.pieces);
       this.scene.add(this._boardLamps);
-      console.log(`B3/B4: board render path drew ${boardData.pieces.length} real pieces, ${this._boardTrees.children.length} real trees and ${this._boardLamps.children.length} real street lamps from public/board.generated.json`);
+      // B4: real benches and bins, from propModel("bench", ...) /
+      // propModel("bin", ...) -- the manifest's next two plain aliases
+      // after lampPost, alternated along a modest fraction of the real
+      // road pieces; see board-render.js's own scatterStreetFurniture()
+      // header for why this one also rotates (a bench's footprint, unlike
+      // a lamp's, is not roughly symmetric).
+      this._boardStreetFurniture = scatterStreetFurniture(THREE, boardData.pieces);
+      this.scene.add(this._boardStreetFurniture);
+      console.log(`B3/B4: board render path drew ${boardData.pieces.length} real pieces, ${this._boardTrees.children.length} real trees, ${this._boardLamps.children.length} real street lamps and ${this._boardStreetFurniture.children.length} real street furniture items from public/board.generated.json`);
     } catch (e) {
       console.error("B3/B4: failed to fetch/draw the real board (city geometry above is unaffected):", e);
     }

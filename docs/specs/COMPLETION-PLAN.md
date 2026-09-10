@@ -99,6 +99,29 @@ this list.
              product-reachable (dead-exports gate watched red, confirmed,
              re-greened); roadkit/buildings-typology/full props manifest
              still open                                c785e29 / 547b721
+             2026-09-10: two more manifest ids wired live -- scatterStreetFurniture
+             (public/board-render.js) alternates real propModel("bench", ...)/
+             ("bin", ...) along road pieces, wired into world-render-3d.js's
+             existing ?board=1-gated block alongside scatterTrees/
+             scatterStreetLamps. A blind review of the plan (before
+             implementation) found two real gaps, both fixed before
+             writing code: the plan's own single id-parameterised
+             propModel() call would not satisfy the static reachability
+             gate's literal-string pattern (fixed: two literal calls); and
+             copying scatterStreetLamps's rotation-free positioning would
+             leave a bench (real footprint 1.8x0.55m, not roughly
+             symmetric like a lamp) pointing ACROSS the road on every
+             east/west-oriented span (fixed: the group now rotates 90
+             degrees on that orientation). Both fixes mutation-tested,
+             CAUGHT. Evidence: node test/run.mjs test/boardRender.test.ts
+             (25/25 pass, targeted only -- free memory was 2.12 GB this
+             session, under the 4 GB floor for a full suite/browser run,
+             per docs/OVERNIGHT-RUN.md; a targeted run does not need it);
+             npx tsc --noEmit clean; node scripts/_mutcheck.mjs
+             test/boardRender.test.ts public/board-render.js (both new
+             mutations CAUGHT, test/mutations.json). Roadkit/buildings-
+             typology (decisions #5/#6) and busShelter (a third manifest
+             alias, same pattern, not attempted this step) still open.
 [ ] B5     The visual pass -- judged against named reference shots (K5.5)
 [ ] B7     The countryside -- farmland, the range, greenery
 ```
