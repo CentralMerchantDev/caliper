@@ -634,3 +634,62 @@ push, `main` untouched throughout — matching the brief's own hard guards.
   item" instruction, already applied this session).
 - **Decision #8** (should the Cowork schedule keep pointing at this brief)
   — a scheduling question, not this session's to resolve either.
+
+---
+
+## RUN 7 — stopped before starting, on the memory floor, exactly as briefed
+
+A follow-up brief asked for `scatterBenches`/`scatterStreetFurniture` (named
+precisely by RUN 6's own handover above — the plan itself did not need
+re-deriving). Before any work: `git status`/`git log --oneline -5` confirmed
+the tree clean at `4d47861`, matching RUN 6's own last entry exactly — no
+re-derivation needed there either.
+
+**Free memory checked first, per the brief's own explicit instruction**
+("check free memory and apply `docs/OVERNIGHT-RUN.md`'s own floor... do not
+run the full suite to find out"):
+
+```
+Get-CimInstance Win32_OperatingSystem -> FreePhysicalMemory
+Free: 1.77 GB / Total: 15.71 GB
+```
+
+**1.77 GB, against this project's own standing 4 GB floor**
+(`docs/OVERNIGHT-RUN.md`: *"Memory below 4 GB: do code-only work and check
+again. Do not kill processes."*). This session's own brief was more direct
+still — *"if you are under it, say so and stop."* Followed literally: no
+plan written, no subagent dispatched, no test run, no file touched other
+than this one. `scatterStreetLamps` was not even opened this run (RUN 6
+already read it in full and the plan doesn't need re-reading the source to
+be written correctly — but writing the actual test/mutation would mean
+running `node test/run.mjs`/`_mutcheck.mjs`, both real memory pressure on a
+host already under a quarter of its own stated floor).
+
+**No process killed, per the brief's own instruction.** Nothing was started
+that would need one — there is no PID to record.
+
+**What this is not:** not a finding that the plan is wrong, not a finding
+that `scatterStreetLamps` doesn't match the description, not new information
+about the code. Purely an environment condition, checked first as asked,
+before spending any of it.
+
+### The next step, unchanged from RUN 6, still costing zero re-derivation
+
+Build `scatterBenches`/`scatterStreetFurniture` in `public/board-render.js`,
+mirroring `scatterStreetLamps`'s own real, tested shape — piece-type filter,
+`everyNth`/`maxX` bounds, shape-aware positioning off the piece's own
+`foot.w`/`foot.d` (not a blind copy of a single-axis offset — that file's
+own header names the exact mistake a naive port would make). `propModel`'s
+manifest already carries the two aliases needed
+(`MODELS["bench"] = MODELS["bench-slat"]`, `MODELS["bin"] = MODELS["bin-round"]`
+in `public/prop-models.js`) — confirmed by RUN 6, not re-checked this run
+since nothing changed. Plan in writing first (what changes, why, the test,
+the mutation), blind subagent review before implementing, test-first
+(watch red, then green), mutate and confirm the mutation is caught by the
+test that names it, commit. Does not depend on either open B4 decision
+(#5 roadkit width, #6 typology selector) — purely additive prop-scattering.
+
+**Before attempting it: re-check free memory.** If still under 4 GB, this
+is not a blocker that clears itself by waiting inside the same session —
+per `docs/OVERNIGHT-RUN.md`'s own distinction, this is exactly the kind of
+condition a later run should re-check fresh, not a permanent stop.
