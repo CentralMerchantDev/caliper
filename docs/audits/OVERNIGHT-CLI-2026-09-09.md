@@ -781,3 +781,186 @@ published mutation count (C1, above), and a stale visual-verification
 claim in the completion plan (B3, above) now corrected in this document.
 No new work was started to close this out. The other lane can take the
 memory this one has been holding.
+
+---
+
+## RUN 4 — push, the blind cross-vendor review, and one process finding
+
+Per Mark's own instruction: close out (done above, commit `6a9874e`), push
+both branches, run a blind Codex review of each branch's diff against
+`main`, report Codex's findings verbatim, state a merge recommendation, and
+stop. No merge, no deploy, no further code changes attempted this run.
+
+### Push
+
+`git push origin b1-land codex-lane`, run from this lane's own checkout
+(shared `.git`, no worktree switch needed):
+
+```
+a03a903..6a9874e  b1-land -> b1-land
+4df1512..00229a2  codex-lane -> codex-lane
+```
+
+Both branches' full commit histories (`git cat-file -e` on every hash this
+document and `COMPLETION-PLAN.md` cite: `501f0a9`, `ca413a0`, `6dcfda3`,
+`bac86b0`, `c785e29`, `547b721`, `d00aea5`, `a8f5e14`, `87ee76b`, `f99d149`,
+`18007b8`) were confirmed present before pushing, not assumed from their
+citation alone.
+
+### The review — `codex exec`, non-interactive, blind
+
+No `scripts/review-loop.sh` exists in this repo (confirmed: `find . -iname
+"*review-loop*"` returns nothing here; it exists in SQ.FT. only). Rather than
+port a second copy of a tool that should be one, the underlying command
+(`codex exec`) was invoked directly: `codex exec -s read-only
+--skip-git-repo-check -o <output file> -` with the prompt piped via stdin.
+Read-only sandbox — the reviewer only needed `git log`/`git diff`, never a
+write.
+
+**Given cold, exactly as instructed**: the prompt named neither branch's
+purpose nor this project's thesis, told Codex to inspect
+`git log main..<branch>` / `git diff main...<branch>` itself rather than
+being handed a pre-cut diff, and to judge each branch strictly against its
+own commit messages — not against what a reasonable implementation "should"
+do. Three questions only, specified verbatim in the prompt (full text:
+`scratchpad/codex-review-prompt.txt` from this session, not committed here —
+scratch, not repo state).
+
+**Codex's findings, verbatim, unedited:**
+
+> 1. **`b1-land`: No.** Commit `501f0a9` claims bridges and boat routes are
+> implemented, with "1 bridge, 10 boat routes (20 docks)." But the committed
+> `public/board.generated.json` contains exactly **17,728 roads, 17,637
+> buildings, zero bridges and zero docks**. `public/board-load.js::fetchBoard()`
+> loads that asset; it never generates crossings. The implementation exists in
+> `scripts/gen-board.mjs`, but its crossing output has not reached the
+> committed board.
+>
+>    **`codex-lane`: No.** Commit `28079ee` explicitly claims the facade
+> reachability gate "will go green unedited the day the cross-lane diff
+> lands." The actual test, `GATE: distinct facade materials reachable from
+> real placements, well above four` in `test/facadeVariants.test.ts`,
+> constructs:
+>    ```js
+>    keys.add(`${char}-vc-day-`);
+>    ```
+>    It then asserts `keys.size > 4`. With four characters, that cannot pass,
+> regardless of whether the renderer starts passing `variantSeed`. It neither
+> calls the renderer's material-selection code nor includes the seed in its
+> count.
+>
+> 2. **`b1-land`: The shipped board omits the new crossing functionality.**
+> The strongest rejection reason is the stale generated asset described
+> above. `test/bridgeGenerator.test.ts` tests `buildCrossingPieces()` against
+> a newly created board; it does not establish that the asset visitors load
+> contains those crossings. Generator tests can therefore pass while the
+> delivered board contains none.
+>
+>    **`codex-lane`: The facade integration gate cannot verify the
+> integration it claims to verify.** Its hardcoded four-key maximum and
+> `{ todo: ... }` designation leave no effective passing criterion for
+> successful renderer integration. This is a concrete test defect, beyond the
+> explicitly acknowledged missing caller change.
+>
+> 3. **No—these two files do not contain a hidden semantic merge conflict.**
+> The requested branch-specific diffs contradict the premise that both
+> branches modify both files:
+>
+>    - `b1-land` has **no changes to `public/index.html`**.
+>    - `codex-lane` has **no changes to `public/city-render.js`**.
+>
+>    The entire `b1-land` hunk in `public/city-render.js` is:
+>    ```diff
+>    @@ -1929,7 +1929,10 @@
+>           const usesVertexColour = !!(geo0 && geo0.attributes.color);
+>           const char = g.options?.character || spec.character || "heritage";
+>           const wallColor = (!usesVertexColour && spec.material && spec.material.wall) || 0x9a9a94;
+>    -      const mat = getFacadeMaterial(char, { vertexColors: usesVertexColour, wallColor, night: isNight });
+>    +      const mat = getFacadeMaterial(char, {
+>    +        vertexColors: usesVertexColour, wallColor, night: isNight,
+>    +        variantSeed: g.seed,
+>    +      });
+>    ```
+>
+>    `codex-lane` changes navigation controls and inspector positioning in
+> `public/index.html`. Relevant executable hunk excerpts are:
+>    ```diff
+>    @@ -5056,6 +5274,8 @@
+>     import { createNavigation } from "./navigate.js";
+>    +import { createNavWheel } from "./nav-wheel.js";
+>    +import { trackLiveRect } from "./live-position.js";
+>    ```
+>    ```diff
+>    @@ -5063,8 +5283,39 @@
+>    -if (window.renderer3d) createNavigation(window.renderer3d, document);
+>    -else console.error("navigation not started: window.renderer3d is missing");
+>    +if (window.renderer3d) {
+>    +  createNavigation(window.renderer3d, document);
+>    +  createNavWheel(window.renderer3d, document);
+>    +} else {
+>    +  console.error("navigation not started: window.renderer3d is missing");
+>    +}
+>    ```
+>    The same added hunk anchors the inspector to the navigation pad:
+>    ```diff
+>    +const navPadEl = document.getElementById('nav-compass-pad');
+>    +const inspectCardEl = document.getElementById('parcel-inspect-card');
+>    +if (navPadEl && inspectCardEl) {
+>    +  trackLiveRect(navPadEl, (padRect) => {
+>    +    inspectCardEl.style.left = `${Math.round(padRect.left)}px`;
+>    ```
+>    ```diff
+>    +    inspectCardEl.style.bottom = `${Math.round(window.innerHeight - padRect.top + 12)}px`;
+>    +  });
+>    +}
+>    ```
+>    Its other HTML hunks supply wheel markup/styles, change hint styling,
+> remove the rule hiding the navigation pad, and remove competing mobile
+> inspector positioning. None alters facade material selection or `g.seed`.
+> **A clean textual merge of these two files would not hide a real conflict
+> between these changes.** This conclusion is limited to the two requested
+> files; it does not assert that the complete branches merge cleanly.
+
+**Not summarized, not re-worded above** — Mark's own instruction was that the
+auditee does not paraphrase the auditor. Both defects Codex found are real
+and independently checkable: `public/board.generated.json`'s bridge/dock
+counts are a `grep`/`jq` away, and `test/facadeVariants.test.ts`'s
+`${char}-vc-day-}` line is a direct read. Neither was known to this document
+before this run — the RUN 2 section above names `board.generated.json` as
+stale ("predates B2.7 and has zero bridges/docks yet... deferred") but
+`COMPLETION-PLAN.md` still marks B2.7 `[x]`, unqualified, which this finding
+shows is wrong: the commit implements crossings, the shipped asset does not
+contain them. This is a real correction this run's own reconciliation above
+missed, found by the blind reviewer specifically because it was blind.
+
+**This run's own recommendation: do not merge either branch as-is.**
+`b1-land`'s B2.7 checkbox overclaims what visitors actually get (zero
+crossings in the live asset); the one-line fix is `npm run gen:board`
+(already updated to include crossings per the RUN 2 section above) plus a
+gate asserting the committed asset itself, not just the generator function,
+contains at least one bridge/dock when the source data supports it.
+`codex-lane`'s facade gate is not a completeness nitpick — it is a gate
+that cannot fail for the thing it claims to test, which is this project's
+own stated failure floor (`docs/UMAA-CALIPER.md` §Step 4: never report
+unverified work as verified) applied to a test file instead of a feature.
+Question 3's answer is genuine good news — no hidden semantic collision
+between the two files both lanes touch — but it does not offset the other
+two findings. Per ADR-020, the merge decision itself is Mark's.
+
+### One process finding, Mark's own, recorded here rather than paraphrased
+
+The cross-lane request protocol (`docs/CROSS-LANE-REQUESTS.md`) is broken
+by construction. The BLD lane reported the facade line unlanded for three
+consecutive runs because it was checking its own worktree on `codex-lane`,
+where the CLI lane's commit does not exist and cannot until these branches
+merge. Its observations were correct and its conclusion was false. **A
+requesting lane can never observe fulfilment** — the reply lives on the
+other lane's own branch, invisible from the requester's own checkout, until
+a merge neither lane controls happens. Worth naming as a real gap in the
+protocol's own design, not a bug in either lane's reporting.
+
+### The tree, confirmed again
+
+`git status --short` — clean, before and after this run. No code touched;
+this run wrote to `docs/audits/OVERNIGHT-CLI-2026-09-09.md` only. No merge,
+no deploy attempted.
