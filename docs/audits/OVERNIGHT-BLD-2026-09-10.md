@@ -228,6 +228,21 @@ triggered that caution. Targeted test files (the ones this run's actual
 changes and reconfirmations touch) were run instead, matching the pattern
 every prior run in this lane already established for the same reason.
 
+A second, smaller instance of the same risk, worth naming precisely: a
+final broader confirmation pass (`buildingFeatureFlags`, `buildingExplicitSize`,
+`buildingLODAndColors`, `layoutGeometry`, plus `cityWorld.test.ts` and
+`regressionGate.test.ts` — the two files that build the real 26 km,
+17,108-building world) was started after all three fixes were committed,
+purely as extra confirmation beyond what each fix's own targeted run
+already covered. Free memory, checked mid-run, had dropped from 1.80 GB to
+0.76 GB while it was still executing — stopped immediately rather than let
+it finish, per the same standing rule. Not a regression signal about the
+three commits: each was already verified green against the specific files
+its own change touches (including `layoutGeometry.test.ts`, which does
+exercise the real placement pipeline), before this extra pass was
+attempted. Named so the next reader does not read the missing
+`cityWorld`/`regressionGate` confirmation as skipped carelessly.
+
 ---
 
 ## Decisions queued for Mark
