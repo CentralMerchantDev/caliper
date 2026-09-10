@@ -1,0 +1,78 @@
+F2 (K6 checklist survey continued): bldApartmentWalkup's hasGarden was
+computed (`r6 > 0.3`) and reported in the returned spec's `params`, but
+never consulted by any of buildLOD0/buildLOD1/buildLOD2 -- the exact
+defect class already fixed for villa/terrace/townhouse/midrise
+(docs/audits/K6-BUILDINGS.md's "reads as basic" checklist), found this run
+while surveying the four typologies that survey never actually reached:
+tower, warehouse, high-street terrace, apartment walk-up. Tower and
+warehouse are clean (every `params` field genuinely consulted); high-street
+terrace has zero structural options at all, which is a missing-capability
+gap rather than this same wired-but-ignored defect, and is named below as
+a finding rather than fixed, to avoid inventing a feature that was never
+asked for. Apartment walk-up (0.04% of placements, 7 of 17,108) had the
+real defect.
+
+What changed. `hasGarden` is now options-overridable
+(`options.hasGarden !== undefined ? options.hasGarden : r6 > 0.3`),
+matching this file's sibling idiom (bldVilla's hasPorch/hasBay/hasDormers/
+hasChimney) exactly, and gates a real ground-level garden bed + low hedge
+at the building's rear.
+
+Placement, and why the rear. A blind plan review (fresh subagent, no other
+context, before any code was written) read the real function and found a
+genuine collision risk the first placement idea (along the front) would
+have hit: the front margin already carries the stair core(s) --
+`stairPosition === "center"` places a 4.0m-wide block at x=0 spanning that
+exact band, `"dual"` places two 3.0m blocks at x=+-bW*0.35 -- so a garden
+strip along the front would interpenetrate the stairs for roughly 70% of
+seeds (`r4 < 0.7`). The rear only carries two thin mirrored window/sill
+boxes at x=+-bW*0.28; the bed is centred at x=0 and sized narrower than
+that gap (`gardenW = min(bW*0.4, bW*0.28*2 - 1.6)`), and depth-limited to
+the existing (footD-bD)/2 rear margin, so it cannot collide with the
+stairs (front-only, any stairPosition) or the rear windows (outside the
+bed's width). `stairPosition` is not itself options-overridable in this
+function (rolled purely from seed), which is why the fix avoids depending
+on its value at all rather than trying to steer around it per-case.
+
+The gate, red first. Extended test/buildingFeatureFlags.test.ts's CASES
+array with `{ typology: "bld-apartment-walkup", flag: "hasGarden" }` (the
+file's existing triangle-count-changes assertion) and, per the blind
+review's second finding -- the plan's original test list omitted the
+file's own established convention for *new* geometry, the "new shapes...
+stay strictly inside the declared footprint" bounds test that every prior
+flag-gated addition in this file (bldTownhouse's cantilever bay,
+bldMidrise's curved corner/arcade podium, bldWorkshop's roofStyle,
+bldBusinessParkBlock's hasSolarArray) already has a case in -- added
+`["bld-apartment-walkup", { hasGarden: true }]` there too.
+
+  node test/run.mjs buildingFeatureFlags.test.ts -- new test failed before
+  implementation: "bld-apartment-walkup: hasGarden=false and hasGarden=true
+  produced identical triangle counts".
+
+Implemented, then green: same file plus buildingExplicitSize.test.ts,
+buildingLODAndColors.test.ts, layoutGeometry.test.ts -- 32/32 (including
+AS1-AS4 and the new bounds case). `npx tsc --noEmit` clean.
+
+Watched red for real, in the finished code, not just before writing it:
+the `if (hasGarden)` gate was replaced with `if (false)` (public/
+buildings.js), and exactly the new hasGarden test failed --
+"hasGarden=false and hasGarden=true produced identical triangle counts
+(636)" -- no other test affected. Restored and verified byte-identical
+(`md5sum`, matched: 937297d0a7b41de4bdce23aa8b3fb986) before re-running
+green (27/27 across the four targeted files).
+
+Measured, not assumed: real LOD0 triangle counts from the artefact,
+hasGarden=true -> 564, false -> 540 (declared budget 644; both inside
+AS3's 70%-100% band, confirmed by buildingLODAndColors.test.ts staying
+green).
+
+Process note, continuing from the same-session business-park commit: F1,
+K7.1's visual re-shoot, and the browser-dependent interface items remain
+blocked for the reasons already recorded in
+docs/audits/OVERNIGHT-BLD-2026-09-10.md (cross-branch merge; memory read
+0.94-1.19 GB free this run, far below the 4 GB floor). This is a second,
+independent instance of the same defect class as the business-park fix,
+found by finishing a survey the checklist itself had left incomplete
+(tower/warehouse/high-street-terrace/apartment-walkup were never
+individually checked) rather than by re-reading typologies already marked
+clean.

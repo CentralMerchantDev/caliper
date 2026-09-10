@@ -55,6 +55,11 @@ const CASES = [
   // placements but never closed). hasSolarArray is the first real flag:
   // gates the existing roof solar-panel box rather than adding new geometry.
   { typology: "bld-business-park", flag: "hasSolarArray", holdConstant: {} },
+  // bldApartmentWalkup's hasGarden: same defect, found surveying the four
+  // typologies the earlier flag-gating pass never read (tower, warehouse,
+  // high-street terrace, apartment walk-up) -- computed, reported in
+  // params, never consulted by any of the three LOD builders.
+  { typology: "bld-apartment-walkup", flag: "hasGarden", holdConstant: {} },
 ];
 
 for (const c of CASES) {
@@ -95,6 +100,11 @@ test("new shapes (cantilever bay, curved corner, arcade podium) stay strictly in
     ["bld-workshop", { roofStyle: "gabled" }],
     ["bld-business-park", { hasSolarArray: true }],
     ["bld-business-park", { hasSolarArray: false }],
+    // stairPosition is not options-overridable in this function (rolled
+    // purely from the seed) -- the garden sits at the rear specifically so
+    // it cannot collide with any of the three stair positions, all of
+    // which occupy the front margin only; not re-tested per stairPosition.
+    ["bld-apartment-walkup", { hasGarden: true }],
   ];
   for (const [typology, options] of cases) {
     const spec = building(typology, "bounds-check-seed", options, THREE);

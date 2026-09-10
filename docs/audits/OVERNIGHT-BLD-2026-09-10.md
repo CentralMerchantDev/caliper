@@ -59,7 +59,14 @@ at — so this is recorded as a finding, not a stop.
         read to its end for the first time this run: no further computed-
         but-ungated defect found). bldBusinessParkBlock's zero-variation gap
         (the one remaining named, open leaf) closed for real.
-                                                    commit: (this commit)
+                                                    commit: f4b4076
+[x] F2b Survey completed for the 4 typologies the checklist never
+        individually checked (tower, warehouse, high-street terrace,
+        apartment walk-up). Tower and warehouse clean. High-street terrace
+        has zero structural options at all -- a missing-capability gap, not
+        the same defect, named below rather than built. Apartment walk-up's
+        hasGarden was the same computed-but-unconsulted defect a second
+        time -- closed.                             commit: (this commit)
 [x] F3  Kitbash variety -- reconfirmed CLOSED, unchanged. 8/8 real tests
         green (kitbashNamedDesigns/RecipeMap/Parts/Retrieval), 3 correctly
         skipped (zero API spend).                        (a check)
@@ -125,6 +132,43 @@ named failure class ("computed but never consulted"). Fixed to two
 independent AND-based assertions, then verified by mutating each colour
 channel separately and confirming each mutation is caught by name, not by
 accident.
+
+## F2b — the checklist's own survey, actually finished
+
+The K6-BUILDINGS.md checklist's RUN2 survey ("does the computed-but-
+ungated defect recur in the remaining 8 typologies?") only ever checked
+`bldShop` and `bldOffice` in full, plus `bldWorkshop` (found and fixed in
+RUN3) and `bldBusinessParkBlock` (found and fixed above, this run) —
+`bldTower`, `bldWarehouse`, `bldHighStreetTerrace`, and
+`bldApartmentWalkup` were never individually read for this defect. Read
+all four in full this run:
+
+- `bldTower`: `params: { cellW, cellD, storeys, profile }` — `profile`'s
+  five values (stepped/tapered/slab/crown/straight) all branch genuinely
+  different shaft or crown geometry. Clean.
+- `bldWarehouse`: `params: { cellW, cellD, roofStyle }` — `roofStyle`'s
+  sawtooth/default branch is real; `cellW`/`cellD` set the footprint. An
+  `r4` is rolled and never used, but it never reaches `params`, so it is
+  dead code, not this defect (nothing claims it varies anything). Clean;
+  not touched.
+- `bldHighStreetTerrace`: no `params` field at all, no optional flags of
+  any kind — only wall/roof colour varies by seed. Not this defect (there
+  is no computed-but-ignored value to find), but a real, separate gap:
+  1.86% of placements (318 buildings), the highest share of anything below
+  the four dominant typologies, with zero structural variation. Named
+  here, not fixed — closing it means designing a first option for a
+  function that has never had one, which is a real scope decision, not a
+  wire-up of something already computed. Worth prioritizing next given its
+  share is 23x business park's and worth doing right rather than folding
+  into this run's smaller, purely-mechanical fixes.
+- `bldApartmentWalkup`: `hasGarden = r6 > 0.3` computed and put in
+  `params`, never referenced by any of the three LOD builders. The same
+  defect, a second real instance this run. Fixed: options-overridable,
+  gates a real ground-level garden bed + hedge at the building's rear
+  (not the front, which a blind plan review correctly flagged as already
+  congested with the stair core for ~70% of seeds). Full detail, the
+  red-first gate, the watched-red mutation, and measured triangle counts
+  are in `docs/pending-commits/run5-f2-apartment-walkup-garden.txt`.
 
 ## F3 / F4 — reconfirmed, unchanged
 
@@ -194,3 +238,10 @@ public/city-render.js` fresh, since a merge is the only thing that changes
 that answer), item 2's own facade street-level check — does 16 variants
 actually read as variety at real camera distance — is worth doing before
 any further facade-texture work of any kind.
+
+If the floor stays down and more code-only work is wanted: `bldHighStreetTerrace`'s
+zero-structural-variation gap (named above, F2b) is the next real,
+un-superseded item in K6's own priority order — 1.86% of placements, no
+options of any kind today. Unlike this run's two fixes, it needs a genuine
+first design decision (what varies, and how) rather than a wire-up, which
+is why it was named rather than built tonight.

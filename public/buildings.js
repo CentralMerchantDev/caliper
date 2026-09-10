@@ -2275,7 +2275,11 @@ export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
   const bodyH = storeys * 4;
   const stairPosition = r4 < 0.4 ? "center" : r4 < 0.7 ? "dual" : "gallery";
   const roofStyle = options.roofStyle || (r5 < 0.4 ? "pitched" : r5 < 0.75 ? "mansard" : "parapet");
-  const hasGarden = r6 > 0.3;
+  // hasGarden was computed and reported in params but never consulted by any
+  // geometry -- every walk-up had the identical (absent) garden regardless
+  // of the roll (same defect class as villa/terrace/townhouse/midrise's
+  // ungated flags, docs/audits/K6-BUILDINGS.md's "reads as basic" checklist).
+  const hasGarden = options.hasGarden !== undefined ? options.hasGarden : r6 > 0.3;
 
   const roofH = roofStyle === "pitched" ? 3.5 : roofStyle === "mansard" ? 2.8 : 1.2;
   const baseOffsetMax = foundation === "plinth" ? 1.2 : foundation === "stepped" ? 0.7 : 0;
@@ -2376,6 +2380,22 @@ export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
       coping.translate(0, baseOffset + bodyH + 1.15, 0);
       parts.push({ geo: par, tag: "wall" }, { geo: coping, tag: "roof" });
     }
+
+    if (hasGarden) {
+      // Rear margin, not the front -- the front is already congested with
+      // the stair core(s) (dual stairs sit at x=+-bW*0.35) and, for the
+      // "dual"/"center" positions, would interpenetrate. The rear only
+      // carries thin mirrored window sills at x=+-bW*0.28, so a bed
+      // centred on x=0 and narrower than that gap clears them.
+      const gardenD = Math.min(1.6, (footD - bD) / 2 * 0.8);
+      const gardenW = Math.min(bW * 0.4, bW * 0.28 * 2 - 1.6);
+      const bed = new geomT.BoxGeometry(gardenW, 0.4, gardenD);
+      bed.translate(0, baseOffset + 0.2, -bD / 2 - gardenD / 2);
+      const hedge = new geomT.BoxGeometry(gardenW * 1.05, 0.7, 0.2);
+      hedge.translate(0, baseOffset + 0.35, -bD / 2 - gardenD + 0.1);
+      parts.push({ geo: bed, tag: "wall" }, { geo: hedge, tag: "wall" });
+    }
+
     return mergeWithMassingDepth(parts, mat, geomT, footW, footD, true);
   }
 
