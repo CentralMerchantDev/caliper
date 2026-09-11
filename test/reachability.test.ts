@@ -26,6 +26,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripSourceComments, stripHtmlComments } from "./stripSourceComments.ts";
 
 function repoRoot(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
@@ -55,10 +56,24 @@ const HOME = "index.html";
  * would be excluded by nobody. So the property is what excludes it: a page that
  * navigates away on load is not a destination. If plan-preview ever stops
  * redirecting, it stops being exempt on the same line.
+ *
+ * Split into the real logic (text-in, testable against hand-built strings --
+ * public/ is served, no test fixtures belong there, mirrors spanText()/
+ * checkAllGeneratedClaims()'s split in test/generatedClaimsAreCurrent.test.ts)
+ * and a thin file-reading wrapper. Comments stripped first: a comment merely
+ * MENTIONING location.replace( or a refresh tag -- left behind by a
+ * refactor, or describing what a page used to do -- must not cause a real,
+ * non-redirecting page to be silently exempted from the reachability walk.
+ * That is the dangerous direction: it masks the exact defect class this
+ * file's own header names as the worst one found in this repository.
  */
+function isRedirectStubText(html: string): boolean {
+  const stripped = stripHtmlComments(stripSourceComments(html));
+  return /location\.replace\(/.test(stripped) || /http-equiv=["\']refresh["\']/i.test(stripped);
+}
+
 function isRedirectStub(page: string): boolean {
-  const html = readFileSync(path.join(PUBLIC, page), "utf8");
-  return /location\.replace\(/.test(html) || /http-equiv=["\']refresh["\']/i.test(html);
+  return isRedirectStubText(readFileSync(path.join(PUBLIC, page), "utf8"));
 }
 
 /** Every .html file a player could actually land on. */
@@ -173,4 +188,39 @@ test("the back control is painted before the scene it sits on top of", () => {
       `${page}'s back control is not plain markup at the top of the body -- it will be missing exactly when the renderer fails`,
     );
   }
+});
+
+// --- rawSourceScan's own gap, closed: isRedirectStub() matched raw HTML for
+// location.replace(/refresh, so a comment merely MENTIONING either pattern
+// would silently exempt a real, non-redirecting page from this whole file's
+// reason for existing (see the header). See test/rawSourceScan.test.ts's
+// own history (2026-09-11).
+
+test("(synthetic) the vulnerability: a comment merely mentioning location.replace( must not exempt a real page", () => {
+  const commentedOut =
+    "<html><body><!-- old version used to do location.replace('/x') --><p>real content, no redirect</p></body></html>";
+  assert.equal(
+    isRedirectStubText(commentedOut), false,
+    "a comment mentioning location.replace( was read as a real redirect -- this would silently exempt an orphaned page from the reachability walk",
+  );
+});
+
+test("(synthetic) the vulnerability: a JS comment inside a real <script> block must not exempt a real page", () => {
+  const commentedOut =
+    "<html><body><script>// location.replace('/x') -- disabled for now\nconsole.log('still here');</script></body></html>";
+  assert.equal(isRedirectStubText(commentedOut), false);
+});
+
+test("(synthetic) a real redirect -- location.replace( actually called -- is still detected after stripping", () => {
+  const real = "<html><body><script>location.replace('/city.html' + location.search);</script></body></html>";
+  assert.equal(isRedirectStubText(real), true);
+});
+
+test("(synthetic) a real redirect -- a refresh meta tag -- is still detected after stripping", () => {
+  const real = '<html><head><meta http-equiv="refresh" content="0; url=/city.html"></head></html>';
+  assert.equal(isRedirectStubText(real), true);
+});
+
+test("plan-preview.html, the one real redirect stub today, is still detected by the fixed check", () => {
+  assert.equal(isRedirectStub("plan-preview.html"), true);
 });

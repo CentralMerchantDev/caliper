@@ -136,13 +136,6 @@ const REVIEWED_EXCLUSIONS: Record<string, string> = {
     "confirmed comment-safe for the html sources. Also reads " +
     "src/citySummary.generated.ts, matched only for numeric substring " +
     "presence in a generated (not hand-authored) file -- not the same risk.",
-  "reachability.test.ts":
-    "isRedirectStub() regex-tests a page's raw HTML for `location.replace(` " +
-    "or a meta-refresh tag to decide whether that page is EXEMPT from " +
-    "reachability checks -- a comment mentioning either pattern could wrongly " +
-    "exempt a real, non-redirecting page, the dangerous direction (masks a " +
-    "navigation trap). A real, not-yet-fixed instance; named for a future " +
-    "pass, time-boxed out of tonight's sweep.",
   "rendererStatic.test.ts":
     "Two of its three checks (`analyse()`, undeclared-reference and " +
     "temporal-dead-zone detection) use a real tokenizer, comment-immune by " +
