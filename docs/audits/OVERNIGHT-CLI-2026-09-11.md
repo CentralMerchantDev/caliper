@@ -66,5 +66,45 @@ by the arithmetic above, not merely assumed stable.
 `test/boardGenerator.test.ts`'s own `decision-5 step 1` test (roadClass
 still uniformly `STREET`); `test/boardLoad.test.ts` (all 7, above).
 
-**Commit:** pending — landing with this audit entry and decision #10,
-below.
+**Commit:** `f3db6d9`.
+
+---
+
+## Step 2 — geometry reads its own class's width
+
+**Landed:** `3352110`. `public/board-generator.js` now sizes every road
+piece (`placeRoadGraph()`) and the block-carving margin
+(`generateBoard()`'s own, separate site) from `roadkit.js`'s
+`ROAD_STANDARDS` via new `roadWidthFor`/`halfRoadFor` helpers, retiring the
+`ROAD_WIDTH`/`HALF_ROAD` module constants entirely. Every piece's
+`roadClass` stays uniformly `"STREET"` — `ROAD_STANDARDS.STREET.row` (18)
+now governs geometry everywhere `9` used to.
+
+**Blind review, before implementing:** a fresh subagent found the plan's
+originally-designed "no road/building overlap" test would never catch the
+mutation it was meant to catch, because `public/board.js`'s own occupancy
+guard already prevents any two *placed* pieces from ever overlapping,
+regardless of whether the margin math feeding candidate placement is
+correct — so a stale site produces a different, non-overlapping board, not
+an overlapping one. Confirmed directly by reading `board.js`. Redesigned
+as a static source-scan (this repo's own `B2.6` precedent) instead, which
+checks the actual code path rather than an output invariant `board.js`
+already guarantees for unrelated reasons.
+
+**Test-first, watched red, then green:** two new tests in
+`test/boardGenerator.test.ts` — both confirmed red before the edit, both
+green after. Evidence: `node test/run.mjs test/boardGenerator.test.ts`.
+
+**Expected, named consequence, confirmed exactly as predicted:** the B2
+20–40% coverage gate went RED the moment this step landed — `"downtown"`
+measured 55.4% covered, over the ceiling. This is not a surprise; §9's own
+plan named it in advance. Step 3 is the fix.
+
+**Mutation NOT YET proven CAUGHT — blocked, not skipped:**
+`scripts/_mutcheck.mjs` refused to score the named mutation
+(`decision-5-step-2-block-carving-reads-road-standards`) because the
+coverage gate above shares `test/boardGenerator.test.ts` with the new
+controls, and the harness will not score against a red baseline (correct,
+by design). The **same** "two correct controls disable each other" shape
+as decision #10, now for a second pair. Will be run and proven CAUGHT
+immediately after Step 3 restores a green baseline, before Step 4 starts.
