@@ -472,6 +472,77 @@ permission boundary, left named and red rather than worked around. See
 account; whoever runs Step 1's regeneration should do it before Step 2,
 independent of the rest of the retirement plan.
 
+**CLOSED, 2026-09-11 (b1-land, CLI, overnight, attended): all six steps of
+`docs/specs/PIECE-CATALOGUE-ROADS.md` §9 are built, tested, and committed.**
+`ROAD_WIDTH` no longer exists as an identifier anywhere in `public/
+board-generator.js` or `public/bridge-generator.js` — every road piece,
+block-carving margin, and bridge deck reads its width from `roadkit.js`'s
+own `ROAD_STANDARDS` table, uniformly at the `STREET` class (18 m) Step 1
+already committed every piece's `roadClass` to. Commits, in order:
+`f01a324` (step 1, roadClass metadata, this lane's own prior session),
+`f3db6d9` (ITEM 0, the boardLoad drift that step left open), `3352110`
+(step 2, geometry reads ROAD_STANDARDS), `2790d16` (step 3, blockAtoms
+re-tuned into the coverage band), `b09a509` (step 4, bridge deck agrees
+with the roads it connects to), `101ac09` (step 5, the committed board
+regenerated against the finished generator).
+
+**The real numbers, measured, not the plan's original estimates:**
+- Coverage, per settled boundary, in the 20-40% band on every one:
+  mainland 28.5%, downtown (city) 37.7%, suburb-isle 37.6%, resort-isle
+  38.2%, highland-isle 36.0%, fishing-isle 27.1%, farm-isle 38.7%,
+  vineyard-isle 26.1%, quarry-isle 28.2%.
+- `blockAtoms` doubled for 6 of 9 tiers (city 57→114, highland/fishing/
+  farm/vineyard/quarry 65→130), doubled-then-nudged for 2 more (suburb
+  69→150, resort 57→150), and left UNCHANGED for mainland (80) — a blind
+  review caught that mainland's own boundary shape (a fixed-depth coastal
+  strip, not a compact island) made the plan's original uniform-doubling
+  proposal wrong for that one tier specifically, before it was built, not
+  after.
+- The committed board: 21,007 pieces (was 35,381 before this retirement),
+  fewer and larger blocks, as intended.
+- Bridge/dock crossings: 19 pieces (0 bridges, 19 docks), 3 refused. The
+  `docs/DECISIONS-FOR-MARK.md` #7 egress gap improved from 3 boundaries
+  lacking crossings to 1 (`farm-isle`) — a real, measured side effect of
+  the wider roads/bigger blocks changing occupancy, not something this
+  retirement set out to fix. #7 itself is unchanged and still Mark's call.
+
+**Two real regressions this retirement's own work caused, both found and
+fixed before landing, not shipped and discovered later:** `test/
+boardLoad.test.ts` drifted red twice (once from step 1 not being paired
+with a regeneration, once from steps 3/4 landing without one) — both
+times found by running the full suite rather than only the touched file,
+and both times fixed by regenerating, not by loosening the gate. `test/
+originStability.test.ts` broke because step 2's own new `roadkit.js`
+import pulled in the `three` npm package, which a disposable test copy
+living outside the repo (the OS tmpdir) could not resolve — fixed by
+moving that copy under the repo root; verified by reverting and watching
+the exact original error reproduce.
+
+**One real disagreement between the plan and what actually happened,
+recorded rather than smoothed over:** the plan's own algebra predicted
+building coverage would stay roughly flat under the `blockAtoms` retune.
+Measured reality showed real, large increases in several tiers (e.g.
+`suburb-isle` 0.4%→18.2%) — most likely a terrain-edge effect the retune
+didn't model, not chased to a confirmed root cause. The coverage gate
+still passed on every tier, which is what it asks for; the reasoning that
+got there was partly wrong, and stays on record as such.
+
+**Still open, not this retirement's job:** `farm-isle`'s own remaining
+egress gap (#7, unchanged). `test/mutationEvidence.test.ts`'s own two
+sub-tests, red since ITEM 0 (decision #10) and joined by three more
+manifest entries across steps 2-4, all verified real via
+`scripts/_mutcheck.mjs` (or by hand where even that tool's own baseline
+check was blocked) but not through the authoritative `scripts/mutate.mjs`
+path — decision #10's own two questions (the regex bug, and whether a
+lighter-weight evidence path should exist) are unresolved and unrelated
+to whether this retirement itself is correctly built.
+
+**Reversibility:** every step above is a real, committed code change
+against a real, committed board — reverting any one of them now means
+re-generating the board again, the same real cost regenerating it forward
+did (measured: ~33-45 s per `generateBoard()` call on this host, varying
+with memory pressure).
+
 ---
 
 ## 6. B4's building typologies size themselves internally; two of twelve have no override at all. A naive "typologies from the kit" wiring would silently overhang the plot for at least those two.

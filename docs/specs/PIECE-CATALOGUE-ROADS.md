@@ -1,8 +1,13 @@
 # PIECE CATALOGUE — ROADS
 
-Status: **proposal, untracked, awaiting Mark's approval.** Drafted 2026-09-11
-from Mark's spoken brief, `rule://standard-piece-sizes` ("Not yet decided: the
-catalogue itself — how many sizes, and what they are") and a direct read of
+Status, updated 2026-09-11 (overnight, b1-land): **§§1-8 (the footprint/type
+catalogue itself) remain a proposal, awaiting Mark's approval** — nothing in
+them beyond §9 is built. **§9 (retiring `ROAD_WIDTH`) is DONE** — all six
+steps built, tested, mutation-verified and committed; see
+`docs/DECISIONS-FOR-MARK.md` #5's own closing note for the commit list and
+the real, measured numbers. Originally drafted 2026-09-11 from Mark's spoken
+brief, `rule://standard-piece-sizes` ("Not yet decided: the catalogue itself
+— how many sizes, and what they are") and a direct read of
 `public/roadkit.js` and `public/board-generator.js`.
 
 Roads only. Buildings, props and materials get the same treatment afterwards —
