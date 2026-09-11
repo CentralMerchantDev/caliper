@@ -19,6 +19,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 function repoRoot(): string {
@@ -58,7 +59,13 @@ function findMatchingParen(source: string, openIndex: number): number {
  * leading spread) gets no such exemption -- that is exactly the shape the
  * incident's own broken call had.
  */
-export function findMessagesCreateCallsWithoutThinking(source: string, label: string): string[] {
+export function findMessagesCreateCallsWithoutThinking(rawSource: string, label: string): string[] {
+  // Comments stripped once, in place, before any matching or slicing -- a
+  // comment inside a call's own arguments claiming thinking is set
+  // elsewhere must not satisfy the regex below in place of a real setting.
+  // Safe to slice offsets out of: stripSourceComments blanks comment
+  // characters (same length, newlines kept) rather than truncating.
+  const source = stripSourceComments(rawSource);
   const issues: string[] = [];
 
   // A function DECLARATION also matches `name(` -- exclude it, so this only
@@ -125,6 +132,18 @@ test("synthetic: a messages.create call that purely forwards an already-built pa
     findMessagesCreateCallsWithoutThinking(notReallyForwarding, "fixture").length, 1,
     "a call building its own literal object was wrongly exempted just because it happens to contain a spread",
   );
+});
+
+// --- rawSourceScan's own gap, closed: findMessagesCreateCallsWithoutThinking
+// matched `thinking\s*:` against a call's raw, unstripped argument text, so
+// a COMMENT inside a call's own arguments claiming thinking was "handled
+// elsewhere" would satisfy the check with zero real setting present. See
+// test/rawSourceScan.test.ts's own history (2026-09-11).
+
+test("(synthetic) the vulnerability: a comment inside a call's own arguments claiming thinking is handled must not exempt a call missing the real setting", () => {
+  const bad = `const response = await client.messages.create({\n  model, max_tokens: 1024,\n  /* thinking: handled elsewhere, TODO verify */\n  system: systemPrompt,\n  messages: [{ role: "user", content: userPrompt }],\n});`;
+  const issues = findMessagesCreateCallsWithoutThinking(bad, "fixture");
+  assert.equal(issues.length, 1, `a comment mentioning thinking: wrongly exempted a call with no real thinking setting; got: ${JSON.stringify(issues)}`);
 });
 
 test("every messages.create / createWithTruncationGuard call in src/ and scripts/ carries an explicit thinking setting", () => {

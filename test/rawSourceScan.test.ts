@@ -148,12 +148,6 @@ const REVIEWED_EXCLUSIONS: Record<string, string> = {
     "assert.match() targets a spawned child process's own STDERR text at " +
     "runtime, not a source file's code -- \"comment\" has no meaning for " +
     "program output.",
-  "thinkingDisabledOnEveryCall.test.ts":
-    "findMatchingParen() extracts a call's own argument-list text before " +
-    "regex-testing it for `thinking\\s*:` -- narrower blast radius than a " +
-    "whole-file scan (a comment would need to sit INSIDE a multi-line call's " +
-    "own arguments to trigger it), but not zero. A real, not-yet-fixed " +
-    "instance; named for a future pass.",
   "verifyUntrustedGeometry.test.ts":
     "`.includes(\"process\")` checks a TEST FIXTURE payload string defined " +
     "in this same file (a sanity check on the test's own setup), not a real " +
