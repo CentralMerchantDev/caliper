@@ -124,7 +124,27 @@ either is empty on real work, send it back. Only then tick the ledger.
 - **Commit at every BUILD-LOOP Step 9**, not at the end of a phase. A crash must
   cost one step, not a night.
 - **Never retry into a failure.** Commit, record, move on.
-- **Memory below 4 GB:** do code-only work and check again. **Do not kill
+- **Renders, tested, not assumed:** a single-camera `scripts/shoot.mjs`
+  render and the full multi-camera `test/regressionGate.test.ts`/
+  `test/cullingRatio.test.ts` pass both completed successfully on
+  2026-09-11, measured, at free memory (`Get-CimInstance
+  Win32_OperatingSystem`) as low as **0.02 GB** — no crash, no hang, no
+  corrupted output (`docs/audits/MEMORY-FLOOR-EXPERIMENT-2026-09-11.md`).
+  The prior "4 GB floor" this line stated had no source anywhere in this
+  repository, ground-checked the same day — no measurement, no incident,
+  no citation, traced to the commit that first tracked this file. Retired
+  for these two render workloads, verified working down to the reading
+  above; **below 0.02 GB free is unmeasured**, not proven safe — this
+  experiment observed no failure, which is not the same as knowing where
+  one would occur.
+  **What this does NOT cover, real and separate:** the full, unscoped
+  `node test/run.mjs` (every test, no target file) has genuinely crashed
+  on this host with a JavaScript heap out-of-memory error at DEFAULT V8
+  settings — a different failure mode (Node's own default old-space
+  ceiling, not Windows' system free memory) that this experiment neither
+  tested nor retires. Use `NODE_OPTIONS="--max-old-space-size=8192"` (or
+  target specific test files) for a full-suite run; that is a V8 heap
+  question, not a "wait for more free memory" one. **Do not kill
   processes** — record PIDs and reasoning in the handover.
 - Stay on the branch. Do not merge, deploy, open a PR, or touch `main`.
 - Nothing deleted — quarantine to `_TO-DELETE/<reason>/`.
