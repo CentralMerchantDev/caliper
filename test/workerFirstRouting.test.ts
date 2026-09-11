@@ -23,6 +23,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 // esbuild bundles this test into test/.built/ before running it, so
 // import.meta.url points at the built copy, not the source tree --
@@ -65,7 +66,12 @@ function extractWorkerRoutes(indexTsSource: string): string[] {
   const routes: string[] = [];
   const re = /url\.pathname\s*===\s*"([^"]+)"/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(indexTsSource)) !== null) routes.push(m[1]);
+  // A route mentioned only in a comment (a stale "used to check ..." left
+  // by a rewrite) must not be extracted as if it were a real handled
+  // route -- comments stripped first, same offset-preserving helper every
+  // other source-text scan in this suite uses.
+  const source = stripSourceComments(indexTsSource);
+  while ((m = re.exec(source)) !== null) routes.push(m[1]);
   return routes;
 }
 
@@ -103,6 +109,22 @@ test("guardrail: the check above actually fails on a route missing from the allo
 
   const missing = routes.filter((r) => !allowlist.has(r));
   assert.deepEqual(missing, ["/change-error-decision"]);
+});
+
+// --- rawSourceScan's own gap, closed: extractWorkerRoutes matched
+// `url.pathname === "..."` against raw src/index.ts text, no comment
+// stripping. See test/rawSourceScan.test.ts's own history (2026-09-11) --
+// verified rigorously here rather than left as "likely safe, not checked".
+
+test("(synthetic) the vulnerability: a route mentioned only in a comment must not be extracted as a real one", () => {
+  const withPhantom = `if (url.pathname === "/real-route") { return handleReal(); }\n// used to check url.pathname === "/old-phantom-route" before the rewrite\n`;
+  const routes = extractWorkerRoutes(withPhantom);
+  assert.deepEqual(routes, ["/real-route"], `a comment-only route was extracted as real: ${JSON.stringify(routes)}`);
+});
+
+test("(synthetic) a real, uncommented route is still extracted correctly after stripping", () => {
+  const real = `if (url.pathname === "/real-route") { return handleReal(); }\n`;
+  assert.deepEqual(extractWorkerRoutes(real), ["/real-route"]);
 });
 
 test("control: extractWorkerRoutes finds the routes actually present in src/index.ts, including /change-error-decision itself", () => {

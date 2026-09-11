@@ -152,12 +152,6 @@ const REVIEWED_EXCLUSIONS: Record<string, string> = {
     "`.includes(\"process\")` checks a TEST FIXTURE payload string defined " +
     "in this same file (a sanity check on the test's own setup), not a real " +
     "source file's code.",
-  "workerFirstRouting.test.ts":
-    "extractWorkerRoutes() regex-extracts `url.pathname === \"...\"` from " +
-    "src/index.ts's raw text -- a real, not-yet-fixed instance. Direction is " +
-    "likely safe (a comment-phantom route would need a matching wrangler.jsonc " +
-    "allowlist entry to pass, which is a visible, separate assertion), but " +
-    "not verified rigorously enough tonight to close; named for a future pass.",
 };
 
 /**
