@@ -38,6 +38,7 @@ import { execFileSync } from "node:child_process";
 import { writeFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
+import { extractTestTitles } from "./extract-test-titles.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -229,9 +230,14 @@ const COUNT_CLAIM_TEST = "the test counts on the page are the test counts";
 // possible run and the exemption below could never fire -- a guard that cannot
 // trigger, which is the same defect as a test that cannot fail. Found by running
 // the regex against the runner's real output instead of assuming its shape.
-const failingNames = [...out.matchAll(/^(?:not ok \d+ - |✖ )(.+?)(?: \(\d|$)/gm)]
-  .map((m) => m[1].trim())
-  .filter((n) => n !== "failing tests:");
+// scripts/extract-test-titles.mjs -- docs/DECISIONS-FOR-MARK.md #10: this
+// file's own inline regex (like scripts/mutate.mjs's separate copy) stopped
+// at a title's own FIRST parenthetical-with-a-digit rather than the
+// trailing duration node's runner appends. COUNT_CLAIM_TEST itself has no
+// such parenthetical, so `onlyTheCountClaim`'s own equality check was never
+// wrong -- but the "### failing: ..." diagnostic text below WAS silently
+// truncating any other failing test's own name whenever one had this shape.
+const failingNames = extractTestTitles(out, { failingOnly: true });
 const onlyTheCountClaim =
   fail === 1 && workerFail === 0 &&
   failingNames.length > 0 &&

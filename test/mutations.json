@@ -1114,6 +1114,15 @@
       "expect": "every real bridge deck is the SAME width as the road pieces it connects to"
     },
     {
+      "id": "decision-10-extract-test-titles-anchors-on-trailing-duration",
+      "guards": "extractTestTitles() captures a test's own full title, including any early parenthetical-with-a-digit in the title itself, stopping only at the TRAILING duration node's test runner appends -- not the first digit-parenthetical found, which is the bug docs/DECISIONS-FOR-MARK.md #10 found shared across scripts/mutate.mjs, scripts/_mutcheck.mjs (already correct before this extraction), and scripts/gen-test-count.mjs.",
+      "note": "Verified this session (b1-land, 2026-09-11) via node scripts/_mutcheck.mjs test/extractTestTitles.test.ts scripts/extract-test-titles.mjs test/mutations.json: baseline GREEN, mutation CAUGHT (4 of 6 tests correctly went red, each on the truncated-title assertion, not a crash), source restored byte-identical.",
+      "file": "scripts/extract-test-titles.mjs",
+      "find": "const re = new RegExp(`^(?:${prefixes})(.+?)(?: \\\\([\\\\d.]+m?s\\\\))?$`, \"gm\");",
+      "replace": "const re = new RegExp(`^(?:${prefixes})(.+?)(?: \\\\(\\\\d|$)`, \"gm\");",
+      "expect": "a real test title with an EARLY parenthetical-digit is captured whole"
+    },
+    {
       "id": "b2-7-classify-crossing-uses-real-ceiling",
       "guards": "classifyCrossing genuinely splits bridge-vs-boat at roadkit.js's real 800 m buildable ceiling, not the old world's 9,000 m 'plausible' cutoff this plan's own blind review corrected.",
       "note": "Verified this session: forcing every gap to classify as a bridge regardless of distance is exactly the defect the blind review found in the first B2.7 draft (reusing 9,000 m, which answers 'is this geographically plausible' not 'can roadkit.js build it') -- caught directly by the unit test asserting 801m/9000m both classify as boat.",

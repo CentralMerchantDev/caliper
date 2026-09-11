@@ -1,0 +1,86 @@
+Item 2 -- decision #10: fix the title-extraction regex bug in
+scripts/mutate.mjs, and the two OTHER copies of the same defect found
+while verifying it.
+
+ANSWERED FIRST, FROM THE ARTEFACT, PER THIS RUN'S OWN BRIEF: does the bug
+affect mutation results ALREADY TAKEN, or only future ones? Read every
+one of the 124 entries in test/.mutate-results.json -- every single one
+carries "method": "_mutcheck.mjs ...". Zero carry "mutate.mjs". The
+buggy regex lives only in scripts/mutate.mjs itself, which has never
+actually been used to produce a recorded result (this project has always
+used the scoped _mutcheck.mjs in practice, per docs/BUILD-LOOP.md STEP
+6's own instruction). CONCLUSION: no already-published mutation evidence
+(test/mutationSummary.generated.json, README.md's own mutation sentence)
+is affected. Zero, proven, not assumed.
+
+BLIND REVIEW BEFORE IMPLEMENTING found the bug's own scope was WORSE than
+decision #10 originally recorded, and found a THIRD independent copy of
+the identical defect:
+- scripts/mutate.mjs actually has the bug in TWO places, not one --
+  `rawFailing` (feeds the baseline-red check AND, via the same array,
+  per-mutation CAUGHT/SURVIVED scoring) and `all` (feeds the "does this
+  expect refer to a real test" staleness check, which could make
+  mutate.mjs refuse to run entirely over a perfectly valid `expect`
+  string, truncated away).
+- scripts/gen-test-count.mjs:232-235 carries the byte-identical buggy
+  regex, feeding the diagnostic "### failing: ..." text printed when the
+  count-claim exemption cannot fire -- COUNT_CLAIM_TEST itself has no
+  early parenthetical so the exemption's own correctness was never at
+  risk, but the human-readable failure list was silently corrupted
+  whenever another failing test had this shape.
+- Two REAL, currently-existing test titles beyond B2.5 already have this
+  exact shape and would already be mis-scored if ever targeted by a
+  mutation's own `expect`: test/fail-open.test.ts's own two titles
+  (checked: neither is currently referenced by any mutations.json entry,
+  so nothing has silently mis-scored yet, but the risk was live, not
+  hypothetical).
+
+WHAT CHANGED: new scripts/extract-test-titles.mjs -- one shared,
+exported extractTestTitles(output, {failingOnly}) function, anchored on
+the TRAILING duration `(NNN[.NN]ms)` node's own test runner appends
+(generalising _mutcheck.mjs's own already-correct pattern, which is now
+also switched to import this instead of keeping its own copy). All
+three consumers (scripts/mutate.mjs's two call sites,
+scripts/_mutcheck.mjs's one, scripts/gen-test-count.mjs's one) now
+import and call the one function -- eliminating the duplication that let
+three copies drift apart in the first place, not just patching one to
+match today.
+
+TEST FIRST: test/extractTestTitles.test.ts, six tests against the shared
+function directly (not a live suite run) -- the B2.5-shaped case, a
+plain title with no parenthetical, the summary-header exclusion, TAP-
+style prefixes, the failingOnly:false "all" mode, and (per the blind
+review's own recommendation) a REAL, spawned `node --test` run against a
+disposable specimen file with a deliberately tricky title, parsed from
+its own real captured console bytes -- not only hand-written fixtures,
+this project's own AUDIT-PROTOCOL.md §7 having burned on that shortcut
+once already for this exact header-line problem.
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs against
+extractTestTitles/expectedRed/mutateResume/mutateLock/claimSpansAreChecked
+-- 21/21 pass. Regression-checked _mutcheck.mjs's own EXISTING, working
+behaviour is unchanged by the shared-function swap: re-ran it against
+public/board-generator.js's own six real mutations from tonight's earlier
+work (including B2.5's) -- baseline GREEN, all six still CAUGHT, byte-
+identical restore, matching every prior run this session.
+
+MUTATED, CAUGHT: node scripts/_mutcheck.mjs test/extractTestTitles.test.ts
+scripts/extract-test-titles.mjs test/mutations.json -- baseline GREEN,
+mutation "decision-10-extract-test-titles-anchors-on-trailing-duration"
+CAUGHT (4 of 6 tests correctly went red on the truncated-title
+assertion), source restored byte-identical. RED gate as the brief itself
+specified: the fixed regex failing to catch a case the buggy one
+provably could not (the B2.5-shaped title) -- proven, not assumed.
+
+GUARDS CHECKED: nothing deleted. Zero API spend. No merge (beyond item
+1's already-authorised push), no deploy, no PR. src/ untouched.
+
+STILL OPEN, per decision #10's own second question: whether a
+lighter-weight path should exist for _mutcheck.mjs-verified controls to
+reach test/mutationSummary.generated.json without the authoritative
+mutate.mjs --all/--id path (still blocked on 46-47 unrelated pre-existing
+failures, unaffected by this fix). Not resolved here -- that is a scope
+question, not a bug, and stays queued.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf
