@@ -1105,6 +1105,15 @@
       "expect": "coverage is measured INSIDE each settlement boundary"
     },
     {
+      "id": "decision-5-step-4-bridge-deck-reads-road-standards",
+      "guards": "the bridge deck's own width comes from ROAD_STANDARDS via roadWidthFor(BRIDGE_DECK_CLASS), agreeing with the roads it connects to (STREET), not a fixed constant of its own -- decision 5's retirement of ROAD_WIDTH, step 4.",
+      "note": "Verified this session (b1-land, 2026-09-11) by DIRECT mutation-and-revert, not scripts/_mutcheck.mjs -- that script's own baseline check refuses to run against test/bridgeGenerator.test.ts because docs/DECISIONS-FOR-MARK.md #7's own gate is already, and possibly permanently, red in that same file (an accepted starting-state gap per rule://generated-world-is-a-starting-state, not something this session has grounds to resolve, and not on scripts/expected-red.mjs's own narrow allowlist). Applied the mutation by hand, ran node test/run.mjs test/bridgeGenerator.test.ts, confirmed exactly one NEW failure (this test, named, for the stated reason) alongside the pre-existing #7 red and nothing else, reverted, confirmed back to the same 13/14 as before the mutation.",
+      "file": "public/bridge-generator.js",
+      "find": "const deckHalfWidth = halfRoadFor(BRIDGE_DECK_CLASS), deckWidth = roadWidthFor(BRIDGE_DECK_CLASS);",
+      "replace": "const deckHalfWidth = 4, deckWidth = 9;",
+      "expect": "every real bridge deck is the SAME width as the road pieces it connects to"
+    },
+    {
       "id": "b2-7-classify-crossing-uses-real-ceiling",
       "guards": "classifyCrossing genuinely splits bridge-vs-boat at roadkit.js's real 800 m buildable ceiling, not the old world's 9,000 m 'plausible' cutoff this plan's own blind review corrected.",
       "note": "Verified this session: forcing every gap to classify as a bridge regardless of distance is exactly the defect the blind review found in the first B2.7 draft (reusing 9,000 m, which answers 'is this geographically plausible' not 'can roadkit.js build it') -- caught directly by the unit test asserting 801m/9000m both classify as boat.",

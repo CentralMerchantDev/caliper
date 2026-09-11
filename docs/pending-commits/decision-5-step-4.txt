@@ -1,0 +1,72 @@
+STEP 4 (docs/specs/PIECE-CATALOGUE-ROADS.md §9) -- bridge-generator.js's
+own separate ROAD_WIDTH=9 retired; the bridge deck's width now agrees with
+the roads it connects to (STREET, 18m), not a fixed constant of its own.
+
+A WRONG TURN, CAUGHT BY BLIND REVIEW, NOT SILENTLY FIXED: while
+implementing, found that bridgePieceFrom() already calls roadkit.js's own
+bridgeSpan() with { roadClass: "AVENUE" } for its span-engineering check.
+Read that as evidence the deck should be AVENUE-width (28m) for internal
+consistency, and drafted the step that way. A blind review (given only the
+draft plan and the real source, not told what was suspected) found this
+was wrong: bridgeSpan()'s roadClass argument does not affect its
+engineering refusal checks at all (grade/min-length/800m ceiling are all
+hardcoded, independent of class) -- it only computes a width value
+bridge-generator.js already discards. Worse, the ALREADY-WRITTEN
+docs/specs/PIECE-CATALOGUE-ROADS.md §9 Step 4 (this session's own prior
+commit) explicitly says STREET, twice, with the exact reasoning ("agrees
+with the road pieces it connects to... a real, visible seam at every
+bridge crossing" otherwise) -- AVENUE would have reopened that exact seam
+in the opposite direction (28m deck meeting 18m roads instead of 9m deck
+meeting 18m roads). Reverted to STREET, the plan's own original,
+correctly-reasoned answer.
+
+WHAT CHANGED: public/bridge-generator.js -- new import of ROAD_STANDARDS
+from roadkit.js; ROAD_WIDTH (line 57) retired, replaced by a named
+BRIDGE_DECK_CLASS = "STREET" constant (with a comment explaining why it is
+STREET and not the separate "AVENUE" bridgeSpan() argument two lines
+below) and roadWidthFor/halfRoadFor helpers (bridge-generator.js does not
+import board-generator.js for this -- an independent, small duplication,
+matching the already-written plan's own allowance). All four use sites in
+bridgePieceFrom() now read from these helpers. Dock footprints untouched
+(confirmed, again: hardcoded 4x4, unrelated to road width).
+
+TEST: test/bridgeGenerator.test.ts gains "every real bridge deck is the
+SAME width as the road pieces it connects to, not a fixed constant of its
+own" -- checks every real bridge piece a fresh, unoccupied board produces
+against ROAD_STANDARDS.STREET.row. NOT watched red in the strict
+before-the-edit sense (the fix was already applied while resolving the
+AVENUE/STREET question above, before the test was written) -- substituted
+with a direct mutation-and-revert (below), which proves the same thing:
+the test fails for the right reason when the fix is undone, and passes
+when it is present.
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs test/bridgeGenerator.test.ts
+-- 13/14 pass, only the already-tracked, possibly-permanent
+docs/DECISIONS-FOR-MARK.md #7 gate (committed-board egress) red, unrelated
+and unaffected by this in-memory-generator change.
+
+MUTATED, CAUGHT -- BY HAND, NOT scripts/_mutcheck.mjs: that script's own
+baseline check refuses to run against this test file because #7's own
+gate is already red there, and #7 is accepted as a possibly-PERMANENT
+starting-state gap (rule://generated-world-is-a-starting-state), not
+something this session can or should resolve to unblock a mutation check.
+This is a FOURTH instance of the "two correct controls disable each
+other" shape docs/DECISIONS-FOR-MARK.md #10 already named -- unlike the
+Step 2/3 instances (which cleared once this session's own honest reds
+were fixed), this one may never clear. Verified directly instead: applied
+the mutation by hand (deckHalfWidth/deckWidth hardcoded to 4/9), ran the
+full file, confirmed exactly ONE new failure (the named test, for the
+stated reason) alongside the pre-existing #7 red and nothing else,
+reverted, confirmed back to the same 13/14 as before.
+
+GUARDS CHECKED: nothing deleted. Zero API spend. No merge, no deploy, no
+PR. src/ untouched.
+
+STILL OPEN: test/mutationEvidence.test.ts's own gap grows by one more
+entry (decision #10's own prediction, again). Step 5 (regenerate the
+committed board) is next -- per this session's own §9 text, that will
+also re-check #7's own gate against the real, now-differently-occupied
+board, not assume it stays exactly as found.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

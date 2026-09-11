@@ -33,7 +33,7 @@
 
 import { atomOf, atomCentre } from "./grid.js";
 import { classifyAt, roadAllowedAt, USE } from "./land-use.js";
-import { bridgeSpan } from "./roadkit.js";
+import { bridgeSpan, ROAD_STANDARDS } from "./roadkit.js";
 
 /** roadkit.js's own bridgeSpan() engineering ceiling -- exported so the gate
  *  test can assert this file reads it from there, not from a second,
@@ -54,7 +54,25 @@ const BRIDGE_ANCHOR_WALK_M = 2600;
 const DOCK_ANCHOR_WALK_M = 200;
 const ANCHOR_STEP_M = 10;
 
-const ROAD_WIDTH = 9; // matches board-generator.js's own ROAD_WIDTH -- one bridge deck lane width
+// Decision 5's retirement of the old fixed bridge-deck-width constant
+// (docs/DECISIONS-FOR-MARK.md #5, docs/specs/PIECE-CATALOGUE-ROADS.md §9
+// Step 4). The deck's own width now
+// reads roadkit.js's own ROAD_STANDARDS, at the SAME class
+// board-generator.js's placeRoadGraph() places every road at
+// (ROAD_CLASS_DEFAULT, "STREET") -- a bridge is a crossing IN that road
+// network, so its deck must agree with what it connects to, not with
+// bridgeSpan()'s own separate "AVENUE" default two lines below (that
+// argument governs bridgeSpan()'s own engineering refusal checks only --
+// read directly, none of which actually vary by roadClass today -- and is
+// unrelated to this file's own deck footprint, which discarded
+// bridgeSpan()'s internally-computed width even before this change).
+const BRIDGE_DECK_CLASS = "STREET";
+function roadWidthFor(roadClass) {
+  return (ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.STREET).row;
+}
+function halfRoadFor(roadClass) {
+  return Math.floor(roadWidthFor(roadClass) / 2);
+}
 
 let pieceSeq = 0;
 function nextId(prefix) {
@@ -197,17 +215,18 @@ function bridgePieceFrom(edge, anchorA, anchorB, boundaries) {
   // guess -- a radial walk can land anchors whose dominant separation
   // differs from the two boundaries' own nearest points.
   const axis = Math.abs(cellB.j - cellA.j) >= Math.abs(cellB.i - cellA.i) ? "j" : "i";
+  const deckHalfWidth = halfRoadFor(BRIDGE_DECK_CLASS), deckWidth = roadWidthFor(BRIDGE_DECK_CLASS);
   let cell, foot;
   if (axis === "i") {
     const iLo = Math.min(cellA.i, cellB.i), iHi = Math.max(cellA.i, cellB.i);
-    const jFixed = Math.round((cellA.j + cellB.j) / 2) - Math.floor(ROAD_WIDTH / 2);
+    const jFixed = Math.round((cellA.j + cellB.j) / 2) - deckHalfWidth;
     cell = { i: iLo, j: jFixed, k: 0 };
-    foot = { w: Math.max(1, iHi - iLo), d: ROAD_WIDTH };
+    foot = { w: Math.max(1, iHi - iLo), d: deckWidth };
   } else {
     const jLo = Math.min(cellA.j, cellB.j), jHi = Math.max(cellA.j, cellB.j);
-    const iFixed = Math.round((cellA.i + cellB.i) / 2) - Math.floor(ROAD_WIDTH / 2);
+    const iFixed = Math.round((cellA.i + cellB.i) / 2) - deckHalfWidth;
     cell = { i: iFixed, j: jLo, k: 0 };
-    foot = { w: ROAD_WIDTH, d: Math.max(1, jHi - jLo) };
+    foot = { w: deckWidth, d: Math.max(1, jHi - jLo) };
   }
   if (foot.w < 1 || foot.d < 1) return { ok: false, reason: "degenerate span" };
 

@@ -25,6 +25,7 @@ import {
 } from "../public/bridge-generator.js";
 import { settlementBoundaries } from "../public/board-generator.js";
 import { createBoard } from "../public/board.js";
+import { ROAD_STANDARDS } from "../public/roadkit.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
 import { atomOf } from "../public/grid.js";
 import { classifyAt, roadAllowedAt, USE } from "../public/land-use.js";
@@ -220,6 +221,27 @@ test("B2.7 gate: a bridge candidate the BOARD refuses (occupied cell) redirects 
   assert.equal(after.built.filter((p) => p.pieceType === "bridge").length, 0, "expected the occupied bridge candidate to build ZERO bridges");
   assert.equal(after.refused.length, 0, "expected the occupied bridge candidate to be redirected to a boat route, not left refused");
   assert.ok(after.built.filter((p) => p.pieceType === "dock").length > before.built.filter((p) => p.pieceType === "dock").length, "expected MORE dock pieces after the bridge was redirected to a boat route");
+});
+
+test("decision-5 step 4: every real bridge deck is the SAME width as the road pieces it connects to, not a fixed constant of its own", () => {
+  // board-generator.js's placeRoadGraph() places every road piece uniformly
+  // at ROAD_CLASS_DEFAULT ("STREET", test/boardGenerator.test.ts's own
+  // "decision-5 step 1" test guards that this stays true) -- so agreement
+  // with "the road pieces it connects to" and agreement with
+  // ROAD_STANDARDS.STREET.row are the same claim today. Dock footprints are
+  // NOT part of this claim -- checked directly, they are a fixed 4x4,
+  // unrelated to road width.
+  const board = createBoard({ heightAt });
+  const { built } = buildCrossingPieces(boundaries, heightAt, board);
+  const bridges = built.filter((p) => p.pieceType === "bridge");
+  assert.ok(bridges.length > 0, "expected at least one real bridge on the default archipelago to check");
+  for (const p of bridges) {
+    const narrow = Math.min(p.foot.w, p.foot.d);
+    assert.equal(
+      narrow, ROAD_STANDARDS.STREET.row,
+      `bridge "${p.id}" has narrow dimension ${narrow}, expected ${ROAD_STANDARDS.STREET.row} (ROAD_STANDARDS.STREET.row) -- still sized from a fixed constant, not the class the roads it connects to are built at`,
+    );
+  }
 });
 
 test("B2.7 gate: grid alignment by construction -- every bridge/dock cell is an integer atom index", () => {
