@@ -1078,6 +1078,15 @@
       "expect": "no file in src/ imports generateBoard -- the request path must not generate"
     },
     {
+      "id": "decision-5-step-1-roadclass-default",
+      "guards": "every road piece placeRoadGraph() places carries a real, current ROAD_STANDARDS key as its roadClass -- decision 5's retirement of ROAD_WIDTH (docs/DECISIONS-FOR-MARK.md #5), step 1: metadata only, no footprint change yet.",
+      "note": "Verified this session (b1-land, 2026-09-11): ROAD_CLASS_DEFAULT set to an invalid ROAD_STANDARDS key makes every real road piece's roadClass unresolvable, caught by the dedicated test asserting ROAD_STANDARDS[p.roadClass] for every road piece, not a sample.",
+      "file": "public/board-generator.js",
+      "find": "const ROAD_CLASS_DEFAULT = \"STREET\";",
+      "replace": "const ROAD_CLASS_DEFAULT = \"NOT_A_REAL_CLASS\";",
+      "expect": "every road piece the generator places carries a real, current roadClass"
+    },
+    {
       "id": "b2-7-classify-crossing-uses-real-ceiling",
       "guards": "classifyCrossing genuinely splits bridge-vs-boat at roadkit.js's real 800 m buildable ceiling, not the old world's 9,000 m 'plausible' cutoff this plan's own blind review corrected.",
       "note": "Verified this session: forcing every gap to classify as a bridge regardless of distance is exactly the defect the blind review found in the first B2.7 draft (reusing 9,000 m, which answers 'is this geographically plausible' not 'can roadkit.js build it') -- caught directly by the unit test asserting 801m/9000m both classify as boat.",

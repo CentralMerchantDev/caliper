@@ -83,6 +83,14 @@ export const SETTLEMENT_TABLE = {
 
 const ROAD_WIDTH = 9; // atoms (metres) -- one local-street width for every road, P1 of this generator
 const HALF_ROAD = Math.floor(ROAD_WIDTH / 2);
+// Decision 5's retirement of ROAD_WIDTH, step 1 (docs/DECISIONS-FOR-MARK.md
+// #5, docs/specs/PIECE-CATALOGUE-ROADS.md): every road piece now carries a
+// roadClass, so a later step can size it from roadkit.js's own
+// ROAD_STANDARDS instead of this one constant. This step is metadata only
+// -- ROAD_WIDTH/HALF_ROAD above are untouched, so no piece's actual
+// footprint changes yet. "STREET" matches roadkit.js's own fallback
+// (ROAD_STANDARDS[stdKey] || ROAD_STANDARDS.STREET), not a new convention.
+const ROAD_CLASS_DEFAULT = "STREET";
 // Atoms of clearance around a placed building, inside its own plot. Tuned,
 // not guessed: measured coverage at CLEAR=2 was 38.5-46.5% across every
 // density tier (public/terrain.js's own real ground, not a hand estimate)
@@ -263,7 +271,7 @@ function placeRoadGraph(board, boundaryId, graph, heightAt, stats) {
   let t = now();
   for (const node of graph.nodes) {
     const piece = {
-      id: nextId(`road-j-${boundaryId}`), pieceType: "road", boundaryId,
+      id: nextId(`road-j-${boundaryId}`), pieceType: "road", boundaryId, roadClass: ROAD_CLASS_DEFAULT,
       cell: { i: node.i - HALF_ROAD, j: node.j - HALF_ROAD, k: 0 }, rotation: 0,
       foot: { w: ROAD_WIDTH, d: ROAD_WIDTH }, levels: 1, clear: { w: 0, d: 0 },
       standsOn: [USE.BUILDABLE], surface: "road",
@@ -279,7 +287,7 @@ function placeRoadGraph(board, boundaryId, graph, heightAt, stats) {
       const iLo = Math.min(edge.a.i, edge.b.i) + HALF_ROAD + 1, iHi = Math.max(edge.a.i, edge.b.i) - HALF_ROAD;
       if (iHi <= iLo) continue;
       piece = {
-        id: nextId(`road-s-${boundaryId}`), pieceType: "road", boundaryId,
+        id: nextId(`road-s-${boundaryId}`), pieceType: "road", boundaryId, roadClass: ROAD_CLASS_DEFAULT,
         cell: { i: iLo, j: edge.a.j - HALF_ROAD, k: 0 }, rotation: 0,
         foot: { w: iHi - iLo, d: ROAD_WIDTH }, levels: 1, clear: { w: 0, d: 0 },
         standsOn: [USE.BUILDABLE], surface: "road",
@@ -288,7 +296,7 @@ function placeRoadGraph(board, boundaryId, graph, heightAt, stats) {
       const jLo = Math.min(edge.a.j, edge.b.j) + HALF_ROAD + 1, jHi = Math.max(edge.a.j, edge.b.j) - HALF_ROAD;
       if (jHi <= jLo) continue;
       piece = {
-        id: nextId(`road-s-${boundaryId}`), pieceType: "road", boundaryId,
+        id: nextId(`road-s-${boundaryId}`), pieceType: "road", boundaryId, roadClass: ROAD_CLASS_DEFAULT,
         cell: { i: edge.a.i - HALF_ROAD, j: jLo, k: 0 }, rotation: 0,
         foot: { w: ROAD_WIDTH, d: jHi - jLo }, levels: 1, clear: { w: 0, d: 0 },
         standsOn: [USE.BUILDABLE], surface: "road",

@@ -28,6 +28,7 @@ import { generateBoard, SETTLEMENT_TABLE, settlementBoundaries, sampledGroundOk 
 import { USE } from "../public/land-use.js";
 import { LandField, makeHeightAt, landmassPolygonsWorld } from "../public/terrain.js";
 import { atomOf, atomOrigin, ATOM } from "../public/grid.js";
+import { ROAD_STANDARDS } from "../public/roadkit.js";
 
 // Walk up from this file's own built location (test/.built/) to the repo
 // root, the same technique terrainLandmassOwnership.test.ts's own
@@ -75,6 +76,26 @@ test("B2 gate: something real was generated, not an empty board", () => {
   const buildings = G.pieces.filter((p) => p.pieceType === "building").length;
   assert.ok(roads > 0, "no road pieces at all");
   assert.ok(buildings > 0, "no building pieces at all");
+});
+
+test("decision-5 step 1: every road piece the generator places carries a real, current roadClass, and step 1 has not changed which one", () => {
+  const roadPieces = G.pieces.filter((p) => p.pieceType === "road");
+  assert.ok(roadPieces.length > 0, "no road pieces to check");
+  for (const p of roadPieces) {
+    assert.ok(
+      ROAD_STANDARDS[p.roadClass],
+      `road piece "${p.id}" has roadClass "${p.roadClass}", which is not a real, current ROAD_STANDARDS key`,
+    );
+  }
+  // "which, not one of": every piece, not a sample -- a rollout that only
+  // reached some of the three piece-construction sites in placeRoadGraph()
+  // would still pass a test that checked only one piece or one axis.
+  const classesUsed = new Set(roadPieces.map((p) => p.roadClass));
+  assert.deepStrictEqual(
+    [...classesUsed],
+    ["STREET"],
+    "step 1 only adds a class label -- it must not change which class every road piece reports, since no geometry has changed yet",
+  );
 });
 
 test("B2 gate: settlement boundaries exist, one per settled landmass, derived from the real coastline", () => {
