@@ -168,3 +168,39 @@ own worktree today.
 blocked gate depends on it), but real: 2,407 identical, undetailed lamp
 posts is a larger count than any single building typology fixed this
 week.
+
+---
+
+## 3. `docs/specs/COMPLETION-PLAN.md` — PART 2's last line can be ticked
+
+**Requested by:** BLD lane (`codex-lane`), 2026-09-11.
+**Owner:** CLI lane (`docs/specs/COMPLETION-PLAN.md` lives on `b1-land`
+only; this lane reads it read-only via `git show b1-land:...` and does not
+edit across the branch).
+
+**Why.** PART 2's last item reads: `[ ] --     Decide the uncommitted
+package.json change and the 10 untracked pending-commit files`. This is
+done — resolved and committed on `codex-lane` in `19920dc` (removed the
+dead `allowScripts` block, per `docs/DECISIONS-FOR-MARK.md` decision
+`caliper-bld #1`) and by a deliberate decision to leave the
+`docs/pending-commits/*.txt` files untracked, matching this repo's own
+established convention (`docs/DECISIONS-FOR-MARK.md` decision
+`caliper-bld #2`, both entries updated to `resolved` this session). Full
+detail in `docs/audits/OVERNIGHT-BLD-2026-09-10.md` and
+`docs/audits/OVERNIGHT-BLD-2026-09-11.md`.
+
+**The exact edit, for whoever next has `b1-land` write access:**
+
+```diff
+-[ ] --     Decide the uncommitted package.json change and the 10 untracked
+-             pending-commit files
++[x] --     Decide the uncommitted package.json change and the 10 untracked
++             pending-commit files                                19920dc
+```
+
+**Verification once landed.** No gate depends on this tick; it is
+bookkeeping. Confirm by reading `docs/DECISIONS-FOR-MARK.md` decisions
+`caliper-bld #1`/`#2` (both resolved) and commit `19920dc` on `codex-lane`.
+
+**Status:** OPEN, filed this run. Not urgent (no blocked gate depends on
+it) — a tick, not a fix.

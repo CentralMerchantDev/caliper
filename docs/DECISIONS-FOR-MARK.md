@@ -60,6 +60,10 @@ than `git add -A`.
 **Reversal cost.** Trivial either way — a three-line JSON block with no
 downstream code depending on its presence or absence.
 
+**RESOLVED, 2026-09-11.** Option 2 (remove) taken, per the recommendation
+above, re-verified unchanged in the tree first. Commit `19920dc`. Mark
+confirmed this done in the 2026-09-11 overnight brief.
+
 ---
 
 ## 2. The 10 untracked `docs/pending-commits/*.txt` files — pre-dating this lane's work
@@ -115,6 +119,12 @@ found, not touched by any commit across RUN 1, RUN 2, or tonight.
 **Reversal cost.** Zero — these are plain text files with no code
 dependency; committing or archiving them later is a single, reversible `git
 add`/`git mv` whenever Mark decides.
+
+**RESOLVED, 2026-09-11.** Option 1 (leave untracked) stands — the file
+count has grown since this entry was written (10 → 37+ across later
+sessions), re-verified as the same convention on each check (spot-checked
+against `git log` each time), never contradicted. Mark confirmed this done
+in the 2026-09-11 overnight brief.
 
 ---
 
