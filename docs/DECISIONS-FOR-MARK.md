@@ -856,3 +856,123 @@ not a vacuously-red one: temporarily setting the page's claim to 1212 to
 match the fresh record turned it GREEN, and reverting turned it red again
 for the correct, current reason. This does not change the recommendation
 above or resolve the decision -- it is still Mark's call.
+
+---
+
+## 10. `scripts/mutate.mjs`'s own title-extraction regex has a real bug that makes `EXPECTED_RED` ineffective for at least one entry, and `test/mutationEvidence.test.ts` is red on two new counts tonight because the authoritative mutation path cannot currently run at all.
+
+**Ground-checked, 2026-09-11 (b1-land, CLI, overnight, ITEM 0):** fixing the
+known `test/boardLoad.test.ts` red gate (regenerating `public/
+board.generated.json` via `node scripts/gen-board.mjs`, per this run's own
+brief) required a full-suite run afterward, per instruction, "to see what
+else that commit moved." Compared against `test/testCount.generated.json`'s
+own pre-session baseline (1212 tests, 1150 pass, 46 fail, recorded
+2026-09-11 by the prior session): tonight's full run measured 1213 tests
+(the `+1` is this run's own new `decision-5 step 1` test, which passes),
+1149 pass, 48 fail. Arithmetic: of the original 1212 tests, 1148 now pass
+where 1150 did — **exactly two flipped from pass to fail**, not a broad
+regression. Both identified directly: `test/mutationEvidence.test.ts`'s two
+sub-tests ("every mutation in the manifest has a committed, checkable
+CAUGHT result" and "the summary is not stale against the manifest it
+claims to cover"). Confirmed by reading the file and the data directly:
+`test/mutations.json` now has 134 entries (this run's own leftover-step
+commit, `f01a324`, added `decision-5-step-1-roadclass-default`, correctly,
+per `docs/BUILD-LOOP.md` STEP 6's own instruction to use
+`scripts/_mutcheck.mjs`), but `test/mutationSummary.generated.json` --
+the COMMITTED evidence artefact `scripts/gen-mutation-summary.mjs`
+produces from `test/.mutate-results.json` -- still says
+`"manifestCount": 133` and has no entry for that id, so the new control is
+reported as `neverRun`.
+
+**Why this can't simply be fixed by running the authoritative tool:**
+`scripts/gen-mutation-summary.mjs` reads `test/.mutate-results.json` (the
+gitignored progress file `scripts/mutate.mjs` writes), and that file has no
+entry for the new mutation either -- `scripts/_mutcheck.mjs` (the tool
+`docs/BUILD-LOOP.md` STEP 6 actually names) is a scoped, scratch runner by
+its own header comment and does not write to it. Running
+`node scripts/mutate.mjs --id decision-5-step-1-roadclass-default` to
+record it properly requires a green baseline first (`mutate.mjs`'s own
+refusal: "THE SUITE IS ALREADY RED... every mutation result would be
+inconclusive against this"), and the real, current suite has 47 failures
+besides this one, per `scripts/expected-red.mjs`'s own
+`unexpectedFailures()` -- confirmed by running it directly against
+tonight's real failing-test list, not assumed.
+
+**A second, separate, genuine defect found while checking that count, not
+previously named anywhere:** `scripts/expected-red.mjs`'s one allowlisted
+title (`B2.5 gate: generation time...ceiling (30,000 ms, wrangler.jsonc has
+no override)`) is ALSO reported as unexpected by `scripts/mutate.mjs`'s own
+baseline check, even though it is the one control the allowlist exists to
+cover. Root cause, confirmed directly with the real regex against the real
+failure line: `scripts/mutate.mjs`'s title-extraction regex
+(`/^(?:not ok \d+ - |✖ )(.+?)(?: \(\d|$)/gm`) is LAZY and stops at the
+FIRST `" (<digit>"` it finds -- which, for this test's own title, is the
+`"(30,000 ms..."` parenthetical in the MIDDLE of the name, not the trailing
+`"(131965.6883ms)"` duration node's own test runner appends. The captured
+title is truncated to `"...CPU-time ceiling"`, missing the
+`"(30,000 ms, wrangler.jsonc has no override)"` suffix the `EXPECTED_RED`
+map's key requires verbatim, so `unexpectedFailures()` never matches it.
+`scripts/_mutcheck.mjs`'s OWN regex (`/^✖ (.+?) \([\d.]+m?s\)$/gm`) does not
+have this bug -- it is anchored on the trailing `(NNN[.NN]ms)` shape at end
+of line specifically, so it correctly captures the full title including the
+mid-string parenthetical. This is why `_mutcheck.mjs` reported
+`baseline: GREEN` for `test/boardGenerator.test.ts` (which contains B2.5)
+throughout tonight, while `mutate.mjs` cannot get a green baseline for the
+WHOLE suite even setting the other 46 failures aside.
+
+**The question:** two related but separable questions --
+1. Should `scripts/mutate.mjs`'s title-extraction regex be fixed to match
+   `_mutcheck.mjs`'s own (correct) one, so `EXPECTED_RED` actually works
+   for the entry it was written for?
+2. Separately from that bug, should new mutation-manifest entries verified
+   only via the scoped `_mutcheck.mjs` (as `docs/BUILD-LOOP.md` STEP 6
+   literally instructs) get some other, lighter-weight path into
+   `test/mutationSummary.generated.json`, given the authoritative
+   `mutate.mjs --all`/`--id` path is currently unusable against a red
+   whole-suite baseline regardless of the regex bug (46 other, mostly
+   already-decision-tracked reds)?
+
+**Options:**
+1. **Fix the regex bug now, narrowly** (one line in `scripts/mutate.mjs`,
+   matching `_mutcheck.mjs`'s own pattern) and leave everything else --
+   this at least restores the allowlist's ONE entry to working as designed,
+   though it does not by itself get the whole-suite baseline green (46
+   other reds remain).
+2. **Leave both gaps named, exactly as this entry does, for tonight** --
+   the least irreversible option, and consistent with this run's own
+   instruction not to widen scope chasing unrelated red gates. Every
+   subsequent `docs/specs/PIECE-CATALOGUE-ROADS.md` §9 step tonight will
+   use `_mutcheck.mjs` per `docs/BUILD-LOOP.md`'s own instruction, and will
+   ADD to the `neverRun` count in `test/mutationEvidence.test.ts` each
+   time, since none of tonight's new controls can reach the authoritative
+   summary either. By the end of tonight this gate will likely report
+   several more `neverRun` entries, not just one -- named here in advance
+   so that is not read as a surprise or as a new problem each time it grows.
+3. **Widen `scripts/expected-red.mjs`** to also cover
+   `test/mutationEvidence.test.ts`'s two sub-tests while this is unresolved
+   -- rejected for tonight: `docs/DECISIONS-FOR-MARK.md` #2's own
+   reasoning against a loose allowlist ("an exemption is how a guard grows
+   a hole") applies here too, and this run does not have grounds to make
+   that call unilaterally for a gate that exists specifically to catch
+   unrecorded controls.
+
+**Recommendation: Option 2 for tonight** (name it, do not widen scope),
+**Option 1 as a real, small, separate next step** -- it is a one-line,
+low-risk fix to a verification tool's own correctness, independent of the
+46-failure baseline problem, and worth its own test-first treatment per
+`docs/BUILD-LOOP.md` rather than being folded into tonight's road-width
+work.
+
+**What was done in the meantime:** nothing in `scripts/mutate.mjs` was
+touched. `test/mutationEvidence.test.ts`'s two sub-tests are left red,
+named, exactly as found. `public/board.generated.json` was regenerated
+(fixing `test/boardLoad.test.ts`, unrelated to this decision) and
+`test/mutations.json`'s own new entry from `f01a324` was left as-is --
+correct, real, `_mutcheck.mjs`-verified CAUGHT evidence exists for it in
+this session's own commit history, just not in the committed summary
+artefact.
+
+**Reversibility:** the regex fix (Option 1) is trivial and fully
+reversible. Leaving the gates named (Option 2, tonight's choice) costs
+nothing to change later. Widening the allowlist (Option 3, not taken)
+would have been reversible in one commit but was not attempted.
