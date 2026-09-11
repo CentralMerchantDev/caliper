@@ -217,3 +217,64 @@ the pre-existing #7 red and nothing else, reverted, confirmed back to
 13/14.
 
 **Commit:** `b09a509`.
+
+---
+
+## Step 5 — regenerate the committed board and re-verify
+
+**Landed:** `101ac09`. `node scripts/gen-board.mjs` — 21,007 total pieces
+(20,988 generated + 19 crossings, 0 bridges/19 docks/3 refused).
+
+**Found and fixed along the way, not part of the original plan:**
+
+1. `test/boardLoad.test.ts` had drifted red AGAIN between Step 2's commit
+   and this one — Steps 3/4 landed real generator changes without a
+   matching regeneration (the exact same class of mistake ITEM 0 fixed
+   once already tonight). Fixed by this step's own regeneration.
+2. Blind review, before regenerating, found the plan's re-check list was
+   missing `boardLoad.test.ts`, and — more importantly — found that both
+   `pieces.length > 30000` sanity checks were **near-certain**, not
+   merely possible, to fail: the real post-retirement piece count
+   (21,007, measurable before regenerating at all) is well under 30,000,
+   a direct consequence of Step 3's own larger blocks. Confirmed after
+   regeneration: both failed, exactly as predicted. Both thresholds
+   re-calibrated to 15,000 — real margin below the measured count, with
+   the history and the measurement recorded in the comment, not a number
+   nudged just past today's figure.
+3. **A third real regression, found by a full-suite run, not previously
+   named anywhere:** `test/originStability.test.ts`'s own settlement-
+   boundary stability test started throwing
+   `ERR_MODULE_NOT_FOUND: Cannot find package 'three'`. Root cause: Step
+   2's new `roadkit.js` import (which itself imports the `three` npm
+   package) broke this test's own technique of copying `public/` into the
+   OS tmpdir to patch `WORLD_SCALE` — a copy outside the repo has no
+   ancestor `node_modules`, so anything it transitively imports needing an
+   npm package fails. Not specific to `roadkit.js` — any future import of
+   an npm-package-using module into `public/` would have tripped this the
+   same way; a real, previously-undiscovered fragility in the test's own
+   technique. Fixed by creating the disposable copy under the repo root
+   instead, so it resolves packages the same way the real `public/`
+   directory always has. Verified by direct mutation-and-revert (reverted
+   to the OS tmpdir, confirmed the exact same error reappeared, restored).
+
+**A real, measured improvement, not claimed as this step's goal:**
+`docs/DECISIONS-FOR-MARK.md` #7 previously named 3 boundaries with no
+crossing egress. After this regeneration, only `farm-isle` still lacks
+one — wider roads and bigger blocks changed real occupancy favourably for
+2 of the 3. The gate itself is unchanged and stays red for the one
+boundary still affected.
+
+**Verified:** `npx tsc --noEmit` clean throughout. Targeted run (5 files):
+68 tests, 65 pass, 2 fail (B2.5, #7 — both tracked), 1 todo. A headless
+browser check (Playwright/SwiftShader) confirmed the regenerated board
+loads and renders end-to-end: `boardPieceCount: 21007`,
+`boardChildren: 21007` (one mesh per piece), zero page errors.
+
+**Visual check, honestly qualified:** `scripts/shoot.mjs` with
+`SHOOT_BOARD=1` rendered without error, but plain-grey placeholder board
+pieces (typologies not yet wired, B3's own documented scope) are not
+clearly distinguishable from the much more detailed legacy city in the
+same frame. Not claimed as a confirmed visual pass — the numeric
+piece-count/render check above is the real evidence for this step.
+
+**Commit:** `101ac09`.
