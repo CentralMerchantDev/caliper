@@ -73,8 +73,16 @@ export const PROPS = {
   },
   bench: {
     kind: "hard", cat: "furniture", h: 0.45, clear: 0.4,
-    foot: { w: 1.8, d: 0.55 },
-    from: "BoxGeometry(1.8, 0.45, 0.55)",
+    // w/d corrected 2026-09-11 (F4): this manifest still claimed the
+    // pre-migration BoxGeometry(1.8, 0.45, 0.55) dimensions. The bench moved
+    // to prop-models.js's own model (public/city-render.js's propGeometry("bench", ...)
+    // call) some time before this fix, and the real model measures 1.76 x
+    // 0.45 -- test/propManifest.test.ts's own check against the real built
+    // geometry's bounding box had been silently matching a preserved
+    // HISTORICAL COMMENT in city-render.js describing the old primitive,
+    // not the live code, until comments were stripped before matching.
+    foot: { w: 1.76, d: 0.45 },
+    from: "propGeometry(\"bench\", THREE) -- public/prop-models.js's own model, measured via its real bounding box",
   },
   busShelter: {
     kind: "hard", cat: "furniture", h: 2.5, clear: 0.5,

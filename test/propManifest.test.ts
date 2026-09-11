@@ -16,8 +16,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import * as THREE from "three";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 import { PROPS, propFootprint, hardPropIds } from "../public/prop-manifest.js";
+import { propGeometry } from "../public/prop-models.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 function findPublic(): string {
@@ -29,28 +32,49 @@ function findPublic(): string {
   }
   throw new Error("could not locate public/ from " + HERE);
 }
-const RENDER = readFileSync(join(findPublic(), "city-render.js"), "utf8");
+// Stripped before matching -- city-render.js is large and heavily commented;
+// a commented-out geometry call (e.g. mid-refactor) would otherwise satisfy
+// these checks exactly as happily as the real, live call does, and this
+// suite's own docs/LESSONS.md entry ("a regex over source matches your
+// comments too") is precisely this failure, found three times already.
+const RENDER = stripSourceComments(readFileSync(join(findPublic(), "city-render.js"), "utf8"));
 
 test("every fixed-size prop's footprint matches the geometry the renderer builds", () => {
   // Read the real constructor arguments out of city-render.js and compare. The
   // pairs below name the geometry call that DEFINES each prop; if that call
   // changes shape or disappears, this fails and says which.
-  const CHECKS: Array<{ id: string; re: RegExp; foot: (n: number[]) => { w: number; d: number } }> = [
+  //
+  // bin/bench/busShelter are checked differently from the other five, and the
+  // reason is itself a finding from stripping comments above (2026-09-11,
+  // F4): city-render.js's own comment block just above its propGeometry()
+  // calls for these three is a DELIBERATELY PRESERVED HISTORICAL RECORD of
+  // the hand-written primitives these props used BEFORE they moved to
+  // prop-models.js's shared registry (the yOff/bench-height bug the comment
+  // itself describes) -- it is prose, not code, and reads "//   bin
+  // CylinderGeometry(0.32, 0.28, 1.0, 6)   a six-sided tube" only as an
+  // example of what used to be there. Before comments were stripped from
+  // RENDER, this test's regex matched that prose and reported PASS for all
+  // three -- real verification of zero real code, for as long as the
+  // migration has stood. Re-pointed at the actual current source of truth:
+  // the real built geometry's own bounding box, via propGeometry() (the
+  // same function city-render.js itself now calls), not a second guess at
+  // what its constructor arguments might be.
+  const REGEX_CHECKS: Array<{ id: string; re: RegExp; foot: { w: number; d: number } }> = [
     // BoxGeometry(w, h, d) -> ground is w x d
-    { id: "bench",      re: /BoxGeometry\(1\.8,\s*0\.45,\s*0\.55\)/,  foot: () => ({ w: 1.8, d: 0.55 }) },
-    { id: "busShelter", re: /BoxGeometry\(3\.6,\s*2\.5,\s*1\.4\)/,    foot: () => ({ w: 3.6, d: 1.4 }) },
-    { id: "container",  re: /BoxGeometry\(12,\s*2\.6,\s*2\.6\)/,      foot: () => ({ w: 12, d: 2.6 }) },
-    { id: "railTie",    re: /BoxGeometry\(3\.2,\s*0\.35,\s*0\.42\)/,  foot: () => ({ w: 3.2, d: 0.42 }) },
+    { id: "container",  re: /BoxGeometry\(12,\s*2\.6,\s*2\.6\)/,      foot: { w: 12, d: 2.6 } },
+    { id: "railTie",    re: /BoxGeometry\(3\.2,\s*0\.35,\s*0\.42\)/,  foot: { w: 3.2, d: 0.42 } },
     // CylinderGeometry(rTop, rBottom, h, ...) -> ground is the WIDER radius x2
-    { id: "bin",        re: /CylinderGeometry\(0\.32,\s*0\.28,\s*1(?:\.0)?,/, foot: () => ({ w: 0.64, d: 0.64 }) },
-    { id: "mooring",    re: /CylinderGeometry\(0\.22,\s*0\.28,\s*1,/,         foot: () => ({ w: 0.56, d: 0.56 }) },
-    { id: "beacon",     re: /CylinderGeometry\(1\.4,\s*2\.0,\s*9,/,           foot: () => ({ w: 4.0, d: 4.0 }) },
-    { id: "lampPost",   re: /CylinderGeometry\(0\.22,\s*0\.3,\s*9,/,          foot: () => ({ w: 0.6, d: 0.6 }) },
+    { id: "mooring",    re: /CylinderGeometry\(0\.22,\s*0\.28,\s*1,/,         foot: { w: 0.56, d: 0.56 } },
+    { id: "beacon",     re: /CylinderGeometry\(1\.4,\s*2\.0,\s*9,/,           foot: { w: 4.0, d: 4.0 } },
+    { id: "lampPost",   re: /CylinderGeometry\(0\.22,\s*0\.3,\s*9,/,          foot: { w: 0.6, d: 0.6 } },
   ];
+  // Migrated to public/prop-models.js's propGeometry() -- checked against
+  // the real built geometry's bounding box, not a constructor-argument guess.
+  const MODEL_CHECKS = ["bin", "bench", "busShelter"];
 
   const missing: string[] = [];
   const wrong: string[] = [];
-  for (const c of CHECKS) {
+  for (const c of REGEX_CHECKS) {
     if (!c.re.test(RENDER)) {
       missing.push(
         `${c.id}: no geometry in city-render.js matches ${c.re}. Either the prop ` +
@@ -59,10 +83,19 @@ test("every fixed-size prop's footprint matches the geometry the renderer builds
       );
       continue;
     }
-    const want = c.foot([]);
     const got = PROPS[c.id].foot;
-    if (!got || got.w !== want.w || got.d !== want.d) {
-      wrong.push(`${c.id}: manifest says ${JSON.stringify(got)}, geometry says ${JSON.stringify(want)}`);
+    if (!got || got.w !== c.foot.w || got.d !== c.foot.d) {
+      wrong.push(`${c.id}: manifest says ${JSON.stringify(got)}, geometry says ${JSON.stringify(c.foot)}`);
+    }
+  }
+  for (const id of MODEL_CHECKS) {
+    const geom = propGeometry(id, THREE);
+    geom.computeBoundingBox();
+    const bb = geom.boundingBox!;
+    const built = { w: +(bb.max.x - bb.min.x).toFixed(2), d: +(bb.max.z - bb.min.z).toFixed(2) };
+    const got = PROPS[id].foot;
+    if (!got || Math.abs(got.w - built.w) > 0.05 || Math.abs(got.d - built.d) > 0.05) {
+      wrong.push(`${id}: manifest says ${JSON.stringify(got)}, real built geometry's bounding box says ${JSON.stringify(built)}`);
     }
   }
   assert.deepEqual(missing, [], missing.join("\n  "));

@@ -46,6 +46,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 function repoRoot(): string {
@@ -79,12 +80,6 @@ function visibleCopy(html: string): string {
  * that case generally, which is more machinery than this file's one job
  * justifies.
  */
-function stripComments(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\/\/.*$/gm, " ");
-}
-
 /**
  * The core registry check, pure and exported for its own direct test:
  * every `id="claim-*"` / `id="city-stat-*"` span across ALL given HTML
@@ -97,7 +92,7 @@ export function findUncheckedClaimSpans(htmlSources: string[], checksSource: str
     const copy = visibleCopy(html);
     for (const m of copy.matchAll(/id="((?:claim|city-stat)-[a-z-]+)"/g)) ids.add(m[1]);
   }
-  const code = stripComments(checksSource);
+  const code = stripSourceComments(checksSource);
   return [...ids].filter((id) => !code.includes(id));
 }
 
