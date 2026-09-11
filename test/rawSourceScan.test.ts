@@ -119,13 +119,6 @@ const REVIEWED_EXCLUSIONS: Record<string, string> = {
   "duplicateKeys.test.ts":
     "duplicateKeysIn() parses with acorn.parse() (a real AST), not regex -- " +
     "comment-immune by construction, checked directly in the source.",
-  "generatedClaimsAreCurrent.test.ts":
-    "spanText() matches `<span id=\"...\">` directly against RAW html, no " +
-    "HTML-comment stripping -- a claim span written only inside `<!-- -->` " +
-    "would be read as the live value. A REAL, not-yet-fixed instance of the " +
-    "same defect shape applied to HTML instead of JS; named for a future " +
-    "pass, time-boxed out of tonight's sweep. publicClaims.test.ts's own " +
-    "checks (below) already do this correctly via visibleCopy().",
   "kitbashNamedDesigns.test.ts":
     "Every .match()/.test()/.includes() call found targets DATA (a part's " +
     "display name, a design's recipe array, a file-path string), never " +

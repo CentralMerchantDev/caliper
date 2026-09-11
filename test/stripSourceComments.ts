@@ -21,6 +21,17 @@
 // was reviewed by hand before being switched over. A future caller with a
 // URL or a regex literal on the line it needs to check should verify that by
 // hand rather than trust this blindly.
+/**
+ * Same idea as stripSourceComments, for HTML instead of JS/TS: a `<span
+ * id="...">` sitting inside `<!-- -->` reads identically to a live one to a
+ * regex that never distinguishes markup from comment. Blanked char-for-char
+ * (newlines kept) for the same offset-preservation reason as the block-
+ * comment case above -- see that function's own doc comment.
+ */
+export function stripHtmlComments(src: string): string {
+  return src.replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, " "));
+}
+
 export function stripSourceComments(src: string): string {
   // Block comments first, blanked character-for-character (newlines kept, all
   // else replaced with a space) so length and line numbers survive -- callers

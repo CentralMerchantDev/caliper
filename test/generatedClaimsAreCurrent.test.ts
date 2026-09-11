@@ -35,6 +35,7 @@ import {
   nodeTestsClaimMismatch, workerTestsClaimMismatch, claudeMdClaimMismatch,
   mutationClaimMismatch,
 } from "../src/generatedClaimChecks.ts";
+import { stripHtmlComments, stripSourceComments } from "./stripSourceComments.ts";
 
 function repoRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -58,7 +59,7 @@ function spanText(html: string, id: string): string | null {
  * hand-kept one.
  */
 export function checkAllGeneratedClaims(): Array<{ name: string; stale: string | null }> {
-  const INDEX = readFileSync(join(ROOT, "public", "index.html"), "utf8");
+  const INDEX = stripHtmlComments(readFileSync(join(ROOT, "public", "index.html"), "utf8"));
   const CLAUDE_MD = readFileSync(join(ROOT, "CLAUDE.md"), "utf8");
   const README = readFileSync(join(ROOT, "README.md"), "utf8");
   const testCount = JSON.parse(readFileSync(join(ROOT, "test", "testCount.generated.json"), "utf8")) as {
@@ -160,4 +161,41 @@ test("P4.6 (synthetic): checkAllGeneratedClaims itself would report exactly one 
   const stale = staledManifest.filter((r) => r.stale !== null);
   assert.equal(stale.length, 1, `expected exactly the injected node-test claim to be stale, got: ${JSON.stringify(stale)}`);
   assert.match(stale[0].name, /#claim-node-tests/);
+});
+
+// --- rawSourceScan's own gap, closed: spanText() matched raw HTML, so a
+// claim span sitting inside <!-- --> read identically to a live one. See
+// test/rawSourceScan.test.ts's own history (2026-09-11) -- this was named
+// there as a real, not-yet-fixed instance of the same defect shape as
+// claimSpansAreChecked.test.ts and propManifest.test.ts.
+
+test("P4.6 (synthetic): the vulnerability, demonstrated -- spanText() on RAW html reads a commented-out span as if it were live", () => {
+  const commentedOut = `<div>before</div><!-- <span id="city-stat-buildings">17108</span> --><div>after</div>`;
+  // This is spanText's actual behaviour on unstripped input -- the reason
+  // checkAllGeneratedClaims() must never call it on raw INDEX text.
+  assert.equal(spanText(commentedOut, "city-stat-buildings"), "17108");
+});
+
+test("P4.6 (synthetic): the fix -- stripHtmlComments() first makes the same commented-out span invisible to spanText()", () => {
+  const commentedOut = `<div>before</div><!-- <span id="city-stat-buildings">17108</span> --><div>after</div>`;
+  assert.equal(spanText(stripHtmlComments(commentedOut), "city-stat-buildings"), null);
+});
+
+test("P4.6 (synthetic, GATE static): checkAllGeneratedClaims's own INDEX read is actually wired through stripHtmlComments, not just tested in isolation", () => {
+  // The two tests above prove stripHtmlComments works; they do not prove
+  // checkAllGeneratedClaims() actually calls it on the real index.html read.
+  // A helper proven correct and never wired into the real path is exactly
+  // this project's own recorded failure pattern E (MODULE-MAP.md) --
+  // checked here directly against this file's own source, comments
+  // stripped first so this check cannot itself be satisfied by a comment.
+  // Not fileURLToPath(import.meta.url) -- test/run.mjs bundles this file
+  // before running it, so that would resolve to the BUILT .mjs output
+  // (test/.built/...), not this source file's real text. Read the source
+  // directly by its repo-relative path instead.
+  const thisFileSrc = stripSourceComments(readFileSync(join(ROOT, "test", "generatedClaimsAreCurrent.test.ts"), "utf8"));
+  assert.match(
+    thisFileSrc,
+    /const INDEX = stripHtmlComments\(readFileSync\(join\(ROOT, "public", "index\.html"\), "utf8"\)\);/,
+    "checkAllGeneratedClaims's INDEX read no longer visibly passes through stripHtmlComments -- the fix may have been reverted or bypassed",
+  );
 });
