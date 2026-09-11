@@ -450,6 +450,28 @@ above always was — not free to reverse once the board is regenerated
 against typed widths — but that cost is now an accepted one, not an
 open question.
 
+**Addendum, 2026-09-11 (b1-land, attended):** the remaining steps of the
+retirement are now written up, numbered and in order, in
+`docs/specs/PIECE-CATALOGUE-ROADS.md` §9 — reviewed by a fresh, blind
+subagent (per `docs/AUDIT-PROTOCOL.md`'s own standing rule) and corrected
+on four points it found. Plan only; nothing in §9 is built.
+
+**A real regression, found by that same blind review, is currently RED on
+this branch:** the prior item's own commit (`f01a324`, "step one... see its
+own commit for gate evidence") added `roadClass` to every piece
+`generateBoard()` produces but did not regenerate the committed `public/
+board.generated.json` to match — `test/boardLoad.test.ts`'s "committed
+board.generated.json matches the seed it claims" gate now fails on every
+road piece, confirmed directly this session. This was missed before that
+commit because its own verification ran only `test/boardGenerator.test.ts`,
+not the full suite. The fix (`node scripts/gen-board.mjs`) is a real build
+step this session's own "plan only, build nothing" instruction forbids
+running unilaterally — attempted, correctly refused by this session's own
+permission boundary, left named and red rather than worked around. See
+`docs/specs/PIECE-CATALOGUE-ROADS.md` §9's own callout for the full
+account; whoever runs Step 1's regeneration should do it before Step 2,
+independent of the rest of the retirement plan.
+
 ---
 
 ## 6. B4's building typologies size themselves internally; two of twelve have no override at all. A naive "typologies from the kit" wiring would silently overhang the plot for at least those two.
