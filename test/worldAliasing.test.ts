@@ -24,6 +24,7 @@ import assert from "node:assert/strict";
 
 import { createWorld } from "../public/world.js";
 import { WORLD, LANDMASSES, HIGHWAYS } from "../public/city-plan.js";
+import { LANDMASSES as TERRAIN_LANDMASSES, MAINLAND_ZONES } from "../public/terrain.js";
 
 /**
  * Collect every non-primitive object reachable from `root`, by reference,
@@ -111,6 +112,23 @@ function allowedShared(landIfSameSeed) {
       value: lm.points,
       reason: "deep-frozen raw coastline outline, deliberately one shared source table -- see the comment on LANDMASSES' deepFreeze call.",
     })),
+    // B2.0's own gap, closed here: no LandField has read city-plan.js's
+    // LANDMASSES since Step A (b1-land) -- every world's `.masses` comes from
+    // public/terrain.js's own LANDMASSES via landmassPolygonsDesign()'s
+    // `{ ...lm, polygon }`, which leaves `.points` (and, for the mainland
+    // entry, `.zones`) shared by reference for exactly the same reason as the
+    // city-plan.js entries above: deep-frozen at module load, one source
+    // table, nothing anywhere writes to it after.
+    ...TERRAIN_LANDMASSES.filter((lm) => lm.points).map((lm) => ({
+      label: `LANDMASSES["${lm.id}"].points (public/terrain.js)`,
+      value: lm.points,
+      reason: "deep-frozen raw outline (authored or organicIsland-generated), one shared source table -- see the comment on terrain.js's LANDMASSES deepFreeze call.",
+    })),
+    {
+      label: "MAINLAND_ZONES (public/terrain.js)",
+      value: MAINLAND_ZONES,
+      reason: "a flat, frozen spec of the mainland's own depth-band fractions (Object.freeze); the mainland's LANDMASSES entry embeds it as `.zones` by reference, for every seed -- one frozen table, not one per world, same category as WORLD.",
+    },
     // Found BY this test: generateWorld()'s `roads` array spreads `...HIGHWAYS`
     // directly (unlike the separate `highways:` field a few lines down, which
     // copies each entry) -- so a highway that survives road-clipping unchanged

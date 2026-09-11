@@ -60,6 +60,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { filterPending, baselineIsFresh } from "./mutate-resume.mjs";
 import { MARKER, markerFileMatches, acquireLock, releaseLock, sha } from "./mutate-lock.mjs";
+import { unexpectedFailures } from "./expected-red.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = join(ROOT, "test", "mutations.json");
@@ -167,15 +168,21 @@ function runSuite() {
   // is what made the exemption in gen-test-count dead code on its first version,
   // and this file would have inherited the identical bug by copying the pattern
   // without the lesson.
-  const failing = [...out.matchAll(/^(?:not ok \d+ - |✖ )(.+?)(?: \(\d|$)/gm)]
+  const rawFailing = [...out.matchAll(/^(?:not ok \d+ - |✖ )(.+?)(?: \(\d|$)/gm)]
     .map((x) => x[1].trim())
     .filter((n) => n !== "failing tests:");
+  // scripts/expected-red.mjs: a named, documented, honestly-red test is not
+  // a broken tree (Candidate pattern F, second instance -- AUDIT-PROTOCOL.md
+  // §7, 2026-09-09). `fail`/`failing` below are the UNEXPECTED subset, so a
+  // baseline consisting only of allowlisted titles reads as green; `rawFail`
+  // is kept alongside for anyone who wants the true, unfiltered count.
+  const failing = [...new Set(unexpectedFailures([...new Set(rawFailing)]))];
   // Every test name the run reported, passing or failing. Used to check that a
   // mutation's `expect` still refers to a test that exists.
   const all = [...out.matchAll(/^(?:ok \d+ - |✔ |✖ )(.+?)(?: \(\d|$)/gm)]
     .map((x) => x[1].trim())
     .filter((n) => n !== "failing tests:");
-  return { fail, failing: [...new Set(failing)], all: [...new Set(all)], exit, out };
+  return { fail: fail === null ? null : failing.length, rawFail: fail, failing, all: [...new Set(all)], exit, out };
 }
 
 function applyMutation(mut, baseline) {

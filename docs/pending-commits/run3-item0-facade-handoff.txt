@@ -1,0 +1,45 @@
+RUN3 Item 0 -- the facade handoff, closed. docs/briefs/RUN3-CLI-2026-09-09.md's
+own claim ("three lines... unblocks another lane's finished work") was
+half right: the one-line diff (public/city-render.js passing variantSeed:
+g.seed into getFacadeMaterial) applied cleanly, exactly as verified in
+the sibling worktree's CROSS-LANE-REQUESTS.md #1.
+
+BUT the capability it was meant to unblock did not exist on this branch
+at all -- confirmed directly, not assumed: public/facade-textures.js
+(BLD-lane-owned) had no FACADE_VARIANTS/pickVariant/variantSeed-aware
+getFacadeMaterial here, and test/facadeVariants.test.ts (the gate itself)
+did not exist on b1-land. BLD's own claim was true of codex-lane; it had
+not reached this branch yet.
+
+FIXED, following Item Zero's own precedent for a sibling lane's already-
+tested work: pulled public/facade-textures.js and test/facadeVariants.test.ts
+from codex-lane verbatim (git checkout codex-lane -- <paths>) -- BLD's own
+content, unmodified, not an edit across the line.
+
+Un-marked the {todo} gate as asked. It went RED for a real reason the
+request did not anticipate: the gate's own counting line hardcoded
+`${char}-vc-day-`, a template with no variant seed in it, so it could
+never measure more than 4 regardless of the fix. Fixed to compute
+pickVariant(char, group.seed).name -- the real, reachable selection.
+Measured: 12 distinct facade materials now reachable from real
+placements, matching BLD's own "12 variants" claim.
+
+A SECOND real gap found by mutation-testing the fix, not by inspection:
+the corrected gate still could not detect a regression in the one line
+this handoff actually added -- it recomputes pickVariant independently
+and never reads city-render.js's real call. Added a second, static test
+(greps city-render.js's own source for the literal variantSeed: g.seed
+text) that DOES catch it. 2 mutations, both CAUGHT.
+
+VERIFIED: node test/run.mjs test/facadeVariants.test.ts: 9/9 green.
+No regressions: kitbashAssembler/kitbashParts/cityRenderScenePlacements/
+cityRenderWorldState/phaseDelta/rendererStatic, 34/34 pass. npx tsc
+--noEmit clean.
+
+Reply written to docs/CROSS-LANE-REQUESTS.md (this worktree, new file --
+the first entry, per this project's own established convention). Did not
+write to the sibling worktree.
+
+README.md's mutation-evidence sentence re-synced (131 injected, 121
+caught, 9 never run, 1 survived or inconclusive) to include this run's
+2 new mutations.

@@ -188,24 +188,31 @@ queued is a productive morning.
 Tick an item only when its gate is green AND the commit exists. Record the commit
 hash beside it. An unticked item with a commit is a lie in either direction.
 
-```
-[x] B2.6  Persist the board          gate: boardLoad.test.ts 3/3 green (CPU-time gate stays honestly red, tracked separately, unchanged)  commit: 27cca18
-[!] B2.7  Bridges and boat routes    PLANNED, BLIND-REVIEWED, CORRECTED -- not implemented. commit: 95cf588
-[!] B2.8  Re-pin the old-world tests CATEGORIZED (38/38, all confirmed old-world-geometry-dependent) -- not re-pinned, correctly deferred until after B2.7 per this plan's own sequencing. commit: 76e8d61
-[ ] B3    The render path            gate: ___  commit: ___
-[ ] B4    Kits wire by construction  gate: ___  commit: ___
-[ ] B5    The visual pass            gate: ___  commit: ___
-[ ] B6    Quarantine the three files gate: ___  commit: ___
-[ ] B7    Farmland, range, greenery  gate: ___  commit: ___
-```
+**The checklist has moved.** It now lives in
+[`docs/specs/COMPLETION-PLAN.md`](specs/COMPLETION-PLAN.md), which is the single
+canonical list of everything left to finish this project, and phase numbering is
+governed by [`docs/specs/BOARD-REBUILD-PLAN.md`](specs/BOARD-REBUILD-PLAN.md).
+Tick there, not here.
 
-Also this run, off-checklist but load-bearing: Item Zero (docs/MODULE-MAP.md
-generated fresh, commit adf3362) and the mutationEvidence pair (21
-outstanding mutations run, 11 CAUGHT for real, 10 honestly blocked and
-named, commit 73f84b6).
+**Renumbering note, 2026-09-09.** The checklist that used to sit here numbered
+two phases in a way `BOARD-REBUILD-PLAN.md` does not, and a lane reading both
+would have ticked the wrong box. Two sources of truth with nothing binding them,
+in the phase numbering itself. Corrected as follows:
 
-The list is longer than the night on purpose. Running out of night is expected.
-Running out of work is not.
+| Was, in this file | Now, canonically |
+|---|---|
+| B6 — quarantine the three files | **Not a phase.** Quarantining `city-render.js` is B3's exit condition; `city-plan.js`, `layout.js` and `board-adapter.js` are B4's. |
+| B7 — farmland, range, greenery | **B7 — the countryside**, now a real phase in `BOARD-REBUILD-PLAN.md` |
+| — | **B6 — the interface**, which existed in the plan and was missing here entirely |
+
+State carried across as it stood at the end of the 2026-09-09 run: **B2.6** green
+at `27cca18`; **B2.7** planned, blind-reviewed and corrected at `95cf588` but not
+implemented; **B2.8** categorized 38 of 38 at `76e8d61` but not re-pinned.
+Off-checklist the same run: `docs/MODULE-MAP.md` generated fresh at `adf3362`,
+and the mutation evidence brought to 109 of 119 CAUGHT with 10 honestly named at
+`73f84b6`.
+
+Running out of night is expected. Running out of work is not.
 
 ---
 

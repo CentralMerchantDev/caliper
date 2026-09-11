@@ -54,6 +54,37 @@ export function workerTestsClaimMismatch(claimedWorker: number, generatedWorkerT
   return null;
 }
 
+/**
+ * RUN2-CLI-2026-09-09: README.md said "98 deliberate defects injected...,
+ * all 98 caught" with nothing checking it against the real manifest --
+ * the exact "declared value in a second place, nothing binding them"
+ * pattern this project's own docs (AUDIT-PROTOCOL.md's Failure pattern B)
+ * name elsewhere. Confirmed directly before writing this: no test file
+ * read README.md at all. This closes that hole the same way every other
+ * generated claim on this page already is -- read the real manifest, not
+ * a hand-typed number with no expiry.
+ */
+export function mutationClaimMismatch(readmeText: string, generatedTotal: number, generatedCaught: number, generatedNeverRun: number): string | null {
+  // caught + neverRun does NOT have to equal the total -- a SURVIVED or
+  // INCONCLUSIVE result is neither, and a sentence naming only two of three
+  // real states can look internally consistent while silently omitting the
+  // third. The exact "individually-correct numbers that do not sum to the
+  // stated total" gap this run's own ground-check found in
+  // docs/briefs/OVERNIGHT-CLI-2026-09-09.md's "1,141 tests" line -- fixed
+  // here by requiring the sentence to name the remainder explicitly
+  // (0 when there is none), rather than letting the sentence go quiet
+  // about a state it has no clause for.
+  const otherCount = generatedTotal - generatedCaught - generatedNeverRun;
+  const m = readmeText.match(/(\d+)\s+deliberate defects injected into the guardrails,\s+(\d+)\s+caught and re-verified,\s+(\d+)\s+named and not yet run,\s+(\d+)\s+survived or inconclusive/i);
+  if (!m) return "README.md no longer has a \"N deliberate defects injected... caught and re-verified... named and not yet run... survived or inconclusive\" sentence";
+  const [, claimedTotal, claimedCaught, claimedNeverRun, claimedOther] = m;
+  if (Number(claimedTotal) !== generatedTotal) return `README.md claims ${claimedTotal} defects injected, generated summary says ${generatedTotal} -- run node scripts/gen-mutation-summary.mjs`;
+  if (Number(claimedCaught) !== generatedCaught) return `README.md claims ${claimedCaught} caught, generated summary says ${generatedCaught} -- run node scripts/gen-mutation-summary.mjs`;
+  if (Number(claimedNeverRun) !== generatedNeverRun) return `README.md claims ${claimedNeverRun} never run, generated summary says ${generatedNeverRun} -- run node scripts/gen-mutation-summary.mjs`;
+  if (Number(claimedOther) !== otherCount) return `README.md claims ${claimedOther} survived or inconclusive, generated summary implies ${otherCount} (total ${generatedTotal} - caught ${generatedCaught} - never-run ${generatedNeverRun}) -- run node scripts/gen-mutation-summary.mjs`;
+  return null;
+}
+
 export function claudeMdClaimMismatch(claudeMdText: string, generatedNodeTests: number, generatedWorkerTests: number): string | null {
   const m = claudeMdText.match(/npm test\s+# (\d+) node tests \+ (\d+) worker tests/);
   if (!m) return "CLAUDE.md's \"How to verify\" section no longer has an `npm test # N node tests + M worker tests` line";

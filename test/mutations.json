@@ -1013,6 +1013,330 @@
       "find": "    this._hiddenMovedPieces = [];\n    if (this._movedPieces) {\n      for (const [movedPlotId, entry] of this._movedPieces) {\n        if (keepIds.has(`bld-${movedPlotId}`)) continue;\n        this._hiddenMovedPieces.push(entry.standalone);\n        entry.standalone.visible = false;\n      }\n    }",
       "replace": "    this._hiddenMovedPieces = [];",
       "expect": "a P4.4-moved piece not in the kept set is hidden by isolate, and restored -- a blind audit found applyIsolate cannot see it at all"
+    },
+    {
+      "id": "b1-terrain-no-longer-imports-landmasses",
+      "guards": "terrain.js does not import landmassPolygonsDesign or LANDMASSES from city-plan.js -- the dependency B1 exists to break, since city-plan.js is slated for replacement in B2.",
+      "note": "Verified by hand this session (host memory constraints, per docs/BUILD-LOOP.md's own long-run discipline). First attempt at this mutation added an ALIASED import (`landmassPolygonsDesign as _reimported`); the test's original exact-name array check SURVIVED wrongly, because an aliased entry does not equal the bare name after a naive comma-split. Caught before landing: the test now does a substring/word-boundary match against the whole import clause, not an exact-membership check, and this mutation now correctly goes red.",
+      "file": "public/terrain.js",
+      "find": "import { WORLD } from \"./city-plan.js\";",
+      "replace": "import { WORLD, landmassPolygonsDesign as _reimported } from \"./city-plan.js\";",
+      "expect": "terrain.js no longer imports landmassPolygonsDesign or LANDMASSES from city-plan.js"
+    },
+    {
+      "id": "b1-terrain-exports-own-landmasses",
+      "guards": "terrain.js exports its own landmassPolygonsDesign rather than only using it internally or re-exporting city-plan.js's.",
+      "note": "Verified by hand this session. Removing `export` correctly turned both the export-presence test AND the identity test red (the identity test's own dynamic import reads undefined off the module namespace) -- both recorded as one mutation since they share a single root cause.",
+      "file": "public/terrain.js",
+      "find": "export function landmassPolygonsDesign(samplesPerSegment = 10) {",
+      "replace": "function landmassPolygonsDesign(samplesPerSegment = 10) {",
+      "expect": "terrain.js exports its own landmassPolygonsDesign, not a re-export of city-plan.js's"
+    },
+    {
+      "id": "b1-ownership-list-tracks-real-importers",
+      "guards": "test/terrainLandmassOwnership.test.ts's transformed third check (B1 step B: 'assert nothing reads city-plan.js's copy', not yet true, so tracked as an explicit named list instead -- Mark's own instruction) actually compares the list, rather than trivially passing.",
+      "note": "REPLACES the b1-terrain-landmass-data-identical-to-original entry this superseded (that mutation's own find target, a gull-isle coordinate, no longer exists -- the island is now procedurally generated). Verified by hand this session: removing one real entry from KNOWN_STATIC_IMPORTERS correctly turned exactly this test red, reverted, reconfirmed green.",
+      "file": "test/terrainLandmassOwnership.test.ts",
+      "find": "  const KNOWN_STATIC_IMPORTERS = [\n    \"public/road-network.js\",\n    \"scripts/_render-arterial-data.mjs\",",
+      "replace": "  const KNOWN_STATIC_IMPORTERS = [\n    \"scripts/_render-arterial-data.mjs\",",
+      "expect": "the exact, current set of files still reading city-plan.js's LANDMASSES/landmassPolygonsDesign directly is named and tracked"
+    },
+    {
+      "id": "b1-island-count-gate-real",
+      "guards": "the B1 gate's island-count assertion (>= 20) actually reacts to a real reduction in the archipelago, not a tautology.",
+      "note": "Verified by hand this session: setting SKERRY_COUNT to 0 correctly turned exactly the island-count test red (measured 10 islands, below the 20 floor), reverted, reconfirmed green (32 islands).",
+      "file": "public/terrain.js",
+      "find": "const SKERRY_COUNT = 22;",
+      "replace": "const SKERRY_COUNT = 0;",
+      "expect": "island count and variety -- an archipelago reads by count, not by area alone"
+    },
+    {
+      "id": "b1-mainland-settleable-fraction-capped",
+      "guards": "the B1 gate's mainland settleable-fraction cap (<= 0.2) actually catches a mainland that drifts toward settlement, per Mark's own correction 2.",
+      "note": "Verified by hand this session: raising coastal-strip's fraction from 0.12 to 0.45 (compensating farmland down to keep the three bands summing to 1) correctly turned exactly this test red, reverted, reconfirmed green.",
+      "file": "public/terrain.js",
+      "find": "  { id: \"coastal-strip\", identity: \"the mainland's own thin settled edge -- the only part of the mainland this plan settles\", fraction: 0.12, settleable: true },\n  { id: \"farmland\", identity: \"farmland behind the coast -- open, worked, not built on\", fraction: 0.55, settleable: false },",
+      "replace": "  { id: \"coastal-strip\", identity: \"the mainland's own thin settled edge -- the only part of the mainland this plan settles\", fraction: 0.45, settleable: true },\n  { id: \"farmland\", identity: \"farmland behind the coast -- open, worked, not built on\", fraction: 0.22, settleable: false },",
+      "expect": "the mainland's own settleable fraction is a stated, small number, not left to be inferred"
+    },
+    {
+      "id": "b2-0-worldaliasing-terrain-landmasses-on-allowlist",
+      "guards": "worldAliasing.test.ts's different-seed test genuinely checks terrain.js's own LANDMASSES[...].points for unreviewed sharing, rather than the allow-list entry being decorative.",
+      "note": "Verified by hand this session: replacing TERRAIN_LANDMASSES with [] in the allow-list's own filter/map (so none of terrain.js's landmass outlines are declared shared) correctly turned the different-seed test red (438 unexplained shared objects, first one array(22)), reverted, reconfirmed green.",
+      "file": "test/worldAliasing.test.ts",
+      "find": "    ...TERRAIN_LANDMASSES.filter((lm) => lm.points).map((lm) => ({",
+      "replace": "    ...[].filter((lm) => lm.points).map((lm) => ({",
+      "expect": "two worlds with DIFFERENT seeds share only the declared allow-list (WORLD -- never land)"
+    },
+    {
+      "id": "b2-0-worldaliasing-mainland-zones-on-allowlist",
+      "guards": "worldAliasing.test.ts's different-seed test separately catches MAINLAND_ZONES sharing, not just LANDMASSES.points -- `.zones` is a distinct reachable field on the mainland's own LANDMASSES entry.",
+      "note": "Verified by hand this session: removing the MAINLAND_ZONES allow-list entry alone (leaving the LANDMASSES.points entries in place) correctly turned the different-seed test red (4 unexplained shared objects, first one array(3) -- MAINLAND_ZONES' own three bands), reverted, reconfirmed green.",
+      "file": "test/worldAliasing.test.ts",
+      "find": "    {\n      label: \"MAINLAND_ZONES (public/terrain.js)\",\n      value: MAINLAND_ZONES,\n      reason: \"a flat, frozen spec of the mainland's own depth-band fractions (Object.freeze); the mainland's LANDMASSES entry embeds it as `.zones` by reference, for every seed -- one frozen table, not one per world, same category as WORLD.\",\n    },\n",
+      "replace": "",
+      "expect": "two worlds with DIFFERENT seeds share only the declared allow-list (WORLD -- never land)"
+    },
+    {
+      "id": "b2-settlement-table-wooded-exclusion-real",
+      "guards": "the B2 gate's 'wooded/sandbar/rock/skerry islands carry no settlement at all' assertion actually reacts to SETTLEMENT_TABLE, not a tautology.",
+      "note": "Verified by hand this session: marking wooded settled (with a real density/boundary/block/plot config, matching every other settled kind's shape) correctly turned exactly the wooded-exclusion test red, and only that test -- the other 7 tests in test/boardGenerator.test.ts stayed green -- reverted, reconfirmed green (8/8).",
+      "file": "public/board-generator.js",
+      "find": "  wooded:    { settled: false },",
+      "replace": "  wooded:    { settled: true, boundaryK: 0.3, blockAtoms: 65, plotAtoms: 28, levels: 2 },",
+      "expect": "wooded/sandbar/rock/skerry islands carry no settlement at all"
+    },
+    {
+      "id": "b2-mainland-boundary-inland-direction-real",
+      "guards": "the B2 gate's coverage-inside-boundary assertion catches a mainland settlement boundary built in the wrong direction (out to sea instead of onto land).",
+      "note": "Verified by hand this session: reversing the inland offset sign (the exact bug this file's own comment on mainlandBoundary describes finding, in the other direction) correctly turned the coverage test red -- the settlement-boundaries gate test itself did NOT catch it (boundary geometry is still WORLD_SCALE-invariant either direction, so origin stability is a different, orthogonal property from correctness of direction), which is itself informative: coverage is the control that actually verifies the boundary sits on buildable land. Reverted, reconfirmed green (8/8, plus originStability's own new case unaffected).",
+      "file": "public/board-generator.js",
+      "find": "  const inland = coastPolyline.map(([x, z]) => [x - stripDepth, z]);",
+      "replace": "  const inland = coastPolyline.map(([x, z]) => [x + stripDepth, z]);",
+      "expect": "coverage is measured INSIDE each settlement boundary, 20-40%, not world-wide"
+    },
+    {
+      "id": "b2-5-ground-verified-opt-in-is-load-bearing",
+      "guards": "board.js's groundVerified option actually skips the exhaustive per-cell ground loop -- the B2.5 performance fix is real, not decorative.",
+      "note": "RUN3 item 5: this was previously verified by hand only (a real timing measurement, no node:test assertion -- confirmed SURVIVED against the automated suite three separate times this run). Given a deterministic replacement control in test/board.test.ts that counts heightAt calls instead of wall-clock time: exhaustive canPlace makes >=4 calls (one per foot cell in the GROUND loop), groundVerified:true makes <=1 (only SPACE's own never-skipped groundYFor call). Removing the `!groundVerified &&` guard makes the GROUND loop run unconditionally, so the groundVerified path's call count rises to match the exhaustive path -- caught. Original hand-verified timing evidence (~167.6s vs ~40s) preserved below for history.",
+      "file": "public/board.js",
+      "find": "    if (!groundVerified && standsOn && standsOn.length) {",
+      "replace": "    if (standsOn && standsOn.length) {",
+      "expect": "RUN3 C1: canPlace's groundVerified opt-in genuinely skips the ground check's own heightAt calls -- a deterministic proxy for B2.5's timing claim, not a clock"
+    },
+    {
+      "id": "b2-5-sampled-ground-perimeter-is-load-bearing",
+      "guards": "sampledGroundOk's full-perimeter scan (not just the interior stride grid) actually catches ground the interior sampling alone would miss.",
+      "note": "RUN3 item 5: previously verified by hand only (a real-archipelago disagreement count, no node:test assertion). Given a deterministic replacement control in test/boardGenerator.test.ts: a synthetic heightAt places a single WATER atom exactly on the west edge, strictly between the footprint's own north/south rows and off the interior stride grid, so only the west/east perimeter scan can see it. sampledGroundOk is now exported from board-generator.js for this test. Removing the dj loop (the west/east scan) makes sampledGroundOk wrongly return true for this synthetic case -- caught. Original hand-verified real-archipelago evidence (1 of 39,118 candidates flipped dangerous) preserved below for history.",
+      "file": "public/board-generator.js",
+      "find": "  for (let dj = 0; dj < d; dj++) {\n    if (!standsSet.has(groundKindAt(heightAt, iMin, jMin + dj))) return false;\n    if (!standsSet.has(groundKindAt(heightAt, iMin + w - 1, jMin + dj))) return false;\n  }\n  for (let di = stride; di < w - 1; di += stride) {",
+      "replace": "  for (let di = stride; di < w - 1; di += stride) {",
+      "expect": "RUN3 C1: sampledGroundOk's west/east perimeter scan catches a boundary the north/south scan and the interior stride grid both miss"
+    },
+    {
+      "id": "b2-6-no-live-route-generates-the-board",
+      "guards": "the B2.6 static gate genuinely detects a live route (src/) importing generateBoard -- not a tautology that only ever finds zero because it never looks.",
+      "note": "Verified by hand this session: added a scratch file src/_scratch-violation.ts importing generateBoard from ../public/board-generator.js, confirmed the gate's own scan (re-run standalone against the real src/ directory) reported it by name, then deleted the scratch file (never committed) and reconfirmed zero. This is the control that stands in for the B2.5 timing gate once generation moves offline -- Mark's own words: 'a stronger gate than a time limit, and it cannot be satisfied by a faster machine.'",
+      "file": "test/boardGenerator.test.ts",
+      "find": "    const m = src.match(/import\\s*\\{([^}]*)\\}\\s*from\\s*[\"'][^\"']*board-generator(?:\\.js)?[\"']/);\n    if (m && /\\bgenerateBoard\\b/.test(m[1])) found.push(f);",
+      "replace": "    // disabled",
+      "expect": "no file in src/ imports generateBoard -- the request path must not generate"
+    },
+    {
+      "id": "decision-5-step-1-roadclass-default",
+      "guards": "every road piece placeRoadGraph() places carries a real, current ROAD_STANDARDS key as its roadClass -- decision 5's retirement of ROAD_WIDTH (docs/DECISIONS-FOR-MARK.md #5), step 1: metadata only, no footprint change yet.",
+      "note": "Verified this session (b1-land, 2026-09-11): ROAD_CLASS_DEFAULT set to an invalid ROAD_STANDARDS key makes every real road piece's roadClass unresolvable, caught by the dedicated test asserting ROAD_STANDARDS[p.roadClass] for every road piece, not a sample.",
+      "file": "public/board-generator.js",
+      "find": "const ROAD_CLASS_DEFAULT = \"STREET\";",
+      "replace": "const ROAD_CLASS_DEFAULT = \"NOT_A_REAL_CLASS\";",
+      "expect": "every road piece the generator places carries a real, current roadClass"
+    },
+    {
+      "id": "decision-5-step-2-block-carving-reads-road-standards",
+      "guards": "generateBoard()'s own block-carving loop sizes its margin from ROAD_STANDARDS via halfRoadFor(), not a value that merely happens to equal today's number -- decision 5's retirement of ROAD_WIDTH, step 2: geometry reads its own class's width.",
+      "note": "Verified this session (b1-land, 2026-09-11), after a blind review found the originally-planned road/building overlap test would never fire (public/board.js's own occupancy guard already refuses any candidate that would overlap a real reservation, so no two placed pieces can ever overlap regardless of whether the margin math is correct -- a static source scan is what actually distinguishes a site that reads ROAD_STANDARDS from one that merely reproduces today's number). Caught by the dedicated static-scan test, per-function (placeRoadGraph() and generateBoard()'s block-carving loop each checked to call halfRoadFor() independently), not by counting occurrences file-wide.",
+      "file": "public/board-generator.js",
+      "find": "const blockHalfRoad = halfRoadFor(ROAD_CLASS_DEFAULT);",
+      "replace": "const blockHalfRoad = 9;",
+      "expect": "board-generator.js sizes every road site from ROAD_STANDARDS"
+    },
+    {
+      "id": "decision-5-step-3-blockatoms-retuned-for-doubled-road-width",
+      "guards": "SETTLEMENT_TABLE's blockAtoms values are re-tuned for the doubled (STREET, 18m) road width, so coverage lands back in the 20-40% band -- decision 5's retirement of ROAD_WIDTH, step 3.",
+      "note": "Verified this session (b1-land, 2026-09-11): reverting city/suburb/resort's own retuned blockAtoms to their Step-2-red values reproduces the same coverage-band failure for the same reason (measured directly: downtown 55.4%, resort-isle 59.9%, suburb-isle 41.5% before this step; city 37.7%, suburb 37.6%, resort 38.2% after -- every settled tier in band). Not a new control in the sense of new code -- this proves the FIX is the retune, not an accidental, unrelated change, per docs/specs/PIECE-CATALOGUE-ROADS.md §9 Step 3's own mutation plan.",
+      "file": "public/board-generator.js",
+      "find": "  city:      { settled: true,  density: \"highest\",       era: \"contemporary+heritage\",    boundaryK: 0.55, blockAtoms: 114, plotAtoms: 18, levels: 9 },\n  suburb:    { settled: true,  density: \"medium-high\",   era: \"postwar+contemporary\",     boundaryK: 0.55, blockAtoms: 150, plotAtoms: 20, levels: 3 },\n  resort:    { settled: true,  density: \"medium\",        era: \"contemporary\",             boundaryK: 0.50, blockAtoms: 150, plotAtoms: 24, levels: 4 },",
+      "replace": "  city:      { settled: true,  density: \"highest\",       era: \"contemporary+heritage\",    boundaryK: 0.55, blockAtoms: 57, plotAtoms: 18, levels: 9 },\n  suburb:    { settled: true,  density: \"medium-high\",   era: \"postwar+contemporary\",     boundaryK: 0.55, blockAtoms: 69, plotAtoms: 20, levels: 3 },\n  resort:    { settled: true,  density: \"medium\",        era: \"contemporary\",             boundaryK: 0.50, blockAtoms: 57, plotAtoms: 24, levels: 4 },",
+      "expect": "coverage is measured INSIDE each settlement boundary"
+    },
+    {
+      "id": "decision-5-step-4-bridge-deck-reads-road-standards",
+      "guards": "the bridge deck's own width comes from ROAD_STANDARDS via roadWidthFor(BRIDGE_DECK_CLASS), agreeing with the roads it connects to (STREET), not a fixed constant of its own -- decision 5's retirement of ROAD_WIDTH, step 4.",
+      "note": "Verified this session (b1-land, 2026-09-11) by DIRECT mutation-and-revert, not scripts/_mutcheck.mjs -- that script's own baseline check refuses to run against test/bridgeGenerator.test.ts because docs/DECISIONS-FOR-MARK.md #7's own gate is already, and possibly permanently, red in that same file (an accepted starting-state gap per rule://generated-world-is-a-starting-state, not something this session has grounds to resolve, and not on scripts/expected-red.mjs's own narrow allowlist). Applied the mutation by hand, ran node test/run.mjs test/bridgeGenerator.test.ts, confirmed exactly one NEW failure (this test, named, for the stated reason) alongside the pre-existing #7 red and nothing else, reverted, confirmed back to the same 13/14 as before the mutation.",
+      "file": "public/bridge-generator.js",
+      "find": "const deckHalfWidth = halfRoadFor(BRIDGE_DECK_CLASS), deckWidth = roadWidthFor(BRIDGE_DECK_CLASS);",
+      "replace": "const deckHalfWidth = 4, deckWidth = 9;",
+      "expect": "every real bridge deck is the SAME width as the road pieces it connects to"
+    },
+    {
+      "id": "b2-7-classify-crossing-uses-real-ceiling",
+      "guards": "classifyCrossing genuinely splits bridge-vs-boat at roadkit.js's real 800 m buildable ceiling, not the old world's 9,000 m 'plausible' cutoff this plan's own blind review corrected.",
+      "note": "Verified this session: forcing every gap to classify as a bridge regardless of distance is exactly the defect the blind review found in the first B2.7 draft (reusing 9,000 m, which answers 'is this geographically plausible' not 'can roadkit.js build it') -- caught directly by the unit test asserting 801m/9000m both classify as boat.",
+      "file": "public/bridge-generator.js",
+      "find": "  return edge.d <= BRIDGE_MAX_SPAN_M ? \"bridge\" : \"boat\";",
+      "replace": "  return \"bridge\";",
+      "expect": "classifyCrossing splits at roadkit.js's own real 800 m buildable ceiling"
+    },
+    {
+      "id": "b2-7-anchor-walk-checks-correct-boundary",
+      "guards": "walkAnchor genuinely requires the found ground to be INSIDE the boundary the anchor is FOR, not merely dry ground belonging to any landmass -- mechanism 1's own historically real bug (gen-bridges.mjs: 'barrier-redcliff came back with both ends on the mainland').",
+      "note": "Verified this session: dropping the inPolygon check lets an anchor walk wander onto a neighbouring landmass (most anchors are close enough to their own boundary that this survives on many edges, but the dedicated gate test's own boundaryId cross-check catches it on the real archipelago).",
+      "file": "public/bridge-generator.js",
+      "find": "    if (!inPolygon(x, z, boundaryPolygon)) continue;",
+      "replace": "    // disabled",
+      "expect": "every bridge and every dock lands on dry, road-legal ground belonging to the boundary it serves"
+    },
+    {
+      "id": "b2-7-dock-ids-are-per-pair-not-per-boundary",
+      "guards": "a boundary with boat routes to two different partners gets two DISTINCT dock ids, not one shared dock reused across routes -- board.js's own place() refuses a duplicate id outright.",
+      "note": "Verified this session: dropping the partner-boundary suffix from a dock's own id makes every route touching the same boundary collide on the same id. Caught, but not by the dedicated 'no duplicate ids' test itself -- board.js's own place() silently absorbs the collision (refusing the second, colliding piece) before that assertion ever sees a duplicate, so the ids that DO survive into `built` are never duplicated. Caught instead by the two tests whose own dock count/pairing depends on BOTH ends of every route surviving: a boundary with 2+ routes loses one dock outright, breaking its partner's routeTo reference and the real-built-connectivity count. Recorded here as its own finding, the same shape as the 2026-09-09 worldAliasing entry (AUDIT-PROTOCOL.md SS7): the manifest's own `expect` must name a test that ACTUALLY goes red, not the test whose title best describes the property in prose.",
+      "file": "public/bridge-generator.js",
+      "find": "  const idA = `dock-${edge.aId}-${edge.bId}`;",
+      "replace": "  const idA = `dock-${edge.aId}`;",
+      "expect": "the REAL BUILT pieces -- not just the abstract graph -- connect all 12 boundaries, zero refused"
+    },
+    {
+      "id": "b2-7-bridge-refusal-falls-back-to-boat",
+      "guards": "a bridge candidate that bridgeSpan() or board.place() refuses becomes a boat route instead of silently dropping the connection -- this plan's own named fallback rule.",
+      "note": "Verified this session: skipping the dock fallback on a bridge refusal turns that edge into a real, reported refusal rather than a redirected boat route. SURVIVED on a first attempt scored only against the default archipelago's own connectivity gate -- the real data has exactly one bridge candidate and it never fails, so the fallback branch this mutation touches never executes against that data, and the mutation is invisible to any test that only calls buildCrossingPieces on the unmodified default boundaries. Caught for real once a dedicated test pre-occupied the one real bridge's own exact footprint on a fresh board (forcing board.place() to refuse it for a genuine reason) and asserted the occupied candidate still produces zero refused crossings and more dock pieces than before.",
+      "file": "public/bridge-generator.js",
+      "find": "    if (!tryDockFallback()) {\n      refused.push({ edgeKey, edge, reason: `bridge refused (${result.ok ? \"board placement\" : result.reason}) and no fallback dock anchor` });\n    }",
+      "replace": "    refused.push({ edgeKey, edge, reason: `bridge refused (${result.ok ? \"board placement\" : result.reason}) and no fallback dock anchor` });",
+      "expect": "a bridge candidate the BOARD refuses (occupied cell) redirects to a real boat route"
+    },
+    {
+      "id": "b3-mesh-height-from-real-levels",
+      "guards": "a building piece's own mesh height comes from grid.js's heightOf(levels), not a second, hardcoded storey height that could silently disagree with every other piece on the board.",
+      "note": "Verified this session: hardcoding a constant height instead of reading the piece's own levels field is caught directly by the dedicated position/size gate test, which asserts the mesh height equals heightOf(5) for a 5-level test fixture.",
+      "file": "public/board-render.js",
+      "find": "  if (piece.pieceType === \"building\") return heightOf(piece.levels);",
+      "replace": "  if (piece.pieceType === \"building\") return 12;",
+      "expect": "a mesh's own position and size come from its piece's real cell/foot/levels"
+    },
+    {
+      "id": "b3-import-scan-only-matches-real-imports",
+      "guards": "the B3 render-path gate's own import scan genuinely parses `import ... from \"path\"` statements -- not a stand-in that returns a fixed sentinel regardless of the file's real content.",
+      "note": "Verified this session: replacing the real regex with a fixed-sentinel stand-in (returns a made-up module name whenever the literal word \"import\" appears anywhere) breaks the dedicated real-import guardrail test -- the sentinel name never matches any real forbidden path via .endsWith(), so a file that genuinely imports the forbidden module would wrongly report clean. INCONCLUSIVE on a first attempt naming the comment-only guardrail test instead: that fixture's own prose (\"this module does not read city-plan.js...\") never contains the literal word \"import\", so the mutated stand-in returns [] for it regardless, same shape as the 2026-09-09 worldAliasing/dock-id lesson (AUDIT-PROTOCOL.md SS7) -- the manifest's own `expect` now names the test that actually goes red.",
+      "file": "test/boardRender.test.ts",
+      "find": "  return [...src.matchAll(/^\\s*import\\b[^;]*\\bfrom\\s*[\"']([^\"']+)[\"']/gm)].map((m) => m[1]);",
+      "replace": "  return src.includes(\"import\") ? [\"__any__\"] : [];",
+      "expect": "the check above actually fails on a real import of the forbidden path, not just passing by construction"
+    },
+    {
+      "id": "expected-red-does-not-rubber-stamp-everything",
+      "guards": "unexpectedFailures genuinely filters against the named EXPECTED_RED allowlist -- it does not silently treat every failure as expected, which would hide a real regression behind the same mechanism meant to unblock a known one.",
+      "note": "Verified this session: making unexpectedFailures return an empty array unconditionally (a 'rubber stamp' bug) is caught directly by the dedicated test asserting a genuinely unexpected failure survives the filter.",
+      "file": "scripts/expected-red.mjs",
+      "find": "  return failingTitles.filter((t) => !EXPECTED_RED.has(t));",
+      "replace": "  return [];",
+      "expect": "unexpectedFailures strips only the documented entries, naming everything else"
+    },
+    {
+      "id": "mutation-claim-checks-total-not-just-caught",
+      "guards": "mutationClaimMismatch genuinely checks the total-defects-injected number against the generated manifest count, not just the caught/never-run figures -- a stale total could otherwise hide a shrinking or growing manifest.",
+      "note": "Verified this session: disabling the total-count comparison is caught directly by the dedicated synthetic test asserting a wrong total is named by claim.",
+      "file": "src/generatedClaimChecks.ts",
+      "find": "  if (Number(claimedTotal) !== generatedTotal) return `README.md claims ${claimedTotal} defects injected, generated summary says ${generatedTotal} -- run node scripts/gen-mutation-summary.mjs`;",
+      "replace": "  // disabled",
+      "expect": "a deliberately staled mutation-evidence sentence is named, by claim, not silently absorbed"
+    },
+    {
+      "id": "b4-scatter-trees-respects-max-trees",
+      "guards": "scatterTrees genuinely stops at maxTrees -- it does not scatter an unbounded number of meshes if a caller's own bound is ignored.",
+      "note": "Verified this session: removing the maxTrees break is caught directly by the dedicated bound-respecting test.",
+      "file": "public/board-render.js",
+      "find": "    if (group.children.length >= maxTrees) break;",
+      "replace": "    // disabled",
+      "expect": "scatterTrees respects maxTrees -- it does not scatter thousands of meshes unbounded"
+    },
+    {
+      "id": "b4-scatter-street-lamps-orients-by-piece-shape-not-a-single-axis",
+      "guards": "scatterStreetLamps genuinely branches on the road piece's own long axis (w vs d) rather than getting the orientation backwards -- the exact mistake (copying scatterTrees's single-axis offset unchanged) this file's own header comment names as the defect a naive port would produce.",
+      "note": "Verified this session: inverting the w>=d comparison makes the dedicated long-span positioning test fail -- a 320 m-long north/south-shaped span (foot.w=320, foot.d=9) would then be treated as long along d instead of w, offsetting the lamp hundreds of metres off the piece's own length rather than beside its own 9 m width, caught directly by that test's own position assertions.",
+      "file": "public/board-render.js",
+      "find": "    const longAlongW = w >= d;",
+      "replace": "    const longAlongW = w < d;",
+      "expect": "scatterStreetLamps positions the lamp beside the road's own narrow (width) edge, at the span's own midpoint along its length -- not off the end of a long span"
+    },
+    {
+      "id": "mutation-claim-checks-the-remainder-not-just-two-of-three-states",
+      "guards": "mutationClaimMismatch genuinely checks that caught+neverRun+survivedOrInconclusive sums to the total -- a SURVIVED or INCONCLUSIVE result cannot silently vanish from the claim the way the brief's own '1,141 tests' line let 15 skipped tests vanish.",
+      "note": "Verified this session: disabling the otherCount comparison is caught directly by the dedicated synthetic test for exactly this arithmetic gap.",
+      "file": "src/generatedClaimChecks.ts",
+      "find": "  if (Number(claimedOther) !== otherCount) return `README.md claims ${claimedOther} survived or inconclusive, generated summary implies ${otherCount} (total ${generatedTotal} - caught ${generatedCaught} - never-run ${generatedNeverRun}) -- run node scripts/gen-mutation-summary.mjs`;",
+      "replace": "  // disabled",
+      "expect": "a SURVIVED or INCONCLUSIVE mutation result (neither caught nor never-run) cannot silently vanish from the claim's own arithmetic"
+    },
+    {
+      "id": "facade-handoff-city-render-passes-variant-seed",
+      "guards": "public/city-render.js's real getFacadeMaterial call genuinely passes g.seed as variantSeed -- the one-line cross-lane fix (docs/CROSS-LANE-REQUESTS.md #1) that makes BLD's 12 built variants reachable from a real placement at all.",
+      "note": "Verified this session: removing variantSeed from the real call SURVIVED against the dynamic GATE test -- that test recomputes pickVariant(char, group.seed) independently from groupByVariant's own output and never reads what city-render.js's real call actually received, so it cannot see this specific regression at all (a real gap found by mutation-testing it, not assumed). Caught instead by a new, dedicated static check added the same session, which greps city-render.js's own source for the literal variantSeed: g.seed text -- the same technique test/boardRender.test.ts's own B3 gate uses for a forbidden import, aimed here at a required one.",
+      "file": "public/city-render.js",
+      "find": "        variantSeed: g.seed,",
+      "replace": "        variantSeed: undefined,",
+      "expect": "public/city-render.js's real getFacadeMaterial call still passes variantSeed"
+    },
+    {
+      "id": "facade-gate-counts-real-picked-variants-not-a-fixed-template",
+      "guards": "the facade GATE's own counting logic genuinely measures distinct (character, picked-variant) pairs reached by real placements -- not a fixed string template that could never measure more than 4 regardless of what city-render.js actually passes, the real bug found and fixed this session in the file pulled from codex-lane.",
+      "note": "Verified this session: reverting to the fixed `${char}-vc-day-` template (BLD's own original, unedited version) makes the gate wrongly report 4 even with variantSeed correctly wired -- caught directly by the dedicated gate test itself going red on its own count.",
+      "file": "test/facadeVariants.test.ts",
+      "find": "    const variant = pickVariant(char, group.seed);\n    keys.add(`${char}-${variant.name}`);",
+      "replace": "    keys.add(`${char}-vc-day-`);",
+      "expect": "GATE: distinct facade materials reachable from real placements, well above four"
+    },
+    {
+      "id": "city-html-board-gate-defaults-off",
+      "guards": "public/city.html only draws the ~35,000 un-instanced board pieces when ?board=1 is explicitly requested -- removing the gate would ship the measured cullingRatio/regressionGate regression to every ordinary page load.",
+      "note": "Verified this session: making the board block unconditional (no `if` at all) is caught directly by the dedicated static gate test.",
+      "file": "public/city.html",
+      "find": "if (Q.get(\"board\") === \"1\") try {",
+      "replace": "if (true) try {",
+      "expect": "public/city.html only draws board pieces when ?board=1 is explicitly requested"
+    },
+    {
+      "id": "world-render-3d-board-gate-no-early-return",
+      "guards": "world-render-3d.js's own board-drawing gate uses `if (boardRequested) try {...}`, never an early `return` -- an early return would skip P4.1's board-record wiring, the spatial index, and selection for every city-mode load, not just when the gate is off.",
+      "note": "Verified this session: this is the exact mistake made and caught during implementation, before it was ever committed -- reintroducing `if (!boardRequested) return;` in place of the real gate is caught directly by the dedicated static test's own doesNotMatch assertion.",
+      "file": "public/world-render-3d.js",
+      "find": "    const boardRequested = typeof location !== \"undefined\" && new URLSearchParams(location.search).get(\"board\") === \"1\";\n    if (boardRequested) try {",
+      "replace": "    const boardRequested = typeof location !== \"undefined\" && new URLSearchParams(location.search).get(\"board\") === \"1\";\n    if (!boardRequested) return;\n    try {",
+      "expect": "public/world-render-3d.js only draws board pieces when ?board=1 is explicitly requested, and the gate does not short-circuit the rest of _buildCityBase"
+    },
+    {
+      "id": "piece-at-point-does-not-swap-i-j",
+      "guards": "pieceAtPoint (B3's own step toward picking reading the real board -- docs/specs/BOARD-REBUILD-PLAN.md's architecture rule) genuinely converts world x/z to atom i/j via atomOf and queries THAT cell, not a swapped one.",
+      "note": "Verified this session: a blind review of the plan (before this was implemented) flagged that a SQUARE test footprint would let an i/j swap go undetected at a symmetric point -- fixed before implementing by using an asymmetric footprint (w:20, d:8) and an offset with unequal i/j components. Swapping i/j inside pieceAtPoint (`const { i: j, j: i } = atomOf(x, z);`) is caught directly by the dedicated asymmetric-offset test.",
+      "file": "public/board-load.js",
+      "find": "  const { i, j } = atomOf(x, z);",
+      "replace": "  const { i: j, j: i } = atomOf(x, z);",
+      "expect": "pieceAtPoint: a world point anywhere inside a real piece's own multi-atom footprint resolves to that piece, at an asymmetric offset a swapped axis would miss"
+    },
+    {
+      "id": "scatter-street-furniture-does-not-alternate",
+      "guards": "scatterStreetFurniture genuinely alternates between propModel('bench', ...) and propModel('bin', ...) -- not stuck resolving one id regardless of how many items have already been placed.",
+      "note": "Verified this session: a blind review of the plan (before this was implemented) flagged that the plan's own single-call-with-a-variable-id design would fail the static reachability gate's literal-string regex -- fixed before implementing to use two literal propModel(\"bench\", ...) / propModel(\"bin\", ...) calls. Forcing isBench to always true is caught directly by the dedicated alternation test.",
+      "file": "public/board-render.js",
+      "find": "    const isBench = group.children.length % 2 === 0;",
+      "replace": "    const isBench = true;",
+      "expect": "B4 gate: scatterStreetFurniture alternates between the REAL propModel('bench', ...) and propModel('bin', ...) -- not one id repeated"
+    },
+    {
+      "id": "scatter-street-furniture-never-rotates",
+      "guards": "scatterStreetFurniture genuinely rotates a placed item 90 degrees on an east/west (long-along-d) road span -- the fix for the asymmetric-footprint defect a blind review found: scatterStreetLamps's own positioning technique, copied without this fix, would leave a bench pointing across the road (perpendicular, not parallel) on every east/west-oriented span, since a bench's own real footprint (1.8 x 0.55 m) is not roughly symmetric the way a lamp post's is.",
+      "note": "Verified this session: disabling the rotation (always 0) is caught directly by the dedicated east/west-orientation test's own rotation.y assertion -- the position-only assertions in that same test do NOT catch it (the offset math is unaffected by rotation), confirming rotation needed its own, separate assertion, not just a position check.",
+      "file": "public/board-render.js",
+      "find": "    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;",
+      "replace": "    itemGroup.rotation.y = 0;",
+      "expect": "B4 gate: scatterStreetFurniture positions and ROTATES an item correctly on an east/west (long-along-d) road span -- the orientation scatterStreetLamps's own technique never had to handle"
+    },
+    {
+      "id": "scatter-bus-shelters-does-not-resolve-real-id",
+      "guards": "scatterBusShelters genuinely resolves propModel('busShelter', ...) -- not a different manifest id.",
+      "note": "Verified this session: swapping to propModel(\"bin\", seed) is caught by the dedicated real-id test; a blind review predicted this would also trip the static reachability gate (the literal \"busShelter\" substring disappears too) -- confirmed, both fail together, and _mutcheck.mjs's own named-failure check (r.failed.some(n => n.includes(m.expect))) still correctly reports CAUGHT since the expected test is among the failures, not the sole one.",
+      "file": "public/board-render.js",
+      "find": "    const model = propModel(\"busShelter\", seed);",
+      "replace": "    const model = propModel(\"bin\", seed);",
+      "expect": "B4 gate: scatterBusShelters calls the REAL propModel('busShelter', ...) -- a real, non-VARIED manifest id, not a placeholder box"
+    },
+    {
+      "id": "scatter-bus-shelters-never-rotates",
+      "guards": "scatterBusShelters genuinely rotates a placed shelter 90 degrees on an east/west (long-along-d) road span -- carrying forward the fix scatterStreetFurniture's own blind review required for the bench, needed again here since a bus shelter's real footprint (3.6 x 1.4 m) is even more asymmetric.",
+      "note": "Verified this session: a first attempt at this mutation used a find string scoped by TRAILING context (the next function's own docblock comment) intending to disambiguate scatterBusShelters's own rotation line from scatterStreetFurniture's identical-looking one -- but since scatterBusShelters's docblock immediately follows scatterStreetFurniture in the file, that trailing context actually matched scatterStreetFurniture's own ending, and the mutation silently broke the WRONG function's test (INCONCLUSIVE, reported honestly by _mutcheck.mjs's own named-failure check, not a false CAUGHT). Fixed by scoping the find string with LEADING context unique to scatterBusShelters's own body (its own material colour constant, 0x557799) instead -- caught directly by the dedicated east/west-orientation test's own rotation.y assertion on the corrected attempt.",
+      "file": "public/board-render.js",
+      "find": "    const material = new THREE.MeshStandardMaterial({ color: 0x557799 });\n    const itemGroup = new THREE.Group();\n    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));\n    const origin = atomOrigin(piece.cell.i, piece.cell.j);\n    const { w, d } = piece.foot;\n    const longAlongW = w >= d;\n    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;\n    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;\n    itemGroup.position.set(x, 0, z);\n    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;",
+      "replace": "    const material = new THREE.MeshStandardMaterial({ color: 0x557799 });\n    const itemGroup = new THREE.Group();\n    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));\n    const origin = atomOrigin(piece.cell.i, piece.cell.j);\n    const { w, d } = piece.foot;\n    const longAlongW = w >= d;\n    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;\n    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;\n    itemGroup.position.set(x, 0, z);\n    itemGroup.rotation.y = 0;",
+      "expect": "B4 gate: scatterBusShelters positions and ROTATES a shelter correctly on an east/west (long-along-d) road span -- a position-only assertion cannot see a shelter facing the wrong way"
     }
   ]
 }

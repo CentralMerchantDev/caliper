@@ -1,0 +1,23 @@
+Item Zero (docs/briefs/OVERNIGHT-CLI-2026-09-09.md) -- generate a real
+docs/MODULE-MAP.md for b1-land instead of copying the stale one from
+codex-lane, which describes a branch with no board-generator.js and no
+board-load.js.
+
+WHAT WAS DONE: `git checkout codex-lane -- scripts/gen-module-map.mjs
+scripts/lib/module-graph.mjs` (unmodified from codex-lane; this is
+generic, board/generator-agnostic module-graph analysis, not something
+that describes codex-lane's own world state), then `node
+scripts/gen-module-map.mjs` run fresh against this branch's own tree.
+
+MEASURED: 98 modules, 3013 exports (255 product, 37 demo-only, 206
+test-only, 2515 unreachable). Spot-checked against files known to exist
+on b1-land but not on codex-lane -- public/board.js, public/board-
+generator.js, public/board-load.js, public/board-region.js all appear
+with real callers (createBoard from board-region.js, generateBoard as
+TEST-ONLY via test/boardGenerator.test.ts, etc.), confirming this is a
+b1-land-real map, not a stale copy.
+
+NOT YET DONE: the generator (`node scripts/gen-module-map.mjs`) was not
+itself modified or reviewed beyond running it -- it is codex-lane's own
+tool, brought across verbatim per the brief's explicit instruction not
+to copy the stale MAP, only the scripts that produce a fresh one.

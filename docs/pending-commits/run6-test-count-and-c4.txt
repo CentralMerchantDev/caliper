@@ -1,0 +1,36 @@
+RUN 6 (autonomous) -- the brief's item 1: establish the truth behind the red
+publicClaims.test.ts count-claim gate, regenerate honestly, and correct
+COMPLETION-PLAN.md's C4 tick to match.
+
+A fresh, complete `node test/run.mjs` run (the only honest way to measure
+this -- test/testCount.generated.json's own comment: "the only honest source
+is the runner itself") measured 1,194 tests, 1,130 pass, 48 fail, 15 skipped,
+1 todo. `node scripts/gen-test-count.mjs --node-log <that run>` regenerated
+test/testCount.generated.json from it. As Decision #9 (this run's own,
+written before attempting the fix) predicted: the page's own claim
+("1087 tests") could NOT be brought into agreement by running the intended
+tool -- scripts/gen-test-count.mjs's own page-update step refuses whenever
+more than the count-claim test itself is failing, and 47 other real,
+already-tracked gates are red right now (B2.5, decisions #3-#7, cullingRatio,
+regressionGate, several road-network/waterway/airport gates, and this
+session's own new Decision #7 gate). Confirmed empirically, not just
+reasoned about: the tool's own refusal message named all 48 by title.
+
+Not forced, not hand-edited. `public/index.html`'s claim is left exactly as
+it was; hand-editing it to say 1194 would be the exact "green-looking
+evidence manufactured, not measured" failure this script's own header
+comment says it exists to stop.
+
+docs/specs/COMPLETION-PLAN.md's C4 tick moved [x] -> [!]: the mutation-
+evidence surface C4 names is still correctly reconciled (unchanged, not
+touched this run), but a DIFFERENT published-number surface in the same
+"every published number is generated from the thing it describes" family
+(this file's own condition 3) is red, so the item as a whole cannot honestly
+stay [x] -- the plan's own rule is a tick needs the gate green, and this one
+is not, on a surface C4's own scope already claims to cover.
+
+No code touched. Working tree: test/testCount.generated.json and
+docs/specs/COMPLETION-PLAN.md only.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FD5JvQU4bUcosxg63Xcdgj

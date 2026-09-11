@@ -1,0 +1,61 @@
+B4 -- kits wire by construction, first real slice: propModel(), wired
+live, the dead-exports gate proving it. docs/briefs/RUN2-CLI-2026-09-09.md's
+own gate wording: "the dead-export check, watched red, and it must list
+propModel today."
+
+WHAT WAS BUILT: public/board-render.js gained scatterTrees(THREE,
+pieces, opts) -- a real call to public/prop-models.js's propModel("tree",
+seed), not a placeholder box. Deliberately bounded (one tree per Nth
+building, capped at maxTrees, default 400 trees total against ~17,600
+buildings) and named as such: propModel's own LOD0 is multi-part,
+unmerged geometry, and instancing thousands of them is real future work
+(the same partitionForInstancing machinery world-render-3d.js already
+uses elsewhere, not rebuilt here). A SEPARATE group from
+buildBoardScene() on purpose -- that function's own gate asserts one
+mesh per PIECE exactly, and trees are not pieces (B2's own stated scope
+left them out).
+
+Wired into public/world-render-3d.js's _buildCityBase, additively,
+right beside B3's own board-piece drawing.
+
+THE GATE, WATCHED RED FIRST, FOR REAL: test/deadExports.allowlist.json
+(committed at c785e29) already listed public/prop-models.js:propModel
+as test-only. Before this commit's wiring, `node test/run.mjs
+test/deadExports.test.ts` was GREEN (correctly -- propModel really was
+still test-only). After wiring scatterTrees into the live render path,
+re-running the SAME gate reported it RED, naming the exact stale entry:
+"public/prop-models.js:propModel -- now product-reachable (via
+public/board-render.js); remove this line." Removed the entry;
+reconfirmed green. This is the gate working exactly as designed, watched
+red for a real reason, not asserted to have been watched red.
+
+test/boardRender.test.ts gained 4 new tests: scatterTrees calls the real
+propModel and returns real, non-empty geometry; respects its own
+maxTrees bound; ignores non-building pieces; and a static check that
+board-render.js's own source both imports and calls propModel (the
+positive-space mirror of the B3 gate's forbidden-import check).
+
+MUTATION-TESTED, 1 control, CAUGHT: the maxTrees bound.
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs against
+deadExports.test.ts + boardRender.test.ts: 15/15 pass. Full
+world-render-3d.js regression set (focusDistance, lookPipeline,
+modulesLoad, movePiece, pickSelection, placementLayout, rendererStatic,
+spendCounterDO): 70/70 pass, unaffected.
+
+ALSO FIXED, FOUND WHILE SYNCING THE PUBLISHED CLAIM AGAIN:
+mutationClaimMismatch's own arithmetic had the SAME gap this run's own
+ground-check found in the overnight brief ("1,141 tests" not summing to
+1,084+41+1 without the unstated 15 skipped) -- caught+neverRun does not
+have to equal the manifest total (a SURVIVED or INCONCLUSIVE result,
+which this run now genuinely has one of, is neither). Fixed:
+README.md's own sentence and the check itself now name all three states
+plus the total explicitly ("129 injected, 119 caught, 9 never run, 1
+survived or inconclusive"), so a fourth state can never again vanish
+from the claim's own arithmetic silently. 1 new mutation, CAUGHT.
+
+STILL NOT DONE, NAMED: roads (roadkit), full building typology/character
+selection (buildings.js's own 12 typologies), and props-from-the-manifest
+beyond this one tree call are B4's remaining scope. This is a real,
+bounded first slice -- propModel product-reachable, gate green, nothing
+broken -- not the whole phase.

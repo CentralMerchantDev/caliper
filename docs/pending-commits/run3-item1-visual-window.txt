@@ -1,0 +1,70 @@
+RUN3 Item 1 -- the visual window. Taken early, per the brief's own
+instruction ("take it EARLY, not at the end, because that is what
+happened last time").
+
+FIRST, REAL FINDING: scripts/shoot.mjs (this project's own established
+headless visual tool) serves public/city.html, not public/index.html.
+public/city.html has its own, entirely separate bootstrap -- it calls
+buildWorld() directly and never touches public/world-render-3d.js's
+WorldRenderer class, where ALL of B3's board-drawing (bac86b0) and B4's
+tree-scattering (547b721) were wired. Confirmed directly, not assumed:
+a standalone Playwright check against the live page found
+window.__worldRenderer._impl simply does not exist on city.html.
+**B3/B4's work had never been exercised by this project's own visual-
+verification tool at all, before this commit.**
+
+FIXED: wired the identical fetchBoard()/buildBoardScene()/scatterTrees()
+call into public/city.html's own bootstrap, additively, right after its
+own buildWorld() call -- the same pattern already used in world-render-
+3d.js, applied to the actual page shoot.mjs renders. Confirmed working
+by direct query: 35,365 real board pieces and 400 real trees, genuinely
+drawn, zero errors.
+
+SECOND, REAL FINDING, FROM ACTUALLY LOOKING (not from the fix compiling):
+a real screenshot (.shots/downtown-close.png, taken with the board layer
+on) shows exactly what an additive, non-instanced, un-styled overlay
+looks like -- plain grey/blue boxes (correctly positioned, per B3's own
+scope) visibly interpenetrating the OLD world's own detailed buildings,
+because both draw simultaneously and the two worlds' geometries do not
+agree. Reported plainly, as asked: this is not a clean, finished city:
+it is two overlapping worlds, correctly measured as such.
+
+THIRD, REAL FINDING, FROM MEASURING PERFORMANCE, NOT JUST APPEARANCE:
+drawing all ~35,000 board pieces as individual, un-instanced meshes
+measurably broke TWO of this project's own STANDING performance gates --
+test/cullingRatio.test.ts (street level drew 65.8% of skyline triangles
+against a < 40% ceiling) and test/regressionGate.test.ts (7,851 street
+draw calls against a <= 900 ceiling). Both watched red directly.
+
+FIXED, THE RESPONSIBLE WAY, NOT BY REVERTING THE WHOLE FIX: gated the
+board-drawing behind an explicit `?board=1` query parameter, OFF by
+default, in BOTH public/city.html and public/world-render-3d.js. An
+ordinary page load is completely unaffected -- reconfirmed both standing
+gates green with the gate off (culling ratio 31.90%, well under 40%;
+285/484/271 draw calls, well under 900). scripts/shoot.mjs gained a
+SHOOT_BOARD=1 env-var toggle to opt a verification pass IN to the board
+layer explicitly, which is what produced the screenshots above.
+
+A REAL BUG CAUGHT BEFORE IT WAS EVER COMMITTED: the first version of
+world-render-3d.js's own gate used `if (!boardRequested) return;` --
+which would have skipped P4.1's board-record wiring, the spatial index,
+and selection setup for EVERY city-mode load, not just when the flag is
+off, since those all run AFTER the board block inside the same method.
+Caught by re-reading the method's own control flow before running
+anything, fixed to `if (boardRequested) try { ... } catch { ... }`,
+matching city.html's own, correct pattern. A dedicated static test
+(test/boardRender.test.ts) now asserts this specific mistake cannot
+recur unseen.
+
+MUTATION-TESTED, 2 new controls (the two gates), both CAUGHT.
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs test/boardRender.test.ts:
+13/13 green. node test/run.mjs test/cullingRatio.test.ts
+test/regressionGate.test.ts: 3/3 green (board off by default).
+
+THE WINDOW CLOSES HERE. Per the brief's own instruction ("Record in your
+handover when the window closes so BLD can take its turn"): this is the
+end of tonight's memory-heavy visual verification work. Two real
+screenshots exist (.shots/downtown-close.png, .shots/the-whole-world.png,
+both taken with the board layer explicitly on) as the honest visual
+record. BLD's own code-only window can resume now.

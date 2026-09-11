@@ -1,0 +1,86 @@
+RUN 6 (autonomous) -- B3's first real step toward its own exit condition
+(city-render.js quarantined): picking gains a real connection to the
+committed board, additive, not yet a replacement.
+
+What was wrong: docs/specs/BOARD-REBUILD-PLAN.md's own architecture rule --
+"picking, isolating, neighbour queries, occupancy checks and culling all
+come from [the board]" -- was not true of picking. A blind Explore agent
+(no knowledge of this reasoning) mapped it directly: world-render-3d.js's
+_buildCityBase already fetches the real board (public/board.generated.json,
+via fetchBoard()) when ?board=1 is set, but only to draw it -- the fetched
+`board` object's own whereIs()/inCells() query methods were discarded once
+drawing finished, and the live pick handler resolved entirely through
+board-adapter.js's shim over the OLD plot/road world instead.
+
+The step planned in writing (docs/BUILD-LOOP.md STEP 2) before any code, and
+blind-reviewed by a second fresh subagent with no knowledge of the plan's
+own reasoning, before implementing. The review found no false claim about
+the code (every file/line/signature check held) and four real, fixable
+gaps, folded in before writing anything:
+  - the plan's own proposed mutation (swap i/j) would not reliably be
+    caught against a SQUARE test footprint queried at a symmetric point --
+    fixed by using an asymmetric footprint and an offset with unequal i/j
+    components in every test piece, so a swap provably lands outside the
+    real footprint;
+  - the plan's "existing fields unchanged" claim missed that a `board`
+    field already exists on the same onInspect payload, from a DIFFERENT
+    source (board-adapter.js) -- named explicitly in the new field's own
+    comment so a future reader is not confused between the two;
+  - an untested edge case (elevated, non-ground pieces) named in
+    pieceAtPoint's own doc comment as an explicit, out-of-scope limitation,
+    not silently assumed away;
+  - a robustness gap -- the new call now sits in a try/catch, matching this
+    exact method's own established convention three lines above it
+    (fetchBoard's own try/catch, "a fetch failure must not break city mode
+    entirely").
+
+Watched red first, for the right reason: node test/run.mjs
+test/boardLoad.test.ts failed to BUILD ("No matching export ... for import
+'pieceAtPoint'") before the function existed.
+
+What changed: public/board-load.js gains pieceAtPoint(board, x, z, k=0) --
+atom-converts the point (grid.js's atomOf) and queries board.js's own
+inCells(). public/world-render-3d.js retains the already-fetched board
+(this._boardData = boardData, inside the EXISTING ?board=1 gate -- no
+change to when/whether it is fetched) and the city-mode pick handler
+additionally resolves the real piece at a click as a new realBoardPiece
+field on the existing onInspect payload. Every existing field, and the
+entire code path when ?board=1 is absent, is untouched -- this._boardData
+stays undefined on an ordinary page load, so the new branch never runs.
+
+Measured: node test/run.mjs test/boardLoad.test.ts test/pickSelection.test.ts
+-- 10/10 pass (4 new pieceAtPoint tests: an asymmetric-offset resolution,
+an exact-edge-atom resolution, an off-by-one-atom miss, and open ground
+returning null not throwing; 1 new static wiring gate confirming
+world-render-3d.js actually calls it). npx tsc --noEmit clean.
+
+Mutated: node scripts/_mutcheck.mjs test/boardLoad.test.ts
+public/board-load.js against the i/j-swap the blind review specifically
+raised -- baseline GREEN, mutation CAUGHT, file restored byte-identical.
+Entry added to test/mutations.json.
+
+Guards checked: nothing deleted; zero API spend (CALIPER_ALLOW_SPEND never
+set, nothing here touches a provider); src/ untouched; tick/chooseAction/
+applyAction untouched; the aesthetic is unchanged (no CSS/visual edit).
+e2e/pickBoardRecord.spec.ts -- read directly rather than assumed -- tests a
+SEPARATE, hand-mirrored test-only function (window.__p4PickAt,
+public/index.html:2682) that does not call pieceAtPoint or reference
+this._boardData at all, so this step cannot have broken it; not re-run this
+session (a full Playwright browser spin-up for a function this change
+provably does not touch), named here rather than silently skipped.
+
+What is still open, unchanged by this step: picking is CONNECTED to the
+real board, not yet SWITCHED to it -- the old addr/districtId/className
+path onInspect's other fields depend on still runs unchanged and has no
+board-only equivalent. Sun/sky has no board-based path at all (new,
+separate work per the same blind mapping). fetchBoard() itself is still
+only called under ?board=1 -- making board data available for QUERYING on
+every load (not just drawing) is a separate, later increment. B3's own exit
+condition (city-render.js quarantined) is not met and this commit does not
+claim it is -- docs/specs/COMPLETION-PLAN.md's B3 line updated with this
+step's own evidence, still [!].
+
+No merge, no deploy, no push.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FD5JvQU4bUcosxg63Xcdgj

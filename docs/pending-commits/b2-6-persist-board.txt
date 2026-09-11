@@ -1,0 +1,66 @@
+B2.6 -- persist the board: generated once offline, loaded fast (~200ms),
+served as a static asset, with the CPU gate kept and a stronger
+cannot-be-gamed gate added beside it
+
+ON b1-land, NOT main.
+
+APPROVED, Mark: "The board is a pure function of the seed... Recomputing a
+pure function per visitor is doing work whose answer is already known."
+Same move scripts/gen-city-summary.mjs already makes for generateWorld();
+B0.1's own origin-stability work is what makes persisting safe now, would
+not have been a week ago.
+
+WHAT WAS BUILT: scripts/gen-board.mjs (offline generation, not a Worker,
+not a request -- calls generateBoard(..., {useSampling:true}), writes
+public/board.generated.json). public/board-load.js (loadBoard() replays
+every persisted piece through place(piece, {groundVerified:true}) --
+B2.5's own opt-in -- paying only the SPACE check, not the ground question
+again; fetchBoard() is the real client entry point). npm run gen:board,
+one command, reads noise.js's own DEFAULT_SEED so it cannot drift from the
+seed it claims to represent.
+
+SIZE MEASURED BEFORE THE TRANSPORT WAS CHOSEN: 35,365 pieces, 7,915,668
+bytes raw, 263,598 bytes gzipped (3.3%). STATIC ASSET chosen over KV:
+wrangler.jsonc's own ASSETS binding already serves public/ directly, edge-
+cached, gzipped, zero Worker invocation -- 263KB gzipped loads fast on a
+phone; KV would need a Worker route to serve it, putting the file back
+through a CPU-time-limited request path for no reason a static asset does
+not already solve.
+
+GATE, WATCHED RED (test/boardLoad.test.ts): the committed
+board.generated.json is byte-identical to a fresh generateBoard() call
+(drift detection, same discipline test/publicClaims.test.ts already
+applies elsewhere); loadBoard()'s own board answers real queries
+identically to the fresh one; and a third test deliberately corrupts one
+persisted piece's cell.i and asserts the loaded board now DISAGREES with
+the fresh one -- the equivalence check proven to have teeth. All three
+green.
+
+THE RED CPU GATE KEPT, NOT DELETED, per Mark's own instruction --
+B2.5's own timing assertion is unchanged and still honestly red on this
+host. A STRONGER gate added beside it: test/boardGenerator.test.ts's new
+case reads src/ (the Worker's own live request-handling code) and asserts
+no file there imports generateBoard, by source. Mutation-tested by hand: a
+scratch file importing generateBoard was added to src/, confirmed caught
+by name, deleted (never committed). Currently green -- src/ has never
+called generateBoard.
+
+NOT DONE, ON PURPOSE, LEFT FOR B3: wiring world.js's createWorld() (or the
+real page bootstrap) to call fetchBoard(). world.js's only real consumer,
+city-render.js, is outside this pass's own routing; createWorld() is also
+synchronous today, used by dozens of tests, and fetchBoard() is inherently
+async -- a real design decision for whoever builds B3's bootstrap, not
+guessed at here. B2.6 delivers the proven, tested, fast (~200ms) machinery
+B3 needs to make that decision from.
+
+npx tsc --noEmit clean. Full targeted regression (11 files): 97 tests, 93
+pass, 3 fail, 1 todo -- 2 already-catalogued road-network.js old-world
+pins, plus B2.5's own honest red; the todo is originStability's own
+pre-existing, unchanged city-plan.js finding. 0 unexplained.
+
+WHAT IS STILL OPEN: world.js/page-bootstrap wiring (B3's job); bridges
+(B2.7, next -- explicitly not started tonight per Mark's own instruction,
+given the hour and this host's sustained memory pressure); B2.4
+(re-pinning), last.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

@@ -1,0 +1,38 @@
+RUN 4 -- pushed b1-land and codex-lane (a03a903..6a9874e, 4df1512..00229a2),
+then ran a blind cross-vendor review (codex exec, read-only sandbox, no
+scripts/review-loop.sh in this repo so the underlying command was invoked
+directly rather than porting SQ.FT.'s copy) against each branch's own diff
+from main, cold -- no intent, no docs, judged only against each branch's own
+commit messages.
+
+Codex found two real defects, both independently checkable: b1-land's
+committed public/board.generated.json has zero bridges/zero docks despite
+commit 501f0a9's own "1 bridge, 10 boat routes" claim (the generator works,
+the shipped asset was never regenerated against it -- a gap this document's
+own RUN 2 section already named, but COMPLETION-PLAN.md still marks B2.7
+[x] unqualified, which this finding shows is wrong); codex-lane's
+test/facadeVariants.test.ts counts a fixed `${char}-vc-day-}` key and
+asserts keys.size > 4, which cannot pass with four characters regardless of
+whether the real variantSeed wiring lands -- a gate that cannot fail for the
+thing it claims to test. Question 3 (do b1-land/codex-lane's changes to
+public/index.html and public/city-render.js semantically conflict) came back
+no -- b1-land touches only city-render.js, codex-lane only index.html, no
+overlap, quoted verbatim in the doc.
+
+Findings pasted verbatim, not summarized, per Mark's own instruction that
+the auditee does not paraphrase the auditor. This run's own recommendation:
+do not merge either branch as-is -- both findings are real, not style
+nitpicks, and the merge decision itself is Mark's (ADR-020).
+
+Also recorded, Mark's own observation, not this run's: the cross-lane
+request protocol (docs/CROSS-LANE-REQUESTS.md) is broken by construction --
+a requesting lane can never observe fulfilment, since the reply lives on the
+other lane's own branch until a merge neither lane controls happens. BLD's
+three consecutive "unlanded" reports were correct observations and a false
+conclusion for exactly this reason.
+
+No code touched. Working tree confirmed clean before and after. No merge, no
+deploy.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FD5JvQU4bUcosxg63Xcdgj

@@ -87,7 +87,13 @@ for (const v of VIEWS) {
     ? `&debugOverridePlot=${encodeURIComponent(process.env.SHOOT_OVERRIDE_PLOT)}` +
       (process.env.SHOOT_OVERRIDE_MODEL ? `&debugOverrideModel=${encodeURIComponent(process.env.SHOOT_OVERRIDE_MODEL)}` : "")
     : "";
-  const url = `http://127.0.0.1:${PORT}/city.html?bare=1&dpr=1${knobs}${STILL}${overrideQuery}&view=${encodeURIComponent(v)}`;
+  // RUN3-CLI-2026-09-09: B3/B4's board-piece drawing is gated behind
+  // ?board=1 (off by default -- it measurably breaks this project's own
+  // cullingRatio/regressionGate standing performance gates, un-instanced).
+  // SHOOT_BOARD=1 node scripts/shoot.mjs opts a shoot IN to it explicitly,
+  // for exactly the visual-verification use this flag exists for.
+  const boardQuery = process.env.SHOOT_BOARD === "1" ? "&board=1" : "";
+  const url = `http://127.0.0.1:${PORT}/city.html?bare=1&dpr=1${knobs}${STILL}${overrideQuery}${boardQuery}&view=${encodeURIComponent(v)}`;
   const t0 = Date.now();
   await page.goto(url, { waitUntil: "load", timeout: 120000 });
   try {

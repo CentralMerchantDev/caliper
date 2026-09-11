@@ -1,0 +1,52 @@
+B2.1 -- the generator's contract, written and STOPPED for review, per
+BUILD-LOOP.md Step 2. Nothing implemented.
+
+ON b1-land, NOT main.
+
+WHAT THIS IS: docs/specs/BOARD-REBUILD-PLAN.md's own B2.1 section, written
+before any B2 code, per Mark's own explicit "Step 2 is mandatory ... STOP."
+No implementation in this commit.
+
+THE CORRECTION SURFACED WHILE WRITING IT, PER "IF ANYTHING IN THIS BRIEF IS
+WRONG ABOUT THE CODE, SAY SO AND STOP": B2 is not a blank slate. board.js
+(388 lines), board-adapter.js (273) and board-region.js (41) already exist,
+from an earlier phase (BOARD-CONVERSION-PLAN.md P1-P4) this rebuild plan's
+own "what dies, what lives" section already names board.js as "carried
+across as components." board.js already defines and validates the piece
+record, already does place/canPlace/replace/move/remove against
+world-registry.js's real reservation store. B2's actual job is narrower:
+generate the real pieces -- on the real B1 archipelago, at real density --
+and call board.js's own place() directly, no adapter in between.
+
+A REAL GAP IN THIS DOC, FLAGGED, NOT SILENTLY RESOLVED: "what dies, what
+lives" lists city-plan.js under "replaced outright" but never mentions
+board-adapter.js/board-region.js, which exist only to adapt city-plan.js's
+own output. Once city-plan.js is quarantined, board-adapter.js has nothing
+left to adapt from. Flagged for Mark's decision in the plan itself, not
+assumed.
+
+THE CONTRACT ITSELF: what B2 emits (real board.js pieces, no intermediate
+plot/road structure); settlement density and CHARACTER_SETS era decided
+once per island from B1's own LANDMASSES `kind` field (already-authored
+data, currently unused by any generator) -- a table, not a uniform grid
+generated everywhere and then thinned; roads as an explicit junction graph,
+pieces emitted from it, not implicit crossing detection; grid alignment BY
+CONSTRUCTION (every position is already an integer atom index from the
+first line of the layout math, matching grid.js's own atomOf/atomOrigin,
+never a float later converted -- the exact defect a prior snapping attempt
+hit, a 43% drop in placed buildings); origin stability BY CONSTRUCTION,
+root-caused directly from test/originStability.test.ts's own comments
+(city-plan.js's GRID.ORIGIN_X/ORIGIN_Z are ISLAND.xMin/zMin, a landform-
+derived origin that moves with WORLD_SCALE -- grid.js's own atomOf has zero
+such dependency, so never deriving an origin from island bounds is free,
+not new machinery).
+
+Two open decisions named for Mark's confirmation, not assumed: whether
+board-adapter.js/board-region.js are quarantined alongside city-plan.js or
+kept for a transition window; whether world.js's .plan field is replaced
+outright or a new .board field sits alongside it until B3 flips the render
+path (this contract assumes the latter).
+
+STOP. Waiting for review before Step 3.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

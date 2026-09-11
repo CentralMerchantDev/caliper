@@ -19,3 +19,8 @@ _TO-DELETE/
 restore_landmasses.py
 test-results/
 public/.arterial-network-data.json
+# test/originStability.test.ts's own disposable public/ copy -- created
+# under the repo root (not the OS tmpdir) so it can resolve npm packages
+# via repoRoot/node_modules; cleaned up in a `finally` block on a normal
+# run, but a killed run could leave one behind.
+/origin-stability-*/

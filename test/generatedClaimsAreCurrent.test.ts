@@ -33,6 +33,7 @@ import { CITY_STATS } from "../src/citySummary.generated.ts";
 import {
   settlementsClaimMismatch, buildingsClaimMismatch,
   nodeTestsClaimMismatch, workerTestsClaimMismatch, claudeMdClaimMismatch,
+  mutationClaimMismatch,
 } from "../src/generatedClaimChecks.ts";
 
 function repoRoot(): string {
@@ -59,10 +60,14 @@ function spanText(html: string, id: string): string | null {
 export function checkAllGeneratedClaims(): Array<{ name: string; stale: string | null }> {
   const INDEX = readFileSync(join(ROOT, "public", "index.html"), "utf8");
   const CLAUDE_MD = readFileSync(join(ROOT, "CLAUDE.md"), "utf8");
+  const README = readFileSync(join(ROOT, "README.md"), "utf8");
   const testCount = JSON.parse(readFileSync(join(ROOT, "test", "testCount.generated.json"), "utf8")) as {
     nodeTests: number; workerTests: number;
   };
   const citySummary = readFileSync(join(ROOT, "src", "citySummary.generated.ts"), "utf8");
+  const mutationSummary = JSON.parse(readFileSync(join(ROOT, "test", "mutationSummary.generated.json"), "utf8")) as {
+    manifestCount: number; caught: number; neverRun: string[];
+  };
 
   const claimedBuildings = Number(spanText(INDEX, "city-stat-buildings")?.replace(/,/g, ""));
   const claimedSettlements = Number(spanText(INDEX, "city-stat-settlements")?.replace(/,/g, ""));
@@ -75,6 +80,7 @@ export function checkAllGeneratedClaims(): Array<{ name: string; stale: string |
     { name: "public/index.html #claim-node-tests vs test/testCount.generated.json nodeTests", stale: nodeTestsClaimMismatch(claimedNode, testCount.nodeTests) },
     { name: "public/index.html #claim-worker-tests vs test/testCount.generated.json workerTests", stale: workerTestsClaimMismatch(claimedWorker, testCount.workerTests) },
     { name: "CLAUDE.md's \"How to verify\" line vs test/testCount.generated.json", stale: claudeMdClaimMismatch(CLAUDE_MD, testCount.nodeTests, testCount.workerTests) },
+    { name: "README.md's mutation-evidence sentence vs test/mutationSummary.generated.json", stale: mutationClaimMismatch(README, mutationSummary.manifestCount, mutationSummary.caught, mutationSummary.neverRun.length) },
   ];
 }
 
@@ -118,7 +124,28 @@ test("P4.6 (synthetic): a deliberately staled CLAUDE.md line is named, and an un
   assert.match(unreadable!, /no longer has/);
 });
 
-test("P4.6 (synthetic): checkAllGeneratedClaims itself would report exactly one named claim if only one were stale -- not all five, and not silently none", () => {
+test("P4.6 (synthetic): a deliberately staled mutation-evidence sentence is named, by claim, not silently absorbed -- RUN2-CLI-2026-09-09's own finding, closed", () => {
+  const sentence = "116 deliberate defects injected into the guardrails, 116 caught and re-verified, 0 named and not yet run, 0 survived or inconclusive";
+  assert.equal(mutationClaimMismatch(sentence, 116, 116, 0), null);
+  const wrongTotal = mutationClaimMismatch(sentence, 126, 116, 10);
+  assert.match(wrongTotal!, /README\.md claims 116 defects injected, generated summary says 126/);
+  const wrongCaught = mutationClaimMismatch(sentence, 116, 109, 7);
+  assert.match(wrongCaught!, /README\.md claims 116 caught, generated summary says 109/);
+  const wrongNeverRun = mutationClaimMismatch(sentence, 116, 116, 10);
+  assert.match(wrongNeverRun!, /README\.md claims 0 never run, generated summary says 10/);
+  const unreadable = mutationClaimMismatch("this document no longer has that sentence at all", 116, 116, 0);
+  assert.match(unreadable!, /no longer has/);
+});
+
+test("P4.6 (synthetic): a SURVIVED or INCONCLUSIVE mutation result (neither caught nor never-run) cannot silently vanish from the claim's own arithmetic -- the '1,141 tests' gap, generalised and closed here too", () => {
+  const sentence = "128 deliberate defects injected into the guardrails, 118 caught and re-verified, 9 named and not yet run, 1 survived or inconclusive";
+  assert.equal(mutationClaimMismatch(sentence, 128, 118, 9), null);
+  const wrongOtherSentence = "128 deliberate defects injected into the guardrails, 118 caught and re-verified, 9 named and not yet run, 5 survived or inconclusive";
+  const wrongOther = mutationClaimMismatch(wrongOtherSentence, 128, 118, 9);
+  assert.match(wrongOther!, /README\.md claims 5 survived or inconclusive, generated summary implies 1/);
+});
+
+test("P4.6 (synthetic): checkAllGeneratedClaims itself would report exactly one named claim if only one were stale -- not every claim, and not silently none", () => {
   // Exercises the manifest's OWN aggregation logic (not the individual pure
   // functions above) by re-deriving the manifest shape with one entry's
   // input deliberately wrong -- confirms the gate names the RIGHT one, not

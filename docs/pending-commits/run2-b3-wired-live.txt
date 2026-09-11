@@ -1,0 +1,59 @@
+B3 -- the render path, wired into the live page.
+public/world-render-3d.js's _buildCityBase now fetches the real,
+persisted board (public/board.generated.json, via public/board-load.js's
+fetchBoard()) and draws it with public/board-render.js's
+buildBoardScene(), right after buildWorld() runs.
+
+THE BOOTSTRAP DECISION B2.6 LEFT OPEN, DECIDED: createWorld() is
+synchronous; fetchBoard() is inherently async (fetch()). _buildCityBase
+was ALREADY async (it already awaits a dynamic import of city-render.js
+and two animation frames) -- awaiting fetchBoard() there needed no new
+architecture, only one more await in a place that was already one.
+
+SCOPED HONESTLY AS ADDITIVE, NOT A REPLACEMENT, AND WHY: buildWorld()
+still runs. Its return value is what picking (P4.1's boardPiecesById),
+the spatial index, selection, and sun/sky all key off today -- replacing
+it outright would mean rebuilding all four in the same pass, which this
+run's own "partial credit" allowance (docs/briefs/RUN2-CLI-2026-09-09.md:
+"a render path that draws roads and buildings from the board and
+nothing else YET is worth far more than another phase of invisible
+correctness") does not ask for tonight. The board's pieces are added as
+a second THREE.Group in the same scene instead. A fetch/build failure
+is caught and logged, not thrown, since the board is a real addition,
+not yet load-bearing for anything buildWorld() itself sets up.
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs against every test
+file that exercises world-render-3d.js directly (focusDistance,
+lookPipeline, modulesLoad, movePiece, pickSelection, placementLayout,
+rendererStatic, spendCounterDO) -- 70 of 70 pass, including
+rendererStatic.test.ts's own static checks ("no renderer module
+references a name that does not exist", "no renderer module reads a
+const or let before it is declared"), which would have caught a
+reference/syntax error in this edit directly.
+
+UNVERIFIED, NAMED RATHER THAN CLAIMED: the actual visual result.
+CLAUDE.md's own standard ("look at the output after any visual change...
+never report unverified work as verified") calls for scripts/shoot.mjs
+here. Free memory measured at ~2.4-2.6 GB for this entire step, well
+below this project's own 4 GB floor -- Playwright + headless Chromium on
+top of that is a real crash risk on this host, so it was not attempted.
+What IS verified: board-render.js's own test suite (committed
+separately, 6dcfda3) asserts real mesh positions/sizes against real
+atomOrigin()/heightOf() data, so the GEOMETRY is unit-correct; what is
+NOT verified is whether it reads as coherent next to the existing city
+geometry in an actual render. Left visible by default (not hidden behind
+a flag) because the geometry is real and tested, and Mark's own
+instruction was urgency about seeing the world, not about hiding a
+correct-but-unstyled result -- but this is a judgement call under an
+unverified constraint, named as one. Recommend running
+`node scripts/shoot.mjs` the moment memory allows, before trusting the
+visual result further.
+
+ALSO NAMED, NOT YET DONE: public/board.generated.json (committed,
+35,365 pieces) still predates B2.7 -- it has zero bridge/dock pieces.
+scripts/gen-board.mjs was already updated (commit 6dcfda3) to include
+them on the next regeneration, but running it (~40-170 s, and itself
+memory-hungry per B2.5's own documented behaviour under pressure) was
+deferred for the same reason as the shoot.mjs render above. Until it is
+re-run and the committed JSON updated, the live page draws roads and
+buildings from the board but not yet bridges or boat-route docks.

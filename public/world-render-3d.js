@@ -17,6 +17,8 @@ import { WORLD_SCALE } from "./world-scale.js";
 import { WORLD } from "./city-plan.js";
 import { createSelection } from "./selection.js";
 import { boardPiecesById } from "./board-adapter.js";
+import { fetchBoard, pieceAtPoint } from "./board-load.js";
+import { buildBoardScene, scatterTrees, scatterStreetLamps, scatterStreetFurniture, scatterBusShelters } from "./board-render.js";
 import { neighboursOf, applyIsolate, restoreIsolate } from "./isolate.js";
 import { tryMove, moveEditFor } from "./move-piece.js";
 import { layerFrom } from "./world-model.js";
@@ -1805,6 +1807,88 @@ class Renderer3D {
 
     const city = buildWorld(THREE, this.renderer, this.scene);
     this._city = city;
+
+    // B3 (docs/briefs/RUN2-CLI-2026-09-09.md, reordered ahead of
+    // everything else): draw the REAL persisted board
+    // (public/board.generated.json, B2/B2.7's own real pieces) via
+    // public/board-render.js -- the render path named in
+    // docs/specs/BOARD-REBUILD-PLAN.md as the tenth capability built
+    // beside the renderer and never drawn.
+    //
+    // BOOTSTRAP DECISION, WRITTEN DOWN (B2.6 left this open): createWorld()
+    // is synchronous; fetchBoard() is inherently async (fetch()). This
+    // method (_buildCityBase) is ALREADY async -- it already `await
+    // import()`s city-render.js and awaits two animation frames above --
+    // so awaiting fetchBoard() here needs no new architecture, only this
+    // one more await in a place that was already one.
+    //
+    // ADDITIVE, NOT A REPLACEMENT, NAMED AS A SCOPING CHOICE: buildWorld()
+    // above is not removed. Its return value (`city`) is still what
+    // picking (P4.1's boardPiecesById two lines down), the spatial index,
+    // selection, and sun/sky all key off -- replacing it outright would
+    // mean rebuilding all four in the same pass, which this run's own
+    // "partial credit" allowance (RUN2-CLI-2026-09-09.md) does not ask
+    // for tonight. The board's own pieces are added as a SECOND group in
+    // the same scene instead, so the real board is genuinely visible
+    // (not a placeholder, not hidden behind a flag) while the swap that
+    // retires city-render.js waits for B4 (kits) and B6 (quarantine).
+    // A failure here is caught and logged, not thrown -- the board is a
+    // real addition, not yet load-bearing for anything else this method
+    // sets up, so a fetch failure must not break city mode entirely.
+    //
+    // GATED BEHIND ?board=1, OFF BY DEFAULT (RUN3-CLI-2026-09-09): measured
+    // directly on public/city.html (this file's own sibling bootstrap,
+    // identical wiring) that drawing all ~35,000 un-instanced board pieces
+    // breaks two standing performance gates -- test/cullingRatio.test.ts
+    // and test/regressionGate.test.ts, both watched red. The same
+    // regression applies here (city mode shares this exact code path), so
+    // this stays off for an ordinary visitor and on only when explicitly
+    // requested. Real instancing/LOD for board pieces is B5's job.
+    const boardRequested = typeof location !== "undefined" && new URLSearchParams(location.search).get("board") === "1";
+    if (boardRequested) try {
+      const boardData = await fetchBoard(city.heightAt);
+      // B3 step toward the architecture rule ("picking... come[s] from
+      // [the board]"): retained past this block so the pick handler below
+      // can query it directly (board.js's own whereIs/inCells), not just
+      // draw its pieces. Still gated on ?board=1 like everything else in
+      // this block -- an ordinary page load never sets this, so the new
+      // pick-handler branch that reads it is never reached either.
+      this._boardData = boardData;
+      this._boardScene = buildBoardScene(THREE, boardData.pieces);
+      this.scene.add(this._boardScene);
+      // B4 ("kits wire by construction"): a real tree, from
+      // public/prop-models.js's own propModel(), scattered beside a modest
+      // fraction of the real building pieces -- see board-render.js's own
+      // scatterTrees() header for why this is deliberately bounded rather
+      // than one tree per building.
+      this._boardTrees = scatterTrees(THREE, boardData.pieces);
+      this.scene.add(this._boardTrees);
+      // B4: a real street lamp, from propModel("lampPost", ...) -- the
+      // manifest's OTHER resolution path (a plain props.js alias, not a
+      // VARIED generator family) -- scattered beside a modest fraction of
+      // the real road pieces; see board-render.js's own
+      // scatterStreetLamps() header for the positioning reasoning.
+      this._boardLamps = scatterStreetLamps(THREE, boardData.pieces);
+      this.scene.add(this._boardLamps);
+      // B4: real benches and bins, from propModel("bench", ...) /
+      // propModel("bin", ...) -- the manifest's next two plain aliases
+      // after lampPost, alternated along a modest fraction of the real
+      // road pieces; see board-render.js's own scatterStreetFurniture()
+      // header for why this one also rotates (a bench's footprint, unlike
+      // a lamp's, is not roughly symmetric).
+      this._boardStreetFurniture = scatterStreetFurniture(THREE, boardData.pieces);
+      this.scene.add(this._boardStreetFurniture);
+      // B4: real bus shelters, from propModel("busShelter", ...) -- the
+      // manifest's fourth plain alias, scattered more sparsely than
+      // benches/bins (a much larger, rarer structure); see
+      // board-render.js's own scatterBusShelters() header for why this
+      // one also rotates, same reason as scatterStreetFurniture.
+      this._boardBusShelters = scatterBusShelters(THREE, boardData.pieces);
+      this.scene.add(this._boardBusShelters);
+      console.log(`B3/B4: board render path drew ${boardData.pieces.length} real pieces, ${this._boardTrees.children.length} real trees, ${this._boardLamps.children.length} real street lamps, ${this._boardStreetFurniture.children.length} real street furniture items and ${this._boardBusShelters.children.length} real bus shelters from public/board.generated.json`);
+    } catch (e) {
+      console.error("B3/B4: failed to fetch/draw the real board (city geometry above is unaffected):", e);
+    }
 
     // P4.1 -- the REAL board record for a clicked building, not a
     // renderer-local approximation of the same facts. board.js is not the
@@ -6858,6 +6942,21 @@ class Renderer3D {
       // (`bld-${plotId}`) -- not a second id scheme.
       const piece = addr && addr.onPlot && this._boardPieces ? this._boardPieces.get(`bld-${addr.plotId}`) || null : null;
       this._selectedPiece = piece;
+      // B3 step: the REAL committed board's own record at this point, not
+      // the board-adapter.js shim over the old plot/road world `piece`
+      // above already is. Only resolvable when the real board has been
+      // loaded (this._boardData, currently only when ?board=1) -- null
+      // otherwise, same as `piece` when nothing is there. Wrapped, matching
+      // this method's own fetchBoard() three lines up: a query bug here
+      // must not break picking for everything else this handler does.
+      let realBoardPiece = null;
+      if (this._boardData) {
+        try {
+          realBoardPiece = pieceAtPoint(this._boardData.board, pt.x, pt.z);
+        } catch (e) {
+          console.error("pieceAtPoint failed for a real pick (city mode is otherwise unaffected):", e);
+        }
+      }
       // P4.2 -- highlight the newly selected piece's own building, if it
       // has one; clear any previous highlight first either way (a new
       // pick, even one with no piece, deselects the last one).
@@ -6880,6 +6979,17 @@ class Renderer3D {
             : `At (${Math.round(pt.x)}, ${Math.round(pt.z)}) — ${addr && addr.nearestPlotId ? `nearest plot ${addr.nearestPlotId}, about ${addr.nearestDistance} m away` : "no plot nearby"}.`,
           board: piece
             ? { id: piece.id, kind: piece.pieceType, cell: piece.cell, foot: piece.foot }
+            : null,
+          // NOT the same thing as `board` above: `board` is board-adapter.js's
+          // shim over the OLD plot/road world (buildings only, keyed by
+          // plotId). realBoardPiece is a direct query against the REAL
+          // committed board.generated.json (any pieceType, including roads/
+          // bridges/docks) -- only populated when that board has been
+          // loaded (?board=1). Deliberately not yet surfaced in index.html's
+          // own inspect card -- this step is the data connection, not the
+          // display; B3's own remaining scope, named in COMPLETION-PLAN.md.
+          realBoardPiece: realBoardPiece
+            ? { id: realBoardPiece.id, kind: realBoardPiece.pieceType, cell: realBoardPiece.cell, foot: realBoardPiece.foot }
             : null,
         });
       }

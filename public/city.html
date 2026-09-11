@@ -188,6 +188,50 @@ try {
   throw err;
 }
 window.__world = W;
+
+// B3/B4 (RUN3-CLI-2026-09-09): public/city.html has its own, separate
+// bootstrap -- it calls buildWorld() directly and never goes through
+// public/world-render-3d.js's WorldRenderer class, where B3's board-
+// drawing was first wired (bac86b0) and B4's tree-scattering was added
+// (547b721). scripts/shoot.mjs -- this project's own established headless
+// visual-verification tool -- serves THIS page, not index.html, so that
+// wiring was never actually exercised by it. Found by trying to verify it,
+// not assumed: window.__worldRenderer._impl did not exist on this page at
+// all when checked directly.
+//
+// GATED BEHIND ?board=1, OFF BY DEFAULT, FOUND BY MEASURING NOT ASSUMING:
+// drawing all ~35,000 board pieces as individual, un-instanced meshes (B3's
+// own stated scope -- "a box per piece", no LOD, no chunking, unlike
+// buildWorld()'s own sophisticated instancing/culling) measurably breaks
+// two of this project's own STANDING performance gates --
+// test/cullingRatio.test.ts (street-level draws 65.8% of skyline triangles,
+// must be < 40%) and test/regressionGate.test.ts (street draw calls 7,851,
+// must be <= 900). Both watched red directly, this session, not assumed.
+// Shipping that regression into normal browsing to make ONE verification
+// session easier would be the wrong trade -- so this stays off for a plain
+// page load (nothing here changes for an ordinary visitor) and on only
+// when explicitly requested, which is what a screenshot verification pass
+// (and a future automated one) can do on purpose. Real instancing/LOD for
+// board pieces is B5's own "the visual pass" work, named there, not solved
+// here under time pressure.
+window.__boardReady = false;
+if (Q.get("board") === "1") try {
+  const { fetchBoard } = await import("./board-load.js");
+  const { buildBoardScene, scatterTrees, scatterStreetLamps } = await import("./board-render.js");
+  const boardData = await fetchBoard(W.heightAt);
+  window.__board = buildBoardScene(THREE, boardData.pieces);
+  scene.add(window.__board);
+  window.__boardTrees = scatterTrees(THREE, boardData.pieces);
+  scene.add(window.__boardTrees);
+  window.__boardLamps = scatterStreetLamps(THREE, boardData.pieces);
+  scene.add(window.__boardLamps);
+  window.__boardPieceCount = boardData.pieces.length;
+  window.__boardReady = true;
+  console.log(`B3/B4: city.html drew ${boardData.pieces.length} real board pieces, ${window.__boardTrees.children.length} real trees and ${window.__boardLamps.children.length} real street lamps from public/board.generated.json`);
+} catch (e) {
+  console.error("B3/B4: failed to fetch/draw the real board on city.html (buildWorld's own scene above is unaffected):", e);
+}
+
 // Shadow map size is a knob because a 4096 map is 16 M texels, which a GPU
 // shrugs off and a software rasteriser does not.
 // 2048 by default: a 4096 map is a second 16-megatexel pass every frame and

@@ -205,6 +205,53 @@ Four findings in one week have this shape:
   commit `770267a` did not use them and instead modelled a weaker window system
   from scratch.
 
+### Construct what you want. Do not filter for it and hope.
+
+Every failure pattern in this document, A through F, is about something
+absent that nobody noticed — the negative form: build first, discover the
+gap later, by luck or by an audit. There is a positive form, and it is
+cheaper: **build the structure so the absence cannot occur, and the gate
+then confirms a property instead of discovering its lack.**
+
+Named for Mark's own review of `docs/specs/BOARD-REBUILD-PLAN.md`'s B2.1
+generator contract (2026-09-08), approving both of its central design
+choices on exactly this ground:
+
+- **Settlement density decided from `LANDMASSES.kind`, as a table, before
+  any road or plot is laid** — not a uniform sprinkle generated everywhere
+  and thinned by a buildability filter afterward. Mark's own words: "a
+  cottage island holding one house BECAUSE ONLY ONE PLOT SURVIVED THE
+  BUILDABILITY CHECK, rather than because it is a cottage island... the
+  first is an accident that looks like a decision until the terrain
+  changes; the second is a decision." Filtering can only ever discover
+  what survives; it cannot state intent, and a later terrain change silently
+  changes what "survives" without anyone deciding it should.
+- **Roads as an explicit junction graph (nodes are junctions, edges are
+  spans), pieces emitted from the graph** — not centrelines laid down and
+  crossings detected afterward. Mark named this as the direct fix for the
+  project's own oldest reported defect ("lines of roads in rows with no
+  crossroads," reported since the first week): crossing-detection finds
+  junctions after the fact and can miss them, which is exactly what
+  happened. A graph whose edges only exist between two named nodes cannot
+  represent a road without a junction at its end — the defect becomes
+  unconstructable rather than merely checked for.
+
+This is the same shape as Failure pattern E one level earlier: E says search
+for an existing capability before building a new one, so the system does
+not end up with two weaker mechanisms instead of one strong one already
+present. This principle says, for the mechanism actually being built:
+**make the invariant a constraint on how the data is produced, not a
+predicate checked against data that was produced some other way.** B1's own
+archipelago already worked this way before this principle had a name —
+authored target shapes, radially area-corrected until the polygon's own
+measured area hit the target, not a scaled-down copy of yesterday's map
+filtered for a smaller water fraction — and it is the phase of this rebuild
+that went cleanest, on the first attempt, with no rework cycle. Worth
+treating as a standing question for every future design choice this
+project makes: does this construct the property directly, or does it
+generate broadly and hope a filter downstream produces the property as a
+side effect?
+
 ### Rule Zero also governs the bar, not only the reported result
 
 An unsourced ceiling is a fabrication, exactly like an unsourced measurement.
@@ -928,3 +975,126 @@ session, means the lesson needs to be checkable, not just written: worth a
 standing item in whatever review a mutation entry gets before landing —
 does the `find`/`replace` pair in test/mutations.json actually remove or
 invert behaviour, or does it only comment it out?
+
+### 2026-09-08 (later still) · "New" is a claim too — the third brief this week to skip `docs/MODULE-MAP.md`
+
+Mark's own B2 brief called the generator's work "New file. Emits board
+pieces." `board.js` (388 lines), `board-adapter.js` (273) and
+`board-region.js` (41) already existed, from an earlier phase
+(`BOARD-CONVERSION-PLAN.md` P1–P4) this rebuild plan's own "what dies, what
+lives" section already lists `board.js` under "carried across as
+components." Reading `board.js` directly, before writing B2's own contract,
+found the piece record, its validation, and its full placement machinery
+(`place`/`canPlace`/`replace`/`move`/`remove` against `world-registry.js`'s
+real reservation store) already built and tested. B2's actual scope is
+narrower than the brief's word for it: generate the real pieces and call
+that machinery, not build it.
+
+Mark's own reply named this precisely: **the third brief this week to
+describe something as new without reading `docs/MODULE-MAP.md` first** —
+the document commissioned, by his own account, specifically to stop this
+class of error (`docs/LANE-BRIEF-TEMPLATE.md` §2: "Nine capabilities were
+built in this repository that already existed or were never connected.
+Every one would have been caught by reading the map first."). Sibling entry
+to "A brief is a claim too" above, one section up: that entry is about a
+brief's claim that something was MISSING; this one is about a brief's claim
+that something did not YET EXIST. Both are the same discipline — Rule
+Zero's "do not invent a benchmark, do not trust one the system invented for
+itself" — aimed at the word "new" specifically now, because it is the word
+this project's briefs have gotten wrong three separate times, and a word
+that costly is worth naming as its own checkable claim: **before starting
+work described as "new", grep the codebase (or read `docs/MODULE-MAP.md`
+directly, once it exists) for the capability described — a hit means the
+brief's scope is narrower than written, not that the task is cancelled.**
+
+### 2026-09-09 · A second instance of Candidate pattern F, this time between the mutation harness and an honestly-red gate
+
+**What was found, and by whom:** not by an audit pass — by trying to run
+the 21 outstanding entries `test/mutations.json` accumulated since B1/B2
+landed (`docs/briefs/OVERNIGHT-CLI-2026-09-09.md`'s own "mutationEvidence
+pair" item). `scripts/_mutcheck.mjs` refuses to score any mutation against
+a "red baseline" — correct, by design, and exactly what BUILD-LOOP.md
+Step 6 asks for ("a red suite must name the EXPECTED test"). But
+`test/boardGenerator.test.ts` contains B2.5's own gate
+("B2.5 gate: generation time, against Cloudflare's own default Worker
+CPU-time ceiling"), which `docs/specs/BOARD-REBUILD-PLAN.md` explicitly
+says must stay red on purpose ("THIS GATE IS ASSERTED HONESTLY, AND IT IS
+RED... not hidden by loosening the assertion") until the generator moves
+off the live request path. The two composed: `_mutcheck.mjs test/board
+Generator.test.ts public/board-generator.js` refuses outright
+("baseline: RED... refusing to score mutations against a red baseline"),
+which makes it structurally impossible to mutation-test ANYTHING in
+`board-generator.js`, `board.js`, or `boardGenerator.test.ts` itself for
+as long as B2.5's gate stays red — four of the 21 outstanding mutations
+(`b2-settlement-table-wooded-exclusion-real`,
+`b2-mainland-boundary-inland-direction-real`,
+`b2-5-sampled-ground-perimeter-is-load-bearing`,
+`b2-6-no-live-route-generates-the-board`) are blocked this way, verified
+directly by running the command and reading its own refusal message, not
+inferred. The same shape, separately: `test/isolate.test.ts` currently
+carries one already-catalogued old-world-pin failure ("P4.3: every
+reported neighbour is a building"), which blocks the same way for
+`isolate.js` (3 mutations) and the isolate-scoped half of
+`world-render-3d.js` (2 mutations) — nine of the 21 total, across two
+independent red-baseline causes.
+
+**Why this is the SAME pattern as the 2026-09-08 entry, not a new one:**
+that entry named the shape exactly — "when a system has a control that
+guarantees a state will hold... and a second control that gates on that
+same state never occurring... the two together forbid the second control
+from ever firing, permanently." `node:test`'s `{ todo }` status was the
+fix there (a deliberately-red case gets a distinct status the gate can
+name and exempt). `_mutcheck.mjs`/`mutate.mjs` do not yet read `{ todo }`
+status at all — they classify a suite as red or green from `node:test`'s
+own fail count, and (confirmed by reading `scripts/mutate.mjs` directly)
+a `todo` test is already excluded from that count by `node:test` itself,
+the same mechanism that already saved `gen-test-count.mjs`. **If B2.5's
+gate were declared `{ todo: true }` instead of a plain failing assertion,
+the mutation harness's own baseline check would already treat it as
+green**, without either control needing new code — the fix that closed
+this exact deadlock once already closes it again, unrecognised the
+second time because it showed up in a different pair of files.
+
+**Not fixed here — recorded as a decision for Mark**
+(`docs/DECISIONS-FOR-MARK.md`), because converting B2.5's gate to `{ todo
+}` changes what "red" means for a control `docs/specs/BOARD-REBUILD-PLAN.md`
+was explicit should stay a plain, visible failure, not a status a reader
+might mistake for "skipped" rather than "known, real, and still open."
+That is a real trade-off, not a mechanical fix, and this project's own
+rule is that a brief this size gets planned in writing and reviewed, not
+decided unilaterally by whoever hits the deadlock next.
+
+**Two mutations found separately unmechanisable, a different defect from
+the one above:** `b2-5-ground-verified-opt-in-is-load-bearing` and
+`b2-5-sampled-ground-perimeter-is-load-bearing`'s own manifest entries
+say plainly, in their own `note` field, "verified BY HAND... a real
+timing measurement... board.test.ts stayed green throughout" — these
+were never `node:test` assertions to begin with, so no `expect` string
+could ever match a failing-test title for them. `_mutcheck.mjs` has no
+concept of a measurement-based control, only a pass/fail-title one. Not
+a new problem tonight's run created, but the first time anyone tried to
+mechanically re-run these two since they were written, which is what
+surfaced it.
+
+**A THIRD, smaller thing found while doing this — a genuinely stale
+`expect` string, not a weak control:** `b2-0-worldaliasing-terrain-
+landmasses-on-allowlist` and `b2-0-worldaliasing-mainland-zones-on-
+allowlist` both reported INCONCLUSIVE on the first re-run, each printing
+"red, but not on [long descriptive expect string]" immediately followed
+by the REAL failing title, which plainly contained the right property
+("two worlds with DIFFERENT seeds share only the declared allow-list").
+The manifest's own `expect` field had been written as a paraphrase of
+the property, not a copy of the test's actual title — this passed
+`mutate.mjs`'s own stale-reference check at the time (which only flags
+an `expect` that matches NO failing test at all, not one that
+under-matches a title it was never a substring of, because the mutation
+DOES turn the suite red, on the right test, every time) and was
+presumably eyeballed as correct by whoever wrote it, rather than
+confirmed by the tool actually reporting CAUGHT. Fixed by copying the
+real title verbatim into `expect`; both then reported CAUGHT for real.
+**Worth adding to §5.3's own INCONCLUSIVE rule:** an INCONCLUSIVE result
+whose "red, but not on" message names a failing test that obviously IS
+the property under test is not evidence the control is weak — it is
+evidence the manifest's `expect` string was paraphrased rather than
+copied, and the fix is to copy the real title, not to rewrite the test
+or the mutation.

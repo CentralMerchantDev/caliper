@@ -90,3 +90,19 @@ test("I3 (wiring): the real click handler resolves through the persisted selecti
     "the city-mode click handler resolves the address directly from the index again, instead of through the persisted selection",
   );
 });
+
+test("B3 (wiring): the city-mode pick handler resolves a real board piece via pieceAtPoint when the real board has been loaded", () => {
+  assert.match(
+    RENDER_3D,
+    /import\s*\{[^}]*\bpieceAtPoint\b[^}]*\}\s*from\s*["']\.\/board-load\.js["']/,
+    "world-render-3d.js does not import pieceAtPoint from board-load.js",
+  );
+  const pickHandlerStart = RENDER_3D.indexOf("CITY MODE PICKS AGAINST THE SCENE");
+  assert.ok(pickHandlerStart > -1, "could not find the city-mode pick handler by its own comment -- it may have moved or been renamed");
+  const cityModeBlock = RENDER_3D.slice(pickHandlerStart, pickHandlerStart + 2500);
+  assert.match(
+    cityModeBlock,
+    /pieceAtPoint\(\s*this\._boardData\.board,\s*pt\.x,\s*pt\.z\s*\)/,
+    "the city-mode pick handler does not call pieceAtPoint against the real, loaded board",
+  );
+});
