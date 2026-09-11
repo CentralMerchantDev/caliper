@@ -154,6 +154,63 @@ export function buildBoardScene(THREE, pieces) {
 }
 
 /**
+ * B4 (2c) -- one THREE.InstancedMesh per (propId, geometry-part-index),
+ * replacing one Mesh (or multi-part Group) per placed item. `items`:
+ * `[{ id, propId, parts, position: {x,y,z}, rotationY, color }]` --
+ * `parts` (a geometry[]) MUST be the SAME array object for every item
+ * sharing a `propId` (each scatter function's own geometry cache
+ * guarantees this, so `.createGeometry()` runs once per distinct variant
+ * actually placed, not once per item).
+ *
+ * `"tree"` is `prop-models.js`'s own VARIED family (12 discrete species x
+ * age combinations, chosen deterministically by seed -- ground-checked
+ * directly: `props.js`'s `tree()` is a pure function of its two
+ * arguments, no `Math.random()` anywhere in the file) -- genuinely
+ * instanceable by bucketing on the resolved model's own `.id`, not a case
+ * where "every instance shares one geometry" is violated.
+ * lampPost/bench/bin/busShelter are non-VARIED plain aliases (one fixed
+ * model each), the simpler case of the same mechanism.
+ *
+ * `group.userData.itemCount` records the real placed-item count once,
+ * since `group.children.length` (now the small InstancedMesh-group count)
+ * no longer means that -- `world-render-3d.js`'s and `city.html`'s own
+ * console.log lines read the old `.children.length` for exactly this
+ * number and would otherwise silently report the wrong count.
+ */
+function buildInstancedPropGroup(THREE, groupName, items) {
+  const group = new THREE.Group();
+  group.name = groupName;
+  const byVariant = new Map();
+  for (const item of items) {
+    let v = byVariant.get(item.propId);
+    if (!v) { v = { parts: item.parts, color: item.color, list: [] }; byVariant.set(item.propId, v); }
+    v.list.push(item);
+  }
+  const materialCache = new Map();
+  const dummy = new THREE.Object3D();
+  for (const { parts, color, list } of byVariant.values()) {
+    let material = materialCache.get(color);
+    if (!material) { material = new THREE.MeshStandardMaterial({ color }); materialCache.set(color, material); }
+    for (let partIdx = 0; partIdx < parts.length; partIdx++) {
+      const mesh = new THREE.InstancedMesh(parts[partIdx], material, list.length);
+      mesh.userData.propId = list[0].propId;
+      mesh.userData.pieceIds = list.map((it) => it.id);
+      list.forEach((item, idx) => {
+        dummy.position.set(item.position.x, item.position.y, item.position.z);
+        dummy.rotation.set(0, item.rotationY || 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(idx, dummy.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      group.add(mesh);
+    }
+  }
+  group.userData.itemCount = items.length;
+  return group;
+}
+
+/**
  * B4 -- "kits wire by construction": a real tree, from
  * public/prop-models.js's own propModel(), not a placeholder. A SEPARATE
  * group from buildBoardScene() on purpose -- that function's own gate
@@ -165,44 +222,44 @@ export function buildBoardScene(THREE, pieces) {
  *
  * DELIBERATELY MODEST, NAMED AS SUCH: one tree per `maxTrees`-th building
  * piece (default every 25th), not one per building -- a real board has
- * ~17,600 buildings, and propModel("tree")'s own LOD0 is a multi-part,
- * unmerged geometry not yet instanced here (2c's job -- see scatterTrees'
- * own call site in world-render-3d.js). Corrected 2026-09-11: the prior art
- * for grouping-then-instancing this file's own header pointed at,
- * `partitionForInstancing`, actually lives in `public/instance-groups.js`
- * (consumed by `public/city-render.js`), not `world-render-3d.js` as
- * earlier written here -- ground-checked while building buildBoardScene's
- * own instancing (2b), and named rather than silently carried forward.
- * This satisfies B4's own gate (propModel becomes product-reachable, not
- * merely test-only) honestly -- it is a real, working call from a real
- * render path, not a token invocation -- without shipping tens of
- * thousands of unmerged meshes tonight.
+ * ~17,600 buildings. This satisfies B4's own gate (propModel becomes
+ * product-reachable, not merely test-only) honestly -- it is a real,
+ * working call from a real render path, not a token invocation -- without
+ * shipping tens of thousands of trees tonight.
+ *
+ * THE CAP CHECK READS `items.length`, NOT `group.children.length` (2c):
+ * once placed items are instanced at the end via buildInstancedPropGroup()
+ * rather than added to a group inside this loop, `group.children.length`
+ * would stay zero for the whole loop -- checked directly against the real
+ * blind review that caught this exact bug before it shipped, universal
+ * across all four scatter functions in this file.
  */
 export function scatterTrees(THREE, pieces, { maxTrees = 400, everyNth = 25 } = {}) {
-  const group = new THREE.Group();
-  group.name = "board-trees";
   let seen = 0;
+  const geometryCache = new Map();
+  const items = [];
   for (const piece of pieces) {
     if (!piece || piece.pieceType !== "building") continue;
     seen += 1;
     if (seen % everyNth !== 0) continue;
-    if (group.children.length >= maxTrees) break;
+    if (items.length >= maxTrees) break;
     const model = propModel("tree", piece.cell.i * 31 + piece.cell.j);
-    const parts = model.lod[0].createGeometry(THREE);
-    const partList = Array.isArray(parts) ? parts : [parts];
-    const material = new THREE.MeshStandardMaterial({ color: 0x3f6b35 });
-    const treeGroup = new THREE.Group();
-    for (const geo of partList) treeGroup.add(new THREE.Mesh(geo, material));
+    let parts = geometryCache.get(model.id);
+    if (!parts) {
+      const raw = model.lod[0].createGeometry(THREE);
+      parts = Array.isArray(raw) ? raw : [raw];
+      geometryCache.set(model.id, parts);
+    }
     // Offset from the building's own footprint so the tree sits beside it,
     // inside the building piece's own clear margin, not through its walls.
     const origin = atomOrigin(piece.cell.i, piece.cell.j);
     const offsetX = piece.foot.w + model.footprint.w / 2 + 0.5;
-    treeGroup.position.set(origin.x + offsetX, 0, origin.z + piece.foot.d / 2);
-    treeGroup.userData.pieceId = piece.id;
-    treeGroup.userData.propId = model.id;
-    group.add(treeGroup);
+    items.push({
+      id: piece.id, propId: model.id, parts, color: 0x3f6b35, rotationY: 0,
+      position: { x: origin.x + offsetX, y: 0, z: origin.z + piece.foot.d / 2 },
+    });
   }
-  return group;
+  return buildInstancedPropGroup(THREE, "board-trees", items);
 }
 
 /**
@@ -230,31 +287,29 @@ export function scatterTrees(THREE, pieces, { maxTrees = 400, everyNth = 25 } = 
  * entirely; caught by this file's own test before it shipped.
  */
 export function scatterStreetLamps(THREE, pieces, { maxLamps = 400, everyNth = 40 } = {}) {
-  const group = new THREE.Group();
-  group.name = "board-street-lamps";
   let seen = 0;
+  const geometryCache = new Map();
+  const items = [];
   for (const piece of pieces) {
     if (!piece || piece.pieceType !== "road") continue;
     seen += 1;
     if (seen % everyNth !== 0) continue;
-    if (group.children.length >= maxLamps) break;
+    if (items.length >= maxLamps) break;
     const model = propModel("lampPost", piece.cell.i * 31 + piece.cell.j);
-    const parts = model.lod[0].createGeometry(THREE);
-    const partList = Array.isArray(parts) ? parts : [parts];
-    const material = new THREE.MeshStandardMaterial({ color: 0x2a2a2a });
-    const lampGroup = new THREE.Group();
-    for (const geo of partList) lampGroup.add(new THREE.Mesh(geo, material));
+    let parts = geometryCache.get(model.id);
+    if (!parts) {
+      const raw = model.lod[0].createGeometry(THREE);
+      parts = Array.isArray(raw) ? raw : [raw];
+      geometryCache.set(model.id, parts);
+    }
     const origin = atomOrigin(piece.cell.i, piece.cell.j);
     const { w, d } = piece.foot;
     const longAlongW = w >= d;
     const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.w / 2 + 0.3;
     const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;
-    lampGroup.position.set(x, 0, z);
-    lampGroup.userData.pieceId = piece.id;
-    lampGroup.userData.propId = model.id;
-    group.add(lampGroup);
+    items.push({ id: piece.id, propId: model.id, parts, color: 0x2a2a2a, rotationY: 0, position: { x, y: 0, z } });
   }
-  return group;
+  return buildInstancedPropGroup(THREE, "board-street-lamps", items);
 }
 
 /**
@@ -284,34 +339,37 @@ export function scatterStreetLamps(THREE, pieces, { maxLamps = 400, everyNth = 4
  * parallel to the road on BOTH real span orientations.
  */
 export function scatterStreetFurniture(THREE, pieces, { maxItems = 400, everyNth = 60 } = {}) {
-  const group = new THREE.Group();
-  group.name = "board-street-furniture";
   let seen = 0;
+  const geometryCache = new Map();
+  const items = [];
   for (const piece of pieces) {
     if (!piece || piece.pieceType !== "road") continue;
     seen += 1;
     if (seen % everyNth !== 0) continue;
-    if (group.children.length >= maxItems) break;
+    if (items.length >= maxItems) break;
     const seed = piece.cell.i * 31 + piece.cell.j;
-    const isBench = group.children.length % 2 === 0;
+    // Alternates on THIS function's own placed-item count, not
+    // group.children.length -- group stays empty until the end (2c), so
+    // that read would always see 0 and place a bench forever, never a bin.
+    const isBench = items.length % 2 === 0;
     const model = isBench ? propModel("bench", seed) : propModel("bin", seed);
-    const parts = model.lod[0].createGeometry(THREE);
-    const partList = Array.isArray(parts) ? parts : [parts];
-    const material = new THREE.MeshStandardMaterial({ color: isBench ? 0x6b4a2a : 0x3a3a3a });
-    const itemGroup = new THREE.Group();
-    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));
+    let parts = geometryCache.get(model.id);
+    if (!parts) {
+      const raw = model.lod[0].createGeometry(THREE);
+      parts = Array.isArray(raw) ? raw : [raw];
+      geometryCache.set(model.id, parts);
+    }
     const origin = atomOrigin(piece.cell.i, piece.cell.j);
     const { w, d } = piece.foot;
     const longAlongW = w >= d;
     const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;
     const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;
-    itemGroup.position.set(x, 0, z);
-    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;
-    itemGroup.userData.pieceId = piece.id;
-    itemGroup.userData.propId = model.id;
-    group.add(itemGroup);
+    items.push({
+      id: piece.id, propId: model.id, parts, color: isBench ? 0x6b4a2a : 0x3a3a3a,
+      rotationY: longAlongW ? 0 : Math.PI / 2, position: { x, y: 0, z },
+    });
   }
-  return group;
+  return buildInstancedPropGroup(THREE, "board-street-furniture", items);
 }
 
 /**
@@ -333,31 +391,31 @@ export function scatterStreetFurniture(THREE, pieces, { maxItems = 400, everyNth
  * axis runs along d instead of w.
  */
 export function scatterBusShelters(THREE, pieces, { maxShelters = 400, everyNth = 150 } = {}) {
-  const group = new THREE.Group();
-  group.name = "board-bus-shelters";
   let seen = 0;
+  const geometryCache = new Map();
+  const items = [];
   for (const piece of pieces) {
     if (!piece || piece.pieceType !== "road") continue;
     seen += 1;
     if (seen % everyNth !== 0) continue;
-    if (group.children.length >= maxShelters) break;
+    if (items.length >= maxShelters) break;
     const seed = piece.cell.i * 31 + piece.cell.j;
     const model = propModel("busShelter", seed);
-    const parts = model.lod[0].createGeometry(THREE);
-    const partList = Array.isArray(parts) ? parts : [parts];
-    const material = new THREE.MeshStandardMaterial({ color: 0x557799 });
-    const itemGroup = new THREE.Group();
-    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));
+    let parts = geometryCache.get(model.id);
+    if (!parts) {
+      const raw = model.lod[0].createGeometry(THREE);
+      parts = Array.isArray(raw) ? raw : [raw];
+      geometryCache.set(model.id, parts);
+    }
     const origin = atomOrigin(piece.cell.i, piece.cell.j);
     const { w, d } = piece.foot;
     const longAlongW = w >= d;
     const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;
     const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;
-    itemGroup.position.set(x, 0, z);
-    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;
-    itemGroup.userData.pieceId = piece.id;
-    itemGroup.userData.propId = model.id;
-    group.add(itemGroup);
+    items.push({
+      id: piece.id, propId: model.id, parts, color: 0x557799,
+      rotationY: longAlongW ? 0 : Math.PI / 2, position: { x, y: 0, z },
+    });
   }
-  return group;
+  return buildInstancedPropGroup(THREE, "board-bus-shelters", items);
 }

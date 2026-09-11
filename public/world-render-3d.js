@@ -1885,7 +1885,11 @@ class Renderer3D {
       // one also rotates, same reason as scatterStreetFurniture.
       this._boardBusShelters = scatterBusShelters(THREE, boardData.pieces);
       this.scene.add(this._boardBusShelters);
-      console.log(`B3/B4: board render path drew ${boardData.pieces.length} real pieces, ${this._boardTrees.children.length} real trees, ${this._boardLamps.children.length} real street lamps, ${this._boardStreetFurniture.children.length} real street furniture items and ${this._boardBusShelters.children.length} real bus shelters from public/board.generated.json`);
+      // .userData.itemCount, not .children.length -- 2c instanced these
+      // groups (one InstancedMesh per prop variant, not one child per
+      // placed item), so .children.length is now a small group count, not
+      // the real placed-item count this log line means to report.
+      console.log(`B3/B4: board render path drew ${boardData.pieces.length} real pieces, ${this._boardTrees.userData.itemCount} real trees, ${this._boardLamps.userData.itemCount} real street lamps, ${this._boardStreetFurniture.userData.itemCount} real street furniture items and ${this._boardBusShelters.userData.itemCount} real bus shelters from public/board.generated.json`);
     } catch (e) {
       console.error("B3/B4: failed to fetch/draw the real board (city geometry above is unaffected):", e);
     }
