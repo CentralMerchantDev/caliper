@@ -189,7 +189,11 @@ polish.
 [ ] F2     The rest of the K6 buildings checklist, in K6's own priority order
 [ ] F3     Kitbash variety -- what reaches the world vs what the registry holds
 [ ] F4     The comment-strip sweep finished as a CATEGORY, not nine files
-[ ] K7.1   The atlas gap -- code-verified, never visually verified
+[x] K7.1   The atlas gap -- code-verified, never visually verified
+             `node scripts/shoot.mjs "In the street" "Downtown corner"` ->
+             real cornice/string-course trim visible, textured, distinct
+             from flat wall and flat roof, on two separate buildings.
+             .shots/in-the-street.png, .shots/downtown-corner.png       <commit>
 [ ] B6     The interface. Mobile is the open part: world fills the screen,
              landscape, prompt box findable, touch, and the touch-action gap
              on #world-canvas found and never fixed.
