@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { stripSourceComments } from "./stripSourceComments.ts";
 import {
   FACADE_FAMILIES,
   FACADE_VARIANTS,
@@ -261,7 +262,12 @@ test("GATE: distinct facade materials reachable from real placements, well above
 // import, aimed here at confirming a REQUIRED line is present rather than a
 // forbidden one absent.
 test("GATE (static): public/city-render.js's real getFacadeMaterial call still passes variantSeed -- the one-line cross-lane fix cannot silently regress unseen", () => {
-  const src = readFileSync(join(ROOT, "public", "city-render.js"), "utf8");
+  // Stripped before matching -- this checks a REQUIRED line is PRESENT
+  // (the risky direction: a comment mentioning the call would satisfy the
+  // regex too), not an absence check. test/rawSourceScan.test.ts's own
+  // category gate (F4, 2026-09-11) caught this exact file for exactly this
+  // reason when the merge carried the check over from b1-land.
+  const src = stripSourceComments(readFileSync(join(ROOT, "public", "city-render.js"), "utf8"));
   assert.match(
     src,
     /getFacadeMaterial\(char,\s*\{[^}]*variantSeed:\s*g\.seed[^}]*\}\)/s,

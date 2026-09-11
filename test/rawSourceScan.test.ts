@@ -75,6 +75,32 @@ const SELF = "rawSourceScan.test.ts";
 // says WHY the match is not (or not yet fixed as) the navPad/isolate/
 // movePiece/claimSpansAreChecked/propManifest defect shape.
 const REVIEWED_EXCLUSIONS: Record<string, string> = {
+  "boardGenerator.test.ts":
+    "Reviewed 2026-09-11 (b1-land merge). Two of its four checks against " +
+    "board-generator.js's raw source are the safe direction (ROAD_WIDTH/" +
+    "HALF_ROAD must be ABSENT -- a comment false-positive fails loud, does " +
+    "not hide a real regression). The other two (halfRoadFor(/roadWidthFor( " +
+    "must be PRESENT inside a sliced function body) are the risky direction " +
+    "and a real, not-yet-fixed instance of the same defect shape; named for " +
+    "a future pass, time-boxed out of tonight's sweep.",
+  "boardRender.test.ts":
+    "Reviewed 2026-09-11 (b1-land merge). Its own forbidden-import scan " +
+    "(line ~44-62) already carries a dedicated guardrail test proving it is " +
+    "comment-safe by construction (\"a comment line was mistaken for an " +
+    "import statement\" -- asserts zero false positives), independently of " +
+    "the shared stripSourceComments helper. Every other readFileSync in this " +
+    "file reads JSON data (board.generated.json) or checks mesh/geometry " +
+    "output, not source-code presence.",
+  "terrainLandmassOwnership.test.ts":
+    "Reviewed 2026-09-11 (b1-land merge). The import-clause check (\"terrain.js " +
+    "no longer imports landmassPolygonsDesign or LANDMASSES\") extracts a " +
+    "specific `import { ... } from \"./city-plan.js\"` clause first, then " +
+    "checks names are ABSENT within just that clause -- low risk (a full " +
+    "commented-out import statement would be needed to false-positive, not " +
+    "an arbitrary comment). A separate check (\"terrain.js exports its own " +
+    "landmassPolygonsDesign\") DOES match a required pattern against the " +
+    "whole raw file and is the risky direction -- a real, not-yet-fixed " +
+    "instance; named for a future pass.",
   "cityWorld.test.ts":
     "Every .match()/.test()/.includes() call found targets DATA (a generated " +
     "city-summary report string, plot/road ids, directory-listing filenames), " +
