@@ -167,10 +167,12 @@ this list.
 [ ] B7     The countryside -- farmland, the range, greenery
 ```
 
-**B3 is the item that makes the world visible again.** Landed additively
-tonight; the visual result itself has not been looked at (memory-constrained
-all session). Everything above it is correctness debt; everything below it
-is polish.
+**B3 is the item that makes the world visible again.** Landed additively; the
+visual result WAS looked at and verified 2026-09-10 (`18007b8`, real
+screenshots with `?board=1`/`SHOOT_BOARD=1` on — see the B3 line above for
+detail), and picking gained a real, additive connection to the board
+(`5592f24`). Everything above it is correctness debt; everything below it is
+polish.
 
 ---
 

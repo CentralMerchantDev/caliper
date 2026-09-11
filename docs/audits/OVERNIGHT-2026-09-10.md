@@ -17,17 +17,35 @@ were read directly from `C:\Code\process-mcp\packs\core\*.md` — `build-loop.md
 
 ---
 
-## 1. FIX THIS FIRST — two files this run left behind and could not remove
+## 1. FIX THIS FIRST — RESOLVED, no action needed. Read why.
 
-Run these two lines in PowerShell, in any terminal:
+**CORRECTION, added 2026-09-10 after a Windows automatic restart tore down the
+sandbox.** This section originally told you to delete two files. **Both are
+gone, and the repository is not jammed.** Checked from the Windows side, with
+the file tools rather than with `git`: `.git\index.lock` does not exist,
+`.writetest` does not exist, and there is no `.lock` anywhere under
+`.git\` or `.git\worktrees\`. Nothing to run.
+
+The likely reason, stated as a theory rather than a proof: the Linux sandbox
+reached `C:\Code` through an overlay mount, and the two files existed only in
+that overlay's own layer — `git` inside the sandbox genuinely saw them, which
+is why the jam it reported was real *there*, but they never reached the real
+disk, and the layer went with the sandbox. **This audit file survived because
+it was written with the Windows file tool, not through the mount.** That
+difference is the useful part of the finding and is worth remembering.
+
+What this does NOT change: section 2's conclusion still stands. The mount
+cannot unlink, `git` inside the sandbox jams on its own lock files, and this
+task still cannot commit from here. It only changes the blast radius — this
+run left the repository clean rather than jammed.
+
+The original instruction, kept for the record:
 
 ```powershell
+# NO LONGER NEEDED -- both files are already absent.
 Remove-Item 'C:\Code\sandbox-spike\.git\index.lock'
 Remove-Item 'C:\Code\sandbox-spike\.writetest'
 ```
-
-Then `git status` in `C:\Code\sandbox-spike` should be clean except for this
-file, and normal work resumes. Nothing else was touched.
 
 - **`.git\index.lock`** — a zero-byte stale lock. It is what blocks `git`.
   Created by a `git status` that this run issued; `git` then could not unlink
