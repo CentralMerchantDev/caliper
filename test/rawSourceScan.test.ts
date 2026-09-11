@@ -136,14 +136,6 @@ const REVIEWED_EXCLUSIONS: Record<string, string> = {
     "confirmed comment-safe for the html sources. Also reads " +
     "src/citySummary.generated.ts, matched only for numeric substring " +
     "presence in a generated (not hand-authored) file -- not the same risk.",
-  "rendererStatic.test.ts":
-    "Two of its three checks (`analyse()`, undeclared-reference and " +
-    "temporal-dead-zone detection) use a real tokenizer, comment-immune by " +
-    "construction. The third (`new THREE.WebGLRenderer(` and " +
-    "`logarithmicDepthBuffer: true` occurrence COUNTS) is naive regex over " +
-    "raw source -- a real, not-yet-fixed instance, lower priority since it " +
-    "counts constructions vs flags rather than a single presence/absence " +
-    "check; named for a future pass.",
   "supervisedGenerateScript.test.ts":
     "assert.match() targets a spawned child process's own STDERR text at " +
     "runtime, not a source file's code -- \"comment\" has no meaning for " +
