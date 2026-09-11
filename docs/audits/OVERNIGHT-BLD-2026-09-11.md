@@ -163,3 +163,70 @@ the exact violating combination. Restored, `md5sum`-verified
 byte-identical, re-ran green (5/5).
 
 Committed: `df080ad`.
+
+---
+
+## Continuing K6's remaining items — a finding, not a next item
+
+**Read `docs/audits/K6-BUILDINGS.md` in full again, after item 1's own
+reconciliation, to find the next written item.** Every section:
+
+```
+World cameras / disconnected capability / measurements / geometry
+treatment / frame time / four-azimuth gate / reproduction / culling-ratio
+fix / street-level lighting fix        -- historical record, not open items
+K7.1 (atlas gap)                       -- CLOSED at code level; visual
+                                           re-shoot BLOCKED (memory floor)
+Checklist, extended (F2's items 1-5)   -- item 1/F1 BLOCKED (cross-branch,
+                                           public/city-render.js, CLI-lane);
+                                           items 2-5 all CLOSED or
+                                           reconfirmed clean (this session's
+                                           own item 1 reconciliation, above)
+The connectors gap                     -- CLOSED permanently, RUN3
+```
+
+**Every item this document names is now either closed or blocked. There is
+no next unblocked item to take.** Checked directly, not assumed: free
+memory read `0.653 GB` this session
+(`(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB`) — the
+lowest of any reading across RUN2 through this session (prior lows: 0.94,
+1.19 GB), and almost certainly lower than usual right now because the
+full-suite run (item 0) is itself competing for memory. Far below the
+project's own 4 GB floor either way. F1 is unchanged from every prior
+session's finding — `grep -n "variantSeed" public/city-render.js` still
+finds nothing in this worktree, still fulfilled only on `b1-land`, still
+recorded in `docs/CROSS-LANE-REQUESTS.md` and not re-filed.
+
+**This is the finding the brief itself anticipated** ("if several in a row
+are blocked that way, say so"). Two remaining items, blocked for two
+different reasons — F1 by cross-branch file ownership, K7.1 by the host's
+memory floor — not the same wall hit twice, but the same shape: nothing
+left in this document that this lane can move forward alone, tonight, in
+this environment. `B6` (the interface) is named in `docs/specs/COMPLETION-
+PLAN.md`'s PART 2 checklist but is not itself covered by
+`docs/audits/K6-BUILDINGS.md` — out of this document's own scope, not
+silently skipped.
+
+**Not queued as a new decision for Mark** — the memory situation is
+already a standing, repeatedly-confirmed finding (RUN2 through this
+session), not a new one; re-filing it again would be noise, not
+information. Nothing else here is Mark's to decide either — F1 already has
+its own resolution path recorded (a merge Mark authorises when awake), and
+K7.1/B6 simply need the host's memory to clear.
+
+**What the low reading traces to, named and not acted on, per the standing
+"lanes do not kill processes" rule.** `Get-CimInstance Win32_Process -Filter
+"Name='node.exe'"` lists 19 `node.exe` processes. Two are `test/run.mjs`
+(the full suite) running concurrently: PID 36156 (started 2026-09-11
+01:02:38, ~62 MB) and PID 35292 (started 2026-09-11 01:04:54, ~144 MB).
+This session started exactly one such run (item 0, log redirected to disk)
+— the other is most plausibly the other lane's own `b1-land` checkout
+running its own suite concurrently on the same shared host, per this
+project's own routing ("another lane is working b1-land... stay in this
+worktree"), not confirmed further and not touched either way. The
+remaining 17 `node.exe` processes are small (12–20 KB working set, three
+exceptions at 400 KB–3.4 MB) — MCP servers and dev tool stdio processes
+(`process-mcp`, `chrome-devtools-mcp`, `toolbox-sdk`, a Playwright test
+server, an MCP PDF server), several started hours before this session, none
+obviously related to CALIPER. Named, not touched — per the standing rule,
+this is the finding to hand to Mark, not an action to take.

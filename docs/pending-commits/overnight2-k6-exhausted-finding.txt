@@ -1,0 +1,40 @@
+Overnight: K6-BUILDINGS.md's checklist, read in full again after item 1's
+own reconciliation, has no next unblocked item -- recorded as the finding
+the brief itself anticipated, not forced into invented work
+
+What was checked. Every section of docs/audits/K6-BUILDINGS.md, by
+heading: the historical measurement/geometry/frame-time/gate sections are
+not open items; K7.1 is closed at the code level with its visual re-shoot
+blocked on the host memory floor; the "Checklist, extended" section's five
+items are item 1/F1 (blocked cross-branch, already recorded in
+docs/CROSS-LANE-REQUESTS.md) and items 2-5 (all closed or reconfirmed
+clean, per this session's own item 1 reconciliation); the connectors gap
+is closed permanently since RUN3. Nothing in this document is both open
+and actionable from this worktree right now.
+
+Verified rather than assumed. Free memory read 0.653 GB
+((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB) -- the
+lowest reading across every session in this series (prior lows 0.94, 1.19
+GB), far below the project's own 4 GB floor, confirming K7.1's visual
+re-shoot and B6's browser-dependent work stay correctly blocked. F1
+re-confirmed unchanged: grep -n "variantSeed" public/city-render.js still
+finds nothing in this worktree.
+
+The process finding behind the low reading, named and NOT acted on, per
+the standing "lanes do not kill processes" rule. Get-CimInstance
+Win32_Process lists 19 node.exe processes. Two are test/run.mjs (the full
+suite) running concurrently -- PID 36156 (started 01:02:38, ~62 MB) and
+PID 35292 (started 01:04:54, ~144 MB). This session started exactly one
+such run (item 0); the other is most plausibly the other lane's own
+b1-land checkout running its own suite on the same shared host, not
+confirmed further. The remaining 17 are small MCP/dev-tool stdio
+processes, several pre-dating this session, none obviously CALIPER-related.
+Named -- PIDs, start times, command lines, sizes -- and left exactly as
+found.
+
+What this means for tonight. Nothing left in K6-BUILDINGS.md for this
+lane to move forward alone, in this environment, tonight. Not queued as a
+new decision for Mark -- the memory situation is already a standing,
+repeatedly-confirmed finding across RUN2 through this session, and
+re-filing it again would be noise. F1's resolution (a b1-land -> codex-lane
+merge) is already recorded as Mark's to authorise when he is awake.
