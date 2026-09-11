@@ -793,6 +793,67 @@ every business park building in the world is geometrically identical. Also
 correctly low priority by the same logic, also named rather than left
 unrecorded.
 
+**CORRECTION, 2026-09-11 (`codex-lane`), reconciling this document against
+the real code — this section had not been updated since RUN3 and stopped
+believable as a checklist.** The paragraph above (`bldBusinessParkBlock`
+"takes no seed-derived randomization at all") was true when written and is
+not true now; it and the rest of "everything below 2.91%" have moved since,
+verified directly against `public/buildings.js` rather than against
+`docs/audits/OVERNIGHT-BLD-2026-09-10.md`'s own account of the same work
+(both checked; the code is what settles it):
+
+- `bldBusinessParkBlock` — **FIXED, RUN5.** `wallCol`/`roofCol` now derive
+  from the seed (matching every sibling typology's own idiom) and a real,
+  options-overridable `hasSolarArray` flag gates the existing roof
+  solar-panel box. `public/buildings.js:3028` (`hasSolarArray`),
+  `docs/pending-commits/run5-f2-business-park-variation.txt`, commit
+  `f4b4076`.
+- `bldApartmentWalkup` — **FIXED, RUN5.** `hasGarden` was computed and
+  reported in `params` but never consulted by any LOD builder (the exact
+  wired-but-ignored defect item 1's correction above already named for the
+  four dominant typologies, recurring a second time here). Now
+  options-overridable and gates a real ground-level garden bed and hedge at
+  the building's rear. `public/buildings.js:2282`,
+  `docs/pending-commits/run5-f2-apartment-walkup-garden.txt`, commit
+  `c3bd9de`.
+- `bldHighStreetTerrace` — **FIXED, RUN5.** Had zero structural options of
+  any kind (no `params` field at all, one fixed roof form always present).
+  `roofStyle` (mansard/parapet) now branches real geometry — "mansard"
+  reproduces the original form exactly, "parapet" is new, reusing this
+  file's own flat-parapet-plus-coping idiom. `public/buildings.js:2890`,
+  `docs/pending-commits/run5-f2-highstreet-terrace-roofstyle.txt`, commit
+  `7d09539`.
+- `bldTower` — **surveyed, confirmed clean, RUN5.** `params: { cellW,
+  cellD, storeys, profile }` — `profile`'s five values (stepped/tapered/
+  slab/crown/straight) all branch genuinely different shaft or crown
+  geometry. No fix needed.
+- `bldWarehouse` — **surveyed clean in RUN5, corrected 2026-09-11.** RUN5's
+  survey checked only "is every `params` field consulted," found `roofStyle`
+  was read in a real `if`/`else` and called it clean. It is read, but two
+  of its three declared values, `"barrel"` and `"curved"`, fell through the
+  identical unconditional flat-box `else` branch and produced byte-identical
+  geometry — the same defect class in a milder form (consulted, but not
+  every value distinguished), found by checking whether every declared
+  VALUE produces distinct output, not just whether the field is read at
+  all. Fixed: a real vault via a partial `CylinderGeometry`, "barrel" a
+  deeper arc than "curved". `public/buildings.js:2457`, commit `70a9e64`.
+  **The lesson for whoever runs this survey next**: "the field is
+  consulted" and "every value of the field is distinguishable" are two
+  different checks, and this document's own RUN5 pass only ran the first
+  one.
+- `bldShop`, `bldOffice` — reconfirmed clean this pass (`hasAwning`/
+  `isCornerUnit` and `hasCoreBulge` respectively, all genuine booleans
+  gating real geometry, no multi-value collapse).
+
+**Every one of the twelve dynamic typologies has now been checked for both
+senses of "computed but not fully honoured"** — a field never read
+(terrace/townhouse/villa/midrise/business-park/apartment-walkup/workshop,
+fixed across RUN2–RUN5) and a field read but with declared values that
+collapse to fewer real shapes (warehouse, 2026-09-11). The one item left
+open in this document's own priority order is item 1 (the shared
+four-texture atlas) — see `docs/CROSS-LANE-REQUESTS.md` §1, blocked
+cross-branch, not something this section can close.
+
 **5. Everything below 2.91% of placements (office, high-street terrace,
 shop, tower, workshop, business park, warehouse, apartment walk-up —
 combined 7.26%) is correctly lower priority by this document's own

@@ -1,0 +1,44 @@
+Overnight item 1: reconcile docs/audits/K6-BUILDINGS.md against
+docs/audits/OVERNIGHT-BLD-2026-09-10.md and the real code -- the checklist
+was the one that was wrong
+
+What was wrong. K6-BUILDINGS.md's "Checklist, extended" section had not
+been updated past RUN3: it still described bldBusinessParkBlock as having
+"no seed-derived randomization at all" (fixed in RUN5, commit f4b4076) and
+never mentioned RUN5's other three findings -- bldApartmentWalkup's
+hasGarden fix, bldHighStreetTerrace's roofStyle fix, or the
+bldTower/bldWarehouse survey -- at all. docs/audits/OVERNIGHT-BLD-
+2026-09-10.md already carried the accurate, current account of that work.
+Two documents disagreeing about what is done is how work gets repeated --
+this run's own brief named that risk directly.
+
+How it was checked. Against the real code, not against either document's
+own account of itself: grepped and read public/buildings.js directly for
+hasSolarArray (line 3028), hasGarden (line 2282), bldHighStreetTerrace's
+roofStyle (line 2890), bldTower's profile branch (confirmed all five
+values produce distinct geometry), and this session's own bldWarehouse
+fix (line 2457, commit 70a9e64). All five confirmed present and real.
+
+The fix. K6-BUILDINGS.md gets a dated correction section (2026-09-11),
+not a silent rewrite -- matching the document's own established practice
+(its "CORRECTION, 2026-09-09 RUN2" precedent). Names all five typologies'
+current real state, the commit that closed each, and a general lesson for
+whoever runs this survey next: "the field is consulted" and "every
+declared value of the field is distinguishable" are different checks, and
+RUN5's own survey only ran the first one -- which is exactly how
+bldWarehouse was marked clean in RUN5 and then found to have a real gap
+this session (the barrel/curved collapse fixed in 70a9e64).
+
+OVERNIGHT-BLD-2026-09-10.md gets the same treatment for its one now-stale
+line (bldWarehouse "Clean; not touched") -- not wrong when written, but
+superseded by 70a9e64, which landed the day after. Dated correction added,
+original text left in place.
+
+Also creates docs/audits/OVERNIGHT-BLD-2026-09-11.md, this run's own
+handover, updated and committed at every subsequent step rather than
+written once at the end.
+
+What is still open. The full node test/run.mjs suite (item 0) is running
+in the background, output redirected straight to disk this time (no
+intermediate pipe) -- result to follow in a later commit once it
+completes.

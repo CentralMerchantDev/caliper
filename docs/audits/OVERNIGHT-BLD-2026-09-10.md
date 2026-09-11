@@ -153,6 +153,13 @@ all four in full this run:
   `r4` is rolled and never used, but it never reaches `params`, so it is
   dead code, not this defect (nothing claims it varies anything). Clean;
   not touched.
+  **CORRECTION, 2026-09-11:** this check asked only "is `roofStyle`
+  consulted," and stopped there. It is, but two of its three declared
+  values (`"barrel"`, `"curved"`) fell through the identical unconditional
+  flat-box branch, producing byte-identical geometry — not clean. Fixed in
+  commit `70a9e64`, full detail in `docs/audits/K6-BUILDINGS.md`'s own
+  2026-09-11 correction. Left here unedited rather than rewritten, per this
+  project's own practice of dated corrections over silent rewrites.
 - `bldHighStreetTerrace`: no `params` field at all, no optional flags of
   any kind — only wall/roof colour varies by seed. Not this defect (there
   is no computed-but-ignored value to find), but a real, separate gap:
