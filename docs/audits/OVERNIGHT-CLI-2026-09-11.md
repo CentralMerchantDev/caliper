@@ -100,11 +100,72 @@ green after. Evidence: `node test/run.mjs test/boardGenerator.test.ts`.
 measured 55.4% covered, over the ceiling. This is not a surprise; §9's own
 plan named it in advance. Step 3 is the fix.
 
-**Mutation NOT YET proven CAUGHT — blocked, not skipped:**
-`scripts/_mutcheck.mjs` refused to score the named mutation
-(`decision-5-step-2-block-carving-reads-road-standards`) because the
-coverage gate above shares `test/boardGenerator.test.ts` with the new
-controls, and the harness will not score against a red baseline (correct,
-by design). The **same** "two correct controls disable each other" shape
-as decision #10, now for a second pair. Will be run and proven CAUGHT
-immediately after Step 3 restores a green baseline, before Step 4 starts.
+**Mutation:** deferred at commit time (red-baseline refusal, as above),
+**now CAUGHT** — see Step 3 below, which cleared the baseline and let both
+Step 2's and Step 3's own mutations run.
+
+**Commit:** `3352110`.
+
+---
+
+## Step 3 — re-tune block/plot sizing back into the coverage band
+
+**Landed:** `2790d16`. `SETTLEMENT_TABLE`'s `blockAtoms` doubled for 6 of
+9 settled tiers (city, highland, fishing, farm, vineyard, quarry), doubled
+then nudged twice more for suburb/resort after real measurement, and left
+**unchanged** for mainland.
+
+**Blind review, before implementing:** found the plan's uniform "double
+every tier" approach was well-supported for the 8 island tiers but wrong
+for mainland specifically — mainland's boundary is a fixed-depth (600 m)
+coastal strip, not a compact island shape, so the same road-fraction model
+overpredicts its correction need by ~2.4x versus the islands, and mainland
+already had the most headroom of any tier (28.5%, comfortably in band)
+before this step. Doubling it anyway risked pushing it under the 20%
+floor. Folded in directly: mainland's `blockAtoms` was left at 80.
+
+**Measured, iteratively, not assumed:** a real `generateBoard()` run,
+per-boundary coverage read directly, at each stage:
+
+| boundary | before Step 3 | after 2x pass | after final nudge |
+|---|---|---|---|
+| mainland | 28.5% (in band) | 28.5% | 28.5% |
+| downtown (city) | 55.4% | 37.7% | 37.7% |
+| suburb-isle | 41.5% | 40.6% (barely over) | **37.6%** |
+| resort-isle | 59.9% | 41.8% (over) | **38.2%** |
+| highland-isle | 45.2% | 36.0% | 36.0% |
+| fishing-isle | 43.6% | 27.1% | 27.1% |
+| farm-isle | 42.3% | 38.7% | 38.7% |
+| vineyard-isle | 43.5% | 26.1% | 26.1% |
+| quarry-isle | 43.1% | 28.2% | 28.2% |
+
+All nine settled, non-`oneHouse` boundaries now land in the 20-40% band.
+
+**A real, honest surprise, named rather than smoothed over:** the plan's
+own algebra predicted building coverage fraction would stay roughly flat
+under this retune (same-sized plots, proportionally larger interiors).
+Measured reality disagreed substantially — e.g. `suburb-isle`'s building
+share went 0.4% → 18.2%, `farm-isle` 0.5% → 17.2%. Most likely cause
+(not chased to confirmation): fewer, larger blocks mean a smaller
+fraction of each block straddles the coastline, so far more individual
+plot candidates inside each surviving block clear the terrain check than
+before. The retune still landed every tier in band, which is what the
+gate asks for — the reasoning that got there was partly wrong, and that
+is recorded rather than quietly corrected after the fact.
+
+**Verified:** `npx tsc --noEmit` clean. `node test/run.mjs
+test/boardGenerator.test.ts` — 13/14 pass, only B2.5 (already-tracked)
+red.
+
+**Mutated, CAUGHT (both):**
+`decision-5-step-2-block-carving-reads-road-standards` (deferred from
+Step 2) and `decision-5-step-3-blockatoms-retuned-for-doubled-road-width`
+(new). Both via `scripts/_mutcheck.mjs`, baseline GREEN, source restored
+byte-identical.
+
+**Consequence, named for the record:** `test/mutationEvidence.test.ts`'s
+already-red gate (decision #10) now has two more entries with no
+authoritative `mutate.mjs` evidence, exactly as #10 predicted would
+happen at every subsequent step.
+
+**Commit:** `2790d16`.
