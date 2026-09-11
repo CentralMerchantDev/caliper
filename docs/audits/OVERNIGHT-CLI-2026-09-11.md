@@ -21,6 +21,98 @@ expected.
 
 ---
 
+## HANDOVER — read this first
+
+**Done.** Everything this run was asked to do landed and is committed:
+ITEM 0 (the `boardLoad.test.ts` red gate `f01a324` left open) and all six
+numbered steps of `docs/specs/PIECE-CATALOGUE-ROADS.md` §9 (Decision 5's
+retirement of `ROAD_WIDTH`). Tree is clean. HEAD is `062706b`. Full commit
+list, in order: `f01a324` (pre-existing, finished by a prior segment of
+this same lane before this run started) → `f3db6d9` (ITEM 0) →
+`3352110` (Step 2) → `2790d16` (Step 3) → `b09a509` (Step 4) →
+`101ac09` (Step 5) → `062706b` (Step 6), each paired with an audit-log
+commit. See `docs/DECISIONS-FOR-MARK.md` #5's own CLOSED note for the
+full numbers.
+
+**Every gate, green or red, with its evidence:**
+- GREEN, verified this run: `test/boardLoad.test.ts` (7/7), the new
+  Step 2/3/4 controls, `test/boardGenerator.test.ts`'s coverage gate
+  (all 9 settled boundaries in the 20-40% band), `test/originStability.test.ts`'s
+  own real assertion (not the `todo`).
+- RED, already-tracked, NOT caused by this run, unchanged: B2.5's CPU-time
+  gate (`docs/DECISIONS-FOR-MARK.md` #3), and ~46 other pre-existing
+  failures across the old `city-plan.js`/`layout.js` pipeline, culling
+  ratio/regression gates, and test-count staleness (decision #9) —
+  confirmed by a full-suite run and arithmetic against
+  `test/testCount.generated.json`'s own prior baseline, not assumed.
+- RED, IMPROVED by this run's own side effects, not fixed by design:
+  `docs/DECISIONS-FOR-MARK.md` #7's egress gate — was 3 boundaries lacking
+  crossings, now 1 (`farm-isle`). Still Mark's call whether that's worth
+  closing; not this retirement's job.
+- RED, NEW this run, deliberately not fixed: `test/mutationEvidence.test.ts`'s
+  two sub-tests, now further behind (decision #10) — every mutation this
+  run proved CAUGHT via `scripts/_mutcheck.mjs` (or by hand, where even
+  that tool's baseline check was blocked) is real, verified evidence, just
+  not recorded through the authoritative `scripts/mutate.mjs` path, which
+  cannot currently run at all (47 unrelated pre-existing failures, plus a
+  real regex bug in that script found and named, not fixed, tonight).
+
+**Three real regressions this run's OWN work caused, found and fixed
+before landing, not shipped and discovered later** — see decision #10 and
+the Step 5 entry below for full detail: `test/boardLoad.test.ts` drifting
+red twice; `test/originStability.test.ts` breaking because a new
+`roadkit.js` import pulled in the `three` npm package into a test's own
+disposable copy that lived outside the repo's `node_modules` tree.
+
+**One real wrong design turn, caught before it shipped:** drafted Step 4
+to size bridge decks as `AVENUE`-class (28 m) based on a misreading of
+what `roadkit.js`'s `bridgeSpan()` actually uses its `roadClass` argument
+for. A blind review (no context on what was suspected) caught it before
+any test or mutation was written. Corrected to `STREET` (18 m), matching
+the plan's own already-correct, already-written reasoning.
+
+**Everything named unverified, stated plainly, not glossed over:** Step
+5's screenshot check confirmed no render crash but could NOT visually
+distinguish the new board geometry from the much more detailed legacy
+city sharing the same frame — the real confirmation for that step is a
+numeric one (21,007 pieces loaded and rendered, zero page errors), not a
+visual one. Step 3's own prediction that building coverage would stay
+flat under the block retune was measurably wrong in several tiers — the
+retune still landed every tier in-band, but the reasoning that got there
+is on record as partly wrong, not quietly corrected after the fact.
+
+**What I would do next, in order of what's actually available:**
+1. Nothing is currently blocked on a decision that stops forward
+   progress — decision #10 (the mutate.mjs regex bug, and whether a
+   lighter-weight mutation-evidence path should exist) is real and
+   queued, but doesn't block anything else.
+2. `WORLD-BUILD-PLAN.md`'s own separate, much older ledger (PART 7) has 6
+   items left (`process_next_item` against it, checked this run): the
+   next two, `G2` and `I6`, are both explicitly BLOCKED — `G2` needs
+   Mark's real, authorised dollar figures for a builder-tier spend cap
+   (this run has no grounds to invent one), `I6` needs a live
+   `wrangler dev`/`vitest` crash from a much older session state
+   re-verified in this environment before trusting whether it still
+   applies. `J2`, `J3`, `M4`, `M5` were not investigated tonight — named,
+   not assumed clear. This ledger was NOT part of tonight's brief (which
+   named ITEM 0 and §9's six steps specifically), so it was not started.
+3. If continuing this specific work: `docs/specs/PIECE-CATALOGUE-ROADS.md`
+   §7's own "what this does not decide" already names it — the building
+   catalogue is the same treatment, for a different piece type, after
+   roads. Not started, not assumed trivial.
+
+**Anything I think is wrong that nobody asked about:** `scripts/mutate.mjs`'s
+title-extraction regex (decision #10) is a real, load-bearing bug — it
+makes the ONE entry in `scripts/expected-red.mjs`'s own allowlist fail to
+match, which means the authoritative mutation harness has likely been
+unable to establish a green baseline for longer than just tonight, for a
+reason nobody had traced before this run. It's a one-line fix
+(`scripts/_mutcheck.mjs`'s own regex already does it correctly) but
+touches a shared verification tool, so it wasn't made unilaterally
+tonight — named for Mark, per decision #10's own recommendation.
+
+---
+
 ## ITEM 0 — the red gate
 
 **Fixed.** `node scripts/gen-board.mjs` (with `$env:NODE_OPTIONS =
@@ -278,3 +370,44 @@ same frame. Not claimed as a confirmed visual pass — the numeric
 piece-count/render check above is the real evidence for this step.
 
 **Commit:** `101ac09`.
+
+---
+
+## Step 6 — close the record
+
+**Landed:** `062706b`, docs only. `docs/DECISIONS-FOR-MARK.md` #5 gets a
+CLOSED note with the full commit list, the real measured numbers, both
+real regressions this retirement's own work caused and fixed, and the one
+place the plan's own reasoning was measurably wrong. `docs/specs/
+PIECE-CATALOGUE-ROADS.md`'s status line updated: §§1-8 (footprint/type
+catalogue) still a proposal; §9 done.
+
+**Fact-checked before committing:** a fresh, blind subagent independently
+re-derived every number in the closing note from the real repository
+state — commit hashes, `ROAD_WIDTH` absence, piece/bridge/dock/refused
+counts, `blockAtoms` table, mutation IDs, all nine coverage percentages,
+the egress-gap claim. Everything matched. No inaccuracies found.
+
+**Commit:** `062706b`.
+
+---
+
+## §9 (Decision 5's ROAD_WIDTH retirement) — DONE
+
+All six steps built, tested, mutation-verified (or, where the mutation
+harness's own baseline was structurally blocked, verified by hand with
+the same rigor), and committed. `ROAD_WIDTH` no longer exists anywhere in
+`public/board-generator.js` or `public/bridge-generator.js`. The
+committed board now reflects it: 21,007 pieces, every settled boundary in
+the 20-40% coverage band, bridge decks agreeing with the roads they
+connect to.
+
+Three real regressions were found and fixed DURING this work, not shipped
+and discovered later: `test/boardLoad.test.ts` drifted red twice (once
+from ITEM 0's own predecessor, once from Steps 3/4 landing without a
+regeneration); `test/originStability.test.ts` broke because Step 2's new
+import pulled in an npm package a disposable test copy outside the repo
+couldn't resolve. One wrong design turn (bridge deck width) was caught by
+blind review before it was ever tested or committed. One real disagreement
+between the plan's own algebra and measured reality (building coverage
+under the block retune) is on record rather than smoothed over.
