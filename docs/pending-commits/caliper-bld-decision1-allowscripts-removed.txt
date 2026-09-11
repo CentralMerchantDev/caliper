@@ -1,0 +1,24 @@
+Housekeeping (caliper-bld decision queue #1): remove the dead `allowScripts`
+block from package.json -- open, uncommitted, across three runs
+
+What was wrong: package.json carried an `allowScripts` block
+(esbuild@0.28.1, workerd@1.20260815.1, workerd@1.20260825.1: true) shaped
+exactly like @lavamoat/allow-scripts's config, but nothing in this repo
+reads or enforces it -- no @lavamoat/* dependency, no postinstall script.
+It looked like a supply-chain gate and did nothing, in either direction.
+
+Re-verified against the tree as it stands today, not just re-flagged: `git
+diff package.json` before this change was byte-identical to the block
+quoted in docs/DECISIONS-FOR-MARK.md item 1; `grep -rn
+"allowScripts|lavamoat" package.json public/ src/ scripts/ test/` found no
+wiring anywhere. The recommendation from that queued decision (option 2,
+remove) still fits what is actually in the tree.
+
+Fix: deleted the block. `git diff package.json` now empty against HEAD --
+package.json returned to its last committed state. Nothing else in the
+file touched.
+
+What is still open: nothing on this item. If real @lavamoat/allow-scripts
+supply-chain gating is wanted later, the exact block text is preserved
+verbatim in docs/DECISIONS-FOR-MARK.md item 1 for reinstatement -- reversal
+cost was trivial either way, per that entry's own note.
