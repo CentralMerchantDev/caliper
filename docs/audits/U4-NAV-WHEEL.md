@@ -207,29 +207,62 @@ Host memory sat at 3.3–4.2 GB through this entire session (this project's own
 below needs a browser; none could be finished tonight. Recorded here rather
 than only in conversation, so it survives to whoever picks this up.
 
-- **The wedge redesign has never been screenshotted with the page panels
-  closed.** The one confirmed-good render (visible ring, wedge divisions,
-  legible labels — "↻ Orbit", "✥ Pan", "🔍 Zoom", "🎯 Focus", "N North",
-  "Rewind") was seen directly against a page with the "How it works" welcome
-  content still open behind it, opaque and legible on its own but not the
-  clean comparison frame Mark asked for. `#tour-toggle-btn` alone did not
-  clear the panels in the stubbed-`window.renderer3d` environment this
-  session used to work around the local dev server's unrelated 500/CSP
-  failure (a real `datum.markfrasertoronto.workers.dev` embed issue, not
-  this feature) — its "put the panels away" logic likely depends on real
-  world/renderer state the stub never provided. A broader dismiss-every-✕
-  fallback was tried once and destabilized an already-strained server,
-  overwriting the one good capture with a corrupted one (empty segment
-  labels) before a clean version could be re-taken. Next attempt: on a
-  clear machine, try `#tour-toggle-btn` against the REAL renderer (no stub
-  needed if memory allows a full load) before falling back to individual
-  dismissal.
-- **U1's live-position fix (`434c0fb`) has not been re-watched in
-  `e2e/panelOverlap.spec.ts`.** That suite's "the nav pad stays visible when
-  the inspector opens, and does not overlap it" test gave the ORIGINAL U1
-  fix its red-then-green proof; this session's follow-up (positioning off
-  the pad's live rect instead of a corner assumption) has only structural
-  and mutation-test verification, not a browser re-confirmation.
+- **CLOSED, 2026-09-11 (second autonomous run).** The wedge redesign now has
+  a real screenshot with the page panels genuinely closed:
+  `.shots/nav-wheel-open.png` (gitignored, reproducible -- see the command
+  below), showing the full ring, all six wedge divisions and legible labels
+  ("↻ Orbit", "✥ Pan", "🔍 Zoom", "🎯 Focus", "N North", "↺ Rewind"), with
+  the world rendering correctly behind it and no welcome/tour panel in
+  frame. Confirmed this run's own prediction was right on the first count
+  and wrong on the second: `#tour-toggle-btn` alone did NOT clear the
+  panels even against the real renderer (a static, no-Worker-backend page --
+  see below -- so its "put the panels away" logic still lacked whatever
+  state it depends on); `#welcome-close-btn` clicked directly, plus the
+  same dismiss-every-✕ sweep `e2e/panelOverlap.spec.ts`'s own
+  `dismissOverlays()` uses, worked cleanly with no server destabilisation
+  this time. Root cause of the previous corrupted capture was never
+  isolated, but the direct-dismissal path used here sidesteps it either
+  way.
+
+  Taken via a one-off standalone script (not committed -- the same
+  static-file-server + direct `chromium.launch()` pattern
+  `scripts/shoot.mjs` already uses, deliberately avoiding `wrangler dev`
+  entirely): serves `public/` directly, no Worker backend, so
+  `/pipeline-budget`, `/live-status` etc. 404 harmlessly (caught in the
+  page's own code) and the `datum.markfrasertoronto.workers.dev` embed hits
+  its own CSP frame-ancestors block (expected, unrelated to this feature).
+  Neither affects the nav wheel, which is pure client-side DOM/CSS.
+
+  `getComputedStyle`-level debug taken alongside the shot: after the click,
+  `#nav-wheel-hub`'s `aria-expanded` is `"true"`, `.nav-wheel`'s classList
+  is `["nav-wheel", "open"]`, `.nav-wheel-seg` count is 6 -- the wheel's own
+  state is genuinely open, not just visually coincidental.
+
+- **STILL OPEN, blocked this run by a real infrastructure fault, not
+  memory.** U1's live-position fix (`434c0fb`) has still not been
+  re-watched in `e2e/panelOverlap.spec.ts`. Attempted twice this run:
+  first, a combined run (this file's own spec plus the new
+  `worldCanvasTouchAction.spec.ts`) was terminated by the harness itself
+  (background-task duration, not memory -- host free memory read 6.05 GB
+  at the time); the orphaned child processes it left showed zero CPU
+  movement over an 8 s sample and were left alone per the standing "lanes
+  do not kill processes" rule. Second, a clean re-run of
+  `panelOverlap.spec.ts` alone hit a real `wrangler dev` crash
+  mid-suite (`wrangler-2026-09-11_23-05-37_005.log`) -- the exact
+  "Network connection lost" instability `playwright.config.ts`'s own
+  comments already document. `wrangler dev --port 8787` has had no active
+  listener since (checked directly via `Get-NetTCPConnection`, twice, a
+  few minutes apart) despite process entries still showing in
+  `Win32_Process` with periodic inspector-heartbeat log activity but zero
+  measured CPU -- a genuinely stuck state, not a slow one. Not cleared this
+  run; named with PIDs in this run's own handover rather than killed.
+- **U2 (mobile grounding) has not been started.** The brief's own framing —
+  "the largest item" — is still fully open: world-fills-screen, landscape,
+  the prompt box findable, touch gestures. The `touch-action` gap on
+  `#world-canvas` named here is CLOSED, 2026-09-11 -- see this same run's
+  handover: it was never a real runtime defect (the 3D canvas has always
+  set it inline via JS), and a real-viewport regression gate
+  (`e2e/worldCanvasTouchAction.spec.ts`) now exists for both canvases.
 - **U2 (mobile grounding) has not been started.** The brief's own framing —
   "the largest item" — is still fully open: world-fills-screen, landscape,
   the prompt box findable, touch gestures (including the `touch-action` gap
