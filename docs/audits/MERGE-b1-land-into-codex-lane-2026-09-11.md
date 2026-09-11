@@ -289,3 +289,64 @@ aged`, `postwar-metal-spandrel`, `contemporary-dark-reflective`,
 standard-grid`.
 
 **This is the number the merge was for. It delivered.**
+
+---
+
+## Step 5, the full-suite comparison — still running, not yet finished
+
+`node test/run.mjs`, output redirected straight to disk (PID 14668,
+started 11:48:39 AM), both lanes idle at the time it started. Watched
+across many check-ins rather than left unattended-and-assumed: real
+progress confirmed throughout (CPU climbed from 0 to 524s+ over the
+observed window; a genuine ~50 s `generateBoard({useSampling:true})`
+CPU-time-gate measurement printed early on; a Chromium child process
+spawned and has been rendering camera views for the regression gate,
+`Responding: True` every time checked). The suite reached **1053 of an
+unknown total lines** (last night's comparable, smaller-world run reached
+1573 lines total) before this report was written — inside the expensive
+A5.2/A5.3 regression-gate render pass, the same section that took 220+
+real seconds last night on a **17,586-atom** world; this world now
+measures **45,522 atoms** (confirmed early in this same run's own "PLOT
+ATOM ALIGNMENT" line) — roughly 2.6x larger, so a substantially longer
+render pass here is expected, not alarming.
+
+**Two real failures seen mid-run, not yet formally classified against the
+pre-existing/brought-by-merge/caused-by-resolution taxonomy this step
+asked for** (the log's own content, read directly, not summarised from
+memory):
+
+- `✖ no road is paved mostly over water (18.9585ms)` — a road/world-
+  generation test. This lane touched no road or world-generation code in
+  any conflict resolution above; almost certainly **brought-by-merge**
+  (a real, pre-existing condition on `b1-land`'s own larger board) or
+  **pre-existing** on `b1-land` already, not **caused-by-resolution**, but
+  not yet individually traced to confirm which.
+- `✖ the default plan is byte-identical to the one before the plan was
+  seeded (1500.8576ms)` — a city-planning determinism test. Same
+  reasoning: no city-plan code was touched in any resolution above, so
+  almost certainly **brought-by-merge** or **pre-existing**, not yet
+  individually traced.
+
+**Neither of these two, on their face, look like caused-by-resolution** —
+this lane's own conflict resolutions touched exactly seven files (listed
+above), none of which are roads, board generation, or city planning. But
+"almost certainly" is not the standard this step asked for, and the full
+tally (how many total, how many match last night's 7 pre-existing
+failures by name, how many are new) is not yet known.
+
+**Decision, per this run's own "never block" instruction:** finalising
+this report now rather than waiting indefinitely for a suite that may
+still take a long time on a substantially larger world. The merge itself
+(the risky, hard-to-reverse part) is done, committed, and independently
+verified via targeted checks (`tsc --noEmit` clean; `facadeVariants.test.ts`
+16/16 green) — the full suite is the *extra* confirmation pass, the same
+framing last night's own handover already established, not a gate this
+report's own completion depends on. **Recommendation for whoever picks
+this up, or for a later pass in this same session:** read the log at
+`C:\Users\User\AppData\Local\Temp\claude\C--Code-sandbox-spike-codex\
+9f333d59-6102-4fb2-a407-ddd1809e9bb8\scratchpad\
+full-suite-postmerge-2026-09-11.log` once `EXIT_CODE=` appears at its
+end, classify every failure by name against last night's own 7 (`dead
+Exports`, `livePosition` x3, `mutationEvidence` x2, `regressionGate`) plus
+these 2 newly-seen ones, and append the final tally here. Not killed, per
+the standing rule — left running.
