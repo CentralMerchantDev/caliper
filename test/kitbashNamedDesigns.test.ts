@@ -12,10 +12,14 @@
 // mechanism assembleBuilding already used per fixed slot.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import * as THREE from "three";
 import { assembleBuilding, assembleNamedDesign } from "../public/kitbash-assembler.js";
 import { DESIGN_RECIPE_MAP } from "../public/kitbash-recipe-map.js";
 import { KITBASH_PARTS } from "../public/kitbash-parts.js";
+import { classifyRepoReachability, displayPath } from "../scripts/lib/module-graph.mjs";
 
 test("every one of the 40 canonical designs assembles real, non-empty geometry from its own recipe -- not a spot check", () => {
   for (const designId of Object.keys(DESIGN_RECIPE_MAP)) {
@@ -143,4 +147,82 @@ test("RUN3 item 3: the 5 remaining unused connectors have no design that could s
     ).length;
     assert.equal(connectorCount, 1, `${designId} has a paired volume but ${connectorCount} connectors`);
   }
+});
+
+// F3 (2026-09-11): the GATE above answers "does the kit reach ITS OWN
+// internal harness" -- assembleBuilding's random assembly plus the 40
+// named designs, exercised together. It does not, and was never meant to,
+// answer a different question: does the kit reach the real PRODUCT world,
+// the one a visitor's browser actually loads. Those are the same two
+// questions F1 already asked of facade-textures.js's variant system, asked
+// here of the whole kit. Measured directly, not assumed: `public/city-
+// render.js` -- the only file that builds what index.html/city.html
+// actually render -- has zero references to any `public/kitbash-*.js`
+// export, confirmed by grep on this branch AND on `b1-land`
+// (`git show b1-land:public/city-render.js`, read-only, no checkout). This
+// is NOT the F1 pattern (wired on the other branch, just not merged) -- it
+// is unwired everywhere, a whole disconnected subsystem, first named in
+// docs/audits/K6-BUILDINGS.md's own "disconnected capability" section.
+//
+// Reuses the SAME reachability machinery test/deadExports.test.ts already
+// uses (a real import-graph walk from three declared entry-point classes:
+// PRODUCT/DEMO/TEST), rather than a second, bespoke text-grep -- the two
+// gates should never be able to disagree about what "product-reachable"
+// means.
+function repoRoot() {
+  const here = dirname(fileURLToPath(import.meta.url));
+  let dir = here;
+  for (let up = 0; up < 6; up++) {
+    try { readFileSync(join(dir, "CLAUDE.md"), "utf8"); return dir; } catch { /* keep walking */ }
+    dir = join(dir, "..");
+  }
+  throw new Error("could not locate the repo root from " + here);
+}
+
+test("GATE: kitbash reachable from the real PRODUCT world, not just its own demo/test harness -- registry vs both real callers, side by side", {
+  todo: "blocked on public/city-render.js importing something from any public/kitbash-*.js " +
+    "file -- none do, on codex-lane or b1-land. Not the F1 pattern (wired elsewhere, unmerged): " +
+    "unwired everywhere. Not skipped: runs and prints the real breakdown every time.",
+}, () => {
+  const ROOT = repoRoot();
+  const wranglerText = readFileSync(join(ROOT, "wrangler.jsonc"), "utf8");
+  const { classified } = classifyRepoReachability({
+    publicDir: join(ROOT, "public"),
+    srcDir: join(ROOT, "src"),
+    testDir: join(ROOT, "test"),
+    repoRoot: ROOT,
+    wranglerText,
+  });
+
+  const kitbashExports = [];
+  for (const [filePath, exportsByName] of classified) {
+    const relFile = displayPath(ROOT, filePath);
+    if (!/^public\/kitbash-/.test(relFile)) continue;
+    for (const [exportName, entry] of exportsByName) {
+      kitbashExports.push({ file: relFile, name: exportName, state: entry.state });
+    }
+  }
+
+  const byState = { product: [], "demo-only": [], "test-only": [], unreachable: [] };
+  for (const e of kitbashExports) (byState[e.state] ??= []).push(`${e.file}:${e.name}`);
+
+  const registryPartCount = Object.keys(KITBASH_PARTS).length;
+  const registryDesignCount = Object.keys(DESIGN_RECIPE_MAP).length;
+  console.log(`kitbash registry: ${registryPartCount} parts, ${registryDesignCount} named designs`);
+  console.log(`kitbash exports reachable from PRODUCT: ${byState.product.length} / ${kitbashExports.length}`);
+  console.log(`  demo-only (${byState["demo-only"].length}): ${byState["demo-only"].join(", ")}`);
+  console.log(`  test-only (${byState["test-only"].length}): ${byState["test-only"].join(", ")}`);
+  console.log(`  unreachable, i.e. no importer anywhere (${byState.unreachable.length}): ${byState.unreachable.join(", ")}`);
+
+  // The goal state, not today's state -- see the { todo } reason above.
+  // This is deliberately the INVERSE of "assert nothing is product" (which
+  // is true today and would pass vacuously, proving nothing): asserting
+  // the aspiration and watching it fail is what makes the gate visible
+  // (shows as a real ⚠ in the failing-tests recap, not a silent pass) and
+  // is what will make it go green, unedited, the day city-render.js
+  // imports something real from the kit -- the same shape as
+  // test/facadeVariants.test.ts's own F1 gate.
+  assert.ok(byState.product.length > 0,
+    `0 of ${kitbashExports.length} kitbash exports are product-reachable -- the entire kit ` +
+    `(${registryPartCount} parts, ${registryDesignCount} designs) is unreached from the real world`);
 });
