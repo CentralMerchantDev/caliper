@@ -281,8 +281,26 @@ polish.
 [ ] R1  Merge b1-land into main. Human-authorised, never by a lane.
 [ ] R2  Merge codex-lane into main.
 [ ] R3  Full suite green, or every red named and justified in one place.
+[ ] R3.5 THE BOARD IS THE DEFAULT RENDER. Not behind ?board=1, not behind
+          SHOOT_BOARD=1 -- what a visitor gets with no query string.
+          Blocked by two standing perf gates, which B3 measured un-gated and
+          did not fix: culling 65.8% against a <40% ceiling, and 7,851 draw
+          calls against <=900. B3 shipped the board gated OFF by default and
+          reconfirmed both gates green with it off, which is honest and is
+          NOT the same as resolved.
+          WHY THIS IS ON THE LIST AT ALL: without it, every other line in
+          PART 4 can be ticked -- merged, suite named, deployed, verified
+          live, branches pushed -- and a visitor still sees the OLD world.
+          The archipelago would be one query parameter away and nobody
+          would ever type it. This is the same shape of failure as
+          2026-09-09, where the BRANCH was wrong; here the branch would be
+          right and the FLAG would be wrong, which is harder to notice
+          because nothing looks broken.
+          Do not read R4 without reading this.
 [ ] R4  Deploy from main. Check the branch first -- 2026-09-09 shipped b1-land
           by accident and put 71.8% of plots in the water on the live site.
+          Check R3.5 too: a deploy with the board still gated publishes the
+          old world, which is a worse outcome than not deploying.
 [ ] R5  Verify live, not locally: load the real URL on desktop AND on a phone.
 [ ] R6  Push every branch. The whole rebuild lived on one disk for a full day.
 ```
@@ -332,10 +350,17 @@ Building it is not finishing it. Before R1, one pass, and it is not self-graded:
 Not the finished build — the point at which the links can go out. Everything
 else can land after the résumés are sent.
 
-**B3 · C1 · C4 · R1–R6 · X1 · X3**
+**B3 · R3.5 · C1 · C4 · R1–R6 · X1 · X3**
 
-That is: the archipelago renders, the mutation number is true, every published
-figure agrees with every other, it is merged and live and checked on a phone,
-DATUM stops contradicting CALIPER, and there is one résumé. B4, B5, B7, the
+That is: the archipelago renders **by default, with no query string** (B3 draws
+it; R3.5 is what makes a visitor see it), the mutation number is true, every
+published figure agrees with every other, it is merged and live and checked on a
+phone, DATUM stops contradicting CALIPER, and there is one résumé.
+
+R3.5 is called out separately here even though it falls inside the R1–R6 range,
+because this line previously read "the archipelago renders" and B3 alone
+satisfies that sentence while leaving the board switched off for every real
+visitor. The cut is the point at which LINKS GO OUT; a link that opens the old
+world is worse than a link not sent. B4, B5, B7, the
 interface polish and the allowlist breakdown are all real work and none of them
 is why someone would or would not reply.
