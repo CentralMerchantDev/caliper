@@ -29,6 +29,7 @@ import { USE } from "../public/land-use.js";
 import { LandField, makeHeightAt, landmassPolygonsWorld } from "../public/terrain.js";
 import { atomOf, atomOrigin, ATOM } from "../public/grid.js";
 import { ROAD_STANDARDS } from "../public/roadkit.js";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 // Walk up from this file's own built location (test/.built/) to the repo
 // root, the same technique terrainLandmassOwnership.test.ts's own
@@ -117,6 +118,28 @@ test("decision-5 step 2: every road piece's narrow dimension is its own class's 
   }
 });
 
+// --- rawSourceScan's own gap, closed: the PRESENCE checks below (halfRoadFor(/
+// roadWidthFor( must appear inside a sliced function body) matched raw,
+// unstripped source. See test/rawSourceScan.test.ts's own history
+// (2026-09-11).
+
+test("(synthetic) the vulnerability: a comment mentioning halfRoadFor( must not stand in for a real call that was removed", () => {
+  const fakeSrc =
+    "function placeRoadGraph(board) {\n" +
+    "  // used to call halfRoadFor(cls) and roadWidthFor(cls) here before a refactor\n" +
+    "  return board;\n" +
+    "}\n" +
+    "function placeBlockBuildings() {}\n";
+  const region = fakeSrc.slice(fakeSrc.indexOf("function placeRoadGraph"), fakeSrc.indexOf("function placeBlockBuildings"));
+  // Raw, unstripped: the comment satisfies the regex even though the real
+  // call is gone -- this is spanText/extractWorkerRoutes/countRenderer...'s
+  // same defect shape, applied here to a presence-inside-a-region check.
+  assert.ok(/halfRoadFor\(/.test(region), "sanity: the raw fixture's comment does satisfy the naive regex, confirming the vulnerability is real");
+  // Fixed: strip comments first, then the same real call must be genuinely absent.
+  const strippedRegion = stripSourceComments(fakeSrc).slice(fakeSrc.indexOf("function placeRoadGraph"), fakeSrc.indexOf("function placeBlockBuildings"));
+  assert.ok(!/halfRoadFor\(/.test(strippedRegion), "a comment-only mention of halfRoadFor( was wrongly treated as a real call after stripping");
+});
+
 test("decision-5 step 2: board-generator.js sizes every road site from ROAD_STANDARDS -- no hardcoded road-width constant survives at any of the four sites", () => {
   // A static source scan, not a generated-output check: board.js's own
   // occupancy guard (canPlace/place, "NEVER skipped") means a building
@@ -127,7 +150,7 @@ test("decision-5 step 2: board-generator.js sizes every road site from ROAD_STAN
   // construction, for different reasons. Reading the source directly is
   // what actually distinguishes "reads ROAD_STANDARDS" from "got lucky with
   // today's number".
-  const src = readFileSync(join(repoRoot(), "public", "board-generator.js"), "utf8");
+  const src = stripSourceComments(readFileSync(join(repoRoot(), "public", "board-generator.js"), "utf8"));
   assert.ok(!/\bROAD_WIDTH\b/.test(src), "ROAD_WIDTH still appears in board-generator.js -- the module constant was not fully retired");
   assert.ok(!/\bHALF_ROAD\b/.test(src), "HALF_ROAD still appears in board-generator.js -- the module constant was not fully retired");
   // Two independent call sites, not a sample of a bigger set: placeRoadGraph()

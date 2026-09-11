@@ -50,6 +50,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 function repoRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -60,7 +61,7 @@ function repoRoot(): string {
   throw new Error("could not locate the repo root");
 }
 const ROOT = repoRoot();
-const TERRAIN_SRC = readFileSync(join(ROOT, "public", "terrain.js"), "utf8");
+const TERRAIN_SRC = stripSourceComments(readFileSync(join(ROOT, "public", "terrain.js"), "utf8"));
 
 test("B1 (wiring): terrain.js no longer imports landmassPolygonsDesign or LANDMASSES from city-plan.js", () => {
   // Matches the exact shape of the dependency being broken -- a name pulled
@@ -83,6 +84,20 @@ test("B1 (wiring): terrain.js no longer imports landmassPolygonsDesign or LANDMA
 
 test("B1 (wiring): terrain.js exports its own landmassPolygonsDesign, not a re-export of city-plan.js's", () => {
   assert.match(TERRAIN_SRC, /export function landmassPolygonsDesign\(/, "terrain.js no longer defines its own landmassPolygonsDesign");
+});
+
+// --- rawSourceScan's own gap, closed: the check above matched
+// `export function landmassPolygonsDesign\(` against TERRAIN_SRC's raw
+// text. See test/rawSourceScan.test.ts's own history (2026-09-11).
+
+test("(synthetic) the vulnerability: a comment mentioning the export must not stand in for the real function being gone", () => {
+  const fakeSrcWithRealExport = "export function landmassPolygonsDesign(seed) { return []; }\n";
+  const fakeSrcWithOnlyComment = "// used to export function landmassPolygonsDesign(seed) here before it was reverted to a re-export\n";
+  // Raw, unstripped: the comment alone satisfies the regex.
+  assert.match(fakeSrcWithOnlyComment, /export function landmassPolygonsDesign\(/, "sanity: the raw fixture's comment does satisfy the naive regex, confirming the vulnerability is real");
+  // Fixed: after stripping, a comment-only mention no longer matches, but a real export still does.
+  assert.doesNotMatch(stripSourceComments(fakeSrcWithOnlyComment), /export function landmassPolygonsDesign\(/, "a comment-only mention of the export was wrongly treated as real after stripping");
+  assert.match(stripSourceComments(fakeSrcWithRealExport), /export function landmassPolygonsDesign\(/, "stripping wrongly removed a genuinely real export");
 });
 
 /**
