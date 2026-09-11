@@ -66,19 +66,44 @@ export const SETTLEMENT_TABLE = {
   // gate test before any tuning). Sized here for roughly 2-3 plots per
   // block side (blockAtoms ~= plotsPerSide*plotAtoms + the road's own
   // width), a real block, not a single lot fenced by road on every side.
-  // These numbers were tuned against the fixed 9 m width Decision 5
-  // retired (see roadWidthFor()/halfRoadFor() below) -- re-tuning them for
-  // the new, wider default is docs/specs/PIECE-CATALOGUE-ROADS.md §9's
-  // own Step 3, not this step.
-  mainland:  { settled: true,  density: "low-medium",   era: "mixed",                    blockAtoms: 80, plotAtoms: 22, levels: 3 },
-  city:      { settled: true,  density: "highest",       era: "contemporary+heritage",    boundaryK: 0.55, blockAtoms: 57, plotAtoms: 18, levels: 9 },
-  suburb:    { settled: true,  density: "medium-high",   era: "postwar+contemporary",     boundaryK: 0.55, blockAtoms: 69, plotAtoms: 20, levels: 3 },
-  resort:    { settled: true,  density: "medium",        era: "contemporary",             boundaryK: 0.50, blockAtoms: 57, plotAtoms: 24, levels: 4 },
-  highland:  { settled: true,  density: "low",           era: "heritage+interwar",        boundaryK: 0.35, blockAtoms: 65, plotAtoms: 28, levels: 2 },
-  fishing:   { settled: true,  density: "very low",      era: "interwar+heritage",        boundaryK: 0.30, blockAtoms: 65, plotAtoms: 28, levels: 2 },
-  farm:      { settled: true,  density: "very low",      era: "interwar+heritage",        boundaryK: 0.30, blockAtoms: 65, plotAtoms: 28, levels: 2 },
-  vineyard:  { settled: true,  density: "very low",      era: "interwar+heritage",        boundaryK: 0.30, blockAtoms: 65, plotAtoms: 28, levels: 2 },
-  quarry:    { settled: true,  density: "very low",      era: "interwar+heritage",        boundaryK: 0.30, blockAtoms: 65, plotAtoms: 28, levels: 2 },
+  //
+  // RE-TUNED, docs/specs/PIECE-CATALOGUE-ROADS.md §9 Step 3 (2026-09-11):
+  // Step 2's own road-width doubling (9 -> ROAD_STANDARDS.STREET.row, 18)
+  // pushed every settled tier's own coverage over the 20-40% band --
+  // measured directly (a real generateBoard() run, per-boundary), not
+  // assumed: downtown 55.4%, resort-isle 59.9%, suburb-isle 41.5%,
+  // highland/fishing/farm/vineyard/quarry 42.3-45.2%, mainland 28.5% (the
+  // ONLY tier still in band). For the 8 island tiers, blockAtoms is
+  // DOUBLED here: road-fraction-of-a-block scales with roadWidth/blockAtoms
+  // (a road eats a fixed-width margin off a block whose area grows with the
+  // SQUARE of its side), so doubling blockAtoms when roadWidth doubles
+  // restores roughly the same road fraction those tiers carried before.
+  // plotAtoms is DELIBERATELY UNCHANGED -- it is 2x-lot-growth content
+  // (this comment block, historical), not a road-width-derived number, and
+  // leaving it fixed while blockAtoms doubles means ~4x as many
+  // same-sized plots tile the now-4x-larger interior, keeping BUILDING
+  // coverage fraction roughly flat while only the road term is corrected --
+  // confirmed by measurement, not just the algebra, below.
+  //
+  // MAINLAND IS THE EXCEPTION, blockAtoms left AT 80: a blind review of
+  // this retune (before it was implemented) found mainland's own boundary
+  // is not a compact, roughly-square shape like the islands -- it is a
+  // fixed-DEPTH coastal strip (mainlandBoundary(), stripDepthWorld=600m),
+  // so far more of its blocks are edge-clipped than the islands' own
+  // "many repeated square blocks" shape assumes. Mainland was ALSO the
+  // only tier still comfortably in-band (28.5%) before this retune, with
+  // the most headroom of any tier -- doubling it anyway risked
+  // OVERcorrecting it under the 20% floor, confirmed by measurement below
+  // rather than left as a theoretical risk.
+  mainland:  { settled: true,  density: "low-medium",   era: "mixed",                    blockAtoms: 80,  plotAtoms: 22, levels: 3 },
+  city:      { settled: true,  density: "highest",       era: "contemporary+heritage",    boundaryK: 0.55, blockAtoms: 114, plotAtoms: 18, levels: 9 },
+  suburb:    { settled: true,  density: "medium-high",   era: "postwar+contemporary",     boundaryK: 0.55, blockAtoms: 150, plotAtoms: 20, levels: 3 },
+  resort:    { settled: true,  density: "medium",        era: "contemporary",             boundaryK: 0.50, blockAtoms: 150, plotAtoms: 24, levels: 4 },
+  highland:  { settled: true,  density: "low",           era: "heritage+interwar",        boundaryK: 0.35, blockAtoms: 130, plotAtoms: 28, levels: 2 },
+  fishing:   { settled: true,  density: "very low",      era: "interwar+heritage",        boundaryK: 0.30, blockAtoms: 130, plotAtoms: 28, levels: 2 },
+  farm:      { settled: true,  density: "very low",      era: "interwar+heritage",        boundaryK: 0.30, blockAtoms: 130, plotAtoms: 28, levels: 2 },
+  vineyard:  { settled: true,  density: "very low",      era: "interwar+heritage",        boundaryK: 0.30, blockAtoms: 130, plotAtoms: 28, levels: 2 },
+  quarry:    { settled: true,  density: "very low",      era: "interwar+heritage",        boundaryK: 0.30, blockAtoms: 130, plotAtoms: 28, levels: 2 },
   cottage:   { settled: true,  density: "one house",     era: "heritage",                 oneHouse: true, levels: 1 },
   wooded:    { settled: false },
   sandbar:   { settled: false },

@@ -1,0 +1,89 @@
+STEP 3 (docs/specs/PIECE-CATALOGUE-ROADS.md §9) -- re-tune SETTLEMENT_TABLE's
+blockAtoms back into the 20-40% coverage band Step 2's road-width doubling
+pushed every settled tier out of, per-tier, by measurement.
+
+BLIND REVIEW BEFORE IMPLEMENTING: a fresh subagent, given the plan (uniform
+2x blockAtoms for every tier, derived from a 1-(1-w/L)^2 road-fraction
+model) and the real source, found the model was accurate for the 8 island
+tiers (10-17% overprediction, consistent) but wrong by a qualitatively
+different margin for mainland (42% overprediction) -- because mainland's
+own boundary is a fixed-DEPTH (600m) coastal strip, not a compact,
+roughly-square shape like the islands, so far more of its blocks are
+edge-clipped than the "many repeated square blocks" model assumes. Mainland
+was also the ONLY tier already comfortably in-band (28.5%, most headroom of
+any tier) before this step -- doubling it anyway risked overcorrecting it
+under the 20% floor. Confirmed by measurement (below), not left as a
+theoretical risk.
+
+WHAT CHANGED: public/board-generator.js's SETTLEMENT_TABLE -- blockAtoms
+doubled for city (57->114), highland/fishing/farm/vineyard/quarry
+(65->130); suburb and resort doubled then nudged once more after
+measurement (69->150, 57->150) to clear the ceiling with margin; mainland
+LEFT UNCHANGED at 80, per the blind review's own finding. plotAtoms/CLEAR/
+levels/boundaryK untouched -- plotAtoms is independent, authored content
+("1.5-2x lot growth"), not a road-width-derived number; touching it would
+have changed every building's own floor area, which this step does not ask
+for.
+
+MEASURED, not assumed, at every stage (a real generateBoard() run,
+per-boundary coverage read directly from G.pieces/G.boundaries):
+
+  BEFORE (Step 2 landed, blockAtoms untouched):
+    mainland 28.5% (IN BAND) | downtown 55.4% | suburb-isle 41.5% |
+    resort-isle 59.9% | highland 45.2% | fishing 43.6% | farm 42.3% |
+    vineyard 43.5% | quarry 43.1%
+
+  AFTER first pass (blockAtoms doubled for 8 island tiers, mainland
+  untouched):
+    mainland 28.5% (unchanged, correctly) | downtown 37.7% | suburb-isle
+    40.6% (barely over) | resort-isle 41.8% (over) | highland 36.0% |
+    fishing 27.1% | farm 38.7% | vineyard 26.1% | quarry 28.2%
+
+  AFTER two further nudges (suburb 138->150, resort 114->130->150):
+    ALL NINE SETTLED, NON-oneHouse BOUNDARIES IN BAND: mainland 28.5%,
+    downtown 37.7%, suburb-isle 37.6%, resort-isle 38.2%, highland 36.0%,
+    fishing 27.1%, farm 38.7%, vineyard 26.1%, quarry 28.2%.
+
+Building coverage did NOT stay flat as the plan's own algebra predicted
+(e.g. suburb 0.4%->18.2%, farm 0.5%->17.2%) -- a real, measured deviation
+from the theoretical model, most likely a terrain-edge effect the blind
+review flagged as a possibility for the road term but which also applies
+to building placement: fewer, larger blocks mean a smaller fraction of
+each block straddles the coastline/water, so a much higher fraction of
+individual plot CANDIDATES inside each surviving block pass the terrain
+check. This is real, measured, not chased further to a root cause --
+noted honestly per docs/BUILD-LOOP.md's own "never report unverified work
+as verified" (the flat-building-fraction prediction was wrong; the
+retuning still landed every tier in band, which is what the gate asks
+for, but the reasoning that got there is recorded as partly wrong on
+purpose rather than quietly corrected after the fact).
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs test/boardGenerator.test.ts
+-- 13/14 pass, only B2.5 (already-tracked, unrelated) red.
+
+MUTATED, CAUGHT (two entries, test/mutations.json):
+"decision-5-step-2-block-carving-reads-road-standards" -- DEFERRED from
+this step's own prior commit (3352110) because the coverage gate was
+honestly red in the same test file at that point; run now that the
+baseline is clean -- CAUGHT.
+"decision-5-step-3-blockatoms-retuned-for-doubled-road-width" -- reverting
+city/suburb/resort's own retuned blockAtoms to their Step-2-red values
+reproduces the coverage-band failure -- CAUGHT. Both:
+node scripts/_mutcheck.mjs test/boardGenerator.test.ts
+public/board-generator.js <scratch spec>; baseline GREEN both times,
+source restored byte-identical both times.
+
+GUARDS CHECKED: nothing deleted (two scratch measurement scripts moved to
+_TO-DELETE/session-scratch-scripts/, never committed). Zero API spend. No
+merge, no deploy, no PR. src/ untouched.
+
+STILL OPEN: test/mutationEvidence.test.ts's two sub-tests remain red,
+named in docs/DECISIONS-FOR-MARK.md #10 -- this commit adds two more
+entries to test/mutations.json verified via _mutcheck.mjs (not the
+authoritative mutate.mjs path, for the same reason #10 already names), so
+that gate's own neverRun count grows by two more, exactly as #10 predicted
+it would each time this happened. Step 4 (bridge-generator.js's own
+separate ROAD_WIDTH) is next.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

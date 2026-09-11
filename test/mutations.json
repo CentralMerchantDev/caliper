@@ -1087,6 +1087,24 @@
       "expect": "every road piece the generator places carries a real, current roadClass"
     },
     {
+      "id": "decision-5-step-2-block-carving-reads-road-standards",
+      "guards": "generateBoard()'s own block-carving loop sizes its margin from ROAD_STANDARDS via halfRoadFor(), not a value that merely happens to equal today's number -- decision 5's retirement of ROAD_WIDTH, step 2: geometry reads its own class's width.",
+      "note": "Verified this session (b1-land, 2026-09-11), after a blind review found the originally-planned road/building overlap test would never fire (public/board.js's own occupancy guard already refuses any candidate that would overlap a real reservation, so no two placed pieces can ever overlap regardless of whether the margin math is correct -- a static source scan is what actually distinguishes a site that reads ROAD_STANDARDS from one that merely reproduces today's number). Caught by the dedicated static-scan test, per-function (placeRoadGraph() and generateBoard()'s block-carving loop each checked to call halfRoadFor() independently), not by counting occurrences file-wide.",
+      "file": "public/board-generator.js",
+      "find": "const blockHalfRoad = halfRoadFor(ROAD_CLASS_DEFAULT);",
+      "replace": "const blockHalfRoad = 9;",
+      "expect": "board-generator.js sizes every road site from ROAD_STANDARDS"
+    },
+    {
+      "id": "decision-5-step-3-blockatoms-retuned-for-doubled-road-width",
+      "guards": "SETTLEMENT_TABLE's blockAtoms values are re-tuned for the doubled (STREET, 18m) road width, so coverage lands back in the 20-40% band -- decision 5's retirement of ROAD_WIDTH, step 3.",
+      "note": "Verified this session (b1-land, 2026-09-11): reverting city/suburb/resort's own retuned blockAtoms to their Step-2-red values reproduces the same coverage-band failure for the same reason (measured directly: downtown 55.4%, resort-isle 59.9%, suburb-isle 41.5% before this step; city 37.7%, suburb 37.6%, resort 38.2% after -- every settled tier in band). Not a new control in the sense of new code -- this proves the FIX is the retune, not an accidental, unrelated change, per docs/specs/PIECE-CATALOGUE-ROADS.md §9 Step 3's own mutation plan.",
+      "file": "public/board-generator.js",
+      "find": "  city:      { settled: true,  density: \"highest\",       era: \"contemporary+heritage\",    boundaryK: 0.55, blockAtoms: 114, plotAtoms: 18, levels: 9 },\n  suburb:    { settled: true,  density: \"medium-high\",   era: \"postwar+contemporary\",     boundaryK: 0.55, blockAtoms: 150, plotAtoms: 20, levels: 3 },\n  resort:    { settled: true,  density: \"medium\",        era: \"contemporary\",             boundaryK: 0.50, blockAtoms: 150, plotAtoms: 24, levels: 4 },",
+      "replace": "  city:      { settled: true,  density: \"highest\",       era: \"contemporary+heritage\",    boundaryK: 0.55, blockAtoms: 57, plotAtoms: 18, levels: 9 },\n  suburb:    { settled: true,  density: \"medium-high\",   era: \"postwar+contemporary\",     boundaryK: 0.55, blockAtoms: 69, plotAtoms: 20, levels: 3 },\n  resort:    { settled: true,  density: \"medium\",        era: \"contemporary\",             boundaryK: 0.50, blockAtoms: 57, plotAtoms: 24, levels: 4 },",
+      "expect": "coverage is measured INSIDE each settlement boundary"
+    },
+    {
       "id": "b2-7-classify-crossing-uses-real-ceiling",
       "guards": "classifyCrossing genuinely splits bridge-vs-boat at roadkit.js's real 800 m buildable ceiling, not the old world's 9,000 m 'plausible' cutoff this plan's own blind review corrected.",
       "note": "Verified this session: forcing every gap to classify as a bridge regardless of distance is exactly the defect the blind review found in the first B2.7 draft (reusing 9,000 m, which answers 'is this geographically plausible' not 'can roadkit.js build it') -- caught directly by the unit test asserting 801m/9000m both classify as boat.",
