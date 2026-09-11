@@ -114,6 +114,10 @@ test("new shapes (cantilever bay, curved corner, arcade podium) stay strictly in
     // which occupy the front margin only; not re-tested per stairPosition.
     ["bld-apartment-walkup", { hasGarden: true }],
     ["bld-highstreet-terrace", { roofStyle: "parapet" }],
+    ["bld-warehouse", { roofStyle: "barrel", cellW: 6, cellD: 10 }],
+    ["bld-warehouse", { roofStyle: "barrel", cellW: 10, cellD: 20 }],
+    ["bld-warehouse", { roofStyle: "curved", cellW: 6, cellD: 10 }],
+    ["bld-warehouse", { roofStyle: "curved", cellW: 10, cellD: 20 }],
   ];
   for (const [typology, options] of cases) {
     const spec = building(typology, "bounds-check-seed", options, THREE);
@@ -144,4 +148,20 @@ test("bldBusinessParkBlock's wall AND roof colors both vary with seed -- not jus
   }
   assert.ok(wallColors.size >= 2, `bld-business-park: wall colour did not vary across 12 seeds (always ${[...wallColors]})`);
   assert.ok(roofColors.size >= 2, `bld-business-park: roof colour did not vary across 12 seeds (always ${[...roofColors]})`);
+});
+
+// bldWarehouse's roofStyle declares three values (sawtooth/barrel/curved),
+// but "barrel" and "curved" both fell through the same unconditional flat-box
+// else-branch -- consulted (the condition IS checked), just two of its three
+// labels collapsed to one identical output. Triangle count alone cannot catch
+// this (both vault shapes below use the same CylinderGeometry segment counts,
+// only their radius/angle differ -- the same reason bldTownhouse's bayStyle
+// needed a position fingerprint, not a triangle count, to prove "full" and
+// "cantilever" are different shapes).
+test("bldWarehouse's three roofStyle values (sawtooth/barrel/curved) are three genuinely different shapes, not two", () => {
+  const sawtooth = positionFingerprint("bld-warehouse", { roofStyle: "sawtooth" });
+  const barrel = positionFingerprint("bld-warehouse", { roofStyle: "barrel" });
+  const curved = positionFingerprint("bld-warehouse", { roofStyle: "curved" });
+  const fingerprints = new Set([sawtooth, barrel, curved]);
+  assert.equal(fingerprints.size, 3, `bld-warehouse roofStyle sawtooth/barrel/curved produced only ${fingerprints.size} distinct geometry fingerprint(s)`);
 });

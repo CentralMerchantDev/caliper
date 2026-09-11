@@ -2457,8 +2457,20 @@ export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
   const roofStyle = options.roofStyle || (r3 < 0.4 ? "sawtooth" : r3 < 0.7 ? "barrel" : "curved");
   const roofH = 3.5;
   const bodyH = 12.0;
+  const bW = footW * 0.90;
+  // roofStyle was consulted (the condition below was real) but two of its
+  // three declared values, "barrel" and "curved", fell through the same
+  // unconditional flat-box else-branch and produced identical geometry --
+  // real vaults now, via a partial CylinderGeometry (the same idiom
+  // bldMidrise's "curved" cornerTreatment already uses for a quarter-round
+  // corner, applied horizontally instead of vertically): "barrel" is the
+  // deeper arc, "curved" the shallower one, both genuinely different from
+  // each other and from "sawtooth".
+  const VAULT_HALF_ANGLE = { barrel: 0.55, curved: 0.28 };
+  const vaultRise = roofStyle === "sawtooth" ? roofH
+    : (bW / 2 / Math.sin(VAULT_HALF_ANGLE[roofStyle])) * (1 - Math.cos(VAULT_HALF_ANGLE[roofStyle]));
   const baseOffsetMax = foundation === "plinth" ? 1.2 : foundation === "stepped" ? 0.7 : 0;
-  const totalH = +(baseOffsetMax + bodyH + roofH + 1.0).toFixed(2);
+  const totalH = +(baseOffsetMax + bodyH + vaultRise + 1.0).toFixed(2);
 
   const wallCol = WALLS.WAREHOUSE[Math.floor(r1 * WALLS.WAREHOUSE.length)];
   const roofCol = ROOFS.WAREHOUSE[Math.floor(r2 * ROOFS.WAREHOUSE.length)];
@@ -2466,7 +2478,6 @@ export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
 
   function buildLOD0(geomT = T) {
     const parts = [];
-    const bW = footW * 0.90;
     const bD = footD * 0.92;
     const baseOffset = applyFoundation(parts, footW, footD, foundation, geomT);
 
@@ -2508,14 +2519,30 @@ export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
         parts.push({ geo: tooth, tag: "roof" }, { geo: glass, tag: "wall" });
       }
     } else {
-      const roof = new geomT.BoxGeometry(bW * 0.98, roofH, bD * 0.98);
-      roof.translate(0, baseOffset + bodyH + roofH / 2, 0);
-      parts.push({ geo: roof, tag: "roof" });
+      const halfAngle = VAULT_HALF_ANGLE[roofStyle];
+      const vaultRadius = (bW / 2) / Math.sin(halfAngle);
+      // openEnded: true -- a closed partial-cylinder cap is a fan to the
+      // FULL circle's centre (r=0), which for a shallow arc built from a
+      // large radius sits far below the visible arc itself (caught by the
+      // footprint-bounds test: the capped version dipped 23 m below ground).
+      // An open tube has no such artefact; the gable ends are unseen from
+      // outside the shell, the same tradeoff this file already makes for
+      // every other hollow box mass.
+      const vault = new geomT.CylinderGeometry(
+        vaultRadius, vaultRadius, bD * 0.98, 16, 1, true,
+        Math.PI - halfAngle, halfAngle * 2
+      );
+      vault.rotateX(Math.PI / 2);
+      vault.translate(0, baseOffset + bodyH - vaultRadius * Math.cos(halfAngle), 0);
+      parts.push({ geo: vault, tag: "roof" });
     }
 
     for (let i = 0; i < 3; i++) {
       const vent = new geomT.BoxGeometry(2.0, 1.0, 2.0);
-      vent.translate(-bW * 0.25 + i * (bW * 0.25), baseOffset + bodyH + roofH + 0.5, 0);
+      // vaultRise, not the fixed roofH -- "barrel"/"curved" reach well above
+      // roofH at their apex, and a vent placed at the old fixed height would
+      // sit embedded inside the vault rather than on top of it.
+      vent.translate(-bW * 0.25 + i * (bW * 0.25), baseOffset + bodyH + vaultRise + 0.5, 0);
       parts.push({ geo: vent, tag: "roof" });
     }
 
@@ -2526,8 +2553,8 @@ export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
     const parts = [];
     const body = new geomT.BoxGeometry(footW * 0.92, bodyH, footD * 0.92);
     body.translate(0, bodyH / 2, 0);
-    const roof = new geomT.BoxGeometry(footW * 0.94, roofH, footD * 0.94);
-    roof.translate(0, bodyH + roofH / 2, 0);
+    const roof = new geomT.BoxGeometry(footW * 0.94, vaultRise, footD * 0.94);
+    roof.translate(0, bodyH + vaultRise / 2, 0);
     const annex = new geomT.BoxGeometry(footW * 0.35, 6.0, Math.min(3.0, footD * 0.03));
     annex.translate(-footW * 0.25, 3.0, (footD * 0.92) / 2 + Math.min(3.0, footD * 0.03) / 2);
     parts.push(
@@ -2556,7 +2583,7 @@ export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, roofStyle },
     lod: [
-      { level: 0, tris: 384, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 0, tris: 392, createGeometry: (geomT) => buildLOD0(geomT || T) },
       { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
