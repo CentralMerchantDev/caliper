@@ -1989,7 +1989,7 @@ export function bldMidrise(seed = "midrise-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, podiumType, hasSetback, cornerTreatment, corner, foundation, character },
     lod: [
-      { level: 0, tris: 464, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 0, tris: 624, createGeometry: (geomT) => buildLOD0(geomT || T) },
       { level: 1, tris: 134, createGeometry: (geomT) => buildLOD1(geomT || T) }, // midrise-lod1
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
@@ -2122,7 +2122,7 @@ export function bldShop(seed = "shop-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, hasAwning, isCornerUnit, corner, foundation, character },
     lod: [
-      { level: 0, tris: 324, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 0, tris: 384, createGeometry: (geomT) => buildLOD0(geomT || T) },
       { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
@@ -2245,7 +2245,7 @@ export function bldOffice(seed = "office-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, hasCoreBulge, corner, foundation, character },
     lod: [
-      { level: 0, tris: 344, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 0, tris: 372, createGeometry: (geomT) => buildLOD0(geomT || T) },
       { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
@@ -2434,7 +2434,7 @@ export function bldApartmentWalkup(seed = "walkup-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, stairPosition, roofStyle, hasGarden, corner, position, foundation, character },
     lod: [
-      { level: 0, tris: 644, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 0, tris: 708, createGeometry: (geomT) => buildLOD0(geomT || T) },
       { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
@@ -2583,7 +2583,7 @@ export function bldWarehouse(seed = "warehouse-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, roofStyle },
     lod: [
-      { level: 0, tris: 392, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 0, tris: 780, createGeometry: (geomT) => buildLOD0(geomT || T) },
       { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
@@ -2715,7 +2715,7 @@ export function bldWorkshop(seed = "workshop-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, roofStyle },
     lod: [
-      { level: 0, tris: 314, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 0, tris: 336, createGeometry: (geomT) => buildLOD0(geomT || T) },
       { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]
@@ -2864,7 +2864,7 @@ export function bldTower(seed = "tower-0", options = {}, T = THREE) {
     material: mat,
     params: { cellW, cellD, storeys, profile },
     lod: [
-      { level: 0, tris: 304, createGeometry: (geomT) => buildLOD0(geomT || T) },
+      { level: 0, tris: 396, createGeometry: (geomT) => buildLOD0(geomT || T) },
       { level: 1, tris: 124, createGeometry: (geomT) => buildLOD1(geomT || T) },
       { level: 2, tris: 12, createGeometry: (geomT) => buildLOD2(geomT || T) }
     ]

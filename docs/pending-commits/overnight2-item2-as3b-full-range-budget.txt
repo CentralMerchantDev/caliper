@@ -1,0 +1,90 @@
+Overnight item 2: AS3's triangle budget gate samples one fixed seed per
+typology -- fixed, with a new AS3b test sweeping the full reachable range,
+which found the same defect shape in six more typologies besides
+bldWarehouse
+
+What was wrong. test/buildingLODAndColors.test.ts's AS3 test builds each
+typology with exactly one fixed default seed and no explicit options, then
+asserts measured triangles fall within [70%, 100%] of the declared budget.
+Proven this session: bldWarehouse's own roofStyle ("sawtooth" vs "barrel"/
+"curved") produces very different triangle counts depending which value a
+seed happens to roll, and AS3's one fixed seed never happened to land on
+"sawtooth" at max cell size -- a real ~2x budget violation (measured 780
+against a declared 392) sat uncaught. "A budget gate that samples one seed
+is not a budget gate."
+
+How far the gap actually goes. Swept properly (every typology's legal
+MIN/MAX cellW/cellD extreme, per buildingExplicitSize.test.ts's own
+TYPOLOGIES table, crossed with every declared style-enum option each
+typology accepts -- roofStyle/profile/podiumType/cornerTreatment, the same
+kind of option proven to matter for bldWarehouse -- plus foundation:
+"plinth" at the MAX case, the one foundation value applyFoundation adds
+geometry for unconditionally): 7 of the 8 cellW/cellD-bearing typologies
+exceed their OWN declared LOD0 ceiling somewhere in their real reachable
+option space, not just bldWarehouse. Measured, real numbers (old declared
+-> real worst case found):
+
+  bld-midrise           464 -> 624  (MIN cellW=3,cellD=4, podiumType=retail)
+  bld-shop               324 -> 384  (MIN, plain -- no enum option, cell size alone)
+  bld-office              344 -> 372  (MIN, plain)
+  bld-apartment-walkup   644 -> 708  (MAX, roofStyle=pitched)
+  bld-warehouse           392 -> 780  (MIN, roofStyle=sawtooth)
+  bld-workshop            314 -> 336  (MAX, roofStyle=gabled)
+  bld-tower               304 -> 396  (MAX, profile=tapered)
+  bld-villa              (844, already covers its own worst case -- unchanged)
+
+The fix. New test, AS3b, in test/buildingLODAndColors.test.ts: for each of
+the 8 typologies, at MIN and MAX legal cell size (MAX also forcing
+foundation:"plinth"), crossed with every declared style-enum option value,
+asserts LOD0/LOD1/LOD2 measured triangles never exceed declared. All 7
+typologies' declared LOD0 budgets recalibrated in public/buildings.js to
+their real measured worst case (measured directly, not padded).
+
+A real design conflict found and resolved while implementing, not
+papered over. AS3's own pre-existing 70%-floor "anti-padding" check
+(measured must be >=70% of declared, for its one default seed) started
+failing once declared reflected the true worst case instead of the
+typical case -- bld-midrise's default seed measures 420 against the new
+624 ceiling, correctly below 70% of it, because the default seed was never
+the worst case to begin with. Anchoring an anti-padding check to an
+arbitrary single seed was never sound once the ceiling itself had to
+reflect the full range; moved the anti-padding check into AS3b, anchored
+to the WORST measured value across the whole sweep instead -- a strictly
+more rigorous version of the same property AS3's comment already named
+("a declared ceiling that nothing gets close to looks padded"), now
+proven against the actual worst case rather than an arbitrary one. AS3
+keeps its ceiling check on the one default seed (still valid, still
+useful as a fast sanity check) and its LOD0 >=140 enrichment check;
+only the floor check moved.
+
+The gate, red first, for real -- not injected. AS3b, run against today's
+UNMODIFIED declared budgets before any recalibration, failed immediately
+and correctly: "bld-midrise MIN (cellW=3, cellD=4) {"podiumType":"retail"}
+LOD0 measured triangles (540) exceed declared budget (464)". This was the
+genuine pre-existing defect, not a manufactured one.
+
+Implemented (7 typologies' declared LOD0 budgets recalibrated), then
+green: buildingLODAndColors.test.ts (5/5, including both AS3 and AS3b),
+buildingExplicitSize.test.ts, buildingFeatureFlags.test.ts,
+layoutGeometry.test.ts, trimAtlasPatch.test.ts -- 36/36 total. `npx tsc
+--noEmit` clean. `node test/run.mjs regressionGate.test.ts` green,
+unchanged (366/857/664 calls, culling 36.93/60.31/44.33%) -- confirming
+recalibrating declared budgets, a test-only bookkeeping change, moved
+nothing in the real rendered world.
+
+Watched red for real, proving AS3b catches what AS3 provably cannot: reset
+bldWarehouse's declared LOD0 budget back to its old, too-low value (392).
+AS3 (the OLD test) stayed green -- its one default seed still doesn't roll
+"sawtooth" at max cell size, so it noticed nothing. AS3b (the NEW test)
+failed correctly, naming the exact violating combination: "bld-warehouse
+MIN (cellW=6, cellD=10) {"roofStyle":"sawtooth"} LOD0 measured triangles
+(504) exceed declared budget (392)". Restored and verified byte-identical
+(`md5sum`, matched: 004d104a7109f31418313b47dab7d31e) before re-running
+green (5/5).
+
+What this is not. This does not reduce any typology's real triangle
+count or change what the renderer draws -- confirmed by the unchanged
+regression-gate numbers above. It corrects the budget GATE's own blind
+spot so a future regression in any of these 8 typologies' worst-case
+geometry has somewhere to be caught, instead of depending on one fixed
+seed happening to roll the expensive branch.
