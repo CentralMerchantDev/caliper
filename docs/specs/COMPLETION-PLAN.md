@@ -303,6 +303,78 @@ polish.
           right and the FLAG would be wrong, which is harder to notice
           because nothing looks broken.
           Do not read R4 without reading this.
+
+          RE-MEASURED, 2026-09-11 (b1-land, CLI, attended). B3's two numbers
+          were stale on two counts, not re-taken since: possible measurement
+          contention (decision #4 records this same culling-ratio metric,
+          on a DIFFERENT scene, reading the skyline as 12 triangles/100%
+          culling under load) and a changed board (B3 measured 35,365
+          pieces; the committed board is now 21,007, typed road widths,
+          after ROAD_WIDTH's retirement). Both are real, separate
+          possibilities and are reported separately below, not blended.
+
+          Box confirmed quiet before measuring: `Get-CimInstance
+          Win32_Process -Filter "Name = 'node.exe'"` -- 30 processes, all
+          MCP/IDE infrastructure (chrome-devtools-mcp, process-mcp, the
+          cloud-sql toolbox), zero test runners, zero shoot.mjs, zero
+          mutate.mjs; `(Get-CimInstance Win32_Processor).LoadPercentage`
+          -- 9%; zero Chrome processes carrying `--headless` or
+          `--use-angle=swiftshader` (the real, regular browser windows
+          were the only Chrome instances running). Re-checked after
+          measuring: still zero stray render processes.
+
+          Measured by replicating test/regressionGate.test.ts's own exact
+          method (same local server, same Chromium/SwiftShader launch
+          args, same three views, same culling-ratio formula) with
+          `&board=1` added to the URL, via a one-off script (not
+          committed -- moved to `_TO-DELETE/session-scratch-scripts/`),
+          run three times:
+
+          | | Street level | Downtown skyline | The harbour |
+          |---|---|---|---|
+          | draw calls | 4,584 | 6,129 | 870 |
+          | triangles | 141,764 | 276,635 | 286,185 |
+
+          Identical across all three runs -- **zero spread.** Culling
+          ratio (street triangles / skyline triangles): **51.25%**, all
+          three runs. `window.__boardPieceCount` confirmed 21,007 on every
+          view, every run -- the board was genuinely drawn, not a stale
+          page.
+
+          BOTH GATES STILL FAIL, with real, current numbers replacing the
+          stale ones:
+          - Culling ratio 51.25% against the <40% ceiling (was 65.8%).
+          - Draw calls: street 4,584 and skyline 6,129 both exceed <=900
+            (was 7,851); harbour 870 passes, 30 calls of margin.
+
+          WHAT CAN BE ATTRIBUTED, and to what -- named separately, not
+          blended, per instruction:
+          - **Draw calls are structural** (one mesh per piece, B3's own
+            documented, un-instanced scope) and moved roughly with the
+            piece count, as expected: 4,584/7,851 = 0.584, against the
+            piece-count ratio 21,007/35,365 = 0.594 -- close enough that
+            the draw-call improvement is real and largely explained by
+            the smaller board, not by anything measurement-related.
+          - **Today's own 51.25% reading is NOT a contention artefact** --
+            confirmed by the zero spread across three runs on a box
+            checked quiet before and after, unlike decision #4's
+            documented flakiness for the comparable (un-boarded) metric.
+            This reading can be trusted as a real, reproducible number for
+            the CURRENT board.
+          - **How much of the 65.8% -> 51.25% CHANGE is contention in B3's
+            original reading versus the board changing cannot be cleanly
+            separated with what was measured here.** That would need the
+            OLD board (35,365 pieces, uniform 9 m road width) re-measured
+            on a quiet box for a true controlled comparison, which this
+            item did not do -- checking out and regenerating an old board
+            is a materially bigger undertaking than "one measurement," out
+            of this item's own scope. Not attributed to one cause where
+            two are available, per instruction.
+
+          Gate: RED is either ratio >= 40% or any view's draw calls > 900.
+          Currently RED on both counts -- ratio 51.25%, street/skyline
+          draw calls over budget. Neither threshold was loosened to reach
+          this result.
 [ ] R4  Deploy from main. Check the branch first -- 2026-09-09 shipped b1-land
           by accident and put 71.8% of plots in the water on the live site.
           Check R3.5 too: a deploy with the board still gated publishes the
