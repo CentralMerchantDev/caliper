@@ -487,3 +487,146 @@ clean; 14 kitbash tests, 13 pass, 1 honest todo. Mutation: added a real
 to "1/10 reachable" and green; restored, `md5sum`-verified byte-identical,
 re-ran to original state.
 
+## F4 -- the comment-strip sweep, finished as a category
+
+Committed `ad3f679`. Full detail in that commit's own message
+(`docs/pending-commits/overnight3-f4-comment-strip-category.txt`) —
+summary here.
+
+**Mechanically swept, not listed by hand:** all 145 `test/*.test.ts`
+files, for "reads a real `.js`/`.ts`/`.mjs`/`.html` file AND pattern-
+matches its raw text." 18 candidates; each individually reviewed.
+
+**Two real, previously-unswept instances of `bac6c1b`'s own defect,
+fixed:**
+- `claimSpansAreChecked.test.ts` had grown its OWN local `stripComments()`
+  — a fourth/fifth unshared copy of the exact function `bac6c1b`'s commit
+  already found duplicated three times. Now imports the shared helper.
+- `propManifest.test.ts`'s bin/bench/busShelter checks were matching a
+  **deliberately preserved historical comment** in `city-render.js`
+  documenting pre-migration primitives, not the live `propGeometry()`
+  calls that replaced them. Stripping comments exposed a real, silent
+  drift immediately: bench's manifest claim (1.8×0.55, the exact OLD
+  primitive dimensions) disagreed with the real model (1.76×0.45, an 18%
+  depth gap) — fixed in `public/prop-manifest.js`, measured directly via
+  the real geometry's bounding box, not assumed. bin/busShelter already
+  matched and needed no change.
+
+**The category gate:** new `test/rawSourceScan.test.ts`, mirroring
+`deadExports.test.ts`'s own proven scan-plus-allowlist shape. 16 remaining
+candidates named individually: 8 genuinely safe (real AST parser,
+data-only matching, subprocess stdout, markdown prose), 5 real but
+lower-priority instances of the same defect, named for a future pass
+rather than fixed tonight (time-boxed, matching this project's own
+established discipline).
+
+**Gate evidence, including catching its own detector bugs.** The
+detector's first version undercounted real instances (a nested `join(...)`
+call inside `readFileSync(...)` defeats a same-call regex) — caught by its
+own self-pruning check flagging too many exclusions as "stale," which was
+the tell. Fixed, then found a second real gap (`workerFirstRouting.test.ts`
+uses `.exec(`, not `.match(`/`.test(`) — added. Clean after both fixes.
+141 tests across every touched and adjacent file, 141/141 green; `tsc
+--noEmit` clean. Two mutations, both caught: removing an exclusion entry
+(simulating a new unreviewed risky file) failed correctly, naming it;
+adding a fake entry for a nonexistent file (simulating staleness) failed
+the self-pruning check correctly. Both restored, `md5sum`-verified
+byte-identical.
+
+---
+
+## PART 2, checked line by line — genuinely exhausted, stated plainly
+
+**Every line in `docs/specs/COMPLETION-PLAN.md` PART 2 (`b1-land`, read
+fresh again just now) is done, blocked, or already an accepted terminal
+state. There is nothing left this lane can move forward alone, tonight, in
+this environment:**
+
+```
+[x] Shared comment-stripping helper           -- done (bac6c1b)
+[x] "Buildings read as basic" traced           -- done (a349b05)
+[ ] F1  Facade texture variety                 -- BLOCKED, cross-branch merge
+[ ] F2  Rest of the K6 buildings checklist      -- EXHAUSTED (confirmed twice)
+[ ] F3  Kitbash variety                        -- DONE tonight (e4e181d)
+[ ] F4  Comment-strip sweep as a category       -- DONE tonight (ad3f679)
+[ ] K7.1  The atlas gap, visual re-shoot        -- BLOCKED, memory floor
+[ ] B6  The interface                          -- BLOCKED, memory floor
+[ ] --  Wedge-wheel screenshot                 -- BLOCKED, memory floor
+[!] --  Bug 2, permanent UNEXPLAINED           -- already an accepted close
+[ ] --  package.json / pending-commits         -- DONE, tick filed (842f1c2)
+```
+
+**This is the finding the brief itself named in advance** ("if BOTH finish
+and PART 2 has nothing left that is not blocked on the b1-land merge or
+the memory floor, STOP and say so plainly. That is a real finding about
+this lane's depth"). Stated plainly: it has nothing left. Two blockers
+account for everything still open — a cross-branch merge only Mark can
+authorise (F1), and this host's memory floor blocking every browser-
+dependent item (K7.1, B6, the wedge-wheel screenshot) — plus one item
+(Bug 2) that was never "open," it is a deliberately accepted terminal
+state per the plan's own words.
+
+**What this is not.** Not a claim that CALIPER-BLD is finished — F1/K7.1/
+B6 are real, substantial, unstarted-in-practice work, just not workable
+from this lane's own worktree tonight. Not an invitation to invent new
+scope to fill the night; per this run's own instruction, this is where
+the run stops for real work and turns to writing this handover.
+
+---
+
+## Summary of this continuation session, for whoever reads this next
+
+**Commits, in order:** `842f1c2` (housekeeping: cross-lane tick, decision
+queue closed), `e4e181d` (F3: kitbash reachability), `7aaa754` (handover:
+session-2 correction and F3 summary recorded), `ad3f679` (F4: comment-strip
+category gate), plus this commit (handover: F4 summary and the PART 2
+exhaustion finding).
+
+**Every gate touched, with its evidence:** `test/deadExports.test.ts` (7 →
+6 real failures, `assembleNamedDesign` no longer among them — the other 6
+are F1's own facade-textures.js gap plus one unrelated nav-bindings.js
+export, both out of scope). `test/kitbashNamedDesigns.test.ts`'s new
+PRODUCT-reachability gate (0/10 today, honest, mutation-proven live).
+`test/rawSourceScan.test.ts`, new (green, both failure modes mutation-
+proven). `test/propManifest.test.ts` (a real manifest/geometry drift
+found and fixed, not just a comment-stripping mechanical change).
+
+**Decisions queued for Mark:** none new. `caliper #4` unchanged.
+`caliper-bld #1`/`#2` closed out this session (see housekeeping above).
+
+**What did not work / is still open:** the 5 named, lower-priority
+comment-vulnerability instances in `test/rawSourceScan.test.ts`'s own
+exclusion list — real, not fixed tonight, time-boxed. F1/K7.1/B6 remain
+blocked for reasons outside this lane's control.
+
+**What is unverified:** nothing new from tonight's own changes — every
+touched file has targeted-test evidence, typecheck evidence, and (for F3
+and F4's gates) mutation evidence. The full-suite confirmation pass from
+the PREVIOUS session (1214/1190/7/2, see above) was not re-run tonight,
+deliberately, per this session's own host-load instruction.
+
+**What I would do next, in order:** (1) when Mark authorises the
+`b1-land -> codex-lane` merge, re-check F1 AND `deadExports.test.ts`'s 5
+facade-textures.js failures together — both should clear at once, same
+root cause; (2) if the host memory ever clears, K7.1's visual re-shoot;
+(3) the 5 named `rawSourceScan.test.ts` exclusions, in the priority order
+their own reasons imply (the two masking-a-real-bug-direction ones —
+`generatedClaimsAreCurrent.test.ts` and `reachability.test.ts` — before
+the three lower-risk ones).
+
+**Anything I think is wrong that nobody asked about.** The same lesson
+named after F2/AS3 last session recurred twice more tonight, in a
+different shape each time: F3's `deadExports.test.ts` allowlist had
+correctly classified the kit's exports as demo/test-only for weeks, but
+nobody had connected that classification to F1's own already-known
+blocker until tonight; and F4's `propManifest.test.ts` had been silently
+matching a historical comment instead of live code since whenever
+bin/bench/busShelter migrated to `prop-models.js`, discovered only because
+tonight's fix forced the check to look at the right thing. Both are the
+same underlying shape: **a check that was never wrong on its own terms
+can still have stopped meaning anything, the moment what it checks against
+changed shape underneath it, and nothing short of periodically asking
+"does this still check what I think it checks" would have caught either
+one sooner.** Worth naming as a standing question for reviews, not just
+this run's own two instances of it.
+

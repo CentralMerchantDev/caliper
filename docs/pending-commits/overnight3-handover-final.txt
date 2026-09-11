@@ -1,0 +1,23 @@
+Overnight handover, final update for this continuation session: F4's
+summary, and PART 2 checked line by line, exhausted, stated plainly
+
+What this commit is. Documentation only. Records F4's summary in
+docs/audits/OVERNIGHT-BLD-2026-09-11.md (mirrors the commit ad3f679 body).
+Then checks every line of docs/specs/COMPLETION-PLAN.md PART 2 (b1-land,
+read fresh again) against tonight's own work: F1 blocked cross-branch, F2
+exhausted (confirmed twice), F3 and F4 both done tonight, K7.1/B6/the
+wedge-wheel screenshot blocked on the host memory floor, Bug 2 already an
+accepted permanent UNEXPLAINED close, and the package.json/pending-commits
+line done with its tick filed cross-lane. Every line is done, blocked, or
+an accepted terminal state -- nothing left this lane can move forward
+alone, tonight, in this environment. Stated plainly, per this run's own
+explicit instruction to do exactly that rather than invent scope to fill
+the night.
+
+Closes with a full session summary (commit hashes, gate evidence, decision
+queue status, what did not work, what is unverified, what to do next, and
+one general lesson found twice tonight in different shapes: a check that
+was correct when written can stop meaning anything once what it checks
+against changes shape underneath it, and nothing short of periodically
+re-asking "does this still check what I think it checks" would have caught
+either instance sooner than it was caught tonight).
