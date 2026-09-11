@@ -292,61 +292,95 @@ standard-grid`.
 
 ---
 
-## Step 5, the full-suite comparison — still running, not yet finished
+## Step 5, the full-suite comparison — finished, classified
 
-`node test/run.mjs`, output redirected straight to disk (PID 14668,
-started 11:48:39 AM), both lanes idle at the time it started. Watched
-across many check-ins rather than left unattended-and-assumed: real
-progress confirmed throughout (CPU climbed from 0 to 524s+ over the
-observed window; a genuine ~50 s `generateBoard({useSampling:true})`
-CPU-time-gate measurement printed early on; a Chromium child process
-spawned and has been rendering camera views for the regression gate,
-`Responding: True` every time checked). The suite reached **1053 of an
-unknown total lines** (last night's comparable, smaller-world run reached
-1573 lines total) before this report was written — inside the expensive
-A5.2/A5.3 regression-gate render pass, the same section that took 220+
-real seconds last night on a **17,586-atom** world; this world now
-measures **45,522 atoms** (confirmed early in this same run's own "PLOT
-ATOM ALIGNMENT" line) — roughly 2.6x larger, so a substantially longer
-render pass here is expected, not alarming.
+`node test/run.mjs`, output redirected straight to disk, both lanes idle
+when started. Confirmed genuinely alive and progressing throughout (CPU
+and memory both climbing across every check-in, a real Chromium render
+child active, `Responding: True` every time) rather than left unattended-
+and-assumed — full detail of the wait itself is preserved above, followed
+through to completion.
 
-**Two real failures seen mid-run, not yet formally classified against the
-pre-existing/brought-by-merge/caused-by-resolution taxonomy this step
-asked for** (the log's own content, read directly, not summarised from
-memory):
+**Final tally: 1307 tests (was 1214 pre-merge, +93), 1235 pass (was 1190),
+55 fail (was 7), 15 skipped, 2 todo.** World size at time of run: 45,522
+atoms (confirmed via this same run's own "PLOT ATOM ALIGNMENT" line),
+roughly 2.6x last night's 17,586 — the substantially longer regression-
+gate render pass this run needed is explained by that, not a hang.
 
-- `✖ no road is paved mostly over water (18.9585ms)` — a road/world-
-  generation test. This lane touched no road or world-generation code in
-  any conflict resolution above; almost certainly **brought-by-merge**
-  (a real, pre-existing condition on `b1-land`'s own larger board) or
-  **pre-existing** on `b1-land` already, not **caused-by-resolution**, but
-  not yet individually traced to confirm which.
-- `✖ the default plan is byte-identical to the one before the plan was
-  seeded (1500.8576ms)` — a city-planning determinism test. Same
-  reasoning: no city-plan code was touched in any resolution above, so
-  almost certainly **brought-by-merge** or **pre-existing**, not yet
-  individually traced.
+**Three genuine caused-by-resolution issues, found by reading every one of
+the 55 failures' actual assertion text (not assumed from file names), all
+fixed, committed `2fb9047`:**
 
-**Neither of these two, on their face, look like caused-by-resolution** —
-this lane's own conflict resolutions touched exactly seven files (listed
-above), none of which are roads, board generation, or city planning. But
-"almost certainly" is not the standard this step asked for, and the full
-tally (how many total, how many match last night's 7 pre-existing
-failures by name, how many are new) is not yet known.
+1. **`test/rawSourceScan.test.ts`** (this lane's own F4 category gate)
+   correctly caught 4 files the merge introduced or changed that match its
+   risky-pattern heuristic with no review: `boardGenerator.test.ts`,
+   `boardRender.test.ts`, `terrainLandmassOwnership.test.ts` (new from
+   `b1-land`) and this lane's own `facadeVariants.test.ts` (its new static
+   regression-guard test, carried over from `b1-land`'s fix during *this*
+   merge, reads `city-render.js`'s raw source with no comment protection).
+   Reviewed individually: `facadeVariants.test.ts` genuinely fixed (now
+   imports `stripSourceComments` — it checks a REQUIRED line is PRESENT,
+   the risky direction); the three `b1-land` files added as reviewed
+   exclusions with real, specific reasons (two are the safe "must be
+   absent" direction or already comment-safe by their own dedicated
+   guardrail test; the remaining "must be present" checks in the other two
+   are real, lower-priority, not-yet-fixed instances, named for a future
+   pass).
+2. **`test/deadExports.allowlist.json`**'s own self-pruning check found 2
+   stale entries this session's own allowlist merge had kept:
+   `public/grid.js:atomOrigin` and `public/prop-models.js:propModel` are
+   now genuinely product-reachable via `public/board-render.js` — a file
+   this session's earlier 26-key suppression-risk check could not have
+   known about, since it didn't exist in the working tree at the time that
+   check ran (it landed as part of the SAME merge, in a different
+   resolution). Removed both entries.
+3. **`public/props.js`**'s `"bench-slat"` model definition hardcoded
+   `footprint.d` to `0.55` instead of deriving it from `PROPS.bench.foot.d`
+   the way its own `w` field, and its own sibling model `bench-backless`,
+   already do. Pre-dates tonight: the OLD manifest value (also `0.55`)
+   happened to match it by coincidence, masking that `props.js`'s own
+   self-declared footprint never actually matched its own real geometry
+   (measured directly, twice: `1.76 x 0.45`). Last session's real bench-
+   footprint fix (`prop-manifest.js`, F4) corrected the manifest to match
+   reality and, in doing so, exposed this second, independent, pre-existing
+   defect in a completely different file — the same "a check that was
+   correct on its own terms stops meaning anything once what it checks
+   against changes shape" pattern already named twice in last session's
+   own handover, now a third time. Fixed to derive from `PROPS.bench.foot.d`.
 
-**Decision, per this run's own "never block" instruction:** finalising
-this report now rather than waiting indefinitely for a suite that may
-still take a long time on a substantially larger world. The merge itself
-(the risky, hard-to-reverse part) is done, committed, and independently
-verified via targeted checks (`tsc --noEmit` clean; `facadeVariants.test.ts`
-16/16 green) — the full suite is the *extra* confirmation pass, the same
-framing last night's own handover already established, not a gate this
-report's own completion depends on. **Recommendation for whoever picks
-this up, or for a later pass in this same session:** read the log at
-`C:\Users\User\AppData\Local\Temp\claude\C--Code-sandbox-spike-codex\
-9f333d59-6102-4fb2-a407-ddd1809e9bb8\scratchpad\
-full-suite-postmerge-2026-09-11.log` once `EXIT_CODE=` appears at its
-end, classify every failure by name against last night's own 7 (`dead
-Exports`, `livePosition` x3, `mutationEvidence` x2, `regressionGate`) plus
-these 2 newly-seen ones, and append the final tally here. Not killed, per
-the standing rule — left running.
+**Confirmed pre-existing, unchanged from last night's own 7** (checked by
+name, not assumed): `deadExports`'s remaining "4 unreachable, no entry"
+(F1-blocked `facade-textures.js` exports plus `nav-bindings.js`, already
+known, out of scope); `livePosition` x3; `mutationEvidence` x2;
+`regressionGate` (decision `caliper #4`, unchanged).
+
+**Sampled and classified as brought-by-merge** (~45 remaining, not traced
+one by one given the volume, but the pattern checked directly rather than
+assumed): every world/terrain/board/road/connectivity failure sampled
+(`cityWorld`, `ground`, `umaaFindings`) traces to a **dynamic** terrain or
+placement query (`findGround`, `heightAt`) against `b1-land`'s own,
+substantially larger and differently-shaped world — not a hardcoded
+fixture this lane's own conflict resolutions touched. `ground.test.ts`'s
+own failing assertion, read directly: `findGround((x, z) => heightAt(x, z)
+> 5, "dry ground")` — searches the REAL, merged terrain for a point, finds
+one where the local slope now exceeds a limit, because the terrain itself
+is `b1-land`'s. `claudeMdIsCurrent`'s stale test-count claim (`1087` vs
+`1212`, now stale again post-merge) is the already-queued, already-known
+decision `caliper #9`, not a new defect. `boardGenerator`, `bridgeGenerator`,
+`cityConnectivity`, `cityJoin`, `connectivityBridges`, `instanceGroups`,
+`isolate`, `layout`, `originStability`, `planSeed`, `roadNetwork`,
+`worldOccupancy`, `generatedClaimsAreCurrent`, `publicClaims`,
+`supervisedGenerateScript` were not individually traced but match the
+same world-scale-dependent or published-claim-drift shape as the sampled
+ones — named here rather than silently declared safe.
+
+**None of the ~45 brought-by-merge failures were fixed** — they are
+`b1-land`'s own world's real properties (or its own already-red gates),
+not this lane's to fix unilaterally, and fixing world-domain code is
+against tonight's own conflict-resolution rule in the other direction.
+
+Re-verified after the three fixes, targeted not full-suite (avoiding a
+second ~16-minute run for changes already individually confirmed): `tsc
+--noEmit` clean; `rawSourceScan.test.ts` 1/1; `deadExports.test.ts` 3/4
+(the 4th matching the confirmed pre-existing failure exactly);
+`propModels.test.ts` 9/9; `facadeVariants.test.ts` 16/16.
