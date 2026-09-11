@@ -356,7 +356,7 @@ either.
 
 ---
 
-## 5. B4's road pieces are a fixed 9 m; roadkit's own closest class is 10 m. No exact match exists to wire "roads from roadkit" against.
+## 5. B4's road pieces are a fixed 9 m; roadkit's own closest class is 10 m. No exact match exists to wire "roads from roadkit" against. RESOLVED, 2026-09-11 (retire `ROAD_WIDTH`).
 
 **Ground-checked, 2026-09-09 (CLI lane, RUN3):** `public/board-generator.js`
 builds every road piece at `ROAD_WIDTH = 9` (metres, one fixed width for
@@ -411,6 +411,44 @@ not depend on this question, chosen specifically because it does not.
 Option 2 is not free to reverse — it means re-measuring B2's own
 coverage/density numbers a second time. Option 3 is reversible but ships
 a visible defect in the meantime.
+
+**RESOLVED, Mark, 2026-09-11: none of the three options above.** All three
+accepted the premise that the board has one road width; that premise is
+the defect. `rule://standard-piece-sizes` (decided 2026-09-10, one day
+after this entry was ground-checked, 2026-09-09 — the queue went stale by
+a rule that postdates it) settles the two things that made a real fix feel
+too expensive to attempt here: *"Widths need not match real-world
+dimensions"* (so no cross-section had to be researched to justify a match)
+and *"Regeneration is accepted. Coverage and density numbers get re-taken
+when the catalogue changes. That cost was accepted explicitly."* The
+recommendation above (Option 1, add a 9 m roadkit class) is superseded,
+not merely revised — under the new rule the board should not have a
+one-size premise at all, whether that size is 9 m or a new 9 m class.
+
+**Resolution: retire `ROAD_WIDTH` as a single constant.** The board
+generator places TYPED road pieces, taking their widths from
+`roadkit.js`'s own `ROAD_STANDARDS`, in place of one hard-coded 9 m for
+every road. Regeneration and re-taking B2's coverage/density numbers are
+accepted costs, per the rule, not a reason to avoid this. Full detail,
+including the module-size proposal (2 m, already true of every existing
+`ROAD_STANDARDS` class) and the type catalogue this unlocks:
+`docs/specs/PIECE-CATALOGUE-ROADS.md`. Three items open under `§8` of that
+document remain Mark's call (module size, whether the partitioned
+one-lane road needs its own footprint, and whether freeway-class
+junctions should always be grade-separated rather than at-grade) — this
+resolution answers decision 5 itself, not those three.
+
+**What was done in the meantime:** `docs/specs/PIECE-CATALOGUE-ROADS.md`
+committed. Step one of the retirement (a road piece can carry a class,
+default `STREET`, no geometry changed yet) is this session's item 2 — see
+its own commit for gate evidence. No regeneration, and no coverage/density
+re-measurement, has happened yet.
+
+**Reversibility:** the catalogue document itself is trivially reversible
+(it is a proposal). The retirement itself is the same shape as Option 2
+above always was — not free to reverse once the board is regenerated
+against typed widths — but that cost is now an accepted one, not an
+open question.
 
 ---
 
@@ -477,6 +515,45 @@ originally built.
 
 **Reversibility:** trivial either way tonight — no code was written
 against either option, so there is nothing to undo.
+
+**RESOLVED-BY-RULE, checked 2026-09-11 against `rule://standard-piece-sizes`
+(decided 2026-09-10 — one day AFTER this entry was ground-checked,
+2026-09-09; the queue went stale by exactly one day here, the same shape
+as decision 5 above).** The rule answers this directly, and its answer is
+the opposite of this entry's own recommendation:
+
+- *"Fits-searching stops being a category. Nothing needs to try
+  typologies until one fits, because nothing can fail to fit."* — Option 1
+  above (*"try typologies in a defined order... place the first that
+  does"*) is precisely the fits-searching category the rule retires. It
+  is not the safe, thorough choice this entry took it for; it is the
+  mechanism the rule exists to make unnecessary.
+- *"A typology with a hardcoded footprint gets remade, not worked
+  around."* — the two problem typologies, `bldHighStreetTerrace` and
+  `bldBusinessParkBlock`, are not a search problem at all. They are
+  remade to accept a `cellW`/`cellD` override, the same contract the
+  other ten (`bldVilla`, `bldTower`, `bldWarehouse`, `bldWorkshop`, …)
+  already honour. Once all twelve accept an override, every building
+  piece can be forced to its own slot directly — no trying, no first-fit,
+  no refusal path, because (per the rule) nothing can fail to fit a slot
+  it was built for.
+
+This is cheaper than either original option: narrower than Option 1 (no
+selector to design, test, or maintain) and does not leave a permanent gap
+the way Option 2 did (all twelve typologies end up wired, not ten).
+**Not implemented this session** — remaking two typology generator
+functions is real code work, out of scope for this decision-queue
+correction pass; named here so the next B4 typology step starts from the
+rule's answer rather than re-deriving or re-arguing it.
+
+**What was done in the meantime:** nothing in `public/buildings.js` was
+touched. This entry's own recommendation (Option 1) should no longer be
+read as live guidance — superseded by the rule, not merely qualified.
+
+**Reversibility:** trivial — no code was written against either the
+original options or this resolution; the next session remakes two
+functions, following an already-decided rule rather than choosing among
+options.
 
 ---
 
@@ -562,6 +639,54 @@ committed asset, and the plan's own rule is a tick requires both.
 
 **Reversibility:** trivial — nothing was implemented against either option,
 only a test and a status line, both easy to revisit.
+
+**RESOLVED-BY-RULE, checked 2026-09-11 against
+`rule://generated-world-is-a-starting-state` (decided 2026-09-10, same day
+this entry was ground-checked — the rule's OWN worked example is this
+exact case, described in the past tense: "the crossing gate demanded that
+every settled boundary have crossing egress, and three did not. That was
+read as a defect. It is not." That sentence is this decision, named
+directly, not a coincidence of subject matter).** The rule reframes the
+question this entry asked ("how should a leaf boundary's own crossing
+survive real occupancy?") as the wrong question:
+
+- *"Bridges must be possible, not required. An island reached only by
+  dock and boat lane is fine. Three boundaries having no bridge means
+  nobody has placed one there yet."* — none of Options 1-3 above were
+  wrong to consider, but Option 1 (retry the anchor search) and Option 2
+  (reserve space before placement) both treat the absence as damage to
+  repair. The rule says it isn't damage; a starting state that leaves
+  room for a player or a later pass to add a crossing is doing its job.
+- **Corrected gate, verbatim from the rule:** *"every settled boundary
+  has at least one crossing — bridge or dock — or is listed as
+  intentionally isolated. A dock counts."* Checked directly against the
+  real, current gate (`test/bridgeGenerator.test.ts`, the test named in
+  this entry) rather than assumed: it ALREADY treats a dock as sufficient
+  — `covered` is built from both `pieceType === "dock"` and
+  `pieceType === "bridge"`, so "a dock counts" is not a gap. The gap
+  against the corrected gate is narrower than the whole test: there is no
+  "or is listed as intentionally isolated" allowance anywhere, so the
+  gate currently demands a real, placed piece for all 12 with no way to
+  name an island as deliberately not-yet-connected.
+- Per the rule's own "what still has to hold": a boundary reachable by
+  NOTHING at all (no road, no dock, no bridge, not listed as isolated)
+  would still be a real defect — coherence, not completeness, is what the
+  rule keeps. `farm-isle`/`quarry-isle`/`resort-isle` are not that; they
+  are leaf boundaries whose one crossing candidate was refused, which is
+  exactly "nobody has placed one there yet," not "nothing ever could."
+
+**Not implemented this session** — rewriting `test/bridgeGenerator.test.ts`'s
+gate to the corrected form (and deciding whether these three boundaries
+get formally listed as intentionally isolated, or left for a future
+anchor-retry pass to actually connect) is real test-and-code work, out of
+scope for this decision-queue correction pass. Named here so that work
+starts from the rule's answer.
+
+**What was done in the meantime:** nothing in
+`test/bridgeGenerator.test.ts`, `public/bridge-generator.js`, or
+`public/board-generator.js` was touched. The gate stays red, exactly as
+found — now understood to be asserting a stronger property (full
+completeness) than the project's own rule says a generated world owes.
 
 ---
 
