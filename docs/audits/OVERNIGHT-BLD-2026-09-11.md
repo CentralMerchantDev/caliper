@@ -408,3 +408,82 @@ independently, checked only the first one and called it clean. Worth a
 standing check (or at least a standing habit) rather than re-discovering
 it typology by typology, test by test.
 
+---
+
+## Continuing overnight, second wake -- correction received, and a host-load reversal
+
+**Correction from Mark, taken at face value and verified, not argued
+with.** Last session's "K6-BUILDINGS.md is exhausted" finding was correct
+about K6, but K6-BUILDINGS.md is F2's own sub-checklist, not this lane's
+whole checklist -- that lives at `docs/specs/COMPLETION-PLAN.md` PART 2,
+on `b1-land` only. Re-read it read-only (`git show
+b1-land:docs/specs/COMPLETION-PLAN.md`, no checkout, no merge): confirmed
+F1 (blocked cross-branch, unchanged), F2 (this lane's own K6 checklist,
+genuinely exhausted per last session's finding), **F3 and F4 both
+unstarted**, K7.1/B6 (memory-blocked), and the package.json/pending-commits
+line (done, needs a cross-lane tick since the file lives on `b1-land`).
+
+**Host-load instruction reversed from last session, and honoured exactly.**
+The full suite is NOT run tonight -- this host had ~0.65 GB free at
+session start with the CLI lane running its own suite concurrently
+(`test/boardGenerator.test.ts`, PID 5388), the same condition last
+session's own culling-gate flake traced to. Free memory recovered to
+~4.9 GB partway through this session (checked, not assumed) but the
+instruction was honoured regardless of the reading -- targeted files plus
+`npx tsc --noEmit` only, stated in each commit.
+
+**Housekeeping, `842f1c2`:** filed `docs/CROSS-LANE-REQUESTS.md` entry 3
+(the package.json/pending-commits tick, for whoever next has `b1-land`
+write access) and closed the loop on this lane's own decision queue --
+`caliper-bld #1`/`#2` were resolved in code weeks ago but never marked
+resolved IN `docs/DECISIONS-FOR-MARK.md` itself, so `process_pending_
+decisions` kept re-surfacing them as open every session. Both now carry a
+dated RESOLVED note.
+
+## F3 -- kitbash variety: registry vs. both real senses of "reachable"
+
+Committed `e4e181d`. Full detail in that commit's own message
+(`docs/pending-commits/overnight3-f3-kitbash-reachability.txt`) — summary
+here.
+
+**The two numbers, side by side, and why for every gap.** Registry: 62
+parts, 40 designs. Reachable from the kit's OWN internal harness
+(`assembleBuilding` + all 40 named designs together): 57/62 parts (92%),
+40/40 designs (100%) — already gated since RUN2/RUN3, unchanged tonight.
+The 5 unreached (all `connector` parts): genuinely, mechanically
+unreachable given current content — no design has two structural volumes
+to join one to, checked mechanically, not assumed. Reachable from the
+real PRODUCT world (`city-render.js` → what a visitor actually loads):
+**0/62 parts, 0/40 designs.** `city-render.js` has zero kitbash references
+on either `codex-lane` or `b1-land` — not the F1 pattern (wired elsewhere,
+unmerged), unwired everywhere, first named in K6-BUILDINGS.md's own
+"disconnected capability" section and never closed since.
+
+**A third bucket, found by classifying precisely instead of reporting one
+number.** 4 exports (`createRng`, `createChamferedRectShape`,
+`createBevelledExtrusion`, `resolvePalette`) show as "unreachable" by the
+cross-file import graph but are NOT dead code — all four are called
+heavily within their own file (`resolvePalette` alone has 60+ internal
+call sites). Over-exported utilities, not orphaned code. Allowlist reasons
+upgraded from unreviewed boilerplate to this real finding.
+
+**Fixed, in scope:** `test/deadExports.allowlist.json` was missing an
+entry for `assembleNamedDesign` (causing last night's real deadExports
+failure) — added, matching its sibling `assembleBuilding`'s existing
+entry. New test, `test/kitbashNamedDesigns.test.ts`'s "GATE: kitbash
+reachable from the real PRODUCT world," reuses the SAME reachability
+machinery `deadExports.test.ts` already uses, `{ todo }`-marked exactly
+like F1's own gate, prints the full breakdown every run.
+
+**Blind subagent review caught a real defect before implementation:** the
+planned assertion ("none are product-reachable") is true today and would
+have passed silently — inverted to assert the goal (at least one is),
+which correctly renders as a visible ⚠, not a silent pass.
+
+**Gate evidence:** red first for real (`deadExports.test.ts`, 7 → 6 after
+the fix, `assembleNamedDesign` no longer among them). `tsc --noEmit`
+clean; 14 kitbash tests, 13 pass, 1 honest todo. Mutation: added a real
+`KITBASH_PARTS` import to `city-render.js` — the gate immediately flipped
+to "1/10 reachable" and green; restored, `md5sum`-verified byte-identical,
+re-ran to original state.
+
