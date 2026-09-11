@@ -62,7 +62,7 @@ test("B3 gate (guardrail): a header comment that merely NAMES a forbidden file d
   assert.equal(imports.length, 0, "a comment line was mistaken for an import statement");
 });
 
-test("B3 gate: buildBoardScene produces exactly one mesh per real piece in the committed board.generated.json", () => {
+test("B4 gate (2b): buildBoardScene draws every real piece in the committed board.generated.json exactly once, grouped into a SMALL number of InstancedMesh objects, not one mesh per piece", () => {
   const heightAt = makeHeightAt(new LandField(16));
   const payload = JSON.parse(readFileSync(join(ROOT, "public", "board.generated.json"), "utf8"));
   const { pieces } = loadBoard(payload, heightAt);
@@ -77,7 +77,19 @@ test("B3 gate: buildBoardScene produces exactly one mesh per real piece in the c
   // count, not a number nudged just past today's figure.
   assert.ok(pieces.length > 15000, `expected tens of thousands of real pieces, got ${pieces.length} -- reading the wrong file, or the committed board regenerated smaller than expected`);
   const group = buildBoardScene(THREE, pieces);
-  assert.equal(group.children.length, pieces.length, `expected one mesh per piece (${pieces.length}), got ${group.children.length}`);
+  // This is the whole point of 2b: measured directly against this exact
+  // committed board, grouping by (pieceType, foot.w, foot.d,
+  // levels-if-building) collapses 21,007 pieces into 16 groups. <= 50 is a
+  // real margin above that measured 16 (catches a regrouping bug that
+  // fragmented into hundreds/thousands of one-off groups) without being
+  // brittle to the catalogue growing a few more sizes.
+  assert.ok(group.children.length <= 50, `expected a small number of InstancedMesh groups (measured 16 today), got ${group.children.length} -- grouping is not collapsing pieces the way it should`);
+  assert.ok(group.children.length >= 2, "expected more than one group -- a single group for every piece would hide a bug that merged incompatible geometries");
+  const totalInstances = group.children.reduce((sum: number, m: any) => sum + m.count, 0);
+  assert.equal(totalInstances, pieces.length, `expected every piece drawn exactly once across all groups (${pieces.length}), got ${totalInstances} total instances -- a piece was dropped or double-drawn`);
+  for (const mesh of group.children) {
+    assert.ok(mesh.isInstancedMesh, "expected every child of the board group to be an InstancedMesh, not a plain Mesh");
+  }
 });
 
 test("B3 gate: a mesh's own position and size come from its piece's real cell/foot/levels, not a second, independently-computed geometry", () => {
@@ -109,6 +121,120 @@ test("B3 gate: an unrecognised pieceType still gets a mesh (a visible gap), not 
 test("B3 gate: a piece with no pieceType is skipped, not thrown", () => {
   const scene = buildBoardScene(THREE, [{ id: "broken" }, null]);
   assert.equal(scene.children.length, 0);
+});
+
+// -----------------------------------------------------------------------------
+// B4 (2a) -- buildBoardScene shares ONE material per pieceType (by resolved
+// colour), not one per piece. Distinct material instances prevent batching
+// entirely regardless of geometry sharing, so this is the change that
+// unblocks everything after it (docs/briefs/CLI-2026-09-11-autonomous-2.md
+// item 2a).
+// -----------------------------------------------------------------------------
+
+function makePiece(id: string, pieceType: string, i: number, j = 0, overrides: any = {}): any {
+  return { id, pieceType, cell: { i, j, k: 0 }, foot: { w: 9, d: 9 }, levels: 1, ...overrides };
+}
+
+test("B4 gate (2a/2b): buildBoardScene shares one material instance PER COLOUR across every group of that colour, not one per group and not one per piece", () => {
+  const pieces = [
+    // Two DIFFERENT building groups (different levels -> different geometry,
+    // grouped separately) that must still share ONE building-coloured material.
+    ...Array.from({ length: 3 }, (_, n) => makePiece(`bldgA-${n}`, "building", n, 0, { levels: 1 })),
+    ...Array.from({ length: 3 }, (_, n) => makePiece(`bldgB-${n}`, "building", n, 1, { levels: 5 })),
+    // Two DIFFERENT road groups (different foot widths), same story.
+    ...Array.from({ length: 3 }, (_, n) => makePiece(`roadA-${n}`, "road", n, 2, { foot: { w: 9, d: 9 } })),
+    ...Array.from({ length: 3 }, (_, n) => makePiece(`roadB-${n}`, "road", n, 3, { foot: { w: 40, d: 9 } })),
+    ...Array.from({ length: 2 }, (_, n) => makePiece(`bridge-${n}`, "bridge", n, 4)),
+    ...Array.from({ length: 2 }, (_, n) => makePiece(`dock-${n}`, "dock", n, 5)),
+    ...Array.from({ length: 2 }, (_, n) => makePiece(`mystery-${n}`, "something-new", n, 6)),
+  ];
+  const group = buildBoardScene(THREE, pieces);
+  // 2 building groups + 2 road groups + 1 bridge + 1 dock + 1 fallback = 7.
+  assert.equal(group.children.length, 7, `expected 7 distinct (pieceType, foot, levels) groups, got ${group.children.length}`);
+
+  const byType = (t: string) => group.children.filter((m: any) => m.userData.pieceType === t);
+  const buildingGroups = byType("building");
+  const roadGroups = byType("road");
+  assert.equal(buildingGroups.length, 2, "expected two SEPARATE building groups (different levels means different geometry)");
+  assert.equal(roadGroups.length, 2, "expected two SEPARATE road groups (different foot widths means different geometry)");
+  assert.equal(buildingGroups[0].material, buildingGroups[1].material, "two different building GROUPS must still share the SAME material instance -- colour is the cache key, not the full group key");
+  assert.equal(roadGroups[0].material, roadGroups[1].material, "two different road GROUPS must still share the SAME material instance");
+  assert.notEqual(buildingGroups[0].geometry, buildingGroups[1].geometry, "two different building groups must NOT share geometry -- they are different sizes");
+
+  const bridgeMat = byType("bridge")[0].material;
+  const dockMat = byType("dock")[0].material;
+  assert.notEqual(buildingGroups[0].material, roadGroups[0].material, "building and road must not share a material -- they have different colours");
+  assert.notEqual(bridgeMat, dockMat, "bridge and dock must not share a material -- they have different colours");
+
+  const distinctMaterials = new Set(group.children.map((m: any) => m.material));
+  assert.equal(distinctMaterials.size, 5, `expected 5 distinct materials (building/road/bridge/dock/fallback colours), got ${distinctMaterials.size}`);
+});
+
+test("B4 gate (2a): meshForPiece called directly (no cache) still gets a fresh material each time -- existing direct-call behavior is unchanged", () => {
+  const piece = makePiece("solo", "building", 0);
+  const m1 = meshForPiece(THREE, piece);
+  const m2 = meshForPiece(THREE, piece);
+  assert.notEqual(m1.material, m2.material, "two direct meshForPiece calls with no shared cache must not silently start sharing a material");
+});
+
+// -----------------------------------------------------------------------------
+// B4 (2b) -- per-instance transforms inside a shared InstancedMesh group must
+// match what meshForPiece would have produced for that SAME piece, piece by
+// piece -- the real defence against a transposed index or an off-by-one in
+// the per-instance loop. A bridge's own baseYFor() varies PER PIECE even
+// within one group (each piece carries its own `.height`), which is the one
+// value that could be silently baked from the group's first piece instead of
+// read per instance -- covered explicitly, since no real committed data
+// exercises bridges yet (0 in board.generated.json today).
+// -----------------------------------------------------------------------------
+
+function decodePosition(THREE: any, mesh: any, index: number) {
+  const matrix = new THREE.Matrix4();
+  mesh.getMatrixAt(index, matrix);
+  const position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+  matrix.decompose(position, quaternion, scale);
+  return position;
+}
+
+test("B4 gate (2b): every instance's decoded transform matches meshForPiece's own position for that same piece", () => {
+  const pieces = [
+    makePiece("b1", "building", 0, 0, { levels: 3 }),
+    makePiece("b2", "building", 5, 0, { levels: 3 }),
+    makePiece("b3", "building", 10, 3, { levels: 3 }),
+    makePiece("r1", "road", 0, 20, { foot: { w: 40, d: 9 } }),
+    makePiece("r2", "road", 50, 20, { foot: { w: 40, d: 9 } }),
+  ];
+  const group = buildBoardScene(THREE, pieces);
+  const byIds = (mesh: any) => mesh.userData.pieceIds as string[];
+  for (const piece of pieces) {
+    const mesh = group.children.find((m: any) => byIds(m).includes(piece.id));
+    assert.ok(mesh, `expected to find an InstancedMesh containing piece ${piece.id}`);
+    const idx = byIds(mesh).indexOf(piece.id);
+    const decoded = decodePosition(THREE, mesh, idx);
+    const expected = meshForPiece(THREE, piece).position;
+    assert.ok(Math.abs(decoded.x - expected.x) < 1e-6, `piece ${piece.id}: x mismatch, got ${decoded.x}, expected ${expected.x}`);
+    assert.ok(Math.abs(decoded.y - expected.y) < 1e-6, `piece ${piece.id}: y mismatch, got ${decoded.y}, expected ${expected.y}`);
+    assert.ok(Math.abs(decoded.z - expected.z) < 1e-6, `piece ${piece.id}: z mismatch, got ${decoded.z}, expected ${expected.z}`);
+  }
+});
+
+test("B4 gate (2b): two bridge pieces sharing ONE instance group but with DIFFERENT own heights get DIFFERENT per-instance Y -- baseYFor is read per instance, not baked once from the group's first piece", () => {
+  const low = { id: "bridge-low", pieceType: "bridge", cell: { i: 0, j: 0, k: 0 }, foot: { w: 9, d: 40 }, levels: 1, height: 8 };
+  const high = { id: "bridge-high", pieceType: "bridge", cell: { i: 20, j: 0, k: 0 }, foot: { w: 9, d: 40 }, levels: 1, height: 30 };
+  const group = buildBoardScene(THREE, [low, high]);
+  assert.equal(group.children.length, 1, "both bridges share one foot/levels combo -- expected exactly one instance group");
+  const mesh = group.children[0];
+  assert.equal(mesh.count, 2);
+  const ids: string[] = mesh.userData.pieceIds;
+  const lowIdx = ids.indexOf("bridge-low");
+  const highIdx = ids.indexOf("bridge-high");
+  const lowY = decodePosition(THREE, mesh, lowIdx).y;
+  const highY = decodePosition(THREE, mesh, highIdx).y;
+  assert.notEqual(lowY, highY, "two bridge pieces at different declared heights must land at different Y -- baseYFor must be evaluated per instance");
+  assert.ok(Math.abs(lowY - meshForPiece(THREE, low).position.y) < 1e-6, "the low bridge's own instance Y must match meshForPiece's own computation for that exact piece");
+  assert.ok(Math.abs(highY - meshForPiece(THREE, high).position.y) < 1e-6, "the high bridge's own instance Y must match meshForPiece's own computation for that exact piece");
 });
 
 // -----------------------------------------------------------------------------

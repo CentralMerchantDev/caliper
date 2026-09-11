@@ -45,16 +45,33 @@ function heightMFor(piece) {
   return 0.3; // road -- a thin, walkable slab, not a solid block
 }
 
+/** Resolve (or create) the one shared material for a colour, when a cache
+ *  is given -- one instance per distinct colour, not one per piece, so
+ *  every piece of the same pieceType (or the same unrecognised fallback)
+ *  in a build shares a single material object instead of 21,007 distinct
+ *  ones. No cache means the old behaviour: a fresh material every call,
+ *  unchanged for direct callers (e.g. this file's own tests). */
+function materialFor(THREE, piece, materialCache) {
+  const color = COLOR_BY_TYPE[piece.pieceType] ?? FALLBACK_COLOR;
+  if (!materialCache) return new THREE.MeshStandardMaterial({ color });
+  let material = materialCache.get(color);
+  if (!material) {
+    material = new THREE.MeshStandardMaterial({ color });
+    materialCache.set(color, material);
+  }
+  return material;
+}
+
 /** One box mesh for one real board.js piece -- position and size read
  *  ENTIRELY from the piece's own cell/foot/levels, atomOrigin() (grid.js,
  *  no landform-derived offset), never from a second, independently
  *  computed geometry. */
-export function meshForPiece(THREE, piece) {
+export function meshForPiece(THREE, piece, materialCache = null) {
   const origin = atomOrigin(piece.cell.i, piece.cell.j);
   const w = piece.foot.w, d = piece.foot.d;
   const h = heightMFor(piece);
   const geometry = new THREE.BoxGeometry(w, h, d);
-  const material = new THREE.MeshStandardMaterial({ color: COLOR_BY_TYPE[piece.pieceType] ?? FALLBACK_COLOR });
+  const material = materialFor(THREE, piece, materialCache);
   const mesh = new THREE.Mesh(geometry, material);
   const baseY = baseYFor(piece);
   mesh.position.set(origin.x + w / 2, baseY + h / 2, origin.z + d / 2);
@@ -63,8 +80,39 @@ export function meshForPiece(THREE, piece) {
   return mesh;
 }
 
+/** Two pieces produce IDENTICAL box geometry iff they share this key --
+ *  heightMFor() only reads `levels` for `"building"` (every other
+ *  pieceType's height is a fixed constant regardless of levels), so
+ *  `levels` only needs to distinguish groups for buildings; including it
+ *  for every pieceType would just fragment roads/bridges/docks into
+ *  meaningless extra groups without ever being WRONG. */
+function groupKeyFor(piece) {
+  const levels = piece.pieceType === "building" ? piece.levels : 0;
+  return `${piece.pieceType}|${piece.foot.w}|${piece.foot.d}|${levels}`;
+}
+
 /**
- * Every piece in the given list, as one mesh each, inside one THREE.Group.
+ * B4 (2b) -- one THREE.InstancedMesh per (pieceType, foot.w, foot.d,
+ * levels-if-building) group, not one Mesh per piece. Measured directly
+ * against the committed public/board.generated.json: 21,007 pieces collapse
+ * into 16 such groups (9 road foot dims, 5 building foot/levels combos, no
+ * bridge pieces exist yet). Geometry and material are shared once per
+ * group; only each piece's own transform (position -- baseYFor() varies
+ * PER INSTANCE for bridges, whose own `.height` differs piece to piece even
+ * within one group) is set per instance, via THREE.InstancedMesh's own
+ * setMatrixAt(). No piece is rotated today (meshForPiece never read
+ * piece.rotation either -- not a new gap, not fixed here).
+ *
+ * `userData.pieceType` and `userData.pieceIds` (the group's own piece ids,
+ * in the SAME order as their instance index) replace meshForPiece's
+ * per-mesh `userData.pieceId` -- a single scalar has no meaning once one
+ * mesh represents many pieces. Confirmed before this change that nothing
+ * in the codebase reads `userData.pieceId` for picking or anything else
+ * (board-piece picking resolves through pieceAtPoint()'s own spatial
+ * index against the raycast hit point, never mesh/instance identity --
+ * see test/boardPicking.test.ts), so this is a naming correction, not a
+ * behaviour change.
+ *
  * The whole render path's own contract: given real board pieces (from
  * public/board-load.js's loadBoard()/fetchBoard(), never generated here),
  * build a scene from them and nothing else.
@@ -72,9 +120,35 @@ export function meshForPiece(THREE, piece) {
 export function buildBoardScene(THREE, pieces) {
   const group = new THREE.Group();
   group.name = "board-pieces";
+  const materialCache = new Map();
+  const groups = new Map();
   for (const piece of pieces) {
     if (!piece || !piece.pieceType) continue;
-    group.add(meshForPiece(THREE, piece));
+    const key = groupKeyFor(piece);
+    let g = groups.get(key);
+    if (!g) { g = { sample: piece, list: [] }; groups.set(key, g); }
+    g.list.push(piece);
+  }
+  const dummy = new THREE.Object3D();
+  for (const { sample, list } of groups.values()) {
+    const w = sample.foot.w, d = sample.foot.d;
+    const h = heightMFor(sample);
+    const geometry = new THREE.BoxGeometry(w, h, d);
+    const material = materialFor(THREE, sample, materialCache);
+    const mesh = new THREE.InstancedMesh(geometry, material, list.length);
+    mesh.userData.pieceType = sample.pieceType;
+    mesh.userData.pieceIds = list.map((p) => p.id);
+    list.forEach((piece, idx) => {
+      const origin = atomOrigin(piece.cell.i, piece.cell.j);
+      const baseY = baseYFor(piece);
+      dummy.position.set(origin.x + w / 2, baseY + h / 2, origin.z + d / 2);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(idx, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    group.add(mesh);
   }
   return group;
 }
@@ -83,8 +157,8 @@ export function buildBoardScene(THREE, pieces) {
  * B4 -- "kits wire by construction": a real tree, from
  * public/prop-models.js's own propModel(), not a placeholder. A SEPARATE
  * group from buildBoardScene() on purpose -- that function's own gate
- * (test/boardRender.test.ts) asserts one mesh per PIECE exactly; trees are
- * not pieces (B2's own scope explicitly left them out, per
+ * (test/boardRender.test.ts) asserts every piece is drawn exactly once;
+ * trees are not pieces (B2's own scope explicitly left them out, per
  * docs/specs/BOARD-REBUILD-PLAN.md's "Trees/props are explicitly OUT of
  * B2's scope"), so adding them there would break that contract instead of
  * satisfying a different one.
@@ -92,13 +166,17 @@ export function buildBoardScene(THREE, pieces) {
  * DELIBERATELY MODEST, NAMED AS SUCH: one tree per `maxTrees`-th building
  * piece (default every 25th), not one per building -- a real board has
  * ~17,600 buildings, and propModel("tree")'s own LOD0 is a multi-part,
- * unmerged geometry (world-render-3d.js's own instancing machinery,
- * `partitionForInstancing`, is what B4's later work would wire this
- * through; this pass does not build a second one). This satisfies B4's
- * own gate (propModel becomes product-reachable, not merely test-only)
- * honestly -- it is a real, working call from a real render path, not a
- * token invocation -- without shipping tens of thousands of unmerged
- * meshes tonight.
+ * unmerged geometry not yet instanced here (2c's job -- see scatterTrees'
+ * own call site in world-render-3d.js). Corrected 2026-09-11: the prior art
+ * for grouping-then-instancing this file's own header pointed at,
+ * `partitionForInstancing`, actually lives in `public/instance-groups.js`
+ * (consumed by `public/city-render.js`), not `world-render-3d.js` as
+ * earlier written here -- ground-checked while building buildBoardScene's
+ * own instancing (2b), and named rather than silently carried forward.
+ * This satisfies B4's own gate (propModel becomes product-reachable, not
+ * merely test-only) honestly -- it is a real, working call from a real
+ * render path, not a token invocation -- without shipping tens of
+ * thousands of unmerged meshes tonight.
  */
 export function scatterTrees(THREE, pieces, { maxTrees = 400, everyNth = 25 } = {}) {
   const group = new THREE.Group();
