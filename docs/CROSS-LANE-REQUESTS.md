@@ -89,6 +89,27 @@ underlying condition is false in this branch would turn an honest `todo`
 into a real, self-inflicted failure. The gate will go green here the
 moment this branch actually has the `b1-land` commit, not before.
 
+**Update, 2026-09-10 (recorded so nobody re-investigates this from
+scratch next run).** F1's gate cannot be satisfied from this branch, full
+stop, and re-checking it again will not change that: the 16 real variants
+and their gate test (`test/facadeVariants.test.ts`) live on `codex-lane`;
+the one-line `variantSeed` wiring lives on `b1-land`
+(`public/city-render.js:1934`). Neither branch has both halves. This is
+not a "still waiting" state — it is a "cannot be closed by either lane
+alone" state. Mark has been told directly. The only resolution is a
+`b1-land` -> `codex-lane` merge, which he will authorise at a clean stop —
+not something either lane may do unattended (see this project's own
+"do not merge" rule). Re-measured today, same result as every prior run:
+
+```
+node test/run.mjs facadeVariants.test.ts
+```
+
+→ `facade materials reachable from real placements today: 4 (interwar-vc-day-,
+postwar-vc-day-, heritage-vc-day-, contemporary-vc-day-)` — 14 pass, 0 fail,
+1 honest `todo`. `grep -n "variantSeed" public/city-render.js` in this
+worktree still finds nothing.
+
 ---
 
 ## 2. `public/city-render.js` — street lighting draws two inline primitives instead of the real `lamp-street` model
