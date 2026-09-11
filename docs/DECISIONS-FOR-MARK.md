@@ -1047,3 +1047,30 @@ artefact.
 reversible. Leaving the gates named (Option 2, tonight's choice) costs
 nothing to change later. Widening the allowlist (Option 3, not taken)
 would have been reversible in one commit but was not attempted.
+
+**Question 1 RESOLVED, 2026-09-11 (b1-land, CLI, autonomous run, item 2 of
+`docs/briefs/CLI-2026-09-11-autonomous.md`): Option 1, done.** Before
+fixing anything, answered the brief's own prior question from the
+artefact: every one of the 124 entries in `test/.mutate-results.json`
+carries `"method": "_mutcheck.mjs ..."` — zero used `scripts/mutate.mjs`
+itself, so no already-published mutation evidence was ever at risk. The
+fix turned out larger than "one line": the bug was in TWO places in
+`mutate.mjs` (not one — the `all` array feeding the stale-`expect`-
+reference check has the identical flaw), plus an independent THIRD copy
+in `scripts/gen-test-count.mjs` (harmless for `onlyTheCountClaim`'s own
+correctness, since `COUNT_CLAIM_TEST` has no early parenthetical, but
+silently corrupting its own diagnostic failure listing). Fixed by
+extracting one shared, tested `scripts/extract-test-titles.mjs`, imported
+by all three files (plus `_mutcheck.mjs`, whose own copy was already
+correct but is now the same function rather than a fourth independent
+one) — full detail, verification and mutation-CAUGHT proof in the commit
+`a69027a`.
+
+**Question 2 REMAINS OPEN**, unaffected by the fix above: whether new,
+`_mutcheck.mjs`-verified controls should get a lighter-weight path into
+`test/mutationSummary.generated.json` given the authoritative
+`mutate.mjs --all`/`--id` path is still blocked by 46-47 unrelated,
+mostly already-decision-tracked pre-existing suite failures, regardless
+of this regex now being correct. `test/mutationEvidence.test.ts`'s own
+two sub-tests remain red for this reason, now covering more manifest
+entries than when this decision was first written.

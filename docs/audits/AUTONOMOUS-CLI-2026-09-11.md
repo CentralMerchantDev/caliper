@@ -38,3 +38,49 @@ list), not item 1's job — named, not silently assumed still accurate.
 via `process_record_gate` (item `R3.5-plan-correction-and-push`).
 
 ---
+
+## Item 2 — decision #10, the mutate.mjs regex bug
+
+**Answered the brief's own key question first, from the artefact, not
+assumed:** all 124 entries in `test/.mutate-results.json` carry
+`"method": "_mutcheck.mjs ..."` — zero used `scripts/mutate.mjs` itself.
+No already-published mutation evidence was ever at risk from this bug.
+
+**Blind review before implementing found the bug was bigger than
+recorded:** `mutate.mjs` has the identical flaw in TWO places (the
+`rawFailing`/`failing` list used for both the baseline-red check AND
+per-mutation CAUGHT/SURVIVED scoring, AND the separate `all` list used
+for the stale-`expect`-reference check), and an independent THIRD copy
+lives in `scripts/gen-test-count.mjs`, corrupting its own diagnostic
+failure text. Also found: two real, currently-existing test titles
+(`test/fail-open.test.ts`) already have the exact shape that triggers
+this — not currently referenced by any mutation's `expect`, so nothing
+has silently mis-scored yet, but the risk was live, not hypothetical.
+
+**Fixed:** new `scripts/extract-test-titles.mjs` — one shared, exported,
+tested extraction function, anchored on the TRAILING duration (not the
+first digit-parenthetical). All three buggy call sites, plus
+`_mutcheck.mjs`'s own already-correct one, now import and call it —
+eliminating the duplication that let three copies silently drift apart.
+
+**Test-first:** `test/extractTestTitles.test.ts`, six tests including one
+that spawns a REAL, disposable `node --test` run and parses its own real
+captured output — not only hand-written fixtures, per this project's own
+prior lesson about that exact shortcut.
+
+**Verified, regression-checked:** `npx tsc --noEmit` clean; 21/21 across
+the new test plus `expectedRed`/`mutateResume`/`mutateLock`/
+`claimSpansAreChecked`; re-ran `_mutcheck.mjs` against
+`board-generator.js`'s own six existing mutations post-swap — all six
+still CAUGHT, confirming the refactor didn't regress `_mutcheck.mjs`'s
+own already-working, already-trusted behavior.
+
+**Mutated, CAUGHT:** `decision-10-extract-test-titles-anchors-on-trailing-duration`
+— reverting to the buggy pattern correctly turns 4 of 6 tests red, each
+on the truncation defect specifically.
+
+**Landed:** `a69027a`. Decision #10 updated: question 1 (already-taken
+results) RESOLVED; question 2 (a lighter-weight evidence path) remains
+open, unaffected by this fix.
+
+---
