@@ -33,8 +33,40 @@ and the pass/fail totals are unknown.
 
 **Redone properly this session**: a fresh `node test/run.mjs`, output
 redirected straight to disk in one step (no intermediate pipe, no second
-process), running now in the background. Result recorded below once it
-completes — see "Item 0, continued" further down this document.
+process). Started early in this session and left running throughout items 1
+and 2, per this run's own instruction ("let it run while you work").
+
+**Status as of item 2's commit: still running, not yet finished.** 959
+lines observed so far (this project's suite is large enough that
+`regressionGate.test.ts`'s own A5.2/A5.3 test alone measured 80–142 s
+earlier this session). Everything visible so far is either green or one of
+this project's own already-documented, self-explaining red tests — none of
+it touches `buildings.js` or any `test/building*.test.ts` file, all of
+which were independently re-verified green against this session's own
+changes (items 2 below) via a separate, already-completed targeted run:
+
+- `test/originStability.test.ts`'s "changing WORLD.SIZE moves the grid
+  origin" — self-documented in its own failure message as staying red on
+  purpose (`docs/audits/WORLD-DENSITY-FINDINGS.md` §8), not a regression.
+- `every export in public/ and src/ is product-reachable...` (dead-exports
+  reachability test) — failing; not yet cross-checked against
+  `docs/specs/COMPLETION-PLAN.md`'s own C2 item, which already records this
+  allowlist as "not yet reviewed one-by-one," consistent with a pre-existing,
+  already-named gap rather than something this session touched.
+- Three UI measurement/timer tests (`measures immediately on call...`,
+  `keeps measuring on a poll...`, `stop() ends the poll...`) and two
+  mutation-manifest tests (`every mutation in the manifest has a committed,
+  checkable CAUGHT result`, `the summary is not stale against the manifest
+  it claims to cover`) — failing, in files this session never opened.
+
+None of these were investigated further this session — recording their
+existence and names here is the honest floor per this run's own
+instruction ("record what it says either way"), not a claim that they are
+understood or fixed. Whoever picks this up next should check them against
+`docs/DECISIONS-FOR-MARK.md` and `docs/AUDIT-LEDGER.md` before assuming
+they are new.
+
+**Full result, once the run completes, to follow in a later commit.**
 
 ---
 
@@ -76,4 +108,58 @@ written, but superseded by this session's own `70a9e64`, landed the day
 after. Added a matching dated correction to its `bldWarehouse` line rather
 than editing the original text, same convention.
 
-Committed both doc edits together: <!-- commit hash filled in after commit -->
+Committed both doc edits together, plus this document's own creation:
+`ea715c7`.
+
+---
+
+## Item 2 — AS3's single-seed budget gate, and what sweeping the full range found
+
+**The named example checked first.** `bldWarehouse`'s `roofStyle`
+("sawtooth" vs "barrel"/"curved") produces very different triangle counts;
+`test/buildingLODAndColors.test.ts`'s AS3 test builds each typology with
+exactly one fixed default seed, so it never happened to roll "sawtooth" at
+max cell size — a real ~2x budget violation (measured 780 against a
+declared 392) sat uncaught.
+
+**How far the gap actually went.** Swept properly — every typology's legal
+MIN/MAX cellW/cellD (the same source of truth
+`buildingExplicitSize.test.ts`'s own `TYPOLOGIES` table already
+establishes) crossed with every declared style-enum option each typology
+accepts, plus `foundation: "plinth"` at the MAX case — 7 of the 8
+cellW/cellD-bearing typologies exceeded their own declared LOD0 ceiling
+somewhere in their real reachable option space, not just `bldWarehouse`:
+`bldMidrise` (464→624), `bldShop` (324→384), `bldOffice` (344→372),
+`bldApartmentWalkup` (644→708), `bldWarehouse` (392→780), `bldWorkshop`
+(314→336), `bldTower` (304→396). `bldVilla` already covered its own worst
+case and needed no change.
+
+**The fix.** New test, `AS3b`, sweeping the full range as described above;
+all 7 typologies' declared LOD0 budgets recalibrated in `public/buildings.js`
+to their real measured worst case. A real design conflict surfaced and
+resolved while implementing: AS3's own pre-existing 70%-floor anti-padding
+check (anchored to the one default seed) started failing once the declared
+ceiling reflected the true worst case instead of the typical case —
+resolved by moving the anti-padding check into AS3b, anchored to the worst
+measured value across the whole sweep instead of one arbitrary seed. AS3
+keeps its ceiling check on the default seed as a fast sanity check.
+
+**Gate evidence.** AS3b, run against the unmodified budgets before any
+recalibration, failed immediately for real (not injected): "bld-midrise
+MIN (cellW=3, cellD=4) {"podiumType":"retail"} LOD0 measured triangles
+(540) exceed declared budget (464)". After the fix: 36/36 green across
+`buildingLODAndColors.test.ts`, `buildingExplicitSize.test.ts`,
+`buildingFeatureFlags.test.ts`, `layoutGeometry.test.ts`,
+`trimAtlasPatch.test.ts`; `npx tsc --noEmit` clean;
+`regressionGate.test.ts` green and numerically unchanged (366/857/664
+calls, culling 36.93/60.31/44.33%), confirming this is a test-only
+bookkeeping fix that moved nothing in the real rendered world.
+
+**Mutation, proving AS3b catches what AS3 provably cannot.** Reset
+`bldWarehouse`'s declared LOD0 budget back to its old, too-low value (392).
+AS3 (the OLD test) stayed green — its one default seed still doesn't roll
+"sawtooth" at max cell size. AS3b (the NEW test) failed correctly, naming
+the exact violating combination. Restored, `md5sum`-verified
+byte-identical, re-ran green (5/5).
+
+Committed: `df080ad`.

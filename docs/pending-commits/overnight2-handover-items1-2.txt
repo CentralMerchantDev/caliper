@@ -1,0 +1,19 @@
+Overnight handover: record items 1 and 2 in docs/audits/OVERNIGHT-BLD-2026-09-11.md,
+plus item 0's interim status
+
+What this commit is. Documentation only -- no code change. Fills in the
+commit hashes for items 1 (ea715c7) and 2 (df080ad) in this run's own
+handover doc, and records item 0's interim state: the full node
+test/run.mjs run (started this session, output redirected straight to a
+file per gen-test-count.mjs's double-buffering warning) is still running,
+959 lines observed so far, nothing in it touching buildings.js or any
+test/building*.test.ts file, everything failing so far either
+self-documented as intentionally red (test/originStability.test.ts) or
+plausibly one of this project's own already-tracked ~40+ pre-existing red
+gates (dead-exports reachability, three UI timer tests, two
+mutation-manifest tests) -- named honestly as unconfirmed rather than
+silently assumed pre-existing, since none were individually investigated
+this session.
+
+What is still open. The full suite run itself, still in progress -- full
+result to follow in a later commit. K6's remaining items, next.
