@@ -248,6 +248,23 @@ polish.
           detail and a recommendation. test/testCount.generated.json
           regenerated honestly regardless (1194/1130/48/15/1, measured
           `node test/run.mjs`, full log this session's own handover cites).
+          2026-09-11, RE-MEASURED: three commits landed since the number
+          above was taken (B3's pieceAtPoint step, scatterStreetFurniture,
+          scatterBusShelters), each adding tests, so 1194 was itself already
+          stale, not just 1087 -- a full `node test/run.mjs` run, output
+          redirected straight to a file per gen-test-count.mjs's own
+          double-buffering warning, gave 1212/1150/46/15/1 (2 fewer real
+          failures than the prior measurement, not investigated further --
+          out of this item's scope). test/testCount.generated.json
+          regenerated from that log. The gate itself was proven live, not
+          just watched red: temporarily setting public/index.html's claim to
+          1212 (matching the fresh record) turned "the test counts on the
+          page are the test counts" GREEN (7/7 pass); reverting (`git
+          checkout --`, confirmed byte-identical) turned it red again with
+          the current, correct numbers -- proof the check recognises
+          agreement and is not vacuously red regardless of input. Page left
+          at 1087, deliberately, per #9 -- still Mark's call, not resolved
+          here.
 [ ] C5  B2.5's CPU-time gate: honestly red at ~40-291s against 30s (varies
           with this host's own memory pressure, measured repeatedly).
           Unaffected by this run -- generation still happens offline

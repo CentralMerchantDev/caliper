@@ -692,3 +692,20 @@ handover entry for the exact numbers and the commit.
 **Reversibility:** all three options are reversible; option 3 is the
 cheapest to try and the cheapest to revert if Mark prefers a different
 framing.
+
+**Addendum, 2026-09-11 (CLI lane, attended):** re-measured, not just
+re-reasoned-about. The drift is worse than it looked, structurally, not
+just numerically: `test/testCount.generated.json` had itself gone stale
+again since the entry above (1194 -> 1212, three intervening commits each
+adding tests), confirming this is a recurring, ongoing gap rather than a
+one-time staleness -- every time work lands, the generated record needs
+re-running, and the page needs this decision resolved before it can ever
+catch up on its own. Regenerated honestly again
+(`test/testCount.generated.json`, 1212/1150/46/15/1); page left at 1087,
+unchanged, per this decision's own "what was done in the meantime." The
+gate itself (`test/publicClaims.test.ts`'s "the test counts on the page
+are the test counts") was verified to be a real, working equality check,
+not a vacuously-red one: temporarily setting the page's claim to 1212 to
+match the fresh record turned it GREEN, and reverting turned it red again
+for the correct, current reason. This does not change the recommendation
+above or resolve the decision -- it is still Mark's call.
