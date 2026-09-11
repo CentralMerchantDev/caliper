@@ -36,6 +36,7 @@ import { createBoard } from "./board.js";
 import { classifyAt, roadAllowedAt, USE } from "./land-use.js";
 import { assessFootprint } from "./footprint.js";
 import { landmassPolygonsWorld, waterwayAt } from "./terrain.js";
+import { ROAD_STANDARDS } from "./roadkit.js";
 
 /**
  * Per-`kind` (public/terrain.js's LANDMASSES) settlement decision, made
@@ -58,13 +59,17 @@ import { landmassPolygonsWorld, waterwayAt } from "./terrain.js";
  */
 export const SETTLEMENT_TABLE = {
   // blockAtoms MUST leave room for at least one plot inside a block's own
-  // interior (blockAtoms - ROAD_WIDTH, the road's own half-width eaten off
-  // each side) -- an earlier version picked blockAtoms close to plotAtoms
-  // and produced a road grid with almost nowhere left to build (21
-  // buildings against 100,717 road pieces, caught by this file's own gate
-  // test before any tuning). Sized here for roughly 2-3 plots per block
-  // side (blockAtoms ~= plotsPerSide*plotAtoms + ROAD_WIDTH), a real block,
-  // not a single lot fenced by road on every side.
+  // interior (blockAtoms - the road's own width, eaten off each side as a
+  // half-width margin) -- an earlier version picked blockAtoms close to
+  // plotAtoms and produced a road grid with almost nowhere left to build
+  // (21 buildings against 100,717 road pieces, caught by this file's own
+  // gate test before any tuning). Sized here for roughly 2-3 plots per
+  // block side (blockAtoms ~= plotsPerSide*plotAtoms + the road's own
+  // width), a real block, not a single lot fenced by road on every side.
+  // These numbers were tuned against the fixed 9 m width Decision 5
+  // retired (see roadWidthFor()/halfRoadFor() below) -- re-tuning them for
+  // the new, wider default is docs/specs/PIECE-CATALOGUE-ROADS.md §9's
+  // own Step 3, not this step.
   mainland:  { settled: true,  density: "low-medium",   era: "mixed",                    blockAtoms: 80, plotAtoms: 22, levels: 3 },
   city:      { settled: true,  density: "highest",       era: "contemporary+heritage",    boundaryK: 0.55, blockAtoms: 57, plotAtoms: 18, levels: 9 },
   suburb:    { settled: true,  density: "medium-high",   era: "postwar+contemporary",     boundaryK: 0.55, blockAtoms: 69, plotAtoms: 20, levels: 3 },
@@ -81,16 +86,24 @@ export const SETTLEMENT_TABLE = {
   skerry:    { settled: false },
 };
 
-const ROAD_WIDTH = 9; // atoms (metres) -- one local-street width for every road, P1 of this generator
-const HALF_ROAD = Math.floor(ROAD_WIDTH / 2);
-// Decision 5's retirement of ROAD_WIDTH, step 1 (docs/DECISIONS-FOR-MARK.md
-// #5, docs/specs/PIECE-CATALOGUE-ROADS.md): every road piece now carries a
-// roadClass, so a later step can size it from roadkit.js's own
-// ROAD_STANDARDS instead of this one constant. This step is metadata only
-// -- ROAD_WIDTH/HALF_ROAD above are untouched, so no piece's actual
-// footprint changes yet. "STREET" matches roadkit.js's own fallback
-// (ROAD_STANDARDS[stdKey] || ROAD_STANDARDS.STREET), not a new convention.
+// Decision 5's retirement of the old fixed road-width constant
+// (docs/DECISIONS-FOR-MARK.md #5, docs/specs/PIECE-CATALOGUE-ROADS.md §9).
+// Step 1 gave every road piece a
+// roadClass (default "STREET", matching roadkit.js's own fallback
+// ROAD_STANDARDS[stdKey] || ROAD_STANDARDS.STREET -- not a new convention).
+// Step 2 (this) retires the one-fixed-width constant that used to size
+// every road piece and the block-carving margin: both now read the road's
+// own class from roadkit.js's own ROAD_STANDARDS table instead. Every piece
+// still carries the same "STREET" default step 1 chose, so this doubles the
+// real width every road/block-carving site uses (was 9, STREET.row is 18)
+// -- a real, visible geometry change, not a rename.
 const ROAD_CLASS_DEFAULT = "STREET";
+function roadWidthFor(roadClass) {
+  return (ROAD_STANDARDS[roadClass] || ROAD_STANDARDS.STREET).row;
+}
+function halfRoadFor(roadClass) {
+  return Math.floor(roadWidthFor(roadClass) / 2);
+}
 // Atoms of clearance around a placed building, inside its own plot. Tuned,
 // not guessed: measured coverage at CLEAR=2 was 38.5-46.5% across every
 // density tier (public/terrain.js's own real ground, not a hand estimate)
@@ -268,12 +281,17 @@ function nextId(prefix) {
 
 function placeRoadGraph(board, boundaryId, graph, heightAt, stats) {
   const placed = [];
+  // Computed once per boundary, not per piece -- every piece placed by this
+  // function shares the same ROAD_CLASS_DEFAULT today, so this is one
+  // lookup, not one per piece, without pre-judging a future step where a
+  // boundary's own roadClass could vary.
+  const halfRoad = halfRoadFor(ROAD_CLASS_DEFAULT), roadWidth = roadWidthFor(ROAD_CLASS_DEFAULT);
   let t = now();
   for (const node of graph.nodes) {
     const piece = {
       id: nextId(`road-j-${boundaryId}`), pieceType: "road", boundaryId, roadClass: ROAD_CLASS_DEFAULT,
-      cell: { i: node.i - HALF_ROAD, j: node.j - HALF_ROAD, k: 0 }, rotation: 0,
-      foot: { w: ROAD_WIDTH, d: ROAD_WIDTH }, levels: 1, clear: { w: 0, d: 0 },
+      cell: { i: node.i - halfRoad, j: node.j - halfRoad, k: 0 }, rotation: 0,
+      foot: { w: roadWidth, d: roadWidth }, levels: 1, clear: { w: 0, d: 0 },
       standsOn: [USE.BUILDABLE], surface: "road",
     };
     const r = board.place(piece);
@@ -284,21 +302,21 @@ function placeRoadGraph(board, boundaryId, graph, heightAt, stats) {
   for (const edge of graph.edges) {
     let piece;
     if (edge.axis === "i") {
-      const iLo = Math.min(edge.a.i, edge.b.i) + HALF_ROAD + 1, iHi = Math.max(edge.a.i, edge.b.i) - HALF_ROAD;
+      const iLo = Math.min(edge.a.i, edge.b.i) + halfRoad + 1, iHi = Math.max(edge.a.i, edge.b.i) - halfRoad;
       if (iHi <= iLo) continue;
       piece = {
         id: nextId(`road-s-${boundaryId}`), pieceType: "road", boundaryId, roadClass: ROAD_CLASS_DEFAULT,
-        cell: { i: iLo, j: edge.a.j - HALF_ROAD, k: 0 }, rotation: 0,
-        foot: { w: iHi - iLo, d: ROAD_WIDTH }, levels: 1, clear: { w: 0, d: 0 },
+        cell: { i: iLo, j: edge.a.j - halfRoad, k: 0 }, rotation: 0,
+        foot: { w: iHi - iLo, d: roadWidth }, levels: 1, clear: { w: 0, d: 0 },
         standsOn: [USE.BUILDABLE], surface: "road",
       };
     } else {
-      const jLo = Math.min(edge.a.j, edge.b.j) + HALF_ROAD + 1, jHi = Math.max(edge.a.j, edge.b.j) - HALF_ROAD;
+      const jLo = Math.min(edge.a.j, edge.b.j) + halfRoad + 1, jHi = Math.max(edge.a.j, edge.b.j) - halfRoad;
       if (jHi <= jLo) continue;
       piece = {
         id: nextId(`road-s-${boundaryId}`), pieceType: "road", boundaryId, roadClass: ROAD_CLASS_DEFAULT,
-        cell: { i: edge.a.i - HALF_ROAD, j: jLo, k: 0 }, rotation: 0,
-        foot: { w: ROAD_WIDTH, d: jHi - jLo }, levels: 1, clear: { w: 0, d: 0 },
+        cell: { i: edge.a.i - halfRoad, j: jLo, k: 0 }, rotation: 0,
+        foot: { w: roadWidth, d: jHi - jLo }, levels: 1, clear: { w: 0, d: 0 },
         standsOn: [USE.BUILDABLE], surface: "road",
       };
     }
@@ -511,7 +529,7 @@ export function generateBoard(heightAtRaw, seed = 0, opts = {}) {
   // LandField, so caching is exact, not approximate. CAPPED, not
   // unbounded: measured directly that board.js's own canPlace checks EVERY
   // foot cell of a piece individually (not a sample), so a single road
-  // span's foot (tens of metres by ROAD_WIDTH) alone can cost hundreds of
+  // span's foot (tens of metres by the road's own width) alone can cost hundreds of
   // classifyAt calls, each calling slopeAt for four MORE heightAt calls at
   // distinct offsets that rarely repeat -- an uncapped Map hit V8's own
   // ~16.7M-entry ceiling and crashed mid-run before this cap existed. Most
@@ -560,12 +578,17 @@ export function generateBoard(heightAtRaw, seed = 0, opts = {}) {
 
     // Blocks: the atom rectangle between four adjacent junction nodes,
     // whichever exist -- a block with a missing corner (coastline cut a
-    // node out) is simply not built, not forced.
+    // node out) is simply not built, not forced. The margin carved off each
+    // side must be the SAME half-width placeRoadGraph() just built its own
+    // road pieces at (ROAD_CLASS_DEFAULT, today) -- a second, independent
+    // site computing it, not shared code, so it is checked for on its own
+    // (see decision-5 step 2's own test in test/boardGenerator.test.ts).
+    const blockHalfRoad = halfRoadFor(ROAD_CLASS_DEFAULT);
     for (let i = iMin; i + rule.blockAtoms <= iMax; i += rule.blockAtoms) {
       for (let j = jMin; j + rule.blockAtoms <= jMax; j += rule.blockAtoms) {
         const block = {
-          iMin: i + HALF_ROAD + 1, iMax: i + rule.blockAtoms - HALF_ROAD,
-          jMin: j + HALF_ROAD + 1, jMax: j + rule.blockAtoms - HALF_ROAD,
+          iMin: i + blockHalfRoad + 1, iMax: i + rule.blockAtoms - blockHalfRoad,
+          jMin: j + blockHalfRoad + 1, jMax: j + rule.blockAtoms - blockHalfRoad,
         };
         if (block.iMax <= block.iMin || block.jMax <= block.jMin) continue;
         pieces.push(...placeBlockBuildings(board, b.id, b.polygon, block, rule.plotAtoms, rule.levels, heightAt, stats));

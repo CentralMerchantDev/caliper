@@ -98,6 +98,52 @@ test("decision-5 step 1: every road piece the generator places carries a real, c
   );
 });
 
+test("decision-5 step 2: every road piece's narrow dimension is its own class's real ROAD_STANDARDS width, not a fixed constant", () => {
+  const roadPieces = G.pieces.filter((p) => p.pieceType === "road");
+  assert.ok(roadPieces.length > 0, "no road pieces to check");
+  for (const p of roadPieces) {
+    const std = ROAD_STANDARDS[p.roadClass];
+    assert.ok(std, `road piece "${p.id}" has roadClass "${p.roadClass}", which is not a real, current ROAD_STANDARDS key`);
+    // Junction pieces are foot.w === foot.d === the class width; span pieces
+    // have one long dimension (block length) and one narrow one (the class
+    // width) -- the narrow one is always the smaller of the two for every
+    // real piece this generator places (checked: the shortest configured
+    // blockAtoms, 57, still leaves spans far longer than any class's row).
+    const narrow = Math.min(p.foot.w, p.foot.d);
+    assert.equal(
+      narrow, std.row,
+      `road piece "${p.id}" (class ${p.roadClass}) has narrow dimension ${narrow}, expected ${std.row} (ROAD_STANDARDS.${p.roadClass}.row) -- still sized from a fixed constant, not its own class`,
+    );
+  }
+});
+
+test("decision-5 step 2: board-generator.js sizes every road site from ROAD_STANDARDS -- no hardcoded road-width constant survives at any of the four sites", () => {
+  // A static source scan, not a generated-output check: board.js's own
+  // occupancy guard (canPlace/place, "NEVER skipped") means a building
+  // candidate that would overlap a road is refused before it ever reaches
+  // G.pieces, so no amount of inspecting PLACED pieces can tell a site that
+  // reads the real class width apart from one that still reads a stale,
+  // hardcoded half-width -- both produce a board with zero overlaps, by
+  // construction, for different reasons. Reading the source directly is
+  // what actually distinguishes "reads ROAD_STANDARDS" from "got lucky with
+  // today's number".
+  const src = readFileSync(join(repoRoot(), "public", "board-generator.js"), "utf8");
+  assert.ok(!/\bROAD_WIDTH\b/.test(src), "ROAD_WIDTH still appears in board-generator.js -- the module constant was not fully retired");
+  assert.ok(!/\bHALF_ROAD\b/.test(src), "HALF_ROAD still appears in board-generator.js -- the module constant was not fully retired");
+  // Two independent call sites, not a sample of a bigger set: placeRoadGraph()
+  // computes its own road/junction footprints; generateBoard()'s own
+  // block-carving loop computes the SAME margin separately, to carve the
+  // interior buildings are placed in. Both must read the real class width --
+  // missing either leaves one half of the board's own geometry (what a road
+  // occupies, or what a block believes is left over once a road is carved
+  // out of it) still keyed to whatever the stale site last held.
+  const placeRoadGraphSrc = src.slice(src.indexOf("function placeRoadGraph"), src.indexOf("function placeBlockBuildings"));
+  const generateBoardSrc = src.slice(src.indexOf("export function generateBoard"));
+  assert.ok(/halfRoadFor\(/.test(placeRoadGraphSrc), "placeRoadGraph() does not call halfRoadFor() -- its own road/junction pieces are not sized from ROAD_STANDARDS");
+  assert.ok(/roadWidthFor\(/.test(placeRoadGraphSrc), "placeRoadGraph() does not call roadWidthFor() -- its own road/junction pieces are not sized from ROAD_STANDARDS");
+  assert.ok(/halfRoadFor\(/.test(generateBoardSrc), "generateBoard()'s own block-carving loop does not call halfRoadFor() -- block interiors are still carved against a stale margin");
+});
+
 test("B2 gate: settlement boundaries exist, one per settled landmass, derived from the real coastline", () => {
   assert.ok(G.boundaries.length >= 5, `expected several settled landmasses, got ${G.boundaries.length}`);
   const polysById = new Map(landmassPolygonsWorld().map((lm) => [lm.id, lm]));
