@@ -66,6 +66,33 @@ understood or fixed. Whoever picks this up next should check them against
 `docs/DECISIONS-FOR-MARK.md` and `docs/AUDIT-LEDGER.md` before assuming
 they are new.
 
+**One real result worth flagging now, not held for the final summary: A5.2
+& A5.3 (the regression gate) is RED in THIS run, and it is the already-
+queued, already-named defect, not a new one.** Measured inside the full
+suite: `Downtown skyline: 1 calls, 12 triangles`, culling retained
+`Skyline 100.00%, Harbour 66400.00%` — the skyline camera rendering as
+almost nothing. This is `docs/DECISIONS-FOR-MARK.md` decision `caliper #4`
+verbatim ("`test/cullingRatio.test.ts` AND `test/regressionGate.test.ts`
+both report the skyline view as almost empty... when it is visibly not. A
+real defect, found by accident, not caused by tonight's work"), reproduced
+here, not discovered here. **Contrast, not a contradiction:** this
+session's own standalone `node test/run.mjs regressionGate.test.ts` run
+(item 2's own verification, completed earlier, green — `Downtown skyline:
+857 calls, 203,338 triangles`, culling `60.31%`) passed cleanly on the
+identical committed code. The same test, same code, two different results
+— strongly consistent with decision #4's own framing (a real, not-yet-
+traced defect) plus host contention: two `node test/run.mjs` processes
+were confirmed running concurrently on this host at the time (see the
+process finding further below), and this specific gate's own comment
+already states it "does not synchronize GPU completion" and reads
+"whatever samples are available when readiness is signaled" — exactly the
+kind of measurement a starved, contended host would corrupt. Not
+re-diagnosed further this session (decision #4 already owns the root-cause
+work); recorded here because this run is the first time this project's own
+"~40+ unrelated gates" and this SPECIFIC flaky gate have been seen to
+diverge between an isolated run and a full-suite run of the identical
+commit, which is itself new information for whoever traces #4 next.
+
 **Full result, once the run completes, to follow in a later commit.**
 
 ---
