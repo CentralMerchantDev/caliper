@@ -169,3 +169,51 @@ authoritative `mutate.mjs` evidence, exactly as #10 predicted would
 happen at every subsequent step.
 
 **Commit:** `2790d16`.
+
+---
+
+## Step 4 — retire bridge-generator.js's own separate ROAD_WIDTH
+
+**Landed:** `b09a509`. The bridge deck's width now agrees with the roads
+it connects to (`STREET`, 18 m) instead of a separate, hardcoded `9`.
+
+**A real wrong turn, caught by blind review, worth recording plainly:**
+mid-implementation, found `bridgePieceFrom()` already calls
+`bridgeSpan(..., { roadClass: "AVENUE" })` for its own span-engineering
+check, and read that as grounds to make the deck AVENUE-width (28 m)
+instead of the originally-planned STREET (18 m), for "internal
+consistency." Drafted the step that way and sent it to a fresh, blind
+reviewer before implementing — which found the reasoning was wrong on two
+counts: (1) `bridgeSpan()`'s `roadClass` argument doesn't affect its
+engineering refusal logic at all (grade/length/800 m ceiling are all
+hardcoded), it only computes a width value the caller already discards;
+(2) this session's own, already-written plan document
+(`docs/specs/PIECE-CATALOGUE-ROADS.md` §9 Step 4) explicitly says STREET,
+twice, with the correct reasoning already on record — AVENUE would have
+reopened the exact seam Step 4 exists to close, just 10 m wide in the
+other direction instead of 9 m narrow. Reverted to STREET before writing
+any test or mutation. This is exactly what the blind-review-before-
+implementing requirement is for.
+
+**Test:** `test/bridgeGenerator.test.ts` gains a check that every real
+bridge piece a fresh board produces matches `ROAD_STANDARDS.STREET.row`.
+Not watched red in the strict sense — the fix was already in place while
+resolving the AVENUE/STREET question above — substituted with a direct
+mutation-and-revert (below), which proves the same thing.
+
+**Verified:** `npx tsc --noEmit` clean. `node test/run.mjs
+test/bridgeGenerator.test.ts` — 13/14 pass, only the already-tracked
+`docs/DECISIONS-FOR-MARK.md` #7 gate red (unrelated, unaffected).
+
+**Mutated, CAUGHT — by hand, not `_mutcheck.mjs`:** that tool's own
+baseline check refuses to run against this file because #7's own gate is
+already red there — and #7 may be **permanently** red by its own design
+(an accepted starting-state gap, not a defect). A fourth instance of the
+"two correct controls disable each other" shape (decision #10), but
+unlike the Step 2/3 instances, this one may never clear on its own.
+Verified by hand instead: applied the mutation, ran the file, confirmed
+exactly one new failure (the named test, for the stated reason) alongside
+the pre-existing #7 red and nothing else, reverted, confirmed back to
+13/14.
+
+**Commit:** `b09a509`.
