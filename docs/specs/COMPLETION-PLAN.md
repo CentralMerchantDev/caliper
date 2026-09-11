@@ -280,7 +280,13 @@ polish.
 ```
 [ ] R1  Merge b1-land into main. Human-authorised, never by a lane.
 [ ] R2  Merge codex-lane into main.
-[ ] R3  Full suite green, or every red named and justified in one place.
+[x] R3  Full suite green, or every red named and justified in one place --
+          docs/specs/R3-RED-RECONCILIATION.md, 2026-09-11: 46 failures
+          measured, all 46 classed (5 already-decided-red, 3 same
+          generated-claims-staleness family as #9, 37 B2.8's own
+          old-world tests, 1 genuinely unknown-and-untraced). Re-run
+          before every subsequent claim of "suite green" -- this ties to
+          one measured run, not a standing guarantee.
 [ ] R3.5 THE BOARD IS THE DEFAULT RENDER. Not behind ?board=1, not behind
           SHOOT_BOARD=1 -- what a visitor gets with no query string.
           Blocked by two standing perf gates, which B3 measured un-gated and
