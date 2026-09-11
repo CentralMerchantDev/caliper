@@ -66,7 +66,16 @@ test("B3 gate: buildBoardScene produces exactly one mesh per real piece in the c
   const heightAt = makeHeightAt(new LandField(16));
   const payload = JSON.parse(readFileSync(join(ROOT, "public", "board.generated.json"), "utf8"));
   const { pieces } = loadBoard(payload, heightAt);
-  assert.ok(pieces.length > 30000, `expected tens of thousands of real pieces, got ${pieces.length} -- reading the wrong file, or the committed board regenerated smaller than expected`);
+  // 30,000 was calibrated against the pre-Decision-5 board (fixed 9 m
+  // roads, small 57-80 atom blocks). docs/specs/PIECE-CATALOGUE-ROADS.md
+  // §9's own retirement widened every road to 18 m and roughly doubled
+  // blockAtoms per tier to compensate -- fewer, larger blocks, measured
+  // directly at 21,007 real pieces after the real regeneration
+  // (node scripts/gen-board.mjs, 2026-09-11). 15,000 keeps this a real
+  // sanity check ("read a genuine, non-trivial board", not "read the
+  // wrong file or an empty one") with real margin below the measured
+  // count, not a number nudged just past today's figure.
+  assert.ok(pieces.length > 15000, `expected tens of thousands of real pieces, got ${pieces.length} -- reading the wrong file, or the committed board regenerated smaller than expected`);
   const group = buildBoardScene(THREE, pieces);
   assert.equal(group.children.length, pieces.length, `expected one mesh per piece (${pieces.length}), got ${group.children.length}`);
 });

@@ -284,7 +284,12 @@ test("B2.7 gate: origin stability -- the crossing graph's own edges do not depen
 test("GATE: the COMMITTED public/board.generated.json -- the file a visitor actually loads -- contains real crossing pieces, not just a generator that can produce them", () => {
   const payload = JSON.parse(readFileSync(join(ROOT, "public", "board.generated.json"), "utf8"));
   const pieces = payload.pieces;
-  assert.ok(Array.isArray(pieces) && pieces.length > 30000, `expected tens of thousands of real pieces in the committed board, got ${Array.isArray(pieces) ? pieces.length : typeof pieces} -- reading the wrong file, or the committed board is not what it claims to be`);
+  // 30,000 was calibrated against the pre-Decision-5 board -- see
+  // test/boardRender.test.ts's own identical threshold and comment for the
+  // full reasoning. Measured 21,007 real pieces after the real
+  // regeneration (node scripts/gen-board.mjs, 2026-09-11); 15,000 keeps
+  // real margin below that.
+  assert.ok(Array.isArray(pieces) && pieces.length > 15000, `expected tens of thousands of real pieces in the committed board, got ${Array.isArray(pieces) ? pieces.length : typeof pieces} -- reading the wrong file, or the committed board is not what it claims to be`);
 
   const bridges = pieces.filter((p: any) => p.pieceType === "bridge");
   const docks = pieces.filter((p: any) => p.pieceType === "dock");
@@ -296,12 +301,13 @@ test("GATE: the COMMITTED public/board.generated.json -- the file a visitor actu
   // collided with an already-placed piece, board.place() refused it, and the
   // documented fallback rule (tested above, "a refused bridge candidate
   // redirects to a boat route") correctly redirected it to docks instead --
-  // measured directly, this run: 0 bridges, 16 docks. A future regeneration
-  // legitimately could produce 0 or 1+ bridges depending on where roads and
-  // buildings land; asserting an exact bridge count here would be asserting
-  // a coincidence, not a control. What must always be true is that SOME real
-  // crossing pieces exist -- that is the actual defect this gate exists to
-  // catch.
+  // measured directly, this run (2026-09-11, after docs/specs/
+  // PIECE-CATALOGUE-ROADS.md §9's own retirement of ROAD_WIDTH): 0 bridges,
+  // 19 docks. A future regeneration legitimately could produce 0 or 1+
+  // bridges depending on where roads and buildings land; asserting an
+  // exact bridge count here would be asserting a coincidence, not a
+  // control. What must always be true is that SOME real crossing pieces
+  // exist -- that is the actual defect this gate exists to catch.
   const crossingCount = bridges.length + docks.length;
   assert.ok(crossingCount > 0, `expected real crossing pieces (bridge and/or dock) in the committed board -- got 0 bridges and 0 docks, which is the exact defect Codex found: the generator works, but its output never reached the delivered asset`);
   assert.ok(docks.length >= 1, `expected at least 1 dock piece in the committed board, got ${docks.length}`);

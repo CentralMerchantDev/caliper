@@ -30,7 +30,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, cpSync, readFileSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { generateWorld as generateWorldReal } from "../public/city-plan.js";
@@ -51,9 +50,22 @@ const REPO_PUBLIC = findPublic();
 
 /** A second, disposable copy of public/, with world-scale.js's WORLD_SCALE
  *  patched to a different value -- the only way to actually regenerate the
- *  world at a different WORLD.SIZE without editing the real source. */
+ *  world at a different WORLD.SIZE without editing the real source.
+ *
+ *  Created UNDER THE REPO ROOT, not the OS tmpdir -- found while wiring
+ *  decision-5 step 2 (board-generator.js gained a real import of
+ *  roadkit.js, which itself imports the "three" npm package): Node's own
+ *  module resolution for a bare specifier ("three") walks UP from the
+ *  importing file looking for node_modules, and a copy placed in the OS
+ *  tmpdir has no ancestor node_modules at all, so any module this copy
+ *  transitively imports that needs an npm package fails with
+ *  ERR_MODULE_NOT_FOUND -- a real, previously-undiscovered failure mode of
+ *  this test's own copy-and-patch technique, not specific to roadkit.js.
+ *  A copy placed directly under the repo root resolves "three" the same
+ *  way the real public/ directory always has (repoRoot/node_modules), with
+ *  no other change to the technique. */
 function patchedWorldAt(scale: number) {
-  const dir = mkdtempSync(join(tmpdir(), "origin-stability-"));
+  const dir = mkdtempSync(join(REPO_PUBLIC, "..", "origin-stability-"));
   cpSync(REPO_PUBLIC, dir, { recursive: true });
   const wsPath = join(dir, "world-scale.js");
   const patched = readFileSync(wsPath, "utf8")
