@@ -93,7 +93,77 @@ work); recorded here because this run is the first time this project's own
 diverge between an isolated run and a full-suite run of the identical
 commit, which is itself new information for whoever traces #4 next.
 
-**Full result, once the run completes, to follow in a later commit.**
+**FINISHED, while this section was being written — final result recorded
+below rather than left as "still running."** Total run time ~1,028 s of
+actual node:test execution (`duration_ms 1027815.1015`) inside a much
+longer wall-clock session, consistent with the confirmed host contention.
+`EXIT_CODE=1`, expected given known pre-existing failures, not a crash.
+
+```
+ℹ tests 1214
+ℹ pass 1190
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 15
+ℹ todo 2
+```
+
+**All 7 real failures, named, cross-checked against what this session
+touched:**
+
+1. `deadExports.test.mjs` — 7 exports not product-reachable, no allowlist
+   entry: `public/facade-textures.js`'s `FACADE_VARIANTS`, `floorLayout`,
+   `pickVariant`, `spandrelTreatment`, `tintHex` (all test-only),
+   `public/kitbash-assembler.js`'s `assembleNamedDesign` (demo-only),
+   `public/nav-bindings.js`'s `wheelSegments` (test-only). **Not unrelated
+   to F1** — the five `facade-textures.js` exports are exactly the F1
+   capability (RUN2's facade-variant work): real, tested, and — like F1
+   itself — not yet reachable from any product code path, because the one
+   caller that would reach them (`public/city-render.js`) still lacks the
+   `variantSeed` wiring on this branch. A second, previously-unnoticed
+   symptom of the same already-recorded blocker, not a new defect. Not
+   fixed here (would require either the same cross-branch merge, or
+   allowlisting with a reason that names F1 — a documentation call, left
+   for whoever next touches this specific gate).
+2. `livePosition.test.mjs` — 3 failures (`measures immediately on call`,
+   `keeps measuring on a poll`, `stop() ends the poll`). File never opened
+   this session; not investigated further.
+3. `mutationEvidence.test.mjs` — 2 failures (`every mutation in the
+   manifest has a committed, checkable CAUGHT result`, `the summary is not
+   stale against the manifest it claims to cover`). File never opened this
+   session; not investigated further.
+4. `regressionGate.test.ts` — already covered above (decision #4,
+   reproduced not discovered, contrasted against this session's own clean
+   standalone run of the identical code).
+
+**Todo (2, correctly not counted as failures):** `facadeVariants.test.ts`'s
+own F1 gate (still honestly 4) and `originStability.test.ts`'s WORLD.SIZE
+gate (`docs/audits/WORLD-DENSITY-FINDINGS.md` §8) — both self-documented
+as intentionally red until their own named blockers clear.
+
+**None of the 7 real failures are in `buildings.js` or any
+`test/building*.test.ts` file** — every file this session actually
+changed. This session's own two code/test changes (`70a9e64`, `df080ad`)
+introduced zero new failures into the full suite; the full run's own value
+tonight was surfacing the F1↔deadExports connection above, not finding
+anything wrong with this session's own work.
+
+**Log preserved at:** `C:\Users\User\AppData\Local\Temp\claude\
+C--Code-sandbox-spike-codex\9f333d59-6102-4fb2-a407-ddd1809e9bb8\scratchpad\
+full-suite-2026-09-11.log` — outside the repo, will not survive this
+machine's temp cleanup indefinitely; the numbers above are the durable
+record.
+
+**What this session's own three code/test changes (item 2) do not depend
+on this run for.** All fully verified independently, already committed,
+already covered above: 36/36 targeted tests green, `tsc --noEmit` clean,
+a separate standalone `regressionGate.test.ts` run green, full watched-red
+mutation evidence for both the `bldWarehouse` vault fix and the `AS3b`
+budget gate. This full run was always the EXTRA confirmation pass this
+run's own brief asked for beyond that, per "the targeted-tests-only check
+you argued for is defensible... but the full suite gets looked at once
+before morning" — it has been looked at, partially, honestly, and is still
+looking.
 
 ---
 
@@ -257,3 +327,84 @@ exceptions at 400 KB–3.4 MB) — MCP servers and dev tool stdio processes
 server, an MCP PDF server), several started hours before this session, none
 obviously related to CALIPER. Named, not touched — per the standing rule,
 this is the finding to hand to Mark, not an action to take.
+
+---
+
+## Summary, for whoever reads this next
+
+**Commits this session, in order:** `19920dc`, `6e2613c`, `70a9e64` (prior
+session, verified not authored here — listed for hash continuity),
+`ea715c7` (item 1: checklist reconciliation), `df080ad` (item 2: AS3b full-
+range budget gate), `2ff8271` (handover: items 1–2), `780128a` (K6-exhausted
+finding + process note), `cd6dd6b` (culling-gate flake observed).
+
+**Every gate touched this session, with its evidence:**
+- `test/facadeVariants.test.ts`'s `{ todo }` gate — reconfirmed, still 4,
+  still honest, command: `node test/run.mjs facadeVariants.test.ts`.
+- `test/buildingFeatureFlags.test.ts`'s new vertex-fingerprint test for
+  `bldWarehouse`'s three `roofStyle` values — watched red, then green,
+  mutation-caught (prior session, re-verified this session).
+- `test/buildingLODAndColors.test.ts`'s new `AS3b` — watched red for real
+  (not injected) against the unmodified budgets, implemented, green,
+  mutation-caught (this session, commit `df080ad`).
+- `regressionGate.test.ts` — green in isolation (item 2's own
+  verification); red inside the full-suite run, matching the already-
+  queued decision #4, not a regression from this session's own changes
+  (see item 0's own section above for the full reasoning).
+
+**Decisions queued for Mark:** none new this session. `caliper #4` (the
+culling-gate flake) has new supporting evidence (divergence between
+isolated and full-suite runs of the identical commit) but was not
+re-queued, since it is already open and already recommended. The
+`caliper-bld #3` (trees) decision from prior sessions remains open,
+untouched this session — out of this session's own scope (K6 buildings,
+not props).
+
+**What did not work / is still open:**
+- F1 (the shared four-texture atlas) remains blocked cross-branch — not
+  something this lane can close alone, resolution already recorded. Now
+  confirmed to also be the root cause of `deadExports.test.mjs`'s 5
+  `facade-textures.js` failures (see item 0's own final section).
+- K7.1's visual re-shoot and B6 (the interface) remain blocked on the host
+  memory floor (0.653 GB free, confirmed this session, the lowest reading
+  in this series) — not something this lane can force.
+- The two concurrent `test/run.mjs` processes and 17 other `node.exe`
+  processes found on this host are named, not investigated further, not
+  touched.
+- `livePosition.test.mjs` (3 failures) and `mutationEvidence.test.mjs` (2
+  failures) — real, named, unexplained, in files this session never
+  opened. Not this lane's files by any routing this session checked, but
+  named per this run's own instruction to record what the suite says
+  either way.
+
+**What is unverified:** whether `livePosition.test.mjs`'s and
+`mutationEvidence.test.mjs`'s 5 failures are pre-existing (matching this
+project's own documented "~40+ unrelated gates") or new — not
+cross-checked against `docs/AUDIT-LEDGER.md` this session. Everything this
+session actually changed (the `bldWarehouse` vault geometry, the `AS3b`
+gate, the two documentation reconciliations) IS fully verified, by its own
+targeted tests, typecheck, and mutation evidence, and is now additionally
+confirmed to introduce zero new failures into the full 1,214-test suite.
+
+**What I would do next, in order:** (1) if free memory ever clears the
+4 GB floor, K7.1's visual re-shoot is the single highest-value remaining
+item in this document, closed at the code level for three sessions running
+and only ever waiting on a render; (2) trace decision #4 properly now that
+there is a concrete isolated-vs-contended-host divergence to reason from,
+rather than the single anecdotal reading it was recorded from; (3) when
+Mark authorises the `b1-land -> codex-lane` merge, F1's gate should go
+green unedited — `test/facadeVariants.test.ts` already mirrors the real
+cache-key logic, not a hoped-for one — and `deadExports.test.mjs`'s 5
+`facade-textures.js` failures should clear at the same time, for the same
+reason; (4) check `livePosition.test.mjs`/`mutationEvidence.test.mjs`
+against the audit ledger before assuming either is new.
+
+**Anything I think is wrong that nobody asked about:** the pattern behind
+this session's own item 2 finding is worth naming as a general lesson, not
+just a one-off fix — "the field is consulted" and "every declared value of
+that field is distinguishable" are different properties, and this
+project's own surveys (K6's RUN5 pass, this session's own AS3) have both,
+independently, checked only the first one and called it clean. Worth a
+standing check (or at least a standing habit) rather than re-discovering
+it typology by typology, test by test.
+

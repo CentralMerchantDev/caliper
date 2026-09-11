@@ -1,0 +1,34 @@
+Overnight handover: final update for this session -- item 0's honest
+still-running status, and the closing summary (hashes, gates, decisions,
+what did not work, what is unverified, what to do next, one thing wrong
+nobody asked about)
+
+What this commit is. Documentation only. Closes out
+docs/audits/OVERNIGHT-BLD-2026-09-11.md for this session: item 0's final
+status (the full node test/run.mjs run did not finish in this session's
+window -- 1,236 lines logged, progressing slowly under confirmed host
+contention, not killed, log file path recorded for whoever has terminal
+access next) and a closing summary section matching this project's own
+established handover shape (commit hashes in order, every gate touched
+with its evidence, decisions queued for Mark, what did not work, what is
+unverified, what to do next in order, and one general lesson worth naming
+even though nobody asked for it directly).
+
+The one thing named that nobody asked about. This session's own item 2
+(AS3's single-seed sampling gap) and the prior session's K6 checklist
+survey (RUN5) both, independently, made the same category error: checking
+whether a field is CONSULTED and calling that clean, without also checking
+whether every declared VALUE of that field produces distinguishable
+output. Recorded as a standing pattern worth a habit or a check, not
+re-discovered typology by typology or test by test next time.
+
+Session summary. Eight commits this session: 19920dc, 6e2613c (prior
+session's own tail, listed for hash continuity), ea715c7 (item 1),
+df080ad (item 2), 2ff8271, 780128a, cd6dd6b (handover updates and
+findings), plus this one. Two real code fixes with full build-loop
+evidence (bldWarehouse's roofStyle vault, and AS3b's full-range budget
+gate, which found and fixed the same defect shape in six more typologies).
+Two documentation reconciliations against real code. One finding that K6's
+checklist is exhausted for this lane tonight. One process finding, named
+and not acted on. One live, ongoing verification (item 0's full suite)
+left running and fully documented rather than force-concluded.
