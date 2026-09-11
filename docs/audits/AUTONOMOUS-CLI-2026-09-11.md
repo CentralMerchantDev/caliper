@@ -84,3 +84,26 @@ results) RESOLVED; question 2 (a lighter-weight evidence path) remains
 open, unaffected by this fix.
 
 ---
+
+## Item 3 — C1's two never-re-run mutations
+
+`b2-settlement-table-wooded-exclusion-real` and
+`b2-mainland-boundary-inland-direction-real` had never been recorded
+through any tool — confirmed absent from `test/.mutate-results.json` —
+only "verified by hand" per their own prior notes.
+
+**Re-run:** `node scripts/_mutcheck.mjs test/boardGenerator.test.ts
+public/board-generator.js test/mutations.json` — baseline GREEN, both
+CAUGHT, restored byte-identical.
+
+**Does decision #10's fix change their scoring? No — checked directly,
+not assumed.** Neither mutation's own `expect` string contains a
+parenthetical-with-a-digit (the shape the bug required), and
+`_mutcheck.mjs`'s own extraction was already correct before tonight's
+fix — the bug lived only in `mutate.mjs` and `gen-test-count.mjs`.
+
+**Landed:** `da0e139`. Both entries' `note` fields updated to record the
+real re-run and this scoring answer, replacing the stale "verified by
+hand" framing.
+
+---
