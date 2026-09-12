@@ -22,8 +22,15 @@ PROCESS-ALIGNMENT.md
 # only works if git can still descend into the directory to find it, which
 # `_TO-DELETE/` (the directory itself, ignored as one atomic unit) does not
 # allow -- `_TO-DELETE/*` (its immediate contents) does.
-_TO-DELETE/*
-!_TO-DELETE/LEDGER.jsonl
+# A middle slash anchors a gitignore pattern to this file's own directory
+# (the repo root) -- `_TO-DELETE/*` alone would stop matching
+# `test/_TO-DELETE/...` (test/mutate.test.ts's own scratch backups use that
+# exact nested path), which the prior, unanchored `_TO-DELETE/` pattern DID
+# still ignore. `**/` restores "any depth" for the contents; the negation
+# stays anchored with a leading `/` so ONLY the root quarantine folder's own
+# ledger is ever tracked, never a same-named ledger nested elsewhere.
+**/_TO-DELETE/*
+!/_TO-DELETE/LEDGER.jsonl
 .shots/
 restore_landmasses.py
 test-results/
