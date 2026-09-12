@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "dev:lan": "node scripts/dev-lan.mjs",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
     "cf-typegen": "wrangler types",
