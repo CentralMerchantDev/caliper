@@ -120,37 +120,120 @@ Subagent budget used: 2 of 3 (plan review for 2a, plan review for 2b — the
 2b review found a real, then-fixed gap: my own 2a test would have broken
 silently under 2b's grouping, and was not mentioned in my original plan).
 
-### 2c — next
+### 2c — done, committed `fc56d36` (plus a ledger fix, `e0e4cf6`)
 
-Instance the props: `scatterTrees`/`scatterStreetLamps`/
-`scatterStreetFurniture`/`scatterBusShelters` (lines ~156, ~230+ in the
-current file) have the same per-item-mesh defect. Same fix shape, same
-BUILD-LOOP discipline. Last subagent budget slot (3 of 3) reserved for
-this step's blind review.
+Instanced the four prop scatter functions (`scatterTrees`,
+`scatterStreetLamps`, `scatterStreetFurniture`, `scatterBusShelters`) via
+one shared `buildInstancedPropGroup()` helper. `"tree"` is confirmed a
+VARIED family (12 discrete species×age variants, no further randomness —
+read `tree()`'s own body directly); the other three are non-VARIED plain
+aliases. No picking risk for props (confirmed: never in `board.js`'s own
+spatial index, never read by the pick handler).
 
-### Item 2's own gate — not yet run
+**The blind review (3rd and last subagent slot) found two real bugs before
+any of this was implemented, neither named in the original plan:**
+1. All four functions' own cap check (`maxTrees` etc.) and
+   `scatterStreetFurniture`'s bench/bin alternation read
+   `group.children.length` — which stays zero for the whole loop once
+   items are instanced at the end rather than added inside the loop.
+   Implemented as originally planned, every function would have become
+   UNBOUNDED and street furniture would place nothing but benches, ever.
+   Fixed: each function reads its own local `items.length` instead.
+2. Two `console.log` diagnostics (`world-render-3d.js:1888`,
+   `city.html:230`) read `.children.length` on these exact groups to
+   report placed-item counts — now the small InstancedMesh-group count.
+   Fixed to read a new `group.userData.itemCount`.
 
-`test/regressionGate.test.ts` with the board drawn un-gated (`&board=1`),
-compared against today's already-recorded baseline (4,584/6,129/870 draw
-calls, 51.25% culling, both gates failing — `COMPLETION-PLAN.md`'s R3.5).
-Will run after 2c, per the brief's own framing (the whole board, all prop
-types, is what a real visitor's render actually draws).
+**Watched red three times, for three distinct real bug shapes:**
+- All 20 new/rewritten tests, against pre-2c code — exactly those 20 red.
+- The review's own cap/alternation bug, reproduced — caught by exactly
+  the tests naming it.
+- The shared helper's per-instance position, mutated (2b's own proven
+  mutation shape) — caught by **nothing** on the first attempt, because
+  every existing position test used a single-item fixture (the group's
+  first item IS the only item, so the mutation is invisible). A new test
+  (two lamps sharing one InstancedMesh group — `lampPost` is non-VARIED,
+  so any two lamps share a group) was added, watched red against this
+  exact mutation, confirmed it is the only test that catches it, reverted,
+  confirmed green. This is the mutation-proof step doing exactly its job —
+  catching a hollow suite before it shipped, not after.
+
+**Verification**: `npx tsc --noEmit` clean. `node test/run.mjs
+test/boardRender.test.ts test/boardPicking.test.ts` — 39/39 green. Full
+suite completed this time (not killed): 1230 tests, 1167 pass, **47** fail
+— one more than `R3-RED-RECONCILIATION.md`'s documented 46. Checked
+directly, not waved off: the extra failure is `test/cullingRatio.test.ts`'s
+own test, which that document never names (grepped, zero hits) despite it
+being independently confirmed already-failing THIS SESSION, before any
+board-render.js work, by the R3.5 remeasurement earlier tonight (51.25%
+culling). A real, pre-existing gap in that document's own count, not a
+regression from this work. Every board/prop/picking test in the full run
+passed; the other 46 failures all match the R3 catalogue or Item 1's own
+B2.8 findings.
+
+Gate recorded: `process_record_gate`, item `B4-2c`. (One process mistake,
+corrected and named rather than hidden: the gate was recorded before the
+commit existed, leaving `"commit":"pending"` in the ledger where every
+other entry carries a real hash — fixed in a follow-up commit, `e0e4cf6`.)
+
+Subagent budget used: 3 of 3 (2a, 2b, 2c plan reviews). All three found
+real, load-bearing issues before implementation.
+
+### Item 2's own gate — measured, `6a88d7e`
+
+`test/regressionGate.test.ts`'s exact method replicated with `&board=1`
+added, run three times on a confirmed-quiet box (16% CPU, zero
+render/test/mutation contention), against today's baseline
+(4,584/6,129/870 draw calls, 51.25% culling, both failing):
+
+| | Street level | Downtown skyline | The harbour |
+|---|---|---|---|
+| draw calls | **283** | **502** | **289** |
+| triangles | 377,088 | 478,299 | 605,241 |
+
+Zero spread across three runs, `window.__boardPieceCount` confirmed 21,007
+every time.
+
+**DRAW-CALL GATE NOW PASSES on all three views, with a large margin**
+(283/502/289 against <=900). Real and dramatic — matches the measured
+21,007→16 InstancedMesh-group collapse.
+
+**CULLING RATIO GATE GOT WORSE, NOT BETTER: 78.84% (was 51.25%), against
+the same <40% ceiling.** Reported plainly, not folded into the draw-call
+win. Working hypothesis, named as a hypothesis and not confirmed by
+tracing Three.js's own source this session: `InstancedMesh` frustum-culls
+as ONE object against its own overall bounding volume — a `pieceType`
+group scattered across the whole board is rarely culled at all once any
+part of it is in view, so every instance renders regardless of whether
+it's actually in frame. Consistent with the data: street level's own
+triangle count nearly TRIPLED (141,764 → 377,088) even as its draw calls
+collapsed. A likely fix (spatial chunking in addition to today's
+pieceType/foot/levels grouping — the same idea B3's own prior art already
+used for buildings) is named but NOT attempted — real, materially bigger,
+unplanned work, Mark's to prioritise, not this run's to start unasked.
+
+**R3.5 does NOT tick.** One real gate passes with a large margin; the
+other regressed. Full write-up: `docs/specs/COMPLETION-PLAN.md`'s own
+R3.5 section, second re-measurement entry.
 
 ## What is unverified, stated plainly
 
-- The full node suite has not completed in this run (see above) — two
-  honest partial runs, not one full clean run.
-- Item 2's own performance gate (draw calls, culling ratio) has not been
-  measured yet — 2a/2b alone should help a great deal given the 21,007→16
-  group collapse, but the brief's own instruction is to measure the WHOLE
-  of item 2 (2a+2b+2c) before reporting, not partial credit from 2a/2b
-  alone. No number is claimed here.
-- `docs/DECISIONS-FOR-MARK.md`'s own #2 characterization of `isolate.test.ts`
-  is now stale (item 1's finding) — not yet corrected in that document
-  itself, only in the new B2.8 recheck doc. Worth doing, not done.
+- The culling-ratio regression's root cause (InstancedMesh's own
+  whole-object frustum culling) is a working hypothesis consistent with
+  the measured data, not confirmed by reading Three.js's own culling
+  implementation.
+- Whether spatial-chunked instancing (the named likely fix) would
+  actually restore the culling ratio without reintroducing a large
+  draw-call count was not tested — untried, not merely unverified.
+- `docs/DECISIONS-FOR-MARK.md`'s own #2 characterization of
+  `isolate.test.ts` is now stale (item 1's finding) — not yet corrected in
+  that document itself, only in the new B2.8 recheck doc.
+- `R3-RED-RECONCILIATION.md`'s own 46-failure count has a real, now-named
+  gap (`cullingRatio.test.ts` never appears in it) — not corrected in that
+  document itself this run, only noted here and in the B4-2c gate record.
 
-## Next step, precisely
+## Stopping point reached
 
-2c (instance the props), same BUILD-LOOP discipline, then item 2's
-regressionGate measurement, then §11's stopping point (commit or honestly
-report 2c, then stop — do not start §12's fallback items).
+Per §11: item 2 (2a, 2b, and 2c) is committed. This is the declared
+stopping point. No §12 fallback item (C2's allowlist, C1's remaining
+mutations, C3) was started.
