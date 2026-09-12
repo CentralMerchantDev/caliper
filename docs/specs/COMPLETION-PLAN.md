@@ -375,6 +375,87 @@ polish.
           Currently RED on both counts -- ratio 51.25%, street/skyline
           draw calls over budget. Neither threshold was loosened to reach
           this result.
+
+          RE-MEASURED AGAIN, 2026-09-11 (b1-land, CLI, autonomous run 2),
+          AFTER item 2's board-render instancing (2a: shared materials,
+          2b: one InstancedMesh per (pieceType, foot.w, foot.d,
+          levels-if-building) group -- 21,007 pieces collapse into 16
+          groups, 2c: the same instancing for trees/lamps/street-furniture/
+          bus-shelters). Box confirmed quiet (16% CPU load, no stray
+          render/test/mutation processes) before measuring; same
+          replication method as the entry above (`&board=1`, same server,
+          same Chromium/SwiftShader args, same three views, same
+          culling-ratio formula), run three times:
+
+          | | Street level | Downtown skyline | The harbour |
+          |---|---|---|---|
+          | draw calls | 283 | 502 | 289 |
+          | triangles | 377,088 | 478,299 | 605,241 |
+
+          Identical across all three runs -- zero spread, same as before.
+          `window.__boardPieceCount` confirmed 21,007 on every view, every
+          run.
+
+          **DRAW-CALL GATE NOW PASSES, WITH A LARGE MARGIN, ON ALL THREE
+          VIEWS** -- 283/502/289 against the <=900 ceiling (was
+          4,584/6,129/870). This is real and dramatic, and matches the
+          16-group collapse measured directly against the committed board
+          before this work started.
+
+          **CULLING RATIO GATE GOT WORSE, NOT BETTER: 78.84% against the
+          same <40% ceiling (was 51.25%).** This is not a partial win
+          quietly reported as a win -- it is a real regression on the
+          OTHER half of this item's own gate, and the brief's own
+          instruction ("investigate rather than celebrate... do not tune
+          toward 900") applies with the sign flipped here: a threshold
+          that moved further from passing is exactly as reportable as one
+          that moved suspiciously close.
+
+          A WORKING HYPOTHESIS FOR WHY, NAMED AS A HYPOTHESIS, NOT
+          CONFIRMED BY tracing THREE.js's own frustum-culling source this
+          session: before instancing, each of the 21,007 pieces was its
+          own `Mesh` with its own bounding volume, so Three.js's per-object
+          frustum culling discarded every piece outside a given camera's
+          view individually -- a narrow street-level shot would rasterise
+          only the nearby pieces. After 2b/2c, a `pieceType`-group's pieces
+          (e.g. every "building" of one footprint/levels combo, scattered
+          across the WHOLE board) share ONE `InstancedMesh`, and
+          `InstancedMesh` frustum-culls as a SINGLE object against its own
+          overall bounding volume -- if that volume (spanning the whole
+          board) intersects the camera frustum at all, EVERY instance in
+          it is rasterised, including ones far outside the actual view.
+          The measured data is consistent with this: street level's own
+          triangle count nearly TRIPLED (141,764 -> 377,088) even though
+          its draw-call count collapsed, exactly the shape "fewer, bigger
+          objects, each one drawn in full regardless of what's actually in
+          frame" would produce. Not verified beyond this consistency check
+          -- confirming it would mean reading Three.js's own
+          `InstancedMesh.raycast()`/culling implementation directly, out
+          of this item's own scope tonight.
+
+          WHAT WOULD LIKELY FIX IT, NAMED BUT NOT ATTEMPTED THIS RUN: per
+          the same logic B3's own prior art already used for buildings
+          (`world-render-3d.js`'s spatial chunking, ~1.6 km chunks with
+          tight bounding spheres, mentioned in `test/boardRender.test.ts`'s
+          own header comments), grouping instances by SPATIAL REGION in
+          addition to (pieceType, foot, levels) -- many small
+          `InstancedMesh` objects per region instead of one huge one per
+          type -- would let ordinary frustum culling discard whole
+          off-screen regions again, at the cost of more draw calls than
+          today's 16-group scheme (though very likely still far under 900,
+          given how much margin exists there now). This is real,
+          additional, unplanned work -- a materially bigger undertaking
+          than this item's own scope, not a small follow-up -- and is
+          Mark's to prioritise, not this run's to start unasked.
+
+          Gate: RED is either ratio >= 40% or any view's draw calls > 900.
+          **STILL RED overall** -- draw calls now comfortably PASS on all
+          three views, but the culling ratio is RED and WORSE than before
+          this item's own work (78.84% vs 51.25%). Neither threshold was
+          loosened or tuned toward in either direction. R3.5 does NOT tick
+          -- one real gate improved a great deal, the other regressed, and
+          ticking on a mixed, partially-worse result would misstate what
+          was actually measured.
 [ ] R4  Deploy from main. Check the branch first -- 2026-09-09 shipped b1-land
           by accident and put 71.8% of plots in the water on the live site.
           Check R3.5 too: a deploy with the board still gated publishes the
