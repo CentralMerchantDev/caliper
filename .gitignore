@@ -13,8 +13,17 @@ PROCESS-ALIGNMENT.md
 # --- working artefacts, never part of the project ---------------------------
 # _TO-DELETE is a quarantine folder (nothing here is ever `rm`'d, it is moved
 # here for review). A single `git add -A` would otherwise publish a directory
-# literally named "_TO-DELETE" on a repo used for job applications.
-_TO-DELETE/
+# literally named "_TO-DELETE" on a repo used for job applications -- so its
+# CONTENTS stay ignored via the wildcard below, never the directory itself.
+#
+# rule://quarantine's own LEDGER.jsonl is the one exception: "the record IS
+# the recovery" for a Tier 1 purge, where the bytes are already gone -- a
+# ledger git never tracks is exactly as deletable as what it records. `!`
+# only works if git can still descend into the directory to find it, which
+# `_TO-DELETE/` (the directory itself, ignored as one atomic unit) does not
+# allow -- `_TO-DELETE/*` (its immediate contents) does.
+_TO-DELETE/*
+!_TO-DELETE/LEDGER.jsonl
 .shots/
 restore_landmasses.py
 test-results/
