@@ -30,12 +30,14 @@ import { loadBoard, pieceAtPoint } from "../public/board-load.js";
 import { atomOrigin } from "../public/grid.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
 
-function makePickPiece(id: string, pieceType: string, i: number, j: number, w: number, d: number, levels = 1): any {
-  return {
+function makePickPiece(id: string, pieceType: string, i: number, j: number, w: number, d: number, levels = 1, boundaryId?: string): any {
+  const piece: any = {
     id, pieceType, cell: { i, j, k: 0 }, rotation: 0,
     foot: { w, d }, clear: { w: 0, d: 0 }, levels,
     standsOn: ["buildable"], surface: pieceType === "road" ? "road" : "roof",
   };
+  if (boundaryId) piece.boundaryId = boundaryId;
+  return piece;
 }
 
 /** A real board.js instance, real buildBoardScene() render output, and a
@@ -44,17 +46,25 @@ function makePickPiece(id: string, pieceType: string, i: number, j: number, w: n
 function buildPickFixture() {
   const heightAt = makeHeightAt(new LandField(16));
   const pieces = [
-    // Two buildings in the SAME group (same foot + levels) -- the case
-    // that actually shares one InstancedMesh across more than one instance.
-    makePickPiece("bldg-a", "building", 0, 0, 20, 20, 3),
-    makePickPiece("bldg-b", "building", 0, 30, 20, 20, 3),
+    // Two buildings in the SAME group (same foot + levels, same boundary)
+    // -- the case that shares one InstancedMesh across more than one
+    // instance.
+    makePickPiece("bldg-a", "building", 0, 0, 20, 20, 3, "mainland"),
+    makePickPiece("bldg-b", "building", 0, 30, 20, 20, 3, "mainland"),
     // A third building in a DIFFERENT group (different levels).
-    makePickPiece("bldg-c", "building", 0, 60, 20, 20, 7),
+    makePickPiece("bldg-c", "building", 0, 60, 20, 20, 7, "mainland"),
+    // Item 2 (spatial chunking): two buildings that would have shared ONE
+    // group under 2b's own (pieceType, foot, levels) key alone -- same
+    // foot/levels as bldg-a/b -- but sit in DIFFERENT real boundaries, so
+    // chunking must split them into two groups. Picking must still
+    // resolve each to its own correct piece, not the other one's.
+    makePickPiece("bldg-d-mainland", "building", 300, 0, 20, 20, 3, "mainland"),
+    makePickPiece("bldg-e-downtown", "building", 300, 30, 20, 20, 3, "downtown"),
     // Two roads in the SAME group (same foot dims).
-    makePickPiece("road-a", "road", 50, 0, 40, 9),
-    makePickPiece("road-b", "road", 100, 0, 40, 9),
+    makePickPiece("road-a", "road", 50, 0, 40, 9, 1, "mainland"),
+    makePickPiece("road-b", "road", 100, 0, 40, 9, 1, "mainland"),
     // A dock, alone in its own group.
-    makePickPiece("dock-a", "dock", 150, 0, 9, 9),
+    makePickPiece("dock-a", "dock", 150, 0, 9, 9, 1, "mainland"),
   ];
   const board = loadBoard({ pieces }, heightAt);
   assert.equal(board.pieces.length, pieces.length, "test fixture setup: a piece failed to place (space conflict in the fixture itself, not the code under test)");

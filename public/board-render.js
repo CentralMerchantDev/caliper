@@ -80,38 +80,81 @@ export function meshForPiece(THREE, piece, materialCache = null) {
   return mesh;
 }
 
-/** Two pieces produce IDENTICAL box geometry iff they share this key --
- *  heightMFor() only reads `levels` for `"building"` (every other
- *  pieceType's height is a fixed constant regardless of levels), so
- *  `levels` only needs to distinguish groups for buildings; including it
- *  for every pieceType would just fragment roads/bridges/docks into
- *  meaningless extra groups without ever being WRONG. */
+/** Item 2 (spatial chunking) -- every real piece carries its own
+ *  `boundaryId` (ground-checked directly against the committed
+ *  `board.generated.json`: 12 real settled boundaries, matching
+ *  `data.boundaries`). The 19 dock pieces that connect TWO boundaries
+ *  carry no top-level `boundaryId` (their own `edgeKey` names both) but
+ *  do carry `anchor.boundaryId`, naming one real endpoint -- ground-
+ *  checked: every one of the 19 has it, none are missing both. The
+ *  fallback exists for robustness against a future piece shape this file
+ *  has not been taught about yet (the same philosophy as
+ *  `FALLBACK_COLOR`), not because any piece on the committed board needs
+ *  it beyond those 19 docks. */
+function chunkIdFor(piece) {
+  return piece.boundaryId ?? piece.anchor?.boundaryId ?? "unassigned";
+}
+
+/** Two pieces produce IDENTICAL box geometry iff they share the first
+ *  four parts of this key -- heightMFor() only reads `levels` for
+ *  `"building"` (every other pieceType's height is a fixed constant
+ *  regardless of levels), so `levels` only needs to distinguish groups
+ *  for buildings; including it for every pieceType would just fragment
+ *  roads/bridges/docks into meaningless extra groups without ever being
+ *  WRONG. `chunkIdFor(piece)` (item 2) is a pure REFINEMENT of that same
+ *  key -- two pieces can only land in the same group if they already
+ *  shared the first four parts, so adding it can only ever SPLIT an
+ *  existing group further, never merge two pieces that should not share
+ *  one. Measured directly against the committed board: 21,007 pieces
+ *  collapse into 50 groups with this five-part key (was 16 without the
+ *  chunk component). */
 function groupKeyFor(piece) {
   const levels = piece.pieceType === "building" ? piece.levels : 0;
-  return `${piece.pieceType}|${piece.foot.w}|${piece.foot.d}|${levels}`;
+  return `${piece.pieceType}|${piece.foot.w}|${piece.foot.d}|${levels}|${chunkIdFor(piece)}`;
 }
 
 /**
- * B4 (2b) -- one THREE.InstancedMesh per (pieceType, foot.w, foot.d,
- * levels-if-building) group, not one Mesh per piece. Measured directly
- * against the committed public/board.generated.json: 21,007 pieces collapse
- * into 16 such groups (9 road foot dims, 5 building foot/levels combos, no
- * bridge pieces exist yet). Geometry and material are shared once per
- * group; only each piece's own transform (position -- baseYFor() varies
- * PER INSTANCE for bridges, whose own `.height` differs piece to piece even
- * within one group) is set per instance, via THREE.InstancedMesh's own
- * setMatrixAt(). No piece is rotated today (meshForPiece never read
- * piece.rotation either -- not a new gap, not fixed here).
+ * B4 (2b) + item 2 (spatial chunking) -- one THREE.InstancedMesh per
+ * (pieceType, foot.w, foot.d, levels-if-building, boundaryId) group, not
+ * one Mesh per piece and not one ever-growing group per pieceType/size
+ * spanning the whole archipelago. Measured directly against the committed
+ * public/board.generated.json: 21,007 pieces collapse into 50 groups (was
+ * 16 before chunking by boundary). Geometry and material are shared once
+ * per group; only each piece's own transform (position -- baseYFor()
+ * varies PER INSTANCE for bridges, whose own `.height` differs piece to
+ * piece even within one group) is set per instance, via
+ * THREE.InstancedMesh's own setMatrixAt(). No piece is rotated today
+ * (meshForPiece never read piece.rotation either -- not a new gap, not
+ * fixed here).
  *
- * `userData.pieceType` and `userData.pieceIds` (the group's own piece ids,
- * in the SAME order as their instance index) replace meshForPiece's
- * per-mesh `userData.pieceId` -- a single scalar has no meaning once one
- * mesh represents many pieces. Confirmed before this change that nothing
- * in the codebase reads `userData.pieceId` for picking or anything else
- * (board-piece picking resolves through pieceAtPoint()'s own spatial
- * index against the raycast hit point, never mesh/instance identity --
- * see test/boardPicking.test.ts), so this is a naming correction, not a
- * behaviour change.
+ * WHY CHUNKING: without it, one InstancedMesh per (pieceType, size) group
+ * scatters its instances across the WHOLE board, so its own bounding
+ * volume spans the whole board too -- effectively always in frustum for
+ * any real camera, meaning every instance is submitted to the GPU
+ * regardless of whether it is actually in view. Chunking by the piece's
+ * own real `boundaryId` (island/district) gives each resulting
+ * InstancedMesh a bounding volume tight enough to actually be culled when
+ * a camera is looking elsewhere -- see
+ * docs/specs/CULLING-RATIO-GATE-ANALYSIS-2026-09-11.md for the measured
+ * evidence this was a real defect, not merely a hypothesis.
+ * `computeBoundingSphere()` is called explicitly per group -- three.js
+ * already computes it lazily the first time a frustum test needs it
+ * (`Frustum.intersectsObject`, confirmed directly against the vendored
+ * build), so this is not fixing an observed defect on its own; it makes
+ * the bounding volume's correctness a property of this file's own code
+ * rather than an unstated dependency on the renderer's internal laziness.
+ *
+ * `userData.pieceType`, `userData.boundaryId` and `userData.pieceIds` (the
+ * group's own piece ids, in the SAME order as their instance index)
+ * replace meshForPiece's per-mesh `userData.pieceId` -- a single scalar
+ * has no meaning once one mesh represents many pieces. Confirmed before
+ * 2b that nothing in the codebase reads `userData.pieceId` for picking or
+ * anything else (board-piece picking resolves through pieceAtPoint()'s
+ * own spatial index against the raycast hit point, never mesh/instance
+ * identity -- see test/boardPicking.test.ts), and re-confirmed for this
+ * step: chunking changes which pieces share a mesh, never a piece's own
+ * identity, so picking is unaffected by construction, verified again
+ * through the real production path rather than assumed.
  *
  * The whole render path's own contract: given real board pieces (from
  * public/board-load.js's loadBoard()/fetchBoard(), never generated here),
@@ -137,6 +180,7 @@ export function buildBoardScene(THREE, pieces) {
     const material = materialFor(THREE, sample, materialCache);
     const mesh = new THREE.InstancedMesh(geometry, material, list.length);
     mesh.userData.pieceType = sample.pieceType;
+    mesh.userData.boundaryId = chunkIdFor(sample);
     mesh.userData.pieceIds = list.map((p) => p.id);
     list.forEach((piece, idx) => {
       const origin = atomOrigin(piece.cell.i, piece.cell.j);
@@ -148,19 +192,27 @@ export function buildBoardScene(THREE, pieces) {
       mesh.setMatrixAt(idx, dummy.matrix);
     });
     mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
     group.add(mesh);
   }
   return group;
 }
 
 /**
- * B4 (2c) -- one THREE.InstancedMesh per (propId, geometry-part-index),
- * replacing one Mesh (or multi-part Group) per placed item. `items`:
- * `[{ id, propId, parts, position: {x,y,z}, rotationY, color }]` --
- * `parts` (a geometry[]) MUST be the SAME array object for every item
- * sharing a `propId` (each scatter function's own geometry cache
- * guarantees this, so `.createGeometry()` runs once per distinct variant
- * actually placed, not once per item).
+ * B4 (2c) + item 2 (spatial chunking) -- one THREE.InstancedMesh per
+ * (propId, chunkId, geometry-part-index), replacing one Mesh (or
+ * multi-part Group) per placed item. `items`: `[{ id, propId, chunkId,
+ * parts, position: {x,y,z}, rotationY, color }]` -- `parts` (a
+ * geometry[]) MUST be the SAME array object for every item sharing a
+ * `propId` (each scatter function's own geometry cache guarantees this,
+ * so `.createGeometry()` runs once per distinct variant actually placed,
+ * not once per item). `chunkId` is each item's own source piece's
+ * `boundaryId` (via `chunkIdFor()`) -- props scatter across the whole
+ * board exactly like board pieces do, so they suffer the identical
+ * always-in-frustum defect without it (measured against the real board:
+ * 46 real prop groups after chunking across all four scatter functions,
+ * up from ~16 before -- real headroom against the draw-call ceiling
+ * either way).
  *
  * `"tree"` is `prop-models.js`'s own VARIED family (12 discrete species x
  * age combinations, chosen deterministically by seed -- ground-checked
@@ -182,8 +234,9 @@ function buildInstancedPropGroup(THREE, groupName, items) {
   group.name = groupName;
   const byVariant = new Map();
   for (const item of items) {
-    let v = byVariant.get(item.propId);
-    if (!v) { v = { parts: item.parts, color: item.color, list: [] }; byVariant.set(item.propId, v); }
+    const key = `${item.propId}|${item.chunkId ?? "unassigned"}`;
+    let v = byVariant.get(key);
+    if (!v) { v = { parts: item.parts, color: item.color, list: [] }; byVariant.set(key, v); }
     v.list.push(item);
   }
   const materialCache = new Map();
@@ -194,6 +247,7 @@ function buildInstancedPropGroup(THREE, groupName, items) {
     for (let partIdx = 0; partIdx < parts.length; partIdx++) {
       const mesh = new THREE.InstancedMesh(parts[partIdx], material, list.length);
       mesh.userData.propId = list[0].propId;
+      mesh.userData.boundaryId = list[0].chunkId ?? "unassigned";
       mesh.userData.pieceIds = list.map((it) => it.id);
       list.forEach((item, idx) => {
         dummy.position.set(item.position.x, item.position.y, item.position.z);
@@ -203,6 +257,7 @@ function buildInstancedPropGroup(THREE, groupName, items) {
         mesh.setMatrixAt(idx, dummy.matrix);
       });
       mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
       group.add(mesh);
     }
   }
@@ -255,7 +310,7 @@ export function scatterTrees(THREE, pieces, { maxTrees = 400, everyNth = 25 } = 
     const origin = atomOrigin(piece.cell.i, piece.cell.j);
     const offsetX = piece.foot.w + model.footprint.w / 2 + 0.5;
     items.push({
-      id: piece.id, propId: model.id, parts, color: 0x3f6b35, rotationY: 0,
+      id: piece.id, propId: model.id, chunkId: chunkIdFor(piece), parts, color: 0x3f6b35, rotationY: 0,
       position: { x: origin.x + offsetX, y: 0, z: origin.z + piece.foot.d / 2 },
     });
   }
@@ -307,7 +362,7 @@ export function scatterStreetLamps(THREE, pieces, { maxLamps = 400, everyNth = 4
     const longAlongW = w >= d;
     const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.w / 2 + 0.3;
     const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;
-    items.push({ id: piece.id, propId: model.id, parts, color: 0x2a2a2a, rotationY: 0, position: { x, y: 0, z } });
+    items.push({ id: piece.id, propId: model.id, chunkId: chunkIdFor(piece), parts, color: 0x2a2a2a, rotationY: 0, position: { x, y: 0, z } });
   }
   return buildInstancedPropGroup(THREE, "board-street-lamps", items);
 }
@@ -365,7 +420,7 @@ export function scatterStreetFurniture(THREE, pieces, { maxItems = 400, everyNth
     const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;
     const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;
     items.push({
-      id: piece.id, propId: model.id, parts, color: isBench ? 0x6b4a2a : 0x3a3a3a,
+      id: piece.id, propId: model.id, chunkId: chunkIdFor(piece), parts, color: isBench ? 0x6b4a2a : 0x3a3a3a,
       rotationY: longAlongW ? 0 : Math.PI / 2, position: { x, y: 0, z },
     });
   }
@@ -413,7 +468,7 @@ export function scatterBusShelters(THREE, pieces, { maxShelters = 400, everyNth 
     const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;
     const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;
     items.push({
-      id: piece.id, propId: model.id, parts, color: 0x557799,
+      id: piece.id, propId: model.id, chunkId: chunkIdFor(piece), parts, color: 0x557799,
       rotationY: longAlongW ? 0 : Math.PI / 2, position: { x, y: 0, z },
     });
   }

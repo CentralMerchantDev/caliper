@@ -77,19 +77,86 @@ test("B4 gate (2b): buildBoardScene draws every real piece in the committed boar
   // count, not a number nudged just past today's figure.
   assert.ok(pieces.length > 15000, `expected tens of thousands of real pieces, got ${pieces.length} -- reading the wrong file, or the committed board regenerated smaller than expected`);
   const group = buildBoardScene(THREE, pieces);
-  // This is the whole point of 2b: measured directly against this exact
-  // committed board, grouping by (pieceType, foot.w, foot.d,
-  // levels-if-building) collapses 21,007 pieces into 16 groups. <= 50 is a
-  // real margin above that measured 16 (catches a regrouping bug that
-  // fragmented into hundreds/thousands of one-off groups) without being
-  // brittle to the catalogue growing a few more sizes.
-  assert.ok(group.children.length <= 50, `expected a small number of InstancedMesh groups (measured 16 today), got ${group.children.length} -- grouping is not collapsing pieces the way it should`);
+  // 2b measured 16 groups by (pieceType, foot.w, foot.d, levels-if-
+  // building) alone. Item 2 (spatial chunking) added boundaryId as a
+  // fifth key component -- measured directly against this exact committed
+  // board, that collapses 21,007 pieces into 50 groups, not 16. <= 120 is
+  // a real margin above that measured 50 (catches a regrouping/chunking
+  // bug that fragmented into hundreds/thousands of one-off groups)
+  // without being brittle to the catalogue growing a few more sizes or
+  // boundaries.
+  assert.ok(group.children.length <= 120, `expected a small number of InstancedMesh groups (measured 50 today, chunked by boundary), got ${group.children.length} -- grouping is not collapsing pieces the way it should`);
   assert.ok(group.children.length >= 2, "expected more than one group -- a single group for every piece would hide a bug that merged incompatible geometries");
   const totalInstances = group.children.reduce((sum: number, m: any) => sum + m.count, 0);
   assert.equal(totalInstances, pieces.length, `expected every piece drawn exactly once across all groups (${pieces.length}), got ${totalInstances} total instances -- a piece was dropped or double-drawn`);
   for (const mesh of group.children) {
     assert.ok(mesh.isInstancedMesh, "expected every child of the board group to be an InstancedMesh, not a plain Mesh");
   }
+});
+
+// -----------------------------------------------------------------------------
+// Item 2 (docs/briefs/CLI-2026-09-11-autonomous-3.md) -- spatial chunking.
+// An InstancedMesh scattered across the WHOLE board has a bounding volume
+// spanning the whole board, so it is effectively always in frustum and
+// never culls -- real, measured wasted GPU work (see
+// docs/specs/CULLING-RATIO-GATE-ANALYSIS-2026-09-11.md). Chunking by each
+// piece's own real boundaryId gives each InstancedMesh a tight bounding
+// volume that CAN be culled.
+// -----------------------------------------------------------------------------
+
+function makeChunkPiece(id: string, boundaryId: string | undefined, i: number, j = 0, overrides: any = {}): any {
+  const piece: any = { id, pieceType: "building", cell: { i, j, k: 0 }, foot: { w: 20, d: 20 }, levels: 3, ...overrides };
+  if (boundaryId !== undefined) piece.boundaryId = boundaryId;
+  return piece;
+}
+
+test("item 2 gate: two pieces in DIFFERENT boundaries, same (pieceType, foot, levels), land in DIFFERENT InstancedMesh groups, each with a bounding sphere tight enough to plausibly represent ONE boundary, not the distance between two", () => {
+  // Real-scale separation (kilometres apart), matching how far apart two
+  // real settled boundaries actually sit on this board.
+  const near = makeChunkPiece("near-a", "mainland", 0, 0);
+  const near2 = makeChunkPiece("near-b", "mainland", 5, 0);
+  const far = makeChunkPiece("far-a", "resort-isle", 500000, 500000);
+  const group = buildBoardScene(THREE, [near, near2, far]);
+  assert.equal(group.children.length, 2, "expected two groups -- one per boundary -- not one group spanning both");
+  const mainlandMesh = group.children.find((m: any) => m.userData.boundaryId === "mainland");
+  const resortMesh = group.children.find((m: any) => m.userData.boundaryId === "resort-isle");
+  assert.ok(mainlandMesh && resortMesh, "expected to find one group per real boundaryId");
+  assert.ok(mainlandMesh.boundingSphere, "expected computeBoundingSphere() to have been called -- boundingSphere must not be null");
+  assert.ok(resortMesh.boundingSphere, "expected computeBoundingSphere() to have been called -- boundingSphere must not be null");
+  // The mainland group's own two pieces are ~5 atoms apart -- its bounding
+  // sphere radius must be small (tens of metres, not hundreds of
+  // kilometres). If chunking failed and both pieces shared one group with
+  // the far piece, the radius would be on the order of the ~700,000-unit
+  // separation instead.
+  assert.ok(mainlandMesh.boundingSphere.radius < 1000, `expected the mainland group's own bounding sphere to be tight (real pieces a few atoms apart), got radius ${mainlandMesh.boundingSphere.radius} -- it may still span the whole board`);
+});
+
+test("item 2 gate: a piece resolves to the group matching its OWN real boundaryId, not another piece's", () => {
+  const a = makeChunkPiece("piece-a", "mainland", 0, 0);
+  const b = makeChunkPiece("piece-b", "downtown", 1000, 1000);
+  const group = buildBoardScene(THREE, [a, b]);
+  const meshA = group.children.find((m: any) => (m.userData.pieceIds as string[]).includes("piece-a"));
+  const meshB = group.children.find((m: any) => (m.userData.pieceIds as string[]).includes("piece-b"));
+  assert.equal(meshA.userData.boundaryId, "mainland", "piece-a's own group must carry piece-a's own real boundaryId");
+  assert.equal(meshB.userData.boundaryId, "downtown", "piece-b's own group must carry piece-b's own real boundaryId, not piece-a's");
+  assert.notEqual(meshA, meshB, "two pieces in different boundaries must not land in the same group");
+});
+
+test("item 2 gate: a piece with no top-level boundaryId but a real anchor.boundaryId (a dock connecting two boundaries) resolves into that named boundary's own chunk", () => {
+  const dock: any = {
+    id: "dock-a", pieceType: "dock", cell: { i: 0, j: 0, k: 0 }, foot: { w: 4, d: 4 }, levels: 1,
+    anchor: { x: 0, z: 0, boundaryId: "fishing-isle" },
+  };
+  const group = buildBoardScene(THREE, [dock]);
+  assert.equal(group.children.length, 1);
+  assert.equal(group.children[0].userData.boundaryId, "fishing-isle", "expected the dock to resolve into its own anchor.boundaryId, not a fallback bucket");
+});
+
+test("item 2 gate: a piece with neither boundaryId nor anchor.boundaryId resolves into an explicit 'unassigned' chunk, not silently dropped or thrown", () => {
+  const orphan: any = { id: "orphan-a", pieceType: "building", cell: { i: 0, j: 0, k: 0 }, foot: { w: 20, d: 20 }, levels: 3 };
+  const group = buildBoardScene(THREE, [orphan]);
+  assert.equal(group.children.length, 1);
+  assert.equal(group.children[0].userData.boundaryId, "unassigned");
 });
 
 test("B3 gate: a mesh's own position and size come from its piece's real cell/foot/levels, not a second, independently-computed geometry", () => {
@@ -316,6 +383,35 @@ test("B4 gate (2c): placing enough trees to repeat variants collapses them into 
     geometriesByVariant.set(variant, mesh.geometry);
   }
   assert.ok(geometriesByVariant.size >= 2, "expected the fixture to actually produce more than one distinct tree variant");
+});
+
+test("item 2 gate: two trees of the SAME variant in DIFFERENT boundaries land in DIFFERENT InstancedMesh groups -- props chunk exactly like board pieces do", () => {
+  const sameSeed = 0; // seed 0 -> the same tree variant for both pieces
+  const a = { id: `b-${sameSeed}`, pieceType: "building", cell: { i: 0, j: 0, k: 0 }, foot: { w: 20, d: 20 }, levels: 3, boundaryId: "mainland" };
+  const b = { id: `b-far`, pieceType: "building", cell: { i: 0, j: sameSeed, k: 0 }, foot: { w: 20, d: 20 }, levels: 3, boundaryId: "resort-isle" };
+  const group = scatterTrees(THREE, [a, b], { everyNth: 1, maxTrees: 10 });
+  assert.equal(group.userData.itemCount, 2);
+  assert.equal(group.children.length, 2, "expected two groups -- same tree variant, but two different boundaries -- not one merged group");
+  const boundaries = group.children.map((m: any) => m.userData.boundaryId).sort();
+  assert.deepEqual(boundaries, ["mainland", "resort-isle"]);
+});
+
+test("item 2 gate: against the real committed board, all four prop scatter functions produce a small, bounded number of chunked groups -- real headroom against the draw-call ceiling, not fragmentation into hundreds", () => {
+  const heightAt = makeHeightAt(new LandField(16));
+  const payload = JSON.parse(readFileSync(join(ROOT, "public", "board.generated.json"), "utf8"));
+  const { pieces } = loadBoard(payload, heightAt);
+  const trees = scatterTrees(THREE, pieces);
+  const lamps = scatterStreetLamps(THREE, pieces);
+  const furniture = scatterStreetFurniture(THREE, pieces);
+  const shelters = scatterBusShelters(THREE, pieces);
+  // Measured directly against the committed board with chunking: 16 tree
+  // groups, 9 lamp groups, 14 furniture groups, 7 shelter groups (46
+  // total) -- real margins below, not numbers nudged just past today's
+  // measurement.
+  assert.ok(trees.children.length <= 40, `expected a small number of chunked tree groups, got ${trees.children.length}`);
+  assert.ok(lamps.children.length <= 30, `expected a small number of chunked lamp groups, got ${lamps.children.length}`);
+  assert.ok(furniture.children.length <= 30, `expected a small number of chunked furniture groups, got ${furniture.children.length}`);
+  assert.ok(shelters.children.length <= 20, `expected a small number of chunked shelter groups, got ${shelters.children.length}`);
 });
 
 test("B4 gate: propModel is genuinely reachable from a real render path, not merely test-only", () => {
