@@ -22,15 +22,18 @@ right and was overruled with evidence from the wrong architecture.
 generator at 2.3, placement at 2.5. Rewritten: placement first, generator last,
 and the generator calls `place()`.
 
-**C-3. The Boeing gate as written would REJECT a Manhattan-style grid.** The
-ranges in L1 and T4 are a regional subset presented as global limits. Athens
-cannot plausibly top a hundred-city sample for four-way intersections when
-Manhattan is in it. **Do not gate on those numbers.** The structure is right and
-the values are not: there are **two typologies, grid and organic**, with
-different bands for φ, four-way share, dead-end share and node degree — a grid
-city has *high* orientation-order, *high* four-way share and *low* dead ends.
-**The real values must be read out of Boeing 2019 Table 1 directly before any
-gate uses them.** Until then this is a measurement to report, not a test to fail.
+**C-3. The Boeing gate as written would REJECT a Manhattan-style grid.**
+**VERIFIED 2026-09-13 — the ranges in L1 and T4 were worse than a regional
+subset; they were the Asia/Oceania rows of Table 1 only, misread as the
+paper's global range.** Full derivation and the corrected numbers are at L1
+and T4 below, pulled directly from the paper's own Table 1 and Table 2
+(`pdftotext -layout` against the arXiv PDF, not a secondary source). The
+structure is right and the old values were not: there are **two typologies,
+grid and organic**, with different bands for φ, four-way share, dead-end
+share and node degree — a grid city has *high* orientation-order, *high*
+four-way share and *low* dead ends. **This is now a measurement with a real
+source, not a corrected guess** — see L1/T4 for the numbers and the exact
+cities they come from.
 
 **C-4. Instanced rendering must handle mutation from the first commit.** The
 "21,007 pieces in 16 draws" figure came from a **prebaked static scene**.
@@ -77,13 +80,19 @@ parameter.)*
 - Foster City canal layout (L6) cited a residential estate agent's blog about
   house prices. Struck; the finger-canal rule stands on the Palm Jumeirah source
   alone.
-- Manhattan's 80 × 274 m attributed to Marshall et al. (L2, G1) — **unverified.**
-  274 m is a widely cited real Manhattan dimension, but the review says that
-  paper reports 256 × 60 m. **The attribution is stripped until someone opens the
-  PDF.** 256 m is already 64 exact modules, so if it holds, G1's 274→272
-  rounding evaporates.
-- Portland's 15.2 m minimum lot width (T7) — the URL 404s and Title 33 is written
-  in feet; post-Residential-Infill minimums may be lower. **Verify before use.**
+- Manhattan's 80 × 274 m attributed to Marshall et al. (L2, G1) — **VERIFIED
+  WRONG, 2026-09-13.** The review's suspicion was correct: Marshall et al.
+  (2016) Table 1, read directly (`pdftotext -layout` against the paper's own
+  PDF), reports Manhattan's *existing block* as **256 × 60 m**, not 80 × 274.
+  **The attribution is corrected, not stripped** — see L2 and G1 below. 256 m
+  is exactly 64 modules at the 4 m grid; G1's 274→272 rounding note is
+  removed as unnecessary, not merely unconfirmed.
+- Portland's 15.2 m minimum lot width (T7) — **VERIFIED, 2026-09-13, and the
+  URL is fixed.** The old URL (`portland.gov/code/33/110`) does 404, exactly
+  as flagged. The current code (Title 33.110, Table 110-3, and Title 33.610,
+  Table 610-2, both dated 6/30/22 — the post-Residential-Infill-Project
+  revision) gives real, per-zone figures in feet, not one blanket metre
+  figure. See T7 below for the table and the working URLs.
 
 **C-10. C3's scoring is a simulation and the document said simulation stays
 out.** A dirty-rect influence convolution with exponential decay is not "a reason
@@ -871,14 +880,29 @@ connect population-density peaks; local streets fill the gaps to give access to
 them.** Branch angles snap to 90° unless following elevation contours.
 https://cgl.ethz.ch/Downloads/Publications/Papers/2001/p_Par01.pdf
 
-Boeing's 100-city OSMnx study gives **measured** values from real cities:
+Boeing's 100-city OSMnx study gives **measured** values from real cities.
+**CORRECTED 2026-09-13 — the figures below were re-derived directly from the
+paper's own Table 1 (`pdftotext -layout` on the arXiv PDF, every one of the
+100 cities' rows read, not the Asia/Oceania block alone), because the
+previous version of this table was exactly that block misread as the
+global range.** See T4 for the full six-metric table and the grid/organic
+split; this section keeps only the two the generator gate uses first:
 
-| Metric | Real-world range | Source |
+| Metric | Real global range, verified against Table 1 | Old (wrong) figure |
 |---|---|---|
-| Average node degree (streets per intersection) | **2.38** (Bangkok) – **3.24** (Athens); Melbourne 3.16 | Boeing 2019 |
-| Average circuity (network distance ÷ straight line) | **1.02** (Manila) – **1.13** (Hong Kong) | same |
+| Average node degree (streets per intersection) | **2.348** (Helsinki) – **3.548** (Buenos Aires); Manhattan 3.508 | 2.38 (Bangkok) – 3.24 (Athens) |
+| Average circuity (network distance ÷ straight line) | **1.011** (Buenos Aires) – **1.148** (Caracas) | 1.02 (Manila) – 1.13 (Hong Kong) |
 
+https://arxiv.org/abs/1808.00600 (open-access; the ResearchGate mirror below
+is the same paper, kept as the reader-facing citation)
 https://www.researchgate.net/publication/327257959_Urban_Spatial_Order_Street_Network_Orientation_Configuration_and_Entropy
+
+The paper's own text confirms the shape of the correction: *"Helsinki and
+Bangkok have the lowest average node degrees... Buenos Aires and Manhattan
+have the greatest average node degrees, both over 3.5 streets per node."*
+Bangkok (2.385) and Athens (3.245) — the old table's endpoints — are both
+real Table 1 values, just not the extremes; they were the extremes **of the
+Asia/Oceania rows only.**
 
 **These are acceptance tests, not inputs.** You cannot set node degree; it
 emerges. So they become the generator's gate: generate, measure, compare against
@@ -890,14 +914,25 @@ having none.
 ### L2. The "100 m block" is a myth — with real numbers to replace it
 
 Marshall et al. (2016) measured it: **Portland 60 × 60 m squares; Manhattan
-80 × 274 m elongated.** The widely repeated ~100 m figure traces to nothing.
+256 × 60 m elongated.** **CORRECTED 2026-09-13** — the paper's own Table 1,
+read directly, gives Manhattan's *existing block* row as `Existing block
+width (m): 256` / `Existing block depth (m): 60`, not 80 × 274. The paper's
+own prose (p.91) independently confirms the shape, if not this exact ratio:
+*"The blocks in Portland are 60×60 m... Portland's blocks are perfectly
+square whereas Manhattan's are elongated, with street sides three and a half
+times longer than avenue sides"* — a separately-stated 3.5:1 description of
+the same elongation, not identical arithmetic to 256:60 (≈4.3:1), and not
+reconciled further here; both figures are the paper's own. The widely
+repeated ~100 m figure traces to nothing.
 https://media.voog.com/0000/0036/2451/files/Pedestrian%20accessibility%20in%20grid%20layouts-%20the%20role%20of%20block%2C%20plot%20and%20street%20dimensions.pdf
 
 Blocks subdivide by **recursively splitting oriented bounding boxes** until each
 polygon falls between a minimum and maximum lot area (Parish & Müller).
 
-**These must be rounded to whole modules — see G1 below. 274 m is not divisible
-by 4; round it deliberately and record that you did.**
+**These must be rounded to whole modules where they do not already divide
+evenly — see G1 below. Manhattan's real 256 m (verified above) already is:
+256 ÷ 4 = 64 modules exactly, no rounding needed. Where a future block size
+does not divide evenly, round it deliberately and record that you did.**
 
 ### L3. Where the core goes — a named mechanism, not an observation
 
@@ -1000,20 +1035,63 @@ http://3dworldgen.blogspot.com/2017/12/terrain-erosion.html
 Flat coastal plain is not incidental — it is where a city can go. This step
 produces the buildable land.
 
-### T4. THE STREET NETWORK'S FIVE GATES, all measured across 100 real cities
+### T4. THE STREET NETWORK'S SIX GATES, all measured across 100 real cities
 
-Boeing 2019, the full set this time:
+**REWRITTEN 2026-09-13, per CORRECTIONS C-3.** The table below was the
+Asia/Oceania rows of the paper's own Table 1 (20 of the 100 cities), read as
+though they were the global range. Re-derived by reading every one of the
+100 cities' rows directly (`pdftotext -layout` against the arXiv PDF,
+https://arxiv.org/abs/1808.00600 — open access; the ResearchGate mirror
+below is the same paper), not a secondary source and not the old subset:
 
-| Metric | Real-world range |
-|---|---|
-| Median street segment length | **42.0 m** (Helsinki) – **233.0 m** (Shanghai) |
-| Average node degree | **2.38** (Bangkok) – **3.24** (Athens) |
-| Four-way intersections | **8.7%** (Sydney) – **36.3%** (Athens) |
-| Dead ends | **5.6%** (Athens) – **39.5%** (Helsinki) |
-| Orientation-order φ | **0.005** (Singapore) – **0.340** (Melbourne) |
-| Average circuity | **1.02** (Manila) – **1.13** (Hong Kong) |
+| Metric | REAL global range (100 cities) | Old (wrong) range |
+|---|---|---|
+| Median street segment length | **23.2 m** (Venice) – **233.0 m** (Shanghai) | 42.0 (Helsinki) – 233.0 (Shanghai) |
+| Average node degree | **2.348** (Helsinki) – **3.548** (Buenos Aires) | 2.38 (Bangkok) – 3.24 (Athens) |
+| Four-way intersections | **6.1%** (Ulaanbaatar) – **57.6%** (Buenos Aires) | 8.7% (Sydney) – 36.3% (Athens) |
+| Dead ends | **2.7%** (Manhattan) – **39.5%** (Helsinki) | 5.6% (Athens) – 39.5% (Helsinki) |
+| Orientation-order φ | **0.002** (Charlotte, São Paulo) – **0.899** (Chicago) | 0.005 (Singapore) – 0.340 (Melbourne) |
+| Average circuity | **1.011** (Buenos Aires) – **1.148** (Caracas) | 1.02 (Manila) – 1.13 (Hong Kong) |
 
 https://www.researchgate.net/publication/327257959_Urban_Spatial_Order_Street_Network_Orientation_Configuration_and_Entropy
+
+**Every old figure was a real Table 1 value — just not the extreme.** Bangkok
+(k=2.385), Athens (k=3.245, P4w=36.3%, Pde=5.6%), Sydney (P4w=8.7%),
+Singapore (φ=0.005), Melbourne (φ=0.340), Manila (circuity=1.023), Hong Kong
+(circuity=1.137) are all genuine rows of the table. They are the extremes of
+the **Asia/Oceania region alone** (20 of 100 cities), which is why the old
+range would have rejected cities the paper's own global sample contains —
+Chicago's φ=0.899 is more than double Melbourne's "maximum" of 0.340.
+
+**Grid vs. organic typology, per C-3's own request — the paper's actual
+regional aggregation (Table 2), not an invented split:**
+
+| | **US/Canada — the grid archetype** | **Europe — the organic archetype** |
+|---|---|---|
+| Mean orientation-order φ | **0.427** | **0.033** |
+| Mean median segment length | **98.8 m** | **78.7 m** |
+| Mean circuity | **1.043** | **1.061** |
+
+The paper states the direction in its own words: *"the US/Canadian cities
+exhibit the lowest street orientation entropy, circuity, and proportions of
+dead-ends as well as the highest median street segment lengths, average node
+degrees, and proportions of four-way intersections. They are also by far the
+most grid-like in terms of φ... the European cities exhibit the highest
+street orientation entropy and proportion of dead-ends as well as the lowest
+average node degrees. They are the least gridlike in terms of φ."*
+
+**Table 2 does not aggregate node degree, four-way share or dead-end share by
+region** — only φ, entropy, length and circuity. Rather than hand-averaging
+those three from Table 1's 100 individual rows (a real error risk this
+document does not need to take on), the paper's own named exemplars stand in,
+quoted directly: *"Buenos Aires and Manhattan have the greatest average node
+degrees, both over 3.5 streets per node... Buenos Aires and Manhattan
+similarly have the largest proportions of four-way intersections and the
+smallest proportions of dead-end nodes"* (grid archetype: Buenos Aires
+k=3.548, P4w=57.6%, circuity=1.011; Manhattan k=3.508, P4w=57.2%, Pde=2.7%)
+against *"Helsinki and Bangkok have the lowest average node degrees, each
+with fewer than 2.4 streets per node"* (organic archetype: Helsinki k=2.348,
+Pde=39.5%, l=42.0 m).
 
 **A CITATION TO REJECT.** The first research pass offered "grid orientation
 entropy 2.38 to 3.5" citing `donut.topology.rocks`, which is a persistent-homology
@@ -1046,15 +1124,42 @@ satisfies all three.
 
 ### T7. REAL DIMENSIONS — and their rounding to the module
 
-| Thing | Sourced value | At 4 m module | Rounded to |
+**Residential lot width/depth, VERIFIED 2026-09-13, per CORRECTIONS C-9.**
+The old citation (`portland.gov/code/33/110`) 404s, exactly as flagged, and
+the old 15.2 m/18.3 m figures cannot be traced to a current table. The real
+code, read directly, gives no single figure — it varies by zone. Title
+33.610, Table 610-2, "Lot Dimension Standards" (dated 6/30/22, the
+post-Residential-Infill-Project revision, RF through R5 zones —
+https://www.portland.gov/sites/default/files/code/610-rf-r5-lots.pdf):
+
+| Zone | Min lot width (feet / metres) | Min lot depth (feet / metres) |
+|---|---|---|
+| RF | 60 ft / 18.29 m | 60 ft / 18.29 m |
+| R20 | 60 ft / 18.29 m | 60 ft / 18.29 m |
+| R10 | 50 ft / 15.24 m | 60 ft / 18.29 m |
+| R7 | 40 ft / 12.19 m | 55 ft / 16.76 m |
+| R5 | **36 ft / 10.97 m** | **50 ft / 15.24 m** |
+| Attached house lots (R20–R5) | 15 ft / 4.57 m | — |
+
+Title 33.110, Table 110-3 (dated 8/1/21,
+https://www.portland.gov/sites/default/files/code/110-sd-zone.pdf) restates
+the 36 ft figure directly for RF-through-R5 lots and gives the R2.5 zone's
+standard as an area minimum instead (1,600 sq. ft.), not a width/depth pair.
+
+**R5 is the anchor below** — the smallest-lot standard single-dwelling zone
+and the one Residential Infill most directly targets for smaller/"missing
+middle" lots — recorded as a choice, not the only real number:
+
+| Thing | Sourced value (metric conversion labelled as a conversion) | At 4 m module | Rounded to |
 |---|---|---|---|
-| Residential min lot width | 15.2 m (Portland Title 33) | 3.8 | **16 m / 4 modules** |
-| Residential min lot depth | 18.3 m (Portland Title 33) | 4.575 | **20 m / 5 modules** |
+| Residential min lot width (R5) | 36 ft = **10.97 m** | 2.74 | **12 m / 3 modules** |
+| Residential min lot depth (R5) | 50 ft = **15.24 m** | 3.81 | **16 m / 4 modules** |
 | Commercial min block dimension | 30.4 × 30.4 m (Portland) | 7.6 | **32 × 32 m / 8×8** |
 | Reclaimed frond width | 75.0 m (Palm Jumeirah) | 18.75 | **76 m / 19 modules** |
 | Lot depth : frontage ratio | 2:1 to 3:1 | — | holds at 16×20 to 16×48 |
 
-https://www.portland.gov/code/33/110 ·
+https://www.portland.gov/sites/default/files/code/610-rf-r5-lots.pdf ·
+https://www.portland.gov/sites/default/files/code/110-sd-zone.pdf ·
 https://www.fibertex.com/business-areas/civil-engineering/case-stories/palm-islands
 
 **Every rounding above is deliberate and recorded as a rounding, not a
@@ -1113,9 +1218,14 @@ Why 4:
   scale, which is the test that matters.
 - CS2 ships an 8 m cell; 4 m is one subdivision finer, which buys the 1×1.
 
-**Where it is arbitrary, said plainly:** Manhattan's 274 m does not divide by 4.
-Round to **272 m (68 modules)**. Recorded as a deliberate rounding, not a
-measurement.
+**Where a rounding was believed necessary and turned out not to be, said
+plainly:** this section previously rounded a supposed Manhattan block of
+274 m to 272 m (68 modules), because 274 does not divide by 4. **VERIFIED
+2026-09-13 (CORRECTIONS C-9): 274 m was never Marshall et al.'s real figure.**
+Their Table 1 gives Manhattan's existing block as 256 × 60 m — see L2 — and
+256 is already **exactly 64 modules** at 4 m. No rounding needed; the
+rounding note is removed rather than corrected, since there is nothing left
+to round.
 
 **And the trap avoided.** Polycount's warning is that a spatially-fluent
 non-artist will let a real-world dimension set the module: *"If you pick 2m as
