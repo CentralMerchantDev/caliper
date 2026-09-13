@@ -5,6 +5,61 @@ instruction: "Do not trust that list — derive your own." This document is
 that derivation, not the four-file list `docs/briefs/PHASE-1-rebuild.md`
 names as a starting guess.
 
+---
+
+## CORRECTION — 2026-09-13, from the blind plan review this document itself required. READ FIRST.
+
+**WAVE 1 below is WRONG and none of it was moved.** Per `rule://reviewer-independence`,
+this plan was handed to a fresh, blind agent before any file moved. It found
+that `public/city-render.js` is not reachable only through the dead
+`public/city.html`, as WAVE 1's table claims — `public/world-render-3d.js`
+(the shell's kept `WorldRenderer`) contains `const { buildWorld } = await
+import("./city-render.js")` at line 1722, called from `_buildCityBase`
+whenever `this._cityMode` is true, and `public/index.html` — the live
+product's real entry point — constructs `new WorldRenderer(canvas3d, { city:
+true, ... })` unconditionally, under a comment titled *"THE CITY IS THE
+WORLD NOW... the city replaces the ground."*
+
+**So `city-render.js`, and everything it privately depends on
+(`layout.js`, `instance-groups.js`, `layout-fits.js`), is not a dead demo
+path. It is the code that renders `public/index.html` today** — exactly the
+world Mark opened on a real device and rejected. Verified independently after
+the review returned: `grep -n "await import(\"./city-render" public/world-render-3d.js`
+and `sed -n '2570,2580p' public/index.html`, both confirming the finding
+verbatim before this correction was written, per `rule://subagent-contract`'s
+"re-run the gate yourself rather than trusting the pasted output."
+
+**Root cause, and why the tool used to build WAVE 1 could not see this**:
+`scripts/lib/module-graph.mjs`'s own header names its own limitation — "No
+dynamic `import()`. Only static `import ... from \"...\"` is text a regex
+scanner can see" — and states "Not used anywhere in this codebase today,"
+which was true when that comment was written and is no longer true.
+`docs/MODULE-MAP.md`, built by the same tool, has the identical blind spot,
+so cross-checking against it gave false confidence rather than catching the
+gap. **This is a real, standing limitation of `test/deadExports.test.ts`'s
+own reachability gate, not just this document's mistake** — recorded as a
+lesson (`process_append_lesson`, id `dynamic-import-blind-spot`) since any
+other file reachable only via a dynamic `import()` would be misclassified
+the same way, silently, by the gate this whole project trusts for dead-code
+findings.
+
+**The review also found two smaller gaps, both folded into the corrected
+sections below**: `public/plan-preview.html` redirects to `city.html` and is
+a second live inbound edge the original WAVE 1 never accounted for, and the
+"expected breakage" list omitted `road-network.js`'s own four direct test
+importers and `test/terrainLandmassOwnership.test.ts`'s
+`KNOWN_STATIC_IMPORTERS` tripwire, which hard-codes `"public/road-network.js"`
+and must be updated in the same commit as that file's move.
+
+**What this changes.** Only `public/road-network.js` is quarantined this
+pass — see the revised WAVE 1 below. Everything else this document
+originally proposed moving is deferred, now for a stronger reason than
+"entangled with kept code": it is not dead at all, it is the live rendering
+path, and Phase 1 cannot remove a live product's only rendered content
+without Phase 2's flat board existing to replace it. The sections below are
+left as originally written, with corrections inline, so the mistake stays
+visible rather than quietly disappearing from the record.
+
 **Method.** Not hand-grep. This project already owns a reachability tool —
 `scripts/lib/module-graph.mjs`, the same forward/reverse dependency graph
 `test/deadExports.test.ts` and `docs/MODULE-MAP.md` are built from — so the
@@ -88,52 +143,70 @@ decoupling refactor this phase does not authorise.
 
 ---
 
-## WAVE 1 — safe to quarantine now, zero live breakage
+## WAVE 1 — REVISED after the blind review. One file, not six.
 
-Every file below has **no importer outside this set**, once `public/city.html`
-(the entry point) is included. Confirmed by `_old-world-inventory-probe.mjs`'s
-direct-importer listing for each file, cross-checked against `docs/MODULE-MAP.md`.
+`public/city-render.js`, `layout.js`, `layout-fits.js` and `instance-groups.js`
+are **withdrawn from WAVE 1** — see the CORRECTION block at the top. They are
+the live rendering path for `public/index.html`, not a dead demo, and stay in
+place until Phase 2 exists to replace what they currently render.
+
+`public/city.html` is also withdrawn, for a related but separate reason:
+it has a second live inbound edge the original draft missed —
+`public/plan-preview.html`, a committed redirect stub whose entire purpose is
+forwarding bookmarked/shared preview URLs to `/city.html` (`location.replace("/city.html"...)`.
+Quarantining `city.html` without also resolving that stub would leave a live
+redirect target pointing at nothing — a regression, not a cleanup — and
+`city.html` is entangled with `city-render.js` regardless, which is not
+moving this pass.
+
+**Only `public/road-network.js` is quarantined in this item.**
 
 | File | Direct importers (non-test) | Verdict |
 |---|---|---|
-| `public/road-network.js` | **none** — only its own tests (`test/roadNetwork.test.ts`, `test/bridgePieces.test.ts`, `test/collectorLocalNetwork.test.ts`, `test/connectivityBridges.test.ts`) | Already fully orphaned. `city-plan.js` is imported *by* it, not the reverse — nothing calls in. |
-| `public/instance-groups.js` | `public/city-render.js` only | Safe once city-render.js moves too. |
-| `public/layout-fits.js` | `public/city-render.js` only | Safe once city-render.js moves too. Not in the brief's four-file list — found by the graph, not the brief. |
-| `public/layout.js` | `public/city-render.js`, `public/layout-fits.js` (both moving) | Safe. |
-| `public/city-render.js` | `public/city.html` only (its `LOOK`/`buildWorld` exports — the only two anything outside tests calls) | Safe once city.html moves. |
-| `public/city.html` | Linked from `public/index.html` line 1651 (`◱ The City`) — the only inbound edge | Root of this cluster. Moving it orphans everything above. |
+| `public/road-network.js` | **none** — confirmed by both the forward-graph probe and a direct grep for `await import(` across `public/*.js` and `public/*.html` (the blind review's own method, applied here rather than trusted secondhand) | Already fully orphaned. `city-plan.js` is imported *by* it, not the reverse — nothing calls in, statically or dynamically. |
 
-**The dangling link.** `public/index.html:1651` links to `./city.html` with
-the label *"The 26 km city on its own, without the application chrome"* —
-literally advertising the rejected old world as a feature. Quarantining
-`city.html` without removing this link leaves a 404 on the live product page,
-which is a defect this move introduces, not one it fixes. Removing the
-anchor is scoped as part of *this* quarantine (clearing a dead link is
-clearing the site, not building anything) and is done in the same commit as
-the `city.html` move.
+**One committed test constant must change in the same commit.**
+`test/terrainLandmassOwnership.test.ts`'s `KNOWN_STATIC_IMPORTERS` array
+hard-codes the literal string `"public/road-network.js"` as part of a named,
+tracked list of files still reading `city-plan.js`'s `LANDMASSES` directly —
+its own header says as much: *"public/road-network.js... are outside this
+pass's own routing"* (a prior pass already anticipated this file leaving).
+Once the file is no longer in `public/`, the test's own directory scan
+(`findCityPlanLandmassImporters`) will no longer find it there, `actual` will
+shrink to 5 entries, and the hardcoded 6-entry `KNOWN_STATIC_IMPORTERS` will
+fail `assert.deepEqual` — exactly the tripwire the test's own message
+describes: *"If this shrank (a file migrated to the real, authoritative copy
+in terrain.js), update KNOWN_STATIC_IMPORTERS to match and say so in the
+commit."* Doing exactly that, in the quarantine commit, is not a workaround —
+it is the test performing its documented job.
 
-**Expected breakage, named in advance.** Nine tests exercise `city.html`
-directly (`test/boardRender.test.ts`, `test/publicClaims.test.ts`,
-`test/cullingRatio.test.ts`, `test/regressionGate.test.ts`,
-`test/envLuminance.test.ts`, `test/claimSpansAreChecked.test.ts`,
-`test/reachability.test.ts`, `test/lookPipeline.test.ts`,
-`test/rendererStatic.test.ts`), plus the eight tests that import
-`city-render.js` directly and the five that import `layout.js` directly (full
-list in the reachability dump captured alongside this document). **These are
-expected to go red or need updating as a direct result of this move — that is
-item 2's job** (retiring the ~37 old-world test pins by name), not a defect in
-this move. Named here so item 2 starts from a known set rather than
-rediscovering it.
+**Expected breakage, named in advance, corrected against the blind review's
+finding #2.** Four tests import `road-network.js` directly and will need
+retirement or a rewrite in item 2: `test/roadNetwork.test.ts`,
+`test/bridgePieces.test.ts`, `test/collectorLocalNetwork.test.ts`,
+`test/connectivityBridges.test.ts`. Plus the one test constant named above,
+handled in this same commit rather than deferred to item 2, since it is a
+one-line, mechanical, already-documented update rather than a judgement call
+about whether a test still describes something real.
 
 ---
 
 ## DEFERRED — identified, not quarantined this pass
 
+**`public/city-render.js`, `layout.js`, `layout-fits.js`, `instance-groups.js`,
+`public/city.html`, `public/plan-preview.html`.** Moved from WAVE 1 to here
+after the blind review — see the CORRECTION block. Not merely entangled with
+kept code: `city-render.js`'s `buildWorld` is the live render path for
+`public/index.html` today, reached via a dynamic `import()` in
+`world-render-3d.js` that the module-graph tool cannot see. Cannot move until
+Phase 2's flat board (2.1) and re-pointed shell (2.8) exist to replace what a
+visitor actually sees when the page loads.
+
 **`public/city-plan.js`.** Load-bearing for `terrain.js`, `world-render-3d.js`,
-`board-adapter.js`, `buildings.js` — all reachable from the live
-`public/index.html`. Cannot move until Phase 2 supplies a replacement terrain
-source (2.5) and the generator calls `place()` instead of being read
-directly (2.7).
+`board-adapter.js`, `buildings.js`, and now also `city-render.js` directly
+(above) — all reachable from the live `public/index.html`. Cannot move until
+Phase 2 supplies a replacement terrain source (2.5) and the generator calls
+`place()` instead of being read directly (2.7).
 
 **`public/board-adapter.js`.** This *is* "the current board's generated
 output" mechanism per REBUILD-PLAN — it converts `city-plan.js`'s plots and
@@ -185,11 +258,18 @@ in Phase 3.2, not Phase 1.
 ## WHAT THIS MEANS FOR THE PHASE GATE
 
 REBUILD-PLAN 1.5's gate — *"nothing in `src/`, `public/` or `test/` references
-the old world"* — is **not fully reachable in one item**, because two of its
-four "Goes" categories are genuinely entangled with code this same plan says
-to keep, and untangling them is Phase 2's stated job, not Phase 1's. Wave 1
-above is committed to fully in this item. The deferred sections are real,
-named, dependency-graph-verified findings, not a shortcut — the alternative
-was either breaking `public/index.html`'s live board (not authorised: nothing
-about clearing the site should regress the thing being kept) or writing new
-decoupling code under a phase whose entire brief says not to build anything.
+the old world"* — is **far from reachable in this item**, and further from it
+than the original draft of this document believed. The blind review's
+central finding is not just that one more file is entangled — it is that the
+old world is not a quarantinable side-path at all today. It is what
+`public/index.html` renders. There is no version of the live product today
+that does not run `buildWorld()` from `city-render.js`. Clearing it is
+therefore not a file-move problem; it is contingent on Phase 2 (2.1, 2.2,
+2.8) existing first, so the shell has something else to point at before the
+old renderer is removed. Only `public/road-network.js` — genuinely orphaned,
+confirmed by both static and dynamic-import checks — is quarantined in this
+item. Everything else this document names is a real, dependency-graph- and
+dynamic-import-verified finding, not a shortcut: the alternative was either
+taking the live site's only rendered content away with nothing to replace
+it, or writing replacement/decoupling code under a phase whose entire brief
+says not to build anything.

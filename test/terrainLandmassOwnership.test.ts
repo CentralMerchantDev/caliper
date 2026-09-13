@@ -135,7 +135,13 @@ test("B1: the exact, current set of files still reading city-plan.js's LANDMASSE
   // terrain.js -- this test tells you which, by name, rather than staying
   // silently green either way.
   const KNOWN_STATIC_IMPORTERS = [
-    "public/road-network.js",
+    // "public/road-network.js" migrated OUT -- quarantined to
+    // _TO-DELETE/old-world/road-network.js, Phase 1 rebuild item 1
+    // (docs/specs/PHASE1-SITE-INVENTORY.md), exactly the shrink this test's
+    // own error message anticipates: "a file migrated to the real,
+    // authoritative copy in terrain.js." It had zero live importers of its
+    // own (public/ and test/ both checked) -- the file itself is gone from
+    // findCityPlanLandmassImporters's public/ scan, not merely edited.
     "scripts/_render-arterial-data.mjs",
     "test/cityConnectivity.test.ts",
     "test/cityWorld.test.ts",
