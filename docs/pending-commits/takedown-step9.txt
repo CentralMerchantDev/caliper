@@ -1,0 +1,24 @@
+Phase 1 takedown, step 9 -- public/index.html renders a holding page.
+
+Per Mark's own instruction (docs/specs/REBUILD-PLAN.md's CORRECTION block):
+"index.html renders a holding page. Minimal and honest -- the world is
+being rebuilt, nothing more. Do not port any of the old renderer into it."
+
+The old 5070-line file (the shell boot, panels, inspector, describe/apply
+UI -- all of it wired through world-render-3d.js's now-dormant
+_buildCityBase, or reading a generated plan that no longer exists) is
+preserved as _TO-DELETE/old-world/index.html.pre-holding-page, ledgered,
+before being overwritten -- public/index.html itself stays at its own path
+(the live URL must keep resolving), it is not moved. The new file is 62
+lines of static HTML: a title, the same favicon, basic OG/Twitter meta
+updated to describe the actual current state, and one message. No script
+tags, no WorldRenderer, nothing ported from the old page.
+
+How it is known to be fixed: npm run typecheck -- clean. The file was read
+back after writing to confirm it contains no <script> tag and no reference
+to any quarantined file.
+
+What is still open: every test that scans or exercises the OLD index.html's
+specific structure (nav pad CSS, Build menu markup, importmap, SSE
+verification math, page-reachability graph) is handled at step 10, together
+with the rest of this pass's test disposition.
