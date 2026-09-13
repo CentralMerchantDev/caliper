@@ -12,7 +12,9 @@ import { questState, evaluateQuest } from "../public/quest.js";
 import { changeSomethingQuest } from "../public/change-quest.js";
 import { createWorld } from "../public/world.js";
 import { layerFrom } from "../public/world-model.js";
-import { buildWorldState } from "../public/city-render.js";
+// public/city-render.js is quarantined, 2026-09-13, Phase 1 "take it all
+// down" (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md) -- buildWorldState
+// no longer exists; see the BLOCKED test below.
 
 test("questState's new 'changed' field is empty by default -- existing callers are unaffected", () => {
   // No 5th argument at all -- every call site before tonight looked like this.
@@ -50,23 +52,7 @@ test("a real edit to the world -- an actual layer -- completes the quest", () =>
 // production seed (the same pattern test/runGenerateRequest.test.ts's own
 // I5 end-to-end test already established for exactly this reason), through
 // the same instance I6's apply/persist/undo path actually uses.
-test("a real edit against the real production world -- not a toy fixture -- completes the quest", () => {
-  const { instance, world } = buildWorldState();
-  const realPlot = world.plots.find((p: any) => p.className !== "PARK");
-  assert.ok(realPlot, "setup: no real plot found in the production world");
-
-  const before = questState(instance.plan, {}, {}, {}, instance.layers);
-  assert.equal(evaluateQuest(changeSomethingQuest, before).done, false, "the quest reads as complete before any edit exists");
-
-  const added = instance.layers.add(layerFrom({
-    id: "i7-real-edit", author: "i7-test",
-    edits: [{ address: realPlot.id, op: "retint", payload: { color: 0xff0000 } }],
-  }));
-  assert.equal(added.ok, true, JSON.stringify(added));
-
-  const after = questState(instance.plan, {}, {}, {}, instance.layers);
-  const verdict = evaluateQuest(changeSomethingQuest, after);
-  assert.equal(verdict.done, true, verdict.reason || "");
+test("a real edit against the real production world -- not a toy fixture -- completes the quest", { skip: "BLOCKED: buildWorldState no longer exists; public/city-render.js is quarantined (see file header)" }, () => {
 });
 
 test("the quest check itself never receives anything shaped like a UI flag", () => {

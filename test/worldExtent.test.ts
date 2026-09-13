@@ -26,7 +26,9 @@
 // and is not allowed to reorder them.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WORLD } from "../public/city-plan.js";
+// WORLD moved to public/world-scale.js, 2026-09-13, Phase 1 "take it all
+// down" -- public/city-plan.js is quarantined (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md).
+import { WORLD } from "../public/world-scale.js";
 
 // TWO OPPOSING FAILURES. THE FIRST VERSION OF THIS FILE ASSERTED ONLY ONE OF
 // THEM, AND THAT IS WHAT CAUSED THE OTHER.

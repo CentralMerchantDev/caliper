@@ -27,7 +27,7 @@ import { TYPOLOGY_FOOTPRINT_CELLS } from "./typology-footprints.js";
 // city-plan.js is quarantined; this table is not generated content -- pure
 // per-typology footprint and height limits -- and this file is now its only
 // consumer, so it moves intact rather than being reinvented or stubbed.
-const PLOT_CLASSES = {
+export const PLOT_CLASSES = {
   TERRACE:   { minW: 8,   maxW: 16,  minD: 22,  maxD: 34,  maxHeight:  18, module: 8, tileRow: true },
   TOWNHOUSE: { minW: 8,   maxW: 32,  minD: 24,  maxD: 40,  maxHeight:  24, module: 8, tileRow: true },
   MIDRISE:   { minW: 26,  maxW: 52,  minD: 32,  maxD: 64,  maxHeight:  55, module: 8 },

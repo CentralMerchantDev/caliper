@@ -11,36 +11,17 @@ import assert from "node:assert/strict";
 
 import { createSelection } from "../public/selection.js";
 import { buildSpatialIndex } from "../public/spatial-index.js";
-import { generateWorld } from "../public/city-plan.js";
-import { LandField, makeHeightAt } from "../public/terrain.js";
 
-const heightAt = makeHeightAt(new LandField(16));
-const plan = generateWorld(heightAt);
-const index = buildSpatialIndex(plan);
+// BLOCKED, two of three tests, 2026-09-13, Phase 1 "take it all down"
+// (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md) -- both need a real plot
+// from public/city-plan.js's generateWorld(), quarantined. selection.js and
+// spatial-index.js survive; the third test (an off-plot pick) needs no real
+// plot and is unaffected.
+const index = buildSpatialIndex({ plots: [] });
 
-test("a pick returns a real plot id that is present in the plan", () => {
-  const plot = plan.plots.find((p: any) => p.className !== "PARK") as any;
-  assert.ok(plot, "no non-park plot in the real plan to pick");
-  const cx = (plot.xMin + plot.xMax) / 2, cz = (plot.zMin + plot.zMax) / 2;
+test("a pick returns a real plot id that is present in the plan", { skip: "BLOCKED: needs a real plot from a generated plan; public/city-plan.js is quarantined (see file header)" }, () => {});
 
-  const selection = createSelection(index);
-  const picked = selection.pick(cx, cz);
-
-  assert.equal(picked.plotId, plot.id);
-  assert.ok(plan.plots.some((p: any) => p.id === picked.plotId), "the picked id is not a real plot in the plan");
-});
-
-test("the selection persists as .current until picked again or cleared", () => {
-  const plot = plan.plots[0] as any;
-  const cx = (plot.xMin + plot.xMax) / 2, cz = (plot.zMin + plot.zMax) / 2;
-  const selection = createSelection(index);
-
-  assert.equal(selection.current, null, "a fresh selection was not empty");
-  selection.pick(cx, cz);
-  assert.equal(selection.current.plotId, plot.id);
-  selection.clear();
-  assert.equal(selection.current, null, "clear() did not clear the selection");
-});
+test("the selection persists as .current until picked again or cleared", { skip: "BLOCKED: needs a real plot from a generated plan; public/city-plan.js is quarantined (see file header)" }, () => {});
 
 test("a pick between plots (a street) still resolves, on-plot false, and does not throw", () => {
   const selection = createSelection(index);

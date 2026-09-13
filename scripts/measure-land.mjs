@@ -8,7 +8,9 @@
 //   node scripts/measure-land.mjs
 // =============================================================================
 import { LandField, makeHeightAt, landmassPolygonsDesign } from "../public/terrain.js";
-import { WORLD } from "../public/city-plan.js";
+// WORLD moved to public/world-scale.js, 2026-09-13, Phase 1 "take it all
+// down" -- public/city-plan.js is quarantined (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md).
+import { WORLD } from "../public/world-scale.js";
 
 function shoelaceAreaM2(poly) {
   let a = 0;

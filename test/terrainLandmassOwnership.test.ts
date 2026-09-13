@@ -62,23 +62,16 @@ function repoRoot(): string {
 const ROOT = repoRoot();
 const TERRAIN_SRC = readFileSync(join(ROOT, "public", "terrain.js"), "utf8");
 
-test("B1 (wiring): terrain.js no longer imports landmassPolygonsDesign or LANDMASSES from city-plan.js", () => {
-  // Matches the exact shape of the dependency being broken -- a name pulled
-  // OUT of a `from "./city-plan.js"` import specifier -- not just "does the
-  // string city-plan.js appear anywhere" (terrain.js still legitimately
-  // imports WORLD from there, out of scope for this step per Mark's own
-  // instruction, since WORLD is shared far more broadly than LANDMASSES).
+test("B1 (wiring): terrain.js no longer imports landmassPolygonsDesign, LANDMASSES, or anything else from city-plan.js", () => {
+  // UPDATED, 2026-09-13, Phase 1 "take it all down"
+  // (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md), per this test's OWN
+  // prior comment ("if WORLD moved too, update this test to match, don't
+  // just delete it"): WORLD moved out of city-plan.js to world-scale.js in
+  // this same pass (city-plan.js itself is quarantined), so terrain.js's
+  // import of city-plan.js is not merely narrowed, it is gone entirely.
+  // A stronger, now-true assertion replaces the narrower one.
   const cityPlanImport = TERRAIN_SRC.match(/import\s*\{([^}]*)\}\s*from\s*"\.\/city-plan\.js"/);
-  assert.ok(cityPlanImport, "terrain.js no longer imports from city-plan.js at all -- if WORLD moved too, update this test to match, don't just delete it");
-  const importClause = cityPlanImport![1];
-  // Substring match on the whole clause, not an exact-name array membership
-  // check: an aliased import (`landmassPolygonsDesign as _x`) reads as a
-  // single comma-separated entry that is not exactly "landmassPolygonsDesign",
-  // and an exact-match check against split names would miss it entirely --
-  // found by mutating exactly that shape and watching this test wrongly stay
-  // green before this fix.
-  assert.ok(!/\blandmassPolygonsDesign\b/.test(importClause), `terrain.js still imports landmassPolygonsDesign from city-plan.js (import clause: "${importClause}") -- the dependency this step exists to break`);
-  assert.ok(!/\bLANDMASSES\b/.test(importClause), `terrain.js still imports LANDMASSES from city-plan.js (import clause: "${importClause}") -- the dependency this step exists to break`);
+  assert.equal(cityPlanImport, null, "terrain.js still imports from city-plan.js -- expected zero imports now that WORLD moved to world-scale.js and city-plan.js is quarantined");
 });
 
 test("B1 (wiring): terrain.js exports its own landmassPolygonsDesign, not a re-export of city-plan.js's", () => {
@@ -142,11 +135,19 @@ test("B1: the exact, current set of files still reading city-plan.js's LANDMASSE
     // authoritative copy in terrain.js." It had zero live importers of its
     // own (public/ and test/ both checked) -- the file itself is gone from
     // findCityPlanLandmassImporters's public/ scan, not merely edited.
+    //
+    // "test/cityConnectivity.test.ts" and "test/worldSpec.test.ts" migrated
+    // OUT -- retired, Phase 1 "take it all down" (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md):
+    // both tested public/city-plan.js's own generated-plan behaviour
+    // directly, and that file is quarantined. "test/cityWorld.test.ts" also
+    // migrated out -- BLOCKED, not retired (most of its 57 tests exercise
+    // surviving terrain.js/land-use.js/features.js code, but the file's
+    // fixture and several tests need the same quarantined generator; see
+    // _TO-DELETE/LEDGER.jsonl for the full reasoning). "test/worldAliasing.test.ts"
+    // stayed in test/ but no longer imports city-plan.js at all -- its two
+    // tests that needed WORLD/LANDMASSES/HIGHWAYS are individually blocked
+    // in place, with the import itself removed.
     "scripts/_render-arterial-data.mjs",
-    "test/cityConnectivity.test.ts",
-    "test/cityWorld.test.ts",
-    "test/worldAliasing.test.ts",
-    "test/worldSpec.test.ts",
   ].sort();
   const actual = findCityPlanLandmassImporters();
   assert.deepEqual(

@@ -27,12 +27,13 @@ import assert from "node:assert/strict";
 import { runGenerateRequest } from "../public/run-generate-request.js";
 import { requirements } from "../public/transform.js";
 import { createGround } from "../public/ground.js";
-import { createModelRegistry } from "../public/model-registry.js";
-import { applyAndPersist } from "../public/apply-and-persist.js";
-import { createWorld, worldFromJSON } from "../public/world.js";
-import { createWorldStore, memoryAdapter } from "../public/world-store.js";
-import { buildWorldState, buildScenePlacements } from "../public/city-render.js";
-import { resolveOverrideModels } from "../public/resolve-models.js";
+// public/city-render.js is quarantined, 2026-09-13, Phase 1 "take it all
+// down" (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md) -- buildWorldState/
+// buildScenePlacements no longer exist; see the BLOCKED test below, which
+// used to also exercise createModelRegistry, applyAndPersist, createWorld,
+// worldFromJSON, createWorldStore/memoryAdapter and resolveOverrideModels --
+// all of them survive and are unaffected, just unused now that this one
+// test is blocked.
 
 // The same deterministic fixtures test/generateRequest.test.ts already
 // established for D3/D4 -- dry land at x < -100, harbour water at
@@ -89,47 +90,11 @@ test("I5 positive case: a stubbed valid model response is verified", async () =>
   assert.equal(calls.length, 1, "a transform the ground approved should call the model exactly once");
 });
 
-test("I5 end to end: a verified model reaches the scene, not just verifyModelSource", async () => {
-  // The assessment/verify half uses the deterministic D3/D4 fixture (above);
-  // the "reaches the scene" half needs a REAL plot address a real world
-  // actually resolves -- the two concerns are independent, so this borrows
-  // a real plotId from the real generated plan rather than re-deriving one.
-  const { world, heightAt: realHeightAt } = buildWorldState("i5-end-to-end-seed");
-  const realPlot = world.plots.find((p: any) => p.className !== "PARK");
-  assert.ok(realPlot, "setup: no real plot found to target");
-
-  const want = { label: "a small shed", ...requirements({ footprint: { w: 3, d: 3 }, support: "ground" }) };
-  const source = "(T) => new T.BoxGeometry(2.5, 3, 2.5)";
-  const { caller } = countingStub(source);
-  const result = await runGenerateRequest({
-    subject: shed, want, request: { address: realPlot.id, text: "add a small shed" }, land, caller, evaluate, THREE,
-  });
-  assert.equal(result.ok, true, JSON.stringify(result));
-
-  const registry = createModelRegistry();
-  const instance = createWorld({ seed: "i5-end-to-end-seed" });
-  const store = createWorldStore(memoryAdapter());
-  const persisted = await applyAndPersist({
-    world: instance, worldId: "i5-world", registry, store,
-    request: { address: realPlot.id }, source, verdict: result.verdict,
-    modelId: "i5-generated-shed", layerId: "i5-layer", author: "i5-test",
-  });
-  assert.equal(persisted.ok, true, JSON.stringify(persisted));
-
-  // SURVIVES A RELOAD -- not just true in the same in-memory instance that
-  // just wrote it (the exact gap D8's own undo test was written to catch).
-  const loaded = await store.load("i5-world");
-  assert.equal(loaded.ok, true, JSON.stringify(loaded));
-  const reloaded = worldFromJSON({ seed: (loaded as any).seed, layers: (loaded as any).layers });
-
-  const { overridden } = buildScenePlacements({ instance: reloaded, world: reloaded.plan, heightAt: realHeightAt });
-  const targetPlacement = overridden.find((p: any) => p.plotId === realPlot.id);
-  assert.ok(targetPlacement, "the generated model's plot never left its instance group after reload -- it would not be drawn at all");
-
-  const reloadedRegistry = createModelRegistry();
-  reloadedRegistry.register("i5-generated-shed", result.verdict);
-  const { resolved, refused } = resolveOverrideModels([targetPlacement], reloadedRegistry);
-  assert.equal(refused.length, 0, JSON.stringify(refused));
-  assert.equal(resolved.length, 1);
-  assert.equal(resolved[0].model.geometry, result.verdict.geometry, "the placement did not resolve to the SAME verified geometry the model call produced");
-});
+// BLOCKED, 2026-09-13, Phase 1 "take it all down"
+// (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md). Needs a real plot address
+// from buildWorldState() (public/city-render.js, quarantined) and
+// buildScenePlacements to confirm the generated model reaches the scene.
+// runGenerateRequest/applyAndPersist/createWorld/worldFromJSON/
+// createWorldStore/resolveOverrideModels all survive -- there is simply no
+// real plot to target without the old generator.
+test("I5 end to end: a verified model reaches the scene, not just verifyModelSource", { skip: "BLOCKED: needs a real plot from buildWorldState(); public/city-render.js is quarantined (see comment above)" }, async () => {});
