@@ -93,6 +93,24 @@
  */
 export const WORLD_SCALE = 0.65;
 
+// =============================================================================
+// WORLD — moved here verbatim from public/city-plan.js, 2026-09-13, Phase 1
+// "take it all down" (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md).
+// city-plan.js is quarantined; this object is not generated content -- every
+// field is a literal or a simple product of literals (SIZE is the only
+// derived one, WORLD_SCALE times the design size this file already owns) --
+// so it moves intact rather than being reinvented. public/terrain.js and
+// public/world-render-3d.js both read it from here now.
+// =============================================================================
+export const WORLD = {
+  SIZE: 40000 * WORLD_SCALE,   // the modelled square; 26 km at k = 0.65
+  HORIZON: 52000,
+  SEA_SPAN: 6,
+  ABYSS_SPAN: 6,
+  GROUND_SPAN: 4.5,
+  APRON_STEP_MULTIPLE: 4,
+};
+
 /** Scale a landform distance (metres of terrain) from design space to world. */
 export function sm(v) {
   return v * WORLD_SCALE;

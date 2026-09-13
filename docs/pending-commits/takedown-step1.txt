@@ -1,0 +1,41 @@
+Phase 1 takedown, step 1 -- extract the two pieces of pure static
+configuration data city-plan.js's kept dependents actually need, so
+city-plan.js itself can be quarantined without breaking them.
+
+public/world-scale.js gains WORLD (SIZE/HORIZON/SEA_SPAN/ABYSS_SPAN/
+GROUND_SPAN/APRON_STEP_MULTIPLE), moved verbatim from public/city-plan.js.
+Confirmed before moving it, not assumed: every field is a literal or a
+simple product of literals (SIZE is 40000 * WORLD_SCALE, both already
+independent of the old world), nothing depends on generateWorld()'s output.
+public/terrain.js and public/world-render-3d.js now import WORLD from here
+instead.
+
+public/buildings.js gains a local PLOT_CLASSES (per-typology footprint and
+height-limit table), moved verbatim from public/city-plan.js -- buildings.js
+is its only remaining consumer now that city-render.js (which also read it)
+is quarantined in a later step.
+
+public/world-render-3d.js also loses its import of boardPiecesById from
+public/board-adapter.js -- that import's one real call site was inside
+_buildCityBase, which this same step guts to a documented dormant stub (see
+docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md's "what goes dormant" section
+for the full reasoning): the method built the old world, the shell's own
+picking spatial index, AND the real committed board's render, all riding on
+one boot sequence that only ran when `city: true`. Nothing constructs this
+class with `city: true` any more once index.html becomes a holding page (a
+later step), so the method is unreachable; it throws a named, documented
+error rather than leaving a dangling import to a file that has moved.
+
+How it is known to be fixed: npm run typecheck (clean); node test/run.mjs
+ground.test.ts grid.test.ts placementLayout.test.ts buildingExplicitSize.test.ts
+buildingLODAndColors.test.ts focusDistance.test.ts -- 68/70 pass, the 2
+failures are pre-existing (matched verbatim against this session's very
+first baseline run, before any edit today: "a thing may stand on the ground
+a road defines..." and "but something already standing there does refuse
+it," both in ground.test.ts, both about a road-slope/occupancy interaction
+unrelated to this change).
+
+What is still open: city-plan.js itself has not moved yet (world.js's own
+generateWorld import is next); city-render.js, layout.js, instance-groups.js,
+layout-fits.js, board-adapter.js, city.html, city-live-world.js are all
+still in place, per the plan's own innermost-first order.

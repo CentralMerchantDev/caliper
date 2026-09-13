@@ -13,10 +13,12 @@
 // Day/Dusk/Night atmosphere cycle, and smooth orbital camera with district bookmarks.
 
 import * as THREE from "three";
-import { WORLD_SCALE } from "./world-scale.js";
-import { WORLD } from "./city-plan.js";
+// WORLD moved to world-scale.js, 2026-09-13, Phase 1 "take it all down" --
+// city-plan.js is quarantined (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md).
+import { WORLD_SCALE, WORLD } from "./world-scale.js";
 import { createSelection } from "./selection.js";
-import { boardPiecesById } from "./board-adapter.js";
+// board-adapter.js's boardPiecesById is quarantined with it -- its one call
+// site was inside _buildCityBase, below, which is now dormant.
 import { fetchBoard, pieceAtPoint } from "./board-load.js";
 import { buildBoardScene, scatterTrees, scatterStreetLamps, scatterStreetFurniture, scatterBusShelters } from "./board-render.js";
 import { neighboursOf, applyIsolate, restoreIsolate } from "./isolate.js";
@@ -1719,278 +1721,32 @@ class Renderer3D {
    * on it.
    */
   async _buildCityBase(world) {
-    const { buildWorld } = await import("./city-render.js");
-
-    // GIVE THE BROWSER A FRAME BEFORE BLOCKING IT FOR TWO SECONDS.
+    // DORMANT -- Phase 1 rebuild, "take it all down," 2026-09-13.
+    // docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md.
     //
-    // buildWorld is synchronous, and it is the whole world: terrain field,
-    // city plan, 19,481 plots, then every mesh. On the main thread that is one
-    // uninterruptible block -- no paint, no scroll, no input. The boot panel
-    // exists and says "BUILDING THE CITY", but nothing guaranteed it had ever
-    // been PAINTED before the freeze started, so on a cold load the visitor
-    // could get a blank gradient and a dead tab.
+    // This method built the OLD WORLD (public/city-render.js buildWorld(),
+    // the plot/district city Mark rejected) and, riding the same boot
+    // sequence, ALSO built this shell's own picking spatial index
+    // (this._index, via public/spatial-index.js and city.world), selection
+    // state (this._selection), and the real committed board's instanced
+    // render (public/board-adapter.js + public/board-render.js, drawing
+    // public/board.generated.json). None of it worked independently of the
+    // old world's data shape -- confirmed directly before this method was
+    // gutted, not assumed.
     //
-    // `await import()` only yields a microtask, which does not give the
-    // compositor a turn. Two nested rAFs do: the first fires before a paint,
-    // the second after it, so when this resolves the panel is genuinely on
-    // screen. It costs about 32 ms and buys the difference between "loading"
-    // and "broken".
-    //
-    // This does not make the build interruptible -- it cannot, without moving
-    // generation off-thread, and the honest fix for the freeze itself was to
-    // make it shorter: 5.32 s to 2.34 s, verified byte-identical.
-    await new Promise((resolve) => {
-      if (typeof requestAnimationFrame !== "function") { resolve(); return; }
-      requestAnimationFrame(() => requestAnimationFrame(resolve));
-    });
-
-    // The village's own sky, fog and lights would fight the city's. Take them
-    // out before the city installs its own rather than leaving two suns.
-    // `this.moonLight` DOES NOT EXIST -- the property is `_moonLight` (assigned
-    // in _initScene, read in draw()). The `if (obj && ...)` guard below turned
-    // that typo into a silent skip, so the village's moon stayed in the city
-    // scene and draw() kept driving its intensity every frame: the city's night
-    // lit by a light the city was never tuned against, which is exactly the
-    // "two suns" this loop exists to prevent.
-    //
-    // The village's other atmosphere goes too. The starfield, the 18 cloud
-    // clusters and the 28 fireflies were never in this list at all, and their
-    // extents are the village's: clouds sit at y = 160-250 and wrap at +/-850 m,
-    // while downtown towers reach 220 m -- so they intersect the skyline, and
-    // the city pick raycasts the whole scene, so a ray can hit a cloud and the
-    // inspector then reports a confident plot address for the ground beneath it.
-    for (const obj of [this._skyMesh, this.ambient, this.hemi, this.sun, this._moonLight,
-                       this._moonMesh, this._starsMesh, this._cloudsGroup]) {
-      if (obj && obj.parent) obj.parent.remove(obj);
-    }
-    // REMOVED FROM THE SCENE IS NOT THE SAME AS GONE.
-    //
-    // Taking these out of the scene left the PROPERTIES pointing at them, so
-    // every `if (this._moonMesh && ...)` guard in draw() still passed and the
-    // day/night code went on positioning a moon, fading a starfield and
-    // drifting eighteen cloud clusters that nothing renders. Measured over ten
-    // ticks at night: moonInScene false, yet the moon moved from
-    // (129, 192, -1096) to (-2445, 664, -1228), and star opacity was rewritten
-    // every frame. sky.js's own header describes this exact state as the bug it
-    // was written to fix -- it added a replacement and did not stop the old code.
-    //
-    // Nulled AND disposed: a 1,200-point starfield, eighteen cloud clusters and
-    // a moon sphere were held on the GPU for a scene that cannot show them.
-    for (const [obj, prop] of [[this._moonMesh, "_moonMesh"], [this._starsMesh, "_starsMesh"],
-                               [this._cloudsGroup, "_cloudsGroup"], [this._moonLight, "_moonLight"]]) {
-      if (obj && typeof obj.traverse === "function") {
-        obj.traverse((o) => {
-          if (o.geometry) o.geometry.dispose?.();
-          if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose?.());
-        });
-      }
-      this[prop] = null;
-    }
-    this._cloudPuffs = [];
-    // The fireflies are individual meshes, not a group, so they need their own
-    // pass. They orbit +/-30 m of the village origin, which in the city is a
-    // swarm of glowing dots inside downtown.
-    for (const f of this._fireflies || []) {
-      if (f.mesh && f.mesh.parent) f.mesh.parent.remove(f.mesh);
-      if (f.mesh) { f.mesh.geometry?.dispose?.(); f.mesh.material?.dispose?.(); }
-    }
-    this._fireflies = [];
-    this.scene.background = null;
-
-    // The village lights its materials with a PMREM'd HDRI in scene.environment.
-    // The city's do not expect one -- its own build reports envLuminance 0 --
-    // so applying an environment map to 31,000 buildings raises every surface
-    // towards a flat bright average and the whole scene reads as washed out.
-    // That was the first render after the swap, and it was not fog and not the
-    // sun: both were ruled out by probing the live scene.
-    this.scene.environment = null;
-
-    const city = buildWorld(THREE, this.renderer, this.scene);
-    this._city = city;
-
-    // B3 (docs/briefs/RUN2-CLI-2026-09-09.md, reordered ahead of
-    // everything else): draw the REAL persisted board
-    // (public/board.generated.json, B2/B2.7's own real pieces) via
-    // public/board-render.js -- the render path named in
-    // docs/specs/BOARD-REBUILD-PLAN.md as the tenth capability built
-    // beside the renderer and never drawn.
-    //
-    // BOOTSTRAP DECISION, WRITTEN DOWN (B2.6 left this open): createWorld()
-    // is synchronous; fetchBoard() is inherently async (fetch()). This
-    // method (_buildCityBase) is ALREADY async -- it already `await
-    // import()`s city-render.js and awaits two animation frames above --
-    // so awaiting fetchBoard() here needs no new architecture, only this
-    // one more await in a place that was already one.
-    //
-    // ADDITIVE, NOT A REPLACEMENT, NAMED AS A SCOPING CHOICE: buildWorld()
-    // above is not removed. Its return value (`city`) is still what
-    // picking (P4.1's boardPiecesById two lines down), the spatial index,
-    // selection, and sun/sky all key off -- replacing it outright would
-    // mean rebuilding all four in the same pass, which this run's own
-    // "partial credit" allowance (RUN2-CLI-2026-09-09.md) does not ask
-    // for tonight. The board's own pieces are added as a SECOND group in
-    // the same scene instead, so the real board is genuinely visible
-    // (not a placeholder, not hidden behind a flag) while the swap that
-    // retires city-render.js waits for B4 (kits) and B6 (quarantine).
-    // A failure here is caught and logged, not thrown -- the board is a
-    // real addition, not yet load-bearing for anything else this method
-    // sets up, so a fetch failure must not break city mode entirely.
-    //
-    // GATED BEHIND ?board=1, OFF BY DEFAULT (RUN3-CLI-2026-09-09): measured
-    // directly on public/city.html (this file's own sibling bootstrap,
-    // identical wiring) that drawing all ~35,000 un-instanced board pieces
-    // breaks two standing performance gates -- test/cullingRatio.test.ts
-    // and test/regressionGate.test.ts, both watched red. The same
-    // regression applies here (city mode shares this exact code path), so
-    // this stays off for an ordinary visitor and on only when explicitly
-    // requested. Real instancing/LOD for board pieces is B5's job.
-    const boardRequested = typeof location !== "undefined" && new URLSearchParams(location.search).get("board") === "1";
-    if (boardRequested) try {
-      const boardData = await fetchBoard(city.heightAt);
-      // B3 step toward the architecture rule ("picking... come[s] from
-      // [the board]"): retained past this block so the pick handler below
-      // can query it directly (board.js's own whereIs/inCells), not just
-      // draw its pieces. Still gated on ?board=1 like everything else in
-      // this block -- an ordinary page load never sets this, so the new
-      // pick-handler branch that reads it is never reached either.
-      this._boardData = boardData;
-      this._boardScene = buildBoardScene(THREE, boardData.pieces);
-      this.scene.add(this._boardScene);
-      // B4 ("kits wire by construction"): a real tree, from
-      // public/prop-models.js's own propModel(), scattered beside a modest
-      // fraction of the real building pieces -- see board-render.js's own
-      // scatterTrees() header for why this is deliberately bounded rather
-      // than one tree per building.
-      this._boardTrees = scatterTrees(THREE, boardData.pieces);
-      this.scene.add(this._boardTrees);
-      // B4: a real street lamp, from propModel("lampPost", ...) -- the
-      // manifest's OTHER resolution path (a plain props.js alias, not a
-      // VARIED generator family) -- scattered beside a modest fraction of
-      // the real road pieces; see board-render.js's own
-      // scatterStreetLamps() header for the positioning reasoning.
-      this._boardLamps = scatterStreetLamps(THREE, boardData.pieces);
-      this.scene.add(this._boardLamps);
-      // B4: real benches and bins, from propModel("bench", ...) /
-      // propModel("bin", ...) -- the manifest's next two plain aliases
-      // after lampPost, alternated along a modest fraction of the real
-      // road pieces; see board-render.js's own scatterStreetFurniture()
-      // header for why this one also rotates (a bench's footprint, unlike
-      // a lamp's, is not roughly symmetric).
-      this._boardStreetFurniture = scatterStreetFurniture(THREE, boardData.pieces);
-      this.scene.add(this._boardStreetFurniture);
-      // B4: real bus shelters, from propModel("busShelter", ...) -- the
-      // manifest's fourth plain alias, scattered more sparsely than
-      // benches/bins (a much larger, rarer structure); see
-      // board-render.js's own scatterBusShelters() header for why this
-      // one also rotates, same reason as scatterStreetFurniture.
-      this._boardBusShelters = scatterBusShelters(THREE, boardData.pieces);
-      this.scene.add(this._boardBusShelters);
-      // .userData.itemCount, not .children.length -- 2c instanced these
-      // groups (one InstancedMesh per prop variant, not one child per
-      // placed item), so .children.length is now a small group count, not
-      // the real placed-item count this log line means to report.
-      console.log(`B3/B4: board render path drew ${boardData.pieces.length} real pieces, ${this._boardTrees.userData.itemCount} real trees, ${this._boardLamps.userData.itemCount} real street lamps, ${this._boardStreetFurniture.userData.itemCount} real street furniture items and ${this._boardBusShelters.userData.itemCount} real bus shelters from public/board.generated.json`);
-    } catch (e) {
-      console.error("B3/B4: failed to fetch/draw the real board (city geometry above is unaffected):", e);
-    }
-
-    // P4.1 -- the REAL board record for a clicked building, not a
-    // renderer-local approximation of the same facts. board.js is not the
-    // render source of truth (docs/audits/P4-GROUNDING.md, Finding 1) --
-    // this reads it, once per world load, from the SAME placements the
-    // scene was actually drawn from (city.scenePlacements), not a second,
-    // possibly-diverging computation.
-    this._boardPieces = city.scenePlacements
-      ? boardPiecesById(city.world, [...city.scenePlacements.instanced, ...city.scenePlacements.overridden])
-      : new Map();
-
-    // WHAT IS AT THIS POINT, AND WHAT IS IT PART OF.
-    //
-    // Without this a click reports a coordinate, which is useless to everyone:
-    // the visitor cannot name what they selected and the pipeline cannot act on
-    // it. With it, a point resolves to a plot, its block, its district and its
-    // settlement -- an address a change request can be written against and that
-    // grounding can check a claim against.
-    //
-    // Built from the same generated plan the geometry came from, so it cannot
-    // describe a world that is not on screen.
-    const { buildSpatialIndex } = await import("./spatial-index.js");
-    this._index = buildSpatialIndex(city.world);
-    // I3: WHAT WAS PICKED STAYS PICKED, BETWEEN THE CLICK AND WHATEVER ASKS
-    // ABOUT IT NEXT. `_index.addressAt(x, z)` alone answers the question for
-    // one instant; nothing remembered it a moment later, which is fine for a
-    // label on screen but not for D2/D4's "describe this" -- that request is
-    // written after the click, against whatever was last selected. Composes
-    // D1's createSelection() over the same index, rather than a second,
-    // parallel notion of "what is selected".
-    this._selection = createSelection(this._index);
-    this.sun = city.sun;                    // the shell's day/night code drives this
-    this._skyMesh = city.sky;
-    // AND ITS UNIFORMS, WHICH WERE LEFT POINTING AT THE VILLAGE'S SKY.
-    //
-    // _skyUniforms was assigned once, from the village Sky() built in
-    // _initScene. _buildCityBase removes that mesh from the scene and reassigns
-    // _skyMesh -- and never touched _skyUniforms. So draw() wrote sunPosition,
-    // turbidity and rayleigh into the uniforms of a sky that is not in the
-    // scene, every frame, forever, while the city's own sky had its sun set
-    // once at build time and never moved again.
-    //
-    // The sun light travelled through the day; the sky behind it did not.
-    this._skyUniforms = (city.sky && city.sky.material && city.sky.material.uniforms) || null;
-
-    // HEADLESS CAPTURE HOOKS -- the same pair city.html has had all along.
-    //
-    // Their absence is why nothing visual about THIS page could ever be
-    // verified. scripts/shoot.mjs renders city.html, which is a bare renderer
-    // that never constructs this class, so the pivot marker, the sky and the
-    // colour grade were all invisible to it -- and the one attempt to drive
-    // index.html directly failed because its animation loop never advanced, so
-    // the camera was never positioned and a raycast from it returned the world
-    // origin at distance zero. That was read, at length, as a broken feature.
-    //
-    // __renderOnce draws a frame on demand and __tick advances the world by a
-    // known step, so a harness can put this page in a deterministic state
-    // instead of waiting on rAF and hoping.
-    if (typeof window !== "undefined") {
-      window.__scene = this.scene;
-      window.__camera = this.camera;
-      window.__renderOnce = () => {
-        if (this.composer) this.composer.render();
-        else this.renderer.render(this.scene, this.camera);
-      };
-      window.__tick = (dt = 0.016) => { this.draw(dt); };
-      window.__ready = true;
-    }
-
-    // THE OTHER HALF OF THE SWAP.
-    //
-    // The block above removes the village's starfield, cloud group, moon mesh
-    // and moon light because they are sized for a village. Nothing ever put a
-    // city-sized replacement back -- while draw() went on positioning the moon,
-    // fading the stars and drifting the clouds every frame, against objects that
-    // were no longer in the scene. Every guard passed, every update landed on an
-    // orphan, and the sky was empty.
-    //
-    // The replacement is BUILT BY city-render.js, alongside the sun and the fog,
-    // and handed over here. It is not built in this file: city.html does not
-    // construct WorldRenderer, so a sky created here would be invisible to
-    // scripts/shoot.mjs -- the only tool that can photograph this world.
-    this._citySky = city.citySky || null;
-    this._cityHeightAt = city.heightAt;
-    this._refreshFeatureTargets();
-
-    // Placements are addressed in world metres here, not in village plot units,
-    // so the centre offset is the origin.
-    this._plotCenter = { x: 0, z: 0 };
-    this._surfaces = world.surfaces || {};
-    this._objectTypes = world.objectTypes || {};
-    this._buildingsById = {};
-    this._buildingGroupsById = {};
-    this._buildingScaleById = {};
-    this._placementMeshesById = new Map();
-    this._neighbourhoodBuilt = true;
-    this._reconcilePlacements(world);
-    return city;
+    // city-render.js, city-plan.js and board-adapter.js are quarantined to
+    // _TO-DELETE/old-world/. This method is unreachable in practice: it is
+    // only ever called from _buildNeighbourhoodIfNeeded when this._cityMode
+    // is true, and nothing constructs this class with `city: true` any
+    // more (public/index.html is a holding page). Kept, not deleted, as the
+    // record of what Phase 2 needs to reconnect: a spatial index and
+    // selection built from the NEW board, and the real board drawn from the
+    // NEW board's own boot path -- neither one riding on an old-world city
+    // build again.
+    throw new Error(
+      "_buildCityBase is dormant: the old world is quarantined. " +
+      "See docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md."
+    );
   }
 
   /** The right bookmark table for the world actually on screen. Village

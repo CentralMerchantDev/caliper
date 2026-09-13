@@ -20,11 +20,27 @@
 
 import * as THREE from "./vendor/three/three.module.min.js";
 import { fbm, clamp } from "./noise.js";
-// city-plan.js does not import this module, so there is no cycle. The class
-// height ceilings live there because they are a property of the PLAN, and this
-// module has to honour them rather than keep a second copy that can drift.
-import { PLOT_CLASSES } from "./city-plan.js";
 import { TYPOLOGY_FOOTPRINT_CELLS } from "./typology-footprints.js";
+
+// PLOT_CLASSES moved here verbatim from public/city-plan.js, 2026-09-13,
+// Phase 1 "take it all down" (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md).
+// city-plan.js is quarantined; this table is not generated content -- pure
+// per-typology footprint and height limits -- and this file is now its only
+// consumer, so it moves intact rather than being reinvented or stubbed.
+const PLOT_CLASSES = {
+  TERRACE:   { minW: 8,   maxW: 16,  minD: 22,  maxD: 34,  maxHeight:  18, module: 8, tileRow: true },
+  TOWNHOUSE: { minW: 8,   maxW: 32,  minD: 24,  maxD: 40,  maxHeight:  24, module: 8, tileRow: true },
+  MIDRISE:   { minW: 26,  maxW: 52,  minD: 32,  maxD: 64,  maxHeight:  55, module: 8 },
+  TOWER:     { minW: 48,  maxW: 88,  minD: 40,  maxD: 96,  maxHeight: 220, module: 8 },
+  CIVIC:     { minW: 56,  maxW: 184, minD: 48,  maxD: 112, maxHeight:  70, module: 8 },
+  PARK:      { minW: 40,  maxW: 200, minD: 40,  maxD: 130, maxHeight:   0, module: 8 },
+  // --- beyond the downtown island ---
+  RESORT:    { minW: 32,  maxW: 80,  minD: 32,  maxD: 72,  maxHeight:  70, module: 8 },  // beach hotels
+  VILLA:     { minW: 16,  maxW: 32,  minD: 16,  maxD: 40,  maxHeight:  14, module: 8 },  // low coastal housing
+  WAREHOUSE: { minW: 48,  maxW: 152, minD: 40,  maxD: 96,  maxHeight:  22, module: 8 },  // port sheds
+  FARM:      { minW: 160, maxW: 464, minD: 120, maxD: 344, maxHeight:  11, module: 8 }, // fields + barns
+  HANGAR:    { minW: 88,  maxW: 224, minD: 64,  maxD: 152, maxHeight:  26, module: 8 },  // airport
+};
 
 export { TYPOLOGY_FOOTPRINT_CELLS };
 
