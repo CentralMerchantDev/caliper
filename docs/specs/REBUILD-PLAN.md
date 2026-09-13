@@ -7,6 +7,56 @@ it stops being the checklist.
 
 ---
 
+## CORRECTION — 2026-09-13. IT ALL COMES DOWN. THE LIVE PAGE GOES DARK.
+
+A blind review found that `public/city-render.js` and its dependents are not a
+dead demo path — they are what `index.html` renders today, via a dynamic
+`import()` static analysis cannot see. Only `public/road-network.js` was moved;
+the rest was left standing on the grounds that removing it would take the live
+page down.
+
+**That reasoning is rejected. Mark, 2026-09-13:**
+
+> *"They should have taken the whole thing down. I've gone through this before…
+> I want it all down. We talked about, yes, it would take down the live site,
+> and I get that. That is fine so we can build it back up — that's what phase
+> two was about. I don't want to go about the 'oh, we're gonna patch onto' —
+> that's what we did. That's what we were trying to stop doing. It doesn't work.
+> We ended up with a whole bunch of work that is garbage."*
+
+**"It would take the live page down" is not an obstacle. It is the cost already
+accepted** — *"I am willing to have it look worse for a stretch"* — and treating
+an accepted cost as a blocker is how a workaround gets invented for a problem
+nobody had. A "separate route, switch over later" scheme was drafted here and is
+**withdrawn**: it is the same keep-both structure under a new name, and
+keep-both is what produced doubled roads, 36 permanently red tests, a board of
+three flat colours, and a month of work Mark calls garbage.
+
+**This is the third time in one conversation the assistant defaulted to
+preserving the old world. Do not do it a fourth.**
+
+### What "all down" means, concretely
+
+- **Quarantine `city-render.js`, `layout.js`, `instance-groups.js`,
+  `city-plan.js`** and everything that serves only them. `rule://quarantine`
+  Tier 2 — moved to `_TO-DELETE/<reason>/` with a ledger line, retained, never
+  deleted.
+- **`index.html` stops rendering a world.** A holding page until Phase 2.1
+  produces the flat board.
+- **Every test whose subject leaves, retires** — by name, with its reason, never
+  swept.
+- **The shell's world-dependent parts go dormant.** Picking has nothing to pick;
+  the inspector reads `addr`/`districtId`/`className` that will no longer exist.
+  The shell survives as code and waits for the new board. That is a consequence
+  to plan for, **not a reason to keep the old world.**
+
+### One consequence to know, not to weigh
+
+The live URL goes dark until Phase 2.1. If a link is going out with a résumé this
+week, a holding page is the fix, not a reprieve for the old world.
+
+---
+
 ## CORRECTIONS — 2026-09-13, from a hostile blind review. READ FIRST.
 
 The spec was reviewed cold by a reviewer given no context and told to be hostile.
