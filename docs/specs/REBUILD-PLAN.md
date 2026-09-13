@@ -100,10 +100,11 @@ one cell beats another" — Dorfromantik's version is *count matching edges*.
 **Phase 2 ships flat adjacency scoring: each piece has a base value and gives a
 fixed bonus to neighbours.** The scalar-field model in C3.1–C3.2 moves to Phase 3.
 
-**C-11. The vision material belongs in its own document.** Multi-city unlocking,
-city-health gates, token economies, player code uploads and the charitable-giving
-model are recorded in MARK'S ANSWERS. They are not build scope and should move
-out before a lane reads this as a work list.
+**C-11. The vision material belongs in its own document.** **DONE, 2026-09-13
+(Phase 1 item 4).** Multi-city unlocking, city-health gates, token economies,
+player code uploads and the charitable-giving model — previously in MARK'S
+ANSWERS below — are now `docs/specs/VISION.md`, verbatim, with a one-line
+pointer left in their place.
 
 ---
 
@@ -736,11 +737,9 @@ not being a 3D artist costs nothing at all.
 
 ## MARK'S ANSWERS — 2026-09-11
 
-**The world.** It is a **world**, and we build **one city** in it. Other cities and
-areas are **gate-locked** behind a milestone — a buildout level plus overall city
-health (finance, schooling, healthcare — his examples, not fixed). Reaching it
-lets you start a new city, either **pre-started** with style and layout options, or
-**blank from the ground up**.
+**The world.** It is a **world**, and we build **one city** in it. Multi-city
+unlocking and the city-health gate are recorded intent, not this phase's
+scope — moved to `docs/specs/VISION.md` per CORRECTIONS C-11.
 
 **This first city:** a mix of the original world — the outer island and the inner
 one the old city sat on, **combined** — plus a **large archipelago of islands big
@@ -752,13 +751,10 @@ answer it instead.** What he named wanting more of: houses, condos, commercial
 across a size ladder (small through mega tower and skyscraper), bridges, roads,
 trees, cars. Less of: benches.
 
-**Money.** For now Mark pays, and it must be free or near-free — hence Cloudflare.
-Later: players, in-game purchases, and the coding lane on tokens or passes, with a
-long-term goal of players coding on their own machines and paying to upload and
-have their work checked into the world. **The stated ethic: a share of what a
-player spends funds a real-world outcome** — groceries, a mortgage, a thousand
-bikes — so a digital asset causes real change. A donate path alongside. All of
-this is far beyond current scope and is recorded so it is not lost.
+**Money.** For now Mark pays, and it must be free or near-free — hence
+Cloudflare. The later token economy, player code uploads and
+charitable-giving model are recorded intent, not this phase's scope — moved
+to `docs/specs/VISION.md` per CORRECTIONS C-11.
 
 **Spend ceiling.** Unknown; keep it at zero where possible.
 
