@@ -1,0 +1,32 @@
+Phase 1 takedown, step 10 (part 3) -- the last two BLOCKED files, and a real
+crash found while closing them out.
+
+test/movePiece.test.ts and test/isolate.test.ts each build their fixture by
+running a scratch probe script (scripts/_move-piece-probe.mjs,
+scripts/_isolate-probe.mjs) in a child process via execFileSync at module
+scope. Both probes import public/city-plan.js, public/board-adapter.js and
+public/layout.js to build a real fixture world -- all three quarantined
+this pass. move-piece.js and isolate.js themselves (these files' real
+subjects) are kept and unaffected; there is simply no real board left to
+move a piece on or isolate a selection against.
+
+What was found while fixing this, not before: the execFileSync call was
+UNGUARDED. Once the probe's own import broke, execFileSync throws
+(ERR_MODULE_NOT_FOUND propagating out of the child), and because that
+throw happened at MODULE SCOPE (not inside a test callback), it crashed the
+entire node:test runner process -- confirmed directly, watched red, running
+test/movePiece.test.ts alone. This is worse than a normal test failure: it
+would have taken down every OTHER test file sharing that process in a full
+suite run, not just this one. Fixed with a try/catch around the
+execFileSync call in both files; on failure, the six (movePiece) or seven
+(isolate) tests that read the probe's result are skipped with a named
+reason via node:test's own `{ skip }` option, computed from the caught
+error. The wiring tests in both files (source-text checks against
+world-render-3d.js, unrelated to the probe) are untouched.
+
+How it is known to be fixed: node test/run.mjs isolate.test.ts movePiece.test.ts
+-- no crash, 7/21 pass, 14 skipped (each named), 0 fail. npm run typecheck --
+clean.
+
+This closes the one item the previous two commits' reports left open.
+docs/specs/PHASE1-TAKEDOWN-REPORT-2026-09-13.md updated to reflect it.
