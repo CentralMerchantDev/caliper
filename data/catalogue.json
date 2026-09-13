@@ -1,0 +1,954 @@
+[
+  {
+    "id": "kiosk-a",
+    "category": "civic",
+    "footprint": [
+      1,
+      1
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base"
+    ],
+    "joinSpec": "contact-darkening",
+    "proportion": null
+  },
+  {
+    "id": "shed-a",
+    "category": "industrial",
+    "footprint": [
+      1,
+      1
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base"
+    ],
+    "joinSpec": "contact-darkening",
+    "proportion": null
+  },
+  {
+    "id": "substation-a",
+    "category": "civic",
+    "footprint": [
+      1,
+      1
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base"
+    ],
+    "joinSpec": "contact-darkening",
+    "proportion": null
+  },
+  {
+    "id": "small-civic-a",
+    "category": "civic",
+    "footprint": [
+      1,
+      1
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base"
+    ],
+    "joinSpec": "ground-decal",
+    "proportion": null
+  },
+  {
+    "id": "small-house-a",
+    "category": "residential",
+    "footprint": [
+      2,
+      2
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "top"
+    ],
+    "joinSpec": "ground-decal",
+    "proportion": 1
+  },
+  {
+    "id": "corner-shop-a",
+    "category": "commercial",
+    "footprint": [
+      2,
+      2
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "top"
+    ],
+    "joinSpec": "ground-decal",
+    "proportion": 1
+  },
+  {
+    "id": "house-a",
+    "category": "residential",
+    "footprint": [
+      2,
+      3
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "top"
+    ],
+    "joinSpec": "ground-decal",
+    "proportion": 1.2
+  },
+  {
+    "id": "terrace-unit-a",
+    "category": "residential",
+    "footprint": [
+      2,
+      3
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "top"
+    ],
+    "joinSpec": "ground-decal",
+    "proportion": 1.2
+  },
+  {
+    "id": "small-retail-a",
+    "category": "commercial",
+    "footprint": [
+      2,
+      3
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "top"
+    ],
+    "joinSpec": "ground-decal",
+    "proportion": 1
+  },
+  {
+    "id": "large-house-a",
+    "category": "residential",
+    "footprint": [
+      3,
+      3
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "middle",
+      "top"
+    ],
+    "joinSpec": "ground-decal",
+    "proportion": 1.4
+  },
+  {
+    "id": "small-commercial-a",
+    "category": "commercial",
+    "footprint": [
+      3,
+      3
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "middle",
+      "top"
+    ],
+    "joinSpec": "ground-decal",
+    "proportion": 1.2
+  },
+  {
+    "id": "apartment-block-a",
+    "category": "residential",
+    "footprint": [
+      4,
+      4
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "middle",
+      "top"
+    ],
+    "joinSpec": "ground-decal",
+    "proportion": 1.8
+  },
+  {
+    "id": "mid-commercial-a",
+    "category": "commercial",
+    "footprint": [
+      4,
+      4
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "middle",
+      "top"
+    ],
+    "joinSpec": "ground-decal",
+    "proportion": 1.5
+  },
+  {
+    "id": "large-commercial-4x6-a",
+    "category": "commercial",
+    "footprint": [
+      4,
+      6
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "middle",
+      "top"
+    ],
+    "joinSpec": "ground-decal",
+    "proportion": 1.5
+  },
+  {
+    "id": "small-warehouse-a",
+    "category": "industrial",
+    "footprint": [
+      4,
+      6
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base"
+    ],
+    "joinSpec": "modelled-skirt",
+    "proportion": null
+  },
+  {
+    "id": "tower-base-6x6-a",
+    "category": "landmark",
+    "footprint": [
+      6,
+      6
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "middle",
+      "top"
+    ],
+    "joinSpec": "modelled-skirt",
+    "proportion": 3.5
+  },
+  {
+    "id": "large-commercial-6x6-a",
+    "category": "commercial",
+    "footprint": [
+      6,
+      6
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "middle",
+      "top"
+    ],
+    "joinSpec": "modelled-skirt",
+    "proportion": 1.6
+  },
+  {
+    "id": "civic-6x6-a",
+    "category": "civic",
+    "footprint": [
+      6,
+      6
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "middle",
+      "top"
+    ],
+    "joinSpec": "modelled-skirt",
+    "proportion": 1.3
+  },
+  {
+    "id": "mega-tower-a",
+    "category": "landmark",
+    "footprint": [
+      8,
+      8
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base",
+      "middle",
+      "top"
+    ],
+    "joinSpec": "modelled-skirt",
+    "proportion": 3.5
+  },
+  {
+    "id": "large-warehouse-a",
+    "category": "industrial",
+    "footprint": [
+      8,
+      8
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base"
+    ],
+    "joinSpec": "modelled-skirt",
+    "proportion": null
+  },
+  {
+    "id": "stadium-a",
+    "category": "civic",
+    "footprint": [
+      8,
+      8
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "massing": [
+      "base"
+    ],
+    "joinSpec": "modelled-skirt",
+    "proportion": null
+  },
+  {
+    "id": "lane-straight",
+    "category": "road",
+    "footprint": [
+      2,
+      2
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "lane",
+    "tileType": "straight",
+    "junctionArms": [
+      "lane",
+      "lane"
+    ]
+  },
+  {
+    "id": "lane-curve",
+    "category": "road",
+    "footprint": [
+      2,
+      2
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "lane",
+    "tileType": "curve",
+    "junctionArms": [
+      "lane",
+      "lane"
+    ]
+  },
+  {
+    "id": "lane-t",
+    "category": "road",
+    "footprint": [
+      2,
+      2
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "lane",
+    "tileType": "t",
+    "junctionArms": [
+      "lane",
+      "lane"
+    ]
+  },
+  {
+    "id": "lane-cross",
+    "category": "road",
+    "footprint": [
+      2,
+      2
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "lane",
+    "tileType": "cross",
+    "junctionArms": [
+      "lane",
+      "lane"
+    ]
+  },
+  {
+    "id": "lane-end",
+    "category": "road",
+    "footprint": [
+      2,
+      2
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "lane",
+    "tileType": "end",
+    "junctionArms": [
+      "lane",
+      "lane"
+    ]
+  },
+  {
+    "id": "street-straight",
+    "category": "road",
+    "footprint": [
+      4,
+      4
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "street",
+    "tileType": "straight",
+    "junctionArms": [
+      "street",
+      "street"
+    ]
+  },
+  {
+    "id": "street-curve",
+    "category": "road",
+    "footprint": [
+      4,
+      4
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "street",
+    "tileType": "curve",
+    "junctionArms": [
+      "street",
+      "street"
+    ]
+  },
+  {
+    "id": "street-t",
+    "category": "road",
+    "footprint": [
+      4,
+      4
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "street",
+    "tileType": "t",
+    "junctionArms": [
+      "street",
+      "street"
+    ]
+  },
+  {
+    "id": "street-cross",
+    "category": "road",
+    "footprint": [
+      4,
+      4
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "street",
+    "tileType": "cross",
+    "junctionArms": [
+      "street",
+      "street"
+    ]
+  },
+  {
+    "id": "street-end",
+    "category": "road",
+    "footprint": [
+      4,
+      4
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "street",
+    "tileType": "end",
+    "junctionArms": [
+      "street",
+      "street"
+    ]
+  },
+  {
+    "id": "avenue-straight",
+    "category": "road",
+    "footprint": [
+      6,
+      6
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "avenue",
+    "tileType": "straight",
+    "junctionArms": [
+      "avenue",
+      "avenue"
+    ]
+  },
+  {
+    "id": "avenue-curve",
+    "category": "road",
+    "footprint": [
+      6,
+      6
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "avenue",
+    "tileType": "curve",
+    "junctionArms": [
+      "avenue",
+      "avenue"
+    ]
+  },
+  {
+    "id": "avenue-t",
+    "category": "road",
+    "footprint": [
+      6,
+      6
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "avenue",
+    "tileType": "t",
+    "junctionArms": [
+      "avenue",
+      "avenue"
+    ]
+  },
+  {
+    "id": "avenue-cross",
+    "category": "road",
+    "footprint": [
+      6,
+      6
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "avenue",
+    "tileType": "cross",
+    "junctionArms": [
+      "avenue",
+      "avenue"
+    ]
+  },
+  {
+    "id": "avenue-end",
+    "category": "road",
+    "footprint": [
+      6,
+      6
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "avenue",
+    "tileType": "end",
+    "junctionArms": [
+      "avenue",
+      "avenue"
+    ]
+  },
+  {
+    "id": "highway-straight",
+    "category": "road",
+    "footprint": [
+      8,
+      8
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "highway",
+    "tileType": "straight",
+    "junctionArms": [
+      "highway",
+      "highway"
+    ]
+  },
+  {
+    "id": "highway-curve",
+    "category": "road",
+    "footprint": [
+      8,
+      8
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "highway",
+    "tileType": "curve",
+    "junctionArms": [
+      "highway",
+      "highway"
+    ]
+  },
+  {
+    "id": "highway-t",
+    "category": "road",
+    "footprint": [
+      8,
+      8
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "highway",
+    "tileType": "t",
+    "junctionArms": [
+      "highway",
+      "highway"
+    ]
+  },
+  {
+    "id": "highway-cross",
+    "category": "road",
+    "footprint": [
+      8,
+      8
+    ],
+    "rotatable": false,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "highway",
+    "tileType": "cross",
+    "junctionArms": [
+      "highway",
+      "highway"
+    ]
+  },
+  {
+    "id": "highway-end",
+    "category": "road",
+    "footprint": [
+      8,
+      8
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": "highway",
+    "tileType": "end",
+    "junctionArms": [
+      "highway",
+      "highway"
+    ]
+  },
+  {
+    "id": "lane-street-t",
+    "category": "road",
+    "footprint": [
+      4,
+      4
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": null,
+    "tileType": "t",
+    "junctionArms": [
+      "lane",
+      "street"
+    ]
+  },
+  {
+    "id": "lane-street-cross",
+    "category": "road",
+    "footprint": [
+      4,
+      4
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": null,
+    "tileType": "cross",
+    "junctionArms": [
+      "lane",
+      "street"
+    ]
+  },
+  {
+    "id": "lane-street-transition",
+    "category": "road",
+    "footprint": [
+      4,
+      4
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": null,
+    "tileType": "transition",
+    "junctionArms": [
+      "lane",
+      "street"
+    ]
+  },
+  {
+    "id": "street-avenue-t",
+    "category": "road",
+    "footprint": [
+      6,
+      6
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": null,
+    "tileType": "t",
+    "junctionArms": [
+      "street",
+      "avenue"
+    ]
+  },
+  {
+    "id": "street-avenue-cross",
+    "category": "road",
+    "footprint": [
+      6,
+      6
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": null,
+    "tileType": "cross",
+    "junctionArms": [
+      "street",
+      "avenue"
+    ]
+  },
+  {
+    "id": "street-avenue-transition",
+    "category": "road",
+    "footprint": [
+      6,
+      6
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": null,
+    "tileType": "transition",
+    "junctionArms": [
+      "street",
+      "avenue"
+    ]
+  },
+  {
+    "id": "avenue-highway-t",
+    "category": "road",
+    "footprint": [
+      8,
+      8
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": null,
+    "tileType": "t",
+    "junctionArms": [
+      "avenue",
+      "highway"
+    ]
+  },
+  {
+    "id": "avenue-highway-cross",
+    "category": "road",
+    "footprint": [
+      8,
+      8
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": null,
+    "tileType": "cross",
+    "junctionArms": [
+      "avenue",
+      "highway"
+    ]
+  },
+  {
+    "id": "avenue-highway-transition",
+    "category": "road",
+    "footprint": [
+      8,
+      8
+    ],
+    "rotatable": true,
+    "terrainMask": [
+      "land"
+    ],
+    "pivot": "corner",
+    "roadClass": null,
+    "tileType": "transition",
+    "junctionArms": [
+      "avenue",
+      "highway"
+    ]
+  }
+]

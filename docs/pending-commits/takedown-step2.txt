@@ -1,0 +1,34 @@
+Phase 1 takedown, step 2 -- cut public/world.js's dependency on
+public/city-plan.js's generateWorld(), the single edit with the widest
+consequences in this whole takedown (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md's
+own "consequence that needs stating plainly" section).
+
+createWorld() composed three independently-proven things (generateWorld's
+plan, LandField's ground, createWorldModel's layer stack) into one object.
+It is Side B's own "give me a world to edit" entry point -- generic, kept
+infrastructure, not old-world-only architecture -- but its one real plan
+source was always the old world's generator. Once that generator is
+quarantined, nothing produces a plan; inventing a replacement is Phase 2.7's
+job ("the generator, LAST"), not this one's. `plan` is now `null`,
+documented in place as dormant rather than silently removed or faked.
+`land`, `layers` and `grid` are untouched -- still real, still independently
+built.
+
+How it is known to be fixed, and how narrow the real blast radius turned out
+to be against what the plan feared: npm run typecheck (clean); node
+test/run.mjs world.test.ts worldStore.test.ts undo.test.ts -- 14 of 17
+pass. worldStore.test.ts (10/10) and undo.test.ts (3/3) are FULLY GREEN,
+because neither reads `.plan` content, only `.layers`/`.seed`/`.toJSON()`.
+Only world.test.ts's three tests that directly read `plan.plots` fail, each
+with the same, single, named cause: `TypeError: Cannot read properties of
+null (reading 'plots')` in that test's own `planFingerprint` helper -- not a
+new class of failure, the exact and only consequence of `plan: null`. The
+remaining createWorld()-dependent test files (applyAndPersist, applyLayers,
+cityRenderWorldState, instanceGroups, questCompletion, regions,
+runGenerateRequest, worldAliasing) are checked individually at step 10, not
+assumed from this sample.
+
+What is still open: the quarantine moves themselves (layout.js,
+instance-groups.js, layout-fits.js, city-render.js, city-plan.js,
+board-adapter.js, city-live-world.js, city.html), the index.html holding
+page, and every test's individual retire-or-block disposition.

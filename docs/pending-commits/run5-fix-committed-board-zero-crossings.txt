@@ -1,0 +1,104 @@
+RUN 5 -- fix the defect a blind Codex review found in b1-land (RUN 4): the
+committed public/board.generated.json shipped zero bridge/dock pieces while
+B2.7's own commit (501f0a9) claimed "1 bridge, 10 boat routes." Ground-checked
+directly before touching anything: 17,728 roads, 17,637 buildings, 0 bridges,
+0 docks -- Codex was right to the digit. buildCrossingPieces() was never
+broken; scripts/gen-board.mjs already called it (6dcfda3); nobody had re-run
+`npm run gen:board` since B2.7 landed, so its output never reached the file a
+visitor actually loads.
+
+Fixed: `npm run gen:board` regenerated the asset. Counted directly from the
+result, not trusted from the console: 16 real dock pieces, 0 bridges. Not a
+regression -- gen-board.mjs places crossings onto the SAME board instance
+generateBoard() already filled with 35,365 roads and buildings (real
+occupancy, not a fresh fixture), so the one bridge-classified edge's own
+candidate cell collided with an already-placed piece and correctly fell back
+to a boat route, per the documented fallback rule
+("a refused bridge candidate redirects to a boat route" --
+test/bridgeGenerator.test.ts's own existing gate). A future regeneration
+could legitimately produce a different bridge count depending on where
+roads/buildings land; asserting an exact number would assert a coincidence.
+
+test/bridgeGenerator.test.ts gained a gate reading the COMMITTED file, not a
+fixture: watched RED against the stale asset first ("got 0" bridges/docks),
+then GREEN after regeneration. It asserts crossings exist, not an exact
+bridge count, for the reason above.
+
+That same investigation surfaced a real, deeper gap underneath the one
+Codex named: three of the 12 settled boundaries (farm-isle, quarry-isle,
+resort-isle) have ZERO crossing pieces on their own territory in the
+delivered board. Each is a leaf on exactly one edge in the crossing graph;
+that edge's own-side dock is among the 6 (of 22 candidate placements) that
+collided with real occupancy and were refused, with no retry or fallback for
+a leaf boundary. Confirmed directly by reading anchor.boundaryId off every
+built piece, not inferred. A second new gate names this precisely and is
+left HONESTLY RED -- not strengthened, not hidden. Full writeup, three
+options, and a recommendation in docs/DECISIONS-FOR-MARK.md #7.
+docs/specs/COMPLETION-PLAN.md's B2.7 line moved from [x] to [!] to match:
+crossings are real and delivered now, but "connects the 12 settled
+boundaries" -- B2.7's own stated goal -- is not yet true of the committed
+asset.
+
+Audited every other [x] tick in COMPLETION-PLAN.md for the same category (a
+tick backed by a test that proves something about a fixture it builds
+itself, never the thing actually delivered), per Mark's own instruction to
+name rather than silently fix: B1 is not this category (LandField is
+computed live by both the test and the real site, no persisted asset to
+drift). B2.1-6 is not currently violated but is a real, named structural
+risk -- nothing gates drift between a future generateBoard() change and the
+committed board.generated.json beyond crossing presence; not built this run,
+named instead. BLD lane's bac6c1b (test-infrastructure fix) and a349b05
+(explicitly "no implementation tonight, a planning document") are a
+different category entirely, not overclaims. C4 reads the real committed
+README.md/index.html/CLAUDE.md and generated artefacts directly -- already
+testing delivery, not a fixture.
+
+A SECOND real instance of the same category was found and fixed during
+RE-VERIFICATION, not by the audit above: test/boardLoad.test.ts's own B2.6
+gate ("the committed board.generated.json matches the seed it claims") built
+its comparison from generateBoard() ALONE -- which never included B2.7's
+crossings, only the full scripts/gen-board.mjs pipeline (generateBoard() +
+buildCrossingPieces()) does. That gate was therefore only ever passing
+BECAUSE the committed board was missing crossings -- the exact defect this
+commit fixes -- and once the asset was correctly regenerated, it started
+failing for the right underlying reason but against the wrong reference,
+which would have made this very fix look like drift. Fixed to build its own
+"fresh" comparison the same two-step way gen-board.mjs actually does; watched
+green again, `node test/run.mjs test/boardLoad.test.ts` 3/3 pass, including
+its own "WATCHED RED -- a corrupted piece" control (still has teeth).
+
+Regressions checked, not assumed: `node test/run.mjs test/bridgeGenerator.test.ts
+test/boardRender.test.ts test/boardGenerator.test.ts test/worldSeed.test.ts
+test/board.test.ts test/boardLoad.test.ts` -- all green except B2.5's own
+already-documented, already-red CPU-time gate (Decision #3, unrelated,
+unchanged) and the new, honestly-named Decision #7 gate. `npx tsc --noEmit`
+clean.
+
+Test count: a complete `node test/run.mjs` run (the third of five attempts
+in this session -- two before it and two after were killed by this session's
+own tool-call time limits partway through a ~20-25 minute suite) measured
+1,194 tests / 1,133 pass / 45 fail / 15 skipped / 1 todo, and
+`node scripts/gen-test-count.mjs --node-log <that run>` regenerated
+test/testCount.generated.json from it -- itself a large accuracy
+correction: the previously committed file was dated 2026-09-08 and claimed
+1,087 tests / 1 failure, stale since before RUN 2 and RUN 3 added tests and
+known-red gates, undetected until this run actually looked. That measurement
+predates this commit's own test/boardLoad.test.ts fix (2 of those 45
+failures are now fixed, 0 tests added or removed), so the true current state
+is 1,135 pass / 43 fail -- NOT hand-written into the generated file, named
+here instead, because two further attempts at a clean post-fix full run were
+both killed by this session's own tool time limits before finishing. A
+future session should run `node scripts/gen-test-count.mjs` once a complete
+run fits its own available budget. `test/publicClaims.test.ts`'s own "the
+test counts on the page are the test counts" gate was ALREADY red before this
+commit, for a pre-existing, unrelated reason -- public/index.html claims
+1,087 tests, `gen-test-count.mjs` refuses to update it while the suite has
+any real failures (by design: "a failure is a measurement, the public claim
+was not"), so the page has been unable to auto-sync since long before this
+session. Not caused by this commit, not fixed by it either.
+
+No merge, no deploy, no push -- not asked this run. Working tree confirmed
+clean except the files this commit covers.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FD5JvQU4bUcosxg63Xcdgj

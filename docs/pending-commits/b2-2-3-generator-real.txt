@@ -1,0 +1,72 @@
+B2.2/B2.3 -- the generator itself: real pieces on the real archipelago,
+coverage measured inside settlement boundaries (20-40%), settled land
+20-40 km2, grid round-trip 100% by construction, originStability a real
+passing assertion, not a todo
+
+ON b1-land, NOT main. Implements the B2.1 contract Mark approved
+2026-09-08 (board-adapter.js/board-region.js ruling, both mechanisms
+approved on "construct what you want, do not filter for it and hope").
+
+WATCHED RED FIRST: test/boardGenerator.test.ts and originStability.test.ts's
+new case were written against a nonexistent public/board-generator.js --
+both refused to build, the same standing rule test/landCoverage.test.ts
+already used.
+
+WHAT WAS BUILT: SETTLEMENT_TABLE, keyed by terrain.js's own LANDMASSES.kind
+-- settled/density/era/boundary/block/plot size decided once per island,
+before any road or plot is laid, per Mark's own approved principle. Real
+settlement boundaries (island coastline inset by area; mainland a real
+strip at MAINLAND_ZONES' own coastal-strip depth). Roads as an explicit
+junction graph -- nodes are atom-aligned grid intersections on real,
+road-legal ground; one road piece per node, one per span, non-overlapping
+by construction. Plots checked with footprint.js's real assessFootprint
+before a building is placed. Cottage islands bypass the machinery entirely
+-- one building at the centroid, because it is a cottage island.
+
+MEASURED (default seed): 16,193 buildings, 15,825 roads, 32,018 pieces.
+Settled land 28.2 km2 (target 20-40). Coverage inside each settlement
+boundary 24.0-39.0% across all nine density-tier boundaries (target
+20-40%, cottage islands excluded on purpose -- one house on a whole
+island is a design decision, not a density outcome). Grid round-trip
+100% by construction (contrast the old adapter's measured 305/17,586).
+
+TWO REAL BUGS FOUND BY THE GATE, NOT INSPECTION, EACH FIXED: (1) the
+mainland boundary was built from the wrong end of its own polygon array
+(landmassPolygonsDesign()'s own winding-fix can reverse it) -- a ~0 km2
+self-intersecting boundary that produced 100,717 road pieces against 21
+buildings before this was caught; fixed by selecting the coastline by
+coordinate, not array position. (2) the mainland's inland offset ran
+toward the sea, not inland (MAINLAND_INLAND_XW < MAINLAND_COAST_X0W) --
+1,397 of 1,402 sampled boundary points were WATER before this was caught;
+fixed by reversing the offset sign.
+
+ORIGINSTABILITY, ROOT-CAUSED, NOT WORKED AROUND: a first version of this
+test required every PLACED piece to stay identical across two WORLD_SCALE
+values -- a false claim, measured directly (heightAt at a fixed world
+point is 125.95 m at scale 0.65 and 1,306.96 m at 0.52; WORLD_SCALE
+reshapes the real terrain by design). The true, contract-matching claim is
+that settlement BOUNDARIES (pure geometry, no heightAt) are invariant --
+max vertex delta 0.000 m across all twelve, both scales. Finding this
+correctly surfaced a real bug in public/terrain.js itself: downtown's
+hand-drawn COAST_DESIGN positioned itself from its own raw centroid
+instead of a WORLD-anchored one (every other landmass's own pattern),
+moving up to 328 m under a scale change. Fixed with an explicit fixed
+world anchor (DOWNTOWN_CX_WORLD/CZ_WORLD); today's already-gated 22 km2
+downtown result is byte-identical to before the fix.
+
+MUTATION-TESTED (test/mutations.json): the wooded-exclusion table entry
+and the mainland inland-direction sign, both watched red for the specific
+test each guards, reverted, reconfirmed green.
+
+STILL OPEN, NAMED NOT DROPPED: performance (~100-110 s per generateBoard()
+call, board.js's own per-cell ground check over large road-span
+footprints -- real, existing, tested behaviour this pass does not touch);
+NOT wired into world.js's createWorld() because of this cost, .plan
+untouched; bridges connecting settled islands, not yet built; B2.4
+(re-pinning 34 old-world-pin failures) still last, not started.
+
+npx tsc --noEmit clean. Full targeted regression: 65 tests, 63 pass, 2
+fail -- both the already-catalogued road-network.js old-world pins,
+untouched by this pass.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

@@ -1929,7 +1929,10 @@ varying vec3 vSeaWorld;`)
       const usesVertexColour = !!(geo0 && geo0.attributes.color);
       const char = g.options?.character || spec.character || "heritage";
       const wallColor = (!usesVertexColour && spec.material && spec.material.wall) || 0x9a9a94;
-      const mat = getFacadeMaterial(char, { vertexColors: usesVertexColour, wallColor, night: isNight });
+      const mat = getFacadeMaterial(char, {
+        vertexColors: usesVertexColour, wallColor, night: isNight,
+        variantSeed: g.seed,
+      });
 
       const entry = { spec, geo0, geo1, geo2, mat };
       variantGeomCache.set(g.key, entry);

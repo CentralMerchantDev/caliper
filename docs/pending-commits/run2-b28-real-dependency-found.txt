@@ -1,0 +1,36 @@
+B2.8 -- a real correction to this run's own sequencing assumption,
+found by reading, not by guessing. docs/briefs/RUN2-CLI-2026-09-09.md
+said to re-pin the 38 "now that B2.7 has landed" -- checked against the
+38's own real import lines before attempting any re-pin, and it does
+not hold for most of them.
+
+test/instanceGroups.test.ts, test/layout.test.ts and
+test/roadNetwork.test.ts import partitionForInstancing/planCity/
+groupByVariant/generateWorld/buildArterialNetwork directly from
+public/instance-groups.js, public/layout.js, public/city-plan.js and
+public/road-network.js -- none of which has a board-generator.js
+equivalent yet. Those four files are themselves scheduled for
+quarantine in B6; their real replacements are B4's job ("kits wire by
+construction"), not yet built. Re-pinning a test against a capability
+that does not exist would mean inventing a second requirement for B4
+to satisfy on top of its own, not re-pinning anything.
+
+WHAT B2.7 ALONE ACTUALLY UNBLOCKS, AND IT IS ALREADY DONE: the
+crossing/bridge-shaped failures (cityJoin's bridge-end test, both
+connectivityBridges failures, cityWorld's "every bridge lands on dry
+ground" case). test/bridgeGenerator.test.ts (commit 501f0a9) already
+proves the identical property against the real new archipelago, more
+strictly than the old assertion ever did. The old assertions are left
+exactly as red as found, not patched in place, since their own import
+chain is retired in B6.
+
+RE-SEQUENCED, HONESTLY: the remaining ~30 of the 38 move to after B4,
+not directly after B2.7. The plan's own phase order already had B4
+after B2.8; the DEPENDENCY (re-pinning needs B4's real outputs to
+re-pin against) was not previously stated in writing. It is now,
+in docs/specs/BOARD-REBUILD-PLAN.md's own new B2.8/RUN2 section.
+
+No assertion touched, loosened, or force-fit. This is a finding, not a
+fix -- the honest outcome of checking a sequencing claim against the
+code before acting on it, the same discipline this project's own docs
+(AUDIT-PROTOCOL.md's "a brief is a claim too") ask for every time.

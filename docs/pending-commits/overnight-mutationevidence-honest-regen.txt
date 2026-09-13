@@ -1,0 +1,66 @@
+mutationEvidence pair -- ran the 21 outstanding mutations for real,
+regenerated test/mutationSummary.generated.json honestly. Was: 98 of 119
+CAUGHT (stale since 2026-09-06, before B1/B2 existed), with the 21 gap
+silently unaccounted for and test/mutationEvidence.test.ts already
+failing on it. Now: 109 of 119 CAUGHT, 10 honestly named as NEVER RUN,
+with a real, documented reason for every one of the 10.
+
+MEASURED: 11 of the 21 outstanding mutations ran clean through
+scripts/_mutcheck.mjs against their real, current test files and
+reported CAUGHT --
+
+  b1-terrain-no-longer-imports-landmasses      (terrainLandmassOwnership.test.ts)
+  b1-terrain-exports-own-landmasses            (terrainLandmassOwnership.test.ts)
+  b1-ownership-list-tracks-real-importers      (terrainLandmassOwnership.test.ts, self)
+  b1-island-count-gate-real                    (landCoverage.test.ts)
+  b1-mainland-settleable-fraction-capped       (landCoverage.test.ts)
+  b2-0-worldaliasing-terrain-landmasses-on-allowlist  (worldAliasing.test.ts, self)
+  b2-0-worldaliasing-mainland-zones-on-allowlist      (worldAliasing.test.ts, self)
+  move-edit-shape-exact                        (movePiece.test.ts)
+  move-self-collision-ignoreId                 (movePiece.test.ts)
+  move-refusal-reaches-onMoveRefused            (movePiece.test.ts)
+  generated-claims-buildings-mismatch-detected (generatedClaimsAreCurrent.test.ts)
+
+A REAL BUG FOUND AND FIXED ALONG THE WAY, not just a run of the numbers:
+the two worldAliasing mutations' own `expect` fields were paraphrases of
+the real test title ("different-seed worlds share only the declared
+allow-list -- terrain.js's own LANDMASSES.points included...") rather
+than a copy of it ("two worlds with DIFFERENT seeds share only the
+declared allow-list (WORLD -- never land)"). Both reported INCONCLUSIVE
+on the first run, each printing the REAL failing title right after the
+non-match -- evidence the mutation genuinely works, not that the control
+is weak. Fixed both `expect` fields in test/mutations.json to the exact
+title; both then reported CAUGHT for real. Documented in
+docs/AUDIT-PROTOCOL.md's own new entry so a future INCONCLUSIVE-that-
+looks-like-a-near-miss is checked this way before the mutation or the
+test is blamed.
+
+THE OTHER 10 ARE NOT SILENTLY SKIPPED -- NAMED, WITH WHY, IN
+docs/AUDIT-PROTOCOL.md's new 2026-09-09 §7 entry and
+docs/DECISIONS-FOR-MARK.md's new #2:
+
+- 9 are structurally blocked by a SECOND instance of Candidate pattern F
+  (§7, 2026-09-08): scripts/_mutcheck.mjs correctly refuses to score any
+  mutation against a "red baseline", and test/boardGenerator.test.ts
+  (B2.5's own deliberately-red CPU-time gate) / test/isolate.test.ts (an
+  already-catalogued old-world pin) are both, correctly, red right now.
+  The two controls compose to block board-generator.js (3),
+  boardGenerator.test.ts itself (1), isolate.js (3), and the
+  isolate-scoped half of world-render-3d.js (2) -- verified by running
+  the real command and reading its own refusal message, not inferred.
+  The same fix that closed this pattern once already (node:test's
+  `{ todo }` status) would close it again, but changes what "red" means
+  for a gate Mark was explicit should stay a plain, visible failure --
+  queued as a decision, not applied unilaterally.
+- 1 (b2-5-ground-verified-opt-in-is-load-bearing) was never a node:test
+  assertion to begin with -- its own manifest note says "verified BY
+  HAND... a real timing measurement" -- so no `expect` string could ever
+  match a failing-test title for it. Needs a hand-run paired-timing
+  measurement (the same procedure docs/specs/BOARD-REBUILD-PLAN.md's
+  B2.5 section already used), not a decision.
+
+test/.mutate-results.json (gitignored, local) now carries 109 of 119
+real results. test/mutationEvidence.test.ts: was 2 failing, now 1 --
+"the summary is not stale" is fixed for real; "every mutation has a
+committed CAUGHT result" stays honestly red, naming the 10 real gaps by
+id instead of silently passing against a stale artefact.

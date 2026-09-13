@@ -1,0 +1,77 @@
+THE ITEM (docs only, plan only) -- the remaining steps of retiring
+ROAD_WIDTH, numbered and in order, with a blind review folded in.
+
+RE-GROUND: HEAD was 369b0d8 as expected; decision #5 RESOLVED, #6/#7
+RESOLVED-BY-RULE, matching docs/DECISIONS-FOR-MARK.md. The tree was dirty
+from a dead prior session (step 1's own code+test, uncommitted) -- finished
+and committed first, separately (f01a324), per docs/BUILD-LOOP.md STEP 0.
+
+WHAT THIS COMMIT DOES: adds §9 to docs/specs/PIECE-CATALOGUE-ROADS.md --
+six numbered steps (geometry reads its own class's width; re-tune
+block/plot sizing; retire bridge-generator.js's own separate ROAD_WIDTH;
+regenerate the committed board and re-verify; close the record), each
+naming its file/function, its test, its mutation, and why the order is
+this and not another. Nothing in §9 is built -- no source file changed.
+
+GATES NAMED, per the brief's own requirement to name every one that goes
+red on regeneration:
+  - test/boardGenerator.test.ts's 20-40% coverage gate -- WILL go red the
+    moment Step 2 lands (road width doubles, boundary area does not),
+    honestly, until Step 3 retunes blockAtoms/plotAtoms/CLEAR.
+  - test/bridgeGenerator.test.ts's already-red #7 egress gate -- occupancy-
+    sensitive to both Step 2 and Step 3; added to Step 5's re-check list
+    after the blind review caught it missing from the first draft.
+  - Checked and named as NOT at risk, so a future session does not chase a
+    defect that isn't one: the settled-land-km2 gate (boundary-polygon-only,
+    no road dependency), the 12-boundary count, worldSeed/planSeed/
+    roadsFollowDensity/the 17,108-buildings claim (all read the OLD
+    city-plan.js/generateWorld() pipeline, confirmed by reading
+    scripts/gen-city-summary.mjs directly -- never board-generator.js), and
+    this session's own decision-5-step-1 test (stays green throughout,
+    since every step keeps roadClass uniformly STREET).
+
+COST: generateBoard({useSampling:true}) measured this session at 39.6-39.8s
+(three runs), consistent with gen-board.mjs's own documented 40-113s range
+(quoted, not re-verified to its top end). A full `npm test` attempted once
+this session did NOT complete -- a JS heap OOM 185s into node test/run.mjs
+alone (3m9s real time), a real, measured fact about this host's current
+memory pressure, named as a cost/risk for Step 3's own iterative retune
+loop. Step 3's own iteration count (3-6 cycles) is ESTIMATED from the
+CLEAR-tuning precedent already on record, explicitly labelled as such, not
+measured.
+
+BLIND REVIEW: a fresh general-purpose subagent, given only CLAUDE.md, the
+plan, and the named source/test files -- no conversation history, not told
+what to look for. It found one HIGH-severity issue and four minor/factual
+ones, all now folded in:
+  - HIGH: test/boardLoad.test.ts's "committed board.generated.json matches
+    the seed it claims" gate is CURRENTLY RED on this branch, a direct
+    consequence of commit f01a324 (roadClass added to generateBoard()'s
+    output, but the committed artefact was never regenerated to match).
+    Confirmed directly this session. Not fixed here -- the fix
+    (node scripts/gen-board.mjs) is a real build step this session's own
+    "plan only, build nothing" instruction forbids; attempting it was
+    correctly refused by this session's own permission boundary. Named
+    prominently in both docs, with the instruction that whoever runs Step
+    1's regeneration should do it FIRST, independent of the rest of the
+    retirement.
+  - Four minor corrections: bridge-generator.js's ROAD_WIDTH has four use
+    sites, not three, and only bridge decks (not docks, which are a
+    hardcoded 4x4) read it; the ROAD_STANDARDS-import claim in Step 2 was
+    imprecise (public/road-network.js already imports it, though that file
+    is a dead/legacy module unrelated to board-generator.js); Step 4's own
+    stated reason for ordering after Step 2/3 didn't hold under the plan's
+    own scope, corrected rather than repeated.
+
+STILL OPEN: everything in §9 remains to be built. §8's three items stay
+Mark's call, and this plan explains why they do not block this narrower
+retirement (no second road class is introduced). The boardLoad.test.ts
+regression stays red until someone with build authorisation runs
+scripts/gen-board.mjs.
+
+GUARDS CHECKED: docs-only change, nothing deleted, no API spend, no code
+touched, repo stays private, no b1-land/codex-lane merge performed (noted
+in the plan for the executor, not acted on).
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

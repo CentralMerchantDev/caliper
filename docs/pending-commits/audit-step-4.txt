@@ -1,0 +1,4 @@
+Overnight audit log: Step 4 landed, the AVENUE/STREET wrong-turn recorded, mutation verified by hand.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

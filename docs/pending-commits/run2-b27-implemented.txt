@@ -1,0 +1,72 @@
+B2.7 -- bridges and boat routes, IMPLEMENTED per the corrected plan at
+95cf588. docs/briefs/RUN2-CLI-2026-09-09.md: "a finished plan is not a
+stopping condition... you implement what you plan, in the same run."
+
+WHAT WAS BUILT: public/bridge-generator.js (new). Adapts scripts/gen-
+bridges.mjs's own nearest-gap/MST/redundant-edge algorithm to the real
+12 settled boundaries (public/board-generator.js's settlementBoundaries()),
+classifying each edge at roadkit.js's own real 800 m buildable ceiling
+(bridgeSpan()'s own engineering limit) -- not the old world's 9,000 m
+"plausible" cutoff the first plan draft used before blind review caught
+it. Bridges convert bridgeSpan()'s real socket geometry into board.js
+pieces; boat routes are a pair of "dock" pieces per boundary, carrying
+routeTo/routeId fields ON the piece itself -- inside the board, per
+Standing Gate 5 ("no world state outside the board"), not a separate
+route table beside it.
+
+A REAL DEFECT FOUND AND FIXED DURING IMPLEMENTATION, not by review: the
+plan's own anchor-walk design (a single fixed cross-axis coordinate,
+gen-bridges.mjs's own literal shape) failed 10 of 11 real edges outright
+-- measured directly, "no dry anchor on both boundaries" for every boat
+route, because a small cottage island's own footprint often never
+crosses the fixed line two distant boundaries' midpoint produces. Fixed
+by switching to a radial walk (away from the other boundary's own near
+point, along the real 2D direction between them, not locked to one
+axis). Re-measured after the fix: 11 of 11 edges now realize as real
+placed pieces -- 1 bridge, 10 boat routes (20 docks), 0 refused.
+
+THE GATE, WATCHED RED FIRST (test/bridgeGenerator.test.ts, 11 tests --
+every one failed on the missing module import before public/bridge-
+generator.js existed): connectivity over the real built pieces (not just
+the abstract MST, which would stay green even if every edge failed to
+build -- a dedicated test distinguishes the two); every anchor lands on
+dry, road-legal ground belonging to the boundary it serves; no duplicate
+dock ids; the route relationship lives on the dock piece; a board-level
+refusal (occupied cell) redirects to a boat route rather than dropping
+the connection; grid alignment and origin stability by construction.
+All green.
+
+MUTATION-TESTED, 4 controls, ALL CAUGHT FOR REAL (test/mutations.json,
+scripts/_mutcheck.mjs test/bridgeGenerator.test.ts public/bridge-
+generator.js): the 800 m classification threshold, the correct-boundary
+anchor check, dock id uniqueness, and the bridge-refusal-to-boat
+fallback.
+
+TWO REAL TOOLING FINDINGS, EACH FIXED BEFORE TRUSTING THE RESULT:
+- The fallback mutation SURVIVED on its first attempt: the real
+  archipelago has exactly one bridge candidate and it never fails, so
+  the fallback branch this mutation touches was never exercised by any
+  test that only calls the generator on unmodified default boundaries.
+  Fixed by adding a deterministic test that pre-occupies the one real
+  bridge's own exact footprint on a fresh board (forcing a genuine
+  board.place() refusal, not a simulated one) and asserting the
+  fallback actually fires.
+- The dock-id mutation was CAUGHT, but not by the test its own `expect`
+  field named. board.js's own duplicate-id refusal silently absorbs the
+  collision (refusing the second, colliding piece) before the dedicated
+  "no duplicate ids" assertion ever sees a duplicate -- caught instead
+  by two tests whose own counts depend on both ends of every route
+  surviving. Fixed the manifest's `expect` field to name a test that
+  actually goes red, the same lesson AUDIT-PROTOCOL.md's 2026-09-09
+  entry already recorded for worldAliasing, recurring in a second file.
+
+GUARD CHECK: node test/run.mjs test/worldSeed.test.ts test/board.test.ts
+test/boardGenerator.test.ts -- 29 of 30 pass, the one failure is B2.5's
+own pre-existing, deliberate, unrelated CPU-time gate. npx tsc --noEmit
+clean.
+
+STOPPED HERE, NOT AT B2.8/THE MUTATION HARNESS, per Mark's own live
+reordering of docs/briefs/RUN2-CLI-2026-09-09.md received mid-run:
+B3 (the render path) is now first, ahead of everything else, because
+nothing has drawn the real board yet. This commit lands B2.7 (already
+complete, gated, and not worth holding back) before pivoting.

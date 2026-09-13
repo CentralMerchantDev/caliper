@@ -12,7 +12,6 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
 import { createWorld, worldFromJSON } from "../public/world.js";
-import { generateWorld } from "../public/city-plan.js";
 import { LandField, makeHeightAt } from "../public/terrain.js";
 import { layerFrom } from "../public/world-model.js";
 
@@ -36,17 +35,22 @@ function landFingerprint(land: any, step = 1009): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
-test("createWorld composes generateWorld and LandField -- it does not reimplement them", () => {
+// BLOCKED, 2026-09-13, Phase 1 "take it all down"
+// (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md). public/world.js's
+// createWorld() no longer calls public/city-plan.js's generateWorld() (that
+// file is quarantined) -- `plan` is now `null` until Phase 2 supplies a
+// replacement (2.7, "the generator, LAST"). createWorld() itself is not
+// quarantined -- it survives, and `land`/`layers`/`grid` below are still
+// real -- only these three tests, which read `.plan.plots`/`.blocks`/`.roads`
+// via planFingerprint, are blocked. Not retired: the property they guard
+// (world.plan matches generateWorld's own output, byte for byte) is real
+// and will matter again the moment Phase 2 gives `plan` something to be.
+test("createWorld composes generateWorld and LandField -- it does not reimplement them", { skip: "BLOCKED: plan is null until Phase 2's generator exists; see comment above" }, () => {
   // If public/world.js ever grew its own copy of plan or terrain generation,
   // this is what would catch it drifting from the real thing.
-  const w = createWorld({ seed: "prospect-quarter" });
-  const heightAt = makeHeightAt(new LandField(16, 420, 40, "prospect-quarter"));
-  const directPlan = generateWorld(heightAt, "prospect-quarter");
-  assert.equal(planFingerprint(w.plan), planFingerprint(directPlan), "world.plan is not what generateWorld itself produces for this seed");
-  assert.equal(landFingerprint(w.land), landFingerprint(new LandField(16, 420, 40, "prospect-quarter")), "world.land is not what LandField itself produces for this seed");
 });
 
-test("two instances with the same seed have equal plan and land, and independent layers", () => {
+test("two instances with the same seed have equal plan and land, and independent layers", { skip: "BLOCKED: reads .plan, which is null -- see comment above test 1" }, () => {
   const a = createWorld({ seed: "harbour-of-saint-elms" });
   const b = createWorld({ seed: "harbour-of-saint-elms" });
   assert.equal(planFingerprint(a.plan), planFingerprint(b.plan));
@@ -57,7 +61,7 @@ test("two instances with the same seed have equal plan and land, and independent
   assert.deepEqual(b.layers.layers(), [], "adding a layer to world A appeared in world B");
 });
 
-test("a world round-trips through JSON and rebuilds to the same fingerprint, with its layers intact", () => {
+test("a world round-trips through JSON and rebuilds to the same fingerprint, with its layers intact", { skip: "BLOCKED: reads .plan, which is null -- see comment above test 1" }, () => {
   const a = createWorld({ seed: "prospect-quarter" });
   a.layers.add(layerFrom({ id: "l1", author: "mark", edits: [{ address: "p1", op: "retint", payload: { color: 0x00ff00 } }] }));
   const json = a.toJSON();

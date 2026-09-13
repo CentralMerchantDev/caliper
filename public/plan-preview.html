@@ -3,12 +3,16 @@
 <head>
 <meta charset="utf-8">
 <title>CALIPER — City</title>
-<!-- The world moved to /city.html. This stub stays because the preview URL has
-     been shared and bookmarked; query strings are carried across. -->
-<script>location.replace("/city.html" + location.search + location.hash);</script>
-<meta http-equiv="refresh" content="0; url=/city.html">
+<!-- Was: the world moved to /city.html, and this stub redirected bookmarked
+     preview URLs there. city.html is quarantined, 2026-09-13, Phase 1 "take
+     it all down" (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md) -- repointed
+     to / (the holding page) rather than left redirecting to nothing. This
+     stub stays because the preview URL has been shared and bookmarked;
+     query strings are carried across. -->
+<script>location.replace("/" + location.search + location.hash);</script>
+<meta http-equiv="refresh" content="0; url=/">
 </head>
 <body style="margin:0;background:#0b1016;color:#e8e2d6;font:13px/1.6 Helvetica,Arial,sans-serif">
-<p style="padding:24px">Moved to <a href="/city.html" style="color:#8fc4e8">/city.html</a>.</p>
+<p style="padding:24px">Moved to <a href="/" style="color:#8fc4e8">/</a>.</p>
 </body>
 </html>

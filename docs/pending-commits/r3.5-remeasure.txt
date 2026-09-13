@@ -1,0 +1,50 @@
+R3.5 re-measured -- both perf gates still fail, current numbers replacing
+B3's stale ones, contention and board-change reported separately per
+Mark's own instruction, not blended into one cause.
+
+BOX CONFIRMED QUIET, before and after: Get-CimInstance Win32_Process
+-Filter "Name = 'node.exe'" -- 30 processes, all MCP/IDE infrastructure,
+zero test/render/mutation runners. (Get-CimInstance
+Win32_Processor).LoadPercentage -- 9%. Zero Chrome processes carrying
+--headless or --use-angle=swiftshader -- the running Chrome instances
+were the user's own regular browser windows, not stray renders.
+
+MEASURED by replicating test/regressionGate.test.ts's own exact method
+(same server, same Chromium/SwiftShader args, same three views, same
+culling-ratio formula) with &board=1 added, via a one-off script -- not
+committed, moved to _TO-DELETE/session-scratch-scripts/ -- run three
+times:
+
+  Street level:     4,584 calls, 141,764 triangles
+  Downtown skyline: 6,129 calls, 276,635 triangles
+  The harbour:         870 calls, 286,185 triangles
+  Culling ratio: 51.25%
+
+IDENTICAL across all three runs -- zero spread. window.__boardPieceCount
+confirmed 21,007 (the current committed board) on every view, every run.
+
+BOTH GATES STILL FAIL: culling 51.25% against <40% (was 65.8%); street
+4,584 and skyline 6,129 draw calls both exceed <=900 (was 7,851); harbour
+870 passes with 30 calls of margin. Neither threshold loosened.
+
+ATTRIBUTION, reported separately, not blended:
+  - Draw calls are structural and moved roughly with piece count, as
+    expected: 4,584/7,851 = 0.584 against the piece-count ratio
+    21,007/35,365 = 0.594 -- the draw-call improvement is real and
+    largely explained by the smaller board.
+  - Today's own 51.25% reading is confirmed NOT a contention artefact --
+    zero spread across three runs on a box checked quiet before and
+    after, unlike decision #4's documented flakiness for the comparable
+    metric. Trustworthy as a real, current number.
+  - Whether B3's ORIGINAL 65.8% was itself contention-inflated cannot be
+    determined from what was measured here -- that needs the OLD board
+    (35,365 pieces) re-measured on a quiet box for a true controlled
+    comparison, which is a materially bigger undertaking than this item's
+    own "one measurement" scope. Not attributed to a single cause where
+    two are available.
+
+R3.5 stands, unticked, now carrying today's real numbers instead of B3's
+stale ones.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

@@ -1,0 +1,74 @@
+STEP 2 (docs/specs/PIECE-CATALOGUE-ROADS.md §9) -- board-generator.js sizes
+every road piece and block-carving margin from roadkit.js's own
+ROAD_STANDARDS, not the fixed ROAD_WIDTH=9 constant Decision 5 named for
+retirement.
+
+BLIND REVIEW BEFORE IMPLEMENTING: a fresh subagent, given only CLAUDE.md
+and the concrete plan (not told what to look for), found the original test-2
+design (an exhaustive road/building overlap check) would NOT catch the
+mutation it was meant to catch -- public/board.js's own occupancy guard
+(canPlace/place, "NEVER skipped") already refuses any candidate whose
+footprint overlaps a real reservation, so no two PLACED pieces can ever
+geometrically overlap regardless of whether block-carving reads the correct
+margin. Confirmed by reading board.js directly. Redesigned test 2 as a
+static source-scan instead (matching this repo's own B2.6 precedent -- "no
+file in src/ imports generateBoard"), which sidesteps the placement-refusal
+confound entirely by checking the SOURCE, not generated output.
+
+WHAT CHANGED: public/board-generator.js -- new import of ROAD_STANDARDS
+from roadkit.js; ROAD_WIDTH/HALF_ROAD module constants retired, replaced by
+roadWidthFor(roadClass)/halfRoadFor(roadClass) helpers reading
+ROAD_STANDARDS; placeRoadGraph() computes its own halfRoad/roadWidth once
+per boundary call (not per piece -- every piece it places shares one
+roadClass today) and uses them at all three piece-construction sites;
+generateBoard()'s own, separate block-carving loop computes its own
+blockHalfRoad the same way. Every piece's roadClass stays uniformly
+"STREET" -- no second class introduced. Three stray comments that named
+"ROAD_WIDTH" as a bare word (SETTLEMENT_TABLE's own header, the step-1
+retirement note, one profiling comment) were reworded so they describe the
+same facts without the now-retired identifier, which is also what makes
+the new static-scan test meaningful rather than trivially broken by its
+own comments.
+
+TEST FIRST, WATCHED RED: two tests added to test/boardGenerator.test.ts.
+"every road piece's narrow dimension is its own class's real ROAD_STANDARDS
+width" -- watched red (narrow=9, expected 18) before the edit. "board-
+generator.js sizes every road site from ROAD_STANDARDS" -- a static scan
+asserting no bare ROAD_WIDTH/HALF_ROAD identifier survives and that BOTH
+placeRoadGraph() and generateBoard()'s own block-carving loop each call
+halfRoadFor() independently (checked per-function by slicing the source,
+not just counting occurrences file-wide, so one function converting and the
+other not is still caught) -- watched red (helpers did not exist yet)
+before the edit. Both GREEN after.
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs test/boardGenerator.test.ts
+-- 12/14 pass; the two known reds are B2.5 (already-tracked, unchanged) and
+the "B2 gate: coverage is measured INSIDE each settlement boundary, 20-40%"
+gate, which went red exactly as docs/specs/PIECE-CATALOGUE-ROADS.md §9
+predicted it would the moment this step landed ("downtown" measured 55.4%
+covered, over the 40% ceiling -- road width doubling roughly doubles the
+road term of built area while boundary area is unchanged). Expected,
+honest, not worked around; Step 3 is the fix.
+
+MUTATION -- NAMED, NOT YET PROVEN CAUGHT: node scripts/_mutcheck.mjs
+test/boardGenerator.test.ts public/board-generator.js <scratch spec>,
+mutation "decision-5-step-2-block-carving-reads-road-standards" (revert
+generateBoard()'s own blockHalfRoad back to a hardcoded 9, bypassing
+halfRoadFor() -- deliberately the SAME numeric value as today's correct
+answer, so this proves "reads from ROAD_STANDARDS", not merely "produces
+the right number"). _mutcheck.mjs correctly refused: "baseline: RED" --
+the SAME coverage gate this commit's own step just turned honestly red
+sits in the same test file, and the mutation harness will not score
+against a red baseline, by design (docs/BUILD-LOOP.md STEP 6). This is
+the identical "two correct controls disable each other" shape
+docs/DECISIONS-FOR-MARK.md #10 (this session, ITEM 0) already named for a
+different pair of controls. Not worked around. The mutation will be run
+and proven CAUGHT immediately after Step 3 restores a green coverage gate,
+before Step 4 begins -- named here so a crash between this commit and that
+one leaves a clear, honest record of exactly what is still open.
+
+STILL OPEN: Step 2's own mutation-CAUGHT proof (blocked on Step 3, not
+skipped). Step 3 (re-tune block/plot sizing) is next.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

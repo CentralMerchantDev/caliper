@@ -1,0 +1,54 @@
+ITEM 2 -- finish the half-done step a dead session left in the tree: decision
+5's retirement of ROAD_WIDTH, step 1 (roadClass metadata, no geometry change).
+
+RE-GROUND: session opened on b1-land with the tree dirty -- two files modified
+(public/board-generator.js, test/boardGenerator.test.ts), matching
+docs/DECISIONS-FOR-MARK.md #5's own "what was done in the meantime" line
+("Step one of the retirement ... is this session's item 2 -- see its own
+commit for gate evidence"), but HEAD (369b0d8) was docs-only. The prior
+session died before committing its own item 2. Per docs/BUILD-LOOP.md STEP 0
+("If the tree is dirty from your own previous step, finish that step's loop
+... before starting a new one"), this commit finishes it rather than
+building on top of it or discarding it.
+
+WHAT THE DIFF DOES: public/board-generator.js gains a `ROAD_CLASS_DEFAULT =
+"STREET"` constant and stamps `roadClass: ROAD_CLASS_DEFAULT` onto all three
+road-piece construction sites in placeRoadGraph() (junction node, N/S span,
+E/W span). ROAD_WIDTH/HALF_ROAD are untouched -- this is metadata only, no
+piece's footprint changes.
+
+TEST FIRST, WATCHED: test/boardGenerator.test.ts gains "decision-5 step 1:
+every road piece the generator places carries a real, current roadClass, and
+step 1 has not changed which one" -- asserts ROAD_STANDARDS[p.roadClass] for
+EVERY road piece (not a sample), and that the only class used is still
+STREET (step 1 must not change behaviour, only add a label).
+
+VERIFIED, this session:
+  npx tsc --noEmit                                  clean
+  node test/run.mjs test/boardGenerator.test.ts      11 pass, 1 fail
+    (B2.5's CPU-time gate, 39.6-39.8s measured against the 30,000ms ceiling
+    -- the same, already-decided, already-allowlisted red named in
+    DECISIONS-FOR-MARK.md #3 / scripts/expected-red.mjs; unrelated to this
+    change and unchanged by it)
+
+MUTATED, CAUGHT: added `decision-5-step-1-roadclass-default` to
+test/mutations.json (find ROAD_CLASS_DEFAULT = "STREET", replace with an
+invalid ROAD_STANDARDS key). Baseline GREEN, mutation CAUGHT by the new test,
+source restored byte-identical --
+  node scripts/_mutcheck.mjs test/boardGenerator.test.ts public/board-generator.js test/mutations.json
+The pre-existing board-generator.js mutation (b2-5-sampled-ground-perimeter-
+is-load-bearing) was also re-run against the dirty tree before this commit
+and still CAUGHT -- this step did not disturb it.
+
+GUARDS CHECKED: nothing deleted; no API spend; src/ untouched; tick/
+chooseAction/applyAction untouched; this touches public/ and test/ only.
+
+STILL OPEN: this is step 1 of N in decision 5's retirement
+(docs/specs/PIECE-CATALOGUE-ROADS.md). Steps 2+ (sizing pieces from
+ROAD_STANDARDS instead of ROAD_WIDTH, regenerating the board, re-measuring
+coverage/density) are plan-only as of this session -- see the new section
+added to docs/specs/PIECE-CATALOGUE-ROADS.md in the following commit. No
+regeneration has happened; ROAD_WIDTH/HALF_ROAD remain live and unchanged.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

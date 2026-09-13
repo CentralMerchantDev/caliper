@@ -1,0 +1,46 @@
+The mutation-harness deadlock -- Option 2 (the allowlist), decided by
+Mark in docs/briefs/RUN2-CLI-2026-09-09.md ("take the allowlist... it
+preserves the honest red AND unblocks the controls, where converting
+the gate to {todo} would hide a real measurement") and implemented this
+run.
+
+WHAT WAS BUILT: scripts/expected-red.mjs (new) -- a named, documented
+Map of test titles expected to stay red, each entry carrying its own
+reason and source document, read by BOTH scripts/_mutcheck.mjs and
+scripts/mutate.mjs (one list, not two that could drift -- this
+project's own recurring "two sources of truth" failure pattern, avoided
+on purpose). Carries exactly one entry today: B2.5's own CPU-time gate
+title (docs/specs/BOARD-REBUILD-PLAN.md), copied verbatim from
+test/boardGenerator.test.ts and asserted to match it by a dedicated
+test, not merely trusted by eye.
+
+test/expectedRed.test.ts (new, 5 tests): a baseline with only the
+documented failure is acceptable; one with any unexpected failure
+alongside it is not; the filter strips only documented entries; every
+entry names a real reason (an allowlist with no reason is a hole with
+no evidence it was reviewed); and the allowlisted title is asserted to
+be a real substring of the actual test file, not a paraphrase.
+
+MUTATION-TESTED, 1 control, CAUGHT (test/mutations.json): a "rubber
+stamp" mutation that makes the filter accept everything is caught
+directly by the dedicated unexpected-failure test.
+
+CONFIRMED WORKING ON THE REAL DEADLOCK: `node scripts/_mutcheck.mjs
+test/boardGenerator.test.ts public/board-generator.js test/mutations.json`
+previously refused outright ("baseline: RED... refusing to score
+mutations against a red baseline"). With the allowlist wired in, its
+own baseline check now reports GREEN -- confirmed directly, not assumed
+from reading the code.
+
+REVERSIBLE IN ONE COMMIT, as promised in docs/DECISIONS-FOR-MARK.md #2:
+delete scripts/expected-red.mjs's one entry (or the whole file) and
+both scripts return to their original, stricter behaviour with no other
+code to touch. board-generator.js/board.js/boardGenerator.test.ts
+themselves are untouched by this fix.
+
+NOT YET DONE: the isolate.test.ts-side 5 mutations remain correctly
+blocked -- that file's red is an old-world pin (B2.8's job), not a
+permanent gate, and does not belong on this allowlist. The actual
+mutation run against test/boardGenerator.test.ts's now-accepted
+baseline is in progress as this commits; its results land in a
+follow-up commit once it returns.

@@ -1,0 +1,4 @@
+Overnight audit log: Steps 2 and 3 landed, both mutations proven CAUGHT.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

@@ -1,0 +1,76 @@
+B2.0 -- close both of B1's own self-identified gaps before the generator:
+waterways.js re-derived against the real archipelago, worldAliasing.test.ts's
+allow-list extended to terrain.js's own land tables
+
+ON b1-land, NOT main, continuing B1's own branch discipline.
+
+WRONG (B1's own open gap, named honestly in its own ledger entry, not
+absorbed into the "old generator" catalogue): public/waterways.js's three
+named canals (canal-kingsley/fairlight/cormorant) were never re-derived
+against the B1 archipelago's real island shapes. Self-identified as bigger
+than that: the four mainland rivers (river-west/mid/east/far-e) were ALSO
+authored against the old mainland/range geometry and were, by direct
+point-in-polygon check, running through open sea.
+
+WHAT WAS BUILT, public/waterways.js:
+
+All seven waterways repositioned. Three canals renamed to the B1 islands
+they now actually run through (canal-suburb/resort/vineyard, chosen from
+B1's own larger "developed" characters, not a cottage island or a skerry).
+Every point verified inside its real target landmass's own generated
+polygon (point-in-polygon against public/terrain.js's
+landmassPolygonsDesign()), not assumed. River mouths' x is the real
+mainland coastline's own x at that river's z, sampled from the polygon --
+the coastline is organic, not straight, so a single hand-picked constant
+failed for three of the four rivers before this was found.
+
+river-mid alone took eight iterations against test/ground.test.ts's real
+cross-section test (walks +X from the channel's own midpoint, asserts depth
+falls monotonically to a dry bank, found each time by running the actual
+test logic, not by inspection): the first seven, all at world z -2800,
+sloped the wrong way in +X no matter what x was tried at that same z --
+"the least-bad x at a fixed z" was the wrong axis of freedom. Fixed by
+sweeping BOTH x and z with a clean heightAt grid, off the cut-radius of
+every other waterway, for a spot where elevation genuinely rises over +X:
+world z -4500, x -9200 does, by 14.9 m over 100 m.
+
+WHAT WAS BUILT, test/worldAliasing.test.ts + public/terrain.js:
+
+Root-caused, not guessed: no LandField has read city-plan.js's LANDMASSES
+since B1 Step A -- every world's .masses comes from terrain.js's OWN
+LANDMASSES via landmassPolygonsDesign()'s `{ ...lm, polygon }`, which
+shares each mass's .points (and, for the mainland entry, .zones --
+MAINLAND_ZONES itself) by reference across every seed. The test's own
+allow-list only ever named the OLD, now-unread LANDMASSES from
+city-plan.js. Fixed: LANDMASSES exported from terrain.js; the test imports
+it alongside MAINLAND_ZONES and adds both to allowedShared(), same
+reasoning already applied to the WORLD/HIGHWAYS entries.
+
+MUTATION-TESTED (test/mutations.json), both watched red and reverted:
+gutting the new TERRAIN_LANDMASSES allow-list entry turned the
+different-seed test red (438 unexplained shared objects, first one
+array(22)); separately removing only the MAINLAND_ZONES entry (leaving
+.points allowed) also turned it red on its own (4 unexplained, array(3)) --
+proving .zones is a genuinely distinct reachable field, not already covered
+by .points.
+
+A THIRD thing moved as a direct, measured consequence, caught by re-running
+the full targeted set rather than assumed unaffected: test/worldSeed.test.ts's
+PRE_SEED fingerprint. Waterways are cut into the height field
+(waterwayCut), so repositioning all seven moved the ground under that guard
+too -- re-pinned a second time (5e6b13741e4000dd7efdfed25d4439262814b733b0f246b03a3c0c59c2e29986),
+the same deliberate-redesign exception already claimed for B1 step B, not a
+second one invented for convenience.
+
+VERIFIED: test/ground.test.ts and test/waterwayGround.test.ts green on
+every waterway-specific test (32/34 and 4/4); the two remaining
+test/ground.test.ts failures (a thing standing on a road-defined slope) are
+the already-catalogued road-network.js old-world pins, untouched by this
+pass. test/worldAliasing.test.ts, test/terrainLandmassOwnership.test.ts,
+test/landCoverage.test.ts, test/worldSeed.test.ts all green.
+npx tsc --noEmit clean throughout.
+
+WHAT IS STILL OPEN: B2.1, the generator's own contract -- plan, in writing,
+and STOP for review, per Mark's own instruction, before any implementation.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

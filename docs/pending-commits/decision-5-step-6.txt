@@ -1,0 +1,31 @@
+STEP 6 (docs/specs/PIECE-CATALOGUE-ROADS.md §9) -- close the record. Decision
+5's retirement of ROAD_WIDTH is done; docs only, no code change.
+
+WHAT CHANGED: docs/DECISIONS-FOR-MARK.md #5 gets a CLOSED note -- the
+commit list in order, the real measured numbers (coverage per boundary,
+the retuned blockAtoms table, the committed board's real piece/bridge/dock
+counts, the egress-gap improvement), the two real regressions this
+retirement's own work caused and fixed before landing (boardLoad.test.ts
+drifting twice, originStability.test.ts's node_modules-resolution break),
+and the one real disagreement between the plan's own algebra and measured
+reality (building coverage did not stay flat as predicted). docs/specs/
+PIECE-CATALOGUE-ROADS.md's own status line updated: §§1-8 (the footprint/
+type catalogue) remain a proposal awaiting Mark's approval; §9 is done.
+
+FACT-CHECKED BEFORE COMMITTING: a fresh, blind subagent verified every
+checkable claim in the closing note against the real repository state --
+all six commit hashes exist in docs/DECISIONS-FOR-MARK.md's own cited
+order; ROAD_WIDTH is confirmed absent (word-boundary grep) from both
+public/board-generator.js and public/bridge-generator.js; the committed
+board.generated.json's real pieceCount (21007), bridge/dock counts (0/19),
+and refused-crossing count (3, re-derived by running gen-board.mjs
+directly, byte-identical to the committed file) all matched; SETTLEMENT_TABLE's
+real blockAtoms values matched exactly; all four decision-5 mutation IDs
+exist in test/mutations.json; all nine per-boundary coverage percentages
+were independently re-derived from the real committed board (the same
+shoelace/built-area formula test/boardGenerator.test.ts uses) and matched
+to the decimal; the egress-gap claim (3 boundaries -> 1, farm-isle) was
+independently re-checked and matched. No inaccuracies found.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

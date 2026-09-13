@@ -1,0 +1,74 @@
+B2.7 (bridges and boat routes) -- plan written, blind-reviewed, and
+corrected. PLAN ONLY. Nothing implemented. docs/BUILD-LOOP.md Step 2,
+following docs/briefs/OVERNIGHT-CLI-2026-09-09.md's instruction to plan
+in writing and hand the plan to a blind reviewer before touching code.
+
+WHAT WAS DONE: wrote a first-draft B2.7 contract into
+docs/specs/BOARD-REBUILD-PLAN.md, in B2.1's own shape (what already
+exists, what B2.7 emits, what it is not deciding, STOP for review).
+Dispatched a fresh general-purpose subagent with no session history,
+given only the plan section and the source files it names, asked to find
+what was wrong with it -- docs/OVERNIGHT-RUN.md's own subagent contract
+and blind-review process, verbatim.
+
+THE REVIEW FOUND FOUR REAL DEFECTS, each verified independently before
+accepting the subagent's report (docs/OVERNIGHT-RUN.md "a subagent's
+report is a claim... verify it before accepting it"):
+
+1. The draft reused gen-bridges.mjs's 9000 m "too far to bridge" cutoff
+   as the bridge/boat split point. Re-checked directly:
+   public/road-network.js's own comment states the REAL buildable
+   ceiling is 800 m single-span, measured against the old world's own
+   output (11 of 19 real bridges exceeded it). 9000 m answers "is this
+   geographically plausible on a map", not "can roadkit.js build it" --
+   reusing it would have repeated the exact defect that comment
+   describes, one level up. Fixed: the plan now uses 800 m, sourced from
+   that same comment, and MEASURED the real gap distribution over the 12
+   settled boundaries this revision (66 pairs, only 1 inside 800 m,
+   42 inside the old 9000 m) rather than assuming distances carried over
+   from the pre-B1 geometry unchanged.
+2. The draft claimed `grep -rin "boat|ferry|dock" public/` returned zero
+   hits. Re-ran the identical command: it returns real boat/dock-named
+   kit models in public/asset-registry.js (av-f1-amphibious-flying-boat,
+   mar-f1-floating-drydock, others). Corrected: no GENERATION or
+   CONNECTIVITY capability for boats exists, but these assets are named
+   for whoever builds B3/B4's rendering so they are not rediscovered from
+   zero.
+3. The draft characterised bridgeChain as composing bridgeAbutment/
+   bridgePier/bridgeDeckSpan into real pieces, tested via
+   test/bridgePieces.test.ts. Re-checked: bridgeChain returns a numeric
+   layout PLAN, not composed pieces (scripts/verify-roadkit.mjs's own
+   comment: "excluded -- it returns a chain PLAN"), and only bridgeSpan
+   is exercised by any file under test/. Fixed: B2.7 now scopes to
+   bridgeSpan only, and states plainly that the socket-to-piece
+   conversion is new code, not reuse.
+4. The draft's boat-route "route record... carried alongside the board's
+   pieces, not inside one" was a direct, unflagged conflict with this
+   plan document's own Standing Gate 5 ("no world state outside the
+   board"). Re-checked public/board.js's assertValidPiece (lines 72-97):
+   it validates required fields only and does not reject extra ones.
+   Fixed: the route relationship (routeTo/routeId) now lives as fields
+   on the dock piece itself, inside the board.
+
+Also corrected on the reviewer's finding: the plan document's own B2.0
+catalogue states "34" old-world pins but its own per-file breakdown sums
+to 32 and omits three files the brief's fresh count includes
+(worldOccupancy, isolate, supervisedGenerateScript). Reconciled against
+tonight's own real node test/run.mjs run (1,141 tests: 1,084 pass / 41
+fail / 1 todo / 15 skipped) -- 38 is the current, verified number,
+matching the overnight brief exactly. Left the B2.0 section's own "34"
+text unedited (BUILD-LOOP Step 1: the tree wins, correct forward, do not
+rewrite what was measured at the time) and used 38/B2.8 going forward.
+
+Named, not yet fixed (queued for whoever implements B2.7): the "what B2.7
+is explicitly NOT deciding" list now includes the exact grid-decomposition
+question for a bridge span beyond its two anchors, and a real fallback
+rule for a bridge candidate that bridgeSpan refuses at build time
+(redirect to a boat route rather than drop the connection or block the
+gate). Every gate line now names a concrete mutation, including a
+vacuous-pass guard (a connectivity check that passes without a single
+real bridge existing) the first draft did not address.
+
+NOT YET DONE: implementation. BUILD-LOOP Steps 3-9 (test-first, build,
+verify, mutate, measure, guard-check, commit) have not started. This
+commit is the plan and its correction only.

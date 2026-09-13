@@ -1,0 +1,20 @@
+Overnight handover, CLI lane, 2026-09-09 -- docs/audits/OVERNIGHT-CLI-
+2026-09-09.md, per docs/briefs/OVERNIGHT-CLI-2026-09-09.md section 11's
+required contents. Written as the run's own final artefact, not
+incrementally -- earlier phases' state is already on record in their own
+commits (adf3362, 95cf588, 73f84b6, 76e8d61, ed14abd), which this
+document indexes rather than repeats.
+
+Covers: the brief's own ground-check result (all four claims held, one
+small unmentioned fact -- 15 skipped tests -- named); the checklist with
+real commit hashes; what B2.7/B2.8 actually got done vs. left for next
+session, with concrete next steps; every gate this session touched,
+green or red, with its number; both decisions queued for Mark; what did
+not work (npm run mutate's own baseline check refuses on the current,
+mostly-expected-red suite; the first B2.7 plan draft's four defects,
+found by blind review); what could not be verified (B2.5's own timing
+not re-measured, two hand-timed mutations not re-run, vitest's 12
+worker tests not run); and two things flagged that nobody asked about
+(CLAUDE.md's own stale "current work" pointer; a small arithmetic
+mismatch in this plan's own B2.0 section, left as written per BUILD-
+LOOP Step 1 but named so the next reader isn't the one to find it cold).

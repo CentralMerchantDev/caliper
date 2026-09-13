@@ -60,6 +60,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { filterPending, baselineIsFresh } from "./mutate-resume.mjs";
 import { MARKER, markerFileMatches, acquireLock, releaseLock, sha } from "./mutate-lock.mjs";
+import { unexpectedFailures } from "./expected-red.mjs";
+import { extractTestTitles } from "./extract-test-titles.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = join(ROOT, "test", "mutations.json");
@@ -163,19 +165,23 @@ function runSuite() {
   }
   const m = out.match(/^(?:#|ℹ) fail (\d+)$/m);
   const fail = m ? Number(m[1]) : null;
-  // Same parse as gen-test-count.mjs, INCLUDING the header filter -- that header
-  // is what made the exemption in gen-test-count dead code on its first version,
-  // and this file would have inherited the identical bug by copying the pattern
-  // without the lesson.
-  const failing = [...out.matchAll(/^(?:not ok \d+ - |✖ )(.+?)(?: \(\d|$)/gm)]
-    .map((x) => x[1].trim())
-    .filter((n) => n !== "failing tests:");
+  // scripts/extract-test-titles.mjs -- docs/DECISIONS-FOR-MARK.md #10: this
+  // used to carry its own inline regex, same shape as gen-test-count.mjs's,
+  // which truncated a title at the FIRST parenthetical-with-a-digit rather
+  // than the trailing duration node's own runner appends -- corrupting the
+  // baseline-red check, per-mutation CAUGHT/SURVIVED scoring (both read
+  // `failing` below), and the stale-`expect`-reference check (`all`).
+  const rawFailing = extractTestTitles(out, { failingOnly: true });
+  // scripts/expected-red.mjs: a named, documented, honestly-red test is not
+  // a broken tree (Candidate pattern F, second instance -- AUDIT-PROTOCOL.md
+  // §7, 2026-09-09). `fail`/`failing` below are the UNEXPECTED subset, so a
+  // baseline consisting only of allowlisted titles reads as green; `rawFail`
+  // is kept alongside for anyone who wants the true, unfiltered count.
+  const failing = [...new Set(unexpectedFailures([...new Set(rawFailing)]))];
   // Every test name the run reported, passing or failing. Used to check that a
   // mutation's `expect` still refers to a test that exists.
-  const all = [...out.matchAll(/^(?:ok \d+ - |✔ |✖ )(.+?)(?: \(\d|$)/gm)]
-    .map((x) => x[1].trim())
-    .filter((n) => n !== "failing tests:");
-  return { fail, failing: [...new Set(failing)], all: [...new Set(all)], exit, out };
+  const all = extractTestTitles(out, { failingOnly: false });
+  return { fail: fail === null ? null : failing.length, rawFail: fail, failing, all: [...new Set(all)], exit, out };
 }
 
 function applyMutation(mut, baseline) {

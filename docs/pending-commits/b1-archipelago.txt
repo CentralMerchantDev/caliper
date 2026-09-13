@@ -1,0 +1,115 @@
+B1 -- the land: a real archipelago, gate green, mutation-tested; city-plan.js's
+own incoherence against it measured and catalogued, not chased
+
+ON A NEW BRANCH (b1-land), NOT main, per Mark's own instruction given after
+this session found the finding below: main stays green, deployable and
+truthful while the rebuild is in flight. B1 and B2 merge to main together,
+as one coherent world, not separately.
+
+WRONG: 42% water, 391.9 km2 dry land, one mainland consuming the entire
+land budget, 96% of that land carrying nothing (docs/specs/BOARD-REBUILD-
+PLAN.md). Approved plan: ~65% water (tunable), a real archipelago, a
+mainland that stays countryside.
+
+WHAT WAS BUILT, public/terrain.js:
+
+- LAND_SCALE (default 1.0) -- one global knob, scaling every landmass
+  toward its own centroid, per Mark's correction 1: authored at target
+  areas, not derived by scaling today's map down.
+- organicIsland()/organicCoastlineDesign() -- deterministic, hashed-jitter,
+  RADIALLY AREA-CORRECTED outlines for every landmass with no hand-drawn
+  reference to trace (everything except downtown, which keeps Mark's own
+  COAST_DESIGN pen strokes, scaled around its own centroid). Area-exact by
+  construction: the polygon's own measured area (shoelace, the same
+  function the gate test uses) is what the number in the data means, not
+  an estimate that might drift from a comment.
+- MAINLAND_ZONES -- coastal-strip (12%, settleable) / farmland (55%) /
+  range (33%), summing to 1 (asserted), each with a stated identity string
+  -- Mark's correction 3 ("every large empty area gets an identity") and
+  correction 2 ("state explicitly how much of the mainland is settleable,
+  and gate it") as data, not left to be inferred.
+- RANGE_SPINE repositioned behind the new mainland's own west edge
+  (Mark's brief: "a tall range framing"), not the old embayment's north arm.
+- 15 named islands (suburb/resort/highland/three wooded/fishing/farm/
+  vineyard/quarry/three cottage/sandbar/lighthouse-rock) + 22 procedural
+  skerries (16 survive the mainland-exclusion filter) -- Mark's correction
+  1, "spend the headroom on more islands, not bigger ones."
+
+MEASURED, NOT PRINTED (scripts/measure-land.mjs, sampled against the real
+height field over WORLD.SIZE bounds -- validated against today's own cited
+391.9 km2/42% before being trusted: this instrument reproduces 393.2 km2/
+41.8% against the unmodified world, within grid-resolution rounding):
+
+  68.2% water (target ~65% -- wet side, deliberately left there pending
+    Mark's own eye; the knob exists for exactly this)
+  215.2 km2 dry land (was 393.2)
+  32 islands (was 10) -- the "spend the headroom on count" correction
+    landing exactly as intended
+  largest 22.04 km2 (downtown, confirmed the largest)
+  smallest 0.08 km2 (a rock)
+  mainland's real in-bounds contribution ~108.9 km2 against its own 110 km2
+    target; settleable fraction 0.12, capped well under the 0.2 ceiling
+
+GATE (test/landCoverage.test.ts, 9 tests, green): water fraction and dry-
+land area banded around the measured result (not exact equality -- Mark's
+own "Mark will move it by eye" instruction), island count >= 20, largest
+island is downtown and can carry it, smallest named island is cottage-
+scale, real size variety across four buckets, something carries genuinely
+nothing, mainland settleable fraction stated and capped, mainland's real
+area close to its own target. WATCHED RED FIRST, twice, against git history
+not memory: the test file refuses to even BUILD against the committed
+step-A world (MAINLAND_ZONES does not exist there -- a real, valid red);
+scripts/measure-land.mjs run standalone against that same world measured
+41.8%/393.2 km2/10 islands, outside every band on every axis. Three
+mutations watched red and reverted: SKERRY_COUNT to 0, the coastal-strip
+fraction raised to 0.45, and the ownership-list transformation below.
+
+THE PLAN-SPECIFIC WORLD-HASH GUARD (test/worldSeed.test.ts,
+docs/BUILD-LOOP.md Step 8) was deliberately RE-PINNED, not left red -- the
+terrain moved on purpose, this time. Found and fixed in the same pass:
+docs/BUILD-LOOP.md itself quoted the hash directly, a data value duplicated
+into a process document, and went stale the moment this redesign changed
+it -- the exact failure pattern this project's own docs name elsewhere.
+Re-pointed to read test/worldSeed.test.ts's own live constant instead.
+
+TEST/TERRAINLANDMASSOWNERSHIP.TEST.TS'S BYTE-IDENTITY CHECK WAS
+TRANSFORMED, NOT DELETED, per Mark's explicit instruction ("the property
+you actually want was never 'the two copies agree', it was 'there is one
+source of truth'... Equality was a proxy for that while both existed").
+It now names the exact, current set of files still statically importing
+LANDMASSES/landmassPolygonsDesign from city-plan.js directly
+(public/road-network.js, scripts/_render-arterial-data.mjs, four test
+files; scripts/gen-mainland.mjs's dynamic import checked separately, named
+as a stated limitation of a static regex) -- a tripwire naming who is left,
+not yet an empty-list assertion, since emptying it is B2/B3's job.
+
+A REAL DEVIATION FROM THE STEP-A.5 PLAN, NAMED HONESTLY: the nine old
+island names were not reused, and public/waterways.js's three named canals
+(canal-kingsley/fairlight/cormorant) were NOT re-derived against the new
+shapes as step A.5 said they would be. test/ground.test.ts's two river/
+canal tests fail as a direct, measured consequence -- recorded as an open
+gap in the ledger, not silently absorbed into the "old generator" catalogue
+below, because it is this pass's own gap, not city-plan.js's.
+
+MAJOR FINDING, RECORDED AS EVIDENCE PER MARK'S OWN INSTRUCTION, NOT AS
+DAMAGE: city-plan.js's generateWorld() -- untouched, outside this pass's
+routing, replaced rather than repaired in B2 -- now runs against the new
+height field and the two have come apart. Measured directly: 43,412 plots
+(was 17,586), 440 roads (was 1,402/1,357). Blast-radius run (the 30 test
+files depending on generateWorld/LandField, host memory checked first):
+286 tests, 248 pass, 37 fail, 1 todo. Catalogued in
+docs/specs/BOARD-REBUILD-PLAN.md's own ledger, not fixed: 3 of the 37 are
+real findings (2 the waterways.js gap above, 1 a plausible new aliasing gap
+in worldAliasing.test.ts -- MAINLAND_ZONES likely missing from that test's
+own allowedShared() list, not yet root-caused precisely); the other 34 are
+old-world pins tracing to the same root cause (plots/bridges/sites placed
+against geometry that no longer describes real land -- headline: 72.1% of
+plots now fall in water). Re-pinning is B2's job, once the new generator
+makes the world coherent again, so it happens once rather than twice.
+
+npx tsc --noEmit clean throughout.
+
+WHAT IS STILL OPEN: B1 step B's own name-reuse deviation and the waterways
+canal gap (above); B2, the new generator, next on this same branch.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

@@ -1,0 +1,57 @@
+RUN 6 (autonomous) -- three orientation fixes before any new code: transcribe
+an orphaned decision from a failed scheduled run, record a new one this
+session's own attempt at the test-count fix surfaced, and correct
+COMPLETION-PLAN.md's stale B3 line.
+
+docs/DECISIONS-FOR-MARK.md #8: a scheduled Cowork run attempted this same
+overnight brief earlier today and could not commit anything -- its shell
+mounts this repo read/write but not unlink, so its own first `git status`
+created a lock nothing could remove, proved by a throwaway-repo test in its
+own handover (docs/audits/OVERNIGHT-2026-09-10.md, untracked, written by
+that run). That run queued a real scheduling question (should Cowork keep
+pointing at a build brief it cannot execute) but could not append it to the
+tracked queue for the same reason it could not commit anything else.
+Ground-checked here: the lock and its companion probe file do not exist on
+this checkout (git status, git fsck both clean) -- not a live blocker for
+this session. Transcribed verbatim in substance, per that run's own request,
+so the question is not lost.
+
+docs/DECISIONS-FOR-MARK.md #9: attempting to fix the red publicClaims.test.ts
+test-count gate (this session's own first task) found that
+scripts/gen-test-count.mjs's own page-update exemption is deliberately
+narrow -- it only updates public/index.html's claim when the count-claim
+test is the SUITE'S ONLY failure. With ~40+ other already-decided,
+already-tracked red gates (B2.5, decisions #3-#7, cullingRatio,
+regressionGate, several road-network/waterway gates), that condition cannot
+be met honestly today, so the page's stale "1087" cannot be brought into
+agreement with the real count by running the intended tool -- not because
+the tool is broken, but because it is working exactly as designed. Three
+options recorded; recommends changing what the page claims (a number that
+does not imply full-suite health) rather than widening the exemption or
+leaving the page permanently wrong. Not implemented -- a content decision
+reserved for Mark, the same category as #3's threshold question.
+
+Settled by looking, not by reasoning: read commit 18007b8's full message and
+confirmed .shots/downtown-close.png exists on disk (2026-09-09 15:32). That
+commit ran scripts/shoot.mjs with SHOOT_BOARD=1, drew 35,365 real board
+pieces and 400 trees into a real render, and reported the result plainly --
+an additive, un-styled overlay visibly interpenetrating the old world's own
+geometry, exactly as B3's own scope predicts, plus two standing performance
+gates (cullingRatio, regressionGate) caught red when the board layer was
+drawn un-gated and fixed by gating it behind ?board=1, off by default.
+
+The plan's own line said "Visual result UNVERIFIED ... scripts/shoot.mjs not
+run -- do this first next session," which predates that commit by hours and
+was never updated after it landed. Two prior audit passes (RUN 3's own
+closing section, commit 6a9874e) already named this line stale in prose, but
+nobody had gone back and fixed the line itself in COMPLETION-PLAN.md -- the
+exact "a stale ledger line that a later commit already corrected" case
+docs/BUILD-LOOP.md STEP 1 says to fix on sight. Fixed here.
+
+B3's own exit condition (city-render.js quarantined) is unchanged and still
+NOT YET -- this commit corrects what was verified, not what remains open.
+
+No code touched. No merge, no deploy, no push.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FD5JvQU4bUcosxg63Xcdgj

@@ -1,0 +1,37 @@
+Handover for this run, at the brief's own declared stopping point -- item 5
+committed, item 6 not attempted (optional, no budget left after item 1's
+correction and item 3's research both ran deeper than expected).
+
+Full detail in docs/specs/PHASE1-HANDOVER-2026-09-13.md, written and
+committed now per the brief's own §14 ("write and commit as you go... before
+the budget gets close"). Decision queue #11 opened
+(docs/DECISIONS-FOR-MARK.md) for the one finding with real consequence
+beyond this session: Phase 1's "clear the site" cannot fully happen until
+Phase 2 exists, because the old world is not a dead demo path -- it is what
+public/index.html renders today, reached through a dynamic import this
+project's own dependency-graph tool cannot see. Recorded rather than acted
+on unilaterally, per rule://decision-queue.
+
+Summary, item by item: item 0 done (branch cut, brief committed). Item 1
+done for what a blind review confirmed was actually safe -- one file
+(public/road-network.js), not the six the first draft proposed; the
+inventory document was corrected in place rather than silently rewritten,
+and a lesson was opened naming the tool gap that caused the mistake. Item 2
+done, scoped to match item 1's real result -- four tests retired, not the
+full ~37. Item 3 done -- all three citations verified directly against
+primary sources (pdftotext, since WebFetch could not parse any of the three
+PDFs), and all three were wrong as originally cited, not merely unsourced;
+REBUILD-PLAN.md corrected in place with the real numbers shown alongside the
+old ones. Item 4 done -- VISION.md split out per C-11, moved verbatim. Item
+5 done -- data/catalogue.json (50 entries) and public/catalogue-validator.js
+(six rules, each proven load-bearing by disabling it and watching its own
+tests go red, by hand, before restoring it), test/catalogueValidator.test.ts
+(25 tests green), test/deadExports.allowlist.json updated with real reasons.
+
+What is still open: item 6 (optional); REBUILD-PLAN 1.6's decision-queue
+closeout (named in the plan, not in this lane's own checklist -- not
+attempted, per rule://queue-exhaustion); two background processes from this
+session not force-killed per the brief's own GUARDS, named in the handover
+so a future session checks before assuming a clean tree; the pre-existing,
+unrelated 43-test red count already covered by standing decisions #3/#4/#7/
+#9/#10, none of it new and none of it this lane's four retired files.

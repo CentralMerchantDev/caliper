@@ -1,0 +1,31 @@
+Item 1, second half, continued -- the supporting fixes for the road-network.js
+quarantine that a shell pathspec error left out of the previous commit.
+
+What was wrong: the previous commit (message: "Item 1 of the Phase 1 rebuild
+lane brief, second half...") intended to land the road-network.js move
+together with .gitignore's ledger fix, the corrected inventory document, the
+regenerated module map, the updated dead-exports allowlist and the updated
+terrainLandmassOwnership.test.ts constant, all as one change. `git add`
+was given "public/road-network.js" as one of several paths in a single
+invocation; that path no longer existed (already staged as a rename to its
+quarantine location), so git refused the whole invocation with "fatal:
+pathspec ... did not match any files" and staged NONE of the other listed
+files -- confirmed after the fact by `git status --short` showing all of them
+still modified/untracked post-commit, and the commit's own diffstat showing
+only the rename. The rename itself landed correctly; everything alongside it
+did not.
+
+How it is known to be fixed: re-staged the exact same file list with the
+already-moved path omitted (`git add .gitignore docs/MODULE-MAP.md
+docs/specs/PHASE1-SITE-INVENTORY.md test/deadExports.allowlist.json
+test/terrainLandmassOwnership.test.ts _TO-DELETE/LEDGER.jsonl
+docs/LESSONS-LEDGER.jsonl`), confirmed via `git status --short` that all
+seven show staged (M/A) before committing here. Content of each file is
+unchanged from what the previous commit's message already describes in
+full; this commit exists only to land what a shell error kept out, named
+plainly rather than folded silently into a later, unrelated commit.
+
+What is still open: unchanged from the previous commit's message -- the four
+named old-world test files, item 2's own review, the five withdrawn WAVE 1
+files pending Phase 2, and a fresh full-suite run for a clean post-move
+comparison.

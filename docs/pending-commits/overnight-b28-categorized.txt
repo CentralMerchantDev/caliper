@@ -1,0 +1,27 @@
+B2.8 -- the 38 old-world pins categorized, per docs/briefs/OVERNIGHT-CLI-
+2026-09-09.md's own instruction. Decided, not fixed: this document's own
+sequencing rule (re-pin last, once B2's generator is coherent end to
+end, not before B2.7 lands) still applies, so nothing here changes any
+assertion.
+
+34 of the 38 are exactly this document's own existing B2.0 blast-radius
+catalogue (cityWorld/cityJoin/cityConnectivity/connectivityBridges/
+ground/instanceGroups/layout/planSeed/roadNetwork/umaaFindings) --
+already correctly categorized there as old-world-geometry dependents.
+
+The other 4 (worldOccupancy x2, isolate x1, supervisedGenerateScript x1)
+were never named in that catalogue. Dispatched a fresh subagent, blind
+to this session's own reasoning, to run the real tests and read the
+real source before concluding anything -- confirmed, independently, the
+same category: all four trace to city-plan.js's generateWorld() still
+running against the OLD landmass geometry (no airport/railway/port site
+resolves; roads collapsed ~1,400 -> ~419-440), not a new regression from
+B1/B2's own work. Spot-checked myself: git log confirms every source
+file these four tests exercise (world-registry.js, isolate.js, world-
+render-3d.js, ground.js, transform.js, run-generate-request.js) was last
+touched before the B1 archipelago redesign.
+
+No assertion loosened, retimed, or made vacuous. 38 + 2 mutationEvidence
++ 1 B2.5 honest gate = 41, matching tonight's real node test/run.mjs
+measurement exactly (1,141 tests: 1,084 pass / 41 fail / 1 todo /
+15 skipped).

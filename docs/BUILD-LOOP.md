@@ -172,8 +172,20 @@ Standing, non-negotiable, from [CLAUDE.md](../CLAUDE.md):
   circuit breaker and AST scanners are the part that works.
 
 Plan-specific guards live with the plan — for the world build, the default world
-must stay byte-identical at seed 0, pinned at sha256
-`418744f1faeee0c396a8902117d89a67a6f4fb43f3dfadfe71509f991bf24e96`.
+must stay byte-identical at seed 0 across any change that is NOT a deliberate
+terrain redesign, pinned in `test/worldSeed.test.ts`'s own `PRE_SEED` constant.
+
+Not hardcoded here as a literal hash, on purpose, and found the hard way: this
+line used to quote the value directly (`418744f1...`), and B1's own archipelago
+redesign correctly changed the pinned hash in that test file while this
+document's copy sat unedited — a declared value repeated in a second place,
+the exact failure pattern this project's own docs (AUDIT-PROTOCOL.md's failure
+pattern B) name elsewhere. A PROCESS document should not carry a DATA value
+that a legitimate future phase is expected to change; read the real constant
+from the test file, not from here. When a phase deliberately redesigns the
+terrain, updating `PRE_SEED` (with the commit message stating why) is the
+correct outcome, not a guard violation — the guard exists to catch
+*accidental* drift from unrelated changes, not to freeze the terrain forever.
 
 ---
 

@@ -1,0 +1,40 @@
+B4 -- the dead-exports gate, established for this branch. RUN2-CLI-
+2026-09-09's own B4 description names this gate ("watched red, and it
+must list propModel today") as though it already existed here; it did
+not -- confirmed directly, `test/deadExports.test.ts` and
+`test/deadExports.allowlist.json` did not exist on b1-land at all.
+
+WHAT WAS DONE: pulled test/deadExports.test.ts from codex-lane
+unmodified (generic reachability logic only -- scripts/lib/module-
+graph.mjs's classifyRepoReachability, already present on this branch
+since Item Zero). Did NOT copy codex-lane's own allowlist -- a
+different tree with different modules (board.js, board-generator.js,
+bridge-generator.js, board-render.js, board-load.js exist here and not
+there; codex-lane has its own modules this tree does not). Seeded a
+FRESH test/deadExports.allowlist.json for b1-land's own real, current
+classification: 2,762 non-product exports (37 demo-only, 211 test-only,
+2,514 unreachable), each entry auto-generated with a real, specific
+reason (which demo page or test file actually reaches it, or that none
+does) -- not the word "intentional", and not hand-curated one-by-one
+yet (named honestly as its own remaining review, not claimed finished).
+
+WATCHED RED FIRST, HONESTLY: the gate could not even run before the
+allowlist existed (ENOENT). Confirmed GREEN once seeded: node test/run.mjs
+test/deadExports.test.ts, 4/4 pass, including the independent
+wrangler.jsonc durable_objects guard.
+
+CONFIRMED THE BRIEF'S OWN CLAIM: public/prop-models.js:propModel is
+listed in the fresh allowlist as test-only (reachable only via
+test/propModels.test.ts, never from product) -- exactly matching RUN2's
+own "it must list propModel today." This is the gate's own baseline;
+wiring propModel into the real render path (this run's next step) is
+what should make this entry stale and force its removal.
+
+NAMED, NOT FIXED: the seeded allowlist's `via` values use this host's
+own absolute path (C:\Code\sandbox-spike\...) rather than a portable
+relative one -- classifyRepoReachability's own reported value, not
+something this seeding step invented. A clone on a different machine
+would seed differently-formatted (but equally correct) entries. Cosmetic,
+not a correctness gap in the gate itself; worth a small fix to
+scripts/lib/module-graph.mjs's own `via` reporting if this allowlist is
+kept long-term, not done here under RUN2's own scope.

@@ -1,0 +1,525 @@
+# COMPLETION PLAN — everything left to finish CALIPER
+
+Written 2026-09-09, after Mark's observation that no single document held the
+whole remaining build. `docs/OVERNIGHT-RUN.md` held one night's list;
+`BOARD-REBUILD-PLAN.md` holds the world rebuild only. Neither answered "what is
+left, and how will we know it works."
+
+**This file is the checklist. Tick here.** Phase numbering is governed by
+[`BOARD-REBUILD-PLAN.md`](BOARD-REBUILD-PLAN.md); where anything disagrees, that
+file wins. Tick an item only when its gate is green **and** the commit exists —
+an unticked item with a commit is a lie in either direction, and so is the
+reverse.
+
+---
+
+## WHAT "FINISHED" MEANS
+
+Five conditions, all measurable. Anything not serving one of these is not on
+this list.
+
+1. **The archipelago renders from the board**, and nothing else holds world
+   state or is drawn.
+2. **Every capability that was built is reachable**, or is written down as
+   deliberately unreached with a reason.
+3. **Every published number is generated from the thing it describes**, and a
+   gate fails when they drift — on all four surfaces, not just the one.
+4. **It works on a phone**, because that is where most people will open a link.
+5. **A stranger can open three links and find nothing that contradicts
+   anything else.**
+
+---
+
+## STATUS LEGEND
+
+`[x]` green and committed `[!]` partial, state named `[ ]` not started
+`[~]` in flight this run
+
+---
+
+## PART 1 — THE WORLD (CLI lane, `b1-land`)
+
+```
+[x] B1     The land -- archipelago, 68.2% water, 215.2 km2, 32 islands
+[x] B2.1-6 The generator, coverage inside settlements, persisted board  27cca18
+[!] B2.7   Bridges and boat routes -- generator IMPLEMENTED, tested, mutated
+             (501f0a9); committed asset REGENERATED 2026-09-10 after a blind
+             Codex review found it shipped zero crossings (generator worked,
+             output never reached public/board.generated.json -- fixed,
+             gate now reads the committed file, not a fixture). Regenerating
+             surfaced a further, real gap: 3 of the 12 settled boundaries
+             (farm-isle, quarry-isle, resort-isle) still have zero crossing
+             egress on the real, already-occupied board -- named, watched
+             red on purpose, docs/DECISIONS-FOR-MARK.md #7. Not [x] until
+             that gate is green too. See docs/audits/OVERNIGHT-CLI-
+             2026-09-09.md's RUN 5 section for the commit.
+[!] B2.8   Re-pin the 38 old-world tests -- CATEGORIZED 38/38; ~4 bridge-
+             shaped ones already superseded by bridgeGenerator.test.ts;
+             the remaining ~30 need B4 first (their own old-world import
+             chain -- layout.js/instance-groups.js/road-network.js -- is
+             what B4 replaces), re-sequenced in writing                ca413a0
+[!] B3     The render path -- draws board pieces, additively, alongside
+             the still-running old path (picking/spatial-index/sun-sky
+             not yet rebuilt against the board). Visual result VERIFIED
+             2026-09-09 -- this line was stale until 2026-09-10 (RUN 3
+             item 1, 18007b8, ran scripts/shoot.mjs with SHOOT_BOARD=1 and
+             looked: .shots/downtown-close.png shows 35,365 real board
+             pieces and 400 trees drawn, correctly positioned per B3's own
+             additive scope, visibly interpenetrating the OLD world's
+             still-running geometry -- an honest, imperfect, but genuinely
+             OBSERVED result, not an unverified one. Board-drawing broke
+             two standing perf gates when tried un-gated (measured: culling
+             65.8% vs <40%, 7,851 draw calls vs <=900) -- fixed by gating
+             behind ?board=1/SHOOT_BOARD=1, off by default; both gates
+             reconfirmed green with it off.       6dcfda3 / bac86b0 / 18007b8
+             2026-09-10: picking's own data source, closed one step -- the
+             real board is already fetched in _buildCityBase (when
+             ?board=1); it is now RETAINED (this._boardData) instead of
+             discarded after drawing, and the city-mode pick handler
+             additionally resolves the real board.js piece at a click via
+             a new pieceAtPoint() query, alongside (not replacing) the
+             existing old-world-derived addr/piece/label path -- purely
+             additive, zero effect when ?board=1 is absent. Sun/sky still
+             has no board-based equivalent at all (new, separate work, not
+             started); picking is not yet SWITCHED to the board, only
+             connected to it -- the old-world addr/districtId/className
+             shape onInspect's other fields depend on has no board-only
+             equivalent yet either. Evidence: node test/run.mjs
+             test/boardLoad.test.ts test/pickSelection.test.ts (10/10 pass,
+             including the new wiring gate); npx tsc --noEmit clean; node
+             scripts/_mutcheck.mjs test/boardLoad.test.ts
+             public/board-load.js (CAUGHT, test/mutations.json). See
+             docs/audits/OVERNIGHT-2026-09-10.md's RUN 6 section for the
+             commit.
+             exit: city-render.js quarantined -- NOT YET, on purpose. Real
+             remaining scope, unchanged by this step: switch picking over
+             (not just connect it), sun/sky extracted from buildWorld(),
+             fetchBoard() made unconditional for query purposes.
+[!] B4     The kits wire by construction -- propModel wired live and
+             product-reachable (dead-exports gate watched red, confirmed,
+             re-greened); roadkit/buildings-typology/full props manifest
+             still open                                c785e29 / 547b721
+             2026-09-10: two more manifest ids wired live -- scatterStreetFurniture
+             (public/board-render.js) alternates real propModel("bench", ...)/
+             ("bin", ...) along road pieces, wired into world-render-3d.js's
+             existing ?board=1-gated block alongside scatterTrees/
+             scatterStreetLamps. A blind review of the plan (before
+             implementation) found two real gaps, both fixed before
+             writing code: the plan's own single id-parameterised
+             propModel() call would not satisfy the static reachability
+             gate's literal-string pattern (fixed: two literal calls); and
+             copying scatterStreetLamps's rotation-free positioning would
+             leave a bench (real footprint 1.8x0.55m, not roughly
+             symmetric like a lamp) pointing ACROSS the road on every
+             east/west-oriented span (fixed: the group now rotates 90
+             degrees on that orientation). Both fixes mutation-tested,
+             CAUGHT. Evidence: node test/run.mjs test/boardRender.test.ts
+             (25/25 pass, targeted only -- free memory was 2.12 GB this
+             session, under the 4 GB floor for a full suite/browser run,
+             per docs/OVERNIGHT-RUN.md; a targeted run does not need it);
+             npx tsc --noEmit clean; node scripts/_mutcheck.mjs
+             test/boardRender.test.ts public/board-render.js (both new
+             mutations CAUGHT, test/mutations.json).
+             2026-09-10 (cont.): the manifest's fourth plain alias wired too
+             -- scatterBusShelters (public/board-render.js), same pattern,
+             real propModel("busShelter", ...), wired into the same
+             ?board=1-gated block. Carried forward both findings from the
+             prior step's own blind review (literal-string propModel call;
+             rotation on the east/west span, needed even more here --
+             busShelter's real footprint 3.6x1.4m is more asymmetric than
+             the bench's 1.8x0.55m); a fresh blind review of this step's own
+             plan confirmed both were correctly applied and found nothing
+             else wrong with the code, only a wording nit (this alias is
+             the fourth plain one, not third -- "tree" is a VARIED
+             generator) and named two real, pre-existing, NOT-this-step's-
+             fault gaps: (1) test/testCount.generated.json will drift
+             further from this step's own +6 tests -- NOT regenerated this
+             session, since that needs a full suite run and free memory
+             (2.64 GB) was under the 4 GB floor for that; already-tracked
+             via docs/DECISIONS-FOR-MARK.md #9, not a new problem. (2) the
+             scatter* functions place items by "every Nth road piece"
+             independently, with no cross-function collision check --
+             lamps/furniture/shelters can coincide on a shared road piece
+             (real, pre-existing since scatterStreetFurniture landed, not
+             introduced here, not attempted to fix -- would need real
+             design work against the board's own placement/reservation
+             system, per public/prop-manifest.js's own header on why that
+             system exists). One real mutation-spec bug found and fixed
+             DURING this step's own mutation testing, not by the review:
+             a first attempt at the rotation mutation used trailing-context
+             scoping that accidentally matched scatterStreetFurniture's own
+             ending (since scatterBusShelters's docblock immediately
+             follows it in the file) -- caught honestly as INCONCLUSIVE by
+             _mutcheck.mjs itself, not a false CAUGHT; fixed by scoping with
+             leading context unique to this function's own body instead.
+             Evidence: node test/run.mjs test/boardRender.test.ts (31/31
+             pass, targeted only, same memory-floor reasoning as above);
+             npx tsc --noEmit clean; node scripts/_mutcheck.mjs
+             test/boardRender.test.ts public/board-render.js (both new
+             mutations CAUGHT, test/mutations.json). Roadkit/buildings-
+             typology (decisions #5/#6) still open. railTie remains the
+             manifest's only unwired alias -- NOT assumed to be the same
+             decision-free pattern: rail ties are architecturally a
+             continuous strip along a railway, not discrete street
+             furniture, and may need a different approach than
+             "every Nth piece" scattering -- named, not attempted.
+[ ] B5     The visual pass -- judged against named reference shots (K5.5)
+[ ] B7     The countryside -- farmland, the range, greenery
+```
+
+**B3 is the item that makes the world visible again.** Landed additively; the
+visual result WAS looked at and verified 2026-09-10 (`18007b8`, real
+screenshots with `?board=1`/`SHOOT_BOARD=1` on — see the B3 line above for
+detail), and picking gained a real, additive connection to the board
+(`5592f24`). Everything above it is correctness debt; everything below it is
+polish.
+
+---
+
+## PART 2 — BUILDINGS AND INTERFACE (BLD lane, `codex-lane`)
+
+```
+[x] --     Shared comment-stripping helper, swept 9 files, live mutation  bac6c1b
+[x] --     "Buildings read as basic" traced to its real cause            a349b05
+[ ] F1     Facade texture variety -- 4 window grids serve 17,108 buildings
+             gate: distinct facade materials reachable from real placements,
+             measured from the caller in city-render.js, floor well above 4
+[ ] F2     The rest of the K6 buildings checklist, in K6's own priority order
+[ ] F3     Kitbash variety -- what reaches the world vs what the registry holds
+[ ] F4     The comment-strip sweep finished as a CATEGORY, not nine files
+[ ] K7.1   The atlas gap -- code-verified, never visually verified
+[ ] B6     The interface. Mobile is the open part: world fills the screen,
+             landscape, prompt box findable, touch, and the touch-action gap
+             on #world-canvas found and never fixed.
+             Middle-mouse pan (9d54d05), inspector clearing the nav, and the
+             nav wheel are already done -- do not rebuild them.
+             gate: measured on a real viewport, never a stylesheet substring
+[ ] --     Wedge-wheel screenshot with panels closed; U1's re-watch in
+             e2e/panelOverlap.spec.ts
+[!] --     Bug 2, the CSS rule that matched and never painted -- UNEXPLAINED.
+             An honest permanent UNEXPLAINED is an acceptable close.
+[ ] --     Decide the uncommitted package.json change and the 10 untracked
+             pending-commit files
+```
+
+---
+
+## PART 3 — CORRECTNESS DEBT
+
+```
+[!] C1  Mutation evidence 119/129, 1 SURVIVED (confirmed real -- no node:test
+          assertion for it exists), 9 NEVER RUN. The allowlist fix
+          (scripts/expected-red.mjs) is BUILT and CONFIRMED working against
+          the real deadlock -- d00aea5. Still not run: b2-6-no-live-route
+          (same expensive file), b2-5-ground-verified-opt-in (needs a manual
+          paired-timing run), 5 isolate.test.ts-scoped (blocked on B2.8/B4).
+          2 more (wooded-exclusion, mainland-boundary) had a stale `expect`
+          string -- fixed, not yet re-run (each run costs ~15+ min on this
+          host). Target 129/129 (or fewer if the SURVIVED one needs its own
+          decision, not just a re-run).
+[ ] C2  The dead-export allowlist now exists for b1-land (seeded fresh, NOT
+          copied from codex-lane): test/deadExports.allowlist.json,
+          2,762 entries (37 demo-only, 211 test-only, 2,514 unreachable) --
+          c785e29. Auto-generated reasons, not yet reviewed one-by-one for
+          product/demo/test/unreachable breakdown-by-mechanism this item
+          asks for. propModel already promoted out of it (547b721) by real
+          wiring, not by editing the allowlist by hand.
+[ ] C3  All seven standing gates green simultaneously. This has never happened.
+[!] C4  The claim reconciliation, mutation-evidence surface: README.md's
+          "98 deliberate defects, all 98 caught" fixed to name all four real
+          states (injected/caught/never-run/survived-or-inconclusive), gated
+          by src/generatedClaimChecks.ts's mutationClaimMismatch, mutation-
+          tested twice (the count check, and the "SURVIVED cannot silently
+          vanish from the arithmetic" check -- the same shape of gap this
+          run's own ground-check found in the overnight brief's "1,141
+          tests" line, generalised and closed here too)      9b717a9 / 547b721
+          Other three surfaces (live page beyond this one sentence, DATUM,
+          resume) NOT reconciled -- untouched, out of that run's scope.
+          MOVED FROM [x], 2026-09-10: a DIFFERENT published-number surface in
+          the same "every published number is generated from the thing it
+          describes" family (this file's own header, condition 3) is red --
+          public/index.html claims 1087 tests, the real, freshly-measured
+          count is 1194 (48 real failures, most already named elsewhere in
+          this file/decision queue). Not silently fixable: the count-claim
+          test's own update path refuses to run while ANY other test fails,
+          by design (`scripts/gen-test-count.mjs`'s own narrow exemption,
+          read directly, not assumed) -- confirmed empirically this run, not
+          just reasoned about. docs/DECISIONS-FOR-MARK.md #9 has the full
+          detail and a recommendation. test/testCount.generated.json
+          regenerated honestly regardless (1194/1130/48/15/1, measured
+          `node test/run.mjs`, full log this session's own handover cites).
+          2026-09-11, RE-MEASURED: three commits landed since the number
+          above was taken (B3's pieceAtPoint step, scatterStreetFurniture,
+          scatterBusShelters), each adding tests, so 1194 was itself already
+          stale, not just 1087 -- a full `node test/run.mjs` run, output
+          redirected straight to a file per gen-test-count.mjs's own
+          double-buffering warning, gave 1212/1150/46/15/1 (2 fewer real
+          failures than the prior measurement, not investigated further --
+          out of this item's scope). test/testCount.generated.json
+          regenerated from that log. The gate itself was proven live, not
+          just watched red: temporarily setting public/index.html's claim to
+          1212 (matching the fresh record) turned "the test counts on the
+          page are the test counts" GREEN (7/7 pass); reverting (`git
+          checkout --`, confirmed byte-identical) turned it red again with
+          the current, correct numbers -- proof the check recognises
+          agreement and is not vacuously red regardless of input. Page left
+          at 1087, deliberately, per #9 -- still Mark's call, not resolved
+          here.
+[ ] C5  B2.5's CPU-time gate: honestly red at ~40-291s against 30s (varies
+          with this host's own memory pressure, measured repeatedly).
+          Unaffected by this run -- generation still happens offline
+          (B2.6), so nothing in src/ is exposed to the ceiling regardless.
+          Still not formally retired or fixed; the allowlist (C1) works
+          around it for mutation-testing purposes without resolving it.
+```
+
+---
+
+## PART 4 — RELEASE
+
+```
+[ ] R1  Merge b1-land into main. Human-authorised, never by a lane.
+[ ] R2  Merge codex-lane into main.
+[x] R3  Full suite green, or every red named and justified in one place --
+          docs/specs/R3-RED-RECONCILIATION.md, 2026-09-11: 46 failures
+          measured, all 46 classed (5 already-decided-red, 3 same
+          generated-claims-staleness family as #9, 37 B2.8's own
+          old-world tests, 1 genuinely unknown-and-untraced). Re-run
+          before every subsequent claim of "suite green" -- this ties to
+          one measured run, not a standing guarantee.
+[ ] R3.5 THE BOARD IS THE DEFAULT RENDER. Not behind ?board=1, not behind
+          SHOOT_BOARD=1 -- what a visitor gets with no query string.
+          Blocked by two standing perf gates, which B3 measured un-gated and
+          did not fix: culling 65.8% against a <40% ceiling, and 7,851 draw
+          calls against <=900. B3 shipped the board gated OFF by default and
+          reconfirmed both gates green with it off, which is honest and is
+          NOT the same as resolved.
+          WHY THIS IS ON THE LIST AT ALL: without it, every other line in
+          PART 4 can be ticked -- merged, suite named, deployed, verified
+          live, branches pushed -- and a visitor still sees the OLD world.
+          The archipelago would be one query parameter away and nobody
+          would ever type it. This is the same shape of failure as
+          2026-09-09, where the BRANCH was wrong; here the branch would be
+          right and the FLAG would be wrong, which is harder to notice
+          because nothing looks broken.
+          Do not read R4 without reading this.
+
+          RE-MEASURED, 2026-09-11 (b1-land, CLI, attended). B3's two numbers
+          were stale on two counts, not re-taken since: possible measurement
+          contention (decision #4 records this same culling-ratio metric,
+          on a DIFFERENT scene, reading the skyline as 12 triangles/100%
+          culling under load) and a changed board (B3 measured 35,365
+          pieces; the committed board is now 21,007, typed road widths,
+          after ROAD_WIDTH's retirement). Both are real, separate
+          possibilities and are reported separately below, not blended.
+
+          Box confirmed quiet before measuring: `Get-CimInstance
+          Win32_Process -Filter "Name = 'node.exe'"` -- 30 processes, all
+          MCP/IDE infrastructure (chrome-devtools-mcp, process-mcp, the
+          cloud-sql toolbox), zero test runners, zero shoot.mjs, zero
+          mutate.mjs; `(Get-CimInstance Win32_Processor).LoadPercentage`
+          -- 9%; zero Chrome processes carrying `--headless` or
+          `--use-angle=swiftshader` (the real, regular browser windows
+          were the only Chrome instances running). Re-checked after
+          measuring: still zero stray render processes.
+
+          Measured by replicating test/regressionGate.test.ts's own exact
+          method (same local server, same Chromium/SwiftShader launch
+          args, same three views, same culling-ratio formula) with
+          `&board=1` added to the URL, via a one-off script (not
+          committed -- moved to `_TO-DELETE/session-scratch-scripts/`),
+          run three times:
+
+          | | Street level | Downtown skyline | The harbour |
+          |---|---|---|---|
+          | draw calls | 4,584 | 6,129 | 870 |
+          | triangles | 141,764 | 276,635 | 286,185 |
+
+          Identical across all three runs -- **zero spread.** Culling
+          ratio (street triangles / skyline triangles): **51.25%**, all
+          three runs. `window.__boardPieceCount` confirmed 21,007 on every
+          view, every run -- the board was genuinely drawn, not a stale
+          page.
+
+          BOTH GATES STILL FAIL, with real, current numbers replacing the
+          stale ones:
+          - Culling ratio 51.25% against the <40% ceiling (was 65.8%).
+          - Draw calls: street 4,584 and skyline 6,129 both exceed <=900
+            (was 7,851); harbour 870 passes, 30 calls of margin.
+
+          WHAT CAN BE ATTRIBUTED, and to what -- named separately, not
+          blended, per instruction:
+          - **Draw calls are structural** (one mesh per piece, B3's own
+            documented, un-instanced scope) and moved roughly with the
+            piece count, as expected: 4,584/7,851 = 0.584, against the
+            piece-count ratio 21,007/35,365 = 0.594 -- close enough that
+            the draw-call improvement is real and largely explained by
+            the smaller board, not by anything measurement-related.
+          - **Today's own 51.25% reading is NOT a contention artefact** --
+            confirmed by the zero spread across three runs on a box
+            checked quiet before and after, unlike decision #4's
+            documented flakiness for the comparable (un-boarded) metric.
+            This reading can be trusted as a real, reproducible number for
+            the CURRENT board.
+          - **How much of the 65.8% -> 51.25% CHANGE is contention in B3's
+            original reading versus the board changing cannot be cleanly
+            separated with what was measured here.** That would need the
+            OLD board (35,365 pieces, uniform 9 m road width) re-measured
+            on a quiet box for a true controlled comparison, which this
+            item did not do -- checking out and regenerating an old board
+            is a materially bigger undertaking than "one measurement," out
+            of this item's own scope. Not attributed to one cause where
+            two are available, per instruction.
+
+          Gate: RED is either ratio >= 40% or any view's draw calls > 900.
+          Currently RED on both counts -- ratio 51.25%, street/skyline
+          draw calls over budget. Neither threshold was loosened to reach
+          this result.
+
+          RE-MEASURED AGAIN, 2026-09-11 (b1-land, CLI, autonomous run 2),
+          AFTER item 2's board-render instancing (2a: shared materials,
+          2b: one InstancedMesh per (pieceType, foot.w, foot.d,
+          levels-if-building) group -- 21,007 pieces collapse into 16
+          groups, 2c: the same instancing for trees/lamps/street-furniture/
+          bus-shelters). Box confirmed quiet (16% CPU load, no stray
+          render/test/mutation processes) before measuring; same
+          replication method as the entry above (`&board=1`, same server,
+          same Chromium/SwiftShader args, same three views, same
+          culling-ratio formula), run three times:
+
+          | | Street level | Downtown skyline | The harbour |
+          |---|---|---|---|
+          | draw calls | 283 | 502 | 289 |
+          | triangles | 377,088 | 478,299 | 605,241 |
+
+          Identical across all three runs -- zero spread, same as before.
+          `window.__boardPieceCount` confirmed 21,007 on every view, every
+          run.
+
+          **DRAW-CALL GATE NOW PASSES, WITH A LARGE MARGIN, ON ALL THREE
+          VIEWS** -- 283/502/289 against the <=900 ceiling (was
+          4,584/6,129/870). This is real and dramatic, and matches the
+          16-group collapse measured directly against the committed board
+          before this work started.
+
+          **CULLING RATIO GATE GOT WORSE, NOT BETTER: 78.84% against the
+          same <40% ceiling (was 51.25%).** This is not a partial win
+          quietly reported as a win -- it is a real regression on the
+          OTHER half of this item's own gate, and the brief's own
+          instruction ("investigate rather than celebrate... do not tune
+          toward 900") applies with the sign flipped here: a threshold
+          that moved further from passing is exactly as reportable as one
+          that moved suspiciously close.
+
+          A WORKING HYPOTHESIS FOR WHY, NAMED AS A HYPOTHESIS, NOT
+          CONFIRMED BY tracing THREE.js's own frustum-culling source this
+          session: before instancing, each of the 21,007 pieces was its
+          own `Mesh` with its own bounding volume, so Three.js's per-object
+          frustum culling discarded every piece outside a given camera's
+          view individually -- a narrow street-level shot would rasterise
+          only the nearby pieces. After 2b/2c, a `pieceType`-group's pieces
+          (e.g. every "building" of one footprint/levels combo, scattered
+          across the WHOLE board) share ONE `InstancedMesh`, and
+          `InstancedMesh` frustum-culls as a SINGLE object against its own
+          overall bounding volume -- if that volume (spanning the whole
+          board) intersects the camera frustum at all, EVERY instance in
+          it is rasterised, including ones far outside the actual view.
+          The measured data is consistent with this: street level's own
+          triangle count nearly TRIPLED (141,764 -> 377,088) even though
+          its draw-call count collapsed, exactly the shape "fewer, bigger
+          objects, each one drawn in full regardless of what's actually in
+          frame" would produce. Not verified beyond this consistency check
+          -- confirming it would mean reading Three.js's own
+          `InstancedMesh.raycast()`/culling implementation directly, out
+          of this item's own scope tonight.
+
+          WHAT WOULD LIKELY FIX IT, NAMED BUT NOT ATTEMPTED THIS RUN: per
+          the same logic B3's own prior art already used for buildings
+          (`world-render-3d.js`'s spatial chunking, ~1.6 km chunks with
+          tight bounding spheres, mentioned in `test/boardRender.test.ts`'s
+          own header comments), grouping instances by SPATIAL REGION in
+          addition to (pieceType, foot, levels) -- many small
+          `InstancedMesh` objects per region instead of one huge one per
+          type -- would let ordinary frustum culling discard whole
+          off-screen regions again, at the cost of more draw calls than
+          today's 16-group scheme (though very likely still far under 900,
+          given how much margin exists there now). This is real,
+          additional, unplanned work -- a materially bigger undertaking
+          than this item's own scope, not a small follow-up -- and is
+          Mark's to prioritise, not this run's to start unasked.
+
+          Gate: RED is either ratio >= 40% or any view's draw calls > 900.
+          **STILL RED overall** -- draw calls now comfortably PASS on all
+          three views, but the culling ratio is RED and WORSE than before
+          this item's own work (78.84% vs 51.25%). Neither threshold was
+          loosened or tuned toward in either direction. R3.5 does NOT tick
+          -- one real gate improved a great deal, the other regressed, and
+          ticking on a mixed, partially-worse result would misstate what
+          was actually measured.
+[ ] R4  Deploy from main. Check the branch first -- 2026-09-09 shipped b1-land
+          by accident and put 71.8% of plots in the water on the live site.
+          Check R3.5 too: a deploy with the board still gated publishes the
+          old world, which is a worse outcome than not deploying.
+[ ] R5  Verify live, not locally: load the real URL on desktop AND on a phone.
+[ ] R6  Push every branch. The whole rebuild lived on one disk for a full day.
+```
+
+---
+
+## PART 5 — OUTSIDE THIS REPO
+
+Tracked here so nothing is lost; executed elsewhere.
+
+```
+[ ] X1  DATUM's src/ui/index.html still publishes 19,874 plots and 387 cycles.
+          CALIPER publishes 17,108 buildings and 450 cycles. Two of Mark's own
+          live sites contradict each other. Cheapest high-value fix on the list.
+[ ] X2  DATUM's framing matches its audit: drawing reviewer leads, incident loop
+          demoted, 116 incidents / 112 undetermined / 3.4% diagnosis, no accuracy
+          percentage published because n=4.
+[ ] X3  One resume, not two. outputs/resume-v4.md is current;
+          Downloads/Mark-Fraser-Resume-AI.{pdf,docx} is the older shipped pair.
+          Pick v4, regenerate the pair, retire the other.
+[ ] X4  The resume's own numbers pass C4.
+```
+
+---
+
+## THE VERIFICATION PASS — how we know it works
+
+Building it is not finishing it. Before R1, one pass, and it is not self-graded:
+
+1. **A blind audit at the B4 exit** — a fresh agent with the diff and the plan
+   and none of the reasoning. `docs/UMAA-CALIPER.md`, recording which of the six
+   triggers fired. An audit that cannot say why it ran was run from habit.
+2. **Mutation, not coverage.** Every gate this plan names must be watched red
+   before it is trusted. A control only ever seen green is not known to be a
+   control.
+3. **Reachability, not import-counting.** C2's breakdown is this, and it has
+   already found three real bugs.
+4. **The claim trace.** Pick five published numbers at random and follow each
+   back to the thing it describes. Any that cannot be traced is a C4 failure.
+5. **Open it like a stranger would.** The real URL, on a phone, cold, with no
+   knowledge of what it is meant to do.
+
+---
+
+## THE MINIMUM SENDABLE CUT
+
+Not the finished build — the point at which the links can go out. Everything
+else can land after the résumés are sent.
+
+**B3 · R3.5 · C1 · C4 · R1–R6 · X1 · X3**
+
+That is: the archipelago renders **by default, with no query string** (B3 draws
+it; R3.5 is what makes a visitor see it), the mutation number is true, every
+published figure agrees with every other, it is merged and live and checked on a
+phone, DATUM stops contradicting CALIPER, and there is one résumé.
+
+R3.5 is called out separately here even though it falls inside the R1–R6 range,
+because this line previously read "the archipelago renders" and B3 alone
+satisfies that sentence while leaving the board switched off for every real
+visitor. The cut is the point at which LINKS GO OUT; a link that opens the old
+world is worse than a link not sent. B4, B5, B7, the
+interface polish and the allowlist breakdown are all real work and none of them
+is why someone would or would not reply.

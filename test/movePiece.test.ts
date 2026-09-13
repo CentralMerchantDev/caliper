@@ -30,37 +30,56 @@ function repoRoot() {
 }
 const ROOT = repoRoot();
 const PROBE = join(ROOT, "scripts", "_move-piece-probe.mjs");
-const R = JSON.parse(execFileSync(process.execPath, [PROBE], { encoding: "utf8", timeout: 120000, maxBuffer: 32 * 1024 * 1024 }));
+// BLOCKED (the six R-dependent tests below), 2026-09-13, Phase 1 "take it
+// all down" (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md). This probe
+// imports public/city-plan.js, public/board-adapter.js and public/layout.js
+// to build a real fixture world -- all three quarantined. move-piece.js
+// itself (this file's real subject) is kept and unaffected; there is simply
+// no real board to move a piece on until Phase 2 supplies one. Caught here
+// rather than left to crash the whole process: execFileSync throws
+// (ERR_MODULE_NOT_FOUND inside the child), and that throw was previously
+// unguarded at module scope, which aborts the entire test runner process,
+// not just this file -- confirmed directly, watched red, before this fix.
+let R = null;
+let probeError = null;
+try {
+  R = JSON.parse(execFileSync(process.execPath, [PROBE], { encoding: "utf8", timeout: 120000, maxBuffer: 32 * 1024 * 1024 }));
+} catch (e) {
+  probeError = e;
+}
+const BLOCKED_REASON = probeError
+  ? `BLOCKED: scripts/_move-piece-probe.mjs failed (${(probeError as any).message?.split("\n")[0] || probeError}) -- it imports quarantined city-plan.js/board-adapter.js/layout.js; move-piece.js itself is unaffected`
+  : false;
 
 // --- refusal path, checked first --------------------------------------------
 
-test("P4.4: moving onto a real, already-occupied piece is refused with reason 'occupied' and names what blocked it", () => {
+test("P4.4: moving onto a real, already-occupied piece is refused with reason 'occupied' and names what blocked it", { skip: BLOCKED_REASON }, () => {
   assert.ok(R.occupied, "the probe could not find a real occupied-destination case -- see the probe's own search loop");
   assert.equal(R.occupied.ok, false);
   assert.equal(R.occupied.reason, "occupied");
   assert.ok(R.occupied.blockedBy && R.occupied.blockedBy.id, "an occupied refusal must name what blocked it (board.js's own blockedBy), not just say no");
 });
 
-test("P4.4: moving off the edge of the world is refused with reason 'off-map' -- a DIFFERENT reason than 'occupied', not the same generic refusal", () => {
+test("P4.4: moving off the edge of the world is refused with reason 'off-map' -- a DIFFERENT reason than 'occupied', not the same generic refusal", { skip: BLOCKED_REASON }, () => {
   assert.equal(R.offMap.ok, false);
   assert.equal(R.offMap.reason, "off-map");
   assert.notEqual(R.offMap.reason, R.occupied.reason, "an off-map refusal and an occupied refusal must read differently, per Mark's own brief");
 });
 
-test("P4.4: moving a piece that is not on the board at all is refused as 'not-found', not silently accepted or thrown", () => {
+test("P4.4: moving a piece that is not on the board at all is refused as 'not-found', not silently accepted or thrown", { skip: BLOCKED_REASON }, () => {
   assert.equal(R.notFound.ok, false);
   assert.equal(R.notFound.reason, "not-found");
 });
 
 // --- success path, checked second -------------------------------------------
 
-test("P4.4: a move to real, genuinely free ground succeeds and reports the real destination", () => {
+test("P4.4: a move to real, genuinely free ground succeeds and reports the real destination", { skip: BLOCKED_REASON }, () => {
   assert.ok(R.success, "the probe could not find a real free destination near any sampled building -- see the probe's own search loop");
   assert.equal(R.success.ok, true);
   assert.ok(Number.isFinite(R.success.destWorld.x) && Number.isFinite(R.success.destWorld.z), "a successful move must report a real, finite world position");
 });
 
-test("P4.4: a piece may move a short distance that overlaps its OWN current footprint -- board.js's ignoreId, not a self-refusal", () => {
+test("P4.4: a piece may move a short distance that overlaps its OWN current footprint -- board.js's ignoreId, not a self-refusal", { skip: BLOCKED_REASON }, () => {
   // A blind audit (docs/AUDIT-PROTOCOL.md) found this had no regression
   // coverage: with `{ ignoreId: selected.id }` removed from the real
   // tryMove, the full 8-test suite still passed, because "occupied" above
@@ -73,7 +92,7 @@ test("P4.4: a piece may move a short distance that overlaps its OWN current foot
   assert.equal(R.selfCollision.ok, true);
 });
 
-test("P4.4: moveEditFor() builds world-model.js's own move-op shape exactly -- address/op/payload.x/payload.z, nothing more, nothing renamed", () => {
+test("P4.4: moveEditFor() builds world-model.js's own move-op shape exactly -- address/op/payload.x/payload.z, nothing more, nothing renamed", { skip: BLOCKED_REASON }, () => {
   const edit = R.success.edit;
   assert.equal(edit.address, R.success.plotId);
   assert.equal(edit.op, "move");

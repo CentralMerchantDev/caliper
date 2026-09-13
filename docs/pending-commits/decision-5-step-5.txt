@@ -1,0 +1,102 @@
+STEP 5 (docs/specs/PIECE-CATALOGUE-ROADS.md §9) -- regenerate the committed
+public/board.generated.json against the fully-landed generator (Steps 2-4),
+re-verify, and fix two real regressions a blind review and a full-suite run
+found along the way.
+
+THE REGENERATION: node scripts/gen-board.mjs. 20,988 pieces generated in
+33.4s, B2.7 crossings 19 pieces (0 bridges, 19 docks), 3 refused, in 0.1s
+-- 21,007 total. This also fixed test/boardLoad.test.ts, which had gone
+red AGAIN between Step 2's commit and this one (Steps 3/4 landed real
+generator changes without a matching regeneration -- confirmed directly:
+35,381 committed pieces vs 21,007 a fresh generateBoard() now produces,
+the exact same class of drift ITEM 0 fixed once already tonight). Fixed by
+the regeneration itself, not a separate change.
+
+BLIND REVIEW BEFORE REGENERATING found two things the plan's own re-check
+list (already written, in §9) was missing:
+1. test/boardLoad.test.ts itself -- confirmed already red (above), added
+   to the re-check list.
+2. Both pieces.length > 30000 sanity checks (test/boardRender.test.ts,
+   test/bridgeGenerator.test.ts) were near-certain, not merely possible,
+   to fail: the review measured 21,007 pieces BEFORE regeneration even ran
+   (reading test/boardLoad.test.ts's own fresh-generateBoard() output),
+   well under 30,000 -- a direct, predictable consequence of Step 3's own
+   real change (fewer, ~2x larger blocks). Confirmed after regeneration:
+   both did fail, for exactly this reason, nothing else.
+
+BOTH 30,000 THRESHOLDS RE-CALIBRATED, not removed or loosened without
+reason: 30,000 was tuned against the pre-Decision-5 board (fixed 9m roads,
+57-80 atom blocks). Updated to 15,000 in both files -- comfortable margin
+below the measured 21,007, still a real sanity check ("read a genuine
+board, not an empty or wrong file"), not a number nudged just past
+today's figure. Both comments explain the history and cite the real
+measurement.
+
+THE #7 EGRESS GATE, RE-CHECKED, NOT ASSUMED: docs/DECISIONS-FOR-MARK.md #7
+previously named 3 boundaries with no crossing egress (farm-isle,
+quarry-isle, resort-isle). After this regeneration: only farm-isle still
+lacks egress -- a REAL, measured improvement (wider roads/bigger blocks
+changed real occupancy patterns favourably for 2 of 3 previously-stranded
+boundaries), not something this step set out to fix and not claimed as
+fixed -- the gate itself is unchanged and stays red, honestly, for the one
+boundary still affected.
+
+A THIRD REAL REGRESSION, FOUND BY THE FULL SUITE, NOT PREVIOUSLY NAMED
+ANYWHERE: test/originStability.test.ts's "B2's own settlement boundaries:
+changing WORLD.SIZE does not move a single vertex" test started throwing
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'three' -- caused by
+Step 2's own new import (board-generator.js now imports roadkit.js for
+ROAD_STANDARDS, and roadkit.js imports the "three" npm package at its own
+top level). This test regenerates a SECOND, disposable copy of public/ in
+the OS tmpdir to patch WORLD_SCALE without touching the real source --
+Node's own module resolution for a bare specifier walks UP from the
+importing file looking for node_modules, and a copy in the OS tmpdir has
+no ancestor node_modules at all, so anything that copy transitively
+imports needing an npm package fails. A real, previously-undiscovered
+failure mode of this test's own technique, not specific to roadkit.js --
+any future import of an npm-package-using module into public/ would have
+tripped the same thing.
+
+FIX: patchedWorldAt() now creates its disposable copy under the repo root
+(mkdtempSync(join(REPO_PUBLIC, "..", "origin-stability-"))) instead of the
+OS tmpdir, so walking up from it reaches the real repoRoot/node_modules,
+the same way the actual public/ directory always has. .gitignore gains
+/origin-stability-*/ in case a killed run leaves one behind (the existing
+finally-block cleanup handles the normal case).
+
+VERIFIED BY DIRECT MUTATION-AND-REVERT (this is a test-harness fix, not
+new application behaviour -- BUILD-LOOP's own "watch red first" already
+happened by discovering the bug; this substitutes for a synthetic
+mutation): reverted patchedWorldAt() to mkdtempSync(join(tmpdir(), ...))
+and confirmed the EXACT SAME ERR_MODULE_NOT_FOUND on roadkit.js
+reappeared, then restored the fix and confirmed green again.
+
+VERIFIED, overall: npx tsc --noEmit clean throughout. Targeted run (five
+board/bridge/origin-stability test files): 68 tests, 65 pass, 2 fail (B2.5
+CPU gate and #7's now-single-boundary egress gate, both already-tracked),
+1 todo (the origin-stability test itself, deliberately red-on-purpose per
+its own header). A real numeric confirmation the regenerated board loads
+and renders end-to-end (not just passes unit tests): a headless browser
+check (Playwright/SwiftShader, city.html?board=1) reported
+boardPieceCount: 21007, boardChildren: 21007 (one mesh per piece, matching
+board-render.js's own invariant), zero page errors.
+
+VISUAL CHECK, HONESTLY QUALIFIED: node scripts/shoot.mjs "Downtown close"
+with SHOOT_BOARD=1 rendered without error, but board pieces (plain grey
+placeholder boxes, B3's own documented scope -- typologies are not yet
+wired) are not clearly visually distinguishable from the much more
+detailed legacy generateWorld()/layout.js city occupying the same camera
+frame. Not claimed as a confirmed "the wider roads look right" visual
+pass -- the numeric piece-count/render confirmation above is the real
+evidence for this step; the screenshot only confirms no render-path crash.
+
+GUARDS CHECKED: derived artefact regenerated by its own generator script,
+not hand-edited. Nothing deleted. Zero API spend. No merge, no deploy, no
+PR. src/ untouched.
+
+STILL OPEN: farm-isle's own egress gap (docs/DECISIONS-FOR-MARK.md #7,
+unchanged by this step, still Mark's call per that decision's own
+resolution). Step 6 (close the record) is next.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

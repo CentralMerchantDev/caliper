@@ -1,0 +1,34 @@
+Phase 1, "take it all down" -- the full execution plan, committed before
+anything moves, per rule://reviewer-independence and the same discipline the
+prior session's inventory used.
+
+Mark rejected the prior session's conclusion (docs/specs/REBUILD-PLAN.md's
+CORRECTION block, his own words) that leaving city-render.js standing was
+the right call because removing it would take the live page down. That
+reasoning is withdrawn. This plan implements what he asked for instead:
+quarantine city-render.js, layout.js, instance-groups.js, city-plan.js and
+everything that serves only them; index.html becomes a holding page; the
+shell's world-dependent parts go dormant, documented rather than patched
+around.
+
+A blind review (fresh Explore agent, no conversation history) checked this
+plan against the real repository before anything moved. It found three real
+gaps and confirmed the rest: piecesFromWorld (board-adapter.js) is not
+uncalled -- three scratch probe scripts (scripts/_move-piece-probe.mjs,
+_isolate-probe.mjs, _board-adapter-probe.mjs) use it to build an old-world
+fixture for test/movePiece.test.ts, test/isolate.test.ts and
+test/boardAdapter.test.ts; the first two test files' SUBJECTS (move-piece.js,
+isolate.js) survive and are kept, so those two are blocked, not retired.
+The "eleven tests, named in full" claim understated the real count by
+roughly 2x (at least 19 more test files import a quarantine target directly).
+test/terrainLandmassOwnership.test.ts's own KNOWN_STATIC_IMPORTERS tripwire
+needs a second update, the same shape as the one already made for
+road-network.js. public/city-live-world.js was an unrecorded orphan once
+city.html quarantines. All four corrected in place in
+docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md, which this commit lands.
+
+Independently re-verified after the review returned, per
+rule://subagent-contract's "re-run the gate yourself": grepped all three
+probe scripts directly, confirmed each imports generateWorld/board-adapter/
+layout.js; confirmed execFileSync runs once at module load in each of the
+three test files (so every test in the file, not a handful, depends on it).

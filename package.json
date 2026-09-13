@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "mutate": "node scripts/mutate.mjs --all",
     "typecheck": "tsc --noEmit",
-    "gen:claims": "node scripts/gen-claims.mjs"
+    "gen:claims": "node scripts/gen-claims.mjs",
+    "gen:board": "node scripts/gen-board.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

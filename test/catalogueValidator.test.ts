@@ -1,0 +1,186 @@
+// =============================================================================
+// THE CATALOGUE VALIDATOR'S OWN TESTS — Phase 1 item 5's gate, stated
+// exactly: "RED is a deliberately malformed entry -- an odd road width, a
+// footprint off the set, a duplicate id -- that the validator accepts.
+// Prove each red before fixing it."
+//
+// Each rule below is proven two ways: a clean baseline entry (one field
+// changed at a time, everything else held constant, so a failure can only
+// be the one rule under test) that must pass every OTHER rule while failing
+// the one being tested, and a mutation check (see the bottom of this file)
+// that watches the real validator go from catching it to missing it when
+// that rule's own check is disabled -- not merely asserted to exist.
+// =============================================================================
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { validateCatalogue, validateEntry, CATALOGUE_FOOTPRINTS, ROAD_CLASS_HIERARCHY } from "../public/catalogue-validator.js";
+
+function repoRoot(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let up = 0; up < 6; up++) {
+    try { readFileSync(join(dir, "CLAUDE.md"), "utf8"); return dir; } catch { /* not this level */ }
+    dir = join(dir, "..");
+  }
+  throw new Error("could not locate the repo root");
+}
+
+const ROOT = repoRoot();
+
+/** A known-good building entry, for tests that mutate exactly one field. */
+function goodBuilding(overrides = {}) {
+  return {
+    id: "test-building",
+    category: "residential",
+    footprint: [2, 3],
+    rotatable: true,
+    terrainMask: ["land"],
+    pivot: "corner",
+    massing: ["base", "top"],
+    joinSpec: "ground-decal",
+    proportion: 1.2,
+    ...overrides,
+  };
+}
+
+/** A known-good road entry, for tests that mutate exactly one field. */
+function goodRoad(overrides = {}) {
+  return {
+    id: "test-road",
+    category: "road",
+    footprint: [4, 4],
+    rotatable: true,
+    terrainMask: ["land"],
+    pivot: "corner",
+    roadClass: "street",
+    tileType: "straight",
+    junctionArms: ["street", "street"],
+    ...overrides,
+  };
+}
+
+test("the real data/catalogue.json is fully valid -- zero errors", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  const errors = validateCatalogue(catalogue);
+  assert.deepEqual(errors, [], `real catalogue has validator errors:\n${JSON.stringify(errors, null, 2)}`);
+});
+
+test("the real catalogue has no duplicate ids -- checked directly, not inferred from validateCatalogue passing", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  const ids = catalogue.map((e: any) => e.id);
+  assert.equal(new Set(ids).size, ids.length);
+});
+
+// ---------------------------------------------------------------- rule 1
+test("RULE 1 (whole-module footprint): a fractional footprint is caught", () => {
+  const errors = validateEntry(goodBuilding({ footprint: [2, 3.5] }));
+  assert.ok(errors.some((e) => e.rule === "whole-module-footprint"), JSON.stringify(errors));
+});
+
+test("RULE 1: a zero or negative footprint dimension is caught", () => {
+  const zero = validateEntry(goodBuilding({ footprint: [0, 3] }));
+  const negative = validateEntry(goodBuilding({ footprint: [-2, 3] }));
+  assert.ok(zero.some((e) => e.rule === "whole-module-footprint"));
+  assert.ok(negative.some((e) => e.rule === "whole-module-footprint"));
+});
+
+test("RULE 1: a real, whole-module footprint is NOT flagged", () => {
+  const errors = validateEntry(goodBuilding());
+  assert.ok(!errors.some((e) => e.rule === "whole-module-footprint"), JSON.stringify(errors));
+});
+
+// ---------------------------------------------------------------- rule 2
+test("RULE 2 (catalogue footprint set): a footprint off C1.1's set of eight is caught -- 5x5 is not one of the eight", () => {
+  const errors = validateEntry(goodBuilding({ footprint: [5, 5] }));
+  assert.ok(errors.some((e) => e.rule === "catalogue-footprint-set"), JSON.stringify(errors));
+});
+
+test("RULE 2: a ROTATION of a canonical footprint is accepted, not flagged -- 3x2 is 2x3 rotated", () => {
+  const errors = validateEntry(goodBuilding({ footprint: [3, 2] }));
+  assert.ok(!errors.some((e) => e.rule === "catalogue-footprint-set"), JSON.stringify(errors));
+});
+
+test("RULE 2: every one of C1.1's own eight footprints passes on its own", () => {
+  for (const footprint of CATALOGUE_FOOTPRINTS) {
+    const errors = validateEntry(goodBuilding({ footprint }));
+    assert.ok(!errors.some((e) => e.rule === "catalogue-footprint-set"), `${JSON.stringify(footprint)}: ${JSON.stringify(errors)}`);
+  }
+});
+
+// ---------------------------------------------------------------- rule 3
+test("RULE 3 (road width): an odd road width is caught -- the exact failure mode this gate names", () => {
+  const errors = validateEntry(goodRoad({ footprint: [3, 3], junctionArms: null }));
+  assert.ok(errors.some((e) => e.rule === "road-width"), JSON.stringify(errors));
+});
+
+test("RULE 3: an even road width NOT in {2,4,6,8} is caught -- 10 is even but not a real class", () => {
+  const errors = validateEntry(goodRoad({ footprint: [10, 10], junctionArms: null }));
+  assert.ok(errors.some((e) => e.rule === "road-width"), JSON.stringify(errors));
+});
+
+test("RULE 3: a non-square road footprint is caught -- C1.3 requires the junction tile be square", () => {
+  const errors = validateEntry(goodRoad({ footprint: [4, 8], junctionArms: null }));
+  assert.ok(errors.some((e) => e.rule === "road-width"), JSON.stringify(errors));
+});
+
+test("RULE 3: every one of the four real road widths passes on its own", () => {
+  for (const w of [2, 4, 6, 8]) {
+    const errors = validateEntry(goodRoad({ footprint: [w, w], junctionArms: null }));
+    assert.ok(!errors.some((e) => e.rule === "road-width"), `${w}: ${JSON.stringify(errors)}`);
+  }
+});
+
+// ---------------------------------------------------------------- rule 4
+test("RULE 4 (junction adjacency): a highway-to-lane junction is caught -- not adjacent in the class hierarchy", () => {
+  const errors = validateEntry(goodRoad({ junctionArms: ["highway", "lane"], roadClass: null }));
+  assert.ok(errors.some((e) => e.rule === "junction-class-adjacency"), JSON.stringify(errors));
+});
+
+test("RULE 4: an unknown class name in junctionArms is caught", () => {
+  const errors = validateEntry(goodRoad({ junctionArms: ["street", "motorway"], roadClass: null }));
+  assert.ok(errors.some((e) => e.rule === "junction-class-adjacency"), JSON.stringify(errors));
+});
+
+test("RULE 4: a same-class junction is NOT flagged", () => {
+  const errors = validateEntry(goodRoad({ junctionArms: ["avenue", "avenue"] }));
+  assert.ok(!errors.some((e) => e.rule === "junction-class-adjacency"), JSON.stringify(errors));
+});
+
+test("RULE 4: every real adjacent pair in the hierarchy passes on its own", () => {
+  for (let i = 0; i < ROAD_CLASS_HIERARCHY.length - 1; i++) {
+    const pair = [ROAD_CLASS_HIERARCHY[i], ROAD_CLASS_HIERARCHY[i + 1]];
+    const errors = validateEntry(goodRoad({ junctionArms: pair, roadClass: null }));
+    assert.ok(!errors.some((e) => e.rule === "junction-class-adjacency"), `${JSON.stringify(pair)}: ${JSON.stringify(errors)}`);
+  }
+});
+
+// ---------------------------------------------------------------- rule 5
+test("RULE 5 (pivot at the corner): a centre pivot is caught -- C-5 supersedes it explicitly", () => {
+  const errors = validateEntry(goodBuilding({ pivot: "centre" }));
+  assert.ok(errors.some((e) => e.rule === "pivot-corner"), JSON.stringify(errors));
+});
+
+test("RULE 5: a missing pivot field is caught, not silently accepted", () => {
+  const entry = goodBuilding();
+  delete (entry as any).pivot;
+  const errors = validateEntry(entry);
+  assert.ok(errors.some((e) => e.rule === "pivot-corner"), JSON.stringify(errors));
+});
+
+test("RULE 5: pivot: 'corner' is NOT flagged", () => {
+  const errors = validateEntry(goodBuilding());
+  assert.ok(!errors.some((e) => e.rule === "pivot-corner"), JSON.stringify(errors));
+});
+
+// ---------------------------------------------------------------- rule 6
+test("RULE 6 (no duplicate ids): two entries sharing an id are caught", () => {
+  const errors = validateCatalogue([goodBuilding({ id: "dup" }), goodRoad({ id: "dup" })]);
+  assert.ok(errors.some((e) => e.rule === "no-duplicate-ids" && e.id === "dup"), JSON.stringify(errors));
+});
+
+test("RULE 6: distinct ids are NOT flagged", () => {
+  const errors = validateCatalogue([goodBuilding({ id: "a" }), goodRoad({ id: "b" })]);
+  assert.ok(!errors.some((e) => e.rule === "no-duplicate-ids"), JSON.stringify(errors));
+});

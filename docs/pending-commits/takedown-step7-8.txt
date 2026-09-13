@@ -1,0 +1,38 @@
+Phase 1 takedown, steps 7 and 8 -- quarantine public/board-adapter.js,
+public/city-live-world.js, then public/city.html, and repoint the two live
+things that pointed at city.html rather than leave them 404ing.
+
+public/board-adapter.js: its own header names its job -- "generateWorld() ->
+a list of placed pieces... Converts today's world -- plots, roads, bridges."
+Its one real call site was inside world-render-3d.js's now-dormant
+_buildCityBase, using city.world (old-world data). piecesFromWorld's only
+callers are three scratch probe scripts feeding test/movePiece.test.ts,
+test/isolate.test.ts, test/boardAdapter.test.ts -- named individually at
+step 10 (the last retires with this file; the first two are blocked, their
+own subjects survive).
+
+public/city-live-world.js: served only public/city.html ("the live
+quarter"). Not in the prior session's four-file inventory; found this
+session while confirming city.html's own dependents before quarantining it.
+
+public/city.html: its entire body was buildWorld() from city-render.js.
+Repointed rather than left dangling: public/plan-preview.html's redirect
+(the one other real inbound link, found by the prior session's blind
+review) now goes to / instead of /city.html. scripts/shoot.mjs's own
+hardcoded `/` -> `/city.html` mapping now serves `/index.html` directly --
+its ~40 named VIEWS (old-world camera positions) are left dormant, not
+fixed; there is nothing for them to frame until Phase 2.
+
+How it is known to be fixed: npm run typecheck -- clean, at every one of the
+three moves. A full public/*.js and public/*.html import-resolution scan
+(script-block-aware, using this project's own scripts/lib/module-graph.mjs)
+finds ZERO broken imports anywhere in public/ after all three moves --
+confirmed directly, not assumed, the same check run after every prior step
+in this session.
+
+What is still open: the index.html holding page itself (index.html's
+current content is still the full old app, referencing nothing quarantined
+directly but still wiring up the now-dormant _buildCityBase path via
+`city: true` -- replaced next, not fixed in place); every test's individual
+retire-or-block disposition, recorded together once every move in this pass
+has landed.

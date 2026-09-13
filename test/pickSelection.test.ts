@@ -24,10 +24,6 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { buildWorldState } from "../public/city-render.js";
-import { buildSpatialIndex } from "../public/spatial-index.js";
-import { createSelection } from "../public/selection.js";
-
 const HERE = dirname(fileURLToPath(import.meta.url));
 function findPublic(): string {
   let dir = HERE;
@@ -40,39 +36,31 @@ function findPublic(): string {
 }
 const RENDER_3D = readFileSync(join(findPublic(), "world-render-3d.js"), "utf8");
 
-test("I3 (data): a pick at a real plot's centre selects that plot's real id, and it stays selected", () => {
-  const { world } = buildWorldState("pick-selection-seed");
-  const index = buildSpatialIndex(world);
-  const selection = createSelection(index);
+// BLOCKED, 2026-09-13, Phase 1 "take it all down"
+// (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md). buildWorldState no
+// longer exists (public/city-render.js is quarantined) -- test 1 needs it
+// directly. Test 2 checks that world-render-3d.js's now-dormant
+// _buildCityBase still constructs `this._selection = createSelection(this._index)`;
+// it does not any more, on purpose (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md's
+// "what goes dormant" section names this exact line). Both document a real
+// capability -- picking an address to describe a change against -- that
+// Phase 2 needs to reconnect to the new board, not a defect to patch here.
+test("I3 (data): a pick at a real plot's centre selects that plot's real id, and it stays selected", { skip: "BLOCKED: buildWorldState no longer exists; public/city-render.js is quarantined (see comment above)" }, () => {});
 
-  assert.equal(selection.current, null, "a fresh selection should start with nothing picked");
+test("I3 (wiring): the real click handler resolves through the persisted selection, not the index directly", { skip: "BLOCKED: this._selection is no longer constructed -- it lived in _buildCityBase, now a dormant stub (see comment above)" }, () => {});
 
-  const target = world.plots[Math.floor(world.plots.length / 2)];
-  const cx = (target.xMin + target.xMax) / 2;
-  const cz = (target.zMin + target.zMax) / 2;
-
-  const picked = selection.pick(cx, cz);
-  assert.equal(picked.plotId, target.id, "the pick did not resolve to the real plot at its own centre");
-  assert.equal(selection.current.plotId, target.id, "the pick did not persist -- a later describe/generate step would find nothing selected");
-
-  // A second, different pick REPLACES the first -- one selection, not a history.
-  const other = world.plots[0].id === target.id ? world.plots[1] : world.plots[0];
-  selection.pick((other.xMin + other.xMax) / 2, (other.zMin + other.zMax) / 2);
-  assert.equal(selection.current.plotId, other.id, "picking a second plot did not replace the first selection");
-});
-
-test("I3 (wiring): the real click handler resolves through the persisted selection, not the index directly", () => {
+test("B3 (wiring): the city-mode pick handler resolves a real board piece via pieceAtPoint when the real board has been loaded", () => {
   assert.match(
     RENDER_3D,
-    /this\._selection\s*=\s*createSelection\(this\._index\)/,
-    "world-render-3d.js no longer constructs a selection over the spatial index -- a later describe/generate step would have nothing to read",
+    /import\s*\{[^}]*\bpieceAtPoint\b[^}]*\}\s*from\s*["']\.\/board-load\.js["']/,
+    "world-render-3d.js does not import pieceAtPoint from board-load.js",
   );
   const pickHandlerStart = RENDER_3D.indexOf("CITY MODE PICKS AGAINST THE SCENE");
   assert.ok(pickHandlerStart > -1, "could not find the city-mode pick handler by its own comment -- it may have moved or been renamed");
-  const cityModeBlock = RENDER_3D.slice(pickHandlerStart, pickHandlerStart + 1200);
+  const cityModeBlock = RENDER_3D.slice(pickHandlerStart, pickHandlerStart + 2500);
   assert.match(
     cityModeBlock,
-    /this\._selection\s*\?\s*this\._selection\.pick\(pt\.x,\s*pt\.z\)/,
-    "the city-mode click handler resolves the address directly from the index again, instead of through the persisted selection",
+    /pieceAtPoint\(\s*this\._boardData\.board,\s*pt\.x,\s*pt\.z\s*\)/,
+    "the city-mode pick handler does not call pieceAtPoint against the real, loaded board",
   );
 });

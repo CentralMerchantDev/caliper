@@ -1,0 +1,43 @@
+B2.1 review answers recorded: board-adapter.js/board-region.js ruling,
+Mark's own briefing-error ledger entry, and the construct-don't-filter
+principle behind both approved B2 mechanisms
+
+ON b1-land, NOT main. No code changed -- this is Mark's review of B2.1's
+plan, recorded where the plan itself and the audit protocol live, per his
+own instruction not to answer once in chat and let the doc go stale.
+
+BOARD-ADAPTER.JS DIES WITH city-plan.js, ON A DELAY. board-region.js LIVES.
+Ruled on directly, not by category (Mark). board-adapter.js's own header
+says "generateWorld() -> a list of placed pieces" and it imports ROADS from
+city-plan.js directly -- confirmed by reading it, not assumed. It is
+imported live today by world-render-3d.js (boardPiecesById, P4.1's picking
+path) -- confirmed the same way, one real import, not the two files a first
+guess suggested. Quarantining it before B2 supplies real pieces of its own
+would break live selection, so it is quarantined AFTER, not alongside
+city-plan.js. board-region.js imports only from board.js, has no generator
+dependency, and lives as a board.js utility. Both docs/specs/BOARD-REBUILD-
+PLAN.md's "what dies, what lives" and B2.1's own "not yet decided" list
+updated to match -- the open item marked resolved rather than left to
+contradict the ruling above it.
+
+MARK'S OWN ERROR, RECORDED IN docs/AUDIT-PROTOCOL.md SECTION 7: "New file"
+undersold B2's actual scope -- board.js/board-adapter.js/board-region.js
+already existed from an earlier phase, and this doc's own "what dies, what
+lives" section already lists board.js as carried across. Mark's own words:
+the third brief this week to describe something as new without reading
+docs/MODULE-MAP.md first, the document commissioned specifically to stop
+this. Recorded as a sibling entry to the existing "A brief is a claim too,"
+naming the check for next time: before starting work described as "new",
+search the codebase for the capability described.
+
+THE SHARED PRINCIPLE BEHIND BOTH APPROVED B2 MECHANISMS, NAMED IN THE
+PROTOCOL: "construct what you want, do not filter for it and hope" --
+settlement density decided from LANDMASSES.kind as a table (not a uniform
+sprinkle filtered by what survives a buildability check), and roads as an
+explicit junction graph (not centrelines with crossings detected
+afterward, the exact shape of the project's oldest reported defect).
+Recorded next to Failure pattern E as its positive-form counterpart: make
+the invariant a constraint on how the data is produced, not a predicate
+checked against data produced some other way.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

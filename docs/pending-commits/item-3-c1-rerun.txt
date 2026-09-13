@@ -1,0 +1,32 @@
+Item 3 -- re-run C1's two never-re-run mutations, record the real result.
+
+b2-settlement-table-wooded-exclusion-real and
+b2-mainland-boundary-inland-direction-real had both only ever been
+"verified by hand" per their own notes, never recorded through
+scripts/_mutcheck.mjs or scripts/mutate.mjs -- confirmed directly:
+neither id appears anywhere in test/.mutate-results.json.
+
+RE-RUN TODAY: node scripts/_mutcheck.mjs test/boardGenerator.test.ts
+public/board-generator.js test/mutations.json -- baseline GREEN, BOTH
+CAUGHT, source restored byte-identical. This is a dedicated re-run for
+this item's own record (the same command also happened to run during
+item 2's own regression check minutes earlier, with an identical result
+-- re-run again here so this item has its own clean evidence, not a
+borrowed one).
+
+WHETHER DECISION #10's FIX CHANGES HOW THESE ARE SCORED -- as the brief
+asked, explicitly: NO. Checked directly, not assumed: neither mutation's
+own `expect` string has the parenthetical-with-a-digit shape the bug
+required ("wooded/sandbar/rock/skerry islands carry no settlement at
+all" and "coverage is measured INSIDE each settlement boundary, 20-40%,
+not world-wide" -- neither contains a parenthesis at all). Separately,
+scripts/_mutcheck.mjs's own extraction was ALREADY correct before
+tonight's fix (the bug lived only in scripts/mutate.mjs and
+scripts/gen-test-count.mjs, not in the tool that actually produced every
+recorded result in this project, including these two, tonight).
+
+Both entries' own `note` fields updated to record this re-run and the
+scoring-impact answer, replacing the stale "verified by hand" framing.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

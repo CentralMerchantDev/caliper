@@ -1,0 +1,35 @@
+mutationEvidence -- the allowlist fix confirmed working against the real
+deadlock, plus one real, honest SURVIVED found along the way.
+
+`node scripts/_mutcheck.mjs test/boardGenerator.test.ts public/board-
+generator.js test/mutations.json` -- previously refused outright
+("baseline: RED"). With scripts/expected-red.mjs wired in (commit
+d00aea5), this run's own baseline reported GREEN and all 3 of the
+board-generator.js-scoped mutations actually ran (a real, multi-minute
+operation -- each mutation rebuilds and re-runs boardGenerator.test.ts,
+which calls the ~40-170s generateBoard() itself).
+
+TWO MORE INSTANCES of tonight's own recurring "expect string is a
+paraphrase, not the real title" lesson (AUDIT-PROTOCOL.md SS7, now four
+occurrences in one night): b2-settlement-table-wooded-exclusion-real
+and b2-mainland-boundary-inland-direction-real both went INCONCLUSIVE,
+each printing the REAL failing title (which plainly named the right
+property) immediately after the non-match. Fixed both `expect` fields
+in test/mutations.json to the exact title -- NOT YET RE-RUN to confirm
+CAUGHT (each run costs tens of minutes on this host; queued as real,
+bounded remaining work, not a gap in understanding of what is wrong).
+
+ONE REAL, HONEST SURVIVED, RECORDED NOT HIDDEN:
+b2-5-sampled-ground-perimeter-is-load-bearing genuinely SURVIVED --
+confirms directly (not just inferred from its own manifest note, which
+already said "verified BY HAND... a real timing measurement") that no
+node:test assertion exists for this control at all. Recorded honestly
+in test/mutationSummary.generated.json rather than silently left NEVER
+RUN or miscounted as CAUGHT: 117 of 127 CAUGHT, 1 SURVIVED, 9 never run.
+
+STILL NOT RUN: b2-6-no-live-route-generates-the-board (self-mutation
+against test/boardGenerator.test.ts, same expensive file), b2-5-ground-
+verified-opt-in-is-load-bearing (public/board.js, needs the same manual
+paired-timing procedure as the SURVIVED one above, not a node:test
+assertion), and the 5 isolate.test.ts-scoped mutations (blocked on
+B2.8/B4, not this allowlist).

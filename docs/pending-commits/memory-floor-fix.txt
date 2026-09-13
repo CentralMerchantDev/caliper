@@ -1,0 +1,53 @@
+Rewrite the unsourced 4 GB memory floor -- the fix, committed separately
+from docs/audits/MEMORY-FLOOR-EXPERIMENT-2026-09-11.md's own measurement,
+per Mark's own instruction, so the fix's wording can be argued with
+without touching the record it rests on.
+
+WHAT CHANGED: docs/OVERNIGHT-RUN.md:127's "Memory below 4 GB: do
+code-only work and check again" -- a rule with no source anywhere in this
+repository (ground-checked before the experiment ran, recorded in the
+measurement commit) -- replaced with a MEASURED statement: renders
+verified working down to 0.02 GB free, 2026-09-11, via
+scripts/shoot.mjs and test/regressionGate.test.ts/cullingRatio.test.ts,
+command cited, pointing at the full record. Explicit about what this
+does and does not establish (works AT the memory tested, not where it
+would first fail) and what it protects against (nothing observed to
+protect against, for these two render workloads) -- and explicit about
+what remains a REAL, separate constraint: the full, unscoped
+node test/run.mjs has genuinely crashed on this host on Node's own
+default V8 heap ceiling, a different failure mode this experiment did
+not test or retire.
+
+docs/LANE-BRIEF-TEMPLATE.md: the one standing, forward-looking line that
+cites the old floor as ongoing authority for every future brief
+generated from this template ("below the stated floor, wait") --
+corrected to match, with the same V8-heap distinction carried over so a
+future brief does not lose that real, separate warning along with the
+retired one.
+
+docs/audits/P4.7-WATER-BANDING.md: the one "next pass should do" line
+that told a future reader to wait for memory before re-verifying the
+water-banding diagnosis -- corrected; the diagnosis and the reason it
+was left unverified THIS session both stand exactly as written, only the
+now-stale memory precondition for the next attempt is fixed.
+
+WHAT DID NOT CHANGE, deliberately: docs/audits/OVERNIGHT-2026-09-10.md
+and docs/audits/OVERNIGHT-CLI-2026-09-09.md -- both cite the old floor
+only to explain decisions already made and readings already taken at
+the time; those were true when recorded and are historical record, not
+ongoing authority a future reader would act on. Not touched, per Mark's
+own instruction not to rewrite historical readings.
+
+A COUNT DISCREPANCY, named rather than silently resolved: Mark's own
+brief said "four audits" cite the figure; a direct search of
+docs/audits/ (and a broader repo-wide search for other phrasings) found
+three pre-existing ones (OVERNIGHT-2026-09-10.md,
+OVERNIGHT-CLI-2026-09-09.md, P4.7-WATER-BANDING.md). Not load-bearing --
+the SAME two decisions (correct forward-looking citations, leave
+historical readings) apply regardless of whether the true count is
+three or four -- but named rather than assumed away, per
+rule://escape-clause's own "record it and carry on" for a
+non-load-bearing discrepancy.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

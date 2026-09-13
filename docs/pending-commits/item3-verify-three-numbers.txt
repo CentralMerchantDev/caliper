@@ -1,0 +1,60 @@
+Item 3 of the Phase 1 rebuild lane brief -- the three citations CORRECTIONS
+C-3/C-9 flagged as awaiting verification, each now checked against the
+primary source directly, not a secondary summary.
+
+Method: `pdftotext -layout` against the actual paper PDFs (Boeing 2019 via
+the open-access arXiv copy, arxiv.org/abs/1808.00600; Marshall et al. 2016
+via the media.voog.com PDF REBUILD-PLAN already cited) and the current
+Portland zoning code PDFs (portland.gov/sites/default/files/code/), because
+WebFetch's own HTML-conversion could not parse any of the three PDFs
+directly (compressed FlateDecode streams) and this machine has pdftotext
+(poppler-utils, mingw64) already available -- no new tool installed.
+
+Boeing 2019, Table 1 -- WRONG, not just unsourced. Every one of the six
+metrics REBUILD-PLAN cited was the Asia/Oceania region's own rows (20 of the
+100 cities) read as though they were the paper's global range. Re-derived by
+reading every one of the 100 rows: node degree 2.348 (Helsinki) - 3.548
+(Buenos Aires), not 2.38-3.24; four-way share 6.1% (Ulaanbaatar) - 57.6%
+(Buenos Aires), not 8.7%-36.3%; dead-ends 2.7% (Manhattan) - 39.5%
+(Helsinki), not 5.6%-39.5%; orientation-order phi 0.002 (Charlotte, Sao
+Paulo) - 0.899 (Chicago), not 0.005-0.340; median segment length 23.2 m
+(Venice) - 233.0 m (Shanghai), not 42.0-233.0; circuity 1.011 (Buenos Aires)
+- 1.148 (Caracas), not 1.02-1.13. Every old figure is a real Table 1 value,
+just not the extreme -- Chicago's phi (0.899) is more than double the old
+"maximum" (Melbourne, 0.340). Grid-vs-organic typology bands, per C-3's own
+request: Table 2's actual regional means (US/Canada phi=0.427, Europe
+phi=0.033; the two metrics Table 2 aggregates by region besides length and
+circuity) plus the paper's own named exemplars for node degree/four-way/dead-
+end, which Table 2 does not aggregate regionally (quoted directly rather
+than hand-averaged from 100 rows, a real error risk this document does not
+need to take on). docs/specs/REBUILD-PLAN.md's L1, L2, T4, G1 sections
+updated with the real numbers, the old numbers kept visible alongside them
+(not erased), and the reasoning for each replacement.
+
+Marshall et al. 2016, Table 1 -- the review's suspicion was RIGHT. Manhattan's
+existing block reads 256 x 60 m directly off the table's own "Existing block
+width (m)" / "Existing block depth (m)" rows, not 80 x 274 m. 256 is exactly
+64 modules at the project's own 4 m grid -- G1's "round 274 to 272" note is
+removed as unneeded, not merely re-confirmed, since there is nothing left to
+round. Portland's 60x60 m block (also in this same table) independently
+confirmed, both from the table and from the paper's own prose ("Portland's
+blocks are perfectly square whereas Manhattan's are elongated, with street
+sides three and a half times longer than avenue sides").
+
+Portland Title 33 -- the URL 404s, confirmed directly (WebFetch returned HTTP
+404 on portland.gov/code/33/110, exactly as CORRECTIONS C-9 said). The
+current code has no single "minimum lot width" figure -- Title 33.610's Table
+610-2 (6/30/22, the post-Residential-Infill-Project revision) gives five
+different values by zone (RF/R20: 60 ft; R10: 50 ft; R7: 40 ft; R5: 36 ft),
+plus a uniform 15 ft for attached-house lots across R20-R5. R5 (the smallest-
+lot standard zone, and the one Residential Infill most directly targets) is
+used as this document's anchor -- 36 ft = 10.97 m wide, 50 ft = 15.24 m deep
+-- recorded as a choice among five real numbers, not the only one, with the
+other four given alongside it so nothing is hidden. Title 33.110's Table
+110-3 (8/1/21) independently restates the 36 ft figure for the same zones.
+
+Gate met per the brief's own wording: each of the three is verified with a
+quotation and a working URL. No third state used.
+
+What is still open: item 4 (split VISION.md out) and item 5 (the catalogue
+and its validator) have not started.

@@ -1,0 +1,23 @@
+RUN 6 (autonomous) -- track today's handover doc in git.
+
+docs/audits/OVERNIGHT-2026-09-10.md was started by a scheduled Cowork run
+this morning that could not commit anything at all (its own shell mounts
+this repository read/write but not unlink, so git jammed on its own first
+git status -- full detail in the file's own section 2). That run wrote a
+real, useful handover -- what it verified read-only, the drift it found,
+one decision it could not append to the tracked queue -- but could not
+`git add` its own record.
+
+Added here, in an environment where git works normally, along with this
+session's own continuation: transcribing that run's orphaned decision and
+this session's own new one (docs/DECISIONS-FOR-MARK.md #8/#9, already
+committed separately), correcting the stale B3 plan line, resolving the red
+test-count gate honestly, and B3's first real build-loop step (picking
+connected to the real board) -- all already committed in prior commits this
+session; this commit is the handover file itself catching up to match what
+is already on record elsewhere, not new work of its own.
+
+No code touched.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01FD5JvQU4bUcosxg63Xcdgj

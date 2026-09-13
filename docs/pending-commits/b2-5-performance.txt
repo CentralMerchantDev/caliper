@@ -1,0 +1,65 @@
+B2.5 -- the 100 seconds, profiled first per Mark's own instruction, fixed
+2.7x by a proven-equivalent sampled ground check, gated honestly against
+Cloudflare's own 30s CPU-time ceiling and still red
+
+ON b1-land, NOT main.
+
+GROUNDED BEFORE FIXING, per Mark's own explicit instruction: "profile and
+report WHERE the time goes... do not optimise on my hypothesis." Measured
+(public/board-generator.js's own new .stats): road span placement 39.4s
+(35%), BUILDING placement 66.7s (60%, the larger cost, correcting the
+hypothesis on magnitude though not on mechanism), junction-node placement
+3.9s, assessFootprint 0.7s. 77.1M heightAt calls. A naive cache does not
+help: unique (x,z) pairs alone exceed 16.7M against 77.1M total calls --
+most calls are for genuinely distinct points.
+
+THE FIX, in order of Mark's own three directions: (1) public/board.js
+gained one additive, opt-in option, place(piece, {groundVerified:true}),
+skipping the exhaustive per-cell ground loop for a caller that has already
+verified ground by a proven-equivalent method. Default false; every
+existing caller (board.test.ts, boardAdapter.test.ts, 27+ tests)
+unaffected. SPACE is never skipped, only ever the GROUND half. (2)
+public/board-generator.js gained sampledGroundOk(): the full perimeter at
+native resolution plus a stride-spaced interior grid, not every cell. (3)
+PROVEN EQUIVALENT BEFORE BEING ADOPTED: generateBoard({verifySampling:true})
+runs both checks for every real candidate this generator actually
+produces. Measured on the real archipelago: 100% agreement, zero
+disagreements in either direction, across 11,538 road candidates and
+39,118 building candidates (50,656 total), at both stride 3 and stride 5.
+
+MUTATION-TESTED, both controls: removing board.js's groundVerified guard
+regressed timing to ~167.6s, invisible to every correctness test (proof
+this needs a timing measurement, not a functional one, to catch). Removing
+sampledGroundOk's own i-edge perimeter scan produced a real disagreement
+(1 of 39,118 candidates, the dangerous direction) -- proof the perimeter
+is load-bearing, not decoration. Both reverted, reconfirmed.
+
+MEASURED RESULT, paired same-process (controlling for this development
+host's own memory-pressure noise -- single standalone runs varied 35s to
+172s for identical code, correlating with 3.2-3.7GB free memory observed
+throughout this session, below the project's own 4GB floor): exhaustive
+~111-113s, sampled ~40-41s. A real, reproducible ~2.7x speedup, identical
+output (same 35,365 pieces, same coverage).
+
+THE CEILING, derived and sourced, not picked to pass: wrangler.jsonc's own
+bindings require a paid Cloudflare Workers account, whose documented
+default CPU-time limit per invocation is 30,000ms -- no limits.cpu_ms
+override exists in this repo. THIS GATE IS ASSERTED HONESTLY AND IS RED:
+test/boardGenerator.test.ts's new B2.5 case fails at ~35-46s on this
+development host, above the ceiling more often than not even after the
+2.7x fix. Reported as a real, open finding, not hidden by loosening the
+assertion. The honest conclusion: this generator is not yet fast enough
+to run synchronously inside one live request; the architecturally correct
+fix is what world.js's own LandField memoisation already does for the
+height field -- generate once per seed, persist, never regenerate live per
+visitor. NOT wired into world.js's createWorld() for exactly this reason.
+
+npx tsc --noEmit clean. Full targeted regression (10 files): 93 tests, 89
+pass, 3 fail -- 2 already-catalogued road-network.js old-world pins, plus
+B2.5's own honest red, 0 unexplained.
+
+WHAT IS STILL OPEN: the 30s ceiling itself (needs either further
+optimisation or out-of-request-path generation); B2.6 (bridges), next;
+B2.4 (re-pinning), last.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

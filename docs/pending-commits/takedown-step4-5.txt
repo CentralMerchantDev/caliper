@@ -1,0 +1,38 @@
+Phase 1 takedown, steps 4 and 5 -- quarantine the old-world render cluster
+itself: public/instance-groups.js, public/layout-fits.js, public/layout.js
+(leaves first, nothing else imports them), then public/city-render.js
+(root of this cluster).
+
+Per Mark's own instruction (his words, quoted in docs/specs/REBUILD-PLAN.md's
+CORRECTION block) and docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md's
+execution order. Each moved to _TO-DELETE/old-world/ with its own ledger
+line in _TO-DELETE/LEDGER.jsonl (path, class, bytes, sha256, the exact
+command that verified it, actor, reason) -- retained, not deleted, per
+rule://quarantine Tier 2.
+
+How it is known to be fixed, checked after city-render.js's own move (the
+one that matters, since the other three only ever had one importer): npm run
+typecheck -- clean. node test/run.mjs (full suite build phase) -- every
+public/*.js file still builds without error; the ONLY build failures are 12
+test files that import one of these four files directly:
+cityRenderScenePlacements.test.ts, cityRenderWorldState.test.ts,
+cityWorld.test.ts, facadeVariants.test.ts, instanceGroups.test.ts,
+layout.test.ts, layoutGeometry.test.ts, phaseDelta.test.ts,
+pickSelection.test.ts, questCompletion.test.ts, runGenerateRequest.test.ts,
+setPieceRefusal.test.ts. Named here as they were found; retired by name with
+their reason at step 10, once every quarantine move in this pass has landed
+and the full, final red list can be recorded in one place rather than
+piecemeal.
+
+Every other reference to "city-render" left in public/*.js (board-adapter.js,
+board-render.js, buildings.js, city-plan.js, features.js, grade.js,
+ground.js, isolate.js, prop-manifest.js, prop-models.js, prop-placement.js,
+terrain.js, world-render-3d.js) is a COMMENT, checked individually --
+`grep -n "city-render"` against each, confirmed none is a live import.
+public/city.html still imports city-render.js's buildWorld/LOOK for real;
+it quarantines at step 8, not fixed here.
+
+What is still open: public/city-plan.js, public/board-adapter.js,
+public/city-live-world.js, public/city.html have not moved yet; the holding
+page for public/index.html has not been written; every test's individual
+retire-or-block disposition is recorded together at step 10.

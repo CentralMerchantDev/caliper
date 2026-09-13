@@ -1,0 +1,52 @@
+Test the 4 GB memory floor Mark suspended for this run -- the measurement,
+committed separately from the fix that follows it.
+
+GROUND-CHECKED FIRST: no real source exists for docs/OVERNIGHT-RUN.md:127's
+"memory below 4 GB" figure. Traced to the commit that first tracked the
+file (5bbef49, 2026-09-09) -- no measurement, no incident, no link
+attached. Every other citing file (four audits, two briefs, two specs)
+either points at that same line or repeats the belief without new
+evidence. The one candidate for independent sourcing --
+docs/audits/P4.7-WATER-BANDING.md's "host has crashed on memory three
+times today" -- has no attached evidence (no error text, no reading at
+the crash, no timestamp, no PID) and its own phrasing describes adopting
+the existing rule, not originating it. Not a real source.
+
+THE EXPERIMENT, stepped as instructed:
+  Step 1 (before): Get-CimInstance Win32_OperatingSystem -- 15.71 GB
+    total, 2.97 GB free.
+  Step 2 (single camera, node scripts/shoot.mjs "Downtown close"): a real
+    mistake caught and corrected, not hidden -- the first PowerShell
+    Start-Process invocation split the quoted argument into two, producing
+    two identical fallback-camera images (moved to _TO-DELETE, not
+    counted). Re-run correctly, twice, via the Bash tool: both completed,
+    exit 0, no errors, ~30-31s each. Real image (downtown-close.png)
+    looked at directly -- correct, complete, matches known-good renders of
+    this view. Peak combined node+chrome WorkingSet: 369.6 MB.
+  Step 3 (full multi-camera regression-gate render,
+    test/regressionGate.test.ts + test/cullingRatio.test.ts): free memory
+    6.68 GB immediately before starting (risen naturally at rest between
+    steps, not forced). COMPLETED SUCCESSFULLY, 3/3 tests pass, exit 0,
+    179.7s wall-clock, measurements matching this same session's own
+    earlier healthy readings from tonight exactly (culling ratio 31.90%,
+    same triangle/draw-call counts). Peak combined WorkingSet 418.7 MB.
+    FREE SYSTEM MEMORY OSCILLATED WILDLY AND INDEPENDENTLY OF THE RENDER
+    throughout, in a repeating sawtooth between ~8 GB and near-zero --
+    measured minimum 0.02 GB free (effectively zero) at t+62s, with the
+    render's own memory footprint NOT spiking to correspond (its peak was
+    reached in the FIRST sample, before any of the troughs). The render
+    was unaffected either way.
+  Step 4 (after): 15.71 GB total, 6.64 GB free.
+
+NOTHING KILLED. Nothing hung. No process required intervention.
+
+WHAT THIS SHOWS, PRECISELY, NOT OVERCLAIMED: both render workloads tested
+here completed successfully at free-memory readings from 2.97 GB down to
+a measured 0.02 GB, on this host, today. This does NOT establish where a
+render would first fail -- no failure was observed, including at the
+near-zero reading, so no floor can honestly be stated. A different,
+larger render workload is a separate, unmeasured claim this record does
+not make.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf
