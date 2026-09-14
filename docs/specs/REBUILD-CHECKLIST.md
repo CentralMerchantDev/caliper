@@ -301,12 +301,22 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     clean, 5/5 mutations CAUGHT including the checklist's own named gate
     verbatim (a hand-written linear ramp fails the shrinking-drops
     assertion the real curve passes). Gate ledger: docs/GATE-LEDGER.jsonl.
-[ ] S3 (CLI) Recompute the dirty set only — REBUILD-PLAN.md S3
-    Never the whole board, never per frame.
-    Gate: a mutation widening the dirty set to the whole board must be CAUGHT,
-    so the test asserts WHICH cells recomputed. An assertion on the result
-    alone cannot see this.
-[ ] S4 (CLI) valueAt, valueIfPlaced, and the two worths — SCORING-MODEL §3.2 and §3.3
+[x] S3 (CLI) Recompute the dirty set only — REBUILD-PLAN.md S3
+    0fca9b5 on branch `scoring`, pushed. dirtyCellsForRect (pure geometry,
+    composes area-board.js's cellsOf) + recomputeDirtySet (composes S1's
+    value() per dirty cell, returns a Map whose own keys ARE the proof of
+    what was touched). Blind plan review caught a real off-by-one before
+    any code was written: the exclusive-bound formula needed rect.xMax +
+    radius, not rect.xMax - 1 + radius (one column short once handed to
+    cellsOf's own exclusive convention) -- and caught that the planned
+    gate test itself was insufficient (only checked the negative boundary
+    case, which an under-inclusive set still satisfies). Fixed both;
+    verified against an INDEPENDENT brute-force oracle, not the
+    implementation's own shortcut arithmetic. Not wired into
+    placement.js's commit()/remove() -- a future item. 103/103 tests, tsc
+    clean, 7/7 mutations CAUGHT including the checklist's own named gate
+    verbatim. Gate ledger: docs/GATE-LEDGER.jsonl.
+[x] S4 (CLI) valueAt, valueIfPlaced, and the two worths — SCORING-MODEL §3.2 and §3.3
     `valueAt(cell)` is desirability per unit area — pure location, the ghost
     readout. On a VACANT cell it is terrain-only: nothing occupies the cell to
     receive an adjacency bonus. That resolution is DECISIONS #12 point 4 and is
@@ -322,6 +332,29 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     Gate: `valueIfPlaced` leaves the board byte-identical — RED is any mutation
     escaping a speculative call — AND a test asserting the house/condo
     inversion holds in both directions on the same cell.
+    DONE, commit a27f595 (branch scoring). unitQuality built as a THIRD
+    generated catalogue field (scripts/migrate-catalogue-s2-fields.mjs's
+    unitQualityFor(), 1/sqrt(massing tiers) — DECISIONS-FOR-MARK.md #14),
+    never hand-authored, never folded into baseValue, per Mark's own
+    instruction. value() extended with an optional categoryOverride param
+    rather than duplicated. Both gates verified: byte-identical (mutation-
+    tested — the original 3-cell test let a real board.place() mutation
+    SURVIVE because all 3 cells were unplaceable anyway; fixed with a 4th,
+    genuinely placeable cell) and the inversion (house ~1.22x per-unit,
+    condo ~4.9x total, on real small-house-a/apartment-block-a shapes).
+    catalogue-validator.js rule 9 (already in code from a prior pass) had
+    ZERO test coverage — closed with 6 new tests, watched red first.
+    119/119 targeted tests, tsc clean, 3/3 new mutations CAUGHT. Gate
+    ledger: docs/GATE-LEDGER.jsonl. KNOWN GAP, not closed by this item:
+    test/mutationEvidence.test.ts's formal manifest (test/.mutate-results.json
+    / test/mutationSummary.generated.json) was already stale before S4
+    (133/168 and 124/168 covered); S4's 3 new mutations could not be run
+    through scripts/mutate.mjs's own pipeline this session — 3 attempts
+    each stalled at 0% CPU during its baseline run, root-caused to a
+    concurrent unrelated Claude session actively running the same script
+    against a different repo on this machine. Ad-hoc scripts/_mutcheck.mjs
+    evidence substituted (see commit message); formal manifest still needs
+    a `mutate.mjs --resume` pass once the machine is uncontended.
 [ ] S5 (CLI) The on-screen readout — REBUILD-PLAN.md S4. Was blocked; a surface now EXISTS.
     BLD built `public/look-proof-scene.html` on codex-lane. That is a real
     render surface, so this is no longer structurally blocked — but it is on
@@ -330,7 +363,7 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     The ghost shows the cell's current value and the value the piece would have
     there; that number, changing as the cursor moves, IS the reason one cell
     beats another.
-[ ] C1 (CLI) The city score: a registry of terms, with median wealth as the first — SCORING-MODEL-2026-09-14.md §4B
+[x] C1 (CLI) The city score: a registry of terms, with median wealth as the first — SCORING-MODEL-2026-09-14.md §4B
     A SECOND DIMENSION, not an adjacency value. §S1 is strictly local at
     R = 3; the city score is global. Two dimensions, computed differently,
     shown separately. Do not fold it into the adjacency table.
@@ -355,20 +388,106 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     Gate: adding a second, trivial term requires no change to the registry or
     to the first term. Prove it by adding a throwaway term in the test, not
     by asserting the design is extensible.
-[ ] S6 (CLI) Developed value sits on top, unchanged in mechanism — REBUILD-PLAN.md S5 and V3
+    DONE, commit e8decb4 (branch scoring). public/city-score.js: median()
+    (null for empty, not 0 — see below), medianWealth() (per-CELL, not
+    per-building — DECISIONS-FOR-MARK.md #15 discloses this as a real
+    judgement call, not the only defensible reading), createCityScoreRegistry()
+    (fresh instance per call) and defaultCityScoreRegistry(). Gate proven:
+    registering median wealth alone vs. median wealth plus a throwaway
+    constant term in two separate fresh registries — first term's own value
+    byte-identical across both, total = sum. Blind review before code found
+    a serious defect in the original plan: an empty city would have scored
+    0, silently outranking a real, badly-planned city that legitimately
+    scores negative (dilutive residential adjacency) — fixed to null
+    throughout, with computeScore excluding null-valued terms from its sum.
+    13 new tests, 132/132 targeted suite, tsc clean, 5/5 new mutations
+    CAUGHT. Gate ledger: docs/GATE-LEDGER.jsonl.
+[x] S6 (CLI) Developed value sits on top, unchanged in mechanism — REBUILD-PLAN.md S5 and V3
     Read S5 and V3 and confirm the mechanism is genuinely unchanged rather than
     assumed so.
-[ ] S7 (CLI) Write up the two parked systems as plan sections, do not build them — SCORING-MODEL §5 and §6
+    DONE, commit 0171261 (branch scoring). Confirmation-only, no new
+    production code: test/developedValue.test.ts (4 tests) composes only
+    the already-built place()/remove(), valueAt/perUnitWorth/totalWorth,
+    and medianWealth to prove a remove-then-place "development" (farmland
+    -> house -> subdivision) propagates to neighbours, raises the plot's
+    own worth, moves the city's median, and is fully path-independent
+    (extending S1's own gate to this exact narrative) — with zero
+    development-specific code anywhere. Two real bugs found by running the
+    tests (an amenity placed inside the new building's own footprint,
+    silently failing the redevelopment and reading a false pass off a
+    vacant cell) fixed before commit. 136/136 targeted suite, tsc clean.
+    Gate ledger: docs/GATE-LEDGER.jsonl.
+[x] S7 (CLI) Write up the two parked systems as plan sections, do not build them — SCORING-MODEL §5 and §6
     Second-order lift (a neighbourhood's reputation raising itself beyond the
     sum of its parts — needs a fixed-point solve) and the BUILD COST layer
     (land near the centre costing more because there is less of it and because
     what is already built constrains what can go on it).
     Both are Mark's, both are real, neither is built tonight. Losing them is
     the failure mode this item exists to prevent.
+    DONE, commit 6be5608 (branch scoring). Two new subsections added to
+    docs/specs/REBUILD-PLAN.md directly after S5, cross-referencing
+    SCORING-MODEL §5/§6 rather than duplicating their prose, each adding
+    the forward-looking "what a real build would need" detail the
+    decision record itself doesn't cover. Documentation only — verified
+    no test parses REBUILD-PLAN.md programmatically, tsc clean, targeted
+    suite 136/136 unaffected. Gate ledger: docs/GATE-LEDGER.jsonl.
 
 ---
 
-## BUILD ORDER — STEP 6, TERRAIN. CLI'S OVERFLOW.
+## UNBLOCK THE INSTRUMENTS — CLI OWNS THIS. Added 2026-09-15.
+
+Three measuring instruments are broken, and every claim about test counts,
+mutation coverage and suite health currently rests on them. Terrain (T1-T3) is
+suspended pending decision #17 — it may be land-lane's, in another repository —
+so this is CLI's real next work.
+
+[ ] U1 (CLI) Fix `npm run gen:claims` — its dependency was quarantined, then deleted
+    `scripts/gen-city-summary.mjs` imports `public/city-plan.js`, quarantined by
+    `e3c355b` in the Phase 1 takedown and now DELETED outright by item zero of
+    this run. The import can no longer resolve at all.
+    Consequence, which is why this matters: `gen:claims` fails before reaching
+    `gen-test-count.mjs`, so **the published test count has been stale for days
+    and cannot be regenerated.** `rule://published-claims` is unenforceable
+    while its own generator is broken.
+    `gen-city-summary.mjs` summarises a city that no longer exists. Decide
+    whether it is retired or re-pointed, say which and why, and do not restore
+    anything from the deleted quarantine to make it work.
+    Gate: `npm run gen:claims` completes and the regenerated count matches a
+    freshly measured one.
+[ ] U2 (CLI) `cullingRatio.test.ts` — five identical reproductions, a named cause, and a decision
+    It has now failed five times at ~243s against its own internal 240-second
+    `page.waitForFunction` timeout. **The cause is not in dispute** — it is not
+    memory, not the harness, not resource contention. It is that test.
+    It blocks every full-suite run, and the full suite is what `mutate.mjs` and
+    the test-count claim both depend on.
+    Either fix the wait condition it is stuck on, or quarantine it OUT OF THE
+    DEFAULT SUITE with its reason recorded and a named owner. Both are
+    acceptable; another reproduction is not.
+    Gate: the default suite completes, with its own `ℹ tests` / `ℹ pass` line as
+    the evidence.
+[ ] U3 (CLI) Decide what the real mutation instrument is — RECOMMEND, do not unilaterally replace
+    `scripts/mutate.mjs` runs the FULL SUITE per mutation. At 160 mutations that
+    is 160 full suites, in a repo where one full suite has never completed. It
+    has stalled on every attempt, most recently traced to genuine CPU contention
+    with a concurrent lane.
+    `scripts/_mutcheck.mjs` — scoped, fast — is what every successful run has
+    actually used, including S4's. It is no longer a workaround; it is the
+    working instrument, and `test/mutationSummary.generated.json` is a manifest
+    only the broken one writes.
+    This is a real decision about what evidence this project accepts, so
+    `rule://decision-queue`: recommend, queue it, take the least irreversible
+    path. **Do not quietly retire `mutate.mjs`.**
+[ ] U4 (CLI) Side B's data model — REBUILD-PLAN.md B1-B3
+    Step 10 of the revised build order, and the mechanic that makes CALIPER
+    itself rather than a city builder: a player-authored piece IS a catalogue
+    entry, full stop (B1). B2 is the day-one requirement. B3 is where coding
+    becomes value.
+    Data and logic only — no interface. Read B1-B3 in full first; §B4 names what
+    stays out of scope and that boundary is load-bearing.
+
+---
+
+## BUILD ORDER — STEP 6, TERRAIN. SUSPENDED — see decision #17.
 
 [ ] T1 (CLI) Heights, water and slope constraints as fields on the board — REBUILD-PLAN.md T1-T3
     Coarse mesh with heightmap displacement, DECOUPLED from the gameplay grid.

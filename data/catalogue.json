@@ -17,7 +17,8 @@
     "joinSpec": "contact-darkening",
     "proportion": null,
     "baseValue": 1,
-    "adjacency": {}
+    "adjacency": {},
+    "unitQuality": 1
   },
   {
     "id": "shed-a",
@@ -39,7 +40,8 @@
     "baseValue": 1,
     "adjacency": {
       "residential": -5
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "substation-a",
@@ -59,7 +61,8 @@
     "joinSpec": "contact-darkening",
     "proportion": null,
     "baseValue": 1,
-    "adjacency": {}
+    "adjacency": {},
+    "unitQuality": 1
   },
   {
     "id": "small-civic-a",
@@ -81,7 +84,8 @@
     "baseValue": 1,
     "adjacency": {
       "residential": 5
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "small-house-a",
@@ -105,7 +109,8 @@
     "adjacency": {
       "residential": -2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 0.7071067811865475
   },
   {
     "id": "corner-shop-a",
@@ -128,7 +133,8 @@
     "baseValue": 8,
     "adjacency": {
       "residential": 5
-    }
+    },
+    "unitQuality": 0.7071067811865475
   },
   {
     "id": "house-a",
@@ -152,7 +158,8 @@
     "adjacency": {
       "residential": -2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 0.7071067811865475
   },
   {
     "id": "terrace-unit-a",
@@ -176,7 +183,8 @@
     "adjacency": {
       "residential": -2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 0.7071067811865475
   },
   {
     "id": "small-retail-a",
@@ -199,7 +207,8 @@
     "baseValue": 12,
     "adjacency": {
       "residential": 5
-    }
+    },
+    "unitQuality": 0.7071067811865475
   },
   {
     "id": "large-house-a",
@@ -224,7 +233,8 @@
     "adjacency": {
       "residential": -2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 0.5773502691896258
   },
   {
     "id": "small-commercial-a",
@@ -248,7 +258,8 @@
     "baseValue": 27,
     "adjacency": {
       "residential": 5
-    }
+    },
+    "unitQuality": 0.5773502691896258
   },
   {
     "id": "apartment-block-a",
@@ -273,7 +284,8 @@
     "adjacency": {
       "residential": -2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 0.5773502691896258
   },
   {
     "id": "mid-commercial-a",
@@ -297,7 +309,8 @@
     "baseValue": 48,
     "adjacency": {
       "residential": 5
-    }
+    },
+    "unitQuality": 0.5773502691896258
   },
   {
     "id": "large-commercial-4x6-a",
@@ -321,7 +334,8 @@
     "baseValue": 72,
     "adjacency": {
       "residential": 5
-    }
+    },
+    "unitQuality": 0.5773502691896258
   },
   {
     "id": "small-warehouse-a",
@@ -343,7 +357,8 @@
     "baseValue": 24,
     "adjacency": {
       "residential": -5
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "tower-base-6x6-a",
@@ -367,7 +382,8 @@
     "baseValue": 108,
     "adjacency": {
       "residential": 5
-    }
+    },
+    "unitQuality": 0.5773502691896258
   },
   {
     "id": "large-commercial-6x6-a",
@@ -391,7 +407,8 @@
     "baseValue": 108,
     "adjacency": {
       "residential": 5
-    }
+    },
+    "unitQuality": 0.5773502691896258
   },
   {
     "id": "civic-6x6-a",
@@ -415,7 +432,8 @@
     "baseValue": 108,
     "adjacency": {
       "residential": 5
-    }
+    },
+    "unitQuality": 0.5773502691896258
   },
   {
     "id": "mega-tower-a",
@@ -439,7 +457,8 @@
     "baseValue": 192,
     "adjacency": {
       "residential": 5
-    }
+    },
+    "unitQuality": 0.5773502691896258
   },
   {
     "id": "large-warehouse-a",
@@ -461,7 +480,8 @@
     "baseValue": 64,
     "adjacency": {
       "residential": -5
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "stadium-a",
@@ -481,7 +501,8 @@
     "joinSpec": "modelled-skirt",
     "proportion": null,
     "baseValue": 64,
-    "adjacency": {}
+    "adjacency": {},
+    "unitQuality": 1
   },
   {
     "id": "lane-straight",
@@ -505,7 +526,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "lane-curve",
@@ -529,7 +551,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "lane-t",
@@ -553,7 +576,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "lane-cross",
@@ -577,7 +601,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "lane-end",
@@ -601,7 +626,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "street-straight",
@@ -625,7 +651,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "street-curve",
@@ -649,7 +676,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "street-t",
@@ -673,7 +701,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "street-cross",
@@ -697,7 +726,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "street-end",
@@ -721,7 +751,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "avenue-straight",
@@ -745,7 +776,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "avenue-curve",
@@ -769,7 +801,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "avenue-t",
@@ -793,7 +826,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "avenue-cross",
@@ -817,7 +851,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "avenue-end",
@@ -841,7 +876,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "highway-straight",
@@ -865,7 +901,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "highway-curve",
@@ -889,7 +926,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "highway-t",
@@ -913,7 +951,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "highway-cross",
@@ -937,7 +976,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "highway-end",
@@ -961,7 +1001,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "lane-street-t",
@@ -985,7 +1026,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "lane-street-cross",
@@ -1009,7 +1051,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "lane-street-transition",
@@ -1033,7 +1076,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "street-avenue-t",
@@ -1057,7 +1101,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "street-avenue-cross",
@@ -1081,7 +1126,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "street-avenue-transition",
@@ -1105,7 +1151,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "avenue-highway-t",
@@ -1129,7 +1176,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "avenue-highway-cross",
@@ -1153,7 +1201,8 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   },
   {
     "id": "avenue-highway-transition",
@@ -1177,6 +1226,7 @@
     "adjacency": {
       "residential": 2,
       "commercial": 2
-    }
+    },
+    "unitQuality": 1
   }
 ]
