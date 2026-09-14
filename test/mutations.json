@@ -1346,6 +1346,24 @@
       "find": "    const material = new THREE.MeshStandardMaterial({ color: 0x557799 });\n    const itemGroup = new THREE.Group();\n    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));\n    const origin = atomOrigin(piece.cell.i, piece.cell.j);\n    const { w, d } = piece.foot;\n    const longAlongW = w >= d;\n    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;\n    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;\n    itemGroup.position.set(x, 0, z);\n    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;",
       "replace": "    const material = new THREE.MeshStandardMaterial({ color: 0x557799 });\n    const itemGroup = new THREE.Group();\n    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));\n    const origin = atomOrigin(piece.cell.i, piece.cell.j);\n    const { w, d } = piece.foot;\n    const longAlongW = w >= d;\n    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;\n    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;\n    itemGroup.position.set(x, 0, z);\n    itemGroup.rotation.y = 0;",
       "expect": "B4 gate: scatterBusShelters positions and ROTATES a shelter correctly on an east/west (long-along-d) road span -- a position-only assertion cannot see a shelter facing the wrong way"
+    },
+    {
+      "id": "look-proof-material-glsl3",
+      "guards": "createLookProofMaterial's ShaderMaterial sets glslVersion: THREE.GLSL3 -- required for sampler2DArray/texture(sampler2DArray,...) sampling, which do not exist in GLSL ES 1.00. Without it the shader fails to compile and the mesh renders nothing.",
+      "note": "A real defect, not a hypothetical one: the first real render of look-proof-scene.html was a blank white canvas with ZERO console errors and 'draw calls: 1, triangles: 1270' -- green on every measure available without a GPU, drawing nothing. Manually mutated (sed) and confirmed CAUGHT, then restored byte-identical (diff confirmed) before this entry was written.",
+      "file": "public/look-proof-material.js",
+      "find": "    glslVersion: THREE.GLSL3,",
+      "replace": "    // glslVersion removed by mutation",
+      "expect": "look-proof-material.js sets glslVersion: THREE.GLSL3 -- required for sampler2DArray, and a real regression once"
+    },
+    {
+      "id": "look-proof-scene-preserve-drawing-buffer",
+      "guards": "look-proof-scene.html's WebGLRenderer sets preserveDrawingBuffer: true. scripts/shoot-look-proof.mjs reads the canvas via toDataURL() in a separate page.evaluate() call after render() -- without this flag that read can race the browser's own buffer clear and capture blank white.",
+      "note": "Found the same session as look-proof-material-glsl3, same symptom (blank canvas, no errors). Every other headless-shoot pipeline in this repo (scripts/shoot-kitbash-contact-sheet.mjs, scripts/shoot-buildings-self-shadow.mjs, public/kitbash-*.html) already sets this flag for the identical reason. Manually mutated (sed) and confirmed CAUGHT, then restored byte-identical (diff confirmed) before this entry was written.",
+      "file": "public/look-proof-scene.html",
+      "find": "logarithmicDepthBuffer: true, preserveDrawingBuffer: true });",
+      "replace": "logarithmicDepthBuffer: true });",
+      "expect": "look-proof-scene.html sets preserveDrawingBuffer: true on its WebGLRenderer -- required for the shoot script's toDataURL() read, and a real regression once"
     }
   ]
 }
