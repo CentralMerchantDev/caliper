@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CALIPER — overview: distant pieces, impostors on/off</title>
+<meta name="description" content="RC3: I1's baked 64-angle octahedral impostor atlas, wired to something real -- distant pieces in the overview, measured against full detail. docs/specs/REBUILD-CHECKLIST.md, MAKE IT PLAYABLE.">
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1016; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<a href="./index.html" class="back-to-caliper" aria-label="Back to CALIPER"
+   style="position:fixed;top:14px;left:14px;z-index:9999;display:inline-flex;align-items:center;gap:7px;
+          padding:7px 13px;border-radius:11px;text-decoration:none;font:600 12px/1 system-ui,sans-serif;
+          letter-spacing:.02em;color:#e8e4de;background:rgba(22,20,18,.82);border:1px solid rgba(255,255,255,.16);
+          backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 6px 20px rgba(0,0,0,.4)">
+  <span aria-hidden="true">&#8592;</span> CALIPER
+</a>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.min.js"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { mergeGeometries } from "./vendor/three/addons/utils/BufferGeometryUtils.js";
+import { loadPieceGeometry, fitToFootprint } from "./look-proof-pieces.js";
+import { createLookProofMaterial } from "./look-proof-material.js";
+import { hemiOctahedralDirection } from "./octahedral-mapping.js";
+
+// RC3 -- "MAKE IT PLAYABLE" (docs/specs/REBUILD-CHECKLIST.md). I1 baked a
+// real 64-angle octahedral impostor atlas (public/impostor-bake-scene.html,
+// docs/look-proof-shots/impostor-bake/) and measured its own texture cost
+// honestly -- and nothing read it. rule://failure-patterns' own "a
+// capability built and unreachable from a real caller."
+//
+// Wired here to exactly where the checklist item names: distant pieces in
+// an overview. GRID_SIZE, PIECE_GLB and PIECE_FOOTPRINT below are NOT
+// re-guessed -- they are the SAME real values impostor-bake-scene.html
+// used to build the atlas this file fetches (public/vendor/impostor-
+// atlas/colour-atlas.png, a copy of the real, already-committed
+// docs/look-proof-shots/impostor-bake/colour-atlas.png -- nothing
+// re-baked, nothing invented). Only house-2x3 has real baked data; this
+// demo places multiple DISTANT instances of exactly that piece, never a
+// different glb the atlas was never baked for.
+//
+// `?impostors=1` renders every instance as a camera-facing textured quad
+// (2 triangles), its own UV rect selected by a real nearest-angle search
+// against hemiOctahedralDirection -- the SAME function the bake used to
+// place each grid cell, imported from octahedral-mapping.js rather than a
+// second, hand-typed copy that could silently disagree about which
+// direction cell (gx,gy) actually is. No `?impostors=1` (or `=0`) renders
+// the SAME instances at FULL detail -- the real glb geometry, the real
+// shared material -- so the two renders differ in exactly one thing.
+const GRID_SIZE = 8; // impostor-bake-scene.html's own GRID_SIZE
+const PIECE_GLB = "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb"; // impostor-bake-scene.html's own PIECE.glb -- the only piece with real baked data
+const PIECE_FOOTPRINT = [8, 12]; // impostor-bake-scene.html's own PIECE.footprint
+const PIECE_LAYER = 0; // look-proof-pieces.js's own PIECES[0] ("house-2x3", same glb) -- modular-buildings' real array-texture layer
+const IMPOSTORS_ON = new URLSearchParams(window.location.search).get("impostors") === "1";
+
+const INSTANCE_COLS = 4, INSTANCE_ROWS = 3, SPACING = 20; // a distant field of 12 instances -- more than the single piece L1-L12 ever placed alone
+const INSTANCES = [];
+for (let row = 0; row < INSTANCE_ROWS; row++) {
+  for (let col = 0; col < INSTANCE_COLS; col++) {
+    INSTANCES.push({ anchor: [col * SPACING, row * SPACING] });
+  }
+}
+
+function stripToPositionNormalUv(geometry) {
+  const out = new THREE.BufferGeometry();
+  out.setAttribute("position", geometry.getAttribute("position"));
+  out.setAttribute("normal", geometry.getAttribute("normal"));
+  out.setAttribute("uv", geometry.getAttribute("uv"));
+  if (geometry.index) out.setIndex(geometry.index);
+  const count = out.getAttribute("position").count;
+  out.setAttribute("groundDecal", new THREE.BufferAttribute(new Float32Array(count), 1));
+  out.setAttribute("layerIndex", new THREE.BufferAttribute(new Float32Array(count).fill(PIECE_LAYER), 1));
+  return out;
+}
+
+async function buildArrayTexture() {
+  const manifest = await fetch("vendor/kits/array-texture/manifest.json").then((r) => r.json());
+  const size = manifest.targetSize;
+  const depth = manifest.layers.length;
+  const combined = new Uint8Array(size * size * 4 * depth);
+  for (const layer of manifest.layers) {
+    const img = await createImageBitmap(await fetch(`vendor/kits/array-texture/${layer.file}`).then((r) => r.blob()));
+    const canvas = document.createElement("canvas");
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, size, size);
+    combined.set(ctx.getImageData(0, 0, size, size).data, layer.index * size * size * 4);
+  }
+  const tex = new THREE.DataArrayTexture(combined, size, size, depth);
+  tex.format = THREE.RGBAFormat;
+  tex.type = THREE.UnsignedByteType;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// The real nearest-angle search: given a view direction, find which of
+// the GRID_SIZE x GRID_SIZE baked cells is closest, by the SAME forward
+// function the bake used to place each cell -- not a closed-form inverse
+// of the fold (octahedral-mapping.js's own comment names exactly why that
+// fold is fiddly to invert by hand), and never a second, independently-
+// derived direction table that could silently disagree with the real one.
+function nearestCell(viewDir) {
+  let best = { gx: 0, gy: 0 }, bestDot = -Infinity;
+  for (let gy = 0; gy < GRID_SIZE; gy++) {
+    for (let gx = 0; gx < GRID_SIZE; gx++) {
+      const u = (gx / (GRID_SIZE - 1)) * 2 - 1;
+      const v = (gy / (GRID_SIZE - 1)) * 2 - 1;
+      const [dx, dy, dz] = hemiOctahedralDirection(u, v);
+      const dot = dx * viewDir.x + dy * viewDir.y + dz * viewDir.z;
+      if (dot > bestDot) { bestDot = dot; best = { gx, gy }; }
+    }
+  }
+  return best;
+}
+
+async function main() {
+  const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(1);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.95;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+  window.__renderer = renderer;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0b1016);
+  scene.add(new THREE.AmbientLight(0x8891a0, 1.4));
+  const light = new THREE.DirectionalLight(0xffffff, 1.6);
+  light.position.set(20, 40, 30);
+  scene.add(light);
+
+  const spanX = (INSTANCE_COLS - 1) * SPACING + PIECE_FOOTPRINT[0];
+  const spanZ = (INSTANCE_ROWS - 1) * SPACING + PIECE_FOOTPRINT[1];
+  const centerX = spanX / 2, centerZ = spanZ / 2;
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 500);
+  camera.position.set(centerX - 90, 160, centerZ - 90);
+  camera.lookAt(centerX, 4, centerZ);
+
+  // Loaded once regardless of mode: full-detail mode instances it directly,
+  // and impostor mode still measures its own REAL bounding-box height
+  // (via the SAME fitToFootprint scaling look-proof-pieces.js already
+  // uses) so the billboard's own size is not a guess.
+  const baseGeom = await loadPieceGeometry(PIECE_GLB);
+  fitToFootprint(baseGeom, PIECE_FOOTPRINT, [0, 0]);
+  baseGeom.computeBoundingBox();
+  const pieceHeight = baseGeom.boundingBox.max.y - baseGeom.boundingBox.min.y;
+
+  let mergedGeom;
+  let material;
+  if (IMPOSTORS_ON) {
+    // loadAsync, not load() -- TextureLoader.load() returns a texture
+    // object immediately while the actual image bytes decode in the
+    // background. Found the hard way: the FIRST render here showed 12
+    // solid black rectangles, zero console errors, plausible triangle
+    // counts -- render() had already run against the texture's own 1x1
+    // black placeholder before the real atlas image finished decoding.
+    const atlasTexture = await new THREE.TextureLoader().loadAsync("vendor/impostor-atlas/colour-atlas.png");
+    atlasTexture.colorSpace = THREE.SRGBColorSpace;
+    material = new THREE.MeshBasicMaterial({ map: atlasTexture, side: THREE.DoubleSide });
+    const quads = INSTANCES.map((inst) => {
+      const cx = inst.anchor[0] + PIECE_FOOTPRINT[0] / 2;
+      const cz = inst.anchor[1] + PIECE_FOOTPRINT[1] / 2;
+      const cy = pieceHeight / 2;
+      const toCam = new THREE.Vector3(camera.position.x - cx, camera.position.y - cy, camera.position.z - cz).normalize();
+      const cell = nearestCell(toCam);
+      const up = new THREE.Vector3(0, 1, 0);
+      const right = new THREE.Vector3().crossVectors(up, toCam).normalize();
+      const realUp = new THREE.Vector3().crossVectors(toCam, right).normalize();
+      const geom = new THREE.PlaneGeometry(PIECE_FOOTPRINT[0], pieceHeight);
+      geom.applyMatrix4(new THREE.Matrix4().makeBasis(right, realUp, toCam));
+      geom.translate(cx, cy, cz);
+      const u0 = cell.gx / GRID_SIZE, u1 = (cell.gx + 1) / GRID_SIZE;
+      const v0 = cell.gy / GRID_SIZE, v1 = (cell.gy + 1) / GRID_SIZE;
+      const uvAttr = geom.getAttribute("uv");
+      for (let i = 0; i < uvAttr.count; i++) {
+        uvAttr.setXY(i, u0 + uvAttr.getX(i) * (u1 - u0), v0 + uvAttr.getY(i) * (v1 - v0));
+      }
+      uvAttr.needsUpdate = true;
+      return geom;
+    });
+    mergedGeom = mergeGeometries(quads, false);
+  } else {
+    const arrayTex = await buildArrayTexture();
+    material = createLookProofMaterial(arrayTex);
+    material.uniforms.uCastShadows.value = false; // no shadow pass in this scene -- a triangle-count measurement, not a visual-quality proof
+    const instanceGeoms = INSTANCES.map((inst) => {
+      const geom = baseGeom.clone();
+      geom.translate(inst.anchor[0], 0, inst.anchor[1]);
+      return stripToPositionNormalUv(geom);
+    });
+    mergedGeom = mergeGeometries(instanceGeoms, false);
+  }
+
+  const mesh = new THREE.Mesh(mergedGeom, material);
+  scene.add(mesh);
+
+  renderer.info.reset();
+  renderer.render(scene, camera);
+  window.__ready = true;
+  window.__impostorRenderStats = {
+    impostorsOn: IMPOSTORS_ON,
+    instanceCount: INSTANCES.length,
+    triangles: renderer.info.render.triangles,
+    calls: renderer.info.render.calls,
+  };
+  console.log("IMPOSTOR-OVERVIEW-STATS", JSON.stringify(window.__impostorRenderStats));
+}
+
+main().catch((e) => {
+  console.error(e);
+  window.__ready = "error";
+});
+</script>
+</body>
+</html>
