@@ -491,7 +491,7 @@ so this is CLI's real next work.
     failures checked individually and confirmed pre-existing, unrelated
     to city.html. 3/3 new mutations CAUGHT. Gate ledger:
     docs/GATE-LEDGER.jsonl.
-[ ] U3 (CLI) Decide what the real mutation instrument is — RECOMMEND, do not unilaterally replace
+[x] U3 (CLI) Decide what the real mutation instrument is — RECOMMEND, do not unilaterally replace
     `scripts/mutate.mjs` runs the FULL SUITE per mutation. At 160 mutations that
     is 160 full suites, in a repo where one full suite has never completed. It
     has stalled on every attempt, most recently traced to genuine CPU contention
@@ -503,6 +503,16 @@ so this is CLI's real next work.
     This is a real decision about what evidence this project accepts, so
     `rule://decision-queue`: recommend, queue it, take the least irreversible
     path. **Do not quietly retire `mutate.mjs`.**
+    DONE, commit 99a837f (branch scoring). Checked directly rather than
+    assumed: the brief's own premise was written before U2 landed and is
+    now only partly true. node scripts/mutate.mjs --id <entry> completed
+    in 1m49s (previously never completed at all) and correctly refused --
+    the suite has 7 genuine pre-existing failures, unrelated to any
+    mutation. Recommendation queued, DECISIONS-FOR-MARK.md #18: keep both
+    tools, `_mutcheck.mjs` for day-to-day work (established practice all
+    session), `mutate.mjs` as the stricter full-suite audit once the 7
+    failures are fixed (now a bounded ~2-minute-per-attempt task). Neither
+    tool retired or replaced. Gate ledger: docs/GATE-LEDGER.jsonl.
 [ ] U4 (CLI) Side B's data model — REBUILD-PLAN.md B1-B3
     Step 10 of the revised build order, and the mechanic that makes CALIPER
     itself rather than a city builder: a player-authored piece IS a catalogue
