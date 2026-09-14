@@ -504,13 +504,25 @@ still have no mesh, so 38 of the catalogue's pieces cannot be placed and seen.**
     commercial pieces read as similar plain boxes at this camera
     distance -- acceptable at 12 bound entries, worth watching as CP1
     eventually adds more.
-[ ] CP3 (BLD) The five pending image pairs, gathered for judgement — no code
+[x] CP3 (BLD) The five pending image pairs, gathered for judgement — no code
     N1a, N1b, N1c, RB5 and RC4 each produced a before/after pair that Mark has
     not yet seen. They are scattered across `docs/look-proof-shots/`.
     Write one short document listing each pair by path, what changed, and your
     own honest read of whether it improved. **Do not re-render and do not
     re-tune** — this is a gathering task so a judgement can happen in one sitting
     instead of five.
+
+    `docs/audits/BLD-2026-09-15-image-pairs-for-mark.md`. No image was
+    re-rendered or re-tuned to produce it -- every file already existed.
+    Honest read, summarised: the two paving-radius changes (RB5, RC4)
+    read as the strongest, clearest improvements -- both fix the same
+    "dust bowl" complaint at two different camera scales. N1a is close
+    behind (removes an outright void). N1b is real but quieter (an edge
+    disappears rather than a whole void). N1c is the weakest of the five
+    on this evidence alone -- real, working code, but the least visible
+    change, consistent with L10's own verdict that meshes and joins carry
+    more of a scene's read than incremental shading refinement. None of
+    the five looks like a regression.
 
 ---
 
