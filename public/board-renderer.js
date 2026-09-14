@@ -142,6 +142,50 @@ export function resolveGhost(ghost, catalogue) {
   };
 }
 
+/**
+ * RB3 -- THE VALUE READOUT, reassigned from CLI's S5. §S4's own
+ * `valueAt`/`valueIfPlaced` are CLI's, not built as of this run (checked
+ * `origin/scoring` and `origin/main` directly, neither has them; only S1's
+ * `value(board, catalogue, x, y)` and S2's falloff exist) -- per this
+ * run's own brief §4: "If S4 has not landed when you reach RB3, build the
+ * readout against the functions' signatures and say plainly ... that it
+ * is unverified. Do not stub scoring yourself." This function does
+ * exactly that and nothing more.
+ *
+ * `scoringModule` is the DYNAMICALLY imported public/scoring.js namespace
+ * (`await import("./scoring.js")`), passed in rather than imported
+ * statically at this module's own top level -- a static `import {
+ * valueAt } from "./scoring.js"` would throw at parse time for an export
+ * that does not exist yet, breaking every OTHER mode of look-proof-
+ * scene.html the moment this file is loaded, not just this one. Checking
+ * `typeof scoringModule.valueAt === "function"` on the real, dynamically
+ * loaded module object never throws -- a missing export just reads as
+ * `undefined`.
+ *
+ * THE GUESSED SIGNATURE, DISCLOSED, NOT INVENTED FROM NOTHING: S1's own
+ * `value(board, catalogue, x, y)` is the one established calling
+ * convention this file already has to extend from, and its own header
+ * names `valueAt`/`valueIfPlaced` as "the one piece they will both
+ * call" -- so this guesses `valueAt(board, catalogue, x, y)` and
+ * `valueIfPlaced(board, catalogue, typeId, x, y, rotation)`, matching S1's
+ * own argument order rather than inventing a different one. If S4 lands
+ * with a different signature, the call below throws and is reported as
+ * `available: false` with the real error message -- loud, not a silently
+ * wrong number.
+ */
+export function resolveReadout(scoringModule, board, catalogue, cell, candidateTypeId, rotation) {
+  if (typeof scoringModule.valueAt !== "function" || typeof scoringModule.valueIfPlaced !== "function") {
+    return { available: false, reason: "S4 not landed: valueAt/valueIfPlaced are not yet exported from public/scoring.js" };
+  }
+  try {
+    const current = scoringModule.valueAt(board, catalogue, cell.x, cell.y);
+    const ifPlaced = scoringModule.valueIfPlaced(board, catalogue, candidateTypeId, cell.x, cell.y, rotation);
+    return { available: true, current, ifPlaced };
+  } catch (e) {
+    return { available: false, reason: `S4 call failed against this file's own guessed signature (board, catalogue, x, y / typeId, x, y, rotation): ${e.message}` };
+  }
+}
+
 /** Rotate a geometry around its own local Y axis by the placement's own
  * rotation (degrees, clockwise, matching ROTATIONS in area-board.js) --
  * applied BEFORE look-proof-pieces.js's own fitToFootprint, so the

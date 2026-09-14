@@ -30,7 +30,15 @@ import { createLookProofMaterial, LIGHT_DIR } from "./look-proof-material.js";
 import { PIECES as ALL_PIECES, LAYOUT_BOUNDS, GROUND as GROUND_FULL, loadPieceGeometry, fitToFootprint } from "./look-proof-pieces.js";
 import { createAreaBoard } from "./area-board.js";
 import { createPlacementSession } from "./placement.js";
-import { resolveBoardPieces, resolveGhost, rotateGeometryY } from "./board-renderer.js";
+import { resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY } from "./board-renderer.js";
+// RB3 -- a NAMESPACE import (`import * as`), not `import { valueAt,
+// valueIfPlaced }`. A named import of an export that does not exist
+// throws at parse time and would crash every OTHER mode this file
+// already ships (RB1/RB2 included) the moment this line loads -- a
+// namespace import never fails for a missing individual name; a missing
+// export just reads as `undefined` on the object, which resolveReadout
+// (board-renderer.js) already checks for and reports honestly.
+import * as ScoringModule from "./scoring.js";
 
 // N1 -- "the same fixed camera as 08" (docs/briefs/BLD-2026-09-15.md).
 // Mark judged 08-cast-shadows.png, not 09-piece-count-20.png ("09 was
@@ -121,6 +129,29 @@ const GHOST_DEMO = {
   invalid: { typeId: "tower-base-6x6-a", anchorCell: { x: 2, y: 2 }, rotation: 0 }, // house-a already sits here
 };
 const GHOST_COLOR = { valid: 0x4caf50, invalid: 0xe53935 }; // visibly distinct: green vs red
+
+// RB3 -- THE VALUE READOUT, reassigned from CLI's S5 (docs/specs/
+// REBUILD-CHECKLIST.md, THE CONVERGENCE: "S5 sat in CLI's list marked
+// blocked because no render surface existed. RB1 creates one, and a
+// readout is a view concern. So it moves to the lane that owns the
+// view."). `?board=1&readout=x,y` previews a cell's own value() reading
+// via resolveReadout (board-renderer.js), which calls CLI's own
+// valueAt/valueIfPlaced through the real, dynamically-checked
+// ScoringModule namespace -- never a value computed here.
+// UNVERIFIED AS OF THIS RUN, DISCLOSED PER THE BRIEF'S OWN §4: neither
+// origin/scoring nor origin/main has valueAt/valueIfPlaced yet (checked
+// directly, not assumed) -- only S1's value() and S2's falloff exist.
+// This mode renders the REAL, honest "unavailable" state rather than a
+// guessed or stubbed number -- the brief's own explicit instruction:
+// "Do not stub scoring yourself."
+const READOUT_MODE = new URLSearchParams(window.location.search).get("readout"); // "x,y" | null
+const READOUT_CELL = (() => {
+  if (!READOUT_MODE) return null;
+  const [x, y] = READOUT_MODE.split(",").map(Number);
+  return Number.isInteger(x) && Number.isInteger(y) ? { x, y } : null;
+})();
+const READOUT_CANDIDATE_TYPE_ID = "house-a"; // an arbitrary, real, glb-bound typeId to preview "if placed" with
+const READOUT_COLOR = { available: 0x2196f3, unavailable: 0x9e9e9e }; // blue once real; neutral grey while S4 is pending
 
 const PIECES = HERO_MODE
   ? [...HERO_IDS, ...HERO_PROP_IDS].map((id) => {
@@ -467,6 +498,7 @@ async function main() {
   let boardSkipped = [];
   let boardFootprintsForDecal = [];
   let ghostResolved = null;
+  let readoutResolved = null;
   if (BOARD_MODE) {
     const catalogueArr = await fetch("data/catalogue.json").then((r) => r.json());
     const catalogueById = Object.fromEntries(catalogueArr.map((e) => [e.id, e]));
@@ -516,10 +548,19 @@ async function main() {
         console.log(`GHOST-COMMIT ok=${commitResult.ok} reason=${commitResult.reason} piecesBefore=${beforeCommit} piecesAfter=${afterCommit} unchanged=${beforeCommit === afterCommit}`);
       }
     }
+
+    // RB3 -- the value readout. See this file's own comment above
+    // READOUT_MODE for why this calls through ScoringModule rather than
+    // a statically-imported valueAt/valueIfPlaced.
+    if (READOUT_CELL) {
+      readoutResolved = resolveReadout(ScoringModule, board, catalogueById, READOUT_CELL, READOUT_CANDIDATE_TYPE_ID, 0);
+      console.log(`READOUT-STATE cell=${READOUT_CELL.x},${READOUT_CELL.y} available=${readoutResolved.available} ${readoutResolved.available ? `current=${readoutResolved.current} ifPlaced=${readoutResolved.ifPlaced}` : `reason="${readoutResolved.reason}"`}`);
+    }
   }
   window.__boardResolved = boardResolved;
   window.__boardSkipped = boardSkipped;
   window.__ghostResolved = ghostResolved;
+  window.__readoutResolved = readoutResolved;
 
   // Subdivided (1 segment/metre) so the join decal below has enough
   // resolution to read as a gradient rather than one flat quad -- a
@@ -629,6 +670,31 @@ async function main() {
     const ghostMesh = new THREE.Mesh(ghostGeom, ghostMaterial);
     scene.add(ghostMesh);
     window.__ghostMesh = ghostMesh;
+  }
+
+  // RB3 -- the value readout's own visual marker. A small floating
+  // diamond at the queried cell -- blue once real numbers exist
+  // (READOUT_COLOR.available), neutral grey while §S4 is pending
+  // (READOUT_COLOR.unavailable, the REAL state as of this run). This is
+  // a status indicator, not a data visualisation -- with no real number
+  // to show, rendering one anyway (a guessed height, a guessed colour
+  // ramp) would be exactly the invented substitute the brief's own §4
+  // says not to build. The real numbers, once available, are logged
+  // (READOUT-STATE, above) and belong in a future revision of this
+  // marker's own height/colour, not invented here ahead of them.
+  if (readoutResolved) {
+    const [rx, rz] = anchorForCell(READOUT_CELL);
+    const readoutGeom = new THREE.OctahedronGeometry(1.4, 0)
+      .translate(rx + 2, 2.5, rz + 2);
+    const readoutMaterial = new THREE.MeshBasicMaterial({
+      color: readoutResolved.available ? READOUT_COLOR.available : READOUT_COLOR.unavailable,
+      transparent: true,
+      opacity: 0.75,
+      depthWrite: false,
+    });
+    const readoutMesh = new THREE.Mesh(readoutGeom, readoutMaterial);
+    scene.add(readoutMesh);
+    window.__readoutMesh = readoutMesh;
   }
 
   const shadowPass = buildShadowPass(renderer, scene, shadowBB);

@@ -15,10 +15,12 @@ import {
   anchorForCell,
   resolveBoardPieces,
   resolveGhost,
+  resolveReadout,
   rotateGeometryY,
 } from "../public/board-renderer.js";
 import { createAreaBoard } from "../public/area-board.js";
 import { createPlacementSession } from "../public/placement.js";
+import * as REAL_SCORING from "../public/scoring.js";
 
 const MANIFEST = {
   layers: [
@@ -205,6 +207,59 @@ test("resolveGhost: an unknown typeId resolves to null, not a guessed footprint 
   const ghost = session.setGhost("does-not-exist", { x: 0, y: 0 }, 0);
   assert.equal(ghost.valid, false);
   assert.equal(resolveGhost(ghost, CATALOGUE), null);
+});
+
+// ----------------------------------------------------------------- resolveReadout
+test("GATE (RB3): the REAL public/scoring.js, as of this run, does NOT export valueAt/valueIfPlaced -- resolveReadout must report unavailable against it, not silently compute something else. This test itself is expected to start failing the moment CLI's S4 lands, which is the point: it is a live check against the real module, not a mock standing in for a claim.", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  const result = resolveReadout(REAL_SCORING, board, CATALOGUE, { x: 0, y: 0 }, "house-a", 0);
+  assert.equal(result.available, false, "S4 appears to have landed -- update board-renderer.js's own resolveReadout call and RB3's own render to use the real functions, this fallback path is no longer the honest state");
+  assert.match(result.reason, /S4 not landed/);
+});
+
+test("resolveReadout: reports unavailable, by name, when valueAt/valueIfPlaced are missing -- never silently computes a substitute", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  const mockScoring = {}; // no valueAt, no valueIfPlaced -- today's real state
+  const result = resolveReadout(mockScoring, board, CATALOGUE, { x: 0, y: 0 }, "house-a", 0);
+  assert.deepEqual(result, { available: false, reason: "S4 not landed: valueAt/valueIfPlaced are not yet exported from public/scoring.js" });
+});
+
+test("resolveReadout: once available, calls valueAt/valueIfPlaced with the guessed (board, catalogue, x, y[, typeId, rotation]) signature and returns both real numbers", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  const calls: any[] = [];
+  const mockScoring = {
+    valueAt: (b: any, c: any, x: number, y: number) => { calls.push(["valueAt", b === board, c === CATALOGUE, x, y]); return 7; },
+    valueIfPlaced: (b: any, c: any, typeId: string, x: number, y: number, rotation: number) => { calls.push(["valueIfPlaced", b === board, c === CATALOGUE, typeId, x, y, rotation]); return 12; },
+  };
+  const result = resolveReadout(mockScoring, board, CATALOGUE, { x: 3, y: 5 }, "house-a", 90);
+  assert.deepEqual(result, { available: true, current: 7, ifPlaced: 12 });
+  assert.deepEqual(calls, [
+    ["valueAt", true, true, 3, 5],
+    ["valueIfPlaced", true, true, "house-a", 3, 5, 90],
+  ]);
+});
+
+test("resolveReadout: a call that THROWS against the guessed signature (e.g. S4 lands with a different arg order) is reported as unavailable with the real error, never crashes the caller", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  const mockScoring = {
+    valueAt: () => { throw new TypeError("cannot read property 'x' of undefined"); },
+    valueIfPlaced: () => 0,
+  };
+  const result = resolveReadout(mockScoring, board, CATALOGUE, { x: 0, y: 0 }, "house-a", 0);
+  assert.equal(result.available, false);
+  assert.match(result.reason, /S4 call failed/);
+  assert.match(result.reason, /cannot read property 'x' of undefined/);
+});
+
+test("resolveReadout: two different cells against the SAME mock scoring module produce different numbers -- the mechanism itself is cursor-position-sensitive, independent of whether the real S4 has landed", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  const mockScoring = {
+    valueAt: (b: any, c: any, x: number, y: number) => x + y * 10, // varies with position, deliberately
+    valueIfPlaced: (b: any, c: any, typeId: string, x: number, y: number) => x + y * 10 + 1,
+  };
+  const near = resolveReadout(mockScoring, board, CATALOGUE, { x: 1, y: 1 }, "house-a", 0);
+  const far = resolveReadout(mockScoring, board, CATALOGUE, { x: 8, y: 8 }, "house-a", 0);
+  assert.notEqual(near.current, far.current, "GATE (RB3): a readout that does not move as the queried cell changes is exactly the red this item's own gate names");
 });
 
 // --------------------------------------------------------------- rotateGeometryY

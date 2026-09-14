@@ -144,13 +144,14 @@ test("(synthetic) the vulnerability: a comment mentioning preserveDrawingBuffer 
 
 test("look-proof-scene.html merges every piece into ONE geometry before adding a single mesh -- the one-draw-call claim, structurally", () => {
   assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom,\s*farGroundGeom,\s*\.\.\.preparedPieces,\s*\.\.\.streetDetailGeoms,\s*\.\.\.preparedBoardPieces\]/, "the scene does not merge ground, far ground, every piece, street-level detail, and board pieces into one geometry -- 4.1's gate (\"two pieces from different packs render in a single draw call\") is not wired the way this file claims");
-  // RB2's own ghost overlay is a SECOND, deliberate mesh (its own simple
-  // material, a UI preview, not a "piece") -- the one-draw-call claim is
-  // about pieces sharing one merged geometry, which the assertion above
-  // already checks structurally; this count only guards against a THIRD,
-  // accidental mesh construction creeping in.
+  // RB2's own ghost overlay and RB3's own readout marker are each a
+  // SEPARATE, deliberate mesh (their own simple materials, UI previews,
+  // never "pieces") -- the one-draw-call claim is about pieces sharing
+  // one merged geometry, which the assertion above already checks
+  // structurally; this count only guards against a FOURTH, accidental
+  // mesh construction creeping in.
   const meshConstructions = (SCENE_SRC.match(/new THREE\.Mesh\(/g) || []).length;
-  assert.equal(meshConstructions, 2, `expected exactly two THREE.Mesh constructions (the merged pieces mesh, RB2's own ghost overlay), found ${meshConstructions}`);
+  assert.equal(meshConstructions, 3, `expected exactly three THREE.Mesh constructions (the merged pieces mesh, RB2's own ghost overlay, RB3's own readout marker), found ${meshConstructions}`);
 });
 
 test("look-proof-scene.html offers a way back to index.html -- reachability.test.ts's own gate", () => {
@@ -265,7 +266,7 @@ test("(synthetic) the vulnerability: a comment mentioning buildStreetLevelDetail
 // ------------------------------------------------------------- RB1: the board
 test("GATE (RB1): ?board=1 places demo pieces into a REAL createAreaBoard, never a hardcoded PIECES-style array -- PIECES is empty in this mode", () => {
   assert.match(SCENE_SRC, /import \{ createAreaBoard \} from "\.\/area-board\.js"/, "look-proof-scene.html does not import the real area board");
-  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real board-renderer module");
+  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real board-renderer module");
   assert.match(SCENE_SRC, /const board = createAreaBoard\(\{ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById \}\)/, "BOARD_MODE does not construct a real area board");
   assert.match(SCENE_SRC, /board\.place\(p\.typeId, p\.anchorCell, p\.rotation\)/, "BOARD_MODE does not call the real board.place()");
   assert.match(SCENE_SRC, /BOARD_MODE\s*\n\s*\? \[\]/, "PIECES is not empty in BOARD_MODE -- a hardcoded piece list would still be feeding the render alongside (or instead of) the real board");
@@ -298,7 +299,7 @@ test("(synthetic) the vulnerability: a comment mentioning createAreaBoard must n
 // ------------------------------------------------------------- RB2: the ghost
 test("GATE (RB2): a real placement session previews the ghost -- session.setGhost() against the SAME real board, never a staged/hardcoded valid or invalid flag", () => {
   assert.match(SCENE_SRC, /import \{ createPlacementSession \} from "\.\/placement\.js"/, "look-proof-scene.html does not import the real placement session");
-  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real resolveGhost");
+  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real resolveGhost");
   assert.match(SCENE_SRC, /const session = createPlacementSession\(\{ board \}\)/, "GHOST_MODE does not construct a real placement session against the real board");
   assert.match(SCENE_SRC, /const ghost = session\.setGhost\(demo\.typeId, demo\.anchorCell, demo\.rotation\)/, "GHOST_MODE does not call the real session.setGhost()");
 });
@@ -328,4 +329,29 @@ test("RB2: the ghost overlay is a SEPARATE mesh from the shared-material mesh --
 test("(synthetic) the vulnerability: a comment mentioning session.setGhost must not satisfy the checks above", () => {
   const commentOnly = stripSourceComments("// const ghost = session.setGhost(demo.typeId, demo.anchorCell, demo.rotation) used to be here\nconst m = {};\n");
   assert.doesNotMatch(commentOnly, /const ghost = session\.setGhost\(demo\.typeId, demo\.anchorCell, demo\.rotation\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
+
+// ------------------------------------------------------- RB3: the value readout
+test("GATE (RB3): the readout is a NAMESPACE import of scoring.js, never a named import of valueAt/valueIfPlaced -- a named import of a non-existent export throws at parse time and would crash every mode this file ships, not just RB3's own", () => {
+  assert.match(SCENE_SRC, /import \* as ScoringModule from "\.\/scoring\.js"/, "look-proof-scene.html does not import scoring.js as a namespace -- a named import of valueAt/valueIfPlaced would crash the whole page while S4 is unlanded");
+  assert.doesNotMatch(SCENE_SRC, /import \{[^}]*valueAt[^}]*\} from "\.\/scoring\.js"/, "a named import of valueAt from scoring.js would throw at parse time until CLI's S4 lands -- this must stay a namespace import");
+});
+
+test("GATE (RB3): the readout calls the real resolveReadout against the real board/catalogue, never a hardcoded or invented value", () => {
+  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real resolveReadout");
+  assert.match(SCENE_SRC, /readoutResolved = resolveReadout\(ScoringModule, board, catalogueById, READOUT_CELL, READOUT_CANDIDATE_TYPE_ID, 0\)/, "READOUT_MODE does not call the real resolveReadout against the real board and catalogue");
+});
+
+test("RB3: the readout's own marker colour is driven by readoutResolved.available -- it must not render as though a real number exists when S4 has not landed", () => {
+  assert.match(SCENE_SRC, /const READOUT_COLOR = \{ available: 0x2196f3, unavailable: 0x9e9e9e \}/, "READOUT_COLOR is missing or no longer distinguishes available from unavailable");
+  assert.match(SCENE_SRC, /color: readoutResolved\.available \? READOUT_COLOR\.available : READOUT_COLOR\.unavailable/, "the readout marker's own colour is not driven by readoutResolved.available");
+});
+
+test("RB3: the readout's own console evidence reports the REAL available flag and, when unavailable, the REAL reason string -- not a silently swallowed state", () => {
+  assert.match(SCENE_SRC, /READOUT-STATE cell=\$\{READOUT_CELL\.x\},\$\{READOUT_CELL\.y\} available=\$\{readoutResolved\.available\}/, "the readout's own state is not logged for evidence");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning resolveReadout must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// readoutResolved = resolveReadout(ScoringModule, board, catalogueById, READOUT_CELL, READOUT_CANDIDATE_TYPE_ID, 0) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /readoutResolved = resolveReadout\(ScoringModule, board, catalogueById, READOUT_CELL, READOUT_CANDIDATE_TYPE_ID, 0\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });
