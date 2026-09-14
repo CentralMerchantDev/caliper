@@ -394,7 +394,7 @@ is still there on reload.* RB1–RB4 built the machinery. This is the person.
     area, or two areas ACTIVE at once — the second must be impossible rather
     than merely refused, which is how `area.js` already built it.
     W5: re-entering after leaving RELOADS. Do not assume residency.
-[ ] RC3 (BLD) Wire the impostor atlas to something real — REBUILD-PLAN.md 8 of the revised order
+[x] RC3 (BLD) Wire the impostor atlas to something real — REBUILD-PLAN.md 8 of the revised order
     I1 baked a 64-angle atlas, measured its cost, and **nothing reads it.** That
     is "a capability built and unreachable from a real caller" —
     `rule://failure-patterns` names it, and the server's own orphan check exists
