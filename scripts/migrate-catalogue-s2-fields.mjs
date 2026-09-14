@@ -132,8 +132,38 @@ export function baseValueFor(entry) {
   return w * d * entry.massing.length;
 }
 
+/** SCORING-MODEL §3.2: a THIRD generated field, alongside baseValue/
+ * adjacency -- never hand-authored per entry, never folded into baseValue
+ * (Mark's own instruction, item S4). "A calculating factor per housing
+ * type, determined by its size and its niceness" -- §3.2 gives no formula.
+ * Mark's own scarcity framing ("fewer units sharing the same amenity
+ * access are worth more each") and "density is already in the catalogue
+ * as massing tiers" together fix the INPUT (massing.length) and the
+ * DIRECTION (decreasing); the exact CURVE is a disclosed judgement call,
+ * docs/DECISIONS-FOR-MARK.md #14, same rigor as #13's EDGE_FRACTION for
+ * S2's falloff.
+ *
+ * `1/sqrt(tiers)`, not the simpler `1/tiers` -- because `baseValue` IS
+ * "units" (footprint x tiers, above), `1/tiers` would cancel the tiers
+ * term EXACTLY inside totalWorth = (value x unitQuality) x baseValue =
+ * value x footprint x (tiers/tiers) = value x footprint, making massing
+ * irrelevant to total worth -- a condo BUILDING's height would count for
+ * nothing beyond its footprint. `1/sqrt(tiers)` avoids the cancellation
+ * (totalWorth = value x footprint x sqrt(tiers)): more tiers still
+ * genuinely raises total worth, not just footprint, while still diluting
+ * PER-UNIT worth (the scarcity effect Mark asked for) more gently than
+ * 1/tiers would.
+ *
+ * Road gets a flat neutral 1 (no massing field exists on road entries at
+ * all, and "scarcity of housing units" has no meaning for infrastructure)
+ * -- the same treatment road already gets for baseValue. */
+export function unitQualityFor(entry) {
+  if (entry.category === "road") return 1;
+  return 1 / Math.sqrt(entry.massing.length);
+}
+
 export function migrateEntry(entry) {
-  return { ...entry, baseValue: baseValueFor(entry), adjacency: adjacencyFor(entry) };
+  return { ...entry, baseValue: baseValueFor(entry), adjacency: adjacencyFor(entry), unitQuality: unitQualityFor(entry) };
 }
 
 function main() {

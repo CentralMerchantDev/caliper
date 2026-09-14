@@ -1493,6 +1493,30 @@
       "find": "  const clipped = {\n    xMin: Math.max(0, rect.xMin - radius),\n    xMax: Math.min(board.width, rect.xMax + radius),\n    yMin: Math.max(0, rect.yMin - radius),\n    yMax: Math.min(board.height, rect.yMax + radius),\n  };\n  return [...cellsOf(clipped)];",
       "replace": "  return [...cellsOf({ xMin: 0, xMax: board.width, yMin: 0, yMax: board.height })];",
       "expect": "GATE (S3, the checklist's own named gate): recomputeDirtySet's returned Map contains ONLY the dirty cells -- a far cell is not a key at all, even though its value would be correct if computed"
+    },
+    {
+      "id": "scoring-s4-category-override-ignored",
+      "guards": "S4: valueIfPlaced's ENTIRE mechanism is the categoryOverride seam on value() -- if the override stops being read, valueIfPlaced silently falls back to the REAL board occupant's category (or null on a vacant cell), which is exactly the bug this parameter exists to prevent. Note: the 'VACANT cell equals value() with override' test does NOT catch this -- it builds its own expectation by calling value() with the override too, so the same mutation cancels out on both sides of that assertion (0 === 0). The occupied-cell test below computes its expectation independently (manual arithmetic against terrainContribution/falloff), which is what actually catches it.",
+      "file": "public/scoring.js",
+      "find": "  let occupantCategory;\n  if (categoryOverride !== undefined) {\n    occupantCategory = categoryOverride;\n  } else {",
+      "replace": "  let occupantCategory;\n  if (false) {\n    occupantCategory = categoryOverride;\n  } else {",
+      "expect": "GATE (S4): valueIfPlaced on an OCCUPIED cell correctly excludes the REAL current occupant from the neighbour sum, while using the CANDIDATE's category for the lookup -- 'replace' semantics"
+    },
+    {
+      "id": "scoring-s4-valueifplaced-must-not-mutate-board",
+      "guards": "S4's own named gate: valueIfPlaced is supposed to be STRUCTURALLY incapable of touching occupancy -- it never calls board.place()/board.remove(). Simulates a future edit that actually places the candidate to compute the number, the place-then-restore approach blind review rejected, and confirms the byte-identical snapshot test would catch it if it ever landed.",
+      "file": "public/scoring.js",
+      "find": "  const category = catalogueOf(typeId).category;\n  return value(board, catalogue, x, y, category);",
+      "replace": "  const category = catalogueOf(typeId).category;\n  board.place(typeId, { x, y }, rotation || 0);\n  return value(board, catalogue, x, y, category);",
+      "expect": "GATE (S4): valueIfPlaced leaves the board byte-identical -- a snapshot before and after must match exactly"
+    },
+    {
+      "id": "scoring-s4-unit-quality-formula-must-be-inverse-sqrt-tiers",
+      "guards": "S4/DECISIONS-FOR-MARK.md #14: unitQuality's curve is 1/sqrt(tiers), chosen specifically so it does NOT cancel baseValue's own tiers factor (1/tiers would). Substitutes the rejected 1/tiers and confirms a test built from LITERAL numbers (not by calling unitQualityFor to build its own expectation) catches the change -- the inversion gate test alone does NOT catch this mutation, both curves happen to preserve the house/condo inversion's direction.",
+      "file": "scripts/migrate-catalogue-s2-fields.mjs",
+      "find": "  return 1 / Math.sqrt(entry.massing.length);",
+      "replace": "  return 1 / entry.massing.length;",
+      "expect": "unitQualityFor is exactly 1/sqrt(tiers) -- DECISIONS-FOR-MARK.md #14's disclosed curve, checked against LITERAL numbers so a mutated formula (e.g. 1/tiers) cannot pass by calling the function under test to build its own expectation"
     }
   ]
 }

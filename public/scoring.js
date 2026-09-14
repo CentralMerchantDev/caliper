@@ -134,12 +134,27 @@ export function terrainContribution(board, x, y) {
  * @param {object|Map} catalogue  typeId -> { category, adjacency, ... }
  * @param {number} x
  * @param {number} y
+ * @param {string} [categoryOverride]  §S4: when supplied, used as the
+ *   occupant category INSTEAD OF reading `board.pieceIdAt(x,y)`'s own
+ *   category -- this is the one seam `valueIfPlaced` needs (a hypothetical
+ *   candidate's category, never actually placed on the board) and it is
+ *   parameterized here rather than given a second, hand-copied
+ *   implementation in a sibling function. Composing one function two ways
+ *   carries zero drift risk; two functions with the same loop body,
+ *   maintained separately, do not stay identical forever. Optional and
+ *   last, so every existing 4-argument call site (valueAt, recomputeDirtySet,
+ *   every S1-S3 test) is unaffected.
  */
-export function value(board, catalogue, x, y) {
+export function value(board, catalogue, x, y, categoryOverride) {
   const catalogueOf = catalogue instanceof Map ? (id) => catalogue.get(id) : (id) => catalogue[id];
 
-  const occupantId = board.pieceIdAt(x, y);
-  const occupantCategory = occupantId === -1 ? null : catalogueOf(board.getPiece(occupantId).typeId).category;
+  let occupantCategory;
+  if (categoryOverride !== undefined) {
+    occupantCategory = categoryOverride;
+  } else {
+    const occupantId = board.pieceIdAt(x, y);
+    occupantCategory = occupantId === -1 ? null : catalogueOf(board.getPiece(occupantId).typeId).category;
+  }
 
   let total = terrainContribution(board, x, y);
 
@@ -227,4 +242,67 @@ export function recomputeDirtySet(board, catalogue, rect, radius = R) {
     results.set(`${x},${y}`, value(board, catalogue, x, y));
   }
   return results;
+}
+
+// =============================================================================
+// valueAt, valueIfPlaced, AND THE TWO WORTHS — §S4, "the point of the whole
+// model" per SCORING-MODEL §3.2/§3.3.
+//
+// `valueAt` is `value()` itself, named per §S4's own vocabulary -- "the
+// target cell's CURRENT value... pure location, the ghost readout."
+//
+// `valueIfPlaced` asks "what would value(x,y) be if `typeId` occupied
+// (x,y)?" WITHOUT ever calling `board.place()`/`board.remove()` -- it
+// supplies `typeId`'s own category as `value()`'s `categoryOverride`
+// (above), which is structurally, not just behaviourally, incapable of
+// mutating the board: there is no code path here that could touch
+// occupancy even by accident. A place-then-restore approach was considered
+// and rejected: `evaluatePlacement` refuses outright when the candidate's
+// OWN full footprint doesn't fit (occupied, terrain-mismatched, out of
+// bounds) -- exactly where a hover-preview is most useful -- so that route
+// would return NO NUMBER AT ALL for the common case of previewing over
+// ground the candidate cannot actually occupy. This readout is about the
+// desirability of a spot, decoupled from whether a piece can physically fit
+// there right now; that is C2.3's `evaluatePlacement`'s own, separate job.
+//
+// `rotation` is accepted in the signature (matching C2.2/`evaluatePlacement`'s
+// own convention, and the checklist's own stated signature) but DOES NOT
+// change the computed number under this design -- `value()` is inherently
+// single-point, examining only NEIGHBOURING pieces' rects via
+// `nearestChebyshevDistance`, never the candidate's own footprint cells. A
+// disclosed choice, not a silent gap: a future caller must not assume
+// hovering a different rotation changes this particular readout.
+//
+// OCCUPIED-CELL ("REPLACE") BEHAVIOUR, VERIFIED, NOT JUST ASSUMED:
+// `pieceIdsWithinR`'s own self-exclusion keys on `board.pieceIdAt(x,y)` --
+// the REAL current occupant's id -- independent of `categoryOverride`. So
+// calling `valueIfPlaced` on an already-occupied cell correctly excludes
+// the real occupant from its own neighbour sum (as `value()` always does)
+// while using the CANDIDATE's category for the lookup -- exactly "replace"
+// semantics, covered by its own test below, not left as an undemonstrated
+// side effect of the design.
+// =============================================================================
+
+export function valueAt(board, catalogue, x, y) {
+  return value(board, catalogue, x, y);
+}
+
+export function valueIfPlaced(board, catalogue, typeId, x, y, rotation) {
+  const catalogueOf = catalogue instanceof Map ? (id) => catalogue.get(id) : (id) => catalogue[id];
+  const category = catalogueOf(typeId).category;
+  return value(board, catalogue, x, y, category);
+}
+
+/** SCORING-MODEL §3.2: perUnitWorth(type, cell) = value(cell) x unitQuality(type). */
+export function perUnitWorth(valueNumber, unitQuality) {
+  return valueNumber * unitQuality;
+}
+
+/** SCORING-MODEL §3.3: totalWorth(type, cell) = perUnitWorth(type, cell) x
+ * units(type). Callers pass `catalogue[typeId].baseValue` as `units` --
+ * `baseValue` was redefined in A1 to mean the unit count (footprint area x
+ * massing tiers), not a worth number; this does not recompute that formula
+ * a second time. */
+export function totalWorth(perUnitWorthNumber, units) {
+  return perUnitWorthNumber * units;
 }

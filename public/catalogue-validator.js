@@ -1,12 +1,13 @@
 // =============================================================================
 // THE CATALOGUE VALIDATOR — docs/specs/REBUILD-PLAN.md C1, Phase 1 item 5;
-// rules 7-8 added for §S2 (docs/briefs/CLI-2026-09-14-scoring.md item 2.1).
+// rules 7-8 added for §S2 (docs/briefs/CLI-2026-09-14-scoring.md item 2.1);
+// rule 9 added for §S4 (unitQuality).
 //
 // Written before anything consumes data/catalogue.json, per the brief's own
 // instruction. A11's own evidence is why: "Unknown node types are caught
 // immediately — the LLM cannot invent a node name." This is what makes that
 // true here — a model (or a person) can add a row, and this is what tells
-// them, immediately and by name, when the row is wrong. Eight rules:
+// them, immediately and by name, when the row is wrong. Nine rules:
 //
 //   1. every footprint is a whole number of modules
 //   2. every footprint in C1.1's set of eight, or a rotation of one
@@ -16,6 +17,7 @@
 //   6. no duplicate ids
 //   7. baseValue is present and an integer (S2)
 //   8. adjacency is present, a plain object, and every value in it an integer (S2)
+//   9. unitQuality is present, a finite number, in (0, 1] (S4)
 //
 // Returns a list of errors rather than throwing, so a caller (a test, a
 // future LLM generation loop per A11) can report every problem in one pass
@@ -162,6 +164,17 @@ export function validateEntry(entry) {
         }
       }
     }
+  }
+
+  // Rule 9 — §S4: unitQuality is present, a finite number, and in (0, 1].
+  // Not required to be an integer (S2's rule 7 requires that of baseValue;
+  // unitQuality's own formula, 1/sqrt(tiers), is inherently fractional).
+  // Bounded above by 1, not just "> 0": by construction the real formula
+  // never exceeds 1 for tiers >= 1, so an upper bound catches a hand-typed
+  // value outside that domain (e.g. unitQuality: 50) the same way rule 7's
+  // integer check catches a fractional baseValue -- ">0" alone would not.
+  if (!entry || !Number.isFinite(entry.unitQuality) || entry.unitQuality <= 0 || entry.unitQuality > 1) {
+    push("has-unit-quality", `unitQuality is ${JSON.stringify(entry && entry.unitQuality)}, not a finite number in (0, 1] -- S4 requires one on every entry`);
   }
 
   return errors;

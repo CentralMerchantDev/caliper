@@ -6,7 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createAreaBoard, occupiedRect } from "../public/area-board.js";
-import { value, pieceIdsWithinR, terrainContribution, falloff, dirtyCellsForRect, recomputeDirtySet, R } from "../public/scoring.js";
+import { value, pieceIdsWithinR, terrainContribution, falloff, dirtyCellsForRect, recomputeDirtySet, valueAt, valueIfPlaced, perUnitWorth, totalWorth, R } from "../public/scoring.js";
+import { baseValueFor, unitQualityFor } from "../scripts/migrate-catalogue-s2-fields.mjs";
 
 const CATALOGUE = {
   "house-a": { category: "residential", footprint: [1, 1], terrainMask: ["land"], adjacency: { residential: -2, commercial: 2 } },
@@ -353,4 +354,162 @@ test("recomputeDirtySet's values match calling value() directly for the same cel
   const results = recomputeDirtySet(b, CATALOGUE, rect, R);
   assert.equal(results.get("10,10"), value(b, CATALOGUE, 10, 10));
   assert.equal(results.get("12,10"), value(b, CATALOGUE, 12, 10));
+});
+
+// ---------------------------------------------------------------- valueAt, valueIfPlaced, the two worths -- §S4
+
+// A dedicated fixture built from the REAL migration functions (baseValueFor/
+// unitQualityFor), not hand-typed literals -- shapes match the real
+// catalogue's small-house-a ([2,2], 2 tiers) and apartment-block-a
+// ([4,4], 3 tiers), verified against the real data by blind review before
+// this was written (perUnitWorth ratio ~1.22x house-favouring,
+// totalWorth ratio ~4.9x condo-favouring -- a comfortable margin, not a
+// knife-edge case).
+function residentialEntry(footprint, massingLength) {
+  const base = { category: "residential", footprint, massing: Array(massingLength).fill("tier"), terrainMask: ["land"], adjacency: { residential: -2, commercial: 2 } };
+  return { ...base, baseValue: baseValueFor(base), unitQuality: unitQualityFor(base) };
+}
+
+const S4_CATALOGUE = {
+  ...CATALOGUE,
+  "house-s4": residentialEntry([2, 2], 2), // small-house-a's real shape
+  "condo-s4": residentialEntry([4, 4], 3), // apartment-block-a's real shape
+};
+
+function s4Board() {
+  return createAreaBoard({ width: 20, height: 20, catalogue: S4_CATALOGUE });
+}
+
+test("valueAt is exactly value() -- the spec's own vocabulary for the same readout", () => {
+  const b = s4Board();
+  b.place("house-s4", { x: 5, y: 5 }, 0, { id: 1 });
+  b.place("shop-a", { x: 6, y: 5 }, 0, { id: 2 });
+  assert.equal(valueAt(b, S4_CATALOGUE, 5, 5), value(b, S4_CATALOGUE, 5, 5));
+});
+
+test("valueIfPlaced on a VACANT cell equals value() with the candidate's own category substituted", () => {
+  const b = s4Board();
+  b.place("shop-a", { x: 6, y: 5 }, 0, { id: 1 }); // an amenity nearby
+  const viaValueIfPlaced = valueIfPlaced(b, S4_CATALOGUE, "house-s4", 5, 5, 0);
+  const viaValueOverride = value(b, S4_CATALOGUE, 5, 5, "residential");
+  assert.equal(viaValueIfPlaced, viaValueOverride);
+});
+
+test("GATE (S4): valueIfPlaced leaves the board byte-identical -- a snapshot before and after must match exactly", () => {
+  const b = s4Board();
+  b.place("shop-a", { x: 6, y: 5 }, 0, { id: 1 });
+  b.place("house-s4", { x: 10, y: 10 }, 0, { id: 2 });
+  const before = JSON.stringify(b.pieces());
+  // Four cells, each a DIFFERENT reason a real board.place() of the
+  // candidate could behave differently -- (5,5) is blocked by shop-a's own
+  // footprint, (10,10) is already occupied by house-s4 (the "replace"
+  // case), (19,19) is out of bounds for a 4x4 footprint, and (0,0) is
+  // GENUINELY PLACEABLE -- vacant, in bounds, nothing in the way. Without
+  // that last one this test cannot tell "valueIfPlaced never places
+  // anything" from "valueIfPlaced happens to only be asked about spots
+  // where placement would fail anyway" -- caught for real: an earlier
+  // version of this test (only the first three cells) let a mutation that
+  // added a genuine board.place() call SURVIVE, because all three of ITS
+  // OWN cells happened to be unplaceable and the call silently no-opped.
+  valueIfPlaced(b, S4_CATALOGUE, "condo-s4", 5, 5, 90);
+  valueIfPlaced(b, S4_CATALOGUE, "condo-s4", 10, 10, 0);
+  valueIfPlaced(b, S4_CATALOGUE, "condo-s4", 19, 19, 0);
+  valueIfPlaced(b, S4_CATALOGUE, "condo-s4", 0, 0, 0);
+  const after = JSON.stringify(b.pieces());
+  assert.equal(before, after, "no speculative call may mutate the board's own pieces");
+  assert.equal(b.pieceIdAt(5, 5), -1, "the target cell must still be vacant -- nothing was actually placed");
+  assert.equal(b.pieceIdAt(0, 0), -1, "the GENUINELY PLACEABLE cell must also still be vacant -- this is the case a real board.place() call would have succeeded on");
+});
+
+test("GATE (S4): valueIfPlaced on an OCCUPIED cell correctly excludes the REAL current occupant from the neighbour sum, while using the CANDIDATE's category for the lookup -- 'replace' semantics", () => {
+  // 1x1 pieces here deliberately -- house-s4/condo-s4 are 2x2/4x4 (matching
+  // the real catalogue shapes this file's other tests need), which cannot
+  // be placed on adjacent single cells without colliding. Footprint size is
+  // irrelevant to what THIS test checks (self-exclusion + category
+  // override), so the base fixture's own 1x1 house-a/shop-a are used.
+  const b = board();
+  // house-a dilutes itself: adjacency.residential = -2, adjacency.commercial = 2.
+  b.place("house-a", { x: 5, y: 5 }, 0, { id: 1 });
+  b.place("house-a", { x: 6, y: 5 }, 0, { id: 2 }); // the "current occupant" being hypothetically replaced
+  b.place("shop-a", { x: 7, y: 5 }, 0, { id: 3 });
+
+  // What would (6,5) be worth if replaced by a shop instead of a house?
+  const asShop = valueIfPlaced(b, CATALOGUE, "shop-a", 6, 5, 0);
+  // Manually: terrain(0) + house-a-at-(5,5)'s adjacency.commercial (the
+  // candidate's own category) at distance 1, PLUS shop-a-at-(7,5)
+  // contributing nothing to itself (its own adjacency has no "commercial"
+  // key, so it contributes 0 regardless of exclusion).
+  const expected = terrainContribution(b, 6, 5) + 2 * falloff(1);
+  assert.equal(asShop, expected);
+
+  // And the REAL occupant at (6,5) (house-a, id 2) must be excluded from
+  // its own neighbour sum regardless of which candidate category is asked
+  // about -- proven by checking pieceIdsWithinR itself never includes id 2
+  // when queried AT (6,5).
+  assert.ok(!pieceIdsWithinR(b, 6, 5).includes(2));
+});
+
+test("rotation is accepted by valueIfPlaced but does not change the result -- disclosed, not silently ignored", () => {
+  const b = s4Board();
+  b.place("shop-a", { x: 6, y: 5 }, 0, { id: 1 });
+  const r0 = valueIfPlaced(b, S4_CATALOGUE, "condo-s4", 5, 5, 0);
+  const r90 = valueIfPlaced(b, S4_CATALOGUE, "condo-s4", 5, 5, 90);
+  const r180 = valueIfPlaced(b, S4_CATALOGUE, "condo-s4", 5, 5, 180);
+  assert.equal(r0, r90);
+  assert.equal(r0, r180);
+});
+
+test("perUnitWorth and totalWorth are pure multiplication, composing S4's own inputs", () => {
+  assert.equal(perUnitWorth(10, 0.5), 5);
+  assert.equal(totalWorth(5, 8), 40);
+});
+
+// The checklist's own named gate, verbatim: "a test asserting the house/
+// condo inversion holds in both directions on the same cell." Blind review
+// caught a real gap in the original plan: without a real amenity placed
+// within R, value(cell) is 0 (a fresh/vacant board) and BOTH inversion
+// assertions read `0 > 0`, which is false either way -- the test would not
+// be testing anything. A real shop is placed here specifically so
+// value(cell) is meaningfully positive before the inversion is checked.
+test("GATE (S4): the house/condo inversion holds BOTH ways on the SAME cell -- house wins per unit, condo wins in total", () => {
+  const b = s4Board();
+  b.place("shop-a", { x: 6, y: 5 }, 0, { id: 1 }); // makes the residential-category readout meaningfully positive
+
+  const houseValue = valueIfPlaced(b, S4_CATALOGUE, "house-s4", 5, 5, 0);
+  const condoValue = valueIfPlaced(b, S4_CATALOGUE, "condo-s4", 5, 5, 0);
+  // Sanity check: the test's own premise. valueAt() on this still-VACANT
+  // cell would read 0 (terrain-only, by design -- a vacant cell has no
+  // occupant category to key adjacency against, DECISIONS #12 point 4),
+  // so checking THAT would compare 0 > 0 and prove nothing. valueIfPlaced
+  // supplies the hypothetical residential category, which is what makes
+  // this cell's readout meaningfully positive.
+  assert.ok(houseValue > 0, `sanity check: valueIfPlaced must be meaningfully positive here, got ${houseValue}`);
+  // Same category (residential), same cell -> valueIfPlaced returns the
+  // identical number for both -- the inversion is driven purely by
+  // unitQuality/baseValue below, nothing incidental to which typeId asked.
+  assert.equal(houseValue, condoValue);
+
+  const housePerUnit = perUnitWorth(houseValue, S4_CATALOGUE["house-s4"].unitQuality);
+  const condoPerUnit = perUnitWorth(condoValue, S4_CATALOGUE["condo-s4"].unitQuality);
+  assert.ok(housePerUnit > condoPerUnit, `house should beat condo PER UNIT: ${housePerUnit} vs ${condoPerUnit}`);
+
+  const houseTotal = totalWorth(housePerUnit, S4_CATALOGUE["house-s4"].baseValue);
+  const condoTotal = totalWorth(condoPerUnit, S4_CATALOGUE["condo-s4"].baseValue);
+  assert.ok(condoTotal > houseTotal, `condo should beat house IN TOTAL: ${condoTotal} vs ${houseTotal}`);
+});
+
+test("the house/condo inversion is disclosed as sign-dependent -- it can reverse in a net-undesirable location, named rather than hidden", () => {
+  const b = s4Board();
+  b.place("factory-a", { x: 6, y: 5 }, 0, { id: 1 }); // makes the residential-category readout meaningfully NEGATIVE
+
+  const houseValue = valueIfPlaced(b, S4_CATALOGUE, "house-s4", 5, 5, 0);
+  const condoValue = valueIfPlaced(b, S4_CATALOGUE, "condo-s4", 5, 5, 0);
+  assert.ok(houseValue < 0, `sanity check: this scenario needs a genuinely undesirable readout, got ${houseValue}`);
+  const housePerUnit = perUnitWorth(houseValue, S4_CATALOGUE["house-s4"].unitQuality);
+  const condoPerUnit = perUnitWorth(condoValue, S4_CATALOGUE["condo-s4"].unitQuality);
+  // Being LESS negative is "worth more" here -- the ordering flips relative
+  // to the desirable-location case above. Documented, not silently assumed
+  // to hold everywhere; SCORING-MODEL does not state whether the ordering
+  // should be location-independent.
+  assert.ok(condoPerUnit > housePerUnit, `in a net-undesirable spot the ordering flips: condo ${condoPerUnit} vs house ${housePerUnit}`);
 });
