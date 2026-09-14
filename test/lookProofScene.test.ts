@@ -64,6 +64,12 @@ test("4.2 mechanism 2 (warm-cool terminator) is ON by default, and never darkens
   assert.match(MATERIAL_SRC, /vec3 cool = vec3\(/, "no cool shadow colour is defined -- the brief's own wording: shadows shift toward cool, NEVER to black");
 });
 
+test("4.2 mechanism 3 (rim separation) is ON by default, adds light rather than a dark outline, and is masked by N.up", () => {
+  assert.match(MATERIAL_SRC, /uRimSeparation:\s*\{\s*value:\s*true\s*\}/, "uRimSeparation's default is not true -- 04-rim-separation.png's own before/after pair has nothing to show if this mechanism is not actually on");
+  assert.match(MATERIAL_SRC, /lit \+= rimColor/, "rim separation must ADD light (a highlight), not subtract it -- the brief's own wording: rim highlights, not dark outlines");
+  assert.match(MATERIAL_SRC, /upMask = clamp\(1\.0 - abs\(N\.y\)/, "the rim term is not modulated by N.up -- per the brief, it should read strongest on vertical faces, not roofs already lit from above");
+});
+
 test("look-proof-material.js's fragment shader actually samples a sampler2DArray, not a plain sampler2D", () => {
   assert.match(MATERIAL_SRC, /uniform\s+sampler2DArray\s+uArrayTex/, "the array-texture uniform is not declared as sampler2DArray");
   assert.match(MATERIAL_SRC, /texture\(uArrayTex,\s*vec3\(/, "the fragment shader does not sample uArrayTex with a vec3(uv, layer) lookup");

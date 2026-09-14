@@ -29,7 +29,8 @@ export function createLookProofMaterial(arrayTexture) {
       uHalfLambertSquared: { value: true },
       // 4.2, mechanism 2 of 4 (R1): warm->cool terminator -- turned on here.
       uWarmCoolTerminator: { value: true },
-      uRimSeparation: { value: false },
+      // 4.2, mechanism 3 of 4 (R1): rim separation -- turned on here.
+      uRimSeparation: { value: true },
       uContactDarkening: { value: false },
       uValueSplit: { value: false },
     },
