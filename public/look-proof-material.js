@@ -27,7 +27,8 @@ export function createLookProofMaterial(arrayTexture) {
       // Mechanism toggles, each false until its own commit turns it on.
       // 4.2, mechanism 1 of 4 (R1): Half Lambert, SQUARED -- turned on here.
       uHalfLambertSquared: { value: true },
-      uWarmCoolTerminator: { value: false },
+      // 4.2, mechanism 2 of 4 (R1): warm->cool terminator -- turned on here.
+      uWarmCoolTerminator: { value: true },
       uRimSeparation: { value: false },
       uContactDarkening: { value: false },
       uValueSplit: { value: false },

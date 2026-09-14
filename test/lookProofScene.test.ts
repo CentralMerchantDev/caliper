@@ -59,6 +59,11 @@ test("4.2 mechanism 1 (Half Lambert squared) is ON by default -- this commit's o
   assert.match(MATERIAL_SRC, /half_\s*\*\s*half_/, "the fragment shader does not square the half-lambert term -- R1's own correction: (0.5*(N.L)+0.5)^2, not un-squared");
 });
 
+test("4.2 mechanism 2 (warm-cool terminator) is ON by default, and never darkens toward pure black", () => {
+  assert.match(MATERIAL_SRC, /uWarmCoolTerminator:\s*\{\s*value:\s*true\s*\}/, "uWarmCoolTerminator's default is not true -- 03-warm-cool-terminator.png's own before/after pair has nothing to show if this mechanism is not actually on");
+  assert.match(MATERIAL_SRC, /vec3 cool = vec3\(/, "no cool shadow colour is defined -- the brief's own wording: shadows shift toward cool, NEVER to black");
+});
+
 test("look-proof-material.js's fragment shader actually samples a sampler2DArray, not a plain sampler2D", () => {
   assert.match(MATERIAL_SRC, /uniform\s+sampler2DArray\s+uArrayTex/, "the array-texture uniform is not declared as sampler2DArray");
   assert.match(MATERIAL_SRC, /texture\(uArrayTex,\s*vec3\(/, "the fragment shader does not sample uArrayTex with a vec3(uv, layer) lookup");
