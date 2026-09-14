@@ -420,6 +420,42 @@ is still there on reload.* RB1–RB4 built the machinery. This is the person.
 
 ---
 
+## THE CATALOGUE PROPER — BLD OWNS THIS. Added 2026-09-15.
+
+Step 7 of the revised build order, and it was blocked until now by design: *"the
+catalogue proper, built to the look proven at step 4."* The look is proven, the
+board renders, and BO7A bound 12 of 50 entries to real meshes. **38 entries
+still have no mesh, so 38 of the catalogue's pieces cannot be placed and seen.**
+
+[ ] CP1 (BLD) Close the mesh gap — REBUILD-PLAN.md C1 and C1.6
+    Source and normalise CC0 meshes for the unbound entries, through
+    `scripts/normalise-kit-textures.mjs`, and bind them with the same disclosed
+    rule `scripts/link-catalogue-meshes.mjs` already uses.
+    **Do not invent catalogue entries and do not change any entry's category,
+    footprint or adjacency** — those are CLI's, and A1's discipline holds: a
+    number you cannot justify goes to the decision queue, not into the file.
+    An entry with no plausible CC0 match is a FINDING. Name it; do not force a
+    mesh that does not fit its footprint class.
+    Gate: still ONE draw call with the bound set rendered, measured. RED is the
+    draw count rising. Report how many of the 50 are bound, and the shortfall.
+[ ] CP2 (BLD) A contact sheet of every bound piece, one shot — REBUILD-PLAN.md C1.5 and R2
+    Every bound entry rendered on the same ground at the same camera, labelled.
+    This is how a catalogue is judged — not by reading JSON. It is also the only
+    way the "do they read as one coherent kit" question gets answered, which R2
+    and A8 both say is what kills projects of this kind.
+    Gate: the sheet, judged by Mark. No numeric gate.
+    Say plainly which pieces look wrong beside the others rather than presenting
+    a wall of thumbnails as a pass.
+[ ] CP3 (BLD) The five pending image pairs, gathered for judgement — no code
+    N1a, N1b, N1c, RB5 and RC4 each produced a before/after pair that Mark has
+    not yet seen. They are scattered across `docs/look-proof-shots/`.
+    Write one short document listing each pair by path, what changed, and your
+    own honest read of whether it improved. **Do not re-render and do not
+    re-tune** — this is a gathering task so a judgement can happen in one sitting
+    instead of five.
+
+---
+
 ## VERSIONING AND TRACKING — CLI OWNS THIS. DO IT FIRST.
 
 `docs/specs/VERSIONING-AND-TRACKING-2026-09-15.md` is the spec.
