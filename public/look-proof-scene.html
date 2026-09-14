@@ -155,6 +155,19 @@ async function buildArrayTexture() {
   const tex = new THREE.DataArrayTexture(combined, size, size, depth);
   tex.format = THREE.RGBAFormat;
   tex.type = THREE.UnsignedByteType;
+  // N1b -- found while checking the far-ground render, not assumed: without
+  // mipmaps, a single UV tile stretched across FAR_GROUND_SIZE (400m) and
+  // viewed at the grazing angle this camera uses toward the horizon
+  // minifies far faster than one sampled texel per screen pixel, and
+  // THREE's own default minFilter for a texture this size aliases that
+  // into a visible checkerboard moire pattern near the horizon -- worse
+  // than the hard edge it replaced. 512 is power-of-two, so real mipmaps
+  // are available; turning them on (plus anisotropic filtering, for the
+  // same grazing angle) is the standard fix, not a workaround.
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = 8;
   tex.needsUpdate = true;
   return tex;
 }
@@ -163,15 +176,18 @@ async function buildArrayTexture() {
 // shadow system (which needs a real THREE.Light and a material built for
 // its light-loop; this scene has neither -- the light exists only as
 // look-proof-material.js's own uLightDir uniform). An orthographic camera
-// sized to the SCENE'S REAL bounding box (computed after every piece is
-// placed, not guessed), positioned along the same LIGHT_DIR the shading
-// already uses, renders the merged mesh's depth into a DepthTexture. The
+// sized to the REAL bounding box of the pieces and the near ground
+// (computed after every piece is placed, not guessed), positioned along
+// the same LIGHT_DIR the shading already uses, renders the scene's depth
+// into a DepthTexture. bb deliberately excludes N1b's far ground -- that
+// plane exists only to extend the visible silhouette into the fog, and
+// sizing the shadow frustum to its ~400m extent instead of the buildings'
+// own ~90m would spread the SAME 1024x1024 depth texture over a much
+// larger area, coarsening every texel the buildings actually need. The
 // main material samples that texture itself (createLookProofMaterial's
 // own sampleShadow) -- this function only builds the camera, the render
 // target, and renders the one pass.
-function buildShadowPass(renderer, scene, mesh) {
-  mesh.geometry.computeBoundingBox();
-  const bb = mesh.geometry.boundingBox;
+function buildShadowPass(renderer, scene, bb) {
   const center = bb.getCenter(new THREE.Vector3());
   const size = bb.getSize(new THREE.Vector3());
   const camDistance = Math.max(size.x, size.y, size.z) * 1.5 + 10;
@@ -297,6 +313,29 @@ async function main() {
   // Ground's own UVs tile once across its footprint -- fine for a grass
   // sample texture at this scale, and not what this scene exists to prove.
 
+  // N1b -- "a ground that reads as continuing past the frame rather than
+  // stopping at a visible edge" (docs/briefs/BLD-2026-09-15.md). The near
+  // ground above is only GROUND.footprint metres across (90x60 in HERO_MODE)
+  // -- at this camera's distance its own far corners are ~78-112 units out,
+  // squarely inside the frame, so it reads as a stage, not a place. Tried
+  // fog alone first and rejected it: the buildings themselves sit at
+  // overlapping camera distances (~40-90 units), so no single linear fog
+  // range can hide the near ground's edge without also fogging out the
+  // subject. Fixing the actual cause instead of leaning harder on fog: a
+  // second, much larger, coarsely-subdivided plane (8 segments, not
+  // GROUND.footprint's 1/metre -- this plane carries no decal or lighting
+  // detail, it exists only to give fog something past the buildings to
+  // fade into) extends solid ground out to FAR_GROUND_SIZE metres, well
+  // beyond both the buildings and the fog's own far distance (retuned
+  // below). Sits at y=-0.02, fractionally below the near ground, so the
+  // two never z-fight where they overlap -- the near ground (with its own
+  // join-decal detail) always wins those pixels.
+  const FAR_GROUND_SIZE = 400;
+  const farGroundGeomRaw = new THREE.PlaneGeometry(FAR_GROUND_SIZE, FAR_GROUND_SIZE, 8, 8)
+    .rotateX(-Math.PI / 2)
+    .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, -0.02, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+  const farGroundGeom = addLayerAttribute(addZeroDecalAttribute(farGroundGeomRaw), GROUND.layer);
+
   const preparedPieces = pieceGeoms.map((geom, i) => {
     const p = PIECES[i];
     fitToFootprint(geom, p.footprint, p.anchor);
@@ -304,14 +343,26 @@ async function main() {
     return addLayerAttribute(stripped, p.layer);
   });
 
-  const merged = mergeGeometries([groundGeom, ...preparedPieces], false);
+  // The shadow camera's own frustum is sized from the pieces and the near
+  // ground ONLY -- see buildShadowPass's own comment for why the far ground
+  // must stay out of this box (it would coarsen every shadow texel the
+  // buildings actually need).
+  const shadowBB = new THREE.Box3();
+  groundGeom.computeBoundingBox();
+  shadowBB.union(groundGeom.boundingBox);
+  for (const g of preparedPieces) {
+    g.computeBoundingBox();
+    shadowBB.union(g.boundingBox);
+  }
+
+  const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces], false);
   const material = createLookProofMaterial(arrayTex);
   const mesh = new THREE.Mesh(merged, material);
   scene.add(mesh);
   window.__material = material;
   window.__scene = scene;
 
-  const shadowPass = buildShadowPass(renderer, scene, mesh);
+  const shadowPass = buildShadowPass(renderer, scene, shadowBB);
   material.uniforms.uShadowMap.value = shadowPass.depthTexture;
   material.uniforms.uLightViewProjectionMatrix.value.copy(shadowPass.lightViewProjectionMatrix);
   window.__shadowMapTexture = shadowPass.depthTexture;

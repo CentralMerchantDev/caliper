@@ -109,7 +109,7 @@ test("L11 cast shadows: ON by default, samples a real depth texture, and reduces
 
 test("look-proof-scene.html builds the shadow camera from the scene's own real bounding box, not a hardcoded guess, and shares LIGHT_DIR with the material rather than a second copy of the light direction", () => {
   assert.match(SCENE_SRC, /import \{ createLookProofMaterial, LIGHT_DIR \} from "\.\/look-proof-material\.js"/, "look-proof-scene.html does not import LIGHT_DIR from the material -- a second, hand-copied light direction would silently drift from the one the shading actually uses");
-  assert.match(SCENE_SRC, /mesh\.geometry\.computeBoundingBox\(\)/, "the shadow camera's frustum is not sized from the mesh's own real bounding box");
+  assert.match(SCENE_SRC, /groundGeom\.computeBoundingBox\(\)/, "the shadow camera's frustum is not sized from the near ground's own real bounding box");
   assert.match(SCENE_SRC, /shadowCamera\.position\.copy\(center\)\.addScaledVector\(LIGHT_DIR/, "the shadow camera is not positioned along the shared LIGHT_DIR");
 });
 
@@ -143,7 +143,7 @@ test("(synthetic) the vulnerability: a comment mentioning preserveDrawingBuffer 
 });
 
 test("look-proof-scene.html merges every piece into ONE geometry before adding a single mesh -- the one-draw-call claim, structurally", () => {
-  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom,\s*\.\.\.preparedPieces\]/, "the scene does not merge ground and every piece into one geometry -- 4.1's gate (\"two pieces from different packs render in a single draw call\") is not wired the way this file claims");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom,\s*farGroundGeom,\s*\.\.\.preparedPieces\]/, "the scene does not merge ground, far ground, and every piece into one geometry -- 4.1's gate (\"two pieces from different packs render in a single draw call\") is not wired the way this file claims");
   const meshConstructions = (SCENE_SRC.match(/new THREE\.Mesh\(/g) || []).length;
   assert.equal(meshConstructions, 1, `expected exactly one THREE.Mesh construction (one draw call), found ${meshConstructions}`);
 });
@@ -201,4 +201,35 @@ test("look-proof-scene.html supports ?hero=1 -- the EXACT camera and piece compo
 test("N1a: scene.background is set to a real gradient texture, not a flat colour -- the black void 08-cast-shadows.png still has", () => {
   assert.match(SCENE_SRC, /scene\.background = buildSkyTexture\(\)/, "scene.background is not set to the sky texture -- 09's own flat THREE.Color(0x0b1016) is exactly the black void N1a exists to remove");
   assert.match(SCENE_SRC, /createLinearGradient/, "buildSkyTexture does not build a real gradient -- 'even a gradient' is the brief's own floor, not a single flat colour with a different name");
+});
+
+test("N1b: a far-ground plane is merged into the SAME mesh as the near ground and pieces -- not a second draw call, not a second scene object", () => {
+  assert.match(SCENE_SRC, /const FAR_GROUND_SIZE = 400/, "far-ground plane's own size constant is missing or changed unexpectedly");
+  assert.match(SCENE_SRC, /new THREE\.PlaneGeometry\(FAR_GROUND_SIZE, FAR_GROUND_SIZE, 8, 8\)/, "far-ground geometry is missing -- the ground still ends at GROUND.footprint's own edge");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces\]/, "far-ground geometry is not merged into the scene's one mesh -- either dropped, or added as a second draw call instead");
+});
+
+test("N1b: the shadow camera's frustum is fit to the pieces and near ground ONLY, not the far ground -- the far ground would coarsen every shadow texel the buildings need", () => {
+  assert.match(SCENE_SRC, /function buildShadowPass\(renderer, scene, bb\)/, "buildShadowPass no longer takes an explicit bounding box -- if it derives bb from the full merged mesh again, the far ground's ~400m extent will spread the same shadow-map resolution across a much larger area");
+  assert.match(SCENE_SRC, /const shadowBB = new THREE\.Box3\(\);[\s\S]{0,200}shadowBB\.union\(groundGeom\.boundingBox\);/, "shadow bounding box is not built from the near ground plus pieces");
+  assert.doesNotMatch(SCENE_SRC, /shadowBB\.union\(farGroundGeom/, "far-ground geometry has leaked into the shadow camera's own bounding box");
+});
+
+test("N1b: the array texture enables mipmapping -- the far-ground plane stretches one UV tile across 400m at a grazing angle, and without mipmaps that aliases into a visible checkerboard moire (found by rendering, not assumed)", () => {
+  assert.match(SCENE_SRC, /tex\.generateMipmaps = true/, "mipmaps are not enabled on the array texture");
+  assert.match(SCENE_SRC, /tex\.minFilter = THREE\.LinearMipmapLinearFilter/, "minFilter does not use mipmaps");
+});
+
+test("N1b: fog range starts beyond HERO_MODE's own buildings and ends within the enlarged far ground, not at the old ground's edge -- (20,65) fogged the buildings themselves out, measured not guessed", () => {
+  assert.match(MATERIAL_SRC, /uFogNear: \{ value: 90 \}/, "uFogNear regressed toward a value that overlaps HERO_MODE's own building distances (~40-90 units)");
+  assert.match(MATERIAL_SRC, /uFogFar: \{ value: 230 \}/, "uFogFar regressed toward a value inside the old (pre-N1b) ground's own edge distance");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning FAR_GROUND_SIZE must not satisfy the far-ground check above", () => {
+  const withOnlyAComment = SCENE_SRC.replace(
+    /const FAR_GROUND_SIZE = 400;\n  const farGroundGeomRaw = new THREE\.PlaneGeometry\(FAR_GROUND_SIZE, FAR_GROUND_SIZE, 8, 8\)/,
+    "// FAR_GROUND_SIZE used to be 400 here\n  const farGroundGeomRaw = new THREE.PlaneGeometry(1, 1, 8, 8)",
+  );
+  assert.notEqual(withOnlyAComment, SCENE_SRC, "the mutation did not apply -- this check is inconclusive, not a pass");
+  assert.doesNotMatch(withOnlyAComment, /new THREE\.PlaneGeometry\(FAR_GROUND_SIZE, FAR_GROUND_SIZE, 8, 8\)/, "a commented-out reference wrongly satisfies the real far-ground geometry check");
 });

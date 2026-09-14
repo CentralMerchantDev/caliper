@@ -54,6 +54,32 @@ export function createLookProofMaterial(arrayTexture) {
       uCastShadows: { value: true },
       uShadowMap: { value: null },
       uLightViewProjectionMatrix: { value: new THREE.Matrix4() },
+      // N1b -- "a ground that reads as continuing past the frame rather
+      // than stopping at a visible edge" (docs/briefs/BLD-2026-09-15.md).
+      // THREE's own built-in fog (material.fog = true) only auto-injects
+      // into materials that include its standard fog_fragment chunk; this
+      // ShaderMaterial has never opted into that system (C1.6: "replace
+      // only the lighting equation"), so fog is implemented directly here
+      // instead -- a manual distance fade toward the sky's own horizon
+      // colour, not three.js's built-in mechanism.
+      //
+      // Retuned twice, both times by measuring the actual render, not by
+      // guessing: (45,110) left the ground's hard edge clearly visible;
+      // (20,65) hid the edge but fogged the buildings themselves out too,
+      // because at HERO_MODE's camera the buildings (~40-90 units out) and
+      // the THEN-current ground's own far edge (~78-112 units out)
+      // occupied overlapping distance bands -- no single linear range
+      // could tell them apart. Fixed the actual cause instead of fog
+      // alone: look-proof-scene.html's own N1b comment adds a much larger
+      // far-ground plane, which moves the ground's real edge from ~110
+      // units out to ~280+. uFogNear now starts just past every building
+      // in HERO_MODE (~90) so the subject stays clear; uFogFar ends within
+      // the enlarged ground, not at its edge, so what actually disappears
+      // into the sky colour is fog fading out ground that is still there,
+      // not a visible boundary.
+      uFogColor: { value: new THREE.Color(0xf2ddb8) },
+      uFogNear: { value: 90 },
+      uFogFar: { value: 230 },
     },
     vertexShader: /* glsl */ `
       in float layerIndex;
@@ -106,6 +132,9 @@ export function createLookProofMaterial(arrayTexture) {
       uniform bool uJoinDecal;
       uniform bool uCastShadows;
       uniform sampler2D uShadowMap;
+      uniform vec3 uFogColor;
+      uniform float uFogNear;
+      uniform float uFogFar;
       in vec3 vNormal;
       in vec3 vWorldPos;
       in vec2 vUv;
@@ -215,6 +244,14 @@ export function createLookProofMaterial(arrayTexture) {
           // the actual render, not assumed.
           lit *= mix(1.0, 0.5, vGroundDecal);
         }
+
+        // N1b -- fade toward the sky's own horizon colour with distance,
+        // so the ground's real edge (still a finite plane -- nothing in
+        // WebGL is actually infinite) is hidden inside the fog before the
+        // camera ever reaches it, rather than ending abruptly in frame.
+        float camDist = length(vWorldPos - cameraPosition);
+        float fogFactor = clamp((camDist - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
+        lit = mix(lit, uFogColor, fogFactor);
 
         fragColor = vec4(lit, 1.0);
       }
