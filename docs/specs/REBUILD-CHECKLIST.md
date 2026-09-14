@@ -111,13 +111,14 @@ pulled, and it is deliberately fenced off from the file CLI is working in.
     (performance.now(), SwiftShader). The 4 MiB cost does not scale with piece
     count; the render-time cost scales with triangle count the same way the
     main pass already does — re-measured directly once L12 lands, not assumed.
-[ ] L12 (BLD) The proof scene at a realistic piece count — REBUILD-PLAN.md C1.5 and R2
-    Five pieces proved the pipeline. C1.5 gives the real starting counts. Source
-    and normalise up to that, through `scripts/normalise-kit-textures.mjs`, and
-    prove them in the existing look-proof scene.
-    Gate: still ONE draw call at the higher count, textures intact, measured.
-    RED is the draw count rising with the piece count.
-    R2's numbers are far lower than instinct — read it before deciding how many.
+[x] L12 (BLD) The proof scene at a realistic piece count — REBUILD-PLAN.md C1.5 and R2
+    312fb7d. `09-piece-count-20.png`. 20 pieces (Firewatch's 23 trees, Caravan
+    SandWitch's 39 total props -- same order, not 200), a THIRD real CC0 pack
+    (Kenney City Kit Commercial), 6 of C1.1's 8 footprint classes including
+    8x8. Gate held: draw calls: 1 (unchanged from 4 pieces), triangles 1270 ->
+    32355. Real bug found by rendering, not inspection: the mega-tower's
+    height scaled linearly with its footprint (~87 m) before being capped at
+    6x, matching the smaller pieces' own working scale.
 [ ] I1 (BLD) Octahedral impostors: pre-render one piece, colour, normal and depth — REBUILD-PLAN.md 8 of the revised order
     Investigate under its real name and verify against primary sources, not a
     summary. Report texture-memory cost MEASURED.
