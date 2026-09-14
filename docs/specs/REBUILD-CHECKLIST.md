@@ -434,7 +434,60 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
 
 ---
 
-## BUILD ORDER — STEP 6, TERRAIN. CLI'S OVERFLOW.
+## UNBLOCK THE INSTRUMENTS — CLI OWNS THIS. Added 2026-09-15.
+
+Three measuring instruments are broken, and every claim about test counts,
+mutation coverage and suite health currently rests on them. Terrain (T1-T3) is
+suspended pending decision #17 — it may be land-lane's, in another repository —
+so this is CLI's real next work.
+
+[ ] U1 (CLI) Fix `npm run gen:claims` — its dependency was quarantined, then deleted
+    `scripts/gen-city-summary.mjs` imports `public/city-plan.js`, quarantined by
+    `e3c355b` in the Phase 1 takedown and now DELETED outright by item zero of
+    this run. The import can no longer resolve at all.
+    Consequence, which is why this matters: `gen:claims` fails before reaching
+    `gen-test-count.mjs`, so **the published test count has been stale for days
+    and cannot be regenerated.** `rule://published-claims` is unenforceable
+    while its own generator is broken.
+    `gen-city-summary.mjs` summarises a city that no longer exists. Decide
+    whether it is retired or re-pointed, say which and why, and do not restore
+    anything from the deleted quarantine to make it work.
+    Gate: `npm run gen:claims` completes and the regenerated count matches a
+    freshly measured one.
+[ ] U2 (CLI) `cullingRatio.test.ts` — five identical reproductions, a named cause, and a decision
+    It has now failed five times at ~243s against its own internal 240-second
+    `page.waitForFunction` timeout. **The cause is not in dispute** — it is not
+    memory, not the harness, not resource contention. It is that test.
+    It blocks every full-suite run, and the full suite is what `mutate.mjs` and
+    the test-count claim both depend on.
+    Either fix the wait condition it is stuck on, or quarantine it OUT OF THE
+    DEFAULT SUITE with its reason recorded and a named owner. Both are
+    acceptable; another reproduction is not.
+    Gate: the default suite completes, with its own `ℹ tests` / `ℹ pass` line as
+    the evidence.
+[ ] U3 (CLI) Decide what the real mutation instrument is — RECOMMEND, do not unilaterally replace
+    `scripts/mutate.mjs` runs the FULL SUITE per mutation. At 160 mutations that
+    is 160 full suites, in a repo where one full suite has never completed. It
+    has stalled on every attempt, most recently traced to genuine CPU contention
+    with a concurrent lane.
+    `scripts/_mutcheck.mjs` — scoped, fast — is what every successful run has
+    actually used, including S4's. It is no longer a workaround; it is the
+    working instrument, and `test/mutationSummary.generated.json` is a manifest
+    only the broken one writes.
+    This is a real decision about what evidence this project accepts, so
+    `rule://decision-queue`: recommend, queue it, take the least irreversible
+    path. **Do not quietly retire `mutate.mjs`.**
+[ ] U4 (CLI) Side B's data model — REBUILD-PLAN.md B1-B3
+    Step 10 of the revised build order, and the mechanic that makes CALIPER
+    itself rather than a city builder: a player-authored piece IS a catalogue
+    entry, full stop (B1). B2 is the day-one requirement. B3 is where coding
+    becomes value.
+    Data and logic only — no interface. Read B1-B3 in full first; §B4 names what
+    stays out of scope and that boundary is load-bearing.
+
+---
+
+## BUILD ORDER — STEP 6, TERRAIN. SUSPENDED — see decision #17.
 
 [ ] T1 (CLI) Heights, water and slope constraints as fields on the board — REBUILD-PLAN.md T1-T3
     Coarse mesh with heightmap displacement, DECOUPLED from the gameplay grid.
