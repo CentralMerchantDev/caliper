@@ -121,13 +121,43 @@ function buildShadowPass(renderer, scene, mesh) {
   const bb = mesh.geometry.boundingBox;
   const center = bb.getCenter(new THREE.Vector3());
   const size = bb.getSize(new THREE.Vector3());
-  const radius = Math.max(size.x, size.z) / 2 + 2; // +2 m margin
   const camDistance = Math.max(size.x, size.y, size.z) * 1.5 + 10;
 
-  const shadowCamera = new THREE.OrthographicCamera(-radius, radius, radius, -radius, 0.5, camDistance * 2);
+  const shadowCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.5, camDistance * 2);
   shadowCamera.position.copy(center).addScaledVector(LIGHT_DIR, camDistance);
   shadowCamera.lookAt(center);
   shadowCamera.updateMatrixWorld(true);
+
+  // FOUND WRONG BY A BLIND AUDIT: half(max(size.x, size.z)) approximates
+  // the frustum from the OBJECT's own world-axis extents, not from what
+  // the LIGHT actually sees. LIGHT_DIR is oblique (0.45, 0.78, 0.35), not
+  // straight down -- projecting the bounding box onto the light camera's
+  // own right/up axes gives a LARGER footprint than either world-axis
+  // half-width alone, and the old formula clipped shadow coverage at the
+  // scene's own edges without any test able to see it (the coverage
+  // number was never compared against the real geometry it needed to
+  // contain). Fixed the standard way: transform all 8 box corners into
+  // the shadow camera's own view space and fit the frustum to their real
+  // min/max extent, not an axis-aligned guess.
+  const corners = [];
+  for (let i = 0; i < 8; i++) {
+    corners.push(new THREE.Vector3(
+      i & 1 ? bb.max.x : bb.min.x,
+      i & 2 ? bb.max.y : bb.min.y,
+      i & 4 ? bb.max.z : bb.min.z,
+    ));
+  }
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const c of corners) {
+    const local = c.clone().applyMatrix4(shadowCamera.matrixWorldInverse);
+    minX = Math.min(minX, local.x); maxX = Math.max(maxX, local.x);
+    minY = Math.min(minY, local.y); maxY = Math.max(maxY, local.y);
+  }
+  const margin = 2; // metres
+  shadowCamera.left = minX - margin;
+  shadowCamera.right = maxX + margin;
+  shadowCamera.bottom = minY - margin;
+  shadowCamera.top = maxY + margin;
   shadowCamera.updateProjectionMatrix();
 
   const SHADOW_MAP_SIZE = 1024;

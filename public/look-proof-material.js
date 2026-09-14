@@ -66,7 +66,22 @@ export function createLookProofMaterial(arrayTexture) {
       out float vGroundDecal;
       out vec4 vShadowCoord;
       void main() {
-        vNormal = normalize(normalMatrix * normal);
+        // World-space normal, NOT three.js's own built-in normalMatrix
+        // (equals getNormalMatrix(modelViewMatrix), VIEW space). Found by
+        // a blind audit: uLightDir, cameraPosition and N.y are all read
+        // as world-space quantities everywhere below, so a view-space
+        // normal silently rotates the effective lighting with the camera
+        // on every frame -- invisible in a single still render (each shot
+        // is one fixed camera, so the mismatch reads as some light
+        // direction, just not the one LIGHT_DIR actually names) and never
+        // caught without a second, independent check of the math. This
+        // mesh's own modelMatrix is always identity (every real transform
+        // is baked into vertex data by fitToFootprint before merging), so
+        // mat3(modelMatrix) is identity and this is exactly equivalent to
+        // using the raw normal attribute directly -- written this way so
+        // it stays correct if a future scene ever gives this mesh a real
+        // transform.
+        vNormal = normalize(mat3(modelMatrix) * normal);
         vec4 worldPos = modelMatrix * vec4(position, 1.0);
         vWorldPos = worldPos.xyz;
         vUv = uv;

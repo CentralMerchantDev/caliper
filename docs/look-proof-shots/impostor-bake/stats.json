@@ -7,11 +7,11 @@
   "bytesPerAtlasRGBA": 4194304,
   "totalBytesUncompressed": 12582912,
   "renderCount": 192,
-  "bakeMs": 31.100000023841858,
+  "bakeMs": 35.39999997615814,
   "realPngBytesPerAtlas": {
-    "colour": 416654,
-    "normal": 96612,
-    "depth": 614872
+    "colour": 306662,
+    "normal": 76892,
+    "depth": 399139
   },
-  "totalRealPngBytes": 1128138
+  "totalRealPngBytes": 782693
 }

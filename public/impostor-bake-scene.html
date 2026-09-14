@@ -24,6 +24,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "./vendor/three/addons/loaders/GLTFLoader.js";
 import { createLookProofMaterial } from "./look-proof-material.js";
+import { hemiOctahedralDirection as hemiOctDirRaw } from "./octahedral-mapping.js";
 
 // I1 -- OCTAHEDRAL IMPOSTORS, under their real name, per
 // docs/briefs/OVERNIGHT-BLD-2026-09-14.md. Investigated against a real,
@@ -54,12 +55,12 @@ const GRID_SIZE = 8; // 8x8 = 64 angles. Production precedent: 16 (256 angles).
 const CELL_SIZE = 128; // px per angle, per pass.
 const PIECE = { glb: "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb", footprint: [8, 12] };
 
+// octahedral-mapping.js's own function returns a plain [x,y,z] array (no
+// THREE dependency, so test/impostorBake.test.ts can import and check it
+// directly, numerically, without a GPU) -- wrapped here into a Vector3.
 function hemiOctahedralDirection(u, v) {
-  // u, v in [-1, 1]. Godot/shaderbits' own hemi-octahedral inverse map --
-  // no folding needed (unlike full-sphere octahedral) because the domain
-  // is already restricted to the upper hemisphere.
-  const y = 1.0 - Math.abs(u) - Math.abs(v);
-  return new THREE.Vector3(u, y, v).normalize();
+  const [x, y, z] = hemiOctDirRaw(u, v);
+  return new THREE.Vector3(x, y, z);
 }
 
 async function main() {

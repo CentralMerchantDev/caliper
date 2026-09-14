@@ -39,7 +39,13 @@ function findPublic(): string {
 }
 const PUBLIC = findPublic();
 const MATERIAL_SRC = stripSourceComments(readFileSync(join(PUBLIC, "look-proof-material.js"), "utf8"));
-const SCENE_SRC = stripHtmlComments(readFileSync(join(PUBLIC, "look-proof-scene.html"), "utf8"));
+// Both comment forms stripped, in the order this project's other double
+// checks already use (test/reachability.test.ts, test/rendererStatic.test.ts)
+// -- FOUND BY A BLIND AUDIT: stripHtmlComments alone only blanks <!-- -->;
+// a JS `//` comment inside a real <script> block would still satisfy
+// every "the real fix line is present" check below, since it survives
+// HTML-comment stripping untouched.
+const SCENE_SRC = stripHtmlComments(stripSourceComments(readFileSync(join(PUBLIC, "look-proof-scene.html"), "utf8")));
 // I2 extracted PIECES/layoutPieces/fitToFootprint into their own module so
 // the overview's massing bake reads the SAME 20 pieces rather than a
 // second, hand-typed list -- the L12 checks below moved with them.
@@ -174,7 +180,7 @@ test("look-proof-scene.html imports PIECES/fitToFootprint from look-proof-pieces
 });
 
 test("I2: overview-massing-scene.html imports the SAME shared PIECES list, and measures each piece's real height rather than guessing from footprint class", () => {
-  const massingSrc = stripHtmlComments(readFileSync(join(PUBLIC, "overview-massing-scene.html"), "utf8"));
+  const massingSrc = stripHtmlComments(stripSourceComments(readFileSync(join(PUBLIC, "overview-massing-scene.html"), "utf8")));
   assert.match(massingSrc, /from "\.\/look-proof-pieces\.js"/, "the massing bake does not import the shared PIECES list -- a second, independently-typed piece set would not be a real comparison against L12's own detailed scene");
   assert.match(massingSrc, /geom\.boundingBox\.max\.y - geom\.boundingBox\.min\.y/, "piece height is not read from the real loaded geometry's own bounding box -- W4's own wording is 'height and footprint follow what is actually built there', not an assumed value per footprint class");
   assert.match(massingSrc, /new THREE\.BoxGeometry\(p\.footprint\[0\], realHeight, p\.footprint\[1\]\)/, "the massing box is not sized from the real measured height");
