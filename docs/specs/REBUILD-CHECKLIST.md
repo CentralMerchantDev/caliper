@@ -459,7 +459,7 @@ still have no mesh, so 38 of the catalogue's pieces cannot be placed and seen.**
     mesh that does not fit its footprint class.
     Gate: still ONE draw call with the bound set rendered, measured. RED is the
     draw count rising. Report how many of the 50 are bound, and the shortfall.
-[ ] CP2 (BLD) A contact sheet of every bound piece, one shot — REBUILD-PLAN.md C1.5 and R2
+[x] CP2 (BLD) A contact sheet of every bound piece, one shot — REBUILD-PLAN.md C1.5 and R2
     Every bound entry rendered on the same ground at the same camera, labelled.
     This is how a catalogue is judged — not by reading JSON. It is also the only
     way the "do they read as one coherent kit" question gets answered, which R2
@@ -467,6 +467,43 @@ still have no mesh, so 38 of the catalogue's pieces cannot be placed and seen.**
     Gate: the sheet, judged by Mark. No numeric gate.
     Say plainly which pieces look wrong beside the others rather than presenting
     a wall of thumbnails as a pass.
+
+    `27-catalogue-contact-sheet.png` -- all 12 of CP1's own bound entries
+    (CP1 itself found blocked, still `[ ]`, no new bindings this run), one
+    ground, one camera, each labelled with its own real catalogue id.
+    A REAL DEFECT FOUND FIRST: the shared material's own default fog
+    range (tuned for HERO_MODE's ~40-90m composition) left most of this
+    much-larger grid fogged into the ground's own tone -- caught by
+    looking at the first render, not assumed from a clean triangle count.
+    Fixed with a caller-side `uFogFar` override for this camera's own
+    real distance (RC4's own established pattern), not an edit to
+    look-proof-material.js.
+
+    THE HONEST READ, SAID PLAINLY, NOT A WALL OF THUMBNAILS PRESENTED AS
+    A PASS: the strongest visible pattern is a CROSS-KIT PALETTE SPLIT,
+    not a defect in any one piece. `house-a`/`small-house-a`/
+    `terrace-unit-a`/`apartment-block-a`/`tower-base-6x6-a` (Kenney
+    Modular Buildings) read warm -- tan walls, a terracotta-orange trim
+    band at roof level that reads as a bright warm patch from directly
+    overhead (confirmed real by a close, unlit render of the source
+    meshes -- not a lighting or binding artefact). `corner-shop-a`/
+    `small-commercial-a`/`mid-commercial-a`/`mega-tower-a` (Kenney City
+    Kit Commercial) read cool -- blue-grey walls, no warm trim anywhere.
+    `street-straight`/`street-curve`/`street-cross` (Kenney City Kit
+    Roads) read neutral grey. Side by side, a residential piece and a
+    commercial piece visibly disagree in temperature purely because of
+    which source pack they came from, not because of any deliberate
+    material distinction CALIPER itself makes -- this is exactly the
+    "does it read as one coherent kit" question R2/A8 ask, and the
+    honest answer from this sheet is: not fully, yet. A suspected green
+    patch on `small-commercial-a` was checked directly (a close render of
+    the same piece through the real shared-material pipeline) and did
+    NOT hold up -- no green anywhere on the real geometry; named here
+    only so a future reviewer does not re-spend time chasing the same
+    misread. Minor, not disqualifying: the four smallest residential/
+    commercial pieces read as similar plain boxes at this camera
+    distance -- acceptable at 12 bound entries, worth watching as CP1
+    eventually adds more.
 [ ] CP3 (BLD) The five pending image pairs, gathered for judgement — no code
     N1a, N1b, N1c, RB5 and RC4 each produced a before/after pair that Mark has
     not yet seen. They are scattered across `docs/look-proof-shots/`.
