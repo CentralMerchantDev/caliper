@@ -260,14 +260,38 @@ proven, current, and yours to build on.
     from a valid one, and committing it changes nothing. RED is a ghost that
     looks placeable where `place()` would refuse — the render and the rule
     disagreeing, again.
-[ ] RB3 (BLD) THE VALUE READOUT — §S4's payoff. REASSIGNED from CLI's S5.
-    **Ownership changed 2026-09-15 and the reason is stated so it is not
-    mistaken for drift:** S5 sat in CLI's list marked blocked because no render
-    surface existed. RB1 creates one, and a readout is a view concern. So it
-    moves to the lane that owns the view. CLI's S5 line stays, pointing here.
-    `valueAt(cell)` and `valueIfPlaced(typeId, cell, rotation)` are CLI's, built
-    in S4. **Call them. Do not reimplement scoring, and do not touch
-    `public/scoring.js`.**
+[!] RB3 (BLD) THE VALUE READOUT — §S4's payoff. REASSIGNED from CLI's S5.
+    PARTIAL, HONESTLY, PER THIS RUN'S OWN BRIEF §4 -- S4 has not landed:
+    checked `origin/scoring` and `origin/main` directly (not assumed),
+    neither exports `valueAt`/`valueIfPlaced`; only S1's `value()` and
+    S2's `falloff` exist. Built exactly what §4 asked for in that case:
+    `board-renderer.js`'s `resolveReadout(scoringModule, board, catalogue,
+    cell, typeId, rotation)` checks for both functions BEFORE calling
+    them (a namespace `import * as ScoringModule`, never a named import
+    of an export that does not exist yet -- that would throw at parse
+    time and crash every OTHER mode this file ships), calls them against
+    a DISCLOSED guessed signature (`(board, catalogue, x, y[, typeId,
+    rotation])`, extending S1's own established convention rather than
+    inventing a new one) if present, and reports `{ available: false,
+    reason }` if not -- never a stubbed or invented number.
+    `look-proof-scene.html`'s `?board=1&readout=x,y` renders the REAL,
+    honest state: `18-readout-unavailable.png` shows a small, deliberately
+    muted grey marker (not the blue `READOUT_COLOR.available` a real
+    number would render), and the console logs
+    `READOUT-STATE ... available=false reason="S4 not landed: ..."`.
+    THE GATE ITSELF IS UNVERIFIED, NAMED PLAINLY: "move the cursor across
+    cells of genuinely different value and the number changes" cannot be
+    demonstrated with real numbers while none exist. Proven instead at
+    the mechanism level, against a mock scoring module
+    (test/boardRenderer.test.ts): two different cells produce two
+    different numbers through the SAME resolveReadout call path that will
+    run once S4 lands. A LIVE test against the real, unmocked
+    `public/scoring.js` (`GATE (RB3): the REAL public/scoring.js ...`) is
+    written to START FAILING the moment `valueAt`/`valueIfPlaced` exist --
+    at which point this item's own render should be revisited to show
+    real numbers and re-verify the actual visual gate before ticking `[x]`.
+    Call them. Do not reimplement scoring, and do not touch
+    `public/scoring.js`. -- honoured: zero edits to that file this run.
     The ghost shows the cell's current value AND the value the piece would have
     there. *"That number, changing as the cursor moves, IS the reason one cell
     beats another."* §A2 calls it the item every project of this kind skips.
