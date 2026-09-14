@@ -24,18 +24,35 @@ that index, and nothing more.
 
 ## HOW IT IS USED
 
-Both lanes read this one file. **It is byte-identical in both worktrees**
-(`C:\Code\sandbox-spike` and `C:\Code\sandbox-spike-codex`) on purpose: two
-checklists for one plan is the copy problem this process exists to kill. If a
-merge reports a conflict here, the two sides should be identical — take either
-and check.
+**CORRECTED 2026-09-15 (item V2).** This header used to claim the file is
+"byte-identical in both worktrees... If a merge reports a conflict here, the
+two sides should be identical — take either." **That was always going to be
+false, and by 2026-09-14 it was**: two lanes ticking their own items on their
+own branches diverges every time — two writers, one file, two branches, every
+night. Not carelessness; structural.
+
+**The checklist is an index, not the record of truth. The log is the
+evidence.** `docs/EVENT-LOG.jsonl` (V1) is append-only and merges cleanly
+across branches (`merge=union`, `.gitattributes`) in exactly the way a file
+full of ticks cannot. A gated item checks the log — "is there a `pushed`
+event for item X?" (`node scripts/query-event-log.mjs --item X --event
+pushed`) — not a ref it had to guess, and not this file's own tick, which is
+convenience, read AFTER checking the log, never instead of it.
+
+**Divergence in the OTHER lane's own section of this file is expected until
+merge, and is not itself a finding.** Each lane's own section (marked CLI or
+BLD) is that lane's live claim about its own work; only the log is
+authoritative across branches. If a merge conflicts here, resolve it by
+taking both sides' ticks for their own ids — this file is not what decides
+whether an item is really done, `docs/EVENT-LOG.jsonl` is.
 
 Ownership is marked in each line, and each lane passes the **other** lane's ids
 as `skip_ids` to `process_next_item`. `allRemainingSkipped` then distinguishes
 "this lane is blocked" from "the plan is finished" — opposite responses.
 
 **Tick an item only when its gate is green AND the commit exists**, and record the
-evidence with `process_record_gate`. A tick is a claim.
+evidence with `process_record_gate`. A tick is a claim; the log and the gate
+ledger are the evidence, not this file.
 
 ## STATUS MARKS
 
@@ -189,14 +206,14 @@ pulled, and it is deliberately fenced off from the file CLI is working in.
     defect was found by blind audit in `recordGate` on 2026-09-10, where a
     read-then-write-whole-file with a catch that swallowed every read error
     silently truncated the ledger to its newest line. Do not rebuild it.
-[ ] V2 (CLI) Correct the checklist's own byte-identity claim — VERSIONING-AND-TRACKING-2026-09-15.md V1
-    This file's header says it is byte-identical in both worktrees. As of
-    2026-09-14 that is FALSE and it was always going to be: two lanes ticking
-    one file on two branches diverges every time. That is structural, not
-    carelessness.
-    Once V1 exists, ticks are convenience and THE LOG IS THE EVIDENCE.
-    Rewrite the header to say that, and to say divergence in the other lane's
-    section is expected until merge.
+[x] V2 (CLI) Correct the checklist's own byte-identity claim — VERSIONING-AND-TRACKING-2026-09-15.md V1
+    "## HOW IT IS USED" rewritten in place, in this same commit: the
+    byte-identity claim replaced with "the checklist is an index, not the
+    record of truth; the log is the evidence," naming docs/EVENT-LOG.jsonl
+    and scripts/query-event-log.mjs as what a gated item actually checks,
+    and stating plainly that divergence in the OTHER lane's own section is
+    expected until merge, not a finding. Doc-only; no code, no gate ledger
+    entry (nothing to mutate-test in a header rewrite).
 [ ] V3 (CLI) Save-format schema version and per-placement timestamp — VERSIONING-AND-TRACKING-2026-09-15.md V2
     §A4's save is already an append-only event log in all but name: seed,
     generatorParams, tombstones, placements.
