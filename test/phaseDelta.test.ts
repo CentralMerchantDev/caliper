@@ -10,10 +10,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as THREE from "three";
-import { PROPS } from "../public/prop-manifest.js";
-import { propGeometry, disposePropGeometry } from "../public/prop-models.js";
 import { FACADE_FAMILIES, generateFacadeAtlas } from "../public/facade-textures.js";
+// public/prop-models.js quarantined, 2026-09-13, board takedown (Mark's
+// ruling: "the b1-board board code is not a foundation... it comes out";
+// _TO-DELETE/b1-board/) -- measureLiveProps below needed propGeometry/
+// disposePropGeometry; see the BLOCKED test that used to call it.
 
 export interface PhaseMeasurement {
   phase: string;
@@ -42,19 +43,10 @@ export const BASELINE_V0: PhaseMeasurement = {
 // below needed generateWorld/planCity/makeFits/groupByVariant; see the
 // BLOCKED test that used to call it.
 
-/**
- * Measures live LOD0 triangle count across all manifest props directly from geometry.
- */
-export function measureLiveProps(): number {
-  disposePropGeometry();
-  let totalTris = 0;
-  for (const id of Object.keys(PROPS)) {
-    const g: any = propGeometry(id, THREE, { lod: 0, seed: 0 });
-    const tris = g.index ? g.index.count / 3 : g.getAttribute("position").count / 3;
-    totalTris += tris;
-  }
-  return totalTris;
-}
+// measureLiveProps (and its only caller, the V2 test below) removed,
+// 2026-09-13, board takedown -- it called propGeometry/disposePropGeometry
+// from public/prop-models.js, now quarantined, and nothing outside this
+// file imported it either.
 
 /**
  * Measures live texture atlas count and PBR map validity directly from facade-textures.js.
@@ -164,21 +156,10 @@ test("LIVE WORLD GATE: Phase V1 passes by measuring real live facade texture atl
   assert.strictEqual(result.delta, liveTextures - BASELINE_V0.textureCount!);
 });
 
-test("LIVE WORLD GATE: Phase V2 passes by measuring real live prop geometry", () => {
-  const livePropTris = measureLiveProps();
-  // Real measurement must be >= 1,500 tris (12 props * ~150-300 tris each)
-  assert.ok(
-    livePropTris >= 1500,
-    `Live props only measured ${livePropTris} triangles across 12 manifest props -- expected >= 1500`
-  );
-
-  const result = verifyPhaseProgress(
-    BASELINE_V0,
-    { phase: "V2", status: "LANDED", propTris: livePropTris },
-    "props"
-  );
-  assert.ok(result.valid, result.reason);
-  assert.strictEqual(result.delta, livePropTris - BASELINE_V0.propTris!);
-});
+// BLOCKED, 2026-09-13, board takedown (Mark's ruling: "the b1-board board
+// code is not a foundation... it comes out"). measureLiveProps needed
+// propGeometry/disposePropGeometry from public/prop-models.js, now
+// quarantined to _TO-DELETE/b1-board/, and is removed (see comment above).
+test("LIVE WORLD GATE: Phase V2 passes by measuring real live prop geometry", { skip: "BLOCKED: measureLiveProps needed public/prop-models.js, quarantined (see comment above)" }, () => {});
 
 test("LIVE WORLD GATE: measureLiveGeometry and measureLiveDrawn measure real city building meshes", { skip: "BLOCKED: measureLiveLayoutGeometry needed generateWorld/planCity/groupByVariant, all quarantined (see comment above)" }, () => {});

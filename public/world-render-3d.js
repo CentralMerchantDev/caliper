@@ -19,10 +19,16 @@ import { WORLD_SCALE, WORLD } from "./world-scale.js";
 import { createSelection } from "./selection.js";
 // board-adapter.js's boardPiecesById is quarantined with it -- its one call
 // site was inside _buildCityBase, below, which is now dormant.
-import { fetchBoard, pieceAtPoint } from "./board-load.js";
-import { buildBoardScene, scatterTrees, scatterStreetLamps, scatterStreetFurniture, scatterBusShelters } from "./board-render.js";
-import { neighboursOf, applyIsolate, restoreIsolate } from "./isolate.js";
-import { tryMove, moveEditFor } from "./move-piece.js";
+//
+// board-load.js, board-render.js, isolate.js and move-piece.js are
+// quarantined, 2026-09-13 (Mark's ruling: "the b1-board board code is not a
+// foundation... it comes out" -- _TO-DELETE/b1-board/). fetchBoard() and
+// buildBoardScene()/scatterTrees()/scatterStreetLamps()/scatterStreetFurniture()/
+// scatterBusShelters() had no call sites left in this file at all (checked
+// directly, grepping for each name); pieceAtPoint(), neighboursOf()/
+// applyIsolate()/restoreIsolate() and tryMove()/moveEditFor() did -- see
+// _isolate()/_restoreIsolateState()/_moveSelected() and the city-mode pick
+// handler below, now dormant stubs.
 import { layerFrom } from "./world-model.js";
 import { inWorld } from "./grid.js";
 
@@ -6482,145 +6488,22 @@ class Renderer3D {
   }
 
   /**
-   * P4.3 ISOLATE -- hide every other building, keep the current selection
-   * and its immediate neighbours (public/isolate.js's neighboursOf, within
-   * one grid.js BLOCK of the selection's own footprint -- see that file's
-   * header for why that unit and not plan.blockId or an invented radius).
-   * Mechanism: applyIsolate() hides every OTHER InstancedMesh batch wholesale
-   * (cheap, one `.visible = false` per batch) and draws a standalone Mesh for
-   * the kept set at its saved matrix -- instance-groups.js's own
-   * instanced/overridden split, applied at isolate time rather than only at
-   * scene-build time, and NOT per-instance zero-scaling across the whole
-   * batch the way that would be if it mutated shared InstancedMesh state at
-   * isolate scale. Returns the neighbour result (for the UI to report what
-   * was kept), or null if there is no current selection.
+   * P4.3 ISOLATE, P4.4 MOVE -- dormant, 2026-09-13 (Mark's ruling: "the
+   * b1-board board code is not a foundation... it comes out"). The real
+   * implementations lived in public/isolate.js and public/move-piece.js,
+   * both quarantined to _TO-DELETE/b1-board/ along with public/board.js,
+   * which both of them needed. _restoreIsolateState() is kept as a no-op --
+   * the city-mode pick handler below calls it unconditionally on every new
+   * pick -- but nothing can set _isolateState any more, so it never has
+   * anything to restore. _isolate(), _moveSelected() and their
+   * move-preview helper _liveRepositionMoved() are removed outright, not
+   * stubbed: WorldRenderer's own isolate()/moveSelected() wrappers already
+   * guard on `this._impl._isolate ? ... : null`, so an absent method
+   * degrades to a no-op there without any further change.
    */
-  _isolate() {
-    this._restoreIsolateState();
-    const piece = this._selectedPiece;
-    const city = this._city;
-    if (!piece || !city || !city.buildingInstanceIndex || !this._boardPieces) return null;
-    const plotId = piece.id.slice("bld-".length);
-    const { selected, neighbours, keepIds } = neighboursOf(plotId, this._boardPieces, {
-      heightAt: city.heightAt, inWorld,
-    });
-    if (!selected) return null;
-    this._isolateState = applyIsolate({
-      THREE: city.THREE, scene: this.scene, buildingInstanceIndex: city.buildingInstanceIndex, keepIds,
-    });
-    this._isolatedPlotId = plotId;
-    // A blind audit found that a piece moved earlier this session (P4.4,
-    // this._movedPieces) is invisible to applyIsolate entirely -- it lives
-    // in a standalone Mesh applyIsolate never sees, not in
-    // buildingInstanceIndex, so it stayed visible through an isolate that
-    // was not its own. Hidden here as a separate step, restored in
-    // _restoreIsolateState below; the moved piece's OWN position/material
-    // are untouched, only its visibility.
-    this._hiddenMovedPieces = [];
-    if (this._movedPieces) {
-      for (const [movedPlotId, entry] of this._movedPieces) {
-        if (keepIds.has(`bld-${movedPlotId}`)) continue;
-        this._hiddenMovedPieces.push(entry.standalone);
-        entry.standalone.visible = false;
-      }
-    }
-    return { selected, neighbours };
-  }
-
-  /** The reverse of _isolate() -- exact, see public/isolate.js's
-   *  restoreIsolate for what "exact" means and how it is checked
-   *  (test/isolate.test.ts, a real Three.js scene-graph fingerprint, not an
-   *  object count). Safe to call with nothing isolated (a no-op). */
   _restoreIsolateState() {
-    if (this._hiddenMovedPieces) {
-      for (const standalone of this._hiddenMovedPieces) standalone.visible = true;
-      this._hiddenMovedPieces = null;
-    }
-    if (!this._isolateState) return;
-    restoreIsolate(this.scene, this._isolateState);
     this._isolateState = null;
     this._isolatedPlotId = null;
-  }
-
-  /**
-   * P4.4 MOVE -- drag the current selection to a new grid address.
-   * board.js's own canPlace ({ok:false, reason, blockedBy}) is the ONLY
-   * authority on whether this fits (public/move-piece.js's tryMove) -- this
-   * method does not re-decide that, it wires the existing refusal to a
-   * cursor and, on success, emits the real world-model.js `move` edit
-   * (public/apply-and-persist.js's own layerFrom()/world.layers.add()
-   * pattern).
-   *
-   * A refusal calls `this.onMoveRefused({reason, blockedBy, plotId})` --
-   * NEVER a console log; Mark's own brief: "a refusal the player cannot
-   * read is the same as no refusal." An occupied destination and a
-   * destination whose footprint does not fit report DIFFERENT reasons
-   * (board.js's own "occupied" vs "off-map"/"ground"), not one generic "no".
-   *
-   * The moved piece is repositioned live in THIS scene too (the same
-   * promote-out-of-the-instanced-batch technique P4.2/P4.3 already use, at
-   * the NEW position instead of the saved one) -- an approximation, named
-   * as one: the Y used here is heightAt(x,z), the bare ground height, not
-   * footprint.js's own terrace/verdict-aware base a full rebuild would
-   * compute. The real, authoritative position is the emitted layer edit
-   * itself; this is a live preview of it, not a second source of truth.
-   */
-  _moveSelected(destCell) {
-    const piece = this._selectedPiece;
-    const city = this._city;
-    if (!piece || !city || !this._boardPieces) return null;
-    const plotId = piece.id.slice("bld-".length);
-    const result = tryMove(plotId, destCell, this._boardPieces, { heightAt: city.heightAt, inWorld });
-    if (!result.ok) {
-      if (this.onMoveRefused) this.onMoveRefused({ reason: result.reason, blockedBy: result.blockedBy || null, plotId });
-      return result;
-    }
-
-    const edit = moveEditFor(result);
-    const layer = layerFrom({ id: `move-${plotId}-${Date.now()}`, author: "visitor-drag", edits: [edit] });
-    const added = city.instance && city.instance.layers ? city.instance.layers.add(layer) : { ok: false, reason: "no-layer-stack" };
-    if (!added.ok) {
-      if (this.onMoveRefused) this.onMoveRefused({ reason: added.reason || "could-not-persist", blockedBy: null, plotId });
-      return { ok: false, reason: added.reason || "could-not-persist", plotId };
-    }
-
-    this._liveRepositionMoved(plotId, result.destWorld);
-    return result;
-  }
-
-  /** Live-preview half of _moveSelected -- pull the piece's instance out of
-   *  its shared batch (P4.2/P4.3's own technique) and draw it as a
-   *  standalone Mesh at the new world position, permanently (not restored
-   *  by _clearHighlight/_restoreIsolateState, which only ever touch their
-   *  OWN temporary promotions). A piece moved more than once in the same
-   *  session is simply re-promoted from wherever it currently stands. */
-  _liveRepositionMoved(plotId, destWorld) {
-    const city = this._city;
-    if (!city || !city.buildingInstanceIndex) return;
-    if (!this._movedPieces) this._movedPieces = new Map();
-    const already = this._movedPieces.get(plotId);
-    if (already) {
-      const y = city.heightAt(destWorld.x, destWorld.z);
-      already.standalone.position.set(destWorld.x, y, destWorld.z);
-      return;
-    }
-    const entry = city.buildingInstanceIndex.get(plotId);
-    if (!entry) return;
-    const { mesh, index, geometry } = entry;
-    const THREE = city.THREE;
-    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
-    mesh.setMatrixAt(index, zero);
-    mesh.instanceMatrix.needsUpdate = true;
-
-    const material = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0.02 });
-    const standalone = new THREE.Mesh(geometry, material);
-    const y = city.heightAt(destWorld.x, destWorld.z);
-    standalone.position.set(destWorld.x, y, destWorld.z);
-    standalone.name = "p4-moved";
-    standalone.castShadow = true;
-    standalone.receiveShadow = true;
-    this.scene.add(standalone);
-    this._movedPieces.set(plotId, { mesh, index, geometry, material, standalone });
   }
 
   _inspectClick(e) {
@@ -6702,21 +6585,14 @@ class Renderer3D {
       // (`bld-${plotId}`) -- not a second id scheme.
       const piece = addr && addr.onPlot && this._boardPieces ? this._boardPieces.get(`bld-${addr.plotId}`) || null : null;
       this._selectedPiece = piece;
-      // B3 step: the REAL committed board's own record at this point, not
-      // the board-adapter.js shim over the old plot/road world `piece`
-      // above already is. Only resolvable when the real board has been
-      // loaded (this._boardData, currently only when ?board=1) -- null
-      // otherwise, same as `piece` when nothing is there. Wrapped, matching
-      // this method's own fetchBoard() three lines up: a query bug here
-      // must not break picking for everything else this handler does.
-      let realBoardPiece = null;
-      if (this._boardData) {
-        try {
-          realBoardPiece = pieceAtPoint(this._boardData.board, pt.x, pt.z);
-        } catch (e) {
-          console.error("pieceAtPoint failed for a real pick (city mode is otherwise unaffected):", e);
-        }
-      }
+      // B3's real committed-board lookup (pieceAtPoint against
+      // this._boardData.board) is dormant, 2026-09-13 (Mark's ruling: "the
+      // b1-board board code is not a foundation... it comes out";
+      // public/board-load.js is quarantined to _TO-DELETE/b1-board/). Always
+      // null now, same as before this surgery in practice -- this._boardData
+      // was never set anywhere in this file (checked directly), so the old
+      // `if (this._boardData)` branch never actually ran.
+      const realBoardPiece = null;
       // P4.2 -- highlight the newly selected piece's own building, if it
       // has one; clear any previous highlight first either way (a new
       // pick, even one with no piece, deselects the last one).
@@ -6740,17 +6616,11 @@ class Renderer3D {
           board: piece
             ? { id: piece.id, kind: piece.pieceType, cell: piece.cell, foot: piece.foot }
             : null,
-          // NOT the same thing as `board` above: `board` is board-adapter.js's
-          // shim over the OLD plot/road world (buildings only, keyed by
-          // plotId). realBoardPiece is a direct query against the REAL
-          // committed board.generated.json (any pieceType, including roads/
-          // bridges/docks) -- only populated when that board has been
-          // loaded (?board=1). Deliberately not yet surfaced in index.html's
-          // own inspect card -- this step is the data connection, not the
-          // display; B3's own remaining scope, named in COMPLETION-PLAN.md.
-          realBoardPiece: realBoardPiece
-            ? { id: realBoardPiece.id, kind: realBoardPiece.pieceType, cell: realBoardPiece.cell, foot: realBoardPiece.foot }
-            : null,
+          // B3's own real-board lookup is dormant -- see the comment on
+          // `realBoardPiece`'s declaration above. Field kept, always null,
+          // so onInspect's payload shape does not change out from under a
+          // caller that reads it.
+          realBoardPiece: null,
         });
       }
       return;

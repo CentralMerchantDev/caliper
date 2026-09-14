@@ -112,7 +112,16 @@ test("changing WORLD.SIZE moves the grid origin -- written to report this, not t
 // asserted for city-plan.js's own plots (the test above stays exactly as
 // it is, still red-on-purpose, still describing a real, unfixed defect in
 // a generator B2 replaces) -- only for B2's own boundaries.
-test("B2's own settlement boundaries: changing WORLD.SIZE does not move a single vertex -- a REAL passing assertion, not a todo", async () => {
+//
+// BLOCKED, 2026-09-13, board takedown (Mark's ruling: "the b1-board board
+// code is not a foundation... it comes out"). public/board-generator.js is
+// quarantined to _TO-DELETE/b1-board/, so the dynamic import below has
+// nothing to load. Not retired: the property itself -- geometry anchored
+// to grid.js's atomOf/atomOrigin must not drift when WORLD_SCALE changes --
+// is not specific to the b1-board generator being torn out; Phase 2's own
+// generator will need to satisfy the identical contract, and this is the
+// one real, passing proof this codebase ever had of it.
+test("B2's own settlement boundaries: changing WORLD.SIZE does not move a single vertex -- a REAL passing assertion, not a todo", { skip: "BLOCKED: public/board-generator.js is quarantined; nothing for the dynamic import below to load (see comment above)" }, async () => {
   const dirSmaller = patchedWorldAt(WORLD_SCALE * 0.8);
   try {
     const { settlementBoundaries: boundariesSmaller } =

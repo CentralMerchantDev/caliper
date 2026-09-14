@@ -49,7 +49,16 @@ test("I3 (data): a pick at a real plot's centre selects that plot's real id, and
 
 test("I3 (wiring): the real click handler resolves through the persisted selection, not the index directly", { skip: "BLOCKED: this._selection is no longer constructed -- it lived in _buildCityBase, now a dormant stub (see comment above)" }, () => {});
 
-test("B3 (wiring): the city-mode pick handler resolves a real board piece via pieceAtPoint when the real board has been loaded", () => {
+// BLOCKED, 2026-09-13, board quarantine (Mark's ruling: "the b1-board board
+// code is not a foundation... it comes out"). public/board-load.js is
+// quarantined to _TO-DELETE/b1-board/ -- world-render-3d.js no longer
+// imports pieceAtPoint from it, and the city-mode pick handler's
+// this._boardData branch was removed (this._boardData was never set
+// anywhere in the file to begin with; see the comment left in its place).
+// Not retired: the capability this test names -- resolving a click to a
+// real committed board piece -- is real and will matter again once Phase 2
+// supplies a board to load.
+test("B3 (wiring): the city-mode pick handler resolves a real board piece via pieceAtPoint when the real board has been loaded", { skip: "BLOCKED: public/board-load.js is quarantined; world-render-3d.js's pieceAtPoint call was removed with it (see comment above)" }, () => {
   assert.match(
     RENDER_3D,
     /import\s*\{[^}]*\bpieceAtPoint\b[^}]*\}\s*from\s*["']\.\/board-load\.js["']/,
