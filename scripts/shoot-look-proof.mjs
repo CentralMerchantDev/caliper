@@ -36,10 +36,17 @@ const MIME = {
   ".glb": "model/gltf-binary", ".hdr": "application/octet-stream",
 };
 
+// RB1 -- board mode fetches the real data/catalogue.json (BO7A's own glb
+// bindings), which lives at the repo root, deliberately outside public/
+// (CLI's own data, not a served asset). `/data/...` is the one exception,
+// mapped to ROOT/data/ instead of PUBLIC -- everything else is unchanged.
+const DATA = path.join(ROOT, "data");
 const server = http.createServer((req, res) => {
   const url = decodeURIComponent(req.url.split("?")[0]);
-  const file = path.join(PUBLIC, url);
-  if (!file.startsWith(PUBLIC) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+  const base = url.startsWith("/data/") ? DATA : PUBLIC;
+  const rel = url.startsWith("/data/") ? url.slice("/data/".length) : url;
+  const file = path.join(base, rel);
+  if (!file.startsWith(base) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     res.writeHead(404); return res.end("not found");
   }
   res.writeHead(200, { "content-type": MIME[path.extname(file)] || "application/octet-stream" });

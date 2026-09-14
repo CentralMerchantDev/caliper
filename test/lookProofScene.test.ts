@@ -98,7 +98,7 @@ test("4.3 the join decal is ON by default and darkens the ground toward each foo
 
 test("look-proof-scene.html bakes the join decal from real footprint geometry, not a placeholder constant", () => {
   assert.match(SCENE_SRC, /function distanceOutsideFootprint/, "no real distance-to-footprint function -- a constant decal value would satisfy the shader-side check above without doing what the brief asked (sized to the footprint)");
-  assert.match(SCENE_SRC, /addGroundDecalAttribute\(groundGeomRaw,\s*PIECES\)/, "the ground's own decal attribute is not built from the real PIECES list");
+  assert.match(SCENE_SRC, /addGroundDecalAttribute\(groundGeomRaw,\s*\[\.\.\.PIECES,\s*\.\.\.boardFootprintsForDecal\]\)/, "the ground's own decal attribute is not built from the real PIECES list plus RB1's own resolved board pieces");
 });
 
 test("L11 cast shadows: ON by default, samples a real depth texture, and reduces direct light only (never ambient, never to black)", () => {
@@ -143,7 +143,7 @@ test("(synthetic) the vulnerability: a comment mentioning preserveDrawingBuffer 
 });
 
 test("look-proof-scene.html merges every piece into ONE geometry before adding a single mesh -- the one-draw-call claim, structurally", () => {
-  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom,\s*farGroundGeom,\s*\.\.\.preparedPieces,\s*\.\.\.streetDetailGeoms\]/, "the scene does not merge ground, far ground, every piece, and street-level detail into one geometry -- 4.1's gate (\"two pieces from different packs render in a single draw call\") is not wired the way this file claims");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom,\s*farGroundGeom,\s*\.\.\.preparedPieces,\s*\.\.\.streetDetailGeoms,\s*\.\.\.preparedBoardPieces\]/, "the scene does not merge ground, far ground, every piece, street-level detail, and board pieces into one geometry -- 4.1's gate (\"two pieces from different packs render in a single draw call\") is not wired the way this file claims");
   const meshConstructions = (SCENE_SRC.match(/new THREE\.Mesh\(/g) || []).length;
   assert.equal(meshConstructions, 1, `expected exactly one THREE.Mesh construction (one draw call), found ${meshConstructions}`);
 });
@@ -206,7 +206,7 @@ test("N1a: scene.background is set to a real gradient texture, not a flat colour
 test("N1b: a far-ground plane is merged into the SAME mesh as the near ground and pieces -- not a second draw call, not a second scene object", () => {
   assert.match(SCENE_SRC, /const FAR_GROUND_SIZE = 400/, "far-ground plane's own size constant is missing or changed unexpectedly");
   assert.match(SCENE_SRC, /new THREE\.PlaneGeometry\(FAR_GROUND_SIZE, FAR_GROUND_SIZE, 8, 8\)/, "far-ground geometry is missing -- the ground still ends at GROUND.footprint's own edge");
-  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms\]/, "far-ground geometry is not merged into the scene's one mesh -- either dropped, or added as a second draw call instead");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms, \.\.\.preparedBoardPieces\]/, "far-ground geometry is not merged into the scene's one mesh -- either dropped, or added as a second draw call instead");
 });
 
 test("N1b: the shadow camera's frustum is fit to the pieces and near ground ONLY, not the far ground -- the far ground would coarsen every shadow texel the buildings need", () => {
@@ -239,7 +239,7 @@ test("N1c: street-level detail (kerbs + a path) is built and merged into the SAM
   assert.match(SCENE_SRC, /const kerbs = \[/, "kerb geometry is not built");
   assert.match(SCENE_SRC, /const path = addLayerAttribute\(addConstantDecalAttribute\(pathGeom, 1\), groundLayer\)/, "the path plane is not built with a constant, fully-darkened groundDecal -- the mechanism that makes it read as distinct from the surrounding ground");
   assert.match(SCENE_SRC, /const streetDetailGeoms = HERO_MODE\s*\n\s*\? buildStreetLevelDetail\(/, "street-level detail is not gated to HERO_MODE -- the full 20-piece scene has no single street for this to describe");
-  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms\]/, "street-level detail geometry is not merged into the scene's one mesh");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms, \.\.\.preparedBoardPieces\]/, "street-level detail geometry is not merged into the scene's one mesh");
 });
 
 test("N1c: kerbs and the path reuse GROUND's own layer texture, not the road pack's -- attempt 1 used the road layer and rendered visible rainbow banding (BoxGeometry stretches a whole sprite-sheet atlas across each thin face), found by rendering and reverted", () => {
@@ -255,4 +255,37 @@ test("N1c: exactly one street prop (dumpster-1x1), loaded through the same PIECE
 test("(synthetic) the vulnerability: a comment mentioning buildStreetLevelDetail must not satisfy the checks above", () => {
   const commentOnly = stripSourceComments("// function buildStreetLevelDetail(roadPiece, housePiece, groundLayer) used to be here\nconst m = {};\n");
   assert.doesNotMatch(commentOnly, /function buildStreetLevelDetail\(roadPiece, housePiece, groundLayer\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
+
+// ------------------------------------------------------------- RB1: the board
+test("GATE (RB1): ?board=1 places demo pieces into a REAL createAreaBoard, never a hardcoded PIECES-style array -- PIECES is empty in this mode", () => {
+  assert.match(SCENE_SRC, /import \{ createAreaBoard \} from "\.\/area-board\.js"/, "look-proof-scene.html does not import the real area board");
+  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real board-renderer module");
+  assert.match(SCENE_SRC, /const board = createAreaBoard\(\{ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById \}\)/, "BOARD_MODE does not construct a real area board");
+  assert.match(SCENE_SRC, /board\.place\(p\.typeId, p\.anchorCell, p\.rotation\)/, "BOARD_MODE does not call the real board.place()");
+  assert.match(SCENE_SRC, /BOARD_MODE\s*\n\s*\? \[\]/, "PIECES is not empty in BOARD_MODE -- a hardcoded piece list would still be feeding the render alongside (or instead of) the real board");
+});
+
+test("GATE (RB1): the real catalogue is fetched, not a hand-typed copy -- data/catalogue.json, served by shoot-look-proof.mjs's own /data/ mapping", () => {
+  assert.match(SCENE_SRC, /fetch\("data\/catalogue\.json"\)/, "look-proof-scene.html does not fetch the real catalogue");
+  const serverSrc = stripSourceComments(readFileSync(join(PUBLIC, "..", "scripts", "shoot-look-proof.mjs"), "utf8"));
+  assert.match(serverSrc, /url\.startsWith\("\/data\/"\)/, "shoot-look-proof.mjs's own static server does not map /data/ requests to the repo's real data/ directory -- the fetch above would 404");
+});
+
+test("GATE (RB1): a board piece is resolved through resolveBoardPieces (reading the board's own CURRENT state) and merged into the SAME one mesh as everything else -- draw calls stay at 1", () => {
+  assert.match(SCENE_SRC, /const \{ resolved, skipped \} = resolveBoardPieces\(board, catalogueById, manifest\)/, "board pieces are not resolved via the real board-renderer.js function");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms, \.\.\.preparedBoardPieces\]/, "resolved board pieces are not merged into the scene's one mesh -- either dropped, or rendered as a separate draw call");
+});
+
+test("GATE (RB1): ?removeId=<id> calls the real board.remove() before resolving -- the 'place, render, remove, render' gate is one real board's own state transition, not two independently-scripted renders", () => {
+  assert.match(SCENE_SRC, /if \(BOARD_REMOVE_ID !== null\) \{\s*\n\s*const removed = board\.remove\(BOARD_REMOVE_ID\)/, "?removeId is not wired to a real board.remove() call");
+});
+
+test("RB1: a piece with no matching catalogue mesh is named in the skipped list (console), not silently dropped or substituted -- board-renderer.js's own disclosed behaviour, not re-decided here", () => {
+  assert.match(SCENE_SRC, /BOARD-SKIPPED \$\{skipped\.map/, "skipped board pieces are not surfaced -- a real board built against catalogue entries with no glb would silently render fewer pieces than it placed");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning createAreaBoard must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// const board = createAreaBoard({ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById }) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /const board = createAreaBoard\(\{ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById \}\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });

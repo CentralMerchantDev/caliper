@@ -28,6 +28,8 @@ import * as THREE from "three";
 import { mergeGeometries } from "./vendor/three/addons/utils/BufferGeometryUtils.js";
 import { createLookProofMaterial, LIGHT_DIR } from "./look-proof-material.js";
 import { PIECES as ALL_PIECES, LAYOUT_BOUNDS, GROUND as GROUND_FULL, loadPieceGeometry, fitToFootprint } from "./look-proof-pieces.js";
+import { createAreaBoard } from "./area-board.js";
+import { resolveBoardPieces, rotateGeometryY } from "./board-renderer.js";
 
 // N1 -- "the same fixed camera as 08" (docs/briefs/BLD-2026-09-15.md).
 // Mark judged 08-cast-shadows.png, not 09-piece-count-20.png ("09 was
@@ -67,14 +69,53 @@ const HERO_PROP_ANCHORS = {
   "dumpster-1x1": [20, 26],
 };
 
+// RB1 -- "A board renderer: draw a real area board, not a hardcoded list"
+// (docs/specs/REBUILD-CHECKLIST.md, THE CONVERGENCE). `?board=1` selects a
+// mode with NO piece list of its own at all -- PIECES below is empty in
+// this mode, and every piece rendered comes from board-renderer.js's own
+// resolveBoardPieces(), reading a REAL createAreaBoard() this file places
+// pieces into via the real board.place()/board.remove() (public/area-
+// board.js), never a literal array. `?board=1&removeId=<id>` re-runs the
+// SAME placement sequence and then calls board.remove(id) before
+// rendering -- the gate's own "place, render, remove, render, and the two
+// shots disagree exactly where the removed piece was" evidence, from one
+// script, one page, one real board's own state transition, not two
+// independently-scripted renders that could silently diverge from each
+// other.
+const BOARD_MODE = new URLSearchParams(window.location.search).has("board");
+const BOARD_REMOVE_ID = (() => {
+  const raw = new URLSearchParams(window.location.search).get("removeId");
+  const n = raw === null ? null : Number(raw);
+  return Number.isInteger(n) ? n : null;
+})();
+const BOARD_WIDTH_CELLS = 24;
+const BOARD_HEIGHT_CELLS = 16;
+// A small, varied demo: two building categories BO7A bound (residential,
+// landmark), one road tile, and one CLI-commercial-kit landmark -- real
+// glb-bound catalogue ids, not invented ones (scripts/link-catalogue-
+// meshes.mjs's own MESH_BINDINGS names all four).
+const BOARD_DEMO_PLACEMENTS = [
+  { typeId: "house-a", anchorCell: { x: 2, y: 2 }, rotation: 0 },
+  { typeId: "tower-base-6x6-a", anchorCell: { x: 8, y: 2 }, rotation: 0 },
+  { typeId: "street-straight", anchorCell: { x: 2, y: 10 }, rotation: 0 },
+  { typeId: "mega-tower-a", anchorCell: { x: 15, y: 2 }, rotation: 0 },
+];
+const BOARD_GROUND = {
+  footprint: [BOARD_WIDTH_CELLS * 4 + 16, BOARD_HEIGHT_CELLS * 4 + 16],
+  anchor: [-8, -8],
+  layer: GROUND_FULL.layer,
+};
+
 const PIECES = HERO_MODE
   ? [...HERO_IDS, ...HERO_PROP_IDS].map((id) => {
       const p = ALL_PIECES.find((x) => x.id === id);
       const anchor = HERO_ANCHORS[id] || HERO_PROP_ANCHORS[id];
       return { ...p, anchor };
     })
-  : ALL_PIECES;
-const GROUND = HERO_MODE ? HERO_GROUND : GROUND_FULL;
+  : BOARD_MODE
+    ? []
+    : ALL_PIECES;
+const GROUND = HERO_MODE ? HERO_GROUND : BOARD_MODE ? BOARD_GROUND : GROUND_FULL;
 
 // mergeGeometries requires every input to carry the same attribute set --
 // drop TANGENT (unused by this shader) so it does not conflict with the
@@ -252,7 +293,11 @@ async function buildArrayTexture() {
   tex.magFilter = THREE.LinearFilter;
   tex.anisotropy = 8;
   tex.needsUpdate = true;
-  return tex;
+  // RB1 -- board-renderer.js's own layerForGlb needs this SAME manifest
+  // (which file is on which layer) to resolve a catalogue entry's glb path
+  // into a layer index; returning it here keeps one fetch, one source of
+  // truth, rather than a second fetch of the same file for board mode.
+  return { tex, manifest };
 }
 
 // L11 -- a self-contained shadow-map pass, not three.js's own automatic
@@ -364,6 +409,15 @@ async function main() {
     // actually judged, not a re-derived approximation.
     camera.position.set(-6, 34, 70);
     camera.lookAt(6, 6, 4);
+  } else if (BOARD_MODE) {
+    // RB1's own demo board -- sized to BOARD_GROUND's real extent, not
+    // guessed. Same diagonal-corner angle as L12's wide camera below, for
+    // the identical reason: a straight-on approach stacks whichever
+    // piece is nearest the camera in front of everything behind it.
+    const boardCenterX = GROUND.anchor[0] + GROUND.footprint[0] / 2;
+    const boardCenterZ = GROUND.anchor[1] + GROUND.footprint[1] / 2;
+    camera.position.set(boardCenterX - 70, 130, boardCenterZ - 70);
+    camera.lookAt(boardCenterX, 0, boardCenterZ);
   } else {
     // L12's own camera -- the 01-08 sequence's close-up framing cannot see
     // a 20-piece site plan; a wider, higher angle replaces it for this item
@@ -380,10 +434,54 @@ async function main() {
     camera.lookAt(layoutCenterX, 0, layoutCenterZ);
   }
 
-  const [arrayTex, ...pieceGeoms] = await Promise.all([
+  const [{ tex: arrayTex, manifest }, ...pieceGeoms] = await Promise.all([
     buildArrayTexture(),
     ...PIECES.map((p) => loadPieceGeometry(p.glb)),
   ]);
+
+  // RB1 -- the real board. Placed via the SAME board.place() a player's
+  // own placement session would call (public/area-board.js), against the
+  // SAME catalogue BO7A bound glb paths onto (data/catalogue.json, fetched
+  // real -- never a hand-typed copy). `resolveBoardPieces`
+  // (board-renderer.js) reads the board's own CURRENT state -- place(),
+  // then optionally remove() a specific id (?removeId=<id>) -- so the
+  // "place, render; remove, render" gate is one real board's own state
+  // transition, not two independently-scripted renders.
+  let boardResolved = [];
+  let boardSkipped = [];
+  let boardFootprintsForDecal = [];
+  if (BOARD_MODE) {
+    const catalogueArr = await fetch("data/catalogue.json").then((r) => r.json());
+    const catalogueById = Object.fromEntries(catalogueArr.map((e) => [e.id, e]));
+    const board = createAreaBoard({ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById });
+    const placedIds = [];
+    for (const p of BOARD_DEMO_PLACEMENTS) {
+      const result = board.place(p.typeId, p.anchorCell, p.rotation);
+      if (!result.ok) {
+        // A demo placement this file's own table asked for was refused --
+        // a real disagreement between this scene and the board's own
+        // rules, surfaced loudly rather than silently rendering fewer
+        // pieces than the table names.
+        console.error(`BOARD-PLACE-REFUSED typeId=${p.typeId} reason=${result.reason} detail=${result.detail || ""}`);
+      } else {
+        placedIds.push(result.id);
+      }
+    }
+    if (BOARD_REMOVE_ID !== null) {
+      const removed = board.remove(BOARD_REMOVE_ID);
+      console.log(`BOARD-REMOVE id=${BOARD_REMOVE_ID} ok=${removed.ok}`);
+    }
+    const { resolved, skipped } = resolveBoardPieces(board, catalogueById, manifest);
+    boardResolved = resolved;
+    boardSkipped = skipped;
+    boardFootprintsForDecal = resolved.map((p) => ({ anchor: p.anchor, footprint: p.footprint }));
+    console.log(`BOARD-STATE placed=${placedIds.length} resolved=${resolved.length} skipped=${skipped.length} removeId=${BOARD_REMOVE_ID}`);
+    if (skipped.length) {
+      console.log(`BOARD-SKIPPED ${skipped.map((s) => `${s.typeId}(${s.reason})`).join(", ")}`);
+    }
+  }
+  window.__boardResolved = boardResolved;
+  window.__boardSkipped = boardSkipped;
 
   // Subdivided (1 segment/metre) so the join decal below has enough
   // resolution to read as a gradient rather than one flat quad -- a
@@ -391,7 +489,7 @@ async function main() {
   const groundGeomRaw = new THREE.PlaneGeometry(GROUND.footprint[0], GROUND.footprint[1], GROUND.footprint[0], GROUND.footprint[1])
     .rotateX(-Math.PI / 2)
     .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2);
-  addGroundDecalAttribute(groundGeomRaw, PIECES);
+  addGroundDecalAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal]);
   const groundGeom = addLayerAttribute(groundGeomRaw, GROUND.layer);
   // Ground's own UVs tile once across its footprint -- fine for a grass
   // sample texture at this scale, and not what this scene exists to prove.
@@ -426,6 +524,20 @@ async function main() {
     return addLayerAttribute(stripped, p.layer);
   });
 
+  // RB1 -- load and prepare exactly what boardResolved names, in the same
+  // shape preparedPieces already produces. Loaded HERE (not in the
+  // opening Promise.all) because which glb files are even needed is only
+  // known after the board itself is built and resolved -- BOARD_MODE's
+  // own piece list is not known in advance the way HERO/L12's PIECES is.
+  const boardPieceGeoms = await Promise.all(boardResolved.map((p) => loadPieceGeometry(p.glb)));
+  const preparedBoardPieces = boardPieceGeoms.map((geom, i) => {
+    const p = boardResolved[i];
+    rotateGeometryY(geom, p.rotation, THREE);
+    fitToFootprint(geom, p.footprint, p.anchor);
+    const stripped = stripToPositionNormalUv(geom);
+    return addLayerAttribute(stripped, p.layer);
+  });
+
   // N1c -- kerbs and a path around the road tile, HERO_MODE only (see
   // buildStreetLevelDetail's own comment for why).
   const streetDetailGeoms = HERO_MODE
@@ -443,12 +555,12 @@ async function main() {
   const shadowBB = new THREE.Box3();
   groundGeom.computeBoundingBox();
   shadowBB.union(groundGeom.boundingBox);
-  for (const g of [...preparedPieces, ...streetDetailGeoms]) {
+  for (const g of [...preparedPieces, ...streetDetailGeoms, ...preparedBoardPieces]) {
     g.computeBoundingBox();
     shadowBB.union(g.boundingBox);
   }
 
-  const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms], false);
+  const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...preparedBoardPieces], false);
   const material = createLookProofMaterial(arrayTex);
   const mesh = new THREE.Mesh(merged, material);
   scene.add(mesh);
