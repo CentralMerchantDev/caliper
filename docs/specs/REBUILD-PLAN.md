@@ -193,8 +193,13 @@ scope. Nothing in the old plan built it.
 - **The shell** — Orbit/Walk/Drive/Fly, the inspector, picking, the day-night
   clock, lighting, the panel system. The interface around the world is not the
   weak part.
-- **The knowledge** — every audit and measurement. Instancing 21,007 pieces into
-  16 draws is a proven technique that Phase 2 uses from its first commit.
+- **The knowledge** — every audit and measurement. **But not the 16-draws
+  figure.** Corrected 2026-09-14, applying C-4: "21,007 pieces in 16 draws" was
+  measured on a **prebaked static scene** and does not transfer to a board the
+  player mutates. Phase 2 renders chunk-merged meshes with per-chunk culling
+  (each chunk carries its own bounding volume, so the all-or-nothing instancing
+  problem never arises) — the approach Pocket City 2 shipped on mobile after
+  trying instancing and billboards and abandoning both.
 
 **Goes — quarantined, never deleted, per `rule://quarantine`:**
 
@@ -343,8 +348,17 @@ https://book.leveldesignbook.com/process/blockout
 Valve's *Illustrative Rendering in Team Fortress 2* (NPAR 2007, peer-reviewed,
 first-party) gives the implementable fix: shadows shift **warm→cool, never to
 black**; saturation **increases at the terminator**; silhouettes read via **rim
-highlights, not dark outlines**; **Half Lambert** (scale N·L by 0.5, bias 0.5);
-ambient bounce is "critical to truly grounding" objects.
+highlights, not dark outlines**; **Half Lambert — scale N·L by 0.5, bias by 0.5,
+THEN SQUARE**; ambient bounce is "critical to truly grounding" objects.
+
+**CORRECTED 2026-09-14. This line omitted the square since the day it was
+written.** Verified against the paper: its own slides state Half Lambert
+*"scales the -1 to 1 cosine term by ½, biases by ½ and squares to pull the light
+all the way around,"* and the text calls out *"the scale, bias and squared
+lobes."* So the term is `(0.5·(N·L) + 0.5)²`, not `0.5·(N·L) + 0.5`. Implemented
+as written, the shadows come out flatter than intended on the one phase this
+document says is won or lost — and nobody would ever trace it back to a missing
+exponent.
 https://steamcdn-a.akamaihd.net/apps/valve/2007/NPAR07_IllustrativeRenderingInTeamFortress2.pdf
 
 Alba reached the same place from solid colours: they needed "more definition into
@@ -1250,8 +1264,21 @@ arithmetic be locked day one and versioned as a schema, because *"changing pivot
 later… requires manual updates to hundreds of instances"* — and here that means
 saved player cities.
 
-**MODULE = 4 m. Submodules 2 m and 1 m. Detail snap 0.25 m. Snap at half the
-footprint. Pivot at footprint centre on the ground plane.**
+**MODULE = 4 m. Submodules 2 m and 1 m. Detail snap 0.25 m. Snap is ONE CELL.
+Pivot at the ANCHOR CELL'S CORNER, on the ground plane.**
+
+**CORRECTED 2026-09-14.** This section read *"Snap at half the footprint. Pivot
+at footprint centre"* — both superseded, and both were still stated here, in the
+section headed "locked," long after the corrections that replaced them.
+C1.2 corrects the snap: on a discrete cell grid **the cell is the snap**, always
+one module; the half-footprint rule is for continuous-space editors and would put
+odd-width pieces on half-cells. C-5 corrects the pivot: a centre pivot puts every
+odd-dimension piece — 2×3, 3×3 — at a half-module offset, and the corner pivot
+matches `{typeId, anchorCell, rotation}`, where the anchor already *is* a corner.
+
+A12's warning applies literally to saved player cities: *"changing pivots
+later… requires manual updates to hundreds of instances."* **This is the value
+that must never change again.** It is stated here and nowhere else.
 
 Why 4:
 
@@ -1411,11 +1438,28 @@ Buildings, Nature Kit (330 models), Quaternius Downtown City MegaKit (315).
 **GLB, not FBX.** Disable "Recompute Normals" — flat shading breaks if the engine
 re-derives them.
 
-**One shared material and one palette atlas, applied to everything.** A8: style
-clash is a shader problem, and ten first-hand accounts fixed it by unifying the
-shader, none by editing geometry. Kenney's own guide states each pack ships its
-own textures — so a one-off Blender batch remapping every pack's UVs onto a single
-~10-colour atlas, nearest-neighbour filtered, **is the coherence fix.**
+**One shared material, applied to everything. A8: style clash is a shader
+problem** — ten first-hand accounts fixed it by unifying the shader, none by
+editing geometry.
+
+**CORRECTED 2026-09-14, applying C-7, which this section never absorbed and
+which it still directly contradicted.** This read: remap every pack's UVs onto a
+single ten-colour palette atlas, *"nearest-neighbour filtered, is the coherence
+fix."* **Do not do that.** Kenney and Quaternius meshes carry real information in
+their textures — road markings, lane lines, window panes, signage, door frames —
+and flattening those onto ten colours produces precisely the untextured blockout
+look this rebuild exists to correct. The spec instructed, as the remedy, the
+exact failure being remedied.
+
+**The method instead, converged on independently by two research passes:** keep
+each pack's own albedo untouched; replace only the LIGHTING EQUATION, in one
+shared shader; load every texture as a layer of a single `Texture2DArray` /
+`DataArrayTexture`; pass the layer index as a per-instance attribute. Meshes from
+different packs then render in one draw call, with one material, textures intact.
+
+The cost, named by both passes: an array texture requires every layer to share
+one resolution and format, so a build-time pass must normalise them. That is a
+script, run once, offline — not a runtime cost and not a loss of detail.
 
 **Greybox the entire kit in flat boxes with correct footprints and pivots, and
 prove every piece snaps, before modelling anything.** That phase is where Mark's
@@ -1486,9 +1530,17 @@ consistent choice.
 
 ### C2.5 Save format
 
-**`{ seed, generatorParams, placements[] }`.** Regenerate the base board on load;
-store only what the player changed. A4: Minecraft keeps the seed in `level.dat`
-and edits in region files — the recipe and the exceptions to it.
+**`{ seed, generatorParams, tombstones: number[], placements[] }`.** Regenerate
+the base board on load; store only what the player changed. A4: Minecraft keeps
+the seed in `level.dat` and edits in region files — the recipe and the
+exceptions to it.
+
+**CORRECTED 2026-09-14, applying C-6, which this section never absorbed.**
+Without `tombstones` the format cannot record a DELETION: there is no way to say
+"the player bulldozed a generated road," so regenerating from the seed on load
+silently puts it back. Tombstones are the cell indices where generated pieces
+were removed. A save format that cannot represent removal fails 2.2's own gate,
+which is that placement *and removal* survive a reload.
 
 **Never a full board snapshot with no seed. That is the 7.5 MB JSON with extra
 steps.**
@@ -1567,3 +1619,264 @@ written item and never invents. `rule://quarantine` — nothing is deleted.
 looks better.** Mark accepted that explicitly on 2026-09-11. Do not shortcut
 Phase 1 to get something on screen; that shortcut is the whole reason this file
 exists.
+
+---
+
+# ADDED 2026-09-14 — THE THREE SYSTEMS THIS DOCUMENT NEVER SPECIFIED
+
+Everything above describes a board. It does not describe the world the board
+sits in, it no longer describes a scoring rule (C-10 deleted C3 and wrote no
+replacement), and it gives Side B one line. Those three gaps are filled here.
+
+**Where W, S or B below conflicts with anything above, these win** — they are
+later and they were written against the corrections rather than before them.
+
+---
+
+## W — THE WORLD LAYER
+
+### W1. Areas are GEOGRAPHIC, not a uniform grid
+
+The world is the whole terrain: the downtown island, the archipelago, the
+mainland with its port and farmland. It is generated once, deterministically,
+from a seed, and **all of it exists from first load.**
+
+The world is divided into **areas**, and an area is a piece of geography — one
+island, one stretch of mainland coast, one valley — **not a tile of a uniform
+grid.** The generator defines them and their boundaries are water or
+impassable terrain.
+
+This is not a cosmetic choice. It settles three problems at once:
+
+- **Nothing straddles an area boundary**, because the boundary is water. A
+  piece is at most 8×8 cells; an area boundary is a coastline. The
+  straddling case that would otherwise force either a dead seam or
+  multi-area loading simply cannot arise.
+- **Locking is legible.** "This island is not open yet" is a thing a player
+  understands. "Tile 7,3 is not open yet" is not.
+- **The overview means something.** You pick an island, not a rectangle.
+
+Mark, 2026-09-13: *"the board itself... the whole world should be made just not
+opened, that will make sure that it is built right from the start and then we
+can add on to it rather than having to build it and potentially messing with the
+existing world."*
+
+### W2. Area state, and exactly one is active
+
+Every area is `LOCKED` or `OPEN`. Exactly one OPEN area is `ACTIVE` at a time —
+the one being played. **Locked does not mean ungenerated.** Terrain exists
+everywhere from the first frame; locking controls play, not existence.
+
+Opening an area is a game action (Phase 3). One area is OPEN at the start.
+
+### W3. Area size is the real board-size decision
+
+**256 × 256 cells — 1,024 m at the 4 m module — is the working figure for a
+typical area**, recorded as a choice rather than a measurement. It is a real
+city site, it is fillable in a sitting rather than being an empty field, and
+its occupancy grid is 128 KB. Geography will make areas vary; this is the
+target a generated island is sized toward, not a constraint on it.
+
+**The world's extent is NOT a performance number and must not be derived from
+one.** It comes from the terrain design — how many islands, how much mainland.
+A world of sixty-four such areas is 8 km square and costs 8.4 MB of occupancy
+data, of which one area is live at a time. The cost of a large world is
+storage, and storage is not the constraint.
+
+*Recorded because it caused a real error:* an earlier pass proposed a
+256 × 256 ceiling **for the whole world**, derived from the cost of sweeping
+every cell each frame. This design never sweeps the board — scoring is
+dirty-set only (S3), generation and save run once. The ceiling was real
+arithmetic answering a question nobody had asked.
+
+### W4. The overview is the real world, rendered coarsely
+
+Mark, 2026-09-13: *"it should still be 3D and highest quality snapshot of our
+actual world so that it shows you what it looks like and updates as you build
+it."* And: *"having it look cheap will be the death of it as it will be what
+you see first."*
+
+So the overview is **not a separate map.** A hand-made map is a second artifact
+that drifts out of sync with the first. The overview renders:
+
+- **The same terrain heightfield**, at coarse LOD.
+- **Built content as massing**, not as buildings — merged volumes whose height
+  and footprint follow what is actually built there. Re-baked when the player
+  leaves an area, so it always reflects the real city.
+- **Locked areas** rendered, and visually distinct — desaturated, no built
+  content, legible as dormant rather than as missing.
+
+Zoom is bounded. You cannot zoom from the overview to street level; at a
+threshold the camera descends into the area and the real content loads.
+
+**A deliberate transition, not a mode switch.** True continuous geometric zoom
+over player-built content requires runtime proxy generation and hierarchical
+LOD, which two independent research passes agree is too expensive for one
+person in a browser. The transition is placed where that breaks, on purpose,
+and dressed as a descent rather than as a loading screen.
+
+### W5. What loads, and when
+
+| Always resident | On entering an area | Discarded on leaving |
+|---|---|---|
+| World heightfield (from seed) | That area's placements | That area's meshes and textures |
+| The area list and their states | Its pieces' meshes, materials, impostors | Full-resolution terrain for it |
+| Overview massing for every area | Full-resolution terrain for it | — |
+
+Placements are never discarded; only their rendered form is. Leaving an area
+re-bakes its overview massing.
+
+### W6. Addressing
+
+A cell is `{ areaId, x, y }`, local to its area. Areas are independently sized,
+so there is no global cell grid and no global index arithmetic. A piece is
+`{ typeId, anchorCell, rotation }` exactly as C2.1 says, where `anchorCell`
+carries its `areaId`.
+
+**Camera-relative rendering: the active area re-centres at the origin on
+entry.** At 8 km from an origin, float32 gives roughly millimetre precision and
+produces visible vertex jitter and Z-fighting. Because only one area is ever
+active, this costs one translation on entry and removes the problem entirely —
+but it must be designed in at the start, because retrofitting it means touching
+every transform.
+
+---
+
+## S — THE SCORING RULE (replaces C3.1–C3.2, per C-10)
+
+C-10 moved the scalar-field model to Phase 3 and specified "flat adjacency
+scoring" without writing it. This is that specification.
+
+### S1. Stateless, by construction
+
+`value(cell) = terrainContribution(cell) + Σ contribution(piece, cell)` for
+every placed piece within Chebyshev radius **R = 3** cells.
+
+There is no tick. No agents, no pathfinding, no propagation beyond R, no state
+that evolves between player actions. The value of the board at rest is a pure
+function of what is on it. **If it needs a clock, it is out of scope.**
+
+### S2. What a piece carries
+
+Two new catalogue fields per piece type:
+
+- `baseValue` — an integer.
+- `adjacency` — a map from category (or specific `typeId`) to an integer
+  bonus or penalty applied to cells within R.
+
+Housing raises desirability nearby. Industry lowers it. Parks and water raise
+it. Roads raise access. Terrain contributes directly — water adjacency and
+buildable slope.
+
+**Falloff across R is not linear** (T9, Clark's negative exponential): steep
+immediately outside, then a long flat tail. A linear gradient reads as wrong
+to a player who could not say why.
+
+### S3. Computed on change, for the dirty set only
+
+On placement or removal, recompute only the cells inside the affected radius.
+Never the whole board, never per frame. This is what makes a large world free.
+
+### S4. What the player sees, and it is the whole point
+
+**The ghost shows the target cell's current value and the value the piece would
+have there.** That number, changing as the cursor moves, *is* the reason one
+cell beats another. A2's item five, the one the research says is always
+skipped, is this single readout.
+
+### S5. Developed value sits on top, unchanged in mechanism
+
+V3 — farmland becomes a house becomes a subdivision — needs nothing S1 does not
+already have. Improving a cell changes what is placed there, which changes its
+neighbours' contributions, which is already how the function works.
+
+---
+
+## B — SIDE B'S DATA MODEL
+
+Side B is the differentiator, the pipeline behind it already works, and this
+document has given it one line. The gap is not the pipeline. It is that nothing
+says **what a player-authored piece IS.**
+
+### B1. A player-authored piece is a catalogue entry. Full stop.
+
+Same schema as every shipped piece — `id`, `footprint`, `category`,
+`rotatable`, `terrainMask`, `baseValue`, `adjacency` — plus provenance:
+`author`, `verifiedBy`, `createdAt`, `sourceRef`.
+
+Its geometry comes from model-written procedural code, validated against the
+schema and executed in the sandbox. That is A11's documented loop and it is
+what the Build pipeline already does. **The board cannot tell the difference
+between a shipped piece and an authored one, and must not be able to.**
+
+### B2. THE DAY-ONE REQUIREMENT, and it is the same class as the pivot
+
+**`data/catalogue.json` must support entries added at runtime, not only entries
+shipped in the file.** The catalogue is a registry with a persisted overlay, not
+a static asset.
+
+If the catalogue is built as a fixed shipped file, Side B is not a feature that
+gets added later — it is a rewrite of the piece system, the save format and the
+validator. This belongs beside A12's grid arithmetic on the list of things
+locked before anything depends on them.
+
+### B3. Uniqueness is where coding becomes value
+
+Mark, 2026-09-11: *"you gain more value by laying out UNIQUE infrastructure. As
+you code something into the city that is different, that gains you more value in
+your city, because it's something unique that isn't in another city."*
+
+So: **a piece whose `typeId` is player-authored contributes a uniqueness
+multiplier to `baseValue`.** Side A and Side B stop being two games sharing a
+world and become one economy with two ways to raise the same number — which V4
+already says, and which S2's `baseValue` now gives a place to live.
+
+### B4. What stays out of scope here
+
+Sharing authored pieces between players, a marketplace, moderation, and the
+token economy are all in `VISION.md`. B1 and B2 are what Phase 2 must not
+foreclose; the rest is later.
+
+---
+
+## REVISED BUILD ORDER — supersedes Phase 2 above
+
+The ordering above is unchanged in its central rule (placement before
+generator). Two things move.
+
+**The world layer comes first**, because 2.1's "bounded grid of addressable
+cells" is an *area* inside a world, and those are different objects. The board
+cannot be built until the thing containing it exists.
+
+**The look moves earlier — and is proven on a handful of pieces before the
+catalogue is built.** The plan had models at 2.6, "the phase is won or lost
+here." That is the third time the look has been scheduled last, and the
+previous world was rejected for exactly that. Proving the shared material, the
+four lighting mechanisms and one join treatment on five pieces costs days;
+discovering they do not work after two hundred pieces exist costs the project.
+R2 and C1.5 already say this — *"start with ONE variant and test it in a real
+scene before building a second"* — and A12 says greybox the kit and prove every
+piece snaps before modelling anything.
+
+1. **The world layer.** Areas, state, the overview, the transition, addressing,
+   camera-relative origin. W1–W6.
+2. **The area board.** Grid, occupancy index, terrain fields. Data only.
+3. **Placement.** C2's Tier 1, on one area. The vertical slice, real but ugly.
+4. **The look, on five pieces.** One shared material, array texture with a
+   per-instance layer index (C-7, not the palette atlas C1.6 still describes),
+   the four R1 mechanisms with **Half Lambert squared**, one join treatment
+   from R8. Judged against 1.4's references.
+5. **Scoring.** S1–S5. Without it this is a toy, not a game.
+6. **Terrain.** Heights, water, slope constraints. Coarse mesh with heightmap
+   displacement, decoupled from the gameplay grid.
+7. **The catalogue proper**, built to the look proven at step 4.
+8. **Impostors and the overview.** Offline-baked multi-angle impostors for
+   distance; the overview's massing bake.
+9. **The generator, LAST**, emitting through the same `place()` the player
+   calls.
+10. **Side B**, pointed at the new board. B1–B3.
+11. **Progression.** Tasks, goals, NPCs.
+
+*Phase gate, unchanged in spirit:* a person opens the page, sees a world worth
+looking at, picks an area, places a building, sees why that cell was worth
+choosing, and it is still there on reload.
