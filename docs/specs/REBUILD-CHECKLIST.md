@@ -408,15 +408,31 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
 
 ## GATED — BLD, AND ONLY AFTER A1 HAS LANDED AND BEEN PUSHED
 
-[ ] BO7A (BLD) Catalogue entries for L12's new meshes — REBUILD-PLAN.md C1
-    BLOCKED until CLI's A1 is on origin. Until then the catalogue's schema and
-    its category table are both in flux, and entries written against the old
-    table would be written wrong.
-    CHECK, do not assume: fetch and confirm A1's commit exists on origin before
-    starting. If it does not, this stays blocked — go to I1/I2 instead and say
-    in the handover that you checked and it was not there. A lane that waits is
-    stalled; a lane that checks and moves on is working.
-    Never edit `data/catalogue.json` before that check passes.
+[x] BO7A (BLD) Catalogue entries for L12's new meshes — REBUILD-PLAN.md C1
+    A1 confirmed on `origin/scoring` (62650f4), then `origin/main`
+    (c63e7cd, after CLI merged scoring into main), then merged into
+    `codex-lane` (8c9b3a9) before this item started -- the catalogue's own
+    9-field-plus-baseValue/adjacency schema was live in this branch's own
+    `data/catalogue.json` before any edit.
+    RESCOPED DIRECTLY BY MARK, 2026-09-15, after the brief's own wording
+    ("catalogue entries for L12's new meshes") was found ambiguous: BO7A is
+    a JOIN, not a creation. `data/catalogue.json`'s 50 abstract entries
+    carry no mesh reference; `public/look-proof-pieces.js`'s 20 real L12
+    meshes carry no category/adjacency. `scripts/link-catalogue-meshes.mjs`
+    writes a `glb` field onto EXISTING entries where a real mesh matches
+    that entry's own footprint and category -- 12 of 50 linked. No new
+    entries. No invented category or adjacency value.
+    3 L12 meshes (the "-alt" variants at footprints whose one matching
+    category slot was already taken) are a disclosed FINDING, not a
+    guessed binding: `UNMATCHED_MESHES` in the script.
+    5 L12 meshes (street-lamp-1x1, utility-pole-1x1, dumpster-1x1,
+    awning-1x1, parasol-1x1) are scene dressing, never catalogue pieces --
+    `PROP_MESH_IDS`, resolved directly by Mark. Written into the
+    validator's own header so the next lane does not re-derive it; a
+    prop's own typeId refuses to place via the ordinary unknown-type path,
+    proven by a dedicated test naming dumpster-1x1 directly.
+    See docs/GATE-LEDGER.jsonl (item BO7A) for the commit hash and full
+    red/green evidence.
 
 ---
 
