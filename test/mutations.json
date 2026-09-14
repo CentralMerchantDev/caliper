@@ -1429,6 +1429,22 @@
       "find": "    if (typeof bonus === \"number\") total += bonus;",
       "replace": "    total += bonus;",
       "expect": "an entry with no adjacency key for the occupant's category contributes zero, not undefined-coerced-to-NaN"
+    },
+    {
+      "id": "v1-event-log-closed-list-enforced",
+      "guards": "V1's own gate: an event name outside the closed list (started/item-green/committed/pushed/merged/blocked/unblocked/finding) is refused, not silently accepted as a new de-facto category.",
+      "file": "scripts/record-event.mjs",
+      "find": "  if (!EVENTS.includes(event.event)) {",
+      "replace": "  if (false) {",
+      "expect": "appendEvent refuses an event name outside the closed list"
+    },
+    {
+      "id": "v1-event-log-no-truncation-on-malformed-prior-line",
+      "guards": "V1's own gate, verbatim: \"append-only proven by test -- a write cannot truncate.\" Reproduces the exact 2026-09-10 recordGate failure shape (a malformed line from a crashed write, followed by a real append) via the read-then-write-whole-file anti-pattern the checklist names directly.",
+      "file": "scripts/record-event.mjs",
+      "find": "  appendFileSync(logPath, JSON.stringify(record) + \"\\n\", \"utf8\");\n  return record;\n}",
+      "replace": "  let existing = [];\n  try { existing = readFileSync(logPath, \"utf8\").trim().split(\"\\n\").filter(Boolean).map((l) => JSON.parse(l)); } catch { existing = []; }\n  existing.push(record);\n  writeFileSync(logPath, existing.map((r) => JSON.stringify(r)).join(\"\\n\") + \"\\n\", \"utf8\");\n  return record;\n}",
+      "expect": "GATE: a malformed line left by a prior crashed write does NOT get lost when a new event is appended -- this is the exact 2026-09-10 recordGate failure shape, reproduced and proven fixed"
     }
   ]
 }
