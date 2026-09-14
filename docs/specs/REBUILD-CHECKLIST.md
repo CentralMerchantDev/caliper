@@ -374,7 +374,7 @@ The phase gate: *a person opens the page, sees a world worth looking at, **picks
 an area**, **places a building**, sees why that cell was worth choosing, and it
 is still there on reload.* RB1–RB4 built the machinery. This is the person.
 
-[ ] RC1 (BLD) Pointer interaction: hover, place, cancel, remove — REBUILD-PLAN.md C2.2
+[x] RC1 (BLD) Pointer interaction: hover, place, cancel, remove — REBUILD-PLAN.md C2.2
     `placement.js` has Tier 1 as data and RB2 renders the ghost, but nothing is
     driven by a mouse. Wire real input: hover moves the ghost, click commits,
     Escape or right-click cancels, and a click on a placed piece removes it.
