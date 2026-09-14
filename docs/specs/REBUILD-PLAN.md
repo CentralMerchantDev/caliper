@@ -1851,6 +1851,83 @@ V3 — farmland becomes a house becomes a subdivision — needs nothing S1 does 
 already have. Improving a cell changes what is placed there, which changes its
 neighbours' contributions, which is already how the function works.
 
+### PARKED — second-order lift, and PARKED — the build cost layer
+
+**Written up here, deliberately, rather than built.** Both are Mark's, both are
+real, neither is built as part of this document's own build order. Recorded so
+they are not lost, per `docs/specs/SCORING-MODEL-2026-09-14.md` §5 and §6,
+which is where each was first decided against building tonight — this section
+is their permanent home, not a duplicate of that reasoning.
+
+#### Second-order lift — needs a fixed-point solve, not built
+
+Mark described value density feeding on itself: a good neighbourhood's own
+reputation making it *more* good, beyond what the sum of its individual pieces
+would predict. Taken literally, that is **recursive** — a cell's value depends
+on its neighbours' values, which depend on its own — and S1's own gate forbids
+it outright: *"the same arrangement scores identically however it was arrived
+at."* A recursive definition either iterates to a fixed point or becomes
+order-dependent, and order-dependent fails that gate directly, not as an edge
+case.
+
+**What was built instead (S1–S4, S6):** the non-recursive version. A cell's
+value comes from *what pieces are within R*, read directly off the board,
+never from a neighbour's own *computed* value. Density still compounds in
+practice — four shops and a park beat one shop, per the ordinary sum of
+contributions — with no recursion, no iteration, and no path dependence. S6
+confirms this holds even under Mark's own "developer" narrative (farmland to
+subdivision): improving a cell changes what it contributes to its neighbours
+through the same, single, non-recursive pass — nothing here needed a second
+pass to converge.
+
+**What the non-recursive version does NOT give**, and what a real build would
+need: true second-order lift, where a neighbourhood's own reputation raises
+itself beyond the sum of its individually-placed pieces. That needs an
+**iterative relaxation** — recompute every affected cell's value from its
+neighbours' current values, repeat until the whole board's values stop moving
+by more than some tolerance (a Jacobi- or Gauss-Seidel-style pass over a fixed
+point), or an equivalent closed form if the compounding can be expressed as a
+solvable linear system. Either is a materially different kind of computation
+from anything S1–S4 built: bounded-cost-per-event becomes
+bounded-cost-per-*convergence*, and convergence itself needs a proof or a
+measured bound before it can ship, or a single bad arrangement could fail to
+settle at all. Not scoped, not estimated, not started. A future phase's own
+item, when it exists — this paragraph is what stops that phase starting from
+nothing.
+
+#### The build cost layer — a different system from desirability, does not leak into `value()`
+
+Mark's separate point: land near downtown should get more expensive to
+*acquire and build on* as the city fills in, because there is less of it left
+and because what is already built constrains what can still go there. That is
+a **cost** mechanic — what a cell costs a player to act on — and it is a
+different question from everything §S (this section) answers, which is
+**desirability**: what a cell is worth as a place to have put something,
+independent of what it cost to get there.
+
+**Why it must stay a separate system, named explicitly so a future
+implementer does not fold it in by convenience:** `value()`'s own gate is
+`baseValue` never entering the formula (§S1) specifically so the location-only
+readout stays uncontaminated by a piece's own worth. A cost layer reads the
+opposite direction — from scarcity and existing development *to* a price a
+player pays — and mixing the two would make both harder to reason about:
+desirability would start reflecting cost pressure it was never meant to carry,
+and cost would inherit whatever assumptions `value()` makes about adjacency
+and falloff that have nothing to do with acquisition price.
+
+**What it would need, roughly, when it is built:** a function of the same
+general shape as `value()` — reads the board, returns a number per cell — but
+over a DIFFERENT input (remaining buildable land nearby, or a count of what
+already occupies a radius, rather than adjacency bonuses) and feeding a
+DIFFERENT output (an acquisition/build cost the player pays, not a
+desirability score the player reads). Composes the same board primitives
+(`area-board.js`), reuses nothing from `scoring.js`'s own formula, and is
+never read BY `scoring.js` in either direction.
+
+Good idea, real mechanic, **not built here**. This is the future plan section
+it needed so it stays findable instead of living only inside a scoring
+decision document about something else.
+
 ---
 
 ## B — SIDE B'S DATA MODEL

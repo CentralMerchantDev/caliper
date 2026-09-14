@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { validateCatalogue, validateEntry, CATALOGUE_FOOTPRINTS, ROAD_CLASS_HIERARCHY } from "../public/catalogue-validator.js";
-import { AMENITY_CIVIC_TYPE_IDS } from "../scripts/migrate-catalogue-s2-fields.mjs";
+import { AMENITY_CIVIC_TYPE_IDS, unitQualityFor } from "../scripts/migrate-catalogue-s2-fields.mjs";
 import { MESH_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS } from "../scripts/link-catalogue-meshes.mjs";
 import { PIECES } from "../public/look-proof-pieces.js";
 import { createAreaBoard } from "../public/area-board.js";
@@ -47,6 +47,7 @@ function goodBuilding(overrides = {}) {
     proportion: 1.2,
     baseValue: 12,
     adjacency: { residential: 3, commercial: 3, industrial: 3, civic: 3, landmark: 3, road: 3 },
+    unitQuality: 1,
     ...overrides,
   };
 }
@@ -65,6 +66,7 @@ function goodRoad(overrides = {}) {
     junctionArms: ["street", "street"],
     baseValue: 1,
     adjacency: { residential: 3, commercial: 3, industrial: 3, civic: 3, landmark: 3, road: 3 },
+    unitQuality: 1,
     ...overrides,
   };
 }
@@ -390,30 +392,82 @@ test("RULE 8: a well-formed adjacency map is NOT flagged", () => {
   assert.ok(!errors.some((e) => e.rule === "has-adjacency" || e.rule === "adjacency-values-are-integers"), JSON.stringify(errors));
 });
 
-// ------------------------------------------------------------- rule 9 (BO7A)
-test("RULE 9 (glb): absent entirely is NOT flagged -- most of the 50 entries have no matching L12 mesh yet, and that is expected", () => {
+// ---------------------------------------------------------------- rule 9 (S4)
+test("RULE 9 (has unitQuality): a missing unitQuality is caught", () => {
+  const entry = goodBuilding();
+  delete (entry as any).unitQuality;
+  const errors = validateEntry(entry);
+  assert.ok(errors.some((e) => e.rule === "has-unit-quality"), JSON.stringify(errors));
+});
+
+test("RULE 9: a non-finite unitQuality is caught -- NaN", () => {
+  const errors = validateEntry(goodBuilding({ unitQuality: NaN }));
+  assert.ok(errors.some((e) => e.rule === "has-unit-quality"), JSON.stringify(errors));
+});
+
+test("RULE 9: a non-finite unitQuality is caught -- Infinity", () => {
+  const errors = validateEntry(goodBuilding({ unitQuality: Infinity }));
+  assert.ok(errors.some((e) => e.rule === "has-unit-quality"), JSON.stringify(errors));
+});
+
+test("RULE 9: a zero or negative unitQuality is caught -- the formula's own range never reaches or crosses zero", () => {
+  for (const v of [0, -1, -0.5]) {
+    const errors = validateEntry(goodBuilding({ unitQuality: v }));
+    assert.ok(errors.some((e) => e.rule === "has-unit-quality"), `${v}: ${JSON.stringify(errors)}`);
+  }
+});
+
+test("RULE 9: a unitQuality above 1 is caught -- the real formula, 1/sqrt(tiers), never exceeds 1 for tiers >= 1", () => {
+  const errors = validateEntry(goodBuilding({ unitQuality: 50 }));
+  assert.ok(errors.some((e) => e.rule === "has-unit-quality"), JSON.stringify(errors));
+});
+
+test("RULE 9: a real unitQuality in (0, 1], including exactly 1, is NOT flagged", () => {
+  for (const v of [1, 0.7071067811865475, 0.0001]) {
+    const errors = validateEntry(goodBuilding({ unitQuality: v }));
+    assert.ok(!errors.some((e) => e.rule === "has-unit-quality"), `${v}: ${JSON.stringify(errors)}`);
+  }
+});
+
+test("every real catalogue entry's unitQuality matches unitQualityFor() recomputed from its own massing -- the migration's own idempotence, not just the validator's range check", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  for (const entry of catalogue) {
+    const expected = unitQualityFor(entry);
+    assert.equal(entry.unitQuality, expected, `${entry.id}: stored ${entry.unitQuality}, recomputed ${expected}`);
+  }
+});
+
+test("unitQualityFor is exactly 1/sqrt(tiers) -- DECISIONS-FOR-MARK.md #14's disclosed curve, checked against LITERAL numbers so a mutated formula (e.g. 1/tiers) cannot pass by calling the function under test to build its own expectation", () => {
+  assert.equal(unitQualityFor({ category: "residential", massing: ["a"] }), 1);
+  assert.equal(unitQualityFor({ category: "residential", massing: ["a", "b"] }), 0.7071067811865475);
+  assert.equal(unitQualityFor({ category: "residential", massing: ["a", "b", "c"] }), 0.5773502691896258);
+  assert.equal(unitQualityFor({ category: "road", massing: ["a", "b", "c"] }), 1);
+});
+
+// ------------------------------------------------------------ rule 10 (BO7A)
+test("RULE 10 (glb): absent entirely is NOT flagged -- most of the 50 entries have no matching L12 mesh yet, and that is expected", () => {
   const entry = goodBuilding();
   delete (entry as any).glb;
   const errors = validateEntry(entry);
   assert.ok(!errors.some((e) => e.rule === "glb-is-string-or-null"), JSON.stringify(errors));
 });
 
-test("RULE 9: null is NOT flagged -- the explicit 'no mesh yet' value scripts/link-catalogue-meshes.mjs writes", () => {
+test("RULE 10: null is NOT flagged -- the explicit 'no mesh yet' value scripts/link-catalogue-meshes.mjs writes", () => {
   const errors = validateEntry(goodBuilding({ glb: null }));
   assert.ok(!errors.some((e) => e.rule === "glb-is-string-or-null"), JSON.stringify(errors));
 });
 
-test("RULE 9: an empty string is caught", () => {
+test("RULE 10: an empty string is caught", () => {
   const errors = validateEntry(goodBuilding({ glb: "" }));
   assert.ok(errors.some((e) => e.rule === "glb-is-string-or-null"), JSON.stringify(errors));
 });
 
-test("RULE 9: a non-string, non-null value is caught", () => {
+test("RULE 10: a non-string, non-null value is caught", () => {
   const errors = validateEntry(goodBuilding({ glb: 42 }));
   assert.ok(errors.some((e) => e.rule === "glb-is-string-or-null"), JSON.stringify(errors));
 });
 
-test("RULE 9: a real path string is NOT flagged", () => {
+test("RULE 10: a real path string is NOT flagged", () => {
   const errors = validateEntry(goodBuilding({ glb: "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb" }));
   assert.ok(!errors.some((e) => e.rule === "glb-is-string-or-null"), JSON.stringify(errors));
 });

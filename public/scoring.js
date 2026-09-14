@@ -67,6 +67,8 @@
 // [0.1, 0.46], not "mostly full strength, dampened only at the edge."
 // =============================================================================
 
+import { cellsOf } from "./area-board.js";
+
 export const R = 3;
 const EDGE_FRACTION = 0.1;
 const GAMMA = -Math.log(EDGE_FRACTION) / R;
@@ -132,12 +134,27 @@ export function terrainContribution(board, x, y) {
  * @param {object|Map} catalogue  typeId -> { category, adjacency, ... }
  * @param {number} x
  * @param {number} y
+ * @param {string} [categoryOverride]  §S4: when supplied, used as the
+ *   occupant category INSTEAD OF reading `board.pieceIdAt(x,y)`'s own
+ *   category -- this is the one seam `valueIfPlaced` needs (a hypothetical
+ *   candidate's category, never actually placed on the board) and it is
+ *   parameterized here rather than given a second, hand-copied
+ *   implementation in a sibling function. Composing one function two ways
+ *   carries zero drift risk; two functions with the same loop body,
+ *   maintained separately, do not stay identical forever. Optional and
+ *   last, so every existing 4-argument call site (valueAt, recomputeDirtySet,
+ *   every S1-S3 test) is unaffected.
  */
-export function value(board, catalogue, x, y) {
+export function value(board, catalogue, x, y, categoryOverride) {
   const catalogueOf = catalogue instanceof Map ? (id) => catalogue.get(id) : (id) => catalogue[id];
 
-  const occupantId = board.pieceIdAt(x, y);
-  const occupantCategory = occupantId === -1 ? null : catalogueOf(board.getPiece(occupantId).typeId).category;
+  let occupantCategory;
+  if (categoryOverride !== undefined) {
+    occupantCategory = categoryOverride;
+  } else {
+    const occupantId = board.pieceIdAt(x, y);
+    occupantCategory = occupantId === -1 ? null : catalogueOf(board.getPiece(occupantId).typeId).category;
+  }
 
   let total = terrainContribution(board, x, y);
 
@@ -155,4 +172,137 @@ export function value(board, catalogue, x, y) {
   }
 
   return total;
+}
+
+// =============================================================================
+// THE DIRTY SET — §S3. "On placement or removal, recompute only the cells
+// inside the affected radius. Never the whole board, never per frame."
+//
+// A placement or removal at `rect` can only change `value()` for a cell
+// within Chebyshev R of SOME cell `rect` occupies -- everything else reads
+// the identical set of nearby pieces it did before, so its own value()
+// cannot have moved. `dirtyCellsForRect` names exactly that set.
+//
+// THE MATH: an L∞ (Chebyshev) ball around every point of an axis-aligned
+// rectangle is ITSELF exactly another axis-aligned rectangle -- dilation by
+// a Chebyshev ball is separable per axis, so no per-cell distance filter is
+// needed (unlike `pieceIdsWithinR`'s point-based scan, which keeps one for
+// its own -- unrelated -- reasons, out of this item's scope to touch).
+// GOT WRONG ONCE, CAUGHT BY BLIND REVIEW BEFORE ANY CODE LANDED: the first
+// version of this comment described the exclusive-upper-bound conversion as
+// `rect.xMax - 1 + radius` -- correct as the INCLUSIVE rightmost dirty
+// column, but silently one column short once handed to `cellsOf()`'s own
+// EXCLUSIVE convention (it loops `x < rect.xMax`). The real formula needs a
+// compensating +1: `rect.xMax + radius` is the correct EXCLUSIVE bound. Not
+// hypothetical -- reproduced by hand: for a piece occupying columns 5-6 at
+// radius 3, the true dirty set includes column 9 (Chebyshev distance exactly
+// 3, `falloff(3) = EDGE_FRACTION`, nonzero); the wrong formula silently
+// dropped it. Both the positive case (a cell AT the true edge IS in the
+// dirty set) and the negative case (one cell further is NOT) are pinned by
+// separate tests below -- a test that only checks the negative case would
+// not have caught this, and did not, until this was found.
+//
+// ACCEPTED COST, NAMED RATHER THAN SILENT: `recomputeDirtySet` calls
+// `value()` once per dirty cell, and each call independently re-scans its
+// own (2R+1)^2 neighbourhood via `pieceIdsWithinR` -- heavily overlapping
+// adjacent cells' own scans. For a large piece the dirty set can be
+// hundreds of cells. This is bounded per EVENT (a placement or a removal),
+// never per frame and never the whole board, which is what this item's own
+// gate asks for -- but it is real, repeated work, not free, and a future
+// performance pass could share scans across the dirty set if it matters in
+// practice.
+// =============================================================================
+
+/** Every `{x,y}` cell within Chebyshev `radius` of ANY cell inside `rect`,
+ * clipped to the board. Pure geometry -- composes `cellsOf()` from
+ * area-board.js rather than reimplementing cell iteration. */
+export function dirtyCellsForRect(board, rect, radius = R) {
+  const clipped = {
+    xMin: Math.max(0, rect.xMin - radius),
+    xMax: Math.min(board.width, rect.xMax + radius),
+    yMin: Math.max(0, rect.yMin - radius),
+    yMax: Math.min(board.height, rect.yMax + radius),
+  };
+  return [...cellsOf(clipped)];
+}
+
+/**
+ * Recompute `value()` for exactly the dirty set a placement or removal at
+ * `rect` affects -- never the whole board. Returns a `Map` from `"x,y"` to
+ * the freshly computed value; the Map's own keys are the record of which
+ * cells were actually touched, which is what this item's own gate needs
+ * ("the test asserts WHICH cells recomputed. An assertion on the result
+ * alone cannot see this" -- a far cell's value() would still be CORRECT if
+ * computed anyway, so only checking values can't tell "touched 20 cells"
+ * from "touched all 400 and 380 happened not to change").
+ */
+export function recomputeDirtySet(board, catalogue, rect, radius = R) {
+  const results = new Map();
+  for (const { x, y } of dirtyCellsForRect(board, rect, radius)) {
+    results.set(`${x},${y}`, value(board, catalogue, x, y));
+  }
+  return results;
+}
+
+// =============================================================================
+// valueAt, valueIfPlaced, AND THE TWO WORTHS — §S4, "the point of the whole
+// model" per SCORING-MODEL §3.2/§3.3.
+//
+// `valueAt` is `value()` itself, named per §S4's own vocabulary -- "the
+// target cell's CURRENT value... pure location, the ghost readout."
+//
+// `valueIfPlaced` asks "what would value(x,y) be if `typeId` occupied
+// (x,y)?" WITHOUT ever calling `board.place()`/`board.remove()` -- it
+// supplies `typeId`'s own category as `value()`'s `categoryOverride`
+// (above), which is structurally, not just behaviourally, incapable of
+// mutating the board: there is no code path here that could touch
+// occupancy even by accident. A place-then-restore approach was considered
+// and rejected: `evaluatePlacement` refuses outright when the candidate's
+// OWN full footprint doesn't fit (occupied, terrain-mismatched, out of
+// bounds) -- exactly where a hover-preview is most useful -- so that route
+// would return NO NUMBER AT ALL for the common case of previewing over
+// ground the candidate cannot actually occupy. This readout is about the
+// desirability of a spot, decoupled from whether a piece can physically fit
+// there right now; that is C2.3's `evaluatePlacement`'s own, separate job.
+//
+// `rotation` is accepted in the signature (matching C2.2/`evaluatePlacement`'s
+// own convention, and the checklist's own stated signature) but DOES NOT
+// change the computed number under this design -- `value()` is inherently
+// single-point, examining only NEIGHBOURING pieces' rects via
+// `nearestChebyshevDistance`, never the candidate's own footprint cells. A
+// disclosed choice, not a silent gap: a future caller must not assume
+// hovering a different rotation changes this particular readout.
+//
+// OCCUPIED-CELL ("REPLACE") BEHAVIOUR, VERIFIED, NOT JUST ASSUMED:
+// `pieceIdsWithinR`'s own self-exclusion keys on `board.pieceIdAt(x,y)` --
+// the REAL current occupant's id -- independent of `categoryOverride`. So
+// calling `valueIfPlaced` on an already-occupied cell correctly excludes
+// the real occupant from its own neighbour sum (as `value()` always does)
+// while using the CANDIDATE's category for the lookup -- exactly "replace"
+// semantics, covered by its own test below, not left as an undemonstrated
+// side effect of the design.
+// =============================================================================
+
+export function valueAt(board, catalogue, x, y) {
+  return value(board, catalogue, x, y);
+}
+
+export function valueIfPlaced(board, catalogue, typeId, x, y, rotation) {
+  const catalogueOf = catalogue instanceof Map ? (id) => catalogue.get(id) : (id) => catalogue[id];
+  const category = catalogueOf(typeId).category;
+  return value(board, catalogue, x, y, category);
+}
+
+/** SCORING-MODEL §3.2: perUnitWorth(type, cell) = value(cell) x unitQuality(type). */
+export function perUnitWorth(valueNumber, unitQuality) {
+  return valueNumber * unitQuality;
+}
+
+/** SCORING-MODEL §3.3: totalWorth(type, cell) = perUnitWorth(type, cell) x
+ * units(type). Callers pass `catalogue[typeId].baseValue` as `units` --
+ * `baseValue` was redefined in A1 to mean the unit count (footprint area x
+ * massing tiers), not a worth number; this does not recompute that formula
+ * a second time. */
+export function totalWorth(perUnitWorthNumber, units) {
+  return perUnitWorthNumber * units;
 }
