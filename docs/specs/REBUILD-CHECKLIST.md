@@ -260,7 +260,7 @@ proven, current, and yours to build on.
     from a valid one, and committing it changes nothing. RED is a ghost that
     looks placeable where `place()` would refuse — the render and the rule
     disagreeing, again.
-[!] RB3 (BLD) THE VALUE READOUT — §S4's payoff. REASSIGNED from CLI's S5.
+[x] RB3 (BLD) THE VALUE READOUT — §S4's payoff. REASSIGNED from CLI's S5.
     PARTIAL, HONESTLY, PER THIS RUN'S OWN BRIEF §4 -- S4 has not landed:
     checked `origin/scoring` and `origin/main` directly (not assumed),
     neither exports `valueAt`/`valueIfPlaced`; only S1's `value()` and
@@ -279,17 +279,38 @@ proven, current, and yours to build on.
     muted grey marker (not the blue `READOUT_COLOR.available` a real
     number would render), and the console logs
     `READOUT-STATE ... available=false reason="S4 not landed: ..."`.
-    THE GATE ITSELF IS UNVERIFIED, NAMED PLAINLY: "move the cursor across
-    cells of genuinely different value and the number changes" cannot be
-    demonstrated with real numbers while none exist. Proven instead at
-    the mechanism level, against a mock scoring module
-    (test/boardRenderer.test.ts): two different cells produce two
-    different numbers through the SAME resolveReadout call path that will
-    run once S4 lands. A LIVE test against the real, unmocked
-    `public/scoring.js` (`GATE (RB3): the REAL public/scoring.js ...`) is
-    written to START FAILING the moment `valueAt`/`valueIfPlaced` exist --
-    at which point this item's own render should be revisited to show
-    real numbers and re-verify the actual visual gate before ticking `[x]`.
+    THE GATE ITSELF WAS UNVERIFIED WHEN THIS WAS FIRST WRITTEN: "move the
+    cursor across cells of genuinely different value and the number
+    changes" could not be demonstrated with real numbers while none
+    existed. Proven instead at the mechanism level, against a mock
+    scoring module (test/boardRenderer.test.ts): two different cells
+    produce two different numbers through the SAME resolveReadout call
+    path that would run once S4 landed. A LIVE test against the real,
+    unmocked `public/scoring.js` was written to START FAILING the moment
+    `valueAt`/`valueIfPlaced` existed -- that test fired red on schedule.
+
+    FINISHED FOR REAL, RC5, 2026-09-15 (this run): S4 landed on
+    `origin/main` (merged from `scoring`, Mark's own authorisation per
+    ADR-020), then merged into `codex-lane`. `resolveReadout` needed no
+    code change -- the guessed signature matched S4's real one exactly,
+    confirmed directly against `public/scoring.js`, not assumed from the
+    guess having been reasonable. The live signal test
+    (`test/boardRenderer.test.ts`) replaced with a real one asserting
+    `available: true` and cross-checking the returned numbers directly
+    against the real `valueAt`/`valueIfPlaced`. Rendered on the real
+    demo board (`26-readout-real-numbers.png`, `?board=1&readout=7,4`):
+    the marker renders blue (`READOUT_COLOR.available`), console reports
+    `READOUT-STATE cell=7,4 available=true current=0
+    ifPlaced=2.3207944168063896`. THE NUMBERS, SHOWN NOT TUNED, per this
+    item's own brief: at (2,6) near `house-a` (residential, dilutive on
+    itself), `ifPlaced=-0.43`; at (7,4) beside `tower-base-6x6-a`
+    (landmark, +5 to residential, Chebyshev distance 1), `ifPlaced=2.32`
+    -- `2.32/5 = 0.464`, matching Mark's own named falloff-anchor
+    question almost exactly ("the nearest possible neighbour contributes
+    only ~46% of its nominal value"); at (20,14), far from every piece,
+    `ifPlaced=0`. Real, non-trivial, distinguishable numbers across all
+    three -- not "everything weak" or "nothing distinguishable" -- shown
+    here for Mark's own judgement on the falloff anchor, not retuned.
     Call them. Do not reimplement scoring, and do not touch
     `public/scoring.js`. -- honoured: zero edits to that file this run.
     The ghost shows the cell's current value AND the value the piece would have
@@ -408,7 +429,7 @@ is still there on reload.* RB1–RB4 built the machinery. This is the person.
     different camera and still reads as a dust bowl at that distance.
     Gate: the pair of images at the BOARD camera, judged by Mark. No numeric
     gate; inventing one would be a check that cannot fail.
-[ ] RC5 (BLD) Finish RB3 the moment S4 lands — SCORING-MODEL-2026-09-14.md §3.2 and §3.3
+[x] RC5 (BLD) Finish RB3 the moment S4 lands — SCORING-MODEL-2026-09-14.md §3.2 and §3.3
     RB3 is `[!]`: the readout renders an honest "unavailable" state and a live
     test fails the moment CLI's `valueAt`/`valueIfPlaced` exist. That test is
     the signal. When it goes red, finish the readout for real.
