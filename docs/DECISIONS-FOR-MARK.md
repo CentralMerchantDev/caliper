@@ -1149,3 +1149,36 @@ entries than when this decision was first written.
 **Recommendation:** unblocking — `medianWealth`'s own per-cell scan is one function; switching to `units(type)`-weighted sampling is a bounded, local change (repeat each building's single computed value `units(type)` times in the pool, instead of once per occupied cell) that does not touch the registry, the median primitive, or any other term. Worth a real answer once a real board and real catalogue spread exist to judge the distortion against, not from a formula on paper.
 
 **Reversibility:** fully reversible — the weighting logic lives in one loop inside `medianWealth`; nothing downstream depends on cell-counting specifically, since `computeScore`'s registry only ever sees the final number.
+
+## 16. `docs/briefs/CLI-2026-09-15.md` §6 asked, if budget allowed after C1, to draft a rule for something no rule currently covers — the harness auto-promoting long commands to background tasks. Drafted here, not written directly into `C:\Code\process-mcp`, since that repo is outside this lane's file surface (the same boundary V1 already draws for `process_record_event`).
+
+**Context:** this session's own tool environment silently promotes a command to a background task once it runs long enough, **regardless of whether the caller asked for that** — observed directly and repeatedly this run (`node test/run.mjs`, `scripts/mutate.mjs --id ...`). A caller that assumes a tool call blocks until the command finishes will act on a still-running process's absence of output as if it were a real result. This is not named anywhere in `rule://build-loop`, `rule://stopping-authority`, or any rule this session could find — `rule://lane-brief`'s own principle ("if a brief needs a paragraph the rules do not have, that is a missing rule, not a brief section") applies directly.
+
+**What was observed, concretely, this run:** a full-suite run stalled for over 20 minutes with the spawned process at ~0% CPU, root-caused (not guessed) to a *second, unrelated* Claude Code session actively running its own full-suite reruns against a different repository (`process-mcp`) on the same machine, confirmed by inspecting `Win32_Process` command lines directly. The stall was real contention, not a defect in this lane's own tests — proven by the same full suite completing cleanly, twice, once the contending process was no longer competing for the same resources.
+
+**The recommended rule, drafted in full so it can be adopted with minimal editing:**
+
+---
+**Proposed rule id:** `background-promotion-evidence`
+
+**Title:** A tool call that runs long enough is silently backgrounded — evidence of completion is the runner's own summary line, never the absence of an error
+
+**Body:**
+
+The harness auto-promotes a long-running command to a background task once it exceeds some duration, independent of any parameter the caller passed. A tool result returning without visible failure is **not** evidence the underlying command finished — it may mean the command is still running in the background.
+
+**The evidence a test suite genuinely completed is the runner's own summary line** (for this project's `node:test`-based runner, the `ℹ tests` / `ℹ pass` / `ℹ fail` block; the equivalent exists for any other runner in any other repo this rule applies to). Absent that line, the run did not complete, whatever the tool result's own exit code or apparent success otherwise suggests.
+
+**When a run stalls:** check whether the spawned process is genuinely making progress (CPU time increasing across two checks a minute or more apart) before concluding it is hung. A process at or near 0% CPU across repeated checks, with no growing output, is a real stall — but the cause may be **contention with another, unrelated concurrent process on the same machine**, not a defect in the command itself. Verify before assuming either.
+
+**What this does not license:** killing another session's processes to relieve contention. Only kill processes this session itself spawned.
+
+**Where this is read:** any moment a lane is about to trust that a background-eligible command has finished — before reporting a suite as green, before trusting a mutation run's CAUGHT/SURVIVED classification, before any claim that depends on a command having actually run to completion.
+
+---
+
+**What was done in the meantime, this run:** treated the runner's own summary line as the standard throughout (never trusted a bare "command completed" without seeing `ℹ tests`/`ℹ pass`), verified stalls were real (flat CPU across repeated checks) before intervening, killed only this session's own spawned processes, and root-caused one stall to a concrete, confirmed external cause rather than guessing. `docs/specs/REBUILD-CHECKLIST.md`'s S4 entry already names the resulting known gap (formal `mutate.mjs` manifest coverage) honestly rather than forcing it through a contended environment.
+
+**Recommendation:** adopt substantially as drafted above. The PROC lane (or Mark directly) is the right owner for actually writing it into `C:\Code\process-mcp`, per the same V1 boundary this brief already draws — this lane drafts, PROC lane commits, matching how `process_record_event`'s implementation crosses the same line in the other direction.
+
+**Reversibility:** fully reversible — this is a documentation/process rule, not code; adopting, editing, or discarding the draft costs nothing beyond the rule server's own versioning.
