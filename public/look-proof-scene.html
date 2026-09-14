@@ -131,20 +131,23 @@ const GHOST_DEMO = {
 };
 const GHOST_COLOR = { valid: 0x4caf50, invalid: 0xe53935 }; // visibly distinct: green vs red
 
-// RB3 -- THE VALUE READOUT, reassigned from CLI's S5 (docs/specs/
+// RB3/RC5 -- THE VALUE READOUT, reassigned from CLI's S5 (docs/specs/
 // REBUILD-CHECKLIST.md, THE CONVERGENCE: "S5 sat in CLI's list marked
 // blocked because no render surface existed. RB1 creates one, and a
 // readout is a view concern. So it moves to the lane that owns the
 // view."). `?board=1&readout=x,y` previews a cell's own value() reading
-// via resolveReadout (board-renderer.js), which calls CLI's own
-// valueAt/valueIfPlaced through the real, dynamically-checked
-// ScoringModule namespace -- never a value computed here.
-// UNVERIFIED AS OF THIS RUN, DISCLOSED PER THE BRIEF'S OWN §4: neither
-// origin/scoring nor origin/main has valueAt/valueIfPlaced yet (checked
-// directly, not assumed) -- only S1's value() and S2's falloff exist.
-// This mode renders the REAL, honest "unavailable" state rather than a
-// guessed or stubbed number -- the brief's own explicit instruction:
-// "Do not stub scoring yourself."
+// via resolveReadout (board-renderer.js), which calls CLI's own real
+// valueAt/valueIfPlaced through the dynamically-checked ScoringModule
+// namespace -- never a value computed here.
+// RC5 -- S4 LANDED, 2026-09-15: `origin/scoring` merged into `origin/main`
+// with Mark's own authorisation (`ADR-020`, logged in `EVENT-LOG.jsonl`),
+// then merged into this branch. valueAt/valueIfPlaced are real now --
+// this mode renders REAL current/ifPlaced numbers via resolveReadout,
+// never a guessed or stubbed one. The "unavailable" path (READOUT_COLOR
+// .unavailable, resolveReadout's own honest fallback) stays wired for
+// exactly the reason it was built: if a future scoring change ever
+// removes or renames these exports again, this renders the true state
+// instead of crashing or silently showing a stale number.
 const READOUT_MODE = new URLSearchParams(window.location.search).get("readout"); // "x,y" | null
 const READOUT_CELL = (() => {
   if (!READOUT_MODE) return null;
@@ -152,7 +155,7 @@ const READOUT_CELL = (() => {
   return Number.isInteger(x) && Number.isInteger(y) ? { x, y } : null;
 })();
 const READOUT_CANDIDATE_TYPE_ID = "house-a"; // an arbitrary, real, glb-bound typeId to preview "if placed" with
-const READOUT_COLOR = { available: 0x2196f3, unavailable: 0x9e9e9e }; // blue once real; neutral grey while S4 is pending
+const READOUT_COLOR = { available: 0x2196f3, unavailable: 0x9e9e9e }; // blue once real (now the common case); neutral grey only if scoring ever becomes unavailable again
 
 // RB4 -- "Still there on reload" (docs/specs/REBUILD-CHECKLIST.md, THE
 // CONVERGENCE). `?board=1&reload=1` places the SAME BOARD_DEMO_PLACEMENTS
@@ -828,16 +831,17 @@ async function main() {
     window.__ghostMesh = ghostMesh;
   }
 
-  // RB3 -- the value readout's own visual marker. A small floating
-  // diamond at the queried cell -- blue once real numbers exist
-  // (READOUT_COLOR.available), neutral grey while §S4 is pending
-  // (READOUT_COLOR.unavailable, the REAL state as of this run). This is
-  // a status indicator, not a data visualisation -- with no real number
-  // to show, rendering one anyway (a guessed height, a guessed colour
-  // ramp) would be exactly the invented substitute the brief's own §4
-  // says not to build. The real numbers, once available, are logged
-  // (READOUT-STATE, above) and belong in a future revision of this
-  // marker's own height/colour, not invented here ahead of them.
+  // RB3/RC5 -- the value readout's own visual marker. A small floating
+  // diamond at the queried cell -- blue now that S4 is real
+  // (READOUT_COLOR.available, the common case as of this run), neutral
+  // grey only if scoring becomes unavailable again (READOUT_COLOR
+  // .unavailable). Still a status indicator, not a data visualisation:
+  // the real current/ifPlaced numbers are the evidence (READOUT-STATE,
+  // above, and window.__readoutResolved), read directly rather than
+  // encoded into a guessed marker height or colour ramp -- a screenshot
+  // paired with the console line is what this run's own brief asked be
+  // shown to Mark, not a second, invented visual encoding of the same
+  // numbers.
   if (readoutResolved) {
     const [rx, rz] = anchorForCell(READOUT_CELL);
     const readoutGeom = new THREE.OctahedronGeometry(1.4, 0)

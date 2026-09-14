@@ -143,35 +143,33 @@ export function resolveGhost(ghost, catalogue) {
 }
 
 /**
- * RB3 -- THE VALUE READOUT, reassigned from CLI's S5. §S4's own
- * `valueAt`/`valueIfPlaced` are CLI's, not built as of this run (checked
- * `origin/scoring` and `origin/main` directly, neither has them; only S1's
- * `value(board, catalogue, x, y)` and S2's falloff exist) -- per this
- * run's own brief §4: "If S4 has not landed when you reach RB3, build the
- * readout against the functions' signatures and say plainly ... that it
- * is unverified. Do not stub scoring yourself." This function does
- * exactly that and nothing more.
+ * RB3/RC5 -- THE VALUE READOUT, reassigned from CLI's S5. §S4's own
+ * `valueAt`/`valueIfPlaced` were CLI's, not built as of RB3's own run
+ * (checked `origin/scoring` and `origin/main` directly at the time,
+ * neither had them). **S4 landed 2026-09-15**, merged from `scoring` into
+ * `main` with Mark's own authorisation (`ADR-020`, logged in
+ * `EVENT-LOG.jsonl`), then merged into this branch -- this function now
+ * calls the REAL functions on every render, not a guessed fallback.
  *
- * `scoringModule` is the DYNAMICALLY imported public/scoring.js namespace
- * (`await import("./scoring.js")`), passed in rather than imported
- * statically at this module's own top level -- a static `import {
- * valueAt } from "./scoring.js"` would throw at parse time for an export
- * that does not exist yet, breaking every OTHER mode of look-proof-
- * scene.html the moment this file is loaded, not just this one. Checking
- * `typeof scoringModule.valueAt === "function"` on the real, dynamically
- * loaded module object never throws -- a missing export just reads as
- * `undefined`.
+ * `scoringModule` is still the DYNAMICALLY imported public/scoring.js
+ * namespace (`await import("./scoring.js")` /
+ * `import * as ScoringModule` in look-proof-scene.html), not a static
+ * named import -- kept that way even though the export now exists, since
+ * a static `import { valueAt }` would have thrown at parse time for the
+ * entire lifetime this function had to tolerate S4's absence, and there
+ * is no benefit to switching now that reintroduces that fragility for a
+ * future export this file might reference before it lands.
  *
- * THE GUESSED SIGNATURE, DISCLOSED, NOT INVENTED FROM NOTHING: S1's own
- * `value(board, catalogue, x, y)` is the one established calling
- * convention this file already has to extend from, and its own header
- * names `valueAt`/`valueIfPlaced` as "the one piece they will both
- * call" -- so this guesses `valueAt(board, catalogue, x, y)` and
- * `valueIfPlaced(board, catalogue, typeId, x, y, rotation)`, matching S1's
- * own argument order rather than inventing a different one. If S4 lands
- * with a different signature, the call below throws and is reported as
- * `available: false` with the real error message -- loud, not a silently
- * wrong number.
+ * THE GUESSED SIGNATURE, CONFIRMED, NOT JUST HOPED: RB3's own guess --
+ * `valueAt(board, catalogue, x, y)` and `valueIfPlaced(board, catalogue,
+ * typeId, x, y, rotation)`, matching S1's own `value()` argument order --
+ * turned out to match S4's real, shipped signature exactly (verified
+ * directly against `public/scoring.js`, not assumed from the guess
+ * having been reasonable). The `typeof scoringModule.valueAt ===
+ * "function"` check and the try/catch around the real call both stay:
+ * if a FUTURE scoring change ever alters the signature again, this
+ * reports `available: false` with the real error message rather than a
+ * silently wrong number, exactly as it did while S4 was still absent.
  */
 export function resolveReadout(scoringModule, board, catalogue, cell, candidateTypeId, rotation) {
   if (typeof scoringModule.valueAt !== "function" || typeof scoringModule.valueIfPlaced !== "function") {

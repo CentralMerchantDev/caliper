@@ -210,11 +210,34 @@ test("resolveGhost: an unknown typeId resolves to null, not a guessed footprint 
 });
 
 // ----------------------------------------------------------------- resolveReadout
-test("GATE (RB3): the REAL public/scoring.js, as of this run, does NOT export valueAt/valueIfPlaced -- resolveReadout must report unavailable against it, not silently compute something else. This test itself is expected to start failing the moment CLI's S4 lands, which is the point: it is a live check against the real module, not a mock standing in for a claim.", () => {
-  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
-  const result = resolveReadout(REAL_SCORING, board, CATALOGUE, { x: 0, y: 0 }, "house-a", 0);
-  assert.equal(result.available, false, "S4 appears to have landed -- update board-renderer.js's own resolveReadout call and RB3's own render to use the real functions, this fallback path is no longer the honest state");
-  assert.match(result.reason, /S4 not landed/);
+test("GATE (RC5): the REAL public/scoring.js now exports valueAt/valueIfPlaced (S4 landed 2026-09-15, merged from origin/scoring with Mark's own authorisation) -- resolveReadout reports available and returns REAL numbers, composed from the real value(), not reinvented. This test replaces RB3's own live-signal test, which fired red exactly as its own header said it would the moment this happened.", () => {
+  // A real S4-shaped catalogue (category/adjacency/baseValue/unitQuality),
+  // not board-renderer.test.ts's own shared CATALOGUE above -- that fixture
+  // predates S4 and deliberately has no scoring-relevant fields; the real
+  // value()/valueIfPlaced() need them to do anything but return early on
+  // terrain alone.
+  const SCORING_CATALOGUE = {
+    "house-a": { category: "residential", footprint: [2, 3], terrainMask: ["land"], adjacency: { residential: -1 }, baseValue: 6, unitQuality: 1 },
+    "shop-a": { category: "commercial", footprint: [2, 2], terrainMask: ["land"], adjacency: { residential: 5 }, baseValue: 4, unitQuality: 1 },
+  };
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: SCORING_CATALOGUE });
+  board.place("shop-a", { x: 5, y: 5 }, 0); // within R of (8,8) -- Chebyshev distance 3
+  const result = resolveReadout(REAL_SCORING, board, SCORING_CATALOGUE, { x: 8, y: 8 }, "house-a", 0);
+  assert.equal(result.available, true, JSON.stringify(result));
+  assert.equal(typeof result.current, "number");
+  assert.equal(typeof result.ifPlaced, "number");
+  // Composes the real value()/valueIfPlaced(), never a second, hand-rolled
+  // formula that could silently disagree with what CLI actually built --
+  // cross-checked directly against the same real module this test itself
+  // imports, not just trusted because resolveReadout claims it.
+  assert.equal(result.current, REAL_SCORING.valueAt(board, SCORING_CATALOGUE, 8, 8));
+  assert.equal(result.ifPlaced, REAL_SCORING.valueIfPlaced(board, SCORING_CATALOGUE, "house-a", 8, 8, 0));
+  // Not a degenerate zero-vs-zero pass: the shop's own real adjacency bonus
+  // to residential (+5, falloff-weighted at distance 3) is what "placing a
+  // house here" actually picks up, so a house genuinely reads as MORE
+  // valuable at this cell than the vacant terrain-only baseline -- a real,
+  // non-trivial number, not an artefact of an empty test fixture.
+  assert.ok(result.ifPlaced > result.current, `expected placing a house near the shop to read as more valuable than vacant ground: current=${result.current} ifPlaced=${result.ifPlaced}`);
 });
 
 test("resolveReadout: reports unavailable, by name, when valueAt/valueIfPlaced are missing -- never silently computes a substitute", () => {
