@@ -30,7 +30,8 @@ import { createLookProofMaterial, LIGHT_DIR } from "./look-proof-material.js";
 import { PIECES as ALL_PIECES, LAYOUT_BOUNDS, GROUND as GROUND_FULL, loadPieceGeometry, fitToFootprint } from "./look-proof-pieces.js";
 import { createAreaBoard } from "./area-board.js";
 import { createPlacementSession, loadBoard } from "./placement.js";
-import { resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY } from "./board-renderer.js";
+import { resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY, MODULE_SIZE_M } from "./board-renderer.js";
+import { cellFromWorldXZ, handleHover, handleClick, handleCancel } from "./pointer-interaction.js";
 // RB3 -- a NAMESPACE import (`import * as`), not `import { valueAt,
 // valueIfPlaced }`. A named import of an export that does not exist
 // throws at parse time and would crash every OTHER mode this file
@@ -171,6 +172,20 @@ const RELOAD_MODE = new URLSearchParams(window.location.search).has("reload");
 // surfaced rather than an empty list that was never actually exercised.
 const RELOAD_SHRINK = new URLSearchParams(window.location.search).has("reloadShrink");
 
+// RC1 -- "MAKE IT PLAYABLE" (docs/specs/REBUILD-CHECKLIST.md). `?board=1&interactive=1`
+// wires REAL pointer input: hover moves the ghost, click commits (or
+// removes, if the clicked cell already holds a piece), Escape or
+// right-click cancels. The DECISION logic (which cell, hover vs. commit
+// vs. remove vs. cancel) lives in public/pointer-interaction.js, tested
+// there against a real board with no browser at all; everything in this
+// file is the one browser-only step that module cannot do itself --
+// screen pixel -> world point -- plus re-rendering. INTERACTIVE_TYPE_ID
+// is the "brush": a real, glb-bound catalogue id (the same one RB3's own
+// READOUT_CANDIDATE_TYPE_ID already established as a safe demo choice),
+// not an invented one.
+const INTERACTIVE_MODE = new URLSearchParams(window.location.search).has("interactive");
+const INTERACTIVE_TYPE_ID = "house-a";
+
 const PIECES = HERO_MODE
   ? [...HERO_IDS, ...HERO_PROP_IDS].map((id) => {
       const p = ALL_PIECES.find((x) => x.id === id);
@@ -241,6 +256,25 @@ function addConstantDecalAttribute(geometry, value) {
   const count = geometry.getAttribute("position").count;
   geometry.setAttribute("groundDecal", new THREE.BufferAttribute(new Float32Array(count).fill(value), 1));
   return geometry;
+}
+
+// RB2/RC1 -- the ghost overlay's own mesh, ONE construction site shared by
+// both the static ?ghost=valid|invalid demo (main()'s own `if
+// (ghostResolved)` block) and RC1's live pointer-driven ghost (updated on
+// every hover) -- not two near-identical copies that could drift apart,
+// and keeping the structural "exactly 3 THREE.Mesh constructions" count
+// (test/lookProofScene.test.ts) true of BOTH code paths, not just one.
+function buildGhostOverlayMesh(resolved) {
+  const [gw, gd] = resolved.footprint;
+  const [gx, gz] = resolved.anchor;
+  const geom = new THREE.BoxGeometry(gw, 0.4, gd).translate(gx + gw / 2, 0.2, gz + gd / 2);
+  const material = new THREE.MeshBasicMaterial({
+    color: resolved.valid ? GHOST_COLOR.valid : GHOST_COLOR.invalid,
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
+  });
+  return new THREE.Mesh(geom, material);
 }
 
 // RB5 -- "the ground stops reading as desert" (docs/specs/REBUILD-
@@ -558,10 +592,19 @@ async function main() {
   let boardFootprintsForDecal = [];
   let ghostResolved = null;
   let readoutResolved = null;
+  // RC1 -- promoted to main()'s own outer scope (not `let` inside the
+  // BOARD_MODE block below) so the interactive wiring at the end of this
+  // function, which runs AFTER that block, can still reach the real board,
+  // catalogue and a piece-geometry cache keyed by piece id -- a rebuild on
+  // commit/remove only needs to load the glb for a NEWLY placed piece, not
+  // re-fetch every piece already on the board.
+  let board = null;
+  let catalogueById = null;
+  const pieceGeometryCache = new Map();
   if (BOARD_MODE) {
     const catalogueArr = await fetch("data/catalogue.json").then((r) => r.json());
-    const catalogueById = Object.fromEntries(catalogueArr.map((e) => [e.id, e]));
-    let board = createAreaBoard({ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById });
+    catalogueById = Object.fromEntries(catalogueArr.map((e) => [e.id, e]));
+    board = createAreaBoard({ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById });
     const placedIds = [];
     for (const p of BOARD_DEMO_PLACEMENTS) {
       const result = board.place(p.typeId, p.anchorCell, p.rotation);
@@ -702,6 +745,11 @@ async function main() {
     const stripped = stripToPositionNormalUv(geom);
     return addLayerAttribute(stripped, p.layer);
   });
+  // RC1 -- seed the cache with what is already loaded, keyed by the
+  // board's own piece id (stable for a piece's whole lifetime; ids are
+  // never reused while a piece is still on the board). A later
+  // rebuildBoardMesh() reuses these instead of re-fetching the same glb.
+  boardResolved.forEach((p, i) => pieceGeometryCache.set(p.id, preparedBoardPieces[i]));
 
   // N1c -- kerbs and a path around the road tile, HERO_MODE only (see
   // buildStreetLevelDetail's own comment for why).
@@ -743,17 +791,7 @@ async function main() {
   // preview is not a real object) and is excluded from the shadow
   // camera's own bounding box above.
   if (ghostResolved) {
-    const [gw, gd] = ghostResolved.footprint;
-    const [gx, gz] = ghostResolved.anchor;
-    const ghostGeom = new THREE.BoxGeometry(gw, 0.4, gd)
-      .translate(gx + gw / 2, 0.2, gz + gd / 2);
-    const ghostMaterial = new THREE.MeshBasicMaterial({
-      color: ghostResolved.valid ? GHOST_COLOR.valid : GHOST_COLOR.invalid,
-      transparent: true,
-      opacity: 0.55,
-      depthWrite: false,
-    });
-    const ghostMesh = new THREE.Mesh(ghostGeom, ghostMaterial);
+    const ghostMesh = buildGhostOverlayMesh(ghostResolved);
     scene.add(ghostMesh);
     window.__ghostMesh = ghostMesh;
   }
@@ -783,7 +821,7 @@ async function main() {
     window.__readoutMesh = readoutMesh;
   }
 
-  const shadowPass = buildShadowPass(renderer, scene, shadowBB);
+  let shadowPass = buildShadowPass(renderer, scene, shadowBB);
   material.uniforms.uShadowMap.value = shadowPass.depthTexture;
   material.uniforms.uLightViewProjectionMatrix.value.copy(shadowPass.lightViewProjectionMatrix);
   window.__shadowMapTexture = shadowPass.depthTexture;
@@ -792,8 +830,183 @@ async function main() {
   const mainT0 = performance.now();
   renderer.render(scene, camera);
   const mainRenderMs = performance.now() - mainT0;
-  window.__ready = true;
   console.log("LOOK-PROOF ready, draw calls:", renderer.info.render.calls, "triangles:", renderer.info.render.triangles, "mainRenderMs:", mainRenderMs.toFixed(3));
+
+  // RC1 -- real pointer input. `?board=1&interactive=1` only: the static
+  // GHOST_MODE/READOUT_MODE query params above stay exactly what they
+  // were (single-shot, screenshot-driven demos); this mode owns its OWN
+  // session and keeps the scene live for real mouse/keyboard events
+  // instead of rendering once and stopping.
+  if (BOARD_MODE && INTERACTIVE_MODE) {
+    const session = createPlacementSession({ board });
+    const raycaster = new THREE.Raycaster();
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    let liveGhostMesh = null;
+
+    // Screen pixel -> world (x,z) on the ground plane (y=0). The one step
+    // pointer-interaction.js cannot do itself (it has no THREE, no DOM) --
+    // everything past this point (which cell, hover vs. commit vs. remove
+    // vs. cancel) is that module's own tested logic, called with a plain
+    // {x,z} this function hands it.
+    function worldXZFromClientXY(clientX, clientY) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      raycaster.setFromCamera(ndc, camera);
+      const hit = new THREE.Vector3();
+      return raycaster.ray.intersectPlane(groundPlane, hit) ? { x: hit.x, z: hit.z } : null;
+    }
+
+    // The inverse projection, exposed for scripts/interact-look-proof.mjs:
+    // given a board cell, the screen pixel a real mouse would need to hit
+    // to hover/click it. Kept here rather than re-derived in the driving
+    // script so both directions of the screen<->world mapping go through
+    // the SAME camera object, not two independently-computed projections
+    // that could silently disagree.
+    function worldToScreen(x, y, z) {
+      const v = new THREE.Vector3(x, y, z).project(camera);
+      const rect = renderer.domElement.getBoundingClientRect();
+      return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + (1 - (v.y + 1) / 2) * rect.height };
+    }
+    function cellCenterToScreen(cellX, cellY) {
+      const [ax, az] = anchorForCell({ x: cellX, y: cellY });
+      return worldToScreen(ax + MODULE_SIZE_M / 2, 0, az + MODULE_SIZE_M / 2);
+    }
+    window.__cellCenterToScreen = cellCenterToScreen;
+
+    function updateGhostMesh() {
+      const ghost = session.getGhost();
+      const resolved = resolveGhost(ghost, catalogueById);
+      if (liveGhostMesh) {
+        scene.remove(liveGhostMesh);
+        liveGhostMesh.geometry.dispose();
+        liveGhostMesh.material.dispose();
+        liveGhostMesh = null;
+      }
+      if (resolved) {
+        liveGhostMesh = buildGhostOverlayMesh(resolved);
+        scene.add(liveGhostMesh);
+      }
+      window.__ghostMesh = liveGhostMesh;
+      window.__ghostResolved = resolved;
+    }
+
+    // A commit or a remove changes what board.pieces() actually holds --
+    // rebuild the merged geometry (ground decal/layer depend on the real
+    // footprint set) and the shadow pass (a newly placed piece with no
+    // shadow, or a removed one still casting one, is exactly the kind of
+    // "renderer and the rule disagreeing" this run's own brief warns
+    // about) from the CURRENT board, reusing pieceGeometryCache so only a
+    // genuinely new piece triggers a glb fetch.
+    async function rebuildBoardMesh() {
+      const { resolved, skipped } = resolveBoardPieces(board, catalogueById, manifest);
+      boardResolved = resolved;
+      boardSkipped = skipped;
+      window.__boardResolved = boardResolved;
+      window.__boardSkipped = boardSkipped;
+
+      for (const p of resolved) {
+        if (pieceGeometryCache.has(p.id)) continue;
+        const raw = await loadPieceGeometry(p.glb);
+        rotateGeometryY(raw, p.rotation, THREE);
+        fitToFootprint(raw, p.footprint, p.anchor);
+        const stripped = stripToPositionNormalUv(raw);
+        pieceGeometryCache.set(p.id, addLayerAttribute(stripped, p.layer));
+      }
+      const liveBoardGeoms = resolved.map((p) => pieceGeometryCache.get(p.id));
+
+      const footprintsForDecal = resolved.map((p) => ({ anchor: p.anchor, footprint: p.footprint }));
+      const newGroundGeomRaw = new THREE.PlaneGeometry(GROUND.footprint[0], GROUND.footprint[1], GROUND.footprint[0], GROUND.footprint[1])
+        .rotateX(-Math.PI / 2)
+        .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+      addGroundDecalAttribute(newGroundGeomRaw, [...PIECES, ...footprintsForDecal]);
+      const newGroundGeom = addGroundLayerAttribute(newGroundGeomRaw, [...PIECES, ...footprintsForDecal], pavedLayerIndex, GROUND.layer);
+
+      const newMerged = mergeGeometries([newGroundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...liveBoardGeoms], false);
+      mesh.geometry.dispose();
+      mesh.geometry = newMerged;
+
+      const newShadowBB = new THREE.Box3();
+      newGroundGeom.computeBoundingBox();
+      newShadowBB.union(newGroundGeom.boundingBox);
+      for (const g of [...preparedPieces, ...streetDetailGeoms, ...liveBoardGeoms]) {
+        g.computeBoundingBox();
+        newShadowBB.union(g.boundingBox);
+      }
+      shadowPass = buildShadowPass(renderer, scene, newShadowBB);
+      material.uniforms.uShadowMap.value = shadowPass.depthTexture;
+      material.uniforms.uLightViewProjectionMatrix.value.copy(shadowPass.lightViewProjectionMatrix);
+      window.__shadowMapTexture = shadowPass.depthTexture;
+    }
+
+    renderer.domElement.addEventListener("pointermove", (e) => {
+      const hit = worldXZFromClientXY(e.clientX, e.clientY);
+      if (!hit) return;
+      const cell = cellFromWorldXZ(hit.x, hit.z);
+      window.__lastHoverCell = cell;
+      handleHover(session, INTERACTIVE_TYPE_ID, cell, 0);
+      updateGhostMesh();
+      renderer.render(scene, camera);
+    });
+
+    // Two clicks close enough together that the FIRST one's async rebuild
+    // (a newly-committed piece needs a real glb fetch) is still in flight
+    // when the SECOND one starts would otherwise race: both read/write
+    // pieceGeometryCache and both eventually call `mesh.geometry.dispose();
+    // mesh.geometry = newMerged;` against whatever the OTHER call last put
+    // there -- whichever rebuild happens to finish LAST wins, even if it
+    // started from an OLDER board snapshot, which can leave the mesh
+    // showing a piece the board no longer has (or missing one it does)
+    // exactly the "renderer and the rule disagreeing" failure this run's
+    // own brief names. board.pieces() itself is never at risk (session
+    // commit/remove are synchronous, called before any await below) --
+    // only the VISUAL rebuild needs serializing. Chained onto a single
+    // promise so a second rebuild only starts once the first has actually
+    // finished mutating mesh.geometry, and always reads the board fresh
+    // when IT runs -- eventual consistency, not "last click wins by luck".
+    let rebuildChain = Promise.resolve();
+    function queueRebuild() {
+      rebuildChain = rebuildChain.then(() => rebuildBoardMesh());
+      return rebuildChain;
+    }
+
+    renderer.domElement.addEventListener("pointerdown", async (e) => {
+      if (e.button !== 0) return; // left click only -- right-click is contextmenu, below
+      const hit = worldXZFromClientXY(e.clientX, e.clientY);
+      if (!hit) return;
+      const cell = cellFromWorldXZ(hit.x, hit.z);
+      const outcome = handleClick(board, session, cell);
+      window.__lastClickOutcome = outcome;
+      const piecesRightAfterThisClick = board.pieces().length; // captured NOW, synchronously -- a later click's own rebuild must not change what THIS click's own evidence line reports
+      await queueRebuild();
+      updateGhostMesh();
+      renderer.render(scene, camera);
+      console.log(`POINTER-CLICK cell=${cell.x},${cell.y} action=${outcome.action} ok=${outcome.result.ok} pieces=${piecesRightAfterThisClick}`);
+    });
+
+    renderer.domElement.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      handleCancel(session);
+      updateGhostMesh();
+      renderer.render(scene, camera);
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      handleCancel(session);
+      updateGhostMesh();
+      renderer.render(scene, camera);
+    });
+
+    window.__session = session;
+    window.__board = board;
+    window.__interactiveTypeId = INTERACTIVE_TYPE_ID;
+    window.__worldXZFromClientXY = worldXZFromClientXY;
+  }
+
+  window.__ready = true;
 }
 
 main().catch((e) => {

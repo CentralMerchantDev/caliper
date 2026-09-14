@@ -266,8 +266,8 @@ test("(synthetic) the vulnerability: a comment mentioning buildStreetLevelDetail
 // ------------------------------------------------------------- RB1: the board
 test("GATE (RB1): ?board=1 places demo pieces into a REAL createAreaBoard, never a hardcoded PIECES-style array -- PIECES is empty in this mode", () => {
   assert.match(SCENE_SRC, /import \{ createAreaBoard \} from "\.\/area-board\.js"/, "look-proof-scene.html does not import the real area board");
-  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real board-renderer module");
-  assert.match(SCENE_SRC, /let board = createAreaBoard\(\{ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById \}\)/, "BOARD_MODE does not construct a real area board");
+  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY, MODULE_SIZE_M \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real board-renderer module");
+  assert.match(SCENE_SRC, /board = createAreaBoard\(\{ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById \}\)/, "BOARD_MODE does not construct a real area board");
   assert.match(SCENE_SRC, /board\.place\(p\.typeId, p\.anchorCell, p\.rotation\)/, "BOARD_MODE does not call the real board.place()");
   assert.match(SCENE_SRC, /BOARD_MODE\s*\n\s*\? \[\]/, "PIECES is not empty in BOARD_MODE -- a hardcoded piece list would still be feeding the render alongside (or instead of) the real board");
 });
@@ -299,7 +299,7 @@ test("(synthetic) the vulnerability: a comment mentioning createAreaBoard must n
 // ------------------------------------------------------------- RB2: the ghost
 test("GATE (RB2): a real placement session previews the ghost -- session.setGhost() against the SAME real board, never a staged/hardcoded valid or invalid flag", () => {
   assert.match(SCENE_SRC, /import \{ createPlacementSession, loadBoard \} from "\.\/placement\.js"/, "look-proof-scene.html does not import the real placement session");
-  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real resolveGhost");
+  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY, MODULE_SIZE_M \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real resolveGhost");
   assert.match(SCENE_SRC, /const session = createPlacementSession\(\{ board \}\)/, "GHOST_MODE does not construct a real placement session against the real board");
   assert.match(SCENE_SRC, /const ghost = session\.setGhost\(demo\.typeId, demo\.anchorCell, demo\.rotation\)/, "GHOST_MODE does not call the real session.setGhost()");
 });
@@ -311,7 +311,7 @@ test("GATE (RB2): the invalid-ghost demo previews the SAME cell a real placement
 
 test("GATE (RB2): a valid and an invalid ghost render with VISIBLY DISTINCT colours -- green vs red, not a subtle tint one screenshot could blur", () => {
   assert.match(SCENE_SRC, /const GHOST_COLOR = \{ valid: 0x4caf50, invalid: 0xe53935 \}/, "GHOST_COLOR is missing or no longer a real green/red pair");
-  assert.match(SCENE_SRC, /color: ghostResolved\.valid \? GHOST_COLOR\.valid : GHOST_COLOR\.invalid/, "the ghost overlay's own colour is not driven by ghostResolved.valid -- it could render the same colour whether the placement is valid or not");
+  assert.match(SCENE_SRC, /color: resolved\.valid \? GHOST_COLOR\.valid : GHOST_COLOR\.invalid/, "the ghost overlay's own colour is not driven by resolved.valid -- it could render the same colour whether the placement is valid or not");
 });
 
 test("GATE (RB2): committing an invalid ghost is proven inert on the REAL board -- resolved before/after compared, not merely asserted in a comment", () => {
@@ -321,9 +321,11 @@ test("GATE (RB2): committing an invalid ghost is proven inert on the REAL board 
   assert.match(SCENE_SRC, /unchanged=\$\{beforeCommit === afterCommit\}/, "the before/after piece counts are not actually compared");
 });
 
-test("RB2: the ghost overlay is a SEPARATE mesh from the shared-material mesh -- RB1's own brief said plainly not to rewrite the proven material, and the shared material has no tint/alpha uniform to drive from ghostResolved.valid", () => {
-  assert.match(SCENE_SRC, /const ghostMaterial = new THREE\.MeshBasicMaterial\(\{/, "the ghost overlay is not built with its own separate material");
-  assert.match(SCENE_SRC, /const ghostMesh = new THREE\.Mesh\(ghostGeom, ghostMaterial\)/, "the ghost overlay is not added as its own separate mesh");
+test("RB2/RC1: the ghost overlay is a SEPARATE mesh from the shared-material mesh, built by ONE shared function -- RB1's own brief said plainly not to rewrite the proven material, and the shared material has no tint/alpha uniform to drive from resolved.valid. RC1's live pointer-driven ghost reuses this SAME function rather than a second, near-identical construction site that could drift from it.", () => {
+  assert.match(SCENE_SRC, /function buildGhostOverlayMesh\(resolved\) \{/, "buildGhostOverlayMesh is missing -- the ghost overlay's own single construction site");
+  assert.match(SCENE_SRC, /const material = new THREE\.MeshBasicMaterial\(\{/, "the ghost overlay is not built with its own separate material");
+  assert.match(SCENE_SRC, /return new THREE\.Mesh\(geom, material\);/, "buildGhostOverlayMesh does not return its own separate mesh");
+  assert.match(SCENE_SRC, /const ghostMesh = buildGhostOverlayMesh\(ghostResolved\);/, "the static ?ghost= demo does not call the shared buildGhostOverlayMesh");
 });
 
 test("(synthetic) the vulnerability: a comment mentioning session.setGhost must not satisfy the checks above", () => {
@@ -338,7 +340,7 @@ test("GATE (RB3): the readout is a NAMESPACE import of scoring.js, never a named
 });
 
 test("GATE (RB3): the readout calls the real resolveReadout against the real board/catalogue, never a hardcoded or invented value", () => {
-  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real resolveReadout");
+  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY, MODULE_SIZE_M \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real resolveReadout");
   assert.match(SCENE_SRC, /readoutResolved = resolveReadout\(ScoringModule, board, catalogueById, READOUT_CELL, READOUT_CANDIDATE_TYPE_ID, 0\)/, "READOUT_MODE does not call the real resolveReadout against the real board and catalogue");
 });
 
@@ -402,4 +404,52 @@ test("RB5: the fog colour and the sky's own horizon stop are matched EXACTLY -- 
 test("(synthetic) the vulnerability: a comment mentioning addGroundLayerAttribute must not satisfy the checks above", () => {
   const commentOnly = stripSourceComments("// function addGroundLayerAttribute(geometry, footprints, pavedLayer, earthLayer) used to be here\nconst m = {};\n");
   assert.doesNotMatch(commentOnly, /function addGroundLayerAttribute\(geometry, footprints, pavedLayer, earthLayer\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
+
+// ---------------------------------------------------- RC1: pointer interaction
+test("GATE (RC1): interactive mode imports the real, separately-tested pointer-interaction module -- not a copy of its logic inlined here", () => {
+  assert.match(SCENE_SRC, /import \{ cellFromWorldXZ, handleHover, handleClick, handleCancel \} from "\.\/pointer-interaction\.js"/, "look-proof-scene.html does not import the real pointer-interaction module");
+});
+
+test("GATE (RC1): a real session is created for interactive mode, and real pointer events call into the real hover/click/cancel handlers -- not a second, hand-rolled decision path", () => {
+  assert.match(SCENE_SRC, /if \(BOARD_MODE && INTERACTIVE_MODE\) \{/, "interactive wiring is not gated to board=1&interactive=1");
+  assert.match(SCENE_SRC, /const session = createPlacementSession\(\{ board \}\)/, "interactive mode does not construct a real placement session against the real board");
+  assert.match(SCENE_SRC, /renderer\.domElement\.addEventListener\("pointermove"/, "hover is not wired to a real pointermove listener");
+  assert.match(SCENE_SRC, /handleHover\(session, INTERACTIVE_TYPE_ID, cell, 0\)/, "pointermove does not call the real, tested handleHover");
+  assert.match(SCENE_SRC, /renderer\.domElement\.addEventListener\("pointerdown"/, "click is not wired to a real pointerdown listener");
+  assert.match(SCENE_SRC, /const outcome = handleClick\(board, session, cell\)/, "pointerdown does not call the real, tested handleClick against the real board");
+});
+
+test("GATE (RC1): Escape and right-click both call the real handleCancel -- Tier 1's own two cancel gestures, neither hand-rolled separately", () => {
+  assert.match(SCENE_SRC, /renderer\.domElement\.addEventListener\("contextmenu", \(e\) => \{\s*\n\s*e\.preventDefault\(\);\s*\n\s*handleCancel\(session\)/, "right-click does not call the real handleCancel");
+  assert.match(SCENE_SRC, /if \(e\.key !== "Escape"\) return;\s*\n\s*handleCancel\(session\)/, "Escape does not call the real handleCancel");
+});
+
+test("RC1: a click rebuilds the board mesh through the REAL resolveBoardPieces against the CURRENT board -- a commit or remove that changed board.pieces() but left the render stale would be exactly the 'renderer and the rule disagree' failure this run's own brief names", () => {
+  assert.match(SCENE_SRC, /async function rebuildBoardMesh\(\) \{/, "rebuildBoardMesh is missing -- a commit/remove would leave the merged geometry unchanged");
+  assert.match(SCENE_SRC, /const \{ resolved, skipped \} = resolveBoardPieces\(board, catalogueById, manifest\);/, "rebuildBoardMesh does not re-resolve the real, current board state");
+  assert.match(SCENE_SRC, /await queueRebuild\(\);/, "pointerdown does not actually trigger a rebuild after a commit/remove");
+});
+
+test("RC1: newly-needed piece geometry is loaded once and cached by the board's own piece id -- a rebuild after every click must not re-fetch a glb for a piece already on the board", () => {
+  assert.match(SCENE_SRC, /const pieceGeometryCache = new Map\(\);/, "pieceGeometryCache is missing");
+  assert.match(SCENE_SRC, /if \(pieceGeometryCache\.has\(p\.id\)\) continue;/, "rebuildBoardMesh does not skip already-cached pieces -- every click would re-fetch every glb on the board");
+  assert.match(SCENE_SRC, /pieceGeometryCache\.set\(p\.id, addLayerAttribute\(stripped, p\.layer\)\);/, "a newly loaded piece is not added to the cache");
+});
+
+test("RC1: real board/session state is exposed on window for a driving script to read back -- the gate's own instruction, 'assert against the real thing', requires the real thing be reachable, not just the renderer's own claims about it", () => {
+  assert.match(SCENE_SRC, /window\.__session = session;/, "the real session is not exposed for a driving script");
+  assert.match(SCENE_SRC, /window\.__board = board;/, "the real board is not exposed for a driving script -- board.pieces().length would be unreachable from outside the page");
+  assert.match(SCENE_SRC, /window\.__cellCenterToScreen = cellCenterToScreen;/, "no screen-coordinate helper is exposed -- a driving script would have no way to know which pixel to click for a given cell");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning handleClick must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// const outcome = handleClick(board, session, cell) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /const outcome = handleClick\(board, session, cell\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
+
+test("RC1: rapid clicks queue their own rebuilds rather than racing -- a second click's async rebuild (a new piece's glb fetch) can still be in flight when a third click starts; without serializing, whichever rebuild finishes LAST wins even from an older board snapshot, leaving the mesh disagreeing with board.pieces() (found by actually running scripts/interact-look-proof.mjs, not assumed)", () => {
+  assert.match(SCENE_SRC, /let rebuildChain = Promise\.resolve\(\);/, "rebuildChain queue is missing -- overlapping pointerdown handlers can race on mesh.geometry");
+  assert.match(SCENE_SRC, /rebuildChain = rebuildChain\.then\(\(\) => rebuildBoardMesh\(\)\);/, "queueRebuild does not actually chain onto the running promise -- concurrent rebuilds could still race");
+  assert.match(SCENE_SRC, /await queueRebuild\(\);/, "pointerdown calls rebuildBoardMesh directly rather than through the serializing queue");
 });
