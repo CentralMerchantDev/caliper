@@ -301,11 +301,21 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     clean, 5/5 mutations CAUGHT including the checklist's own named gate
     verbatim (a hand-written linear ramp fails the shrinking-drops
     assertion the real curve passes). Gate ledger: docs/GATE-LEDGER.jsonl.
-[ ] S3 (CLI) Recompute the dirty set only — REBUILD-PLAN.md S3
-    Never the whole board, never per frame.
-    Gate: a mutation widening the dirty set to the whole board must be CAUGHT,
-    so the test asserts WHICH cells recomputed. An assertion on the result
-    alone cannot see this.
+[x] S3 (CLI) Recompute the dirty set only — REBUILD-PLAN.md S3
+    0fca9b5 on branch `scoring`, pushed. dirtyCellsForRect (pure geometry,
+    composes area-board.js's cellsOf) + recomputeDirtySet (composes S1's
+    value() per dirty cell, returns a Map whose own keys ARE the proof of
+    what was touched). Blind plan review caught a real off-by-one before
+    any code was written: the exclusive-bound formula needed rect.xMax +
+    radius, not rect.xMax - 1 + radius (one column short once handed to
+    cellsOf's own exclusive convention) -- and caught that the planned
+    gate test itself was insufficient (only checked the negative boundary
+    case, which an under-inclusive set still satisfies). Fixed both;
+    verified against an INDEPENDENT brute-force oracle, not the
+    implementation's own shortcut arithmetic. Not wired into
+    placement.js's commit()/remove() -- a future item. 103/103 tests, tsc
+    clean, 7/7 mutations CAUGHT including the checklist's own named gate
+    verbatim. Gate ledger: docs/GATE-LEDGER.jsonl.
 [ ] S4 (CLI) valueAt, valueIfPlaced, and the two worths — SCORING-MODEL §3.2 and §3.3
     `valueAt(cell)` is desirability per unit area — pure location, the ghost
     readout. On a VACANT cell it is terrain-only: nothing occupies the cell to
