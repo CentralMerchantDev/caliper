@@ -243,6 +243,37 @@ function addConstantDecalAttribute(geometry, value) {
   return geometry;
 }
 
+// RB5 -- "the ground stops reading as desert" (docs/specs/REBUILD-
+// CHECKLIST.md, THE CONVERGENCE; Mark, 2026-09-15, after 13-street-
+// level.png: "buildings in a dust bowl"). MEASURED, not assumed: the
+// existing ground layer (GROUND_FULL.layer, "ground-grass" per the
+// manifest) has a real mean RGB of (172,148,121) -- a warm dirt/sand
+// tone despite its own filename, not green -- so darkening it further
+// (4.3's existing groundDecal mechanism) could never read as PAVEMENT,
+// only as darker dirt. Escalated instead of retuned: a second, more
+// neutral ground texture (04-ground-paved.png, already CC0-vendored
+// gravel, added to the array texture by scripts/normalise-kit-
+// textures.mjs this same item) assigned per-vertex -- PAVING_RADIUS of
+// any real footprint reads as paved ground, everything past it stays
+// earth. Reuses distanceOutsideFootprint (the SAME distance function
+// 4.3's own decal already computes) rather than a second, independent
+// proximity calculation that could disagree with it about where a
+// footprint's own edge actually is.
+const PAVING_RADIUS = 6; // metres -- a plausible street-level paved apron, wider than DECAL_RADIUS's own tight contact-shadow scale
+function addGroundLayerAttribute(geometry, footprints, pavedLayer, earthLayer) {
+  const pos = geometry.getAttribute("position");
+  const count = pos.count;
+  const data = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    let nearest = Infinity;
+    for (const fp of footprints) nearest = Math.min(nearest, distanceOutsideFootprint(x, z, fp.anchor, fp.footprint));
+    data[i] = nearest <= PAVING_RADIUS ? pavedLayer : earthLayer;
+  }
+  geometry.setAttribute("layerIndex", new THREE.BufferAttribute(data, 1));
+  return geometry;
+}
+
 // N1c -- "something at street level ... kerbs, a path" (docs/briefs/
 // BLD-2026-09-15.md). R8, "interesting things happen where different
 // things meet," already covered ONE junction (4.3's join decal, a
@@ -315,11 +346,21 @@ function buildSkyTexture() {
   canvas.width = 1;
   canvas.height = 256;
   const ctx = canvas.getContext("2d");
+  // RB5 -- retuned (docs/specs/REBUILD-CHECKLIST.md, THE CONVERGENCE):
+  // Mark's own read of 13-street-level.png named "a hard pale band at
+  // the horizon" alongside the fog's own warm tint. The old gradient's
+  // last two stops (0.85/1.0) were both a similarly saturated warm tan,
+  // leaving little visible change across that whole span -- a real flat
+  // plateau, not a fade. A third stop at 0.8, less saturated than
+  // either old one, spreads the fade further up the sky instead of
+  // leaving it compressed into the bottom 15%. The final stop matches
+  // look-proof-material.js's own uFogColor EXACTLY (0xe6dccb) so the
+  // ground still fades seamlessly into the sky at the horizon.
   const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
   gradient.addColorStop(0, "#0d2340"); // zenith -- deep cool blue
   gradient.addColorStop(0.55, "#3a5f82"); // mid sky
-  gradient.addColorStop(0.85, "#e7c9a0"); // near horizon -- warm, matching LIGHT_DIR
-  gradient.addColorStop(1, "#f2ddb8"); // horizon
+  gradient.addColorStop(0.8, "#c9b99f"); // near horizon -- warm, matching LIGHT_DIR, less saturated than before
+  gradient.addColorStop(1, "#e6dccb"); // horizon -- matches uFogColor exactly
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   const tex = new THREE.CanvasTexture(canvas);
@@ -610,7 +651,11 @@ async function main() {
     .rotateX(-Math.PI / 2)
     .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2);
   addGroundDecalAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal]);
-  const groundGeom = addLayerAttribute(groundGeomRaw, GROUND.layer);
+  // RB5 -- read the paved layer's own real index from the manifest
+  // (never hardcoded) -- matches board-renderer.js's own layerForGlb
+  // discipline: one source of truth for "which file is on which layer".
+  const pavedLayerIndex = manifest.layers.find((l) => l.file.includes("ground-paved")).index;
+  const groundGeom = addGroundLayerAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal], pavedLayerIndex, GROUND.layer);
   // Ground's own UVs tile once across its footprint -- fine for a grass
   // sample texture at this scale, and not what this scene exists to prove.
 

@@ -48,6 +48,22 @@ const SOURCES = [
     path: "public/vendor/textures/grass/diffuse.webp",
     usedBy: ["ground plane (procedural, not a pack mesh)"],
   },
+  {
+    // RB5 (docs/specs/REBUILD-CHECKLIST.md, THE CONVERGENCE): Mark's own
+    // read of 13-street-level.png -- "buildings in a dust bowl". Measured,
+    // not assumed: layer 3 (ground-grass)'s own mean RGB is (172,148,121)
+    // -- a warm dirt/sand tone despite its own filename, not green. A real
+    // fix needs a second, more neutral ground texture for the paved area
+    // near buildings/roads, not just darkening the same dirt texture
+    // further. Already-vendored, already CC0-licensed (public/vendor/
+    // textures/gravel/LICENSE.txt) -- no new asset sourcing needed.
+    // Measured mean RGB (173,163,150) -- notably more neutral/grey than
+    // grass's own (172,148,121), close to plaster's (171,163,160) without
+    // that texture's own wall-surface patterning reading oddly as ground.
+    name: "ground-paved",
+    path: "public/vendor/textures/gravel/diffuse.webp",
+    usedBy: ["ground plane, near buildings/roads (procedural, not a pack mesh) -- RB5"],
+  },
 ];
 
 mkdirSync(OUT_DIR, { recursive: true });

@@ -77,7 +77,20 @@ export function createLookProofMaterial(arrayTexture) {
       // the enlarged ground, not at its edge, so what actually disappears
       // into the sky colour is fog fading out ground that is still there,
       // not a visible boundary.
-      uFogColor: { value: new THREE.Color(0xf2ddb8) },
+      // RB5 -- retuned once more (docs/specs/REBUILD-CHECKLIST.md, THE
+      // CONVERGENCE): Mark's own read of 13-street-level.png named "a
+      // warm sand fog tint" alongside "a hard pale band at the horizon"
+      // as part of the overall desert read. 0xf2ddb8 (242,221,184) is a
+      // fully-saturated warm tan; lightened and desaturated toward
+      // 0xe6dccb (230,220,203) -- still warm-leaning (the warm-cool
+      // terminator mechanism, 4.2, already established a warm-lit scene;
+      // a cold fog would contradict it, per N1a's own reasoning), just
+      // less saturated so it reads as atmospheric haze rather than sand.
+      // Matched EXACTLY in buildSkyTexture's own horizon stop
+      // (look-proof-scene.html) so the ground still fades seamlessly
+      // into the sky -- changing one without the other would reintroduce
+      // the visible seam N1b's own far-ground fix eliminated.
+      uFogColor: { value: new THREE.Color(0xe6dccb) },
       uFogNear: { value: 90 },
       uFogFar: { value: 230 },
     },

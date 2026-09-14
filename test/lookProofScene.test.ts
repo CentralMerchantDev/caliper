@@ -376,3 +376,30 @@ test("(synthetic) the vulnerability: a comment mentioning loadBoard must not sat
   const commentOnly = stripSourceComments("// const { board: reloadedBoard, failures } = loadBoard( used to be here\nconst m = {};\n");
   assert.doesNotMatch(commentOnly, /const \{ board: reloadedBoard, failures \} = loadBoard\(/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });
+
+// -------------------------------------------------- RB5: the ground material
+test("GATE (RB5): the ground's own layerIndex is computed PER VERTEX (paved near a footprint, earth otherwise), not a single uniform value for the whole plane", () => {
+  assert.match(SCENE_SRC, /function addGroundLayerAttribute\(geometry, footprints, pavedLayer, earthLayer\)/, "addGroundLayerAttribute is missing -- the ground would still be one uniform layer");
+  assert.match(SCENE_SRC, /data\[i\] = nearest <= PAVING_RADIUS \? pavedLayer : earthLayer/, "the per-vertex paved/earth split is not actually wired to the real nearest-footprint distance");
+  assert.match(SCENE_SRC, /const groundGeom = addGroundLayerAttribute\(groundGeomRaw, \[\.\.\.PIECES, \.\.\.boardFootprintsForDecal\], pavedLayerIndex, GROUND\.layer\)/, "the real ground geometry does not use the new per-vertex layer function");
+});
+
+test("GATE (RB5): the paved layer's own index is read from the REAL array-texture manifest, never hardcoded -- board-renderer.js's own layerForGlb discipline, applied here too", () => {
+  assert.match(SCENE_SRC, /const pavedLayerIndex = manifest\.layers\.find\(\(l\) => l\.file\.includes\("ground-paved"\)\)\.index/, "the paved layer's own index is not resolved from the real manifest");
+});
+
+test("RB5: a real, already CC0-licensed, already-vendored gravel texture is the new paving layer -- not a newly-sourced asset, and not the road pack's own sprite-sheet layer (which N1c already found bands under a large stretch)", () => {
+  const normaliseSrc = stripSourceComments(readFileSync(join(PUBLIC, "..", "scripts", "normalise-kit-textures.mjs"), "utf8"));
+  assert.match(normaliseSrc, /name: "ground-paved"/, "scripts/normalise-kit-textures.mjs does not define a ground-paved layer");
+  assert.match(normaliseSrc, /path: "public\/vendor\/textures\/gravel\/diffuse\.webp"/, "the paved layer is not sourced from the already-vendored, already CC0-licensed gravel texture");
+});
+
+test("RB5: the fog colour and the sky's own horizon stop are matched EXACTLY -- N1b's own seamless-fade design, which a fog-only or sky-only retune would silently break", () => {
+  assert.match(MATERIAL_SRC, /uFogColor: \{ value: new THREE\.Color\(0xe6dccb\) \}/, "uFogColor was not retuned, or no longer matches the value this test expects");
+  assert.match(SCENE_SRC, /gradient\.addColorStop\(1, "#e6dccb"\)/, "the sky's own horizon stop does not match uFogColor's real hex value -- N1b's seamless ground-into-sky fade would show a visible seam");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning addGroundLayerAttribute must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// function addGroundLayerAttribute(geometry, footprints, pavedLayer, earthLayer) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /function addGroundLayerAttribute\(geometry, footprints, pavedLayer, earthLayer\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
