@@ -76,6 +76,11 @@ test("4.2 mechanism 4 (contact darkening) is ON by default and darkens toward th
   assert.match(MATERIAL_SRC, /groundDarken = mix\(0\.45,\s*1\.0,\s*heightFalloff\)/, "the mix direction is wrong -- low height (near 0) must map toward the DARKER end (0.45), high height toward 1.0 (undarkened)");
 });
 
+test("the fifth mechanism (horizontal/vertical value split) is ON by default and lifts horizontal surfaces, not vertical ones", () => {
+  assert.match(MATERIAL_SRC, /uValueSplit:\s*\{\s*value:\s*true\s*\}/, "uValueSplit's default is not true -- 06-value-split.png's own before/after pair has nothing to show if this mechanism is not actually on");
+  assert.match(MATERIAL_SRC, /horizontalness = clamp\(N\.y,\s*0\.0,\s*1\.0\)/, "horizontalness must be derived from N.y -- a wall (N.y near 0) and a floor/roof (N.y near 1) must read differently");
+});
+
 test("look-proof-material.js's fragment shader actually samples a sampler2DArray, not a plain sampler2D", () => {
   assert.match(MATERIAL_SRC, /uniform\s+sampler2DArray\s+uArrayTex/, "the array-texture uniform is not declared as sampler2DArray");
   assert.match(MATERIAL_SRC, /texture\(uArrayTex,\s*vec3\(/, "the fragment shader does not sample uArrayTex with a vec3(uv, layer) lookup");

@@ -33,7 +33,8 @@ export function createLookProofMaterial(arrayTexture) {
       uRimSeparation: { value: true },
       // 4.2, mechanism 4 of 4 (R1): contact darkening -- turned on here.
       uContactDarkening: { value: true },
-      uValueSplit: { value: false },
+      // The fifth mechanism, sourced separately from R1 -- turned on here.
+      uValueSplit: { value: true },
     },
     vertexShader: /* glsl */ `
       in float layerIndex;
