@@ -1360,10 +1360,10 @@
     },
     {
       "id": "world-layer-loadboard-reports-failures-not-silent-drop",
-      "guards": "Blind audit finding (2026-09-14, world-layer branch): loadBoard() used to discard a placement that failed to re-apply (catalogue drift, a shrunk board) with no signal at all. Now every refusal is pushed to `failures`.",
+      "guards": "Blind audit finding (2026-09-14, world-layer branch): loadBoard() used to discard a placement that failed to re-apply (catalogue drift, a shrunk board) with no signal at all. Now every refusal is pushed to `failures`. Find string updated 2026-09-15 (V3): the original one-line body was restructured into an if/if pair when placedAt tracking was added, and the old find silently matched zero times (INCONCLUSIVE) rather than CAUGHT until this was noticed and fixed -- per rule://standard-of-proof, a mutation that no longer applies is not a pass.",
       "file": "public/placement.js",
-      "find": "    const result = board.place(p.typeId, p.anchorCell, p.rotation, { id: p.id, origin: \"player\" });\n    if (!result.ok) failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });",
-      "replace": "    const result = board.place(p.typeId, p.anchorCell, p.rotation, { id: p.id, origin: \"player\" });",
+      "find": "    if (!result.ok) {\n      failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });\n    }",
+      "replace": "    if (false) {\n      failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });\n    }",
       "expect": "GATE: a saved placement that fails to re-apply on load is reported in failures, not silently dropped"
     },
     {
@@ -1445,6 +1445,22 @@
       "find": "  appendFileSync(logPath, JSON.stringify(record) + \"\\n\", \"utf8\");\n  return record;\n}",
       "replace": "  let existing = [];\n  try { existing = readFileSync(logPath, \"utf8\").trim().split(\"\\n\").filter(Boolean).map((l) => JSON.parse(l)); } catch { existing = []; }\n  existing.push(record);\n  writeFileSync(logPath, existing.map((r) => JSON.stringify(r)).join(\"\\n\") + \"\\n\", \"utf8\");\n  return record;\n}",
       "expect": "GATE: a malformed line left by a prior crashed write does NOT get lost when a new event is appended -- this is the exact 2026-09-10 recordGate failure shape, reproduced and proven fixed"
+    },
+    {
+      "id": "v3-remove-clears-placed-at",
+      "guards": "Plan-review finding (2026-09-15, before any code was written): remove() must clear placedAt so a later piece reusing the same numeric id does not inherit a stale timestamp from the piece that used to hold it.",
+      "file": "public/placement.js",
+      "find": "    if (result.ok) {\n      placedAt.delete(id);\n      if (piece.origin === \"generated\") {",
+      "replace": "    if (result.ok) {\n      if (piece.origin === \"generated\") {",
+      "expect": "GATE: remove() deletes the piece's own placedAt entry -- a later, unrelated piece reusing the same id must NOT inherit a stale timestamp"
+    },
+    {
+      "id": "v3-loadboard-placedat-gated-on-success",
+      "guards": "Plan-review finding: loadBoard() must only populate placedAt for placements that actually re-applied -- an unconditional version gives a phantom timestamp to an id that failed to re-apply (e.g. catalogue drift) and is not really on the reloaded board.",
+      "file": "public/placement.js",
+      "find": "    if (!result.ok) {\n      failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });\n    } else if (p.at !== undefined && p.at !== null) {\n      placedAt.set(p.id, p.at);\n    }",
+      "replace": "    if (!result.ok) {\n      failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });\n    }\n    if (p.at !== undefined && p.at !== null) {\n      placedAt.set(p.id, p.at);\n    }",
+      "expect": "loadBoard()'s placedAt is populated ONLY for placements that actually re-applied -- a failed one must not leave a phantom timestamp"
     }
   ]
 }
