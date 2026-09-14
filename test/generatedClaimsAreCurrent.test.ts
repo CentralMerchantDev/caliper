@@ -84,7 +84,7 @@ export function checkAllGeneratedClaims(): Array<{ name: string; stale: string |
   ];
 }
 
-test("P4.6: no published generated claim is stale -- one gate, naming every stale one at once, not just the first", { skip: "BLOCKED (deliberate, temporary): index.html is a minimal holding page, 2026-09-13, Phase 1 'take it all down' (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md), and carries none of the claim spans (#city-stat-buildings, #city-stat-settlements, #claim-node-tests, #claim-worker-tests) this gate checks -- accepted, not an oversight. One further stale claim (CLAUDE.md's own 'How to verify' line, 1087 vs the real 1214 node tests) is pre-existing and unrelated to this pass; named here rather than conflated with the holding-page cause." }, () => {
+test("P4.6: no published generated claim is stale -- one gate, naming every stale one at once, not just the first", { skip: "BLOCKED (deliberate, temporary): index.html is a minimal holding page, 2026-09-13, Phase 1 'take it all down' (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md), and carries none of the claim spans (#city-stat-buildings, #city-stat-settlements, #claim-node-tests, #claim-worker-tests) this gate checks -- accepted, not an oversight. CLAUDE.md's own 'How to verify' line, once stale (1087 vs the real 1214 node tests), was fixed by U2's overnight run (2026-09-15) once npm run gen:claims could complete again -- now reads 619, the real post-Phase-1-takedown count, and test/claudeMdIsCurrent.test.ts confirms it stays current." }, () => {
   const results = checkAllGeneratedClaims();
   const stale = results.filter((r) => r.stale !== null);
   assert.equal(
