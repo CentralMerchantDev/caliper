@@ -45,10 +45,18 @@ evidence with `process_record_gate`. A tick is a claim.
 
 ## RECONCILIATION
 
-[ ] R0 (CLI) Back-fill gate records for BO1-BO3 from the world-layer commits — §none, this file
-    Source them from `docs/specs/STATE-2026-09-14.md` and the commits it names,
-    not from memory. If the evidence for one cannot be found, mark that item `[!]`
-    rather than inventing a record.
+[x] R0 (CLI) Back-fill gate records for BO1-BO3 from the world-layer commits — §none, this file
+    Three process_record_gate entries added to docs/GATE-LEDGER.jsonl, all
+    commit d252ac7 (branch world-layer, merged to main at 3d8c90a): BO1
+    (public/area.js + public/world-layer.js, W1/W2/W5/W6, 26 tests, 3
+    mutations CAUGHT), BO2 (public/area-board.js, C2.1, 25 tests, 3
+    mutations CAUGHT), BO3 (public/placement.js, C2.2/C2.5, 17 tests, 3
+    mutations CAUGHT). Sourced from docs/specs/STATE-2026-09-14.md plus this
+    session's own direct record of the d252ac7 work (mutation ids, test
+    counts, the two pre-audit bugs and the blind-audit HIGH/LOW findings) --
+    not from memory alone. process_reconcile_plan confirmed clean
+    afterward: no item both ticked-with-no-gate-record and no item
+    gate-recorded-but-still-open, for BO1/BO2/BO3.
 
 ---
 
