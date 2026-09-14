@@ -513,13 +513,34 @@ so this is CLI's real next work.
     session), `mutate.mjs` as the stricter full-suite audit once the 7
     failures are fixed (now a bounded ~2-minute-per-attempt task). Neither
     tool retired or replaced. Gate ledger: docs/GATE-LEDGER.jsonl.
-[ ] U4 (CLI) Side B's data model — REBUILD-PLAN.md B1-B3
+[x] U4 (CLI) Side B's data model — REBUILD-PLAN.md B1-B3
     Step 10 of the revised build order, and the mechanic that makes CALIPER
     itself rather than a city builder: a player-authored piece IS a catalogue
     entry, full stop (B1). B2 is the day-one requirement. B3 is where coding
     becomes value.
     Data and logic only — no interface. Read B1-B3 in full first; §B4 names what
     stays out of scope and that boundary is load-bearing.
+    DONE, commit 2737c3b (branch scoring). public/catalogue-registry.js:
+    createCatalogueRegistry() with .get/.all/.addAuthoredEntry, composing
+    the shipped catalogue's own baseValueFor/unitQualityFor/adjacencyFor
+    (the last now exported, was private) rather than reimplementing them.
+    B1 ("the board cannot tell the difference") proven directly: an
+    authored piece places and scores through valueAt/perUnitWorth/
+    totalWorth with zero special-casing, and a companion test proves a
+    STALE snapshot correctly cannot see a newly-authored piece — the
+    re-fetch requirement is tested, not silently assumed. B3's
+    UNIQUENESS_MULTIPLIER = 2 is a disclosed placeholder (baseValue only,
+    never unitQuality), proven to actually apply. TWO REAL GAPS DISCLOSED,
+    not hidden (DECISIONS-FOR-MARK.md #19): B2's own "persisted" is not
+    yet true (in-memory overlay only, a Cloudflare Worker isolate does
+    not survive past one request); the multiplier is baked in at
+    authoring time with no re-tuning path, mitigated with a recorded
+    trail field. Blind review before code found and fixed three real
+    defects (adjacencyFor's own throw-on-unknown-category crashing
+    untrusted input; a missing `pivot` field that would have failed
+    every call; rule 10 alone cannot enforce authored-entries-need-
+    provenance). 15 new tests, 170/170 targeted suite, tsc clean, 5/5
+    new mutations CAUGHT. Gate ledger: docs/GATE-LEDGER.jsonl.
 
 ---
 
