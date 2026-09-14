@@ -43,7 +43,7 @@ test("A5.1: Baseline reference renders exist and are valid non-empty files", () 
   console.log("✔ A5.1: All 6 baseline renders verified present on disk");
 });
 
-test("A5.2 & A5.3: Automated Regression Gate: draw calls, triangles, culling ratio, and LOD bounds", async () => {
+test("A5.2 & A5.3: Automated Regression Gate: draw calls, triangles, culling ratio, and LOD bounds", { skip: "QUARANTINED (U2, docs/briefs/CLI-2026-09-15-overnight.md): subject page public/city.html no longer exists -- quarantined in the Phase 1 takedown (e3c355b) and deleted outright by this run's own item zero purge. page.goto() against it 404s, window.__ready is never set, and page.waitForFunction hangs its full 240s timeout every run -- same root cause as test/cullingRatio.test.ts and test/envLuminance.test.ts, confirmed directly, not guessed. A5.1 above is unaffected -- it checks committed baseline PNGs on disk, no browser, no city.html. Owner: BLD -- re-point at a real rendered scene once one exists in public/ (REBUILD-CHECKLIST.md L11/L12, 'THE LOOK AT SCALE'; BLD's own public/look-proof-scene.html exists only on codex-lane, not yet merged here)." }, async () => {
   const server = http.createServer((req, res) => {
     const url = decodeURIComponent(req.url.split("?")[0]);
     const file = path.join(

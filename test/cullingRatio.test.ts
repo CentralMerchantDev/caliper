@@ -28,7 +28,7 @@ const MIME = {
   ".hdr": "application/octet-stream", ".txt": "text/plain",
 };
 
-test("street level drawn triangles are a small fraction of skyline view (culling ratio gate)", async () => {
+test("street level drawn triangles are a small fraction of skyline view (culling ratio gate)", { skip: "QUARANTINED (U2, docs/briefs/CLI-2026-09-15-overnight.md): subject page public/city.html no longer exists -- quarantined in the Phase 1 takedown (e3c355b) and deleted outright by this run's own item zero purge. page.goto() against it 404s, window.__ready is never set, and page.waitForFunction hangs its full 240s timeout every run -- traced directly (a chrome-headless-shell.exe child confirmed still alive with its parent's CPU flat past 30 minutes), not guessed; matches REBUILD-CHECKLIST.md's own U2 finding exactly ('not memory, not the harness, not resource contention. It is that test'). Owner: BLD -- re-point at a real rendered scene once one exists in public/ (REBUILD-CHECKLIST.md L11/L12, 'THE LOOK AT SCALE'; BLD's own public/look-proof-scene.html exists only on codex-lane, not yet merged here)." }, async () => {
   const server = http.createServer((req, res) => {
     const url = decodeURIComponent(req.url.split("?")[0]);
     const file = path.join(

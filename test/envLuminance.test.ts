@@ -28,7 +28,7 @@ const MIME = {
   ".hdr": "application/octet-stream", ".txt": "text/plain",
 };
 
-test("HDRI is live at runtime and environment reflection is active", async () => {
+test("HDRI is live at runtime and environment reflection is active", { skip: "QUARANTINED (U2, docs/briefs/CLI-2026-09-15-overnight.md): subject page public/city.html no longer exists -- quarantined in the Phase 1 takedown (e3c355b) and deleted outright by this run's own item zero purge. page.goto() against it 404s, window.__ready is never set, and page.waitForFunction hangs its full 240s timeout every run -- same root cause as test/cullingRatio.test.ts and test/regressionGate.test.ts's A5.2/A5.3, confirmed directly, not guessed. Owner: BLD -- re-point at a real rendered scene once one exists in public/ (REBUILD-CHECKLIST.md L11/L12, 'THE LOOK AT SCALE'; BLD's own public/look-proof-scene.html exists only on codex-lane, not yet merged here)." }, async () => {
   const server = http.createServer((req, res) => {
     const url = decodeURIComponent(req.url.split("?")[0]);
     const file = path.join(

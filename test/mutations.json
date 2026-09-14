@@ -1565,6 +1565,30 @@
       "find": "if (!fs.existsSync(path.join(P, \"city-plan.js\"))) {",
       "replace": "if (false) {",
       "expect": "GATE (U1): gen-city-summary.mjs exits 0 (not a crash) when its dependency is gone, so gen-claims.mjs's un-caught execFileSync call does not abort the whole pipeline"
+    },
+    {
+      "id": "u2-quarantine-must-stay-on-culling-ratio",
+      "guards": "U2: test/cullingRatio.test.ts must stay quarantined (skip) while public/city.html does not exist -- removing the skip would reintroduce the 240s page.waitForFunction hang that blocked every full-suite run. Removes the skip annotation entirely.",
+      "file": "test/cullingRatio.test.ts",
+      "find": ", { skip: \"QUARANTINED (U2, docs/briefs/CLI-2026-09-15-overnight.md): subject page public/city.html no longer exists -- quarantined in the Phase 1 takedown (e3c355b) and deleted outright by this run's own item zero purge. page.goto() against it 404s, window.__ready is never set, and page.waitForFunction hangs its full 240s timeout every run -- traced directly (a chrome-headless-shell.exe child confirmed still alive with its parent's CPU flat past 30 minutes), not guessed; matches REBUILD-CHECKLIST.md's own U2 finding exactly ('not memory, not the harness, not resource contention. It is that test'). Owner: BLD -- re-point at a real rendered scene once one exists in public/ (REBUILD-CHECKLIST.md L11/L12, 'THE LOOK AT SCALE'; BLD's own public/look-proof-scene.html exists only on codex-lane, not yet merged here).\" }",
+      "replace": "",
+      "expect": "GATE (U2): all three quarantines name city.html as the cause, so a future reader (or an automated unblock check) can find them by grepping for it, not by memory"
+    },
+    {
+      "id": "u2-quarantine-must-stay-on-regression-gate",
+      "guards": "U2: test/regressionGate.test.ts must stay quarantined (skip) while public/city.html does not exist -- removing the skip would reintroduce the 240s page.waitForFunction hang that blocked every full-suite run. Removes the skip annotation entirely.",
+      "file": "test/regressionGate.test.ts",
+      "find": ", { skip: \"QUARANTINED (U2, docs/briefs/CLI-2026-09-15-overnight.md): subject page public/city.html no longer exists -- quarantined in the Phase 1 takedown (e3c355b) and deleted outright by this run's own item zero purge. page.goto() against it 404s, window.__ready is never set, and page.waitForFunction hangs its full 240s timeout every run -- same root cause as test/cullingRatio.test.ts and test/envLuminance.test.ts, confirmed directly, not guessed. A5.1 above is unaffected -- it checks committed baseline PNGs on disk, no browser, no city.html. Owner: BLD -- re-point at a real rendered scene once one exists in public/ (REBUILD-CHECKLIST.md L11/L12, 'THE LOOK AT SCALE'; BLD's own public/look-proof-scene.html exists only on codex-lane, not yet merged here).\" }",
+      "replace": "",
+      "expect": "GATE (U2): all three quarantines name city.html as the cause, so a future reader (or an automated unblock check) can find them by grepping for it, not by memory"
+    },
+    {
+      "id": "u2-quarantine-must-stay-on-env-luminance",
+      "guards": "U2: test/envLuminance.test.ts must stay quarantined (skip) while public/city.html does not exist -- removing the skip would reintroduce the 240s page.waitForFunction hang that blocked every full-suite run. Removes the skip annotation entirely.",
+      "file": "test/envLuminance.test.ts",
+      "find": ", { skip: \"QUARANTINED (U2, docs/briefs/CLI-2026-09-15-overnight.md): subject page public/city.html no longer exists -- quarantined in the Phase 1 takedown (e3c355b) and deleted outright by this run's own item zero purge. page.goto() against it 404s, window.__ready is never set, and page.waitForFunction hangs its full 240s timeout every run -- same root cause as test/cullingRatio.test.ts and test/regressionGate.test.ts's A5.2/A5.3, confirmed directly, not guessed. Owner: BLD -- re-point at a real rendered scene once one exists in public/ (REBUILD-CHECKLIST.md L11/L12, 'THE LOOK AT SCALE'; BLD's own public/look-proof-scene.html exists only on codex-lane, not yet merged here).\" }",
+      "replace": "",
+      "expect": "GATE (U2): all three quarantines name city.html as the cause, so a future reader (or an automated unblock check) can find them by grepping for it, not by memory"
     }
   ]
 }
