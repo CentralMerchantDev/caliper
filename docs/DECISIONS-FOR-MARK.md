@@ -1296,3 +1296,60 @@ entries than when this decision was first written.
 **Recommendation:** option — treat this as expected and correctly sequenced, not a shortfall to correct. REBUILD-PLAN's own Phase 2 order (2.1 flat board, 2.2 placement, 2.8 re-point the shell) is exactly the work that removes the old renderer's reason to exist; clearing it earlier would mean either a broken live site or unauthorised Phase 1 construction. The decision that is genuinely open: whether a dedicated audit of `scripts/lib/module-graph.mjs`'s dynamic-import blind spot (checking whether any OTHER file in this codebase is live only through a dynamic import, the way `city-render.js` was) happens now, as a standalone Phase 1 addendum, or waits and is folded into Phase 2's own work.
 
 **Reversibility:** fully reversible either way — nothing was built, one file was quarantined (retained, not deleted), and the finding is documented rather than acted on unilaterally.
+
+## 12. `BO7A`'s own gate (CLI's A1 on `origin/scoring`) has passed, but `A1` is not merged into `codex-lane` — writing catalogue entries now would still be "written wrong," just against a different stale schema than the checklist's own warning names
+
+**The question, stated as one:** does BLD merge `origin/scoring` into `codex-lane` to pick up A1's catalogue schema/validator changes before writing BO7A's own new entries, or does BO7A wait until that merge is Mark's own decision (or A1 lands on `main`)?
+
+**Ground-checked, 2026-09-15 (BLD lane, `codex-lane`, this run, after N1a/b/c):**
+`docs/briefs/BLD-2026-09-15.md` §3 said check `origin/scoring` by name for
+A1, not "origin" unqualified (last night's brief's own defect, corrected
+this time). `git fetch origin && git log origin/scoring --oneline` finds
+it: `62650f4 A1 of the overnight scoring brief ... BLD's BO7A is gated on
+this landing and being pushed` — landed, and pushed, exactly the two
+conditions BO7A's own checklist text names. `mcp__process__process_next_item`
+confirms BO7A is next in plan order once CLI's own items are skipped.
+
+**But `git merge-base HEAD origin/scoring` returns `a55a725`, several
+commits back** — A1 (`62650f4`) and everything after it on the scoring
+branch (the catalogue's `baseValue`/`adjacency` fields, its validator) is
+NOT in `codex-lane`'s own tree. Confirmed directly, not inferred: the
+live `data/catalogue.json` on this branch still has the OLD schema
+(`id`/`category`/`footprint`/`rotatable`/`terrainMask`/`pivot`/`massing`/
+`joinSpec`/`proportion` — no `baseValue`, no `adjacency`, per commit
+`3c0dbbf`, Phase 1's own catalogue-as-data item). Writing BO7A's new
+entries against this schema right now reproduces the EXACT failure mode
+BO7A's own checklist text was written to prevent ("entries written
+against the old table would be written wrong") — just against the
+pre-A1 table instead of a hypothetical future one.
+
+**Why this was not resolved unilaterally:** merging another lane's own
+branch into this one is a cross-lane action with a real blast radius —
+`codex-lane`'s own catalogue validator, and everything already built
+against the current 9-field schema (the look-proof pieces, any existing
+tests reading `data/catalogue.json`), would need to be reconciled against
+A1's own new required fields in the same motion. `rule://commit-
+discipline` (memory) already names "never merge ... on own initiative" as
+standing guidance; a lane brief authorising the CHECK ("check origin/
+scoring by name") is not the same authorisation as merging what the check
+finds.
+
+**What was done in the meantime:** nothing in `data/catalogue.json` was
+touched, per the checklist's own explicit instruction, honoured past the
+letter of "check A1 landed" into the spirit of "the schema entries would
+be written against must actually be the current one." `git status` shows
+no changes to that file this run. Moved to writing this decision instead
+of guessing which schema to write against.
+
+**Recommendation:** merge `origin/scoring` into `codex-lane` (or wait for
+CLI/Mark to land it on `main` and re-sync both lanes from there, whichever
+is this project's own standing convention for cross-lane integration —
+not established in anything BLD has read this session) before BO7A's own
+entries are written. Writing against the OLD schema now and migrating
+those entries later is the less safe order: it produces exactly the kind
+of "ticked with none of what it claimed" drift `process_record_gate`'s own
+description names as the reason gate records exist at all.
+
+**Reversibility:** fully reversible as left — no catalogue edits, no
+merge attempted. A merge, once done, is not trivially reversible on a
+shared branch; better decided once than attempted and walked back.
