@@ -363,6 +363,63 @@ proven, current, and yours to build on.
 
 ---
 
+## MAKE IT PLAYABLE — BLD OWNS THIS. THE REST OF THE PHASE GATE.
+
+The board renders, the ghost renders, reload works. **But no person can do any
+of it.** Everything is driven by URL parameters (`?board=1&removeId=`), the
+overview and the board have never been connected, and I1's impostor atlas is
+baked and called by nothing.
+
+The phase gate: *a person opens the page, sees a world worth looking at, **picks
+an area**, **places a building**, sees why that cell was worth choosing, and it
+is still there on reload.* RB1–RB4 built the machinery. This is the person.
+
+[ ] RC1 (BLD) Pointer interaction: hover, place, cancel, remove — REBUILD-PLAN.md C2.2
+    `placement.js` has Tier 1 as data and RB2 renders the ghost, but nothing is
+    driven by a mouse. Wire real input: hover moves the ghost, click commits,
+    Escape or right-click cancels, and a click on a placed piece removes it.
+    **C2.2 is Tier 1 and Tier 1 only. Undo is explicitly NOT in it** — R7 says
+    the minimum is small and undo is not part of it. Do not add it.
+    Gate: a scripted pointer sequence — hover an invalid cell, click, and the
+    board is unchanged; hover a valid one, click, and exactly one piece exists.
+    RED is a click that places where the ghost read invalid, or a committed
+    placement the board does not contain. Assert against the REAL board's own
+    piece count, not the renderer's.
+[ ] RC2 (BLD) Pick an area from the overview and enter it — REBUILD-PLAN.md W1-W4
+    `area.js` has the LOCKED/OPEN/ACTIVE state machine and at most one ACTIVE —
+    structurally, not by check. `world-layer.js` has addressing. I2 baked the
+    overview's massing. **None of it is connected to anything a person clicks.**
+    Gate: from the overview, click an OPEN area and the board for THAT area
+    loads. Click a LOCKED one and it refuses visibly. RED is entering a locked
+    area, or two areas ACTIVE at once — the second must be impossible rather
+    than merely refused, which is how `area.js` already built it.
+    W5: re-entering after leaving RELOADS. Do not assume residency.
+[ ] RC3 (BLD) Wire the impostor atlas to something real — REBUILD-PLAN.md 8 of the revised order
+    I1 baked a 64-angle atlas, measured its cost, and **nothing reads it.** That
+    is "a capability built and unreachable from a real caller" —
+    `rule://failure-patterns` names it, and the server's own orphan check exists
+    because of it.
+    Use it where it was meant to go: distant pieces in the overview.
+    Gate: a shot at a distance where impostors are active, and the triangle
+    count measurably below the same view with them off. RED is no measurable
+    difference — that means they are not actually being used.
+[ ] RC4 (BLD) The board camera's own scene pass — REBUILD-PLAN.md R1, Mark 2026-09-15
+    RB5 retuned fog, sky and ground for the HERO camera. `14-board.png` is a
+    different camera and still reads as a dust bowl at that distance.
+    Gate: the pair of images at the BOARD camera, judged by Mark. No numeric
+    gate; inventing one would be a check that cannot fail.
+[ ] RC5 (BLD) Finish RB3 the moment S4 lands — SCORING-MODEL-2026-09-14.md §3.2 and §3.3
+    RB3 is `[!]`: the readout renders an honest "unavailable" state and a live
+    test fails the moment CLI's `valueAt`/`valueIfPlaced` exist. That test is
+    the signal. When it goes red, finish the readout for real.
+    **Call CLI's functions. Do not reimplement scoring. Do not edit
+    `public/scoring.js`.**
+    If the numbers look wrong on a real board — everything weak, or nothing
+    distinguishable — **show them, do not tune them.** The falloff anchor is an
+    open question for Mark and a real board is what it was waiting for.
+
+---
+
 ## VERSIONING AND TRACKING — CLI OWNS THIS. DO IT FIRST.
 
 `docs/specs/VERSIONING-AND-TRACKING-2026-09-15.md` is the spec.
