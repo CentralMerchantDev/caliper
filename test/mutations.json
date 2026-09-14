@@ -1517,6 +1517,46 @@
       "find": "  return 1 / Math.sqrt(entry.massing.length);",
       "replace": "  return 1 / entry.massing.length;",
       "expect": "unitQualityFor is exactly 1/sqrt(tiers) -- DECISIONS-FOR-MARK.md #14's disclosed curve, checked against LITERAL numbers so a mutated formula (e.g. 1/tiers) cannot pass by calling the function under test to build its own expectation"
+    },
+    {
+      "id": "city-score-median-not-mean",
+      "guards": "C1's own load-bearing property, SCORING-MODEL §4B.2 verbatim: \"a mean lets one tower carry a slum.\" Substitutes a genuine arithmetic mean for the median computation.",
+      "file": "public/city-score.js",
+      "find": "  const sorted = [...numbers].sort((a, b) => a - b);\n  const mid = sorted.length >> 1;\n  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];",
+      "replace": "  return numbers.reduce((sum, n) => sum + n, 0) / numbers.length;",
+      "expect": "GATE (C1): median wealth reads as the MEDIAN, not the mean -- one rich outlier does not carry a slum of poor cells"
+    },
+    {
+      "id": "city-score-per-cell-not-per-piece",
+      "guards": "C1's own disclosed judgement call, DECISIONS-FOR-MARK.md #15: medianWealth samples one value per CELL a residential piece occupies (footprint size as an implicit weight), not one value per piece. Substitutes anchorCell-only sampling -- one vote per building regardless of footprint.",
+      "file": "public/city-score.js",
+      "find": "    for (const { x, y } of cellsOf(board.rectFor(piece.id))) {\n      perUnitValues.push(perUnitWorth(valueAt(board, catalogue, x, y), entry.unitQuality));\n    }",
+      "replace": "    perUnitValues.push(perUnitWorth(valueAt(board, catalogue, piece.anchorCell.x, piece.anchorCell.y), entry.unitQuality));",
+      "expect": "GATE (C1): medianWealth counts EVERY cell of a multi-cell residential piece separately, not once per piece -- footprint size is an implicit weight"
+    },
+    {
+      "id": "city-score-must-exclude-non-residential",
+      "guards": "C1: only residential cells enter the median wealth pool -- commercial/industrial/civic/landmark/road cells must never contribute, or the statistic stops meaning \"the typical resident's wealth\" at all. Disables the category filter entirely.",
+      "file": "public/city-score.js",
+      "find": "    if (entry.category !== \"residential\") continue;",
+      "replace": "    if (false) continue;",
+      "expect": "medianWealth EXCLUDES non-residential cells from the pool -- commercial and industrial cells never enter the median"
+    },
+    {
+      "id": "city-score-empty-must-be-null-not-zero",
+      "guards": "C1's most serious plan-review finding: an empty city (no residential cells) must report null, not 0 -- a real, populated-but-badly-planned city can legitimately score negative (dilutive residential adjacency), and a silent 0 would let 'no data yet' outrank a real, worse city on the leaderboard SCORING-MODEL §4B.1 describes.",
+      "file": "public/city-score.js",
+      "find": "  if (numbers.length === 0) return null;",
+      "replace": "  if (numbers.length === 0) return 0;",
+      "expect": "median() of an empty array is null, not 0 or NaN -- 'no data' must not silently read as a real (and possibly winning) score"
+    },
+    {
+      "id": "city-score-registry-must-sum-not-take-last",
+      "guards": "C1's own named gate, verbatim (REBUILD-CHECKLIST.md): \"adding a second, trivial term requires no change to the registry or to the first term.\" Substitutes 'take only the last registered term's value' for summing every term with data -- with one term this is indistinguishable, which is exactly why the gate test registers a SECOND term and checks the total, not just that computeScore returns a number.",
+      "file": "public/city-score.js",
+      "find": "      const withData = breakdown.filter((t) => t.value !== null);\n      const score = withData.length === 0 ? null : withData.reduce((sum, t) => sum + t.value, 0);",
+      "replace": "      const withData = breakdown.filter((t) => t.value !== null);\n      const score = withData.length === 0 ? null : withData[withData.length - 1].value;",
+      "expect": "GATE (C1): adding a second, trivial term requires no change to the registry or the first term"
     }
   ]
 }
