@@ -159,7 +159,17 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     a false SURVIVED. Gate: node test/run.mjs catalogueValidator.test.ts --
     37/37 (was 34), tsc clean, 4/4 mutations CAUGHT, migration idempotent.
     Gate ledger: docs/GATE-LEDGER.jsonl.
-[ ] S1 (CLI) value(cell) stateless, Chebyshev R = 3, and baseValue is NOT in it — REBUILD-PLAN.md S1 + SCORING-MODEL §3.1
+[x] S1 (CLI) value(cell) stateless, Chebyshev R = 3, and baseValue is NOT in it — REBUILD-PLAN.md S1 + SCORING-MODEL §3.1
+    d889c1f on branch `scoring`. public/scoring.js, composing area-board.js.
+    Blind review (required before commit) found the implementation clean
+    (6 hand-mutations, all caught correctly) but TWO tests too weak to
+    detect what they claimed -- both fixed before commit: the path-
+    independence GATE tests both queried the same coordinate against
+    equivalent arrangements, so a coordinate-only cache would have passed
+    both (proven by hand); a "summed" test's shop(+5)/factory(-5) values
+    net to zero, so sign-flip and disabled-adjacency both passed it
+    (proven by hand). test/scoring.test.ts, 13 tests green. 3/3 mutations
+    CAUGHT. Gate ledger: docs/GATE-LEDGER.jsonl.
     `terrainContribution(cell) + sum of contribution(piece, cell)` within R.
     NON-RECURSIVE: computed from WHAT PIECES ARE within R, never from
     neighbours' computed values. SCORING-MODEL §5 decided this — recursion
