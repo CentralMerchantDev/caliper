@@ -35,19 +35,25 @@ export function createLookProofMaterial(arrayTexture) {
       uContactDarkening: { value: true },
       // The fifth mechanism, sourced separately from R1 -- turned on here.
       uValueSplit: { value: true },
+      // 4.3 -- the one join, tier 2 (a ground decal sized to the
+      // footprint). Turned on here, its own commit.
+      uJoinDecal: { value: true },
     },
     vertexShader: /* glsl */ `
       in float layerIndex;
+      in float groundDecal;
       out vec3 vNormal;
       out vec3 vWorldPos;
       out vec2 vUv;
       out float vLayer;
+      out float vGroundDecal;
       void main() {
         vNormal = normalize(normalMatrix * normal);
         vec4 worldPos = modelMatrix * vec4(position, 1.0);
         vWorldPos = worldPos.xyz;
         vUv = uv;
         vLayer = layerIndex;
+        vGroundDecal = groundDecal;
         gl_Position = projectionMatrix * viewMatrix * worldPos;
       }
     `,
@@ -63,10 +69,12 @@ export function createLookProofMaterial(arrayTexture) {
       uniform bool uRimSeparation;
       uniform bool uContactDarkening;
       uniform bool uValueSplit;
+      uniform bool uJoinDecal;
       in vec3 vNormal;
       in vec3 vWorldPos;
       in vec2 vUv;
       in float vLayer;
+      in float vGroundDecal;
       out vec4 fragColor;
 
       void main() {
@@ -127,6 +135,20 @@ export function createLookProofMaterial(arrayTexture) {
           // R1's own four, per the brief's fifth mechanism.
           float horizontalness = clamp(N.y, 0.0, 1.0);
           lit *= mix(1.0, 1.12, horizontalness);
+        }
+
+        if (uJoinDecal) {
+          // R8, tier 2: "cover the intersection" with a ground decal sized
+          // to the footprint, baked per-vertex at build time
+          // (addGroundDecalAttribute in look-proof-scene.html). vGroundDecal
+          // is 0 everywhere except the ring immediately around a building's
+          // own base, where it rises to 1 at the wall and falls off over
+          // DECAL_RADIUS -- escalated past tier 1 (uContactDarkening, which
+          // only darkens each piece's OWN low vertices, never the ground)
+          // because tier 1 alone still read as the building resting on top
+          // of the ground rather than meeting it, confirmed by looking at
+          // the actual render, not assumed.
+          lit *= mix(1.0, 0.5, vGroundDecal);
         }
 
         fragColor = vec4(lit, 1.0);

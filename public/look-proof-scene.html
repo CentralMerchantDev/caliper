@@ -85,13 +85,50 @@ function stripToPositionNormalUv(geometry) {
   out.setAttribute("normal", geometry.getAttribute("normal"));
   out.setAttribute("uv", geometry.getAttribute("uv"));
   if (geometry.index) out.setIndex(geometry.index);
-  return out;
+  return addZeroDecalAttribute(out);
 }
 
 function addLayerAttribute(geometry, layer) {
   const count = geometry.getAttribute("position").count;
   const data = new Float32Array(count).fill(layer);
   geometry.setAttribute("layerIndex", new THREE.BufferAttribute(data, 1));
+  return geometry;
+}
+
+// 4.3 -- THE JOIN. Tier 1 (contact darkening baked into each piece's own
+// lower mesh, 4.2's fourth mechanism) does not touch the ground itself, so
+// a building still reads as resting cleanly on top of it rather than
+// meeting it -- confirmed by looking at the actual render, not assumed.
+// Escalated to tier 2: a ground decal sized to each footprint, R8's
+// "cover the intersection" cheap version. Every ground vertex within
+// DECAL_RADIUS of a footprint's own edge gets a value in [0,1] -- 0 at
+// the edge, 1 at DECAL_RADIUS and beyond -- baked as a per-vertex
+// attribute at build time (this scene has no runtime SDF pass), the same
+// "static, not per-frame" discipline C2.3 asks of validity checks.
+const DECAL_RADIUS = 1.4;
+function distanceOutsideFootprint(x, z, anchor, footprint) {
+  const minX = anchor[0], maxX = anchor[0] + footprint[0];
+  const minZ = anchor[1], maxZ = anchor[1] + footprint[1];
+  const dx = Math.max(minX - x, 0, x - maxX);
+  const dz = Math.max(minZ - z, 0, z - maxZ);
+  return Math.sqrt(dx * dx + dz * dz);
+}
+function addGroundDecalAttribute(geometry, footprints) {
+  const pos = geometry.getAttribute("position");
+  const count = pos.count;
+  const data = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    let nearest = Infinity;
+    for (const fp of footprints) nearest = Math.min(nearest, distanceOutsideFootprint(x, z, fp.anchor, fp.footprint));
+    data[i] = 1 - Math.min(nearest / DECAL_RADIUS, 1);
+  }
+  geometry.setAttribute("groundDecal", new THREE.BufferAttribute(data, 1));
+  return geometry;
+}
+function addZeroDecalAttribute(geometry) {
+  const count = geometry.getAttribute("position").count;
+  geometry.setAttribute("groundDecal", new THREE.BufferAttribute(new Float32Array(count), 1));
   return geometry;
 }
 
@@ -145,12 +182,14 @@ async function main() {
     ...PIECES.map((p) => loadPieceGeometry(p.glb)),
   ]);
 
-  const groundGeom = addLayerAttribute(
-    new THREE.PlaneGeometry(GROUND.footprint[0], GROUND.footprint[1], 1, 1)
-      .rotateX(-Math.PI / 2)
-      .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2),
-    GROUND.layer,
-  );
+  // Subdivided (1 segment/metre) so the join decal below has enough
+  // resolution to read as a gradient rather than one flat quad -- a
+  // single-quad ground cannot carry a per-vertex halo around a footprint.
+  const groundGeomRaw = new THREE.PlaneGeometry(GROUND.footprint[0], GROUND.footprint[1], GROUND.footprint[0], GROUND.footprint[1])
+    .rotateX(-Math.PI / 2)
+    .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+  addGroundDecalAttribute(groundGeomRaw, PIECES);
+  const groundGeom = addLayerAttribute(groundGeomRaw, GROUND.layer);
   // Ground's own UVs tile once across its footprint -- fine for a grass
   // sample texture at this scale, and not what this scene exists to prove.
 

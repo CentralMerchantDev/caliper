@@ -81,6 +81,16 @@ test("the fifth mechanism (horizontal/vertical value split) is ON by default and
   assert.match(MATERIAL_SRC, /horizontalness = clamp\(N\.y,\s*0\.0,\s*1\.0\)/, "horizontalness must be derived from N.y -- a wall (N.y near 0) and a floor/roof (N.y near 1) must read differently");
 });
 
+test("4.3 the join decal is ON by default and darkens the ground toward each footprint's own edge, not away from it", () => {
+  assert.match(MATERIAL_SRC, /uJoinDecal:\s*\{\s*value:\s*true\s*\}/, "uJoinDecal's default is not true -- 07-join-decal.png's own before/after pair has nothing to show if this mechanism is not actually on");
+  assert.match(MATERIAL_SRC, /lit \*= mix\(1\.0,\s*0\.5,\s*vGroundDecal\)/, "the join decal must darken (mix toward < 1.0) as vGroundDecal rises toward 1 (at the wall), not brighten");
+});
+
+test("look-proof-scene.html bakes the join decal from real footprint geometry, not a placeholder constant", () => {
+  assert.match(SCENE_SRC, /function distanceOutsideFootprint/, "no real distance-to-footprint function -- a constant decal value would satisfy the shader-side check above without doing what the brief asked (sized to the footprint)");
+  assert.match(SCENE_SRC, /addGroundDecalAttribute\(groundGeomRaw,\s*PIECES\)/, "the ground's own decal attribute is not built from the real PIECES list");
+});
+
 test("look-proof-material.js's fragment shader actually samples a sampler2DArray, not a plain sampler2D", () => {
   assert.match(MATERIAL_SRC, /uniform\s+sampler2DArray\s+uArrayTex/, "the array-texture uniform is not declared as sampler2DArray");
   assert.match(MATERIAL_SRC, /texture\(uArrayTex,\s*vec3\(/, "the fragment shader does not sample uArrayTex with a vec3(uv, layer) lookup");
