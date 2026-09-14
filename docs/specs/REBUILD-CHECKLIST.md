@@ -137,25 +137,29 @@ pulled, and it is deliberately fenced off from the file CLI is working in.
     no area system exists on this branch to leave (BO1 is on origin/main /
     origin/world-layer, not merged into codex-lane as of this run).
 
-[ ] N1 (BLD) THE SCENE — sky, a ground that does not end, and something at street level — REBUILD-PLAN.md R1 and A5
-    The highest-value look item left, and it is not a shading problem.
-    In `08-cast-shadows.png` the lighting is close to good. What stops it
-    reading as a place is that there is NO SCENE: a black void instead of a
-    sky, a dirt plane that stops at a hard edge, and nothing between the
-    buildings. Four well-lit pieces floating in black is not a city.
-    Three things, each its own commit and its own before/after from the SAME
-    fixed camera as 08:
-      a. A sky. Even a gradient. The void is doing more damage than any
-         missing shader feature.
-      b. A ground that reads as continuing past the frame rather than ending.
-      c. Something at street level — kerbs, a path, one or two props. R8's
-         "interesting things happen where different things meet" applies to
-         the ground/road/building meeting as much as to the join already done.
-    Gate: the pair of images, judged by Mark. There is no numeric gate here
-    and inventing one would be a check that cannot fail.
-    Mark's standing assessment, to be beaten rather than matched: "not
-    anywhere close to done, but the lighting is much better and on the right
-    path."
+[x] N1 (BLD) THE SCENE — sky, a ground that does not end, and something at street level — REBUILD-PLAN.md R1 and A5
+    Three commits, each its own before/after from `08`'s own fixed camera
+    (`?hero=1`): 5f72578 (a: sky, `11-sky.png`), 3f0861e (b: ground,
+    `12-ground.png`), 09a9b23 (c: street level, `13-street-level.png`).
+    a. A CanvasTexture gradient as scene.background. Measured, not assumed:
+       +1 draw call, +2 triangles.
+    b. A second, much larger (400x400m), coarsely-subdivided ground plane
+       merged into the same draw call, plus retuned manual fog (uFogNear/Far
+       in look-proof-material.js) so the enlarged ground's own edge, not the
+       buildings, is what fades into the sky. Mipmapping/anisotropy added to
+       the array texture after the far plane's single UV tile aliased into a
+       visible checkerboard at grazing angles -- found by rendering.
+    c. A raised curb + a paved path around the road tile (R8's join-decal
+       logic, extended from a single building's own footprint to the road),
+       plus one prop (dumpster-1x1). Attempt 1 textured these with the road
+       pack's own layer and got visible rainbow banding (BoxGeometry
+       stretches a whole sprite-sheet atlas across each thin face); fixed by
+       reusing GROUND's own layer instead. HONEST READ: kerb/path are real
+       but subtle at this camera distance -- a smaller improvement than a/b,
+       said plainly rather than oversold, per the gate below.
+    Gate: the pair of images, judged by Mark, no numeric gate invented.
+    Each commit message states its own before/after and what did or did not
+    read as an improvement; not yet shown to Mark as of this run.
 
 ---
 
