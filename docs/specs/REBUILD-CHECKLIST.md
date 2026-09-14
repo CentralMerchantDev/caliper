@@ -240,9 +240,22 @@ proven, current, and yours to build on.
     at the piece counts L12 reached. RED is the draw count rising, or a
     placement that the board accepts and the render does not show — the two
     disagreeing is the whole defect class this item exists to prevent.
-[ ] RB2 (BLD) The ghost, and an invalid one that reads as invalid — REBUILD-PLAN.md C2.2
-    `placement.js` already has Tier 1: ghost, inert-on-invalid commit, cancel,
-    remove. None of it is visible. Render the ghost.
+[x] RB2 (BLD) The ghost, and an invalid one that reads as invalid — REBUILD-PLAN.md C2.2
+    `board-renderer.js` gained `resolveGhost(ghost, catalogue)` (pure,
+    reads `session.getGhost()`'s own `valid`/`reason` VERBATIM -- never
+    re-decides them). `look-proof-scene.html`'s `?board=1&ghost=valid` /
+    `&ghost=invalid` build a real `createPlacementSession`, call the real
+    `session.setGhost()`; the invalid demo targets the SAME cell
+    `house-a` already occupies, so the refusal ("occupied") is real, not
+    staged. Rendered as a SEPARATE overlay mesh (its own
+    `MeshBasicMaterial`, not the shared material -- RB1's own "the
+    material is proven" applies here too): green (`0x4caf50`) valid, red
+    (`0xe53935`) invalid. `16-ghost-valid.png` / `17-ghost-invalid.png`.
+    "Committing it changes nothing" proven on the real board, not
+    asserted: `GHOST-COMMIT ok=false reason=inert piecesBefore=4
+    piecesAfter=4 unchanged=true`, logged from the real
+    `session.commit()` call and a real `resolveBoardPieces` count taken
+    before and after.
     Gate: a ghost over an occupied or out-of-bounds cell is VISIBLY distinct
     from a valid one, and committing it changes nothing. RED is a ghost that
     looks placeable where `place()` would refuse — the render and the rule
