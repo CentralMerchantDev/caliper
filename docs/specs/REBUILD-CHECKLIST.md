@@ -287,11 +287,20 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     No tick, no clock. If it needs one it is out of scope.
     Gate: the same arrangement scores identically however it was reached — A
     then B, B then A, or loaded from a save. RED is any path dependence.
-[ ] S2 (CLI) Falloff is a negative exponential, NOT linear — REBUILD-PLAN.md T9, Clark
-    Steep immediately outside the piece, then a long flat tail. A linear
-    gradient reads as wrong to a player who could not say why.
-    Gate: a test that FAILS on a linear ramp and passes on the exponential.
-    Name the curve's parameters and where they came from.
+[x] S2 (CLI) Falloff is a negative exponential, NOT linear — REBUILD-PLAN.md T9, Clark
+    84d4a16 on branch `scoring`, pushed. falloff(distance)=e^(-GAMMA*d),
+    GAMMA derived from EDGE_FRACTION=0.1 (10% remaining at r=R) -- a
+    disclosed judgement call, DECISIONS-FOR-MARK.md #13, since T9 gives
+    the curve's shape (Clark, city-scale) not a number for a hard R=3
+    cutoff. Distance to a multi-cell piece is to its own NEAREST occupied
+    cell. Blind plan review caught 2 bugs before code (a dropped NaN
+    guard; a mutation anchored to the rewritten line); mutation testing
+    after implementation caught a 3rd (an off-by-one only visible
+    querying a multi-cell piece from its far side -- no existing test
+    approached from that direction). All three fixed. 96/96 tests, tsc
+    clean, 5/5 mutations CAUGHT including the checklist's own named gate
+    verbatim (a hand-written linear ramp fails the shrinking-drops
+    assertion the real curve passes). Gate ledger: docs/GATE-LEDGER.jsonl.
 [ ] S3 (CLI) Recompute the dirty set only — REBUILD-PLAN.md S3
     Never the whole board, never per frame.
     Gate: a mutation widening the dirty set to the whole board must be CAUGHT,
