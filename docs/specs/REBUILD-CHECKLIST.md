@@ -213,11 +213,28 @@ explicit: *"Do not do it a fourth."* It then did. Do not do it a fifth.
 Compose `look-proof-material.js`, `area-board.js` and `placement.js`. Those are
 proven, current, and yours to build on.
 
-[ ] RB1 (BLD) A board renderer: draw a real area board, not a hardcoded list — REBUILD-PLAN.md C2.1 and C1.6
-    `look-proof-scene.html` renders `PIECES`, a literal array. Replace that
-    source with a real `areaBoard`'s own placements, resolved through the
-    catalogue's `glb` field that BO7A just bound.
-    Not a rewrite of the material — the material is proven. This is the feed.
+[x] RB1 (BLD) A board renderer: draw a real area board, not a hardcoded list — REBUILD-PLAN.md C2.1 and C1.6
+    `public/board-renderer.js` (new module, pure data resolution, no THREE
+    at the top level, GPU-free tests): reads a real `createAreaBoard()`'s
+    own `board.pieces()` and the real `data/catalogue.json` (BO7A's `glb`
+    field), resolves each into a render-ready descriptor via the SAME
+    array-texture manifest `buildArrayTexture()` already reads (never a
+    second, hand-typed kit-name parser). `look-proof-scene.html`'s own
+    `?board=1` places 4 real, glb-bound catalogue pieces onto a real board
+    via the real `board.place()`, and `?board=1&removeId=<id>` re-runs the
+    SAME sequence then calls the real `board.remove()` before rendering --
+    one script, one page, one real board's own state transition, not two
+    independently-scripted renders. `14-board.png` / `15-board-removed.png`:
+    the removed piece (tower-base-6x6-a) is visibly gone in the second shot,
+    the other three unchanged. Draw calls stayed at 2 (mesh + N1a's sky,
+    unchanged from every other mode) at both piece counts. A piece with no
+    matching mesh is named in a console `BOARD-SKIPPED` line, not silently
+    dropped -- board-renderer.js's own disclosed `{resolved, skipped}`
+    contract, not re-decided in the scene file.
+    Not a rewrite of the material — the material is untouched. `PIECES`
+    (HERO_MODE/L12) stays exactly as it was; `?board=1` is additive, gated
+    to its own mode, with an empty `PIECES` in that mode so nothing
+    hardcoded feeds the render alongside the real board.
     Gate: `place()` a piece into a board, render, and the piece is visibly there
     in the shot; `remove()` it, render, and it is gone. **Draw calls stay at 1**
     at the piece counts L12 reached. RED is the draw count rising, or a
