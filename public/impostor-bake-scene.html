@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CALIPER — octahedral impostor bake</title>
+<meta name="description" content="I1: pre-render one piece from multiple angles, colour+normal+depth, hemi-octahedral grid. Not a product page -- docs/briefs/OVERNIGHT-BLD-2026-09-14.md's own investigation.">
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1016; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<a href="./index.html" class="back-to-caliper" aria-label="Back to CALIPER"
+   style="position:fixed;top:14px;left:14px;z-index:9999;display:inline-flex;align-items:center;gap:7px;
+          padding:7px 13px;border-radius:11px;text-decoration:none;font:600 12px/1 system-ui,sans-serif;
+          letter-spacing:.02em;color:#e8e4de;background:rgba(22,20,18,.82);border:1px solid rgba(255,255,255,.16);
+          backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 6px 20px rgba(0,0,0,.4)">
+  <span aria-hidden="true">&#8592;</span> CALIPER
+</a>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.min.js"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "./vendor/three/addons/loaders/GLTFLoader.js";
+import { createLookProofMaterial } from "./look-proof-material.js";
+
+// I1 -- OCTAHEDRAL IMPOSTORS, under their real name, per
+// docs/briefs/OVERNIGHT-BLD-2026-09-14.md. Investigated against a real,
+// fetchable primary source: the open-source Godot-Octahedral-Impostors
+// baker (github.com/wojtekpil/Godot-Octahedral-Impostors), itself built on
+// Ryan Brucks' (Principal Technical Artist, Epic Games) originating
+// article at shaderbits.com/blog/octahedral-impostors and the GDC 2018
+// Impostor Baking Plugin used in Fortnite. That baker's own README:
+// "Grid size - A root value of number of images taken from different
+// angles of baked model. 16 is recommended" (16x16 = 256 angles) and
+// "Atlas resolution... recommended to use 2048 in most cases", capturing
+// albedo, depth and normal (plus an optional ORM map) per angle. An
+// academic precursor exists (INRIA hal-00650120, CiteSeerX
+// 10.1.1.90.6202) but both were unreachable behind an access-denial
+// challenge at the time of this investigation -- named here rather than
+// silently substituted with the industry source alone.
+//
+// THIS BAKE IS A PROOF, NOT PRODUCTION: an 8x8 = 64-angle grid (not the
+// recommended 16x16 = 256), 128x128 px per cell (a real, deliberately
+// small size chosen for one thing -- measuring texture-memory COST at a
+// known grid/cell size, not shipping a usable impostor). The formula is
+// the same hemi-octahedral parametrization the Godot baker documents
+// using for foliage/ground objects: "a hemisphere should be better,
+// because it increases resolution from the side views" versus a full
+// sphere, which this scene has no need of (nothing here is ever viewed
+// from below).
+const GRID_SIZE = 8; // 8x8 = 64 angles. Production precedent: 16 (256 angles).
+const CELL_SIZE = 128; // px per angle, per pass.
+const PIECE = { glb: "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb", footprint: [8, 12] };
+
+function hemiOctahedralDirection(u, v) {
+  // u, v in [-1, 1]. Godot/shaderbits' own hemi-octahedral inverse map --
+  // no folding needed (unlike full-sphere octahedral) because the domain
+  // is already restricted to the upper hemisphere.
+  const y = 1.0 - Math.abs(u) - Math.abs(v);
+  return new THREE.Vector3(u, y, v).normalize();
+}
+
+async function main() {
+  const renderer = new THREE.WebGLRenderer({ antialias: false, logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
+  renderer.setSize(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE);
+  renderer.setPixelRatio(1);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+  window.__renderer = renderer;
+
+  const loader = new GLTFLoader();
+  const gltf = await loader.loadAsync(PIECE.glb);
+  let geom = null;
+  gltf.scene.traverse((obj) => { if (!geom && obj.isMesh) geom = obj.geometry; });
+  geom.computeBoundingBox();
+  const bb = geom.boundingBox;
+  const nativeW = bb.max.x - bb.min.x, nativeD = bb.max.z - bb.min.z;
+  const sx = PIECE.footprint[0] / nativeW, sz = PIECE.footprint[1] / nativeD, sy = Math.min((sx + sz) / 2, 6);
+  const m = new THREE.Matrix4().makeScale(sx, sy, sz).multiply(new THREE.Matrix4().makeTranslation(-bb.min.x, -bb.min.y, -bb.min.z));
+  geom.applyMatrix4(m);
+  geom.computeBoundingBox();
+  geom.computeBoundingSphere();
+  const sphere = geom.boundingSphere;
+
+  const buildArrayTexture = async () => {
+    const manifest = await fetch("vendor/kits/array-texture/manifest.json").then((r) => r.json());
+    const layer = manifest.layers.find((l) => l.file.includes("modular-buildings"));
+    const size = manifest.targetSize;
+    const img = await createImageBitmap(await fetch(`vendor/kits/array-texture/${layer.file}`).then((r) => r.blob()));
+    const canvas = document.createElement("canvas");
+    canvas.width = size; canvas.height = size;
+    canvas.getContext("2d").drawImage(img, 0, 0, size, size);
+    const pixels = canvas.getContext("2d").getImageData(0, 0, size, size).data;
+    const tex = new THREE.DataArrayTexture(new Uint8Array(pixels), size, size, 1);
+    tex.format = THREE.RGBAFormat; tex.type = THREE.UnsignedByteType; tex.needsUpdate = true;
+    return tex;
+  };
+  const arrayTex = await buildArrayTexture();
+  const count = geom.getAttribute("position").count;
+  geom.setAttribute("layerIndex", new THREE.BufferAttribute(new Float32Array(count), 1));
+  geom.setAttribute("groundDecal", new THREE.BufferAttribute(new Float32Array(count), 1));
+
+  const colorMaterial = createLookProofMaterial(arrayTex);
+  // uCastShadows defaults true (look-proof-material.js), sampling
+  // uShadowMap -- null here, since this bake has no shadow pass of its
+  // own (out of scope for I1, which is about colour/normal/depth capture).
+  // Left on, a null sampler2D read produced a blank canvas with zero
+  // console errors -- the same 'green but wrong' shape L11 and 4.1 both
+  // hit already, caught here by looking at the actual atlas image rather
+  // than trusting the reported stats.
+  colorMaterial.uniforms.uCastShadows.value = false;
+  const normalMaterial = new THREE.MeshNormalMaterial();
+  const depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+
+  const scene = new THREE.Scene();
+  const mesh = new THREE.Mesh(geom, colorMaterial);
+  scene.add(mesh);
+
+  const camDist = sphere.radius * 2.5;
+  // near/far tight around the object's own bounding sphere, not (0.1,
+  // camDist*2) -- that range wasted almost the whole depth buffer on
+  // empty space in front of and behind the piece, banding the
+  // RGBADepthPacking output badly enough to be visible as stripes in the
+  // atlas. Found by looking at the actual depth-atlas.png, not assumed
+  // correct because the pass "ran".
+  const camera = new THREE.OrthographicCamera(-sphere.radius * 1.1, sphere.radius * 1.1, sphere.radius * 1.1, -sphere.radius * 1.1, camDist - sphere.radius * 1.3, camDist + sphere.radius * 1.3);
+
+  const passes = [
+    { name: "colour", material: colorMaterial },
+    { name: "normal", material: normalMaterial },
+    { name: "depth", material: depthMaterial },
+  ];
+  const atlasCanvases = {};
+  for (const pass of passes) {
+    const atlas = document.createElement("canvas");
+    atlas.width = GRID_SIZE * CELL_SIZE; atlas.height = GRID_SIZE * CELL_SIZE;
+    atlasCanvases[pass.name] = atlas;
+  }
+
+  const t0 = performance.now();
+  let renderCount = 0;
+  for (let gy = 0; gy < GRID_SIZE; gy++) {
+    for (let gx = 0; gx < GRID_SIZE; gx++) {
+      const u = (gx / (GRID_SIZE - 1)) * 2 - 1;
+      const v = (gy / (GRID_SIZE - 1)) * 2 - 1;
+      const dir = hemiOctahedralDirection(u, v);
+      camera.position.copy(sphere.center).addScaledVector(dir, camDist);
+      camera.lookAt(sphere.center);
+      camera.updateProjectionMatrix();
+
+      for (const pass of passes) {
+        mesh.material = pass.material;
+        // A real resize per frame, not a viewport/scissor corner-reuse
+        // trick -- the scissor approach left unrendered regions of the
+        // 1024x1024 canvas un-cleared across all 192 renders (each frame
+        // only clearing its own small scissor rect), producing a smeared
+        // accumulation of every prior frame's leftovers. Found by
+        // capturing the live canvas directly and looking at it, not by
+        // trusting the compositing code's own logic.
+        renderer.setSize(CELL_SIZE, CELL_SIZE);
+        renderer.render(scene, camera);
+        renderCount++;
+        const ctx = atlasCanvases[pass.name].getContext("2d");
+        ctx.drawImage(renderer.domElement, 0, 0, CELL_SIZE, CELL_SIZE, gx * CELL_SIZE, (GRID_SIZE - 1 - gy) * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+      }
+    }
+  }
+  const bakeMs = performance.now() - t0;
+
+  window.__atlases = {};
+  for (const pass of passes) {
+    window.__atlases[pass.name] = atlasCanvases[pass.name].toDataURL("image/png");
+  }
+  const atlasResolution = GRID_SIZE * CELL_SIZE;
+  const bytesPerAtlasRGBA = atlasResolution * atlasResolution * 4;
+  window.__impostorStats = {
+    gridSize: GRID_SIZE,
+    angleCount: GRID_SIZE * GRID_SIZE,
+    cellSize: CELL_SIZE,
+    atlasResolution,
+    passCount: passes.length,
+    bytesPerAtlasRGBA,
+    totalBytesUncompressed: bytesPerAtlasRGBA * passes.length,
+    renderCount,
+    bakeMs,
+  };
+  console.log("IMPOSTOR-BAKE-STATS", JSON.stringify(window.__impostorStats));
+  window.__ready = true;
+}
+
+main().catch((e) => { console.error(e); window.__ready = "error"; });
+</script>
+</body>
+</html>

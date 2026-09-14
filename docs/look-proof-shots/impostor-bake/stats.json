@@ -1,0 +1,17 @@
+{
+  "gridSize": 8,
+  "angleCount": 64,
+  "cellSize": 128,
+  "atlasResolution": 1024,
+  "passCount": 3,
+  "bytesPerAtlasRGBA": 4194304,
+  "totalBytesUncompressed": 12582912,
+  "renderCount": 192,
+  "bakeMs": 31.100000023841858,
+  "realPngBytesPerAtlas": {
+    "colour": 416654,
+    "normal": 96612,
+    "depth": 614872
+  },
+  "totalRealPngBytes": 1128138
+}
