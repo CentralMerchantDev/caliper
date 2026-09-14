@@ -267,7 +267,7 @@ test("(synthetic) the vulnerability: a comment mentioning buildStreetLevelDetail
 test("GATE (RB1): ?board=1 places demo pieces into a REAL createAreaBoard, never a hardcoded PIECES-style array -- PIECES is empty in this mode", () => {
   assert.match(SCENE_SRC, /import \{ createAreaBoard \} from "\.\/area-board\.js"/, "look-proof-scene.html does not import the real area board");
   assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real board-renderer module");
-  assert.match(SCENE_SRC, /const board = createAreaBoard\(\{ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById \}\)/, "BOARD_MODE does not construct a real area board");
+  assert.match(SCENE_SRC, /let board = createAreaBoard\(\{ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById \}\)/, "BOARD_MODE does not construct a real area board");
   assert.match(SCENE_SRC, /board\.place\(p\.typeId, p\.anchorCell, p\.rotation\)/, "BOARD_MODE does not call the real board.place()");
   assert.match(SCENE_SRC, /BOARD_MODE\s*\n\s*\? \[\]/, "PIECES is not empty in BOARD_MODE -- a hardcoded piece list would still be feeding the render alongside (or instead of) the real board");
 });
@@ -298,7 +298,7 @@ test("(synthetic) the vulnerability: a comment mentioning createAreaBoard must n
 
 // ------------------------------------------------------------- RB2: the ghost
 test("GATE (RB2): a real placement session previews the ghost -- session.setGhost() against the SAME real board, never a staged/hardcoded valid or invalid flag", () => {
-  assert.match(SCENE_SRC, /import \{ createPlacementSession \} from "\.\/placement\.js"/, "look-proof-scene.html does not import the real placement session");
+  assert.match(SCENE_SRC, /import \{ createPlacementSession, loadBoard \} from "\.\/placement\.js"/, "look-proof-scene.html does not import the real placement session");
   assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real resolveGhost");
   assert.match(SCENE_SRC, /const session = createPlacementSession\(\{ board \}\)/, "GHOST_MODE does not construct a real placement session against the real board");
   assert.match(SCENE_SRC, /const ghost = session\.setGhost\(demo\.typeId, demo\.anchorCell, demo\.rotation\)/, "GHOST_MODE does not call the real session.setGhost()");
@@ -354,4 +354,25 @@ test("RB3: the readout's own console evidence reports the REAL available flag an
 test("(synthetic) the vulnerability: a comment mentioning resolveReadout must not satisfy the checks above", () => {
   const commentOnly = stripSourceComments("// readoutResolved = resolveReadout(ScoringModule, board, catalogueById, READOUT_CELL, READOUT_CANDIDATE_TYPE_ID, 0) used to be here\nconst m = {};\n");
   assert.doesNotMatch(commentOnly, /readoutResolved = resolveReadout\(ScoringModule, board, catalogueById, READOUT_CELL, READOUT_CANDIDATE_TYPE_ID, 0\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
+
+// -------------------------------------------------------- RB4: still there on reload
+test("GATE (RB4): ?board=1&reload=1 serializes the REAL session and rebuilds via the REAL loadBoard() -- the render downstream runs against the reloaded board, not the original", () => {
+  assert.match(SCENE_SRC, /import \{ createPlacementSession, loadBoard \} from "\.\/placement\.js"/, "look-proof-scene.html does not import the real loadBoard");
+  assert.match(SCENE_SRC, /const save = saveSession\.serialize\(\{ seed: "rb4-demo", generatorParams: null \}\)/, "RELOAD_MODE does not call the real session.serialize()");
+  assert.match(SCENE_SRC, /const \{ board: reloadedBoard, failures \} = loadBoard\(/, "RELOAD_MODE does not call the real loadBoard()");
+  assert.match(SCENE_SRC, /board = reloadedBoard/, "the reloaded board does not replace the original -- downstream resolution would still be reading the pre-reload board, proving nothing about the round trip");
+});
+
+test("GATE (RB4): loadBoard()'s own failures are logged, not swallowed -- C2.5's own contract, named directly", () => {
+  assert.match(SCENE_SRC, /RELOAD-FAILURES \$\{failures\.length === 0 \? "none" : failures\.map/, "loadBoard()'s own failures are not surfaced to console -- C2.5 exists specifically to prevent them being swallowed");
+});
+
+test("GATE (RB4): ?reloadShrink=1 reloads into a DELIBERATELY narrower board so a real placement (mega-tower-a) genuinely fails to re-apply -- the failure-surfacing half of the gate is exercised for real, not left at an untested 'failures: []' happy path", () => {
+  assert.match(SCENE_SRC, /const reloadWidth = RELOAD_SHRINK \? BOARD_WIDTH_CELLS - 4 : BOARD_WIDTH_CELLS/, "RELOAD_SHRINK does not actually narrow the reload target's own width");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning loadBoard must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// const { board: reloadedBoard, failures } = loadBoard( used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /const \{ board: reloadedBoard, failures \} = loadBoard\(/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });

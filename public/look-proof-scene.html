@@ -29,7 +29,7 @@ import { mergeGeometries } from "./vendor/three/addons/utils/BufferGeometryUtils
 import { createLookProofMaterial, LIGHT_DIR } from "./look-proof-material.js";
 import { PIECES as ALL_PIECES, LAYOUT_BOUNDS, GROUND as GROUND_FULL, loadPieceGeometry, fitToFootprint } from "./look-proof-pieces.js";
 import { createAreaBoard } from "./area-board.js";
-import { createPlacementSession } from "./placement.js";
+import { createPlacementSession, loadBoard } from "./placement.js";
 import { resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY } from "./board-renderer.js";
 // RB3 -- a NAMESPACE import (`import * as`), not `import { valueAt,
 // valueIfPlaced }`. A named import of an export that does not exist
@@ -152,6 +152,24 @@ const READOUT_CELL = (() => {
 })();
 const READOUT_CANDIDATE_TYPE_ID = "house-a"; // an arbitrary, real, glb-bound typeId to preview "if placed" with
 const READOUT_COLOR = { available: 0x2196f3, unavailable: 0x9e9e9e }; // blue once real; neutral grey while S4 is pending
+
+// RB4 -- "Still there on reload" (docs/specs/REBUILD-CHECKLIST.md, THE
+// CONVERGENCE). `?board=1&reload=1` places the SAME BOARD_DEMO_PLACEMENTS
+// as every other board=1 render, then serializes the real session
+// (public/placement.js's own C2.5 save shape) and reloads it into a
+// FRESH board via the real loadBoard() -- the render pipeline downstream
+// (resolveBoardPieces, the ground decal, the merge) then runs against
+// the RELOADED board, not the original one. The gate is exactly this
+// file's own before/after discipline: `19-reload.png` must be
+// byte-identical to `14-board.png`, proving the round trip lost, moved,
+// or silently dropped nothing.
+const RELOAD_MODE = new URLSearchParams(window.location.search).has("reload");
+// `?reloadShrink=1` reloads into a DELIBERATELY narrower board (20 cells,
+// not 24) so mega-tower-a's own anchor (x=15, an 8-module footprint,
+// spanning x:15-23) no longer fits -- a real out-of-bounds refusal from
+// the real board, proving loadBoard()'s own `failures` are genuinely
+// surfaced rather than an empty list that was never actually exercised.
+const RELOAD_SHRINK = new URLSearchParams(window.location.search).has("reloadShrink");
 
 const PIECES = HERO_MODE
   ? [...HERO_IDS, ...HERO_PROP_IDS].map((id) => {
@@ -502,7 +520,7 @@ async function main() {
   if (BOARD_MODE) {
     const catalogueArr = await fetch("data/catalogue.json").then((r) => r.json());
     const catalogueById = Object.fromEntries(catalogueArr.map((e) => [e.id, e]));
-    const board = createAreaBoard({ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById });
+    let board = createAreaBoard({ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById });
     const placedIds = [];
     for (const p of BOARD_DEMO_PLACEMENTS) {
       const result = board.place(p.typeId, p.anchorCell, p.rotation);
@@ -520,6 +538,29 @@ async function main() {
       const removed = board.remove(BOARD_REMOVE_ID);
       console.log(`BOARD-REMOVE id=${BOARD_REMOVE_ID} ok=${removed.ok}`);
     }
+
+    // RB4 -- "Still there on reload". Serialize the real session (C2.5's
+    // save shape), then rebuild a FRESH board from that save via the real
+    // loadBoard() -- every render step downstream of this point (the
+    // ground decal, resolveBoardPieces, the merge) operates on the
+    // RELOADED board, not the original, so the render itself is the
+    // proof, not a comment claiming reload works.
+    if (RELOAD_MODE) {
+      const saveSession = createPlacementSession({ board });
+      const save = saveSession.serialize({ seed: "rb4-demo", generatorParams: null });
+      const reloadWidth = RELOAD_SHRINK ? BOARD_WIDTH_CELLS - 4 : BOARD_WIDTH_CELLS;
+      const { board: reloadedBoard, failures } = loadBoard(
+        { width: reloadWidth, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById },
+        save,
+      );
+      // loadBoard() returns failures rather than swallowing them (C2.5) --
+      // surfaced here, not discarded. Empty on a normal reload; real and
+      // named when ?reloadShrink=1 makes mega-tower-a's own saved anchor
+      // no longer fit the reloaded board's own (narrower) bounds.
+      console.log(`RELOAD-FAILURES ${failures.length === 0 ? "none" : failures.map((f) => `${f.typeId}(${f.reason})`).join(", ")}`);
+      board = reloadedBoard;
+    }
+
     const { resolved, skipped } = resolveBoardPieces(board, catalogueById, manifest);
     boardResolved = resolved;
     boardSkipped = skipped;
