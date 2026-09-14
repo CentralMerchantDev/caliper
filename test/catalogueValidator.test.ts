@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { validateCatalogue, validateEntry, CATALOGUE_FOOTPRINTS, ROAD_CLASS_HIERARCHY } from "../public/catalogue-validator.js";
+import { AMENITY_CIVIC_TYPE_IDS } from "../scripts/migrate-catalogue-s2-fields.mjs";
 
 function repoRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -41,6 +42,8 @@ function goodBuilding(overrides = {}) {
     massing: ["base", "top"],
     joinSpec: "ground-decal",
     proportion: 1.2,
+    baseValue: 12,
+    adjacency: { residential: 3, commercial: 3, industrial: 3, civic: 3, landmark: 3, road: 3 },
     ...overrides,
   };
 }
@@ -57,6 +60,8 @@ function goodRoad(overrides = {}) {
     roadClass: "street",
     tileType: "straight",
     junctionArms: ["street", "street"],
+    baseValue: 1,
+    adjacency: { residential: 3, commercial: 3, industrial: 3, civic: 3, landmark: 3, road: 3 },
     ...overrides,
   };
 }
@@ -71,6 +76,67 @@ test("the real catalogue has no duplicate ids -- checked directly, not inferred 
   const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
   const ids = catalogue.map((e: any) => e.id);
   assert.equal(new Set(ids).size, ids.length);
+});
+
+// Rule 8 deliberately does not restrict adjacency's keys to a fixed enum
+// (a future player-authored typeId, per B1, cannot be enumerated in
+// advance) -- which means a typo'd category key (e.g. "resedential")
+// would satisfy rule 8 (a real string key, an integer value) while never
+// matching anything at runtime, forever, with nothing else to catch it.
+// This is a check on the DATA, not the validator: every key actually
+// present in the real catalogue today is drawn from the real category set.
+test("every adjacency key in the real catalogue is one of the six real catalogue categories -- guards the typo rule 8 cannot see", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  const realCategories = new Set(catalogue.map((e: any) => e.category));
+  const badKeys: string[] = [];
+  for (const entry of catalogue) {
+    for (const key of Object.keys(entry.adjacency)) {
+      if (!realCategories.has(key)) badKeys.push(`${entry.id}: "${key}"`);
+    }
+  }
+  assert.deepEqual(badKeys, []);
+});
+
+// ---------------------------------------------------------------- SCORING-MODEL §4: the substation problem
+//
+// "civic" carries both genuine services (a library) and infrastructure that
+// must not raise nearby housing value (a substation) -- resolved by keying
+// amenity civic entries on typeId (scripts/migrate-catalogue-s2-fields.mjs's
+// own AMENITY_CIVIC_TYPE_IDS), not by splitting the category. This is the
+// checklist's own named gate for A1: "a test that refuses a positive
+// residential bonus from a non-amenity civic entry."
+
+test("GATE (A1): every non-amenity civic entry in the real catalogue carries NO positive residential adjacency", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  const civicEntries = catalogue.filter((e: any) => e.category === "civic");
+  assert.ok(civicEntries.length > 0, "fixture sanity: there should be real civic entries to check");
+  const violations: string[] = [];
+  for (const entry of civicEntries) {
+    if (AMENITY_CIVIC_TYPE_IDS.includes(entry.id)) continue;
+    const residentialBonus = entry.adjacency.residential;
+    if (typeof residentialBonus === "number" && residentialBonus > 0) {
+      violations.push(`${entry.id}: adjacency.residential = ${residentialBonus}`);
+    }
+  }
+  assert.deepEqual(violations, [], `non-amenity civic entries must not raise nearby housing value:\n${violations.join("\n")}`);
+});
+
+test("GATE (A1), named directly: substation-a specifically carries no positive residential adjacency", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  const substation = catalogue.find((e: any) => e.id === "substation-a");
+  assert.ok(substation, "substation-a must exist in the real catalogue for this gate to mean anything");
+  const residentialBonus = substation.adjacency.residential;
+  assert.ok(!(typeof residentialBonus === "number" && residentialBonus > 0), `substation-a must not raise nearby housing value, got adjacency.residential = ${JSON.stringify(residentialBonus)}`);
+});
+
+test("every civic entry ON the amenity list DOES carry a positive residential bonus -- the split is not vacuous in the other direction", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  for (const typeId of AMENITY_CIVIC_TYPE_IDS) {
+    const entry = catalogue.find((e: any) => e.id === typeId);
+    assert.ok(entry, `${typeId} (named in AMENITY_CIVIC_TYPE_IDS) must exist in the real catalogue`);
+    assert.equal(entry.category, "civic", `${typeId} is on the civic amenity list but its own category is "${entry.category}"`);
+    assert.ok(typeof entry.adjacency.residential === "number" && entry.adjacency.residential > 0, `${typeId}: expected a positive adjacency.residential, got ${JSON.stringify(entry.adjacency.residential)}`);
+  }
 });
 
 // ---------------------------------------------------------------- rule 1
@@ -183,4 +249,76 @@ test("RULE 6 (no duplicate ids): two entries sharing an id are caught", () => {
 test("RULE 6: distinct ids are NOT flagged", () => {
   const errors = validateCatalogue([goodBuilding({ id: "a" }), goodRoad({ id: "b" })]);
   assert.ok(!errors.some((e) => e.rule === "no-duplicate-ids"), JSON.stringify(errors));
+});
+
+// ---------------------------------------------------------------- rule 7 (S2)
+test("RULE 7 (has baseValue): a missing baseValue is caught", () => {
+  const entry = goodBuilding();
+  delete (entry as any).baseValue;
+  const errors = validateEntry(entry);
+  assert.ok(errors.some((e) => e.rule === "has-base-value"), JSON.stringify(errors));
+});
+
+test("RULE 7: a non-integer baseValue is caught -- a float", () => {
+  const errors = validateEntry(goodBuilding({ baseValue: 12.5 }));
+  assert.ok(errors.some((e) => e.rule === "has-base-value"), JSON.stringify(errors));
+});
+
+test("RULE 7: a non-integer baseValue is caught -- a string that LOOKS like a number", () => {
+  const errors = validateEntry(goodBuilding({ baseValue: "12" }));
+  assert.ok(errors.some((e) => e.rule === "has-base-value"), JSON.stringify(errors));
+});
+
+test("RULE 7: a real integer baseValue, including zero, is NOT flagged", () => {
+  for (const v of [0, 1, -1, 999]) {
+    const errors = validateEntry(goodBuilding({ baseValue: v }));
+    assert.ok(!errors.some((e) => e.rule === "has-base-value"), `${v}: ${JSON.stringify(errors)}`);
+  }
+});
+
+// ---------------------------------------------------------------- rule 8 (S2)
+test("RULE 8 (has adjacency): a missing adjacency is caught", () => {
+  const entry = goodBuilding();
+  delete (entry as any).adjacency;
+  const errors = validateEntry(entry);
+  assert.ok(errors.some((e) => e.rule === "has-adjacency"), JSON.stringify(errors));
+});
+
+test("RULE 8: adjacency as an array is caught -- an array is not a category map", () => {
+  const errors = validateEntry(goodBuilding({ adjacency: [3, 3, 3] }));
+  assert.ok(errors.some((e) => e.rule === "has-adjacency"), JSON.stringify(errors));
+});
+
+test("RULE 8: adjacency as null is caught -- typeof null === 'object' is the exact trap", () => {
+  const errors = validateEntry(goodBuilding({ adjacency: null }));
+  assert.ok(errors.some((e) => e.rule === "has-adjacency"), JSON.stringify(errors));
+});
+
+test("RULE 8: adjacency as a string is caught", () => {
+  const errors = validateEntry(goodBuilding({ adjacency: "residential:3" }));
+  assert.ok(errors.some((e) => e.rule === "has-adjacency"), JSON.stringify(errors));
+});
+
+test("RULE 8: an empty adjacency object is a legitimate value, NOT flagged by has-adjacency -- commercial/civic/landmark entries use exactly this", () => {
+  const errors = validateEntry(goodBuilding({ adjacency: {} }));
+  assert.ok(!errors.some((e) => e.rule === "has-adjacency"), JSON.stringify(errors));
+  assert.ok(!errors.some((e) => e.rule === "adjacency-values-are-integers"), JSON.stringify(errors));
+});
+
+test("RULE 8: a non-integer value INSIDE adjacency is caught, naming the key", () => {
+  const errors = validateEntry(goodBuilding({ adjacency: { residential: 3.5 } }));
+  const err = errors.find((e) => e.rule === "adjacency-values-are-integers");
+  assert.ok(err, JSON.stringify(errors));
+  assert.match(err!.message, /residential/);
+});
+
+test("RULE 8: every bad value inside adjacency is reported, not just the first", () => {
+  const errors = validateEntry(goodBuilding({ adjacency: { residential: 3.5, commercial: "3" } }));
+  const bad = errors.filter((e) => e.rule === "adjacency-values-are-integers");
+  assert.equal(bad.length, 2, JSON.stringify(errors));
+});
+
+test("RULE 8: a well-formed adjacency map is NOT flagged", () => {
+  const errors = validateEntry(goodBuilding());
+  assert.ok(!errors.some((e) => e.rule === "has-adjacency" || e.rule === "adjacency-values-are-integers"), JSON.stringify(errors));
 });

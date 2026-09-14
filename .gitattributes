@@ -51,6 +51,23 @@
 *.zip binary
 *.pdf binary
 
+# APPEND-ONLY JSONL LOGS MERGE AS A UNION, NOT AS TEXT.
+#
+# V1 (docs/specs/VERSIONING-AND-TRACKING-2026-09-15.md) claims "an append-only
+# log merges cleanly across branches where a file full of ticks does not" --
+# true of the DATA, false of git's own default merge strategy without this
+# line. Two branches that each append one distinct line to the SAME file
+# still conflict under git's ordinary 3-way text merge (verified directly:
+# two branches each appending one line to a shared JSONL file produced a real
+# `CONFLICT (content)`, not a clean merge) -- the anchor line both sides
+# appended after is identical, but line-based diff3 has no way to know
+# "keep both, order doesn't matter" without being told. `merge=union` is
+# git's own built-in driver for exactly this: keep every line from both
+# sides, drop exact duplicates, no custom driver to configure. This is what
+# makes the "merges cleanly" claim actually true rather than only intended.
+docs/EVENT-LOG.jsonl merge=union
+docs/GATE-LEDGER.jsonl merge=union
+
 # TO APPLY, ONCE, WITH A CLEAN TREE (nothing uncommitted, nothing running):
 #
 #     git add --renormalize .

@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createAreaBoard } from "../public/area-board.js";
-import { createPlacementSession, loadBoard } from "../public/placement.js";
+import { createPlacementSession, loadBoard, SAVE_SCHEMA_VERSION } from "../public/placement.js";
 
 const CATALOGUE = {
   "kiosk-a": { footprint: [1, 1], terrainMask: ["land"] },
@@ -217,4 +217,134 @@ test("a placement that fails to re-apply because the area shrank is also reporte
   const { failures } = loadBoard({ width: 5, height: 5, catalogue: CATALOGUE }, save);
   assert.equal(failures.length, 1);
   assert.equal(failures[0].reason, "out-of-bounds");
+});
+
+// ---------------------------------------------------------------- V3: schema version + per-placement timestamp
+
+test("serialize() writes the real SAVE_SCHEMA_VERSION, not a hand-typed number that could drift from it", () => {
+  const { session: s } = session();
+  const save = s.serialize({ seed: "v3", generatorParams: {} });
+  assert.equal(save.schemaVersion, SAVE_SCHEMA_VERSION);
+  assert.equal(SAVE_SCHEMA_VERSION, 1);
+});
+
+test("a committed placement carries the injected clock's timestamp, not the real wall clock", () => {
+  const board = createAreaBoard({ width: 10, height: 10, catalogue: CATALOGUE });
+  const s = createPlacementSession({ board, now: () => "2026-09-15T03:00:00.000Z" });
+  s.setGhost("kiosk-a", { x: 1, y: 1 }, 0);
+  s.commit();
+  const save = s.serialize({ seed: "x", generatorParams: {} });
+  assert.equal(save.placements[0].at, "2026-09-15T03:00:00.000Z");
+});
+
+test("GATE: the clock is called only on a SUCCESSFUL commit -- never on preview, cancel, or an inert (invalid) commit attempt", () => {
+  const board = createAreaBoard({ width: 10, height: 10, catalogue: CATALOGUE });
+  let calls = 0;
+  const s = createPlacementSession({ board, now: () => { calls++; return "t"; } });
+
+  s.setGhost("kiosk-a", { x: 1, y: 1 }, 0);
+  assert.equal(calls, 0, "previewing a ghost must never call the clock");
+  s.cancel();
+  assert.equal(calls, 0, "cancelling must never call the clock");
+
+  board.place("kiosk-a", { x: 5, y: 5 }, 0, { id: 999 }); // occupy a spot out of band
+  s.setGhost("kiosk-a", { x: 5, y: 5 }, 0); // now invalid -- occupied
+  const inert = s.commit();
+  assert.equal(inert.ok, false, "sanity check: this commit must actually be inert");
+  assert.equal(calls, 0, "an inert commit must never call the clock");
+
+  s.setGhost("kiosk-a", { x: 2, y: 2 }, 0);
+  s.commit();
+  assert.equal(calls, 1, "exactly one real commit must call the clock exactly once");
+});
+
+test("a piece placed directly via board.place() (bypassing the session) has no tracked timestamp -- serializes as null, not a crash", () => {
+  const board = createAreaBoard({ width: 10, height: 10, catalogue: CATALOGUE });
+  board.place("kiosk-a", { x: 3, y: 3 }, 0, { id: 7 });
+  const s = createPlacementSession({ board });
+  const save = s.serialize({ seed: "x", generatorParams: {} });
+  assert.equal(save.placements.length, 1);
+  assert.equal(save.placements[0].at, null);
+});
+
+test("GATE: remove() deletes the piece's own placedAt entry -- a later, unrelated piece reusing the same id must NOT inherit a stale timestamp", () => {
+  const board = createAreaBoard({ width: 10, height: 10, catalogue: CATALOGUE });
+  const s = createPlacementSession({ board, now: () => "2026-09-15T00:00:00Z" });
+  s.setGhost("kiosk-a", { x: 1, y: 1 }, 0);
+  const first = s.commit(); // id N, timestamped
+
+  s.remove(first.id);
+  // A different, unrelated piece reuses the exact same numeric id --
+  // area-board.js's own place() allows this once the original is gone.
+  board.place("house-a", { x: 4, y: 4 }, 0, { id: first.id });
+
+  const save = s.serialize({ seed: "x", generatorParams: {} });
+  const reused = save.placements.find((p) => p.id === first.id);
+  assert.ok(reused);
+  assert.equal(reused.typeId, "house-a");
+  assert.equal(reused.at, null, "the reused id must NOT carry the removed piece's old timestamp");
+});
+
+test("loadBoard() reports the save's own schemaVersion and the code's expected one, so a caller can compare", () => {
+  const { session: s } = session();
+  const save = s.serialize({ seed: "x", generatorParams: {} });
+  const result = loadBoard({ width: 10, height: 10, catalogue: CATALOGUE }, save);
+  assert.equal(result.schemaVersion, SAVE_SCHEMA_VERSION);
+  assert.equal(result.expectedSchemaVersion, SAVE_SCHEMA_VERSION);
+});
+
+test("a save with no schemaVersion field at all (predates V3) reports schemaVersion 0, distinct from any real version", () => {
+  const legacySave = { seed: "x", generatorParams: {}, tombstones: [], placements: [] };
+  const result = loadBoard({ width: 10, height: 10, catalogue: CATALOGUE }, legacySave);
+  assert.equal(result.schemaVersion, 0);
+  assert.equal(result.expectedSchemaVersion, 1);
+  assert.notEqual(result.schemaVersion, result.expectedSchemaVersion);
+});
+
+test("GATE: reloading and re-serializing preserves every EXISTING placement's real timestamp -- round trip does not reset history to null", () => {
+  const board = createAreaBoard({ width: 10, height: 10, catalogue: CATALOGUE });
+  const original = createPlacementSession({ board, now: () => "2026-09-01T00:00:00Z" });
+  original.setGhost("kiosk-a", { x: 2, y: 2 }, 0);
+  const placed = original.commit();
+  const save = original.serialize({ seed: "x", generatorParams: {} });
+  assert.equal(save.placements[0].at, "2026-09-01T00:00:00Z");
+
+  const { board: reloadedBoard, placedAt } = loadBoard({ width: 10, height: 10, catalogue: CATALOGUE }, save);
+  const resumed = createPlacementSession({ board: reloadedBoard, placedAt, now: () => "2026-09-15T00:00:00Z" });
+  const resaved = resumed.serialize({ seed: "x", generatorParams: {} });
+
+  assert.equal(resaved.placements[0].id, placed.id);
+  assert.equal(resaved.placements[0].at, "2026-09-01T00:00:00Z", "the ORIGINAL timestamp must survive a reload, not reset to the resumed session's own clock");
+});
+
+test("loadBoard()'s placedAt is populated ONLY for placements that actually re-applied -- a failed one must not leave a phantom timestamp", () => {
+  const { session: s } = session();
+  s.setGhost("house-a", { x: 2, y: 2 }, 0);
+  const placed = s.commit();
+  const save = s.serialize({ seed: "x", generatorParams: {} });
+  assert.ok(save.placements[0].at, "sanity check: the original placement really did get a timestamp");
+
+  // Reload against a catalogue missing "house-a" -- the placement fails to
+  // re-apply (B2: catalogue drift), so it is NOT on the reloaded board.
+  const driftedCatalogue = { "kiosk-a": CATALOGUE["kiosk-a"] };
+  const { failures, placedAt } = loadBoard({ width: 10, height: 10, catalogue: driftedCatalogue }, save);
+  assert.equal(failures.length, 1);
+  assert.equal(placedAt.has(placed.id), false, "a placement that failed to re-apply must not leave a phantom timestamp for its id to inherit later");
+});
+
+test("GATE (C2.5, extended to the new fields): a removed placement's timestamp does not come back on reload either", () => {
+  const { session: s } = session();
+  s.setGhost("kiosk-a", { x: 1, y: 1 }, 0);
+  const kept = s.commit();
+  s.setGhost("house-a", { x: 5, y: 5 }, 0);
+  const removedLater = s.commit();
+  s.remove(removedLater.id);
+
+  const save = s.serialize({ seed: "x", generatorParams: {} });
+  assert.equal(save.placements.length, 1, "only the kept piece is in the save at all");
+
+  const { board: reloaded, placedAt } = loadBoard({ width: 10, height: 10, catalogue: CATALOGUE }, save);
+  assert.equal(reloaded.pieceIdAt(5, 5), -1, "the removed house must not come back");
+  assert.equal(placedAt.has(removedLater.id), false);
+  assert.equal(placedAt.has(kept.id), true);
 });

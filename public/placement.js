@@ -18,15 +18,42 @@
 // simply is not regenerated, so its absence from `placements` already means
 // gone. This is why the two lists have different shapes — one is what to
 // ADD back, the other is what to REFUSE to add back.
+//
+// V3 (docs/specs/VERSIONING-AND-TRACKING-2026-09-15.md §V2, "the save format
+// is already an event log"): `schemaVersion` on the save, `at` per
+// placement. Both one-line additions now, expensive to retrofit -- "cheap
+// now, impossible to backfill later." NOT in this item: actual migration of
+// an old-version save's shape; replay/undo (separate, later features); a
+// timestamp on tombstones (the spec says "a timestamp per placement," not
+// per removal). And the constraint that makes S1 still hold: nothing here
+// is ever read BACK by `public/scoring.js` -- `value()` is computed from the
+// board, never from a save or its timestamps, or S1's path-independence
+// gate ("the same arrangement scores identically however it was reached")
+// fails outright. `at` is a record of history, not an input to anything.
 // =============================================================================
 
 import { createAreaBoard } from "./area-board.js";
 
+/** The save format's own version. A missing field on an older save reads as
+ * `0` (see loadBoard below) -- `0` is reserved, permanently, to mean "no
+ * version field was ever written"; the first real version is 1 and stays 1
+ * even if this file's shape never changes again, so `0` never collides with
+ * a genuine version number. */
+export const SAVE_SCHEMA_VERSION = 1;
+
 /**
  * @param {object} opts
  * @param {object} opts.board  a board from createAreaBoard()
+ * @param {() => string} [opts.now]  the clock -- injectable so a test can
+ *   supply a fixed one instead of the real wall clock. Defaults to the real
+ *   wall clock.
+ * @param {Map<number,string>} [opts.placedAt]  seeds the session's own
+ *   per-piece timestamp tracking, e.g. from `loadBoard()`'s own returned
+ *   `placedAt` -- without this, reloading a save and re-serializing it
+ *   would silently wipe every existing placement's timestamp back to
+ *   `null`, exactly what "impossible to backfill later" warns against.
  */
-export function createPlacementSession({ board }) {
+export function createPlacementSession({ board, now = () => new Date().toISOString(), placedAt = new Map() }) {
   let ghost = null;
   // Cell indices (y*width+x, matching the board's own addressing) where a
   // GENERATED piece was removed. Tracked here, not in area-board.js itself
@@ -69,31 +96,52 @@ export function createPlacementSession({ board }) {
     if (!ghost) return { ok: false, reason: "no-ghost", detail: "nothing is being placed" };
     if (!ghost.valid) return { ok: false, reason: "inert", detail: `placement is invalid: ${ghost.reason}` };
     const result = board.place(ghost.typeId, ghost.anchorCell, ghost.rotation, { origin: "player" });
-    if (result.ok) ghost = null;
+    if (result.ok) {
+      placedAt.set(result.id, now());
+      ghost = null;
+    }
     return result;
   }
 
   /** Bulldoze. A generated piece's removal is recorded as a tombstone so a
    *  reload does not silently bring it back; a player piece's removal needs
-   *  nothing extra -- it is simply gone from the placements list. */
+   *  nothing extra -- it is simply gone from the placements list.
+   *  `placedAt` is cleared here too, mirroring `tombstones` above -- blind
+   *  review caught the real bug this prevents: `area-board.js`'s own
+   *  `place()` lets an explicit id be REUSED once its piece is removed
+   *  (`pieces.has(id)` is the only check, never against `nextId`), so a
+   *  removed piece's own stale timestamp would otherwise attach itself to
+   *  whatever unrelated piece next reuses that id. */
   function remove(id) {
     const piece = board.getPiece(id);
     if (!piece) return { ok: false, reason: "not-found", detail: `no piece with id ${id}` };
     const result = board.remove(id);
-    if (result.ok && piece.origin === "generated") {
-      tombstones.add(piece.anchorCell.y * board.width + piece.anchorCell.x);
+    if (result.ok) {
+      placedAt.delete(id);
+      if (piece.origin === "generated") {
+        tombstones.add(piece.anchorCell.y * board.width + piece.anchorCell.x);
+      }
     }
     return result;
   }
 
-  /** C2.5's save shape. Generated pieces are never in `placements` -- they
-   *  are reproduced by the generator on load, not stored twice. */
+  /** C2.5's save shape, V3-corrected: `schemaVersion` at the top, `at` per
+   *  placement. Generated pieces are never in `placements` -- they are
+   *  reproduced by the generator on load, not stored twice, so they never
+   *  had a timestamp entry to begin with and still don't.
+   *  `placedAt.get(p.id) ?? null`: `null` means either "this genuinely
+   *  predates V3" or "this piece was placed some other way than through
+   *  this session's own commit() (board.place() directly, as several
+   *  tests do)" -- the two are not distinguishable from here, by design;
+   *  timestamping lives in the session layer, not the board, the same
+   *  separation `tombstones` already keeps (see this file's own header). */
   function serialize({ seed, generatorParams }) {
     const placements = board
       .pieces()
       .filter((p) => p.origin !== "generated")
-      .map((p) => ({ id: p.id, typeId: p.typeId, anchorCell: p.anchorCell, rotation: p.rotation }));
+      .map((p) => ({ id: p.id, typeId: p.typeId, anchorCell: p.anchorCell, rotation: p.rotation, at: placedAt.get(p.id) ?? null }));
     return {
+      schemaVersion: SAVE_SCHEMA_VERSION,
       seed,
       generatorParams,
       tombstones: [...tombstones].sort((a, b) => a - b),
@@ -122,11 +170,31 @@ export function createPlacementSession({ board }) {
  * player's own kept work disappears on reload with nothing to say so, which
  * is the exact class of silent failure this whole project exists to refuse.
  * `failures` names each one, with the real reason `board.place()` gave.
+ *
+ * V3: also returns `schemaVersion` (the save's own, or `0` if the save
+ * predates this field entirely -- see `SAVE_SCHEMA_VERSION`'s own comment
+ * for why `0` is reserved rather than reusing `1`), `expectedSchemaVersion`
+ * (this code's own `SAVE_SCHEMA_VERSION`, for the caller to compare), and
+ * `placedAt` (a `Map<id,isoString>` rebuilt from each placement's own `at`
+ * field). Pass `placedAt` into a new `createPlacementSession({ board,
+ * placedAt })` to keep every existing timestamp alive across a reload --
+ * without that, resaving right after loading would silently reset every
+ * placement's history to `null`, which is exactly what "impossible to
+ * backfill later" warns against. `placedAt` is populated ONLY for
+ * placements that actually re-applied (`result.ok`) -- blind review caught
+ * this: an unconditional version would give a PHANTOM timestamp to an id
+ * that failed to re-apply (real and already-handled, e.g. catalogue drift
+ * per B2) and is therefore not actually on the reloaded board at all, and
+ * that phantom entry could later attach itself to a different, unrelated
+ * piece if that same numeric id ever gets reused (area-board.js's own
+ * `place()` allows an explicit id to be reused once its prior piece is
+ * gone).
  */
 export function loadBoard({ width, height, catalogue }, save, generate = null) {
   const board = createAreaBoard({ width, height, catalogue });
   const tombstoneSet = new Set(save.tombstones || []);
   const failures = [];
+  const placedAt = new Map();
 
   if (typeof generate === "function") {
     const generatedPieces = generate(save.seed, save.generatorParams) || [];
@@ -140,8 +208,18 @@ export function loadBoard({ width, height, catalogue }, save, generate = null) {
 
   for (const p of save.placements || []) {
     const result = board.place(p.typeId, p.anchorCell, p.rotation, { id: p.id, origin: "player" });
-    if (!result.ok) failures.push({ ...p, origin: "player", reason: result.reason, detail: result.detail });
+    if (!result.ok) {
+      failures.push({ ...p, origin: "player", reason: result.reason, detail: result.detail });
+    } else if (p.at !== undefined && p.at !== null) {
+      placedAt.set(p.id, p.at);
+    }
   }
 
-  return { board, failures };
+  return {
+    board,
+    failures,
+    placedAt,
+    schemaVersion: save.schemaVersion ?? 0,
+    expectedSchemaVersion: SAVE_SCHEMA_VERSION,
+  };
 }

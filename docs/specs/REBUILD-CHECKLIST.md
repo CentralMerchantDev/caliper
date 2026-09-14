@@ -24,18 +24,43 @@ that index, and nothing more.
 
 ## HOW IT IS USED
 
-Both lanes read this one file. **It is byte-identical in both worktrees**
-(`C:\Code\sandbox-spike` and `C:\Code\sandbox-spike-codex`) on purpose: two
-checklists for one plan is the copy problem this process exists to kill. If a
-merge reports a conflict here, the two sides should be identical — take either
-and check.
+**CORRECTED 2026-09-15 (item V2).** This header used to claim the file is
+"byte-identical in both worktrees... If a merge reports a conflict here, the
+two sides should be identical — take either." **That was always going to be
+false, and by 2026-09-14 it was**: two lanes ticking their own items on their
+own branches diverges every time — two writers, one file, two branches, every
+night. Not carelessness; structural.
+
+**The checklist is an index, not the record of truth. The log is the
+evidence.** `docs/EVENT-LOG.jsonl` (V1) is append-only and merges cleanly
+across branches (`merge=union`, `.gitattributes`) in exactly the way a file
+full of ticks cannot. A gated item checks the log — "is there a `pushed`
+event for item X?" (`node scripts/query-event-log.mjs --item X --event
+pushed`) — not a ref it had to guess, and not this file's own tick, which is
+convenience, read AFTER checking the log, never instead of it.
+
+**Divergence in the OTHER lane's own section of this file is expected until
+merge, and is not itself a finding.** Each lane's own section (marked CLI or
+BLD) is that lane's live claim about its own work; only the log is
+authoritative across branches. If a merge conflicts here, resolve it by
+taking both sides' ticks for their own ids — this file is not what decides
+whether an item is really done, `docs/EVENT-LOG.jsonl` is.
+
+**Applied 2026-09-15 (this merge, codex-lane):** exactly the divergence this
+correction predicts. Took `origin/main`'s own version of every CLI-owned item
+(R0, V1, V2, V3, A1, S1, S2 — each further along on `main`/`scoring` than the
+stale copy `codex-lane` had been carrying) and `codex-lane`'s own version of
+every BLD-owned item (L11, L12, I1, I2, N1 — completed on this branch this
+session, not yet reflected on `main`). Neither side's ticks were second-
+guessed; each lane's own claim about its own work was kept.
 
 Ownership is marked in each line, and each lane passes the **other** lane's ids
 as `skip_ids` to `process_next_item`. `allRemainingSkipped` then distinguishes
 "this lane is blocked" from "the plan is finished" — opposite responses.
 
 **Tick an item only when its gate is green AND the commit exists**, and record the
-evidence with `process_record_gate`. A tick is a claim.
+evidence with `process_record_gate`. A tick is a claim; the log and the gate
+ledger are the evidence, not this file.
 
 ## STATUS MARKS
 
@@ -45,10 +70,18 @@ evidence with `process_record_gate`. A tick is a claim.
 
 ## RECONCILIATION
 
-[ ] R0 (CLI) Back-fill gate records for BO1-BO3 from the world-layer commits — §none, this file
-    Source them from `docs/specs/STATE-2026-09-14.md` and the commits it names,
-    not from memory. If the evidence for one cannot be found, mark that item `[!]`
-    rather than inventing a record.
+[x] R0 (CLI) Back-fill gate records for BO1-BO3 from the world-layer commits — §none, this file
+    Three process_record_gate entries added to docs/GATE-LEDGER.jsonl, all
+    commit d252ac7 (branch world-layer, merged to main at 3d8c90a): BO1
+    (public/area.js + public/world-layer.js, W1/W2/W5/W6, 26 tests, 3
+    mutations CAUGHT), BO2 (public/area-board.js, C2.1, 25 tests, 3
+    mutations CAUGHT), BO3 (public/placement.js, C2.2/C2.5, 17 tests, 3
+    mutations CAUGHT). Sourced from docs/specs/STATE-2026-09-14.md plus this
+    session's own direct record of the d252ac7 work (mutation ids, test
+    counts, the two pre-audit bugs and the blind-audit HIGH/LOW findings) --
+    not from memory alone. process_reconcile_plan confirmed clean
+    afterward: no item both ticked-with-no-gate-record and no item
+    gate-recorded-but-still-open, for BO1/BO2/BO3.
 
 ---
 
@@ -167,7 +200,22 @@ pulled, and it is deliberately fenced off from the file CLI is working in.
 
 `docs/specs/VERSIONING-AND-TRACKING-2026-09-15.md` is the spec.
 
-[ ] V1 (CLI) The cross-lane event log — VERSIONING-AND-TRACKING-2026-09-15.md V1
+[x] V1 (CLI) The cross-lane event log — VERSIONING-AND-TRACKING-2026-09-15.md V1
+    4f27f42 on branch `scoring`, PUSHED to origin (BLD gated on this again).
+    scripts/record-event.mjs (the one writer, closed event list enforced),
+    scripts/query-event-log.mjs (answers "is there a pushed event for item
+    X?" without naming a ref). `process_record_gate` confirmed to have no
+    source anywhere in this repo (separate MCP server) -- could not
+    literally extend it; mirrored its append-only mechanism instead, named
+    as such rather than claimed as the same tool. Blind review found two
+    real gaps before commit: the original "never reads" test passed even
+    against a read-then-rewrite implementation (fixed with a static
+    source-level check); the spec's own "merges cleanly across branches"
+    claim was false under git's default strategy until `merge=union` was
+    added to .gitattributes for both this file and GATE-LEDGER.jsonl,
+    verified in a scratch repo. 64/64 tests, tsc clean, 2/2 mutations
+    CAUGHT. Real A1/S1/R0/V1 pushed events backfilled via the actual tool.
+    Gate ledger: docs/GATE-LEDGER.jsonl.
     `docs/EVENT-LOG.jsonl`, append-only, one object per line:
     `{at, lane, event, item, commit, ref, note}`. Closed event set:
     started, item-green, committed, pushed, merged, blocked, unblocked,
@@ -185,15 +233,27 @@ pulled, and it is deliberately fenced off from the file CLI is working in.
     defect was found by blind audit in `recordGate` on 2026-09-10, where a
     read-then-write-whole-file with a catch that swallowed every read error
     silently truncated the ledger to its newest line. Do not rebuild it.
-[ ] V2 (CLI) Correct the checklist's own byte-identity claim — VERSIONING-AND-TRACKING-2026-09-15.md V1
-    This file's header says it is byte-identical in both worktrees. As of
-    2026-09-14 that is FALSE and it was always going to be: two lanes ticking
-    one file on two branches diverges every time. That is structural, not
-    carelessness.
-    Once V1 exists, ticks are convenience and THE LOG IS THE EVIDENCE.
-    Rewrite the header to say that, and to say divergence in the other lane's
-    section is expected until merge.
-[ ] V3 (CLI) Save-format schema version and per-placement timestamp — VERSIONING-AND-TRACKING-2026-09-15.md V2
+[x] V2 (CLI) Correct the checklist's own byte-identity claim — VERSIONING-AND-TRACKING-2026-09-15.md V1
+    "## HOW IT IS USED" rewritten in place, in this same commit: the
+    byte-identity claim replaced with "the checklist is an index, not the
+    record of truth; the log is the evidence," naming docs/EVENT-LOG.jsonl
+    and scripts/query-event-log.mjs as what a gated item actually checks,
+    and stating plainly that divergence in the OTHER lane's own section is
+    expected until merge, not a finding. Doc-only; no code, no gate ledger
+    entry (nothing to mutate-test in a header rewrite).
+[x] V3 (CLI) Save-format schema version and per-placement timestamp — VERSIONING-AND-TRACKING-2026-09-15.md V2
+    4134dc7 on branch `scoring`, pushed. SAVE_SCHEMA_VERSION=1, `at` per
+    placement. Blind plan review (before any code) caught two real bugs:
+    remove() not clearing the new placedAt map (a removed piece's id can be
+    reused by area-board.js, which would inherit a stale timestamp) and
+    loadBoard()'s placedAt reconstruction being unconditional (a phantom
+    timestamp for a placement that failed to re-apply). Both fixed before
+    implementation, mirroring the existing tombstones pattern exactly.
+    value() in public/scoring.js confirmed untouched (grep) -- S1's
+    path-independence gate holds. 91/91 tests, tsc clean, 5/5 mutations
+    CAUGHT (one of them a pre-existing entry whose find string broke
+    during this item's own refactor, repaired rather than left
+    INCONCLUSIVE). Gate ledger: docs/GATE-LEDGER.jsonl.
     §A4's save is already an append-only event log in all but name: seed,
     generatorParams, tombstones, placements.
     Add a schema version and a timestamp per placement. Both are one-line
@@ -220,23 +280,32 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     from a single category table, not hand-typed — closing a typo risk the blind
     review flagged, since 222 hand-typed pairs would have been uncatchable by an
     open-ended validator.
-[ ] A1 (CLI) Re-run the migration under Mark's model, and fold it into the plan — SCORING-MODEL-2026-09-14.md §4
-    THE CLEARANCE ITEM. BLD's BO7A is gated on this landing and being pushed.
-    Three changes to `scripts/migrate-catalogue-s2-fields.mjs`'s table:
-    commercial, civic and landmark gain real POSITIVE adjacency to residential
-    (they were `{}`, which switched the primary driver of value off in the data);
-    residential becomes DILUTIVE on residential and positive on commercial;
-    industrial and road unchanged.
-    RESOLVE THE SUBSTATION PROBLEM FIRST: `substation-a` is category `civic`,
-    so a flat civic bonus makes a substation raise nearby housing, which is
-    wrong. Either `civic` splits or amenity entries key on `typeId` — §S2
-    permits both. Record which you chose and why.
-    Then fold SCORING-MODEL-2026-09-14.md into REBUILD-PLAN.md as a Correction.
-    NOTE: REBUILD-PLAN.md had an uncommitted diff as of 2026-09-14 that the BLD
-    run deliberately did not commit. Check before editing; do not clobber it.
-    Gate: validator green on all 50, and a test asserting no civic entry gives
-    a positive residential bonus unless it is a real amenity.
-[ ] S1 (CLI) value(cell) stateless, Chebyshev R = 3, and baseValue is NOT in it — REBUILD-PLAN.md S1 + SCORING-MODEL §3.1
+[x] A1 (CLI) Re-run the migration under Mark's model, and fold it into the plan — SCORING-MODEL-2026-09-14.md §4
+    62650f4 on branch `scoring`, PUSHED to origin (BLD's BO7A was gated on
+    this). AMENITY_CIVIC_TYPE_IDS (small-civic-a, civic-6x6-a) resolves the
+    substation problem by typeId, not a category split. Table rebuilt per
+    SCORING-MODEL §4; baseValue's formula unchanged, its role changed (S1
+    never consumed it -- it is now the unit count S4's totalWorth needs).
+    SCORING-MODEL folded into REBUILD-PLAN.md §S2 as a Correction, alongside
+    three earlier uncommitted corrections (G1/C1.2 pivot, C2.1 field name,
+    W3 memory figure) found already sitting in the working tree and not
+    clobbered. A real bundling bug in the migration script's own path/
+    entry-point logic was found and fixed along the way (see commit
+    message) -- caught by a mutation test that would otherwise have reported
+    a false SURVIVED. Gate: node test/run.mjs catalogueValidator.test.ts --
+    37/37 (was 34), tsc clean, 4/4 mutations CAUGHT, migration idempotent.
+    Gate ledger: docs/GATE-LEDGER.jsonl.
+[x] S1 (CLI) value(cell) stateless, Chebyshev R = 3, and baseValue is NOT in it — REBUILD-PLAN.md S1 + SCORING-MODEL §3.1
+    d889c1f on branch `scoring`. public/scoring.js, composing area-board.js.
+    Blind review (required before commit) found the implementation clean
+    (6 hand-mutations, all caught correctly) but TWO tests too weak to
+    detect what they claimed -- both fixed before commit: the path-
+    independence GATE tests both queried the same coordinate against
+    equivalent arrangements, so a coordinate-only cache would have passed
+    both (proven by hand); a "summed" test's shop(+5)/factory(-5) values
+    net to zero, so sign-flip and disabled-adjacency both passed it
+    (proven by hand). test/scoring.test.ts, 13 tests green. 3/3 mutations
+    CAUGHT. Gate ledger: docs/GATE-LEDGER.jsonl.
     `terrainContribution(cell) + sum of contribution(piece, cell)` within R.
     NON-RECURSIVE: computed from WHAT PIECES ARE within R, never from
     neighbours' computed values. SCORING-MODEL §5 decided this — recursion
@@ -245,11 +314,20 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     No tick, no clock. If it needs one it is out of scope.
     Gate: the same arrangement scores identically however it was reached — A
     then B, B then A, or loaded from a save. RED is any path dependence.
-[ ] S2 (CLI) Falloff is a negative exponential, NOT linear — REBUILD-PLAN.md T9, Clark
-    Steep immediately outside the piece, then a long flat tail. A linear
-    gradient reads as wrong to a player who could not say why.
-    Gate: a test that FAILS on a linear ramp and passes on the exponential.
-    Name the curve's parameters and where they came from.
+[x] S2 (CLI) Falloff is a negative exponential, NOT linear — REBUILD-PLAN.md T9, Clark
+    84d4a16 on branch `scoring`, pushed. falloff(distance)=e^(-GAMMA*d),
+    GAMMA derived from EDGE_FRACTION=0.1 (10% remaining at r=R) -- a
+    disclosed judgement call, DECISIONS-FOR-MARK.md #13, since T9 gives
+    the curve's shape (Clark, city-scale) not a number for a hard R=3
+    cutoff. Distance to a multi-cell piece is to its own NEAREST occupied
+    cell. Blind plan review caught 2 bugs before code (a dropped NaN
+    guard; a mutation anchored to the rewritten line); mutation testing
+    after implementation caught a 3rd (an off-by-one only visible
+    querying a multi-cell piece from its far side -- no existing test
+    approached from that direction). All three fixed. 96/96 tests, tsc
+    clean, 5/5 mutations CAUGHT including the checklist's own named gate
+    verbatim (a hand-written linear ramp fails the shrinking-drops
+    assertion the real curve passes). Gate ledger: docs/GATE-LEDGER.jsonl.
 [ ] S3 (CLI) Recompute the dirty set only — REBUILD-PLAN.md S3
     Never the whole board, never per frame.
     Gate: a mutation widening the dirty set to the whole board must be CAUGHT,

@@ -1,12 +1,12 @@
 // =============================================================================
-// THE CATALOGUE VALIDATOR — docs/specs/REBUILD-PLAN.md C1, Phase 1 item 5.
+// THE CATALOGUE VALIDATOR — docs/specs/REBUILD-PLAN.md C1, Phase 1 item 5;
+// rules 7-8 added for §S2 (docs/briefs/CLI-2026-09-14-scoring.md item 2.1).
 //
 // Written before anything consumes data/catalogue.json, per the brief's own
 // instruction. A11's own evidence is why: "Unknown node types are caught
 // immediately — the LLM cannot invent a node name." This is what makes that
 // true here — a model (or a person) can add a row, and this is what tells
-// them, immediately and by name, when the row is wrong. Six rules, each one
-// named in docs/briefs/PHASE-1-rebuild.md's own checklist item 5, no more:
+// them, immediately and by name, when the row is wrong. Eight rules:
 //
 //   1. every footprint is a whole number of modules
 //   2. every footprint in C1.1's set of eight, or a rotation of one
@@ -14,10 +14,39 @@
 //   4. every junction's arms same-class or adjacent-class
 //   5. every pivot at the anchor cell's corner (C-5), never the footprint centre
 //   6. no duplicate ids
+//   7. baseValue is present and an integer (S2)
+//   8. adjacency is present, a plain object, and every value in it an integer (S2)
 //
 // Returns a list of errors rather than throwing, so a caller (a test, a
 // future LLM generation loop per A11) can report every problem in one pass
 // instead of stopping at the first. An empty list is the only "valid".
+//
+// WHAT `adjacency`'S KEYS MEAN, RESOLVED HERE BECAUSE S2 DOES NOT SAY —
+// keyed by the CATEGORY OF THE NEIGHBOURING CELL a bonus applies to: for a
+// piece P and a cell C within Chebyshev radius R of P, P's own
+// `adjacency[categoryAtC]` (if present) is P's contribution to C's value.
+// This composes with S4's own two-number framing ("the target cell's
+// CURRENT value, and the value the piece WOULD have there") for the one
+// case that would otherwise be undefined -- a vacant cell has no category
+// to key on: `valueAt()` on empty ground is terrain-only (S1's
+// `terrainContribution(cell)` term, no adjacency component, because
+// nothing occupies the cell to receive one); `valueIfPlaced(typeId, cell,
+// rotation)` supplies the missing category itself (the candidate's own)
+// and is where adjacency actually applies. Neither function is built in
+// this pass (S2's own catalogue migration only) -- recorded here so
+// whoever builds them does not have to re-derive it.
+//
+// THE TABLE ITSELF — `docs/specs/SCORING-MODEL-2026-09-14.md` (Mark's own
+// decisions, folded into REBUILD-PLAN.md §S2 as a Correction, item A1):
+// commercial/civic(amenity-only, keyed on typeId)/landmark carry a strong
+// positive bonus to `residential`; `residential` is DILUTIVE on itself
+// (scarcity) and positive on `commercial`; `industrial` is strongly
+// negative on `residential`; `road` is positive on both. Not a uniform
+// bonus applied to all six categories -- that was S0's reading, corrected
+// by A1 because it left three amenity categories (commercial/civic/
+// landmark) at `{}`, switching off the model's own primary value driver.
+// `scripts/migrate-catalogue-s2-fields.mjs`'s own `AMENITY_CIVIC_TYPE_IDS`
+// is the authoritative list of which `civic` entries count as an amenity.
 // =============================================================================
 
 /** C1.1's eight canonical footprints, modules, each stored width-first,
@@ -108,6 +137,31 @@ export function validateEntry(entry) {
   // footprint centre.
   if (!entry || entry.pivot !== "corner") {
     push("pivot-corner", `pivot is ${JSON.stringify(entry && entry.pivot)}, not "corner" -- C-5 supersedes a centre pivot`);
+  }
+
+  // Rule 7 — S2: baseValue is present and an integer. No sign constraint
+  // beyond that -- S2 says only "an integer".
+  if (!entry || !Number.isInteger(entry.baseValue)) {
+    push("has-base-value", `baseValue is ${JSON.stringify(entry && entry.baseValue)}, not an integer -- S2 requires one on every entry`);
+  }
+
+  // Rule 8 — S2: adjacency is present, a plain object (not an array, not
+  // null -- both would pass a bare truthiness/typeof check), and every
+  // value inside it is an integer. Keys are NOT restricted to a fixed
+  // enum here: S2 explicitly allows "category (or specific typeId)", and
+  // a future player-authored typeId (B1) cannot be enumerated in advance.
+  {
+    const adjacency = entry && entry.adjacency;
+    const isPlainObject = typeof adjacency === "object" && adjacency !== null && !Array.isArray(adjacency);
+    if (!isPlainObject) {
+      push("has-adjacency", `adjacency is ${JSON.stringify(adjacency)}, not a plain object -- S2 requires a category/typeId -> integer map on every entry`);
+    } else {
+      for (const [key, value] of Object.entries(adjacency)) {
+        if (!Number.isInteger(value)) {
+          push("adjacency-values-are-integers", `adjacency["${key}"] is ${JSON.stringify(value)}, not an integer`);
+        }
+      }
+    }
   }
 
   return errors;
