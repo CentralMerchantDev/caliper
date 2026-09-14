@@ -403,7 +403,7 @@ is still there on reload.* RB1–RB4 built the machinery. This is the person.
     Gate: a shot at a distance where impostors are active, and the triangle
     count measurably below the same view with them off. RED is no measurable
     difference — that means they are not actually being used.
-[ ] RC4 (BLD) The board camera's own scene pass — REBUILD-PLAN.md R1, Mark 2026-09-15
+[x] RC4 (BLD) The board camera's own scene pass — REBUILD-PLAN.md R1, Mark 2026-09-15
     RB5 retuned fog, sky and ground for the HERO camera. `14-board.png` is a
     different camera and still reads as a dust bowl at that distance.
     Gate: the pair of images at the BOARD camera, judged by Mark. No numeric
