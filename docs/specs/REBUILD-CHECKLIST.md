@@ -128,7 +128,14 @@ pulled, and it is deliberately fenced off from the file CLI is working in.
     bot-blocked at every mirror tried -- named, not silently substituted.
     Depth atlas has real RGBADepthPacking banding under SwiftShader, reported
     honestly, does not block the texture-memory deliverable.
-[ ] I2 (BLD) The overview's massing bake — REBUILD-PLAN.md W4
+[x] I2 (BLD) The overview's massing bake — REBUILD-PLAN.md W4
+    3f8d54e (shared PIECES module) + 7f6633f (the bake).
+    `docs/look-proof-shots/10-overview-massing.png`. Real per-piece heights
+    measured from each piece's own loaded geometry, not guessed from footprint
+    class. 242 triangles vs L12's own 32355 at full detail -- a 99.25%
+    reduction, still 1 draw call. Does not implement re-bake-on-leave-area:
+    no area system exists on this branch to leave (BO1 is on origin/main /
+    origin/world-layer, not merged into codex-lane as of this run).
 
 ---
 
