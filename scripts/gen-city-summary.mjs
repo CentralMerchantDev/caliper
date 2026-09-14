@@ -24,6 +24,35 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const P = path.join(ROOT, "public");
+
+// RETIRED, not re-pointed -- U1 (docs/briefs/CLI-2026-09-15-overnight.md).
+// public/city-plan.js (the procedural 40km-city generator this whole script
+// exists to summarise) was quarantined in the Phase 1 takedown and then
+// DELETED OUTRIGHT by a later purge. Rebuilding an equivalent generator
+// against the new public/area-board.js world is a real feature, not a
+// maintenance fix, and is out of scope here. src/citySummary.generated.ts
+// stays exactly as last committed -- a static, accepted-stale snapshot;
+// test/generatedClaimsAreCurrent.test.ts's own P4.6 gate already treats it
+// that way while public/index.html is a holding page with none of the
+// claim spans that would check it.
+//
+// Exits 0, not a nonzero refusal: scripts/gen-claims.mjs calls this script
+// via execFileSync with NO try/catch, first, before scripts/gen-test-count.mjs
+// -- the actually load-bearing, currently-enforced claim (the published
+// test count). A crash OR a nonzero exit here would both kill that pipeline
+// before it ever reached gen-test-count.mjs, which is the exact defect this
+// refusal exists to stop. See test/genCitySummaryRetired.test.ts.
+if (!fs.existsSync(path.join(P, "city-plan.js"))) {
+  console.error(
+    "gen-city-summary.mjs: RETIRED, not run -- public/city-plan.js (this script's " +
+    "own dependency) was deleted in the Phase 1 takedown. src/citySummary.generated.ts " +
+    "is left exactly as last committed, a static snapshot. See this script's own header " +
+    "comment and docs/DECISIONS-FOR-MARK.md for the full reasoning. Exiting 0 (a deliberate " +
+    "no-op, not a failure) so scripts/gen-claims.mjs can still reach gen-test-count.mjs.",
+  );
+  process.exit(0);
+}
+
 // pathToFileURL, not a raw path: a bare Windows path ("C:\...") is not a
 // scheme dynamic import() accepts, so this script could not run on Windows.
 const plan = await import(pathToFileURL(path.join(P, "city-plan.js")).href);

@@ -1557,6 +1557,14 @@
       "find": "      const withData = breakdown.filter((t) => t.value !== null);\n      const score = withData.length === 0 ? null : withData.reduce((sum, t) => sum + t.value, 0);",
       "replace": "      const withData = breakdown.filter((t) => t.value !== null);\n      const score = withData.length === 0 ? null : withData[withData.length - 1].value;",
       "expect": "GATE (C1): adding a second, trivial term requires no change to the registry or the first term"
+    },
+    {
+      "id": "gen-city-summary-must-refuse-cleanly-not-crash",
+      "guards": "U1: gen-city-summary.mjs must recognize its own dependency (public/city-plan.js) is gone and refuse with exit 0, not let the dynamic import throw -- scripts/gen-claims.mjs calls this script first, with no try/catch, so any crash here kills the whole npm run gen:claims pipeline before it ever reaches gen-test-count.mjs. Removes the existsSync guard entirely, restoring the original crash.",
+      "file": "scripts/gen-city-summary.mjs",
+      "find": "if (!fs.existsSync(path.join(P, \"city-plan.js\"))) {",
+      "replace": "if (false) {",
+      "expect": "GATE (U1): gen-city-summary.mjs exits 0 (not a crash) when its dependency is gone, so gen-claims.mjs's un-caught execFileSync call does not abort the whole pipeline"
     }
   ]
 }
