@@ -417,13 +417,20 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     silently failing the redevelopment and reading a false pass off a
     vacant cell) fixed before commit. 136/136 targeted suite, tsc clean.
     Gate ledger: docs/GATE-LEDGER.jsonl.
-[ ] S7 (CLI) Write up the two parked systems as plan sections, do not build them — SCORING-MODEL §5 and §6
+[x] S7 (CLI) Write up the two parked systems as plan sections, do not build them — SCORING-MODEL §5 and §6
     Second-order lift (a neighbourhood's reputation raising itself beyond the
     sum of its parts — needs a fixed-point solve) and the BUILD COST layer
     (land near the centre costing more because there is less of it and because
     what is already built constrains what can go on it).
     Both are Mark's, both are real, neither is built tonight. Losing them is
     the failure mode this item exists to prevent.
+    DONE, commit 6be5608 (branch scoring). Two new subsections added to
+    docs/specs/REBUILD-PLAN.md directly after S5, cross-referencing
+    SCORING-MODEL §5/§6 rather than duplicating their prose, each adding
+    the forward-looking "what a real build would need" detail the
+    decision record itself doesn't cover. Documentation only — verified
+    no test parses REBUILD-PLAN.md programmatically, tsc clean, targeted
+    suite 136/136 unaffected. Gate ledger: docs/GATE-LEDGER.jsonl.
 
 ---
 
