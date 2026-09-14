@@ -5,8 +5,8 @@
 // =============================================================================
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createAreaBoard } from "../public/area-board.js";
-import { value, pieceIdsWithinR, terrainContribution, falloff, R } from "../public/scoring.js";
+import { createAreaBoard, occupiedRect } from "../public/area-board.js";
+import { value, pieceIdsWithinR, terrainContribution, falloff, dirtyCellsForRect, recomputeDirtySet, R } from "../public/scoring.js";
 
 const CATALOGUE = {
   "house-a": { category: "residential", footprint: [1, 1], terrainMask: ["land"], adjacency: { residential: -2, commercial: 2 } },
@@ -252,4 +252,105 @@ test("pieceIdsWithinR excludes the cell's own occupant and returns each distinct
 
 test("R is exactly 3, matching REBUILD-PLAN.md §S1", () => {
   assert.equal(R, 3);
+});
+
+// ---------------------------------------------------------------- dirtyCellsForRect / recomputeDirtySet -- §S3
+
+// Independent oracle: brute-force, per-cell, scanning the WHOLE board --
+// deliberately NOT the closed-form rectangle-expansion shortcut the real
+// implementation uses, and NOT importing nearestChebyshevDistance from the
+// module, so a shared off-by-one in both couldn't pass silently. Blind
+// review named this explicitly: a test whose oracle reuses the same
+// rectangle arithmetic as the implementation cannot catch a bug shared by
+// both.
+function bruteForceDirtyCells(board, rect, radius) {
+  const cells = [];
+  for (let y = 0; y < board.height; y++) {
+    for (let x = 0; x < board.width; x++) {
+      const dx = Math.max(rect.xMin - x, 0, x - (rect.xMax - 1));
+      const dy = Math.max(rect.yMin - y, 0, y - (rect.yMax - 1));
+      if (Math.max(dx, dy) <= radius) cells.push(`${x},${y}`);
+    }
+  }
+  return new Set(cells);
+}
+
+test("GATE (S3): dirtyCellsForRect matches an independent brute-force oracle exactly, in the open middle of the board", () => {
+  const b = board();
+  const rect = occupiedRect({ x: 8, y: 8 }, 0, [2, 3]); // a real 2x3 piece's derived rect
+  const cells = dirtyCellsForRect(b, rect, R);
+  const got = new Set(cells.map((c) => `${c.x},${c.y}`));
+  const expected = bruteForceDirtyCells(b, rect, R);
+  assert.equal(got.size, expected.size, `sizes differ: got ${got.size}, expected ${expected.size}`);
+  assert.deepEqual(got, expected);
+});
+
+// Blind review's own finding, reproduced directly: the first version of
+// dirtyCellsForRect used `rect.xMax - 1 + radius` (the INCLUSIVE rightmost
+// dirty column) as an EXCLUSIVE upper bound, silently dropping the
+// genuinely-dirty column at exactly distance R. A test checking only "the
+// cell one step further is excluded" would NOT have caught this -- it
+// needs the POSITIVE case too: a cell exactly AT distance R must be
+// INCLUDED.
+test("GATE (S3): a cell at EXACTLY Chebyshev distance R from the rect IS in the dirty set -- this is the exact bug blind review caught before any code was committed", () => {
+  const b = board();
+  const rect = occupiedRect({ x: 5, y: 5 }, 0, [2, 3]); // occupies x=5,6 / y=5,6,7
+  const cells = dirtyCellsForRect(b, rect, R);
+  const keys = new Set(cells.map((c) => `${c.x},${c.y}`));
+  // Rightmost occupied column is 6 (xMax-1); at distance exactly R=3, x=9.
+  assert.ok(keys.has("9,5"), "a cell at exactly distance R from the rect's own edge must be included");
+});
+
+test("a cell at distance R+1 from the rect is NOT in the dirty set", () => {
+  const b = board();
+  const rect = occupiedRect({ x: 5, y: 5 }, 0, [2, 3]);
+  const cells = dirtyCellsForRect(b, rect, R);
+  const keys = new Set(cells.map((c) => `${c.x},${c.y}`));
+  assert.ok(!keys.has("10,5"), "one cell further than the true edge must be excluded");
+});
+
+test("dirtyCellsForRect clips to the board's LOW edge -- a piece anchored near (0,0) has a smaller dirty set than one in the open middle", () => {
+  const b = board();
+  const nearEdge = occupiedRect({ x: 0, y: 0 }, 0, [1, 1]);
+  const middle = occupiedRect({ x: 10, y: 10 }, 0, [1, 1]);
+  const edgeCells = dirtyCellsForRect(b, nearEdge, R);
+  const middleCells = dirtyCellsForRect(b, middle, R);
+  assert.ok(edgeCells.length < middleCells.length, `edge=${edgeCells.length} should be smaller than middle=${middleCells.length}`);
+  assert.ok(edgeCells.every((c) => c.x >= 0 && c.y >= 0), "no dirty cell may have a negative coordinate");
+});
+
+test("dirtyCellsForRect clips to the board's HIGH edge -- a piece anchored near (width,height) is also smaller, exercising the OTHER clamp", () => {
+  const b = board(); // 20x20
+  const nearHighEdge = occupiedRect({ x: 19, y: 19 }, 0, [1, 1]);
+  const middle = occupiedRect({ x: 10, y: 10 }, 0, [1, 1]);
+  const edgeCells = dirtyCellsForRect(b, nearHighEdge, R);
+  const middleCells = dirtyCellsForRect(b, middle, R);
+  assert.ok(edgeCells.length < middleCells.length, `edge=${edgeCells.length} should be smaller than middle=${middleCells.length}`);
+  assert.ok(edgeCells.every((c) => c.x < b.width && c.y < b.height), "no dirty cell may reach or exceed the board's own width/height");
+});
+
+test("GATE (S3, the checklist's own named gate): recomputeDirtySet's returned Map contains ONLY the dirty cells -- a far cell is not a key at all, even though its value would be correct if computed", () => {
+  const b = board();
+  b.place("house-a", { x: 10, y: 10 }, 0, { id: 1 });
+  const rect = occupiedRect({ x: 10, y: 10 }, 0, [1, 1]);
+  const results = recomputeDirtySet(b, CATALOGUE, rect, R);
+
+  const expectedKeys = bruteForceDirtyCells(b, rect, R);
+  assert.equal(results.size, expectedKeys.size);
+  for (const key of expectedKeys) assert.ok(results.has(key), `missing expected dirty cell ${key}`);
+
+  // A genuinely far cell: even though value() would return a perfectly
+  // correct (unaffected, terrain-only) number for it if called, it must
+  // simply not be a key in the result at all.
+  assert.ok(!results.has("0,0"));
+});
+
+test("recomputeDirtySet's values match calling value() directly for the same cells -- composes value(), does not reimplement its math", () => {
+  const b = board();
+  b.place("house-a", { x: 10, y: 10 }, 0, { id: 1 });
+  b.place("shop-a", { x: 11, y: 10 }, 0, { id: 2 });
+  const rect = occupiedRect({ x: 10, y: 10 }, 0, [1, 1]);
+  const results = recomputeDirtySet(b, CATALOGUE, rect, R);
+  assert.equal(results.get("10,10"), value(b, CATALOGUE, 10, 10));
+  assert.equal(results.get("12,10"), value(b, CATALOGUE, 12, 10));
 });

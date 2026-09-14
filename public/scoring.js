@@ -67,6 +67,8 @@
 // [0.1, 0.46], not "mostly full strength, dampened only at the edge."
 // =============================================================================
 
+import { cellsOf } from "./area-board.js";
+
 export const R = 3;
 const EDGE_FRACTION = 0.1;
 const GAMMA = -Math.log(EDGE_FRACTION) / R;
@@ -155,4 +157,74 @@ export function value(board, catalogue, x, y) {
   }
 
   return total;
+}
+
+// =============================================================================
+// THE DIRTY SET — §S3. "On placement or removal, recompute only the cells
+// inside the affected radius. Never the whole board, never per frame."
+//
+// A placement or removal at `rect` can only change `value()` for a cell
+// within Chebyshev R of SOME cell `rect` occupies -- everything else reads
+// the identical set of nearby pieces it did before, so its own value()
+// cannot have moved. `dirtyCellsForRect` names exactly that set.
+//
+// THE MATH: an L∞ (Chebyshev) ball around every point of an axis-aligned
+// rectangle is ITSELF exactly another axis-aligned rectangle -- dilation by
+// a Chebyshev ball is separable per axis, so no per-cell distance filter is
+// needed (unlike `pieceIdsWithinR`'s point-based scan, which keeps one for
+// its own -- unrelated -- reasons, out of this item's scope to touch).
+// GOT WRONG ONCE, CAUGHT BY BLIND REVIEW BEFORE ANY CODE LANDED: the first
+// version of this comment described the exclusive-upper-bound conversion as
+// `rect.xMax - 1 + radius` -- correct as the INCLUSIVE rightmost dirty
+// column, but silently one column short once handed to `cellsOf()`'s own
+// EXCLUSIVE convention (it loops `x < rect.xMax`). The real formula needs a
+// compensating +1: `rect.xMax + radius` is the correct EXCLUSIVE bound. Not
+// hypothetical -- reproduced by hand: for a piece occupying columns 5-6 at
+// radius 3, the true dirty set includes column 9 (Chebyshev distance exactly
+// 3, `falloff(3) = EDGE_FRACTION`, nonzero); the wrong formula silently
+// dropped it. Both the positive case (a cell AT the true edge IS in the
+// dirty set) and the negative case (one cell further is NOT) are pinned by
+// separate tests below -- a test that only checks the negative case would
+// not have caught this, and did not, until this was found.
+//
+// ACCEPTED COST, NAMED RATHER THAN SILENT: `recomputeDirtySet` calls
+// `value()` once per dirty cell, and each call independently re-scans its
+// own (2R+1)^2 neighbourhood via `pieceIdsWithinR` -- heavily overlapping
+// adjacent cells' own scans. For a large piece the dirty set can be
+// hundreds of cells. This is bounded per EVENT (a placement or a removal),
+// never per frame and never the whole board, which is what this item's own
+// gate asks for -- but it is real, repeated work, not free, and a future
+// performance pass could share scans across the dirty set if it matters in
+// practice.
+// =============================================================================
+
+/** Every `{x,y}` cell within Chebyshev `radius` of ANY cell inside `rect`,
+ * clipped to the board. Pure geometry -- composes `cellsOf()` from
+ * area-board.js rather than reimplementing cell iteration. */
+export function dirtyCellsForRect(board, rect, radius = R) {
+  const clipped = {
+    xMin: Math.max(0, rect.xMin - radius),
+    xMax: Math.min(board.width, rect.xMax + radius),
+    yMin: Math.max(0, rect.yMin - radius),
+    yMax: Math.min(board.height, rect.yMax + radius),
+  };
+  return [...cellsOf(clipped)];
+}
+
+/**
+ * Recompute `value()` for exactly the dirty set a placement or removal at
+ * `rect` affects -- never the whole board. Returns a `Map` from `"x,y"` to
+ * the freshly computed value; the Map's own keys are the record of which
+ * cells were actually touched, which is what this item's own gate needs
+ * ("the test asserts WHICH cells recomputed. An assertion on the result
+ * alone cannot see this" -- a far cell's value() would still be CORRECT if
+ * computed anyway, so only checking values can't tell "touched 20 cells"
+ * from "touched all 400 and 380 happened not to change").
+ */
+export function recomputeDirtySet(board, catalogue, rect, radius = R) {
+  const results = new Map();
+  for (const { x, y } of dirtyCellsForRect(board, rect, radius)) {
+    results.set(`${x},${y}`, value(board, catalogue, x, y));
+  }
+  return results;
 }

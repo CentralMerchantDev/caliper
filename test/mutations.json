@@ -1477,6 +1477,22 @@
       "find": "  const dx = Math.max(rect.xMin - x, 0, x - (rect.xMax - 1));\n  const dy = Math.max(rect.yMin - y, 0, y - (rect.yMax - 1));",
       "replace": "  const dx = Math.max(rect.xMin - x, 0, x - rect.xMax);\n  const dy = Math.max(rect.yMin - y, 0, y - rect.yMax);",
       "expect": "a piece spanning multiple cells within R is counted exactly ONCE, not once per cell it occupies -- and its distance is to its NEAREST cell, approached from EITHER side"
+    },
+    {
+      "id": "scoring-s3-exclusive-bound-off-by-one",
+      "guards": "S3's own real bug, caught by blind review before any code was committed: dirtyCellsForRect's xMax/yMax must be rect.xMax + radius (an EXCLUSIVE bound), not rect.xMax - 1 + radius (the INCLUSIVE rightmost dirty column, one short once handed to cellsOf's own exclusive convention).",
+      "file": "public/scoring.js",
+      "find": "    xMax: Math.min(board.width, rect.xMax + radius),\n    yMin: Math.max(0, rect.yMin - radius),\n    yMax: Math.min(board.height, rect.yMax + radius),",
+      "replace": "    xMax: Math.min(board.width, rect.xMax - 1 + radius),\n    yMin: Math.max(0, rect.yMin - radius),\n    yMax: Math.min(board.height, rect.yMax - 1 + radius),",
+      "expect": "GATE (S3): a cell at EXACTLY Chebyshev distance R from the rect IS in the dirty set -- this is the exact bug blind review caught before any code was committed"
+    },
+    {
+      "id": "scoring-s3-dirty-set-must-not-widen-to-whole-board",
+      "guards": "S3's own named gate, verbatim: \"a mutation widening the dirty set to the whole board must be CAUGHT, so the test asserts WHICH cells recomputed. A result-only assertion cannot see this.\"",
+      "file": "public/scoring.js",
+      "find": "  const clipped = {\n    xMin: Math.max(0, rect.xMin - radius),\n    xMax: Math.min(board.width, rect.xMax + radius),\n    yMin: Math.max(0, rect.yMin - radius),\n    yMax: Math.min(board.height, rect.yMax + radius),\n  };\n  return [...cellsOf(clipped)];",
+      "replace": "  return [...cellsOf({ xMin: 0, xMax: board.width, yMin: 0, yMax: board.height })];",
+      "expect": "GATE (S3, the checklist's own named gate): recomputeDirtySet's returned Map contains ONLY the dirty cells -- a far cell is not a key at all, even though its value would be correct if computed"
     }
   ]
 }
