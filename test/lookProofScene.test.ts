@@ -381,9 +381,19 @@ test("(synthetic) the vulnerability: a comment mentioning loadBoard must not sat
 
 // -------------------------------------------------- RB5: the ground material
 test("GATE (RB5): the ground's own layerIndex is computed PER VERTEX (paved near a footprint, earth otherwise), not a single uniform value for the whole plane", () => {
-  assert.match(SCENE_SRC, /function addGroundLayerAttribute\(geometry, footprints, pavedLayer, earthLayer\)/, "addGroundLayerAttribute is missing -- the ground would still be one uniform layer");
-  assert.match(SCENE_SRC, /data\[i\] = nearest <= PAVING_RADIUS \? pavedLayer : earthLayer/, "the per-vertex paved/earth split is not actually wired to the real nearest-footprint distance");
-  assert.match(SCENE_SRC, /const groundGeom = addGroundLayerAttribute\(groundGeomRaw, \[\.\.\.PIECES, \.\.\.boardFootprintsForDecal\], pavedLayerIndex, GROUND\.layer\)/, "the real ground geometry does not use the new per-vertex layer function");
+  assert.match(SCENE_SRC, /function addGroundLayerAttribute\(geometry, footprints, pavedLayer, earthLayer, radius = PAVING_RADIUS\)/, "addGroundLayerAttribute is missing -- the ground would still be one uniform layer");
+  assert.match(SCENE_SRC, /data\[i\] = nearest <= radius \? pavedLayer : earthLayer/, "the per-vertex paved/earth split is not actually wired to the real nearest-footprint distance");
+  assert.match(SCENE_SRC, /const groundGeom = addGroundLayerAttribute\(groundGeomRaw, \[\.\.\.PIECES, \.\.\.boardFootprintsForDecal\], pavedLayerIndex, GROUND\.layer, BOARD_MODE \? BOARD_PAVING_RADIUS : PAVING_RADIUS\)/, "the real ground geometry does not use the new per-vertex layer function");
+});
+
+test("GATE (RC4): the board camera gets its own, wider paving radius -- RB5's own PAVING_RADIUS (tuned for HERO_MODE's close composition) is left untouched; BOARD_PAVING_RADIUS is a separate, larger constant, applied only when BOARD_MODE", () => {
+  assert.match(SCENE_SRC, /const BOARD_PAVING_RADIUS = 20;/, "BOARD_PAVING_RADIUS is missing -- the board camera would still use HERO_MODE's own tight 6m apron");
+  assert.match(SCENE_SRC, /const PAVING_RADIUS = 6;/, "HERO_MODE's own PAVING_RADIUS was changed -- it must stay exactly what RB5's own already-judged render used");
+});
+
+test("GATE (RC4): the board camera's own fog range is retuned via a caller-side uniform write, never an edit to look-proof-material.js's own construction-time defaults (HERO_MODE's already-judged fog stays untouched)", () => {
+  assert.match(SCENE_SRC, /material\.uniforms\.uFogNear\.value = 100;\s*\n\s*material\.uniforms\.uFogFar\.value = 220;/, "BOARD_MODE does not retune the fog range for its own camera via a caller-side uniform write");
+  assert.doesNotMatch(MATERIAL_SRC, /uFogNear: \{ value: 100 \}|uFogFar: \{ value: 220 \}/, "the board camera's own fog values leaked into look-proof-material.js's own construction-time defaults -- this would retune HERO_MODE's already-judged fog too");
 });
 
 test("GATE (RB5): the paved layer's own index is read from the REAL array-texture manifest, never hardcoded -- board-renderer.js's own layerForGlb discipline, applied here too", () => {

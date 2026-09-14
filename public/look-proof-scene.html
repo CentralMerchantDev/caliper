@@ -294,7 +294,22 @@ function buildGhostOverlayMesh(resolved) {
 // proximity calculation that could disagree with it about where a
 // footprint's own edge actually is.
 const PAVING_RADIUS = 6; // metres -- a plausible street-level paved apron, wider than DECAL_RADIUS's own tight contact-shadow scale
-function addGroundLayerAttribute(geometry, footprints, pavedLayer, earthLayer) {
+// RC4 -- "the board camera's own scene pass" (docs/specs/REBUILD-
+// CHECKLIST.md, MAKE IT PLAYABLE; Mark, 2026-09-15, after 14-board.png:
+// "still reads as a dust bowl at that distance"). RB5's own PAVING_RADIUS
+// was tuned for HERO_MODE's close, angled composition, where the 4-6m
+// halo around a piece is a plausible chunk of the frame. The board
+// camera looks down over the WHOLE 24x16-cell area from much farther out
+// (measured: ~134-212m from camera to the near/far corners of
+// BOARD_GROUND, vs HERO's own ~40-90m to its pieces) -- at that
+// remove, a 6m halo around each piece is a small fraction of what's
+// actually visible, so almost the entire frame still reads as the warm
+// earth layer between the pieces. A wider board-specific radius closes
+// the gaps between BOARD_DEMO_PLACEMENTS' own pieces into one continuous
+// paved area -- the read this camera needs ("a built place"), not a
+// blanket retune of HERO_MODE's own already-judged 6m apron.
+const BOARD_PAVING_RADIUS = 20;
+function addGroundLayerAttribute(geometry, footprints, pavedLayer, earthLayer, radius = PAVING_RADIUS) {
   const pos = geometry.getAttribute("position");
   const count = pos.count;
   const data = new Float32Array(count);
@@ -302,7 +317,7 @@ function addGroundLayerAttribute(geometry, footprints, pavedLayer, earthLayer) {
     const x = pos.getX(i), z = pos.getZ(i);
     let nearest = Infinity;
     for (const fp of footprints) nearest = Math.min(nearest, distanceOutsideFootprint(x, z, fp.anchor, fp.footprint));
-    data[i] = nearest <= PAVING_RADIUS ? pavedLayer : earthLayer;
+    data[i] = nearest <= radius ? pavedLayer : earthLayer;
   }
   geometry.setAttribute("layerIndex", new THREE.BufferAttribute(data, 1));
   return geometry;
@@ -698,7 +713,7 @@ async function main() {
   // (never hardcoded) -- matches board-renderer.js's own layerForGlb
   // discipline: one source of truth for "which file is on which layer".
   const pavedLayerIndex = manifest.layers.find((l) => l.file.includes("ground-paved")).index;
-  const groundGeom = addGroundLayerAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal], pavedLayerIndex, GROUND.layer);
+  const groundGeom = addGroundLayerAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal], pavedLayerIndex, GROUND.layer, BOARD_MODE ? BOARD_PAVING_RADIUS : PAVING_RADIUS);
   // Ground's own UVs tile once across its footprint -- fine for a grass
   // sample texture at this scale, and not what this scene exists to prove.
 
@@ -775,6 +790,23 @@ async function main() {
 
   const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...preparedBoardPieces], false);
   const material = createLookProofMaterial(arrayTex);
+  if (BOARD_MODE) {
+    // RC4 -- fog range retuned for THIS camera only (a caller-side
+    // uniform write, not an edit to look-proof-material.js -- HERO_MODE's
+    // own already-judged uFogNear/uFogFar stay exactly what RB5 left
+    // them). MEASURED, not guessed: with BOARD_MODE's own camera
+    // (boardCenter - 70 on x/z, y=130) and BOARD_GROUND's real footprint,
+    // the near and far corners of the visible ground sit ~134m and ~212m
+    // from the camera -- both already past HERO's own uFogNear=90, but
+    // the fog COLOR (0xe6dccb) is itself warm/tan, so fading toward it
+    // barely changes the "dust" read, only its brightness. Narrowing the
+    // range to bracket this camera's own real 134-212m span pushes the
+    // far ground much closer to fully fog-coloured (pale, closer to the
+    // sky) rather than leaving ~13% of the original warm ground tone
+    // still mixed in at the frame's own far edge.
+    material.uniforms.uFogNear.value = 100;
+    material.uniforms.uFogFar.value = 220;
+  }
   const mesh = new THREE.Mesh(merged, material);
   scene.add(mesh);
   window.__material = material;
@@ -922,7 +954,7 @@ async function main() {
         .rotateX(-Math.PI / 2)
         .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2);
       addGroundDecalAttribute(newGroundGeomRaw, [...PIECES, ...footprintsForDecal]);
-      const newGroundGeom = addGroundLayerAttribute(newGroundGeomRaw, [...PIECES, ...footprintsForDecal], pavedLayerIndex, GROUND.layer);
+      const newGroundGeom = addGroundLayerAttribute(newGroundGeomRaw, [...PIECES, ...footprintsForDecal], pavedLayerIndex, GROUND.layer, BOARD_PAVING_RADIUS); // this rebuild only ever runs inside BOARD_MODE (see the enclosing if above)
 
       const newMerged = mergeGeometries([newGroundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...liveBoardGeoms], false);
       mesh.geometry.dispose();
