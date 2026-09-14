@@ -385,7 +385,7 @@ is still there on reload.* RB1–RB4 built the machinery. This is the person.
     RED is a click that places where the ghost read invalid, or a committed
     placement the board does not contain. Assert against the REAL board's own
     piece count, not the renderer's.
-[ ] RC2 (BLD) Pick an area from the overview and enter it — REBUILD-PLAN.md W1-W4
+[x] RC2 (BLD) Pick an area from the overview and enter it — REBUILD-PLAN.md W1-W4
     `area.js` has the LOCKED/OPEN/ACTIVE state machine and at most one ACTIVE —
     structurally, not by check. `world-layer.js` has addressing. I2 baked the
     overview's massing. **None of it is connected to anything a person clicks.**
