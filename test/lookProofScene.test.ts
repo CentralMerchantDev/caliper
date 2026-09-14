@@ -54,6 +54,11 @@ test("(synthetic) the vulnerability: a comment mentioning glslVersion must not s
   assert.doesNotMatch(commentOnly, /glslVersion:\s*THREE\.GLSL3/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });
 
+test("4.2 mechanism 1 (Half Lambert squared) is ON by default -- this commit's own checklist item", () => {
+  assert.match(MATERIAL_SRC, /uHalfLambertSquared:\s*\{\s*value:\s*true\s*\}/, "uHalfLambertSquared's default is not true -- 02-half-lambert-squared.png's own before/after pair has nothing to show if this mechanism is not actually on");
+  assert.match(MATERIAL_SRC, /half_\s*\*\s*half_/, "the fragment shader does not square the half-lambert term -- R1's own correction: (0.5*(N.L)+0.5)^2, not un-squared");
+});
+
 test("look-proof-material.js's fragment shader actually samples a sampler2DArray, not a plain sampler2D", () => {
   assert.match(MATERIAL_SRC, /uniform\s+sampler2DArray\s+uArrayTex/, "the array-texture uniform is not declared as sampler2DArray");
   assert.match(MATERIAL_SRC, /texture\(uArrayTex,\s*vec3\(/, "the fragment shader does not sample uArrayTex with a vec3(uv, layer) lookup");

@@ -25,7 +25,8 @@ export function createLookProofMaterial(arrayTexture) {
       uLightColor: { value: new THREE.Color(1.0, 0.96, 0.88) },
       uAmbientColor: { value: new THREE.Color(0.28, 0.30, 0.34) },
       // Mechanism toggles, each false until its own commit turns it on.
-      uHalfLambertSquared: { value: false },
+      // 4.2, mechanism 1 of 4 (R1): Half Lambert, SQUARED -- turned on here.
+      uHalfLambertSquared: { value: true },
       uWarmCoolTerminator: { value: false },
       uRimSeparation: { value: false },
       uContactDarkening: { value: false },
