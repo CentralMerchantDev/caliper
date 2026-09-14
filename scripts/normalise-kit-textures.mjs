@@ -25,12 +25,23 @@ const SOURCES = [
   {
     name: "kenney-modular-buildings",
     path: "public/vendor/kits/kenney-modular-buildings/Textures/colormap.png",
-    usedBy: ["building-sample-house-b.glb", "building-sample-tower-b.glb", "building-sample-tower-d.glb"],
+    usedBy: [
+      "building-sample-house-a.glb", "building-sample-house-b.glb", "building-sample-house-c.glb",
+      "building-sample-tower-a.glb", "building-sample-tower-b.glb", "building-sample-tower-c.glb", "building-sample-tower-d.glb",
+    ],
   },
   {
     name: "kenney-city-kit-roads",
     path: "public/vendor/kits/kenney-city-kit-roads/Textures/colormap.png",
-    usedBy: ["road-straight.glb"],
+    usedBy: ["road-straight.glb", "road-bend.glb", "road-crossing.glb", "light-square.glb", "electricity-pole.glb", "dumpster.glb"],
+  },
+  {
+    // Added for L12 (docs/briefs/OVERNIGHT-BLD-2026-09-14.md) -- the THIRD
+    // real texture layer, proving the array-texture mechanism scales past
+    // two packs, not just two packs' pieces repeated.
+    name: "kenney-city-kit-commercial",
+    path: "public/vendor/kits/kenney-city-kit-commercial/Textures/colormap.png",
+    usedBy: ["building-a.glb", "building-e.glb", "building-f.glb", "building-j.glb", "building-skyscraper-b.glb", "detail-awning.glb", "detail-parasol-a.glb"],
   },
   {
     name: "ground-grass",

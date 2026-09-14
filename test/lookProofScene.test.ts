@@ -141,3 +141,32 @@ test("look-proof-scene.html merges every piece into ONE geometry before adding a
 test("look-proof-scene.html offers a way back to index.html -- reachability.test.ts's own gate", () => {
   assert.match(SCENE_SRC, /href="\.\/index\.html"/, "no anchor back to index.html found");
 });
+
+test("L12: 20 pieces, not 200 -- R2/C1.5's own 'start far lower than instinct says', and the number is checkable", () => {
+  const pieceIds = [...SCENE_SRC.matchAll(/\{\s*id:\s*"([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(pieceIds.length, 20, `expected 20 pieces (Firewatch's own 23 trees, Caravan SandWitch's own 39 total props -- same order of magnitude, not the 200-piece catalogue this run is not building), found ${pieceIds.length}`);
+  assert.equal(new Set(pieceIds).size, pieceIds.length, "duplicate piece ids -- two pieces would silently overwrite one anchor slot in layoutPieces");
+});
+
+test("L12: pieces span three real packs (three distinct layer indices among the pieces, a fourth for ground), not two packs merged repeatedly", () => {
+  const layers = [...SCENE_SRC.matchAll(/footprint:\s*\[[^\]]+\],\s*layer:\s*(\d+)\s*\}/g)].map((m) => Number(m[1]));
+  const distinctLayers = new Set(layers);
+  assert.ok(distinctLayers.has(0) && distinctLayers.has(1) && distinctLayers.has(2), `expected pieces on layers 0 (buildings), 1 (roads) and 2 (commercial) -- found layers ${[...distinctLayers].sort().join(",")}`);
+  assert.match(SCENE_SRC, /layer:\s*3\s*,?\s*\}/, "GROUND is not on its own 4th layer");
+});
+
+test("L12: anchors are computed by layoutPieces, not hand-typed -- PIECES literals declare footprint/layer only", () => {
+  const piecesBlockMatch = SCENE_SRC.match(/const PIECES = \[([\s\S]*?)\n\];/);
+  assert.ok(piecesBlockMatch, "could not find the PIECES array literal");
+  assert.doesNotMatch(piecesBlockMatch[1], /anchor:/, "a PIECES entry hand-declares its own anchor -- 20 hand-placed anchors is exactly the transcription-error risk layoutPieces exists to remove");
+});
+
+test("L12: the mega-tower's height is capped, not scaled linearly with its own footprint", () => {
+  assert.match(SCENE_SRC, /Math\.min\(\(sx \+ sz\) \/ 2,\s*6\)/, "sy is not capped -- an 8x8 (32 m) footprint scaled from a 2 m native mesh needs a real 16x horizontal scale; applying that same factor to height produced an ~87 m tower against this scene's own ~24 m tower-base pieces, confirmed by rendering it uncapped before this fix");
+});
+
+test("scripts/normalise-kit-textures.mjs's SOURCES has 4 entries for L12's third pack", () => {
+  const scriptSrc = stripSourceComments(readFileSync(join(PUBLIC, "..", "scripts", "normalise-kit-textures.mjs"), "utf8"));
+  const sourceNameCount = (scriptSrc.match(/name:\s*"kenney-|name:\s*"ground-grass"/g) || []).length;
+  assert.equal(sourceNameCount, 4, `expected 4 SOURCES entries (2 original packs + kenney-city-kit-commercial + ground-grass), found ${sourceNameCount}`);
+});

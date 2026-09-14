@@ -29,17 +29,71 @@ import { GLTFLoader } from "./vendor/three/addons/loaders/GLTFLoader.js";
 import { mergeGeometries } from "./vendor/three/addons/utils/BufferGeometryUtils.js";
 import { createLookProofMaterial, LIGHT_DIR } from "./look-proof-material.js";
 
-// THE FIVE PIECES, per the brief's own list, each anchored at its cell's
-// corner on the ground plane (G1, corrected 2026-09-14) -- never the
-// footprint centre. `anchor` is [x, z] of that corner; `footprint` is
-// [width, depth] in metres (whole 4 m modules per C1.1).
+// L12 (docs/briefs/OVERNIGHT-BLD-2026-09-14.md) -- 20 pieces, not 200.
+// R2/C1.5 both say start far lower than instinct: Firewatch shipped 23
+// unique tree models for its entire game; Caravan SandWitch's entire
+// foliage is 39 props. 20 lands in that same order of magnitude -- enough
+// to be a REAL piece count for this gate (still one draw call, still
+// every texture intact), not enough to be the two-hundred-piece catalogue
+// this run explicitly is not building. Three real CC0 packs (was two),
+// spanning 6 of C1.1's 8 footprint classes including 8x8 (the mega tower
+// class none of L1-L11's five pieces reached).
+//
+// `anchor` is NOT hand-placed here (20 pieces is too many to lay out by
+// hand without a transcription error) -- layoutPieces() below packs them
+// on a grid from `footprint` alone, per the anchor-cell-corner pivot G1
+// already establishes.
 const PIECES = [
-  { id: "house-2x3", glb: "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb", footprint: [8, 12], anchor: [-26, 0], layer: 0 },
-  { id: "street-tile-4wide", glb: "vendor/kits/kenney-city-kit-roads/road-straight.glb", footprint: [16, 16], anchor: [-16, 0], layer: 1 },
-  { id: "midrise-4x4", glb: "vendor/kits/kenney-modular-buildings/building-sample-tower-b.glb", footprint: [16, 16], anchor: [2, 0], layer: 0 },
-  { id: "tower-base-6x6", glb: "vendor/kits/kenney-modular-buildings/building-sample-tower-d.glb", footprint: [24, 24], anchor: [20, 0], layer: 0 },
+  { id: "house-2x3", glb: "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb", footprint: [8, 12], layer: 0 },
+  { id: "house-2x2", glb: "vendor/kits/kenney-modular-buildings/building-sample-house-a.glb", footprint: [8, 8], layer: 0 },
+  { id: "house-2x3-alt", glb: "vendor/kits/kenney-modular-buildings/building-sample-house-c.glb", footprint: [8, 12], layer: 0 },
+  { id: "midrise-4x4", glb: "vendor/kits/kenney-modular-buildings/building-sample-tower-b.glb", footprint: [16, 16], layer: 0 },
+  { id: "midrise-4x4-alt", glb: "vendor/kits/kenney-modular-buildings/building-sample-tower-a.glb", footprint: [16, 16], layer: 0 },
+  { id: "tower-base-6x6", glb: "vendor/kits/kenney-modular-buildings/building-sample-tower-d.glb", footprint: [24, 24], layer: 0 },
+  { id: "tower-base-6x6-alt", glb: "vendor/kits/kenney-modular-buildings/building-sample-tower-c.glb", footprint: [24, 24], layer: 0 },
+  { id: "street-tile-4wide", glb: "vendor/kits/kenney-city-kit-roads/road-straight.glb", footprint: [16, 16], layer: 1 },
+  { id: "street-bend", glb: "vendor/kits/kenney-city-kit-roads/road-bend.glb", footprint: [16, 16], layer: 1 },
+  { id: "street-crossing", glb: "vendor/kits/kenney-city-kit-roads/road-crossing.glb", footprint: [16, 16], layer: 1 },
+  { id: "street-lamp-1x1", glb: "vendor/kits/kenney-city-kit-roads/light-square.glb", footprint: [4, 4], layer: 1 },
+  { id: "utility-pole-1x1", glb: "vendor/kits/kenney-city-kit-roads/electricity-pole.glb", footprint: [4, 4], layer: 1 },
+  { id: "dumpster-1x1", glb: "vendor/kits/kenney-city-kit-roads/dumpster.glb", footprint: [4, 4], layer: 1 },
+  { id: "commercial-2x2", glb: "vendor/kits/kenney-city-kit-commercial/building-a.glb", footprint: [8, 8], layer: 2 },
+  { id: "commercial-2x2-alt", glb: "vendor/kits/kenney-city-kit-commercial/building-e.glb", footprint: [8, 8], layer: 2 },
+  { id: "commercial-3x3", glb: "vendor/kits/kenney-city-kit-commercial/building-f.glb", footprint: [12, 12], layer: 2 },
+  { id: "commercial-4x4", glb: "vendor/kits/kenney-city-kit-commercial/building-j.glb", footprint: [16, 16], layer: 2 },
+  { id: "mega-tower-8x8", glb: "vendor/kits/kenney-city-kit-commercial/building-skyscraper-b.glb", footprint: [32, 32], layer: 2 },
+  { id: "awning-1x1", glb: "vendor/kits/kenney-city-kit-commercial/detail-awning.glb", footprint: [4, 4], layer: 2 },
+  { id: "parasol-1x1", glb: "vendor/kits/kenney-city-kit-commercial/detail-parasol-a.glb", footprint: [4, 4], layer: 2 },
 ];
-const GROUND = { footprint: [90, 60], anchor: [-30, -14], layer: 2 };
+
+// A shelf packer, not a hand-picked grid -- deterministic from PIECES'
+// own order, so adding a 21st piece later never requires re-deriving 20
+// existing anchor coordinates by hand. Each piece's ANCHOR is its own
+// corner on the ground plane (G1), never its centre.
+const LAYOUT_GAP = 2; // metres between pieces
+const LAYOUT_ROW_WIDTH = 76; // metres before wrapping to a new row
+function layoutPieces(pieces) {
+  let cursorX = 0, cursorZ = 0, rowDepth = 0;
+  for (const p of pieces) {
+    const [w, d] = p.footprint;
+    if (cursorX > 0 && cursorX + w > LAYOUT_ROW_WIDTH) {
+      cursorX = 0;
+      cursorZ += rowDepth + LAYOUT_GAP;
+      rowDepth = 0;
+    }
+    p.anchor = [cursorX, cursorZ];
+    cursorX += w + LAYOUT_GAP;
+    rowDepth = Math.max(rowDepth, d);
+  }
+  const totalDepth = cursorZ + rowDepth;
+  return { totalWidth: LAYOUT_ROW_WIDTH, totalDepth };
+}
+const LAYOUT_BOUNDS = layoutPieces(PIECES);
+const GROUND = {
+  footprint: [LAYOUT_BOUNDS.totalWidth + 8, LAYOUT_BOUNDS.totalDepth + 8],
+  anchor: [-4, -4],
+  layer: 3,
+};
 
 const loader = new GLTFLoader();
 
@@ -67,7 +121,14 @@ function fitToFootprint(geometry, footprint, anchor) {
   const nativeD = bb.max.z - bb.min.z;
   const sx = footprint[0] / nativeW;
   const sz = footprint[1] / nativeD;
-  const sy = (sx + sz) / 2;
+  // Capped, not the raw footprint average: a 32 m mega-tower footprint
+  // needs a real 16x horizontal scale (footprint is what C1.1 fixes), but
+  // applying that same 16x to HEIGHT produced an ~87 m tower against this
+  // scene's own ~24 m tower-base pieces -- footprint area and storey
+  // count are not the same axis, and this proof does not model storeys.
+  // Capped at 6x, matching the largest height scale the smaller pieces
+  // (tower-base-6x6) already use successfully.
+  const sy = Math.min((sx + sz) / 2, 6);
   const m = new THREE.Matrix4()
     .makeTranslation(anchor[0], 0, anchor[1])
     .multiply(new THREE.Matrix4().makeScale(sx, sy, sz))
@@ -224,8 +285,19 @@ async function main() {
   scene.background = new THREE.Color(0x0b1016);
 
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 500);
-  camera.position.set(-6, 34, 70);
-  camera.lookAt(6, 6, 4);
+  // L12's own camera -- the 01-08 sequence's close-up framing cannot see
+  // a 20-piece site plan; a wider, higher angle replaces it for this item
+  // only. LAYOUT_BOUNDS gives the real scene extent, not a guess.
+  const layoutCenterX = LAYOUT_BOUNDS.totalWidth / 2;
+  const layoutCenterZ = LAYOUT_BOUNDS.totalDepth / 2;
+  // A steep diagonal-corner angle, not a straight-on approach: at 20
+  // pieces the tallest (the mega-tower, row 4, closest to any
+  // straight-on camera) otherwise occludes everything behind it. Viewed
+  // from a corner along the diagonal, no single piece sits directly in
+  // front of another the way a straight approach stacks row 4 in front
+  // of rows 1-3.
+  camera.position.set(layoutCenterX - 95, 230, layoutCenterZ - 95);
+  camera.lookAt(layoutCenterX, 0, layoutCenterZ);
 
   const [arrayTex, ...pieceGeoms] = await Promise.all([
     buildArrayTexture(),
