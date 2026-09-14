@@ -214,7 +214,19 @@ pulled, and it is deliberately fenced off from the file CLI is working in.
     and stating plainly that divergence in the OTHER lane's own section is
     expected until merge, not a finding. Doc-only; no code, no gate ledger
     entry (nothing to mutate-test in a header rewrite).
-[ ] V3 (CLI) Save-format schema version and per-placement timestamp — VERSIONING-AND-TRACKING-2026-09-15.md V2
+[x] V3 (CLI) Save-format schema version and per-placement timestamp — VERSIONING-AND-TRACKING-2026-09-15.md V2
+    4134dc7 on branch `scoring`, pushed. SAVE_SCHEMA_VERSION=1, `at` per
+    placement. Blind plan review (before any code) caught two real bugs:
+    remove() not clearing the new placedAt map (a removed piece's id can be
+    reused by area-board.js, which would inherit a stale timestamp) and
+    loadBoard()'s placedAt reconstruction being unconditional (a phantom
+    timestamp for a placement that failed to re-apply). Both fixed before
+    implementation, mirroring the existing tombstones pattern exactly.
+    value() in public/scoring.js confirmed untouched (grep) -- S1's
+    path-independence gate holds. 91/91 tests, tsc clean, 5/5 mutations
+    CAUGHT (one of them a pre-existing entry whose find string broke
+    during this item's own refactor, repaired rather than left
+    INCONCLUSIVE). Gate ledger: docs/GATE-LEDGER.jsonl.
     §A4's save is already an append-only event log in all but name: seed,
     generatorParams, tombstones, placements.
     Add a schema version and a timestamp per placement. Both are one-line
