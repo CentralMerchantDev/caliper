@@ -33,6 +33,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { acquireLock, releaseLock, sha } from "./mutate-lock.mjs";
 import { unexpectedFailures } from "./expected-red.mjs";
+import { extractTestTitles } from "./extract-test-titles.mjs";
 
 const [testFile, sourceFile, specFile] = process.argv.slice(2);
 if (!testFile || !sourceFile || !specFile) {
@@ -82,12 +83,18 @@ function run() {
   } catch (e) {
     const out = String(e.stdout || "");
     // Node's built-in test runner's default ("spec") reporter prints
-    // "✖ name (12.3ms)", not TAP's "not ok N - name" -- the old regex
+    // "✖ name (12.3ms)", not TAP's "not ok N - name" -- an old regex here
     // never matched it, so every genuinely red run reported CAUGHT/SURVIVED
     // against an EMPTY failed-test list and printed "red, but not on ...: "
     // with nothing after the colon. That is INCONCLUSIVE dressed as a result:
     // the run really was red, but which test failed was never actually read.
-    const failed = unexpectedFailures([...out.matchAll(/^✖ (.+?) \([\d.]+m?s\)$/gm)].map((m) => m[1]));
+    // scripts/extract-test-titles.mjs -- docs/DECISIONS-FOR-MARK.md #10:
+    // this file's own inline version of the regex WAS already correct
+    // (anchored on the trailing duration); scripts/mutate.mjs's and
+    // scripts/gen-test-count.mjs's own separate copies were not, truncating
+    // a title at the first parenthetical-with-a-digit instead. Shared now,
+    // so the three cannot drift apart again the way they already had.
+    const failed = unexpectedFailures(extractTestTitles(out, { failingOnly: true }));
     // scripts/expected-red.mjs: a named, documented, honestly-red test (B2.5's
     // own CPU-time gate) is not a broken tree -- Candidate pattern F, second
     // instance (docs/AUDIT-PROTOCOL.md §7, 2026-09-09). Every OTHER failure

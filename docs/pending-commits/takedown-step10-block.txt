@@ -1,0 +1,83 @@
+Phase 1 takedown, step 10 (part 1) -- name and dispose of every remaining
+test whose subject survives but whose fixture died, and fix the two
+now-inaccurate tests that were checking against the OLD state of this same
+takedown.
+
+NOTE ON THE PREVIOUS COMMIT: its message described only public/index.html's
+holding page, but a `git add`/`git commit` sequencing mistake also swept in
+the RETIRE batch (18 test files, already individually decided earlier in
+this pass) that was staged before it. Named here so the record is honest --
+the commit's own diff and message did not match at the time, and this note
+is that correction, not a silent fix.
+
+This commit's own content, one test file at a time, per-test not per-file
+(subject survives, fixture used a now-quarantined import -- BLOCK, not
+retire, node:test's own `{ skip: "reason" }` used throughout so the reason
+prints with the test every run):
+
+- test/describeRequest.test.ts: 3 of 4 tests blocked (needed a real plot from
+  generateWorld); "nothing selected means no request" survives untouched.
+- test/selection.test.ts: 2 of 3 blocked; the off-plot pick survives.
+- test/worldAliasing.test.ts: both tests blocked (walk world.plan, null now;
+  also needed city-plan.js's WORLD/LANDMASSES/HIGHWAYS directly).
+- test/questCompletion.test.ts: 1 of 5 blocked (the real-production-world
+  case, needs buildWorldState); 4 survive, including the toy-fixture version
+  of the same property.
+- test/pickSelection.test.ts: 2 of 3 blocked (buildWorldState, and
+  this._selection -- which _buildCityBase no longer constructs, on purpose);
+  the board-piece-picking wiring check survives untouched.
+- test/facadeVariants.test.ts: 2 of 9 blocked (both GATE tests, which read
+  real placements from city-render.js); 7 pure facade-textures.js tests
+  survive.
+- test/phaseDelta.test.ts: 1 of 4 blocked (measureLiveLayoutGeometry, which
+  called generateWorld/planCity/groupByVariant directly -- function removed,
+  not just skipped, since nothing outside this file used it).
+- test/runGenerateRequest.test.ts: 1 of 3 blocked (the end-to-end case
+  needing a real plot); the money-guard and stubbed-positive cases survive.
+- test/originStability.test.ts: 1 of 2 blocked (the city-plan.js-based
+  origin-drift measurement); the board-generator.js-based settlement-boundary
+  version survives untouched -- it never depended on city-plan.js.
+- test/cityWorld.test.ts: quarantined WHOLE, to _TO-DELETE/old-world/,
+  BLOCKED not retired. 57 tests, deeply intermixed -- a sample check found
+  tests using only surviving terrain.js/land-use.js code interleaved,
+  sometimes within a few lines, with tests calling generateWorld/BRIDGES/
+  LANDMASSES/PLOT_CLASSES/gradeGroundBands directly. Triaging 57 individual
+  tests under this pass's own time budget risked exactly the
+  misclassification error the blind review already caught once this session
+  -- the whole file is named here, in one place, as blocked, rather than
+  guessed at test-by-test. Restoring it file-by-file, or test-by-test, once
+  Phase 2 supplies a real generator is future work, not lost work.
+
+Fixed, not blocked (trivial import repoints -- the data these tests need
+already moved to a surviving file in step 1, they just still pointed at the
+old address): test/worldExtent.test.ts (WORLD from public/world-scale.js),
+test/typologyFootprints.test.ts (PLOT_CLASSES from public/buildings.js,
+newly exported there for this). public/buildings.js: PLOT_CLASSES exported
+(was a local const) so this repoint could happen without a second copy.
+scripts/measure-land.mjs: same WORLD repoint, fixing test/landCoverage.test.ts's
+build without touching any of its own 9 real assertions.
+
+test/terrainLandmassOwnership.test.ts: two fixes, both instructed by the
+test's own failure messages, not guessed. (1) KNOWN_STATIC_IMPORTERS shrank
+to a single entry (scripts/_render-arterial-data.mjs) -- every test file
+that used to appear there is now either retired, quarantined-as-blocked, or
+(worldAliasing.test.ts) had its city-plan.js import removed entirely rather
+than merely narrowed. (2) The "B1 (wiring)" test's own prior assertion
+allowed terrain.js to still import WORLD from city-plan.js ("out of scope
+for this step... WORLD is shared far more broadly"); step 1 of this pass
+moved WORLD too, and the test's own error message named exactly what to do:
+"if WORLD moved too, update this test to match, don't just delete it."
+Done -- the assertion is now that terrain.js imports nothing from
+city-plan.js at all, a stronger and now-true statement.
+
+How it is known to be fixed: npm run typecheck -- clean. A full-suite build
+check (node test/run.mjs, scanning for "BUILD FAILED") -- zero failures,
+down from 27 at the start of this step. Every file above individually
+re-run and its pass/skip counts confirmed by hand before this commit.
+
+What is still open: the remaining test files that scan/exercise OLD
+index.html content (claimSpansAreChecked and describeRequestUI already
+retired in the swept-in batch; duplicateKeys, generatedClaimsAreCurrent,
+lookPipeline, navPad (retired), reachability, spendCounterDO, threeIsSingle,
+workerFirstRouting, worldEdit, evidence-forwarding) have not yet been
+individually checked against the NEW holding page -- next.

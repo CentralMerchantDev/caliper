@@ -1,0 +1,45 @@
+Phase 1 takedown, step 10 (part 2) -- the remaining tests that scan or
+exercise the OLD index.html's specific content, checked one by one against
+the NEW holding page rather than assumed.
+
+Each of these is a DELIBERATE, TEMPORARY consequence of "index.html renders
+a holding page... nothing more" (Mark, 2026-09-13), not a broken fixture --
+named as such in each skip reason so it reads differently from the BLOCK
+category in the previous commit:
+
+- test/reachability.test.ts: "every page is reachable from the front door"
+  and "the Build menu names the catalogue" both skipped -- the holding page
+  has zero navigation and zero menus, which is exactly the orphaned-page
+  defect this file's own header says it exists to catch, reintroduced on
+  purpose for now. "every page offers a way back" and "the back control is
+  painted before the scene" are untouched and still pass -- neither is about
+  index.html's own content.
+- test/generatedClaimsAreCurrent.test.ts: the real P4.6 gate and its one
+  synthetic test that shares its precondition (zero real stale claims) are
+  both skipped. The holding page carries none of the four claim spans this
+  gate checks. One further stale claim found along the way is UNRELATED and
+  pre-existing (CLAUDE.md's own "How to verify" line says 1087 node tests;
+  the real generated count is 1214) -- named in the skip reason so it is not
+  conflated with this pass's own cause, and left unfixed as out of scope.
+- test/threeIsSingle.test.ts: "the importmap sends bare three..." skipped --
+  the holding page loads no three.js at all.
+- test/evidence-forwarding.test.ts: the one index.html SSE-math test
+  skipped -- no SSE verification UI exists on the holding page.
+- test/lookPipeline.test.ts: "index.html and city.html grade the world
+  identically" skipped -- city.html is quarantined, so there is no second
+  page left to compare against; world-render-3d.js's own use of the shared
+  grade is unaffected and not what this specific test checks.
+
+Not touched, confirmed unaffected by running them: test/duplicateKeys.test.ts,
+test/spendCounterDO.test.ts, test/workerFirstRouting.test.ts,
+test/worldEdit.test.ts (all fully green -- none of the four touch the 3D
+city/board world or the old index.html at all), and evidence-forwarding.test.ts's
+other 4 tests.
+
+How it is known to be fixed: npm run typecheck -- clean. The full batch of
+nine files run together: 97 tests, 90 pass, 7 skipped (each named above), 0
+fail.
+
+What is still open: a final, clean, full-suite run (node scripts/gen-test-count.mjs)
+for the authoritative total count, and the handover documenting what
+went dormant in the shell, per the instruction's own report requirements.

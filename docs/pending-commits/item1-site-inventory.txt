@@ -1,0 +1,46 @@
+Item 1 of the Phase 1 rebuild lane brief, first half -- the site inventory,
+committed alone before anything moves, per the brief's own instruction.
+
+What was wrong: the brief hands over a four-file candidate list for "the old
+world" and says plainly not to trust it. Taking it at face value would have
+quarantined public/city-plan.js on the assumption it was old-world-only.
+
+How it is known to be wrong: docs/specs/PHASE1-SITE-INVENTORY.md, built from
+this project's own reachability tool (scripts/lib/module-graph.mjs, the same
+one test/deadExports.test.ts and docs/MODULE-MAP.md already trust) via a new
+one-off probe, scripts/_old-world-inventory-probe.mjs. Commands run today:
+`node scripts/gen-module-map.mjs` (refreshed docs/MODULE-MAP.md, included in
+this commit since it was stale against this branch's own prior commits) and
+`node scripts/_old-world-inventory-probe.mjs`.
+
+What the graph actually shows: public/city-plan.js supplies WORLD to
+public/terrain.js and public/world-render-3d.js (the kept shell) and ROADS to
+public/board-adapter.js (the current board's own content source), directly
+and through a shared web of terrain-generation primitives (noise.js,
+land-use.js, features.js, waterways.js, spatial-index.js, grade.js,
+footprint.js, zoning.js, settlement-fit.js) also imported by the live board
+pipeline (board.js, board-adapter.js, board-generator.js, bridge-generator.js,
+ground.js). The models/kitbash generation cluster has the identical shape --
+props.js and prop-models.js currently supply the live board's trees and
+street furniture via board-render.js. Quarantining either cluster today would
+break public/index.html, the page this same plan says to keep working, and
+fixing that forward dependency is Phase 2's stated job (2.1, 2.5, 2.6, 2.7),
+not Phase 1's -- which builds nothing.
+
+What is proven safe, and how: six files have no importer outside themselves
+once public/city.html is included as the root -- public/road-network.js
+(already fully orphaned, zero live callers), public/instance-groups.js,
+public/layout.js, public/layout-fits.js (not in the brief's own list -- found
+by the graph), public/city-render.js, and public/city.html itself. Verified
+by _old-world-inventory-probe.mjs's direct-importer listing for each,
+cross-checked against docs/MODULE-MAP.md.
+
+What is still open: the quarantine moves themselves (this item's second
+half), a blind plan review before executing them per rule://reviewer-independence,
+and the ~37 old-world test pins (item 2) -- nine of which
+(test/boardRender.test.ts, test/publicClaims.test.ts, test/cullingRatio.test.ts,
+test/regressionGate.test.ts, test/envLuminance.test.ts,
+test/claimSpansAreChecked.test.ts, test/reachability.test.ts,
+test/lookPipeline.test.ts, test/rendererStatic.test.ts) exercise city.html
+directly and are named in advance as expected to need retirement once it
+moves, per docs/specs/PHASE1-SITE-INVENTORY.md's WAVE 1 section.

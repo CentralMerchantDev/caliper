@@ -32,9 +32,18 @@ const server = http.createServer((req, res) => {
   // Stand in for the worker's /world-source route so the live-quarter code
   // takes its REAL path here, not its fallback. Testing only the fallback would
   // leave the path that actually runs in production unrendered.
+  //
+  // `/` used to be mapped to `/city.html` -- the old world's own page, and
+  // the thing this whole script existed to photograph. city.html is
+  // quarantined, 2026-09-13, Phase 1 "take it all down"
+  // (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md); `/` now serves
+  // index.html directly, like a real request would. This script's ~40 named
+  // VIEWS are old-world camera positions and are dormant, not fixed here --
+  // there is nothing left for them to frame until Phase 2 gives the holding
+  // page a board to render.
   const file = path.join(
     PUBLIC,
-    url === "/" ? "/city.html" : url === "/world-source" ? "/sim-baseline.generated.js" : url,
+    url === "/" ? "/index.html" : url === "/world-source" ? "/sim-baseline.generated.js" : url,
   );
   if (!file.startsWith(PUBLIC) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     res.writeHead(404); return res.end("not found");

@@ -10,10 +10,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as THREE from "three";
-import { PROPS } from "../public/prop-manifest.js";
-import { propGeometry, disposePropGeometry } from "../public/prop-models.js";
 import { FACADE_FAMILIES, generateFacadeAtlas } from "../public/facade-textures.js";
+// public/prop-models.js quarantined, 2026-09-13, board takedown (Mark's
+// ruling: "the b1-board board code is not a foundation... it comes out";
+// _TO-DELETE/b1-board/) -- measureLiveProps below needed propGeometry/
+// disposePropGeometry; see the BLOCKED test that used to call it.
 
 export interface PhaseMeasurement {
   phase: string;
@@ -36,26 +37,16 @@ export const BASELINE_V0: PhaseMeasurement = {
   propTris: 200, // Baseline: ~12-40 tri boxes per prop (~200 tris total)
 };
 
-import { generateWorld } from "../public/city-plan.js";
-import { assessFootprint } from "../public/footprint.js";
-import { LandField, makeHeightAt } from "../public/terrain.js";
-import { planCity, groupByVariant } from "../public/layout.js";
-import { makeFits } from "../public/layout-fits.js";
-import { building } from "../public/buildings.js";
+// public/city-plan.js, public/layout.js and public/layout-fits.js are
+// quarantined, 2026-09-13, Phase 1 "take it all down"
+// (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md) -- measureLiveLayoutGeometry
+// below needed generateWorld/planCity/makeFits/groupByVariant; see the
+// BLOCKED test that used to call it.
 
-/**
- * Measures live LOD0 triangle count across all manifest props directly from geometry.
- */
-export function measureLiveProps(): number {
-  disposePropGeometry();
-  let totalTris = 0;
-  for (const id of Object.keys(PROPS)) {
-    const g: any = propGeometry(id, THREE, { lod: 0, seed: 0 });
-    const tris = g.index ? g.index.count / 3 : g.getAttribute("position").count / 3;
-    totalTris += tris;
-  }
-  return totalTris;
-}
+// measureLiveProps (and its only caller, the V2 test below) removed,
+// 2026-09-13, board takedown -- it called propGeometry/disposePropGeometry
+// from public/prop-models.js, now quarantined, and nothing outside this
+// file imported it either.
 
 /**
  * Measures live texture atlas count and PBR map validity directly from facade-textures.js.
@@ -72,51 +63,12 @@ export function measureLiveTextures(): number {
   return validAtlases;
 }
 
-let _layoutMemo: { distinctTris: number; drawnTris: number; variants: number; placements: number } | null = null;
-
-/**
- * Measures live building layout geometry: distinct triangles and total drawn triangles across the city.
- */
-export function measureLiveLayoutGeometry(): { distinctTris: number; drawnTris: number; variants: number; placements: number } {
-  if (_layoutMemo) return _layoutMemo;
-  const heightAt = makeHeightAt(new LandField(16));
-  const world = generateWorld(heightAt);
-  const verdictFor = (plot: any) => {
-    const b = plot.buildable || plot;
-    return assessFootprint(heightAt, { xMin: b.xMin, xMax: b.xMax, zMin: b.zMin, zMax: b.zMax }).verdict;
-  };
-
-  const { placements } = planCity(world.blocks, world.plots, verdictFor, makeFits());
-  const groups = groupByVariant(placements);
-
-  let distinctTris = 0;
-  let drawnTris = 0;
-  let variants = 0;
-
-  for (const g of groups.values()) {
-    const spec = building(g.typology, g.seed, g.options);
-    const lod0 = spec.lod && spec.lod[0];
-    if (!lod0 || typeof lod0.createGeometry !== "function") continue;
-    const geo = lod0.createGeometry();
-    if (!geo || !geo.attributes || !geo.attributes.position) continue;
-    const tris = (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
-    distinctTris += tris;
-    drawnTris += tris * g.placements.length;
-    variants++;
-    geo.dispose?.();
-  }
-
-  _layoutMemo = { distinctTris, drawnTris, variants, placements: placements.length };
-  return _layoutMemo;
-}
-
-export function measureLiveGeometry(): number {
-  return measureLiveLayoutGeometry().distinctTris;
-}
-
-export function measureLiveDrawn(): number {
-  return measureLiveLayoutGeometry().drawnTris;
-}
+// measureLiveLayoutGeometry (and measureLiveGeometry/measureLiveDrawn, which
+// only ever called it) removed, 2026-09-13, Phase 1 "take it all down"
+// (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md) -- it called
+// generateWorld/planCity/makeFits/groupByVariant, all quarantined, and
+// nothing outside this file imported any of the three. See the BLOCKED
+// test below, which used to call measureLiveLayoutGeometry directly.
 
 /**
  * Validates that a phase claiming progress actually produced a non-zero delta
@@ -204,44 +156,10 @@ test("LIVE WORLD GATE: Phase V1 passes by measuring real live facade texture atl
   assert.strictEqual(result.delta, liveTextures - BASELINE_V0.textureCount!);
 });
 
-test("LIVE WORLD GATE: Phase V2 passes by measuring real live prop geometry", () => {
-  const livePropTris = measureLiveProps();
-  // Real measurement must be >= 1,500 tris (12 props * ~150-300 tris each)
-  assert.ok(
-    livePropTris >= 1500,
-    `Live props only measured ${livePropTris} triangles across 12 manifest props -- expected >= 1500`
-  );
+// BLOCKED, 2026-09-13, board takedown (Mark's ruling: "the b1-board board
+// code is not a foundation... it comes out"). measureLiveProps needed
+// propGeometry/disposePropGeometry from public/prop-models.js, now
+// quarantined to _TO-DELETE/b1-board/, and is removed (see comment above).
+test("LIVE WORLD GATE: Phase V2 passes by measuring real live prop geometry", { skip: "BLOCKED: measureLiveProps needed public/prop-models.js, quarantined (see comment above)" }, () => {});
 
-  const result = verifyPhaseProgress(
-    BASELINE_V0,
-    { phase: "V2", status: "LANDED", propTris: livePropTris },
-    "props"
-  );
-  assert.ok(result.valid, result.reason);
-  assert.strictEqual(result.delta, livePropTris - BASELINE_V0.propTris!);
-});
-
-test("LIVE WORLD GATE: measureLiveGeometry and measureLiveDrawn measure real city building meshes", () => {
-  const geom = measureLiveLayoutGeometry();
-  assert.ok(geom.distinctTris > 100000, `distinctTris measured ${geom.distinctTris} -- expected > 100,000`);
-  assert.ok(geom.drawnTris > 1000000, `drawnTris measured ${geom.drawnTris} -- expected > 1,000,000`);
-  assert.ok(geom.variants > 300, `variants measured ${geom.variants} -- expected > 300`);
-
-  // Unearned V3 claim with unchanged live geometry MUST trip
-  const v3Unearned = verifyPhaseProgress(
-    { phase: "V2", status: "LANDED", distinctTris: geom.distinctTris },
-    { phase: "V3", status: "LANDED", distinctTris: geom.distinctTris },
-    "geometry"
-  );
-  assert.equal(v3Unearned.valid, false);
-  assert.match(v3Unearned.reason!, /distinctTris did not move/);
-
-  // Unearned V7 claim with unchanged live drawn triangles MUST trip
-  const v7Unearned = verifyPhaseProgress(
-    { phase: "V6", status: "LANDED", drawnTris: geom.drawnTris },
-    { phase: "V7", status: "LANDED", drawnTris: geom.drawnTris },
-    "lod"
-  );
-  assert.equal(v7Unearned.valid, false);
-  assert.match(v7Unearned.reason!, /drawnTris did not move/);
-});
+test("LIVE WORLD GATE: measureLiveGeometry and measureLiveDrawn measure real city building meshes", { skip: "BLOCKED: measureLiveLayoutGeometry needed generateWorld/planCity/groupByVariant, all quarantined (see comment above)" }, () => {});

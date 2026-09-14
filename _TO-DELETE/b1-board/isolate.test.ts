@@ -75,22 +75,41 @@ function repoRoot() {
 const ROOT = repoRoot();
 const PROBE = join(ROOT, "scripts", "_isolate-probe.mjs");
 
-const R = JSON.parse(execFileSync(process.execPath, [PROBE], { encoding: "utf8", timeout: 120000, maxBuffer: 32 * 1024 * 1024 }));
+// BLOCKED (the seven R-dependent tests below), 2026-09-13, Phase 1 "take it
+// all down" (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md). This probe
+// imports public/city-plan.js, public/board-adapter.js and public/layout.js
+// to build a real fixture world -- all three quarantined. isolate.js itself
+// (this file's real subject) is kept and unaffected; there is simply no
+// real board to isolate a selection on until Phase 2 supplies one. Caught
+// here rather than left to crash the whole process, the same shape as
+// test/movePiece.test.ts's identical fix: execFileSync throws
+// (ERR_MODULE_NOT_FOUND inside the child), unguarded at module scope,
+// which previously aborted the entire test runner process.
+let R = null;
+let probeError = null;
+try {
+  R = JSON.parse(execFileSync(process.execPath, [PROBE], { encoding: "utf8", timeout: 120000, maxBuffer: 32 * 1024 * 1024 }));
+} catch (e) {
+  probeError = e;
+}
+const BLOCKED_REASON = probeError
+  ? `BLOCKED: scripts/_isolate-probe.mjs failed (${(probeError as any).message?.split("\n")[0] || probeError}) -- it imports quarantined city-plan.js/board-adapter.js/layout.js; isolate.js itself is unaffected`
+  : false;
 
-test("P4.3: neighboursOf finds a real, non-trivial neighbour set for a real plotId", () => {
+test("P4.3: neighboursOf finds a real, non-trivial neighbour set for a real plotId", { skip: BLOCKED_REASON }, () => {
   assert.ok(R.neighbourGeometryChecks.plotId, "the probe should have found a sample building at all");
   assert.ok(R.neighbourGeometryChecks.neighbourCount > 0, `expected a real building with at least one real neighbour within ${R.neighbourGeometryChecks.marginM} m -- got 0 across the probe's sample`);
 });
 
-test("P4.3: every reported neighbour genuinely falls within NEIGHBOUR_MARGIN_M of the selection's own footprint", () => {
+test("P4.3: every reported neighbour genuinely falls within NEIGHBOUR_MARGIN_M of the selection's own footprint", { skip: BLOCKED_REASON }, () => {
   assert.equal(R.neighbourGeometryChecks.allWithinMargin, true, "a reported neighbour's own foot rectangle is farther than the margin from the selection -- the query is returning something that is not actually a neighbour");
 });
 
-test("P4.3: the selected piece is never reported as its own neighbour", () => {
+test("P4.3: the selected piece is never reported as its own neighbour", { skip: BLOCKED_REASON }, () => {
   assert.equal(R.neighbourGeometryChecks.selectionExcludedFromItsOwnNeighbours, true);
 });
 
-test("P4.3: every reported neighbour is a building -- roads and bridges from the same local query are excluded, matching the pass's own stated buildings-only scope", () => {
+test("P4.3: every reported neighbour is a building -- roads and bridges from the same local query are excluded, matching the pass's own stated buildings-only scope", { skip: BLOCKED_REASON }, () => {
   // A blind audit (docs/AUDIT-PROTOCOL.md) found roads leaking into
   // `neighbours` before this filter existed: boardPieces carries every
   // piece kind, and inCells() answers by rectangle, not by kind. This test
@@ -101,11 +120,11 @@ test("P4.3: every reported neighbour is a building -- roads and bridges from the
   assert.equal(R.neighbourGeometryChecks.allNeighboursAreBuildings, true, `a non-building piece (road/bridge) was reported as a neighbour -- ${R.neighbourGeometryChecks.rawHitCount} raw hits vs ${R.neighbourGeometryChecks.neighbourCount} building neighbours`);
 });
 
-test("P4.3: a building thousands of metres away is correctly excluded -- guards against a margin/rectangle bug that returns everything", () => {
+test("P4.3: a building thousands of metres away is correctly excluded -- guards against a margin/rectangle bug that returns everything", { skip: BLOCKED_REASON }, () => {
   assert.equal(R.farIsExcluded, true);
 });
 
-test("P4.3: the local board population is a genuine best-effort placement of real adapted data, not silently all-or-nothing", () => {
+test("P4.3: the local board population is a genuine best-effort placement of real adapted data, not silently all-or-nothing", { skip: BLOCKED_REASON }, () => {
   // Not asserted to equal localCount -- board-adapter.js's own footprint-proxy
   // approximation (its header) is not guaranteed to satisfy board.js's
   // stricter canPlace on every real piece. Bounded instead: almost every
@@ -118,13 +137,13 @@ test("P4.3: the local board population is a genuine best-effort placement of rea
   );
 });
 
-test("P4.3: isolate actually changes the scene -- a fingerprint that never changes could not catch a restore bug either", () => {
+test("P4.3: isolate actually changes the scene -- a fingerprint that never changes could not catch a restore bug either", { skip: BLOCKED_REASON }, () => {
   assert.equal(R.fingerprint.isolateActuallyChangedSomething, true);
   assert.equal(R.fingerprint.duringVisibleCount, 0, "every real InstancedMesh batch in the sample should be hidden while isolated");
   assert.ok(R.fingerprint.duringSceneChildCount > R.fingerprint.beforeSceneChildCount, "the kept set's standalone meshes should have been added to the scene");
 });
 
-test("P4.3: restore is byte-identical -- every batch's visibility, material identity, and FULL instance-matrix array match exactly, not just a count", () => {
+test("P4.3: restore is byte-identical -- every batch's visibility, material identity, and FULL instance-matrix array match exactly, not just a count", { skip: BLOCKED_REASON }, () => {
   assert.equal(R.fingerprint.restoreIsByteIdentical, true, `before/after scene fingerprint mismatch (before ${R.fingerprint.beforeDigest.slice(0, 12)}, after ${R.fingerprint.afterDigest.slice(0, 12)}) -- restore did not put visibility, material, or a matrix back exactly as it was`);
   assert.equal(R.fingerprint.afterSceneChildCount, R.fingerprint.beforeSceneChildCount, "a standalone isolate mesh was left in the scene (or an original was removed) after restore");
 });

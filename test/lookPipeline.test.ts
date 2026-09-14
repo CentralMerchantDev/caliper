@@ -70,7 +70,7 @@ test("the vignette darkens toward black, not toward grey", () => {
     `values below 1.0 wash the corners out instead of darkening them`);
 });
 
-test("index.html and city.html grade the world identically", () => {
+test("index.html and city.html grade the world identically", { skip: "BLOCKED: public/city.html is quarantined, 2026-09-13, Phase 1 'take it all down' (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md); world-render-3d.js's own use of the shared grade is unaffected and untested by this specific comparison now that there is no second page to compare it against." }, () => {
   // They did not, and that is why every screenshot of this world came through a
   // grade the application never ran. One shared module is the fix; this asserts
   // both pages still use it rather than drifting back to private copies.

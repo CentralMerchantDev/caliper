@@ -14,7 +14,9 @@
 // on where the ground is.
 // =============================================================================
 
-import { WORLD } from "./city-plan.js";
+// WORLD moved to world-scale.js, 2026-09-13, Phase 1 "take it all down" --
+// city-plan.js is quarantined (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md).
+import { WORLD } from "./world-scale.js";
 import { WATERWAYS } from "./waterways.js";
 
 // =============================================================================

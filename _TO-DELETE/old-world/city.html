@@ -227,7 +227,8 @@ if (Q.get("board") === "1") try {
   scene.add(window.__boardLamps);
   window.__boardPieceCount = boardData.pieces.length;
   window.__boardReady = true;
-  console.log(`B3/B4: city.html drew ${boardData.pieces.length} real board pieces, ${window.__boardTrees.children.length} real trees and ${window.__boardLamps.children.length} real street lamps from public/board.generated.json`);
+  // .userData.itemCount, not .children.length -- 2c instanced these groups.
+  console.log(`B3/B4: city.html drew ${boardData.pieces.length} real board pieces, ${window.__boardTrees.userData.itemCount} real trees and ${window.__boardLamps.userData.itemCount} real street lamps from public/board.generated.json`);
 } catch (e) {
   console.error("B3/B4: failed to fetch/draw the real board on city.html (buildWorld's own scene above is unaffected):", e);
 }

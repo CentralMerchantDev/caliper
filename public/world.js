@@ -18,7 +18,6 @@
 // project has already found four times in its own code.
 // =============================================================================
 
-import { generateWorld } from "./city-plan.js";
 import { LandField, makeHeightAt } from "./terrain.js";
 import { createWorldModel } from "./world-model.js";
 import { createGrid } from "./grid.js";
@@ -78,7 +77,14 @@ function landFor(seed) {
  */
 export function createWorld({ seed = DEFAULT_SEED, layers = [], regions = null } = {}) {
   const { land, heightAt } = landFor(seed);
-  const plan = generateWorld(heightAt, seed);
+  // plan: null -- DORMANT, Phase 1 "take it all down," 2026-09-13
+  // (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md). This called
+  // generateWorld() (public/city-plan.js), now quarantined. Nothing else
+  // produces a plan today -- inventing one is Phase 2.7's job ("the
+  // generator, LAST," calling place() the same way a player does), not
+  // this one's. `land`, `layers` and `grid` below are untouched and still
+  // real; only `plan` is null until Phase 2 gives this something to call.
+  const plan = null;
   const layerModel = createWorldModel({ seed, layers });
   const grid = createGrid({ openRegions: regions });
 

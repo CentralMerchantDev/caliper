@@ -1080,7 +1080,7 @@
     {
       "id": "b2-settlement-table-wooded-exclusion-real",
       "guards": "the B2 gate's 'wooded/sandbar/rock/skerry islands carry no settlement at all' assertion actually reacts to SETTLEMENT_TABLE, not a tautology.",
-      "note": "Verified by hand this session: marking wooded settled (with a real density/boundary/block/plot config, matching every other settled kind's shape) correctly turned exactly the wooded-exclusion test red, and only that test -- the other 7 tests in test/boardGenerator.test.ts stayed green -- reverted, reconfirmed green (8/8).",
+      "note": "Originally verified by hand only, never recorded through a tool -- re-run 2026-09-11 (b1-land, autonomous run, item 3 of docs/briefs/CLI-2026-09-11-autonomous.md) via node scripts/_mutcheck.mjs test/boardGenerator.test.ts public/board-generator.js test/mutations.json: baseline GREEN, CAUGHT, source restored byte-identical. Decision #10's regex-truncation fix does NOT change this mutation's scoring, checked directly: this entry's own `expect` string has no parenthetical-with-a-digit shape at all, and _mutcheck.mjs's own extraction was already correct before that fix (the bug lived only in scripts/mutate.mjs and scripts/gen-test-count.mjs).",
       "file": "public/board-generator.js",
       "find": "  wooded:    { settled: false },",
       "replace": "  wooded:    { settled: true, boundaryK: 0.3, blockAtoms: 65, plotAtoms: 28, levels: 2 },",
@@ -1089,7 +1089,7 @@
     {
       "id": "b2-mainland-boundary-inland-direction-real",
       "guards": "the B2 gate's coverage-inside-boundary assertion catches a mainland settlement boundary built in the wrong direction (out to sea instead of onto land).",
-      "note": "Verified by hand this session: reversing the inland offset sign (the exact bug this file's own comment on mainlandBoundary describes finding, in the other direction) correctly turned the coverage test red -- the settlement-boundaries gate test itself did NOT catch it (boundary geometry is still WORLD_SCALE-invariant either direction, so origin stability is a different, orthogonal property from correctness of direction), which is itself informative: coverage is the control that actually verifies the boundary sits on buildable land. Reverted, reconfirmed green (8/8, plus originStability's own new case unaffected).",
+      "note": "Originally verified by hand only, never recorded through a tool -- re-run 2026-09-11 (b1-land, autonomous run, item 3 of docs/briefs/CLI-2026-09-11-autonomous.md) via node scripts/_mutcheck.mjs test/boardGenerator.test.ts public/board-generator.js test/mutations.json: baseline GREEN, CAUGHT, source restored byte-identical -- still true after Steps 2-3 of decision 5's ROAD_WIDTH retirement (SETTLEMENT_TABLE's blockAtoms values, cited implicitly by 'coverage is measured INSIDE...', changed since this mutation was written; the mutation still bites because it targets mainlandBoundary()'s own inland-direction sign, orthogonal to blockAtoms). Decision #10's regex-truncation fix does NOT change this mutation's scoring, checked directly: this entry's own `expect` string ('coverage is measured INSIDE each settlement boundary, 20-40%, not world-wide') has no parenthetical-with-a-digit shape, and _mutcheck.mjs's own extraction was already correct before that fix.",
       "file": "public/board-generator.js",
       "find": "  const inland = coastPolyline.map(([x, z]) => [x - stripDepth, z]);",
       "replace": "  const inland = coastPolyline.map(([x, z]) => [x + stripDepth, z]);",
@@ -1157,6 +1157,15 @@
       "find": "const deckHalfWidth = halfRoadFor(BRIDGE_DECK_CLASS), deckWidth = roadWidthFor(BRIDGE_DECK_CLASS);",
       "replace": "const deckHalfWidth = 4, deckWidth = 9;",
       "expect": "every real bridge deck is the SAME width as the road pieces it connects to"
+    },
+    {
+      "id": "decision-10-extract-test-titles-anchors-on-trailing-duration",
+      "guards": "extractTestTitles() captures a test's own full title, including any early parenthetical-with-a-digit in the title itself, stopping only at the TRAILING duration node's test runner appends -- not the first digit-parenthetical found, which is the bug docs/DECISIONS-FOR-MARK.md #10 found shared across scripts/mutate.mjs, scripts/_mutcheck.mjs (already correct before this extraction), and scripts/gen-test-count.mjs.",
+      "note": "Verified this session (b1-land, 2026-09-11) via node scripts/_mutcheck.mjs test/extractTestTitles.test.ts scripts/extract-test-titles.mjs test/mutations.json: baseline GREEN, mutation CAUGHT (4 of 6 tests correctly went red, each on the truncated-title assertion, not a crash), source restored byte-identical.",
+      "file": "scripts/extract-test-titles.mjs",
+      "find": "const re = new RegExp(`^(?:${prefixes})(.+?)(?: \\\\([\\\\d.]+m?s\\\\))?$`, \"gm\");",
+      "replace": "const re = new RegExp(`^(?:${prefixes})(.+?)(?: \\\\(\\\\d|$)`, \"gm\");",
+      "expect": "a real test title with an EARLY parenthetical-digit is captured whole"
     },
     {
       "id": "b2-7-classify-crossing-uses-real-ceiling",

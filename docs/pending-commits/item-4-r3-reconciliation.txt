@@ -1,0 +1,57 @@
+Item 4 -- R3: reconcile b1-land's real red count. New
+docs/specs/R3-RED-RECONCILIATION.md; COMPLETION-PLAN.md's own R3 ticked.
+
+MEASURED TODAY, redirected straight to disk per gen-test-count.mjs's own
+double-buffering warning (one process, no parent re-capturing it):
+1222 tests, 1160 pass, 46 fail, 15 skip, 1 todo.
+
+Neither stale number in circulation (46 on b1-land, 7 on codex-lane)
+describes this tree -- the 46 is a coincidental count match to the
+earlier b1-land figure; the actual 46 titles were independently
+re-derived and classified, not assumed identical to a prior list.
+
+Compared against this same session's own earlier full-suite run tonight:
+ZERO new failures, ONE resolved (originStability's WORLD.SIZE test,
+fixed earlier this session, commit 101ac09). Items 0-3 of this brief
+introduced nothing new.
+
+EVERY ONE OF THE 46 CLASSED, not assumed into a bucket:
+  Class A (5) -- already-decided-red, decision number cited: B2.5 (#3),
+    bridgeGenerator's own #7 gate, mutationEvidence x2 (#10),
+    publicClaims test-count (#9).
+  Class B (3) -- same generated-claims-staleness mechanism as #9, not
+    individually decision-numbered before now: claudeMdIsCurrent,
+    generatedClaimsAreCurrent x2. Root cause checked directly: the node
+    test count moved again tonight (this session's own new tests), the
+    exact recurring gap #9's own addendum already named.
+  Class C (37) -- COMPLETION-PLAN.md's own B2.8 line ("~30 old-world
+    tests... need B4 first"), verified per-file by import ("every file
+    imports public/city-plan.js" was checked, NOT assumed uniform --
+    isolate.test.ts has no direct public/ import at all and is included
+    on decision #2's and COMPLETION-PLAN.md:215's own explicit naming
+    instead). The open question this brief's own §12 item 3 already
+    names -- whether ROAD_WIDTH's retirement changes B2.8's deferral for
+    any of these 37 -- is NOT resolved here, named as real follow-up.
+  Class D (0) -- genuinely new: none, confirmed by the diff above.
+  Class E (1) -- unknown-and-untraced: supervisedGenerateScript.test.ts's
+    own I5 safety test. Checked and genuinely does not fit A-C (no
+    public/ import, not named in any decision or plan document) -- the
+    honest fallback this document's own header promised, used for real
+    rather than left unexercised by construction.
+
+A REAL ARITHMETIC ERROR CAUGHT AND FIXED BEFORE COMMITTING, not smoothed
+over: an intermediate draft of this document undercounted Class C (35
+instead of 37, from hand-counting cityWorld.test.ts's own 20 entries
+incorrectly) and consequently invented a fabricated "3-title discrepancy"
+paragraph to explain the mismatch rather than actually re-deriving the
+count. Caught by re-running the per-file failure count programmatically
+(node, not awk/sed hand-parsing) before finalising -- the table now sums
+to 46 exactly, matching the measured total, because it was recomputed
+correctly, not because the totals were padded to agree.
+
+GATE: RED is any failure with no class beside it in the document -- none
+found; every one of the 46 carries a class. GREEN is the single document
+existing with that property -- docs/specs/R3-RED-RECONCILIATION.md.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf

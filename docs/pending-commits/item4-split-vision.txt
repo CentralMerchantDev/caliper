@@ -1,0 +1,28 @@
+Item 4 of the Phase 1 rebuild lane brief -- split the vision material out of
+REBUILD-PLAN.md per CORRECTIONS C-11, so a Phase 2/3 lane reading the plan
+does not read multi-city unlocking, city-health gates, the token economy,
+player code uploads and the charitable-giving model as build scope.
+
+What moved, verbatim, content unchanged: two passages from "MARK'S ANSWERS —
+2026-09-11" -- the multi-city/city-health-gate paragraph (from "The world.")
+and the token-economy/uploads/charitable-giving paragraph (from "Money.") --
+now docs/specs/VISION.md, word for word. What stayed, because it is not
+vision but active Phase 1 input: "This first city" (feeds THE TERRAIN BRIEF
+directly below it), "Catalogue" (feeds C1), "Spend ceiling" and "Trees"
+(both listed in OPEN FOR MARK, both near-term).
+
+A one-line pointer replaces each moved passage in REBUILD-PLAN.md, per the
+brief's own instruction, and CORRECTIONS C-11 itself is marked DONE rather
+than left as a standing instruction now already carried out -- matching how
+C-3 and C-9 were marked VERIFIED in item 3 rather than silently left as
+open questions once answered.
+
+Not touched, deliberately: THE VALUE MODEL's V4 ("the bridge to Side B") and
+V5's milestone-gate caution, which also discuss city-health gating. These
+give concrete build guidance for Phase 2/3 (gate city two on something the
+sandbox already knows, not on unbuilt simulation systems) rather than
+restating the vision itself, and C-11 asks for the recorded INTENT to move,
+not every later reference to the same topic.
+
+What is still open: item 5 (the catalogue and its validator) has not
+started; item 6 only if budget remains after it.

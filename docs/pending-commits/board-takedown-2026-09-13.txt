@@ -1,0 +1,186 @@
+Board takedown: the b1-board board code was not a foundation, and it is out.
+
+Mark's ruling: public/board-render.js was live in the world he already
+rejected in the CORRECTION block at the top of docs/specs/REBUILD-PLAN.md
+("take it all down"), and the board layer was written before the research
+it would have to implement. Do not keep any of it, do not flag a reuse
+path -- that pattern has recurred four times in this project and is
+recorded there.
+
+WHAT WAS QUARANTINED, AND WHY (scripts/lib/module-graph.mjs, the project's
+own reachability tool, plus a full-repo dynamic-import grep -- shown, not
+asserted):
+
+  Named directly:
+    public/board-render.js, public/board-generator.js, public/board-load.js,
+    public/bridge-generator.js, public/board.generated.json, public/board.js
+
+  Derived -- "serves only these," scanned rather than guessed:
+    public/prop-models.js   -- only remaining importer was board-render.js
+    public/board-region.js  -- only remaining importers were isolate.js/move-piece.js
+    public/isolate.js       -- only remaining importer was world-render-3d.js
+    public/move-piece.js    -- only remaining importer was world-render-3d.js
+    scripts/gen-board.mjs   -- dynamically imports board-generator.js and
+                                bridge-generator.js, writes board.generated.json;
+                                its only consumer, board-load.js, is gone
+    scripts/_isolate-probe.mjs, scripts/_move-piece-probe.mjs
+                            -- orphaned once their only callers (test/isolate.test.ts,
+                                test/movePiece.test.ts) retired; already broken by the
+                                prior session's city-plan.js/board-adapter.js/layout.js
+                                takedown besides
+
+  package.json's "gen:board" script line removed -- it pointed at a script
+  that no longer exists at that path.
+
+  All 11 quarantined to _TO-DELETE/b1-board/, RETAINED not deleted, one
+  _TO-DELETE/LEDGER.jsonl line each: path, class, bytes, sha256, the
+  verification command run, actor, reason.
+
+SURGERY ON public/world-render-3d.js (kept -- this is the shell, not the
+weak part): removed the four board-cluster imports. Two call sites had
+nothing left calling them at all (fetchBoard, buildBoardScene/scatterTrees/
+scatterStreetLamps/scatterStreetFurniture/scatterBusShelters -- confirmed
+by grep before touching anything); three did:
+
+  - the city-mode pick handler's pieceAtPoint(this._boardData.board, ...)
+    branch -- dead in practice already, since this._boardData was never
+    assigned anywhere in the file (the code that used to set it lived in
+    _buildCityBase, gutted to a dormant stub by the prior session's
+    takedown) -- replaced with a comment and a plain `null`, keeping
+    onInspect's payload shape unchanged
+  - _isolate()/_moveSelected()/_liveRepositionMoved() -- removed outright.
+    WorldRenderer's own isolate()/moveSelected() wrappers already guard
+    `this._impl._isolate ? ... : null`, so an absent method degrades to a
+    no-op there with no further change needed
+  - _restoreIsolateState() -- kept as a 2-line no-op; the pick handler
+    calls it unconditionally on every new pick
+
+npx tsc --noEmit is clean. node --check on the file after surgery is clean.
+
+WHAT WENT RED, AND WHETHER IT WAS EXPECTED:
+
+  Ran test/modulesLoad.test.ts, test/focusDistance.test.ts and
+  test/placementLayout.test.ts FIRST, before touching anything else --
+  all three read world-render-3d.js's own surviving exports, not the
+  board cluster, and all three stayed green through every step below,
+  confirming the surgery did not touch anything they depend on.
+
+  Immediately after the world-render-3d.js surgery: 5 wiring tests failed,
+  exactly the wiring removed by design --
+    test/isolate.test.ts: 2 wiring tests (asserted the isolate.js import
+      and the this._movedPieces P4.4 interaction, both gone)
+    test/movePiece.test.ts: 2 wiring tests (asserted the move-piece.js
+      import and moveEditFor(), both gone)
+    test/pickSelection.test.ts: 1 wiring test (asserted the board-load.js
+      pieceAtPoint import, gone)
+  All five retired/blocked by name below, not patched to pass.
+
+RETIRED (subject left entirely, moved to _TO-DELETE/b1-board/ alongside
+its own module):
+  test/board.test.ts, test/boardGenerator.test.ts, test/boardLoad.test.ts,
+  test/boardPicking.test.ts, test/boardRender.test.ts,
+  test/bridgeGenerator.test.ts, test/propModels.test.ts
+  test/isolate.test.ts   -- its 7 R-dependent tests were ALREADY blocked
+                             for an unrelated reason (city-plan.js/
+                             board-adapter.js/layout.js, prior session);
+                             its 5 wiring tests broke this session on the
+                             surgery above. Nothing in the file had a live
+                             subject left, so the whole file retires rather
+                             than staying at 0-of-12 blocked.
+  test/movePiece.test.ts -- identical shape: 6 R-dependent tests already
+                             blocked, 3 wiring tests broken this session.
+
+BLOCKED ({ skip: "reason" }, file stays, only the affected test(s) do not
+run):
+  test/pickSelection.test.ts -- the B3 wiring test (pieceAtPoint via
+    board-load.js). The other two tests in this file were already blocked
+    for the prior session's reason; this file's own I3/B3 capability is
+    named as real and expected back once Phase 2 supplies a board.
+  test/phaseDelta.test.ts -- the V2 test (measureLiveProps, which called
+    propGeometry/disposePropGeometry from prop-models.js). measureLiveProps
+    itself deleted -- it had exactly one caller, which is now this blocked
+    test, matching how measureLiveLayoutGeometry was handled in the prior
+    session for the identical reason.
+  test/modulesLoad.test.ts -- "prop-models.js" removed from the FILES
+    array it iterates (a load-check list, not individually skippable
+    tests); it would only ever fail to resolve now.
+  test/originStability.test.ts -- the B2.3 test (a real, PASSING assertion
+    that public/board-generator.js's settlementBoundaries() does not move
+    a vertex when WORLD_SCALE changes). Not retired: the property itself --
+    geometry anchored to grid.js's atomOf/atomOrigin must not drift under a
+    WORLD_SCALE change -- is not specific to the generator being torn out;
+    Phase 2's own generator will need to satisfy the same contract, and
+    this was the one real passing proof this codebase ever had of it. This
+    was found by a repo-wide dynamic-import grep across test/ and scripts/,
+    not by the module-graph scan, which (like the prior session's own
+    documented dynamic-import-blind-spot lesson) only walks static imports
+    and had already been extended to scan public/'s dynamic imports but not
+    test/'s -- corrected this session, and no further misses turned up.
+
+test/deadExports.allowlist.json: pruned the 18 entries seeded against the
+8 board-cluster files now quarantined (board-generator.js x4, board-load.js
+x1, board-render.js x1, board.js x2, bridge-generator.js x4, isolate.js x2,
+move-piece.js x1, prop-models.js x3). Confirmed by re-running
+test/deadExports.test.ts before and after: the board-cluster entries left
+the failure list entirely, and the gate's residual failure (122 lines) is
+UNCHANGED by this session's work -- it is a pre-existing backlog from the
+PRIOR session's "take it all down" takedown (public/city-plan.js,
+public/city-render.js, public/layout.js, public/layout-fits.js, and one
+already-stale public/board-adapter.js entry), never pruned there, not
+touched here because it is outside this session's board-cluster scope.
+Reported plainly rather than folded into a false "gate is green."
+
+docs/MODULE-MAP.md regenerated (node scripts/gen-module-map.mjs) -- also
+carried a stale, uncommitted diff from the prior session's own index.html
+holding-page change (never regenerated after it), now folded into one
+current, accurate snapshot: 84 modules (was 93), matching exactly the 9
+source files removed from public/ this session.
+
+CATALOGUE VERIFICATION (STEP 2 -- REBUILD-PLAN.md C1, field by field, entry
+by entry, before quarantining anything if it did not hold up):
+
+  50 entries, 50 unique ids, zero duplicates.
+  21 buildings + 29 roads, matching C1.1's eight-footprint "Carries" column
+    one-for-one (kiosk/shed/substation/small-civic at 1x1; small-house/
+    corner-shop at 2x2; house/terrace-unit/small-retail at 2x3; large-house/
+    small-commercial at 3x3; apartment-block/mid-commercial at 4x4; large-
+    commercial/small-warehouse at 4x6; tower-base/large-commercial/civic at
+    6x6; mega-tower/large-warehouse/stadium at 8x8) and C1.3's road-tile
+    count exactly (4 classes x 5 tile types = 20 same-class, 3 adjacent
+    pairs x {T, cross} = 6, 3 width-transition tiles = 29 total, matching
+    "roughly 30").
+  Every entry: id, footprint (whole modules), category, rotatable,
+    terrainMask, pivot all present. Every non-road entry: massing,
+    joinSpec, proportion present (joinSpec uses exactly C1.4's three named
+    tiers: contact-darkening / ground-decal / modelled-skirt). Every road
+    entry: roadClass, tileType, junctionArms present; every road footprint
+    is square and sized to its widest arm per C1.3, including the six
+    mixed-class junctions and three transition tiles.
+  public/catalogue-validator.js's validateCatalogue() returns zero errors
+    against the live file. test/catalogueValidator.test.ts: 21/21 passing,
+    unchanged.
+  Pivot: "corner" throughout, matching C-5 (which supersedes C1.2's own
+    centre-pivot text within the same document -- read both, the newer
+    correction wins, checked it is the one the validator and data agree on).
+  ONE OPEN GAP, NOT A FAILURE: C1.4 lists "the ground floor is its own
+    piece class, separated from upper floors by a material change, an
+    awning or a dark trim" alongside massing/join_spec/proportion, but the
+    catalogue schema has no field for it. massing/joinSpec/proportion are
+    all present as fields; this one is not. It may belong to the asset
+    lane's modelling brief rather than catalogue.json's own schema (like
+    the 5cm architecture-vs-prop rule, which also has no field) -- named
+    here rather than silently assumed either way, since it is the one C1.4
+    item without a field to point at.
+  Verdict: the catalogue holds up. Nothing quarantined under STEP 2.
+
+npm test's own full run (node test/run.mjs, no filter) hit this project's
+documented host-contention wall again -- timed out past 240s with zero
+build failures logged in what did run. Per the established fallback (this
+project's own history, and the prior session's report), verification here
+is by targeted per-file runs covering every file touched or named above,
+plus npx tsc --noEmit (clean) and node --check on the surgeried file
+(clean) -- not a from-scratch npm test pass, and not claimed as one.
+
+NOT PUSHED, NOT DEPLOYED. Mark runs those.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

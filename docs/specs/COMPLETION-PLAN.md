@@ -286,9 +286,186 @@ polish.
 ```
 [ ] R1  Merge b1-land into main. Human-authorised, never by a lane.
 [ ] R2  Merge codex-lane into main.
-[ ] R3  Full suite green, or every red named and justified in one place.
+[x] R3  Full suite green, or every red named and justified in one place --
+          docs/specs/R3-RED-RECONCILIATION.md, 2026-09-11: 46 failures
+          measured, all 46 classed (5 already-decided-red, 3 same
+          generated-claims-staleness family as #9, 37 B2.8's own
+          old-world tests, 1 genuinely unknown-and-untraced). Re-run
+          before every subsequent claim of "suite green" -- this ties to
+          one measured run, not a standing guarantee.
+[ ] R3.5 THE BOARD IS THE DEFAULT RENDER. Not behind ?board=1, not behind
+          SHOOT_BOARD=1 -- what a visitor gets with no query string.
+          Blocked by two standing perf gates, which B3 measured un-gated and
+          did not fix: culling 65.8% against a <40% ceiling, and 7,851 draw
+          calls against <=900. B3 shipped the board gated OFF by default and
+          reconfirmed both gates green with it off, which is honest and is
+          NOT the same as resolved.
+          WHY THIS IS ON THE LIST AT ALL: without it, every other line in
+          PART 4 can be ticked -- merged, suite named, deployed, verified
+          live, branches pushed -- and a visitor still sees the OLD world.
+          The archipelago would be one query parameter away and nobody
+          would ever type it. This is the same shape of failure as
+          2026-09-09, where the BRANCH was wrong; here the branch would be
+          right and the FLAG would be wrong, which is harder to notice
+          because nothing looks broken.
+          Do not read R4 without reading this.
+
+          RE-MEASURED, 2026-09-11 (b1-land, CLI, attended). B3's two numbers
+          were stale on two counts, not re-taken since: possible measurement
+          contention (decision #4 records this same culling-ratio metric,
+          on a DIFFERENT scene, reading the skyline as 12 triangles/100%
+          culling under load) and a changed board (B3 measured 35,365
+          pieces; the committed board is now 21,007, typed road widths,
+          after ROAD_WIDTH's retirement). Both are real, separate
+          possibilities and are reported separately below, not blended.
+
+          Box confirmed quiet before measuring: `Get-CimInstance
+          Win32_Process -Filter "Name = 'node.exe'"` -- 30 processes, all
+          MCP/IDE infrastructure (chrome-devtools-mcp, process-mcp, the
+          cloud-sql toolbox), zero test runners, zero shoot.mjs, zero
+          mutate.mjs; `(Get-CimInstance Win32_Processor).LoadPercentage`
+          -- 9%; zero Chrome processes carrying `--headless` or
+          `--use-angle=swiftshader` (the real, regular browser windows
+          were the only Chrome instances running). Re-checked after
+          measuring: still zero stray render processes.
+
+          Measured by replicating test/regressionGate.test.ts's own exact
+          method (same local server, same Chromium/SwiftShader launch
+          args, same three views, same culling-ratio formula) with
+          `&board=1` added to the URL, via a one-off script (not
+          committed -- moved to `_TO-DELETE/session-scratch-scripts/`),
+          run three times:
+
+          | | Street level | Downtown skyline | The harbour |
+          |---|---|---|---|
+          | draw calls | 4,584 | 6,129 | 870 |
+          | triangles | 141,764 | 276,635 | 286,185 |
+
+          Identical across all three runs -- **zero spread.** Culling
+          ratio (street triangles / skyline triangles): **51.25%**, all
+          three runs. `window.__boardPieceCount` confirmed 21,007 on every
+          view, every run -- the board was genuinely drawn, not a stale
+          page.
+
+          BOTH GATES STILL FAIL, with real, current numbers replacing the
+          stale ones:
+          - Culling ratio 51.25% against the <40% ceiling (was 65.8%).
+          - Draw calls: street 4,584 and skyline 6,129 both exceed <=900
+            (was 7,851); harbour 870 passes, 30 calls of margin.
+
+          WHAT CAN BE ATTRIBUTED, and to what -- named separately, not
+          blended, per instruction:
+          - **Draw calls are structural** (one mesh per piece, B3's own
+            documented, un-instanced scope) and moved roughly with the
+            piece count, as expected: 4,584/7,851 = 0.584, against the
+            piece-count ratio 21,007/35,365 = 0.594 -- close enough that
+            the draw-call improvement is real and largely explained by
+            the smaller board, not by anything measurement-related.
+          - **Today's own 51.25% reading is NOT a contention artefact** --
+            confirmed by the zero spread across three runs on a box
+            checked quiet before and after, unlike decision #4's
+            documented flakiness for the comparable (un-boarded) metric.
+            This reading can be trusted as a real, reproducible number for
+            the CURRENT board.
+          - **How much of the 65.8% -> 51.25% CHANGE is contention in B3's
+            original reading versus the board changing cannot be cleanly
+            separated with what was measured here.** That would need the
+            OLD board (35,365 pieces, uniform 9 m road width) re-measured
+            on a quiet box for a true controlled comparison, which this
+            item did not do -- checking out and regenerating an old board
+            is a materially bigger undertaking than "one measurement," out
+            of this item's own scope. Not attributed to one cause where
+            two are available, per instruction.
+
+          Gate: RED is either ratio >= 40% or any view's draw calls > 900.
+          Currently RED on both counts -- ratio 51.25%, street/skyline
+          draw calls over budget. Neither threshold was loosened to reach
+          this result.
+
+          RE-MEASURED AGAIN, 2026-09-11 (b1-land, CLI, autonomous run 2),
+          AFTER item 2's board-render instancing (2a: shared materials,
+          2b: one InstancedMesh per (pieceType, foot.w, foot.d,
+          levels-if-building) group -- 21,007 pieces collapse into 16
+          groups, 2c: the same instancing for trees/lamps/street-furniture/
+          bus-shelters). Box confirmed quiet (16% CPU load, no stray
+          render/test/mutation processes) before measuring; same
+          replication method as the entry above (`&board=1`, same server,
+          same Chromium/SwiftShader args, same three views, same
+          culling-ratio formula), run three times:
+
+          | | Street level | Downtown skyline | The harbour |
+          |---|---|---|---|
+          | draw calls | 283 | 502 | 289 |
+          | triangles | 377,088 | 478,299 | 605,241 |
+
+          Identical across all three runs -- zero spread, same as before.
+          `window.__boardPieceCount` confirmed 21,007 on every view, every
+          run.
+
+          **DRAW-CALL GATE NOW PASSES, WITH A LARGE MARGIN, ON ALL THREE
+          VIEWS** -- 283/502/289 against the <=900 ceiling (was
+          4,584/6,129/870). This is real and dramatic, and matches the
+          16-group collapse measured directly against the committed board
+          before this work started.
+
+          **CULLING RATIO GATE GOT WORSE, NOT BETTER: 78.84% against the
+          same <40% ceiling (was 51.25%).** This is not a partial win
+          quietly reported as a win -- it is a real regression on the
+          OTHER half of this item's own gate, and the brief's own
+          instruction ("investigate rather than celebrate... do not tune
+          toward 900") applies with the sign flipped here: a threshold
+          that moved further from passing is exactly as reportable as one
+          that moved suspiciously close.
+
+          A WORKING HYPOTHESIS FOR WHY, NAMED AS A HYPOTHESIS, NOT
+          CONFIRMED BY tracing THREE.js's own frustum-culling source this
+          session: before instancing, each of the 21,007 pieces was its
+          own `Mesh` with its own bounding volume, so Three.js's per-object
+          frustum culling discarded every piece outside a given camera's
+          view individually -- a narrow street-level shot would rasterise
+          only the nearby pieces. After 2b/2c, a `pieceType`-group's pieces
+          (e.g. every "building" of one footprint/levels combo, scattered
+          across the WHOLE board) share ONE `InstancedMesh`, and
+          `InstancedMesh` frustum-culls as a SINGLE object against its own
+          overall bounding volume -- if that volume (spanning the whole
+          board) intersects the camera frustum at all, EVERY instance in
+          it is rasterised, including ones far outside the actual view.
+          The measured data is consistent with this: street level's own
+          triangle count nearly TRIPLED (141,764 -> 377,088) even though
+          its draw-call count collapsed, exactly the shape "fewer, bigger
+          objects, each one drawn in full regardless of what's actually in
+          frame" would produce. Not verified beyond this consistency check
+          -- confirming it would mean reading Three.js's own
+          `InstancedMesh.raycast()`/culling implementation directly, out
+          of this item's own scope tonight.
+
+          WHAT WOULD LIKELY FIX IT, NAMED BUT NOT ATTEMPTED THIS RUN: per
+          the same logic B3's own prior art already used for buildings
+          (`world-render-3d.js`'s spatial chunking, ~1.6 km chunks with
+          tight bounding spheres, mentioned in `test/boardRender.test.ts`'s
+          own header comments), grouping instances by SPATIAL REGION in
+          addition to (pieceType, foot, levels) -- many small
+          `InstancedMesh` objects per region instead of one huge one per
+          type -- would let ordinary frustum culling discard whole
+          off-screen regions again, at the cost of more draw calls than
+          today's 16-group scheme (though very likely still far under 900,
+          given how much margin exists there now). This is real,
+          additional, unplanned work -- a materially bigger undertaking
+          than this item's own scope, not a small follow-up -- and is
+          Mark's to prioritise, not this run's to start unasked.
+
+          Gate: RED is either ratio >= 40% or any view's draw calls > 900.
+          **STILL RED overall** -- draw calls now comfortably PASS on all
+          three views, but the culling ratio is RED and WORSE than before
+          this item's own work (78.84% vs 51.25%). Neither threshold was
+          loosened or tuned toward in either direction. R3.5 does NOT tick
+          -- one real gate improved a great deal, the other regressed, and
+          ticking on a mixed, partially-worse result would misstate what
+          was actually measured.
 [ ] R4  Deploy from main. Check the branch first -- 2026-09-09 shipped b1-land
           by accident and put 71.8% of plots in the water on the live site.
+          Check R3.5 too: a deploy with the board still gated publishes the
+          old world, which is a worse outcome than not deploying.
 [ ] R5  Verify live, not locally: load the real URL on desktop AND on a phone.
 [ ] R6  Push every branch. The whole rebuild lived on one disk for a full day.
 ```
@@ -338,10 +515,17 @@ Building it is not finishing it. Before R1, one pass, and it is not self-graded:
 Not the finished build — the point at which the links can go out. Everything
 else can land after the résumés are sent.
 
-**B3 · C1 · C4 · R1–R6 · X1 · X3**
+**B3 · R3.5 · C1 · C4 · R1–R6 · X1 · X3**
 
-That is: the archipelago renders, the mutation number is true, every published
-figure agrees with every other, it is merged and live and checked on a phone,
-DATUM stops contradicting CALIPER, and there is one résumé. B4, B5, B7, the
+That is: the archipelago renders **by default, with no query string** (B3 draws
+it; R3.5 is what makes a visitor see it), the mutation number is true, every
+published figure agrees with every other, it is merged and live and checked on a
+phone, DATUM stops contradicting CALIPER, and there is one résumé.
+
+R3.5 is called out separately here even though it falls inside the R1–R6 range,
+because this line previously read "the archipelago renders" and B3 alone
+satisfies that sentence while leaving the board switched off for every real
+visitor. The cut is the point at which LINKS GO OUT; a link that opens the old
+world is worse than a link not sent. B4, B5, B7, the
 interface polish and the allowlist breakdown are all real work and none of them
 is why someone would or would not reply.

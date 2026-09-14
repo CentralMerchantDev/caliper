@@ -79,8 +79,14 @@ actually fired. An audit that cannot say why it ran was probably run from habit.
 - Commit at every BUILD-LOOP Step 9, not at the end of a phase. A dead run should
   cost one step, not an evening.
 - Never retry into a failure. Commit what exists and report.
-- Check free memory before any full suite or render; below the stated floor,
-  wait.
+- Renders (a single camera or the full multi-camera regression-gate pass)
+  do not need to wait for free memory — verified working down to 0.02 GB
+  free, 2026-09-11 (`docs/OVERNIGHT-RUN.md`'s own "Renders, tested, not
+  assumed" line; full record `docs/audits/MEMORY-FLOOR-EXPERIMENT-2026-09-11.md`).
+  The full, unscoped `node test/run.mjs` is a separate, real concern — it
+  has crashed on a default V8 heap ceiling on this host; use
+  `NODE_OPTIONS="--max-old-space-size=8192"` or a targeted test file, not a
+  memory-floor wait.
 - Do not merge, do not deploy, do not open a pull request.
 - Nothing is deleted — quarantine to `_TO-DELETE/<reason>/`, git lock files
   included.

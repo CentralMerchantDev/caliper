@@ -16,7 +16,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TYPOLOGY_FOOTPRINT_CELLS, CLASSES_WITH_NO_TYPOLOGY_LARGE_ENOUGH } from "../public/typology-footprints.js";
-import { PLOT_CLASSES } from "../public/city-plan.js";
+// PLOT_CLASSES moved to public/buildings.js, 2026-09-13, Phase 1 "take it
+// all down" -- public/city-plan.js is quarantined (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md).
+import { PLOT_CLASSES } from "../public/buildings.js";
 
 test("every TYPOLOGY_FOOTPRINT_CELLS entry declares whole cells", () => {
   for (const [typology, foot] of Object.entries(TYPOLOGY_FOOTPRINT_CELLS)) {

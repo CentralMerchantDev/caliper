@@ -1,0 +1,42 @@
+Item 2 of the Phase 1 rebuild lane brief -- retire, by name, the tests whose
+entire subject left with item 1's one quarantine move.
+
+What was wrong: after item 1 quarantined public/road-network.js (the only
+file this pass's corrected inventory found genuinely safe to move --
+docs/specs/PHASE1-SITE-INVENTORY.md), four test files could no longer build:
+test/roadNetwork.test.ts, test/bridgePieces.test.ts,
+test/collectorLocalNetwork.test.ts, test/connectivityBridges.test.ts, each
+failing on "Could not resolve ../public/road-network.js" (watched directly,
+node test/run.mjs, before this commit).
+
+How it is known these are retirements and not bugs to fix: read every
+test() in all four files by name (21 cases total -- 6 + 5 + 6 + 4). Every
+single one asserts a property of one of road-network.js's own exports
+(buildArterialNetwork, buildBridgePieces, verifyBridgeEnds,
+buildCollectorLocalNetwork, buildConnectivityBridges). Two of the four also
+import supporting data from public/city-plan.js and public/terrain.js, but
+no assertion in either file is about that supporting data on its own --
+every case's subject is the quarantined file. "A test asserting the
+behaviour of quarantined code is not a failure to fix -- its subject is
+gone" (docs/briefs/PHASE-1-rebuild.md, item 2).
+
+Quarantined, not deleted, per rule://quarantine Tier 2, each with its own
+ledger line in _TO-DELETE/LEDGER.jsonl naming which of the file's own test
+cases it covers and why: test/roadNetwork.test.ts, test/bridgePieces.test.ts,
+test/collectorLocalNetwork.test.ts, test/connectivityBridges.test.ts, all to
+_TO-DELETE/old-world/.
+
+How it is known to be fixed: node scripts/gen-test-count.mjs (regenerated
+test/testCount.generated.json, the derived artefact CLAUDE.md names, rather
+than hand-editing a count) and a fresh full `npm test` run afterward -- the
+first clean, uncontaminated post-quarantine measurement this item has had; an
+earlier attempt spanned the file moves mid-run and its output was discarded
+as untrustworthy for exactly that reason.
+
+What is still open: everything the corrected item 1 deferred (city-render.js,
+layout.js, layout-fits.js, instance-groups.js, city.html, city-plan.js, and
+the two further "Goes" clusters) stays live, and so do the ~33 remaining
+tests that describe it -- correctly, since that code still runs in
+production. Retiring those tests now would be retiring coverage of live
+behaviour, not clearing dead weight; they wait on Phase 2 giving the shell
+something else to render.

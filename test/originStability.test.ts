@@ -32,9 +32,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, cpSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { generateWorld as generateWorldReal } from "../public/city-plan.js";
-import { LandField, makeHeightAt } from "../public/terrain.js";
 import { WORLD_SCALE } from "../public/world-scale.js";
+// public/city-plan.js is quarantined, 2026-09-13, Phase 1 "take it all down"
+// (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md) -- generateWorld no longer
+// exists, and a patched copy of public/ (this file's own technique, below)
+// has nothing to copy either. See the BLOCKED test.
 function findPublic(): string {
   let dir = fileURLToPath(import.meta.url);
   for (let i = 0; i < 5; i++) {
@@ -76,44 +78,7 @@ function patchedWorldAt(scale: number) {
   return dir;
 }
 
-test("changing WORLD.SIZE moves the grid origin -- written to report this, not to fix it", {
-  todo: "docs/audits/WORLD-DENSITY-FINDINGS.md §8 -- opening new land has no " +
-    "operation that does not move the origin yet; this stays red on purpose " +
-    "until one exists. Not skipped: it still runs and still prints the " +
-    "measured drift every time the suite does.",
-}, async () => {
-  const dirSmaller = patchedWorldAt(WORLD_SCALE * 0.8);
-  try {
-    const { generateWorld: generateWorldSmaller, WORLD: WORLD_SMALLER } =
-      await import(pathToFileURL(join(dirSmaller, "city-plan.js")).href);
-
-    const heightAt = makeHeightAt(new LandField(16));
-    const worldReal = generateWorldReal(heightAt);
-    const worldSmaller = generateWorldSmaller(heightAt);
-
-    // GRID.ORIGIN_X/ORIGIN_Z (city-plan.js) are `ISLAND.xMin`/`zMin` --
-    // ISLAND is a landform extent, so it scales with WORLD_SCALE by
-    // world-scale.js's own stated rule. There is no fixed, scale-
-    // independent anchor a saved coordinate could be checked against.
-    const plotReal = worldReal.plots[0], plotSmaller = worldSmaller.plots[0];
-
-    // THE ACTUAL PROPERTY UNDER TEST: a known plot, same index, same seed,
-    // before and after WORLD.SIZE changes. It is not expected to survive --
-    // this assertion is written to go red and stay red until an "open new
-    // land" operation exists that does not route through WORLD_SCALE. The
-    // WORLD.SIZE values themselves (26,000 -> ~20,800 for a 0.8x change)
-    // are reported for context, not asserted on separately -- of course a
-    // deliberate WORLD_SCALE change moves SIZE; that is not the surprising
-    // half of the finding, the moved PLOT COORDINATE is.
-    assert.deepEqual(
-      { xMin: plotReal.xMin, zMin: plotReal.zMin },
-      { xMin: plotSmaller.xMin, zMin: plotSmaller.zMin },
-      `plot[0] moved from (${plotReal.xMin.toFixed(1)}, ${plotReal.zMin.toFixed(1)}) to (${plotSmaller.xMin.toFixed(1)}, ${plotSmaller.zMin.toFixed(1)}) when WORLD.SIZE moved from ${worldReal.world.SIZE} to ${worldSmaller.world.SIZE} (WORLD_SCALE ${WORLD_SCALE} -> ${WORLD_SCALE * 0.8}) -- a saved build's coordinates would be silently wrong after opening new land, exactly the failure docs/audits/WORLD-DENSITY-FINDINGS.md §8 describes`,
-    );
-  } finally {
-    rmSync(dirSmaller, { recursive: true, force: true });
-  }
-});
+test("changing WORLD.SIZE moves the grid origin -- written to report this, not to fix it", { skip: "BLOCKED: needs public/city-plan.js's generateWorld, quarantined 2026-09-13, Phase 1 'take it all down' (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md); the patched-copy technique above has nothing to copy either" }, async () => {});
 
 // B2.3: THE SAME PROPERTY, AS A REAL PASSING ASSERTION FOR B2's OWN
 // GENERATOR, NOT A TODO.
@@ -147,7 +112,16 @@ test("changing WORLD.SIZE moves the grid origin -- written to report this, not t
 // asserted for city-plan.js's own plots (the test above stays exactly as
 // it is, still red-on-purpose, still describing a real, unfixed defect in
 // a generator B2 replaces) -- only for B2's own boundaries.
-test("B2's own settlement boundaries: changing WORLD.SIZE does not move a single vertex -- a REAL passing assertion, not a todo", async () => {
+//
+// BLOCKED, 2026-09-13, board takedown (Mark's ruling: "the b1-board board
+// code is not a foundation... it comes out"). public/board-generator.js is
+// quarantined to _TO-DELETE/b1-board/, so the dynamic import below has
+// nothing to load. Not retired: the property itself -- geometry anchored
+// to grid.js's atomOf/atomOrigin must not drift when WORLD_SCALE changes --
+// is not specific to the b1-board generator being torn out; Phase 2's own
+// generator will need to satisfy the identical contract, and this is the
+// one real, passing proof this codebase ever had of it.
+test("B2's own settlement boundaries: changing WORLD.SIZE does not move a single vertex -- a REAL passing assertion, not a todo", { skip: "BLOCKED: public/board-generator.js is quarantined; nothing for the dynamic import below to load (see comment above)" }, async () => {
   const dirSmaller = patchedWorldAt(WORLD_SCALE * 0.8);
   try {
     const { settlementBoundaries: boundariesSmaller } =

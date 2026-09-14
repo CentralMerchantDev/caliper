@@ -1,0 +1,8 @@
+Commit Mark's own CORRECTION to docs/specs/REBUILD-PLAN.md, found uncommitted
+in the working tree at the start of this session -- his rejection, in his own
+words, of the previous run's decision to leave city-render.js and its
+dependents standing on the grounds that removing them would take the live
+page down.
+
+Nothing added or reworded here; this is his edit, committed as found, before
+any further work proceeds against it.

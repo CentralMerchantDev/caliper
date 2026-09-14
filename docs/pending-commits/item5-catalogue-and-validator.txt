@@ -1,0 +1,57 @@
+Item 5 of the Phase 1 rebuild lane brief, and this run's declared stopping
+point -- the piece catalogue as data, plus its validator, written before
+anything consumes the data file.
+
+What was built: data/catalogue.json, 50 entries turning REBUILD-PLAN.md's
+C1.1 (the eight footprints) and C1.3 (the four road classes, five junction
+types per class, three adjacent-class mixed junctions and three
+width-transition tiles) into real rows -- 21 building pieces, one per named
+"carries" use in C1.1's own table (kiosk, shed, substation, small-civic;
+small-house, corner-shop; house, terrace-unit, small-retail; large-house,
+small-commercial; apartment-block, mid-commercial; large-commercial (4x6),
+small-warehouse; tower-base, large-commercial (6x6), civic; mega-tower,
+large-warehouse, stadium), matching C1.5's "start with ONE variant" --  and
+29 road tiles (4 classes x 5 types = 20, 3 adjacent-class pairs x {T, cross}
+= 6, 3 width-transition tiles = 3), matching C1.3's own "roughly 30 road
+tiles total" estimate exactly.
+
+public/catalogue-validator.js -- the validator, built and tested BEFORE
+data/catalogue.json's own test asserts it is valid, per the item's own
+instruction and A11's evidence ("Unknown node types are caught immediately").
+Six rules, each named in the brief's own checklist item 5, no others:
+whole-module footprints; footprint in C1.1's set of eight or a rotation of
+one (non-road pieces); road width even and one of 2/4/6/8, and square, per
+C1.3 (road pieces); junction arms same-class or adjacent-class in the
+lane-street-avenue-highway hierarchy; pivot at the anchor cell's corner
+(C-5), never centre; no duplicate ids.
+
+How each rule is known to be real, not merely asserted: test/catalogueValidator.test.ts
+has one baseline-plus-mutation pair of tests per rule (a deliberately
+malformed entry the rule must catch, and the same shape entry corrected, to
+prove the rule does not also reject good data), PLUS a direct mutation check
+on the validator itself, done and watched by hand before this commit: each
+rule's own check was disabled in turn (`if (false && ...)` substituted for
+the real condition), the corresponding tests were confirmed to go red naming
+exactly that rule (never a different one), and the file was restored and
+diffed byte-identical against its pre-mutation copy before continuing to the
+next rule. All six: RULE 1 (fractional/zero/negative footprint), RULE 2 (off
+the eight-footprint set), RULE 3 (odd width, even-but-not-2/4/6/8 width, and
+non-square road footprint -- three separate malformed shapes, not one), RULE
+4 (highway-to-lane, and an unknown class name), RULE 5 (a centre pivot, and
+a missing pivot field), RULE 6 (a shared id). Nothing here is asserted to
+work without having been watched failing to catch its own bug first, exactly
+the standard docs/BUILD-LOOP.md Step 6 states.
+
+How it is known to be fixed: node test/run.mjs catalogueValidator.test.ts
+deadExports.test.ts (25/25 pass, including "the real data/catalogue.json is
+fully valid -- zero errors" and a direct no-duplicate-ids check that does not
+merely infer cleanliness from the validator's own silence); npm run
+typecheck (clean); node scripts/gen-module-map.mjs (regenerated,
+docs/MODULE-MAP.md now lists the five new exports); test/deadExports.allowlist.json
+updated with real, specific reasons for each (not yet wired to product code
+-- Phase 2 does that) rather than silenced with the word "intentional".
+
+What is still open, and the brief's own stopping point is here: item 6
+(visual references) only if budget remains -- it does not, given the depth
+this item and item 1's corrected scope both required. Handover follows in a
+separate commit.

@@ -27,8 +27,9 @@ import {
   spandrelTreatment,
   floorLayout,
 } from "../public/facade-textures.js";
-import { buildWorldState, buildScenePlacements } from "../public/city-render.js";
-import { groupByVariant } from "../public/layout.js";
+// public/city-render.js and public/layout.js are quarantined, 2026-09-13,
+// Phase 1 "take it all down" (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md)
+// -- see the two BLOCKED tests below.
 
 const CHARACTERS = ["heritage", "interwar", "postwar", "contemporary"];
 
@@ -213,64 +214,33 @@ test("getFacadeMaterial caches per variantSeed, not just per character -- two di
 // variantSeed into getFacadeMaterial on this branch (see the static gate
 // below), so this dynamic gate is expected to actually measure it.
 //
-// CORRECTED AT THE SAME MERGE (CLI lane, RUN3-CLI-2026-09-09, found by
-// mutation-testing the gate itself): this test's own key construction had a
-// real bug that would have kept it reporting 4 forever, even after
-// city-render.js's fix landed. It hardcoded `${char}-vc-day-` with nothing
-// after the trailing dash for every group, so every key collapsed to one of
-// four fixed strings regardless of which variant a placement actually
-// picked -- confirmed by running it against the fix and still getting 4,
-// all four keys ending in the same empty dash. The real cache key
-// (public/facade-textures.js's own getFacadeMaterial) is keyed on the raw
-// variantSeed, which is unique per variant GROUP by construction
-// (groupByVariant keys groups by seedFor(...)) -- "distinct raw keys" would
-// trivially equal "number of groups" (thousands), not a meaningful
-// measurement of "distinct facade MATERIALS" either. What the gate's own
-// title actually asks is the number of distinct (character, picked-variant)
-// pairs reached: pickVariant(character, group.seed) is the exact selection
-// getFacadeMaterial's own atlas generation makes internally, so keying on
-// that measures the real, reachable outcome, bounded by 4 characters times
-// each character's own variant count -- well above four, per this file's
-// own 16+ total.
-test("GATE: distinct facade materials reachable from real placements, well above four", () => {
-  const state = buildWorldState();
-  const { instanced, overridden } = buildScenePlacements(state);
-  const groups = groupByVariant([...instanced, ...overridden]);
+// WHY THIS STAYS RED HERE, HONESTLY, RATHER THAN BEING MADE TO PASS: the
+// capability above is real and tested. Reaching it from a real placement
+// needs public/city-render.js:1930-1932 to pass a variantSeed into its
+// getFacadeMaterial(char, {...}) call -- a CLI-lane file (see this
+// project's own routing in docs/briefs/OVERNIGHT-BLD-2026-09-09.md §7).
+// The exact one-line diff is recorded in docs/CROSS-LANE-REQUESTS.md. This
+// gate will go green the day that lands, unedited, because it already
+// mirrors the real cache-key logic rather than a hoped-for one.
+// BLOCKED, 2026-09-13, Phase 1 "take it all down"
+// (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md). buildWorldState/
+// buildScenePlacements (public/city-render.js) and groupByVariant
+// (public/layout.js) are both quarantined -- there are no real placements
+// to measure without them. facade-textures.js's own capability (tested
+// above) is unaffected; only "reaching it from a real placement" is blocked,
+// pending Phase 2's own placement path.
+test("GATE: distinct facade materials reachable from real placements, well above four", { skip: "BLOCKED: buildWorldState/buildScenePlacements/groupByVariant are quarantined (see comment above)" }, () => {});
 
-  const keys = new Set();
-  for (const group of groups.values()) {
-    const char = group.options?.character || "heritage";
-    const variant = pickVariant(char, group.seed);
-    keys.add(`${char}-${variant.name}`);
-  }
-
-  console.log(`facade materials reachable from real placements today: ${keys.size} (${[...keys].join(", ")})`);
-  assert.ok(keys.size > 4, `only ${keys.size} distinct facade materials reachable from real placements`);
-});
-
-// THE GATE ABOVE CANNOT SEE THIS LINE REGRESS (CLI lane, RUN3-CLI-2026-09-09,
-// found while mutation-testing it): it recomputes pickVariant(char,
-// group.seed) independently, using group.seed from groupByVariant -- NOT
-// from reading what public/city-render.js's own real getFacadeMaterial call
-// actually received. Removing `variantSeed: g.seed` from that real call
-// SURVIVED against the gate above, because the gate's own measurement never
-// touches that line at all. buildScenePlacements() does not reach deep
-// enough to expose the real call (that closure lives inside buildWorld(),
-// which needs a real THREE renderer and scene this harness does not build)
-// -- so this is a static check instead, the same technique
-// test/boardRender.test.ts's own B3 gate already uses for a forbidden
-// import, aimed here at confirming a REQUIRED line is present rather than a
-// forbidden one absent.
-test("GATE (static): public/city-render.js's real getFacadeMaterial call still passes variantSeed -- the one-line cross-lane fix cannot silently regress unseen", () => {
-  // Stripped before matching -- this checks a REQUIRED line is PRESENT
-  // (the risky direction: a comment mentioning the call would satisfy the
-  // regex too), not an absence check. test/rawSourceScan.test.ts's own
-  // category gate (F4, 2026-09-11) caught this exact file for exactly this
-  // reason when the merge carried the check over from b1-land.
-  const src = stripSourceComments(readFileSync(join(ROOT, "public", "city-render.js"), "utf8"));
-  assert.match(
-    src,
-    /getFacadeMaterial\(char,\s*\{[^}]*variantSeed:\s*g\.seed[^}]*\}\)/s,
-    "public/city-render.js no longer passes variantSeed: g.seed into its real getFacadeMaterial call -- the dynamic gate above cannot see this regression, only this static check can",
-  );
-});
+// THE GATE ABOVE CANNOT SEE THIS LINE REGRESS, FOUND WHILE MUTATION-TESTING
+// IT (RUN3-CLI-2026-09-09): it recomputes pickVariant(char, group.seed)
+// independently, using group.seed from groupByVariant -- NOT from reading
+// what public/city-render.js's own real getFacadeMaterial call actually
+// received. Removing `variantSeed: g.seed` from that real call SURVIVED
+// against the gate above, because the gate's own measurement never touches
+// that line at all. buildScenePlacements() does not reach deep enough to
+// expose the real call (that closure lives inside buildWorld(), which needs
+// a real THREE renderer and scene this harness does not build) -- so this
+// is a static check instead, the same technique test/boardRender.test.ts's
+// own B3 gate already uses for a forbidden import, aimed here at confirming
+// a REQUIRED line is present rather than a forbidden one absent.
+test("GATE (static): public/city-render.js's real getFacadeMaterial call still passes variantSeed -- the one-line cross-lane fix cannot silently regress unseen", { skip: "BLOCKED: public/city-render.js is quarantined -- _TO-DELETE/old-world/city-render.js is where this same check could be re-run against the retained copy if needed" }, () => {});

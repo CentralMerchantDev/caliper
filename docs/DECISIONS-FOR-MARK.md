@@ -1255,3 +1255,44 @@ artefact.
 reversible. Leaving the gates named (Option 2, tonight's choice) costs
 nothing to change later. Widening the allowlist (Option 3, not taken)
 would have been reversible in one commit but was not attempted.
+
+**Question 1 RESOLVED, 2026-09-11 (b1-land, CLI, autonomous run, item 2 of
+`docs/briefs/CLI-2026-09-11-autonomous.md`): Option 1, done.** Before
+fixing anything, answered the brief's own prior question from the
+artefact: every one of the 124 entries in `test/.mutate-results.json`
+carries `"method": "_mutcheck.mjs ..."` — zero used `scripts/mutate.mjs`
+itself, so no already-published mutation evidence was ever at risk. The
+fix turned out larger than "one line": the bug was in TWO places in
+`mutate.mjs` (not one — the `all` array feeding the stale-`expect`-
+reference check has the identical flaw), plus an independent THIRD copy
+in `scripts/gen-test-count.mjs` (harmless for `onlyTheCountClaim`'s own
+correctness, since `COUNT_CLAIM_TEST` has no early parenthetical, but
+silently corrupting its own diagnostic failure listing). Fixed by
+extracting one shared, tested `scripts/extract-test-titles.mjs`, imported
+by all three files (plus `_mutcheck.mjs`, whose own copy was already
+correct but is now the same function rather than a fourth independent
+one) — full detail, verification and mutation-CAUGHT proof in the commit
+`a69027a`.
+
+**Question 2 REMAINS OPEN**, unaffected by the fix above: whether new,
+`_mutcheck.mjs`-verified controls should get a lighter-weight path into
+`test/mutationSummary.generated.json` given the authoritative
+`mutate.mjs --all`/`--id` path is still blocked by 46-47 unrelated,
+mostly already-decision-tracked pre-existing suite failures, regardless
+of this regex now being correct. `test/mutationEvidence.test.ts`'s own
+two sub-tests remain red for this reason, now covering more manifest
+entries than when this decision was first written.
+
+## 11. Phase 1's "clear the site" cannot fully happen until Phase 2 exists — item 1's own scope came back far narrower than the brief expected, and that is a finding, not a shortfall.
+
+**The question, stated as one:** should a future Phase 1 continuation (or Phase 2 itself) do the decoupling work needed to fully clear the old world, or does clearing wait, as this run left it, until Phase 2's flat board and terrain genuinely replace what the old renderer currently provides?
+
+**What was found, this run (Phase 1 rebuild lane, `rebuild` branch, 2026-09-13):** `docs/briefs/PHASE-1-rebuild.md` item 1 named four files as "the old world" to quarantine. A blind plan review (`rule://reviewer-independence`), dispatched before any file moved, found that `public/city-render.js` — and everything it privately depends on (`layout.js`, `instance-groups.js`, `layout-fits.js`) — is not a dead demo page. It is the code `public/index.html`, the live product's real entry point, actually renders today, reached through a dynamic `import()` this project's own dependency-graph tool (`scripts/lib/module-graph.mjs`) cannot see. `public/city-plan.js` is load-bearing for the SAME live page via `terrain.js`, `world-render-3d.js`, `board-adapter.js` and `buildings.js`. Full derivation: `docs/specs/PHASE1-SITE-INVENTORY.md`.
+
+**Consequence:** only `public/road-network.js` — genuinely orphaned, checked both statically and for dynamic imports — was safe to quarantine this pass. Item 2 retired the four tests whose only subject that was. Everything else REBUILD-PLAN's "Goes" list names (the old-world renderer, the current board's generated content, the models/kitbash pipeline) is real, dependency-graph-verified, currently live, and cannot move without either taking the live site's only rendered content away with nothing to replace it, or writing replacement/decoupling code under a phase whose own brief says not to build anything.
+
+**What was done in the meantime:** the inventory document is corrected in place (a loud CORRECTION block, not a silent rewrite) rather than left wrong. A lesson is opened (`process_append_lesson`, id `dynamic-import-blind-spot`) naming the tool gap itself, since `docs/MODULE-MAP.md` and `test/deadExports.test.ts`'s own reachability gate share the same blind spot and could be silently wrong wherever else a dynamic import exists in this codebase — not yet checked beyond this one instance.
+
+**Recommendation:** option — treat this as expected and correctly sequenced, not a shortfall to correct. REBUILD-PLAN's own Phase 2 order (2.1 flat board, 2.2 placement, 2.8 re-point the shell) is exactly the work that removes the old renderer's reason to exist; clearing it earlier would mean either a broken live site or unauthorised Phase 1 construction. The decision that is genuinely open: whether a dedicated audit of `scripts/lib/module-graph.mjs`'s dynamic-import blind spot (checking whether any OTHER file in this codebase is live only through a dynamic import, the way `city-render.js` was) happens now, as a standalone Phase 1 addendum, or waits and is folded into Phase 2's own work.
+
+**Reversibility:** fully reversible either way — nothing was built, one file was quarantined (retained, not deleted), and the finding is documented rather than acted on unilaterally.

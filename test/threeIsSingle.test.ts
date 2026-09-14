@@ -72,7 +72,7 @@ test("both spellings of the three import are the same module", () => {
   (box.material as { dispose(): void }).dispose();
 });
 
-test("the importmap sends bare three to the file the tests alias to", () => {
+test("the importmap sends bare three to the file the tests alias to", { skip: "BLOCKED (deliberate, temporary): index.html is a minimal holding page with no importmap, 2026-09-13, Phase 1 'take it all down' (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md) -- it loads no three.js at all right now. Phase 2 restores this when the shell is re-pointed at the new board." }, () => {
   // The alias in run.mjs is only correct as long as it agrees with the page. If
   // someone re-vendors three at a new path and updates index.html, this fails
   // rather than letting the tests keep exercising a file the page stopped using.

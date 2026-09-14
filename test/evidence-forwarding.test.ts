@@ -149,7 +149,7 @@ test("security probes: judges reject uninvoked/fail-open execution and classify 
   assert.equal(cpuProbe.judge({ invoked: false, error: "CPU deadline reached" }), true, "cpu probe must accept CPU deadline error");
 });
 
-test("index.html SSE verification calculation: accurately sums regression and criteria passed/total", async () => {
+test("index.html SSE verification calculation: accurately sums regression and criteria passed/total", { skip: "BLOCKED (deliberate, temporary): index.html is a minimal holding page with no SSE verification UI at all, 2026-09-13, Phase 1 'take it all down' (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md)." }, async () => {
   const fs = await import("node:fs");
   const html = stripSourceComments(fs.readFileSync("public/index.html", "utf-8"));
   assert.match(html, /Number\(d\.regressionPassed\s*\|\|\s*0\)\s*\+\s*Number\(d\.criteriaPassed\s*\|\|\s*0\)/, "must dynamically sum regressionPassed and criteriaPassed");

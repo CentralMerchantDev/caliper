@@ -1,0 +1,27 @@
+Phase 1 takedown, step 6 -- quarantine public/city-plan.js itself, now that
+its two kept dependents' real needs (world-scale.js's WORLD, buildings.js's
+PLOT_CLASSES, both extracted verbatim in step 1) and world.js's generateWorld
+dependency (cut in step 2) are already handled.
+
+How it is known to be fixed: npm run typecheck -- clean. A direct scan of
+every public/*.js file's own static import specifiers against the real
+filesystem (using this project's own scripts/lib/module-graph.mjs, not a
+second parser) finds exactly ONE broken import left in the whole of
+public/ -- public/board-adapter.js's own `import { ROADS } from
+"./city-plan.js"`. Everything the prior session's inventory and this
+session's surgery touched (terrain.js, world-render-3d.js, buildings.js,
+world.js) resolves cleanly. board-adapter.js quarantines next, per the
+plan's own order -- not fixed here, because its own real call site is
+inside the now-dormant _buildCityBase and it has no other purpose.
+
+test/terrainLandmassOwnership.test.ts's KNOWN_STATIC_IMPORTERS is
+deliberately NOT touched in this commit -- its own scan finds files by
+SOURCE TEXT, not by whether city-plan.js exists at the path they import from,
+so the four test files it names (cityConnectivity, cityWorld, worldAliasing,
+worldSpec) still match until those test files themselves are retired at
+step 10. Updating the list now would jump ahead of the tree it is supposed
+to describe.
+
+What is still open: public/board-adapter.js, public/city-live-world.js,
+public/city.html; the index.html holding page; every test's individual
+retire-or-block disposition.

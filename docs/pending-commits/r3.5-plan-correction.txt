@@ -1,0 +1,34 @@
+Land R3.5 -- the board is the default render, not just drawable -- a plan
+correction written from outside this lane (Cowork), item 1 of this run's
+own brief (docs/briefs/CLI-2026-09-11-autonomous.md).
+
+CHECKED, NOT TAKEN ON FAITH: the two perf-gate numbers this edit cites
+(culling 65.8% against a <40% ceiling, 7,851 draw calls against <=900)
+match PART 1's own existing B3 line exactly ("Board-drawing broke two
+standing perf gates when tried un-gated (measured: culling 65.8% vs <40%,
+7,851 draw calls vs <=900)") -- internally consistent, not a number
+invented for this edit. The new R3.5 line and the MINIMUM SENDABLE CUT
+correction ("the archipelago renders" -> "by default, with no query
+string") both follow from that same, already-recorded fact: B3 satisfies
+"the archipelago renders" literally while the board stays switched off for
+every real visitor, which is exactly the gap the old MINIMUM SENDABLE CUT
+sentence was silent about.
+
+A CAVEAT WORTH RECORDING, NOT LOAD-BEARING FOR THIS COMMIT: those two
+numbers are a historical, one-off measurement (neither
+test/cullingRatio.test.ts nor test/regressionGate.test.ts references
+`board=1`/`SHOOT_BOARD` at all -- confirmed by grep -- so no standing gate
+re-measures them). Re-ran both standing gates just now, against the board
+this lane regenerated earlier tonight (21,007 pieces, was 35,365): BOTH
+GREEN for the default, board-OFF path (culling 31.90%, well under 40%;
+285/484/271 draw calls, well under 900) -- consistent with, not
+contradicting, R3.5's own premise (the board stays gated off specifically
+because turning it on breaks these thresholds). Whether the SPECIFIC
+65.8%/7,851 figures still hold with board=1 on, against today's smaller,
+differently-shaped board, is unmeasured -- that re-investigation is this
+run's own §12 item 4 (the fallback list), not item 1's job. Not chased
+further here; the qualitative fact R3.5 states (board is gated off,
+blocking two perf gates) is unaffected either way.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01BPxmE9Xkfsd13S2rxiXEqf
