@@ -1373,6 +1373,30 @@
       "find": "    cornerOffsets[index(x, y) * 4 + corner] = metres;",
       "replace": "    cornerOffsets[index(x, y) * 4] = metres;",
       "expect": "setCornerOffset writes exactly the ONE corner named, leaving the other three of the same cell untouched"
+    },
+    {
+      "id": "scoring-catalogue-has-base-value",
+      "guards": "S2's own gate (docs/briefs/CLI-2026-09-14-scoring.md item 2.1): the validator refuses an entry missing baseValue.",
+      "file": "public/catalogue-validator.js",
+      "find": "  if (!entry || !Number.isInteger(entry.baseValue)) {\n    push(\"has-base-value\", `baseValue is ${JSON.stringify(entry && entry.baseValue)}, not an integer -- S2 requires one on every entry`);\n  }",
+      "replace": "  if (false) {\n    push(\"has-base-value\", `baseValue is ${JSON.stringify(entry && entry.baseValue)}, not an integer -- S2 requires one on every entry`);\n  }",
+      "expect": "RULE 7 (has baseValue): a missing baseValue is caught"
+    },
+    {
+      "id": "scoring-catalogue-has-adjacency",
+      "guards": "S2's own gate: the validator refuses an entry whose adjacency is missing or not a plain object (an array, or null -- typeof null === 'object' is the specific trap this check must not fall into).",
+      "file": "public/catalogue-validator.js",
+      "find": "    const isPlainObject = typeof adjacency === \"object\" && adjacency !== null && !Array.isArray(adjacency);",
+      "replace": "    const isPlainObject = typeof adjacency === \"object\";",
+      "expect": "RULE 8: adjacency as null is caught -- typeof null === 'object' is the exact trap"
+    },
+    {
+      "id": "scoring-catalogue-adjacency-values-are-integers",
+      "guards": "S2's own gate: every value inside adjacency must be an integer, and every bad one is reported, not just the first.",
+      "file": "public/catalogue-validator.js",
+      "find": "        if (!Number.isInteger(value)) {\n          push(\"adjacency-values-are-integers\", `adjacency[\"${key}\"] is ${JSON.stringify(value)}, not an integer`);\n        }",
+      "replace": "        if (false) {\n          push(\"adjacency-values-are-integers\", `adjacency[\"${key}\"] is ${JSON.stringify(value)}, not an integer`);\n        }",
+      "expect": "RULE 8: every bad value inside adjacency is reported, not just the first"
     }
   ]
 }
