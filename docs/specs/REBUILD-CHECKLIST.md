@@ -321,11 +321,41 @@ proven, current, and yours to build on.
     Gate: place several pieces, save, reload, render — byte-identical shot. RED
     is any placement lost, moved, or silently dropped. `loadBoard()` returns
     `{board, failures}` — **surface the failures; do not swallow them.**
-[ ] RB5 (BLD) The ground stops reading as desert — REBUILD-PLAN.md R1, Mark 2026-09-15
-    After `13-street-level.png` Mark's read was that the scene reads as buildings
-    in a dust bowl: bare earth everywhere, a warm sand fog tint, and a hard pale
-    band at the horizon. Sky and ground extent were real improvements; the ground
-    MATERIAL is now the lever.
+[x] RB5 (BLD) The ground stops reading as desert — REBUILD-PLAN.md R1, Mark 2026-09-15
+    MEASURED FIRST, NOT ASSUMED: the existing ground texture (manifest's own
+    "ground-grass") has a real mean RGB of (172,148,121) -- a warm dirt/sand
+    tone despite its own filename, not green. Darkening it further (4.3's
+    existing mechanism) could only ever read as darker dirt, never pavement --
+    the texture choice itself, not just its tint, was the actual lever.
+    A second, more neutral ground layer added: 04-ground-paved.png, an
+    ALREADY-vendored, ALREADY CC0-licensed gravel texture (public/vendor/
+    textures/gravel/, Poly Haven, provenance already on file) -- no new asset
+    sourcing. `look-proof-scene.html`'s new `addGroundLayerAttribute` assigns
+    this layer PER VERTEX (reusing 4.3's own distanceOutsideFootprint) within
+    PAVING_RADIUS=6m of any real footprint; earth beyond it. Deliberately NOT
+    the road pack's own layer -- N1c already found that a large stretched area
+    against a sprite-sheet atlas bands.
+    Also retuned, disclosed together since they must move together: the fog
+    colour (0xf2ddb8 -> 0xe6dccb, lighter/less saturated) and the sky's own
+    horizon stop, matched EXACTLY so N1b's seamless ground-into-sky fade does
+    not grow a visible seam. A third sky gradient stop (0.8) spreads the fade
+    further up the sky instead of leaving a flat plateau in the bottom 15%.
+    BEFORE/AFTER: `13-street-level.png` (untouched -- the exact shot Mark
+    judged) / `21-ground-material.png`. HONEST READ: the paving is a real,
+    clearly visible change -- a continuous grey ground area now connects the
+    four pieces, replacing uniform dirt on every side. The fog/sky retune is
+    the more subtle of the two -- less saturated, a smoother fade -- but still
+    present in the same pair.
+    Because the ground/sky change is global (not HERO_MODE-scoped), RB1-RB4's
+    own already-gated shots (14-20) were re-rendered to match -- their own
+    STRUCTURAL evidence (draw calls, resolved/skipped counts, RELOAD-FAILURES,
+    GHOST-COMMIT) is unchanged and re-confirmed, only ground pixels differ;
+    those items' own gates are not reopened. `19-reload.png` re-checked
+    byte-identical to the refreshed `14-board.png` -- RB4's own gate still
+    holds. `13-street-level.png` deliberately left untouched (it is RB5's own
+    BEFORE reference) -- caught mid-work via routine `git status` after an
+    early, unintended re-render, restored via `git checkout HEAD --` before
+    anything was committed.
     A city needs urban ground — paving where there should be paving, earth only
     where there should be earth.
     Gate: the pair of images, judged by Mark. No numeric gate; inventing one
