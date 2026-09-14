@@ -1364,6 +1364,78 @@
       "find": "logarithmicDepthBuffer: true, preserveDrawingBuffer: true });",
       "replace": "logarithmicDepthBuffer: true });",
       "expect": "look-proof-scene.html sets preserveDrawingBuffer: true on its WebGLRenderer -- required for the shoot script's toDataURL() read, and a real regression once"
+    },
+    {
+      "id": "world-layer-locked-area-refuses-entry",
+      "guards": "W2's own gate, named directly in the world-layer brief: 'an area that can be entered while LOCKED' is RED. createAreaWorld.enter() checks the target area's real state before activating it.",
+      "file": "public/area.js",
+      "find": "    if (a.state !== AREA_STATE.OPEN) {\n      return { ok: false, reason: \"locked\", detail: `\"${id}\" is LOCKED and cannot be entered` };\n    }",
+      "replace": "    if (false) {\n      return { ok: false, reason: \"locked\", detail: `\"${id}\" is LOCKED and cannot be entered` };\n    }",
+      "expect": "GATE: an area that is LOCKED cannot be entered"
+    },
+    {
+      "id": "world-layer-occupied-rect-rotation-swap",
+      "guards": "C2.1's own gate: 'a footprint that survives a rotation incorrectly'. occupiedRect() must swap width/depth at 90 and 270, never just at 90.",
+      "file": "public/area-board.js",
+      "find": "  const swapped = rotation === 90 || rotation === 270;",
+      "replace": "  const swapped = rotation === 90;",
+      "expect": "GATE: occupiedRect at 90 and 270 swaps width and depth -- a 2x3 becomes 3x2"
+    },
+    {
+      "id": "world-layer-occupancy-matches-derived-rect",
+      "guards": "C2.1's own gate: 'an occupancy index that disagrees with the derived rect'. place() must write the id into every cell of the verdict's own rect, derived from the same evaluatePlacement() the ghost uses -- not a separately-computed one.",
+      "file": "public/area-board.js",
+      "find": "    for (const { x, y } of cellsOf(verdict.rect)) occupancy[index(x, y)] = id;",
+      "replace": "    for (const { x, y } of cellsOf(verdict.rect)) { if (x === verdict.rect.xMin && y === verdict.rect.yMin) continue; occupancy[index(x, y)] = id; }",
+      "expect": "GATE: after placing a piece, the occupancy index names EXACTLY the derived rect's cells -- no more, no less"
+    },
+    {
+      "id": "world-layer-resolve-cell-scoped-to-its-own-area",
+      "guards": "W6's own gate: 'a piece resolving to the wrong area'. resolveCell must look up the board for the ADDRESS's own areaId, never any other resident board.",
+      "file": "public/world-layer.js",
+      "find": "  function resolveCell({ areaId, x, y }) {\n    const board = boards.get(areaId);",
+      "replace": "  function resolveCell({ areaId, x, y }) {\n    const board = boards.values().next().value;",
+      "expect": "GATE: a cell address resolves ONLY within its own area's board -- a non-resident area must not see a resident SIBLING area's real piece at the same coordinates"
+    },
+    {
+      "id": "world-layer-reenter-reloads-not-assumed-resident",
+      "guards": "W5's own load/unload contract: leaving must actually discard the board so a re-entry genuinely reloads rather than trusting stale residency.",
+      "file": "public/world-layer.js",
+      "find": "    const { left } = areaWorld.leave();\n    if (left) boards.delete(left);",
+      "replace": "    const { left } = areaWorld.leave();",
+      "expect": "GATE (W5): re-entering after leaving reloads -- the loader runs again, proving nothing is assumed still resident"
+    },
+    {
+      "id": "world-layer-commit-inert-on-invalid-ghost",
+      "guards": "C2.2 item 3's own gate: click is inert on an invalid ghost. commit() must refuse rather than placing anyway.",
+      "file": "public/placement.js",
+      "find": "    if (!ghost.valid) return { ok: false, reason: \"inert\", detail: `placement is invalid: ${ghost.reason}` };",
+      "replace": "    if (false) return { ok: false, reason: \"inert\", detail: `placement is invalid: ${ghost.reason}` };",
+      "expect": "GATE (C2.2 item 3): commit is INERT on an invalid ghost -- refused, and the board is untouched"
+    },
+    {
+      "id": "world-layer-tombstone-blocks-regeneration",
+      "guards": "C2.5's own gate, verbatim: 'RED is a removal that comes back'. loadBoard must skip a generated piece whose anchor cell is tombstoned.",
+      "file": "public/placement.js",
+      "find": "      if (tombstoneSet.has(cellIndex)) continue; // bulldozed -- do not restore it",
+      "replace": "      if (false) continue; // bulldozed -- do not restore it",
+      "expect": "GATE (C2.5): a removal does NOT come back -- place a generated piece, bulldoze it, save, reload with the SAME generator, and it stays gone"
+    },
+    {
+      "id": "world-layer-loadboard-reports-failures-not-silent-drop",
+      "guards": "Blind audit finding (2026-09-14, world-layer branch): loadBoard() used to discard a placement that failed to re-apply (catalogue drift, a shrunk board) with no signal at all. Now every refusal is pushed to `failures`.",
+      "file": "public/placement.js",
+      "find": "    const result = board.place(p.typeId, p.anchorCell, p.rotation, { id: p.id, origin: \"player\" });\n    if (!result.ok) failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });",
+      "replace": "    const result = board.place(p.typeId, p.anchorCell, p.rotation, { id: p.id, origin: \"player\" });",
+      "expect": "GATE: a saved placement that fails to re-apply on load is reported in failures, not silently dropped"
+    },
+    {
+      "id": "world-layer-corner-offset-per-corner-not-shared",
+      "guards": "Blind audit finding (2026-09-14, world-layer branch): cornerOffsets was allocated but unreachable. Now setCornerOffset must write only the one corner named -- not all four, and not the wrong cell.",
+      "file": "public/area-board.js",
+      "find": "    cornerOffsets[index(x, y) * 4 + corner] = metres;",
+      "replace": "    cornerOffsets[index(x, y) * 4] = metres;",
+      "expect": "setCornerOffset writes exactly the ONE corner named, leaving the other three of the same cell untouched"
     }
   ]
 }
