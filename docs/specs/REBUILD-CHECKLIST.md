@@ -316,7 +316,7 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     placement.js's commit()/remove() -- a future item. 103/103 tests, tsc
     clean, 7/7 mutations CAUGHT including the checklist's own named gate
     verbatim. Gate ledger: docs/GATE-LEDGER.jsonl.
-[ ] S4 (CLI) valueAt, valueIfPlaced, and the two worths — SCORING-MODEL §3.2 and §3.3
+[x] S4 (CLI) valueAt, valueIfPlaced, and the two worths — SCORING-MODEL §3.2 and §3.3
     `valueAt(cell)` is desirability per unit area — pure location, the ghost
     readout. On a VACANT cell it is terrain-only: nothing occupies the cell to
     receive an adjacency bonus. That resolution is DECISIONS #12 point 4 and is
@@ -332,6 +332,29 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     Gate: `valueIfPlaced` leaves the board byte-identical — RED is any mutation
     escaping a speculative call — AND a test asserting the house/condo
     inversion holds in both directions on the same cell.
+    DONE, commit a27f595 (branch scoring). unitQuality built as a THIRD
+    generated catalogue field (scripts/migrate-catalogue-s2-fields.mjs's
+    unitQualityFor(), 1/sqrt(massing tiers) — DECISIONS-FOR-MARK.md #14),
+    never hand-authored, never folded into baseValue, per Mark's own
+    instruction. value() extended with an optional categoryOverride param
+    rather than duplicated. Both gates verified: byte-identical (mutation-
+    tested — the original 3-cell test let a real board.place() mutation
+    SURVIVE because all 3 cells were unplaceable anyway; fixed with a 4th,
+    genuinely placeable cell) and the inversion (house ~1.22x per-unit,
+    condo ~4.9x total, on real small-house-a/apartment-block-a shapes).
+    catalogue-validator.js rule 9 (already in code from a prior pass) had
+    ZERO test coverage — closed with 6 new tests, watched red first.
+    119/119 targeted tests, tsc clean, 3/3 new mutations CAUGHT. Gate
+    ledger: docs/GATE-LEDGER.jsonl. KNOWN GAP, not closed by this item:
+    test/mutationEvidence.test.ts's formal manifest (test/.mutate-results.json
+    / test/mutationSummary.generated.json) was already stale before S4
+    (133/168 and 124/168 covered); S4's 3 new mutations could not be run
+    through scripts/mutate.mjs's own pipeline this session — 3 attempts
+    each stalled at 0% CPU during its baseline run, root-caused to a
+    concurrent unrelated Claude session actively running the same script
+    against a different repo on this machine. Ad-hoc scripts/_mutcheck.mjs
+    evidence substituted (see commit message); formal manifest still needs
+    a `mutate.mjs --resume` pass once the machine is uncontended.
 [ ] S5 (CLI) The on-screen readout — REBUILD-PLAN.md S4. Was blocked; a surface now EXISTS.
     BLD built `public/look-proof-scene.html` on codex-lane. That is a real
     render surface, so this is no longer structurally blocked — but it is on
