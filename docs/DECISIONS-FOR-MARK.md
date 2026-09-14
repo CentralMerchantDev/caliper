@@ -1386,3 +1386,82 @@ description names as the reason gate records exist at all.
 **Reversibility:** fully reversible as left — no catalogue edits, no
 merge attempted. A merge, once done, is not trivially reversible on a
 shared branch; better decided once than attempted and walked back.
+
+---
+
+## 15. BO7A's own `street-cross` binding is very likely wrong — verified by rendering, not by trusting the filename
+
+**The question.** `scripts/link-catalogue-meshes.mjs`'s own MESH_BINDINGS
+binds `"street-crossing": "street-cross"`, using
+`public/vendor/kits/kenney-city-kit-roads/road-crossing.glb` — and its own
+comment already flagged this as "LEAST CERTAIN OF THE THREE ROAD
+BINDINGS": *"'crossing' reads as a 4-way intersection ('cross'), not a
+3-way ('t') — but nothing sourced confirms this specific model's own arm
+count."* Is `road-crossing.glb` really a 4-way intersection, and if not,
+should the binding be corrected?
+
+**What was found tonight, by looking, not guessing.** Working CP1 (close
+the catalogue's mesh gap), I downloaded the same already-licensed CC0 zip
+this pack's own entry in `public/vendor/kits/LICENCES.md` already
+documents (`kenney_city-kit-roads.zip`, same URL, re-verified CC0 on the
+same page) to see what shapes the full pack actually contains beyond the
+6 files already vendored, and rendered several candidate pieces top-down
+to check their real geometry before drawing any conclusion from a
+filename. Three renders, side by side:
+
+- `road-crossing.glb` (what `street-cross` is CURRENTLY bound to):
+  sidewalk bands on only TWO opposite edges, and a ladder/rung pattern
+  down the centre — a STRAIGHT ROAD SEGMENT WITH A PEDESTRIAN CROSSWALK,
+  not a vehicle intersection at all. It has no arms in the perpendicular
+  direction.
+- `road-crossroad.glb`: sidewalk corner pieces at all FOUR corners, with
+  road markings extending toward all four edges symmetrically — a real
+  4-way intersection.
+- `road-intersection.glb`: a through-road band on one side, corner
+  sidewalk pieces on only two of the four corners, and a single marking
+  branching off one edge — a real T-junction (3-way).
+
+So `road-crossroad.glb`, not `road-crossing.glb`, is the piece that
+actually matches what the catalogue's own `street-cross` entry means. The
+existing binding's own "least certain" flag was justified — the filename
+guess (a `-crossing` glb reading as a 4-way "cross") was wrong in a
+specific, now-demonstrated way, not just theoretically uncertain.
+
+**Why this was not fixed unilaterally.** `road-crossroad.glb` is not
+among the files this pack's own already-committed subset carries — it
+would need to be extracted from the pack's full zip and newly committed,
+which is a new asset import, not a correction to already-vendored code.
+Asked directly, and answered: **new CC0 asset sourcing is Mark's call
+while he is out**, the same standing boundary that already governs
+`public/vendor/kits/LICENCES.md`'s own "Policy for Future Imports." All
+files extracted for this verification (`road-crossroad.glb`,
+`road-curve.glb`, `road-end.glb`, `road-end-round.glb`,
+`road-intersection.glb`, `road-square.glb`) were untracked, never
+committed, and have been deleted from the working tree along with the
+scratch inspection page used to render them — nothing from this
+investigation persists on disk except this entry and the screenshots
+that led to it (since discarded with the rest).
+
+**What was done in the meantime.** The binding was left exactly as it
+is — `street-cross` still points at `road-crossing.glb`. CP1 (close the
+mesh gap) stays open; this one entry's own correction, and the other 37
+unbound entries CP1 was scoped to close, all wait on the same
+authorisation.
+
+**Recommendation:** authorise re-fetching `road-crossroad.glb` (and, while
+sourcing is open anyway, `road-intersection.glb` for the catalogue's
+`-t` entries and `road-end.glb`/`road-end-round.glb` for the `-end`
+entries — all four are real 4-way/T/end shapes this same already-licensed
+pack actually contains, verified the same way) from the exact URL
+`public/vendor/kits/LICENCES.md` already has on file for this pack, log
+their SHA-256s the same way the existing entries are logged, and correct
+`street-cross`'s own binding in the same commit. This unblocks a large
+fraction of CP1's own 26 unbound road entries at once (the four shapes
+above, reused across the lane/street/avenue/highway width tiers via the
+same non-uniform `fitToFootprint` scaling every existing binding already
+relies on) rather than one entry at a time.
+
+**Reversibility:** fully reversible as left — no binding changed, no new
+asset committed. Re-fetching the same already-verified-CC0 URL and
+re-running the idempotent `link-catalogue-meshes.mjs` is itself a cheap,
+reversible action once authorised.
