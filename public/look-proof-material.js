@@ -10,6 +10,12 @@
 // that was already there.
 import * as THREE from "three";
 
+// Shared with look-proof-scene.html's own shadow-map light camera -- one
+// source of truth for the light direction, so the shadow the ground
+// receives always agrees with the shading that already reads this same
+// direction. Points TOWARD the light (surface-to-light convention, N.L).
+export const LIGHT_DIR = new THREE.Vector3(0.45, 0.78, 0.35).normalize();
+
 export function createLookProofMaterial(arrayTexture) {
   const material = new THREE.ShaderMaterial({
     // sampler2DArray and texture(sampler2DArray, vec3) do not exist in
@@ -21,7 +27,7 @@ export function createLookProofMaterial(arrayTexture) {
     glslVersion: THREE.GLSL3,
     uniforms: {
       uArrayTex: { value: arrayTexture },
-      uLightDir: { value: new THREE.Vector3(0.45, 0.78, 0.35).normalize() },
+      uLightDir: { value: LIGHT_DIR.clone() },
       uLightColor: { value: new THREE.Color(1.0, 0.96, 0.88) },
       uAmbientColor: { value: new THREE.Color(0.28, 0.30, 0.34) },
       // Mechanism toggles, each false until its own commit turns it on.
@@ -38,15 +44,27 @@ export function createLookProofMaterial(arrayTexture) {
       // 4.3 -- the one join, tier 2 (a ground decal sized to the
       // footprint). Turned on here, its own commit.
       uJoinDecal: { value: true },
+      // L11 -- cast shadows, a sixth mechanism, not one of R1's own four
+      // (R1 lists exactly four; this is the gap the look-proof verdict
+      // named: nothing in 01-07 throws a shadow onto anything). Turned on
+      // here, its own commit. uShadowMap/uLightViewProjectionMatrix are
+      // filled in per-frame by look-proof-scene.html's own shadow pass,
+      // not at material-construction time -- the light camera's matrix
+      // is not known until the scene's real bounding box is.
+      uCastShadows: { value: true },
+      uShadowMap: { value: null },
+      uLightViewProjectionMatrix: { value: new THREE.Matrix4() },
     },
     vertexShader: /* glsl */ `
       in float layerIndex;
       in float groundDecal;
+      uniform mat4 uLightViewProjectionMatrix;
       out vec3 vNormal;
       out vec3 vWorldPos;
       out vec2 vUv;
       out float vLayer;
       out float vGroundDecal;
+      out vec4 vShadowCoord;
       void main() {
         vNormal = normalize(normalMatrix * normal);
         vec4 worldPos = modelMatrix * vec4(position, 1.0);
@@ -54,6 +72,7 @@ export function createLookProofMaterial(arrayTexture) {
         vUv = uv;
         vLayer = layerIndex;
         vGroundDecal = groundDecal;
+        vShadowCoord = uLightViewProjectionMatrix * worldPos;
         gl_Position = projectionMatrix * viewMatrix * worldPos;
       }
     `,
@@ -70,12 +89,38 @@ export function createLookProofMaterial(arrayTexture) {
       uniform bool uContactDarkening;
       uniform bool uValueSplit;
       uniform bool uJoinDecal;
+      uniform bool uCastShadows;
+      uniform sampler2D uShadowMap;
       in vec3 vNormal;
       in vec3 vWorldPos;
       in vec2 vUv;
       in float vLayer;
       in float vGroundDecal;
+      in vec4 vShadowCoord;
       out vec4 fragColor;
+
+      // A small, self-contained shadow-map lookup -- not three.js's own
+      // built-in lights/shadow chunk system, which assumes a material
+      // built around its standard light-loop structure this ShaderMaterial
+      // deliberately does not use (C1.6: "replace only the lighting
+      // equation"). Percentage-closer filtering over a 3x3 kernel, a
+      // depth bias tuned against this scene's own shadow-map texel size to
+      // avoid acne without letting shadows detach from their casters.
+      float sampleShadow(vec4 shadowCoord) {
+        vec3 proj = shadowCoord.xyz / shadowCoord.w;
+        proj = proj * 0.5 + 0.5;
+        if (proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0 || proj.z > 1.0) return 1.0;
+        float bias = 0.0015;
+        float shadow = 0.0;
+        vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0));
+        for (int x = -1; x <= 1; x++) {
+          for (int y = -1; y <= 1; y++) {
+            float depth = texture(uShadowMap, proj.xy + vec2(float(x), float(y)) * texel).r;
+            shadow += (proj.z - bias > depth) ? 0.4 : 1.0;
+          }
+        }
+        return shadow / 9.0;
+      }
 
       void main() {
         vec3 albedo = texture(uArrayTex, vec3(vUv, vLayer)).rgb;
@@ -106,7 +151,12 @@ export function createLookProofMaterial(arrayTexture) {
           lightColor = mix(warmLit, uLightColor, smoothstep(0.15, 0.6, lambert));
         }
 
-        vec3 lit = albedo * (ambient + lightColor * lambert);
+        // Cast shadows reduce DIRECT light only, never ambient -- a
+        // fragment in shadow still reads the sky/bounce term, consistent
+        // with the warm-cool terminator's own "never to black" rule
+        // rather than fighting it.
+        float shadowFactor = uCastShadows ? sampleShadow(vShadowCoord) : 1.0;
+        vec3 lit = albedo * (ambient + lightColor * lambert * shadowFactor);
 
         if (uRimSeparation) {
           // Rim HIGHLIGHTS, not dark outlines -- a Fresnel-masked lobe,

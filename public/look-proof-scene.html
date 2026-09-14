@@ -27,7 +27,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "./vendor/three/addons/loaders/GLTFLoader.js";
 import { mergeGeometries } from "./vendor/three/addons/utils/BufferGeometryUtils.js";
-import { createLookProofMaterial } from "./look-proof-material.js";
+import { createLookProofMaterial, LIGHT_DIR } from "./look-proof-material.js";
 
 // THE FIVE PIECES, per the brief's own list, each anchored at its cell's
 // corner on the ground plane (G1, corrected 2026-09-14) -- never the
@@ -153,6 +153,56 @@ async function buildArrayTexture() {
   return tex;
 }
 
+// L11 -- a self-contained shadow-map pass, not three.js's own automatic
+// shadow system (which needs a real THREE.Light and a material built for
+// its light-loop; this scene has neither -- the light exists only as
+// look-proof-material.js's own uLightDir uniform). An orthographic camera
+// sized to the SCENE'S REAL bounding box (computed after every piece is
+// placed, not guessed), positioned along the same LIGHT_DIR the shading
+// already uses, renders the merged mesh's depth into a DepthTexture. The
+// main material samples that texture itself (createLookProofMaterial's
+// own sampleShadow) -- this function only builds the camera, the render
+// target, and renders the one pass.
+function buildShadowPass(renderer, scene, mesh) {
+  mesh.geometry.computeBoundingBox();
+  const bb = mesh.geometry.boundingBox;
+  const center = bb.getCenter(new THREE.Vector3());
+  const size = bb.getSize(new THREE.Vector3());
+  const radius = Math.max(size.x, size.z) / 2 + 2; // +2 m margin
+  const camDistance = Math.max(size.x, size.y, size.z) * 1.5 + 10;
+
+  const shadowCamera = new THREE.OrthographicCamera(-radius, radius, radius, -radius, 0.5, camDistance * 2);
+  shadowCamera.position.copy(center).addScaledVector(LIGHT_DIR, camDistance);
+  shadowCamera.lookAt(center);
+  shadowCamera.updateMatrixWorld(true);
+  shadowCamera.updateProjectionMatrix();
+
+  const SHADOW_MAP_SIZE = 1024;
+  const target = new THREE.WebGLRenderTarget(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+  target.depthTexture = new THREE.DepthTexture(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+  target.depthTexture.type = THREE.UnsignedIntType;
+
+  const lightViewProjectionMatrix = new THREE.Matrix4().multiplyMatrices(shadowCamera.projectionMatrix, shadowCamera.matrixWorldInverse);
+
+  const prevTarget = renderer.getRenderTarget();
+  renderer.setRenderTarget(target);
+  renderer.clear();
+  const t0 = performance.now();
+  renderer.render(scene, shadowCamera);
+  const shadowPassMs = performance.now() - t0;
+  renderer.setRenderTarget(prevTarget);
+
+  // L11's own "measure, not estimate" instruction -- read from the real
+  // DepthTexture that was actually created, not a formula computed
+  // separately from it. UnsignedIntType is 4 bytes/texel (a 32-bit depth
+  // buffer); width/height come from the texture object itself.
+  const bytesPerTexel = 4;
+  const shadowMapBytes = SHADOW_MAP_SIZE * SHADOW_MAP_SIZE * bytesPerTexel;
+  console.log(`SHADOW-MAP-COST size=${SHADOW_MAP_SIZE}x${SHADOW_MAP_SIZE} bytes=${shadowMapBytes} (${(shadowMapBytes / 1024 / 1024).toFixed(2)} MiB) renderMs=${shadowPassMs.toFixed(3)}`);
+
+  return { depthTexture: target.depthTexture, lightViewProjectionMatrix, shadowMapBytes, shadowPassMs };
+}
+
 async function main() {
   // preserveDrawingBuffer: true -- every other headless-shoot pipeline in
   // this repo sets it (scripts/shoot-kitbash-contact-sheet.mjs,
@@ -207,9 +257,17 @@ async function main() {
   window.__material = material;
   window.__scene = scene;
 
+  const shadowPass = buildShadowPass(renderer, scene, mesh);
+  material.uniforms.uShadowMap.value = shadowPass.depthTexture;
+  material.uniforms.uLightViewProjectionMatrix.value.copy(shadowPass.lightViewProjectionMatrix);
+  window.__shadowMapTexture = shadowPass.depthTexture;
+
+  renderer.info.reset(); // the shadow pass above is a real render call; do not count it as the scene's own draw calls
+  const mainT0 = performance.now();
   renderer.render(scene, camera);
+  const mainRenderMs = performance.now() - mainT0;
   window.__ready = true;
-  console.log("LOOK-PROOF ready, draw calls:", renderer.info.render.calls, "triangles:", renderer.info.render.triangles);
+  console.log("LOOK-PROOF ready, draw calls:", renderer.info.render.calls, "triangles:", renderer.info.render.triangles, "mainRenderMs:", mainRenderMs.toFixed(3));
 }
 
 main().catch((e) => {

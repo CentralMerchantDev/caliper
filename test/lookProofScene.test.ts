@@ -91,6 +91,23 @@ test("look-proof-scene.html bakes the join decal from real footprint geometry, n
   assert.match(SCENE_SRC, /addGroundDecalAttribute\(groundGeomRaw,\s*PIECES\)/, "the ground's own decal attribute is not built from the real PIECES list");
 });
 
+test("L11 cast shadows: ON by default, samples a real depth texture, and reduces direct light only (never ambient, never to black)", () => {
+  assert.match(MATERIAL_SRC, /uCastShadows:\s*\{\s*value:\s*true\s*\}/, "uCastShadows's default is not true -- 08-cast-shadows.png's own before/after pair has nothing to show if this mechanism is not actually on");
+  assert.match(MATERIAL_SRC, /uniform sampler2D uShadowMap/, "no sampler2D uShadowMap uniform -- shadow sampling needs a real depth texture, not sampler2DArray (that is the albedo array, a different texture)");
+  assert.match(MATERIAL_SRC, /lightColor \* lambert \* shadowFactor/, "shadowFactor must multiply the DIRECT light term (lightColor * lambert), not the whole `lit` expression -- multiplying everything would also darken the ambient term, fading shadows to black and breaking the warm-cool terminator's own 'never to black' rule");
+});
+
+test("look-proof-scene.html builds the shadow camera from the scene's own real bounding box, not a hardcoded guess, and shares LIGHT_DIR with the material rather than a second copy of the light direction", () => {
+  assert.match(SCENE_SRC, /import \{ createLookProofMaterial, LIGHT_DIR \} from "\.\/look-proof-material\.js"/, "look-proof-scene.html does not import LIGHT_DIR from the material -- a second, hand-copied light direction would silently drift from the one the shading actually uses");
+  assert.match(SCENE_SRC, /mesh\.geometry\.computeBoundingBox\(\)/, "the shadow camera's frustum is not sized from the mesh's own real bounding box");
+  assert.match(SCENE_SRC, /shadowCamera\.position\.copy\(center\)\.addScaledVector\(LIGHT_DIR/, "the shadow camera is not positioned along the shared LIGHT_DIR");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning uCastShadows must not satisfy the check above", () => {
+  const commentOnly = stripSourceComments("// uCastShadows: { value: true } used to be here before a regression removed it\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /uCastShadows:\s*\{\s*value:\s*true\s*\}/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
+
 test("look-proof-material.js's fragment shader actually samples a sampler2DArray, not a plain sampler2D", () => {
   assert.match(MATERIAL_SRC, /uniform\s+sampler2DArray\s+uArrayTex/, "the array-texture uniform is not declared as sampler2DArray");
   assert.match(MATERIAL_SRC, /texture\(uArrayTex,\s*vec3\(/, "the fragment shader does not sample uArrayTex with a vec3(uv, layer) lookup");
