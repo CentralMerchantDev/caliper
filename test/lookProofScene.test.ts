@@ -173,6 +173,13 @@ test("look-proof-scene.html imports PIECES/fitToFootprint from look-proof-pieces
   assert.match(SCENE_SRC, /from "\.\/look-proof-pieces\.js"/, "look-proof-scene.html does not import from the shared module -- a second, hand-typed PIECES list would drift from I2's own massing bake");
 });
 
+test("I2: overview-massing-scene.html imports the SAME shared PIECES list, and measures each piece's real height rather than guessing from footprint class", () => {
+  const massingSrc = stripHtmlComments(readFileSync(join(PUBLIC, "overview-massing-scene.html"), "utf8"));
+  assert.match(massingSrc, /from "\.\/look-proof-pieces\.js"/, "the massing bake does not import the shared PIECES list -- a second, independently-typed piece set would not be a real comparison against L12's own detailed scene");
+  assert.match(massingSrc, /geom\.boundingBox\.max\.y - geom\.boundingBox\.min\.y/, "piece height is not read from the real loaded geometry's own bounding box -- W4's own wording is 'height and footprint follow what is actually built there', not an assumed value per footprint class");
+  assert.match(massingSrc, /new THREE\.BoxGeometry\(p\.footprint\[0\], realHeight, p\.footprint\[1\]\)/, "the massing box is not sized from the real measured height");
+});
+
 test("scripts/normalise-kit-textures.mjs's SOURCES has 4 entries for L12's third pack", () => {
   const scriptSrc = stripSourceComments(readFileSync(join(PUBLIC, "..", "scripts", "normalise-kit-textures.mjs"), "utf8"));
   const sourceNameCount = (scriptSrc.match(/name:\s*"kenney-|name:\s*"ground-grass"/g) || []).length;

@@ -4,10 +4,14 @@
 // mechanism, which is dormant (city.html is quarantined, Phase 1 "take it
 // all down"). This is the same technique -- Chromium + SwiftShader, read
 // the canvas directly rather than through the compositor -- pointed at
-// public/look-proof-scene.html instead, for
+// public/look-proof-scene.html by default, for
 // docs/briefs/BLD-2026-09-14-look-proof.md's own before/after evidence.
 //
-//   node scripts/shoot-look-proof.mjs <output-name>
+//   node scripts/shoot-look-proof.mjs <output-name> [page.html]
+//
+// [page.html] defaults to look-proof-scene.html -- I2
+// (docs/briefs/OVERNIGHT-BLD-2026-09-14.md) reuses this same script for
+// overview-massing-scene.html rather than a third near-duplicate.
 import { chromium } from "playwright";
 import http from "node:http";
 import fs from "node:fs";
@@ -20,8 +24,9 @@ const OUT_DIR = process.env.SHOOT_OUT || path.join(ROOT, "docs/look-proof-shots"
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
 const outName = process.argv[2];
+const pageName = process.argv[3] || "look-proof-scene.html";
 if (!outName) {
-  console.error("usage: node scripts/shoot-look-proof.mjs <output-name>");
+  console.error("usage: node scripts/shoot-look-proof.mjs <output-name> [page.html]");
   process.exit(1);
 }
 
@@ -57,7 +62,7 @@ page.on("console", (m) => {
 });
 
 const t0 = Date.now();
-await page.goto(`http://127.0.0.1:${PORT}/look-proof-scene.html`, { waitUntil: "load", timeout: 60000 });
+await page.goto(`http://127.0.0.1:${PORT}/${pageName}`, { waitUntil: "load", timeout: 60000 });
 try {
   await page.waitForFunction("window.__ready === true || window.__ready === 'error'", null, { timeout: 60000 });
 } catch {
