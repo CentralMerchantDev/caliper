@@ -1360,10 +1360,10 @@
     },
     {
       "id": "world-layer-loadboard-reports-failures-not-silent-drop",
-      "guards": "Blind audit finding (2026-09-14, world-layer branch): loadBoard() used to discard a placement that failed to re-apply (catalogue drift, a shrunk board) with no signal at all. Now every refusal is pushed to `failures`.",
+      "guards": "Blind audit finding (2026-09-14, world-layer branch): loadBoard() used to discard a placement that failed to re-apply (catalogue drift, a shrunk board) with no signal at all. Now every refusal is pushed to `failures`. Find string updated 2026-09-15 (V3): the original one-line body was restructured into an if/if pair when placedAt tracking was added, and the old find silently matched zero times (INCONCLUSIVE) rather than CAUGHT until this was noticed and fixed -- per rule://standard-of-proof, a mutation that no longer applies is not a pass.",
       "file": "public/placement.js",
-      "find": "    const result = board.place(p.typeId, p.anchorCell, p.rotation, { id: p.id, origin: \"player\" });\n    if (!result.ok) failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });",
-      "replace": "    const result = board.place(p.typeId, p.anchorCell, p.rotation, { id: p.id, origin: \"player\" });",
+      "find": "    if (!result.ok) {\n      failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });\n    }",
+      "replace": "    if (false) {\n      failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });\n    }",
       "expect": "GATE: a saved placement that fails to re-apply on load is reported in failures, not silently dropped"
     },
     {
@@ -1373,6 +1373,110 @@
       "find": "    cornerOffsets[index(x, y) * 4 + corner] = metres;",
       "replace": "    cornerOffsets[index(x, y) * 4] = metres;",
       "expect": "setCornerOffset writes exactly the ONE corner named, leaving the other three of the same cell untouched"
+    },
+    {
+      "id": "scoring-catalogue-has-base-value",
+      "guards": "S2's own gate (docs/briefs/CLI-2026-09-14-scoring.md item 2.1): the validator refuses an entry missing baseValue.",
+      "file": "public/catalogue-validator.js",
+      "find": "  if (!entry || !Number.isInteger(entry.baseValue)) {\n    push(\"has-base-value\", `baseValue is ${JSON.stringify(entry && entry.baseValue)}, not an integer -- S2 requires one on every entry`);\n  }",
+      "replace": "  if (false) {\n    push(\"has-base-value\", `baseValue is ${JSON.stringify(entry && entry.baseValue)}, not an integer -- S2 requires one on every entry`);\n  }",
+      "expect": "RULE 7 (has baseValue): a missing baseValue is caught"
+    },
+    {
+      "id": "scoring-catalogue-has-adjacency",
+      "guards": "S2's own gate: the validator refuses an entry whose adjacency is missing or not a plain object (an array, or null -- typeof null === 'object' is the specific trap this check must not fall into).",
+      "file": "public/catalogue-validator.js",
+      "find": "    const isPlainObject = typeof adjacency === \"object\" && adjacency !== null && !Array.isArray(adjacency);",
+      "replace": "    const isPlainObject = typeof adjacency === \"object\";",
+      "expect": "RULE 8: adjacency as null is caught -- typeof null === 'object' is the exact trap"
+    },
+    {
+      "id": "scoring-catalogue-adjacency-values-are-integers",
+      "guards": "S2's own gate: every value inside adjacency must be an integer, and every bad one is reported, not just the first.",
+      "file": "public/catalogue-validator.js",
+      "find": "        if (!Number.isInteger(value)) {\n          push(\"adjacency-values-are-integers\", `adjacency[\"${key}\"] is ${JSON.stringify(value)}, not an integer`);\n        }",
+      "replace": "        if (false) {\n          push(\"adjacency-values-are-integers\", `adjacency[\"${key}\"] is ${JSON.stringify(value)}, not an integer`);\n        }",
+      "expect": "RULE 8: every bad value inside adjacency is reported, not just the first"
+    },
+    {
+      "id": "scoring-a1-substation-does-not-raise-housing-value",
+      "guards": "A1's own named gate (docs/specs/SCORING-MODEL-2026-09-14.md §4): substation-a, a non-amenity civic entry, must not carry a positive residential adjacency bonus.",
+      "file": "data/catalogue.json",
+      "find": "    \"id\": \"substation-a\",\n    \"category\": \"civic\",\n    \"footprint\": [\n      1,\n      1\n    ],\n    \"rotatable\": false,\n    \"terrainMask\": [\n      \"land\"\n    ],\n    \"pivot\": \"corner\",\n    \"massing\": [\n      \"base\"\n    ],\n    \"joinSpec\": \"contact-darkening\",\n    \"proportion\": null,\n    \"baseValue\": 1,\n    \"adjacency\": {}",
+      "replace": "    \"id\": \"substation-a\",\n    \"category\": \"civic\",\n    \"footprint\": [\n      1,\n      1\n    ],\n    \"rotatable\": false,\n    \"terrainMask\": [\n      \"land\"\n    ],\n    \"pivot\": \"corner\",\n    \"massing\": [\n      \"base\"\n    ],\n    \"joinSpec\": \"contact-darkening\",\n    \"proportion\": null,\n    \"baseValue\": 1,\n    \"adjacency\": { \"residential\": 5 }",
+      "expect": "GATE (A1), named directly: substation-a specifically carries no positive residential adjacency"
+    },
+    {
+      "id": "scoring-s1-piece-excludes-self",
+      "guards": "S1's own contract: a piece does not contribute to its own cell's value, only to cells within R of it.",
+      "file": "public/scoring.js",
+      "find": "      if (id !== -1 && id !== selfId) ids.add(id);",
+      "replace": "      if (id !== -1) ids.add(id);",
+      "expect": "GATE: a piece does not contribute to its OWN cell's value"
+    },
+    {
+      "id": "scoring-s1-dedup-multi-cell-piece",
+      "guards": "S1's own contract: a piece spanning several cells within R is counted exactly once, never once per cell it occupies.",
+      "file": "public/scoring.js",
+      "find": "  const ids = new Set();\n  const xMin = Math.max(0, x - radius);\n  const xMax = Math.min(board.width - 1, x + radius);\n  const yMin = Math.max(0, y - radius);\n  const yMax = Math.min(board.height - 1, y + radius);\n  for (let cy = yMin; cy <= yMax; cy++) {\n    for (let cx = xMin; cx <= xMax; cx++) {\n      if (chebyshevDistance(x, y, cx, cy) > radius) continue;\n      const id = board.pieceIdAt(cx, cy);\n      if (id !== -1 && id !== selfId) ids.add(id);\n    }\n  }\n  return [...ids];",
+      "replace": "  const ids = [];\n  const xMin = Math.max(0, x - radius);\n  const xMax = Math.min(board.width - 1, x + radius);\n  const yMin = Math.max(0, y - radius);\n  const yMax = Math.min(board.height - 1, y + radius);\n  for (let cy = yMin; cy <= yMax; cy++) {\n    for (let cx = xMin; cx <= xMax; cx++) {\n      if (chebyshevDistance(x, y, cx, cy) > radius) continue;\n      const id = board.pieceIdAt(cx, cy);\n      if (id !== -1 && id !== selfId) ids.push(id);\n    }\n  }\n  return ids;",
+      "expect": "a piece spanning multiple cells within R is counted exactly ONCE, not once per cell it occupies"
+    },
+    {
+      "id": "scoring-s1-missing-adjacency-key-is-zero-not-nan",
+      "guards": "S1: an adjacency map with no key for the occupant's category contributes zero, never NaN from adding undefined. Find string updated 2026-09-15 (S2): falloff landed inside this same guarded block; the old single-line find stopped matching (would have reported INCONCLUSIVE, not a pass) once the multiplication was added.",
+      "file": "public/scoring.js",
+      "find": "    if (typeof bonus === \"number\") {\n      const distance = nearestChebyshevDistance(x, y, board.rectFor(pieceId));\n      total += bonus * falloff(distance);\n    }",
+      "replace": "    {\n      const distance = nearestChebyshevDistance(x, y, board.rectFor(pieceId));\n      total += bonus * falloff(distance);\n    }",
+      "expect": "an entry with no adjacency key for the occupant's category contributes zero, not undefined-coerced-to-NaN"
+    },
+    {
+      "id": "v1-event-log-closed-list-enforced",
+      "guards": "V1's own gate: an event name outside the closed list (started/item-green/committed/pushed/merged/blocked/unblocked/finding) is refused, not silently accepted as a new de-facto category.",
+      "file": "scripts/record-event.mjs",
+      "find": "  if (!EVENTS.includes(event.event)) {",
+      "replace": "  if (false) {",
+      "expect": "appendEvent refuses an event name outside the closed list"
+    },
+    {
+      "id": "v1-event-log-no-truncation-on-malformed-prior-line",
+      "guards": "V1's own gate, verbatim: \"append-only proven by test -- a write cannot truncate.\" Reproduces the exact 2026-09-10 recordGate failure shape (a malformed line from a crashed write, followed by a real append) via the read-then-write-whole-file anti-pattern the checklist names directly.",
+      "file": "scripts/record-event.mjs",
+      "find": "  appendFileSync(logPath, JSON.stringify(record) + \"\\n\", \"utf8\");\n  return record;\n}",
+      "replace": "  let existing = [];\n  try { existing = readFileSync(logPath, \"utf8\").trim().split(\"\\n\").filter(Boolean).map((l) => JSON.parse(l)); } catch { existing = []; }\n  existing.push(record);\n  writeFileSync(logPath, existing.map((r) => JSON.stringify(r)).join(\"\\n\") + \"\\n\", \"utf8\");\n  return record;\n}",
+      "expect": "GATE: a malformed line left by a prior crashed write does NOT get lost when a new event is appended -- this is the exact 2026-09-10 recordGate failure shape, reproduced and proven fixed"
+    },
+    {
+      "id": "v3-remove-clears-placed-at",
+      "guards": "Plan-review finding (2026-09-15, before any code was written): remove() must clear placedAt so a later piece reusing the same numeric id does not inherit a stale timestamp from the piece that used to hold it.",
+      "file": "public/placement.js",
+      "find": "    if (result.ok) {\n      placedAt.delete(id);\n      if (piece.origin === \"generated\") {",
+      "replace": "    if (result.ok) {\n      if (piece.origin === \"generated\") {",
+      "expect": "GATE: remove() deletes the piece's own placedAt entry -- a later, unrelated piece reusing the same id must NOT inherit a stale timestamp"
+    },
+    {
+      "id": "v3-loadboard-placedat-gated-on-success",
+      "guards": "Plan-review finding: loadBoard() must only populate placedAt for placements that actually re-applied -- an unconditional version gives a phantom timestamp to an id that failed to re-apply (e.g. catalogue drift) and is not really on the reloaded board.",
+      "file": "public/placement.js",
+      "find": "    if (!result.ok) {\n      failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });\n    } else if (p.at !== undefined && p.at !== null) {\n      placedAt.set(p.id, p.at);\n    }",
+      "replace": "    if (!result.ok) {\n      failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });\n    }\n    if (p.at !== undefined && p.at !== null) {\n      placedAt.set(p.id, p.at);\n    }",
+      "expect": "loadBoard()'s placedAt is populated ONLY for placements that actually re-applied -- a failed one must not leave a phantom timestamp"
+    },
+    {
+      "id": "scoring-s2-falloff-must-be-exponential-not-linear",
+      "guards": "S2's own gate, verbatim (docs/specs/REBUILD-CHECKLIST.md): \"a test that FAILS on a linear ramp and passes on the exponential.\" Substitutes a genuinely linear falloff and confirms the shape-discriminator test catches it.",
+      "file": "public/scoring.js",
+      "find": "export function falloff(distance) {\n  return Math.exp(-GAMMA * distance);\n}",
+      "replace": "export function falloff(distance) {\n  return 1 - ((1 - EDGE_FRACTION) / R) * distance;\n}",
+      "expect": "GATE (S2): the curve's consecutive per-step drops SHRINK as distance increases -- true for exponential decay, false for every linear ramp"
+    },
+    {
+      "id": "scoring-s2-nearest-distance-off-by-one",
+      "guards": "S2: distance to a multi-cell piece must use its own NEAREST occupied cell (rect.xMax/yMax are EXCLUSIVE upper bounds -- the last real cell is xMax-1/yMax-1). Dropping the -1 silently shifts every multi-cell piece's falloff by one step.",
+      "file": "public/scoring.js",
+      "find": "  const dx = Math.max(rect.xMin - x, 0, x - (rect.xMax - 1));\n  const dy = Math.max(rect.yMin - y, 0, y - (rect.yMax - 1));",
+      "replace": "  const dx = Math.max(rect.xMin - x, 0, x - rect.xMax);\n  const dy = Math.max(rect.yMin - y, 0, y - rect.yMax);",
+      "expect": "a piece spanning multiple cells within R is counted exactly ONCE, not once per cell it occupies -- and its distance is to its NEAREST cell, approached from EITHER side"
     }
   ]
 }
