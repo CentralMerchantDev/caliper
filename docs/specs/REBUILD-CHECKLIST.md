@@ -441,7 +441,7 @@ mutation coverage and suite health currently rests on them. Terrain (T1-T3) is
 suspended pending decision #17 — it may be land-lane's, in another repository —
 so this is CLI's real next work.
 
-[!] U1 (CLI) Fix `npm run gen:claims` — its dependency was quarantined, then deleted
+[x] U1 (CLI) Fix `npm run gen:claims` — its dependency was quarantined, then deleted
     `scripts/gen-city-summary.mjs` imports `public/city-plan.js`, quarantined by
     `e3c355b` in the Phase 1 takedown and now DELETED outright by item zero of
     this run. The import can no longer resolve at all.
@@ -454,16 +454,17 @@ so this is CLI's real next work.
     anything from the deleted quarantine to make it work.
     Gate: `npm run gen:claims` completes and the regenerated count matches a
     freshly measured one.
-    PARTIAL, commit b116279 (branch scoring). RETIRED (decided, not
-    re-pointed): gen-city-summary.mjs now recognizes its own dependency is
-    gone and refuses cleanly (exit 0, informative message, no write) instead
-    of crashing -- gen-claims.mjs reaches gen-test-count.mjs reliably,
-    proven in 5 tests, 1/1 new mutation CAUGHT, tsc clean. NOT closed: a
-    full `npm run gen:claims` run with a real, fresh test-count measurement
-    could not be observed -- traced directly (not guessed) to U2's own
-    already-documented cullingRatio.test.ts stall blocking the full suite
-    gen-test-count.mjs needs to run. This is U2's defect blocking U1's own
-    literal gate, not a gap in this fix. Gate ledger: docs/GATE-LEDGER.jsonl.
+    DONE, commits b116279 then 08d563c (branch scoring). RETIRED (decided,
+    not re-pointed): gen-city-summary.mjs now recognizes its own dependency
+    is gone and refuses cleanly (exit 0, informative message, no write)
+    instead of crashing. b116279 proved reachability only, honestly
+    disclosing the full gate was blocked by U2's own cullingRatio.test.ts
+    stall -- once U2 fixed that (commit 660929f), 08d563c ran
+    `npm run gen:claims` for real: full 123-file suite, fresh measurement
+    written (619 node tests, 8 fail (all pre-existing, per U2), 12 worker
+    tests, 0 fail), CLAUDE.md's stale `1087` line corrected to the real
+    `619`. The literal gate -- "completes and the regenerated count matches
+    a freshly measured one" -- is met. Gate ledger: docs/GATE-LEDGER.jsonl.
 [x] U2 (CLI) `cullingRatio.test.ts` — five identical reproductions, a named cause, and a decision
     It has now failed five times at ~243s against its own internal 240-second
     `page.waitForFunction` timeout. **The cause is not in dispute** — it is not
