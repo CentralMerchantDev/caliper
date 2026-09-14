@@ -464,7 +464,7 @@ so this is CLI's real next work.
     already-documented cullingRatio.test.ts stall blocking the full suite
     gen-test-count.mjs needs to run. This is U2's defect blocking U1's own
     literal gate, not a gap in this fix. Gate ledger: docs/GATE-LEDGER.jsonl.
-[ ] U2 (CLI) `cullingRatio.test.ts` — five identical reproductions, a named cause, and a decision
+[x] U2 (CLI) `cullingRatio.test.ts` — five identical reproductions, a named cause, and a decision
     It has now failed five times at ~243s against its own internal 240-second
     `page.waitForFunction` timeout. **The cause is not in dispute** — it is not
     memory, not the harness, not resource contention. It is that test.
@@ -475,6 +475,21 @@ so this is CLI's real next work.
     acceptable; another reproduction is not.
     Gate: the default suite completes, with its own `ℹ tests` / `ℹ pass` line as
     the evidence.
+    DONE, commit 660929f (branch scoring). Root cause traced directly
+    (process inspection, not guessed): public/city.html, the page all
+    three affected tests load, was deleted by this run's own item zero
+    purge. Scope widened honestly beyond the named file: regressionGate.test.ts's
+    A5.2/A5.3 and envLuminance.test.ts carry the byte-identical defect,
+    both quarantined too, or the gate would still fail on them next.
+    QUARANTINED (node:test `{ skip: "..." }`), not fixed -- no live
+    rendered scene exists in public/ to re-point at yet; owner BLD, per
+    L11/L12. New regression lock, test/cullingSuiteUnblocked.test.ts.
+    GATE MET FOR REAL, not just the regression lock: the actual default
+    suite (`node test/run.mjs`, no args) completed in ~110s, 123 files,
+    `ℹ tests 619 / ℹ pass 579 / ℹ fail 8 / ℹ skipped 32`. All 8 remaining
+    failures checked individually and confirmed pre-existing, unrelated
+    to city.html. 3/3 new mutations CAUGHT. Gate ledger:
+    docs/GATE-LEDGER.jsonl.
 [ ] U3 (CLI) Decide what the real mutation instrument is — RECOMMEND, do not unilaterally replace
     `scripts/mutate.mjs` runs the FULL SUITE per mutation. At 160 mutations that
     is 160 full suites, in a repo where one full suite has never completed. It
