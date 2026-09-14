@@ -1348,8 +1348,17 @@ editors. **On a discrete cell grid the cell IS the snap** — snap is one module
 always. Applying the half-footprint rule here would put odd-width pieces on
 half-cells and break the occupancy grid.
 
-Pivot: **footprint centre, on the ground plane.** Never change it — A12's warning
-applies literally to saved player cities.
+Pivot: **the ANCHOR CELL'S CORNER, on the ground plane.** Never change it —
+A12's warning applies literally to saved player cities. The single authoritative
+statement of the pivot is in G1; this line exists only so that reading C1.2 alone
+cannot mislead.
+
+**CORRECTED 2026-09-14, and found by the world-layer lane rather than by its
+author.** This read *"Pivot: footprint centre, on the ground plane. Never change
+it"* — which correction C-5 had already superseded, saying so by name. G1 was
+corrected the same day and this was missed, so for several hours the document
+stated both pivots in two places and told you never to change either. A lane
+building from C1.2 alone would have implemented the wrong one and been right to.
 
 ### C1.3 Roads — FOUR widths, and roads are TILES
 
@@ -1477,7 +1486,9 @@ most of what was paid for.
 ### C2.1 Representation
 
 - **A piece is `{ typeId, anchorCell, rotation }`.** Nothing else.
-- **The footprint is DERIVED** — `occupiedRect(anchor, rotation, catalogue[typeId].size)`
+- **The footprint is DERIVED** — `occupiedRect(anchor, rotation, catalogue[typeId].footprint)`
+  *(the field is `footprint`; this line said `.size` until 2026-09-14, matching
+  nothing in `data/catalogue.json` or the code)*
   — recomputed on demand, never stored. RimWorld's pattern, and the only
   representation that survives rotation without a bug class.
 - **A dense occupancy grid is maintained as an index**, holding the piece's
@@ -1674,14 +1685,20 @@ Opening an area is a game action (Phase 3). One area is OPEN at the start.
 **256 × 256 cells — 1,024 m at the 4 m module — is the working figure for a
 typical area**, recorded as a choice rather than a measurement. It is a real
 city site, it is fillable in a sitting rather than being an empty field, and
-its occupancy grid is 128 KB. Geography will make areas vary; this is the
+its occupancy grid is **256 KB**. Geography will make areas vary; this is the
 target a generated island is sized toward, not a constraint on it.
+
+*The figure was 128 KB here until 2026-09-14 and was wrong.* It assumed a
+16-bit index — but a 256 × 256 area has 65,536 cells, so 65,536 distinct piece
+ids plus an empty sentinel does not fit in a `Uint16Array`. The index is
+`Int32Array`, so every occupancy figure in this document doubles. Nothing it
+was used to argue changes; the numbers were never near a limit.
 
 **The world's extent is NOT a performance number and must not be derived from
 one.** It comes from the terrain design — how many islands, how much mainland.
-A world of sixty-four such areas is 8 km square and costs 8.4 MB of occupancy
-data, of which one area is live at a time. The cost of a large world is
-storage, and storage is not the constraint.
+A world of sixty-four such areas is 8 km square and costs roughly **17 MB** of
+occupancy data, of which one area is live at a time. The cost of a large world
+is storage, and storage is not the constraint.
 
 *Recorded because it caused a real error:* an earlier pass proposed a
 256 × 256 ceiling **for the whole world**, derived from the cost of sweeping
@@ -1767,6 +1784,50 @@ Two new catalogue fields per piece type:
 Housing raises desirability nearby. Industry lowers it. Parks and water raise
 it. Roads raise access. Terrain contributes directly — water adjacency and
 buildable slope.
+
+**CORRECTED 2026-09-14, per `docs/specs/SCORING-MODEL-2026-09-14.md` (Mark's
+own decisions, folded in here as item A1).** This superseded ONE sentence
+above: *"Housing raises desirability nearby"* is not wrong, but it is not the
+whole rule — Mark's scarcity argument (a townhouse in Midtown beats an
+equivalent condo purely through scarcity) means more housing nearby also
+**dilutes** per-unit value, and both effects are real at once, resolved by
+acting on different categories rather than by picking one:
+
+| Piece category | → residential | → commercial |
+|---|---|---|
+| `commercial` (shops) | + strong | — |
+| `civic` (services), **amenity entries only** | + strong | — |
+| `landmark` (entertainment) | + strong | — |
+| `residential` | − dilutive | + |
+| `industrial` | − strong (unchanged) | — |
+| `road` | + access (unchanged) | + access (unchanged) |
+
+**`baseValue` no longer enters `value(cell)`.** §S1's formula never consumed
+it — it was a stored constant nothing read. It survives as the **unit count**
+a piece represents (footprint area × massing tiers, unchanged formula), used
+by §S4's `totalWorth = perUnitWorth × units(type)` rather than by the ghost's
+own location-only readout — SCORING-MODEL §3 has the full derivation.
+
+**Amenity civic entries key on `typeId`, not on the bare category.**
+`substation-a` is category `civic`, the same as a library — a flat civic
+bonus would make a substation raise nearby housing value, which is wrong in a
+way anyone would feel. `public/catalogue-validator.js`'s own
+`AMENITY_CIVIC_TYPE_IDS` export (imported from
+`scripts/migrate-catalogue-s2-fields.mjs`) is the authoritative, disclosed
+list; everything in `civic` not on it carries no residential bonus.
+
+**Compounding is non-recursive**, decided for the same reason §S1's own gate
+already required it: a cell's value is computed from what pieces are within
+R, never from neighbours' own computed values — a recursive version either
+iterates to a fixed point or becomes order-dependent, and order-dependent
+fails §S1's gate outright. True second-order lift (a neighbourhood raising
+its own reputation beyond the sum of its parts) needs a fixed-point solve,
+and a separate build-cost layer (land near the centre costing more because
+there is less of it and because what is already built constrains what can
+go on it) is a different mechanic again — both real, both Mark's, both
+parked rather than built; `SCORING-MODEL-2026-09-14.md` §§5–6 has the full
+account and a later checklist item writes them up as their own plan
+sections.
 
 **Falloff across R is not linear** (T9, Clark's negative exponential): steep
 immediately outside, then a long flat tail. A linear gradient reads as wrong

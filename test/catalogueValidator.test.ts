@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { validateCatalogue, validateEntry, CATALOGUE_FOOTPRINTS, ROAD_CLASS_HIERARCHY } from "../public/catalogue-validator.js";
+import { AMENITY_CIVIC_TYPE_IDS } from "../scripts/migrate-catalogue-s2-fields.mjs";
 
 function repoRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -94,6 +95,48 @@ test("every adjacency key in the real catalogue is one of the six real catalogue
     }
   }
   assert.deepEqual(badKeys, []);
+});
+
+// ---------------------------------------------------------------- SCORING-MODEL §4: the substation problem
+//
+// "civic" carries both genuine services (a library) and infrastructure that
+// must not raise nearby housing value (a substation) -- resolved by keying
+// amenity civic entries on typeId (scripts/migrate-catalogue-s2-fields.mjs's
+// own AMENITY_CIVIC_TYPE_IDS), not by splitting the category. This is the
+// checklist's own named gate for A1: "a test that refuses a positive
+// residential bonus from a non-amenity civic entry."
+
+test("GATE (A1): every non-amenity civic entry in the real catalogue carries NO positive residential adjacency", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  const civicEntries = catalogue.filter((e: any) => e.category === "civic");
+  assert.ok(civicEntries.length > 0, "fixture sanity: there should be real civic entries to check");
+  const violations: string[] = [];
+  for (const entry of civicEntries) {
+    if (AMENITY_CIVIC_TYPE_IDS.includes(entry.id)) continue;
+    const residentialBonus = entry.adjacency.residential;
+    if (typeof residentialBonus === "number" && residentialBonus > 0) {
+      violations.push(`${entry.id}: adjacency.residential = ${residentialBonus}`);
+    }
+  }
+  assert.deepEqual(violations, [], `non-amenity civic entries must not raise nearby housing value:\n${violations.join("\n")}`);
+});
+
+test("GATE (A1), named directly: substation-a specifically carries no positive residential adjacency", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  const substation = catalogue.find((e: any) => e.id === "substation-a");
+  assert.ok(substation, "substation-a must exist in the real catalogue for this gate to mean anything");
+  const residentialBonus = substation.adjacency.residential;
+  assert.ok(!(typeof residentialBonus === "number" && residentialBonus > 0), `substation-a must not raise nearby housing value, got adjacency.residential = ${JSON.stringify(residentialBonus)}`);
+});
+
+test("every civic entry ON the amenity list DOES carry a positive residential bonus -- the split is not vacuous in the other direction", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  for (const typeId of AMENITY_CIVIC_TYPE_IDS) {
+    const entry = catalogue.find((e: any) => e.id === typeId);
+    assert.ok(entry, `${typeId} (named in AMENITY_CIVIC_TYPE_IDS) must exist in the real catalogue`);
+    assert.equal(entry.category, "civic", `${typeId} is on the civic amenity list but its own category is "${entry.category}"`);
+    assert.ok(typeof entry.adjacency.residential === "number" && entry.adjacency.residential > 0, `${typeId}: expected a positive adjacency.residential, got ${JSON.stringify(entry.adjacency.residential)}`);
+  }
 });
 
 // ---------------------------------------------------------------- rule 1

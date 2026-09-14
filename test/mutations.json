@@ -1397,6 +1397,14 @@
       "find": "        if (!Number.isInteger(value)) {\n          push(\"adjacency-values-are-integers\", `adjacency[\"${key}\"] is ${JSON.stringify(value)}, not an integer`);\n        }",
       "replace": "        if (false) {\n          push(\"adjacency-values-are-integers\", `adjacency[\"${key}\"] is ${JSON.stringify(value)}, not an integer`);\n        }",
       "expect": "RULE 8: every bad value inside adjacency is reported, not just the first"
+    },
+    {
+      "id": "scoring-a1-substation-does-not-raise-housing-value",
+      "guards": "A1's own named gate (docs/specs/SCORING-MODEL-2026-09-14.md §4): substation-a, a non-amenity civic entry, must not carry a positive residential adjacency bonus.",
+      "file": "data/catalogue.json",
+      "find": "    \"id\": \"substation-a\",\n    \"category\": \"civic\",\n    \"footprint\": [\n      1,\n      1\n    ],\n    \"rotatable\": false,\n    \"terrainMask\": [\n      \"land\"\n    ],\n    \"pivot\": \"corner\",\n    \"massing\": [\n      \"base\"\n    ],\n    \"joinSpec\": \"contact-darkening\",\n    \"proportion\": null,\n    \"baseValue\": 1,\n    \"adjacency\": {}",
+      "replace": "    \"id\": \"substation-a\",\n    \"category\": \"civic\",\n    \"footprint\": [\n      1,\n      1\n    ],\n    \"rotatable\": false,\n    \"terrainMask\": [\n      \"land\"\n    ],\n    \"pivot\": \"corner\",\n    \"massing\": [\n      \"base\"\n    ],\n    \"joinSpec\": \"contact-darkening\",\n    \"proportion\": null,\n    \"baseValue\": 1,\n    \"adjacency\": { \"residential\": 5 }",
+      "expect": "GATE (A1), named directly: substation-a specifically carries no positive residential adjacency"
     }
   ]
 }

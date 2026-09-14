@@ -25,21 +25,28 @@
 // keyed by the CATEGORY OF THE NEIGHBOURING CELL a bonus applies to: for a
 // piece P and a cell C within Chebyshev radius R of P, P's own
 // `adjacency[categoryAtC]` (if present) is P's contribution to C's value.
-// "housing raises desirability nearby" (S2) has no stated per-category
-// distinction, so residential/industrial/road entries here apply ONE flat
-// bonus to all six real catalogue categories rather than inventing
-// differentiated ones. This composes with S4's own two-number framing
-// ("the target cell's CURRENT value, and the value the piece WOULD have
-// there") for the one case that would otherwise be undefined -- a vacant
-// cell has no category to key on: `valueAt()` on empty ground is
-// terrain-only (S1's `terrainContribution(cell)` term, no adjacency
-// component, because nothing occupies the cell to receive one);
-// `valueIfPlaced(typeId, cell, rotation)` supplies the missing category
-// itself (the candidate's own) and is where adjacency actually applies.
-// Neither function is built in this pass (S2's own catalogue migration
-// only) -- recorded here so whoever builds them does not have to re-derive
-// it, and because the 50 entries' own key choices below are written
-// against this reading.
+// This composes with S4's own two-number framing ("the target cell's
+// CURRENT value, and the value the piece WOULD have there") for the one
+// case that would otherwise be undefined -- a vacant cell has no category
+// to key on: `valueAt()` on empty ground is terrain-only (S1's
+// `terrainContribution(cell)` term, no adjacency component, because
+// nothing occupies the cell to receive one); `valueIfPlaced(typeId, cell,
+// rotation)` supplies the missing category itself (the candidate's own)
+// and is where adjacency actually applies. Neither function is built in
+// this pass (S2's own catalogue migration only) -- recorded here so
+// whoever builds them does not have to re-derive it.
+//
+// THE TABLE ITSELF — `docs/specs/SCORING-MODEL-2026-09-14.md` (Mark's own
+// decisions, folded into REBUILD-PLAN.md §S2 as a Correction, item A1):
+// commercial/civic(amenity-only, keyed on typeId)/landmark carry a strong
+// positive bonus to `residential`; `residential` is DILUTIVE on itself
+// (scarcity) and positive on `commercial`; `industrial` is strongly
+// negative on `residential`; `road` is positive on both. Not a uniform
+// bonus applied to all six categories -- that was S0's reading, corrected
+// by A1 because it left three amenity categories (commercial/civic/
+// landmark) at `{}`, switching off the model's own primary value driver.
+// `scripts/migrate-catalogue-s2-fields.mjs`'s own `AMENITY_CIVIC_TYPE_IDS`
+// is the authoritative list of which `civic` entries count as an amenity.
 // =============================================================================
 
 /** C1.1's eight canonical footprints, modules, each stored width-first,
