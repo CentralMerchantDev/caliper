@@ -130,6 +130,86 @@ pulled, and it is deliberately fenced off from the file CLI is working in.
     summary. Report texture-memory cost MEASURED.
 [ ] I2 (BLD) The overview's massing bake — REBUILD-PLAN.md W4
 
+[ ] N1 (BLD) THE SCENE — sky, a ground that does not end, and something at street level — REBUILD-PLAN.md R1 and A5
+    The highest-value look item left, and it is not a shading problem.
+    In `08-cast-shadows.png` the lighting is close to good. What stops it
+    reading as a place is that there is NO SCENE: a black void instead of a
+    sky, a dirt plane that stops at a hard edge, and nothing between the
+    buildings. Four well-lit pieces floating in black is not a city.
+    Three things, each its own commit and its own before/after from the SAME
+    fixed camera as 08:
+      a. A sky. Even a gradient. The void is doing more damage than any
+         missing shader feature.
+      b. A ground that reads as continuing past the frame rather than ending.
+      c. Something at street level — kerbs, a path, one or two props. R8's
+         "interesting things happen where different things meet" applies to
+         the ground/road/building meeting as much as to the join already done.
+    Gate: the pair of images, judged by Mark. There is no numeric gate here
+    and inventing one would be a check that cannot fail.
+    Mark's standing assessment, to be beaten rather than matched: "not
+    anywhere close to done, but the lighting is much better and on the right
+    path."
+
+---
+
+## VERSIONING AND TRACKING — CLI OWNS THIS. DO IT FIRST.
+
+`docs/specs/VERSIONING-AND-TRACKING-2026-09-15.md` is the spec.
+
+[x] V1 (CLI) The cross-lane event log — VERSIONING-AND-TRACKING-2026-09-15.md V1
+    4f27f42 on branch `scoring`, PUSHED to origin (BLD gated on this again).
+    scripts/record-event.mjs (the one writer, closed event list enforced),
+    scripts/query-event-log.mjs (answers "is there a pushed event for item
+    X?" without naming a ref). `process_record_gate` confirmed to have no
+    source anywhere in this repo (separate MCP server) -- could not
+    literally extend it; mirrored its append-only mechanism instead, named
+    as such rather than claimed as the same tool. Blind review found two
+    real gaps before commit: the original "never reads" test passed even
+    against a read-then-rewrite implementation (fixed with a static
+    source-level check); the spec's own "merges cleanly across branches"
+    claim was false under git's default strategy until `merge=union` was
+    added to .gitattributes for both this file and GATE-LEDGER.jsonl,
+    verified in a scratch repo. 64/64 tests, tsc clean, 2/2 mutations
+    CAUGHT. Real A1/S1/R0/V1 pushed events backfilled via the actual tool.
+    Gate ledger: docs/GATE-LEDGER.jsonl.
+    `docs/EVENT-LOG.jsonl`, append-only, one object per line:
+    `{at, lane, event, item, commit, ref, note}`. Closed event set:
+    started, item-green, committed, pushed, merged, blocked, unblocked,
+    finding.
+    THIS IS NOT A NEW SYSTEM. `process_record_gate` already appends to
+    `docs/GATE-LEDGER.jsonl`; this is the same mechanism with a wider event
+    set and it belongs beside it — `rule://reference-not-copy` applies to
+    mechanisms as much as to text. Prefer extending the server over inventing
+    a second writer.
+    WHY: on 2026-09-14 CLI pushed A1 to `origin/scoring` and BLD, on
+    `codex-lane`, was told to check "on origin" without a named ref. It
+    checked, correctly found nothing, and the gated item never ran. A lane
+    had no way to ask where the other lane's work landed.
+    Gate: append-only proven by test — a write cannot truncate. That exact
+    defect was found by blind audit in `recordGate` on 2026-09-10, where a
+    read-then-write-whole-file with a catch that swallowed every read error
+    silently truncated the ledger to its newest line. Do not rebuild it.
+[ ] V2 (CLI) Correct the checklist's own byte-identity claim — VERSIONING-AND-TRACKING-2026-09-15.md V1
+    This file's header says it is byte-identical in both worktrees. As of
+    2026-09-14 that is FALSE and it was always going to be: two lanes ticking
+    one file on two branches diverges every time. That is structural, not
+    carelessness.
+    Once V1 exists, ticks are convenience and THE LOG IS THE EVIDENCE.
+    Rewrite the header to say that, and to say divergence in the other lane's
+    section is expected until merge.
+[ ] V3 (CLI) Save-format schema version and per-placement timestamp — VERSIONING-AND-TRACKING-2026-09-15.md V2
+    §A4's save is already an append-only event log in all but name: seed,
+    generatorParams, tombstones, placements.
+    Add a schema version and a timestamp per placement. Both are one-line
+    additions now and expensive to retrofit. Replay and undo are features for
+    later and are NOT in this item.
+    `loadBoard()` already returns `{board, failures}` rather than dropping
+    placements silently — that is half of this. The version field is the
+    other half, and it is what makes migration possible instead of guesswork.
+    MUST NOT: make `value()` read the log. The log is how you got here, the
+    board is what is here, value is computed from the board. Reading the log
+    inside scoring would fail S1's path-independence gate outright.
+
 ---
 
 ## BUILD ORDER — STEP 5, SCORING. CLI OWNS THIS.
@@ -212,6 +292,31 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     The ghost shows the cell's current value and the value the piece would have
     there; that number, changing as the cursor moves, IS the reason one cell
     beats another.
+[ ] C1 (CLI) The city score: a registry of terms, with median wealth as the first — SCORING-MODEL-2026-09-14.md §4B
+    A SECOND DIMENSION, not an adjacency value. §S1 is strictly local at
+    R = 3; the city score is global. Two dimensions, computed differently,
+    shown separately. Do not fold it into the adjacency table.
+    It exists because of Mark's stadium ruling: a stadium raises the OVERALL
+    city value and is NEUTRAL to the area it is built in. There was nowhere
+    for "raises the city" to live. This is that place.
+    MEDIAN, not mean, and this is load-bearing: a mean lets one tower carry a
+    slum. The city that is good for the typical resident should win.
+    A REGISTRY, not a formula. One term today — median wealth across
+    residential cells, from S4's `perUnitWorth`. A term takes the board and
+    returns a number plus a label, and registers itself. Adding a term later
+    must touch nothing but that term, because Mark has said players' own
+    lives may become a term and today it is judged on buildings only.
+    NOT NOW, and the reason is the catalogue, not the idea: commercial space
+    for jobs, healthcare, education, social services, parks, entertainment.
+    There are six categories today and a hospital, a school and an electrical
+    substation are all `civic`. A term rewarding healthcare would score
+    against a taxonomy that cannot tell a school from a transformer. The
+    taxonomy is BO7's work and is a PREREQUISITE. Same shape as the
+    substation problem one level up — the model is finer-grained than the
+    data.
+    Gate: adding a second, trivial term requires no change to the registry or
+    to the first term. Prove it by adding a throwaway term in the test, not
+    by asserting the design is extensible.
 [ ] S6 (CLI) Developed value sits on top, unchanged in mechanism — REBUILD-PLAN.md S5 and V3
     Read S5 and V3 and confirm the mechanism is genuinely unchanged rather than
     assumed so.

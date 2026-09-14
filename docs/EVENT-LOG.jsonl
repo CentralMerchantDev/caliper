@@ -1,3 +1,4 @@
 {"at":"2026-09-14T16:41:07.531Z","lane":"CLI","event":"pushed","item":"A1","commit":"62650f4","ref":"origin/scoring","note":"Backfilled 2026-09-15 from git history -- V1 did not exist yet when this actually happened on 2026-09-14. The clearance item BLD needs; also on main via the world-layer/scoring lineage once merged."}
 {"at":"2026-09-14T16:41:07.727Z","lane":"CLI","event":"pushed","item":"S1","commit":"d889c1f","ref":"origin/scoring","note":"Backfilled 2026-09-15 from git history."}
 {"at":"2026-09-14T16:41:07.934Z","lane":"CLI","event":"pushed","item":"R0","commit":"2e5c720","ref":"origin/scoring","note":"Backfilled 2026-09-15 from git history."}
+{"at":"2026-09-14T16:41:52.933Z","lane":"CLI","event":"pushed","item":"V1","commit":"4f27f42","ref":"origin/scoring","note":"The cross-lane event log itself. Any lane can now query this file (once merged/fetched) instead of guessing a ref."}
