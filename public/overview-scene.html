@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CALIPER — overview: pick an area</title>
+<meta name="description" content="RC2: connects area.js's real LOCKED/OPEN/ACTIVE state machine and world-layer.js's real addressing to an actual click. docs/specs/REBUILD-CHECKLIST.md, MAKE IT PLAYABLE.">
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1016; overflow: hidden; }
+  canvas { display: block; }
+  #refusal {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    padding: 14px 22px; border-radius: 10px; background: rgba(140, 30, 30, 0.88);
+    color: #fff; font: 600 15px/1.3 system-ui, sans-serif; letter-spacing: .01em;
+    box-shadow: 0 8px 24px rgba(0,0,0,.45); display: none; z-index: 9998;
+  }
+</style>
+</head>
+<body>
+<!-- A way back, same anchor kit-contact-sheet.html/kitbash-*.html already
+     use -- reachability.test.ts's own gate: no page here may be reachable
+     only forward. -->
+<a href="./index.html" class="back-to-caliper" aria-label="Back to CALIPER"
+   style="position:fixed;top:14px;left:14px;z-index:9999;display:inline-flex;align-items:center;gap:7px;
+          padding:7px 13px;border-radius:11px;text-decoration:none;font:600 12px/1 system-ui,sans-serif;
+          letter-spacing:.02em;color:#e8e4de;background:rgba(22,20,18,.82);border:1px solid rgba(255,255,255,.16);
+          backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 6px 20px rgba(0,0,0,.4)">
+  <span aria-hidden="true">&#8592;</span> CALIPER
+</a>
+<div id="refusal"></div>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.min.js"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { mergeGeometries } from "./vendor/three/addons/utils/BufferGeometryUtils.js";
+import { loadPieceGeometry, fitToFootprint, GROUND } from "./look-proof-pieces.js";
+import { createAreaBoard } from "./area-board.js";
+import { createWorldLayer } from "./world-layer.js";
+import { resolveBoardPieces, rotateGeometryY, MODULE_SIZE_M } from "./board-renderer.js";
+import { createLookProofMaterial } from "./look-proof-material.js";
+
+// RC2 -- "MAKE IT PLAYABLE" (docs/specs/REBUILD-CHECKLIST.md). area.js has
+// the real LOCKED/OPEN/ACTIVE state machine; world-layer.js has the real
+// addressing and the real "materialise on entry, release on leaving"
+// discipline (W5). Neither was connected to anything a person clicks --
+// this file is that connection, and it re-decides NONE of their own
+// logic: every enter/leave/lock/open call below goes straight to the
+// real createWorldLayer(), never a second, hand-rolled copy of "is this
+// area allowed to be entered".
+//
+// "At most one ACTIVE... must be structurally impossible for two" is true
+// for free here -- area.js's own enter() holds exactly one activeAreaId
+// variable; a second enter() reassigns it, it does not add a second slot.
+// This file's own UI additionally makes a second click unREACHABLE while
+// inside a board (the overview's own pads are hidden and not raycast
+// targets in board mode) -- belt and suspenders, not the mechanism itself.
+//
+// Deliberately real, deliberately small: three demo areas, two OPEN (so
+// leaving one and entering the other is actually exercisable) and one
+// LOCKED (so the refusal path is real, not staged). Each OPEN area's own
+// board is a handful of real, glb-bound catalogue pieces -- placed
+// through the same board.place() RC1's own interaction already proved
+// out, not a literal render list.
+const AREA_BOARD_WIDTH = 10;
+const AREA_BOARD_HEIGHT = 10;
+
+const DEMO_AREAS = [
+  { id: "downtown", name: "Downtown", state: "OPEN", worldAnchor: { x: 0, z: 0 } },
+  { id: "harbor", name: "Harbor", state: "LOCKED", worldAnchor: { x: 60, z: 0 } },
+  { id: "hills", name: "Hills", state: "OPEN", worldAnchor: { x: 0, z: 60 } },
+];
+const AREA_DEMO_PLACEMENTS = {
+  downtown: [{ typeId: "mega-tower-a", anchorCell: { x: 1, y: 1 }, rotation: 0 }],
+  hills: [{ typeId: "house-a", anchorCell: { x: 3, y: 3 }, rotation: 0 }],
+  // harbor: none -- LOCKED, never entered by this demo, so never loaded.
+};
+const AREA_PAD_COLOR = { LOCKED: 0x555a63, OPEN: 0x4a90d9 }; // W4's own "desaturated, no built content" for LOCKED, applied here to a real area.state, not just described
+
+function stripToPositionNormalUv(geometry) {
+  const out = new THREE.BufferGeometry();
+  out.setAttribute("position", geometry.getAttribute("position"));
+  out.setAttribute("normal", geometry.getAttribute("normal"));
+  out.setAttribute("uv", geometry.getAttribute("uv"));
+  if (geometry.index) out.setIndex(geometry.index);
+  const count = out.getAttribute("position").count;
+  out.setAttribute("groundDecal", new THREE.BufferAttribute(new Float32Array(count), 1));
+  return out;
+}
+function addLayerAttribute(geometry, layer) {
+  const count = geometry.getAttribute("position").count;
+  geometry.setAttribute("layerIndex", new THREE.BufferAttribute(new Float32Array(count).fill(layer), 1));
+  return geometry;
+}
+
+async function buildArrayTexture() {
+  const manifest = await fetch("vendor/kits/array-texture/manifest.json").then((r) => r.json());
+  const size = manifest.targetSize;
+  const depth = manifest.layers.length;
+  const combined = new Uint8Array(size * size * 4 * depth);
+  for (const layer of manifest.layers) {
+    const img = await createImageBitmap(await fetch(`vendor/kits/array-texture/${layer.file}`).then((r) => r.blob()));
+    const canvas = document.createElement("canvas");
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, size, size);
+    combined.set(ctx.getImageData(0, 0, size, size).data, layer.index * size * size * 4);
+  }
+  const tex = new THREE.DataArrayTexture(combined, size, size, depth);
+  tex.format = THREE.RGBAFormat;
+  tex.type = THREE.UnsignedByteType;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
+  return { tex, manifest };
+}
+
+async function main() {
+  const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(1);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.95;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+  window.__renderer = renderer;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0b1016);
+  const light = new THREE.DirectionalLight(0xffffff, 2.2);
+  light.position.set(20, 40, 30);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0x556070, 1.0));
+
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 500);
+  function setOverviewCamera() {
+    camera.position.set(-30, 180, -30);
+    camera.lookAt(50, 0, 50);
+  }
+  function setBoardCamera() {
+    const w = AREA_BOARD_WIDTH * MODULE_SIZE_M, d = AREA_BOARD_HEIGHT * MODULE_SIZE_M;
+    const dist = Math.max(w, d);
+    camera.position.set(w / 2 - dist, dist * 1.4, d / 2 - dist);
+    camera.lookAt(w / 2, 0, d / 2);
+  }
+  setOverviewCamera();
+
+  const { tex: arrayTex, manifest } = await buildArrayTexture();
+  const material = createLookProofMaterial(arrayTex);
+  // RC2 does not run a shadow pass -- the board camera's own scene pass
+  // (fog, sky, ground, and by extension shadows) for THIS camera is RC4's
+  // own explicit, separate item ("14-board.png ... still reads as a dust
+  // bowl"). uShadowMap stays at its own construction-time default (null);
+  // turning uCastShadows off here (a caller-side uniform write, not an
+  // edit to the shared material file RB1's own brief said not to rewrite)
+  // keeps the shader from sampling it.
+  material.uniforms.uCastShadows.value = false;
+
+  const catalogueArr = await fetch("data/catalogue.json").then((r) => r.json());
+  const catalogueById = Object.fromEntries(catalogueArr.map((e) => [e.id, e]));
+
+  // W5's own gate, made checkable: incremented only by a REAL load, so a
+  // driving script can prove "re-entering after leaving reloads" by
+  // reading this before and after a leave+re-enter, rather than trusting
+  // a comment.
+  const loadCounts = {};
+  function loadBoardForArea(id) {
+    loadCounts[id] = (loadCounts[id] || 0) + 1;
+    const board = createAreaBoard({ width: AREA_BOARD_WIDTH, height: AREA_BOARD_HEIGHT, catalogue: catalogueById });
+    for (const p of AREA_DEMO_PLACEMENTS[id] || []) {
+      const result = board.place(p.typeId, p.anchorCell, p.rotation);
+      if (!result.ok) console.error(`AREA-BOARD-PLACE-REFUSED area=${id} typeId=${p.typeId} reason=${result.reason}`);
+    }
+    return board;
+  }
+
+  const worldLayer = createWorldLayer({ areas: DEMO_AREAS });
+  window.__worldLayer = worldLayer;
+  window.__loadCounts = loadCounts;
+
+  // The overview: one real ground plane, and one mesh PER AREA (not
+  // merged) -- each carries its own real area id in userData so a
+  // raycast hit resolves directly to the area it actually struck, and
+  // each is coloured from its own real area.state, not a guess.
+  const groundGeom = new THREE.PlaneGeometry(160, 160).rotateX(-Math.PI / 2).translate(50, -0.01, 50);
+  const groundMesh = new THREE.Mesh(groundGeom, new THREE.MeshLambertMaterial({ color: 0x3a3f36 }));
+  scene.add(groundMesh);
+
+  const overviewGroup = new THREE.Group();
+  for (const area of DEMO_AREAS) {
+    const w = AREA_BOARD_WIDTH * MODULE_SIZE_M, d = AREA_BOARD_HEIGHT * MODULE_SIZE_M;
+    const geom = new THREE.BoxGeometry(w, 1, d).translate(area.worldAnchor.x + w / 2, 0.5, area.worldAnchor.z + d / 2);
+    const padMaterial = new THREE.MeshLambertMaterial({ color: AREA_PAD_COLOR[area.state] });
+    const padMesh = new THREE.Mesh(geom, padMaterial);
+    padMesh.userData.areaId = area.id;
+    overviewGroup.add(padMesh);
+  }
+  scene.add(overviewGroup);
+
+  let mode = "overview"; // "overview" | "board"
+  let boardMesh = null;
+  window.__mode = () => mode;
+
+  async function buildBoardMesh(board) {
+    const { resolved, skipped } = resolveBoardPieces(board, catalogueById, manifest);
+    if (skipped.length) console.log(`AREA-BOARD-SKIPPED ${skipped.map((s) => `${s.typeId}(${s.reason})`).join(", ")}`);
+    const pieceGeoms = await Promise.all(resolved.map((p) => loadPieceGeometry(p.glb)));
+    const preparedPieces = pieceGeoms.map((geom, i) => {
+      const p = resolved[i];
+      rotateGeometryY(geom, p.rotation, THREE);
+      fitToFootprint(geom, p.footprint, p.anchor);
+      return addLayerAttribute(stripToPositionNormalUv(geom), p.layer);
+    });
+    const w = AREA_BOARD_WIDTH * MODULE_SIZE_M, d = AREA_BOARD_HEIGHT * MODULE_SIZE_M;
+    const groundGeomLocal = addLayerAttribute(
+      stripToPositionNormalUv(new THREE.PlaneGeometry(w + 8, d + 8).rotateX(-Math.PI / 2).translate(w / 2, 0, d / 2)),
+      GROUND.layer,
+    );
+    const merged = mergeGeometries([groundGeomLocal, ...preparedPieces], false);
+    return new THREE.Mesh(merged, material);
+  }
+
+  async function enterBoardView(areaId) {
+    const board = worldLayer.boardFor(areaId);
+    const mesh = await buildBoardMesh(board);
+    if (boardMesh) { scene.remove(boardMesh); boardMesh.geometry.dispose(); }
+    boardMesh = mesh;
+    scene.add(boardMesh);
+    overviewGroup.visible = false;
+    groundMesh.visible = false;
+    setBoardCamera();
+    mode = "board";
+    renderer.render(scene, camera);
+    console.log(`AREA-ENTERED area=${areaId} pieces=${board.pieces().length} loadCount=${loadCounts[areaId]}`);
+  }
+
+  function leaveBoardView() {
+    const { left } = worldLayer.leave();
+    if (boardMesh) { scene.remove(boardMesh); boardMesh.geometry.dispose(); boardMesh = null; }
+    overviewGroup.visible = true;
+    groundMesh.visible = true;
+    setOverviewCamera();
+    mode = "overview";
+    renderer.render(scene, camera);
+    console.log(`AREA-LEFT area=${left}`);
+  }
+
+  function showRefusal(areaId, reason) {
+    const area = DEMO_AREAS.find((a) => a.id === areaId);
+    const el = document.getElementById("refusal");
+    el.textContent = `${area ? area.name : areaId} is locked (${reason}) -- cannot enter.`;
+    el.style.display = "block";
+  }
+  function hideRefusal() {
+    document.getElementById("refusal").style.display = "none";
+  }
+
+  const raycaster = new THREE.Raycaster();
+  function areaIdAtClientXY(clientX, clientY) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObjects(overviewGroup.children);
+    return hits.length ? hits[0].object.userData.areaId : null;
+  }
+
+  renderer.domElement.addEventListener("pointerdown", async (e) => {
+    if (e.button !== 0 || mode !== "overview") return; // pads are not even hit-testable outside overview mode -- structurally unclickable, not merely ignored
+    const areaId = areaIdAtClientXY(e.clientX, e.clientY);
+    if (!areaId) return;
+    const result = worldLayer.enter(areaId, { loadBoard: loadBoardForArea });
+    window.__lastEnterResult = result;
+    if (!result.ok) {
+      showRefusal(areaId, result.reason);
+      console.log(`AREA-ENTER-REFUSED area=${areaId} reason=${result.reason}`);
+      return;
+    }
+    hideRefusal();
+    await enterBoardView(areaId);
+  });
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || mode !== "board") return;
+    leaveBoardView();
+  });
+
+  // Screen coordinate for a given area's own pad centre, exposed for
+  // scripts/interact-overview-scene.mjs -- the SAME "expose the real
+  // projection, don't make a driving script re-derive it" discipline
+  // RC1's own cellCenterToScreen already established.
+  function padCenterToScreen(areaId) {
+    const area = DEMO_AREAS.find((a) => a.id === areaId);
+    const w = AREA_BOARD_WIDTH * MODULE_SIZE_M, d = AREA_BOARD_HEIGHT * MODULE_SIZE_M;
+    const v = new THREE.Vector3(area.worldAnchor.x + w / 2, 0.5, area.worldAnchor.z + d / 2).project(camera);
+    const rect = renderer.domElement.getBoundingClientRect();
+    return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + (1 - (v.y + 1) / 2) * rect.height };
+  }
+  window.__padCenterToScreen = padCenterToScreen;
+
+  renderer.render(scene, camera);
+  window.__ready = true;
+  console.log("OVERVIEW-SCENE ready, areas:", DEMO_AREAS.map((a) => `${a.id}(${a.state})`).join(", "));
+}
+
+main().catch((e) => {
+  console.error(e);
+  window.__ready = "error";
+});
+</script>
+</body>
+</html>
