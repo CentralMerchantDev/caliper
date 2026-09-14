@@ -143,7 +143,7 @@ test("(synthetic) the vulnerability: a comment mentioning preserveDrawingBuffer 
 });
 
 test("look-proof-scene.html merges every piece into ONE geometry before adding a single mesh -- the one-draw-call claim, structurally", () => {
-  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom,\s*farGroundGeom,\s*\.\.\.preparedPieces\]/, "the scene does not merge ground, far ground, and every piece into one geometry -- 4.1's gate (\"two pieces from different packs render in a single draw call\") is not wired the way this file claims");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom,\s*farGroundGeom,\s*\.\.\.preparedPieces,\s*\.\.\.streetDetailGeoms\]/, "the scene does not merge ground, far ground, every piece, and street-level detail into one geometry -- 4.1's gate (\"two pieces from different packs render in a single draw call\") is not wired the way this file claims");
   const meshConstructions = (SCENE_SRC.match(/new THREE\.Mesh\(/g) || []).length;
   assert.equal(meshConstructions, 1, `expected exactly one THREE.Mesh construction (one draw call), found ${meshConstructions}`);
 });
@@ -206,7 +206,7 @@ test("N1a: scene.background is set to a real gradient texture, not a flat colour
 test("N1b: a far-ground plane is merged into the SAME mesh as the near ground and pieces -- not a second draw call, not a second scene object", () => {
   assert.match(SCENE_SRC, /const FAR_GROUND_SIZE = 400/, "far-ground plane's own size constant is missing or changed unexpectedly");
   assert.match(SCENE_SRC, /new THREE\.PlaneGeometry\(FAR_GROUND_SIZE, FAR_GROUND_SIZE, 8, 8\)/, "far-ground geometry is missing -- the ground still ends at GROUND.footprint's own edge");
-  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces\]/, "far-ground geometry is not merged into the scene's one mesh -- either dropped, or added as a second draw call instead");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms\]/, "far-ground geometry is not merged into the scene's one mesh -- either dropped, or added as a second draw call instead");
 });
 
 test("N1b: the shadow camera's frustum is fit to the pieces and near ground ONLY, not the far ground -- the far ground would coarsen every shadow texel the buildings need", () => {
@@ -232,4 +232,27 @@ test("(synthetic) the vulnerability: a comment mentioning FAR_GROUND_SIZE must n
   );
   assert.notEqual(withOnlyAComment, SCENE_SRC, "the mutation did not apply -- this check is inconclusive, not a pass");
   assert.doesNotMatch(withOnlyAComment, /new THREE\.PlaneGeometry\(FAR_GROUND_SIZE, FAR_GROUND_SIZE, 8, 8\)/, "a commented-out reference wrongly satisfies the real far-ground geometry check");
+});
+
+test("N1c: street-level detail (kerbs + a path) is built and merged into the SAME mesh as everything else, HERO_MODE only", () => {
+  assert.match(SCENE_SRC, /function buildStreetLevelDetail\(roadPiece, housePiece, groundLayer\)/, "buildStreetLevelDetail is missing -- N1c's own kerb/path builder");
+  assert.match(SCENE_SRC, /const kerbs = \[/, "kerb geometry is not built");
+  assert.match(SCENE_SRC, /const path = addLayerAttribute\(addConstantDecalAttribute\(pathGeom, 1\), groundLayer\)/, "the path plane is not built with a constant, fully-darkened groundDecal -- the mechanism that makes it read as distinct from the surrounding ground");
+  assert.match(SCENE_SRC, /const streetDetailGeoms = HERO_MODE\s*\n\s*\? buildStreetLevelDetail\(/, "street-level detail is not gated to HERO_MODE -- the full 20-piece scene has no single street for this to describe");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms\]/, "street-level detail geometry is not merged into the scene's one mesh");
+});
+
+test("N1c: kerbs and the path reuse GROUND's own layer texture, not the road pack's -- attempt 1 used the road layer and rendered visible rainbow banding (BoxGeometry stretches a whole sprite-sheet atlas across each thin face), found by rendering and reverted", () => {
+  assert.match(SCENE_SRC, /addLayerAttribute\(addConstantDecalAttribute\(g, 1\), groundLayer\)/, "kerb boxes are not tagged with the ground's own layer -- regression toward the road pack's own layer would reintroduce the banding attempt 1 found");
+  assert.doesNotMatch(SCENE_SRC, /kerbBox[\s\S]{0,10}roadPiece\.layer/, "a kerb box is reading roadPiece's own layer directly -- the exact regression this test exists to catch");
+});
+
+test("N1c: exactly one street prop (dumpster-1x1), loaded through the same PIECES pipeline as every other piece -- attempt 1's second prop (street-lamp-1x1) rendered as an unlabelled white shape and was dropped, not fixed blind", () => {
+  assert.match(SCENE_SRC, /const HERO_PROP_IDS = \["dumpster-1x1"\]/, "HERO_PROP_IDS does not match the single, verified-visible prop this commit settled on");
+  assert.doesNotMatch(SCENE_SRC, /street-lamp-1x1/, "street-lamp-1x1 is still referenced -- attempt 1's own unclear prop was meant to be fully removed, not left half-wired");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning buildStreetLevelDetail must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// function buildStreetLevelDetail(roadPiece, housePiece, groundLayer) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /function buildStreetLevelDetail\(roadPiece, housePiece, groundLayer\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });

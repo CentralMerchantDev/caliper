@@ -45,10 +45,33 @@ const HERO_IDS = ["house-2x3", "street-tile-4wide", "midrise-4x4", "tower-base-6
 const HERO_ANCHORS = { "house-2x3": [-26, 0], "street-tile-4wide": [-16, 0], "midrise-4x4": [2, 0], "tower-base-6x6": [20, 0] };
 const HERO_GROUND = { footprint: [90, 60], anchor: [-30, -14], layer: GROUND_FULL.layer };
 
+// N1c -- "something at street level ... kerbs, a path, one or two props"
+// (docs/briefs/BLD-2026-09-15.md). ADDITIVE to HERO_IDS's own four --
+// HERO_IDS itself stays exactly what it was for N1a (the composition
+// test above still matches its own literal array), this is loaded and
+// merged alongside it, not instead of it.
+//
+// ATTEMPT 1 placed TWO props: street-lamp-1x1 beside the tower's east
+// wall (x=44, outside this camera's own view), and light-square.glb
+// itself rendered as an unlabelled white abstract shape once loaded --
+// found by looking at test-street.png, not assumed. Cutting to ONE
+// (still satisfies the brief's own "one or two") removes both problems
+// at once rather than debugging an asset whose read is ambiguous even
+// once correctly placed. dumpster-1x1's own anchor was ALSO wrong on
+// attempt 1 (behind the tower in camera depth, not in front -- occluded,
+// confirmed absent in a cropped re-check of the render) -- moved from
+// the tower's south-WEST corner to its south, in the open ground nearer
+// the camera than the tower's own near face (z=24), unoccluded.
+const HERO_PROP_IDS = ["dumpster-1x1"];
+const HERO_PROP_ANCHORS = {
+  "dumpster-1x1": [20, 26],
+};
+
 const PIECES = HERO_MODE
-  ? HERO_IDS.map((id) => {
+  ? [...HERO_IDS, ...HERO_PROP_IDS].map((id) => {
       const p = ALL_PIECES.find((x) => x.id === id);
-      return { ...p, anchor: HERO_ANCHORS[id] };
+      const anchor = HERO_ANCHORS[id] || HERO_PROP_ANCHORS[id];
+      return { ...p, anchor };
     })
   : ALL_PIECES;
 const GROUND = HERO_MODE ? HERO_GROUND : GROUND_FULL;
@@ -107,6 +130,66 @@ function addZeroDecalAttribute(geometry) {
   const count = geometry.getAttribute("position").count;
   geometry.setAttribute("groundDecal", new THREE.BufferAttribute(new Float32Array(count), 1));
   return geometry;
+}
+function addConstantDecalAttribute(geometry, value) {
+  const count = geometry.getAttribute("position").count;
+  geometry.setAttribute("groundDecal", new THREE.BufferAttribute(new Float32Array(count).fill(value), 1));
+  return geometry;
+}
+
+// N1c -- "something at street level ... kerbs, a path" (docs/briefs/
+// BLD-2026-09-15.md). R8, "interesting things happen where different
+// things meet," already covered ONE junction (4.3's join decal, a
+// building's own footprint edge). This is the SAME logic -- cover the
+// intersection -- applied to the ground-meets-road-meets-building
+// junction the brief names explicitly.
+//
+// ATTEMPT 1 used the road pack's own layer texture on these boxes and
+// rendered a visible rainbow banding along every kerb -- found by looking
+// at test-street.png, not assumed. Cause: THREE.BoxGeometry maps each
+// face's own UV across the FULL 0..1 range regardless of the face's real
+// size, so a 16m-long, 0.5m-wide kerb face stretches the entire road
+// atlas (a sprite sheet with hard colour boundaries between its own
+// sub-images: markings, crossings, plain asphalt) into one thin,
+// squashed strip. Fixed by dropping the road layer for this geometry
+// entirely and reusing GROUND's own layer instead -- a single
+// photographic-style texture has no hard internal boundaries, so the
+// exact same stretch just reads as a slight blur, not banding. Distinct
+// from the ground around it via the ALREADY-VERIFIED join-decal
+// mechanism (4.3's uJoinDecal, addConstantDecalAttribute here instead of
+// footprint-distance-computed) at full strength: kerbs and path both
+// darken toward the join-decal's own 0.5x floor, the same mechanism a
+// building's own footprint edge already uses, not a new shader path.
+// HERO_MODE only -- the full 20-piece scene has no single "street" to
+// detail this way, and N1's own gate judges only the hero camera pair.
+const KERB_HEIGHT = 0.25;
+const KERB_WIDTH = 0.5;
+function buildStreetLevelDetail(roadPiece, housePiece, groundLayer) {
+  const [rx, rz] = roadPiece.anchor;
+  const [rw, rd] = roadPiece.footprint;
+  function kerbBox(cx, cz, w, d) {
+    const g = new THREE.BoxGeometry(w, KERB_HEIGHT, d).translate(cx, KERB_HEIGHT / 2, cz);
+    return addLayerAttribute(addConstantDecalAttribute(g, 1), groundLayer);
+  }
+  const kerbs = [
+    kerbBox(rx + rw / 2, rz - KERB_WIDTH / 2, rw + KERB_WIDTH * 2, KERB_WIDTH), // north edge
+    kerbBox(rx + rw / 2, rz + rd + KERB_WIDTH / 2, rw + KERB_WIDTH * 2, KERB_WIDTH), // south edge
+    kerbBox(rx - KERB_WIDTH / 2, rz + rd / 2, KERB_WIDTH, rd), // west edge
+    kerbBox(rx + rw + KERB_WIDTH / 2, rz + rd / 2, KERB_WIDTH, rd), // east edge
+  ];
+
+  // A paved path bridging the real gap between the road tile and the
+  // house -- the ground-meets-road-meets-building junction itself, not
+  // just the road's own edge alone.
+  const pathZFrom = 3, pathZTo = 9;
+  const pathX0 = housePiece.anchor[0] + housePiece.footprint[0]; // house's east edge
+  const pathX1 = rx; // road's west edge
+  const pathGeom = new THREE.PlaneGeometry(pathX1 - pathX0, pathZTo - pathZFrom)
+    .rotateX(-Math.PI / 2)
+    .translate((pathX0 + pathX1) / 2, 0.02, (pathZFrom + pathZTo) / 2);
+  const path = addLayerAttribute(addConstantDecalAttribute(pathGeom, 1), groundLayer);
+
+  return [...kerbs, path];
 }
 
 // N1a -- A SKY. "Even a gradient. The void is doing more damage to the
@@ -343,19 +426,29 @@ async function main() {
     return addLayerAttribute(stripped, p.layer);
   });
 
-  // The shadow camera's own frustum is sized from the pieces and the near
-  // ground ONLY -- see buildShadowPass's own comment for why the far ground
-  // must stay out of this box (it would coarsen every shadow texel the
-  // buildings actually need).
+  // N1c -- kerbs and a path around the road tile, HERO_MODE only (see
+  // buildStreetLevelDetail's own comment for why).
+  const streetDetailGeoms = HERO_MODE
+    ? buildStreetLevelDetail(
+        PIECES.find((p) => p.id === "street-tile-4wide"),
+        PIECES.find((p) => p.id === "house-2x3"),
+        GROUND.layer,
+      )
+    : [];
+
+  // The shadow camera's own frustum is sized from the pieces, the near
+  // ground, and N1c's own street detail -- see buildShadowPass's own
+  // comment for why the far ground must stay out of this box (it would
+  // coarsen every shadow texel the buildings actually need).
   const shadowBB = new THREE.Box3();
   groundGeom.computeBoundingBox();
   shadowBB.union(groundGeom.boundingBox);
-  for (const g of preparedPieces) {
+  for (const g of [...preparedPieces, ...streetDetailGeoms]) {
     g.computeBoundingBox();
     shadowBB.union(g.boundingBox);
   }
 
-  const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces], false);
+  const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms], false);
   const material = createLookProofMaterial(arrayTex);
   const mesh = new THREE.Mesh(merged, material);
   scene.add(mesh);
