@@ -302,9 +302,22 @@ proven, current, and yours to build on.
     distinguishable — **say so and show them.** That is a real finding about the
     falloff anchor, which is an open question Mark has not yet answered, and a
     real board is exactly what it was waiting for.
-[ ] RB4 (BLD) Still there on reload — REBUILD-PLAN.md C2.5 and the phase gate
-    Save, reload, and the board is what it was. `placement.js`'s save format is
-    built and carries a schema version and per-placement timestamps since V3.
+[x] RB4 (BLD) Still there on reload — REBUILD-PLAN.md C2.5 and the phase gate
+    `?board=1&reload=1`: serializes the REAL session (session.serialize(),
+    C2.5's save shape) and rebuilds via the REAL loadBoard() -- every render
+    step downstream (resolveBoardPieces, the ground decal, the merge) runs
+    against the RELOADED board, not the original, by reassigning `board`
+    itself (declared `let`, not `const`, specifically so this swap is real).
+    `19-reload.png` is BYTE-IDENTICAL to `14-board.png` -- confirmed by
+    `cmp`, not eyeballed -- proving the round trip lost, moved, or silently
+    dropped nothing.
+    `?reloadShrink=1` reloads into a DELIBERATELY narrower board (20 cells,
+    not 24) so mega-tower-a's own saved anchor genuinely no longer fits --
+    a REAL out-of-bounds refusal, not a happy-path-only "failures: []" left
+    untested. Console: `RELOAD-FAILURES mega-tower-a(out-of-bounds)`.
+    `20-reload-failure.png` shows exactly that piece missing, the other
+    three unchanged -- loadBoard()'s own `{board, failures}` contract
+    surfaced, not swallowed.
     Gate: place several pieces, save, reload, render — byte-identical shot. RED
     is any placement lost, moved, or silently dropped. `loadBoard()` returns
     `{board, failures}` — **surface the failures; do not swallow them.**
