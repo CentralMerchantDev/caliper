@@ -1405,6 +1405,30 @@
       "find": "    \"id\": \"substation-a\",\n    \"category\": \"civic\",\n    \"footprint\": [\n      1,\n      1\n    ],\n    \"rotatable\": false,\n    \"terrainMask\": [\n      \"land\"\n    ],\n    \"pivot\": \"corner\",\n    \"massing\": [\n      \"base\"\n    ],\n    \"joinSpec\": \"contact-darkening\",\n    \"proportion\": null,\n    \"baseValue\": 1,\n    \"adjacency\": {}",
       "replace": "    \"id\": \"substation-a\",\n    \"category\": \"civic\",\n    \"footprint\": [\n      1,\n      1\n    ],\n    \"rotatable\": false,\n    \"terrainMask\": [\n      \"land\"\n    ],\n    \"pivot\": \"corner\",\n    \"massing\": [\n      \"base\"\n    ],\n    \"joinSpec\": \"contact-darkening\",\n    \"proportion\": null,\n    \"baseValue\": 1,\n    \"adjacency\": { \"residential\": 5 }",
       "expect": "GATE (A1), named directly: substation-a specifically carries no positive residential adjacency"
+    },
+    {
+      "id": "scoring-s1-piece-excludes-self",
+      "guards": "S1's own contract: a piece does not contribute to its own cell's value, only to cells within R of it.",
+      "file": "public/scoring.js",
+      "find": "      if (id !== -1 && id !== selfId) ids.add(id);",
+      "replace": "      if (id !== -1) ids.add(id);",
+      "expect": "GATE: a piece does not contribute to its OWN cell's value"
+    },
+    {
+      "id": "scoring-s1-dedup-multi-cell-piece",
+      "guards": "S1's own contract: a piece spanning several cells within R is counted exactly once, never once per cell it occupies.",
+      "file": "public/scoring.js",
+      "find": "  const ids = new Set();\n  const xMin = Math.max(0, x - radius);\n  const xMax = Math.min(board.width - 1, x + radius);\n  const yMin = Math.max(0, y - radius);\n  const yMax = Math.min(board.height - 1, y + radius);\n  for (let cy = yMin; cy <= yMax; cy++) {\n    for (let cx = xMin; cx <= xMax; cx++) {\n      if (chebyshevDistance(x, y, cx, cy) > radius) continue;\n      const id = board.pieceIdAt(cx, cy);\n      if (id !== -1 && id !== selfId) ids.add(id);\n    }\n  }\n  return [...ids];",
+      "replace": "  const ids = [];\n  const xMin = Math.max(0, x - radius);\n  const xMax = Math.min(board.width - 1, x + radius);\n  const yMin = Math.max(0, y - radius);\n  const yMax = Math.min(board.height - 1, y + radius);\n  for (let cy = yMin; cy <= yMax; cy++) {\n    for (let cx = xMin; cx <= xMax; cx++) {\n      if (chebyshevDistance(x, y, cx, cy) > radius) continue;\n      const id = board.pieceIdAt(cx, cy);\n      if (id !== -1 && id !== selfId) ids.push(id);\n    }\n  }\n  return ids;",
+      "expect": "a piece spanning multiple cells within R is counted exactly ONCE, not once per cell it occupies"
+    },
+    {
+      "id": "scoring-s1-missing-adjacency-key-is-zero-not-nan",
+      "guards": "S1: an adjacency map with no key for the occupant's category contributes zero, never NaN from adding undefined.",
+      "file": "public/scoring.js",
+      "find": "    if (typeof bonus === \"number\") total += bonus;",
+      "replace": "    total += bonus;",
+      "expect": "an entry with no adjacency key for the occupant's category contributes zero, not undefined-coerced-to-NaN"
     }
   ]
 }
