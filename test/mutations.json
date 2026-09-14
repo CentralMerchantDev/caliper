@@ -1589,6 +1589,46 @@
       "find": ", { skip: \"QUARANTINED (U2, docs/briefs/CLI-2026-09-15-overnight.md): subject page public/city.html no longer exists -- quarantined in the Phase 1 takedown (e3c355b) and deleted outright by this run's own item zero purge. page.goto() against it 404s, window.__ready is never set, and page.waitForFunction hangs its full 240s timeout every run -- same root cause as test/cullingRatio.test.ts and test/regressionGate.test.ts's A5.2/A5.3, confirmed directly, not guessed. Owner: BLD -- re-point at a real rendered scene once one exists in public/ (REBUILD-CHECKLIST.md L11/L12, 'THE LOOK AT SCALE'; BLD's own public/look-proof-scene.html exists only on codex-lane, not yet merged here).\" }",
       "replace": "",
       "expect": "GATE (U2): all three quarantines name city.html as the cause, so a future reader (or an automated unblock check) can find them by grepping for it, not by memory"
+    },
+    {
+      "id": "u4-registry-must-refuse-collision",
+      "guards": "U4/B1: an authored entry must never be allowed to override an existing typeId, shipped or already-authored -- 'a player cannot override an existing piece.' Disables the collision check entirely.",
+      "file": "public/catalogue-registry.js",
+      "find": "    } else if (Object.prototype.hasOwnProperty.call(baseCatalogue, id) || overlay.has(id)) {",
+      "replace": "    } else if (false) {",
+      "expect": "GATE (U4/B1): a collision against the SHIPPED catalogue is refused -- a player cannot override an existing piece"
+    },
+    {
+      "id": "u4-registry-must-check-category-before-adjacencyfor",
+      "guards": "U4: an unrecognized category must be refused cleanly, not passed through to the real, throwing adjacencyFor() -- migrate-catalogue-s2-fields.mjs's own adjacencyFor throws by design on an unknown category, which is correct for hand-typed shipped data but would crash on untrusted authored input if this check is skipped. Disables the known-category check.",
+      "file": "public/catalogue-registry.js",
+      "find": "    if (!KNOWN_CATEGORIES.includes(category)) {",
+      "replace": "    if (false) {",
+      "expect": "GATE (U4): a category the validator does not recognise is refused cleanly, not thrown -- adjacencyFor() throws by design on an unknown category, so this must be checked BEFORE composing it"
+    },
+    {
+      "id": "u4-registry-must-apply-uniqueness-multiplier",
+      "guards": "U4/B3's own gate, verbatim: 'a piece whose typeId is player-authored contributes a uniqueness multiplier to baseValue.' Removes the multiplier from the stored baseValue entirely.",
+      "file": "public/catalogue-registry.js",
+      "find": "baseValue: baseValueFor(forFormulas) * UNIQUENESS_MULTIPLIER, // B3: the multiplier lives here.",
+      "replace": "baseValue: baseValueFor(forFormulas), // MUTATED: multiplier removed.",
+      "expect": "GATE (U4/B3): an authored piece's totalWorth is measurably higher than an otherwise-identical shipped piece, purely from the uniqueness multiplier on baseValue -- the multiplier is real, not decorative"
+    },
+    {
+      "id": "u4-registry-must-require-provenance",
+      "guards": "U4/B1: an authored entry must actually carry provenance -- catalogue-validator.js's own rule 10 alone cannot enforce this (0-of-4 is legal there, since every shipped entry has zero), so addAuthoredEntry's own stricter check is the only thing that does. Disables that check.",
+      "file": "public/catalogue-registry.js",
+      "find": "      if (typeof value !== \"string\" || value.trim() === \"\") {",
+      "replace": "      if (false) {",
+      "expect": "GATE (U4/B1): an entry with ZERO provenance fields is refused -- rule 10 alone (all-or-nothing) legally accepts this, since every SHIPPED entry has zero; addAuthoredEntry has its own, stricter check that an authored entry must actually BE authored"
+    },
+    {
+      "id": "u4-validator-provenance-must-be-all-or-nothing",
+      "guards": "U4's own rule 10: provenance is all-or-nothing at the shared-validator level too, defence in depth alongside addAuthoredEntry's own stricter check. Disables the partial-provenance check.",
+      "file": "public/catalogue-validator.js",
+      "find": "    if (present.length > 0 && present.length < provenance.length) {",
+      "replace": "    if (false) {",
+      "expect": "RULE 10: three of four provenance fields present is caught, naming the one missing"
     }
   ]
 }

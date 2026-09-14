@@ -376,3 +376,31 @@ test("unitQualityFor is exactly 1/sqrt(tiers) -- DECISIONS-FOR-MARK.md #14's dis
   assert.equal(unitQualityFor({ category: "residential", massing: ["a", "b", "c"] }), 0.5773502691896258);
   assert.equal(unitQualityFor({ category: "road", massing: ["a", "b", "c"] }), 1);
 });
+
+// ---------------------------------------------------------------- rule 10 (U4)
+test("RULE 10 (provenance all-or-nothing): zero provenance fields is NOT flagged -- every shipped entry has zero, and that must stay legal", () => {
+  const errors = validateEntry(goodBuilding());
+  assert.ok(!errors.some((e) => e.rule === "provenance-all-or-nothing"), JSON.stringify(errors));
+});
+
+test("RULE 10: all four provenance fields present is NOT flagged", () => {
+  const errors = validateEntry(goodBuilding({ author: "p", verifiedBy: "v", createdAt: "c", sourceRef: "s" }));
+  assert.ok(!errors.some((e) => e.rule === "provenance-all-or-nothing"), JSON.stringify(errors));
+});
+
+test("RULE 10: exactly one provenance field present is caught, naming what is missing", () => {
+  const errors = validateEntry(goodBuilding({ author: "p" }));
+  const err = errors.find((e) => e.rule === "provenance-all-or-nothing");
+  assert.ok(err, JSON.stringify(errors));
+  assert.match(err!.message, /verifiedBy/);
+  assert.match(err!.message, /createdAt/);
+  assert.match(err!.message, /sourceRef/);
+});
+
+test("RULE 10: three of four provenance fields present is caught, naming the one missing", () => {
+  const errors = validateEntry(goodBuilding({ author: "p", verifiedBy: "v", createdAt: "c" }));
+  const err = errors.find((e) => e.rule === "provenance-all-or-nothing");
+  assert.ok(err, JSON.stringify(errors));
+  assert.match(err!.message, /sourceRef/);
+  assert.doesNotMatch(err!.message, /author\/verifiedBy\/createdAt\/sourceRef/);
+});

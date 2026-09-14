@@ -103,7 +103,14 @@ const MAGNITUDE = { STRONG: 5, MODERATE: 2 };
  * one landed where it did. */
 export const AMENITY_CIVIC_TYPE_IDS = ["small-civic-a", "civic-6x6-a"];
 
-function adjacencyFor(entry) {
+/** Exported (was private) for §U4: public/catalogue-registry.js composes
+ * this directly rather than keeping a second, hand-copied magnitude table
+ * -- one source of truth for "what does each category's adjacency look
+ * like", shipped and authored entries alike. Still throws on an unknown
+ * category, deliberately (see below) -- a caller with untrusted input
+ * (an authored entry's own category) must check it is one of the six
+ * known ones BEFORE calling this, exactly as catalogue-registry.js does. */
+export function adjacencyFor(entry) {
   switch (entry.category) {
     case "commercial":
       return { residential: MAGNITUDE.STRONG };

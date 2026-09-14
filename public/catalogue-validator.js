@@ -1,13 +1,14 @@
 // =============================================================================
 // THE CATALOGUE VALIDATOR — docs/specs/REBUILD-PLAN.md C1, Phase 1 item 5;
 // rules 7-8 added for §S2 (docs/briefs/CLI-2026-09-14-scoring.md item 2.1);
-// rule 9 added for §S4 (unitQuality).
+// rule 9 added for §S4 (unitQuality); rule 10 added for §U4 (B1's own
+// provenance fields on a player-authored entry).
 //
 // Written before anything consumes data/catalogue.json, per the brief's own
 // instruction. A11's own evidence is why: "Unknown node types are caught
 // immediately — the LLM cannot invent a node name." This is what makes that
 // true here — a model (or a person) can add a row, and this is what tells
-// them, immediately and by name, when the row is wrong. Nine rules:
+// them, immediately and by name, when the row is wrong. Ten rules:
 //
 //   1. every footprint is a whole number of modules
 //   2. every footprint in C1.1's set of eight, or a rotation of one
@@ -18,6 +19,7 @@
 //   7. baseValue is present and an integer (S2)
 //   8. adjacency is present, a plain object, and every value in it an integer (S2)
 //   9. unitQuality is present, a finite number, in (0, 1] (S4)
+//   10. provenance (author/verifiedBy/createdAt/sourceRef) is all-or-nothing (U4)
 //
 // Returns a list of errors rather than throwing, so a caller (a test, a
 // future LLM generation loop per A11) can report every problem in one pass
@@ -175,6 +177,25 @@ export function validateEntry(entry) {
   // integer check catches a fractional baseValue -- ">0" alone would not.
   if (!entry || !Number.isFinite(entry.unitQuality) || entry.unitQuality <= 0 || entry.unitQuality > 1) {
     push("has-unit-quality", `unitQuality is ${JSON.stringify(entry && entry.unitQuality)}, not a finite number in (0, 1] -- S4 requires one on every entry`);
+  }
+
+  // Rule 10 — §U4/B1: provenance (author, verifiedBy, createdAt, sourceRef)
+  // is ALL-OR-NOTHING. Every SHIPPED entry has ZERO of these four -- that
+  // is legal, and must stay legal, or this rule would break the entire
+  // shipped catalogue. It is deliberately NOT the check that "an authored
+  // entry must actually have provenance" (catalogue-registry.js's own
+  // addAuthoredEntry() enforces that, separately and more strictly, before
+  // an entry ever reaches this shared validator) -- this rule catches only
+  // the narrower, structural case: a hand-corrupted or partially-filled-in
+  // entry with SOME but not all four present, which is never a valid state
+  // for either a shipped or a genuinely authored piece.
+  {
+    const provenance = ["author", "verifiedBy", "createdAt", "sourceRef"];
+    const present = entry ? provenance.filter((k) => entry[k] !== undefined) : [];
+    if (present.length > 0 && present.length < provenance.length) {
+      const missing = provenance.filter((k) => !present.includes(k));
+      push("provenance-all-or-nothing", `has ${present.join("/")} but is missing ${missing.join("/")} -- provenance is all four fields or none, never some`);
+    }
   }
 
   return errors;
