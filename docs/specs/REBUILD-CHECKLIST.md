@@ -363,7 +363,7 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     The ghost shows the cell's current value and the value the piece would have
     there; that number, changing as the cursor moves, IS the reason one cell
     beats another.
-[ ] C1 (CLI) The city score: a registry of terms, with median wealth as the first — SCORING-MODEL-2026-09-14.md §4B
+[x] C1 (CLI) The city score: a registry of terms, with median wealth as the first — SCORING-MODEL-2026-09-14.md §4B
     A SECOND DIMENSION, not an adjacency value. §S1 is strictly local at
     R = 3; the city score is global. Two dimensions, computed differently,
     shown separately. Do not fold it into the adjacency table.
@@ -388,6 +388,20 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     Gate: adding a second, trivial term requires no change to the registry or
     to the first term. Prove it by adding a throwaway term in the test, not
     by asserting the design is extensible.
+    DONE, commit e8decb4 (branch scoring). public/city-score.js: median()
+    (null for empty, not 0 — see below), medianWealth() (per-CELL, not
+    per-building — DECISIONS-FOR-MARK.md #15 discloses this as a real
+    judgement call, not the only defensible reading), createCityScoreRegistry()
+    (fresh instance per call) and defaultCityScoreRegistry(). Gate proven:
+    registering median wealth alone vs. median wealth plus a throwaway
+    constant term in two separate fresh registries — first term's own value
+    byte-identical across both, total = sum. Blind review before code found
+    a serious defect in the original plan: an empty city would have scored
+    0, silently outranking a real, badly-planned city that legitimately
+    scores negative (dilutive residential adjacency) — fixed to null
+    throughout, with computeScore excluding null-valued terms from its sum.
+    13 new tests, 132/132 targeted suite, tsc clean, 5/5 new mutations
+    CAUGHT. Gate ledger: docs/GATE-LEDGER.jsonl.
 [ ] S6 (CLI) Developed value sits on top, unchanged in mechanism — REBUILD-PLAN.md S5 and V3
     Read S5 and V3 and confirm the mechanism is genuinely unchanged rather than
     assumed so.
