@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createAreaBoard } from "../public/area-board.js";
-import { value, pieceIdsWithinR, terrainContribution, R } from "../public/scoring.js";
+import { value, pieceIdsWithinR, terrainContribution, falloff, R } from "../public/scoring.js";
 
 const CATALOGUE = {
   "house-a": { category: "residential", footprint: [1, 1], terrainMask: ["land"], adjacency: { residential: -2, commercial: 2 } },
@@ -90,7 +90,7 @@ test("a vacant cell far from everything is terrain-only", () => {
   assert.equal(value(b, CATALOGUE, 10, 10), terrainContribution(b, 10, 10));
 });
 
-test("a residential cell with a commercial neighbour within R gains the shop's adjacency bonus", () => {
+test("a residential cell with a commercial neighbour within R gains the shop's adjacency bonus, scaled by falloff at that distance", () => {
   const b = board();
   b.place("house-a", { x: 5, y: 5 }, 0, { id: 1 });
   b.place("shop-a", { x: 7, y: 5 }, 0, { id: 2 }); // Chebyshev distance 2, within R=3
@@ -100,10 +100,10 @@ test("a residential cell with a commercial neighbour within R gains the shop's a
   bAlone.place("house-a", { x: 5, y: 5 }, 0, { id: 1 });
   const withoutShop = value(bAlone, CATALOGUE, 5, 5);
 
-  assert.equal(withShop - withoutShop, 5, "the shop's own adjacency.residential value");
+  assert.equal(withShop - withoutShop, 5 * falloff(2), "the shop's own adjacency.residential value, scaled by falloff(2)");
 });
 
-test("a neighbour at exactly Chebyshev distance R contributes; one step further does not", () => {
+test("a neighbour at exactly Chebyshev distance R contributes something real; one step further does not", () => {
   const atR = board();
   atR.place("house-a", { x: 10, y: 10 }, 0, { id: 1 });
   atR.place("shop-a", { x: 13, y: 10 }, 0, { id: 2 }); // distance exactly 3
@@ -116,6 +116,8 @@ test("a neighbour at exactly Chebyshev distance R contributes; one step further 
 
   assert.notEqual(valueAtR, valuePastR, "the boundary at R must actually matter");
   assert.equal(valuePastR, terrainContribution(pastR, 10, 10) + 0, "past R, the shop contributes nothing");
+  assert.equal(valueAtR, terrainContribution(atR, 10, 10) + 5 * falloff(3), "at exactly R, the shop contributes a real, non-vanishing amount -- not silently zero");
+  assert.ok(valueAtR - terrainContribution(atR, 10, 10) > 0.01, "sanity: the contribution at R must be clearly distinguishable from zero, not lost to floating-point noise");
 });
 
 test("GATE: a piece does not contribute to its OWN cell's value", () => {
@@ -135,27 +137,41 @@ test("GATE: a piece does not contribute to its OWN cell's value", () => {
 test("multiple distinct neighbours within R all contribute, summed -- not a coincidental cancellation", () => {
   const b = board();
   b.place("house-a", { x: 5, y: 5 }, 0, { id: 1 });
-  b.place("shop-a", { x: 6, y: 5 }, 0, { id: 2 });
-  b.place("shop-a", { x: 4, y: 5 }, 0, { id: 3 });
+  b.place("shop-a", { x: 6, y: 5 }, 0, { id: 2 }); // distance 1
+  b.place("shop-a", { x: 4, y: 5 }, 0, { id: 3 }); // distance 1
   const v = value(b, CATALOGUE, 5, 5);
-  assert.equal(v, terrainContribution(b, 5, 5) + 10, "two +5 shops must sum to +10, not net to zero or flip sign");
+  assert.equal(v, terrainContribution(b, 5, 5) + 10 * falloff(1), "two +5 shops at distance 1 must sum to +10*falloff(1), not net to zero or flip sign");
 
   // And confirm each shop's OWN contribution individually, not just the
   // combined total -- rules out "disabled entirely" landing on the right
-  // total by a different coincidence (e.g. a single +10 constant).
+  // total by a different coincidence (e.g. a single constant).
   const oneShop = board();
   oneShop.place("house-a", { x: 5, y: 5 }, 0, { id: 1 });
   oneShop.place("shop-a", { x: 6, y: 5 }, 0, { id: 2 });
-  assert.equal(value(oneShop, CATALOGUE, 5, 5), terrainContribution(oneShop, 5, 5) + 5);
+  assert.equal(value(oneShop, CATALOGUE, 5, 5), terrainContribution(oneShop, 5, 5) + 5 * falloff(1));
 });
 
-test("a piece spanning multiple cells within R is counted exactly ONCE, not once per cell it occupies", () => {
+test("a piece spanning multiple cells within R is counted exactly ONCE, not once per cell it occupies -- and its distance is to its NEAREST cell, approached from EITHER side", () => {
   const wideCatalogue = { ...CATALOGUE, "mall-a": { category: "commercial", footprint: [2, 1], terrainMask: ["land"], adjacency: { residential: 5 } } };
-  const b = createAreaBoard({ width: 20, height: 20, catalogue: wideCatalogue });
-  b.place("house-a", { x: 5, y: 5 }, 0, { id: 1 });
-  b.place("mall-a", { x: 6, y: 5 }, 0, { id: 2 }); // occupies (6,5) and (7,5), both within R of (5,5)
-  const v = value(b, wideCatalogue, 5, 5);
-  assert.equal(v - terrainContribution(b, 5, 5), 5, "the mall's bonus must not be double-counted for its second cell");
+
+  // Querying from the LEFT/near side of the mall (mall occupies x=6,7).
+  const left = createAreaBoard({ width: 20, height: 20, catalogue: wideCatalogue });
+  left.place("house-a", { x: 5, y: 5 }, 0, { id: 1 });
+  left.place("mall-a", { x: 6, y: 5 }, 0, { id: 2 }); // nearest cell to (5,5) is (6,5), distance 1
+  const vLeft = value(left, wideCatalogue, 5, 5);
+  assert.equal(vLeft - terrainContribution(left, 5, 5), 5 * falloff(1), "approached from the left, the mall's nearest cell is 1 away");
+
+  // Querying from the RIGHT/far side -- this is the direction rect.xMax's
+  // EXCLUSIVE-upper-bound convention actually matters: an off-by-one here
+  // (using xMax instead of xMax-1) is invisible from the left side (the
+  // wrong term stays negative and loses the max() either way) and only
+  // shows up querying from the right, which is exactly why this second
+  // case exists rather than relying on the left-side case alone.
+  const right = createAreaBoard({ width: 20, height: 20, catalogue: wideCatalogue });
+  right.place("house-a", { x: 9, y: 5 }, 0, { id: 1 });
+  right.place("mall-a", { x: 6, y: 5 }, 0, { id: 2 }); // occupies x=6,7 -- nearest cell to (9,5) is (7,5), distance 2
+  const vRight = value(right, wideCatalogue, 9, 5);
+  assert.equal(vRight - terrainContribution(right, 9, 5), 5 * falloff(2), "approached from the right, the mall's nearest cell (x=7, the LAST occupied column) is 2 away, not 1");
 });
 
 test("an entry with no adjacency key for the occupant's category contributes zero, not undefined-coerced-to-NaN", () => {
@@ -165,6 +181,62 @@ test("an entry with no adjacency key for the occupant's category contributes zer
   const v = value(b, CATALOGUE, 5, 5);
   assert.equal(v, terrainContribution(b, 5, 5));
   assert.ok(Number.isFinite(v));
+});
+
+// ---------------------------------------------------------------- falloff -- §S2, T9
+
+// Independently computed expected values (a literal Math.exp(...), not
+// sourced from the module) -- the falloff-aware tests above prove value()
+// WIRES to falloff() correctly, but since they compute their own
+// expectation by calling the real falloff(), they cannot catch a bug
+// INSIDE falloff() itself (wrong GAMMA, a sign error, a wrong formula
+// shape moves both sides of those assertions identically and stays green).
+// These pin the curve's own real numbers.
+test("falloff(0) is exactly 1 -- full strength at zero distance", () => {
+  assert.equal(falloff(0), 1);
+});
+
+test("falloff(R) is exactly EDGE_FRACTION (0.1) by construction -- GAMMA is derived so this holds exactly, not approximately", () => {
+  assert.ok(Math.abs(falloff(R) - 0.1) < 1e-9, `falloff(R)=${falloff(R)}`);
+});
+
+test("falloff at an interior point matches an independently-computed exponential, not just the module's own internal consistency", () => {
+  const GAMMA = -Math.log(0.1) / 3; // re-derived here, not imported
+  const expected = Math.exp(-GAMMA * 2);
+  assert.ok(Math.abs(falloff(2) - expected) < 1e-9);
+});
+
+test("falloff is monotonically decreasing across the whole R window", () => {
+  for (let r = 0; r < R; r++) {
+    assert.ok(falloff(r) > falloff(r + 1), `falloff(${r})=${falloff(r)} should exceed falloff(${r + 1})=${falloff(r + 1)}`);
+  }
+});
+
+// The checklist's own named gate, verbatim: "a test that FAILS on a linear
+// ramp and passes on the exponential."
+test("GATE (S2): the curve's consecutive per-step drops SHRINK as distance increases -- true for exponential decay, false for every linear ramp", () => {
+  // The real falloff() must show shrinking drops.
+  const drop01 = falloff(0) - falloff(1);
+  const drop12 = falloff(1) - falloff(2);
+  const drop23 = falloff(2) - falloff(3);
+  assert.ok(drop01 > drop12, `drop 0->1 (${drop01}) should exceed drop 1->2 (${drop12})`);
+  assert.ok(drop12 > drop23, `drop 1->2 (${drop12}) should exceed drop 2->3 (${drop23})`);
+
+  // A hand-written LINEAR ramp, same endpoints (1 at r=0, 0.1 at r=R), to
+  // prove this assertion actually discriminates rather than being true of
+  // any monotonic decreasing curve. A line's consecutive drops are all
+  // equal by definition -- it must FAIL the strict inequality above.
+  function linearRamp(distance) {
+    return 1 - ((1 - 0.1) / R) * distance;
+  }
+  const linDrop01 = linearRamp(0) - linearRamp(1);
+  const linDrop12 = linearRamp(1) - linearRamp(2);
+  // Mathematically exact equality, but IEEE-754 float subtraction of
+  // repeating-binary fractions (0.3, here) can differ in the last bit --
+  // confirmed directly: linDrop01/linDrop12 differ by ~1.1e-16. An epsilon
+  // is the honest comparison, not a hand-picked one to dodge a real gap.
+  assert.ok(!(linDrop01 > linDrop12 + 1e-9), "a linear ramp's drops are equal, not shrinking -- this must NOT satisfy the same assertion the real curve does");
+  assert.ok(Math.abs(linDrop01 - linDrop12) < 1e-9, "a straight line's per-step drops are equal (within float precision)");
 });
 
 // ---------------------------------------------------------------- pieceIdsWithinR

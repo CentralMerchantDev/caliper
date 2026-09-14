@@ -38,12 +38,46 @@
 // which nothing in S1/S2/S4 asks for and would make every residential cell
 // automatically dilute itself regardless of what is actually nearby).
 //
-// FALLOFF IS NOT YET APPLIED HERE -- every piece within R contributes its
-// full flat adjacency value regardless of exact distance. That is §S2's own
-// item, layered on top of this function, not a property S1 itself claims.
+// FALLOFF — §S2, REBUILD-PLAN.md T9 (Barr & Cohen 2014, Clark's negative
+// exponential): D(r) = D0 * e^(-gamma * r) -- steep immediately outside a
+// piece, then flattening, never linear. `falloff(distance)` returns the
+// MULTIPLIER only (D0 is the caller's own adjacency bonus); `value()`
+// multiplies each contribution by it before summing. Preserves sign, so a
+// dilutive (negative) bonus decays toward zero the same way a positive one
+// does -- T9 is phrased in terms of positive "density" but nothing in it or
+// in SCORING-MODEL suggests residential-on-residential dilution should
+// behave differently from any other adjacency effect.
+//
+// GAMMA IS DERIVED, NOT HAND-PICKED, FROM ONE NAMED CHOICE:
+// docs/DECISIONS-FOR-MARK.md #13 has the full account. `EDGE_FRACTION = 0.1`
+// -- at the edge of R (distance = R), a piece's influence has dropped to
+// 10% of its nominal value: clearly present, meaningfully diminished,
+// avoiding both "R feels arbitrary because the edge is still nearly full
+// strength" and "R and the falloff say the same thing because the edge is
+// already ~0". GAMMA = -ln(EDGE_FRACTION) / R follows algebraically so that
+// `falloff(R) === EDGE_FRACTION` exactly. T9's own citation gives the
+// curve's SHAPE, not a number for a hard R=3 cutoff (Clark's model is
+// continuous, city-scale, kilometres) -- EDGE_FRACTION is a disclosed
+// judgement call, not sourced from the paper, same rigor as A1's adjacency
+// magnitudes. ONE CONSEQUENCE WORTH KNOWING, not just the edge dampening:
+// because self-exclusion guarantees a contributing piece is never closer
+// than distance 1 (occupancy makes two pieces sharing a cell impossible),
+// NOTHING in the live game ever contributes above `falloff(1) ≈ 0.464` of
+// its nominal adjacency value -- the practical range in play is roughly
+// [0.1, 0.46], not "mostly full strength, dampened only at the edge."
 // =============================================================================
 
 export const R = 3;
+const EDGE_FRACTION = 0.1;
+const GAMMA = -Math.log(EDGE_FRACTION) / R;
+
+/** The falloff MULTIPLIER at a given Chebyshev distance, range (0, 1].
+ * `falloff(0) === 1` by construction, though no included piece is ever
+ * actually at distance 0 from the cell it influences -- occupancy makes
+ * that geometrically impossible (see the header). */
+export function falloff(distance) {
+  return Math.exp(-GAMMA * distance);
+}
 
 function chebyshevDistance(ax, ay, bx, by) {
   return Math.max(Math.abs(ax - bx), Math.abs(ay - by));
@@ -68,6 +102,20 @@ export function pieceIdsWithinR(board, x, y, radius = R) {
     }
   }
   return [...ids];
+}
+
+/** Chebyshev distance from (x,y) to the NEAREST cell of a rect (inclusive
+ * of being inside it, distance 0). `rect.xMax`/`yMax` are EXCLUSIVE upper
+ * bounds -- occupiedRect()'s and cellsOf()'s own convention throughout
+ * area-board.js -- so the last occupied index is `xMax - 1`/`yMax - 1`;
+ * without that -1 a cell immediately adjacent to the rect would wrongly
+ * compute distance 0. "How far is the shop from my house" means distance
+ * to its nearest point, not to an anchor corner that might be on the far
+ * side of a large piece. */
+function nearestChebyshevDistance(x, y, rect) {
+  const dx = Math.max(rect.xMin - x, 0, x - (rect.xMax - 1));
+  const dy = Math.max(rect.yMin - y, 0, y - (rect.yMax - 1));
+  return Math.max(dx, dy);
 }
 
 /** No terrain system exists yet (REBUILD-PLAN.md T1-T3, a later build-order
@@ -100,7 +148,10 @@ export function value(board, catalogue, x, y) {
     const piece = board.getPiece(pieceId);
     const entry = catalogueOf(piece.typeId);
     const bonus = entry.adjacency[occupantCategory];
-    if (typeof bonus === "number") total += bonus;
+    if (typeof bonus === "number") {
+      const distance = nearestChebyshevDistance(x, y, board.rectFor(pieceId));
+      total += bonus * falloff(distance);
+    }
   }
 
   return total;

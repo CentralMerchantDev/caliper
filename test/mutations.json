@@ -1424,10 +1424,10 @@
     },
     {
       "id": "scoring-s1-missing-adjacency-key-is-zero-not-nan",
-      "guards": "S1: an adjacency map with no key for the occupant's category contributes zero, never NaN from adding undefined.",
+      "guards": "S1: an adjacency map with no key for the occupant's category contributes zero, never NaN from adding undefined. Find string updated 2026-09-15 (S2): falloff landed inside this same guarded block; the old single-line find stopped matching (would have reported INCONCLUSIVE, not a pass) once the multiplication was added.",
       "file": "public/scoring.js",
-      "find": "    if (typeof bonus === \"number\") total += bonus;",
-      "replace": "    total += bonus;",
+      "find": "    if (typeof bonus === \"number\") {\n      const distance = nearestChebyshevDistance(x, y, board.rectFor(pieceId));\n      total += bonus * falloff(distance);\n    }",
+      "replace": "    {\n      const distance = nearestChebyshevDistance(x, y, board.rectFor(pieceId));\n      total += bonus * falloff(distance);\n    }",
       "expect": "an entry with no adjacency key for the occupant's category contributes zero, not undefined-coerced-to-NaN"
     },
     {
@@ -1461,6 +1461,22 @@
       "find": "    if (!result.ok) {\n      failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });\n    } else if (p.at !== undefined && p.at !== null) {\n      placedAt.set(p.id, p.at);\n    }",
       "replace": "    if (!result.ok) {\n      failures.push({ ...p, origin: \"player\", reason: result.reason, detail: result.detail });\n    }\n    if (p.at !== undefined && p.at !== null) {\n      placedAt.set(p.id, p.at);\n    }",
       "expect": "loadBoard()'s placedAt is populated ONLY for placements that actually re-applied -- a failed one must not leave a phantom timestamp"
+    },
+    {
+      "id": "scoring-s2-falloff-must-be-exponential-not-linear",
+      "guards": "S2's own gate, verbatim (docs/specs/REBUILD-CHECKLIST.md): \"a test that FAILS on a linear ramp and passes on the exponential.\" Substitutes a genuinely linear falloff and confirms the shape-discriminator test catches it.",
+      "file": "public/scoring.js",
+      "find": "export function falloff(distance) {\n  return Math.exp(-GAMMA * distance);\n}",
+      "replace": "export function falloff(distance) {\n  return 1 - ((1 - EDGE_FRACTION) / R) * distance;\n}",
+      "expect": "GATE (S2): the curve's consecutive per-step drops SHRINK as distance increases -- true for exponential decay, false for every linear ramp"
+    },
+    {
+      "id": "scoring-s2-nearest-distance-off-by-one",
+      "guards": "S2: distance to a multi-cell piece must use its own NEAREST occupied cell (rect.xMax/yMax are EXCLUSIVE upper bounds -- the last real cell is xMax-1/yMax-1). Dropping the -1 silently shifts every multi-cell piece's falloff by one step.",
+      "file": "public/scoring.js",
+      "find": "  const dx = Math.max(rect.xMin - x, 0, x - (rect.xMax - 1));\n  const dy = Math.max(rect.yMin - y, 0, y - (rect.yMax - 1));",
+      "replace": "  const dx = Math.max(rect.xMin - x, 0, x - rect.xMax);\n  const dy = Math.max(rect.yMin - y, 0, y - rect.yMax);",
+      "expect": "a piece spanning multiple cells within R is counted exactly ONCE, not once per cell it occupies -- and its distance is to its NEAREST cell, approached from EITHER side"
     }
   ]
 }
