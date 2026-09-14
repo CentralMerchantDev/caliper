@@ -196,6 +196,76 @@ pulled, and it is deliberately fenced off from the file CLI is working in.
 
 ---
 
+## THE CONVERGENCE — BLD OWNS THIS. THE PHASE GATE ITSELF.
+
+Everything both lanes have built has never been in one view. The board is data
+(`area-board.js`), placement is data (`placement.js`), the look is a hardcoded
+piece list in `look-proof-scene.html`, and scoring is a pure function nothing
+displays. **Nothing renders a board.** This is that.
+
+**BUILD FROM ZERO. This is the hard one and it has been violated four times.**
+`_TO-DELETE/b1-board/` contains `board-render.js`, `board-generator.js` and a
+generated board. That is the REJECTED world, not a head start. Nothing in
+`_TO-DELETE/` is read, referenced, copied or repaired — not for inspiration, not
+"just to see how it did instancing". `REBUILD-PLAN.md`'s 2026-09-13 correction is
+explicit: *"Do not do it a fourth."* It then did. Do not do it a fifth.
+
+Compose `look-proof-material.js`, `area-board.js` and `placement.js`. Those are
+proven, current, and yours to build on.
+
+[ ] RB1 (BLD) A board renderer: draw a real area board, not a hardcoded list — REBUILD-PLAN.md C2.1 and C1.6
+    `look-proof-scene.html` renders `PIECES`, a literal array. Replace that
+    source with a real `areaBoard`'s own placements, resolved through the
+    catalogue's `glb` field that BO7A just bound.
+    Not a rewrite of the material — the material is proven. This is the feed.
+    Gate: `place()` a piece into a board, render, and the piece is visibly there
+    in the shot; `remove()` it, render, and it is gone. **Draw calls stay at 1**
+    at the piece counts L12 reached. RED is the draw count rising, or a
+    placement that the board accepts and the render does not show — the two
+    disagreeing is the whole defect class this item exists to prevent.
+[ ] RB2 (BLD) The ghost, and an invalid one that reads as invalid — REBUILD-PLAN.md C2.2
+    `placement.js` already has Tier 1: ghost, inert-on-invalid commit, cancel,
+    remove. None of it is visible. Render the ghost.
+    Gate: a ghost over an occupied or out-of-bounds cell is VISIBLY distinct
+    from a valid one, and committing it changes nothing. RED is a ghost that
+    looks placeable where `place()` would refuse — the render and the rule
+    disagreeing, again.
+[ ] RB3 (BLD) THE VALUE READOUT — §S4's payoff. REASSIGNED from CLI's S5.
+    **Ownership changed 2026-09-15 and the reason is stated so it is not
+    mistaken for drift:** S5 sat in CLI's list marked blocked because no render
+    surface existed. RB1 creates one, and a readout is a view concern. So it
+    moves to the lane that owns the view. CLI's S5 line stays, pointing here.
+    `valueAt(cell)` and `valueIfPlaced(typeId, cell, rotation)` are CLI's, built
+    in S4. **Call them. Do not reimplement scoring, and do not touch
+    `public/scoring.js`.**
+    The ghost shows the cell's current value AND the value the piece would have
+    there. *"That number, changing as the cursor moves, IS the reason one cell
+    beats another."* §A2 calls it the item every project of this kind skips.
+    Gate: move the cursor across cells of genuinely different value and the
+    number changes. RED is a readout that does not move, or one that moves when
+    the board has not changed.
+    If the numbers look wrong — everything reading weak, or nothing
+    distinguishable — **say so and show them.** That is a real finding about the
+    falloff anchor, which is an open question Mark has not yet answered, and a
+    real board is exactly what it was waiting for.
+[ ] RB4 (BLD) Still there on reload — REBUILD-PLAN.md C2.5 and the phase gate
+    Save, reload, and the board is what it was. `placement.js`'s save format is
+    built and carries a schema version and per-placement timestamps since V3.
+    Gate: place several pieces, save, reload, render — byte-identical shot. RED
+    is any placement lost, moved, or silently dropped. `loadBoard()` returns
+    `{board, failures}` — **surface the failures; do not swallow them.**
+[ ] RB5 (BLD) The ground stops reading as desert — REBUILD-PLAN.md R1, Mark 2026-09-15
+    After `13-street-level.png` Mark's read was that the scene reads as buildings
+    in a dust bowl: bare earth everywhere, a warm sand fog tint, and a hard pale
+    band at the horizon. Sky and ground extent were real improvements; the ground
+    MATERIAL is now the lever.
+    A city needs urban ground — paving where there should be paving, earth only
+    where there should be earth.
+    Gate: the pair of images, judged by Mark. No numeric gate; inventing one
+    would be a check that cannot fail.
+
+---
+
 ## VERSIONING AND TRACKING — CLI OWNS THIS. DO IT FIRST.
 
 `docs/specs/VERSIONING-AND-TRACKING-2026-09-15.md` is the spec.
