@@ -402,9 +402,21 @@ housing sentence and resolves DECISIONS-FOR-MARK #12.
     throughout, with computeScore excluding null-valued terms from its sum.
     13 new tests, 132/132 targeted suite, tsc clean, 5/5 new mutations
     CAUGHT. Gate ledger: docs/GATE-LEDGER.jsonl.
-[ ] S6 (CLI) Developed value sits on top, unchanged in mechanism — REBUILD-PLAN.md S5 and V3
+[x] S6 (CLI) Developed value sits on top, unchanged in mechanism — REBUILD-PLAN.md S5 and V3
     Read S5 and V3 and confirm the mechanism is genuinely unchanged rather than
     assumed so.
+    DONE, commit 0171261 (branch scoring). Confirmation-only, no new
+    production code: test/developedValue.test.ts (4 tests) composes only
+    the already-built place()/remove(), valueAt/perUnitWorth/totalWorth,
+    and medianWealth to prove a remove-then-place "development" (farmland
+    -> house -> subdivision) propagates to neighbours, raises the plot's
+    own worth, moves the city's median, and is fully path-independent
+    (extending S1's own gate to this exact narrative) — with zero
+    development-specific code anywhere. Two real bugs found by running the
+    tests (an amenity placed inside the new building's own footprint,
+    silently failing the redevelopment and reading a false pass off a
+    vacant cell) fixed before commit. 136/136 targeted suite, tsc clean.
+    Gate ledger: docs/GATE-LEDGER.jsonl.
 [ ] S7 (CLI) Write up the two parked systems as plan sections, do not build them — SCORING-MODEL §5 and §6
     Second-order lift (a neighbourhood's reputation raising itself beyond the
     sum of its parts — needs a fixed-point solve) and the BUILD COST layer
