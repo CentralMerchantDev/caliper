@@ -119,9 +119,15 @@ pulled, and it is deliberately fenced off from the file CLI is working in.
     32355. Real bug found by rendering, not inspection: the mega-tower's
     height scaled linearly with its footprint (~87 m) before being capped at
     6x, matching the smaller pieces' own working scale.
-[ ] I1 (BLD) Octahedral impostors: pre-render one piece, colour, normal and depth — REBUILD-PLAN.md 8 of the revised order
-    Investigate under its real name and verify against primary sources, not a
-    summary. Report texture-memory cost MEASURED.
+[x] I1 (BLD) Octahedral impostors: pre-render one piece, colour, normal and depth — REBUILD-PLAN.md 8 of the revised order
+    b7f5e82. `docs/look-proof-shots/impostor-bake/`. 8x8=64-angle hemi-octahedral
+    bake (proof scale; production precedent per the Godot-Octahedral-Impostors
+    baker README is 16x16=256), colour+normal+depth per angle. Measured: 4.00 MiB
+    per atlas uncompressed (12.00 MiB total); real on-disk PNG bytes 1.08 MiB
+    total. Academic precursor (INRIA hal-00650120, CiteSeerX 10.1.1.90.6202) was
+    bot-blocked at every mirror tried -- named, not silently substituted.
+    Depth atlas has real RGBADepthPacking banding under SwiftShader, reported
+    honestly, does not block the texture-memory deliverable.
 [ ] I2 (BLD) The overview's massing bake — REBUILD-PLAN.md W4
 
 ---
