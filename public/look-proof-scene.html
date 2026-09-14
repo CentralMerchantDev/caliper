@@ -29,7 +29,8 @@ import { mergeGeometries } from "./vendor/three/addons/utils/BufferGeometryUtils
 import { createLookProofMaterial, LIGHT_DIR } from "./look-proof-material.js";
 import { PIECES as ALL_PIECES, LAYOUT_BOUNDS, GROUND as GROUND_FULL, loadPieceGeometry, fitToFootprint } from "./look-proof-pieces.js";
 import { createAreaBoard } from "./area-board.js";
-import { resolveBoardPieces, rotateGeometryY } from "./board-renderer.js";
+import { createPlacementSession } from "./placement.js";
+import { resolveBoardPieces, resolveGhost, rotateGeometryY } from "./board-renderer.js";
 
 // N1 -- "the same fixed camera as 08" (docs/briefs/BLD-2026-09-15.md).
 // Mark judged 08-cast-shadows.png, not 09-piece-count-20.png ("09 was
@@ -105,6 +106,21 @@ const BOARD_GROUND = {
   anchor: [-8, -8],
   layer: GROUND_FULL.layer,
 };
+
+// RB2 -- "The ghost, and an invalid one that reads as invalid"
+// (docs/specs/REBUILD-CHECKLIST.md, THE CONVERGENCE). `placement.js`
+// already has the ghost (Tier 1) -- this renders it. `?board=1&ghost=valid`
+// previews a real, empty, in-bounds cell; `?board=1&ghost=invalid` previews
+// the SAME cell BOARD_DEMO_PLACEMENTS's own house-a already occupies, so
+// the refusal is a real "occupied" verdict from the real board, not staged.
+// Reads `session.getGhost()`'s own `valid`/`reason` VERBATIM (via
+// board-renderer.js's resolveGhost) rather than re-deciding anything here.
+const GHOST_MODE = new URLSearchParams(window.location.search).get("ghost"); // "valid" | "invalid" | null
+const GHOST_DEMO = {
+  valid: { typeId: "house-a", anchorCell: { x: 2, y: 6 }, rotation: 0 }, // empty cell
+  invalid: { typeId: "tower-base-6x6-a", anchorCell: { x: 2, y: 2 }, rotation: 0 }, // house-a already sits here
+};
+const GHOST_COLOR = { valid: 0x4caf50, invalid: 0xe53935 }; // visibly distinct: green vs red
 
 const PIECES = HERO_MODE
   ? [...HERO_IDS, ...HERO_PROP_IDS].map((id) => {
@@ -450,6 +466,7 @@ async function main() {
   let boardResolved = [];
   let boardSkipped = [];
   let boardFootprintsForDecal = [];
+  let ghostResolved = null;
   if (BOARD_MODE) {
     const catalogueArr = await fetch("data/catalogue.json").then((r) => r.json());
     const catalogueById = Object.fromEntries(catalogueArr.map((e) => [e.id, e]));
@@ -479,9 +496,30 @@ async function main() {
     if (skipped.length) {
       console.log(`BOARD-SKIPPED ${skipped.map((s) => `${s.typeId}(${s.reason})`).join(", ")}`);
     }
+
+    // RB2 -- the ghost. A real session, the SAME setGhost/commit a player's
+    // own placement UI would call (public/placement.js), previewing over
+    // the SAME real board the pieces above were placed on.
+    if (GHOST_MODE === "valid" || GHOST_MODE === "invalid") {
+      const session = createPlacementSession({ board });
+      const demo = GHOST_DEMO[GHOST_MODE];
+      const ghost = session.setGhost(demo.typeId, demo.anchorCell, demo.rotation);
+      ghostResolved = resolveGhost(ghost, catalogueById);
+      console.log(`GHOST-STATE mode=${GHOST_MODE} valid=${ghost.valid} reason=${ghost.reason}`);
+      if (!ghost.valid) {
+        // "committing it changes nothing" -- proven here, on the REAL
+        // board, not asserted: resolve before, commit, resolve after,
+        // compare the actual piece counts a render would show.
+        const beforeCommit = resolveBoardPieces(board, catalogueById, manifest).resolved.length;
+        const commitResult = session.commit();
+        const afterCommit = resolveBoardPieces(board, catalogueById, manifest).resolved.length;
+        console.log(`GHOST-COMMIT ok=${commitResult.ok} reason=${commitResult.reason} piecesBefore=${beforeCommit} piecesAfter=${afterCommit} unchanged=${beforeCommit === afterCommit}`);
+      }
+    }
   }
   window.__boardResolved = boardResolved;
   window.__boardSkipped = boardSkipped;
+  window.__ghostResolved = ghostResolved;
 
   // Subdivided (1 segment/metre) so the join decal below has enough
   // resolution to read as a gradient rather than one flat quad -- a
@@ -566,6 +604,32 @@ async function main() {
   scene.add(mesh);
   window.__material = material;
   window.__scene = scene;
+
+  // RB2 -- the ghost overlay. A SEPARATE, simple, transparent mesh (not
+  // merged into the shared-material mesh above): the shared material
+  // samples the array texture and does not carry a tint/alpha uniform,
+  // and RB1's own brief said plainly not to rewrite it ("the material is
+  // proven"). Green reads as placeable, red as refused -- GHOST_COLOR's
+  // own mapping, chosen for maximum, unambiguous separation rather than a
+  // subtler palette a screenshot's own compression or a colourblind
+  // viewer could blur together. Never receives or casts a shadow (a
+  // preview is not a real object) and is excluded from the shadow
+  // camera's own bounding box above.
+  if (ghostResolved) {
+    const [gw, gd] = ghostResolved.footprint;
+    const [gx, gz] = ghostResolved.anchor;
+    const ghostGeom = new THREE.BoxGeometry(gw, 0.4, gd)
+      .translate(gx + gw / 2, 0.2, gz + gd / 2);
+    const ghostMaterial = new THREE.MeshBasicMaterial({
+      color: ghostResolved.valid ? GHOST_COLOR.valid : GHOST_COLOR.invalid,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+    });
+    const ghostMesh = new THREE.Mesh(ghostGeom, ghostMaterial);
+    scene.add(ghostMesh);
+    window.__ghostMesh = ghostMesh;
+  }
 
   const shadowPass = buildShadowPass(renderer, scene, shadowBB);
   material.uniforms.uShadowMap.value = shadowPass.depthTexture;

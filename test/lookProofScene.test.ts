@@ -144,8 +144,13 @@ test("(synthetic) the vulnerability: a comment mentioning preserveDrawingBuffer 
 
 test("look-proof-scene.html merges every piece into ONE geometry before adding a single mesh -- the one-draw-call claim, structurally", () => {
   assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom,\s*farGroundGeom,\s*\.\.\.preparedPieces,\s*\.\.\.streetDetailGeoms,\s*\.\.\.preparedBoardPieces\]/, "the scene does not merge ground, far ground, every piece, street-level detail, and board pieces into one geometry -- 4.1's gate (\"two pieces from different packs render in a single draw call\") is not wired the way this file claims");
+  // RB2's own ghost overlay is a SECOND, deliberate mesh (its own simple
+  // material, a UI preview, not a "piece") -- the one-draw-call claim is
+  // about pieces sharing one merged geometry, which the assertion above
+  // already checks structurally; this count only guards against a THIRD,
+  // accidental mesh construction creeping in.
   const meshConstructions = (SCENE_SRC.match(/new THREE\.Mesh\(/g) || []).length;
-  assert.equal(meshConstructions, 1, `expected exactly one THREE.Mesh construction (one draw call), found ${meshConstructions}`);
+  assert.equal(meshConstructions, 2, `expected exactly two THREE.Mesh constructions (the merged pieces mesh, RB2's own ghost overlay), found ${meshConstructions}`);
 });
 
 test("look-proof-scene.html offers a way back to index.html -- reachability.test.ts's own gate", () => {
@@ -260,7 +265,7 @@ test("(synthetic) the vulnerability: a comment mentioning buildStreetLevelDetail
 // ------------------------------------------------------------- RB1: the board
 test("GATE (RB1): ?board=1 places demo pieces into a REAL createAreaBoard, never a hardcoded PIECES-style array -- PIECES is empty in this mode", () => {
   assert.match(SCENE_SRC, /import \{ createAreaBoard \} from "\.\/area-board\.js"/, "look-proof-scene.html does not import the real area board");
-  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real board-renderer module");
+  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real board-renderer module");
   assert.match(SCENE_SRC, /const board = createAreaBoard\(\{ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById \}\)/, "BOARD_MODE does not construct a real area board");
   assert.match(SCENE_SRC, /board\.place\(p\.typeId, p\.anchorCell, p\.rotation\)/, "BOARD_MODE does not call the real board.place()");
   assert.match(SCENE_SRC, /BOARD_MODE\s*\n\s*\? \[\]/, "PIECES is not empty in BOARD_MODE -- a hardcoded piece list would still be feeding the render alongside (or instead of) the real board");
@@ -288,4 +293,39 @@ test("RB1: a piece with no matching catalogue mesh is named in the skipped list 
 test("(synthetic) the vulnerability: a comment mentioning createAreaBoard must not satisfy the checks above", () => {
   const commentOnly = stripSourceComments("// const board = createAreaBoard({ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById }) used to be here\nconst m = {};\n");
   assert.doesNotMatch(commentOnly, /const board = createAreaBoard\(\{ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById \}\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
+
+// ------------------------------------------------------------- RB2: the ghost
+test("GATE (RB2): a real placement session previews the ghost -- session.setGhost() against the SAME real board, never a staged/hardcoded valid or invalid flag", () => {
+  assert.match(SCENE_SRC, /import \{ createPlacementSession \} from "\.\/placement\.js"/, "look-proof-scene.html does not import the real placement session");
+  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, rotateGeometryY \} from "\.\/board-renderer\.js"/, "look-proof-scene.html does not import the real resolveGhost");
+  assert.match(SCENE_SRC, /const session = createPlacementSession\(\{ board \}\)/, "GHOST_MODE does not construct a real placement session against the real board");
+  assert.match(SCENE_SRC, /const ghost = session\.setGhost\(demo\.typeId, demo\.anchorCell, demo\.rotation\)/, "GHOST_MODE does not call the real session.setGhost()");
+});
+
+test("GATE (RB2): the invalid-ghost demo previews the SAME cell a real placement already occupies -- a real 'occupied' refusal from the real board, not staged", () => {
+  assert.match(SCENE_SRC, /invalid: \{ typeId: "tower-base-6x6-a", anchorCell: \{ x: 2, y: 2 \}, rotation: 0 \}/, "the invalid ghost demo does not target house-a's own real anchor cell (2,2) from BOARD_DEMO_PLACEMENTS");
+  assert.match(SCENE_SRC, /\{ typeId: "house-a", anchorCell: \{ x: 2, y: 2 \}, rotation: 0 \}/, "BOARD_DEMO_PLACEMENTS no longer places house-a at (2,2) -- the invalid-ghost demo's own premise (that cell is occupied) would be false");
+});
+
+test("GATE (RB2): a valid and an invalid ghost render with VISIBLY DISTINCT colours -- green vs red, not a subtle tint one screenshot could blur", () => {
+  assert.match(SCENE_SRC, /const GHOST_COLOR = \{ valid: 0x4caf50, invalid: 0xe53935 \}/, "GHOST_COLOR is missing or no longer a real green/red pair");
+  assert.match(SCENE_SRC, /color: ghostResolved\.valid \? GHOST_COLOR\.valid : GHOST_COLOR\.invalid/, "the ghost overlay's own colour is not driven by ghostResolved.valid -- it could render the same colour whether the placement is valid or not");
+});
+
+test("GATE (RB2): committing an invalid ghost is proven inert on the REAL board -- resolved before/after compared, not merely asserted in a comment", () => {
+  assert.match(SCENE_SRC, /const beforeCommit = resolveBoardPieces\(board, catalogueById, manifest\)\.resolved\.length/, "the invalid-ghost path does not measure the board's own resolved pieces before commit()");
+  assert.match(SCENE_SRC, /const commitResult = session\.commit\(\)/, "the invalid-ghost path does not call the real session.commit()");
+  assert.match(SCENE_SRC, /const afterCommit = resolveBoardPieces\(board, catalogueById, manifest\)\.resolved\.length/, "the invalid-ghost path does not re-measure the board's own resolved pieces after commit()");
+  assert.match(SCENE_SRC, /unchanged=\$\{beforeCommit === afterCommit\}/, "the before/after piece counts are not actually compared");
+});
+
+test("RB2: the ghost overlay is a SEPARATE mesh from the shared-material mesh -- RB1's own brief said plainly not to rewrite the proven material, and the shared material has no tint/alpha uniform to drive from ghostResolved.valid", () => {
+  assert.match(SCENE_SRC, /const ghostMaterial = new THREE\.MeshBasicMaterial\(\{/, "the ghost overlay is not built with its own separate material");
+  assert.match(SCENE_SRC, /const ghostMesh = new THREE\.Mesh\(ghostGeom, ghostMaterial\)/, "the ghost overlay is not added as its own separate mesh");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning session.setGhost must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// const ghost = session.setGhost(demo.typeId, demo.anchorCell, demo.rotation) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /const ghost = session\.setGhost\(demo\.typeId, demo\.anchorCell, demo\.rotation\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });

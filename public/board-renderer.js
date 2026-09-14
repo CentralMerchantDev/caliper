@@ -113,6 +113,35 @@ export function resolveBoardPieces(board, catalogue, manifest) {
   return { resolved, skipped };
 }
 
+/**
+ * RB2 -- resolve a real placement session's own ghost (public/placement.js's
+ * `session.getGhost()`) into a render-ready overlay descriptor: `{ valid,
+ * reason, footprint (metres), anchor (metres) }`. `null` in, `null` out (no
+ * ghost is being previewed); an unknown typeId also resolves to `null` --
+ * there is no real footprint to size an overlay from, and this function
+ * does not guess one.
+ *
+ * Deliberately reads `ghost.valid`/`ghost.reason` VERBATIM from the real
+ * session rather than re-deriving them -- `setGhost` already calls the
+ * board's own `evaluatePlacement`, the SAME function `place()` itself
+ * calls (area-board.js's own "one function, two callers" guarantee). This
+ * function has no business re-deciding whether a placement is valid; it
+ * only sizes and positions what the session already decided.
+ */
+export function resolveGhost(ghost, catalogue) {
+  if (!ghost) return null;
+  const catalogueOf = catalogue instanceof Map ? (id) => catalogue.get(id) : (id) => catalogue[id];
+  const entry = catalogueOf(ghost.typeId);
+  if (!entry) return null;
+  const footprintModules = footprintForRotation(entry.footprint, ghost.rotation);
+  return {
+    valid: ghost.valid,
+    reason: ghost.reason,
+    footprint: [footprintModules[0] * MODULE_SIZE_M, footprintModules[1] * MODULE_SIZE_M],
+    anchor: anchorForCell(ghost.anchorCell),
+  };
+}
+
 /** Rotate a geometry around its own local Y axis by the placement's own
  * rotation (degrees, clockwise, matching ROTATIONS in area-board.js) --
  * applied BEFORE look-proof-pieces.js's own fitToFootprint, so the

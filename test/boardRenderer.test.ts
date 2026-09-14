@@ -14,9 +14,11 @@ import {
   footprintForRotation,
   anchorForCell,
   resolveBoardPieces,
+  resolveGhost,
   rotateGeometryY,
 } from "../public/board-renderer.js";
 import { createAreaBoard } from "../public/area-board.js";
+import { createPlacementSession } from "../public/placement.js";
 
 const MANIFEST = {
   layers: [
@@ -147,6 +149,62 @@ test("(synthetic) the vulnerability: resolveBoardPieces must call board.pieces()
   const { resolved, skipped } = resolveBoardPieces(board, CATALOGUE, MANIFEST);
   assert.equal(resolved.length, 0);
   assert.equal(skipped.length, 0);
+});
+
+// ------------------------------------------------------------------ resolveGhost
+test("resolveGhost: null in, null out -- no ghost is being previewed", () => {
+  assert.equal(resolveGhost(null, CATALOGUE), null);
+});
+
+test("GATE (RB2): a VALID ghost (an empty, in-bounds cell) resolves valid: true, sized to its own real footprint", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  const session = createPlacementSession({ board });
+  const ghost = session.setGhost("house-a", { x: 2, y: 6 }, 0);
+  assert.equal(ghost.valid, true, JSON.stringify(ghost));
+  const resolved = resolveGhost(ghost, CATALOGUE);
+  assert.deepEqual(resolved, {
+    valid: true,
+    reason: null,
+    footprint: [2 * MODULE_SIZE_M, 3 * MODULE_SIZE_M],
+    anchor: [2 * MODULE_SIZE_M, 6 * MODULE_SIZE_M],
+  });
+});
+
+test("GATE (RB2): an INVALID ghost (over an already-occupied cell) resolves valid: false, with the REAL refusal reason -- visibly distinct from a valid one is only meaningful if this flag is actually correct", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  const placed = board.place("house-a", { x: 2, y: 2 }, 0);
+  assert.ok(placed.ok);
+  const session = createPlacementSession({ board });
+  const ghost = session.setGhost("tower-base-6x6-a", { x: 2, y: 2 }, 0); // same cell, already occupied
+  assert.equal(ghost.valid, false, JSON.stringify(ghost));
+  assert.equal(ghost.reason, "occupied");
+  const resolved = resolveGhost(ghost, CATALOGUE);
+  assert.equal(resolved!.valid, false);
+  assert.equal(resolved!.reason, "occupied");
+});
+
+test("GATE (RB2): committing an invalid ghost changes NOTHING -- the board's own resolved pieces are byte-identical before and after, and commit() itself reports 'inert'", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  const placed = board.place("house-a", { x: 2, y: 2 }, 0);
+  assert.ok(placed.ok);
+  const session = createPlacementSession({ board });
+  session.setGhost("tower-base-6x6-a", { x: 2, y: 2 }, 0); // occupied -- invalid
+
+  const before = resolveBoardPieces(board, CATALOGUE, MANIFEST);
+  const commitResult = session.commit();
+  const after = resolveBoardPieces(board, CATALOGUE, MANIFEST);
+
+  assert.equal(commitResult.ok, false);
+  assert.equal(commitResult.reason, "inert");
+  assert.deepEqual(after, before, "committing an invalid ghost must not change the board's own resolved pieces at all");
+});
+
+test("resolveGhost: an unknown typeId resolves to null, not a guessed footprint -- there is nothing real to size an overlay from", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  const session = createPlacementSession({ board });
+  const ghost = session.setGhost("does-not-exist", { x: 0, y: 0 }, 0);
+  assert.equal(ghost.valid, false);
+  assert.equal(resolveGhost(ghost, CATALOGUE), null);
 });
 
 // --------------------------------------------------------------- rotateGeometryY
