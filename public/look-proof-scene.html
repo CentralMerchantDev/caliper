@@ -27,7 +27,31 @@
 import * as THREE from "three";
 import { mergeGeometries } from "./vendor/three/addons/utils/BufferGeometryUtils.js";
 import { createLookProofMaterial, LIGHT_DIR } from "./look-proof-material.js";
-import { PIECES, LAYOUT_BOUNDS, GROUND, loadPieceGeometry, fitToFootprint } from "./look-proof-pieces.js";
+import { PIECES as ALL_PIECES, LAYOUT_BOUNDS, GROUND as GROUND_FULL, loadPieceGeometry, fitToFootprint } from "./look-proof-pieces.js";
+
+// N1 -- "the same fixed camera as 08" (docs/briefs/BLD-2026-09-15.md).
+// Mark judged 08-cast-shadows.png, not 09-piece-count-20.png ("09 was
+// correctly read as a throughput instrument and discounted") -- so N1's
+// own before/after pairs need EXACTLY that shot's camera and piece
+// composition, not L12's wide 20-piece site-plan view. `?hero=1` selects
+// it: the same four pieces, in the same order, at the exact anchors and
+// camera 08 used, computed once here rather than re-derived from
+// layoutPieces (which starts every layout at cursor (0,0) and would
+// shift every anchor by a constant, changing nothing about the
+// COMPOSITION but breaking pixel continuity with the committed 01-08
+// sequence for no reason).
+const HERO_MODE = new URLSearchParams(window.location.search).has("hero");
+const HERO_IDS = ["house-2x3", "street-tile-4wide", "midrise-4x4", "tower-base-6x6"];
+const HERO_ANCHORS = { "house-2x3": [-26, 0], "street-tile-4wide": [-16, 0], "midrise-4x4": [2, 0], "tower-base-6x6": [20, 0] };
+const HERO_GROUND = { footprint: [90, 60], anchor: [-30, -14], layer: GROUND_FULL.layer };
+
+const PIECES = HERO_MODE
+  ? HERO_IDS.map((id) => {
+      const p = ALL_PIECES.find((x) => x.id === id);
+      return { ...p, anchor: HERO_ANCHORS[id] };
+    })
+  : ALL_PIECES;
+const GROUND = HERO_MODE ? HERO_GROUND : GROUND_FULL;
 
 // mergeGeometries requires every input to carry the same attribute set --
 // drop TANGENT (unused by this shader) so it does not conflict with the
@@ -83,6 +107,35 @@ function addZeroDecalAttribute(geometry) {
   const count = geometry.getAttribute("position").count;
   geometry.setAttribute("groundDecal", new THREE.BufferAttribute(new Float32Array(count), 1));
   return geometry;
+}
+
+// N1a -- A SKY. "Even a gradient. The void is doing more damage to the
+// read than any missing shader feature, and it is the cheapest thing on
+// this list" (docs/briefs/BLD-2026-09-15.md). A CanvasTexture set as
+// scene.background is drawn as its own fullscreen background quad
+// (confirmed by measurement, not assumed: draw calls rose 1->2, triangles
+// 12068->12070, exactly one quad's worth) -- a real, small, separate cost
+// from the "one draw call for N pieces" claim the rest of this scene
+// proves, not zero as an earlier draft of this comment wrongly claimed.
+// Deliberately warm at the horizon, cool toward the zenith -- the same
+// warm-lit / cool-shadow relationship the warm-cool terminator mechanism
+// (4.2) already established, so the sky agrees with the light the scene
+// is already lit by rather than contradicting it.
+function buildSkyTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, "#0d2340"); // zenith -- deep cool blue
+  gradient.addColorStop(0.55, "#3a5f82"); // mid sky
+  gradient.addColorStop(0.85, "#e7c9a0"); // near horizon -- warm, matching LIGHT_DIR
+  gradient.addColorStop(1, "#f2ddb8"); // horizon
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 async function buildArrayTexture() {
@@ -204,22 +257,29 @@ async function main() {
   window.__renderer = renderer;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b1016);
+  scene.background = buildSkyTexture();
 
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 500);
-  // L12's own camera -- the 01-08 sequence's close-up framing cannot see
-  // a 20-piece site plan; a wider, higher angle replaces it for this item
-  // only. LAYOUT_BOUNDS gives the real scene extent, not a guess.
-  const layoutCenterX = LAYOUT_BOUNDS.totalWidth / 2;
-  const layoutCenterZ = LAYOUT_BOUNDS.totalDepth / 2;
-  // A steep diagonal-corner angle, not a straight-on approach: at 20
-  // pieces the tallest (the mega-tower, row 4, closest to any
-  // straight-on camera) otherwise occludes everything behind it. Viewed
-  // from a corner along the diagonal, no single piece sits directly in
-  // front of another the way a straight approach stacks row 4 in front
-  // of rows 1-3.
-  camera.position.set(layoutCenterX - 95, 230, layoutCenterZ - 95);
-  camera.lookAt(layoutCenterX, 0, layoutCenterZ);
+  if (HERO_MODE) {
+    // The EXACT camera 01-08 used -- pixel continuity with the shot Mark
+    // actually judged, not a re-derived approximation.
+    camera.position.set(-6, 34, 70);
+    camera.lookAt(6, 6, 4);
+  } else {
+    // L12's own camera -- the 01-08 sequence's close-up framing cannot see
+    // a 20-piece site plan; a wider, higher angle replaces it for this item
+    // only. LAYOUT_BOUNDS gives the real scene extent, not a guess.
+    const layoutCenterX = LAYOUT_BOUNDS.totalWidth / 2;
+    const layoutCenterZ = LAYOUT_BOUNDS.totalDepth / 2;
+    // A steep diagonal-corner angle, not a straight-on approach: at 20
+    // pieces the tallest (the mega-tower, row 4, closest to any
+    // straight-on camera) otherwise occludes everything behind it. Viewed
+    // from a corner along the diagonal, no single piece sits directly in
+    // front of another the way a straight approach stacks row 4 in front
+    // of rows 1-3.
+    camera.position.set(layoutCenterX - 95, 230, layoutCenterZ - 95);
+    camera.lookAt(layoutCenterX, 0, layoutCenterZ);
+  }
 
   const [arrayTex, ...pieceGeoms] = await Promise.all([
     buildArrayTexture(),

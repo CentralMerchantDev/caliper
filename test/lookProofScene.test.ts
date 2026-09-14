@@ -191,3 +191,14 @@ test("scripts/normalise-kit-textures.mjs's SOURCES has 4 entries for L12's third
   const sourceNameCount = (scriptSrc.match(/name:\s*"kenney-|name:\s*"ground-grass"/g) || []).length;
   assert.equal(sourceNameCount, 4, `expected 4 SOURCES entries (2 original packs + kenney-city-kit-commercial + ground-grass), found ${sourceNameCount}`);
 });
+
+test("look-proof-scene.html supports ?hero=1 -- the EXACT camera and piece composition 08-cast-shadows.png used, for N1's own before/after continuity", () => {
+  assert.match(SCENE_SRC, /HERO_IDS = \["house-2x3", "street-tile-4wide", "midrise-4x4", "tower-base-6x6"\]/, "hero mode does not select the exact four pieces, in the exact order, 08-cast-shadows.png used");
+  assert.match(SCENE_SRC, /camera\.position\.set\(-6, 34, 70\)/, "hero mode does not use 08's own exact camera position");
+  assert.match(SCENE_SRC, /camera\.lookAt\(6, 6, 4\)/, "hero mode does not use 08's own exact lookAt target");
+});
+
+test("N1a: scene.background is set to a real gradient texture, not a flat colour -- the black void 08-cast-shadows.png still has", () => {
+  assert.match(SCENE_SRC, /scene\.background = buildSkyTexture\(\)/, "scene.background is not set to the sky texture -- 09's own flat THREE.Color(0x0b1016) is exactly the black void N1a exists to remove");
+  assert.match(SCENE_SRC, /createLinearGradient/, "buildSkyTexture does not build a real gradient -- 'even a gradient' is the brief's own floor, not a single flat colour with a different name");
+});
