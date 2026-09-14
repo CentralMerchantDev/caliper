@@ -31,7 +31,8 @@ export function createLookProofMaterial(arrayTexture) {
       uWarmCoolTerminator: { value: true },
       // 4.2, mechanism 3 of 4 (R1): rim separation -- turned on here.
       uRimSeparation: { value: true },
-      uContactDarkening: { value: false },
+      // 4.2, mechanism 4 of 4 (R1): contact darkening -- turned on here.
+      uContactDarkening: { value: true },
       uValueSplit: { value: false },
     },
     vertexShader: /* glsl */ `

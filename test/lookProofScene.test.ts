@@ -70,6 +70,12 @@ test("4.2 mechanism 3 (rim separation) is ON by default, adds light rather than 
   assert.match(MATERIAL_SRC, /upMask = clamp\(1\.0 - abs\(N\.y\)/, "the rim term is not modulated by N.up -- per the brief, it should read strongest on vertical faces, not roofs already lit from above");
 });
 
+test("4.2 mechanism 4 (contact darkening) is ON by default and darkens toward the ground, not away from it", () => {
+  assert.match(MATERIAL_SRC, /uContactDarkening:\s*\{\s*value:\s*true\s*\}/, "uContactDarkening's default is not true -- 05-contact-darkening.png's own before/after pair has nothing to show if this mechanism is not actually on");
+  assert.match(MATERIAL_SRC, /heightFalloff = clamp\(vWorldPos\.y/, "contact darkening must read world-space HEIGHT, not something orientation-independent");
+  assert.match(MATERIAL_SRC, /groundDarken = mix\(0\.45,\s*1\.0,\s*heightFalloff\)/, "the mix direction is wrong -- low height (near 0) must map toward the DARKER end (0.45), high height toward 1.0 (undarkened)");
+});
+
 test("look-proof-material.js's fragment shader actually samples a sampler2DArray, not a plain sampler2D", () => {
   assert.match(MATERIAL_SRC, /uniform\s+sampler2DArray\s+uArrayTex/, "the array-texture uniform is not declared as sampler2DArray");
   assert.match(MATERIAL_SRC, /texture\(uArrayTex,\s*vec3\(/, "the fragment shader does not sample uArrayTex with a vec3(uv, layer) lookup");
