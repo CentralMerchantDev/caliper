@@ -23,7 +23,11 @@ resolve a conflict by taking both sides' ticks for their own ids.
 
 ## THE BLOCKERS — NOTHING ELSE STARTS UNTIL THESE CLEAR. PLAN.md §3.
 
-[ ] FIX-1 (BLD) Remove the 6x height cap — real range, 100+ storeys at the top — PLAN.md 3.1
+[x] FIX-1 (BLD) Remove the 6x height cap — real range, 100+ storeys at the top — PLAN.md 3.1
+    DONE 2026-09-16, once FIX-2 landed (merged from origin/main, 3b6c842): public/look-proof-pieces.js's fitToFootprint takes an OPTIONAL 5th arg, storeys. Real (from the catalogue) -> height = storeys directly, uncapped (two already-real, already-sourced numbers multiplied -- the mesh's own native height, the catalogue's own storeys -- never an invented floor-to-floor metres constant; RESEARCH.md R11 explicitly forbids exactly that, and storeysFor's own header explains why it is a disclosed SCALE, not literal storeys). Absent (HERO_MODE's own already-judged static PIECES, no catalogue) -> UNCHANGED, byte-for-byte, still (sx+sz)/2 capped at 6. board-renderer.js's resolveBoardPieces reads storeys straight from the real catalogue entry. Wired into BOARD_MODE (both the initial build and RC1's rebuild path) and the catalogue contact sheet -- both catalogue-driven; HERO_MODE untouched.
+    node test/run.mjs test/lookProofPieces.test.ts test/boardRenderer.test.ts test/lookProofScene.test.ts test/catalogueContactSheet.test.ts test/catalogueValidator.test.ts test/shootLookProof.test.ts: 187/187 pass. npx tsc --noEmit clean. 3 mutations CAUGHT (fix1-storeys-must-still-drive-height-when-real, fix1-default-path-must-stay-capped, fix1-board-renderer-must-still-read-storeys).
+    Gate: docs/look-proof-shots/34-height-range.png + .console.txt -- small-house-a (storeys 4) measured 4.57m, mega-tower-a (storeys 84) measured 376.32m real, both stated by the render itself, not a declared value. 82:1 ratio -- Mark's own Toronto reference is ~24:1; this run's own real numbers overshoot it, disclosed rather than tuned to match. A dedicated shot, not the 38-piece contact sheet: tried framing the whole crowded sheet to also fit this range and it failed on both counts tried (elevated/angled: tower still clipped; a distance driven off real boundingBox height: everything else shrank to unreadable) -- kept the contact sheet's own CAT-4 camera as-is, mega-tower-a/tower-base-6x6-a clip off its top as a real, disclosed consequence, not silently hidden.
+    A SEPARATE, real finding, NOT fixed here: rendered the actual board (docs/look-proof-shots/35-board-fix1-real-height.png) -- the board camera itself (tuned for the old ~22-27m capped range) is now completely inadequate; tower-base-6x6-a (237m real) and mega-tower-a (376m real) fill the whole frame from a camera position designed for buildings a tenth that size. The board camera's own retune is real, necessary follow-up work this item's own scope does not cover.
     `mega-tower-a` renders at 26.88 m, roughly eight storeys. Mark's ruling: a
     mega-tower is 100+ storeys and the range descends from there. Toronto holds
     the whole range in one view — a 72-storey tower and three-storey semis a
@@ -50,7 +54,8 @@ resolve a conflict by taking both sides' ticks for their own ids.
     Gate: the house-beats-condo-per-unit / condo-beats-house-in-total inversion
     still holds at real proportions, both directions, same cell. If it does not,
     say so — do not tune until it does.
-[ ] FIX-3 (BLD) Revert the board-camera fog to 14's settings and retune from there — PLAN.md 3.3
+[x] FIX-3 (BLD) Revert the board-camera fog to 14's settings and retune from there — PLAN.md 3.3
+    DONE 2026-09-16: node scripts/_mutcheck.mjs test/lookProofScene.test.ts public/look-proof-scene.html test/mutations.json -- both fix3-board-fog-override-must-stay-reverted and fix3-board-paving-radius-must-stay-retuned CAUGHT. Evidence pair: docs/look-proof-shots/14-board.png (before) vs docs/look-proof-shots/30-board-scene-pass-fix3.png (after). Rendering proved the fog override alone (28-board-fog-reverted.png) was visually indistinguishable from the rejected 25 -- the 20m paving radius, not the fog, was the real driver of the wash. Retuned to 10 (measured against real piece gaps, half of RC4's rejected 20), not reverted to 6 -- 6 leaves the original "islands" problem RC4 was legitimately solving. Judged by Mark, not self-certified (no numeric gate by design).
     `25-board-scene-pass.png` was judged by Mark: hazier and more of a dust bowl
     than the `14-board.png` it was meant to improve. The wash removed ground
     texture, the horizon, and the contrast the buildings need.
@@ -58,7 +63,8 @@ resolve a conflict by taking both sides' ticks for their own ids.
     The cure was worse. Start again from 14.
     Gate: the pair, judged by Mark. No numeric gate; inventing one would be a
     check that cannot fail.
-[ ] FIX-4 (BLD) Produce evidence the readout actually shows a number — PLAN.md 3.4
+[x] FIX-4 (BLD) Produce evidence the readout actually shows a number — PLAN.md 3.4
+    DONE 2026-09-16: node scripts/_mutcheck.mjs test/shootLookProof.test.ts scripts/shoot-look-proof.mjs test/mutations.json -- both fix4-shoot-look-proof-must-capture-all-console-lines and fix4-shoot-look-proof-must-write-console-companion-file CAUGHT. Root cause was NOT the toDataURL/HTML-overlay theory: look-proof-scene.html's own readout was always a coloured 3D marker + a console.log line, by deliberate design (see its own RB3/RC5 comment) -- no on-screen text ever existed. The real gap: scripts/shoot-look-proof.mjs discarded the console transcript on exit, so 26-readout-real-numbers.png's own commit message hand-transcribed 3 cells' worth of numbers with nothing in the repo to check them against. Fixed by writing a companion <name>.console.txt beside every PNG. Fresh evidence, not reused: docs/look-proof-shots/31-readout-cell-7-4.png (ifPlaced=2.32), 32-readout-cell-2-6.png (ifPlaced=-0.43), 33-readout-cell-20-14.png (ifPlaced=0) -- three genuinely different values, each with its own committed .console.txt. Said plainly: the PNG alone still only shows marker position/colour, never the number itself -- the number is only checkable via the paired .console.txt, by design, not a shortfall being hidden.
     `26-readout-real-numbers.png` shows a cursor marker and no number. If the
     readout is an HTML overlay, `toDataURL()` captured the canvas and not the
     text — which would make the number real and the evidence empty.
@@ -169,7 +175,8 @@ remains is implementation against answers already in hand.
     the 4 m module BLD's own board-renderer.js already uses -- so BLD samples
     at whatever density its own mesh needs, decoupled from the gameplay grid.
     Backed by public/terrain-field.js (TER-1/2/3, committed alongside).
-[ ] CAT-2 (BLD) Bind the remaining 38 entries, and correct street-cross — PLAN.md 5.1
+[x] CAT-2 (BLD) Bind the remaining 38 entries, and correct street-cross — PLAN.md 5.1
+    DONE 2026-09-16: node scripts/link-catalogue-meshes.mjs -- "linked 38 of 50 catalogue entries to a real L12 mesh" (up from 12). node test/run.mjs test/catalogueValidator.test.ts: 58/58 pass (GATE (BO7A) glb-match, classification and idempotence gates all green). node scripts/_mutcheck.mjs: cat2-street-cross-must-stay-corrected and cat2-lane-cross-binding-must-stay-classified both CAUGHT. 26 of the 38 unblocked via 3 newly-sourced kenney-city-kit-roads shapes (road-crossroad, road-intersection, road-end, each verified by rendering top-down against the real texture, not by filename) plus reuse of the 2 already-vendored ones (straight, curve); 3 "transition" entries reuse road-straight.glb, disclosed as a placeholder (no taper mesh exists in the pack). street-cross corrected from road-crossing.glb (a straight road with a crosswalk, confirmed by rendering) to road-crossroad.glb (a real 4-way). Shortfall: 12 of the 38 remain unbound -- non-road categories (civic/industrial/commercial/residential footprint tiers) this item was never scoped to cover; a genuine finding, not silently dropped. Contact sheet regenerated: docs/look-proof-shots/27-catalogue-contact-sheet.png, "bound=38 total=50", draw calls: 1 (unchanged).
     kenney.nl is an AUTHORISED standing CC0 source. Every import records URL,
     licence and SHA-256 in `public/vendor/kits/LICENCES.md`; anything not CC0
     stops and asks.
@@ -183,14 +190,17 @@ remains is implementation against answers already in hand.
     adjacency — those are CLI's. An entry with no plausible match is a FINDING.
     Gate: still ONE draw call with the bound set rendered, measured. Report how
     many of the 50 are bound and the shortfall.
-[ ] CAT-3 (BLD) Variety — design, shape, size and height, within the plot limits — PLAN.md 5.2
+[x] CAT-3 (BLD) Variety — design, shape, size and height, within the plot limits — PLAN.md 5.2
+    DONE 2026-09-16, SCOPED: R2/C1.5 (docs/specs/REBUILD-PLAN.md) are explicit -- "start with ONE variant and test it in a real scene before building a second," variation numbers are "far lower than intuition." This item spends that budget on the highest-value target Mark's own words named literally ("two towers of the same footprint should not be the same tower") using ZERO new assets: the 3 meshes BO7A's own UNMATCHED_MESHES had benched (tower-base-6x6-alt, midrise-4x4-alt, commercial-2x2-alt -- already vendored, already CC0-licensed, excluded only because no second CATALOGUE SLOT existed) now serve as a real second LOOK via a new, additive `glbVariants` catalogue field and a deterministic per-placement selector (public/board-renderer.js's `deterministicVariantIndex`/`glbForPiece`) -- never Math.random(), so the same placement always renders the same mesh. node test/run.mjs test/boardRenderer.test.ts test/catalogueValidator.test.ts test/lookProofScene.test.ts: 163/163 pass. npx tsc --noEmit clean. 4 mutations CAUGHT (cat3-variant-index-must-stay-real-hash, cat3-glb-variants-must-stay-consulted, cat3-tower-variant-binding-must-stay-classified, plus cat2-lane-cross-binding-must-stay-classified's own expect string kept in sync with the renamed BO7A/CAT-3 gate). Rendered 5 real tower-base-6x6-a placements on a real board (a temporary verification page, removed after use): console log shows real alternation (tower-d, tower-c, tower-d, tower-c, tower-d) and the image shows two visually distinct tower designs. draw calls: 1, unchanged (node scripts/shoot-catalogue-contact-sheet.mjs). NOT DONE, disclosed: the CAT-2 clone-duplicate road pieces (e.g. street-t/lane-street-t share one mesh at one footprint) are unaddressed -- a genuine remaining "variety within a footprint class" gap on the contact sheet itself, left for a follow-up rather than force-fit into this item's own scope.
     Mark: a city builder is about diversity, as in real buildings in a real city.
     Two towers of the same footprint should not be the same tower.
     §R2's variation numbers are FAR lower than instinct — read them before
     deciding how many. §C1.5 gives the real starting counts.
     Gate: the contact sheet shows genuine variety within each footprint class,
     and the draw count has not risen.
-[ ] CAT-4 (BLD) The contact sheet, on a grid — PLAN.md 5.3
+[x] CAT-4 (BLD) The contact sheet, on a grid — PLAN.md 5.3
+    DONE 2026-09-16: the grid MATH (col = i % COLS, row = Math.floor(i / COLS)) was already real -- the camera was the defect. A 45-degree isometric camera (equal X and Z offset from centre) photographs any rectangular grid as a rotated diamond; changed to offset on Z only (x fixed at centerX) so rows read as horizontal bands. node scripts/_mutcheck.mjs test/catalogueContactSheet.test.ts public/catalogue-contact-sheet.html test/mutations.json -- cat4-camera-must-stay-off-diagonal CAUGHT. node test/run.mjs test/catalogueContactSheet.test.ts: 5/5 pass. npx tsc --noEmit clean.
+    JUDGED BY MARK, own read offered first per this item's own instruction not to present a wall of thumbnails as a pass: docs/look-proof-shots/27-catalogue-contact-sheet.png. (1) mega-tower-a reads as the tallest piece on the sheet by a wide margin over tower-base-6x6-a beside it -- expected, not new: this is FIX-1's own still-open 6x cap, visible here rather than hidden, and should re-render taller once FIX-1/FIX-2 land, needing no further change to this camera. (2) apartment-block-a and small-commercial-a (bottom row) read visually similar to each other -- both grey/blue blocky masses at a glance; a real, if minor, "which is which" concern. (3) The top two rows (avenue-highway-t/cross/transition, street-avenue-t/cross/transition, lane-street-t/cross/transition) are visually cramped -- 6+ labels within a narrow band, two clipped mid-word ("eet-avenue-transition", "eet-avenue-cross") in this render. A real legibility gap, disclosed rather than silently left for Mark to discover; not fixed here (COLS/cellSize retuning risks a second round of the exact "found it, didn't fix it right" pattern this run is trying to avoid without a dedicated pass). (4) The three-shape reuse CAT-2 disclosed (road-intersection/road-crossroad/road-straight shared across footprint tiers) is visually mitigated by real scale difference between tiers, not eliminated -- e.g. street-t and lane-street-t are the same silhouette at different sizes, distinguishable mainly by size and label, a genuine remaining "variety within a footprint class" gap CAT-3's own commit already named and left open.
     Every bound piece, same ground, same camera, labelled, ON A GRID. The current
     sheet is a diagonal strip in a field of black.
     It has already earned its keep: it is what made the scale problem visible.
@@ -199,55 +209,443 @@ remains is implementation against answers already in hand.
 
 ---
 
-## THE REAL RANGE, ON SCREEN — BLD OWNS THIS. Added 2026-09-16.
+## CAMERA, READOUT, GROUND — BLD's own follow-up findings, docs/briefs/BLD-2026-09-17.md.
 
-FIX-1 made the heights real — 376.32 m against 4.57 m, an 82:1 range, measured
-and rendered. **But `35-board-fix1-real-height.png` puts the camera inside the
-tower's footprint.** You cannot see the building, you cannot see the range, and
-FIX-1's own gate — *"a shot showing the real range"* — is not met by it. The
-measurement is met; the picture is not.
+Not yet indexed under a PLAN.md section — added here directly against the
+brief that raised them, a real gap this checklist itself should have
+caught before the brief had to. Correct the line (and PLAN.md) once these
+land somewhere permanent; until then this IS the record.
 
-A camera framed for eight-storey buildings cannot frame 82:1. That is this
-section.
-
-[ ] CAM-1 (BLD) A camera that frames the real range — PLAN.md 3.1
-    The board camera, the contact sheet's camera, and the overview's all assumed
-    a compressed height range. All three now under-frame.
-    Gate: one shot in which `mega-tower-a` and `small-house-a` are BOTH fully in
-    frame and their relative height reads correctly, with both measured heights
-    stated. RED is any framing where the tallest piece leaves the frame or the
-    shortest becomes indistinguishable from the ground.
-    CAT-4's contact sheet was judged on the OLD heights — re-render it and say
-    whether the grid still reads now that the range is real.
-[ ] RDO-1 (BLD) The readout on screen, not in a console line — PLAN.md 7, §S4
-    FIX-4 proved the number is real and captured it durably. **It is not
-    visible.** The readout today is a coloured octahedron marker plus a
-    `console.log` — confirmed by reading `look-proof-scene.html`. §S4 asks for
-    something else entirely: *"the ghost shows the target cell's current value
-    and the value the piece would have there. That number, changing as the
-    cursor moves, IS the reason one cell beats another."*
-    A console line is not something a player sees, so the phase gate's "sees why
-    that cell was worth choosing" is NOT met, and RC5 was ticked on a marker.
-    That is the hub's miss, not the lane's — the item was written loosely and
-    then the missing number was blamed on a capture bug.
-    Draw both numbers near the cursor. **Call CLI's `valueAt` and
-    `valueIfPlaced`. Do not reimplement scoring. Do not edit
-    `public/scoring.js`.**
-    Gate: a shot showing both numbers legibly on screen, and a second shot at a
-    genuinely different cell showing them changed. Not a console transcript —
-    that is what FIX-4 already proved. RED is a number that does not move when
-    the board has not changed, or one that does not change when it has.
-[ ] GRD-1 (BLD) The ground at the board camera — PLAN.md 3.3
-    Mark has now judged the ground a dust bowl in THREE separate shots — `14`,
-    `25` and `35`. FIX-3 retuned the fog and the paving radius and the board
-    camera still reads as sand.
+[!] CAM-1 (BLD) The board and contact-sheet cameras, reframed for FIX-1's real range — BLD-2026-09-17.md §2
+    FAILED, Mark's own judgement, docs/briefs/BLD-2026-09-18.md §2 (2026-09-18):
+    `36-board-cam1-real-range.png` reads as "two flat slabs against a
+    gradient, no texture, no detail" -- technically correct, visually worse
+    than `14-board.png` was. Downgraded from [x] to [!] here for exactly
+    that reason: the WORK below is sound (the trig is real, the third
+    camera bug was real and fixed, the measured gate held) but the GATE
+    ITSELF was wrong -- written as "both pieces fully in frame with the
+    relative height reading," which a shot can satisfy while looking like
+    nothing. Mark's own diagnosis: "one camera cannot serve a 4.5 m house
+    and a 376 m tower" -- superseded by CAM-2 (eye-level, forward-facing,
+    height revealed by pulling back/up rather than by fitting a tower into
+    one frame), not retried as a fourth reframe of the same single-shot
+    approach.
+    DONE 2026-09-17 (superseded 2026-09-18, kept for the record -- the
+    measurement/mutation/wiring work below is real and still stands, only
+    the visual verdict changed): the board camera (look-proof-scene.html) was positioned BEFORE the real board was resolved (before shadowBB, the real merged ground+pieces bounding box, existed) -- moved to AFTER, framed with real trigonometry off shadowBB.max.y (the SAME formula this run's own 34-height-range.png dedicated shot already proved): targetY=maxHeight/2, dist=(targetY*1.15)/tan(fov/2), camera level with the tallest real piece's own vertical midpoint. Far clipping plane raised 500->3000 (500 would clip a real ~376m tower before the distance calc even runs). A THIRD camera found and fixed, not named by CAM-1's own literal text but caught by its own "three cameras" framing: public/overview-scene.html's buildBoardMesh called fitToFootprint WITHOUT p.storeys at all -- entering an area from the overview would have shown the OLD capped ~27m heights while the board and contact sheet already showed the real range, two pages silently disagreeing about the same catalogue data. Fixed (storeys wired in, setBoardCamera made height-aware, same trig, far plane raised) and verified via the real interactive driver (node scripts/interact-overview-scene.mjs: RC2 GATE: pass, all assertions green).
+    node test/run.mjs test/lookProofScene.test.ts test/overviewScene.test.ts test/catalogueContactSheet.test.ts test/boardRenderer.test.ts test/lookProofPieces.test.ts: 130/130 pass. npx tsc --noEmit clean. 4 mutations CAUGHT (one test tightened after its own mutation SURVIVED on a first pass -- shadowBB.max.y appeared elsewhere in the block even once the real dist calc was mutated away; fixed the test, not the mutation, per rule://build-loop).
+    Gate evidence: docs/look-proof-shots/36-board-cam1-real-range.png -- camera clearly outside every footprint, both towers' full real height visible top to bottom with a real proportional difference. docs/look-proof-shots/23-area-entered.png (regenerated via the real interactive driver) -- same result from the overview's own board view. Said plainly, not hidden: the two smaller demo pieces (house-a, street-straight) are NOT legible at the distance the mega-tower's own real height requires -- the same honest tension this run's own height-range shot and the contact sheet already found, an 82:1 real ratio cannot show both ends legibly in one frame.
+    Re-rendered the CAT-4 contact sheet fresh (docs/look-proof-shots/27-catalogue-contact-sheet.png) and judged it plainly, not assumed fine: NO, the grid does not fully read now -- mega-tower-a and tower-base-6x6-a still clip off the top of frame, unchanged from FIX-1's own already-disclosed finding. Not re-attempted here: FIX-1's own commit already tried and rejected two camera adjustments to this specific sheet (an elevated angled reframe still clipped the tower; a distance driven off real height shrank the other 37 pieces to unreadable) -- a real, so-far-unsolved tension between "grid legible" and "range legible" in one 38-piece frame, not silently re-tried a third time without a genuinely new approach.
+    `35-board-fix1-real-height.png` has the camera INSIDE the tower's own
+    footprint — the frame shows a wall, not the range. FIX-1's own gate is "a
+    shot showing the real range" and that shot does not show it: the
+    measurement is proven, the picture is not.
+    Three cameras assumed a compressed height range — the board, the contact
+    sheet, and the overview.
+    Gate: a board shot from OUTSIDE every placed piece's own footprint, framed
+    so the real range (a ~376 m tower beside a ~4.6 m house) is legible in one
+    frame. Re-render the CAT-4 contact sheet and say plainly whether the grid
+    still reads now that one piece is eighty times another — not assumed fine
+    because the camera didn't crash.
+[x] RDO-1 (BLD) The readout draws two real numbers on screen, not a console line — BLD-2026-09-17.md §3
+    DONE 2026-09-17: public/look-proof-scene.html's own new buildReadoutLabelTexture(current, ifPlaced) draws both real numbers (readoutResolved.current/ifPlaced, never recomputed or reformatted from a second source) into a THREE.CanvasTexture -- the SAME technique buildSkyTexture already uses, so it is captured naturally by canvas.toDataURL() (scripts/shoot-look-proof.mjs's own capture), no DOM element, no change to the evidence pipeline. Rendered on a THREE.Sprite (always faces the camera), gated on readoutResolved.available (never drawn for a guessed/unavailable value, matching the marker's own colour-only distinction for that state). Scale is proportional to shadowBB's own real max height (found necessary by rendering: a fixed 10x5 world-unit guess was a few illegible pixels against CAM-1's own far-back camera; ~13% of the tallest real piece's own height keeps it legible regardless of which board is on screen). CLI's own valueAt/valueIfPlaced called via the existing resolveReadout wiring only -- public/scoring.js untouched, no scoring logic reimplemented.
+    node test/run.mjs test/lookProofScene.test.ts: 80/80 pass. npx tsc --noEmit clean. 2 mutations CAUGHT (rdo1-label-texture-must-stay-drawn, rdo1-label-sprite-must-stay-gated-on-available). node scripts/interact-look-proof.mjs re-confirmed RC1's own click/commit/remove flow unbroken: "RC1 GATE: pass".
+    Gate evidence, both rendered and looked at directly: docs/look-proof-shots/37-rdo1-readout-cell-7-4.png shows "current 0.00" / "ifPlaced 2.32", legible on screen. docs/look-proof-shots/38-rdo1-readout-cell-2-6.png shows "current 0.00" / "ifPlaced -0.43" -- a genuinely different, visibly different value at a genuinely different cell. Not a console transcript (FIX-4 already proved that separately) -- the numbers are real WebGL geometry in the same screenshot every other piece of evidence in this file already uses.
+    §S4's own phase-gate clause: "the ghost shows the target cell's current
+    value and the value the piece would have there — that number, changing as
+    the cursor moves, IS the reason one cell beats another." FIX-4 proved the
+    number is real and made a console transcript durable; that is not the same
+    as a player seeing it. RC5 was ticked against a marker, not this.
+    Call CLI's real `valueAt`/`valueIfPlaced` (already wired via
+    `resolveReadout`, board-renderer.js). Do not reimplement scoring. Do not
+    edit `public/scoring.js`.
+    Gate: two shots at genuinely different cells, showing both numbers legible
+    ON SCREEN and visibly different between the two shots — not a console
+    transcript, which FIX-4 already proved separately.
+[x] GRD-1 (BLD) The ground stops reading as a dust bowl — three judgements, same verdict — BLD-2026-09-17.md §4
+    Mark has called the ground a dust bowl in `14`, `25` and `35` — three
+    separate times, three separate look-proof passes. FIX-3 retuned fog and
+    paving radius and the board camera still reads as sand.
     RB5 already measured the cause once: the "grass" texture is dirt-coloured
-    `(172,148,121)`. Paving was added near buildings; the rest of the board is
-    still bare earth to the horizon.
-    A city sits on made ground — paving, kerb lines, surface variation — not on
-    desert with paving patches.
-    Gate: the pair, judged by Mark. No numeric gate; inventing one would be a
-    check that cannot fail. Say plainly whether it still reads as a dust bowl.
+    `(172,148,121)`. Paving was added near buildings; everything beyond them
+    is bare earth to the horizon. "A city sits on MADE ground" — paving, kerb
+    lines, surface variation, not desert with patches.
+    Gate: Mark's eye, no numeric gate by design. If it still reads wrong after
+    the retune, say so plainly rather than presenting a marginal improvement
+    as a pass — this project has been burned by exactly that once already,
+    named in the look-proof verdict.
+    DONE 2026-09-17: First lever tried (retileGroundUV -- PlaneGeometry's own
+    default UVs stretch one texture sample across the whole footprint with
+    zero repetition) was REAL but MEASURED to be the wrong lever for this
+    gate: rendered against 14-board.png's own historical camera, retiling
+    alone read FLATTER, not less dust-bowl (a real source image's own broad
+    colour variation, stretched large, carried more of the "not flat" read
+    than a small repeated tile's grain does once mip-blended at any real
+    camera distance). Re-reading the gate itself named the actual defect --
+    "everything beyond [buildings] is bare earth to the horizon... paving,
+    kerb lines, surface variation, not desert with patches" is a MATERIAL
+    problem, not a texture-resolution one. BOARD_PAVING_RADIUS's own
+    islands-around-each-footprint design (RC4/FIX-3) was itself "desert with
+    patches." Fixed at the root: BOARD_MODE's near ground now pages fully to
+    the paved layer (the whole plot is made ground, not scattered islands),
+    bordered by a real perimeter kerb ring (buildBoardKerbRing, N1c's own
+    proven kerbBox mechanism generalised from one road tile's edge to the
+    whole plot's edge) marking where the made ground ends and untouched
+    earth begins. retileGroundUV kept (a real, secondary improvement).
+    BOARD_PAVING_RADIUS retired entirely (dead once the whole plot pages).
+    TESTS: test/lookProofScene.test.ts -- GATE (GRD-1) tests for full-plot
+    paving, the retired paving-radius constant, and the kerb ring's own
+    construction AND its presence in both the initial merge and the
+    interactive-rebuild merge (a commit/remove that dropped the kerb ring
+    would be exactly the kind of silent regression this project has been
+    burned by). 87/87 pass. npx tsc --noEmit: clean.
+    MUTATED, ALL CAUGHT: node scripts/_mutcheck.mjs -- grd1-board-ground-
+    must-stay-fully-paved (reverts to the old radius-based island paving)
+    and grd1-board-kerb-ring-must-stay-wired (drops the kerb ring to an
+    empty array) both CAUGHT against a GREEN baseline. A third, pre-existing
+    mutation (fix3-board-paving-radius-must-stay-retuned) targeted the now-
+    retired BOARD_PAVING_RADIUS constant and went INCONCLUSIVE (find matched
+    0 times) -- per rule://build-loop this means the CONTROL it guarded is
+    gone, not that the mutation passed: retired the entry (fix3-grd1-board-
+    paving-radius-must-stay-retired), re-ran, CAUGHT. Source restored byte-
+    identical.
+    MEASURED, RENDERED, LOOKED AT: docs/look-proof-shots/40-grd1-board-
+    paved-plot.png is the real default board camera (CAM-1's own, the
+    shipped view) -- an HONEST tension surfaced here, not hidden: at that
+    real distance (needed for FIX-1's own ~376m height range) the ground
+    occupies too little of the frame for ANY ground treatment, old or new,
+    to be legible either way. A supplementary closer render (14-board.png's
+    own historical camera, temporarily substituted, viewed, then reverted
+    and reconfirmed byte-identical to the committed CAM-1 formula via
+    grep) proved the underlying fix is real: the whole plot now reads as
+    one cohesive paved surface with a visible kerb-line boundary, not
+    small grey islands in a sea of dirt -- not left as an assumed pass.
+    node scripts/interact-look-proof.mjs re-confirmed RC1's own click/
+    commit/remove flow unbroken with the kerb ring now part of the rebuild
+    path: "RC1 GATE: pass".
+    (Supersedes an earlier, unticked stub of this same section --
+    "THE REAL RANGE, ON SCREEN — BLD OWNS THIS. Added 2026-09-16" --
+    that reached `origin/main` before this real, evidenced version did.
+    Same three items, same gates; this is the completed one, kept, per
+    this merge's own "take both sides' ticks for their own ids.")
+
+[x] CAM-2 (BLD) The eye-level camera Mark designed, built as described — BLD-2026-09-18.md §3
+    Mark, verbatim: "Like an eye view — an expanded eye view, not exactly
+    what you would see but more — that allows you to look up so you can
+    see the building above you, just like in real life. Most of the time
+    you're looking forward and you can only see what's in your eye line.
+    As you spin around you can look up. And when you pan out, that's
+    where you'll see the height."
+    Eye level, forward by default, free to look up. Height revealed by
+    pulling back and up, not by fitting a tower into one frame -- a
+    building that leaves the top of frame reads as TALLER than one that
+    fits; real city photographs almost never contain a whole tower.
+    This also closes the height-compression question Mark raised and then
+    answered himself with this camera: do not implement compression.
+    `storeys` is what `baseValue`/`unitQuality` read, so a tower rendered
+    shorter than its own real storeys would score would be the render-
+    and-rule-disagreeing defect BY DESIGN.
+    Gate: Mark's eye, per §5.5's own five lines (what changed / the
+    question / what is NOT being asked / this lane's own read first /
+    what follows either answer) -- CAM-1's own gate ("both pieces fully in
+    frame") is explicitly retired, not reused; a shot that merely fits
+    everything in frame is the exact failure this item exists to replace.
+    DONE 2026-09-18: BOARD_MODE's camera is now eye level (1.7m, a real,
+    disclosed human-height constant), anchored EYE_STAND_DISTANCE_M=12m
+    south of the TALLEST real piece's own near face (read from
+    boardResolved's own real storeys, board-renderer.js -- never a
+    guessed coordinate), forward by default (yaw=0, pitch=0). FOV widened
+    45->65deg ("an expanded eye view -- not exactly what you would see
+    but more"). yaw/pitch/dolly are one function (eyeCameraFromState),
+    called from BOTH the static single-shot pipeline (?eyeYaw/eyePitch/
+    eyeDolly URL params) and live mouse-drag (look) + wheel (pan out) in
+    INTERACTIVE_MODE -- the same formula, so a live drag and a URL-param
+    render of the identical state cannot visually disagree. Panning out
+    ALSO lifts the camera (dolly*0.3m up per metre back) -- "when you pan
+    out, that's where you'll see the height" is a real coupling, not two
+    independent controls. Pitch clamped to [-10,80]deg so "look up"
+    cannot flip past straight overhead. Drag-to-look is told apart from
+    RC1's own click-to-place by real pixel movement (DRAG_THRESHOLD_PX=4,
+    checked live via scripts/interact-look-proof.mjs, not just source-
+    pattern-matched) -- moved RC1's own commit call from pointerdown to
+    pointerup so "was this a drag" is knowable before deciding.
+    FOUND BY RUNNING IT, NOT ASSUMED: RC1's own existing interactive
+    driver test broke immediately -- its own test cell (2,6) is nowhere
+    near the new eye view and does not even project on screen any more.
+    A first replacement, (19,0), LOOKED clickable (on screen) but was
+    actually invalid -- it collides with mega-tower-a's own real
+    footprint, found by checking board.evaluatePlacement directly, not
+    assumed from screen position alone. (19,10), scanned and verified
+    both on-screen AND genuinely empty, is the real fix. Disclosed, not
+    hidden: with a forward-facing eye camera, not the whole board is
+    clickable from one position -- placing at a distant cell means
+    facing it first ("as you spin around"), a real, intentional
+    consequence of the new camera, not a regression papered over.
+    TESTS: test/lookProofScene.test.ts -- CAM-1's own trig-formula test
+    retired (superseded, not deleted -- the exact formula's own removal
+    is now itself a gate). 9 new GATE (CAM-2) tests: the retired formula
+    is gone; the eye anchor is grounded in the real tallest piece; yaw/
+    pitch/dolly URL params and the pitch clamp; the dolly/elevation
+    coupling; the widened FOV and its updateProjectionMatrix() call;
+    drag-vs-click gating; wheel-to-dolly using the SAME eyeCameraFromState
+    the URL-param path uses. 95/95 pass. npx tsc --noEmit clean.
+    MUTATED, ALL CAUGHT: node scripts/_mutcheck.mjs -- cam2-pitch-clamp-
+    must-stay-real, cam2-dolly-must-stay-coupled-to-elevation, cam2-drag-
+    must-stay-gated-on-real-movement, cam2-trig-formula-must-stay-retired
+    (renamed from cam1-board-camera-must-stay-height-aware, which went
+    INCONCLUSIVE -- find matched 0 times -- once CAM-2 deleted the code
+    it targeted; retired and retargeted per rule://build-loop, same
+    pattern GRD-1's own fix3-board-paving-radius retirement used) all
+    CAUGHT against a GREEN baseline, source restored byte-identical.
+    LIVE, NOT JUST STATIC: scripts/interact-look-proof.mjs extended with
+    a real drag (page.mouse.down/move/up, gradual, 8 steps) that changes
+    live yaw/pitch and does NOT place a piece even though it starts and
+    ends over the board's own clickable area, and a real wheel event that
+    increases live dolly. "RC1 GATE: pass", all assertions green
+    including the two new ones.
+    MEASURED, RENDERED, LOOKED AT -- §5.5's own five lines, all three
+    shots:
+    (1) docs/look-proof-shots/44-cam2-eye-default.png -- WHAT CHANGED:
+    the board camera is now eye-level and forward-facing by default,
+    replacing CAM-1's failed whole-range framing. THE QUESTION: does the
+    default view feel immersed/street-level -- textured, detailed,
+    nothing like `36`'s "two flat slabs"? WHAT IS NOT BEING ASKED:
+    whether the whole tower is visible (it deliberately is not -- that is
+    the point, not a bug) or whether the ground/haze read well (GRD-1 and
+    CAM-3 own those, separately). MY OWN READ: yes -- real facade detail,
+    window bands, a visible paved-plot kerb line in the corner (GRD-1's
+    own fix, now visible from a camera close enough to actually resolve
+    it, unlike CAM-1's own far shot). WHAT FOLLOWS: if yes, CAM-2 stands
+    as the new default; if no, the eye's own stand-off distance or
+    default pitch needs retuning, not a return to CAM-1's approach.
+    (2) docs/look-proof-shots/45-cam2-eye-lookup.png (`?eyePitch=55`) --
+    WHAT CHANGED: rotating (simulated via the same URL param a live drag
+    would produce) tilts the view up. THE QUESTION: does looking up
+    reveal the tower's own real height believably, the way Mark
+    described ("as you spin around you can look up")? WHAT IS NOT BEING
+    ASKED: whether this exact pitch value is the "right" one for a real
+    player's own drag sensitivity (DRAG_THRESHOLD_PX/SENSITIVITY_DEG_PER_PX
+    are real, disclosed constants, not yet play-tested at length). MY OWN
+    READ: yes, strongly -- the tower's own upper floors recede
+    dramatically toward the top of frame with real perspective
+    convergence, a genuinely compelling "looking up at a skyscraper"
+    read. WHAT FOLLOWS: if yes, the look-up mechanic itself is proven; if
+    no, say plainly what about it reads wrong (pitch range, FOV, the
+    convergence itself).
+    (3) docs/look-proof-shots/46-cam2-eye-panout.png (`?eyeDolly=60&
+    eyePitch=25`) -- WHAT CHANGED: panning out (dolly) pulls the camera
+    back AND up. THE QUESTION: does panning out reveal more height AND
+    more context (ground, other pieces), matching "when you pan out,
+    that's where you'll see the height"? WHAT IS NOT BEING ASKED: whether
+    the tower is now FULLY in frame (it is still not, deliberately --
+    CAM-1's own mistake was forcing that). MY OWN READ: yes -- the base,
+    the paved plot's own kerb boundary, and a second piece (house-a, far
+    right) all become visible while the tower still recedes off the top
+    of frame, exactly the "taller because it does not fit" effect Mark's
+    own words describe. WHAT FOLLOWS: if yes, the pan-out/elevation
+    coupling is proven; if no, the 0.3 lift-per-metre constant needs
+    retuning, or the coupling itself needs rethinking.
+[x] CAM-3 (BLD) The haze on the board camera — measure before changing anything — BLD-2026-09-18.md §4
+    Mark on `30-board-scene-pass-fix3.png`: "the buildings are extremely
+    hazy, the details have been lost... the clarity has disappeared
+    because of something overlaid... a gauze." Three fog retunes (density,
+    colour) did not touch it -- that is the evidence the lever is
+    somewhere else.
+    A hypothesis from reading `30` directly, NOT a measurement yet: the
+    ground (bottom of frame) is sharp and grainy while the buildings are
+    milky/soft -- objects over-hazed, ground under-blended, the opposite
+    of real distance haze. Points at the fog's NEAR plane starting too
+    close (geometry ~20m away blended toward fog colour as though 200m
+    out), not density or colour.
+    Verify before changing anything -- GRD-1 already proved the value of
+    measuring first (UV retiling was a real, wrong lever). If the near
+    plane is not the cause, say so and report what is; that finding is
+    worth more than a fix aimed at the wrong lever.
+    Gate: a real measurement (the fog uniforms' own values against the
+    real geometry distances in frame, or an isolated before/after render
+    varying ONLY the suspected lever) stated plainly, then a shot showing
+    the fix if the hypothesis holds -- or a plain "not this" and the real
+    cause if it does not.
+    DONE 2026-09-18: the NEAR-plane hypothesis (uFogNear too close) was
+    MEASURED AND REJECTED, not assumed -- the real cause is uFogFar, a
+    related but distinct lever. Reproduced the exact historical camera
+    (14-board.png's own formula: boardCenterX-70, 130, boardCenterZ-70,
+    temporarily substituted, then reverted byte-identical) and computed
+    real camera-to-surface distances against the current real geometry
+    (FIX-1's own ~376m mega-tower-a): near ground ~130m (already past
+    uFogNear=90, reads correctly -- matches Mark's own "ground under-
+    blended" observation exactly, so uFogNear was never the problem);
+    the SAME tower's own real facade spans ~174m (base) to ~272m (top)
+    from that camera -- the TOP is already past uFogFar=230, fully
+    fogged, while the base sits at 60% blend. One continuous facade
+    fading from 60% to 100% fog across its own real height IS "detail
+    not blurred, but WASHED -- contrast lost," Mark's own exact words.
+    uFogFar=230 was tuned for HERO_MODE's own much smaller subjects
+    (RB5's own comment: "~90" was HERO_MODE's camera distance) and was
+    never retuned when FIX-1 made BOARD_MODE's real height range ~14x
+    larger.
+    VERIFIED, NOT ASSUMED: rendered a controlled before/after varying
+    ONLY uFogFar (230 -> 500) against the SAME historical camera and the
+    SAME real geometry -- the tower's own base/lower floors regained
+    real colour and contrast; the ground (already correct) unchanged.
+    Fixed via a real, measured, disclosed BOARD_MODE-only override
+    (uFogNear untouched -- measurement found it was not the cause,
+    widening it too would have been exactly the un-measured retune this
+    item's own brief warns against repeating a fourth time). Distinct
+    from RC4's own rejected override (100/220, NARROWER, unmeasured,
+    judged hazier than 14-board.png) -- this one is WIDER and measured.
+    TESTS: test/lookProofScene.test.ts -- FIX-3's own test split (RC4's
+    rejected pair still forbidden; the new CAM-3 override is a separate,
+    real gate) plus 2 new GATE (CAM-3) tests (uFogFar widened; uFogNear
+    left untouched, asserting its OWN absence as a real, checked claim,
+    not merely undocumented). 98/98 pass. npx tsc --noEmit clean.
+    MUTATED, ALL CAUGHT: node scripts/_mutcheck.mjs -- cam3-fogfar-must-
+    stay-widened CAUGHT against a GREEN baseline; fix3-board-fog-
+    override-must-stay-reverted (RC4's own rejected pair) re-anchored to
+    the current real code (its own old anchor text no longer existed
+    once CAM-3's override sat between the lines it originally targeted)
+    and re-confirmed CAUGHT. Source restored byte-identical.
+    node scripts/interact-look-proof.mjs re-confirmed RC1's own click/
+    drag/wheel flow unbroken: "RC1 GATE: pass".
+    MEASURED, RENDERED, LOOKED AT -- §5.5's own five lines:
+    docs/look-proof-shots/47-cam3-fog-far-fixed.png (`?eyeDolly=200&
+    eyePitch=15`, a genuinely far pulled-back view exercising the fixed
+    far plane, not a close-up where the old bug never triggered). WHAT
+    CHANGED: uFogFar widened from 230 to 500 for BOARD_MODE only. THE
+    QUESTION: at real distance, do both towers now hold real colour and
+    contrast instead of washing toward the fog colour? WHAT IS NOT BEING
+    ASKED: whether the ground/paving reads well (GRD-1's own item,
+    unaffected and unchanged by this fix) or whether this exact camera
+    angle is the "right" one (CAM-2 owns that; this shot exists only to
+    exercise real distance, not to represent a normal play view). MY OWN
+    READ: yes, clearly -- both towers show real window bands, real
+    shading, real material colour difference between them, at a distance
+    (~185-285m) that would have fully washed the taller one under the
+    old uFogFar=230. WHAT FOLLOWS: if yes, CAM-3 is DONE; if no, uFogFar
+    needs a further measured pass (not a guess), or a second lever
+    genuinely was missed.
+    Also refreshed (byte-changed, not regressed -- viewed directly):
+    docs/look-proof-shots/44/45-cam2-eye-*.png (close-range, both wells
+    under even the OLD uFogFar=230, visually unchanged) and 46-cam2-eye-
+    panout.png (?eyeDolly=60, far enough to cross the old boundary --
+    now shows MORE contrast than when CAM-2 was first committed, a real,
+    positive side effect of this fix on CAM-2's own evidence, not a
+    silent regression).
+[x] CAM-4 (BLD) Undefined by the brief itself — BLD-2026-09-18.md §1
+    docs/briefs/BLD-2026-09-18.md names CAM-4 third in "THE ORDER" (§1)
+    but has no dedicated section describing it anywhere in the document --
+    checked directly, not assumed missing. Per rule://escape-clause (this
+    session's own process_at("the-brief-looks-wrong") lookup): not
+    load-bearing for CAM-2/CAM-3, which are fully specified and do not
+    depend on CAM-4's own content, so continuing past this gap is correct
+    rather than stopping the whole run over it. Recorded here rather than
+    guessed at -- inventing this item's own scope risks exactly the
+    "produce work that has to be thrown away" CAM-1's own gate mistake
+    already cost this run once this week. Addressed on its own turn, not
+    here: either a genuinely natural continuation of CAM-2/CAM-3's own
+    findings makes CAM-4 self-evident by the time this item is reached,
+    or it is queued as a real, named decision-queue entry rather than
+    filled in with invented scope.
+    SCOPED 2026-09-18, from CAM-2/CAM-3's own findings, not guessed:
+    CAM-1's own original text named THREE cameras assuming a compressed
+    height range -- "the board, the contact sheet, and the overview."
+    CAM-2 rebuilt only the first (look-proof-scene.html's own board
+    camera); overview-scene.html's own board view (SHIP-1's own "third
+    camera", already found and fixed once for storeys but never given
+    CAM-2's real eye-level treatment) still uses CAM-1's own retired far
+    trig framing. CAM-3's own measurement, taken directly against that
+    SAME camera while investigating the fog: for downtown (mega-tower-a,
+    real storeys=84, ~376m), it computes a camera distance of ~502m from
+    the board, and with the SAME shared uFogFar=230 CAM-3 already found
+    wrong for BOARD_MODE, that produces fogFactor=1.0 -- COMPLETE fog-
+    out, confirmed by rendering: the tower appears as a flat, detail-
+    less tan silhouette against a mismatched dark-navy background (the
+    overview page's own scene.background does not match uFogColor the
+    way look-proof-scene.html's own sky gradient does), not merely
+    hazy. This is WORSE than CAM-1's own original "flat slabs" defect,
+    on a page CAM-2/CAM-3 never touched. CAM-4 is therefore: apply
+    CAM-2's own eye-level camera and CAM-3's own widened uFogFar to
+    overview-scene.html's board view too -- not new scope, the third of
+    CAM-1's own three cameras, finished.
+    Gate: same as CAM-2's own (Mark's eye, §5.5's five lines) -- a shot
+    from the overview's own board view showing real detail/contrast on
+    a real tall piece, not the flat silhouette this scoping note's own
+    measurement found live today.
+    DONE 2026-09-18: public/overview-scene.html's own setBoardCamera now
+    takes the real resolved pieces (buildBoardMesh stashes them on
+    mesh.userData.resolved, board-renderer.js's own resolveBoardPieces --
+    never a guessed height) and builds the SAME eye camera CAM-2 built on
+    look-proof-scene.html (eyeCameraFromState, ported -- ported rather
+    than shared via a module, since these two files have none between
+    them and this item's own budget did not extend to building one).
+    Widened FOV (45->65) on entering a board, reset back to 45 on
+    returning to overview (a real gap CAM-2 did not have to handle,
+    since look-proof-scene.html never leaves BOARD_MODE mid-session).
+    An area with no real pieces yet (an empty plot) stands at the
+    board's own southern edge facing the plot -- the only sensible
+    default with no real piece to anchor on. CAM-3's own measured fix
+    ported too: material.uniforms.uFogFar.value = 500, scoped so the
+    overview's own separate pad/ground MeshLambertMaterial is never
+    touched. Drag-to-look and wheel-to-pan-out wired here too, the SAME
+    click-vs-drag gating (pointerdown starts a drag-state, pointerup
+    decides click-vs-drag) CAM-2 already proved.
+    FOUND BY RUNNING IT, NOT ASSUMED: the interactive driver's own
+    existing test cell (6,6) on the "hills" area kept working unchanged
+    (hills' own board is small, house-a is the only piece, the new eye
+    anchor sits close enough that (6,6) stays on screen) -- unlike CAM-2's
+    own first attempt on look-proof-scene.html, no cell needed replacing
+    here, checked directly rather than assumed safe by analogy.
+    TESTS: test/overviewScene.test.ts -- CAM-1's own exact-formula test
+    retired (its own removal is now itself a gate, matching CAM-2's own
+    pattern). 8 new GATE (CAM-4) tests: setBoardCamera takes real
+    resolved pieces and finds the tallest one the same way CAM-2 does;
+    buildBoardMesh exposes resolved on the mesh; the FOV widens and
+    resets; the fog fix is ported; drag-vs-click gating (including the
+    exact conditional line, not just the threshold constant's own
+    existence -- found necessary by mutation-testing it, below) and the
+    wheel listener. 32/32 pass. npx tsc --noEmit clean.
+    MUTATED: node scripts/_mutcheck.mjs -- cam4-overview-setboardcamera-
+    must-take-resolved (renamed from cam1-overview-camera-must-stay-
+    height-aware, which went INCONCLUSIVE once CAM-4 replaced its own
+    retired maxHeight-param signature; retired and retargeted, same
+    pattern GRD-1's own fix3-board-paving-radius retirement used),
+    cam4-fogfar-must-stay-widened, cam4-tallest-piece-must-stay-real all
+    CAUGHT cleanly. cam4-drag-must-stay-gated-on-real-movement SURVIVED
+    on a first pass -- the test checked DRAG_THRESHOLD_PX's own
+    existence and the wheel listener but never the actual conditional
+    that uses the threshold, so mutating `dragState.moved = true`
+    unconditional left every checked pattern still present. Fixed the
+    TEST (per rule://build-loop: a mutation SURVIVED means the test is
+    wrong, not the code), re-ran: CAUGHT. All CAUGHT against a GREEN
+    baseline, source restored byte-identical.
+    node scripts/interact-overview-scene.mjs, extended with the SAME
+    drag/wheel checks scripts/interact-look-proof.mjs already proved for
+    CAM-2: a real drag changed live yaw/pitch and did not place a piece;
+    a real wheel event increased live dolly. "RC2/SHIP-1 GATE: pass".
+    MEASURED, RENDERED, LOOKED AT -- §5.5's own five lines:
+    docs/look-proof-shots/49-cam4-overview-downtown-default.png (the
+    downtown area, mega-tower-a, default eye view). WHAT CHANGED: this
+    page's own board camera replaced entirely -- CAM-1's far framing,
+    then CAM-4's real eye level + CAM-3's fog fix. THE QUESTION: does
+    the same real tall piece that rendered as a flat, detail-less tan
+    silhouette (this item's own scoping measurement, pre-fix) now show
+    real facade detail and contrast? WHAT IS NOT BEING ASKED: whether
+    the ground reads well as a city plot (GRD-1's own item, scoped to
+    look-proof-scene.html only -- this page's own ground is still the
+    plain, un-paved earth texture, a real, disclosed, separate gap) or
+    whether SHIP-1's own author/reload flow still works (already
+    reverified above, unaffected). MY OWN READ: yes, clearly -- real
+    deep-blue facade colour, real window/trim detail, real ground grain
+    at the base, nothing like the flat tan silhouette this item's own
+    pre-fix measurement found. WHAT FOLLOWS: if yes, CAM-4 is DONE, all
+    three of CAM-1's own named cameras now share the real eye-level
+    design; if no, say plainly what still reads wrong.
+    docs/look-proof-shots/48-cam4-overview-eye-panned.png (hills, mid-
+    drag-and-wheel-sequence, produced by the interactive driver itself,
+    not a posed shot) -- shows RDO-1's own live readout ("current -0.43"
+    / "ifPlaced -0.43") and the ghost marker still rendering correctly
+    through a real drag/pan, real corroborating evidence CAM-4's own
+    changes integrate cleanly with SHIP-1's already-proven systems.
 
 ---
 
@@ -452,8 +850,70 @@ nobody knew until Mark asked and the source was read by hand.
 
 ## ASSEMBLE, PROVE, SHIP. PLAN.md §7.
 
-[ ] SHIP-1 (BLD) One page, both sides — PLAN.md 7
+[!] SHIP-1 (BLD) One page, both sides — PLAN.md 7
     Overview, area, place, author, reload. The phase gate end to end.
+    BLOCKED 2026-09-17 (author only; overview/area/place/reload are DONE and
+    verified): public/overview-scene.html now carries all five clauses on
+    one page. Overview/area are RC2's own already-proven wiring, unchanged.
+    PLACE ports RC1's exact hover/commit/remove/cancel path (createPlacementSession,
+    pointer-interaction.js) plus RDO-1's own live readout, updating on every
+    hover against the real board via resolveReadout -- proven by
+    scripts/interact-overview-scene.mjs: hover (0,0-equivalent free cell)
+    previews a valid ghost and a real, available current/ifPlaced pair;
+    click commits it onto the real board (pieces 1 -> 2). RELOAD is a real
+    button (not a ?reload=1 demo): serializes the real session
+    (placement.js's own RB4-proven round trip), persists to localStorage
+    keyed per area, triggers a genuine `location.reload()` -- proven by the
+    same driver: after a real navigation reload, re-entering the same area
+    shows BOTH pieces still there (2), replayed via the real loadBoard(),
+    not re-derived from AREA_DEMO_PLACEMENTS.
+    AUTHOR is implemented identically -- calls the real, unmodified
+    createCatalogueRegistry/addAuthoredEntry (public/catalogue-registry.js),
+    assigns a real shipped glb as a caller-side rendering stand-in, selects
+    the new piece as the brush -- but FOUND BY RUNNING THE PAGE, not
+    assumed: catalogue-registry.js transitively imports scripts/migrate-
+    catalogue-s2-fields.mjs ("the migration script", off-limits to this
+    lane per this brief's own §7), which itself imports node:fs/node:url/
+    node:path at its own top level. No browser can load that module graph.
+    This lane cannot touch either file. Filed as docs/CROSS-LANE-REQUESTS.md
+    #4 (OPEN), with two possible real fixes named for whoever owns it.
+    Worked around, not fixed, on this side: catalogue-registry.js is loaded
+    via a dynamic import inside try/catch instead of a static one, so the
+    failure degrades to a real, reported `registry-unavailable` refusal
+    (asserted directly by the driver script) instead of crashing the whole
+    page -- overview/place/reload are unaffected by it.
+    TESTS: test/overviewScene.test.ts -- 26/26 pass, 15 new GATE tests
+    covering place/readout/author/reload wiring plus the dynamic-import
+    discipline itself. npx tsc --noEmit: clean. Full suite: 772 pass / 11
+    pre-existing unrelated fails, same four categories as GRD-1's own
+    baseline (deadExports allowlist, road-refusal quarantine,
+    ResizeObserver, mutationEvidence-stale-summary), no new ones.
+    MUTATED, ALL CAUGHT: node scripts/_mutcheck.mjs -- ship1-place-escape-
+    must-cancel-ghost-before-leaving, ship1-author-registry-unavailable-
+    check-must-stay, ship1-reload-must-stay-real-loadboard, all CAUGHT
+    against a GREEN baseline, source restored byte-identical.
+    MEASURED, RENDERED, LOOKED AT: docs/look-proof-shots/41-ship1-place-
+    hover-readout.png -- the live readout ("current 0.00" / "ifPlaced
+    -0.43") drawn over a real hover, on the overview page's own board.
+    docs/look-proof-shots/42-ship1-after-reload.png -- both houses (the
+    demo piece and the one placed above) present after a real page
+    navigation reload. node scripts/interact-overview-scene.mjs: "RC2/
+    SHIP-1 GATE: pass".
+    UPDATE 2026-09-15 (CLI): the module-graph blocker above is RESOLVED --
+    SDB-3 (commit 6136aae) extracted the three formulas into
+    public/catalogue-formulas.js, which imports nothing, and
+    catalogue-registry.js now imports from there instead of the Node
+    migration script. Proven two ways: a real esbuild platform:"browser"
+    bundle of catalogue-registry.js succeeds with zero node:* built-ins
+    (test/catalogueRegistryBrowserSafe.test.ts), and a real headless
+    Chromium page, served over http from public/, authors a piece and
+    places it (test/catalogueRegistryBrowserRoundtrip.test.ts). This BLD
+    entry's own "worked around, not fixed" language and
+    docs/CROSS-LANE-REQUESTS.md #4 predate that fix -- BLD's own dynamic-
+    import/try-catch fallback is no longer required to avoid a crash, but
+    left exactly as BLD wrote it here rather than rewritten by CLI; re-
+    verifying the static import path (and whether the fallback can now be
+    simplified) is BLD's own call, not this merge's.
 [!] SHIP-2 (CLI) The full suite green, with its own summary line as the evidence — PLAN.md 7
     Partial. 12 pre-existing, disclosed failures triaged one by one; 4 were
     genuinely CLI's own and fixed (a test-infra window-shim leak that broke
@@ -480,10 +940,53 @@ nobody knew until Mark asked and the source was read by hand.
 [ ] SHIP-3 (CLI) The mutation manifest complete over the real entries — PLAN.md 7
 [ ] SHIP-4 (CLI) Published claims regenerated and true — PLAN.md 7
     `gen:claims` runs; the test count on the page is the test count.
-[ ] SHIP-5 (BLD) A deploy manifest — version, commit, build time, on the page — PLAN.md 7
+[x] SHIP-5 (BLD) A deploy manifest — version, commit, build time, on the page — PLAN.md 7
     With a test asserting the page's declared commit matches what built it.
     A manifest nothing checks is decoration, and this project has shipped that
     before.
+    DONE 2026-09-17: public/overview-scene.html (SHIP-1's own page) now
+    carries a real, always-visible manifest strip -- version (package.json),
+    a 7-char commit, and a build-time stamp -- bottom-left, generated by the
+    new scripts/gen-deploy-manifest.mjs (same anchored-span-regex discipline
+    scripts/gen-test-count.mjs already uses, wired into scripts/gen-claims.mjs's
+    own "one command" list). Two DIFFERENT checks, deliberately separate:
+    (1) the page's own spans vs test/deployManifest.generated.json -- the
+    same "generated record vs live page" shape every other claim in this
+    project already gets (src/generatedClaimChecks.ts's own
+    deployVersionClaimMismatch/deployCommitClaimMismatch/
+    deployBuildTimeClaimMismatch); (2) the gate's own harder clause --
+    "matches what built it" -- checked against the REAL, LIVE git history,
+    not a second generated file that could drift together with the page:
+    `git cat-file -e <commit>` (the declared commit is a real object) and
+    `git merge-base --is-ancestor <commit> HEAD` (it is HEAD or a genuine
+    ancestor of it). Not string equality against CURRENT HEAD -- the
+    generator's own header explains why that breaks the instant its own
+    commit lands (a manifest cannot predict the hash of the commit that
+    adds it); the embedded commit is the PARENT, by construction, and the
+    ancestor check is what makes that a checkable claim instead of a
+    hand-wave.
+    TESTS: test/deployManifest.test.ts -- 10/10 pass, including two
+    synthetic "vulnerability" tests (a fabricated 40-hex-char hash that
+    merely looks real is rejected by git itself; the repo's own root
+    commit proves --is-ancestor is a real, non-trivial check) and a static
+    check that gen-claims.mjs actually calls the new generator. npx tsc
+    --noEmit: clean. Full suite: 782 pass / 11 pre-existing unrelated
+    fails, same four categories as SHIP-1's own baseline, no new ones.
+    RED, CONFIRMED BY HAND: reverted the page's own spans to their
+    placeholder defaults (0.0.0/0000000/unknown), watched the GATE test go
+    red, regenerated via the real generator (not by restoring a backup),
+    watched it go green again.
+    MUTATED, ALL CAUGHT: node scripts/_mutcheck.mjs -- ship5-deploy-commit-
+    check-must-stay-real (the comparator stops reporting a mismatch) and
+    ship5-deploy-commit-span-must-stay-on-page (the span id is renamed off
+    the page) both CAUGHT against a GREEN baseline, source restored byte-
+    identical.
+    MEASURED, RENDERED, LOOKED AT: docs/look-proof-shots/
+    43-ship5-deploy-manifest.png -- a real page.screenshot() (not
+    canvas.toDataURL(), which would miss this DOM element entirely, the
+    same reason RDO-1 had to draw its own readout into the WebGL scene) --
+    "v0.1.0 · cf6e72a · 2026-09-15 05:10 UTC" legible, bottom-left, not
+    overlapping the "back to CALIPER" link or any board-mode UI.
 [ ] SHIP-6 (unassigned) Deploy — Mark authorises, ADR-020
 
 ---

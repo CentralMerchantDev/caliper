@@ -36,6 +36,8 @@ const TRACKED = [
   { label: "docs/MODULE-MAP.md", path: join(ROOT, "docs", "MODULE-MAP.md") },
   { label: "test/testCount.generated.json", path: join(ROOT, "test", "testCount.generated.json") },
   { label: "public/index.html", path: join(ROOT, "public", "index.html") },
+  { label: "test/deployManifest.generated.json", path: join(ROOT, "test", "deployManifest.generated.json") },
+  { label: "public/overview-scene.html", path: join(ROOT, "public", "overview-scene.html") },
 ];
 const before = TRACKED.map((t) => readOrNull(t.path));
 
@@ -52,6 +54,12 @@ execFileSync(process.execPath, [join(ROOT, "scripts", "gen-city-summary.mjs")], 
 // drifting from the gate it shares its data with (test/deadExports.test.ts).
 console.log("\nRegenerating docs/MODULE-MAP.md (scripts/gen-module-map.mjs)...");
 execFileSync(process.execPath, [join(ROOT, "scripts", "gen-module-map.mjs")], { cwd: ROOT, stdio: "inherit" });
+
+// SHIP-5 (docs/briefs/BLD-2026-09-17.md §5): version/commit/build-time on
+// public/overview-scene.html. No dependency on the suite's own run (unlike
+// gen-test-count.mjs below), so this can run any time in the sequence.
+console.log("\nRegenerating test/deployManifest.generated.json and public/overview-scene.html's deploy manifest (scripts/gen-deploy-manifest.mjs)...");
+execFileSync(process.execPath, [join(ROOT, "scripts", "gen-deploy-manifest.mjs")], { cwd: ROOT, stdio: "inherit" });
 
 console.log("\nRegenerating test/testCount.generated.json and public/index.html's test-count claim (scripts/gen-test-count.mjs)...");
 const passthroughFlags = ["--node-log", "--worker-log"];

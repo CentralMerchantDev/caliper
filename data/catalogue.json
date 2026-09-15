@@ -146,7 +146,10 @@
     },
     "unitQuality": 0.5,
     "glb": "vendor/kits/kenney-city-kit-commercial/building-a.glb",
-    "storeys": 4
+    "storeys": 4,
+    "glbVariants": [
+      "vendor/kits/kenney-city-kit-commercial/building-e.glb"
+    ]
   },
   {
     "id": "house-a",
@@ -309,7 +312,10 @@
     },
     "unitQuality": 0.21320071635561041,
     "glb": "vendor/kits/kenney-modular-buildings/building-sample-tower-b.glb",
-    "storeys": 22
+    "storeys": 22,
+    "glbVariants": [
+      "vendor/kits/kenney-modular-buildings/building-sample-tower-a.glb"
+    ]
   },
   {
     "id": "mid-commercial-a",
@@ -415,7 +421,10 @@
     },
     "unitQuality": 0.1259881576697424,
     "glb": "vendor/kits/kenney-modular-buildings/building-sample-tower-d.glb",
-    "storeys": 63
+    "storeys": 63,
+    "glbVariants": [
+      "vendor/kits/kenney-modular-buildings/building-sample-tower-c.glb"
+    ]
   },
   {
     "id": "large-commercial-6x6-a",
@@ -570,7 +579,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb",
     "storeys": 1
   },
   {
@@ -597,7 +606,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-bend.glb",
     "storeys": 1
   },
   {
@@ -624,7 +633,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb",
     "storeys": 1
   },
   {
@@ -651,7 +660,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb",
     "storeys": 1
   },
   {
@@ -678,7 +687,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-end.glb",
     "storeys": 1
   },
   {
@@ -759,7 +768,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb",
     "storeys": 1
   },
   {
@@ -786,7 +795,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": "vendor/kits/kenney-city-kit-roads/road-crossing.glb",
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb",
     "storeys": 1
   },
   {
@@ -813,7 +822,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-end.glb",
     "storeys": 1
   },
   {
@@ -840,7 +849,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb",
     "storeys": 1
   },
   {
@@ -867,7 +876,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-bend.glb",
     "storeys": 1
   },
   {
@@ -894,7 +903,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb",
     "storeys": 1
   },
   {
@@ -921,7 +930,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb",
     "storeys": 1
   },
   {
@@ -948,7 +957,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-end.glb",
     "storeys": 1
   },
   {
@@ -975,7 +984,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb",
     "storeys": 1
   },
   {
@@ -1002,7 +1011,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-bend.glb",
     "storeys": 1
   },
   {
@@ -1029,7 +1038,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb",
     "storeys": 1
   },
   {
@@ -1056,7 +1065,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb",
     "storeys": 1
   },
   {
@@ -1083,7 +1092,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-end.glb",
     "storeys": 1
   },
   {
@@ -1110,7 +1119,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb",
     "storeys": 1
   },
   {
@@ -1137,7 +1146,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb",
     "storeys": 1
   },
   {
@@ -1164,7 +1173,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb",
     "storeys": 1
   },
   {
@@ -1191,7 +1200,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb",
     "storeys": 1
   },
   {
@@ -1218,7 +1227,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb",
     "storeys": 1
   },
   {
@@ -1245,7 +1254,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb",
     "storeys": 1
   },
   {
@@ -1272,7 +1281,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb",
     "storeys": 1
   },
   {
@@ -1299,7 +1308,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb",
     "storeys": 1
   },
   {
@@ -1326,7 +1335,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null,
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb",
     "storeys": 1
   }
 ]

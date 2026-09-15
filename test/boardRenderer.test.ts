@@ -31,12 +31,20 @@ const MANIFEST = {
 };
 
 const CATALOGUE = {
-  "house-a": { footprint: [2, 3], terrainMask: ["land"], glb: "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb" },
-  "tower-base-6x6-a": { footprint: [6, 6], terrainMask: ["land"], glb: "vendor/kits/kenney-modular-buildings/building-sample-tower-d.glb" },
+  "house-a": { footprint: [2, 3], terrainMask: ["land"], glb: "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb", storeys: 5 },
+  "tower-base-6x6-a": { footprint: [6, 6], terrainMask: ["land"], glb: "vendor/kits/kenney-modular-buildings/building-sample-tower-d.glb", storeys: 63 },
   "street-straight": { footprint: [4, 4], terrainMask: ["land"], glb: "vendor/kits/kenney-city-kit-roads/road-straight.glb" },
   "mega-tower-a": { footprint: [8, 8], terrainMask: ["land"], glb: "vendor/kits/kenney-city-kit-commercial/building-skyscraper-b.glb" },
   "no-mesh-a": { footprint: [1, 1], terrainMask: ["land"], glb: null }, // most of the 50, per BO7A
   "unknown-layer-a": { footprint: [1, 1], terrainMask: ["land"], glb: "vendor/kits/some-other-kit/thing.glb" },
+  // CAT-3 -- a real, already-vendored second variant (docs/specs/PLAN.md
+  // §5.2, Mark: "two towers of the same footprint should not be the same
+  // tower"), same layer so this fixture does not need a second manifest entry.
+  "variant-tower-a": {
+    footprint: [6, 6], terrainMask: ["land"],
+    glb: "vendor/kits/kenney-modular-buildings/building-sample-tower-d.glb",
+    glbVariants: ["vendor/kits/kenney-modular-buildings/building-sample-house-b.glb"],
+  },
 };
 
 test("glbBasename strips the directory, keeps just the filename", () => {
@@ -83,6 +91,7 @@ test("resolveBoardPieces: a real placed piece resolves to a real glb, layer, foo
     layer: 0,
     footprint: [2 * MODULE_SIZE_M, 3 * MODULE_SIZE_M],
     anchor: [2 * MODULE_SIZE_M, 2 * MODULE_SIZE_M],
+    storeys: 5,
     rotation: 0,
   });
 });
@@ -112,6 +121,24 @@ test("resolveBoardPieces: a rotated piece's own footprint is the SWAPPED one, ma
   const { resolved } = resolveBoardPieces(board, CATALOGUE, MANIFEST);
   assert.deepEqual(resolved[0].footprint, [3 * MODULE_SIZE_M, 2 * MODULE_SIZE_M]); // [2,3] swapped at 90
   assert.equal(resolved[0].rotation, 90);
+});
+
+test("GATE (FIX-1): resolveBoardPieces reads storeys directly from the real catalogue entry -- never invented, never computed here", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  board.place("house-a", { x: 2, y: 2 }, 0);
+  board.place("tower-base-6x6-a", { x: 8, y: 2 }, 0);
+  const { resolved } = resolveBoardPieces(board, CATALOGUE, MANIFEST);
+  const house = resolved.find((p) => p.typeId === "house-a");
+  const tower = resolved.find((p) => p.typeId === "tower-base-6x6-a");
+  assert.equal(house.storeys, 5);
+  assert.equal(tower.storeys, 63);
+});
+
+test("resolveBoardPieces: an entry with no storeys field (pre-FIX-2 shape, or a fixture that never set one) resolves storeys to undefined, not a guessed number", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  board.place("mega-tower-a", { x: 0, y: 0 }, 0); // this fixture's own mega-tower-a carries no storeys
+  const { resolved } = resolveBoardPieces(board, CATALOGUE, MANIFEST);
+  assert.equal(resolved[0].storeys, undefined);
 });
 
 test("a piece with no matching mesh (glb: null, most of the 50 per BO7A) is SKIPPED, not silently dropped or substituted", () => {
@@ -144,6 +171,42 @@ test("multiple real pieces, mixed resolvable and not, resolve independently -- o
   assert.equal(resolved.length, 2);
   assert.equal(skipped.length, 1);
   assert.deepEqual(resolved.map((p) => p.typeId).sort(), ["house-a", "mega-tower-a"]);
+});
+
+test("CAT-3: an entry with NO glbVariants resolves glb to entry.glb, byte-identical to before this feature existed", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  const placed = board.place("house-a", { x: 2, y: 2 }, 0);
+  const { resolved } = resolveBoardPieces(board, CATALOGUE, MANIFEST);
+  assert.equal(resolved[0].glb, CATALOGUE["house-a"].glb);
+});
+
+test("GATE (CAT-3): an entry WITH glbVariants resolves glb to one of [glb, ...glbVariants] -- never a third, invented path", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  const placed = board.place("variant-tower-a", { x: 2, y: 2 }, 0);
+  assert.ok(placed.ok, JSON.stringify(placed));
+  const { resolved } = resolveBoardPieces(board, CATALOGUE, MANIFEST);
+  const pool = [CATALOGUE["variant-tower-a"].glb, ...CATALOGUE["variant-tower-a"].glbVariants];
+  assert.ok(pool.includes(resolved[0].glb), `resolved glb "${resolved[0].glb}" is not in the real variant pool`);
+});
+
+test("GATE (CAT-3): the SAME placement id always resolves to the SAME variant -- deterministic, not re-rolled on every render", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  board.place("variant-tower-a", { x: 2, y: 2 }, 0);
+  const first = resolveBoardPieces(board, CATALOGUE, MANIFEST).resolved[0].glb;
+  const second = resolveBoardPieces(board, CATALOGUE, MANIFEST).resolved[0].glb;
+  assert.equal(first, second, "the same real placement resolved to two different variants across two calls");
+});
+
+test("GATE (CAT-3): 'two towers of the same footprint should not be the same tower' -- many real placements of the SAME variant-bearing typeId are not all the SAME variant", () => {
+  const board = createAreaBoard({ width: 200, height: 200, catalogue: CATALOGUE });
+  const glbs = [];
+  for (let i = 0; i < 30; i++) {
+    const placed = board.place("variant-tower-a", { x: (i % 20) * 6, y: Math.floor(i / 20) * 6 }, 0);
+    assert.ok(placed.ok, JSON.stringify(placed));
+  }
+  const { resolved } = resolveBoardPieces(board, CATALOGUE, MANIFEST);
+  for (const p of resolved) glbs.push(p.glb);
+  assert.equal(new Set(glbs).size, 2, `expected both real variants to appear across 30 real placements, saw ${new Set(glbs).size} distinct glb(s)`);
 });
 
 test("(synthetic) the vulnerability: resolveBoardPieces must call board.pieces(), not a hardcoded list -- an empty board resolves to nothing", () => {

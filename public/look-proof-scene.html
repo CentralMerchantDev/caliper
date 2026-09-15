@@ -297,21 +297,56 @@ function buildGhostOverlayMesh(resolved) {
 // proximity calculation that could disagree with it about where a
 // footprint's own edge actually is.
 const PAVING_RADIUS = 6; // metres -- a plausible street-level paved apron, wider than DECAL_RADIUS's own tight contact-shadow scale
-// RC4 -- "the board camera's own scene pass" (docs/specs/REBUILD-
-// CHECKLIST.md, MAKE IT PLAYABLE; Mark, 2026-09-15, after 14-board.png:
-// "still reads as a dust bowl at that distance"). RB5's own PAVING_RADIUS
-// was tuned for HERO_MODE's close, angled composition, where the 4-6m
-// halo around a piece is a plausible chunk of the frame. The board
-// camera looks down over the WHOLE 24x16-cell area from much farther out
-// (measured: ~134-212m from camera to the near/far corners of
-// BOARD_GROUND, vs HERO's own ~40-90m to its pieces) -- at that
-// remove, a 6m halo around each piece is a small fraction of what's
-// actually visible, so almost the entire frame still reads as the warm
-// earth layer between the pieces. A wider board-specific radius closes
-// the gaps between BOARD_DEMO_PLACEMENTS' own pieces into one continuous
-// paved area -- the read this camera needs ("a built place"), not a
-// blanket retune of HERO_MODE's own already-judged 6m apron.
-const BOARD_PAVING_RADIUS = 20;
+// RC4/FIX-3 -- the board camera's own paving radius (20, then retuned to
+// 10, docs/briefs/BLD-2026-09-16.md) was islands of paving around each
+// footprint, closing gaps between nearby pieces but never covering the
+// plot itself -- still "desert with patches" past those islands. GRD-1
+// (below) retires the radius approach for BOARD_MODE entirely in favour
+// of paving the whole plot; the constant and its own tuning history are
+// gone from the source, not carried forward as dead code, but the
+// history stays here since the choice (10, half of RC4's rejected 20)
+// is what the FULL-plot paving below replaces, not reinvents from
+// nothing.
+
+// GRD-1 (docs/briefs/BLD-2026-09-17.md §4) -- Mark has now called the
+// ground a dust bowl in THREE separate look-proof passes (14, 25, 35).
+// FIX-3 already retuned fog and BOARD_PAVING_RADIUS and the board camera
+// still read as sand. A lever examined first: `THREE.PlaneGeometry`'s own
+// DEFAULT UVs span exactly [0,1] across the WHOLE plane regardless of its
+// real size, stretching one sample of the ground texture across the
+// entire footprint with zero repetition -- real, and fixed below
+// (retileGroundUV), but MEASURED (not assumed) to be the wrong lever for
+// THIS gate: rendered side-by-side against 14-board.png's own historical
+// camera, retiling alone reads FLATTER, not less dust-bowl -- a real
+// source image's own broad colour variation, stretched large, was
+// carrying more of the "not one flat colour" read than a small repeated
+// tile's high-frequency grain does once mip-blended at any real camera
+// distance. Re-reading the gate itself named the actual defect: "Paving
+// was added near buildings; everything beyond them is bare earth to the
+// horizon... Paving, kerb lines, surface variation -- not desert with
+// patches." That is a MATERIAL problem, not a texture-resolution one --
+// BOARD_PAVING_RADIUS's own islands-around-each-footprint design is
+// exactly "desert with patches." Fixed at the root below: the board's own
+// near-ground plot pages fully to the paved layer (a real city plot is
+// made ground, not scattered islands in dirt), bordered by a kerb ring
+// (N1c's own already-proven mechanism, generalised from one road tile's
+// edge to the whole plot's edge) marking where the made ground actually
+// ends and the untouched earth beyond it begins. retileGroundUV is kept
+// (a real, if secondary, improvement, and cheap to keep) rather than
+// reverted. GROUND_TILE_M=6 -- the same street-level scale PAVING_RADIUS's
+// own comment already uses ("a plausible street-level paved apron"), not
+// a second, unrelated guess.
+const GROUND_TILE_M = 6;
+function retileGroundUV(geometry, footprint) {
+  const uv = geometry.getAttribute("uv");
+  const repeatX = footprint[0] / GROUND_TILE_M, repeatZ = footprint[1] / GROUND_TILE_M;
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, uv.getX(i) * repeatX, uv.getY(i) * repeatZ);
+  }
+  uv.needsUpdate = true;
+  return geometry;
+}
+
 function addGroundLayerAttribute(geometry, footprints, pavedLayer, earthLayer, radius = PAVING_RADIUS) {
   const pos = geometry.getAttribute("position");
   const count = pos.count;
@@ -381,6 +416,28 @@ function buildStreetLevelDetail(roadPiece, housePiece, groundLayer) {
   return [...kerbs, path];
 }
 
+// GRD-1 (docs/briefs/BLD-2026-09-17.md §4) -- BOARD_MODE's own plot is
+// now fully paved (above); this marks where that made ground actually
+// ends and the untouched earth beyond it begins, so the transition reads
+// as a built edge rather than paving fading into dirt with no boundary.
+// Reuses N1c's own kerbBox shape (raised box, full-strength join-decal
+// darkening) -- the SAME mechanism proven there for one road tile's edge,
+// applied to the whole plot's own perimeter instead.
+function buildBoardKerbRing(ground, groundLayer) {
+  const [ax, az] = ground.anchor;
+  const [fw, fd] = ground.footprint;
+  function kerbBox(cx, cz, w, d) {
+    const g = new THREE.BoxGeometry(w, KERB_HEIGHT, d).translate(cx, KERB_HEIGHT / 2, cz);
+    return addLayerAttribute(addConstantDecalAttribute(g, 1), groundLayer);
+  }
+  return [
+    kerbBox(ax + fw / 2, az - KERB_WIDTH / 2, fw + KERB_WIDTH * 2, KERB_WIDTH), // north edge
+    kerbBox(ax + fw / 2, az + fd + KERB_WIDTH / 2, fw + KERB_WIDTH * 2, KERB_WIDTH), // south edge
+    kerbBox(ax - KERB_WIDTH / 2, az + fd / 2, KERB_WIDTH, fd), // west edge
+    kerbBox(ax + fw + KERB_WIDTH / 2, az + fd / 2, KERB_WIDTH, fd), // east edge
+  ];
+}
+
 // N1a -- A SKY. "Even a gradient. The void is doing more damage to the
 // read than any missing shader feature, and it is the cheapest thing on
 // this list" (docs/briefs/BLD-2026-09-15.md). A CanvasTexture set as
@@ -420,6 +477,41 @@ function buildSkyTexture() {
   return tex;
 }
 
+// RDO-1 (docs/briefs/BLD-2026-09-17.md §3) -- the readout's own marker
+// (RB3/RC5, below) was a status LIGHT, not the number itself: "a
+// screenshot paired with the console line is what this run's own brief
+// asked be shown to Mark" -- a real design decision, but not what §S4
+// actually asks for: "the ghost shows the target cell's current value
+// and the value the piece would have there... that number, changing as
+// the cursor moves, IS the reason one cell beats another." A console
+// line is not something a player sees. Draws the two REAL numbers
+// resolveReadout already returned (never recomputed, never reformatted
+// from a different source) into a canvas, the same THREE.CanvasTexture
+// technique buildSkyTexture above already uses -- captured naturally by
+// canvas.toDataURL() (scripts/shoot-look-proof.mjs's own capture), no
+// DOM element, no change to the evidence pipeline every other shot in
+// this file already relies on.
+function buildReadoutLabelTexture(current, ifPlaced) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+  ctx.textBaseline = "middle";
+  ctx.font = "600 52px system-ui, sans-serif";
+  ctx.fillStyle = "#e8e4de";
+  ctx.fillText(`current ${current.toFixed(2)}`, 24, 84);
+  ctx.fillStyle = "#4fc3f7";
+  ctx.fillText(`ifPlaced ${ifPlaced.toFixed(2)}`, 24, 176);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 async function buildArrayTexture() {
   const manifest = await fetch("vendor/kits/array-texture/manifest.json").then((r) => r.json());
   const size = manifest.targetSize;
@@ -450,6 +542,16 @@ async function buildArrayTexture() {
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.magFilter = THREE.LinearFilter;
   tex.anisotropy = 8;
+  // GRD-1 (docs/briefs/BLD-2026-09-17.md §4) -- THREE's own default wrap
+  // (ClampToEdge) means a UV coordinate outside [0,1] just repeats the
+  // edge texel instead of tiling. Every real mesh's own baked UVs already
+  // stay within [0,1] (pack-authored geometry), so this is a genuine no-op
+  // for them -- ClampToEdge and RepeatWrapping are IDENTICAL for in-range
+  // coordinates. Needed below, where the board's own ground UVs are
+  // deliberately rescaled past [0,1] to tile a real texture sample at a
+  // real metre scale instead of stretching one sample across the whole
+  // board.
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.needsUpdate = true;
   // RB1 -- board-renderer.js's own layerForGlb needs this SAME manifest
   // (which file is on which layer) to resolve a catalogue entry's glb path
@@ -561,21 +663,27 @@ async function main() {
   const scene = new THREE.Scene();
   scene.background = buildSkyTexture();
 
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 500);
+  // CAM-1 (docs/briefs/BLD-2026-09-17.md §2) -- far plane raised from 500
+  // (sized for FIX-1's own OLD, capped ~27m tower) to 3000: FIX-1's real
+  // range now reaches ~376m for mega-tower-a, and BOARD_MODE's own camera
+  // (below, positioned once shadowBB's real bounds are known) needs real
+  // headroom past that or the far plane would clip the tower before its
+  // own distance calculation even gets a chance to frame it.
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 3000);
   if (HERO_MODE) {
     // The EXACT camera 01-08 used -- pixel continuity with the shot Mark
     // actually judged, not a re-derived approximation.
     camera.position.set(-6, 34, 70);
     camera.lookAt(6, 6, 4);
   } else if (BOARD_MODE) {
-    // RB1's own demo board -- sized to BOARD_GROUND's real extent, not
-    // guessed. Same diagonal-corner angle as L12's wide camera below, for
-    // the identical reason: a straight-on approach stacks whichever
-    // piece is nearest the camera in front of everything behind it.
-    const boardCenterX = GROUND.anchor[0] + GROUND.footprint[0] / 2;
-    const boardCenterZ = GROUND.anchor[1] + GROUND.footprint[1] / 2;
-    camera.position.set(boardCenterX - 70, 130, boardCenterZ - 70);
-    camera.lookAt(boardCenterX, 0, boardCenterZ);
+    // CAM-1 -- positioned further down, once shadowBB (the real merged
+    // ground+pieces bounding box, including FIX-1's own real storeys-
+    // driven heights) exists. The old fixed (boardCenterX-70, 130,
+    // boardCenterZ-70) assumed a capped ~27m tower; against a real ~376m
+    // one it put the camera so close, relative to the tower's own real
+    // height, that the near face filled the whole frame top to bottom
+    // (35-board-fix1-real-height.png, CAM-1's own named defect) --
+    // fixable only with real data this scope does not have yet.
   } else {
     // L12's own camera -- the 01-08 sequence's close-up framing cannot see
     // a 20-piece site plan; a wider, higher angle replaces it for this item
@@ -711,14 +819,23 @@ async function main() {
   const groundGeomRaw = new THREE.PlaneGeometry(GROUND.footprint[0], GROUND.footprint[1], GROUND.footprint[0], GROUND.footprint[1])
     .rotateX(-Math.PI / 2)
     .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+  // GRD-1 -- BOARD_MODE only, so HERO_MODE's own already-judged ground
+  // (90x60m, already read as acceptable at that smaller scale) is not
+  // touched by this at all.
+  if (BOARD_MODE) retileGroundUV(groundGeomRaw, GROUND.footprint);
   addGroundDecalAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal]);
   // RB5 -- read the paved layer's own real index from the manifest
   // (never hardcoded) -- matches board-renderer.js's own layerForGlb
   // discipline: one source of truth for "which file is on which layer".
   const pavedLayerIndex = manifest.layers.find((l) => l.file.includes("ground-paved")).index;
-  const groundGeom = addGroundLayerAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal], pavedLayerIndex, GROUND.layer, BOARD_MODE ? BOARD_PAVING_RADIUS : PAVING_RADIUS);
-  // Ground's own UVs tile once across its footprint -- fine for a grass
-  // sample texture at this scale, and not what this scene exists to prove.
+  // GRD-1 -- BOARD_MODE's own plot is made ground in full, not islands of
+  // paving around each footprint (BOARD_PAVING_RADIUS's own prior design,
+  // measured to still read as "desert with patches"). HERO_MODE/full
+  // GROUND_FULL keep the original footprint-radius paving unchanged --
+  // that ground was already judged acceptable at its own smaller scale.
+  const groundGeom = BOARD_MODE
+    ? addLayerAttribute(groundGeomRaw, pavedLayerIndex)
+    : addGroundLayerAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal], pavedLayerIndex, GROUND.layer, PAVING_RADIUS);
 
   // N1b -- "a ground that reads as continuing past the frame rather than
   // stopping at a visible edge" (docs/briefs/BLD-2026-09-15.md). The near
@@ -741,6 +858,13 @@ async function main() {
   const farGroundGeomRaw = new THREE.PlaneGeometry(FAR_GROUND_SIZE, FAR_GROUND_SIZE, 8, 8)
     .rotateX(-Math.PI / 2)
     .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, -0.02, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+  // GRD-1 -- BOARD_MODE only. A single tile stretched across 400m is an
+  // even flatter blur than the near ground's own 112m; the same already-
+  // tuned mipmap chain + anisotropic filtering (N1b's own comment above,
+  // originally for grazing-angle minification at the horizon) is exactly
+  // what keeps a high repeat count on this coarse 8-segment mesh from
+  // aliasing into moire rather than reading as texture.
+  if (BOARD_MODE) retileGroundUV(farGroundGeomRaw, [FAR_GROUND_SIZE, FAR_GROUND_SIZE]);
   const farGroundGeom = addLayerAttribute(addZeroDecalAttribute(farGroundGeomRaw), GROUND.layer);
 
   const preparedPieces = pieceGeoms.map((geom, i) => {
@@ -759,7 +883,11 @@ async function main() {
   const preparedBoardPieces = boardPieceGeoms.map((geom, i) => {
     const p = boardResolved[i];
     rotateGeometryY(geom, p.rotation, THREE);
-    fitToFootprint(geom, p.footprint, p.anchor);
+    // FIX-1 -- p.storeys is real catalogue data (board-renderer.js's own
+    // resolveBoardPieces, read directly from the entry, never guessed
+    // here). HERO_MODE's own preparedPieces above stays on the old,
+    // unchanged, no-storeys call -- only board pieces get this.
+    fitToFootprint(geom, p.footprint, p.anchor, p.storeys);
     const stripped = stripToPositionNormalUv(geom);
     return addLayerAttribute(stripped, p.layer);
   });
@@ -779,6 +907,10 @@ async function main() {
       )
     : [];
 
+  // GRD-1 -- the board plot's own perimeter kerb ring (see
+  // buildBoardKerbRing's own comment for why), BOARD_MODE only.
+  const boardKerbGeoms = BOARD_MODE ? buildBoardKerbRing(GROUND, GROUND.layer) : [];
+
   // The shadow camera's own frustum is sized from the pieces, the near
   // ground, and N1c's own street detail -- see buildShadowPass's own
   // comment for why the far ground must stay out of this box (it would
@@ -786,30 +918,127 @@ async function main() {
   const shadowBB = new THREE.Box3();
   groundGeom.computeBoundingBox();
   shadowBB.union(groundGeom.boundingBox);
-  for (const g of [...preparedPieces, ...streetDetailGeoms, ...preparedBoardPieces]) {
+  for (const g of [...preparedPieces, ...streetDetailGeoms, ...boardKerbGeoms, ...preparedBoardPieces]) {
     g.computeBoundingBox();
     shadowBB.union(g.boundingBox);
   }
 
-  const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...preparedBoardPieces], false);
-  const material = createLookProofMaterial(arrayTex);
   if (BOARD_MODE) {
-    // RC4 -- fog range retuned for THIS camera only (a caller-side
-    // uniform write, not an edit to look-proof-material.js -- HERO_MODE's
-    // own already-judged uFogNear/uFogFar stay exactly what RB5 left
-    // them). MEASURED, not guessed: with BOARD_MODE's own camera
-    // (boardCenter - 70 on x/z, y=130) and BOARD_GROUND's real footprint,
-    // the near and far corners of the visible ground sit ~134m and ~212m
-    // from the camera -- both already past HERO's own uFogNear=90, but
-    // the fog COLOR (0xe6dccb) is itself warm/tan, so fading toward it
-    // barely changes the "dust" read, only its brightness. Narrowing the
-    // range to bracket this camera's own real 134-212m span pushes the
-    // far ground much closer to fully fog-coloured (pale, closer to the
-    // sky) rather than leaving ~13% of the original warm ground tone
-    // still mixed in at the frame's own far edge.
-    material.uniforms.uFogNear.value = 100;
-    material.uniforms.uFogFar.value = 220;
+    // CAM-2 (docs/briefs/BLD-2026-09-18.md §3) -- CAM-1 (the trig-framed,
+    // whole-range-in-one-shot camera this block used to build) FAILED
+    // Mark's own eye: "two flat slabs against a gradient, no texture, no
+    // detail, technically correct and visually worse than 14 was."
+    // Mark's own design, built as described: "an expanded eye view...
+    // most of the time you're looking forward and you can only see
+    // what's in your eye line. As you spin around you can look up. And
+    // when you pan out, that's where you'll see the height." Eye level,
+    // forward by default, free to look up; height revealed by pulling
+    // BACK AND UP, never by fitting a tower into one frame -- a building
+    // that leaves the top of frame reads as TALLER than one that fits.
+    //
+    // The eye's own anchor is grounded in the real board, not a guessed
+    // coordinate: standing EYE_STAND_DISTANCE_M south of the TALLEST
+    // real piece's own near face (storeys read straight from the real
+    // catalogue, FIX-1/board-renderer.js -- never re-derived here),
+    // centred on that piece's own real width. A plausible street-width
+    // stand-off, not tuned to make any one shot work.
+    // "An expanded eye view -- not exactly what you would see but more."
+    // A pure human FOV (~50deg) reads as narrow/telephoto on screen;
+    // widened so looking up actually brings a tall building's own upper
+    // floors into frame without an extreme rotation, and updateProjection
+    // Matrix() called since this changes the camera's own construction-
+    // time 45deg (sized for CAM-1's now-superseded whole-range framing).
+    camera.fov = 65;
+    camera.updateProjectionMatrix();
+
+    const tallestPiece = boardResolved.reduce((a, b) => (b.storeys || 0) > (a.storeys || 0) ? b : a, boardResolved[0]);
+    const EYE_HEIGHT_M = 1.7; // a real, disclosed human-eye-height constant
+    const EYE_STAND_DISTANCE_M = 12; // metres back from the tallest piece's own near face -- a plausible street width
+    const eyeAnchor = new THREE.Vector3(
+      tallestPiece.anchor[0] + tallestPiece.footprint[0] / 2,
+      EYE_HEIGHT_M,
+      tallestPiece.anchor[1] - EYE_STAND_DISTANCE_M,
+    );
+
+    // yaw/pitch/dolly -- controllable by URL for the static single-shot
+    // pipeline (?board=1&eyeYaw=..&eyePitch=..&eyeDolly=..), and live via
+    // mouse-drag/scroll in INTERACTIVE_MODE (wired further down: the SAME
+    // function drives both, so a live drag and a URL-param render of the
+    // identical state cannot visually disagree). yaw=0 faces +Z (toward
+    // the tallest piece, since the eye stands south of it). Pitch clamped
+    // so "look up" cannot flip past straight overhead or dip below the
+    // horizon into the ground -- Mark's own words are "look up", not
+    // "look anywhere".
+    function eyeCameraFromState(yawDeg, pitchDeg, dolly) {
+      const yaw = (yawDeg * Math.PI) / 180;
+      const pitch = (Math.max(-10, Math.min(80, pitchDeg)) * Math.PI) / 180;
+      const forward = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      const dollyClamped = Math.max(0, dolly);
+      // "Pan out... that's where you'll see the height" -- pulling back
+      // ALSO lifts the camera, so height is revealed by the pull-back
+      // itself, not by a second, independent vertical control.
+      const position = eyeAnchor.clone()
+        .addScaledVector(forward, -dollyClamped)
+        .add(new THREE.Vector3(0, dollyClamped * 0.3, 0));
+      const lookAtPoint = position.clone().add(forward);
+      return { position, lookAtPoint };
+    }
+    window.__eyeCameraFromState = eyeCameraFromState;
+    window.__eyeAnchor = eyeAnchor;
+
+    const eyeParams = new URLSearchParams(window.location.search);
+    const initialYaw = Number(eyeParams.get("eyeYaw")) || 0;
+    const initialPitch = Number(eyeParams.get("eyePitch")) || 0;
+    const initialDolly = Number(eyeParams.get("eyeDolly")) || 0;
+    const { position: eyePos, lookAtPoint: eyeLookAt } = eyeCameraFromState(initialYaw, initialPitch, initialDolly);
+    camera.position.copy(eyePos);
+    camera.lookAt(eyeLookAt);
+    window.__boardCameraMaxHeight = shadowBB.max.y;
+    window.__eyeCameraState = { yaw: initialYaw, pitch: initialPitch, dolly: initialDolly };
   }
+
+  const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...boardKerbGeoms, ...preparedBoardPieces], false);
+  // FIX-3 (docs/briefs/BLD-2026-09-16.md §2) -- RC4's board-camera-only fog
+  // override (uFogNear=100, uFogFar=220, narrower and closer than the
+  // shared 90/230) is REMOVED, not retuned. Mark's own judgment on
+  // 25-board-scene-pass.png: "hazier and more of a dust bowl than
+  // 14-board.png" -- the narrower band faded ground toward uFogColor over a
+  // shorter distance, washing out the ground texture, the shadows and the
+  // board's own edge that 14-board.png still showed. BOARD_MODE now reads
+  // the exact same construction-time uFogNear/uFogFar every other mode
+  // does, matching what 14-board.png itself was rendered with (the
+  // override did not exist yet at that commit -- see 2936b7e vs b4949c9).
+  const material = createLookProofMaterial(arrayTex);
+  // CAM-3 (docs/briefs/BLD-2026-09-18.md §4) -- Mark on `30-board-scene-
+  // pass-fix3.png`: "the buildings are extremely hazy... the clarity has
+  // disappeared because of something overlaid... a gauze." Three prior
+  // fog retunes (density/colour) never touched uFogFar itself, and this
+  // is why: reading `30` directly showed the ground (near camera) sharp
+  // while buildings (farther) were washed, objects over-hazed and ground
+  // under-blended -- the opposite of real distance haze, and the
+  // hypothesis this item's own brief names is "the near plane starting
+  // too close." VERIFIED BY MEASUREMENT, not assumed: rendered the exact
+  // historical camera (14-board.png's own formula, temporarily
+  // substituted, then reverted -- see the real eye camera above, restored
+  // byte-identical) and computed real camera-to-surface distances.
+  // uFogNear (90) was NOT the dominant lever -- the near ground sits at
+  // ~130m from that camera, already past uFogNear, and read correctly
+  // (sharp, matching Mark's own "ground under-blended" observation
+  // exactly). uFogFar (230) WAS: the same camera puts mega-tower-a's own
+  // real ~376m-tall facade (FIX-1) at ~174m (base) to ~272m (top) away --
+  // the TOP is already past uFogFar=230, fully fogged, and the BASE sits
+  // at 60% blend. A single continuous facade fading from 60% to 100% fog
+  // across its own real height is exactly what "detail not blurred, but
+  // WASHED -- contrast lost" looks like. uFogFar=230 was tuned for
+  // HERO_MODE's own much smaller subjects (RB5's own comment: "~90" was
+  // HERO_MODE's own camera distance) and was never retuned when FIX-1
+  // made BOARD_MODE's own real height range ~14x larger. Confirmed the
+  // fix by rendering a controlled before/after varying ONLY uFogFar (500,
+  // clearing FIX-1's own real range with margin): the SAME tower's
+  // facade regained real colour/contrast on its base and lower floors,
+  // the ground (already correct) unchanged. uFogNear is untouched --
+  // it was not the cause, said plainly rather than changed on a guess.
+  if (BOARD_MODE) material.uniforms.uFogFar.value = 500;
   const mesh = new THREE.Mesh(merged, material);
   scene.add(mesh);
   window.__material = material;
@@ -835,13 +1064,20 @@ async function main() {
   // diamond at the queried cell -- blue now that S4 is real
   // (READOUT_COLOR.available, the common case as of this run), neutral
   // grey only if scoring becomes unavailable again (READOUT_COLOR
-  // .unavailable). Still a status indicator, not a data visualisation:
-  // the real current/ifPlaced numbers are the evidence (READOUT-STATE,
-  // above, and window.__readoutResolved), read directly rather than
-  // encoded into a guessed marker height or colour ramp -- a screenshot
-  // paired with the console line is what this run's own brief asked be
-  // shown to Mark, not a second, invented visual encoding of the same
-  // numbers.
+  // .unavailable). A status indicator: whether a real number exists here
+  // at all, not the number itself.
+  //
+  // RDO-1 (docs/briefs/BLD-2026-09-17.md §3) -- the marker ALONE is not
+  // what §S4 asks for, corrected here: "the ghost shows the target
+  // cell's current value and the value the piece would have there...
+  // that number, changing as the cursor moves, IS the reason one cell
+  // beats another." The marker + a console line (RB3/RC5's own original
+  // design) was judged against that clause and did not meet it -- a
+  // console line is not something a player sees. The label sprite below
+  // draws readoutResolved's own REAL current/ifPlaced (buildReadoutLabel
+  // Texture, above), only when readoutResolved.available -- never a
+  // guessed number for the unavailable case, matching the marker's own
+  // colour-only distinction for that state.
   if (readoutResolved) {
     const [rx, rz] = anchorForCell(READOUT_CELL);
     const readoutGeom = new THREE.OctahedronGeometry(1.4, 0)
@@ -855,6 +1091,28 @@ async function main() {
     const readoutMesh = new THREE.Mesh(readoutGeom, readoutMaterial);
     scene.add(readoutMesh);
     window.__readoutMesh = readoutMesh;
+
+    if (readoutResolved.available) {
+      const labelTex = buildReadoutLabelTexture(readoutResolved.current, readoutResolved.ifPlaced);
+      const labelMaterial = new THREE.SpriteMaterial({ map: labelTex, depthTest: false, depthWrite: false });
+      const labelSprite = new THREE.Sprite(labelMaterial);
+      // Above the marker, near the cursor's own cell -- a Sprite always
+      // faces the camera, so this stays legible from any of this file's
+      // own camera modes without a per-mode angle correction. Scale is
+      // proportional to shadowBB's own real max height, not a fixed
+      // guess: FOUND BY RENDERING, NOT ASSUMED -- a fixed 10x5 (a
+      // reasonable size against the OLD ~27m capped board) was a few
+      // illegible pixels against CAM-1's own real, far-back camera
+      // (needed to fit a real ~376m tower). Scaled to ~13% of the
+      // tallest real piece's own height keeps the label a legible,
+      // consistent fraction of the frame regardless of which board is
+      // actually on screen.
+      const labelH = Math.max(shadowBB.max.y * 0.13, 5);
+      labelSprite.position.set(rx + 2, labelH * 0.6, rz + 2);
+      labelSprite.scale.set(labelH * 2, labelH, 1);
+      scene.add(labelSprite);
+      window.__readoutLabelSprite = labelSprite;
+    }
   }
 
   let shadowPass = buildShadowPass(renderer, scene, shadowBB);
@@ -947,7 +1205,11 @@ async function main() {
         if (pieceGeometryCache.has(p.id)) continue;
         const raw = await loadPieceGeometry(p.glb);
         rotateGeometryY(raw, p.rotation, THREE);
-        fitToFootprint(raw, p.footprint, p.anchor);
+        // FIX-1 -- same p.storeys as the initial build above; this rebuild
+        // path (a click, RC1) must agree with it or a piece would appear
+        // to change height depending on whether it was on the board at
+        // load time or placed afterward.
+        fitToFootprint(raw, p.footprint, p.anchor, p.storeys);
         const stripped = stripToPositionNormalUv(raw);
         pieceGeometryCache.set(p.id, addLayerAttribute(stripped, p.layer));
       }
@@ -957,17 +1219,18 @@ async function main() {
       const newGroundGeomRaw = new THREE.PlaneGeometry(GROUND.footprint[0], GROUND.footprint[1], GROUND.footprint[0], GROUND.footprint[1])
         .rotateX(-Math.PI / 2)
         .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+      retileGroundUV(newGroundGeomRaw, GROUND.footprint); // GRD-1 -- this rebuild only ever runs inside BOARD_MODE (see the enclosing if above), matching the initial build's own retiling
       addGroundDecalAttribute(newGroundGeomRaw, [...PIECES, ...footprintsForDecal]);
-      const newGroundGeom = addGroundLayerAttribute(newGroundGeomRaw, [...PIECES, ...footprintsForDecal], pavedLayerIndex, GROUND.layer, BOARD_PAVING_RADIUS); // this rebuild only ever runs inside BOARD_MODE (see the enclosing if above)
+      const newGroundGeom = addLayerAttribute(newGroundGeomRaw, pavedLayerIndex); // GRD-1 -- fully paved, matching the initial build's own plot-wide paving; this rebuild only ever runs inside BOARD_MODE (see the enclosing if above)
 
-      const newMerged = mergeGeometries([newGroundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...liveBoardGeoms], false);
+      const newMerged = mergeGeometries([newGroundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...boardKerbGeoms, ...liveBoardGeoms], false);
       mesh.geometry.dispose();
       mesh.geometry = newMerged;
 
       const newShadowBB = new THREE.Box3();
       newGroundGeom.computeBoundingBox();
       newShadowBB.union(newGroundGeom.boundingBox);
-      for (const g of [...preparedPieces, ...streetDetailGeoms, ...liveBoardGeoms]) {
+      for (const g of [...preparedPieces, ...streetDetailGeoms, ...boardKerbGeoms, ...liveBoardGeoms]) {
         g.computeBoundingBox();
         newShadowBB.union(g.boundingBox);
       }
@@ -977,7 +1240,49 @@ async function main() {
       window.__shadowMapTexture = shadowPass.depthTexture;
     }
 
+    // CAM-2 -- drag-to-look, wheel-to-pan-out. "As you spin around you can
+    // look up" is a real mouse gesture, not just a URL param -- but RC1's
+    // own left-click already means "place/commit", so a drag and a click
+    // must be told apart, not layered onto the same event. A held button
+    // with real pixel movement is a LOOK gesture (updates yaw/pitch,
+    // suppresses hover/placement for that gesture); a held button with no
+    // real movement, released, is still a CLICK (unchanged from RC1) --
+    // moved from pointerdown to pointerup so "was this a drag" is knowable
+    // before deciding.
+    const DRAG_THRESHOLD_PX = 4;
+    let dragState = null; // { startX, startY, startYaw, startPitch, moved }
+    function applyEyeCamera(yaw, pitch, dolly) {
+      // window.__eyeCameraFromState, not the bare identifier -- eyeCameraFromState
+      // is a `function` declared inside the EARLIER `if (BOARD_MODE) {...}`
+      // block above, which (this file is a module, always strict mode)
+      // block-scopes it to that block alone. This block is a SEPARATE
+      // `if (BOARD_MODE && INTERACTIVE_MODE) {...}`, so the bare name is
+      // out of scope here -- the window.__ escape hatch that block already
+      // set is what makes it reachable.
+      const { position, lookAtPoint } = window.__eyeCameraFromState(yaw, pitch, dolly);
+      camera.position.copy(position);
+      camera.lookAt(lookAtPoint);
+      window.__eyeCameraState = { yaw, pitch, dolly };
+    }
+
     renderer.domElement.addEventListener("pointermove", (e) => {
+      if (dragState) {
+        const dx = e.clientX - dragState.startX;
+        const dy = e.clientY - dragState.startY;
+        if (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;
+        if (dragState.moved) {
+          // Screen-pixel-to-degree sensitivity -- a real, disclosed
+          // constant (0.15 deg/px), not tuned per shot; dragging right
+          // looks right (yaw increases), dragging up looks up (pitch
+          // increases, matching eyeCameraFromState's own pitch sign).
+          const SENSITIVITY_DEG_PER_PX = 0.15;
+          const yaw = dragState.startYaw + dx * SENSITIVITY_DEG_PER_PX;
+          const pitch = dragState.startPitch - dy * SENSITIVITY_DEG_PER_PX;
+          applyEyeCamera(yaw, pitch, window.__eyeCameraState.dolly);
+          renderer.render(scene, camera);
+          return; // looking around, not hovering a placement cell
+        }
+      }
       const hit = worldXZFromClientXY(e.clientX, e.clientY);
       if (!hit) return;
       const cell = cellFromWorldXZ(hit.x, hit.z);
@@ -986,6 +1291,17 @@ async function main() {
       updateGhostMesh();
       renderer.render(scene, camera);
     });
+
+    renderer.domElement.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      // "When you pan out, that's where you'll see the height." Scroll
+      // down/away = pan out (dolly increases); never negative (dolly is
+      // clamped at 0 inside eyeCameraFromState too, defence in depth).
+      const DOLLY_SENSITIVITY = 0.02;
+      const dolly = Math.max(0, window.__eyeCameraState.dolly + e.deltaY * DOLLY_SENSITIVITY);
+      applyEyeCamera(window.__eyeCameraState.yaw, window.__eyeCameraState.pitch, dolly);
+      renderer.render(scene, camera);
+    }, { passive: false });
 
     // Two clicks close enough together that the FIRST one's async rebuild
     // (a newly-committed piece needs a real glb fetch) is still in flight
@@ -1008,8 +1324,16 @@ async function main() {
       return rebuildChain;
     }
 
-    renderer.domElement.addEventListener("pointerdown", async (e) => {
-      if (e.button !== 0) return; // left click only -- right-click is contextmenu, below
+    renderer.domElement.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return; // left button only -- right-click is contextmenu, below
+      dragState = { startX: e.clientX, startY: e.clientY, startYaw: window.__eyeCameraState.yaw, startPitch: window.__eyeCameraState.pitch, moved: false };
+    });
+
+    renderer.domElement.addEventListener("pointerup", async (e) => {
+      if (e.button !== 0 || !dragState) return;
+      const wasDrag = dragState.moved;
+      dragState = null;
+      if (wasDrag) return; // a real look-drag, not a placement click
       const hit = worldXZFromClientXY(e.clientX, e.clientY);
       if (!hit) return;
       const cell = cellFromWorldXZ(hit.x, hit.z);

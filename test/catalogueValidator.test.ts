@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { validateCatalogue, validateEntry, CATALOGUE_FOOTPRINTS, ROAD_CLASS_HIERARCHY, KNOWN_AUTHORED_CLASSES } from "../public/catalogue-validator.js";
 import { AMENITY_CIVIC_TYPE_IDS, unitQualityFor, baseValueFor, storeysFor } from "../scripts/migrate-catalogue-s2-fields.mjs";
-import { MESH_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS } from "../scripts/link-catalogue-meshes.mjs";
+import { MESH_BINDINGS, VARIANT_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS } from "../scripts/link-catalogue-meshes.mjs";
 import { PIECES } from "../public/look-proof-pieces.js";
 import { createAreaBoard } from "../public/area-board.js";
 
@@ -174,15 +174,39 @@ test("GATE (BO7A): the real catalogue's own glb fields exactly match link-catalo
   }
 });
 
-test("GATE (BO7A): every real L12 mesh is accounted for exactly once -- bound, a disclosed finding, or a disclosed prop, never silently unclassified", () => {
+test("GATE (BO7A/CAT-3): every real L12 mesh is accounted for exactly once -- bound, a disclosed variant, a disclosed finding, or a disclosed prop, never silently unclassified", () => {
   const bound = new Set(Object.keys(MESH_BINDINGS));
+  const variants = new Set(Object.values(VARIANT_BINDINGS).flat());
   const unmatched = new Set(UNMATCHED_MESHES);
   const props = new Set(PROP_MESH_IDS);
   for (const piece of PIECES as any[]) {
-    const memberships = [bound.has(piece.id), unmatched.has(piece.id), props.has(piece.id)].filter(Boolean).length;
-    assert.equal(memberships, 1, `"${piece.id}" is in ${memberships} of {MESH_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS} -- must be in exactly one`);
+    const memberships = [bound.has(piece.id), variants.has(piece.id), unmatched.has(piece.id), props.has(piece.id)].filter(Boolean).length;
+    assert.equal(memberships, 1, `"${piece.id}" is in ${memberships} of {MESH_BINDINGS, VARIANT_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS} -- must be in exactly one`);
   }
-  assert.equal(bound.size + unmatched.size + props.size, (PIECES as any[]).length, "the three tables' combined size does not match PIECES's own length -- something is double-counted or missing");
+  assert.equal(bound.size + variants.size + unmatched.size + props.size, (PIECES as any[]).length, "the four tables' combined size does not match PIECES's own length -- something is double-counted or missing");
+});
+
+test("GATE (CAT-3): every VARIANT_BINDINGS target names a real, already-bound catalogue entry -- a variant pool with no primary binding is nonsense", () => {
+  const primaryCatalogueIds = new Set(Object.values(MESH_BINDINGS));
+  for (const catalogueId of Object.keys(VARIANT_BINDINGS)) {
+    assert.ok(primaryCatalogueIds.has(catalogueId), `VARIANT_BINDINGS names "${catalogueId}", which has no primary MESH_BINDINGS entry`);
+  }
+});
+
+test("GATE (CAT-3): the real catalogue's own glbVariants fields exactly match link-catalogue-meshes.mjs's disclosed VARIANT_BINDINGS table", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  const glbByMeshId = new Map(PIECES.map((p: any) => [p.id, p.glb]));
+  for (const [catalogueId, meshIds] of Object.entries(VARIANT_BINDINGS)) {
+    const entry = catalogue.find((e: any) => e.id === catalogueId);
+    assert.ok(entry, `VARIANT_BINDINGS names catalogue id "${catalogueId}", which does not exist in the real catalogue`);
+    assert.deepEqual(entry.glbVariants, (meshIds as string[]).map((id) => glbByMeshId.get(id)), `${catalogueId}.glbVariants does not match the real paths for [${meshIds}]`);
+  }
+  const variantIds = new Set(Object.keys(VARIANT_BINDINGS));
+  for (const entry of catalogue) {
+    if (!variantIds.has(entry.id)) {
+      assert.ok(!("glbVariants" in entry), `${entry.id}.glbVariants is set but is not named in VARIANT_BINDINGS -- either the table is stale or this was hand-edited outside the script`);
+    }
+  }
 });
 
 test("GATE (BO7A), named directly per Mark's own scoping: a prop's own typeId (dumpster-1x1, an L12 mesh id) cannot be placed as a catalogue piece -- refused via the ordinary unknown-type path, not a special case", () => {
@@ -197,7 +221,7 @@ test("GATE (BO7A), named directly per Mark's own scoping: a prop's own typeId (d
   }
 });
 
-test("BO7A: scripts/link-catalogue-meshes.mjs is idempotent -- running it again against the real, already-linked catalogue produces byte-identical output", () => {
+test("BO7A/CAT-3: scripts/link-catalogue-meshes.mjs is idempotent -- running it again against the real, already-linked catalogue produces byte-identical output", () => {
   const before = readFileSync(join(ROOT, "data", "catalogue.json"), "utf8");
   const catalogue = JSON.parse(before);
   const glbByMeshId = new Map(PIECES.map((p: any) => [p.id, p.glb]));
@@ -205,7 +229,15 @@ test("BO7A: scripts/link-catalogue-meshes.mjs is idempotent -- running it again 
   for (const [meshId, catalogueId] of Object.entries(MESH_BINDINGS)) {
     glbByCatalogueId.set(catalogueId, glbByMeshId.get(meshId) as string);
   }
-  const relinked = catalogue.map((entry: any) => ({ ...entry, glb: glbByCatalogueId.get(entry.id) || null }));
+  const relinked = catalogue.map((entry: any) => {
+    const { glbVariants, ...rest } = entry;
+    const variantIds = (VARIANT_BINDINGS as any)[entry.id];
+    return {
+      ...rest,
+      glb: glbByCatalogueId.get(entry.id) || null,
+      ...(variantIds ? { glbVariants: variantIds.map((id: string) => glbByMeshId.get(id)) } : {}),
+    };
+  });
   const after = JSON.stringify(relinked, null, 2) + "\n";
   assert.equal(after, before, "re-running the same linking logic against the real catalogue produced a different result -- the file on disk has drifted from the script");
 });

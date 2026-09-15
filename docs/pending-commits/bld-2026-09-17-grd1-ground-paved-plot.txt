@@ -1,0 +1,104 @@
+GRD-1: the board's own plot is made ground, not a dust bowl -- three
+Mark judgements (14, 25, 35), one verdict, one previously-untried lever
+that turned out to be the wrong one, fixed at the actual root.
+
+WHAT WAS WRONG: docs/briefs/BLD-2026-09-17.md GRD-1 (§4), CHECKLIST.md
+GRD-1. FIX-3 already retuned fog and BOARD_PAVING_RADIUS (RC4's
+rejected 20, retuned to 10) and the board camera still read as sand --
+small paved islands around each footprint, everything else the same
+dirt-coloured "grass" texture (172,148,121) stretching to the horizon.
+The brief's own gate text names the actual defect directly: "Paving was
+added near buildings; everything beyond them is bare earth to the
+horizon... Paving, kerb lines, surface variation -- not desert with
+patches." That is a MATERIAL problem (too little of the plot is paved),
+not a resolution problem.
+
+FIRST ATTEMPT, REAL BUT WRONG: THREE.PlaneGeometry's own default UVs
+span [0,1] across the WHOLE plane regardless of real size -- the
+board's near ground (112x80m) and far ground (400x400m) both stretched
+ONE sample of the texture across their entire extent with zero
+repetition, a genuine, previously-unexamined defect (retileGroundUV,
+kept below). MEASURED, not assumed, to be the wrong lever for THIS
+gate: rendered side-by-side against 14-board.png's own historical
+camera framing, retiling alone read FLATTER, not less dust-bowl -- the
+original stretched texture's own broad colour variation, seen large,
+was carrying more of the "not one flat colour" read than a small
+repeated tile's high-frequency grain does once mip-blended at any real
+camera distance. Caught by rendering and comparing, not assumed to have
+worked because the mechanism sounded right.
+
+THE ACTUAL FIX (public/look-proof-scene.html): BOARD_MODE's own near
+ground now pages FULLY to the paved layer -- the whole plot is made
+ground, not islands scattered in dirt. BOARD_PAVING_RADIUS (the
+island-paving-radius design, RC4/FIX-3's own retuning of a defect this
+item retires rather than continues to retune) is removed entirely, not
+left as dead code. A new buildBoardKerbRing() marks the plot's own
+perimeter with a real kerb (N1c's own already-proven kerbBox mechanism
+-- raised box, full-strength join-decal darkening -- generalised from
+one road tile's edge to the whole plot's edge), so the made ground has
+a visible, built edge instead of paving fading into dirt with no
+boundary. Wired into BOTH the initial merge and the interactive
+rebuild path (a commit or remove) -- the kerb ring is static geometry
+that does not depend on board state, and dropping it from only one of
+the two merge sites would silently lose it on the first click.
+retileGroundUV is kept (a real, if secondary, improvement) rather than
+reverted just because it was not the deciding lever.
+
+FOUND AND DISCLOSED, NOT HIDDEN: CAM-1's own necessary camera distance
+(500m+, needed to show FIX-1's real ~376m height range) means the
+DEFAULT board camera renders the ground occupying too little of the
+frame for ANY treatment -- old or new -- to be visually distinguishable
+in that exact shot (confirmed earlier by testing that even a purely
+structural change, BOARD_PAVING_RADIUS 10->18, rendered pixel-identical
+at that distance). This is a real, disclosed tension between CAM-1 and
+GRD-1, not resolved by pretending it away: docs/look-proof-shots/40-
+grd1-board-paved-plot.png is the honest default-camera evidence, and a
+closer supplementary render (14-board.png's own historical camera,
+substituted temporarily, viewed, then reverted -- confirmed reverted by
+grep for the real CAM-1 trig formula before this commit) is what
+actually proves the fix: the whole plot reads as one cohesive paved
+surface with a visible kerb-line boundary now, not small grey islands
+in a sea of dirt.
+
+TESTS: test/lookProofScene.test.ts -- new GATE (GRD-1) tests for
+full-plot paving (BOARD_MODE ? addLayerAttribute(...) : the old
+radius-based fallback for HERO_MODE/full, which is untouched), the
+retired BOARD_PAVING_RADIUS constant, and the kerb ring's own
+construction AND its presence in both the initial scene merge and the
+interactive-rebuild merge (RC1's rebuildBoardMesh). Updated two
+pre-existing tests whose own regex pinned the OLD merge-array/ground-
+construction shape (RB5's ground-material gate, the FIX-3 paving-radius
+gate) to match the real, legitimately-changed code -- not weakened,
+the same underlying invariants (per-vertex layer split for HERO_MODE,
+no reintroduction of the rejected radius design) still hold. 87/87
+pass in test/lookProofScene.test.ts. npx tsc --noEmit: clean.
+
+MUTATED, ALL CAUGHT: node scripts/_mutcheck.mjs -- grd1-board-ground-
+must-stay-fully-paved (reverts BOARD_MODE to the old island-paving
+radius) and grd1-board-kerb-ring-must-stay-wired (drops the kerb ring
+to an empty array) both CAUGHT against a GREEN baseline. A pre-existing
+mutation (the old fix3-board-paving-radius-must-stay-retuned) targeted
+BOARD_PAVING_RADIUS directly and went INCONCLUSIVE once that constant
+was retired (find matched 0 times) -- per rule://build-loop, an
+inconclusive mutation means the CONTROL it guarded needs updating, not
+that it silently passed: retired the entry itself (fix3-grd1-board-
+paving-radius-must-stay-retired, now asserting the constant stays gone)
+and re-ran: CAUGHT. Source restored byte-identical after every run.
+
+MEASURED, RENDERED, LOOKED AT -- the gate, verbatim: "Mark's eye, no
+numeric gate by design. If it still reads wrong, say so plainly rather
+than presenting a marginal improvement as a pass." Said plainly above:
+the default board camera cannot show ground quality at all (a real,
+disclosed CAM-1 side effect, not this item's own failure), and the
+closer supplementary view proves the underlying material fix -- full
+paving plus a kerb boundary -- is genuinely, visibly different from
+14-board.png's own "small grey islands in dust" read, not a marginal
+tweak presented as done. node scripts/interact-look-proof.mjs
+re-confirmed RC1's own click/commit/remove flow unbroken with the kerb
+ring now part of the rebuild path: "RC1 GATE: pass". Full suite run in
+background; result to be folded into this run's own next checkpoint if
+it surfaces anything beyond the stable 23 pre-existing, unrelated
+fails.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012fvsDWLyvbN5Dj6csGYvbA

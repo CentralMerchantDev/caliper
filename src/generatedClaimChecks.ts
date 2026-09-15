@@ -85,6 +85,42 @@ export function mutationClaimMismatch(readmeText: string, generatedTotal: number
   return null;
 }
 
+/**
+ * SHIP-5 (docs/briefs/BLD-2026-09-17.md §5): "a deploy manifest -- version,
+ * commit, build time, on the page." These three are the SAME "page claim
+ * vs. generated record" shape every other function in this file already
+ * checks -- has the page been regenerated since the record last changed.
+ * The DEEPER claim SHIP-5 also asks for ("matches what built it") is not a
+ * pure function of two strings -- it needs the real, live git history (is
+ * the declared commit HEAD or a real ancestor of it) -- and lives in
+ * test/deployManifest.test.ts itself instead, the one place in this
+ * project's claim-checking that legitimately shells out to git rather than
+ * comparing two already-generated artefacts.
+ */
+export function deployVersionClaimMismatch(claimedVersion: string, generatedVersion: string): string | null {
+  if (!claimedVersion) return "#deploy-version is missing from the page";
+  if (claimedVersion !== generatedVersion) {
+    return `page says v${claimedVersion}, generated manifest says v${generatedVersion} -- run node scripts/gen-deploy-manifest.mjs`;
+  }
+  return null;
+}
+
+export function deployCommitClaimMismatch(claimedCommit: string, generatedShortCommit: string): string | null {
+  if (!claimedCommit) return "#deploy-commit is missing from the page";
+  if (claimedCommit !== generatedShortCommit) {
+    return `page says ${claimedCommit}, generated manifest says ${generatedShortCommit} -- run node scripts/gen-deploy-manifest.mjs`;
+  }
+  return null;
+}
+
+export function deployBuildTimeClaimMismatch(claimedBuildTime: string, generatedBuildTime: string): string | null {
+  if (!claimedBuildTime) return "#deploy-build-time is missing from the page";
+  if (claimedBuildTime !== generatedBuildTime) {
+    return `page says "${claimedBuildTime}", generated manifest says "${generatedBuildTime}" -- run node scripts/gen-deploy-manifest.mjs`;
+  }
+  return null;
+}
+
 export function claudeMdClaimMismatch(claudeMdText: string, generatedNodeTests: number, generatedWorkerTests: number): string | null {
   const m = claudeMdText.match(/npm test\s+# (\d+) node tests \+ (\d+) worker tests/);
   if (!m) return "CLAUDE.md's \"How to verify\" section no longer has an `npm test # N node tests + M worker tests` line";

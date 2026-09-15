@@ -1,0 +1,136 @@
+CAT-2: bind 26 more catalogue entries to real kenney.nl meshes, correct
+street-cross's own wrong binding.
+
+WHAT WAS WRONG: docs/briefs/BLD-2026-09-16.md CAT-2 (PLAN.md 5.1,
+CHECKLIST.md CAT-2): 38 of 50 catalogue entries had no glb, all of them
+road tiles (lane/street/avenue/highway, plus the width-transition tiers
+between them). Separately, street-cross's own existing binding pointed at
+road-crossing.glb, disclosed at the time (scripts/link-catalogue-
+meshes.mjs's own BO7A comment) as "LEAST CERTAIN OF THE THREE ROAD
+BINDINGS" -- the doubt was correct.
+
+kenney.nl is an authorised standing CC0 source (docs/briefs/BLD-2026-09-
+16.md §5, public/vendor/kits/LICENCES.md's own Policy for Future Imports).
+Licence re-verified directly on the asset's own page at the moment of
+download (CC0, same text as the pack's existing entry), same zip URL
+already on file re-fetched, not re-guessed from site reputation.
+
+VERIFIED BY RENDERING, NOT BY TRUSTING THE FILENAME: extracted 6
+candidates (road-crossroad, road-intersection, road-end, road-end-round,
+road-split, road-square, plus the already-vendored road-crossing for
+comparison) and rendered each top-down against the pack's own real
+texture (a temporary page, public/_scratch-road-verify.html, removed
+after use -- nothing persists from this step except this record and the
+shapes' real use in public/look-proof-pieces.js). Confirmed:
+- road-crossroad.glb: a genuine 4-way (sidewalk border on all four sides,
+  lane markings crossing both axes).
+- road-intersection.glb: a genuine T-junction (sidewalk border on three
+  sides, the fourth open for the branch).
+- road-end.glb / road-end-round.glb: a flat cap and a rounded cul-de-sac
+  cap, respectively.
+- road-crossing.glb (the EXISTING street-cross binding): a STRAIGHT road
+  with a crosswalk painted on it -- continuous sidewalk on both long
+  edges, no side branch. Not a junction at all, despite the name. This is
+  the confirmation the original disclosed doubt was correct.
+- road-square.glb: a plain paved tile, no junction markings -- ruled out,
+  not useful for any unbound entry.
+- road-split.glb: a real lane-fork/diverge shape. A genuine candidate for
+  the catalogue's "transition" tileType (no dedicated taper/merge piece
+  exists anywhere in this pack -- confirmed by name-searching the full
+  zip listing for taper/narrow/wide/merge/funnel/slant) -- but NOT used:
+  CAT-2's own brief names exactly four pre-verified shapes and no fifth,
+  and using an unauthorised fifth asset for three entries was judged
+  closer to "forcing a mesh that does not fit" than a real match. The
+  three "transition" entries instead reuse the already-vendored
+  road-straight.glb, disclosed plainly as a placeholder, not a considered
+  visual match.
+
+THE FIX:
+- public/vendor/kits/kenney-city-kit-roads/: road-crossroad.glb, road-
+  intersection.glb, road-end.glb, road-end-round.glb added, sha256 logged
+  in public/vendor/kits/LICENCES.md with the full verification reasoning
+  above. road-end-round.glb is imported but NOT bound this pass --
+  reserved as a second "end" variant for CAT-3's own diversity work,
+  disclosed rather than left unexplained.
+- public/look-proof-pieces.js: 26 new dedicated PIECES entries (one per
+  catalogue footprint tier, so fitToFootprint's own non-uniform scale
+  matches each tier's real size), plus the street-crossing entry's own
+  glb corrected from road-crossing.glb to road-crossroad.glb (id kept
+  unchanged so scripts/link-catalogue-meshes.mjs's own MESH_BINDINGS key
+  needs no restructuring).
+- scripts/link-catalogue-meshes.mjs: 26 new MESH_BINDINGS entries (mesh id
+  spelled identically to its target catalogue id, since each is a
+  dedicated instance) plus the street-crossing disclosure comment updated
+  to record the correction and why the original doubt was right.
+- node scripts/link-catalogue-meshes.mjs re-run (idempotent, a re-run not
+  a hand edit): "linked 38 of 50 catalogue entries to a real L12 mesh"
+  (was 12).
+
+A REAL REGRESSION, FOUND BY THE FULL SUITE, NOT ASSUMED CLEAN: adding 26
+entries grew PIECES from 20 to 46, and test/lookProofScene.test.ts's own
+"L12: 20 pieces, not 200" gate went genuinely red -- it encoded L12's own
+assumption (the demo scene's piece count) as PIECES's own total length,
+which CAT-2's real, authorised road-binding growth now legitimately
+violates. Split into two tests rather than just bumping the number: one
+asserts L12's original 20 ids are still exactly present, unshrunk and
+unrenamed; the other checks the new total is 46, exactly, with a comment
+telling a future reader to name why if it grows again rather than silently
+bump the literal. Both are named, not incidental -- the split preserves
+the original gate's real protective intent (do not silently creep toward
+200) while accommodating CAT-2's own disclosed, deliberate growth.
+
+SHORTFALL, STATED PLAINLY: 12 of the 38 originally-unbound entries remain
+unbound -- kiosk-a, shed-a, substation-a, small-civic-a, small-retail-a,
+large-house-a, large-commercial-4x6-a, small-warehouse-a, large-
+commercial-6x6-a, civic-6x6-a, large-warehouse-a, stadium-a. All are
+non-road categories (civic/industrial/commercial/residential) this item's
+own four verified shapes were never scoped to cover -- a genuine finding,
+not a silent drop. 3 further entries (the "transition" tier) are bound
+but to a disclosed placeholder mesh, not a real taper.
+
+TESTS: test/catalogueValidator.test.ts already carried the real gates for
+this (GATE (BO7A): glb fields match MESH_BINDINGS; every real mesh
+classified exactly once; the linking script is idempotent) -- no new test
+needed, the existing gate's own red-then-green cycle is the proof: before
+adding MESH_BINDINGS entries, the classification gate failed naming each
+new PIECES id ("lane-straight" is in 0 of {...}"), and the glb-match gate
+failed on street-cross's own stale value. After adding the bindings and
+re-running the linking script, all three gates pass. node test/run.mjs
+test/catalogueValidator.test.ts: 58/58 pass. test/lookProofScene.test.ts's
+own split PIECES-count tests (above): 73/73 pass. npx tsc --noEmit: clean.
+
+MUTATED, BOTH CAUGHT: node scripts/_mutcheck.mjs test/catalogueValidator.
+test.ts public/look-proof-pieces.js test/mutations.json --
+cat2-street-cross-must-stay-corrected (reverts street-cross to road-
+crossing.glb) CAUGHT. node scripts/_mutcheck.mjs test/catalogueValidator.
+test.ts scripts/link-catalogue-meshes.mjs test/mutations.json --
+cat2-lane-cross-binding-must-stay-classified (drops one of the 26 new
+MESH_BINDINGS entries) CAUGHT. node scripts/_mutcheck.mjs test/lookProof
+Scene.test.ts public/look-proof-pieces.js test/mutations.json --
+cat2-pieces-count-must-stay-46-not-drift (drops one of the 26 new PIECES
+entries) CAUGHT. All three against a GREEN baseline; source files restored
+byte-identical after each run. All three entries added to
+test/mutations.json.
+
+MEASURED, RENDERED, LOOKED AT: node scripts/shoot-catalogue-contact-
+sheet.mjs -- console reports "CATALOGUE-CONTACT-SHEET bound=38 total=50"
+and "draw calls: 1" (the CAT-2 gate: "still ONE draw call with the bound
+set rendered, measured" -- unchanged from before this item). Regenerated
+docs/look-proof-shots/27-catalogue-contact-sheet.png, opened and looked
+at directly: all 38 bound pieces render with their own real labels.
+
+FULL-SUITE VERIFICATION, HONESTLY INCOMPLETE: two background attempts at
+the full `node test/run.mjs` (no args) were killed mid-run by something
+outside this lane's own control -- 24 node.exe processes were observed
+running concurrently at the time (`tasklist`), consistent with CLAUDE.md's
+own standing note that CLI runs concurrently on this machine. Per
+`rule://` this lane's own standing guard ("lanes do not kill processes...
+a strong inference is not the standard... name the PIDs and stop"), none
+were touched. Verification instead rests on the exact files this item
+touched, each run to completion: test/catalogueValidator.test.ts (58/58)
+and test/lookProofScene.test.ts (73/73), both green, plus the three
+mutation proofs above. Said plainly rather than presenting a full-suite
+number that was never actually observed complete.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012fvsDWLyvbN5Dj6csGYvbA

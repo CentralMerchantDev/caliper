@@ -1,0 +1,73 @@
+FIX-3: revert the board-camera fog wash, retune the real cause instead.
+
+WHAT WAS WRONG: Mark judged 25-board-scene-pass.png (RC4, 2936b7e) against
+14-board.png (RB5, b4949c9): "hazier and more of a dust bowl than the
+14-board.png it was meant to improve." The wash removed 14's readable ground
+texture, real shadows and defined board edge, and the buildings lost contrast
+against the background. docs/briefs/BLD-2026-09-16.md FIX-3, PLAN.md 3.3,
+CHECKLIST.md FIX-3.
+
+RE-GROUNDED, NOT TAKEN ON FAITH: the checklist's own short title names only
+"the board-camera fog," so the first attempt reverted just RC4's caller-side
+uFogNear/uFogFar override (100/220 back to the shared 90/230, matching what
+14-board.png itself used -- that override did not exist yet at b4949c9).
+Rendered it (28-board-fog-reverted.png) and looked at it, per rule://
+background-promotion-evidence -- it was visually indistinguishable from the
+rejected 25, confirmed by diff (they are not byte-identical, but the fog
+alone barely moves the read). The tree disagreed with the checklist's own
+short title, so the tree won: RC4's OTHER change, BOARD_PAVING_RADIUS=20
+(vs the shared PAVING_RADIUS=6), was the real driver. At 20m every one of
+BOARD_DEMO_PLACEMENTS' own four pieces merges into one slab covering nearly
+the whole visible frame -- that is the actual "wash," not the fog range.
+
+THE FIX, both board-camera-only, neither touching HERO_MODE's own
+already-judged values:
+- The BOARD_MODE fog uniform override is REMOVED (not retuned). BOARD_MODE
+  now reads look-proof-material.js's own construction-time uFogNear=90/
+  uFogFar=230, exactly what 14-board.png was rendered with.
+- BOARD_PAVING_RADIUS retuned from RC4's 20 to 10 -- not reverted to the
+  shared 6. 6 recreates 14's own real problem (RC4's own accurate
+  description: "small grey islands in a sea of dust" -- tower-base-6x6-a and
+  mega-tower-a sit only ~4m apart edge-to-edge, but street-straight and
+  house-a sit tens of metres out and stay isolated at 6). 10 is measured
+  against BOARD_DEMO_PLACEMENTS' own real footprints (MODULE_SIZE_M=4m/cell,
+  public/board-renderer.js) -- half of RC4's own rejected 20 -- and closes
+  the near pieces into one connected, organically-shaped plaza while the
+  board's own corners still read as clearly-textured earth.
+
+EVIDENCE, RENDERED AND LOOKED AT (not just exit-code-checked):
+- docs/look-proof-shots/28-board-fog-reverted.png -- fog-only revert,
+  radius still 20. Visually near-identical to the rejected 25; kept as the
+  record that this attempt did NOT solve it.
+- docs/look-proof-shots/29-board-radius10-experiment.png -- radius=10 with
+  fog already reverted. Connected plaza, earth clearly readable at the
+  corners, shadows visible, defined edge. Kept as the record of the choice.
+- docs/look-proof-shots/30-board-scene-pass-fix3.png -- final render,
+  identical settings to 29, this item's own official after-shot.
+- The pair for Mark's own judgment (no numeric gate by design -- "inventing
+  one would be a check that cannot fail," CHECKLIST.md's own words):
+  docs/look-proof-shots/14-board.png (before) vs
+  docs/look-proof-shots/30-board-scene-pass-fix3.png (after).
+
+TESTS: test/lookProofScene.test.ts's own two RC4 gates are replaced with
+FIX-3 gates naming the real, current values -- doesNotMatch on RC4's
+rejected uFogNear=100/uFogFar=220 and rejected BOARD_PAVING_RADIUS=20, match
+on the retuned 10. node test/run.mjs test/lookProofScene.test.ts: 72/72
+pass. npx tsc --noEmit: clean.
+
+MUTATED, BOTH CAUGHT: node scripts/_mutcheck.mjs test/lookProofScene.test.ts
+public/look-proof-scene.html test/mutations.json --
+fix3-board-fog-override-must-stay-reverted (reintroduces the fog override)
+and fix3-board-paving-radius-must-stay-retuned (reintroduces the 20m
+radius) both CAUGHT against a GREEN baseline; source file restored byte-
+identical after the run. Both entries added to test/mutations.json.
+
+STILL OPEN: this is presented for Mark's own visual judgment, same as every
+other before/after pair in this file's history -- an autonomous run cannot
+self-certify it. If the pair still reads wrong, the next attempt should
+retune BOARD_PAVING_RADIUS alone (one number, in one place) rather than
+touching the fog again, since the fog is now confirmed to carry very little
+of this problem's real weight.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012fvsDWLyvbN5Dj6csGYvbA

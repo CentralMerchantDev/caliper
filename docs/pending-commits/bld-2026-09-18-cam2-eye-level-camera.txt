@@ -1,0 +1,96 @@
+CAM-2: the eye-level camera Mark designed, built as described -- CAM-1's
+own failed whole-range-in-one-shot approach retired, not retuned a fourth
+time.
+
+WHAT WAS WRONG: docs/briefs/BLD-2026-09-18.md CAM-2 (§3), CHECKLIST.md
+CAM-2. Mark judged CAM-1's own `36-board-cam1-real-range.png` and the
+answer was no: "two flat slabs against a gradient, no texture, no
+detail, technically correct and visually worse than 14 was." The work
+was sound (real trig, a genuine third-camera bug found and fixed, the
+measured gate held); the GATE was wrong -- "both pieces fully in frame"
+is satisfiable while looking like nothing. CAM-1 downgraded [x]->[!] in
+this same file's own prior commit for exactly that reason.
+
+THE CAMERA (public/look-proof-scene.html, BOARD_MODE): Mark's own words,
+built as described. "Like an eye view -- an expanded eye view... most of
+the time you're looking forward and you can only see what's in your eye
+line. As you spin around you can look up. And when you pan out, that's
+where you'll see the height." Eye level (1.7m, a real disclosed human-
+height constant), anchored 12m south of the TALLEST real piece's own
+near face -- read from boardResolved's own real storeys
+(board-renderer.js), never a guessed coordinate. Forward by default
+(yaw=0, pitch=0). FOV widened 45->65deg for "an expanded eye view."
+yaw/pitch/dolly all flow through ONE function (eyeCameraFromState),
+called from both the static single-shot pipeline (?eyeYaw/eyePitch/
+eyeDolly URL params, for scripts/shoot-look-proof.mjs's own evidence
+renders) and live mouse-drag/wheel in INTERACTIVE_MODE -- the same
+formula, so a live drag and a URL-param render of the identical state
+cannot visually disagree. Panning out ALSO lifts the camera
+(dolly*0.3m per metre back) -- "when you pan out, that's where you'll
+see the height" is a real coupling between two effects, not two
+independent controls. Pitch clamped to [-10,80]deg. This also closes
+the height-compression question Mark raised and answered himself:
+compression is not implemented -- storeys still drives baseValue/
+unitQuality directly, per FIX-1.
+
+DRAG-TO-LOOK is a real gesture, told apart from RC1's own click-to-place
+by real pixel movement (DRAG_THRESHOLD_PX=4): a held button with no real
+movement, released, is still a click. RC1's own commit call moved from
+pointerdown to pointerup so "was this a drag" is knowable before
+deciding whether to place.
+
+FOUND BY RUNNING IT, NOT ASSUMED: RC1's own existing interactive driver
+test broke on the first run -- its own test cell (2,6) is nowhere near
+the new eye view and does not even project on screen any more. A first
+replacement cell, (19,0), LOOKED clickable (it projected on screen) but
+was actually invalid -- it collides with mega-tower-a's own real
+footprint, found by checking board.evaluatePlacement directly rather
+than assuming validity from screen position alone. (19,10), scanned and
+verified both on-screen and genuinely empty, is the real fix. Disclosed,
+not papered over: with a forward-facing eye camera, not the whole board
+is clickable from one position -- placing at a distant cell now means
+facing it first ("as you spin around"), a real, intentional consequence
+of the new camera design, not a regression.
+
+TESTS: test/lookProofScene.test.ts -- CAM-1's own exact-formula test
+retired (its own removal is now itself a gate: "GATE (CAM-2): CAM-1's
+own trig-framed... formula is gone"). 9 new GATE (CAM-2) tests: the
+retired formula's absence; the eye anchor grounded in the real tallest
+piece; URL-param yaw/pitch/dolly and the pitch clamp; the dolly/
+elevation coupling; the widened FOV and its updateProjectionMatrix()
+call; drag-vs-click gating; wheel using the SAME eyeCameraFromState the
+URL-param path uses. 95/95 pass. npx tsc --noEmit clean. Full suite:
+1173 pass / 13 pre-existing unrelated fails, the exact same categories
+confirmed during the origin/main sync (deadExports allowlist, navWheel's
+own decision-#24 findings, CLI's own rawSourceScan gap on 3 of its own
+test files, catalogue-registry.js/world.html's own unresolved imports,
+ResizeObserver, mutationEvidence-stale-summary), no new ones.
+
+MUTATED, ALL CAUGHT: node scripts/_mutcheck.mjs -- cam2-pitch-clamp-
+must-stay-real, cam2-dolly-must-stay-coupled-to-elevation, cam2-drag-
+must-stay-gated-on-real-movement, and cam2-trig-formula-must-stay-
+retired (renamed from cam1-board-camera-must-stay-height-aware, which
+went INCONCLUSIVE -- find matched 0 times -- once CAM-2 deleted the code
+it targeted; retired and retargeted per rule://build-loop, the same
+pattern GRD-1's own fix3-board-paving-radius retirement already used)
+all CAUGHT against a GREEN baseline, source restored byte-identical.
+
+LIVE, NOT JUST STATIC: scripts/interact-look-proof.mjs extended with a
+real drag (page.mouse.down/move/up, gradual, 8 steps) that changes live
+yaw/pitch and does NOT place a piece even though it starts and ends over
+the board's own clickable area, and a real wheel event that increases
+live dolly. "RC1 GATE: pass", every assertion green including the two
+new ones.
+
+MEASURED, RENDERED, LOOKED AT -- three shots, each carrying its own five
+lines per docs/briefs/BLD-2026-09-17.md §5.5 (full text in CHECKLIST.md's
+own CAM-2 entry, not restated here): docs/look-proof-shots/
+44-cam2-eye-default.png (default forward view -- real facade detail, a
+visible GRD-1 kerb line, nothing like CAM-1's flat slabs), 45-cam2-eye-
+lookup.png (?eyePitch=55 -- a dramatic, convergent "looking up at a
+skyscraper" read), 46-cam2-eye-panout.png (?eyeDolly=60&eyePitch=25 --
+panning out reveals more height AND more context, the tower still
+deliberately not fully in frame).
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012fvsDWLyvbN5Dj6csGYvbA
