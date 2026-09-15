@@ -1581,3 +1581,81 @@ relies on) rather than one entry at a time.
 asset committed. Re-fetching the same already-verified-CC0 URL and
 re-running the idempotent `link-catalogue-meshes.mjs` is itself a cheap,
 reversible action once authorised.
+
+---
+
+## 22. `public/terrain.js` already implements most of what TER-1..5 asks for — real, sourced, Mark-approved — but sits entirely unwired, and its own method disagrees with RESEARCH.md T1
+
+**The question.** CHECKLIST.md's TER-1 through TER-3 ask for coastline-first
+generation (§T2), the drowned-river-valley method (§T1: one landmass, then
+flood it) and hydraulic erosion (§T3) — read as "build this," per PLAN.md
+§4's own framing ("not a placeholder... what remains is implementation
+against answers already in hand").
+
+Re-grounding (`rule://build-loop` Step 1) before writing a single line found
+that `public/terrain.js` (1,586 lines) already has almost all of the
+MACHINERY this asks for: a real `LandField` class that indexes landmass
+polygons into a spatial-hash coastline + scanline inside/outside mask
+(built FIRST, exactly T2's prescribed order), a real height function
+(`makeHeightAt`, exported as `makeHeightAt`) that derives elevation from
+distance-to-coast plus real relief tiers (coastal hills, foothills, a
+named-peak range, calibrated against real Vancouver/Wellington figures in
+its own comments), real beaches/cliffs/basins/waterways, and a real
+`groundColor(h, slope)` ramp. It is genuinely sourced and genuinely
+calibrated, not a stub.
+
+**It is also completely unwired.** `test/deadExports.test.ts`'s own
+reachability scan (found while doing FIX-5, unrelated) lists
+`LandField`/`makeHeightAt` as test-only and `TERRAIN`/`waterwayAt` as
+demo-only — nothing in the live product (`public/area-board.js`'s
+`elevation`/`cornerOffsets`/`surfaceType` arrays, `public/scoring.js`'s
+`terrainContribution()`) reads any of it. This is exactly the "already
+exists, built, and unwired" pattern CLAUDE.md's MODULE-MAP section warns
+about by name.
+
+**And its generation METHOD is not T1's.** It is a hand-placed archipelago
+(named islands at authored positions, each an organic-but-independent
+outline) plus a hand-authored mainland coast, not one landmass generated
+then flooded. The code's own comments show this was Mark's own explicit
+prior direction, not a shortcut taken without asking: *"per Mark's approved
+orientation,"* *"the four named characters Mark's brief asked for,"*
+*"Mark's own correction: spend the headroom on MORE islands, not bigger
+ones."* T1's own method would very likely produce a visibly different
+archipelago than the one currently live and previously approved.
+
+**Options:**
+1. **Wire the existing system as-is** (TER-4/TER-5's own job — real
+   elevation/water/slope onto `area-board.js`'s fields, real values out of
+   `terrainContribution()`) and treat TER-1/TER-2's literal method as
+   satisfied by citation rather than rebuilt — T2's order-of-operations is
+   genuinely already how `LandField` works; T1's specific *method* is not,
+   but the world it already produced was explicitly reviewed and approved.
+2. **Rebuild via T1's drowned-river-valley method**, discarding the
+   hand-placed archipelago and its own approval history, to match the
+   research's literal prescription.
+3. **Something in between** — keep the named/approved islands as fixed
+   authored content, and use T1's method only for any *new* landmass this
+   phase might still want to add (there is no such need named in PLAN.md
+   §4 today).
+
+**Recommendation:** option 1. Wiring the existing, sourced, previously-
+approved system is the least irreversible path, delivers PLAN.md §4's
+actual stated goal (real terrain the board and score can read), and does
+not silently discard a design decision that was Mark's own to begin with.
+T3 (hydraulic erosion) is the one piece genuinely absent from what exists —
+worth a real answer on whether it is still wanted given the coastline it
+would be run against is hand-authored, not generated, so C-8's own
+"erosion maturity" framing (mature vs young relief) may not transfer
+directly.
+
+**What was done in the meantime.** Nothing rebuilt or discarded. Proceeding
+to wire `terrain.js`'s real height/water functions into `area-board.js`'s
+fields and `scoring.js`'s `terrainContribution()` (TER-4/TER-5), which is
+correct under any of the three options above and blocks nothing while this
+is decided.
+
+**Reversibility:** fully reversible. Wiring is additive (area-board.js
+gains real values where it had zeros; nothing about its public shape
+changes) and does not touch `public/terrain.js` itself, so choosing option
+2 or 3 later costs re-doing the wiring against a different height source,
+not undoing anything already committed.
