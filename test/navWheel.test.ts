@@ -30,15 +30,46 @@ function repoRoot(): string {
 // Stripped once, here -- see test/stripSourceComments.ts and
 // docs/LESSONS.md's "a regex over source matches your comments too" entry.
 const html = stripSourceComments(readFileSync(path.join(repoRoot(), "public", "index.html"), "utf8"));
-const wheelBlock = (() => {
+
+// FOUND 2026-09-15 (TER-1..5 verification): this used to compute wheelBlock
+// with a bare `assert` call at MODULE TOP LEVEL, outside any test(). A
+// throw here is not a failing test -- it is an uncaught exception during
+// `import()`, and test/run.mjs's own import loop
+// (`for (const outfile of built) { await import(...) }`) has no try/catch
+// around it. The result was not "this test fails": it was the WHOLE
+// process crashing mid-suite, silently truncating every file imported
+// after this one from the reported summary -- exactly the "plausible-
+// looking pass/fail total that silently omits real tests" failure mode
+// docs/DECISIONS-FOR-MARK.md's new entry on test/run.mjs's own harness
+// names. Queued as a decision (that entry), not fixed here (rebuilding the
+// harness is a bigger, separate item) -- but THIS file's own crash-unsafety
+// is this file's own bug, regardless of that larger decision, and left
+// unfixed it makes verifying anything past this point in read-dir order
+// unreliable for every lane, not just this session.
+//
+// Deferred into the two tests that actually need it, wrapped so a missing
+// #nav-wheel element fails THOSE tests cleanly instead of crashing the
+// import. `public/index.html`'s own current content -- whether it still
+// carries `#nav-wheel` -- is not this fix's business; that is a real,
+// separate question for whoever owns the shell markup.
+let wheelBlock;
+let wheelBlockError = null;
+try {
   const i = html.indexOf('id="nav-wheel"');
-  assert.notEqual(i, -1, "no #nav-wheel element found");
+  if (i === -1) throw new Error("no #nav-wheel element found");
   const close = html.indexOf("<!-- Street-Level", i);
-  assert.ok(close > i, "could not find the end of the #nav-wheel block");
-  return html.slice(i, close);
-})();
+  if (!(close > i)) throw new Error("could not find the end of the #nav-wheel block");
+  wheelBlock = html.slice(i, close);
+} catch (e) {
+  wheelBlockError = e;
+}
+function requireWheelBlock() {
+  if (wheelBlockError) throw wheelBlockError;
+  return wheelBlock;
+}
 
 test("every wheel segment in the markup has a matching wheel:true binding", () => {
+  const wheelBlock = requireWheelBlock();
   const segIds = [...wheelBlock.matchAll(/data-nav-action="([^"]+)"/g)].map((m) => m[1]);
   assert.ok(segIds.length >= 6, "expected at least 6 wheel segments in the markup");
   const wheelIds = new Set(NAV_BINDINGS.filter((b) => b.segment).map((b) => b.id));
@@ -51,6 +82,7 @@ test("every wheel segment in the markup has a matching wheel:true binding", () =
 });
 
 test("no camera MODE is a wheel segment -- modes are a switch, not an action, and stay in the button row", () => {
+  const wheelBlock = requireWheelBlock();
   for (const mode of ["orbit-mode", "walk-mode", "drive-mode", "fly-mode", "walk", "drive", "fly"]) {
     assert.ok(
       !wheelBlock.includes(`data-nav-action="${mode}"`),

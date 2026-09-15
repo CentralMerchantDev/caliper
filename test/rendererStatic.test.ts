@@ -55,13 +55,21 @@ function findPublicDir(): string {
 }
 const PUBLIC = findPublicDir();
 
-/** Files that run in the browser and cannot be executed by this suite. */
+/** Files that run in the browser and cannot be executed by this suite.
+ *  Four stale entries removed 2026-09-15 (TER-1..5 verification): none of
+ *  the four still exist on disk, so each only ever produced an ENOENT
+ *  failure here rather than the intended undeclared-reference/TDZ check.
+ *  "world-render-3d.js"/"terrain.js" -- quarantined this session
+ *  (docs/DECISIONS-FOR-MARK.md #22, confirmed zero product-reachable
+ *  exports). "city-render.js"/"city-plan.js" -- already gone before this
+ *  session (Phase 1 takedown, 2026-09-13), found incidentally while fixing
+ *  the other two, same stale-entry defect. This file's own reads happen
+ *  inside test() bodies (a contained failure, not a process crash), so
+ *  none of the four were ever the harness-crashing defect this session's
+ *  other fixes address -- removed here purely because a check against a
+ *  file that no longer exists checks nothing. */
 const RENDERER_FILES = [
-  "world-render-3d.js",
-  "city-render.js",
   "buildings.js",
-  "city-plan.js",
-  "terrain.js",
   "land-use.js",
   "features.js",
   "footprint.js",
@@ -488,7 +496,7 @@ test("(synthetic, GATE static): the real logarithmic-depth-buffer test is actual
   );
 });
 
-test("every WebGLRenderer asks for a logarithmic depth buffer", () => {
+test("every WebGLRenderer asks for a logarithmic depth buffer", { skip: "BLOCKED: both files this test names (world-render-3d.js -- quarantined 2026-09-15, docs/DECISIONS-FOR-MARK.md #22; city.html -- quarantined 2026-09-13, Phase 1 takedown) no longer exist. The regression this guards (a one-flag deletion re-introducing z-fighting at distance) is real and still worth guarding once BLD's own live renderer (public/board-renderer.js / public/look-proof-*) is the thing constructing WebGLRenderer -- not fixed here: those files are BLD's, not CLI's, per PLAN.md §1's lane boundary." }, () => {
   // A ONE-WORD DELETION HERE LOOKS LIKE NOTHING AND UNDOES THE WHOLE FIX.
   //
   // Removing this option does not throw, does not fail to compile, and does not

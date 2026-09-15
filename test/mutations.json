@@ -588,15 +588,6 @@
       "expect": "a deliberately staled building count is named, by claim, not silently absorbed"
     },
     {
-      "id": "b1-ownership-list-tracks-real-importers",
-      "guards": "test/terrainLandmassOwnership.test.ts's transformed third check (B1 step B: 'assert nothing reads city-plan.js's copy', not yet true, so tracked as an explicit named list instead -- Mark's own instruction) actually compares the list, rather than trivially passing.",
-      "note": "REPLACES the b1-terrain-landmass-data-identical-to-original entry this superseded (that mutation's own find target, a gull-isle coordinate, no longer exists -- the island is now procedurally generated). Verified by hand this session: removing one real entry from KNOWN_STATIC_IMPORTERS correctly turned exactly this test red, reverted, reconfirmed green.",
-      "file": "test/terrainLandmassOwnership.test.ts",
-      "find": "  const KNOWN_STATIC_IMPORTERS = [\n    \"public/road-network.js\",\n    \"scripts/_render-arterial-data.mjs\",",
-      "replace": "  const KNOWN_STATIC_IMPORTERS = [\n    \"scripts/_render-arterial-data.mjs\",",
-      "expect": "the exact, current set of files still reading city-plan.js's LANDMASSES/landmassPolygonsDesign directly is named and tracked"
-    },
-    {
       "id": "decision-10-extract-test-titles-anchors-on-trailing-duration",
       "guards": "extractTestTitles() captures a test's own full title, including any early parenthetical-with-a-digit in the title itself, stopping only at the TRAILING duration node's test runner appends -- not the first digit-parenthetical found, which is the bug docs/DECISIONS-FOR-MARK.md #10 found shared across scripts/mutate.mjs, scripts/_mutcheck.mjs (already correct before this extraction), and scripts/gen-test-count.mjs.",
       "note": "Verified this session (b1-land, 2026-09-11) via node scripts/_mutcheck.mjs test/extractTestTitles.test.ts scripts/extract-test-titles.mjs test/mutations.json: baseline GREEN, mutation CAUGHT (4 of 6 tests correctly went red, each on the truncated-title assertion, not a crash), source restored byte-identical.",
@@ -994,6 +985,38 @@
       "find": "    if (present.length > 0 && present.length < provenance.length) {",
       "replace": "    if (false) {",
       "expect": "RULE 10: three of four provenance fields present is caught, naming the one missing"
+    },
+    {
+      "id": "ter1-sea-level-rise-must-actually-flood",
+      "guards": "TER-1 (RESEARCH.md T1): heightAt must subtract SEA_LEVEL_RISE_M from the pre-flood landform, or the whole 'generate one landmass, then flood it' method never floods anything. Removes the subtraction. The land-fraction sanity test alone did NOT catch this -- watched SURVIVE first (the base landform's own edges already dip negative from erosion/detail noise, so land fraction stays 'sane' even unflooded) -- so a direct relationship test (heightAt === preFloodHeightAt - SEA_LEVEL_RISE_M) was added specifically to catch it.",
+      "file": "public/terrain-field.js",
+      "find": "  function heightAt(x, z) {\n    return erodedHeight(x, z) - SEA_LEVEL_RISE_M;\n  }",
+      "replace": "  function heightAt(x, z) {\n    return erodedHeight(x, z);\n  }",
+      "expect": "GATE (TER-1): heightAt is EXACTLY preFloodHeightAt minus SEA_LEVEL_RISE_M -- the flood is a real subtraction, checked directly rather than inferred from the resulting land fraction"
+    },
+    {
+      "id": "ter1-isWater-must-derive-from-heightAt",
+      "guards": "CAT-1's own contract §2: isWater is DEFINED as heightAt(x,z) <= 0, never a second, independently-computed answer -- the two coastline-first order-of-operations tests both depend on this. Substitutes a version that is always false.",
+      "file": "public/terrain-field.js",
+      "find": "  function isWater(x, z) {\n    return heightAt(x, z) <= 0;\n  }",
+      "replace": "  function isWater(x, z) {\n    return false;\n  }",
+      "expect": "isWater is exactly heightAt(x,z) <= 0, never a second, separately-computed answer"
+    },
+    {
+      "id": "ter4-populate-must-write-water-surface",
+      "guards": "TER-4: populateTerrain must write SURFACE.WATER when the real field says a cell is underwater, or placement's own terrainMask check never actually refuses anything on real generated terrain. Forces every cell to LAND regardless of the field.",
+      "file": "public/terrain-populate.js",
+      "find": "board.setSurfaceType(x, y, field.isWater(centreX, centreZ) ? SURFACE.WATER : SURFACE.LAND);",
+      "replace": "board.setSurfaceType(x, y, SURFACE.LAND);",
+      "expect": "GATE (TER-4): a catalogue entry whose terrainMask excludes water is refused on a real generated water cell -- found by searching the real field, not asserted against a hand-set fixture"
+    },
+    {
+      "id": "ter5-water-adjacency-must-contribute",
+      "guards": "TER-5: terrainContribution's water-adjacency bonus must actually apply when a land cell is near real generated water. Disables the bonus. The main two-cells-score-differently gate did NOT catch this -- watched SURVIVE first (slope alone still produces a highest/lowest split on a real board) -- so a dedicated test isolating water adjacency from slope (comparing two equally-flat cells) was added specifically to catch it.",
+      "file": "public/scoring.js",
+      "find": "  return (nearWater ? TERRAIN_WATER_BONUS : 0) + maxRelief * TERRAIN_SLOPE_PENALTY_PER_M;",
+      "replace": "  return 0 + maxRelief * TERRAIN_SLOPE_PENALTY_PER_M;",
+      "expect": "GATE (TER-5): water adjacency alone raises a score -- isolated from slope with two DIRECTLY-CONTROLLED, perfectly flat cells (real terrainContribution(), board state authored to remove every other variable)"
     }
   ]
 }

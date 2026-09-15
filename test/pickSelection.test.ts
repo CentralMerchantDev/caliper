@@ -23,6 +23,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 function findPublic(): string {
@@ -34,7 +35,25 @@ function findPublic(): string {
   }
   throw new Error("could not locate public/ from " + HERE);
 }
-const RENDER_3D = readFileSync(join(findPublic(), "world-render-3d.js"), "utf8");
+// FOUND 2026-09-15 (TER-1..5 verification, docs/DECISIONS-FOR-MARK.md #22):
+// this used to read world-render-3d.js at MODULE TOP LEVEL, unconditionally
+// -- even though every test below that reads it is already `skip`'d for
+// unrelated, pre-existing reasons and never runs its own callback body.
+// public/world-render-3d.js was quarantined 2026-09-15
+// (_TO-DELETE/decision-22-terrain-chain/, confirmed zero product-reachable
+// exports), so this top-level read now throws ENOENT unconditionally --
+// not a failing test, an uncaught exception during `import()` that crashes
+// test/run.mjs's own import loop (no try/catch around it) and silently
+// truncates every test file imported after this one from the suite's own
+// reported summary. Deferred into the one test that actually uses it,
+// which is itself already skipped, so the read now correctly never
+// executes rather than crashing unconditionally.
+function readRender3D() {
+  // Stripped, per test/rawSourceScan.test.ts's own gate: a comment
+  // mentioning pieceAtPoint or the pick handler's own name must not
+  // satisfy the pattern match below on its own.
+  return stripSourceComments(readFileSync(join(findPublic(), "world-render-3d.js"), "utf8"));
+}
 
 // BLOCKED, 2026-09-13, Phase 1 "take it all down"
 // (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md). buildWorldState no
@@ -59,6 +78,7 @@ test("I3 (wiring): the real click handler resolves through the persisted selecti
 // real committed board piece -- is real and will matter again once Phase 2
 // supplies a board to load.
 test("B3 (wiring): the city-mode pick handler resolves a real board piece via pieceAtPoint when the real board has been loaded", { skip: "BLOCKED: public/board-load.js is quarantined; world-render-3d.js's pieceAtPoint call was removed with it (see comment above)" }, () => {
+  const RENDER_3D = readRender3D();
   assert.match(
     RENDER_3D,
     /import\s*\{[^}]*\bpieceAtPoint\b[^}]*\}\s*from\s*["']\.\/board-load\.js["']/,
