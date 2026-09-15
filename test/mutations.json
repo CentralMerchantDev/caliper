@@ -1868,6 +1868,30 @@
       "find": "const boardKerbGeoms = BOARD_MODE ? buildBoardKerbRing(GROUND, GROUND.layer) : [];",
       "replace": "const boardKerbGeoms = [];",
       "expect": "GATE (GRD-1): the board's own plot has a real perimeter kerb ring marking where the paved plot ends and untouched earth begins, built via buildBoardKerbRing and merged into the SAME one mesh as everything else"
+    },
+    {
+      "id": "ship1-place-escape-must-cancel-ghost-before-leaving",
+      "guards": "SHIP-1: Escape stops cancelling a live ghost first -- a player mid-preview would lose their whole board view by accident instead of just dropping what they were about to place.",
+      "file": "public/overview-scene.html",
+      "find": "if (session && session.getGhost()) {",
+      "replace": "if (false) {",
+      "expect": "GATE (SHIP-1/place): Escape cancels a live ghost FIRST, only leaving the board when nothing is being previewed"
+    },
+    {
+      "id": "ship1-author-registry-unavailable-check-must-stay",
+      "guards": "SHIP-1: addRenderableAuthoredEntry stops checking whether the registry actually loaded -- a real browser (docs/CROSS-LANE-REQUESTS.md #4) would throw calling registry.addAuthoredEntry on a null registry instead of refusing with a real, reported reason.",
+      "file": "public/overview-scene.html",
+      "find": "if (!registry) {\n      return { ok: false, errors: [{ rule: \"registry-unavailable\", message: `catalogue-registry.js could not be loaded in this browser: ${registryLoadError ? registryLoadError.message : \"unknown error\"}` }] };\n    }",
+      "replace": "",
+      "expect": "GATE (SHIP-1/author): a failed registry load degrades the AUTHOR step honestly"
+    },
+    {
+      "id": "ship1-reload-must-stay-real-loadboard",
+      "guards": "SHIP-1: loadBoardForArea stops replaying a saved session through the real loadBoard() when one exists -- a reload would silently re-derive AREA_DEMO_PLACEMENTS instead of proving RB4's own round trip actually ran.",
+      "file": "public/overview-scene.html",
+      "find": "const { board, failures } = loadBoard({ width: AREA_BOARD_WIDTH, height: AREA_BOARD_HEIGHT, catalogue: catalogueById }, save);",
+      "replace": "const { board, failures } = { board: createAreaBoard({ width: AREA_BOARD_WIDTH, height: AREA_BOARD_HEIGHT, catalogue: catalogueById }), failures: [] };",
+      "expect": "GATE (SHIP-1/reload): loadBoardForArea replays a real save via the real loadBoard()"
     }
   ]
 }

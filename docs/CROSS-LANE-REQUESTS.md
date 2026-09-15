@@ -324,3 +324,80 @@ this file's own §1 RESOLVED note above — exactly as predicted here,
 resolved at the 2026-09-11 merge in BLD's favour (the fuller, later file),
 with this entry's own bug-fix logic preserved and carried forward into
 BLD's version of the test.
+
+---
+
+## 4. `public/catalogue-registry.js` — cannot be imported from a browser page
+
+**Requested by:** BLD lane (`codex-lane`), 2026-09-17, SHIP-1
+(`docs/briefs/BLD-2026-09-17.md` §5, "one page, both sides: overview ->
+area -> place -> author -> reload").
+**Owner:** CLI lane (`public/catalogue-registry.js` is CLI-lane-owned,
+Side B's own data model, REBUILD-PLAN.md B1-B4).
+
+**Why.** SHIP-1 wires a real "author a piece" step into
+`public/overview-scene.html` — the first time anything in this repo has
+tried to import `createCatalogueRegistry` from a browser page rather than
+from a Node test. **Found by actually running the page, not assumed**:
+the whole page failed to become ready, with the browser reporting a 404
+for `/scripts/migrate-catalogue-s2-fields.mjs` (fixed on this lane's own
+side — `scripts/interact-overview-scene.mjs` had no `/scripts/` route),
+and then, once that route existed, three more failures:
+
+```
+Access to script at 'node:fs' from origin '...' has been blocked by CORS
+policy: Cross origin requests are only supported for protocol schemes:
+chrome, chrome-untrusted, data, http, https.
+```
+
+(same for `node:url`, `node:path`).
+
+`public/catalogue-registry.js` imports `baseValueFor`/`unitQualityFor`/
+`adjacencyFor`/`storeysFor` from `../scripts/migrate-catalogue-s2-fields.mjs`
+("the migration script", explicitly off-limits to this lane per the same
+brief's own §7 FILES list). That script itself imports `readFileSync`/
+`writeFileSync` (`node:fs`), `fileURLToPath` (`node:url`), and `basename`/
+`dirname`/`join` (`node:path`) at its own top level — real Node built-ins
+with no browser equivalent. A browser's ES module loader tries to resolve
+`"node:fs"` as a URL and fails; since these are STATIC imports, the
+failure is not scoped to the one function that (if any) actually needs
+them — it fails the ENTIRE module graph, meaning `catalogue-registry.js`
+cannot be imported by any browser page at all, not just this one, as
+currently written. This also means it could not run inside the actual
+Cloudflare Worker runtime CALIPER ships on either (Workers have no
+filesystem) if anything there ever tried to import it directly.
+
+**Not fixed here** — this lane cannot touch either file (`catalogue-
+registry.js` is Side B / CLI-owned; `migrate-catalogue-s2-fields.mjs` is
+"the migration script", named off-limits explicitly). Duplicating
+`baseValueFor`/`unitQualityFor`/`adjacencyFor`/`storeysFor` into a second,
+browser-safe copy was considered and rejected: `catalogue-registry.js`'s
+own header is explicit that it "composes the SAME function the shipped
+catalogue's own migration uses -- one source of truth," and a duplicate
+would be exactly the kind of drift risk that comment exists to prevent.
+
+**Worked around, not fixed, on this lane's own side**: `overview-scene.html`
+now loads `catalogue-registry.js` via a DYNAMIC `import()` inside a
+try/catch (not a static top-level import), so the failure becomes a
+catchable promise rejection instead of crashing the whole page's module
+instantiation. The "author" step degrades honestly — a clear, specific,
+on-page and console-logged `registry-unavailable` refusal, asserted
+directly in `scripts/interact-overview-scene.mjs` (not silently
+swallowed) — while overview/place/reload continue working normally.
+
+**Possible real fixes**, for whoever picks this up (not prescribed — CLI's
+own call):
+- `migrate-catalogue-s2-fields.mjs` could stop importing `node:fs`/
+  `node:url`/`node:path` at its own top level (they are very likely only
+  needed by its own CLI entry point, `CATALOGUE_PATH`, and whatever runs
+  when it is invoked directly as `node scripts/migrate-catalogue-s2-
+  fields.mjs` — not by the pure functions `catalogue-registry.js` actually
+  calls), moving those into a lazily-loaded or conditionally-executed path.
+- Or the four pure functions could move to a new, browser-safe module with
+  no Node-only imports, with `migrate-catalogue-s2-fields.mjs` itself
+  importing FROM that module instead of the reverse — same "one source of
+  truth," different direction of dependency.
+
+**Status: OPEN.** No deadline pressure from this lane's own side — SHIP-1's
+other four clauses (overview, area, place, reload) do not depend on this
+and are fully wired and verified independent of it.

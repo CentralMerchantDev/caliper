@@ -286,8 +286,55 @@ land somewhere permanent; until then this IS the record.
 
 ## ASSEMBLE, PROVE, SHIP. PLAN.md §7.
 
-[ ] SHIP-1 (BLD) One page, both sides — PLAN.md 7
+[!] SHIP-1 (BLD) One page, both sides — PLAN.md 7
     Overview, area, place, author, reload. The phase gate end to end.
+    BLOCKED 2026-09-17 (author only; overview/area/place/reload are DONE and
+    verified): public/overview-scene.html now carries all five clauses on
+    one page. Overview/area are RC2's own already-proven wiring, unchanged.
+    PLACE ports RC1's exact hover/commit/remove/cancel path (createPlacementSession,
+    pointer-interaction.js) plus RDO-1's own live readout, updating on every
+    hover against the real board via resolveReadout -- proven by
+    scripts/interact-overview-scene.mjs: hover (0,0-equivalent free cell)
+    previews a valid ghost and a real, available current/ifPlaced pair;
+    click commits it onto the real board (pieces 1 -> 2). RELOAD is a real
+    button (not a ?reload=1 demo): serializes the real session
+    (placement.js's own RB4-proven round trip), persists to localStorage
+    keyed per area, triggers a genuine `location.reload()` -- proven by the
+    same driver: after a real navigation reload, re-entering the same area
+    shows BOTH pieces still there (2), replayed via the real loadBoard(),
+    not re-derived from AREA_DEMO_PLACEMENTS.
+    AUTHOR is implemented identically -- calls the real, unmodified
+    createCatalogueRegistry/addAuthoredEntry (public/catalogue-registry.js),
+    assigns a real shipped glb as a caller-side rendering stand-in, selects
+    the new piece as the brush -- but FOUND BY RUNNING THE PAGE, not
+    assumed: catalogue-registry.js transitively imports scripts/migrate-
+    catalogue-s2-fields.mjs ("the migration script", off-limits to this
+    lane per this brief's own §7), which itself imports node:fs/node:url/
+    node:path at its own top level. No browser can load that module graph.
+    This lane cannot touch either file. Filed as docs/CROSS-LANE-REQUESTS.md
+    #4 (OPEN), with two possible real fixes named for whoever owns it.
+    Worked around, not fixed, on this side: catalogue-registry.js is loaded
+    via a dynamic import inside try/catch instead of a static one, so the
+    failure degrades to a real, reported `registry-unavailable` refusal
+    (asserted directly by the driver script) instead of crashing the whole
+    page -- overview/place/reload are unaffected by it.
+    TESTS: test/overviewScene.test.ts -- 26/26 pass, 15 new GATE tests
+    covering place/readout/author/reload wiring plus the dynamic-import
+    discipline itself. npx tsc --noEmit: clean. Full suite: 772 pass / 11
+    pre-existing unrelated fails, same four categories as GRD-1's own
+    baseline (deadExports allowlist, road-refusal quarantine,
+    ResizeObserver, mutationEvidence-stale-summary), no new ones.
+    MUTATED, ALL CAUGHT: node scripts/_mutcheck.mjs -- ship1-place-escape-
+    must-cancel-ghost-before-leaving, ship1-author-registry-unavailable-
+    check-must-stay, ship1-reload-must-stay-real-loadboard, all CAUGHT
+    against a GREEN baseline, source restored byte-identical.
+    MEASURED, RENDERED, LOOKED AT: docs/look-proof-shots/41-ship1-place-
+    hover-readout.png -- the live readout ("current 0.00" / "ifPlaced
+    -0.43") drawn over a real hover, on the overview page's own board.
+    docs/look-proof-shots/42-ship1-after-reload.png -- both houses (the
+    demo piece and the one placed above) present after a real page
+    navigation reload. node scripts/interact-overview-scene.mjs: "RC2/
+    SHIP-1 GATE: pass".
 [ ] SHIP-2 (CLI) The full suite green, with its own summary line as the evidence — PLAN.md 7
 [ ] SHIP-3 (CLI) The mutation manifest complete over the real entries — PLAN.md 7
 [ ] SHIP-4 (CLI) Published claims regenerated and true — PLAN.md 7

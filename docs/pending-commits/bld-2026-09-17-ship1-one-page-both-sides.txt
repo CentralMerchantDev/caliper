@@ -1,0 +1,101 @@
+SHIP-1: one page, both sides -- overview, area, place, reload all wired
+and verified end to end; author implemented identically but blocked by a
+real, disclosed, cross-lane dependency this lane cannot fix.
+
+WHAT WAS MISSING: docs/briefs/BLD-2026-09-17.md SHIP-1 (§5), CHECKLIST.md
+SHIP-1. public/overview-scene.html (RC2) already had overview and area
+entry/exit; look-proof-scene.html had place (RC1) and the readout
+(RDO-1) on a SEPARATE page; reload (RB4) was a ?reload=1 query-param
+demo, not a real user action. "Everything it needs now exists" -- the
+work was porting proven mechanisms onto one page and closing the reload
+gap, not building anything new from scratch.
+
+PLACE (public/overview-scene.html): ports RC1's exact hover/commit/
+remove/cancel path -- createPlacementSession (placement.js),
+handleHover/handleClick/handleCancel (pointer-interaction.js), the SAME
+buildGhostOverlayMesh look-proof-scene.html already uses -- called
+against THIS page's own board, not a second implementation. A session is
+created fresh on entering each area's own board; pointer handlers are
+gated structurally to board mode, the same "not merely ignored --
+unreachable" discipline RC2's own overview-pad gating already uses.
+
+READOUT (RDO-1's own clause, made LIVE): buildReadoutLabelTexture,
+ported verbatim, now redraws on EVERY hover via the real resolveReadout
+against the real, currently-active board -- "that number, changing as
+the cursor moves, IS the reason one cell beats another" is now literally
+what happens, not a single static ?readout=x,y cell as look-proof-
+scene.html's own demo mode shows.
+
+RELOAD: RB4's own proven serialize()/loadBoard() round trip
+(public/placement.js, untouched), triggered by a real "Save & Reload"
+button instead of a query-param flag. Persists the serialized session to
+localStorage keyed per area, then calls a genuine location.reload() --
+loadBoardForArea replays the real save via the real loadBoard() on the
+next load if one exists, falling through to AREA_DEMO_PLACEMENTS
+unchanged otherwise. A real page navigation, not the same in-memory page
+pretending to have reloaded.
+
+AUTHOR: implemented identically to the other three -- calls the real,
+unmodified createCatalogueRegistry/addAuthoredEntry
+(public/catalogue-registry.js), assigns a real, already-shipped glb as a
+caller-side rendering stand-in (an authored entry has no glb by design;
+the BOARD's own rules -- placement validity, scoring -- read nothing
+about rendering and genuinely cannot tell an authored piece from a
+shipped one, matching B1's own "the board cannot tell the difference"
+verbatim), then selects the new piece as the current brush so it places
+through the identical session/ghost/commit path as any shipped one.
+
+FOUND BY RUNNING THE PAGE, NOT ASSUMED: the whole page failed to become
+ready. catalogue-registry.js transitively imports scripts/migrate-
+catalogue-s2-fields.mjs ("the migration script", explicitly off-limits
+to this lane per this brief's own §7 FILES list), which itself imports
+node:fs/node:url/node:path at its own top level -- real Node built-ins a
+browser's ES module loader cannot resolve. A STATIC import of that graph
+fails module instantiation for the ENTIRE page, not just the author
+step. This lane cannot touch either off-limits file, and duplicating the
+formulas elsewhere was considered and rejected -- catalogue-registry.js's
+own header is explicit that it is "one source of truth," and a duplicate
+is exactly the drift risk that exists to prevent. Filed as
+docs/CROSS-LANE-REQUESTS.md #4 (OPEN), with the exact diagnosis and two
+possible real fixes named for whoever owns it -- not prescribed.
+
+WORKED AROUND, NOT FIXED, on this side: catalogue-registry.js is now
+loaded via a dynamic import() inside try/catch, turning the failure into
+a catchable rejection instead of a page-crashing one. The author step
+degrades HONESTLY -- a specific, real, checkable `registry-unavailable`
+refusal, asserted directly by the driving script, not a silent no-op --
+while overview/place/reload are fully unaffected and keep working.
+
+Also fixed, found the same way: scripts/interact-overview-scene.mjs's
+own static file server had no /scripts/ route at all (only /data/ and
+public/), so the migration script's own real relative import 404'd
+before the node:fs failure was even reached.
+
+TESTS: test/overviewScene.test.ts -- 15 new GATE tests (place wiring,
+the live readout, the dynamic-import discipline and its honest fallback,
+reload). 26/26 pass. npx tsc --noEmit: clean.
+
+MUTATED, ALL CAUGHT: node scripts/_mutcheck.mjs -- ship1-place-escape-
+must-cancel-ghost-before-leaving (Escape stops cancelling a live ghost
+first), ship1-author-registry-unavailable-check-must-stay (drops the
+null-registry guard, which would throw instead of refusing honestly),
+ship1-reload-must-stay-real-loadboard (loadBoardForArea stops actually
+replaying the save) -- all three CAUGHT against a GREEN baseline, source
+restored byte-identical.
+
+MEASURED, RENDERED, LOOKED AT: node scripts/interact-overview-scene.mjs
+drives the full sequence for real -- overview, LOCKED refusal, OPEN
+entry, leave/re-enter (RC2's own gate, unchanged), then hover (a valid
+ghost, a real available current/ifPlaced readout), commit (pieces 1->2),
+author (refused specifically as registry-unavailable, brush unchanged),
+save & reload (a real navigation), re-enter (pieces still 2, replayed
+from the real save): "RC2/SHIP-1 GATE: pass". docs/look-proof-shots/
+41-ship1-place-hover-readout.png: the live label legible over a real
+hover. docs/look-proof-shots/42-ship1-after-reload.png: both houses
+present after the real reload. Full suite: 772 pass / 11 pre-existing
+unrelated fails, the same four categories as GRD-1's own baseline
+(deadExports allowlist, road-refusal quarantine, ResizeObserver,
+mutationEvidence-stale-summary), no new ones introduced.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012fvsDWLyvbN5Dj6csGYvbA
