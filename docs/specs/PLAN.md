@@ -421,6 +421,167 @@ disclosed rather than silently chosen.
 
 ---
 
+## 8B. THE FULL ARC — EVERY PHASE TO THE END
+
+**This section exists for two reasons and both matter.**
+
+**Depth**, because `rule://queue-exhaustion` makes it a precondition: *"a lane
+cannot be told 'continue within the plan' if the plan runs out two items past the
+brief. Check before launching."* A lane that reaches the end of its list at 3am
+descends to the next written phase. If there is no next written phase, it stops
+and reports — and a night is lost.
+
+**Coherence**, because a decision made tonight can foreclose a phase in November.
+So each phase below states **what it constrains about now**. That line is the
+load-bearing part of this section; the rest is context for it.
+
+Phases after v1 are **not** built until v1 ships. They are written so that what
+is built tonight fits them.
+
+---
+
+### PHASE 2 — THE ECONOMY
+
+Placement costs money. Authoring earns it, graded by what was produced — a prop,
+a house, a condo — with complexity read from how much the player had to specify
+versus how much the lane inferred. Rule compliance is a **gate, not a grade**: a
+piece that breaks the rules does not earn less, it does not get placed.
+
+**What it constrains about now:**
+
+- **A balance is a number on a save, so the save format must tolerate new
+  top-level fields.** It already does — schema-versioned since V3.
+- **`SDB-2`'s authored-class field is the hook.** Recording prop/house/condo at
+  authoring time, with no mechanic attached, is what makes the reward table a
+  lookup rather than a retrofit against entries that never recorded what they
+  were. **Do not remove it because nothing reads it yet.**
+- **Banked value, if it is ever spendable on a cell, is spent by PLACING
+  something.** Anything else makes a cell's worth depend on allocation history,
+  and `value(cell)` is path-independent by construction. §V3's *"value is
+  DEVELOPED"* already describes the compliant mechanic.
+
+---
+
+### PHASE 3 — TAXES, SERVICES, AND THE CITY SCORE'S REAL TERMS
+
+Set a rate, fund services, watch the city respond. The city score's deferred
+terms — jobs, healthcare, education, social services, parks, entertainment — are
+what that money buys, so the economy and those terms are **one body of work, not
+two.**
+
+**What it constrains about now, and this is the sharpest constraint in the
+document:**
+
+- **This phase needs a clock. §S1 forbids one.** *"If it needs a clock, it is out
+  of scope."* So the economy **layers on top of a board that stays stateless** —
+  it ticks over a board it only reads. `value(cell)` never learns about time.
+  §S5's *"developed value sits on top, unchanged in mechanism"* is the precedent
+  and the shape.
+- **`C1`'s city score must stay a REGISTRY of terms, never a formula.** Adding
+  the amenity terms later must touch nothing but the new term. That is why its
+  gate is "add a throwaway second term and prove the registry did not change."
+- **The catalogue taxonomy is the real prerequisite.** Six categories cannot tell
+  a hospital from a substation, so an amenity term today would score against a
+  taxonomy that cannot see what it is measuring. **Any catalogue work done now
+  should keep `typeId`-level distinctions available**, as `A1` already did for
+  the amenity-civic split.
+
+---
+
+### PHASE 4 — PROGRESSION: TASKS, GOALS, NPCs
+
+Reasons to build a particular thing in a particular place. Step 11 of the
+original build order.
+
+**What it constrains about now:**
+
+- **A task is "make this true of the board."** So anything that reads board state
+  must be queryable, not just renderable. `valueAt`, `occupiedRect`, the city
+  score's terms — all already pure functions over board state, which is what
+  makes this cheap later.
+- **NPCs are the first thing that might want a clock.** Same answer as Phase 3:
+  they observe a stateless board; the board does not observe them.
+
+---
+
+### PHASE 5 — THE GENERATOR, LAST
+
+A world that generates itself: districts, street networks, a plausible starting
+city. §L1–L7 and §T4's six measured gates are the sourced material.
+
+**Deliberately last, and the reason is the whole project's history.** The
+previous world was generated first and rejected on sight. §A1: *sandbox first,
+simulation second.*
+
+**What it constrains about now:**
+
+- **The generator emits through the SAME `place()` the player calls.** Not a
+  parallel path, not a bulk loader. If generated pieces could enter the board by
+  a route a player cannot use, the two would drift and the generator would
+  produce boards the game cannot make. **Every placement API decision must keep
+  one entry point.**
+- **Terrain generation (TER-1..5) is the generator's foundation**, which is why
+  it sits in v1 while the generator does not.
+
+---
+
+### PHASE 6 — THE WORLD AT SCALE
+
+The board is the **whole world**, generated and ready, with the initial build one
+area of it. Big, partly filled; unbuilt land is the growth space. A 1024² board
+at the 4 m module is 4.1 km across and about 2.1 MB.
+
+**What it constrains about now:**
+
+- **Nothing may assume a per-frame full-board sweep.** `S3`'s dirty-set recompute
+  is the pattern and it is already correct. Any new board-wide operation must be
+  dirty-set-scoped or explicitly one-off.
+- **Impostors and the massing bake already exist** (`I1`, `I2`) and are wired
+  (`RC3`). They are the distance strategy; do not build a second one.
+- **Area addressing is already `{areaId, x, y}` with no global grid**, which makes
+  cross-area collision structurally impossible rather than merely checked. Keep
+  it that way.
+
+---
+
+### PHASE 7 — SIDE B MATURITY
+
+The reward table, complexity grading, and whatever Side B becomes once people
+have used it.
+
+**What it constrains about now:**
+
+- **An authored piece is a catalogue entry. Full stop.** §B1. The board cannot
+  tell the difference — already proven by test, and that proof is the thing
+  every later Side B feature stands on.
+- **D1 persistence must survive a redeploy**, not just an isolate. A cache here
+  would quietly lose player work and the loss would look like a bug in something
+  else.
+- **The formulas live in ONE browser-safe module** (`SDB-3`). Every future
+  authoring path — form, loop, or anything after — computes the same numbers the
+  same way or the indistinguishability claim fails.
+
+---
+
+### THE INVARIANTS — TRUE AT EVERY PHASE
+
+Break one of these and something above breaks with it.
+
+1. **`value(cell)` is stateless and path-independent.** The same arrangement
+   scores identically however it was reached. Every later system layers on top.
+2. **One entry point for placement.** Player, generator, Side B — all through
+   `place()`.
+3. **An authored piece is indistinguishable from a shipped one.**
+4. **One draw call.** The array-texture material is what makes the world free;
+   every asset decision answers to it.
+5. **The save is an append-only log** — seed, placements, tombstones — versioned,
+   timestamped, and never read by `value()`.
+6. **`storeys` is real.** What is rendered and what is scored read the same
+   number. No compression, no separate display height.
+7. **Nothing is deleted.** Quarantine, ledger, and only then a purge Mark named.
+
+---
+
 ## 9. DEFERRED, WITH REASONS
 
 ### 9.1 The economy
