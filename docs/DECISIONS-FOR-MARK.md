@@ -1584,7 +1584,23 @@ reversible action once authorised.
 
 ---
 
-## 22. `public/terrain.js` already implements most of what TER-1..5 asks for — real, sourced, Mark-approved — but sits entirely unwired, and its own method disagrees with RESEARCH.md T1
+## 22. `public/terrain.js` already implements most of what TER-1..5 asks for — real, sourced, Mark-approved — but sits entirely unwired, and its own method disagrees with RESEARCH.md T1 — RESOLVED, 2026-09-15
+
+**Mark's ruling (verbatim, condensed):** *"terrain.js is pre-rebuild code. It
+was not quarantined in Phase 1 but it was not endorsed either — surviving a
+takedown is not approval, and inferring design approval from a file's
+existence is the exact pattern that has pulled old-world code back in four
+times... a hand-placed archipelago is what RESEARCH.md §T1's drowned-river-
+valley method exists to replace... Quarantine terrain.js with a ledger
+entry, then build TER-1 through TER-5 from the research... Do not read the
+quarantined file for reference while building the new one."*
+
+**Done:** `public/terrain.js` and its own direct dependency chain (31 files
+total — see `_TO-DELETE/LEDGER.jsonl`'s 2026-09-15 `decision-22-terrain-chain`
+entries for the full, hashed inventory) quarantined to
+`_TO-DELETE/decision-22-terrain-chain/`. TER-1 through TER-5 are being built
+fresh against `public/area-board.js`/`public/scoring.js`, sourced only from
+`docs/specs/RESEARCH.md`.
 
 **The question.** CHECKLIST.md's TER-1 through TER-3 ask for coastline-first
 generation (§T2), the drowned-river-valley method (§T1: one landmass, then
@@ -1659,3 +1675,52 @@ gains real values where it had zeros; nothing about its public shape
 changes) and does not touch `public/terrain.js` itself, so choosing option
 2 or 3 later costs re-doing the wiring against a different height source,
 not undoing anything already committed.
+
+---
+
+## 23. A second, independently-dead ~63-file subsystem, found while executing #22's terrain quarantine — inventoried, not touched, and it is a bigger call than #22
+
+**The question.** Quarantining `public/terrain.js`'s own direct dependency
+chain (decision #22) required measuring its real fallout first. That
+measurement found a SEPARATE cluster — not part of the terrain chain, and
+not caused by this run's own edits — that reads as an entire previous
+game-loop iteration: a world model with its own persistence
+(`world-model.js`, `world-store.js`, `world-registry.js`), an apply/edit
+pipeline (`apply-and-persist.js`, `apply-layers.js`), a second, unwired
+LLM change-request pipeline (`generate-request.js`, `run-generate-request.js`,
+`model-forge.js`, `model-registry.js`), a quest system
+(`quest.js`, `change-quest.js`), and its own content generators
+(`buildings.js`, `roadkit.js`, `props.js`, `land-use.js`, `zoning.js`, and
+more). Full inventory, with the method that produced it:
+`docs/specs/OLD-WORLD-SECOND-CLUSTER-2026-09-15.md` — 63 files (45
+source/script, 18 test), every one confirmed to have zero product-reachable
+exports the same way `test/deadExports.test.ts` itself checks.
+
+**What was done in the meantime.** Nothing moved. Inventoried and written
+down, per the standing rule ("never bulk-delete... inventory, categorise,
+get the exact list confirmed, then act") — this is exactly that step, not
+yet the act.
+
+**Why this is not folded into #22.** #22 already has a ruling and a narrow,
+specific reason (terrain generation is being rebuilt from research). This
+cluster is a different question with a different real cost if wrong: it is
+not one subsystem, it looks like most of a previous product, and treating
+"quarantine terrain.js" as authorisation to also quarantine 63 unrelated
+files would be exactly the scope-creep the bulk-delete rule exists to
+prevent — confirmed necessary this same session, when an initial estimate
+of "~15-20 files" for the terrain chain alone turned out, on actual
+measurement, to be off by more than 3x before the scope was corrected back
+down.
+
+**Recommendation:** quarantine it, on the same reasoning #22 already
+established — pre-rebuild code that survived a takedown by omission is not
+approved code, and none of it is reachable from anything a visitor's
+browser or the Worker runs. One live exception worth naming before acting:
+`public/noise.js` (hash-based value noise / fbm) is generic, reusable,
+project-decoupled code that TER-1..5's own coastline work might legitimately
+want rather than reimplementing — worth deciding on its own rather than
+folding it into a blanket "all 63 dead" call.
+
+**Reversibility:** fully reversible either way — nothing has been moved.
+Quarantine (Tier 2, per `rule://quarantine`) is itself reversible; only an
+explicit later purge, requiring its own confirmation, would not be.

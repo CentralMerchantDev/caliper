@@ -82,38 +82,12 @@
       "expect": "at the orbit Mark was flying"
     },
     {
-      "id": "beach-has-a-width",
-      "guards": "sand is bounded by distance from the coastline, not by height alone, so a slowly-rising shelf does not get painted as a 975 m sandbar",
-      "file": "public/terrain.js",
-      "find": "export const BEACH_FADE_M = 140;",
-      "replace": "export const BEACH_FADE_M = 140000;",
-      "expect": "the thresholds are BUILT metres"
-    },
-    {
-      "id": "bloom-is-shared-not-copied",
-      "guards": "both pages bloom the same world the same way, because the renderer uses the shared BLOOM object rather than a copy of its values",
-      "note": "Mutating to an equal-valued literal, not a different one: the point is that a COPY is the defect, even when the numbers happen to match today. That is precisely how the two pages drifted apart in the first place.",
-      "file": "public/world-render-3d.js",
-      "find": "  BLOOM: SHARED_BLOOM,",
-      "replace": "  BLOOM: { strength: 0.085, radius: 0.38, threshold: 2.20 },",
-      "expect": "the tuned render values are what they are meant to be"
-    },
-    {
       "id": "library-declares-the-prop-join",
       "guards": "props.js resolves every manifest id by its own name, so prop-models.js does not need a second table that must agree with it",
       "file": "public/props.js",
       "find": "MODELS[\"bench\"] = MODELS[\"bench-slat\"];",
       "replace": "",
       "expect": "the LIBRARY declares the join"
-    },
-    {
-      "id": "large-footprints-cannot-step-over-water",
-      "guards": "a footprint's sample grid is capped at 56 m however wide the footprint is, so a 3.5 km runway cannot step over a river lying across it -- 56 m is the full width of the narrowest water in waterways.js, read from it rather than picked",
-      "note": "The comment on sampleGrid claimed 'never coarser than TARGET_SPACING'. Measured, it was 8 m at 200 m wide, 24 m at 600 m and 140 m at 3,500 m -- true below about 100 m and false everywhere it mattered. The ceiling costs nothing at any size except the single largest footprint in the world, where it is 6.1x.",
-      "file": "public/ground.js",
-      "find": "const MAX_SPACING = 56;",
-      "replace": "const MAX_SPACING = Infinity;",
-      "expect": "sees a 60 m trench that used to fall between its samples"
     },
     {
       "id": "nav-rows-share-one-radius",
@@ -132,33 +106,6 @@
       "find": ".nav-bare > * { box-sizing: border-box; width: 100%; }",
       "replace": ".nav-bare > * { box-sizing: content-box; }",
       "expect": "edges line up"
-    },
-    {
-      "id": "ground-is-measured-only-when-needed",
-      "guards": "canPlace takes the footprint's heights through a getter, so a candidate refused by the terrain or by what is already built never pays for a measurement it does not use -- and nothing can read the heights before they are taken",
-      "note": "The measurement used to be eager, to close a real ordering hazard where a later step read `hi` as -Infinity and a 30 m tower was accepted onto a house lot. Eager fixed that and made every rejection pay 676 probes. MEASURED on findGround for an unplaceable spec: 12,142,980 heightAt calls in 11.0 s, over 17,910 candidates. After: 35,820 calls in 0.46 s -- 339x fewer probes, same answer. The getter closes both problems, where simply moving the loop later would have reopened the first.",
-      "file": "public/ground.js",
-      "find": "    // 1. DOES THE LAND ITSELF FORBID IT?",
-      "replace": "    groundRange();\n    // 1. DOES THE LAND ITSELF FORBID IT?",
-      "expect": "does not pay to measure the ground first"
-    },
-    {
-      "id": "waterway-depth-is-local-not-declared",
-      "guards": "waterAt reports the depth AT THE POINT, derived from the channel's own surface level, so a hull at the bank does not read the mid-channel figure",
-      "note": "MEASURED on river-mid before: bed 59.31 m at the centreline climbing to 66.34 m at 50 m out, and 5.85 m of declared depth reported at every one of them. The function even computed heightAt and discarded it, under a comment describing a surface at bed + depth that nothing calculated.",
-      "file": "public/ground.js",
-      "find": "      const depth = surfaceY - h;",
-      "replace": "      const depth = way.depth;",
-      "expect": "a level surface, a sloping bed, and dry banks"
-    },
-    {
-      "id": "a-waterway-has-banks",
-      "guards": "ground inside a channel's envelope but above its water line is dry land, so a river has banks rather than vertical walls and nothing floats up a shelving bed",
-      "note": "The first version of this control SURVIVED, and finding out why exposed a third defect: waterwayInfoAt reported the manifest's untapered halfWidth while membership was decided by the tapered one, so the test's walk was escaping the rectangle rather than reaching a waterline. It reports the deciding figure now.",
-      "file": "public/ground.js",
-      "find": "      if (depth <= 0) return null;",
-      "replace": "      if (depth <= -99999) return null;",
-      "expect": "a level surface, a sloping bed, and dry banks"
     },
     {
       "id": "line-endings-stay-lf",
@@ -247,33 +194,6 @@
       "find": "export function createNoise(seed = DEFAULT_SEED) {\n  const s = seedToInt(seed);",
       "replace": "export function createNoise(seed = DEFAULT_SEED) {\n  const s = 0;",
       "expect": "different seed is a different world"
-    },
-    {
-      "id": "the-field-carries-its-seed",
-      "guards": "a LandField keeps the seed it was built with, so a named world is a genuinely different landmass rather than the same one relabelled",
-      "note": "The seed lives on the FIELD rather than being threaded through every height call: heightAt is asked tens of millions of times per world build, and a parameter that must be passed at every call site is one somebody eventually forgets, producing a world that is half one place and half another.",
-      "file": "public/terrain.js",
-      "find": "    this.seed = seedToInt(seed);",
-      "replace": "    this.seed = 0;",
-      "expect": "named seed is a genuinely different landmass"
-    },
-    {
-      "id": "the-height-function-reads-the-fields-seed",
-      "guards": "makeHeightAt reads the field's seed and passes it to every shaping function, so seeding reaches the actual ground rather than stopping at the field object",
-      "note": "An earlier version of this mutation neutered only edgeFalloff and SURVIVED -- cliffiness, shoreRampAt and reliefAt were still seeded, so the world still differed. A partial mutation proves nothing. KNOWN GAP: this pins that the seed reaches the shaping functions collectively, not that each one's seed is individually load-bearing.",
-      "file": "public/terrain.js",
-      "find": "  const seed = field && Number.isFinite(field.seed) ? field.seed : DEFAULT_SEED;",
-      "replace": "  const seed = DEFAULT_SEED;",
-      "expect": "named seed is a genuinely different landmass"
-    },
-    {
-      "id": "world-toJSON-carries-its-layers",
-      "guards": "createWorlds toJSON includes the layer stack, not just the seed, so a stored world can rebuild with its edits intact",
-      "note": "The whole point of A4 is that a world round-trips -- a toJSON that dropped layers would serialise a world that forgets every edit on the next load, silently.",
-      "file": "public/world.js",
-      "find": "    toJSON: () => layerModel.toJSON(),",
-      "replace": "    toJSON: () => ({ seed }),",
-      "expect": "rebuilds to the same fingerprint"
     },
     {
       "id": "world-store-reports-corrupt-json",
@@ -366,15 +286,6 @@
       "expect": "setting a UI flag, with no real edit, does NOT complete the quest"
     },
     {
-      "id": "locked-region-refuses-with-a-reason-not-bare-false",
-      "guards": "a locked/unloaded region refuses placement with a reason and a detail string, never a bare false -- an empty result and a locked region must never look alike",
-      "note": "Ledger finding named directly in the plan: absence nobody can see. A bare false is indistinguishable from any other falsy 'nothing happened' signal; {ok:false, reason, detail} is not.",
-      "file": "public/grid.js",
-      "find": "      return { ok: false, reason: \"locked\", detail: `(${x.toFixed(0)}, ${z.toFixed(0)}) is in a part of the world that is not open yet` };",
-      "replace": "      return false;",
-      "expect": "loaded then unloaded, refuses again"
-    },
-    {
       "id": "checkInputGuard-reads-control-limits-not-a-literal",
       "guards": "checkInputGuard reads its length cap from CONTROL_LIMITS.FREE_FORM_MAX_LENGTH, never a hard-coded number at the call site -- a hard-coded copy stops tracking the one limits object silently",
       "note": "This is the exact mutation G1 names in the plan: hard-code one -> the test names it.",
@@ -400,42 +311,6 @@
       "find": "npm test            # 948 node tests + 12 worker tests",
       "replace": "npm test            # 949 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
-    },
-    {
-      "id": "close-region-on-open-null-refuses-not-a-silent-success",
-      "guards": "closeRegion on a whole-world-open grid (open === null) genuinely refuses with a reason, rather than silently reporting success for a region that was never load-tracked in the first place",
-      "note": "Found untested by docs/audits/UMAA-phases-B-H.md (Finding 3): every prior closeRegion test used an explicit openRegions list; createWorld()'s own default (regions: null) -- the shape of every world built today -- reaches this branch and nothing exercised it.",
-      "file": "public/grid.js",
-      "find": "      return { ok: false, reason: `grid: cannot close \"${name}\" -- the whole world is open, not region-tracked` };",
-      "replace": "      return { ok: true };",
-      "expect": "closing a region on a whole-world-open grid (open === null) is refused"
-    },
-    {
-      "id": "createWorld-reuses-land-for-a-repeat-seed",
-      "guards": "a second createWorld() call for the same seed reuses the same LandField/heightAt object, not a fresh one -- the memoisation Finding 5 asked for, without which generateWorld's own heightAt-identity-keyed caches (cityDemand, placeFeatures) never hit on a repeat call",
-      "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 5): createWorld() cost 2.3-2.7s per call and a repeat call with the identical seed was not materially cheaper, because a fresh LandField/heightAt was built every time.",
-      "file": "public/world.js",
-      "find": "  let entry = landCache.get(seed);",
-      "replace": "  let entry = undefined;",
-      "expect": "a second createWorld() call for the same seed reuses the same land"
-    },
-    {
-      "id": "landfield-freezes-itself",
-      "guards": "LandField freezes itself once built -- decision A, made explicit: sharing land across two same-seed worlds (Finding 5) is safe only because nothing can write through it",
-      "note": "Verified empirically before this freeze was made permanent: the full 872-test suite was run once with it in place and passed unchanged, proving nothing in this codebase currently writes to a LandField after construction.",
-      "file": "public/terrain.js",
-      "find": "    this.MAX_D = cell * 3;\n    Object.freeze(this);\n  }",
-      "replace": "    this.MAX_D = cell * 3;\n  }",
-      "expect": "LandField cannot be written through"
-    },
-    {
-      "id": "city-mode-pick-resolves-through-persisted-selection",
-      "guards": "I3: the real city-mode click handler resolves an address through the persisted selection (createSelection), not the spatial index directly -- a later describe/generate step reads the persisted selection and would find nothing if the handler stopped updating it",
-      "note": "Reverting this line to call this._index.addressAt() directly still labels every click, but nothing remembers what was picked a moment later.",
-      "file": "public/world-render-3d.js",
-      "find": "const addr = this._selection ? this._selection.pick(pt.x, pt.z) : null;",
-      "replace": "const addr = this._index ? this._index.addressAt(pt.x, pt.z) : null;",
-      "expect": "the real click handler resolves through the persisted selection"
     },
     {
       "id": "describe-result-uses-textContent-not-innerHTML",
@@ -704,24 +579,6 @@
       "expect": "a refusal offers something of the SAME KIND -- a location with room, or a demolition list -- never a substitute"
     },
     {
-      "id": "isolate-new-pick-restores",
-      "guards": "a new pick always restores any active P4.3 isolate before showing the new selection -- an isolate cannot silently survive picking something else.",
-      "note": "Verified by hand this session, same reason as above. First attempt at this exact mutation (commenting out the call rather than deleting it) SURVIVED wrongly -- the wiring test's regex matched the call's own text still present inside the comment. Caught before landing; the wiring test now strips line comments before matching (test/isolate.test.ts's stripLineComments), and this mutation (a real deletion) correctly goes red.",
-      "file": "public/world-render-3d.js",
-      "find": "      this._restoreIsolateState();\n      if (this.onInspect) {",
-      "replace": "      if (this.onInspect) {",
-      "expect": "a new pick restores any active isolate -- an isolate does not silently survive picking something else"
-    },
-    {
-      "id": "move-refusal-reaches-onMoveRefused",
-      "guards": "P4.4 _moveSelected() surfaces a refused move to the player via onMoveRefused -- never only a console log.",
-      "note": "Verified by hand this session (same host-memory reason as the P4.3 entries above). First attempt at this mutation used too wide a source window and matched the SEPARATE onMoveRefused call in the could-not-persist branch further down, so removing only the refusal-path call SURVIVED wrongly -- caught before landing; the wiring test now anchors on `if (!result.ok)` itself with a narrow 200-char window, and this mutation correctly goes red.",
-      "file": "public/world-render-3d.js",
-      "find": "    if (!result.ok) {\n      if (this.onMoveRefused) this.onMoveRefused({ reason: result.reason, blockedBy: result.blockedBy || null, plotId });\n      return result;\n    }",
-      "replace": "    if (!result.ok) {\n      return result;\n    }",
-      "expect": "a refused move reaches a caller-visible callback, not console.log"
-    },
-    {
       "id": "generated-claims-buildings-mismatch-detected",
       "guards": "P4.6's buildingsClaimMismatch actually detects a mismatch between the page's claim and the generated building count, rather than always reporting clean.",
       "note": "Verified by hand this session (same host-memory reason as the other entries added alongside this one). A disabled-condition mutation (`if (false && ...)`) correctly turned the SYNTHETIC test red (which calls the function directly with a deliberately wrong value) while the real-data gate test stayed green, since the real page and the real generated file currently agree either way -- the synthetic test is the one this specific mutation is checkable against, and is the one recorded here.",
@@ -731,33 +588,6 @@
       "expect": "a deliberately staled building count is named, by claim, not silently absorbed"
     },
     {
-      "id": "isolate-hides-moved-pieces",
-      "guards": "P4.3 isolate hides a P4.4-moved piece (a standalone Mesh applyIsolate cannot see, since it lives outside buildingInstanceIndex) when that piece is not in the kept set, and restores its visibility afterward.",
-      "note": "Found by a blind audit: a piece moved earlier in a session stayed visible through an unrelated isolate, because applyIsolate only ever reads buildingInstanceIndex. Fixed as a separate step in _isolate()/_restoreIsolateState(), deliberately outside the pure public/isolate.js module. Verified by hand this session: DELETING the added block (not disabling it with `if (false)`, which left the text intact and let the wiring test SURVIVE wrongly on the first attempt -- caught before landing) correctly turned exactly this wiring test red, reverted, reconfirmed green.",
-      "file": "public/world-render-3d.js",
-      "find": "    this._hiddenMovedPieces = [];\n    if (this._movedPieces) {\n      for (const [movedPlotId, entry] of this._movedPieces) {\n        if (keepIds.has(`bld-${movedPlotId}`)) continue;\n        this._hiddenMovedPieces.push(entry.standalone);\n        entry.standalone.visible = false;\n      }\n    }",
-      "replace": "    this._hiddenMovedPieces = [];",
-      "expect": "a P4.4-moved piece not in the kept set is hidden by isolate, and restored -- a blind audit found applyIsolate cannot see it at all"
-    },
-    {
-      "id": "b1-terrain-no-longer-imports-landmasses",
-      "guards": "terrain.js does not import landmassPolygonsDesign or LANDMASSES from city-plan.js -- the dependency B1 exists to break, since city-plan.js is slated for replacement in B2.",
-      "note": "Verified by hand this session (host memory constraints, per docs/BUILD-LOOP.md's own long-run discipline). First attempt at this mutation added an ALIASED import (`landmassPolygonsDesign as _reimported`); the test's original exact-name array check SURVIVED wrongly, because an aliased entry does not equal the bare name after a naive comma-split. Caught before landing: the test now does a substring/word-boundary match against the whole import clause, not an exact-membership check, and this mutation now correctly goes red.",
-      "file": "public/terrain.js",
-      "find": "import { WORLD } from \"./city-plan.js\";",
-      "replace": "import { WORLD, landmassPolygonsDesign as _reimported } from \"./city-plan.js\";",
-      "expect": "terrain.js no longer imports landmassPolygonsDesign or LANDMASSES from city-plan.js"
-    },
-    {
-      "id": "b1-terrain-exports-own-landmasses",
-      "guards": "terrain.js exports its own landmassPolygonsDesign rather than only using it internally or re-exporting city-plan.js's.",
-      "note": "Verified by hand this session. Removing `export` correctly turned both the export-presence test AND the identity test red (the identity test's own dynamic import reads undefined off the module namespace) -- both recorded as one mutation since they share a single root cause.",
-      "file": "public/terrain.js",
-      "find": "export function landmassPolygonsDesign(samplesPerSegment = 10) {",
-      "replace": "function landmassPolygonsDesign(samplesPerSegment = 10) {",
-      "expect": "terrain.js exports its own landmassPolygonsDesign, not a re-export of city-plan.js's"
-    },
-    {
       "id": "b1-ownership-list-tracks-real-importers",
       "guards": "test/terrainLandmassOwnership.test.ts's transformed third check (B1 step B: 'assert nothing reads city-plan.js's copy', not yet true, so tracked as an explicit named list instead -- Mark's own instruction) actually compares the list, rather than trivially passing.",
       "note": "REPLACES the b1-terrain-landmass-data-identical-to-original entry this superseded (that mutation's own find target, a gull-isle coordinate, no longer exists -- the island is now procedurally generated). Verified by hand this session: removing one real entry from KNOWN_STATIC_IMPORTERS correctly turned exactly this test red, reverted, reconfirmed green.",
@@ -765,42 +595,6 @@
       "find": "  const KNOWN_STATIC_IMPORTERS = [\n    \"public/road-network.js\",\n    \"scripts/_render-arterial-data.mjs\",",
       "replace": "  const KNOWN_STATIC_IMPORTERS = [\n    \"scripts/_render-arterial-data.mjs\",",
       "expect": "the exact, current set of files still reading city-plan.js's LANDMASSES/landmassPolygonsDesign directly is named and tracked"
-    },
-    {
-      "id": "b1-island-count-gate-real",
-      "guards": "the B1 gate's island-count assertion (>= 20) actually reacts to a real reduction in the archipelago, not a tautology.",
-      "note": "Verified by hand this session: setting SKERRY_COUNT to 0 correctly turned exactly the island-count test red (measured 10 islands, below the 20 floor), reverted, reconfirmed green (32 islands).",
-      "file": "public/terrain.js",
-      "find": "const SKERRY_COUNT = 22;",
-      "replace": "const SKERRY_COUNT = 0;",
-      "expect": "island count and variety -- an archipelago reads by count, not by area alone"
-    },
-    {
-      "id": "b1-mainland-settleable-fraction-capped",
-      "guards": "the B1 gate's mainland settleable-fraction cap (<= 0.2) actually catches a mainland that drifts toward settlement, per Mark's own correction 2.",
-      "note": "Verified by hand this session: raising coastal-strip's fraction from 0.12 to 0.45 (compensating farmland down to keep the three bands summing to 1) correctly turned exactly this test red, reverted, reconfirmed green.",
-      "file": "public/terrain.js",
-      "find": "  { id: \"coastal-strip\", identity: \"the mainland's own thin settled edge -- the only part of the mainland this plan settles\", fraction: 0.12, settleable: true },\n  { id: \"farmland\", identity: \"farmland behind the coast -- open, worked, not built on\", fraction: 0.55, settleable: false },",
-      "replace": "  { id: \"coastal-strip\", identity: \"the mainland's own thin settled edge -- the only part of the mainland this plan settles\", fraction: 0.45, settleable: true },\n  { id: \"farmland\", identity: \"farmland behind the coast -- open, worked, not built on\", fraction: 0.22, settleable: false },",
-      "expect": "the mainland's own settleable fraction is a stated, small number, not left to be inferred"
-    },
-    {
-      "id": "b2-0-worldaliasing-terrain-landmasses-on-allowlist",
-      "guards": "worldAliasing.test.ts's different-seed test genuinely checks terrain.js's own LANDMASSES[...].points for unreviewed sharing, rather than the allow-list entry being decorative.",
-      "note": "Verified by hand this session: replacing TERRAIN_LANDMASSES with [] in the allow-list's own filter/map (so none of terrain.js's landmass outlines are declared shared) correctly turned the different-seed test red (438 unexplained shared objects, first one array(22)), reverted, reconfirmed green.",
-      "file": "test/worldAliasing.test.ts",
-      "find": "    ...TERRAIN_LANDMASSES.filter((lm) => lm.points).map((lm) => ({",
-      "replace": "    ...[].filter((lm) => lm.points).map((lm) => ({",
-      "expect": "two worlds with DIFFERENT seeds share only the declared allow-list (WORLD -- never land)"
-    },
-    {
-      "id": "b2-0-worldaliasing-mainland-zones-on-allowlist",
-      "guards": "worldAliasing.test.ts's different-seed test separately catches MAINLAND_ZONES sharing, not just LANDMASSES.points -- `.zones` is a distinct reachable field on the mainland's own LANDMASSES entry.",
-      "note": "Verified by hand this session: removing the MAINLAND_ZONES allow-list entry alone (leaving the LANDMASSES.points entries in place) correctly turned the different-seed test red (4 unexplained shared objects, first one array(3) -- MAINLAND_ZONES' own three bands), reverted, reconfirmed green.",
-      "file": "test/worldAliasing.test.ts",
-      "find": "    {\n      label: \"MAINLAND_ZONES (public/terrain.js)\",\n      value: MAINLAND_ZONES,\n      reason: \"a flat, frozen spec of the mainland's own depth-band fractions (Object.freeze); the mainland's LANDMASSES entry embeds it as `.zones` by reference, for every seed -- one frozen table, not one per world, same category as WORLD.\",\n    },\n",
-      "replace": "",
-      "expect": "two worlds with DIFFERENT seeds share only the declared allow-list (WORLD -- never land)"
     },
     {
       "id": "decision-10-extract-test-titles-anchors-on-trailing-duration",
@@ -846,15 +640,6 @@
       "find": "    const variant = pickVariant(char, group.seed);\n    keys.add(`${char}-${variant.name}`);",
       "replace": "    keys.add(`${char}-vc-day-`);",
       "expect": "GATE: distinct facade materials reachable from real placements, well above four"
-    },
-    {
-      "id": "world-render-3d-board-gate-no-early-return",
-      "guards": "world-render-3d.js's own board-drawing gate uses `if (boardRequested) try {...}`, never an early `return` -- an early return would skip P4.1's board-record wiring, the spatial index, and selection for every city-mode load, not just when the gate is off.",
-      "note": "Verified this session: this is the exact mistake made and caught during implementation, before it was ever committed -- reintroducing `if (!boardRequested) return;` in place of the real gate is caught directly by the dedicated static test's own doesNotMatch assertion.",
-      "file": "public/world-render-3d.js",
-      "find": "    const boardRequested = typeof location !== \"undefined\" && new URLSearchParams(location.search).get(\"board\") === \"1\";\n    if (boardRequested) try {",
-      "replace": "    const boardRequested = typeof location !== \"undefined\" && new URLSearchParams(location.search).get(\"board\") === \"1\";\n    if (!boardRequested) return;\n    try {",
-      "expect": "public/world-render-3d.js only draws board pieces when ?board=1 is explicitly requested, and the gate does not short-circuit the rest of _buildCityBase"
     },
     {
       "id": "look-proof-material-glsl3",

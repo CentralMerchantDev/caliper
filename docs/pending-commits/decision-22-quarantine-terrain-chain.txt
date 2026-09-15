@@ -1,0 +1,104 @@
+Decision #22 (docs/DECISIONS-FOR-MARK.md): quarantine public/terrain.js and
+its own direct dependency chain, per Mark's explicit ruling -- pre-rebuild
+code surviving a takedown is not approval, and TER-1..5 rebuild fresh from
+RESEARCH.md rather than wire it.
+
+WHAT WAS FOUND, RE-GROUNDING BEFORE WRITING TER-1
+
+public/terrain.js (1,586 lines) already implemented most of what TER-1..5
+describes -- a real coastline-first LandField (distance-hash + scanline mask,
+built before height, matching RESEARCH.md T2's own order), a real height
+function, real relief/beach/cliff/basin/waterway logic -- but zero of it is
+product-reachable (confirmed via scripts/lib/module-graph.mjs's own
+classifyRepoReachability, the same function test/deadExports.test.ts uses).
+Queued as decision #22 rather than decided unilaterally: the code's own
+comments cite "Mark's approved orientation" and "Mark's own correction" for
+its hand-placed archipelago, which is a different method than RESEARCH.md
+T1's drowned-river-valley prescription.
+
+MARK'S RULING: surviving Phase 1's takedown is not the same as being
+endorsed by it -- inferring approval from a file merely existing is the
+exact pattern that has pulled old-world code back into this project four
+times before. Quarantine it; build TER-1..5 fresh from the research; do not
+read the quarantined file while doing so.
+
+WHAT WAS DONE
+
+Quarantining public/terrain.js alone left 25 test files unable to build
+(esbuild: "Could not resolve './terrain.js'") -- their own bundles pull in
+public/grid.js, public/ground.js, public/world.js and
+public/world-render-3d.js, which import terrain.js directly. Measured with
+scripts/lib/module-graph.mjs's own reachability walk before moving anything
+further: all four are ALSO confirmed zero-product-reachable, so the real
+unit to quarantine is this whole five-source-file, one-script,
+25-test-file chain (31 files total), not terrain.js alone.
+
+Every file's size and SHA-256 recorded in _TO-DELETE/LEDGER.jsonl BEFORE
+the move (class "tier2-decision-22-terrain-chain", action "retained" -- not
+purged; that step needs Mark's own explicit confirmation of the exact list,
+same two-step precedent as the 2026-09-15 final-purge-batch and this run's
+own item-zero quarantine). Moved via `git mv` to
+_TO-DELETE/decision-22-terrain-chain/, nothing deleted.
+
+FALLOUT, FOUND AND FIXED (not part of the quarantine itself, but its direct
+consequence):
+
+- test/modulesLoad.test.ts hardcodes a file list it dynamically `import()`s
+  by string -- a case esbuild's own bundler and this project's static
+  reachability scan both cannot see (test/deadExports's own OPEN "dynamic
+  import blind spot" lesson, docs/LESSONS-LEDGER.jsonl). Found only by
+  actually running the test after quarantining; the four now-gone names
+  removed from its FILES array.
+- test/lookPipeline.test.ts reads public/world-render-3d.js's SOURCE TEXT
+  (not an import) to verify its composer/vignette wiring -- three tests
+  skipped with a named, dated reason, matching the file's own existing
+  skip precedent for the (already-quarantined) city.html comparison. The
+  live colour-grade path, if any, has no equivalent test yet -- disclosed,
+  not silently assumed covered.
+- test/deadExports.allowlist.json: 56 entries pruned that named exports on
+  the five now-gone source files.
+- test/mutations.json: 24 entries pruned that targeted the five now-gone
+  files.
+- test/mutationSummary.generated.json regenerated (66 of 114 CAUGHT).
+
+A SECOND, SEPARATE, ~63-FILE DEAD CLUSTER, FOUND BUT NOT TOUCHED
+
+Measuring the terrain-chain fallout surfaced an unrelated cluster --
+apply-and-persist.js, apply-layers.js, quest.js, change-quest.js,
+generate-request.js, run-generate-request.js, model-forge.js,
+model-registry.js, world-model.js, world-registry.js, world-store.js,
+transform.js, and everything reachable from them (buildings.js, roadkit.js,
+props.js, land-use.js, zoning.js, and 30 more, plus 18 dedicated tests) --
+all confirmed independently non-product, but connected to the terrain chain
+only because a few of ITS tests also import world.js as fixture
+convenience. This reads as an entire previous game-loop iteration, not one
+subsystem. Per the standing rule (never bulk-delete; inventory, categorise,
+get the exact list confirmed, then act) this is NOT folded into today's
+quarantine -- full inventory written to
+docs/specs/OLD-WORLD-SECOND-CLUSTER-2026-09-15.md and queued as decision
+#23, with a recommendation and one named exception (public/noise.js is
+generic, reusable, project-decoupled code TER-1..5's own coastline work
+might legitimately want, worth its own call rather than a blanket "all
+dead").
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs: zero "BUILD FAILED"
+entries (was 25 test files failing to even build with terrain.js
+quarantined alone). pass 633, fail 6 -- down from 8 pre-existing failures
+before this commit; 2 cleared were the deadExports/lookPipeline/
+modulesLoad fallout described above being fixed, and 2 more (the ground/
+road-standing tests) went away because their own test file (test/
+ground.test.ts) was itself part of the quarantined chain -- disclosed as
+removed-with-their-subject, not fixed. The remaining 6 are the same
+pre-existing, unrelated failures this run has carried since before item
+zero (deadExports notProduct backlog, one import-resolution checker
+defect, 3 timer/poll measurement tests, and "every mutation has a CAUGHT
+result").
+
+WHAT IS STILL OPEN
+
+- Decision #23 (the ~63-file second cluster) is queued, not answered.
+- TER-1 through TER-5 are not yet built. Next: coastline first (RESEARCH.md
+  T2), the drowned-river-valley method (T1), against area-board.js's own
+  elevation/cornerOffset/surfaceType fields and scoring.js's
+  terrainContribution() -- built fresh, per Mark's ruling, without
+  reference to the quarantined terrain.js.
