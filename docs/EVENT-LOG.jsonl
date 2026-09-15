@@ -24,3 +24,4 @@
 {"at":"2026-09-15T02:06:34.302Z","lane":"CLI","event":"pushed","item":"FIX-2","commit":"f955d3a","ref":"origin/main","note":"Item 0 (RESEARCH.md extraction, plan retirement, CLAUDE.md corrections) and FIX-2 (real storey count) pushed to origin/main. BLD's FIX-1 (height cap removal) can build against storeysFor(entry) now."}
 {"at":"2026-09-15T05:47:19.121Z","lane":"CLI","event":"pushed","item":"TER-5","commit":"032a1fc","ref":"origin/main","note":"FIX-5, FIX-6, decision-22 quarantine, the harness-blindness fix (test/run.mjs silently dropping ~40% of the suite), CAT-1's terrain mesh contract, and TER-1 through TER-5 all pushed to origin/main. BLD can build its coastline mesh against docs/specs/CAT-1-TERRAIN-MESH-CONTRACT.md now."}
 {"at":"2026-09-15T06:36:28.677Z","lane":"CLI","event":"pushed","item":"SDB-1"}
+{"at":"2026-09-15T06:54:18.797Z","lane":"CLI","event":"pushed","item":"SDB-2"}
