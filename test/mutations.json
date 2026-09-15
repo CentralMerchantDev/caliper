@@ -1099,12 +1099,12 @@
       "expect": "GATE (FIX-1): resolveBoardPieces reads storeys directly from the real catalogue entry -- never invented, never computed here"
     },
     {
-      "id": "cam1-board-camera-must-stay-height-aware",
-      "guards": "CAM-1 (docs/briefs/BLD-2026-09-17.md): the board camera's own height-aware distance calc reverts to a fixed value not driven by shadowBB's own real max height -- the same defect 35-board-fix1-real-height.png named.",
+      "id": "cam2-trig-formula-must-stay-retired",
+      "guards": "CAM-1/CAM-2: CAM-1's own retired trig-based distance formula (dist = targetY*1.15/tan(halfFovRad)) is reintroduced -- Mark's own verdict retired it (36-board-cam1-real-range.png, 'two flat slabs against a gradient'); its return would mean the failed whole-range-in-one-shot approach is back, live or not. Was cam1-board-camera-must-stay-height-aware (targeted the SAME formula's now-deleted find text) -- went INCONCLUSIVE (find matched 0 times) once CAM-2 removed it; renamed and retargeted (adds the retired line back, rather than mutating an existing one, since there is no longer a live line to mutate INTO it) rather than left stale, same pattern GRD-1's own fix3-board-paving-radius retirement used.",
       "file": "public/look-proof-scene.html",
-      "find": "const dist = (targetY * 1.15) / Math.tan(halfFovRad); // 15% margin so the tallest piece's own top/base are not touching the frame edge",
-      "replace": "const dist = 100;",
-      "expect": "GATE (CAM-1): the board camera is repositioned AFTER shadowBB exists, using its own real max height -- never a hardcoded distance/elevation guessed independent of what is actually on the board"
+      "find": "const dollyClamped = Math.max(0, dolly);",
+      "replace": "const dollyClamped = Math.max(0, dolly);\n      const dist = (targetY * 1.15) / Math.tan(halfFovRad); // 15% margin so the tallest piece's own top/base are not touching the frame edge",
+      "expect": "GATE (CAM-2): CAM-1's own trig-framed, whole-range-in-one-shot formula is gone -- Mark's own verdict (36-board-cam1-real-range.png, 'two flat slabs against a gradient') retired it, not silently kept alongside the real fix"
     },
     {
       "id": "cam1-overview-storeys-must-stay-wired",
@@ -1225,6 +1225,30 @@
       "find": "  return (nearWater ? TERRAIN_WATER_BONUS : 0) + maxRelief * TERRAIN_SLOPE_PENALTY_PER_M;",
       "replace": "  return 0 + maxRelief * TERRAIN_SLOPE_PENALTY_PER_M;",
       "expect": "GATE (TER-5): water adjacency alone raises a score -- isolated from slope with two DIRECTLY-CONTROLLED, perfectly flat cells (real terrainContribution(), board state authored to remove every other variable)"
+    },
+    {
+      "id": "cam2-pitch-clamp-must-stay-real",
+      "guards": "CAM-2 (docs/briefs/BLD-2026-09-18.md): the pitch clamp is widened past 80deg -- 'look up' could flip past straight overhead into an disorienting, unintended view Mark's own words never asked for.",
+      "file": "public/look-proof-scene.html",
+      "find": "const pitch = (Math.max(-10, Math.min(80, pitchDeg)) * Math.PI) / 180;",
+      "replace": "const pitch = (Math.max(-10, Math.min(179, pitchDeg)) * Math.PI) / 180;",
+      "expect": "GATE (CAM-2): yaw/pitch/dolly are read from the URL for the static single-shot pipeline, and pitch is clamped so a look-up cannot flip past straight overhead"
+    },
+    {
+      "id": "cam2-dolly-must-stay-coupled-to-elevation",
+      "guards": "CAM-2: panning out stops also lifting the camera -- 'when you pan out, that's where you'll see the height' would no longer hold; panning out would move the camera back without revealing any more height.",
+      "file": "public/look-proof-scene.html",
+      "find": ".add(new THREE.Vector3(0, dollyClamped * 0.3, 0));",
+      "replace": ".add(new THREE.Vector3(0, 0, 0));",
+      "expect": "GATE (CAM-2): panning out ALSO lifts the camera -- 'when you pan out, that's where you'll see the height' is a real coupling between dolly and elevation, not two independent controls"
+    },
+    {
+      "id": "cam2-drag-must-stay-gated-on-real-movement",
+      "guards": "CAM-2: the drag-vs-click threshold is removed -- every click would also register as a zero-distance 'drag', and (depending on evaluation order) could suppress real placement clicks or, conversely, a real drag could misfire as a placement click.",
+      "file": "public/look-proof-scene.html",
+      "find": "if (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;",
+      "replace": "dragState.moved = true;",
+      "expect": "GATE (CAM-2): drag-to-look is a real gesture, told apart from RC1's own click-to-place by real pixel movement, not layered onto the same event -- a held button with no movement, released, is still a click"
     }
   ]
 }

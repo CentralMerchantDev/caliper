@@ -457,18 +457,54 @@ test("GATE (CAM-1): the board camera is no longer positioned before the real boa
   assert.doesNotMatch(earlyBlock, /BOARD_MODE[\s\S]{0,800}camera\.position\.set/, "the board camera is still positioned in the early block, before boardResolved/shadowBB exist -- 35-board-fix1-real-height.png's own defect (a camera framed for the OLD capped heights, now showing a wall) would still apply");
 });
 
-test("GATE (CAM-1): the board camera is repositioned AFTER shadowBB exists, using its own real max height -- never a hardcoded distance/elevation guessed independent of what is actually on the board", () => {
+test("GATE (CAM-1, retired): the board camera is repositioned AFTER shadowBB exists -- superseded by CAM-2 below, kept as a structural check that BOARD_MODE's own camera block still runs after the real board is resolved", () => {
   const afterShadowBB = SCENE_SRC.slice(SCENE_SRC.indexOf("shadowBB.union(groundGeom.boundingBox)"));
   assert.match(afterShadowBB, /BOARD_MODE/, "no BOARD_MODE-specific block found after shadowBB is computed");
-  // Precise, not just "shadowBB.max.y appears somewhere in this block" --
-  // that regex SURVIVED a mutation that hardcoded `dist` to a fixed 100,
-  // because targetY's own line still mentioned shadowBB.max.y even though
-  // the actual camera distance no longer depended on it. Anchored on the
-  // targetY declaration itself, the one value that actually reaches both
-  // the distance calc and camera.position.set/lookAt below it.
-  assert.match(afterShadowBB, /const targetY = Math\.max\(shadowBB\.max\.y \/ 2, 1\);/, "targetY is not computed from shadowBB's own real max height");
-  assert.match(afterShadowBB, /const dist = \(targetY \* 1\.15\) \/ Math\.tan\(halfFovRad\);/, "the board camera's own distance is not derived from targetY (and so, transitively, from shadowBB's real max height) -- a hardcoded distance would leave this line unchanged while shadowBB.max.y still appears elsewhere in the block, unused");
-  assert.match(afterShadowBB, /camera\.position\.set\(boardCenterX, targetY, boardCenterZ - dist\);/, "camera.position.set does not use the real targetY/dist this block just computed");
+});
+
+// -------------------------------------------------- CAM-2: the eye-level camera
+test("GATE (CAM-2): CAM-1's own trig-framed, whole-range-in-one-shot formula is gone -- Mark's own verdict (36-board-cam1-real-range.png, 'two flat slabs against a gradient') retired it, not silently kept alongside the real fix", () => {
+  assert.doesNotMatch(SCENE_SRC, /const dist = \(targetY \* 1\.15\) \/ Math\.tan\(halfFovRad\);/, "CAM-1's own retired distance formula is still present");
+});
+
+test("GATE (CAM-2): the eye anchor is grounded in the real board's own tallest piece (real storeys, board-renderer.js's own resolveBoardPieces), never a guessed coordinate", () => {
+  const afterShadowBB = SCENE_SRC.slice(SCENE_SRC.indexOf("shadowBB.union(groundGeom.boundingBox)"));
+  assert.match(afterShadowBB, /const tallestPiece = boardResolved\.reduce\(\(a, b\) => \(b\.storeys \|\| 0\) > \(a\.storeys \|\| 0\) \? b : a, boardResolved\[0\]\);/, "the eye anchor is not derived from the real board's own tallest piece");
+  assert.match(afterShadowBB, /tallestPiece\.anchor\[0\] \+ tallestPiece\.footprint\[0\] \/ 2/, "the eye anchor's own X is not centred on the tallest piece's real, resolved footprint");
+});
+
+test("GATE (CAM-2): yaw/pitch/dolly are read from the URL for the static single-shot pipeline, and pitch is clamped so a look-up cannot flip past straight overhead", () => {
+  assert.match(SCENE_SRC, /const initialYaw = Number\(eyeParams\.get\("eyeYaw"\)\) \|\| 0;/, "eyeYaw is not read from the URL");
+  assert.match(SCENE_SRC, /const initialPitch = Number\(eyeParams\.get\("eyePitch"\)\) \|\| 0;/, "eyePitch is not read from the URL");
+  assert.match(SCENE_SRC, /const initialDolly = Number\(eyeParams\.get\("eyeDolly"\)\) \|\| 0;/, "eyeDolly is not read from the URL");
+  assert.match(SCENE_SRC, /Math\.max\(-10, Math\.min\(80, pitchDeg\)\)/, "pitch is not clamped -- 'look up' could flip past straight overhead or dip below the horizon");
+});
+
+test("GATE (CAM-2): panning out ALSO lifts the camera -- 'when you pan out, that's where you'll see the height' is a real coupling between dolly and elevation, not two independent controls", () => {
+  assert.match(SCENE_SRC, /\.addScaledVector\(forward, -dollyClamped\)/, "dolly does not pull the camera back along the real view direction");
+  assert.match(SCENE_SRC, /\.add\(new THREE\.Vector3\(0, dollyClamped \* 0\.3, 0\)\)/, "dolly does not also lift the camera -- panning out alone would not reveal height the way Mark's own description asks for");
+});
+
+test("GATE (CAM-2): the FOV is widened for the eye camera ('an expanded eye view'), and the projection matrix is actually updated after changing it", () => {
+  assert.match(SCENE_SRC, /camera\.fov = 65;/, "the eye camera's own FOV is not widened from the old 45deg (sized for CAM-1's now-retired whole-range framing)");
+  assert.match(SCENE_SRC, /camera\.fov = 65;\s*\n\s*camera\.updateProjectionMatrix\(\);/, "camera.fov is changed without calling updateProjectionMatrix() -- the new FOV would never actually take effect in the render");
+});
+
+test("GATE (CAM-2): drag-to-look is a real gesture, told apart from RC1's own click-to-place by real pixel movement, not layered onto the same event -- a held button with no movement, released, is still a click", () => {
+  assert.match(SCENE_SRC, /const DRAG_THRESHOLD_PX = 4;/, "no real drag-vs-click threshold exists");
+  assert.match(SCENE_SRC, /if \(Math\.abs\(dx\) > DRAG_THRESHOLD_PX \|\| Math\.abs\(dy\) > DRAG_THRESHOLD_PX\) dragState\.moved = true;/, "pointermove does not detect real drag movement past the threshold");
+  assert.match(SCENE_SRC, /if \(wasDrag\) return;/, "pointerup does not skip placement for a real look-drag");
+});
+
+test("GATE (CAM-2): wheel pans out (never negative), the same 'pan out reveals height' coupling as the URL-param path -- not a second, independently-computed dolly", () => {
+  assert.match(SCENE_SRC, /renderer\.domElement\.addEventListener\("wheel", \(e\) => \{/, "no wheel listener exists for dolly");
+  assert.match(SCENE_SRC, /const dolly = Math\.max\(0, window\.__eyeCameraState\.dolly \+ e\.deltaY \* DOLLY_SENSITIVITY\);/, "wheel does not compute a real, non-negative dolly from the current live state");
+  assert.match(SCENE_SRC, /window\.__eyeCameraFromState\(yaw, pitch, dolly\)/, "the live drag/wheel path does not call the SAME eyeCameraFromState the URL-param path uses -- a second, independently-computed camera formula could visually disagree with it");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning eyeCameraFromState must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// function eyeCameraFromState(yawDeg, pitchDeg, dolly) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /function eyeCameraFromState\(yawDeg, pitchDeg, dolly\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });
 
 test("GATE (CAM-1): the camera's own far clipping plane is wide enough for FIX-1's real range -- 500 (the old value, sized for a ~27m capped tower) would clip a real ~376m mega-tower before the far plane even lets it render", () => {

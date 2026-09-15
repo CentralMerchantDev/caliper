@@ -329,7 +329,7 @@ land somewhere permanent; until then this IS the record.
     Same three items, same gates; this is the completed one, kept, per
     this merge's own "take both sides' ticks for their own ids.")
 
-[ ] CAM-2 (BLD) The eye-level camera Mark designed, built as described — BLD-2026-09-18.md §3
+[x] CAM-2 (BLD) The eye-level camera Mark designed, built as described — BLD-2026-09-18.md §3
     Mark, verbatim: "Like an eye view — an expanded eye view, not exactly
     what you would see but more — that allows you to look up so you can
     see the building above you, just like in real life. Most of the time
@@ -350,6 +350,101 @@ land somewhere permanent; until then this IS the record.
     what follows either answer) -- CAM-1's own gate ("both pieces fully in
     frame") is explicitly retired, not reused; a shot that merely fits
     everything in frame is the exact failure this item exists to replace.
+    DONE 2026-09-18: BOARD_MODE's camera is now eye level (1.7m, a real,
+    disclosed human-height constant), anchored EYE_STAND_DISTANCE_M=12m
+    south of the TALLEST real piece's own near face (read from
+    boardResolved's own real storeys, board-renderer.js -- never a
+    guessed coordinate), forward by default (yaw=0, pitch=0). FOV widened
+    45->65deg ("an expanded eye view -- not exactly what you would see
+    but more"). yaw/pitch/dolly are one function (eyeCameraFromState),
+    called from BOTH the static single-shot pipeline (?eyeYaw/eyePitch/
+    eyeDolly URL params) and live mouse-drag (look) + wheel (pan out) in
+    INTERACTIVE_MODE -- the same formula, so a live drag and a URL-param
+    render of the identical state cannot visually disagree. Panning out
+    ALSO lifts the camera (dolly*0.3m up per metre back) -- "when you pan
+    out, that's where you'll see the height" is a real coupling, not two
+    independent controls. Pitch clamped to [-10,80]deg so "look up"
+    cannot flip past straight overhead. Drag-to-look is told apart from
+    RC1's own click-to-place by real pixel movement (DRAG_THRESHOLD_PX=4,
+    checked live via scripts/interact-look-proof.mjs, not just source-
+    pattern-matched) -- moved RC1's own commit call from pointerdown to
+    pointerup so "was this a drag" is knowable before deciding.
+    FOUND BY RUNNING IT, NOT ASSUMED: RC1's own existing interactive
+    driver test broke immediately -- its own test cell (2,6) is nowhere
+    near the new eye view and does not even project on screen any more.
+    A first replacement, (19,0), LOOKED clickable (on screen) but was
+    actually invalid -- it collides with mega-tower-a's own real
+    footprint, found by checking board.evaluatePlacement directly, not
+    assumed from screen position alone. (19,10), scanned and verified
+    both on-screen AND genuinely empty, is the real fix. Disclosed, not
+    hidden: with a forward-facing eye camera, not the whole board is
+    clickable from one position -- placing at a distant cell means
+    facing it first ("as you spin around"), a real, intentional
+    consequence of the new camera, not a regression papered over.
+    TESTS: test/lookProofScene.test.ts -- CAM-1's own trig-formula test
+    retired (superseded, not deleted -- the exact formula's own removal
+    is now itself a gate). 9 new GATE (CAM-2) tests: the retired formula
+    is gone; the eye anchor is grounded in the real tallest piece; yaw/
+    pitch/dolly URL params and the pitch clamp; the dolly/elevation
+    coupling; the widened FOV and its updateProjectionMatrix() call;
+    drag-vs-click gating; wheel-to-dolly using the SAME eyeCameraFromState
+    the URL-param path uses. 95/95 pass. npx tsc --noEmit clean.
+    MUTATED, ALL CAUGHT: node scripts/_mutcheck.mjs -- cam2-pitch-clamp-
+    must-stay-real, cam2-dolly-must-stay-coupled-to-elevation, cam2-drag-
+    must-stay-gated-on-real-movement, cam2-trig-formula-must-stay-retired
+    (renamed from cam1-board-camera-must-stay-height-aware, which went
+    INCONCLUSIVE -- find matched 0 times -- once CAM-2 deleted the code
+    it targeted; retired and retargeted per rule://build-loop, same
+    pattern GRD-1's own fix3-board-paving-radius retirement used) all
+    CAUGHT against a GREEN baseline, source restored byte-identical.
+    LIVE, NOT JUST STATIC: scripts/interact-look-proof.mjs extended with
+    a real drag (page.mouse.down/move/up, gradual, 8 steps) that changes
+    live yaw/pitch and does NOT place a piece even though it starts and
+    ends over the board's own clickable area, and a real wheel event that
+    increases live dolly. "RC1 GATE: pass", all assertions green
+    including the two new ones.
+    MEASURED, RENDERED, LOOKED AT -- §5.5's own five lines, all three
+    shots:
+    (1) docs/look-proof-shots/44-cam2-eye-default.png -- WHAT CHANGED:
+    the board camera is now eye-level and forward-facing by default,
+    replacing CAM-1's failed whole-range framing. THE QUESTION: does the
+    default view feel immersed/street-level -- textured, detailed,
+    nothing like `36`'s "two flat slabs"? WHAT IS NOT BEING ASKED:
+    whether the whole tower is visible (it deliberately is not -- that is
+    the point, not a bug) or whether the ground/haze read well (GRD-1 and
+    CAM-3 own those, separately). MY OWN READ: yes -- real facade detail,
+    window bands, a visible paved-plot kerb line in the corner (GRD-1's
+    own fix, now visible from a camera close enough to actually resolve
+    it, unlike CAM-1's own far shot). WHAT FOLLOWS: if yes, CAM-2 stands
+    as the new default; if no, the eye's own stand-off distance or
+    default pitch needs retuning, not a return to CAM-1's approach.
+    (2) docs/look-proof-shots/45-cam2-eye-lookup.png (`?eyePitch=55`) --
+    WHAT CHANGED: rotating (simulated via the same URL param a live drag
+    would produce) tilts the view up. THE QUESTION: does looking up
+    reveal the tower's own real height believably, the way Mark
+    described ("as you spin around you can look up")? WHAT IS NOT BEING
+    ASKED: whether this exact pitch value is the "right" one for a real
+    player's own drag sensitivity (DRAG_THRESHOLD_PX/SENSITIVITY_DEG_PER_PX
+    are real, disclosed constants, not yet play-tested at length). MY OWN
+    READ: yes, strongly -- the tower's own upper floors recede
+    dramatically toward the top of frame with real perspective
+    convergence, a genuinely compelling "looking up at a skyscraper"
+    read. WHAT FOLLOWS: if yes, the look-up mechanic itself is proven; if
+    no, say plainly what about it reads wrong (pitch range, FOV, the
+    convergence itself).
+    (3) docs/look-proof-shots/46-cam2-eye-panout.png (`?eyeDolly=60&
+    eyePitch=25`) -- WHAT CHANGED: panning out (dolly) pulls the camera
+    back AND up. THE QUESTION: does panning out reveal more height AND
+    more context (ground, other pieces), matching "when you pan out,
+    that's where you'll see the height"? WHAT IS NOT BEING ASKED: whether
+    the tower is now FULLY in frame (it is still not, deliberately --
+    CAM-1's own mistake was forcing that). MY OWN READ: yes -- the base,
+    the paved plot's own kerb boundary, and a second piece (house-a, far
+    right) all become visible while the tower still recedes off the top
+    of frame, exactly the "taller because it does not fit" effect Mark's
+    own words describe. WHAT FOLLOWS: if yes, the pan-out/elevation
+    coupling is proven; if no, the 0.3 lift-per-metre constant needs
+    retuning, or the coupling itself needs rethinking.
 [ ] CAM-3 (BLD) The haze on the board camera — measure before changing anything — BLD-2026-09-18.md §4
     Mark on `30-board-scene-pass-fix3.png`: "the buildings are extremely
     hazy, the details have been lost... the clarity has disappeared

@@ -91,20 +91,32 @@ const piecesAfterInvalidClick = await page.evaluate(() => window.__board.pieces(
 assertEqual(piecesAfterInvalidClick, 4, "board unchanged after clicking the invalid cell");
 
 // GATE, part 2 -- "hover a valid one, click, and exactly one piece
-// exists." (2,6) is empty (the same cell RB2's own GHOST_DEMO.valid
-// already established as safe) -- committing here is the FIFTH piece on
-// the demo board, so "exactly one piece exists" is read as "exactly one
-// MORE piece exists" -- the gate's own wording assumes an otherwise-empty
-// board; this scene's board mode always starts from BOARD_DEMO_PLACEMENTS,
-// so the real assertion is piecesBefore -> piecesBefore+1.
-const validScreen = await page.evaluate(() => window.__cellCenterToScreen(2, 6));
+// exists." CAM-2 (docs/briefs/BLD-2026-09-18.md §3) replaced the old
+// far-back, whole-board-visible camera with an eye-level one facing the
+// tallest real piece -- (2,6), house-a's own old test cell, is nowhere
+// near that view and does not even project on screen any more (found by
+// running this script, not assumed: it failed here first, and (19,0),
+// the first replacement tried, turned out to collide with mega-tower-a's
+// own real footprint -- found the SAME way, not assumed valid because it
+// was on screen). (19,10), verified directly against the real
+// board.evaluatePlacement (not guessed from screen position alone), is
+// on screen from CAM-2's own default eye view AND genuinely empty. A
+// real consequence of the new camera's own narrower field of view, not a
+// defect papered over: placing at a cell means facing it first, the same
+// "as you spin around" model CAM-2 was built from.
+// Committing here is the FIFTH piece on the demo board, so "exactly one
+// piece exists" is read as "exactly one MORE piece exists" -- the gate's
+// own wording assumes an otherwise-empty board; this scene's board mode
+// always starts from BOARD_DEMO_PLACEMENTS, so the real assertion is
+// piecesBefore -> piecesBefore+1.
+const validScreen = await page.evaluate(() => window.__cellCenterToScreen(19, 10));
 await page.mouse.move(validScreen.x, validScreen.y);
 const validGhost = await page.evaluate(() => window.__ghostResolved);
-assertEqual(validGhost && validGhost.valid, true, "ghost reads valid at (2,6)");
+assertEqual(validGhost && validGhost.valid, true, "ghost reads valid at (19,10)");
 await page.mouse.click(validScreen.x, validScreen.y);
 const piecesAfterValidClick = await page.evaluate(() => window.__board.pieces().length);
 assertEqual(piecesAfterValidClick, 5, "exactly one new piece exists after committing the valid cell");
-const placedTypeId = await page.evaluate(() => window.__board.pieceAt(2, 6)?.typeId);
+const placedTypeId = await page.evaluate(() => window.__board.pieceAt(19, 10)?.typeId);
 assertEqual(placedTypeId, "house-a", "the committed piece is the real board's own house-a, at the real cell");
 
 // A click on THAT SAME now-placed piece removes it.
@@ -122,6 +134,26 @@ const ghostAfterEscape = await page.evaluate(() => window.__ghostResolved);
 assertEqual(ghostAfterEscape, null, "Escape drops the ghost");
 const piecesAfterEscape = await page.evaluate(() => window.__board.pieces().length);
 assertEqual(piecesAfterEscape, 4, "Escape never touches the board");
+
+// CAM-2 -- drag-to-look is a REAL mouse gesture, driven for real (not just
+// source-pattern-checked): a held-button drag with real pixel movement
+// changes yaw/pitch and must NOT place a piece, even though it starts and
+// ends inside the board's own clickable area.
+const stateBeforeDrag = await page.evaluate(() => window.__eyeCameraState);
+await page.mouse.move(validScreen.x, validScreen.y);
+await page.mouse.down();
+await page.mouse.move(validScreen.x + 120, validScreen.y - 60, { steps: 8 }); // real, gradual movement -- a teleport in one step would not exercise DRAG_THRESHOLD_PX's own per-move check the same way a real drag does
+await page.mouse.up();
+const stateAfterDrag = await page.evaluate(() => window.__eyeCameraState);
+assertEqual(stateAfterDrag.yaw !== stateBeforeDrag.yaw || stateAfterDrag.pitch !== stateBeforeDrag.pitch, true, "a real drag changed the live yaw/pitch");
+const piecesAfterDrag = await page.evaluate(() => window.__board.pieces().length);
+assertEqual(piecesAfterDrag, 4, "a drag-to-look did not place a piece, even though it started and ended over the board's own clickable area");
+
+// Wheel pans out -- also driven for real.
+const dollyBeforeWheel = stateAfterDrag.dolly;
+await page.mouse.wheel(0, 200);
+const stateAfterWheel = await page.evaluate(() => window.__eyeCameraState);
+assertEqual(stateAfterWheel.dolly > dollyBeforeWheel, true, "scrolling changed the live dolly, panning out");
 
 const renderInfo = await page.evaluate(() => ({ calls: window.__renderer.info.render.calls, triangles: window.__renderer.info.render.triangles }));
 console.log(`  draw calls: ${renderInfo.calls}, triangles: ${renderInfo.triangles}`);

@@ -924,30 +924,77 @@ async function main() {
   }
 
   if (BOARD_MODE) {
-    // CAM-1 (docs/briefs/BLD-2026-09-17.md §2) -- framed with real
-    // trigonometry off shadowBB's own real max height (FIX-1's storeys-
-    // driven heights, not a guess) -- the SAME formula this run's own
-    // dedicated height-range shot already proved (docs/look-proof-
-    // shots/34-height-range.png): half of the tallest real piece's own
-    // height must subtend less than half the vertical FOV at distance
-    // `dist`, camera level with that piece's own real vertical midpoint.
-    // Front-on (Z offset only), not the ORIGINAL diagonal -- the
-    // diagonal existed so "a straight-on approach stacks whichever piece
-    // is nearest the camera in front of everything behind it" would not
-    // happen; checked against this board's own real BOARD_DEMO_
-    // PLACEMENTS, no two pieces share overlapping X along this camera's
-    // own single viewing axis (house x:8-16, tower-base-6x6-a x:32-56,
-    // mega-tower-a x:60-92, street-straight x:8-24 at a much deeper z),
-    // so front-on does not reintroduce the problem the diagonal was for.
-    const boardCenterX = GROUND.anchor[0] + GROUND.footprint[0] / 2;
-    const boardCenterZ = GROUND.anchor[1] + GROUND.footprint[1] / 2;
-    const CAM_FOV_DEG = 45;
-    const targetY = Math.max(shadowBB.max.y / 2, 1);
-    const halfFovRad = (CAM_FOV_DEG / 2) * (Math.PI / 180);
-    const dist = (targetY * 1.15) / Math.tan(halfFovRad); // 15% margin so the tallest piece's own top/base are not touching the frame edge
-    camera.position.set(boardCenterX, targetY, boardCenterZ - dist);
-    camera.lookAt(boardCenterX, targetY, boardCenterZ);
+    // CAM-2 (docs/briefs/BLD-2026-09-18.md §3) -- CAM-1 (the trig-framed,
+    // whole-range-in-one-shot camera this block used to build) FAILED
+    // Mark's own eye: "two flat slabs against a gradient, no texture, no
+    // detail, technically correct and visually worse than 14 was."
+    // Mark's own design, built as described: "an expanded eye view...
+    // most of the time you're looking forward and you can only see
+    // what's in your eye line. As you spin around you can look up. And
+    // when you pan out, that's where you'll see the height." Eye level,
+    // forward by default, free to look up; height revealed by pulling
+    // BACK AND UP, never by fitting a tower into one frame -- a building
+    // that leaves the top of frame reads as TALLER than one that fits.
+    //
+    // The eye's own anchor is grounded in the real board, not a guessed
+    // coordinate: standing EYE_STAND_DISTANCE_M south of the TALLEST
+    // real piece's own near face (storeys read straight from the real
+    // catalogue, FIX-1/board-renderer.js -- never re-derived here),
+    // centred on that piece's own real width. A plausible street-width
+    // stand-off, not tuned to make any one shot work.
+    // "An expanded eye view -- not exactly what you would see but more."
+    // A pure human FOV (~50deg) reads as narrow/telephoto on screen;
+    // widened so looking up actually brings a tall building's own upper
+    // floors into frame without an extreme rotation, and updateProjection
+    // Matrix() called since this changes the camera's own construction-
+    // time 45deg (sized for CAM-1's now-superseded whole-range framing).
+    camera.fov = 65;
+    camera.updateProjectionMatrix();
+
+    const tallestPiece = boardResolved.reduce((a, b) => (b.storeys || 0) > (a.storeys || 0) ? b : a, boardResolved[0]);
+    const EYE_HEIGHT_M = 1.7; // a real, disclosed human-eye-height constant
+    const EYE_STAND_DISTANCE_M = 12; // metres back from the tallest piece's own near face -- a plausible street width
+    const eyeAnchor = new THREE.Vector3(
+      tallestPiece.anchor[0] + tallestPiece.footprint[0] / 2,
+      EYE_HEIGHT_M,
+      tallestPiece.anchor[1] - EYE_STAND_DISTANCE_M,
+    );
+
+    // yaw/pitch/dolly -- controllable by URL for the static single-shot
+    // pipeline (?board=1&eyeYaw=..&eyePitch=..&eyeDolly=..), and live via
+    // mouse-drag/scroll in INTERACTIVE_MODE (wired further down: the SAME
+    // function drives both, so a live drag and a URL-param render of the
+    // identical state cannot visually disagree). yaw=0 faces +Z (toward
+    // the tallest piece, since the eye stands south of it). Pitch clamped
+    // so "look up" cannot flip past straight overhead or dip below the
+    // horizon into the ground -- Mark's own words are "look up", not
+    // "look anywhere".
+    function eyeCameraFromState(yawDeg, pitchDeg, dolly) {
+      const yaw = (yawDeg * Math.PI) / 180;
+      const pitch = (Math.max(-10, Math.min(80, pitchDeg)) * Math.PI) / 180;
+      const forward = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      const dollyClamped = Math.max(0, dolly);
+      // "Pan out... that's where you'll see the height" -- pulling back
+      // ALSO lifts the camera, so height is revealed by the pull-back
+      // itself, not by a second, independent vertical control.
+      const position = eyeAnchor.clone()
+        .addScaledVector(forward, -dollyClamped)
+        .add(new THREE.Vector3(0, dollyClamped * 0.3, 0));
+      const lookAtPoint = position.clone().add(forward);
+      return { position, lookAtPoint };
+    }
+    window.__eyeCameraFromState = eyeCameraFromState;
+    window.__eyeAnchor = eyeAnchor;
+
+    const eyeParams = new URLSearchParams(window.location.search);
+    const initialYaw = Number(eyeParams.get("eyeYaw")) || 0;
+    const initialPitch = Number(eyeParams.get("eyePitch")) || 0;
+    const initialDolly = Number(eyeParams.get("eyeDolly")) || 0;
+    const { position: eyePos, lookAtPoint: eyeLookAt } = eyeCameraFromState(initialYaw, initialPitch, initialDolly);
+    camera.position.copy(eyePos);
+    camera.lookAt(eyeLookAt);
     window.__boardCameraMaxHeight = shadowBB.max.y;
+    window.__eyeCameraState = { yaw: initialYaw, pitch: initialPitch, dolly: initialDolly };
   }
 
   const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...boardKerbGeoms, ...preparedBoardPieces], false);
@@ -1163,7 +1210,49 @@ async function main() {
       window.__shadowMapTexture = shadowPass.depthTexture;
     }
 
+    // CAM-2 -- drag-to-look, wheel-to-pan-out. "As you spin around you can
+    // look up" is a real mouse gesture, not just a URL param -- but RC1's
+    // own left-click already means "place/commit", so a drag and a click
+    // must be told apart, not layered onto the same event. A held button
+    // with real pixel movement is a LOOK gesture (updates yaw/pitch,
+    // suppresses hover/placement for that gesture); a held button with no
+    // real movement, released, is still a CLICK (unchanged from RC1) --
+    // moved from pointerdown to pointerup so "was this a drag" is knowable
+    // before deciding.
+    const DRAG_THRESHOLD_PX = 4;
+    let dragState = null; // { startX, startY, startYaw, startPitch, moved }
+    function applyEyeCamera(yaw, pitch, dolly) {
+      // window.__eyeCameraFromState, not the bare identifier -- eyeCameraFromState
+      // is a `function` declared inside the EARLIER `if (BOARD_MODE) {...}`
+      // block above, which (this file is a module, always strict mode)
+      // block-scopes it to that block alone. This block is a SEPARATE
+      // `if (BOARD_MODE && INTERACTIVE_MODE) {...}`, so the bare name is
+      // out of scope here -- the window.__ escape hatch that block already
+      // set is what makes it reachable.
+      const { position, lookAtPoint } = window.__eyeCameraFromState(yaw, pitch, dolly);
+      camera.position.copy(position);
+      camera.lookAt(lookAtPoint);
+      window.__eyeCameraState = { yaw, pitch, dolly };
+    }
+
     renderer.domElement.addEventListener("pointermove", (e) => {
+      if (dragState) {
+        const dx = e.clientX - dragState.startX;
+        const dy = e.clientY - dragState.startY;
+        if (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;
+        if (dragState.moved) {
+          // Screen-pixel-to-degree sensitivity -- a real, disclosed
+          // constant (0.15 deg/px), not tuned per shot; dragging right
+          // looks right (yaw increases), dragging up looks up (pitch
+          // increases, matching eyeCameraFromState's own pitch sign).
+          const SENSITIVITY_DEG_PER_PX = 0.15;
+          const yaw = dragState.startYaw + dx * SENSITIVITY_DEG_PER_PX;
+          const pitch = dragState.startPitch - dy * SENSITIVITY_DEG_PER_PX;
+          applyEyeCamera(yaw, pitch, window.__eyeCameraState.dolly);
+          renderer.render(scene, camera);
+          return; // looking around, not hovering a placement cell
+        }
+      }
       const hit = worldXZFromClientXY(e.clientX, e.clientY);
       if (!hit) return;
       const cell = cellFromWorldXZ(hit.x, hit.z);
@@ -1172,6 +1261,17 @@ async function main() {
       updateGhostMesh();
       renderer.render(scene, camera);
     });
+
+    renderer.domElement.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      // "When you pan out, that's where you'll see the height." Scroll
+      // down/away = pan out (dolly increases); never negative (dolly is
+      // clamped at 0 inside eyeCameraFromState too, defence in depth).
+      const DOLLY_SENSITIVITY = 0.02;
+      const dolly = Math.max(0, window.__eyeCameraState.dolly + e.deltaY * DOLLY_SENSITIVITY);
+      applyEyeCamera(window.__eyeCameraState.yaw, window.__eyeCameraState.pitch, dolly);
+      renderer.render(scene, camera);
+    }, { passive: false });
 
     // Two clicks close enough together that the FIRST one's async rebuild
     // (a newly-committed piece needs a real glb fetch) is still in flight
@@ -1194,8 +1294,16 @@ async function main() {
       return rebuildChain;
     }
 
-    renderer.domElement.addEventListener("pointerdown", async (e) => {
-      if (e.button !== 0) return; // left click only -- right-click is contextmenu, below
+    renderer.domElement.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return; // left button only -- right-click is contextmenu, below
+      dragState = { startX: e.clientX, startY: e.clientY, startYaw: window.__eyeCameraState.yaw, startPitch: window.__eyeCameraState.pitch, moved: false };
+    });
+
+    renderer.domElement.addEventListener("pointerup", async (e) => {
+      if (e.button !== 0 || !dragState) return;
+      const wasDrag = dragState.moved;
+      dragState = null;
+      if (wasDrag) return; // a real look-drag, not a placement click
       const hit = worldXZFromClientXY(e.clientX, e.clientY);
       if (!hit) return;
       const cell = cellFromWorldXZ(hit.x, hit.z);
