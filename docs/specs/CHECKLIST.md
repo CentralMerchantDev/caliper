@@ -216,8 +216,23 @@ brief that raised them, a real gap this checklist itself should have
 caught before the brief had to. Correct the line (and PLAN.md) once these
 land somewhere permanent; until then this IS the record.
 
-[x] CAM-1 (BLD) The board and contact-sheet cameras, reframed for FIX-1's real range — BLD-2026-09-17.md §2
-    DONE 2026-09-17: the board camera (look-proof-scene.html) was positioned BEFORE the real board was resolved (before shadowBB, the real merged ground+pieces bounding box, existed) -- moved to AFTER, framed with real trigonometry off shadowBB.max.y (the SAME formula this run's own 34-height-range.png dedicated shot already proved): targetY=maxHeight/2, dist=(targetY*1.15)/tan(fov/2), camera level with the tallest real piece's own vertical midpoint. Far clipping plane raised 500->3000 (500 would clip a real ~376m tower before the distance calc even runs). A THIRD camera found and fixed, not named by CAM-1's own literal text but caught by its own "three cameras" framing: public/overview-scene.html's buildBoardMesh called fitToFootprint WITHOUT p.storeys at all -- entering an area from the overview would have shown the OLD capped ~27m heights while the board and contact sheet already showed the real range, two pages silently disagreeing about the same catalogue data. Fixed (storeys wired in, setBoardCamera made height-aware, same trig, far plane raised) and verified via the real interactive driver (node scripts/interact-overview-scene.mjs: RC2 GATE: pass, all assertions green).
+[!] CAM-1 (BLD) The board and contact-sheet cameras, reframed for FIX-1's real range — BLD-2026-09-17.md §2
+    FAILED, Mark's own judgement, docs/briefs/BLD-2026-09-18.md §2 (2026-09-18):
+    `36-board-cam1-real-range.png` reads as "two flat slabs against a
+    gradient, no texture, no detail" -- technically correct, visually worse
+    than `14-board.png` was. Downgraded from [x] to [!] here for exactly
+    that reason: the WORK below is sound (the trig is real, the third
+    camera bug was real and fixed, the measured gate held) but the GATE
+    ITSELF was wrong -- written as "both pieces fully in frame with the
+    relative height reading," which a shot can satisfy while looking like
+    nothing. Mark's own diagnosis: "one camera cannot serve a 4.5 m house
+    and a 376 m tower" -- superseded by CAM-2 (eye-level, forward-facing,
+    height revealed by pulling back/up rather than by fitting a tower into
+    one frame), not retried as a fourth reframe of the same single-shot
+    approach.
+    DONE 2026-09-17 (superseded 2026-09-18, kept for the record -- the
+    measurement/mutation/wiring work below is real and still stands, only
+    the visual verdict changed): the board camera (look-proof-scene.html) was positioned BEFORE the real board was resolved (before shadowBB, the real merged ground+pieces bounding box, existed) -- moved to AFTER, framed with real trigonometry off shadowBB.max.y (the SAME formula this run's own 34-height-range.png dedicated shot already proved): targetY=maxHeight/2, dist=(targetY*1.15)/tan(fov/2), camera level with the tallest real piece's own vertical midpoint. Far clipping plane raised 500->3000 (500 would clip a real ~376m tower before the distance calc even runs). A THIRD camera found and fixed, not named by CAM-1's own literal text but caught by its own "three cameras" framing: public/overview-scene.html's buildBoardMesh called fitToFootprint WITHOUT p.storeys at all -- entering an area from the overview would have shown the OLD capped ~27m heights while the board and contact sheet already showed the real range, two pages silently disagreeing about the same catalogue data. Fixed (storeys wired in, setBoardCamera made height-aware, same trig, far plane raised) and verified via the real interactive driver (node scripts/interact-overview-scene.mjs: RC2 GATE: pass, all assertions green).
     node test/run.mjs test/lookProofScene.test.ts test/overviewScene.test.ts test/catalogueContactSheet.test.ts test/boardRenderer.test.ts test/lookProofPieces.test.ts: 130/130 pass. npx tsc --noEmit clean. 4 mutations CAUGHT (one test tightened after its own mutation SURVIVED on a first pass -- shadowBB.max.y appeared elsewhere in the block even once the real dist calc was mutated away; fixed the test, not the mutation, per rule://build-loop).
     Gate evidence: docs/look-proof-shots/36-board-cam1-real-range.png -- camera clearly outside every footprint, both towers' full real height visible top to bottom with a real proportional difference. docs/look-proof-shots/23-area-entered.png (regenerated via the real interactive driver) -- same result from the overview's own board view. Said plainly, not hidden: the two smaller demo pieces (house-a, street-straight) are NOT legible at the distance the mega-tower's own real height requires -- the same honest tension this run's own height-range shot and the contact sheet already found, an 82:1 real ratio cannot show both ends legibly in one frame.
     Re-rendered the CAT-4 contact sheet fresh (docs/look-proof-shots/27-catalogue-contact-sheet.png) and judged it plainly, not assumed fine: NO, the grid does not fully read now -- mega-tower-a and tower-base-6x6-a still clip off the top of frame, unchanged from FIX-1's own already-disclosed finding. Not re-attempted here: FIX-1's own commit already tried and rejected two camera adjustments to this specific sheet (an elevated angled reframe still clipped the tower; a distance driven off real height shrank the other 37 pieces to unreadable) -- a real, so-far-unsolved tension between "grid legible" and "range legible" in one 38-piece frame, not silently re-tried a third time without a genuinely new approach.
@@ -313,6 +328,64 @@ land somewhere permanent; until then this IS the record.
     that reached `origin/main` before this real, evidenced version did.
     Same three items, same gates; this is the completed one, kept, per
     this merge's own "take both sides' ticks for their own ids.")
+
+[ ] CAM-2 (BLD) The eye-level camera Mark designed, built as described — BLD-2026-09-18.md §3
+    Mark, verbatim: "Like an eye view — an expanded eye view, not exactly
+    what you would see but more — that allows you to look up so you can
+    see the building above you, just like in real life. Most of the time
+    you're looking forward and you can only see what's in your eye line.
+    As you spin around you can look up. And when you pan out, that's
+    where you'll see the height."
+    Eye level, forward by default, free to look up. Height revealed by
+    pulling back and up, not by fitting a tower into one frame -- a
+    building that leaves the top of frame reads as TALLER than one that
+    fits; real city photographs almost never contain a whole tower.
+    This also closes the height-compression question Mark raised and then
+    answered himself with this camera: do not implement compression.
+    `storeys` is what `baseValue`/`unitQuality` read, so a tower rendered
+    shorter than its own real storeys would score would be the render-
+    and-rule-disagreeing defect BY DESIGN.
+    Gate: Mark's eye, per §5.5's own five lines (what changed / the
+    question / what is NOT being asked / this lane's own read first /
+    what follows either answer) -- CAM-1's own gate ("both pieces fully in
+    frame") is explicitly retired, not reused; a shot that merely fits
+    everything in frame is the exact failure this item exists to replace.
+[ ] CAM-3 (BLD) The haze on the board camera — measure before changing anything — BLD-2026-09-18.md §4
+    Mark on `30-board-scene-pass-fix3.png`: "the buildings are extremely
+    hazy, the details have been lost... the clarity has disappeared
+    because of something overlaid... a gauze." Three fog retunes (density,
+    colour) did not touch it -- that is the evidence the lever is
+    somewhere else.
+    A hypothesis from reading `30` directly, NOT a measurement yet: the
+    ground (bottom of frame) is sharp and grainy while the buildings are
+    milky/soft -- objects over-hazed, ground under-blended, the opposite
+    of real distance haze. Points at the fog's NEAR plane starting too
+    close (geometry ~20m away blended toward fog colour as though 200m
+    out), not density or colour.
+    Verify before changing anything -- GRD-1 already proved the value of
+    measuring first (UV retiling was a real, wrong lever). If the near
+    plane is not the cause, say so and report what is; that finding is
+    worth more than a fix aimed at the wrong lever.
+    Gate: a real measurement (the fog uniforms' own values against the
+    real geometry distances in frame, or an isolated before/after render
+    varying ONLY the suspected lever) stated plainly, then a shot showing
+    the fix if the hypothesis holds -- or a plain "not this" and the real
+    cause if it does not.
+[ ] CAM-4 (BLD) Undefined by the brief itself — BLD-2026-09-18.md §1
+    docs/briefs/BLD-2026-09-18.md names CAM-4 third in "THE ORDER" (§1)
+    but has no dedicated section describing it anywhere in the document --
+    checked directly, not assumed missing. Per rule://escape-clause (this
+    session's own process_at("the-brief-looks-wrong") lookup): not
+    load-bearing for CAM-2/CAM-3, which are fully specified and do not
+    depend on CAM-4's own content, so continuing past this gap is correct
+    rather than stopping the whole run over it. Recorded here rather than
+    guessed at -- inventing this item's own scope risks exactly the
+    "produce work that has to be thrown away" CAM-1's own gate mistake
+    already cost this run once this week. Addressed on its own turn, not
+    here: either a genuinely natural continuation of CAM-2/CAM-3's own
+    findings makes CAM-4 self-evident by the time this item is reached,
+    or it is queued as a real, named decision-queue entry rather than
+    filled in with invented scope.
 
 ---
 
