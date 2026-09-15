@@ -208,29 +208,32 @@ queued is a productive morning.
 Tick an item only when its gate is green AND the commit exists. Record the commit
 hash beside it. An unticked item with a commit is a lie in either direction.
 
-**The checklist has moved.** It now lives in
-[`docs/specs/COMPLETION-PLAN.md`](specs/COMPLETION-PLAN.md), which is the single
-canonical list of everything left to finish this project, and phase numbering is
-governed by [`docs/specs/BOARD-REBUILD-PLAN.md`](specs/BOARD-REBUILD-PLAN.md).
-Tick there, not here.
+**The checklist is [`docs/specs/CHECKLIST.md`](specs/CHECKLIST.md)**, the index
+into [`docs/specs/PLAN.md`](specs/PLAN.md), which governs. Tick there, not here.
+Call `process_next_item` rather than choosing by eye, passing the OTHER lanes'
+ids as `skip_ids`.
 
-**Renumbering note, 2026-09-09.** The checklist that used to sit here numbered
-two phases in a way `BOARD-REBUILD-PLAN.md` does not, and a lane reading both
-would have ticked the wrong box. Two sources of truth with nothing binding them,
-in the phase numbering itself. Corrected as follows:
+**Corrected 2026-09-15.** This section previously pointed at
+`docs/specs/COMPLETION-PLAN.md` and `docs/specs/BOARD-REBUILD-PLAN.md`, and
+carried B-phase state from the 2026-09-09 run. All of that is the pre-rebuild
+world: both files still exist on disk (checked directly, not assumed — neither
+is quarantined) but neither governs any more, and a lane reading this pointer
+would have been sent to a document nothing current cites. The research those
+plans carried survives intact in [`docs/specs/RESEARCH.md`](specs/RESEARCH.md)
+and is cited by section. Whether `COMPLETION-PLAN.md`/`BOARD-REBUILD-PLAN.md`
+themselves should be formally retired (matching `WORLD-RULES.md`'s own
+item-0 quarantine) is a separate, undecided question, not settled here.
 
-| Was, in this file | Now, canonically |
-|---|---|
-| B6 — quarantine the three files | **Not a phase.** Quarantining `city-render.js` is B3's exit condition; `city-plan.js`, `layout.js` and `board-adapter.js` are B4's. |
-| B7 — farmland, range, greenery | **B7 — the countryside**, now a real phase in `BOARD-REBUILD-PLAN.md` |
-| — | **B6 — the interface**, which existed in the plan and was missing here entirely |
+**`docs/BUILD-LOOP.md` is superseded by `rule://build-loop`**, served by the
+process server. Fetch it with `process_get_rule` rather than reading a copy — a
+copy drifts, which is `rule://reference-not-copy`'s whole subject. The same
+applies to the subagent contract above: retrieve it with the `subagent_contract`
+prompt and hand it over verbatim.
 
-State carried across as it stood at the end of the 2026-09-09 run: **B2.6** green
-at `27cca18`; **B2.7** planned, blind-reviewed and corrected at `95cf588` but not
-implemented; **B2.8** categorized 38 of 38 at `76e8d61` but not re-pinned.
-Off-checklist the same run: `docs/MODULE-MAP.md` generated fresh at `adf3362`,
-and the mutation evidence brought to 109 of 119 CAUGHT with 10 honestly named at
-`73f84b6`.
+**Pass `repo` and `lane` to `process_at` and `process_get_rule`.** Supplying both
+is what records the consultation, and the consultation record is what
+`process_check_consultation` audits. Omit them and a run that followed every rule
+reports as having consulted none.
 
 Running out of night is expected. Running out of work is not.
 
