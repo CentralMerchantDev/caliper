@@ -62,7 +62,10 @@ test("GATE (U4/B3): a successfully authored entry's baseValue carries the unique
   const registry = createCatalogueRegistry(BASE_CATALOGUE);
   const result = registry.addAuthoredEntry(goodAuthoredFields());
   assert.equal(result.ok, true, JSON.stringify(result.errors));
-  // Real formula: footprint area (1) x massing tiers (1) = 1, x the multiplier.
+  // Real formula (FIX-2, PLAN.md §3.2): footprint area (1) x storeysFor(entry).
+  // No proportion is collected for an authored piece, so storeysFor defaults
+  // to a square massing (proportion 1); with 1 tier and width 1 that is
+  // storeys=1, giving baseValue = 1 x 1 = 1, x the multiplier.
   assert.equal(result.entry.baseValue, 1 * UNIQUENESS_MULTIPLIER);
   // unitQuality for a 1-tier residential entry is 1/sqrt(1) = 1, UNCHANGED
   // by the multiplier -- B3 says baseValue only.

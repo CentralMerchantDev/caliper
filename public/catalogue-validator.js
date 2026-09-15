@@ -22,6 +22,7 @@
 //   9. unitQuality is present, a finite number, in (0, 1] (S4)
 //   10. provenance (author/verifiedBy/createdAt/sourceRef) is all-or-nothing (U4)
 //   11. glb, if present, is a non-empty string (BO7A)
+//   12. storeys is present and a positive integer (FIX-2, PLAN.md §3.2)
 //
 // Returns a list of errors rather than throwing, so a caller (a test, a
 // future LLM generation loop per A11) can report every problem in one pass
@@ -225,6 +226,15 @@ export function validateEntry(entry) {
     if (typeof entry.glb !== "string" || entry.glb.length === 0) {
       push("glb-is-string-or-null", `glb is ${JSON.stringify(entry.glb)}, not a non-empty string or null`);
     }
+  }
+
+  // Rule 12 — FIX-2 (PLAN.md §3.2): storeys is present and a positive
+  // integer, on every entry including road (storeysFor's own flat 1) --
+  // the same "no exemption" treatment rule 7 already gives baseValue.
+  // `massing.length` (2-4) was never a real storey count; this is the
+  // field that replaced it as baseValue/unitQuality's own height signal.
+  if (!entry || !isPositiveInteger(entry.storeys)) {
+    push("has-storeys", `storeys is ${JSON.stringify(entry && entry.storeys)}, not a positive integer -- FIX-2 requires one on every entry`);
   }
 
   return errors;

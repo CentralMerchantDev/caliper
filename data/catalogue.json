@@ -19,7 +19,8 @@
     "baseValue": 1,
     "adjacency": {},
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "shed-a",
@@ -43,7 +44,8 @@
       "residential": -5
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "substation-a",
@@ -65,7 +67,8 @@
     "baseValue": 1,
     "adjacency": {},
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "small-civic-a",
@@ -89,7 +92,8 @@
       "residential": 5
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "small-house-a",
@@ -109,13 +113,14 @@
     ],
     "joinSpec": "ground-decal",
     "proportion": 1,
-    "baseValue": 8,
+    "baseValue": 16,
     "adjacency": {
       "residential": -2,
       "commercial": 2
     },
-    "unitQuality": 0.7071067811865475,
-    "glb": "vendor/kits/kenney-modular-buildings/building-sample-house-a.glb"
+    "unitQuality": 0.5,
+    "glb": "vendor/kits/kenney-modular-buildings/building-sample-house-a.glb",
+    "storeys": 4
   },
   {
     "id": "corner-shop-a",
@@ -135,12 +140,13 @@
     ],
     "joinSpec": "ground-decal",
     "proportion": 1,
-    "baseValue": 8,
+    "baseValue": 16,
     "adjacency": {
       "residential": 5
     },
-    "unitQuality": 0.7071067811865475,
-    "glb": "vendor/kits/kenney-city-kit-commercial/building-a.glb"
+    "unitQuality": 0.5,
+    "glb": "vendor/kits/kenney-city-kit-commercial/building-a.glb",
+    "storeys": 4
   },
   {
     "id": "house-a",
@@ -160,13 +166,14 @@
     ],
     "joinSpec": "ground-decal",
     "proportion": 1.2,
-    "baseValue": 12,
+    "baseValue": 30,
     "adjacency": {
       "residential": -2,
       "commercial": 2
     },
-    "unitQuality": 0.7071067811865475,
-    "glb": "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb"
+    "unitQuality": 0.4472135954999579,
+    "glb": "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb",
+    "storeys": 5
   },
   {
     "id": "terrace-unit-a",
@@ -186,13 +193,14 @@
     ],
     "joinSpec": "ground-decal",
     "proportion": 1.2,
-    "baseValue": 12,
+    "baseValue": 30,
     "adjacency": {
       "residential": -2,
       "commercial": 2
     },
-    "unitQuality": 0.7071067811865475,
-    "glb": "vendor/kits/kenney-modular-buildings/building-sample-house-c.glb"
+    "unitQuality": 0.4472135954999579,
+    "glb": "vendor/kits/kenney-modular-buildings/building-sample-house-c.glb",
+    "storeys": 5
   },
   {
     "id": "small-retail-a",
@@ -212,12 +220,13 @@
     ],
     "joinSpec": "ground-decal",
     "proportion": 1,
-    "baseValue": 12,
+    "baseValue": 24,
     "adjacency": {
       "residential": 5
     },
-    "unitQuality": 0.7071067811865475,
-    "glb": null
+    "unitQuality": 0.5,
+    "glb": null,
+    "storeys": 4
   },
   {
     "id": "large-house-a",
@@ -238,13 +247,14 @@
     ],
     "joinSpec": "ground-decal",
     "proportion": 1.4,
-    "baseValue": 27,
+    "baseValue": 117,
     "adjacency": {
       "residential": -2,
       "commercial": 2
     },
-    "unitQuality": 0.5773502691896258,
-    "glb": null
+    "unitQuality": 0.2773500981126146,
+    "glb": null,
+    "storeys": 13
   },
   {
     "id": "small-commercial-a",
@@ -265,12 +275,13 @@
     ],
     "joinSpec": "ground-decal",
     "proportion": 1.2,
-    "baseValue": 27,
+    "baseValue": 99,
     "adjacency": {
       "residential": 5
     },
-    "unitQuality": 0.5773502691896258,
-    "glb": "vendor/kits/kenney-city-kit-commercial/building-f.glb"
+    "unitQuality": 0.30151134457776363,
+    "glb": "vendor/kits/kenney-city-kit-commercial/building-f.glb",
+    "storeys": 11
   },
   {
     "id": "apartment-block-a",
@@ -291,13 +302,14 @@
     ],
     "joinSpec": "ground-decal",
     "proportion": 1.8,
-    "baseValue": 48,
+    "baseValue": 352,
     "adjacency": {
       "residential": -2,
       "commercial": 2
     },
-    "unitQuality": 0.5773502691896258,
-    "glb": "vendor/kits/kenney-modular-buildings/building-sample-tower-b.glb"
+    "unitQuality": 0.21320071635561041,
+    "glb": "vendor/kits/kenney-modular-buildings/building-sample-tower-b.glb",
+    "storeys": 22
   },
   {
     "id": "mid-commercial-a",
@@ -318,12 +330,13 @@
     ],
     "joinSpec": "ground-decal",
     "proportion": 1.5,
-    "baseValue": 48,
+    "baseValue": 288,
     "adjacency": {
       "residential": 5
     },
-    "unitQuality": 0.5773502691896258,
-    "glb": "vendor/kits/kenney-city-kit-commercial/building-j.glb"
+    "unitQuality": 0.23570226039551587,
+    "glb": "vendor/kits/kenney-city-kit-commercial/building-j.glb",
+    "storeys": 18
   },
   {
     "id": "large-commercial-4x6-a",
@@ -344,12 +357,13 @@
     ],
     "joinSpec": "ground-decal",
     "proportion": 1.5,
-    "baseValue": 72,
+    "baseValue": 432,
     "adjacency": {
       "residential": 5
     },
-    "unitQuality": 0.5773502691896258,
-    "glb": null
+    "unitQuality": 0.23570226039551587,
+    "glb": null,
+    "storeys": 18
   },
   {
     "id": "small-warehouse-a",
@@ -368,12 +382,13 @@
     ],
     "joinSpec": "modelled-skirt",
     "proportion": null,
-    "baseValue": 24,
+    "baseValue": 96,
     "adjacency": {
       "residential": -5
     },
-    "unitQuality": 1,
-    "glb": null
+    "unitQuality": 0.5,
+    "glb": null,
+    "storeys": 4
   },
   {
     "id": "tower-base-6x6-a",
@@ -394,12 +409,13 @@
     ],
     "joinSpec": "modelled-skirt",
     "proportion": 3.5,
-    "baseValue": 108,
+    "baseValue": 2268,
     "adjacency": {
       "residential": 5
     },
-    "unitQuality": 0.5773502691896258,
-    "glb": "vendor/kits/kenney-modular-buildings/building-sample-tower-d.glb"
+    "unitQuality": 0.1259881576697424,
+    "glb": "vendor/kits/kenney-modular-buildings/building-sample-tower-d.glb",
+    "storeys": 63
   },
   {
     "id": "large-commercial-6x6-a",
@@ -420,12 +436,13 @@
     ],
     "joinSpec": "modelled-skirt",
     "proportion": 1.6,
-    "baseValue": 108,
+    "baseValue": 1044,
     "adjacency": {
       "residential": 5
     },
-    "unitQuality": 0.5773502691896258,
-    "glb": null
+    "unitQuality": 0.18569533817705186,
+    "glb": null,
+    "storeys": 29
   },
   {
     "id": "civic-6x6-a",
@@ -446,12 +463,13 @@
     ],
     "joinSpec": "modelled-skirt",
     "proportion": 1.3,
-    "baseValue": 108,
+    "baseValue": 828,
     "adjacency": {
       "residential": 5
     },
-    "unitQuality": 0.5773502691896258,
-    "glb": null
+    "unitQuality": 0.20851441405707477,
+    "glb": null,
+    "storeys": 23
   },
   {
     "id": "mega-tower-a",
@@ -472,12 +490,13 @@
     ],
     "joinSpec": "modelled-skirt",
     "proportion": 3.5,
-    "baseValue": 192,
+    "baseValue": 5376,
     "adjacency": {
       "residential": 5
     },
-    "unitQuality": 0.5773502691896258,
-    "glb": "vendor/kits/kenney-city-kit-commercial/building-skyscraper-b.glb"
+    "unitQuality": 0.1091089451179962,
+    "glb": "vendor/kits/kenney-city-kit-commercial/building-skyscraper-b.glb",
+    "storeys": 84
   },
   {
     "id": "large-warehouse-a",
@@ -496,12 +515,13 @@
     ],
     "joinSpec": "modelled-skirt",
     "proportion": null,
-    "baseValue": 64,
+    "baseValue": 512,
     "adjacency": {
       "residential": -5
     },
-    "unitQuality": 1,
-    "glb": null
+    "unitQuality": 0.35355339059327373,
+    "glb": null,
+    "storeys": 8
   },
   {
     "id": "stadium-a",
@@ -520,10 +540,11 @@
     ],
     "joinSpec": "modelled-skirt",
     "proportion": null,
-    "baseValue": 64,
+    "baseValue": 512,
     "adjacency": {},
-    "unitQuality": 1,
-    "glb": null
+    "unitQuality": 0.35355339059327373,
+    "glb": null,
+    "storeys": 8
   },
   {
     "id": "lane-straight",
@@ -549,7 +570,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "lane-curve",
@@ -575,7 +597,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "lane-t",
@@ -601,7 +624,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "lane-cross",
@@ -627,7 +651,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "lane-end",
@@ -653,7 +678,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "street-straight",
@@ -679,7 +705,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb"
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb",
+    "storeys": 1
   },
   {
     "id": "street-curve",
@@ -705,7 +732,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": "vendor/kits/kenney-city-kit-roads/road-bend.glb"
+    "glb": "vendor/kits/kenney-city-kit-roads/road-bend.glb",
+    "storeys": 1
   },
   {
     "id": "street-t",
@@ -731,7 +759,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "street-cross",
@@ -757,7 +786,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": "vendor/kits/kenney-city-kit-roads/road-crossing.glb"
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossing.glb",
+    "storeys": 1
   },
   {
     "id": "street-end",
@@ -783,7 +813,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "avenue-straight",
@@ -809,7 +840,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "avenue-curve",
@@ -835,7 +867,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "avenue-t",
@@ -861,7 +894,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "avenue-cross",
@@ -887,7 +921,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "avenue-end",
@@ -913,7 +948,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "highway-straight",
@@ -939,7 +975,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "highway-curve",
@@ -965,7 +1002,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "highway-t",
@@ -991,7 +1029,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "highway-cross",
@@ -1017,7 +1056,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "highway-end",
@@ -1043,7 +1083,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "lane-street-t",
@@ -1069,7 +1110,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "lane-street-cross",
@@ -1095,7 +1137,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "lane-street-transition",
@@ -1121,7 +1164,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "street-avenue-t",
@@ -1147,7 +1191,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "street-avenue-cross",
@@ -1173,7 +1218,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "street-avenue-transition",
@@ -1199,7 +1245,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "avenue-highway-t",
@@ -1225,7 +1272,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "avenue-highway-cross",
@@ -1251,7 +1299,8 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   },
   {
     "id": "avenue-highway-transition",
@@ -1277,6 +1326,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": null,
+    "storeys": 1
   }
 ]

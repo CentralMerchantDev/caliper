@@ -33,7 +33,12 @@ resolve a conflict by taking both sides' ticks for their own ids.
     Gate: a shot showing the real range, and the measured height of the tallest
     piece stated in metres. RED is any piece whose rendered height does not
     follow from its own data.
-[ ] FIX-2 (CLI) A real storey count, and point baseValue and unitQuality at it — PLAN.md 3.2
+[x] FIX-2 (CLI) A real storey count, and point baseValue and unitQuality at it — PLAN.md 3.2
+    Done: `storeysFor(entry)` added to scripts/migrate-catalogue-s2-fields.mjs,
+    baseValue/unitQuality point at it; `node scripts/migrate-catalogue-s2-fields.mjs`
+    re-run over data/catalogue.json. Gate held at real proportions, same cell:
+    house-s4 (storeys 4) beats condo-s4 (storeys 22) per unit ~2.35x; condo
+    beats house in total ~9.38x. Evidence: docs/GATE-LEDGER.jsonl item FIX-2.
     `massing` is a shape-segment array — `["base","top"]`, two to four entries —
     not storeys. But `baseValue = footprint area x massing tiers` and
     `unitQuality = 1/sqrt(tiers)`.
