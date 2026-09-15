@@ -212,6 +212,27 @@ assertEqual(piecesAfterReload, 2, "everything placed before the reload is STILL 
 const shipReloadDataUrl = await page.evaluate(() => document.querySelector("canvas").toDataURL("image/png"));
 fs.writeFileSync(path.join(OUT_DIR, "42-ship1-after-reload.png"), Buffer.from(shipReloadDataUrl.split(",")[1], "base64"));
 
+// CAM-4 -- drag-to-look and wheel-to-pan-out, driven for real, the SAME
+// two checks scripts/interact-look-proof.mjs already proved for CAM-2.
+const cellScreenForDrag = await page.evaluate(() => window.__cellCenterToScreen(6, 6));
+const stateBeforeDrag = await page.evaluate(() => window.__eyeCameraState());
+await page.mouse.move(cellScreenForDrag.x, cellScreenForDrag.y);
+await page.mouse.down();
+await page.mouse.move(cellScreenForDrag.x + 120, cellScreenForDrag.y - 60, { steps: 8 });
+await page.mouse.up();
+const stateAfterDrag = await page.evaluate(() => window.__eyeCameraState());
+assertEqual(stateAfterDrag.yaw !== stateBeforeDrag.yaw || stateAfterDrag.pitch !== stateBeforeDrag.pitch, true, "a real drag changed the live yaw/pitch");
+const piecesAfterDrag = await page.evaluate(() => window.__worldLayer.boardFor("hills").pieces().length);
+assertEqual(piecesAfterDrag, 2, "a drag-to-look did not place a piece, even though it started and ended over the board's own clickable area");
+
+const dollyBeforeWheel = stateAfterDrag.dolly;
+await page.mouse.wheel(0, 200);
+const stateAfterWheel = await page.evaluate(() => window.__eyeCameraState());
+assertEqual(stateAfterWheel.dolly > dollyBeforeWheel, true, "scrolling changed the live dolly, panning out");
+
+const camShotDataUrl = await page.evaluate(() => document.querySelector("canvas").toDataURL("image/png"));
+fs.writeFileSync(path.join(OUT_DIR, "48-cam4-overview-eye-panned.png"), Buffer.from(camShotDataUrl.split(",")[1], "base64"));
+
 // "At most one ACTIVE... must be structurally impossible for two" -- proven
 // directly against the real world layer object, bypassing this page's own
 // UI guard (which hides the overview pads in board mode) so the invariant

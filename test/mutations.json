@@ -1115,12 +1115,12 @@
       "expect": "GATE (CAM-1): the overview's own board view passes each piece's real storeys to fitToFootprint -- FIX-1's real height, not the old default-capped path this page silently kept"
     },
     {
-      "id": "cam1-overview-camera-must-stay-height-aware",
-      "guards": "CAM-1: overview-scene.html's own setBoardCamera stops taking a real maxHeight and reverts to the old groundWidth-only distance formula.",
+      "id": "cam4-overview-setboardcamera-must-take-resolved",
+      "guards": "CAM-1/CAM-4: overview-scene.html's own setBoardCamera stops taking the real resolved pieces. Was cam1-overview-camera-must-stay-height-aware (targeted the retired maxHeight-param signature) -- went INCONCLUSIVE (find matched 0 times) once CAM-4 replaced it with the real eye camera's own resolved-pieces signature; renamed and retargeted rather than left stale, same pattern GRD-1's own fix3-board-paving-radius retirement used.",
       "file": "public/overview-scene.html",
-      "find": "function setBoardCamera(maxHeight) {",
+      "find": "function setBoardCamera(resolved) {",
       "replace": "function setBoardCamera() {",
-      "expect": "GATE (CAM-1): setBoardCamera is framed off the real board mesh's own max height, not a fixed groundWidth-only distance -- the old formula assumed a compressed range, same defect look-proof-scene.html's own board camera had"
+      "expect": "GATE (CAM-4): setBoardCamera takes the real resolved pieces"
     },
     {
       "id": "rdo1-label-texture-must-stay-drawn",
@@ -1257,6 +1257,30 @@
       "find": "if (BOARD_MODE) material.uniforms.uFogFar.value = 500;",
       "replace": "",
       "expect": "GATE (CAM-3): BOARD_MODE's own uFogFar is widened past the shared 230"
+    },
+    {
+      "id": "cam4-fogfar-must-stay-widened",
+      "guards": "CAM-4: overview-scene.html's own widened uFogFar reverts to the shared 230 -- CAM-3's own measurement, taken directly against this page's real camera formula (downtown/mega-tower-a, ~502m), found this produces fogFactor=1.0, complete fog-out, worse than CAM-1's own original defect.",
+      "file": "public/overview-scene.html",
+      "find": "material.uniforms.uFogFar.value = 500;",
+      "replace": "",
+      "expect": "GATE (CAM-4): the fog fix is ported too"
+    },
+    {
+      "id": "cam4-tallest-piece-must-stay-real",
+      "guards": "CAM-4: the eye anchor stops finding the tallest piece from the real resolved list -- a hardcoded or arbitrary anchor could silently disagree with which piece is actually tallest once an area's own real pieces change.",
+      "file": "public/overview-scene.html",
+      "find": "const tallestPiece = resolved.length\n      ? resolved.reduce((a, b) => (b.storeys || 0) > (a.storeys || 0) ? b : a, resolved[0])\n      : null;",
+      "replace": "const tallestPiece = resolved[0] || null;",
+      "expect": "GATE (CAM-4): setBoardCamera takes the real resolved pieces"
+    },
+    {
+      "id": "cam4-drag-must-stay-gated-on-real-movement",
+      "guards": "CAM-4: the drag-vs-click threshold is removed -- every click would also register as a zero-distance 'drag', the same real regression class CAM-2's own equivalent mutation guards against on look-proof-scene.html.",
+      "file": "public/overview-scene.html",
+      "find": "if (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;",
+      "replace": "dragState.moved = true;",
+      "expect": "GATE (CAM-4): drag-to-look and wheel-to-pan-out are wired here too"
     }
   ]
 }

@@ -531,7 +531,7 @@ land somewhere permanent; until then this IS the record.
     now shows MORE contrast than when CAM-2 was first committed, a real,
     positive side effect of this fix on CAM-2's own evidence, not a
     silent regression).
-[ ] CAM-4 (BLD) Undefined by the brief itself — BLD-2026-09-18.md §1
+[x] CAM-4 (BLD) Undefined by the brief itself — BLD-2026-09-18.md §1
     docs/briefs/BLD-2026-09-18.md names CAM-4 third in "THE ORDER" (§1)
     but has no dedicated section describing it anywhere in the document --
     checked directly, not assumed missing. Per rule://escape-clause (this
@@ -546,6 +546,106 @@ land somewhere permanent; until then this IS the record.
     findings makes CAM-4 self-evident by the time this item is reached,
     or it is queued as a real, named decision-queue entry rather than
     filled in with invented scope.
+    SCOPED 2026-09-18, from CAM-2/CAM-3's own findings, not guessed:
+    CAM-1's own original text named THREE cameras assuming a compressed
+    height range -- "the board, the contact sheet, and the overview."
+    CAM-2 rebuilt only the first (look-proof-scene.html's own board
+    camera); overview-scene.html's own board view (SHIP-1's own "third
+    camera", already found and fixed once for storeys but never given
+    CAM-2's real eye-level treatment) still uses CAM-1's own retired far
+    trig framing. CAM-3's own measurement, taken directly against that
+    SAME camera while investigating the fog: for downtown (mega-tower-a,
+    real storeys=84, ~376m), it computes a camera distance of ~502m from
+    the board, and with the SAME shared uFogFar=230 CAM-3 already found
+    wrong for BOARD_MODE, that produces fogFactor=1.0 -- COMPLETE fog-
+    out, confirmed by rendering: the tower appears as a flat, detail-
+    less tan silhouette against a mismatched dark-navy background (the
+    overview page's own scene.background does not match uFogColor the
+    way look-proof-scene.html's own sky gradient does), not merely
+    hazy. This is WORSE than CAM-1's own original "flat slabs" defect,
+    on a page CAM-2/CAM-3 never touched. CAM-4 is therefore: apply
+    CAM-2's own eye-level camera and CAM-3's own widened uFogFar to
+    overview-scene.html's board view too -- not new scope, the third of
+    CAM-1's own three cameras, finished.
+    Gate: same as CAM-2's own (Mark's eye, §5.5's five lines) -- a shot
+    from the overview's own board view showing real detail/contrast on
+    a real tall piece, not the flat silhouette this scoping note's own
+    measurement found live today.
+    DONE 2026-09-18: public/overview-scene.html's own setBoardCamera now
+    takes the real resolved pieces (buildBoardMesh stashes them on
+    mesh.userData.resolved, board-renderer.js's own resolveBoardPieces --
+    never a guessed height) and builds the SAME eye camera CAM-2 built on
+    look-proof-scene.html (eyeCameraFromState, ported -- ported rather
+    than shared via a module, since these two files have none between
+    them and this item's own budget did not extend to building one).
+    Widened FOV (45->65) on entering a board, reset back to 45 on
+    returning to overview (a real gap CAM-2 did not have to handle,
+    since look-proof-scene.html never leaves BOARD_MODE mid-session).
+    An area with no real pieces yet (an empty plot) stands at the
+    board's own southern edge facing the plot -- the only sensible
+    default with no real piece to anchor on. CAM-3's own measured fix
+    ported too: material.uniforms.uFogFar.value = 500, scoped so the
+    overview's own separate pad/ground MeshLambertMaterial is never
+    touched. Drag-to-look and wheel-to-pan-out wired here too, the SAME
+    click-vs-drag gating (pointerdown starts a drag-state, pointerup
+    decides click-vs-drag) CAM-2 already proved.
+    FOUND BY RUNNING IT, NOT ASSUMED: the interactive driver's own
+    existing test cell (6,6) on the "hills" area kept working unchanged
+    (hills' own board is small, house-a is the only piece, the new eye
+    anchor sits close enough that (6,6) stays on screen) -- unlike CAM-2's
+    own first attempt on look-proof-scene.html, no cell needed replacing
+    here, checked directly rather than assumed safe by analogy.
+    TESTS: test/overviewScene.test.ts -- CAM-1's own exact-formula test
+    retired (its own removal is now itself a gate, matching CAM-2's own
+    pattern). 8 new GATE (CAM-4) tests: setBoardCamera takes real
+    resolved pieces and finds the tallest one the same way CAM-2 does;
+    buildBoardMesh exposes resolved on the mesh; the FOV widens and
+    resets; the fog fix is ported; drag-vs-click gating (including the
+    exact conditional line, not just the threshold constant's own
+    existence -- found necessary by mutation-testing it, below) and the
+    wheel listener. 32/32 pass. npx tsc --noEmit clean.
+    MUTATED: node scripts/_mutcheck.mjs -- cam4-overview-setboardcamera-
+    must-take-resolved (renamed from cam1-overview-camera-must-stay-
+    height-aware, which went INCONCLUSIVE once CAM-4 replaced its own
+    retired maxHeight-param signature; retired and retargeted, same
+    pattern GRD-1's own fix3-board-paving-radius retirement used),
+    cam4-fogfar-must-stay-widened, cam4-tallest-piece-must-stay-real all
+    CAUGHT cleanly. cam4-drag-must-stay-gated-on-real-movement SURVIVED
+    on a first pass -- the test checked DRAG_THRESHOLD_PX's own
+    existence and the wheel listener but never the actual conditional
+    that uses the threshold, so mutating `dragState.moved = true`
+    unconditional left every checked pattern still present. Fixed the
+    TEST (per rule://build-loop: a mutation SURVIVED means the test is
+    wrong, not the code), re-ran: CAUGHT. All CAUGHT against a GREEN
+    baseline, source restored byte-identical.
+    node scripts/interact-overview-scene.mjs, extended with the SAME
+    drag/wheel checks scripts/interact-look-proof.mjs already proved for
+    CAM-2: a real drag changed live yaw/pitch and did not place a piece;
+    a real wheel event increased live dolly. "RC2/SHIP-1 GATE: pass".
+    MEASURED, RENDERED, LOOKED AT -- §5.5's own five lines:
+    docs/look-proof-shots/49-cam4-overview-downtown-default.png (the
+    downtown area, mega-tower-a, default eye view). WHAT CHANGED: this
+    page's own board camera replaced entirely -- CAM-1's far framing,
+    then CAM-4's real eye level + CAM-3's fog fix. THE QUESTION: does
+    the same real tall piece that rendered as a flat, detail-less tan
+    silhouette (this item's own scoping measurement, pre-fix) now show
+    real facade detail and contrast? WHAT IS NOT BEING ASKED: whether
+    the ground reads well as a city plot (GRD-1's own item, scoped to
+    look-proof-scene.html only -- this page's own ground is still the
+    plain, un-paved earth texture, a real, disclosed, separate gap) or
+    whether SHIP-1's own author/reload flow still works (already
+    reverified above, unaffected). MY OWN READ: yes, clearly -- real
+    deep-blue facade colour, real window/trim detail, real ground grain
+    at the base, nothing like the flat tan silhouette this item's own
+    pre-fix measurement found. WHAT FOLLOWS: if yes, CAM-4 is DONE, all
+    three of CAM-1's own named cameras now share the real eye-level
+    design; if no, say plainly what still reads wrong.
+    docs/look-proof-shots/48-cam4-overview-eye-panned.png (hills, mid-
+    drag-and-wheel-sequence, produced by the interactive driver itself,
+    not a posed shot) -- shows RDO-1's own live readout ("current -0.43"
+    / "ifPlaced -0.43") and the ghost marker still rendering correctly
+    through a real drag/pan, real corroborating evidence CAM-4's own
+    changes integrate cleanly with SHIP-1's already-proven systems.
 
 ---
 

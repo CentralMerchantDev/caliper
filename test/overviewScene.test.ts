@@ -83,9 +83,41 @@ test("GATE (CAM-1): the overview's own board view passes each piece's real store
   assert.match(SCENE_SRC, /fitToFootprint\(geom, p\.footprint, p\.anchor, p\.storeys\)/, "buildBoardMesh's own fitToFootprint call does not pass p.storeys -- entering an area from the overview would still show the old, capped ~27m heights while look-proof-scene.html's own board shows FIX-1's real ~376m range, two pages silently disagreeing about the same catalogue data");
 });
 
-test("GATE (CAM-1): setBoardCamera is framed off the real board mesh's own max height, not a fixed groundWidth-only distance -- the old formula assumed a compressed range, same defect look-proof-scene.html's own board camera had", () => {
-  assert.match(SCENE_SRC, /function setBoardCamera\(maxHeight\)/, "setBoardCamera does not take a real maxHeight argument");
+test("GATE (CAM-1, retired): CAM-1's own trig-framed formula is gone from this page too -- superseded by CAM-4 below (scoped from CAM-2/CAM-3's own findings: this exact function, measured, put a real tall piece at fogFactor=1.0, a complete fog-out worse than CAM-1's own original defect)", () => {
   assert.doesNotMatch(SCENE_SRC, /const dist = Math\.max\(w, d\);/, "setBoardCamera's own distance is still driven only by the board's ground width/depth, never the real height of what is actually placed on it");
+  assert.doesNotMatch(SCENE_SRC, /const heightDist = \(targetY \* 1\.15\) \/ Math\.tan\(halfFovRad\);/, "CAM-1's own retired trig-based heightDist formula is still present");
+});
+
+// -------------------------------------------------- CAM-4: the eye-level camera, ported
+test("GATE (CAM-4): setBoardCamera takes the real resolved pieces (anchor/footprint/storeys), not a guessed max height, and finds the tallest one the same way CAM-2's own boardResolved.reduce does on look-proof-scene.html", () => {
+  assert.match(SCENE_SRC, /function setBoardCamera\(resolved\)/, "setBoardCamera does not take the real resolved pieces");
+  assert.match(SCENE_SRC, /const tallestPiece = resolved\.length\s*\n\s*\? resolved\.reduce\(\(a, b\) => \(b\.storeys \|\| 0\) > \(a\.storeys \|\| 0\) \? b : a, resolved\[0\]\)\s*\n\s*: null;/, "the tallest real piece is not found from the real resolved list");
+});
+
+test("GATE (CAM-4): buildBoardMesh exposes its own real resolved pieces on the mesh itself, so setBoardCamera never has to re-derive or guess them", () => {
+  assert.match(SCENE_SRC, /mesh\.userData\.resolved = resolved;/, "buildBoardMesh does not expose the real resolved pieces on the mesh");
+  assert.match(SCENE_SRC, /setBoardCamera\(mesh\.userData\.resolved\);/, "enterBoardView does not pass the real resolved pieces to setBoardCamera");
+});
+
+test("GATE (CAM-4): the FOV widens for the eye camera entering a board, and resets back on returning to the overview -- the overview's own top-down shot must not stay eye-camera-wide after leaving a board", () => {
+  assert.match(SCENE_SRC, /camera\.fov = 65;\s*\n\s*camera\.updateProjectionMatrix\(\);/, "setBoardCamera does not widen the FOV and update the projection matrix");
+  assert.match(SCENE_SRC, /camera\.fov = 45;\s*\n\s*camera\.updateProjectionMatrix\(\);/, "setOverviewCamera does not reset the FOV back and update the projection matrix");
+});
+
+test("GATE (CAM-4): the fog fix is ported too -- this page's own board view uses the SAME widened uFogFar CAM-3 measured for look-proof-scene.html, scoped so the overview's own separate pad/ground material is never touched", () => {
+  assert.match(SCENE_SRC, /material\.uniforms\.uFogFar\.value = 500;/, "the board view's own uFogFar is not widened past the shared 230");
+});
+
+test("GATE (CAM-4): drag-to-look and wheel-to-pan-out are wired here too, the SAME click-vs-drag gating CAM-2 already proved on look-proof-scene.html", () => {
+  assert.match(SCENE_SRC, /const DRAG_THRESHOLD_PX = 4;/, "no real drag-vs-click threshold exists");
+  assert.match(SCENE_SRC, /if \(Math\.abs\(dx\) > DRAG_THRESHOLD_PX \|\| Math\.abs\(dy\) > DRAG_THRESHOLD_PX\) dragState\.moved = true;/, "pointermove does not detect real drag movement past the threshold -- every held-button move, even zero-distance, would register as a drag");
+  assert.match(SCENE_SRC, /if \(wasDrag\) return;/, "pointerup does not skip placement for a real look-drag");
+  assert.match(SCENE_SRC, /renderer\.domElement\.addEventListener\("wheel", \(e\) => \{/, "no wheel listener exists for dolly");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning eyeCameraFromState must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// function eyeCameraFromState(yawDeg, pitchDeg, dolly) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /function eyeCameraFromState\(yawDeg, pitchDeg, dolly\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });
 
 // =============================================================================

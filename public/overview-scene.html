@@ -90,7 +90,7 @@
      declared commit must actually be HEAD or a real ancestor of it, checked
      with a real `git merge-base --is-ancestor`, not just string equality
      against a second generated file that could ALSO be stale. -->
-<div id="deployManifest">v<span id="deploy-version">0.1.0</span> · <span id="deploy-commit">e47feae</span> · <span id="deploy-build-time">2026-09-15 06:51 UTC</span></div>
+<div id="deployManifest">v<span id="deploy-version">0.1.0</span> · <span id="deploy-commit">b228a84</span> · <span id="deploy-build-time">2026-09-15 07:00 UTC</span></div>
 <script type="importmap">
 {"imports":{"three":"./vendor/three/three.module.min.js"}}
 </script>
@@ -273,28 +273,62 @@ async function main() {
   // setBoardCamera's own distance calculation gets a chance to frame it.
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 3000);
   function setOverviewCamera() {
+    // CAM-4 -- setBoardCamera widens FOV to 65 ("an expanded eye view");
+    // reset back to the construction-time 45 here, or the overview's own
+    // wide top-down shot would stay eye-camera-wide after leaving a board.
+    camera.fov = 45;
+    camera.updateProjectionMatrix();
     camera.position.set(-30, 180, -30);
     camera.lookAt(50, 0, 50);
   }
-  // CAM-1 (docs/briefs/BLD-2026-09-17.md §2) -- `maxHeight` is the real
-  // board mesh's own real max Y (FIX-1's storeys-driven height, read from
-  // the actual geometry just built, never a guess). The old formula
-  // (distance from groundWidth/Depth only) assumed a compressed ~27m
-  // range -- the SAME defect look-proof-scene.html's own board camera
-  // had (35-board-fix1-real-height.png). Same trig this run's own
-  // dedicated height-range shot and look-proof-scene.html's own board
-  // camera already use: half of maxHeight must subtend less than half
-  // the vertical FOV at `dist`, camera level with that real midpoint.
-  function setBoardCamera(maxHeight) {
+  // CAM-4 (docs/briefs/BLD-2026-09-18.md, scoped from CAM-2/CAM-3's own
+  // findings) -- CAM-1's own trig-framed formula (below, retired) FAILED
+  // Mark's eye on look-proof-scene.html's own board camera (36-board-
+  // cam1-real-range.png, "two flat slabs against a gradient"); this page's
+  // own copy of the SAME formula was never separately judged, but CAM-3's
+  // own measurement (taken directly against this exact function, for
+  // downtown/mega-tower-a) found it WORSE: at ~502m camera distance with
+  // the shared uFogFar=230, fogFactor is 1.0 -- complete fog-out,
+  // confirmed by rendering (a flat, detail-less silhouette). Replaced
+  // with CAM-2's own real eye-level design (see that item's own comment
+  // in look-proof-scene.html for Mark's own words) -- the SAME
+  // eyeCameraFromState shape, ported here since this file has no shared
+  // module with that one to import it from.
+  const EYE_HEIGHT_M = 1.7;
+  const EYE_STAND_DISTANCE_M = 12;
+  let eyeAnchor = new THREE.Vector3(0, EYE_HEIGHT_M, 0);
+  function eyeCameraFromState(yawDeg, pitchDeg, dolly) {
+    const yaw = (yawDeg * Math.PI) / 180;
+    const pitch = (Math.max(-10, Math.min(80, pitchDeg)) * Math.PI) / 180;
+    const forward = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+    const dollyClamped = Math.max(0, dolly);
+    const position = eyeAnchor.clone()
+      .addScaledVector(forward, -dollyClamped)
+      .add(new THREE.Vector3(0, dollyClamped * 0.3, 0));
+    const lookAtPoint = position.clone().add(forward);
+    return { position, lookAtPoint };
+  }
+  window.__eyeCameraFromState = eyeCameraFromState;
+  let eyeCameraState = { yaw: 0, pitch: 0, dolly: 0 };
+  window.__eyeCameraState = () => eyeCameraState;
+  // `resolved` is THIS area's own real resolved pieces (board-renderer.js's
+  // resolveBoardPieces, real anchor/footprint/storeys) -- an empty area
+  // (no pieces yet) stands at the board's own southern edge facing the
+  // plot, the only sensible default with no real piece to anchor on.
+  function setBoardCamera(resolved) {
     const w = AREA_BOARD_WIDTH * MODULE_SIZE_M, d = AREA_BOARD_HEIGHT * MODULE_SIZE_M;
-    const groundDist = Math.max(w, d);
-    const FOV_DEG = 45;
-    const targetY = Math.max(maxHeight / 2, 1);
-    const halfFovRad = (FOV_DEG / 2) * (Math.PI / 180);
-    const heightDist = (targetY * 1.15) / Math.tan(halfFovRad);
-    const dist = Math.max(groundDist, heightDist);
-    camera.position.set(w / 2, targetY, d / 2 - dist);
-    camera.lookAt(w / 2, targetY, d / 2);
+    const tallestPiece = resolved.length
+      ? resolved.reduce((a, b) => (b.storeys || 0) > (a.storeys || 0) ? b : a, resolved[0])
+      : null;
+    camera.fov = 65;
+    camera.updateProjectionMatrix();
+    eyeAnchor = tallestPiece
+      ? new THREE.Vector3(tallestPiece.anchor[0] + tallestPiece.footprint[0] / 2, EYE_HEIGHT_M, tallestPiece.anchor[1] - EYE_STAND_DISTANCE_M)
+      : new THREE.Vector3(w / 2, EYE_HEIGHT_M, -EYE_STAND_DISTANCE_M);
+    eyeCameraState = { yaw: 0, pitch: 0, dolly: 0 };
+    const { position, lookAtPoint } = eyeCameraFromState(0, 0, 0);
+    camera.position.copy(position);
+    camera.lookAt(lookAtPoint);
   }
   setOverviewCamera();
 
@@ -308,6 +342,16 @@ async function main() {
   // edit to the shared material file RB1's own brief said not to rewrite)
   // keeps the shader from sampling it.
   material.uniforms.uCastShadows.value = false;
+  // CAM-4 (scoped from CAM-3's own measurement) -- this page's own board
+  // view uses the SAME shared uFogFar=230 CAM-3 already found too close
+  // for FIX-1's real height range on look-proof-scene.html's board;
+  // CAM-3's own measurement was taken directly against THIS page's real
+  // camera formula (downtown/mega-tower-a, ~502m, fogFactor=1.0 --
+  // complete fog-out, confirmed by rendering). The overview mode's own
+  // pads/ground use a separate MeshLambertMaterial, never this one, so
+  // widening this unconditionally only ever affects board-mode content --
+  // the same scoping CAM-3's own BOARD_MODE-only override uses.
+  material.uniforms.uFogFar.value = 500;
 
   const catalogueArr = await fetch("data/catalogue.json").then((r) => r.json());
   // SHIP-1 -- shippedCatalogueById is the real, unmutated shipped catalogue
@@ -470,7 +514,17 @@ async function main() {
       GROUND.layer,
     );
     const merged = mergeGeometries([groundGeomLocal, ...preparedPieces], false);
-    return new THREE.Mesh(merged, material);
+    const mesh = new THREE.Mesh(merged, material);
+    // CAM-4 (docs/briefs/BLD-2026-09-18.md, scoped from CAM-2/CAM-3's own
+    // findings) -- the eye camera below needs each real piece's own
+    // resolved anchor/footprint/storeys (the same data CAM-2's own
+    // eyeCameraFromState reads from look-proof-scene.html's boardResolved)
+    // to find the tallest real piece. Stashed on the mesh itself rather
+    // than changing this function's own return shape -- both call sites
+    // (enterBoardView, the interactive rebuild below) already just take
+    // the mesh.
+    mesh.userData.resolved = resolved;
+    return mesh;
   }
 
   async function enterBoardView(areaId) {
@@ -481,9 +535,9 @@ async function main() {
     scene.add(boardMesh);
     overviewGroup.visible = false;
     groundMesh.visible = false;
-    // CAM-1 -- the real mesh's own bounding box, not a guessed height.
-    mesh.geometry.computeBoundingBox();
-    setBoardCamera(mesh.geometry.boundingBox.max.y);
+    // CAM-4 -- the real mesh's own resolved pieces (real anchor/footprint/
+    // storeys), not a guessed height.
+    setBoardCamera(mesh.userData.resolved);
     mode = "board";
     // SHIP-1 -- a fresh session over THIS area's own real board; place/
     // author/reload are all only reachable in board mode (the author panel
@@ -635,8 +689,33 @@ async function main() {
     return rebuildChain;
   }
 
+  // CAM-4 -- drag-to-look, wheel-to-pan-out, the SAME gesture look-proof-
+  // scene.html's own CAM-2 block already proved (see that block's own
+  // comment for the full reasoning): a held button with real pixel
+  // movement looks around and suppresses placement for that gesture; a
+  // held button with no real movement, released, is still a click.
+  const DRAG_THRESHOLD_PX = 4;
+  let dragState = null;
+  function applyEyeCamera(yaw, pitch, dolly) {
+    const { position, lookAtPoint } = eyeCameraFromState(yaw, pitch, dolly);
+    camera.position.copy(position);
+    camera.lookAt(lookAtPoint);
+    eyeCameraState = { yaw, pitch, dolly };
+  }
+
   renderer.domElement.addEventListener("pointermove", (e) => {
     if (mode !== "board") return;
+    if (dragState) {
+      const dx = e.clientX - dragState.startX;
+      const dy = e.clientY - dragState.startY;
+      if (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;
+      if (dragState.moved) {
+        const SENSITIVITY_DEG_PER_PX = 0.15;
+        applyEyeCamera(dragState.startYaw + dx * SENSITIVITY_DEG_PER_PX, dragState.startPitch - dy * SENSITIVITY_DEG_PER_PX, eyeCameraState.dolly);
+        renderer.render(scene, camera);
+        return;
+      }
+    }
     const hit = worldXZFromClientXY(e.clientX, e.clientY);
     if (!hit) return;
     const cell = cellFromWorldXZ(hit.x, hit.z);
@@ -646,8 +725,24 @@ async function main() {
     renderer.render(scene, camera);
   });
 
-  renderer.domElement.addEventListener("pointerdown", async (e) => {
+  renderer.domElement.addEventListener("wheel", (e) => {
+    if (mode !== "board") return;
+    e.preventDefault();
+    const DOLLY_SENSITIVITY = 0.02;
+    applyEyeCamera(eyeCameraState.yaw, eyeCameraState.pitch, Math.max(0, eyeCameraState.dolly + e.deltaY * DOLLY_SENSITIVITY));
+    renderer.render(scene, camera);
+  }, { passive: false });
+
+  renderer.domElement.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || mode !== "board") return;
+    dragState = { startX: e.clientX, startY: e.clientY, startYaw: eyeCameraState.yaw, startPitch: eyeCameraState.pitch, moved: false };
+  });
+
+  renderer.domElement.addEventListener("pointerup", async (e) => {
+    if (e.button !== 0 || mode !== "board" || !dragState) return;
+    const wasDrag = dragState.moved;
+    dragState = null;
+    if (wasDrag) return;
     const hit = worldXZFromClientXY(e.clientX, e.clientY);
     if (!hit) return;
     const cell = cellFromWorldXZ(hit.x, hit.z);
