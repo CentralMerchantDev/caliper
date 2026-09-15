@@ -31,8 +31,8 @@ const MANIFEST = {
 };
 
 const CATALOGUE = {
-  "house-a": { footprint: [2, 3], terrainMask: ["land"], glb: "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb" },
-  "tower-base-6x6-a": { footprint: [6, 6], terrainMask: ["land"], glb: "vendor/kits/kenney-modular-buildings/building-sample-tower-d.glb" },
+  "house-a": { footprint: [2, 3], terrainMask: ["land"], glb: "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb", storeys: 5 },
+  "tower-base-6x6-a": { footprint: [6, 6], terrainMask: ["land"], glb: "vendor/kits/kenney-modular-buildings/building-sample-tower-d.glb", storeys: 63 },
   "street-straight": { footprint: [4, 4], terrainMask: ["land"], glb: "vendor/kits/kenney-city-kit-roads/road-straight.glb" },
   "mega-tower-a": { footprint: [8, 8], terrainMask: ["land"], glb: "vendor/kits/kenney-city-kit-commercial/building-skyscraper-b.glb" },
   "no-mesh-a": { footprint: [1, 1], terrainMask: ["land"], glb: null }, // most of the 50, per BO7A
@@ -91,6 +91,7 @@ test("resolveBoardPieces: a real placed piece resolves to a real glb, layer, foo
     layer: 0,
     footprint: [2 * MODULE_SIZE_M, 3 * MODULE_SIZE_M],
     anchor: [2 * MODULE_SIZE_M, 2 * MODULE_SIZE_M],
+    storeys: 5,
     rotation: 0,
   });
 });
@@ -120,6 +121,24 @@ test("resolveBoardPieces: a rotated piece's own footprint is the SWAPPED one, ma
   const { resolved } = resolveBoardPieces(board, CATALOGUE, MANIFEST);
   assert.deepEqual(resolved[0].footprint, [3 * MODULE_SIZE_M, 2 * MODULE_SIZE_M]); // [2,3] swapped at 90
   assert.equal(resolved[0].rotation, 90);
+});
+
+test("GATE (FIX-1): resolveBoardPieces reads storeys directly from the real catalogue entry -- never invented, never computed here", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  board.place("house-a", { x: 2, y: 2 }, 0);
+  board.place("tower-base-6x6-a", { x: 8, y: 2 }, 0);
+  const { resolved } = resolveBoardPieces(board, CATALOGUE, MANIFEST);
+  const house = resolved.find((p) => p.typeId === "house-a");
+  const tower = resolved.find((p) => p.typeId === "tower-base-6x6-a");
+  assert.equal(house.storeys, 5);
+  assert.equal(tower.storeys, 63);
+});
+
+test("resolveBoardPieces: an entry with no storeys field (pre-FIX-2 shape, or a fixture that never set one) resolves storeys to undefined, not a guessed number", () => {
+  const board = createAreaBoard({ width: 20, height: 20, catalogue: CATALOGUE });
+  board.place("mega-tower-a", { x: 0, y: 0 }, 0); // this fixture's own mega-tower-a carries no storeys
+  const { resolved } = resolveBoardPieces(board, CATALOGUE, MANIFEST);
+  assert.equal(resolved[0].storeys, undefined);
 });
 
 test("a piece with no matching mesh (glb: null, most of the 50 per BO7A) is SKIPPED, not silently dropped or substituted", () => {

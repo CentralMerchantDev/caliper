@@ -138,7 +138,11 @@ async function main() {
   const pieceGeoms = await Promise.all(layouts.map((l) => loadPieceGeometry(l.entry.glb)));
   const preparedPieces = pieceGeoms.map((geom, i) => {
     const l = layouts[i];
-    fitToFootprint(geom, l.footprintM, l.anchor);
+    // FIX-1 (docs/briefs/BLD-2026-09-16.md) -- l.entry.storeys is real
+    // catalogue data (FIX-2), read directly, never guessed. This sheet is
+    // catalogue-driven throughout (unlike HERO_MODE), so it gets the same
+    // real height board pieces now do.
+    fitToFootprint(geom, l.footprintM, l.anchor, l.entry.storeys);
     const layer = layerForGlb(l.entry.glb, manifest);
     return addLayerAttribute(stripToPositionNormalUv(geom), layer ?? 0);
   });
@@ -156,6 +160,20 @@ async function main() {
 
   const centerX = groundW / 2, centerZ = groundD / 2;
   const dist = Math.max(groundW, groundD) * 0.9;
+  // FIX-1 -- storeys-driven height (real data, no longer capped at 6x) can
+  // now dwarf the grid's own footprint (mega-tower-a alone is taller than
+  // this whole 38-piece grid is wide). TRIED AND REJECTED, found by
+  // rendering: pushing `dist` back far enough to fit the tallest tower in
+  // frame shrank every other piece to unreadable, and still did not fully
+  // clear the frame (perspective + a wide spread of piece DEPTHS means no
+  // single distance fits both a supertall piece and 37 legible neighbours
+  // in one shot). mega-tower-a and tower-base-6x6-a clip off the top of
+  // THIS crowded overview as a real, disclosed consequence -- the real
+  // height range is the dedicated shot FIX-1 produces separately
+  // (docs/look-proof-shots/34-height-range.png), which this sheet was
+  // never the right tool to also carry.
+  merged.computeBoundingBox();
+  window.__maxPieceHeight = merged.boundingBox.max.y;
   // The shared material's own fog defaults (uFogNear=90, uFogFar=230,
   // look-proof-material.js) are tuned for HERO_MODE's close ~40-90m
   // composition. FOUND BY LOOKING AT THE FIRST RENDER, NOT ASSUMED: at

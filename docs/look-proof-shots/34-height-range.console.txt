@@ -1,0 +1,5 @@
+HEIGHT-RANGE entries: small-house-a(storeys=4), mega-tower-a(storeys=84)
+HEIGHT-RANGE measured: small-house-a real rendered height = 4.57m (storeys=4)
+HEIGHT-RANGE measured: mega-tower-a real rendered height = 376.32m (storeys=84)
+HEIGHT-RANGE tallest piece's own real measured height: 376.32m
+LOOK-PROOF ready, draw calls: 1 triangles: 1906

@@ -1788,6 +1788,30 @@
       "find": "camera.position.set(centerX, dist * 0.55, centerZ - dist);",
       "replace": "camera.position.set(centerX - dist, dist * 0.55, centerZ - dist);",
       "expect": "GATE (CAT-4): the camera looks along ONE axis (front-on), not a 45-degree diagonal isometric offset -- CAT-2's own diagonal camera read as 'a diagonal strip in a field of black' (Mark, docs/briefs/BLD-2026-09-16.md), because an equal X/Z offset onto a rectangular grid photographs as a rotated diamond, not a grid"
+    },
+    {
+      "id": "fix1-storeys-must-still-drive-height-when-real",
+      "guards": "FIX-1 (docs/briefs/BLD-2026-09-16.md, PLAN.md 3.1): disables the real-storeys branch entirely -- every piece would fall back to the old capped footprint-average height regardless of whether real storeys data is available.",
+      "file": "public/look-proof-pieces.js",
+      "find": "const hasRealStoreys = typeof storeys === \"number\" && Number.isFinite(storeys) && storeys > 0;",
+      "replace": "const hasRealStoreys = false;",
+      "expect": "GATE (FIX-1): fitToFootprint WITH a real storeys argument scales height by storeys directly, uncapped -- never the footprint-average path"
+    },
+    {
+      "id": "fix1-default-path-must-stay-capped",
+      "guards": "FIX-1: removes the cap from the DEFAULT (no-storeys) path -- HERO_MODE's own already-judged render (no storeys, calls fitToFootprint the old way) would move.",
+      "file": "public/look-proof-pieces.js",
+      "find": "const sy = hasRealStoreys ? storeys : Math.min((sx + sz) / 2, 6);",
+      "replace": "const sy = hasRealStoreys ? storeys : (sx + sz) / 2;",
+      "expect": "fitToFootprint, no storeys argument (the default): height is UNCHANGED, still (sx+sz)/2 capped at 6 -- HERO_MODE's own already-judged render calls it this way and must not move"
+    },
+    {
+      "id": "fix1-board-renderer-must-still-read-storeys",
+      "guards": "FIX-1: resolveBoardPieces stops reading storeys from the real catalogue entry -- every board piece would silently fall back to capped, footprint-only height again.",
+      "file": "public/board-renderer.js",
+      "find": "storeys: entry.storeys,",
+      "replace": "storeys: undefined,",
+      "expect": "GATE (FIX-1): resolveBoardPieces reads storeys directly from the real catalogue entry -- never invented, never computed here"
     }
   ]
 }

@@ -770,7 +770,11 @@ async function main() {
   const preparedBoardPieces = boardPieceGeoms.map((geom, i) => {
     const p = boardResolved[i];
     rotateGeometryY(geom, p.rotation, THREE);
-    fitToFootprint(geom, p.footprint, p.anchor);
+    // FIX-1 -- p.storeys is real catalogue data (board-renderer.js's own
+    // resolveBoardPieces, read directly from the entry, never guessed
+    // here). HERO_MODE's own preparedPieces above stays on the old,
+    // unchanged, no-storeys call -- only board pieces get this.
+    fitToFootprint(geom, p.footprint, p.anchor, p.storeys);
     const stripped = stripToPositionNormalUv(geom);
     return addLayerAttribute(stripped, p.layer);
   });
@@ -951,7 +955,11 @@ async function main() {
         if (pieceGeometryCache.has(p.id)) continue;
         const raw = await loadPieceGeometry(p.glb);
         rotateGeometryY(raw, p.rotation, THREE);
-        fitToFootprint(raw, p.footprint, p.anchor);
+        // FIX-1 -- same p.storeys as the initial build above; this rebuild
+        // path (a click, RC1) must agree with it or a piece would appear
+        // to change height depending on whether it was on the board at
+        // load time or placed afterward.
+        fitToFootprint(raw, p.footprint, p.anchor, p.storeys);
         const stripped = stripToPositionNormalUv(raw);
         pieceGeometryCache.set(p.id, addLayerAttribute(stripped, p.layer));
       }

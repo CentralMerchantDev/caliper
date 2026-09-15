@@ -141,6 +141,13 @@ export function resolveBoardPieces(board, catalogue, manifest) {
       footprint: [footprintModules[0] * MODULE_SIZE_M, footprintModules[1] * MODULE_SIZE_M],
       anchor: anchorForCell(piece.anchorCell),
       rotation: piece.rotation,
+      // FIX-1 (docs/briefs/BLD-2026-09-16.md, PLAN.md §3.1) -- read
+      // directly from the real catalogue entry, never computed or
+      // guessed here. undefined on an entry with no storeys field (pre-
+      // FIX-2 data, or a fixture that never set one) -- look-proof-
+      // pieces.js's own fitToFootprint already falls back cleanly to its
+      // default height path when this is not a real, finite number.
+      storeys: entry.storeys,
     });
   }
 
