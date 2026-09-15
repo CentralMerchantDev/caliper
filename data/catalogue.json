@@ -140,7 +140,10 @@
       "residential": 5
     },
     "unitQuality": 0.7071067811865475,
-    "glb": "vendor/kits/kenney-city-kit-commercial/building-a.glb"
+    "glb": "vendor/kits/kenney-city-kit-commercial/building-a.glb",
+    "glbVariants": [
+      "vendor/kits/kenney-city-kit-commercial/building-e.glb"
+    ]
   },
   {
     "id": "house-a",
@@ -297,7 +300,10 @@
       "commercial": 2
     },
     "unitQuality": 0.5773502691896258,
-    "glb": "vendor/kits/kenney-modular-buildings/building-sample-tower-b.glb"
+    "glb": "vendor/kits/kenney-modular-buildings/building-sample-tower-b.glb",
+    "glbVariants": [
+      "vendor/kits/kenney-modular-buildings/building-sample-tower-a.glb"
+    ]
   },
   {
     "id": "mid-commercial-a",
@@ -399,7 +405,10 @@
       "residential": 5
     },
     "unitQuality": 0.5773502691896258,
-    "glb": "vendor/kits/kenney-modular-buildings/building-sample-tower-d.glb"
+    "glb": "vendor/kits/kenney-modular-buildings/building-sample-tower-d.glb",
+    "glbVariants": [
+      "vendor/kits/kenney-modular-buildings/building-sample-tower-c.glb"
+    ]
   },
   {
     "id": "large-commercial-6x6-a",

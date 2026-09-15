@@ -1735,11 +1735,11 @@
     },
     {
       "id": "cat2-lane-cross-binding-must-stay-classified",
-      "guards": "CAT-2: drops one of the 26 new MESH_BINDINGS entries -- BO7A's own classification gate must catch a real L12 mesh (lane-cross) silently falling out of {MESH_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS}, not just a glb-value mismatch.",
+      "guards": "CAT-2: drops one of the 26 new MESH_BINDINGS entries -- BO7A's own classification gate must catch a real L12 mesh (lane-cross) silently falling out of {MESH_BINDINGS, VARIANT_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS}, not just a glb-value mismatch.",
       "file": "scripts/link-catalogue-meshes.mjs",
       "find": "  \"lane-cross\": \"lane-cross\",",
       "replace": "",
-      "expect": "GATE (BO7A): every real L12 mesh is accounted for exactly once -- bound, a disclosed finding, or a disclosed prop, never silently unclassified"
+      "expect": "GATE (BO7A/CAT-3): every real L12 mesh is accounted for exactly once -- bound, a disclosed variant, a disclosed finding, or a disclosed prop, never silently unclassified"
     },
     {
       "id": "cat2-pieces-count-must-stay-46-not-drift",
@@ -1748,6 +1748,30 @@
       "find": "{ id: \"lane-straight\", glb: \"vendor/kits/kenney-city-kit-roads/road-straight.glb\", footprint: [8, 8], layer: 1 },",
       "replace": "",
       "expect": "CAT-2 (docs/briefs/BLD-2026-09-16.md): PIECES is 46, not still 20 and not creeping toward 200 -- L12's original 20 plus 26 dedicated, per-tier catalogue road bindings, a real and checkable total"
+    },
+    {
+      "id": "cat3-variant-index-must-stay-real-hash",
+      "guards": "CAT-3 (docs/specs/PLAN.md 5.2): collapses the deterministic variant index to always 0 -- every placement of a variant-bearing typeId would resolve to the SAME mesh, exactly the 'two towers of the same footprint are the same tower' complaint this item exists to fix.",
+      "file": "public/board-renderer.js",
+      "find": "  return (hash >>> 0) % poolSize;",
+      "replace": "  return 0;",
+      "expect": "GATE (CAT-3): 'two towers of the same footprint should not be the same tower' -- many real placements of the SAME variant-bearing typeId are not all the SAME variant"
+    },
+    {
+      "id": "cat3-glb-variants-must-stay-consulted",
+      "guards": "CAT-3: glbForPiece stops consulting glbVariants at all -- every placement falls back to entry.glb regardless of a real variant pool being present. Trivially still 'in the pool' (entry.glb is always element 0), so the test that actually catches this is the variety-across-placements one, not the pool-membership one.",
+      "file": "public/board-renderer.js",
+      "find": "  if (!entry.glbVariants || entry.glbVariants.length === 0) return entry.glb;",
+      "replace": "  return entry.glb;",
+      "expect": "GATE (CAT-3): 'two towers of the same footprint should not be the same tower' -- many real placements of the SAME variant-bearing typeId are not all the SAME variant"
+    },
+    {
+      "id": "cat3-tower-variant-binding-must-stay-classified",
+      "guards": "CAT-3: drops tower-base-6x6-a's own VARIANT_BINDINGS entry -- BO7A/CAT-3's own classification gate must catch tower-base-6x6-alt silently falling out of all four classification tables.",
+      "file": "scripts/link-catalogue-meshes.mjs",
+      "find": "  \"tower-base-6x6-a\": [\"tower-base-6x6-alt\"],",
+      "replace": "",
+      "expect": "GATE (BO7A/CAT-3): every real L12 mesh is accounted for exactly once -- bound, a disclosed variant, a disclosed finding, or a disclosed prop, never silently unclassified"
     }
   ]
 }

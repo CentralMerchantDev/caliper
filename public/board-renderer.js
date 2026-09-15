@@ -66,6 +66,38 @@ export function anchorForCell(anchorCell) {
   return [anchorCell.x * MODULE_SIZE_M, anchorCell.y * MODULE_SIZE_M];
 }
 
+/** CAT-3 (docs/specs/PLAN.md §5.2, Mark: "two towers of the same footprint
+ * should not be the same tower"). A deterministic index into a variant
+ * pool, keyed on the placement's OWN typeId+id -- never Math.random(),
+ * so the same real placement always resolves to the same mesh across
+ * re-renders (a rebuild after a click must not make an already-placed
+ * piece appear to change shape), and two DIFFERENT types placed as the
+ * Nth piece on a board do not read the same index. FNV-1a: small, no
+ * dependency, good enough distribution for a pool this size (2-4 items),
+ * not a cryptographic requirement.
+ */
+export function deterministicVariantIndex(seed, poolSize) {
+  let hash = 2166136261; // FNV-1a offset basis
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % poolSize;
+}
+
+/** CAT-3 -- an entry MAY carry `glbVariants`, additional already-vendored
+ * mesh paths beyond its own primary `glb` (R2/C1.5's own "start far lower
+ * than instinct says": these are real, already-sourced meshes benched by
+ * BO7A's own UNMATCHED_MESHES, not newly-commissioned assets). Absent
+ * `glbVariants`, this returns entry.glb UNCHANGED -- the other 47+
+ * catalogue entries behave exactly as before this feature existed.
+ */
+function glbForPiece(entry, piece) {
+  if (!entry.glbVariants || entry.glbVariants.length === 0) return entry.glb;
+  const pool = [entry.glb, ...entry.glbVariants];
+  return pool[deterministicVariantIndex(`${piece.typeId}:${piece.id}`, pool.length)];
+}
+
 /**
  * Read a real board's own CURRENT placements (board.pieces()) and resolve
  * each into a render-ready descriptor: `{ id, typeId, glb, layer,
@@ -76,7 +108,8 @@ export function anchorForCell(anchorCell) {
  *
  * Never invents a footprint, a layer, or a glb path -- everything returned
  * is read directly from the board's own state, the catalogue's own
- * entries, and the array-texture manifest's own `usedBy` lists.
+ * entries (CAT-3: OR one of that entry's own disclosed glbVariants), and
+ * the array-texture manifest's own `usedBy` lists.
  */
 export function resolveBoardPieces(board, catalogue, manifest) {
   const catalogueOf = catalogue instanceof Map ? (id) => catalogue.get(id) : (id) => catalogue[id];
@@ -93,7 +126,8 @@ export function resolveBoardPieces(board, catalogue, manifest) {
       skipped.push({ ...piece, reason: "no-glb" });
       continue;
     }
-    const layer = layerForGlb(entry.glb, manifest);
+    const glb = glbForPiece(entry, piece);
+    const layer = layerForGlb(glb, manifest);
     if (layer === null) {
       skipped.push({ ...piece, reason: "unknown-layer" });
       continue;
@@ -102,7 +136,7 @@ export function resolveBoardPieces(board, catalogue, manifest) {
     resolved.push({
       id: piece.id,
       typeId: piece.typeId,
-      glb: entry.glb,
+      glb,
       layer,
       footprint: [footprintModules[0] * MODULE_SIZE_M, footprintModules[1] * MODULE_SIZE_M],
       anchor: anchorForCell(piece.anchorCell),
