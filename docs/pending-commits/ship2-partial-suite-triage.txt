@@ -1,0 +1,92 @@
+SHIP-2 (PLAN.md §7, partial): "the full suite green, with its own summary
+line as the evidence." Triaged all 12 pre-existing, already-disclosed
+failures by hand (read each failure and the file it names, not assumed
+still current) rather than accepting the count as fixed. Fixed the two
+that were genuinely CLI's own and fixable without another lane's file or
+Mark's own call. See docs/DECISIONS-FOR-MARK.md #25 for the full
+triage and what remains blocked and why.
+
+Fixed
+-----
+1. test/livePosition.test.ts's 3 timer/poll failures. Real cause: test/
+   foundationRequestClasses.test.ts sets `globalThis.window = {
+   devicePixelRatio: 1 }` at module top level with no addEventListener/
+   removeEventListener, and never restores it. test/run.mjs imports every
+   test file into ONE shared process, so this incomplete shim leaked into
+   public/live-position.js's trackLiveRect (which checks `typeof window
+   !== "undefined"` and calls window.addEventListener) whenever
+   foundationRequestClasses.test.ts happened to run first -- a reason that
+   had nothing to do with live-position.js itself. Fixed by giving the
+   shim the two no-op methods a "minimal window" should actually have.
+
+2. test/rawSourceScan.test.ts's own gate. Two parts:
+   a. 3 newly-unreviewed files. Two reviewed as genuine false positives
+      (catalogueValidator.test.ts's readFileSync targets JSON data, its own
+      .match() calls check assertion messages, not source code;
+      genCitySummaryRetired.test.ts's matches target a generated file's
+      byte-equality and a spawned process's own stdout) and named with a
+      real reason. The third, cullingSuiteUnblocked.test.ts, was the one
+      REAL instance of the defect shape this gate exists to catch -- a raw
+      regex against another test file's own quarantine annotation, which a
+      COMMENT mentioning the same string verbatim would have satisfied
+      without a real skip present. FIXED, not excluded: now imports the
+      shared stripSourceComments helper before matching.
+   b. 3 stale exclusion entries (boardRender.test.ts, cityWorld.test.ts,
+      publicClaims.test.ts) -- all three files confirmed genuinely deleted
+      in earlier takedown commits (git log --diff-filter=D), their
+      exclusion entries simply never pruned. Removed.
+
+RED (1): reverted foundationRequestClasses.test.ts's shim to drop the two
+no-op methods. node test/run.mjs foundationRequestClasses.test.ts
+livePosition.test.ts (that order): all 3 livePosition tests fail with
+"window.addEventListener is not a function" -- exactly the 3 original
+failures, reproduced.
+GREEN: reverted. Same two files together: all pass.
+
+RED (2): scratch check, not a permanent test (touching the real quarantined
+files -- cullingRatio.test.ts etc -- to simulate this directly was judged
+too risky for a mutation drill). A fake source string with the U2 skip
+annotation present ONLY inside a comment: the raw regex
+(/skip:\s*"QUARANTINED \(U2,/.test(fakeSource)) matches TRUE (a false
+pass); the same regex against stripSourceComments(fakeSource) correctly
+returns FALSE. Confirms the fix closes the exact gap the gate exists for.
+
+Verification
+------------
+npx tsc --noEmit: clean.
+node test/run.mjs (full suite): 1172 tests, 1119 pass, 8 fail (down from
+12) -- the 4 gone are the ones fixed here; the other 8 are unrelated,
+disclosed, and NOT CLI's alone to clear (see below).
+npx vitest run: 18/18.
+docs/MODULE-MAP.md regenerated: unchanged.
+
+What's still open -- and why this is NOT "the full suite green"
+-----------------------------------------------------------------
+8 failures remain, none silently ignored (docs/DECISIONS-FOR-MARK.md #25
+has the full account):
+  - 4 need BLD's own UI work: navWheel.test.ts's four failures all trace
+    to public/index.html (the Phase 1 holding page) having no #nav-wheel
+    element, .nav-wheel CSS, or .nav-strip-actions row at all --
+    public/nav-wheel.js and nav-bindings.js already exist and expect this
+    markup, it was simply never rebuilt into the holding page.
+  - 3 trace to decision #22's own aftermath, not yet resolved: public/
+    world.html still imports the quarantined world-render-3d.js;
+    scripts/supervised-generate.mjs still imports the quarantined
+    world.js; roughly a third of deadExports.test.ts's ~188-entry backlog
+    overlaps decision #23's own inventoried-but-undecided 63-file "second
+    dead cluster." All three are "retire the stale importer, or re-point
+    it" calls this repo's own "never bulk-delete, get the exact list
+    confirmed" rule reserves for Mark.
+  - 1 is already named as SHIP-3's own job, verbatim, in FIX-6's gate-
+    ledger entry: "running them all needs the whole suite green first...
+    and is SHIP-3's job, not this one's." Fixing it here would be doing
+    SHIP-3's work inside SHIP-2.
+
+CHECKLIST.md's own SHIP-2 line is marked [!] (partial), not [x] -- it is
+not done, and the point of this commit is to say so plainly rather than
+narrow the definition of "green" to fit what CLI could reach alone.
+
+"Its own summary line as the evidence" is also still open as a separate,
+permanent artifact -- test/run.mjs's own `ℹ tests/pass/fail` summary is
+the evidence quoted above, but SHIP-2's own wording asks for something
+more durable, matching SHIP-4's gen:claims pattern. Not built this pass.
