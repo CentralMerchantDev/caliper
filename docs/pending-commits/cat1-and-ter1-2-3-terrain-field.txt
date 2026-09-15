@@ -1,0 +1,73 @@
+CAT-1 (PLAN.md §1) and TER-1/TER-2/TER-3 (PLAN.md §4, RESEARCH.md §T1-§T3):
+the terrain mesh contract, and the real generator behind it. Built fresh
+per Mark's ruling on decision #22 -- no reference to the retired
+public/terrain.js.
+
+WHAT WAS DONE
+
+public/terrain-field.js: `createTerrainField({ seed })` returns
+`heightAt(x,z)`/`isWater(x,z)`/`slopeAt(x,z)`, a pure, deterministic
+function of world position. Method, in the order RESEARCH.md gives it:
+
+  - T2 (coastline first): isWater is DEFINED as heightAt(x,z) <= 0, never a
+    second, independently-computed boundary -- structurally impossible for
+    the two to disagree, which is the concrete meaning "elevation-first is
+    a named failure" rules out.
+  - T1 (drowned river valley): one noise-warped dome (never several
+    independent blobs), a dendritic drainage network traced by steepest
+    descent from 14 ridge seeds down to the coast and carved into it, THEN
+    a disclosed SEA_LEVEL_RISE_M subtracted at query time -- the flood.
+    Verified directly: the pre-flood landmass (heightAt + the rise added
+    back) is one connected region covering the large majority of dry land
+    at a sampled resolution (a real connectivity check, not inferred from
+    the post-flood island count, which legitimately fragments -- T1's own
+    "islands nestle together, sharing one drainage history" outcome).
+  - T3 (hydraulic erosion): a 2,200-droplet pass over the pre-flood
+    landform, each droplet eroding on descent and depositing on
+    deceleration -- verified directly: sampled points show both real
+    erosion (negative deltas) and real deposition (positive deltas)
+    against the pre-erosion landform, not a cosmetic pass.
+
+docs/specs/CAT-1-TERRAIN-MESH-CONTRACT.md: the published seam. A pure
+function, not a baked mesh -- BLD samples at whatever density its own mesh
+needs, decoupled from the gameplay grid (PLAN.md §4's own wording), while
+CLI's board population (TER-4, next commit) samples the SAME function far
+more densely. Coordinate system: world metres, y-up, sea level exactly 0,
+the 4 m module public/board-renderer.js's own MODULE_SIZE_M already uses.
+Determinism guaranteed and stated as the contract, not just an
+implementation detail -- a version bump to heightAt's own output is a
+breaking change for BLD's committed mesh, and this document is where that
+gets noted.
+
+GATES, WATCHED CAUGHT (scripts/_mutcheck.mjs test/terrainField.test.ts
+public/terrain-field.js test/mutations.json):
+  CAUGHT  ter1-sea-level-rise-must-actually-flood (removes the
+          SEA_LEVEL_RISE_M subtraction -- SURVIVED against the land-fraction
+          sanity test alone, watched red first, then a direct
+          heightAt === preFloodHeightAt - SEA_LEVEL_RISE_M relationship
+          test was added specifically to catch it)
+  CAUGHT  ter1-isWater-must-derive-from-heightAt (isWater forced to always
+          return false)
+Baseline GREEN before mutating; tree restored byte-identical after.
+
+10 tests in test/terrainField.test.ts: determinism (same seed, two
+instances, byte-identical), a different seed produces a different field,
+isWater/heightAt consistency, the T1 connectivity gate, the T2
+derived-contour gate, the T3 erosion gate (both directions), slopeAt
+verified against an independently-computed finite difference at a
+different epsilon than the module's own internal one, a land-fraction
+sanity check, SEA_LEVEL_RISE_M's own positivity, and the direct
+flood-relationship gate.
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs test/terrainField.test.ts:
+10/10 pass.
+
+WHAT IS STILL OPEN
+
+- TER-4 (real fields on public/area-board.js) and TER-5
+  (public/scoring.js's terrainContribution) are the next two commits --
+  this field is not wired into anything yet on its own.
+- decision #23 (the separate ~63-file dead subsystem, including
+  public/noise.js) is still queued, unaffected by this commit --
+  terrain-field.js's own noise primitives are self-contained by design,
+  specifically so this work would not need to wait on that decision.

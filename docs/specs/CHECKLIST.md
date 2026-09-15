@@ -138,11 +138,16 @@ remains is implementation against answers already in hand.
 
 ## THE CATALOGUE — BLD OWNS IT. PLAN.md §5.
 
-[ ] CAT-1 (CLI) A grid-aware terrain mesh contract for BLD — PLAN.md 1
+[x] CAT-1 (CLI) A grid-aware terrain mesh contract for BLD — PLAN.md 1
     ONE small CLI item inside a BLD section, because it is the seam: publish
     what BLD reads to displace a mesh — the field's resolution, extent and units
     — as a documented contract rather than a shape BLD infers from the data.
     Gate: BLD can build against it without reading CLI's generator internals.
+    Done: docs/specs/CAT-1-TERRAIN-MESH-CONTRACT.md. heightAt/isWater/slopeAt
+    are a pure function of (seed, worldX, worldZ) -- sea level 0, y-up metres,
+    the 4 m module BLD's own board-renderer.js already uses -- so BLD samples
+    at whatever density its own mesh needs, decoupled from the gameplay grid.
+    Backed by public/terrain-field.js (TER-1/2/3, committed alongside).
 [ ] CAT-2 (BLD) Bind the remaining 38 entries, and correct street-cross — PLAN.md 5.1
     kenney.nl is an AUTHORISED standing CC0 source. Every import records URL,
     licence and SHA-256 in `public/vendor/kits/LICENCES.md`; anything not CC0
@@ -170,6 +175,58 @@ remains is implementation against answers already in hand.
     It has already earned its keep: it is what made the scale problem visible.
     Gate: the sheet, judged by Mark. Say which pieces look wrong beside the
     others — a wall of thumbnails presented as a pass is the failure.
+
+---
+
+## THE REAL RANGE, ON SCREEN — BLD OWNS THIS. Added 2026-09-16.
+
+FIX-1 made the heights real — 376.32 m against 4.57 m, an 82:1 range, measured
+and rendered. **But `35-board-fix1-real-height.png` puts the camera inside the
+tower's footprint.** You cannot see the building, you cannot see the range, and
+FIX-1's own gate — *"a shot showing the real range"* — is not met by it. The
+measurement is met; the picture is not.
+
+A camera framed for eight-storey buildings cannot frame 82:1. That is this
+section.
+
+[ ] CAM-1 (BLD) A camera that frames the real range — PLAN.md 3.1
+    The board camera, the contact sheet's camera, and the overview's all assumed
+    a compressed height range. All three now under-frame.
+    Gate: one shot in which `mega-tower-a` and `small-house-a` are BOTH fully in
+    frame and their relative height reads correctly, with both measured heights
+    stated. RED is any framing where the tallest piece leaves the frame or the
+    shortest becomes indistinguishable from the ground.
+    CAT-4's contact sheet was judged on the OLD heights — re-render it and say
+    whether the grid still reads now that the range is real.
+[ ] RDO-1 (BLD) The readout on screen, not in a console line — PLAN.md 7, §S4
+    FIX-4 proved the number is real and captured it durably. **It is not
+    visible.** The readout today is a coloured octahedron marker plus a
+    `console.log` — confirmed by reading `look-proof-scene.html`. §S4 asks for
+    something else entirely: *"the ghost shows the target cell's current value
+    and the value the piece would have there. That number, changing as the
+    cursor moves, IS the reason one cell beats another."*
+    A console line is not something a player sees, so the phase gate's "sees why
+    that cell was worth choosing" is NOT met, and RC5 was ticked on a marker.
+    That is the hub's miss, not the lane's — the item was written loosely and
+    then the missing number was blamed on a capture bug.
+    Draw both numbers near the cursor. **Call CLI's `valueAt` and
+    `valueIfPlaced`. Do not reimplement scoring. Do not edit
+    `public/scoring.js`.**
+    Gate: a shot showing both numbers legibly on screen, and a second shot at a
+    genuinely different cell showing them changed. Not a console transcript —
+    that is what FIX-4 already proved. RED is a number that does not move when
+    the board has not changed, or one that does not change when it has.
+[ ] GRD-1 (BLD) The ground at the board camera — PLAN.md 3.3
+    Mark has now judged the ground a dust bowl in THREE separate shots — `14`,
+    `25` and `35`. FIX-3 retuned the fog and the paving radius and the board
+    camera still reads as sand.
+    RB5 already measured the cause once: the "grass" texture is dirt-coloured
+    `(172,148,121)`. Paving was added near buildings; the rest of the board is
+    still bare earth to the horizon.
+    A city sits on made ground — paving, kerb lines, surface variation — not on
+    desert with paving patches.
+    Gate: the pair, judged by Mark. No numeric gate; inventing one would be a
+    check that cannot fail. Say plainly whether it still reads as a dust bowl.
 
 ---
 
