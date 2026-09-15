@@ -1835,3 +1835,93 @@ low-risk and disclosed in full in this session's own commits. The two
 harness recommendations above are additive (a try/catch, a lock or a
 new directory) and do not change `test/run.mjs`'s existing behaviour for
 any file that does not hit either failure mode.
+
+---
+
+## 25. `SHIP-2` ("the full suite green") cannot be reached by CLI alone — 4 of the 8 remaining failures need BLD's own UI work, 3 need a decision on decision #22's aftermath, 1 is already SHIP-3's own deferred scope
+
+**The question.** `SHIP-2` reads "the full suite green, with its own summary
+line as the evidence." Triaged the 12 pre-existing, already-disclosed
+failures the suite carried going into this item (see decisions #22-#24 and
+the FIX-5/FIX-6 gate-ledger entries for their origin) one by one, by
+actually reading each failure and the file it names, not by assuming the
+prior disclosure was still current. Fixed the four that were genuinely
+CLI's own and fixable without another lane's file or Mark's own call:
+
+1. **`livePosition.test.ts`'s 3 timer/poll failures** — a real test-infra
+   bug, not a product one: `test/foundationRequestClasses.test.ts` sets
+   `globalThis.window = { devicePixelRatio: 1 }` at module top level with no
+   `addEventListener`/`removeEventListener`, and never restores it.
+   `test/run.mjs` imports every test file into ONE shared process, so that
+   incomplete shim leaked into `public/live-position.js`'s `trackLiveRect`
+   (which checks `typeof window !== "undefined"` and calls
+   `window.addEventListener`) whenever `foundationRequestClasses.test.ts`
+   happened to run first — a reason that had nothing to do with
+   `live-position.js` itself. Fixed by giving the shim the two no-op methods
+   a "minimal window" should have; genuinely CATCH/reverted, watched red
+   both ways (removing the fix reproduces exactly the 3 original failures
+   when the two files run together, in that order).
+2. **`rawSourceScan.test.ts`'s own gate** — 3 newly-unreviewed test files
+   (`catalogueValidator.test.ts`, `cullingSuiteUnblocked.test.ts`,
+   `genCitySummaryRetired.test.ts`) plus 3 STALE exclusion entries
+   (`boardRender.test.ts`, `cityWorld.test.ts`, `publicClaims.test.ts` — all
+   three files genuinely deleted in earlier takedown commits, confirmed via
+   `git log --diff-filter=D`, their exclusion entries simply never removed).
+   Two of the three new matches were reviewed as genuine false positives
+   (JSON-data reads, spawned-process-output matching, matching this file's
+   own established precedent) and named with a real reason.
+   `cullingSuiteUnblocked.test.ts` was the one REAL instance of the defect
+   shape this gate exists to catch (a raw regex against another test file's
+   own quarantine annotation, which a COMMENT mentioning the same string
+   verbatim would have falsely satisfied) — actually fixed, not excluded,
+   by importing the shared `stripSourceComments` helper. Proven directly
+   with a scratch check: the same fake input matches the raw regex (a false
+   pass) and does not match the stripped one (the correct refusal).
+
+Left alone, all 8 remaining, for three distinct reasons — none of them "not
+tried":
+
+- **4 need BLD's own UI work**, not a CLI file edit: `navWheel.test.ts`'s
+  four failures all trace to one fact — `public/index.html` (the minimal
+  Phase 1 holding page) has no `#nav-wheel` element, no `.nav-wheel` CSS,
+  and no `.nav-strip-actions` row at all. `public/nav-wheel.js` and
+  `public/nav-bindings.js` already exist and expect this markup; it was
+  simply never rebuilt into the holding page. This is real UI construction
+  (markup + CSS), squarely BLD's lane per `CLAUDE.md`'s own boundary.
+- **3 trace to decision #22's aftermath, not yet resolved**: `public/
+  world.html` still imports the now-quarantined `world-render-3d.js`
+  (`importsResolve.test.ts`'s failure); `scripts/supervised-generate.mjs`
+  still imports the now-quarantined `world.js` (`supervisedGenerateScript
+  .test.ts`'s failure, already disclosed at the time of the quarantine
+  commit); and roughly a third of `deadExports.test.ts`'s ~188-entry
+  backlog overlaps decision #23's own inventoried-but-undecided 63-file
+  "second dead cluster." All three are "retire the stale importer, or
+  re-point it at whatever replaced it" calls this repo's own "never
+  bulk-delete, get the exact list confirmed" rule reserves for Mark, not a
+  lane guessing.
+- **1 is already named as someone else's job**: `mutationEvidence.test.ts`'s
+  "every mutation has a CAUGHT result" failure is FIX-6's own gate-ledger
+  entry, verbatim: "running them all needs the whole suite green first...
+  and is SHIP-3's job, not this one's." Fixing it here would mean doing
+  SHIP-3's work inside SHIP-2, the same scope-blur this project's own
+  checklist discipline exists to prevent.
+
+**Recommendation.** Three separate, genuinely different calls, not one:
+(a) file the navWheel markup rebuild as BLD's own item (it already has an
+owner in spirit — `CLAUDE.md`'s lane table — just not a CHECKLIST id yet);
+(b) decide `world.html` and `supervised-generate.mjs` the same way decision
+#22 was decided (quarantine the stale importer too, or re-point it at
+TER-1..5's real replacement) and fold the overlapping third of
+`deadExports.allowlist.json`'s backlog into whatever decision #23 lands on;
+(c) leave `mutationEvidence.test.ts` for SHIP-3, exactly as already
+recorded.
+
+**What was done in the meantime.** The suite moved from 12 failures to 8,
+real and disclosed, not silently narrowed by loosening a check. `SHIP-2`
+itself is left `[!]` (partial), not `[x]` — it is not done, and saying so
+plainly is the point of this entry.
+
+**Reversibility:** the two fixes already applied (the window shim,
+`cullingSuiteUnblocked.test.ts`'s comment-stripping) are small, disclosed,
+and mutation-proven; nothing about the remaining 8 was touched, so there is
+nothing here to revert.

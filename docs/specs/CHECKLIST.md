@@ -454,7 +454,29 @@ nobody knew until Mark asked and the source was read by hand.
 
 [ ] SHIP-1 (BLD) One page, both sides — PLAN.md 7
     Overview, area, place, author, reload. The phase gate end to end.
-[ ] SHIP-2 (CLI) The full suite green, with its own summary line as the evidence — PLAN.md 7
+[!] SHIP-2 (CLI) The full suite green, with its own summary line as the evidence — PLAN.md 7
+    Partial. 12 pre-existing, disclosed failures triaged one by one; 4 were
+    genuinely CLI's own and fixed (a test-infra window-shim leak that broke
+    3 unrelated tests when files ran in a shared process; a real stale-
+    quarantine-annotation gap in rawSourceScan.test.ts's own coverage, fixed
+    by importing the shared stripSourceComments helper rather than excluded).
+    Both mutation-proven (watched red both ways). Suite moved 12 -> 8
+    failures: node test/run.mjs (full suite): 1172 tests, 1119 pass, 8 fail.
+    npx vitest run: 18/18. npx tsc --noEmit: clean.
+    Remaining 8 are NOT CLI's alone to fix — see
+    docs/DECISIONS-FOR-MARK.md #25 for the full triage: 4 need BLD's own
+    navWheel UI markup rebuild (public/index.html has no #nav-wheel at all
+    since the Phase 1 takedown); 3 trace to decision #22's aftermath
+    (public/world.html and scripts/supervised-generate.mjs both still
+    import now-quarantined modules; a third of deadExports.test.ts's
+    backlog overlaps decision #23's own undecided 63-file cluster) and need
+    Mark's call, the same as #22 itself did; 1
+    (mutationEvidence.test.ts) is already SHIP-3's own explicitly-deferred
+    scope, named verbatim in FIX-6's own gate-ledger entry.
+    "Its own summary line as the evidence" not yet built as a separate
+    artifact -- test/run.mjs's own `ℹ tests/pass/fail` summary is the
+    evidence quoted above; a permanent, generated summary line (matching
+    SHIP-4's own gen:claims pattern) is still open.
 [ ] SHIP-3 (CLI) The mutation manifest complete over the real entries — PLAN.md 7
 [ ] SHIP-4 (CLI) Published claims regenerated and true — PLAN.md 7
     `gen:claims` runs; the test count on the page is the test count.

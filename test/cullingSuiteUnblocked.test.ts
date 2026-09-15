@@ -34,6 +34,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { stripSourceComments } from "./stripSourceComments.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 function repoRoot(): string {
@@ -73,7 +74,11 @@ test("GATE (U2): cullingRatio.test.ts, regressionGate.test.ts and envLuminance.t
 test("GATE (U2): all three quarantines name city.html as the cause, so a future reader (or an automated unblock check) can find them by grepping for it, not by memory", () => {
   const files = ["cullingRatio.test.ts", "regressionGate.test.ts", "envLuminance.test.ts"];
   for (const f of files) {
-    const src = readFileSync(join(ROOT, "test", f), "utf8");
+    // Stripped, not raw: a COMMENT mentioning the same skip string verbatim
+    // (describing what used to be there, or what should be) would satisfy a
+    // raw match without a real, active `skip:` option -- the exact defect
+    // shape test/rawSourceScan.test.ts's own gate exists to catch.
+    const src = stripSourceComments(readFileSync(join(ROOT, "test", f), "utf8"));
     assert.match(src, /skip:\s*"QUARANTINED \(U2,/, `${f} is missing its U2 quarantine annotation`);
     assert.match(src, /city\.html no longer exists/, `${f}'s quarantine reason must name city.html directly`);
   }

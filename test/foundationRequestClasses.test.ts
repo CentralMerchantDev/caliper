@@ -109,7 +109,18 @@ function makeMockCanvas() {
   return canvas;
 }
 
-(globalThis as any).window = (globalThis as any).window ?? { devicePixelRatio: 1 };
+// addEventListener/removeEventListener, not just devicePixelRatio: this
+// object is set on globalThis, and test/run.mjs imports every test file
+// into ONE shared process -- so this shim leaks into whatever OTHER file
+// happens to run afterward and checks `typeof window !== "undefined"`.
+// public/live-position.js's trackLiveRect does exactly that and calls
+// window.addEventListener -- a shim missing it crashed
+// test/livePosition.test.ts three different ways, for a reason that had
+// nothing to do with live-position.js itself, only with running after this
+// file in the same process. A no-op EventTarget is the honest fix: this
+// really is meant to look like a minimal window, and a window without
+// addEventListener is not one.
+(globalThis as any).window = (globalThis as any).window ?? { devicePixelRatio: 1, addEventListener() {}, removeEventListener() {} };
 (globalThis as any).ResizeObserver = (globalThis as any).ResizeObserver ?? class { observe() {} disconnect() {} };
 
 function assertRendererDrawsWithoutThrowing(world: any) {

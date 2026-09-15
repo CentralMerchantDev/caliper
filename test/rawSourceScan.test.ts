@@ -75,19 +75,25 @@ const SELF = "rawSourceScan.test.ts";
 // says WHY the match is not (or not yet fixed as) the navPad/isolate/
 // movePiece/claimSpansAreChecked/propManifest defect shape.
 const REVIEWED_EXCLUSIONS: Record<string, string> = {
-  "boardRender.test.ts":
-    "Reviewed 2026-09-11 (b1-land merge). Its own forbidden-import scan " +
-    "(line ~44-62) already carries a dedicated guardrail test proving it is " +
-    "comment-safe by construction (\"a comment line was mistaken for an " +
-    "import statement\" -- asserts zero false positives), independently of " +
-    "the shared stripSourceComments helper. Every other readFileSync in this " +
-    "file reads JSON data (board.generated.json) or checks mesh/geometry " +
-    "output, not source-code presence.",
-  "cityWorld.test.ts":
-    "Every .match()/.test()/.includes() call found targets DATA (a generated " +
-    "city-summary report string, plot/road ids, directory-listing filenames), " +
-    "never a source file's code text as a stand-in for \"is this wired\" -- " +
-    "the comment-vs-code ambiguity does not apply to data.",
+  "catalogueValidator.test.ts":
+    "Reviewed 2026-09-15 (SHIP-2). Every readFileSync targets data/catalogue.json " +
+    "(JSON DATA, not .js/.ts/.mjs/.html source code) -- readsSourceFile()'s own " +
+    "loose 'a quoted extension ANYWHERE in the file' check is satisfied by this " +
+    "file's own import specifiers (\"../public/catalogue-validator.js\" etc), not " +
+    "a real second source-file read. Every .match() call found checks an " +
+    "assertion's own error-MESSAGE string (assert.match(err.message, /.../)), " +
+    "not source code text -- the comment-vs-code ambiguity does not apply to " +
+    "either.",
+  "genCitySummaryRetired.test.ts":
+    "Reviewed 2026-09-15 (SHIP-2). Two distinct matches, neither the risk this " +
+    "gate covers: (1) readFileSync(CITY_SUMMARY_PATH) reads " +
+    "src/citySummary.generated.ts (a GENERATED, not hand-authored, file) purely " +
+    "for a before/after BYTE-EQUALITY check (assert.equal) -- never pattern-" +
+    "matched, so a comment inside it could not change the result either way. " +
+    "(2) assert.match(output, ...) targets a spawned child process's own " +
+    "stdout/stderr text at runtime, not a source file's code -- the identical " +
+    "reasoning supervisedGenerateScript.test.ts's own entry below already gives " +
+    "for the same shape.",
   "deadExports.test.ts":
     "Two matches, both reviewed: (1) `/^export\\s*\\*/m.test(file.source)` is " +
     "the reachability graph's OWN wildcard-re-export guard -- theoretically " +
@@ -112,12 +118,6 @@ const REVIEWED_EXCLUSIONS: Record<string, string> = {
     "bug: a comment mentioning the forbidden assignment could cause a false " +
     "ALARM (fails loud, safe), not a false PASS that hides a real one. Lower " +
     "priority; named rather than fixed tonight.",
-  "publicClaims.test.ts":
-    "spanText()-style matching here runs through visibleCopy() first (script/" +
-    "style/HTML-comment stripped) for the page-content checks -- reviewed and " +
-    "confirmed comment-safe for the html sources. Also reads " +
-    "src/citySummary.generated.ts, matched only for numeric substring " +
-    "presence in a generated (not hand-authored) file -- not the same risk.",
   "supervisedGenerateScript.test.ts":
     "assert.match() targets a spawned child process's own STDERR text at " +
     "runtime, not a source file's code -- \"comment\" has no meaning for " +
