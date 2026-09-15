@@ -167,9 +167,19 @@ when its gate is green and committed, not when its plan is good.
 
 The only legal stopping conditions:
 
-1. **Every item on your checklist is green and committed.** If this happens,
-   the checklist was too short — say so in the handover and keep going on the
-   most valuable thing you can name.
+1. **Every item on your checklist is green and committed.** Descend to the next
+   WRITTEN item — `process_next_item` again, the next phase's checklist, which
+   already exists. **If there is no next written item, the plan is too shallow
+   and THAT is the finding to report.**
+
+   **Corrected 2026-09-15.** This line used to say *"keep going on the most
+   valuable thing you can name."* `rule://queue-exhaustion` retires that
+   wording explicitly, by name: *"it licensed exactly the invention ADR-023
+   feared."* A lane reading this file at 3am would have invented work while the
+   rule governing it forbade exactly that — two sources of truth with nothing
+   binding them, which is itself a named failure pattern.
+
+   **A lane may continue past its own checklist. A lane may never invent work.**
 2. **A blocker no decision can clear tonight** — a missing credential, a
    physical resource, an external service that is down. Memory pressure is not
    this: rotate to work that fits.
