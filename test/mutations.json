@@ -1836,6 +1836,22 @@
       "find": "function setBoardCamera(maxHeight) {",
       "replace": "function setBoardCamera() {",
       "expect": "GATE (CAM-1): setBoardCamera is framed off the real board mesh's own max height, not a fixed groundWidth-only distance -- the old formula assumed a compressed range, same defect look-proof-scene.html's own board camera had"
+    },
+    {
+      "id": "rdo1-label-texture-must-stay-drawn",
+      "guards": "RDO-1 (docs/briefs/BLD-2026-09-17.md): buildReadoutLabelTexture stops drawing the ifPlaced value -- the readout would show only 'current', silently dropping the SECOND number S4's own phase-gate clause requires ('the value the piece WOULD HAVE there').",
+      "file": "public/look-proof-scene.html",
+      "find": "ctx.fillText(`ifPlaced ${ifPlaced.toFixed(2)}`, 24, 176);",
+      "replace": "",
+      "expect": "GATE (RDO-1): a real text texture is drawn from readoutResolved's own current/ifPlaced numbers -- §S4's own phase-gate clause ('the ghost shows the target cell's current value and the value the piece would have there... that number, changing as the cursor moves, IS the reason one cell beats another') is not met by a console line alone"
+    },
+    {
+      "id": "rdo1-label-sprite-must-stay-gated-on-available",
+      "guards": "RDO-1: the label sprite renders even when readoutResolved.available is false -- a guessed/absent number would be drawn as though it were real.",
+      "file": "public/look-proof-scene.html",
+      "find": "if (readoutResolved.available) {\n      const labelTex = buildReadoutLabelTexture(readoutResolved.current, readoutResolved.ifPlaced);",
+      "replace": "if (true) {\n      const labelTex = buildReadoutLabelTexture(readoutResolved.current, readoutResolved.ifPlaced);",
+      "expect": "GATE (RDO-1): the label is a Sprite (always faces the camera, legible from any angle), added to the scene ONLY when readoutResolved is real and available -- never drawn for a guessed or unavailable value"
     }
   ]
 }

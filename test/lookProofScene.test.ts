@@ -376,6 +376,27 @@ test("(synthetic) the vulnerability: a comment mentioning resolveReadout must no
   assert.doesNotMatch(commentOnly, /readoutResolved = resolveReadout\(ScoringModule, board, catalogueById, READOUT_CELL, READOUT_CANDIDATE_TYPE_ID, 0\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });
 
+// -------------------------------------------------------- RDO-1: the readout draws real numbers ON SCREEN
+test("GATE (RDO-1): a real text texture is drawn from readoutResolved's own current/ifPlaced numbers -- §S4's own phase-gate clause ('the ghost shows the target cell's current value and the value the piece would have there... that number, changing as the cursor moves, IS the reason one cell beats another') is not met by a console line alone", () => {
+  assert.match(SCENE_SRC, /function buildReadoutLabelTexture\(current, ifPlaced\)/, "no function draws the real current/ifPlaced numbers into a texture");
+  assert.match(SCENE_SRC, /ctx\.fillText\([^)]*current[^)]*\)/, "the current value is not drawn via fillText");
+  assert.match(SCENE_SRC, /ctx\.fillText\([^)]*ifPlaced[^)]*\)/, "the ifPlaced value is not drawn via fillText");
+});
+
+test("GATE (RDO-1): the label is a Sprite (always faces the camera, legible from any angle), added to the scene ONLY when readoutResolved is real and available -- never drawn for a guessed or unavailable value", () => {
+  assert.match(SCENE_SRC, /if \(readoutResolved\.available\)[\s\S]{0,400}new THREE\.Sprite\(/, "no Sprite is created when readoutResolved.available is true");
+  assert.match(SCENE_SRC, /buildReadoutLabelTexture\(readoutResolved\.current, readoutResolved\.ifPlaced\)/, "the label's own texture is not built from the REAL readoutResolved.current/ifPlaced -- a hardcoded or re-derived number here would silently disagree with resolveReadout's own real result");
+});
+
+test("GATE (RDO-1): the label texture is captured by canvas.toDataURL() the same way every other piece of evidence in this file already is -- a THREE object (Sprite/CanvasTexture), never a DOM element scripts/shoot-look-proof.mjs's own canvas-only capture would miss", () => {
+  assert.doesNotMatch(SCENE_SRC, /readoutLabel[\s\S]{0,200}document\.createElement\("div"\)/, "the readout label must not be a DOM element -- scripts/shoot-look-proof.mjs captures canvas.toDataURL() only, exactly the gap FIX-4 already found for the marker-only design");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning buildReadoutLabelTexture must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// function buildReadoutLabelTexture(current, ifPlaced) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /function buildReadoutLabelTexture\(current, ifPlaced\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
+
 // -------------------------------------------------------- RB4: still there on reload
 test("GATE (RB4): ?board=1&reload=1 serializes the REAL session and rebuilds via the REAL loadBoard() -- the render downstream runs against the reloaded board, not the original", () => {
   assert.match(SCENE_SRC, /import \{ createPlacementSession, loadBoard \} from "\.\/placement\.js"/, "look-proof-scene.html does not import the real loadBoard");

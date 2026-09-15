@@ -1,0 +1,68 @@
+RDO-1: the readout draws two real numbers on screen -- a marker plus a
+console line was not what §S4 asked for.
+
+WHAT WAS WRONG: docs/briefs/BLD-2026-09-17.md RDO-1 (§3), CHECKLIST.md
+RDO-1. FIX-4 (last run) proved the readout's real number and made the
+evidence durable -- a genuine fix, for the wrong defect. §S4's own
+phase-gate clause: "the ghost shows the target cell's current value and
+the value the piece would have there... that number, changing as the
+cursor moves, IS the reason one cell beats another." A console line is
+not something a player sees. RC5 was ticked against a coloured marker,
+never against this clause.
+
+THE FIX (public/look-proof-scene.html, look-proof-pieces/board-renderer
+untouched, public/scoring.js untouched): new `buildReadoutLabelTexture
+(current, ifPlaced)` draws both real numbers -- readoutResolved.current
+and readoutResolved.ifPlaced, read directly, never recomputed or
+reformatted from a second source -- into a THREE.CanvasTexture, the SAME
+technique `buildSkyTexture` (this file's own) already uses. Rendered on a
+THREE.Sprite (always faces the camera) positioned near the readout
+marker, gated on `readoutResolved.available` -- never drawn for a
+guessed or unavailable value, matching the marker's own colour-only
+distinction for that state. Captured naturally by canvas.toDataURL()
+(scripts/shoot-look-proof.mjs's own capture) -- no DOM element, no change
+to the evidence pipeline every other shot in this file already relies on
+(the exact gap FIX-4 traced to the marker-only design's own console-line
+reliance).
+
+FOUND BY RENDERING, NOT ASSUMED: the first attempt (a fixed 10x5 world-
+unit sprite, a reasonable size against the OLD ~27m capped board) was a
+few illegible pixels once actually rendered against CAM-1's own real,
+far-back camera (needed to fit a real ~376m tower). Rescaled
+proportionally to `shadowBB`'s own real max height (~13%) instead of a
+second fixed guess -- legible regardless of which board is actually on
+screen, the same "measured off real data, not a constant" discipline
+CAM-1's own camera framing already used.
+
+`valueAt`/`valueIfPlaced` called ONLY via the existing `resolveReadout`
+wiring (board-renderer.js, already tested and proven by RC5) -- no
+scoring logic reimplemented, `public/scoring.js` untouched, per the
+brief's own explicit instruction.
+
+TESTS: test/lookProofScene.test.ts -- four new GATE (RDO-1) tests:
+buildReadoutLabelTexture draws both current and ifPlaced via fillText; a
+Sprite is created only when readoutResolved.available, built from the
+REAL readoutResolved.current/ifPlaced; the label is never a DOM element
+(scripts/shoot-look-proof.mjs's own canvas-only capture would miss one);
+the standard comment-stripped synthetic-vulnerability check. node
+test/run.mjs test/lookProofScene.test.ts: 80/80 pass. npx tsc --noEmit:
+clean.
+
+MUTATED, BOTH CAUGHT: node scripts/_mutcheck.mjs -- rdo1-label-texture-
+must-stay-drawn (drops the ifPlaced fillText call, silently losing the
+SECOND number S4's own clause requires) and rdo1-label-sprite-must-stay-
+gated-on-available (renders the label even when unavailable) both CAUGHT
+against a GREEN baseline, source restored byte-identical.
+
+MEASURED, RENDERED, LOOKED AT -- the gate, verbatim: "two shots at
+genuinely different cells, showing both numbers legible ON SCREEN and
+visibly different." docs/look-proof-shots/37-rdo1-readout-cell-7-4.png:
+"current 0.00" / "ifPlaced 2.32", clearly legible. docs/look-proof-shots/
+38-rdo1-readout-cell-2-6.png: "current 0.00" / "ifPlaced -0.43" -- a
+genuinely different real value at a genuinely different cell, the label
+itself repositioned with the cell. Re-ran node scripts/interact-look-
+proof.mjs to confirm RC1's own click/commit/remove flow was not disturbed:
+"RC1 GATE: pass".
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012fvsDWLyvbN5Dj6csGYvbA

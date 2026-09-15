@@ -431,6 +431,41 @@ function buildSkyTexture() {
   return tex;
 }
 
+// RDO-1 (docs/briefs/BLD-2026-09-17.md §3) -- the readout's own marker
+// (RB3/RC5, below) was a status LIGHT, not the number itself: "a
+// screenshot paired with the console line is what this run's own brief
+// asked be shown to Mark" -- a real design decision, but not what §S4
+// actually asks for: "the ghost shows the target cell's current value
+// and the value the piece would have there... that number, changing as
+// the cursor moves, IS the reason one cell beats another." A console
+// line is not something a player sees. Draws the two REAL numbers
+// resolveReadout already returned (never recomputed, never reformatted
+// from a different source) into a canvas, the same THREE.CanvasTexture
+// technique buildSkyTexture above already uses -- captured naturally by
+// canvas.toDataURL() (scripts/shoot-look-proof.mjs's own capture), no
+// DOM element, no change to the evidence pipeline every other shot in
+// this file already relies on.
+function buildReadoutLabelTexture(current, ifPlaced) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+  ctx.textBaseline = "middle";
+  ctx.font = "600 52px system-ui, sans-serif";
+  ctx.fillStyle = "#e8e4de";
+  ctx.fillText(`current ${current.toFixed(2)}`, 24, 84);
+  ctx.fillStyle = "#4fc3f7";
+  ctx.fillText(`ifPlaced ${ifPlaced.toFixed(2)}`, 24, 176);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 async function buildArrayTexture() {
   const manifest = await fetch("vendor/kits/array-texture/manifest.json").then((r) => r.json());
   const size = manifest.targetSize;
@@ -876,13 +911,20 @@ async function main() {
   // diamond at the queried cell -- blue now that S4 is real
   // (READOUT_COLOR.available, the common case as of this run), neutral
   // grey only if scoring becomes unavailable again (READOUT_COLOR
-  // .unavailable). Still a status indicator, not a data visualisation:
-  // the real current/ifPlaced numbers are the evidence (READOUT-STATE,
-  // above, and window.__readoutResolved), read directly rather than
-  // encoded into a guessed marker height or colour ramp -- a screenshot
-  // paired with the console line is what this run's own brief asked be
-  // shown to Mark, not a second, invented visual encoding of the same
-  // numbers.
+  // .unavailable). A status indicator: whether a real number exists here
+  // at all, not the number itself.
+  //
+  // RDO-1 (docs/briefs/BLD-2026-09-17.md §3) -- the marker ALONE is not
+  // what §S4 asks for, corrected here: "the ghost shows the target
+  // cell's current value and the value the piece would have there...
+  // that number, changing as the cursor moves, IS the reason one cell
+  // beats another." The marker + a console line (RB3/RC5's own original
+  // design) was judged against that clause and did not meet it -- a
+  // console line is not something a player sees. The label sprite below
+  // draws readoutResolved's own REAL current/ifPlaced (buildReadoutLabel
+  // Texture, above), only when readoutResolved.available -- never a
+  // guessed number for the unavailable case, matching the marker's own
+  // colour-only distinction for that state.
   if (readoutResolved) {
     const [rx, rz] = anchorForCell(READOUT_CELL);
     const readoutGeom = new THREE.OctahedronGeometry(1.4, 0)
@@ -896,6 +938,28 @@ async function main() {
     const readoutMesh = new THREE.Mesh(readoutGeom, readoutMaterial);
     scene.add(readoutMesh);
     window.__readoutMesh = readoutMesh;
+
+    if (readoutResolved.available) {
+      const labelTex = buildReadoutLabelTexture(readoutResolved.current, readoutResolved.ifPlaced);
+      const labelMaterial = new THREE.SpriteMaterial({ map: labelTex, depthTest: false, depthWrite: false });
+      const labelSprite = new THREE.Sprite(labelMaterial);
+      // Above the marker, near the cursor's own cell -- a Sprite always
+      // faces the camera, so this stays legible from any of this file's
+      // own camera modes without a per-mode angle correction. Scale is
+      // proportional to shadowBB's own real max height, not a fixed
+      // guess: FOUND BY RENDERING, NOT ASSUMED -- a fixed 10x5 (a
+      // reasonable size against the OLD ~27m capped board) was a few
+      // illegible pixels against CAM-1's own real, far-back camera
+      // (needed to fit a real ~376m tower). Scaled to ~13% of the
+      // tallest real piece's own height keeps the label a legible,
+      // consistent fraction of the frame regardless of which board is
+      // actually on screen.
+      const labelH = Math.max(shadowBB.max.y * 0.13, 5);
+      labelSprite.position.set(rx + 2, labelH * 0.6, rz + 2);
+      labelSprite.scale.set(labelH * 2, labelH, 1);
+      scene.add(labelSprite);
+      window.__readoutLabelSprite = labelSprite;
+    }
   }
 
   let shadowPass = buildShadowPass(renderer, scene, shadowBB);
