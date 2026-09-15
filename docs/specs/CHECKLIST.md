@@ -54,7 +54,8 @@ resolve a conflict by taking both sides' ticks for their own ids.
     The cure was worse. Start again from 14.
     Gate: the pair, judged by Mark. No numeric gate; inventing one would be a
     check that cannot fail.
-[ ] FIX-4 (BLD) Produce evidence the readout actually shows a number — PLAN.md 3.4
+[x] FIX-4 (BLD) Produce evidence the readout actually shows a number — PLAN.md 3.4
+    DONE 2026-09-16: node scripts/_mutcheck.mjs test/shootLookProof.test.ts scripts/shoot-look-proof.mjs test/mutations.json -- both fix4-shoot-look-proof-must-capture-all-console-lines and fix4-shoot-look-proof-must-write-console-companion-file CAUGHT. Root cause was NOT the toDataURL/HTML-overlay theory: look-proof-scene.html's own readout was always a coloured 3D marker + a console.log line, by deliberate design (see its own RB3/RC5 comment) -- no on-screen text ever existed. The real gap: scripts/shoot-look-proof.mjs discarded the console transcript on exit, so 26-readout-real-numbers.png's own commit message hand-transcribed 3 cells' worth of numbers with nothing in the repo to check them against. Fixed by writing a companion <name>.console.txt beside every PNG. Fresh evidence, not reused: docs/look-proof-shots/31-readout-cell-7-4.png (ifPlaced=2.32), 32-readout-cell-2-6.png (ifPlaced=-0.43), 33-readout-cell-20-14.png (ifPlaced=0) -- three genuinely different values, each with its own committed .console.txt. Said plainly: the PNG alone still only shows marker position/colour, never the number itself -- the number is only checkable via the paired .console.txt, by design, not a shortfall being hidden.
     `26-readout-real-numbers.png` shows a cursor marker and no number. If the
     readout is an HTML overlay, `toDataURL()` captured the canvas and not the
     text — which would make the number real and the evidence empty.

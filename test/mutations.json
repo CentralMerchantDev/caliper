@@ -1708,6 +1708,22 @@
       "find": "const BOARD_PAVING_RADIUS = 10;",
       "replace": "const BOARD_PAVING_RADIUS = 20;",
       "expect": "GATE (FIX-3): the board camera's paving radius is retuned to 10, not RC4's rejected 20 -- 20 merged every demo piece into one slab covering nearly the whole frame (confirmed by rendering it), which is what actually produced the wash Mark rejected on 25-board-scene-pass.png; RB5's own HERO_MODE PAVING_RADIUS is untouched"
+    },
+    {
+      "id": "fix4-shoot-look-proof-must-capture-all-console-lines",
+      "guards": "FIX-4 (docs/briefs/BLD-2026-09-16.md): the readout's real number only ever exists as a console.log line -- filtering the captured transcript down to error lines only throws away the one thing that would prove a number is real.",
+      "file": "scripts/shoot-look-proof.mjs",
+      "find": "  consoleLines.push(m.text());",
+      "replace": "  // MUTATED: console lines no longer captured.",
+      "expect": "GATE (FIX-4): every console line is captured, not filtered down to errors alone -- the readout's real number only ever exists as a console.log line, so dropping non-error lines throws away the one thing that would prove it"
+    },
+    {
+      "id": "fix4-shoot-look-proof-must-write-console-companion-file",
+      "guards": "FIX-4 (docs/briefs/BLD-2026-09-16.md): 26-readout-real-numbers.png's own commit message hand-transcribed three cells' worth of numbers into prose, unverifiable from any committed artefact -- removes the companion transcript file, restoring that gap.",
+      "file": "scripts/shoot-look-proof.mjs",
+      "find": "  fs.writeFileSync(path.join(OUT_DIR, outName + \".console.txt\"), consoleLines.join(\"\\n\") + \"\\n\");",
+      "replace": "  // MUTATED: companion console transcript no longer written.",
+      "expect": "GATE (FIX-4): a successful render writes the captured console transcript to a companion file beside the PNG -- a screenshot alone is canvas pixels and cannot show a number; this is the durable half of the 'screenshot paired with the console line' pairing look-proof-scene.html's own design already relies on"
     }
   ]
 }
