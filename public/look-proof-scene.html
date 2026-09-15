@@ -297,32 +297,56 @@ function buildGhostOverlayMesh(resolved) {
 // proximity calculation that could disagree with it about where a
 // footprint's own edge actually is.
 const PAVING_RADIUS = 6; // metres -- a plausible street-level paved apron, wider than DECAL_RADIUS's own tight contact-shadow scale
-// RC4 -- "the board camera's own scene pass" (docs/specs/REBUILD-
-// CHECKLIST.md, MAKE IT PLAYABLE; Mark, 2026-09-15, after 14-board.png:
-// "still reads as a dust bowl at that distance") introduced a board-only
-// paving radius. Its own first value, 20, is what FIX-3
-// (docs/briefs/BLD-2026-09-16.md) reverted: at 20m every one of
-// BOARD_DEMO_PLACEMENTS' own pieces merges into ONE slab covering nearly
-// the whole visible frame (confirmed by rendering it -- 25-board-scene-
-// pass.png and this item's own 28/29 experiment shots), which is what
-// actually produced Mark's "hazier and more of a dust bowl than 14" --
-// not the fog override alone (reverted separately, see the BOARD_MODE
-// fog comment below); rendering the fog revert ALONE
-// (28-board-fog-reverted.png) still looked like 25, byte-for-byte close
-// but visually indistinguishable, proving the radius carried most of the
-// wash.
-// RETUNED to 10, not reverted to PAVING_RADIUS's own 6 -- 14-board.png's
-// real problem (small disconnected grey islands in earth, RC4's own
-// "sea of dust" description) is real and 6 does not fix it: measured
-// against BOARD_DEMO_PLACEMENTS' own real footprints (public/board-
-// renderer.js MODULE_SIZE_M=4m/cell), tower-base-6x6-a and mega-tower-a
-// sit only ~4m apart edge-to-edge and already merge at 6; house-a and
-// street-straight sit tens of metres further out and do not merge until
-// somewhere past 6. 10 (29-board-radius10-experiment.png, kept as the
-// visual record of the choice) closes those gaps into one connected,
-// organically-shaped plaza while the board's own corners and edges still
-// read as clearly-textured earth -- half of RC4's own 20, not a guess.
-const BOARD_PAVING_RADIUS = 10;
+// RC4/FIX-3 -- the board camera's own paving radius (20, then retuned to
+// 10, docs/briefs/BLD-2026-09-16.md) was islands of paving around each
+// footprint, closing gaps between nearby pieces but never covering the
+// plot itself -- still "desert with patches" past those islands. GRD-1
+// (below) retires the radius approach for BOARD_MODE entirely in favour
+// of paving the whole plot; the constant and its own tuning history are
+// gone from the source, not carried forward as dead code, but the
+// history stays here since the choice (10, half of RC4's rejected 20)
+// is what the FULL-plot paving below replaces, not reinvents from
+// nothing.
+
+// GRD-1 (docs/briefs/BLD-2026-09-17.md §4) -- Mark has now called the
+// ground a dust bowl in THREE separate look-proof passes (14, 25, 35).
+// FIX-3 already retuned fog and BOARD_PAVING_RADIUS and the board camera
+// still read as sand. A lever examined first: `THREE.PlaneGeometry`'s own
+// DEFAULT UVs span exactly [0,1] across the WHOLE plane regardless of its
+// real size, stretching one sample of the ground texture across the
+// entire footprint with zero repetition -- real, and fixed below
+// (retileGroundUV), but MEASURED (not assumed) to be the wrong lever for
+// THIS gate: rendered side-by-side against 14-board.png's own historical
+// camera, retiling alone reads FLATTER, not less dust-bowl -- a real
+// source image's own broad colour variation, stretched large, was
+// carrying more of the "not one flat colour" read than a small repeated
+// tile's high-frequency grain does once mip-blended at any real camera
+// distance. Re-reading the gate itself named the actual defect: "Paving
+// was added near buildings; everything beyond them is bare earth to the
+// horizon... Paving, kerb lines, surface variation -- not desert with
+// patches." That is a MATERIAL problem, not a texture-resolution one --
+// BOARD_PAVING_RADIUS's own islands-around-each-footprint design is
+// exactly "desert with patches." Fixed at the root below: the board's own
+// near-ground plot pages fully to the paved layer (a real city plot is
+// made ground, not scattered islands in dirt), bordered by a kerb ring
+// (N1c's own already-proven mechanism, generalised from one road tile's
+// edge to the whole plot's edge) marking where the made ground actually
+// ends and the untouched earth beyond it begins. retileGroundUV is kept
+// (a real, if secondary, improvement, and cheap to keep) rather than
+// reverted. GROUND_TILE_M=6 -- the same street-level scale PAVING_RADIUS's
+// own comment already uses ("a plausible street-level paved apron"), not
+// a second, unrelated guess.
+const GROUND_TILE_M = 6;
+function retileGroundUV(geometry, footprint) {
+  const uv = geometry.getAttribute("uv");
+  const repeatX = footprint[0] / GROUND_TILE_M, repeatZ = footprint[1] / GROUND_TILE_M;
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(i, uv.getX(i) * repeatX, uv.getY(i) * repeatZ);
+  }
+  uv.needsUpdate = true;
+  return geometry;
+}
+
 function addGroundLayerAttribute(geometry, footprints, pavedLayer, earthLayer, radius = PAVING_RADIUS) {
   const pos = geometry.getAttribute("position");
   const count = pos.count;
@@ -390,6 +414,28 @@ function buildStreetLevelDetail(roadPiece, housePiece, groundLayer) {
   const path = addLayerAttribute(addConstantDecalAttribute(pathGeom, 1), groundLayer);
 
   return [...kerbs, path];
+}
+
+// GRD-1 (docs/briefs/BLD-2026-09-17.md §4) -- BOARD_MODE's own plot is
+// now fully paved (above); this marks where that made ground actually
+// ends and the untouched earth beyond it begins, so the transition reads
+// as a built edge rather than paving fading into dirt with no boundary.
+// Reuses N1c's own kerbBox shape (raised box, full-strength join-decal
+// darkening) -- the SAME mechanism proven there for one road tile's edge,
+// applied to the whole plot's own perimeter instead.
+function buildBoardKerbRing(ground, groundLayer) {
+  const [ax, az] = ground.anchor;
+  const [fw, fd] = ground.footprint;
+  function kerbBox(cx, cz, w, d) {
+    const g = new THREE.BoxGeometry(w, KERB_HEIGHT, d).translate(cx, KERB_HEIGHT / 2, cz);
+    return addLayerAttribute(addConstantDecalAttribute(g, 1), groundLayer);
+  }
+  return [
+    kerbBox(ax + fw / 2, az - KERB_WIDTH / 2, fw + KERB_WIDTH * 2, KERB_WIDTH), // north edge
+    kerbBox(ax + fw / 2, az + fd + KERB_WIDTH / 2, fw + KERB_WIDTH * 2, KERB_WIDTH), // south edge
+    kerbBox(ax - KERB_WIDTH / 2, az + fd / 2, KERB_WIDTH, fd), // west edge
+    kerbBox(ax + fw + KERB_WIDTH / 2, az + fd / 2, KERB_WIDTH, fd), // east edge
+  ];
 }
 
 // N1a -- A SKY. "Even a gradient. The void is doing more damage to the
@@ -496,6 +542,16 @@ async function buildArrayTexture() {
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.magFilter = THREE.LinearFilter;
   tex.anisotropy = 8;
+  // GRD-1 (docs/briefs/BLD-2026-09-17.md §4) -- THREE's own default wrap
+  // (ClampToEdge) means a UV coordinate outside [0,1] just repeats the
+  // edge texel instead of tiling. Every real mesh's own baked UVs already
+  // stay within [0,1] (pack-authored geometry), so this is a genuine no-op
+  // for them -- ClampToEdge and RepeatWrapping are IDENTICAL for in-range
+  // coordinates. Needed below, where the board's own ground UVs are
+  // deliberately rescaled past [0,1] to tile a real texture sample at a
+  // real metre scale instead of stretching one sample across the whole
+  // board.
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.needsUpdate = true;
   // RB1 -- board-renderer.js's own layerForGlb needs this SAME manifest
   // (which file is on which layer) to resolve a catalogue entry's glb path
@@ -763,14 +819,23 @@ async function main() {
   const groundGeomRaw = new THREE.PlaneGeometry(GROUND.footprint[0], GROUND.footprint[1], GROUND.footprint[0], GROUND.footprint[1])
     .rotateX(-Math.PI / 2)
     .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+  // GRD-1 -- BOARD_MODE only, so HERO_MODE's own already-judged ground
+  // (90x60m, already read as acceptable at that smaller scale) is not
+  // touched by this at all.
+  if (BOARD_MODE) retileGroundUV(groundGeomRaw, GROUND.footprint);
   addGroundDecalAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal]);
   // RB5 -- read the paved layer's own real index from the manifest
   // (never hardcoded) -- matches board-renderer.js's own layerForGlb
   // discipline: one source of truth for "which file is on which layer".
   const pavedLayerIndex = manifest.layers.find((l) => l.file.includes("ground-paved")).index;
-  const groundGeom = addGroundLayerAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal], pavedLayerIndex, GROUND.layer, BOARD_MODE ? BOARD_PAVING_RADIUS : PAVING_RADIUS);
-  // Ground's own UVs tile once across its footprint -- fine for a grass
-  // sample texture at this scale, and not what this scene exists to prove.
+  // GRD-1 -- BOARD_MODE's own plot is made ground in full, not islands of
+  // paving around each footprint (BOARD_PAVING_RADIUS's own prior design,
+  // measured to still read as "desert with patches"). HERO_MODE/full
+  // GROUND_FULL keep the original footprint-radius paving unchanged --
+  // that ground was already judged acceptable at its own smaller scale.
+  const groundGeom = BOARD_MODE
+    ? addLayerAttribute(groundGeomRaw, pavedLayerIndex)
+    : addGroundLayerAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal], pavedLayerIndex, GROUND.layer, PAVING_RADIUS);
 
   // N1b -- "a ground that reads as continuing past the frame rather than
   // stopping at a visible edge" (docs/briefs/BLD-2026-09-15.md). The near
@@ -793,6 +858,13 @@ async function main() {
   const farGroundGeomRaw = new THREE.PlaneGeometry(FAR_GROUND_SIZE, FAR_GROUND_SIZE, 8, 8)
     .rotateX(-Math.PI / 2)
     .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, -0.02, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+  // GRD-1 -- BOARD_MODE only. A single tile stretched across 400m is an
+  // even flatter blur than the near ground's own 112m; the same already-
+  // tuned mipmap chain + anisotropic filtering (N1b's own comment above,
+  // originally for grazing-angle minification at the horizon) is exactly
+  // what keeps a high repeat count on this coarse 8-segment mesh from
+  // aliasing into moire rather than reading as texture.
+  if (BOARD_MODE) retileGroundUV(farGroundGeomRaw, [FAR_GROUND_SIZE, FAR_GROUND_SIZE]);
   const farGroundGeom = addLayerAttribute(addZeroDecalAttribute(farGroundGeomRaw), GROUND.layer);
 
   const preparedPieces = pieceGeoms.map((geom, i) => {
@@ -835,6 +907,10 @@ async function main() {
       )
     : [];
 
+  // GRD-1 -- the board plot's own perimeter kerb ring (see
+  // buildBoardKerbRing's own comment for why), BOARD_MODE only.
+  const boardKerbGeoms = BOARD_MODE ? buildBoardKerbRing(GROUND, GROUND.layer) : [];
+
   // The shadow camera's own frustum is sized from the pieces, the near
   // ground, and N1c's own street detail -- see buildShadowPass's own
   // comment for why the far ground must stay out of this box (it would
@@ -842,7 +918,7 @@ async function main() {
   const shadowBB = new THREE.Box3();
   groundGeom.computeBoundingBox();
   shadowBB.union(groundGeom.boundingBox);
-  for (const g of [...preparedPieces, ...streetDetailGeoms, ...preparedBoardPieces]) {
+  for (const g of [...preparedPieces, ...streetDetailGeoms, ...boardKerbGeoms, ...preparedBoardPieces]) {
     g.computeBoundingBox();
     shadowBB.union(g.boundingBox);
   }
@@ -874,7 +950,7 @@ async function main() {
     window.__boardCameraMaxHeight = shadowBB.max.y;
   }
 
-  const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...preparedBoardPieces], false);
+  const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...boardKerbGeoms, ...preparedBoardPieces], false);
   // FIX-3 (docs/briefs/BLD-2026-09-16.md §2) -- RC4's board-camera-only fog
   // override (uFogNear=100, uFogFar=220, narrower and closer than the
   // shared 90/230) is REMOVED, not retuned. Mark's own judgment on
@@ -1066,17 +1142,18 @@ async function main() {
       const newGroundGeomRaw = new THREE.PlaneGeometry(GROUND.footprint[0], GROUND.footprint[1], GROUND.footprint[0], GROUND.footprint[1])
         .rotateX(-Math.PI / 2)
         .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+      retileGroundUV(newGroundGeomRaw, GROUND.footprint); // GRD-1 -- this rebuild only ever runs inside BOARD_MODE (see the enclosing if above), matching the initial build's own retiling
       addGroundDecalAttribute(newGroundGeomRaw, [...PIECES, ...footprintsForDecal]);
-      const newGroundGeom = addGroundLayerAttribute(newGroundGeomRaw, [...PIECES, ...footprintsForDecal], pavedLayerIndex, GROUND.layer, BOARD_PAVING_RADIUS); // this rebuild only ever runs inside BOARD_MODE (see the enclosing if above)
+      const newGroundGeom = addLayerAttribute(newGroundGeomRaw, pavedLayerIndex); // GRD-1 -- fully paved, matching the initial build's own plot-wide paving; this rebuild only ever runs inside BOARD_MODE (see the enclosing if above)
 
-      const newMerged = mergeGeometries([newGroundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...liveBoardGeoms], false);
+      const newMerged = mergeGeometries([newGroundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...boardKerbGeoms, ...liveBoardGeoms], false);
       mesh.geometry.dispose();
       mesh.geometry = newMerged;
 
       const newShadowBB = new THREE.Box3();
       newGroundGeom.computeBoundingBox();
       newShadowBB.union(newGroundGeom.boundingBox);
-      for (const g of [...preparedPieces, ...streetDetailGeoms, ...liveBoardGeoms]) {
+      for (const g of [...preparedPieces, ...streetDetailGeoms, ...boardKerbGeoms, ...liveBoardGeoms]) {
         g.computeBoundingBox();
         newShadowBB.union(g.boundingBox);
       }

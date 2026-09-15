@@ -1,0 +1,3 @@
+BOARD-STATE placed=4 resolved=4 skipped=0 removeId=null
+SHADOW-MAP-COST size=1024x1024 bytes=4194304 (4.00 MiB) renderMs=17.500
+LOOK-PROOF ready, draw calls: 2 triangles: 20492 mainRenderMs: 8.300

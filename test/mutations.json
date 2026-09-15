@@ -1710,12 +1710,12 @@
       "expect": "GATE (FIX-3): the board camera's fog is 14-board.png's real settings -- RC4's narrower per-camera override (100/220) is reverted; BOARD_MODE reads the SAME shared uFogNear/uFogFar (90/230) as every other mode, no caller-side uniform write"
     },
     {
-      "id": "fix3-board-paving-radius-must-stay-retuned",
-      "guards": "FIX-3 (docs/briefs/BLD-2026-09-16.md): restores RC4's rejected 20m board paving radius, which merges every BOARD_DEMO_PLACEMENTS piece into one slab covering nearly the whole visible frame -- measured (by rendering it) as the real cause of Mark's 'hazier and more of a dust bowl' verdict on 25-board-scene-pass.png, more than the fog override alone.",
+      "id": "fix3-grd1-board-paving-radius-must-stay-retired",
+      "guards": "FIX-3/GRD-1: BOARD_PAVING_RADIUS (RC4's rejected 20, FIX-3's retuned 10) is reintroduced -- GRD-1 retired the island-paving-radius design entirely in favour of paving the whole plot; its return would mean the radius-based design is back, live or not.",
       "file": "public/look-proof-scene.html",
-      "find": "const BOARD_PAVING_RADIUS = 10;",
-      "replace": "const BOARD_PAVING_RADIUS = 20;",
-      "expect": "GATE (FIX-3): the board camera's paving radius is retuned to 10, not RC4's rejected 20 -- 20 merged every demo piece into one slab covering nearly the whole frame (confirmed by rendering it), which is what actually produced the wash Mark rejected on 25-board-scene-pass.png; RB5's own HERO_MODE PAVING_RADIUS is untouched"
+      "find": "const PAVING_RADIUS = 6; // metres -- a plausible street-level paved apron, wider than DECAL_RADIUS's own tight contact-shadow scale",
+      "replace": "const PAVING_RADIUS = 6; // metres -- a plausible street-level paved apron, wider than DECAL_RADIUS's own tight contact-shadow scale\nconst BOARD_PAVING_RADIUS = 10;",
+      "expect": "GATE (FIX-3/GRD-1): the board's own island-paving radius (RC4's rejected 20, FIX-3's retuned 10) is retired, not reintroduced -- GRD-1 replaced it with full-plot paving; RB5's own HERO_MODE PAVING_RADIUS is untouched"
     },
     {
       "id": "fix4-shoot-look-proof-must-capture-all-console-lines",
@@ -1852,6 +1852,22 @@
       "find": "if (readoutResolved.available) {\n      const labelTex = buildReadoutLabelTexture(readoutResolved.current, readoutResolved.ifPlaced);",
       "replace": "if (true) {\n      const labelTex = buildReadoutLabelTexture(readoutResolved.current, readoutResolved.ifPlaced);",
       "expect": "GATE (RDO-1): the label is a Sprite (always faces the camera, legible from any angle), added to the scene ONLY when readoutResolved is real and available -- never drawn for a guessed or unavailable value"
+    },
+    {
+      "id": "grd1-board-ground-must-stay-fully-paved",
+      "guards": "GRD-1 (docs/briefs/BLD-2026-09-17.md): BOARD_MODE's near ground reverts to the old island-paving-radius design (addGroundLayerAttribute with a radius) instead of paving the whole plot -- the exact 'desert with patches' defect this gate replaced.",
+      "file": "public/look-proof-scene.html",
+      "find": "const groundGeom = BOARD_MODE\n    ? addLayerAttribute(groundGeomRaw, pavedLayerIndex)\n    : addGroundLayerAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal], pavedLayerIndex, GROUND.layer, PAVING_RADIUS);",
+      "replace": "const groundGeom = addGroundLayerAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal], pavedLayerIndex, GROUND.layer, PAVING_RADIUS);",
+      "expect": "GATE (GRD-1): BOARD_MODE's own near ground is paved in FULL (a real plot, not islands of paving around each footprint) -- addGroundLayerAttribute's own radius design already measured as 'desert with patches'"
+    },
+    {
+      "id": "grd1-board-kerb-ring-must-stay-wired",
+      "guards": "GRD-1: the board's own perimeter kerb ring is dropped (an empty array instead of the real buildBoardKerbRing call) -- the paved plot would fade into earth with no marked edge, and the interactive rebuild path would silently lose it too.",
+      "file": "public/look-proof-scene.html",
+      "find": "const boardKerbGeoms = BOARD_MODE ? buildBoardKerbRing(GROUND, GROUND.layer) : [];",
+      "replace": "const boardKerbGeoms = [];",
+      "expect": "GATE (GRD-1): the board's own plot has a real perimeter kerb ring marking where the paved plot ends and untouched earth begins, built via buildBoardKerbRing and merged into the SAME one mesh as everything else"
     }
   ]
 }

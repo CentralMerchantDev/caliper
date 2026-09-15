@@ -143,7 +143,7 @@ test("(synthetic) the vulnerability: a comment mentioning preserveDrawingBuffer 
 });
 
 test("look-proof-scene.html merges every piece into ONE geometry before adding a single mesh -- the one-draw-call claim, structurally", () => {
-  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom,\s*farGroundGeom,\s*\.\.\.preparedPieces,\s*\.\.\.streetDetailGeoms,\s*\.\.\.preparedBoardPieces\]/, "the scene does not merge ground, far ground, every piece, street-level detail, and board pieces into one geometry -- 4.1's gate (\"two pieces from different packs render in a single draw call\") is not wired the way this file claims");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom,\s*farGroundGeom,\s*\.\.\.preparedPieces,\s*\.\.\.streetDetailGeoms,\s*\.\.\.boardKerbGeoms,\s*\.\.\.preparedBoardPieces\]/, "the scene does not merge ground, far ground, every piece, street-level detail, the board kerb ring, and board pieces into one geometry -- 4.1's gate (\"two pieces from different packs render in a single draw call\") is not wired the way this file claims");
   // RB2's own ghost overlay and RB3's own readout marker are each a
   // SEPARATE, deliberate mesh (their own simple materials, UI previews,
   // never "pieces") -- the one-draw-call claim is about pieces sharing
@@ -230,7 +230,7 @@ test("N1a: scene.background is set to a real gradient texture, not a flat colour
 test("N1b: a far-ground plane is merged into the SAME mesh as the near ground and pieces -- not a second draw call, not a second scene object", () => {
   assert.match(SCENE_SRC, /const FAR_GROUND_SIZE = 400/, "far-ground plane's own size constant is missing or changed unexpectedly");
   assert.match(SCENE_SRC, /new THREE\.PlaneGeometry\(FAR_GROUND_SIZE, FAR_GROUND_SIZE, 8, 8\)/, "far-ground geometry is missing -- the ground still ends at GROUND.footprint's own edge");
-  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms, \.\.\.preparedBoardPieces\]/, "far-ground geometry is not merged into the scene's one mesh -- either dropped, or added as a second draw call instead");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms, \.\.\.boardKerbGeoms, \.\.\.preparedBoardPieces\]/, "far-ground geometry is not merged into the scene's one mesh -- either dropped, or added as a second draw call instead");
 });
 
 test("N1b: the shadow camera's frustum is fit to the pieces and near ground ONLY, not the far ground -- the far ground would coarsen every shadow texel the buildings need", () => {
@@ -263,7 +263,7 @@ test("N1c: street-level detail (kerbs + a path) is built and merged into the SAM
   assert.match(SCENE_SRC, /const kerbs = \[/, "kerb geometry is not built");
   assert.match(SCENE_SRC, /const path = addLayerAttribute\(addConstantDecalAttribute\(pathGeom, 1\), groundLayer\)/, "the path plane is not built with a constant, fully-darkened groundDecal -- the mechanism that makes it read as distinct from the surrounding ground");
   assert.match(SCENE_SRC, /const streetDetailGeoms = HERO_MODE\s*\n\s*\? buildStreetLevelDetail\(/, "street-level detail is not gated to HERO_MODE -- the full 20-piece scene has no single street for this to describe");
-  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms, \.\.\.preparedBoardPieces\]/, "street-level detail geometry is not merged into the scene's one mesh");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms, \.\.\.boardKerbGeoms, \.\.\.preparedBoardPieces\]/, "street-level detail geometry is not merged into the scene's one mesh");
 });
 
 test("N1c: kerbs and the path reuse GROUND's own layer texture, not the road pack's -- attempt 1 used the road layer and rendered visible rainbow banding (BoxGeometry stretches a whole sprite-sheet atlas across each thin face), found by rendering and reverted", () => {
@@ -298,7 +298,7 @@ test("GATE (RB1): the real catalogue is fetched, not a hand-typed copy -- data/c
 
 test("GATE (RB1): a board piece is resolved through resolveBoardPieces (reading the board's own CURRENT state) and merged into the SAME one mesh as everything else -- draw calls stay at 1", () => {
   assert.match(SCENE_SRC, /const \{ resolved, skipped \} = resolveBoardPieces\(board, catalogueById, manifest\)/, "board pieces are not resolved via the real board-renderer.js function");
-  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms, \.\.\.preparedBoardPieces\]/, "resolved board pieces are not merged into the scene's one mesh -- either dropped, or rendered as a separate draw call");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[groundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms, \.\.\.boardKerbGeoms, \.\.\.preparedBoardPieces\]/, "resolved board pieces are not merged into the scene's one mesh -- either dropped, or rendered as a separate draw call");
 });
 
 test("GATE (RB1): ?removeId=<id> calls the real board.remove() before resolving -- the 'place, render, remove, render' gate is one real board's own state transition, not two independently-scripted renders", () => {
@@ -419,16 +419,31 @@ test("(synthetic) the vulnerability: a comment mentioning loadBoard must not sat
 });
 
 // -------------------------------------------------- RB5: the ground material
-test("GATE (RB5): the ground's own layerIndex is computed PER VERTEX (paved near a footprint, earth otherwise), not a single uniform value for the whole plane", () => {
+test("GATE (RB5): HERO_MODE/full ground's own layerIndex is computed PER VERTEX (paved near a footprint, earth otherwise), not a single uniform value for the whole plane", () => {
   assert.match(SCENE_SRC, /function addGroundLayerAttribute\(geometry, footprints, pavedLayer, earthLayer, radius = PAVING_RADIUS\)/, "addGroundLayerAttribute is missing -- the ground would still be one uniform layer");
   assert.match(SCENE_SRC, /data\[i\] = nearest <= radius \? pavedLayer : earthLayer/, "the per-vertex paved/earth split is not actually wired to the real nearest-footprint distance");
-  assert.match(SCENE_SRC, /const groundGeom = addGroundLayerAttribute\(groundGeomRaw, \[\.\.\.PIECES, \.\.\.boardFootprintsForDecal\], pavedLayerIndex, GROUND\.layer, BOARD_MODE \? BOARD_PAVING_RADIUS : PAVING_RADIUS\)/, "the real ground geometry does not use the new per-vertex layer function");
+  assert.match(SCENE_SRC, /: addGroundLayerAttribute\(groundGeomRaw, \[\.\.\.PIECES, \.\.\.boardFootprintsForDecal\], pavedLayerIndex, GROUND\.layer, PAVING_RADIUS\)/, "HERO_MODE/full ground does not fall back to the real per-vertex layer function");
 });
 
-test("GATE (FIX-3): the board camera's paving radius is retuned to 10, not RC4's rejected 20 -- 20 merged every demo piece into one slab covering nearly the whole frame (confirmed by rendering it), which is what actually produced the wash Mark rejected on 25-board-scene-pass.png; RB5's own HERO_MODE PAVING_RADIUS is untouched", () => {
-  assert.match(SCENE_SRC, /const BOARD_PAVING_RADIUS = 10;/, "BOARD_PAVING_RADIUS must be the retuned 10 -- either RC4's rejected 20 (the wash) or an unreviewed different value would both be undocumented regressions");
-  assert.doesNotMatch(SCENE_SRC, /const BOARD_PAVING_RADIUS = 20;/, "RC4's rejected paving radius (20) is still present");
+// -------------------------------------------------- GRD-1: the board's own plot is made ground in full
+test("GATE (GRD-1): BOARD_MODE's own near ground is paved in FULL (a real plot, not islands of paving around each footprint) -- addGroundLayerAttribute's own radius design already measured as 'desert with patches'", () => {
+  assert.match(SCENE_SRC, /const groundGeom = BOARD_MODE\s*\n\s*\? addLayerAttribute\(groundGeomRaw, pavedLayerIndex\)/, "BOARD_MODE's own near ground is not unconditionally paved -- the island-paving design this gate replaces is still active");
+});
+
+test("GATE (FIX-3/GRD-1): the board's own island-paving radius (RC4's rejected 20, FIX-3's retuned 10) is retired, not reintroduced -- GRD-1 replaced it with full-plot paving; RB5's own HERO_MODE PAVING_RADIUS is untouched", () => {
+  assert.doesNotMatch(SCENE_SRC, /const BOARD_PAVING_RADIUS/, "BOARD_PAVING_RADIUS is back -- GRD-1 retired the island-paving-radius design in favour of paving the whole plot");
   assert.match(SCENE_SRC, /const PAVING_RADIUS = 6;/, "HERO_MODE's own PAVING_RADIUS was changed -- it must stay exactly what RB5's own already-judged render used");
+});
+
+test("GATE (GRD-1): the board's own plot has a real perimeter kerb ring marking where the paved plot ends and untouched earth begins, built via buildBoardKerbRing and merged into the SAME one mesh as everything else", () => {
+  assert.match(SCENE_SRC, /function buildBoardKerbRing\(ground, groundLayer\)/, "buildBoardKerbRing is missing -- there is no board-plot-edge kerb");
+  assert.match(SCENE_SRC, /const boardKerbGeoms = BOARD_MODE \? buildBoardKerbRing\(GROUND, GROUND\.layer\) : \[\];/, "boardKerbGeoms is not actually built from the real BOARD_MODE ground/GROUND.layer -- a hardcoded empty array would satisfy the merge-array text checks without ever drawing a kerb");
+  assert.match(SCENE_SRC, /mergeGeometries\(\[newGroundGeom, farGroundGeom, \.\.\.preparedPieces, \.\.\.streetDetailGeoms, \.\.\.boardKerbGeoms, \.\.\.liveBoardGeoms\]/, "the interactive rebuild path (a commit or remove) drops the kerb ring from the merged mesh -- it would vanish after the first click");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning buildBoardKerbRing must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// function buildBoardKerbRing(ground, groundLayer) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /function buildBoardKerbRing\(ground, groundLayer\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });
 
 test("GATE (FIX-3): the board camera's fog is 14-board.png's real settings -- RC4's narrower per-camera override (100/220) is reverted; BOARD_MODE reads the SAME shared uFogNear/uFogFar (90/230) as every other mode, no caller-side uniform write", () => {
@@ -468,6 +483,25 @@ test("RB5: a real, already CC0-licensed, already-vendored gravel texture is the 
   const normaliseSrc = stripSourceComments(readFileSync(join(PUBLIC, "..", "scripts", "normalise-kit-textures.mjs"), "utf8"));
   assert.match(normaliseSrc, /name: "ground-paved"/, "scripts/normalise-kit-textures.mjs does not define a ground-paved layer");
   assert.match(normaliseSrc, /path: "public\/vendor\/textures\/gravel\/diffuse\.webp"/, "the paved layer is not sourced from the already-vendored, already CC0-licensed gravel texture");
+});
+
+// -------------------------------------------------------- GRD-1: the ground stops reading as a dust bowl
+test("GATE (GRD-1): the array texture wraps with Repeat, not the THREE.js default ClampToEdge -- a UV scale factor beyond [0,1] would just smear the edge pixel without this, never actually tile", () => {
+  assert.match(SCENE_SRC, /tex\.wrapS = tex\.wrapT = THREE\.RepeatWrapping;/, "buildArrayTexture does not set Repeat wrapping -- UV retiling below would have no visible effect");
+});
+
+test("GATE (GRD-1): the board's own near ground UVs are rescaled to a real metre-based tile, BOARD_MODE only -- PlaneGeometry's own default UVs stretch ONE texture sample across the WHOLE plane (112x80m for the board), which is the likely real cause of a flat, textureless 'dust bowl' read that nobody had examined before this item", () => {
+  assert.match(SCENE_SRC, /const GROUND_TILE_M = 6;/, "no real, named metre-based ground tile scale constant");
+  assert.match(SCENE_SRC, /if \(BOARD_MODE\) retileGroundUV\(groundGeomRaw, GROUND\.footprint\);/, "the near ground's own UVs are not rescaled for BOARD_MODE");
+});
+
+test("GATE (GRD-1): the far ground (400m span, N1b's own plane) is ALSO retiled for BOARD_MODE -- a single tile stretched 400m would be an even flatter blur than the near ground's own 112m, visible in the same 'dust bowl to the horizon' complaint", () => {
+  assert.match(SCENE_SRC, /if \(BOARD_MODE\) retileGroundUV\(farGroundGeomRaw, \[FAR_GROUND_SIZE, FAR_GROUND_SIZE\]\);/, "the far ground's own UVs are not rescaled for BOARD_MODE");
+});
+
+test("GRD-1: HERO_MODE's own already-judged ground is untouched -- UV retiling only runs inside an explicit BOARD_MODE check, never unconditionally", () => {
+  const uvRetileCount = (SCENE_SRC.match(/\.getAttribute\("uv"\)/g) || []).length;
+  assert.ok(uvRetileCount >= 2, `expected at least 2 real UV-attribute reads (near + far ground), found ${uvRetileCount}`);
 });
 
 test("RB5: the fog colour and the sky's own horizon stop are matched EXACTLY -- N1b's own seamless-fade design, which a fog-only or sky-only retune would silently break", () => {

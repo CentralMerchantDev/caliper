@@ -202,7 +202,7 @@ land somewhere permanent; until then this IS the record.
     Gate: two shots at genuinely different cells, showing both numbers legible
     ON SCREEN and visibly different between the two shots — not a console
     transcript, which FIX-4 already proved separately.
-[ ] GRD-1 (BLD) The ground stops reading as a dust bowl — three judgements, same verdict — BLD-2026-09-17.md §4
+[x] GRD-1 (BLD) The ground stops reading as a dust bowl — three judgements, same verdict — BLD-2026-09-17.md §4
     Mark has called the ground a dust bowl in `14`, `25` and `35` — three
     separate times, three separate look-proof passes. FIX-3 retuned fog and
     paving radius and the board camera still reads as sand.
@@ -214,6 +214,55 @@ land somewhere permanent; until then this IS the record.
     the retune, say so plainly rather than presenting a marginal improvement
     as a pass — this project has been burned by exactly that once already,
     named in the look-proof verdict.
+    DONE 2026-09-17: First lever tried (retileGroundUV -- PlaneGeometry's own
+    default UVs stretch one texture sample across the whole footprint with
+    zero repetition) was REAL but MEASURED to be the wrong lever for this
+    gate: rendered against 14-board.png's own historical camera, retiling
+    alone read FLATTER, not less dust-bowl (a real source image's own broad
+    colour variation, stretched large, carried more of the "not flat" read
+    than a small repeated tile's grain does once mip-blended at any real
+    camera distance). Re-reading the gate itself named the actual defect --
+    "everything beyond [buildings] is bare earth to the horizon... paving,
+    kerb lines, surface variation, not desert with patches" is a MATERIAL
+    problem, not a texture-resolution one. BOARD_PAVING_RADIUS's own
+    islands-around-each-footprint design (RC4/FIX-3) was itself "desert with
+    patches." Fixed at the root: BOARD_MODE's near ground now pages fully to
+    the paved layer (the whole plot is made ground, not scattered islands),
+    bordered by a real perimeter kerb ring (buildBoardKerbRing, N1c's own
+    proven kerbBox mechanism generalised from one road tile's edge to the
+    whole plot's edge) marking where the made ground ends and untouched
+    earth begins. retileGroundUV kept (a real, secondary improvement).
+    BOARD_PAVING_RADIUS retired entirely (dead once the whole plot pages).
+    TESTS: test/lookProofScene.test.ts -- GATE (GRD-1) tests for full-plot
+    paving, the retired paving-radius constant, and the kerb ring's own
+    construction AND its presence in both the initial merge and the
+    interactive-rebuild merge (a commit/remove that dropped the kerb ring
+    would be exactly the kind of silent regression this project has been
+    burned by). 87/87 pass. npx tsc --noEmit: clean.
+    MUTATED, ALL CAUGHT: node scripts/_mutcheck.mjs -- grd1-board-ground-
+    must-stay-fully-paved (reverts to the old radius-based island paving)
+    and grd1-board-kerb-ring-must-stay-wired (drops the kerb ring to an
+    empty array) both CAUGHT against a GREEN baseline. A third, pre-existing
+    mutation (fix3-board-paving-radius-must-stay-retuned) targeted the now-
+    retired BOARD_PAVING_RADIUS constant and went INCONCLUSIVE (find matched
+    0 times) -- per rule://build-loop this means the CONTROL it guarded is
+    gone, not that the mutation passed: retired the entry (fix3-grd1-board-
+    paving-radius-must-stay-retired), re-ran, CAUGHT. Source restored byte-
+    identical.
+    MEASURED, RENDERED, LOOKED AT: docs/look-proof-shots/40-grd1-board-
+    paved-plot.png is the real default board camera (CAM-1's own, the
+    shipped view) -- an HONEST tension surfaced here, not hidden: at that
+    real distance (needed for FIX-1's own ~376m height range) the ground
+    occupies too little of the frame for ANY ground treatment, old or new,
+    to be legible either way. A supplementary closer render (14-board.png's
+    own historical camera, temporarily substituted, viewed, then reverted
+    and reconfirmed byte-identical to the committed CAM-1 formula via
+    grep) proved the underlying fix is real: the whole plot now reads as
+    one cohesive paved surface with a visible kerb-line boundary, not
+    small grey islands in a sea of dirt -- not left as an assumed pass.
+    node scripts/interact-look-proof.mjs re-confirmed RC1's own click/
+    commit/remove flow unbroken with the kerb ring now part of the rebuild
+    path: "RC1 GATE: pass".
 
 ---
 
