@@ -2,12 +2,17 @@
 
 Brief: [docs/briefs/BLD-2026-09-16.md](../briefs/BLD-2026-09-16.md). Order
 followed exactly per §1: FIX-3, FIX-4, then CAT-2, CAT-3, CAT-4 (FIX-1
-checked at every moment transition, never landed -- CLI's FIX-2 has not
-been pushed anywhere this lane can reach, confirmed by `node scripts/
-query-event-log.mjs --item FIX-2` returning `0 matching event(s)` at
-session start, mid-session, and again just before this handover). Stopped
-at CAT-4, an explicitly authorised stopping point per §7. Pushed to
-`origin/codex-lane` through `d04fddc`.
+checked at every moment transition, correctly not taken while CLI's FIX-2
+had not landed anywhere this lane could reach -- `node scripts/query-
+event-log.mjs --item FIX-2` returned `0 matching event(s)` at session
+start, mid-session, and again just before the first handover). Stopped at
+CAT-4, an explicitly authorised stopping point per §7, and the first
+version of this handover was written there.
+
+**UPDATE, same session, after the first handover was written**: told
+directly that FIX-2 had in fact landed on `origin/main` hours earlier and
+this branch simply had not merged it. Merged (`3b6c842`) and took FIX-1
+(`d1ee16e`), both below. Pushed to `origin/codex-lane` through `d1ee16e`.
 
 ## FIX-3 -- the fog wash, reverted, then genuinely retuned
 
@@ -114,24 +119,28 @@ silently left for Mark to find. 1 mutation CAUGHT.
 ## Commits, in order
 
 `5038166` FIX-3, `8e01ce3` FIX-4, `2b57277` CAT-2, `55c8a70` CAT-3,
-`d04fddc` CAT-4. All pushed: `116ff51..d04fddc codex-lane -> codex-lane`.
-Gate ledger entries recorded for all five via `process_record_gate`.
+`d04fddc` CAT-4, `4f15cde` this handover's own first version, `d9eb792`
+a gate-ledger sweep, `3b6c842` merge origin/main (CLI's item-0 and FIX-2),
+`d1ee16e` FIX-1. All pushed: `116ff51..d1ee16e codex-lane -> codex-lane`.
+Gate ledger entries recorded for every item via `process_record_gate`.
 
 ## Verification, this run overall
 
 Each item verified via its own exact touched files, run to completion:
-`test/lookProofScene.test.ts` (73/73 by the end), `test/shootLookProof.
-test.ts` (3/3), `test/catalogueValidator.test.ts` (60/60), `test/
-boardRenderer.test.ts` (30/30), `test/catalogueContactSheet.test.ts`
-(5/5). `npx tsc --noEmit` clean after every item. 13 mutations added to
-`test/mutations.json` this run, every one independently confirmed CAUGHT
-against a GREEN baseline with the source file restored byte-identical
-afterward (`node scripts/_mutcheck.mjs`, never `mutate.mjs --all`, per
-FIX-6's own still-open recommendation to keep both tools working rather
-than picking one). Full, unfiltered `node test/run.mjs` (no args) was
-attempted three times; the first completed (735 pass/23 pre-existing
-fail, confirming FIX-3 introduced nothing new), the second and third were
-killed by apparent machine contention (§ "for the next run" below) rather
+`test/lookProofScene.test.ts`, `test/shootLookProof.test.ts`,
+`test/catalogueValidator.test.ts`, `test/boardRenderer.test.ts`,
+`test/catalogueContactSheet.test.ts`, `test/lookProofPieces.test.ts` (new,
+FIX-1's own). `npx tsc --noEmit` clean after every item. 22 mutations
+added to `test/mutations.json` this run, every one independently
+confirmed CAUGHT against a GREEN baseline with the source file restored
+byte-identical afterward (`node scripts/_mutcheck.mjs`, never `mutate.mjs
+--all`, per FIX-6's own still-open recommendation to keep both tools
+working rather than picking one). Full, unfiltered `node test/run.mjs`
+(no args) was attempted six times across the whole run; three completed
+(735 pass/23 pre-existing fail before any of this run's work, then 751
+after the merge, then 759 after FIX-1 -- the pre-existing fail count never
+moved), three were killed by apparent machine contention (§ "for the next
+run" below) rather
 than completing or failing cleanly.
 
 ## A genuine harness finding, queued not fixed
@@ -148,16 +157,67 @@ Not touched -- `test/run.mjs` is shared harness, outside this lane's own
 FILES list. Verification for every item in this run instead used the
 exact touched files, each confirmed to run to completion.
 
+## Merge -- origin/main into codex-lane, `3b6c842`
+
+CLI's FIX-2 (`storeysFor`, a real disclosed per-entry storey SCALE --
+its own header explains why it is not a literal architectural count,
+RESEARCH.md R11 forbids inventing a floor-to-floor metres constant) and
+item-0 (`docs/specs/RESEARCH.md` restored, closing a dangling reference
+PLAN.md itself cited) landed on `origin/main` while this branch was mid-
+run. Two real conflicts, both from the same root cause -- both lanes
+touched `data/catalogue.json` and `test/catalogueValidator.test.ts` this
+run, in different fields per PLAN.md §1's own CLI/BLD split. Resolved by
+taking `origin/main`'s file as the base and re-running `node scripts/
+link-catalogue-meshes.mjs` (BLD's own idempotent generator, unchanged,
+spreads every existing field first) on top of it -- never hand-spliced
+JSON. `test/catalogueValidator.test.ts`'s one conflict (two different new
+imports) was a real union, not a disagreement. 227/227 across every file
+either side touched, `npx tsc --noEmit` clean, full suite 751 pass/23
+pre-existing fail (unchanged categories) before finalising. A pre-existing
+unrelated stray `docs/MODULE-MAP.md` diff (present since before this
+session started) was stashed, not restored, so it would not collide with
+`origin/main`'s own real changes to that file.
+
+## FIX-1 -- the 6x height cap, removed
+
+`d1ee16e`. `public/look-proof-pieces.js`'s `fitToFootprint` takes an
+OPTIONAL 5th argument, `storeys`. Real -> height = storeys directly,
+uncapped (two already-real numbers multiplied -- native mesh height,
+catalogue storeys -- never an invented floor-to-floor constant). Absent
+(HERO_MODE's own already-judged static demo) -> byte-for-byte unchanged,
+still capped at 6. Computed and rejected the simpler alternative first:
+removing the cap alone (raw footprint-average, no storeys) would only
+reach ~105m for mega-tower-a (8:1 against a small house) -- FIX-2's own
+storeys field, built and verified specifically for this fix (its own
+docstring cites PLAN.md §3.1 directly), would sit completely unused.
+Wired into both `resolveBoardPieces` (board-renderer.js) and the
+catalogue contact sheet; HERO_MODE untouched.
+
+Gate evidence: `docs/look-proof-shots/34-height-range.png` + its own
+`.console.txt` -- small-house-a measured 4.57m (storeys 4), mega-tower-a
+measured 376.32m (storeys 84), both stated by the render itself. 82:1 --
+overshoots Mark's own ~24:1 Toronto reference, said plainly rather than
+tuned to land closer. Tried making the CAT-4 contact sheet itself also
+carry this range and failed both ways attempted (an elevated angled
+camera still clipped the tower; a distance driven off real height shrank
+everything else to unreadable) -- reverted that camera to CAT-4's own
+version, unchanged; the tallest two pieces clip its top as a disclosed
+consequence.
+
+**A separate, real, disclosed finding, not fixed in this item**: the
+board camera itself (`docs/look-proof-shots/35-board-fix1-real-height.png`,
+the same `?board=1` camera 14/25/30-board*.png already use) is now
+completely inadequate for the new realistic height range -- tower-base-
+6x6-a (237m real) and mega-tower-a (376m real) fill the entire frame from
+a camera built for buildings a tenth their size. Real, necessary follow-up
+work this item's own scope does not cover.
+
 ## For the next run
 
-- **FIX-1 is still the first blocked item.** `mega-tower-a` still renders
-  capped (visible again on the freshly regenerated CAT-4 contact sheet).
-  The cap lives in `public/look-proof-pieces.js`'s `fitToFootprint`:
-  `const sy = Math.min((sx + sz) / 2, 6);` -- found and confirmed exact
-  during CAT-2/CAT-3 work, not yet touched (still correctly blocked on
-  CLI's FIX-2, a real storey count field). Check `node scripts/
-  query-event-log.mjs --item FIX-2` first; if it has landed, FIX-1 is next
-  in the brief's own order, ahead of anything past CAT-4.
+- **The board camera needs its own retune for the real height range FIX-1
+  landed** -- see `35-board-fix1-real-height.png` above. This is the
+  single most visible remaining gap: the actual playable board is now
+  dominated by two buildings that no longer fit its own camera.
 - **Two real, disclosed CAT-4 findings worth a dedicated pass**: the top-
   two-row label crowding (a COLS/cellSize retune, needs its own render-
   and-look cycle, not a guess) and the CAT-2/CAT-3 mesh-reuse "same
