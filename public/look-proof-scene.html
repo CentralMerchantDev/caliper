@@ -299,19 +299,30 @@ function buildGhostOverlayMesh(resolved) {
 const PAVING_RADIUS = 6; // metres -- a plausible street-level paved apron, wider than DECAL_RADIUS's own tight contact-shadow scale
 // RC4 -- "the board camera's own scene pass" (docs/specs/REBUILD-
 // CHECKLIST.md, MAKE IT PLAYABLE; Mark, 2026-09-15, after 14-board.png:
-// "still reads as a dust bowl at that distance"). RB5's own PAVING_RADIUS
-// was tuned for HERO_MODE's close, angled composition, where the 4-6m
-// halo around a piece is a plausible chunk of the frame. The board
-// camera looks down over the WHOLE 24x16-cell area from much farther out
-// (measured: ~134-212m from camera to the near/far corners of
-// BOARD_GROUND, vs HERO's own ~40-90m to its pieces) -- at that
-// remove, a 6m halo around each piece is a small fraction of what's
-// actually visible, so almost the entire frame still reads as the warm
-// earth layer between the pieces. A wider board-specific radius closes
-// the gaps between BOARD_DEMO_PLACEMENTS' own pieces into one continuous
-// paved area -- the read this camera needs ("a built place"), not a
-// blanket retune of HERO_MODE's own already-judged 6m apron.
-const BOARD_PAVING_RADIUS = 20;
+// "still reads as a dust bowl at that distance") introduced a board-only
+// paving radius. Its own first value, 20, is what FIX-3
+// (docs/briefs/BLD-2026-09-16.md) reverted: at 20m every one of
+// BOARD_DEMO_PLACEMENTS' own pieces merges into ONE slab covering nearly
+// the whole visible frame (confirmed by rendering it -- 25-board-scene-
+// pass.png and this item's own 28/29 experiment shots), which is what
+// actually produced Mark's "hazier and more of a dust bowl than 14" --
+// not the fog override alone (reverted separately, see the BOARD_MODE
+// fog comment below); rendering the fog revert ALONE
+// (28-board-fog-reverted.png) still looked like 25, byte-for-byte close
+// but visually indistinguishable, proving the radius carried most of the
+// wash.
+// RETUNED to 10, not reverted to PAVING_RADIUS's own 6 -- 14-board.png's
+// real problem (small disconnected grey islands in earth, RC4's own
+// "sea of dust" description) is real and 6 does not fix it: measured
+// against BOARD_DEMO_PLACEMENTS' own real footprints (public/board-
+// renderer.js MODULE_SIZE_M=4m/cell), tower-base-6x6-a and mega-tower-a
+// sit only ~4m apart edge-to-edge and already merge at 6; house-a and
+// street-straight sit tens of metres further out and do not merge until
+// somewhere past 6. 10 (29-board-radius10-experiment.png, kept as the
+// visual record of the choice) closes those gaps into one connected,
+// organically-shaped plaza while the board's own corners and edges still
+// read as clearly-textured earth -- half of RC4's own 20, not a guess.
+const BOARD_PAVING_RADIUS = 10;
 function addGroundLayerAttribute(geometry, footprints, pavedLayer, earthLayer, radius = PAVING_RADIUS) {
   const pos = geometry.getAttribute("position");
   const count = pos.count;
@@ -792,24 +803,17 @@ async function main() {
   }
 
   const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...preparedBoardPieces], false);
+  // FIX-3 (docs/briefs/BLD-2026-09-16.md §2) -- RC4's board-camera-only fog
+  // override (uFogNear=100, uFogFar=220, narrower and closer than the
+  // shared 90/230) is REMOVED, not retuned. Mark's own judgment on
+  // 25-board-scene-pass.png: "hazier and more of a dust bowl than
+  // 14-board.png" -- the narrower band faded ground toward uFogColor over a
+  // shorter distance, washing out the ground texture, the shadows and the
+  // board's own edge that 14-board.png still showed. BOARD_MODE now reads
+  // the exact same construction-time uFogNear/uFogFar every other mode
+  // does, matching what 14-board.png itself was rendered with (the
+  // override did not exist yet at that commit -- see 2936b7e vs b4949c9).
   const material = createLookProofMaterial(arrayTex);
-  if (BOARD_MODE) {
-    // RC4 -- fog range retuned for THIS camera only (a caller-side
-    // uniform write, not an edit to look-proof-material.js -- HERO_MODE's
-    // own already-judged uFogNear/uFogFar stay exactly what RB5 left
-    // them). MEASURED, not guessed: with BOARD_MODE's own camera
-    // (boardCenter - 70 on x/z, y=130) and BOARD_GROUND's real footprint,
-    // the near and far corners of the visible ground sit ~134m and ~212m
-    // from the camera -- both already past HERO's own uFogNear=90, but
-    // the fog COLOR (0xe6dccb) is itself warm/tan, so fading toward it
-    // barely changes the "dust" read, only its brightness. Narrowing the
-    // range to bracket this camera's own real 134-212m span pushes the
-    // far ground much closer to fully fog-coloured (pale, closer to the
-    // sky) rather than leaving ~13% of the original warm ground tone
-    // still mixed in at the frame's own far edge.
-    material.uniforms.uFogNear.value = 100;
-    material.uniforms.uFogFar.value = 220;
-  }
   const mesh = new THREE.Mesh(merged, material);
   scene.add(mesh);
   window.__material = material;

@@ -45,7 +45,8 @@ resolve a conflict by taking both sides' ticks for their own ids.
     Gate: the house-beats-condo-per-unit / condo-beats-house-in-total inversion
     still holds at real proportions, both directions, same cell. If it does not,
     say so — do not tune until it does.
-[ ] FIX-3 (BLD) Revert the board-camera fog to 14's settings and retune from there — PLAN.md 3.3
+[x] FIX-3 (BLD) Revert the board-camera fog to 14's settings and retune from there — PLAN.md 3.3
+    DONE 2026-09-16: node scripts/_mutcheck.mjs test/lookProofScene.test.ts public/look-proof-scene.html test/mutations.json -- both fix3-board-fog-override-must-stay-reverted and fix3-board-paving-radius-must-stay-retuned CAUGHT. Evidence pair: docs/look-proof-shots/14-board.png (before) vs docs/look-proof-shots/30-board-scene-pass-fix3.png (after). Rendering proved the fog override alone (28-board-fog-reverted.png) was visually indistinguishable from the rejected 25 -- the 20m paving radius, not the fog, was the real driver of the wash. Retuned to 10 (measured against real piece gaps, half of RC4's rejected 20), not reverted to 6 -- 6 leaves the original "islands" problem RC4 was legitimately solving. Judged by Mark, not self-certified (no numeric gate by design).
     `25-board-scene-pass.png` was judged by Mark: hazier and more of a dust bowl
     than the `14-board.png` it was meant to improve. The wash removed ground
     texture, the horizon, and the contrast the buildings need.

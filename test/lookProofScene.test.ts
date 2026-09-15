@@ -386,14 +386,16 @@ test("GATE (RB5): the ground's own layerIndex is computed PER VERTEX (paved near
   assert.match(SCENE_SRC, /const groundGeom = addGroundLayerAttribute\(groundGeomRaw, \[\.\.\.PIECES, \.\.\.boardFootprintsForDecal\], pavedLayerIndex, GROUND\.layer, BOARD_MODE \? BOARD_PAVING_RADIUS : PAVING_RADIUS\)/, "the real ground geometry does not use the new per-vertex layer function");
 });
 
-test("GATE (RC4): the board camera gets its own, wider paving radius -- RB5's own PAVING_RADIUS (tuned for HERO_MODE's close composition) is left untouched; BOARD_PAVING_RADIUS is a separate, larger constant, applied only when BOARD_MODE", () => {
-  assert.match(SCENE_SRC, /const BOARD_PAVING_RADIUS = 20;/, "BOARD_PAVING_RADIUS is missing -- the board camera would still use HERO_MODE's own tight 6m apron");
+test("GATE (FIX-3): the board camera's paving radius is retuned to 10, not RC4's rejected 20 -- 20 merged every demo piece into one slab covering nearly the whole frame (confirmed by rendering it), which is what actually produced the wash Mark rejected on 25-board-scene-pass.png; RB5's own HERO_MODE PAVING_RADIUS is untouched", () => {
+  assert.match(SCENE_SRC, /const BOARD_PAVING_RADIUS = 10;/, "BOARD_PAVING_RADIUS must be the retuned 10 -- either RC4's rejected 20 (the wash) or an unreviewed different value would both be undocumented regressions");
+  assert.doesNotMatch(SCENE_SRC, /const BOARD_PAVING_RADIUS = 20;/, "RC4's rejected paving radius (20) is still present");
   assert.match(SCENE_SRC, /const PAVING_RADIUS = 6;/, "HERO_MODE's own PAVING_RADIUS was changed -- it must stay exactly what RB5's own already-judged render used");
 });
 
-test("GATE (RC4): the board camera's own fog range is retuned via a caller-side uniform write, never an edit to look-proof-material.js's own construction-time defaults (HERO_MODE's already-judged fog stays untouched)", () => {
-  assert.match(SCENE_SRC, /material\.uniforms\.uFogNear\.value = 100;\s*\n\s*material\.uniforms\.uFogFar\.value = 220;/, "BOARD_MODE does not retune the fog range for its own camera via a caller-side uniform write");
-  assert.doesNotMatch(MATERIAL_SRC, /uFogNear: \{ value: 100 \}|uFogFar: \{ value: 220 \}/, "the board camera's own fog values leaked into look-proof-material.js's own construction-time defaults -- this would retune HERO_MODE's already-judged fog too");
+test("GATE (FIX-3): the board camera's fog is 14-board.png's real settings -- RC4's narrower per-camera override (100/220) is reverted; BOARD_MODE reads the SAME shared uFogNear/uFogFar (90/230) as every other mode, no caller-side uniform write", () => {
+  assert.doesNotMatch(SCENE_SRC, /material\.uniforms\.uFogNear\.value\s*=\s*100/, "RC4's board-camera fog override (uFogNear=100) is still present -- 25-board-scene-pass.png's rejected wash, judged by Mark as hazier than 14-board.png");
+  assert.doesNotMatch(SCENE_SRC, /material\.uniforms\.uFogFar\.value\s*=\s*220/, "RC4's board-camera fog override (uFogFar=220) is still present -- 25-board-scene-pass.png's rejected wash, judged by Mark as hazier than 14-board.png");
+  assert.doesNotMatch(SCENE_SRC, /if\s*\(\s*BOARD_MODE\s*\)\s*\{\s*material\.uniforms/, "BOARD_MODE still writes to material.uniforms after construction -- 14-board.png used the shared construction-time defaults with no per-camera override at all");
 });
 
 test("GATE (RB5): the paved layer's own index is read from the REAL array-texture manifest, never hardcoded -- board-renderer.js's own layerForGlb discipline, applied here too", () => {
