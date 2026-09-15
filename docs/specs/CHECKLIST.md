@@ -164,6 +164,52 @@ remains is implementation against answers already in hand.
 
 ---
 
+## CAMERA, READOUT, GROUND — BLD's own follow-up findings, docs/briefs/BLD-2026-09-17.md.
+
+Not yet indexed under a PLAN.md section — added here directly against the
+brief that raised them, a real gap this checklist itself should have
+caught before the brief had to. Correct the line (and PLAN.md) once these
+land somewhere permanent; until then this IS the record.
+
+[ ] CAM-1 (BLD) The board and contact-sheet cameras, reframed for FIX-1's real range — BLD-2026-09-17.md §2
+    `35-board-fix1-real-height.png` has the camera INSIDE the tower's own
+    footprint — the frame shows a wall, not the range. FIX-1's own gate is "a
+    shot showing the real range" and that shot does not show it: the
+    measurement is proven, the picture is not.
+    Three cameras assumed a compressed height range — the board, the contact
+    sheet, and the overview.
+    Gate: a board shot from OUTSIDE every placed piece's own footprint, framed
+    so the real range (a ~376 m tower beside a ~4.6 m house) is legible in one
+    frame. Re-render the CAT-4 contact sheet and say plainly whether the grid
+    still reads now that one piece is eighty times another — not assumed fine
+    because the camera didn't crash.
+[ ] RDO-1 (BLD) The readout draws two real numbers on screen, not a console line — BLD-2026-09-17.md §3
+    §S4's own phase-gate clause: "the ghost shows the target cell's current
+    value and the value the piece would have there — that number, changing as
+    the cursor moves, IS the reason one cell beats another." FIX-4 proved the
+    number is real and made a console transcript durable; that is not the same
+    as a player seeing it. RC5 was ticked against a marker, not this.
+    Call CLI's real `valueAt`/`valueIfPlaced` (already wired via
+    `resolveReadout`, board-renderer.js). Do not reimplement scoring. Do not
+    edit `public/scoring.js`.
+    Gate: two shots at genuinely different cells, showing both numbers legible
+    ON SCREEN and visibly different between the two shots — not a console
+    transcript, which FIX-4 already proved separately.
+[ ] GRD-1 (BLD) The ground stops reading as a dust bowl — three judgements, same verdict — BLD-2026-09-17.md §4
+    Mark has called the ground a dust bowl in `14`, `25` and `35` — three
+    separate times, three separate look-proof passes. FIX-3 retuned fog and
+    paving radius and the board camera still reads as sand.
+    RB5 already measured the cause once: the "grass" texture is dirt-coloured
+    `(172,148,121)`. Paving was added near buildings; everything beyond them
+    is bare earth to the horizon. "A city sits on MADE ground" — paving, kerb
+    lines, surface variation, not desert with patches.
+    Gate: Mark's eye, no numeric gate by design. If it still reads wrong after
+    the retune, say so plainly rather than presenting a marginal improvement
+    as a pass — this project has been burned by exactly that once already,
+    named in the look-proof verdict.
+
+---
+
 ## SIDE B — CLI OWNS IT. PLAN.md §6.
 
 [ ] SDB-1 (CLI) D1 persistence, surviving a full redeploy — PLAN.md 6
