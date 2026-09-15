@@ -116,23 +116,44 @@ resolve a conflict by taking both sides' ticks for their own ids.
 Nobody else is building this. The research is done — §T1–T9, §L1–L7 — and what
 remains is implementation against answers already in hand.
 
-[ ] TER-1 (CLI) Coastline first — RESEARCH.md T2
+[x] TER-1 (CLI) Coastline first — RESEARCH.md T2
     Elevation-first is a named failure. Order of operations is the item.
-[ ] TER-2 (CLI) The drowned river valley method — RESEARCH.md T1
+    Done: public/terrain-field.js's isWater IS heightAt(x,z) <= 0, never a
+    second boundary — structurally cannot disagree with elevation.
+[x] TER-2 (CLI) The drowned river valley method — RESEARCH.md T1
     Generate one landmass, then flood it. This is the answer to scattered blobs.
     Gate: a generated coastline that reads as one landmass, not islands.
-[ ] TER-3 (CLI) Hydraulic erosion, and what it actually fixes — RESEARCH.md T3
-[ ] TER-4 (CLI) Heights, water and slope as real fields on the board — PLAN.md 4
+    Done: one noise-warped dome, a 14-seed dendritic drainage network carved
+    by steepest descent, a disclosed SEA_LEVEL_RISE_M flood. Pre-flood
+    landmass connectivity verified directly (largest component > 60% of
+    dry land at a real sampled resolution).
+[x] TER-3 (CLI) Hydraulic erosion, and what it actually fixes — RESEARCH.md T3
+    Done: a 2,200-droplet pass over the pre-flood landform. Verified
+    directly: sampled points show both real erosion and real deposition
+    against the pre-erosion landform.
+    Built fresh, per Mark's ruling on decision #22 (public/terrain.js
+    retired, not wired) — see docs/DECISIONS-FOR-MARK.md #22.
+[x] TER-4 (CLI) Heights, water and slope as real fields on the board — PLAN.md 4
     Replacing the zeroed `elevation`/`cornerOffset`/`surfaceType` the board
     already carries. The coarse mesh is DECOUPLED from the gameplay grid — §T1's
     own wording, and the seam where BLD takes over.
     Gate: placement's existing slope refusal fires on real generated terrain,
     not on a hand-built fixture.
-[ ] TER-5 (CLI) terrainContribution() stops being a stub — PLAN.md 4
+    Done: public/terrain-populate.js's populateTerrain(board, field, {origin})
+    samples terrain-field.js at each cell's real world position. SURFACE.WATER
+    added; setSurfaceType added (the setter C2.2 anticipated, never built).
+    Gate proven: searched the real field for a footprint whose slope exceeds
+    tolerance, found one, evaluatePlacement refused it with reason "slope".
+[x] TER-5 (CLI) terrainContribution() stops being a stub — PLAN.md 4
     Scoring's terrain term reads real values. Water adjacency and buildable
     slope, per §S2.
     Gate: two cells with genuinely different terrain score differently, and the
     difference is attributable to terrain rather than to adjacency.
+    Done: water-adjacency bonus (within 2 cells of real generated water) and
+    a slope penalty (max relief to an in-bounds neighbour), both disclosed
+    placeholders per §S2's own precedent. Gate proven on a real generated
+    coastal board with zero pieces placed (value() reduces to exactly
+    terrainContribution()).
 
 ---
 

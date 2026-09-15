@@ -57,12 +57,12 @@ export function* cellsOf(rect) {
   }
 }
 
-/** Surface types a board cell may carry. `land` is the only one that exists
- *  while terrain is flat (REBUILD-PLAN.md's own note on C2.2: "defaulted to
- *  zero while the board is flat" — terrain arrives at build-order step 6,
- *  not this phase). Kept as a real enum, not a bare string, so a future
- *  terrain phase adding "water"/"slope-too-steep" is additive here. */
-export const SURFACE = Object.freeze({ LAND: "land" });
+/** Surface types a board cell may carry. `water` added TER-4 (PLAN.md §4):
+ *  the terrain phase C2.2's own note anticipated ("a future terrain phase
+ *  adding water/slope-too-steep is additive here") -- real values now come
+ *  from public/terrain-field.js via public/terrain-populate.js, not a
+ *  hand-set fixture. */
+export const SURFACE = Object.freeze({ LAND: "land", WATER: "water" });
 
 /**
  * One area's board. Typed arrays throughout, addressed `y * width + x`.
@@ -86,7 +86,7 @@ export function createAreaBoard({ width, height, catalogue }) {
   const elevation = new Float32Array(size); // metres, per cell
   const cornerOffsets = new Float32Array(size * 4); // 4 corners per cell, metres
   const surfaceType = new Uint8Array(size); // index into SURFACE's own order below
-  const SURFACE_INDEX = { [SURFACE.LAND]: 0 };
+  const SURFACE_INDEX = { [SURFACE.LAND]: 0, [SURFACE.WATER]: 1 };
 
   const pieces = new Map(); // id -> { typeId, anchorCell, rotation, origin }
   let nextId = 1;
@@ -258,6 +258,18 @@ export function createAreaBoard({ width, height, catalogue }) {
     return Object.keys(SURFACE_INDEX)[surfaceType[index(x, y)]] || SURFACE.LAND;
   }
 
+  /** TER-4 (PLAN.md §4): the setter C2.2 anticipated but did not build --
+   *  "defaulted to zero while the board is flat" meant no terrain phase had
+   *  written a non-land surface yet, not that the field was read-only
+   *  forever. Real values come from public/terrain-populate.js. */
+  function setSurfaceType(x, y, surface) {
+    if (!cellInBounds(x, y)) throw new Error(`setSurfaceType: (${x},${y}) is out of bounds`);
+    if (!Object.prototype.hasOwnProperty.call(SURFACE_INDEX, surface)) {
+      throw new Error(`setSurfaceType: "${surface}" is not one of ${Object.keys(SURFACE_INDEX).join("/")}`);
+    }
+    surfaceType[index(x, y)] = SURFACE_INDEX[surface];
+  }
+
   return {
     width, height,
     inBounds: rectInBounds,
@@ -275,5 +287,6 @@ export function createAreaBoard({ width, height, catalogue }) {
     setElevation,
     elevationAt,
     surfaceAt,
+    setSurfaceType,
   };
 }
