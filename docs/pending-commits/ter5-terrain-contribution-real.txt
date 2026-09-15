@@ -1,0 +1,88 @@
+TER-5 (PLAN.md §4): terrainContribution() stops being a stub.
+
+WHAT WAS WRONG
+
+public/scoring.js's terrainContribution(board, x, y) returned a flat 0
+always, with its own header explicitly naming this as a placeholder for a
+real terrain phase.
+
+WHAT WAS DONE
+
+Two disclosed terms, per SCORING-MODEL §7.1's own established precedent
+(every §S2 magnitude started as a disclosed placeholder too -- no formula
+is sourced for either):
+
+  - WATER ADJACENCY: a bonus (TERRAIN_WATER_BONUS = 3, §S2's own MODERATE
+    magnitude) applies when real water exists within TERRAIN_WATER_ADJACENCY_R
+    (2) cells -- waterfront land being worth more is a well-established fact
+    this project does not need a paper to state (RESEARCH.md L4's own
+    port-city framing).
+  - SLOPE PENALTY: TERRAIN_SLOPE_PENALTY_PER_M = -2 per metre of the
+    largest elevation difference to an in-bounds orthogonal neighbour --
+    read from the BOARD's own stored elevation (public/area-board.js),
+    never from public/terrain-field.js directly, so a cell's score never
+    depends on how it was populated, only on what the board itself holds.
+
+A water cell's own terrain term is 0 -- nothing in the catalogue both
+permits water and would be scored by this term, so it stays inert rather
+than double-counting the bonus a LAND neighbour already receives from being
+near it.
+
+GATE (CHECKLIST.md, verbatim): "two cells with genuinely different terrain
+score differently, and the difference is attributable to terrain rather
+than to adjacency." Proven on a real 100x100 board generated around a real
+coastline (found by scanning the field directly), zero pieces placed
+anywhere -- with nothing on the board, value() reduces to exactly
+terrainContribution() at every cell, so any difference is structurally
+terrain and nothing else. The real highest- and lowest-scoring land cells
+differ, and value() matches terrainContribution() exactly at both.
+
+A second, narrower gate isolates the water-adjacency term specifically
+(the main gate alone could pass on slope variation without the bonus doing
+anything): two board cells directly authored via the real
+setElevation/setSurfaceType API -- perfectly flat, one adjacent to a real
+water cell, one not -- confirm the water-adjacent one scores higher. This
+replaced an earlier version that searched a real generated board for the
+"flattest" near/far cells it could find; watched SURVIVE first against the
+water-adjacency mutation below, because a sub-metre relief difference
+between the two searched cells was itself enough to explain the ordering
+without the bonus -- the directly-controlled version removes that
+confound entirely.
+
+GATE, WATCHED CAUGHT (scripts/_mutcheck.mjs test/terrainContribution.test.ts
+public/scoring.js test/mutations.json):
+  CAUGHT  ter5-water-adjacency-must-contribute (disables the bonus term)
+Baseline GREEN before mutating; tree restored byte-identical after.
+
+DISCLOSED, NOT SILENTLY WORKED AROUND: proving ter5-water-adjacency-must-contribute
+CAUGHT requires scoping scripts/_mutcheck.mjs to test/terrainContribution.test.ts,
+which also re-scores every OTHER mutation targeting the shared
+public/scoring.js (the scoring-s1/s2/s3/s4 family) as SURVIVED under this
+narrower scope -- and FIX-6's own upsert-by-id recorder then overwrites
+their real, previously-CAUGHT record with that scoped-wrong one. Both
+directions were run in sequence to restore the FINAL persisted state
+correctly: scoring.test.ts's own 9 mutations re-run last (CAUGHT, their
+real and correct status), which means the persisted
+test/mutationSummary.generated.json shows ter5-water-adjacency-must-contribute
+as SURVIVED even though it was independently verified CAUGHT under its own
+proper scope, twice, in this session's own terminal output. Recorded as
+docs/LESSONS-LEDGER.jsonl's "mutcheck-scoped-run-clobbers-other-files-mutations"
+entry -- a real, non-obvious limitation of _mutcheck.mjs's one-test-file
+design when a source file is covered by more than one test file, not fixed
+here (a harness change, same "not this run's job" boundary as
+docs/DECISIONS-FOR-MARK.md #24's other two recommendations).
+
+4 tests in test/terrainContribution.test.ts: water cell inertness, the main
+two-cells-differ gate, slope-alone isolation (steep vs flat, both away from
+water), and the water-adjacency-alone isolation gate above.
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs test/terrainContribution.test.ts:
+4/4 pass. Full suite: 1163 tests, 1106 pass, 12 fail (unchanged from before
+this commit -- the same 12 pre-existing/previously-disclosed failures this
+session's own harness-fix and decision-22 commits already named). npx
+vitest run: 12 passed.
+
+THE BLOCKERS AND TERRAIN ARE NOW BOTH DONE. FIX-2, FIX-5, FIX-6, CAT-1,
+TER-1 through TER-5 all ticked in docs/specs/CHECKLIST.md, gates recorded
+in docs/GATE-LEDGER.jsonl for each. Next per the brief's own order: SDB-1,
+SDB-2.

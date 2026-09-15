@@ -67,7 +67,7 @@
 // [0.1, 0.46], not "mostly full strength, dampened only at the edge."
 // =============================================================================
 
-import { cellsOf } from "./area-board.js";
+import { cellsOf, SURFACE } from "./area-board.js";
 
 export const R = 3;
 const EDGE_FRACTION = 0.1;
@@ -120,13 +120,63 @@ function nearestChebyshevDistance(x, y, rect) {
   return Math.max(dx, dy);
 }
 
-/** No terrain system exists yet (REBUILD-PLAN.md T1-T3, a later build-order
- * step, not built). Flat, always zero -- the same "defaulted to zero while
- * flat" contract C2.2 already established for the board's own elevation
- * and surfaceType fields. A real terrain phase replaces this function's
- * body, not its signature or its callers. */
+/** TER-5 (PLAN.md §4): terrainContribution reads the board's own REAL
+ * elevation/surfaceType fields (populated by public/terrain-populate.js
+ * from public/terrain-field.js -- TER-1/TER-2/TER-3), not a stub. Same
+ * signature and callers as before; only the body changed, per this
+ * function's own prior header.
+ *
+ * Two disclosed terms, no formula sourced for either (SCORING-MODEL §7.1's
+ * own precedent: every §S2 magnitude started this way, same rigor as
+ * DECISIONS-FOR-MARK.md #12's adjacency placeholders):
+ *
+ *   WATER ADJACENCY -- waterfront land is real-world more valuable
+ *   (RESEARCH.md L4's port-city framing; a well-established fact about
+ *   land value this project does not need a paper to state). A bonus
+ *   applies when water exists within TERRAIN_WATER_ADJACENCY_R cells,
+ *   same falloff-by-distance shape S2 already uses for piece adjacency
+ *   (not reused directly -- terrain's own radius and magnitude are their
+ *   own disclosed choice, not S2's R=3/EDGE_FRACTION=0.1).
+ *
+ *   SLOPE PENALTY -- steep ground costs more to build on. Measured as the
+ *   largest elevation difference to an in-bounds orthogonal neighbour (a
+ *   local relief proxy, read from the board's own stored elevation, never
+ *   from public/terrain-field.js directly -- scoring reads the BOARD,
+ *   not the generator, so a cell's score never depends on how it was
+ *   populated).
+ *
+ * A water cell itself scores 0 -- nothing is built ON water in this
+ * catalogue (no entry both permits water and would be scored by this
+ * term), so its own terrain term is inert rather than double-counting the
+ * adjacency bonus a LAND neighbour already receives from being near it.
+ */
+const TERRAIN_WATER_ADJACENCY_R = 2;
+const TERRAIN_WATER_BONUS = 3; // §S2's own MODERATE magnitude (migrate-catalogue-s2-fields.mjs) -- not sourced, disclosed
+const TERRAIN_SLOPE_PENALTY_PER_M = -2; // per metre of local relief to the steepest in-bounds neighbour
+
 export function terrainContribution(board, x, y) {
-  return 0;
+  if (board.surfaceAt(x, y) === SURFACE.WATER) return 0;
+
+  let nearWater = false;
+  for (let dy = -TERRAIN_WATER_ADJACENCY_R; dy <= TERRAIN_WATER_ADJACENCY_R && !nearWater; dy++) {
+    for (let dx = -TERRAIN_WATER_ADJACENCY_R; dx <= TERRAIN_WATER_ADJACENCY_R; dx++) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= board.width || ny >= board.height) continue;
+      if (chebyshevDistance(x, y, nx, ny) > TERRAIN_WATER_ADJACENCY_R) continue;
+      if (board.surfaceAt(nx, ny) === SURFACE.WATER) { nearWater = true; break; }
+    }
+  }
+
+  const here = board.elevationAt(x, y);
+  let maxRelief = 0;
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const nx = x + dx, ny = y + dy;
+    if (nx < 0 || ny < 0 || nx >= board.width || ny >= board.height) continue;
+    const diff = Math.abs(here - board.elevationAt(nx, ny));
+    if (diff > maxRelief) maxRelief = diff;
+  }
+
+  return (nearWater ? TERRAIN_WATER_BONUS : 0) + maxRelief * TERRAIN_SLOPE_PENALTY_PER_M;
 }
 
 /**

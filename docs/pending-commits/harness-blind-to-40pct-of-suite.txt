@@ -1,0 +1,120 @@
+The full suite was silently blind to roughly 40% of itself: test/run.mjs's
+own import loop has no crash guard, and test/navWheel.test.ts threw an
+uncaught exception at module-import time that truncated every test file
+imported after it from the reported summary. Found while trying to verify
+TER-1..5 for real; not caused by this session, but two of the four instances
+found and fixed here were.
+
+WHAT WAS FOUND
+
+Verifying TER-1..5 needed a trustworthy full-suite count. It kept reporting
+the identical 665 tests / 633 pass / 6 fail regardless of what changed,
+including after three new test files (17 tests, independently proven to
+pass standalone) were added. Traced with disk-persisted instrumentation
+around test/run.mjs's own `for (const outfile of built) { await
+import(...) }` loop (captured stdout alone could not distinguish a real
+completion from a truncated one) to the exact cause:
+
+test/navWheel.test.ts reads public/index.html and asserts, AT MODULE TOP
+LEVEL -- outside any test() -- that it contains `id="nav-wheel"`. It does
+not (the 2026-09-13 Phase 1 holding-page rewrite removed it). The assertion
+throws during `import()`. test/run.mjs's loop has no try/catch around that
+line, so the throw propagates as an uncaught exception -- confirmed
+directly: `node test/run.mjs test/navWheel.test.ts` alone crashes the
+process outright with a full stack trace via triggerUncaughtException.
+In the FULL suite, node:test's own runner absorbs this differently: the
+diagnostic line "A resource generated asynchronous activity after the test
+ended... caught by the test runner" (present in every full run this whole
+session, always read as unrelated noise until traced) IS this absorption --
+and everything imported after the crashing file silently stops being
+counted in the final summary, producing a plausible-looking, genuinely
+INCOMPLETE total rather than a visible error.
+
+A second, independent instance of the identical defect was found and fixed
+in the same pass: test/pickSelection.test.ts read the now-quarantined
+public/world-render-3d.js (decision #22) the same way, at module top level,
+further along in read-dir order -- crashing the loop a second time, later.
+
+Separately (findings, not this commit's job -- see
+docs/DECISIONS-FOR-MARK.md #24 for the full account and recommendation):
+test/.built/ is a shared, unlocked build output directory, and four stray
+`node test/run.mjs` processes were found running on this machine (ended by
+Mark before the authoritative re-run below). That IS a real, separate
+hazard, but the crash-and-truncation above reproduced identically with zero
+contention -- it was not the primary cause of this specific symptom.
+
+WHAT WAS DONE
+
+- test/navWheel.test.ts: the module-top-level `wheelBlock` computation
+  (used by 2 of 5 tests) now catches its own error and defers it into the
+  two tests that actually read it, via a `requireWheelBlock()` helper --
+  a missing #nav-wheel element now fails those two tests cleanly instead
+  of crashing the import. The other 3 tests were already independent of it.
+- test/pickSelection.test.ts: same treatment -- the world-render-3d.js read
+  deferred into the one (already-`skip`'d) test that uses it, wrapped with
+  test/rawSourceScan.test.ts's own required stripSourceComments (a
+  side-effect fix: this file was newly flagged by that meta-test once it
+  finally got to run at all).
+- test/rendererStatic.test.ts: four stale file-list entries removed
+  (world-render-3d.js/terrain.js -- this session's own decision-22
+  quarantine; city-render.js/city-plan.js -- already gone since the
+  2026-09-13 Phase 1 takedown, found incidentally). All four reads were
+  already inside test() bodies (contained ENOENT failures, never a process
+  crash), so none of the four were this specific defect -- removed purely
+  because a check against a file that no longer exists checks nothing. One
+  test ("every WebGLRenderer asks for a logarithmic depth buffer") is now
+  `skip`'d with a named reason: both files it checked are gone, and the
+  regression it guards needs an equivalent check against BLD's own live
+  renderer, which is not this lane's file to write (PLAN.md §1).
+- test/terrainLandmassOwnership.test.ts: quarantined outright (added to
+  decision-22's own terrain-chain batch, missed there originally because
+  that inventory searched static `import` statements only, not
+  readFileSync-based raw-text reads). All 5 of its tests exist solely to
+  check terrain.js's own now-irrelevant import statements. Ledger entry:
+  _TO-DELETE/LEDGER.jsonl.
+- test/mutations.json: one stale entry removed (targeted the now-quarantined
+  terrainLandmassOwnership.test.ts).
+- docs/DECISIONS-FOR-MARK.md #24: the full account, both halves (the crash
+  defect and the test/.built/ race), with a recommendation for each --
+  neither built here; both are the harness's own item.
+- docs/LESSONS-LEDGER.jsonl: two new OPEN entries -- the module-top-level-
+  assertion-crashes-the-import-loop pattern (found in navWheel.test.ts,
+  a second real instance already fixed in pickSelection.test.ts, but no
+  automated CONTROL exists yet to catch a third one -- that is
+  decision #24's own try/catch recommendation, not built this session, so
+  the lesson stays OPEN rather than falsely closed), and a second, distinct
+  one about scripts/_mutcheck.mjs's own scoping colliding with FIX-6's
+  upsert-by-id design when two test files share one source file (found
+  and worked around live while proving TER-5's own mutations, described in
+  that item's own commit).
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs: zero crash traces
+(was: an uncaught exception mid-run, absorbed silently). 119 test files
+(was 120 -- terrainLandmassOwnership quarantined), 1163 tests (was 665),
+1106 pass (was 633), 12 fail (was 6) -- the increase in both totals is
+almost entirely previously-invisible tests now actually running, not new
+work; 4 of the 12 failures are navWheel's own real, previously-invisible,
+pre-existing mismatches between its markup checks and the current
+(holding-page) index.html.
+
+WHAT IS STILL OPEN
+
+- The 4 newly-visible navWheel failures are real and pre-existing --
+  index.html's own markup genuinely does not match what this test expects.
+  Not this commit's job to resolve (index.html is not a file this lane
+  edits without a specific reason to).
+- test/supervisedGenerateScript.test.ts's own "I5 script safety" test is
+  now ALSO newly visible and genuinely broken: scripts/supervised-
+  generate.mjs imports public/world.js (this session's own decision-22
+  quarantine) directly. This is a real regression this session caused,
+  disclosed here rather than silently left; not fixed in this commit --
+  see this run's own summary for the reasoning on why a rushed fix to a
+  "Zero API spend" safety-gated live tool is the wrong tradeoff against
+  disclosing it plainly instead.
+- test/rawSourceScan.test.ts's own gate still names 3 pre-existing,
+  unrelated violations (catalogueValidator.test.ts, cullingSuiteUnblocked.test.ts,
+  genCitySummaryRetired.test.ts) -- newly visible, not caused by this
+  session, not fixed here (out of TER-1..5's own scope).
+- decision #24's two harness recommendations (an import-loop try/catch;
+  a lock or per-run directory for test/.built/) are not built. Both belong
+  to whoever owns test/run.mjs.

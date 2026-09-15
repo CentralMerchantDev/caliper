@@ -22,16 +22,26 @@ import { pathToFileURL } from "node:url";
 // pointed at test/public and every one of these failed to resolve. Static
 // imports are rewritten by the build; a runtime string is not.
 const FILES = [
-  "world-render-3d.js", "menus.js", "workbench.js", "navigate.js",
-  "grid.js", "ground.js", "place.js", "world-registry.js", "prop-manifest.js",
+  "menus.js", "workbench.js", "navigate.js",
+  "place.js", "world-registry.js", "prop-manifest.js",
   // sky.js and colour-grade.js were missing, and an audit proved the cost: a
   // bare `throw` at module scope in sky.js left the whole 605-test suite green,
   // because nothing imported it. That is the exact defect this file exists to
   // prevent, one module over.
-  "sky.js", "colour-grade.js", "terrain.js", "waterways.js",
+  "sky.js", "colour-grade.js", "waterways.js",
   // prop-models.js removed, 2026-09-13, board takedown (Mark's ruling: "the
   // b1-board board code is not a foundation... it comes out") -- quarantined
   // to _TO-DELETE/b1-board/, so this entry would only ever fail to resolve.
+  //
+  // world-render-3d.js, grid.js, ground.js and terrain.js removed here too,
+  // 2026-09-15 (docs/DECISIONS-FOR-MARK.md #22): all four quarantined to
+  // _TO-DELETE/decision-22-terrain-chain/, confirmed zero product-reachable
+  // exports before the move -- Mark's ruling was to rebuild TER-1..5 fresh
+  // from RESEARCH.md rather than wire this pre-rebuild system. A dynamic
+  // `import()` by string, not a static import this project's own reachability
+  // scan or esbuild's bundler would have caught -- found only by actually
+  // running this test after the quarantine, the exact "dynamic import blind
+  // spot" docs/LESSONS-LEDGER.jsonl already has OPEN.
 ];
 
 for (const name of FILES) {

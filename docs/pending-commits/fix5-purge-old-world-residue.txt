@@ -1,0 +1,77 @@
+FIX-5 (PLAN.md §3.5, docs/briefs/CLI-2026-09-16.md item 2): purge the
+old-world mutations and the dead-exports allowlist -- quarantine residue
+holding two gates shut.
+
+RE-GROUNDING (build-loop Step 1): the brief's own figures were stale. PLAN.md
+§3.5 and CHECKLIST.md both say "roughly 140 of 185" mutations.json entries and
+"~162-entry" allowlist drift. The tree disagrees -- prior sessions had already
+cleared most of this. Measured directly (existsSync against every mutation's
+own `file` field; the same reachability walk test/deadExports.test.ts itself
+uses, scripts/lib/module-graph.mjs's classifyRepoReachability, against every
+allowlist key): 55 of 193 mutation entries and 61 of 2,763 allowlist entries
+were stale, not ~140/185 and ~162. The tree wins; this commit's own numbers
+are what was actually removed, not what the brief assumed.
+
+WHAT WAS DONE
+
+1. test/mutations.json: 55 entries targeting `city-plan.js`, `layout.js`,
+   `layout-fits.js`, `instance-groups.js`, `city-render.js`, `isolate.js`,
+   `move-piece.js`, `board-generator.js`, `board.js`, `board-load.js`,
+   `board-render.js`, `bridge-generator.js`, `city.html`, and the test files
+   `boardGenerator.test.ts`/`boardRender.test.ts`/`claimSpansAreChecked.test.ts`
+   /`publicClaims.test.ts` removed -- every one of those files is gone
+   (quarantined in the b1-board/old-world takedowns, or renamed since, e.g.
+   publicClaims.test.ts -> generatedClaimsAreCurrent.test.ts). They could only
+   ever report INCONCLUSIVE. 138 entries remain, verified: every one names a
+   file that currently exists (CHECKLIST.md's own gate for this item).
+
+2. test/deadExports.allowlist.json: 61 entries removed whose key names an
+   export that no longer exists at all (the same quarantined files, plus a
+   handful of renamed/removed individual exports). 2,702 entries remain.
+
+3. scripts/expected-red.mjs's EXPECTED_RED emptied. Its one entry named
+   test/boardGenerator.test.ts's own B2.5 CPU-time gate, existing specifically
+   to unblock mutation-testing of public/board-generator.js and public/board.js
+   -- both of which are exactly the files the b1-board takedown quarantined.
+   The entry was already inert (nothing failing today matches its title) and
+   test/expectedRed.test.ts's own guardrail was failing because the file it
+   checks against no longer exists. isBaselineAcceptable/unexpectedFailures
+   both gained an optional second `allowlist` parameter (default: the real
+   EXPECTED_RED) so their own tests could exercise the general mechanism
+   against a synthetic entry without EXPECTED_RED needing to hold one just to
+   stay testable -- new parameter, defaulted, no call site changed.
+
+VERIFIED: `npx tsc --noEmit` clean. `node test/run.mjs`: pass 745 (was 742),
+fail 9 (was 11) -- 2 cleared:
+  - "every test/deadExports.allowlist.json entry still names a currently-
+    non-product export, and gives a real reason"
+  - "expected-red (guardrail): the B2.5 title in this allowlist matches the
+    REAL test title in test/boardGenerator.test.ts, not a paraphrase"
+
+WHAT IS STILL OPEN, NAMED RATHER THAN SILENTLY LEFT
+
+- "every export in public/ and src/ is product-reachable..." is a DIFFERENT
+  failure from the one this item fixed -- it lists exports that legitimately
+  exist today (public/terrain.js, public/world-model.js, and others) and have
+  never been allowlisted, not stale residue. Out of FIX-5's scope (which is
+  quarantine residue specifically); writing ~45 new allowlist justifications
+  for code this run did not write would be scope creep into someone else's
+  work. Named, not silently left.
+- "every mutation in the manifest has a committed, checkable CAUGHT result"
+  and "the summary is not stale against the manifest it claims to cover"
+  remain red. `node scripts/mutate.mjs` refuses outright: "THE SUITE IS
+  ALREADY RED: 9 failing before any mutation" -- it cannot establish a
+  baseline while ANY test is red, including the 7 remaining failures below
+  that are unrelated to mutation tooling entirely (ground/road standing,
+  import resolution, the measure/poll timer tests). Producing a real,
+  committed CAUGHT result for all 138 entries needs the WHOLE suite green
+  first, which is a bigger scope than FIX-5 or FIX-6 alone. FIX-6 (one
+  recorder, two runners) is next regardless, per the brief's own order.
+- Remaining pre-existing failures (confirmed via `git stash` against the
+  item-0/FIX-2 tree, not caused by this commit): "a thing may stand on the
+  ground a road defines..." (2 tests), "every relative import across
+  public/*.js and public/*.html resolves..." (traced to catalogue-registry.js
+  importing from migrate-catalogue-s2-fields.mjs -- present before FIX-2
+  touched either file, a checker defect not a real missing export), and the
+  three timer/poll measurement tests. None are quarantine residue; none are
+  this item's job.

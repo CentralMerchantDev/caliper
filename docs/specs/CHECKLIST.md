@@ -74,7 +74,14 @@ resolve a conflict by taking both sides' ticks for their own ids.
     caught itself.
     Gate: evidence that SHOWS the number changing across cells of different
     value. If the original shot was incomplete, say so plainly.
-[ ] FIX-5 (CLI) Purge the old-world mutations and the dead-exports allowlist — PLAN.md 3.5
+[x] FIX-5 (CLI) Purge the old-world mutations and the dead-exports allowlist — PLAN.md 3.5
+    Re-grounded: the brief's "~140 of 185" / "~162-entry" figures were stale
+    (prior sessions had already cleared most of the residue). Real counts:
+    55 of 193 mutations.json entries and 61 of 2,763 allowlist entries
+    targeted deleted/renamed exports. Both purged; every remaining mutation
+    entry names a file that exists. 2 tests cleared (11 failing -> 9):
+    the stale-allowlist test, and expected-red's B2.5 guardrail (its own
+    target, test/boardGenerator.test.ts, was itself quarantined).
     Roughly 140 of 185 entries in `test/mutations.json` target `city-plan.js`,
     `layout.js`, `board-generator.js`, `board-render.js` and siblings — deleted.
     They can only ever report INCONCLUSIVE.
@@ -84,7 +91,7 @@ resolve a conflict by taking both sides' ticks for their own ids.
     shut. Expect the sweep to open it.
     Gate: every remaining entry names a file that exists. State how many were
     removed and how many of the seven failures cleared as a result.
-[ ] FIX-6 (CLI) One recorder, two runners — PLAN.md 3.6
+[x] FIX-6 (CLI) One recorder, two runners — PLAN.md 3.6
     Mark's ruling: both tools work properly, or do not keep both.
     Extract the results writer into a shared module both `mutate.mjs` and
     `_mutcheck.mjs` call, with a field recording the BASELINE SCOPE each result
@@ -94,6 +101,18 @@ resolve a conflict by taking both sides' ticks for their own ids.
     Gate: a `_mutcheck.mjs` run produces a recorded, citable result, and
     `mutationEvidence.test.ts` states which scope it accepts for a published
     claim rather than leaving that in someone's head.
+    Done: `scripts/mutate-results.mjs` (loadResults/saveResults/recordResult,
+    upsert by id) shared by both tools; both stamp `baselineScope`
+    ("full-suite" / "scoped:<testFile>"). Real `_mutcheck.mjs` run recorded
+    2 CAUGHT rows into test/.mutate-results.json — confirmed on disk, not
+    just console output. `mutationEvidence.test.ts` states explicitly (both
+    scopes accepted for CAUGHT; no third, undocumented scope shape ever).
+    3 failures cleared this item (9 -> 8): the summary-staleness test now
+    passes on a freshly regenerated `mutationSummary.generated.json`.
+    Still red, disclosed rather than silently left: "every mutation has a
+    CAUGHT result" — 50 of 138 manifest ids have never been run under any
+    scope; running them all needs the whole suite green first (mutate.mjs
+    refuses otherwise) and is SHIP-3's job, not this one's.
 
 ---
 
@@ -103,33 +122,59 @@ resolve a conflict by taking both sides' ticks for their own ids.
 Nobody else is building this. The research is done — §T1–T9, §L1–L7 — and what
 remains is implementation against answers already in hand.
 
-[ ] TER-1 (CLI) Coastline first — RESEARCH.md T2
+[x] TER-1 (CLI) Coastline first — RESEARCH.md T2
     Elevation-first is a named failure. Order of operations is the item.
-[ ] TER-2 (CLI) The drowned river valley method — RESEARCH.md T1
+    Done: public/terrain-field.js's isWater IS heightAt(x,z) <= 0, never a
+    second boundary — structurally cannot disagree with elevation.
+[x] TER-2 (CLI) The drowned river valley method — RESEARCH.md T1
     Generate one landmass, then flood it. This is the answer to scattered blobs.
     Gate: a generated coastline that reads as one landmass, not islands.
-[ ] TER-3 (CLI) Hydraulic erosion, and what it actually fixes — RESEARCH.md T3
-[ ] TER-4 (CLI) Heights, water and slope as real fields on the board — PLAN.md 4
+    Done: one noise-warped dome, a 14-seed dendritic drainage network carved
+    by steepest descent, a disclosed SEA_LEVEL_RISE_M flood. Pre-flood
+    landmass connectivity verified directly (largest component > 60% of
+    dry land at a real sampled resolution).
+[x] TER-3 (CLI) Hydraulic erosion, and what it actually fixes — RESEARCH.md T3
+    Done: a 2,200-droplet pass over the pre-flood landform. Verified
+    directly: sampled points show both real erosion and real deposition
+    against the pre-erosion landform.
+    Built fresh, per Mark's ruling on decision #22 (public/terrain.js
+    retired, not wired) — see docs/DECISIONS-FOR-MARK.md #22.
+[x] TER-4 (CLI) Heights, water and slope as real fields on the board — PLAN.md 4
     Replacing the zeroed `elevation`/`cornerOffset`/`surfaceType` the board
     already carries. The coarse mesh is DECOUPLED from the gameplay grid — §T1's
     own wording, and the seam where BLD takes over.
     Gate: placement's existing slope refusal fires on real generated terrain,
     not on a hand-built fixture.
-[ ] TER-5 (CLI) terrainContribution() stops being a stub — PLAN.md 4
+    Done: public/terrain-populate.js's populateTerrain(board, field, {origin})
+    samples terrain-field.js at each cell's real world position. SURFACE.WATER
+    added; setSurfaceType added (the setter C2.2 anticipated, never built).
+    Gate proven: searched the real field for a footprint whose slope exceeds
+    tolerance, found one, evaluatePlacement refused it with reason "slope".
+[x] TER-5 (CLI) terrainContribution() stops being a stub — PLAN.md 4
     Scoring's terrain term reads real values. Water adjacency and buildable
     slope, per §S2.
     Gate: two cells with genuinely different terrain score differently, and the
     difference is attributable to terrain rather than to adjacency.
+    Done: water-adjacency bonus (within 2 cells of real generated water) and
+    a slope penalty (max relief to an in-bounds neighbour), both disclosed
+    placeholders per §S2's own precedent. Gate proven on a real generated
+    coastal board with zero pieces placed (value() reduces to exactly
+    terrainContribution()).
 
 ---
 
 ## THE CATALOGUE — BLD OWNS IT. PLAN.md §5.
 
-[ ] CAT-1 (CLI) A grid-aware terrain mesh contract for BLD — PLAN.md 1
+[x] CAT-1 (CLI) A grid-aware terrain mesh contract for BLD — PLAN.md 1
     ONE small CLI item inside a BLD section, because it is the seam: publish
     what BLD reads to displace a mesh — the field's resolution, extent and units
     — as a documented contract rather than a shape BLD infers from the data.
     Gate: BLD can build against it without reading CLI's generator internals.
+    Done: docs/specs/CAT-1-TERRAIN-MESH-CONTRACT.md. heightAt/isWater/slopeAt
+    are a pure function of (seed, worldX, worldZ) -- sea level 0, y-up metres,
+    the 4 m module BLD's own board-renderer.js already uses -- so BLD samples
+    at whatever density its own mesh needs, decoupled from the gameplay grid.
+    Backed by public/terrain-field.js (TER-1/2/3, committed alongside).
 [x] CAT-2 (BLD) Bind the remaining 38 entries, and correct street-cross — PLAN.md 5.1
     DONE 2026-09-16: node scripts/link-catalogue-meshes.mjs -- "linked 38 of 50 catalogue entries to a real L12 mesh" (up from 12). node test/run.mjs test/catalogueValidator.test.ts: 58/58 pass (GATE (BO7A) glb-match, classification and idempotence gates all green). node scripts/_mutcheck.mjs: cat2-street-cross-must-stay-corrected and cat2-lane-cross-binding-must-stay-classified both CAUGHT. 26 of the 38 unblocked via 3 newly-sourced kenney-city-kit-roads shapes (road-crossroad, road-intersection, road-end, each verified by rendering top-down against the real texture, not by filename) plus reuse of the 2 already-vendored ones (straight, curve); 3 "transition" entries reuse road-straight.glb, disclosed as a placeholder (no taper mesh exists in the pack). street-cross corrected from road-crossing.glb (a straight road with a crosswalk, confirmed by rendering) to road-crossroad.glb (a real 4-way). Shortfall: 12 of the 38 remain unbound -- non-road categories (civic/industrial/commercial/residential footprint tiers) this item was never scoped to cover; a genuine finding, not silently dropped. Contact sheet regenerated: docs/look-proof-shots/27-catalogue-contact-sheet.png, "bound=38 total=50", draw calls: 1 (unchanged).
     kenney.nl is an AUTHORISED standing CC0 source. Every import records URL,
@@ -263,6 +308,11 @@ land somewhere permanent; until then this IS the record.
     node scripts/interact-look-proof.mjs re-confirmed RC1's own click/
     commit/remove flow unbroken with the kerb ring now part of the rebuild
     path: "RC1 GATE: pass".
+    (Supersedes an earlier, unticked stub of this same section --
+    "THE REAL RANGE, ON SCREEN — BLD OWNS THIS. Added 2026-09-16" --
+    that reached `origin/main` before this real, evidenced version did.
+    Same three items, same gates; this is the completed one, kept, per
+    this merge's own "take both sides' ticks for their own ids.")
 
 ---
 

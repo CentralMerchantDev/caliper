@@ -1582,7 +1582,272 @@ asset committed. Re-fetching the same already-verified-CC0 URL and
 re-running the idempotent `link-catalogue-meshes.mjs` is itself a cheap,
 reversible action once authorised.
 
-## 22. `node test/run.mjs` (no args, the full suite) silently under-reports past a certain point — found while verifying FIX-3/FIX-4, not caused by either
+---
+
+## 22. `public/terrain.js` already implements most of what TER-1..5 asks for — real, sourced, Mark-approved — but sits entirely unwired, and its own method disagrees with RESEARCH.md T1 — RESOLVED, 2026-09-15
+
+**Mark's ruling (verbatim, condensed):** *"terrain.js is pre-rebuild code. It
+was not quarantined in Phase 1 but it was not endorsed either — surviving a
+takedown is not approval, and inferring design approval from a file's
+existence is the exact pattern that has pulled old-world code back in four
+times... a hand-placed archipelago is what RESEARCH.md §T1's drowned-river-
+valley method exists to replace... Quarantine terrain.js with a ledger
+entry, then build TER-1 through TER-5 from the research... Do not read the
+quarantined file for reference while building the new one."*
+
+**Done:** `public/terrain.js` and its own direct dependency chain (31 files
+total — see `_TO-DELETE/LEDGER.jsonl`'s 2026-09-15 `decision-22-terrain-chain`
+entries for the full, hashed inventory) quarantined to
+`_TO-DELETE/decision-22-terrain-chain/`. TER-1 through TER-5 are being built
+fresh against `public/area-board.js`/`public/scoring.js`, sourced only from
+`docs/specs/RESEARCH.md`.
+
+**The question.** CHECKLIST.md's TER-1 through TER-3 ask for coastline-first
+generation (§T2), the drowned-river-valley method (§T1: one landmass, then
+flood it) and hydraulic erosion (§T3) — read as "build this," per PLAN.md
+§4's own framing ("not a placeholder... what remains is implementation
+against answers already in hand").
+
+Re-grounding (`rule://build-loop` Step 1) before writing a single line found
+that `public/terrain.js` (1,586 lines) already has almost all of the
+MACHINERY this asks for: a real `LandField` class that indexes landmass
+polygons into a spatial-hash coastline + scanline inside/outside mask
+(built FIRST, exactly T2's prescribed order), a real height function
+(`makeHeightAt`, exported as `makeHeightAt`) that derives elevation from
+distance-to-coast plus real relief tiers (coastal hills, foothills, a
+named-peak range, calibrated against real Vancouver/Wellington figures in
+its own comments), real beaches/cliffs/basins/waterways, and a real
+`groundColor(h, slope)` ramp. It is genuinely sourced and genuinely
+calibrated, not a stub.
+
+**It is also completely unwired.** `test/deadExports.test.ts`'s own
+reachability scan (found while doing FIX-5, unrelated) lists
+`LandField`/`makeHeightAt` as test-only and `TERRAIN`/`waterwayAt` as
+demo-only — nothing in the live product (`public/area-board.js`'s
+`elevation`/`cornerOffsets`/`surfaceType` arrays, `public/scoring.js`'s
+`terrainContribution()`) reads any of it. This is exactly the "already
+exists, built, and unwired" pattern CLAUDE.md's MODULE-MAP section warns
+about by name.
+
+**And its generation METHOD is not T1's.** It is a hand-placed archipelago
+(named islands at authored positions, each an organic-but-independent
+outline) plus a hand-authored mainland coast, not one landmass generated
+then flooded. The code's own comments show this was Mark's own explicit
+prior direction, not a shortcut taken without asking: *"per Mark's approved
+orientation,"* *"the four named characters Mark's brief asked for,"*
+*"Mark's own correction: spend the headroom on MORE islands, not bigger
+ones."* T1's own method would very likely produce a visibly different
+archipelago than the one currently live and previously approved.
+
+**Options:**
+1. **Wire the existing system as-is** (TER-4/TER-5's own job — real
+   elevation/water/slope onto `area-board.js`'s fields, real values out of
+   `terrainContribution()`) and treat TER-1/TER-2's literal method as
+   satisfied by citation rather than rebuilt — T2's order-of-operations is
+   genuinely already how `LandField` works; T1's specific *method* is not,
+   but the world it already produced was explicitly reviewed and approved.
+2. **Rebuild via T1's drowned-river-valley method**, discarding the
+   hand-placed archipelago and its own approval history, to match the
+   research's literal prescription.
+3. **Something in between** — keep the named/approved islands as fixed
+   authored content, and use T1's method only for any *new* landmass this
+   phase might still want to add (there is no such need named in PLAN.md
+   §4 today).
+
+**Recommendation:** option 1. Wiring the existing, sourced, previously-
+approved system is the least irreversible path, delivers PLAN.md §4's
+actual stated goal (real terrain the board and score can read), and does
+not silently discard a design decision that was Mark's own to begin with.
+T3 (hydraulic erosion) is the one piece genuinely absent from what exists —
+worth a real answer on whether it is still wanted given the coastline it
+would be run against is hand-authored, not generated, so C-8's own
+"erosion maturity" framing (mature vs young relief) may not transfer
+directly.
+
+**What was done in the meantime.** Nothing rebuilt or discarded. Proceeding
+to wire `terrain.js`'s real height/water functions into `area-board.js`'s
+fields and `scoring.js`'s `terrainContribution()` (TER-4/TER-5), which is
+correct under any of the three options above and blocks nothing while this
+is decided.
+
+**Reversibility:** fully reversible. Wiring is additive (area-board.js
+gains real values where it had zeros; nothing about its public shape
+changes) and does not touch `public/terrain.js` itself, so choosing option
+2 or 3 later costs re-doing the wiring against a different height source,
+not undoing anything already committed.
+
+---
+
+## 23. A second, independently-dead ~63-file subsystem, found while executing #22's terrain quarantine — inventoried, not touched, and it is a bigger call than #22
+
+**The question.** Quarantining `public/terrain.js`'s own direct dependency
+chain (decision #22) required measuring its real fallout first. That
+measurement found a SEPARATE cluster — not part of the terrain chain, and
+not caused by this run's own edits — that reads as an entire previous
+game-loop iteration: a world model with its own persistence
+(`world-model.js`, `world-store.js`, `world-registry.js`), an apply/edit
+pipeline (`apply-and-persist.js`, `apply-layers.js`), a second, unwired
+LLM change-request pipeline (`generate-request.js`, `run-generate-request.js`,
+`model-forge.js`, `model-registry.js`), a quest system
+(`quest.js`, `change-quest.js`), and its own content generators
+(`buildings.js`, `roadkit.js`, `props.js`, `land-use.js`, `zoning.js`, and
+more). Full inventory, with the method that produced it:
+`docs/specs/OLD-WORLD-SECOND-CLUSTER-2026-09-15.md` — 63 files (45
+source/script, 18 test), every one confirmed to have zero product-reachable
+exports the same way `test/deadExports.test.ts` itself checks.
+
+**What was done in the meantime.** Nothing moved. Inventoried and written
+down, per the standing rule ("never bulk-delete... inventory, categorise,
+get the exact list confirmed, then act") — this is exactly that step, not
+yet the act.
+
+**Why this is not folded into #22.** #22 already has a ruling and a narrow,
+specific reason (terrain generation is being rebuilt from research). This
+cluster is a different question with a different real cost if wrong: it is
+not one subsystem, it looks like most of a previous product, and treating
+"quarantine terrain.js" as authorisation to also quarantine 63 unrelated
+files would be exactly the scope-creep the bulk-delete rule exists to
+prevent — confirmed necessary this same session, when an initial estimate
+of "~15-20 files" for the terrain chain alone turned out, on actual
+measurement, to be off by more than 3x before the scope was corrected back
+down.
+
+**Recommendation:** quarantine it, on the same reasoning #22 already
+established — pre-rebuild code that survived a takedown by omission is not
+approved code, and none of it is reachable from anything a visitor's
+browser or the Worker runs. One live exception worth naming before acting:
+`public/noise.js` (hash-based value noise / fbm) is generic, reusable,
+project-decoupled code that TER-1..5's own coastline work might legitimately
+want rather than reimplementing — worth deciding on its own rather than
+folding it into a blanket "all 63 dead" call.
+
+**Reversibility:** fully reversible either way — nothing has been moved.
+Quarantine (Tier 2, per `rule://quarantine`) is itself reversible; only an
+explicit later purge, requiring its own confirmation, would not be.
+
+---
+
+## 24. `test/run.mjs`'s own import loop has no crash guard, and a single stale test file was silently truncating roughly 40% of every "full suite" run — found while verifying TER-1..5, not caused by this session
+
+**The question.** Verifying TER-1..5 for real needed a trustworthy full-suite
+count. The full run kept reporting the SAME 665 tests / 633 pass / 6 fail no
+matter what changed -- including after three brand-new test files (17 tests)
+were added and independently proven to pass standalone. Traced with
+instrumentation (a marker written directly to disk around each
+`await import(...)` in `test/run.mjs`'s own loop, since captured stdout
+alone did not distinguish a real completion from a truncated one) to the
+exact root cause, twice:
+
+1. **The immediately-preceding cause**, present even with zero contention
+   (four stray, unrelated `node test/run.mjs` processes were confirmed
+   running on this machine from 9/13-9/14 and were separately ended
+   before this was re-checked -- see below for that half of the finding):
+   `test/navWheel.test.ts` reads `public/index.html` and asserts, AT
+   MODULE TOP LEVEL, `id="nav-wheel"` exists in it. It does not --
+   `index.html` is the minimal holding page from the 2026-09-13 Phase 1
+   takedown. The assertion throws during `import()`, which
+   `test/run.mjs`'s own loop (`for (const outfile of built) { await
+   import(...) }`, no try/catch) does not catch. Confirmed directly:
+   running `node test/run.mjs test/navWheel.test.ts` alone crashes the
+   process outright with an uncaught `AssertionError` and a full Node
+   stack trace, exit via `triggerUncaughtException`.
+
+2. **Node's own test runner absorbs that crash silently in the full-suite
+   context** rather than propagating it as a script-ending error -- the
+   diagnostic line `"A resource generated asynchronous activity after the
+   test ended... caught by the test runner"` (visible in every full run's
+   own output this whole session, always read as unrelated noise until
+   traced) is this exact absorption. The practical effect: everything
+   `test/run.mjs`'s loop tries to `import()` AFTER the crashing file is
+   never counted in the final summary, even though (confirmed by duration
+   and by a second crash found the same way, described below) it still
+   partly executes. The reported "665/633/6" was real evidence for
+   roughly 60% of the suite and silent for the rest -- indistinguishable,
+   by output alone, from a genuinely complete, genuinely smaller run.
+
+3. **A second, independent instance of the identical defect**, found after
+   fixing the first: `test/pickSelection.test.ts` read the now-quarantined
+   `public/world-render-3d.js` (decision #22) the same way, at module top
+   level. Same crash, same silent truncation, further along in the file
+   order. Both are now fixed (deferred into the one test/two tests that
+   actually use the value, each already `skip`'d or newly guarded) --
+   details in this session's own commits, not restated here.
+
+**Separately, the environmental half of the same finding**: `test/.built/`
+is a shared, unlocked build output directory with no lock file and no
+per-run isolation. Four stray `node test/run.mjs` processes (PIDs 33016,
+45732, 29344, 26500; running since 9/13 3:35 PM through 9/14 12:46 PM, none
+matching a command issued this session) were found writing to it
+concurrently while this session's own runs were also writing to it, before
+Mark ended all four. This is a REAL, separate hazard -- two genuine
+concurrent invocations (this lane and BLD's, or two lanes' own overnight
+runs) racing on the same `.mjs` output files -- but it was NOT, on the
+evidence gathered, the primary cause of the specific symptom investigated
+here: the crash-and-silent-truncation above reproduced identically with
+zero other `test/run.mjs` processes running.
+
+**What was done in the meantime.** The two crashing test files
+(`navWheel.test.ts`, `pickSelection.test.ts`) were fixed -- their own
+crash-unsafety is squarely this session's own file-editing territory,
+regardless of who owns the harness loop itself, and leaving them
+unfixed made verifying anything positioned after them in read-dir order
+unreliable for every lane, not just this one. `test/rendererStatic.test.ts`
+and `test/terrainLandmassOwnership.test.ts` had the same underlying
+"references a file this session's own quarantine removed" defect
+(contained, not crashing) and were fixed/quarantined alongside them for
+the same reason. Full suite now runs to a genuine completion: 1163 tests
+(was 665), 1106 pass, 12 fail -- roughly 40% of the suite that was
+silently uncounted in every prior report is now visible, including four
+real (if minor -- stale markup vs. a stale test) pre-existing failures in
+`navWheel.test.ts` itself that no report in this project's history has
+ever shown before.
+
+**Recommendation, on the harness's own loop (`test/run.mjs`):** wrap each
+`await import(outfile)` in a try/catch that reports a build-style failure
+(`### IMPORT FAILED: <file>`) and continues to the next file, the same
+shape the existing `### BUILD FAILED` handling already uses one step
+earlier in this same script. This closes the exact failure mode found here
+without requiring every test file author to remember never to compute
+anything fallible at module scope -- a rule with no enforcement is a rule
+that gets broken by the next new test file, the same argument that
+already justifies this project's OWN build-first, then-import loop
+(see that loop's own comment, "one bad file cannot hide the rest" --
+correct for the BUILD phase, silently not yet extended to the IMPORT
+phase this finding is about).
+
+**Recommendation, on `test/.built/` (the separate, real hazard):** either
+a lock file (matching `scripts/mutate-lock.mjs`'s own already-proven
+pattern for exactly this class of problem -- two concurrent processes
+racing on one shared resource) or a per-run build directory (a
+temp/PID-scoped subdirectory under `test/.built/`, cleaned up after).
+A lock is the smaller change and matches an already-trusted precedent in
+this repo; a per-run directory is more expensive but removes the
+possibility of a genuine, unavoidable two-lane collision (CLI and BLD
+both running the full suite at once, neither doing anything wrong)
+rather than just detecting it.
+
+**Not built in this run** -- both are the harness's own item, per Mark's
+own framing, and belong to whoever owns `test/run.mjs`, not to a lane
+mid-way through TER-1..5.
+
+**Reversibility:** the two test-file fixes already applied are
+low-risk and disclosed in full in this session's own commits. The two
+harness recommendations above are additive (a try/catch, a lock or a
+new directory) and do not change `test/run.mjs`'s existing behaviour for
+any file that does not hit either failure mode.
+
+---
+
+## 25. `node test/run.mjs` (no args, the full suite) silently under-reports past a certain point — found while verifying FIX-3/FIX-4, not caused by either
+
+**RESOLVED, by CLI's own #24 above (commit `e1ba173`), independently, roughly
+a day later.** Filed here first as a finding rather than fixed unilaterally
+(BLD's own reasoning below); CLI hit the same defect verifying TER-1..5 and
+fixed it directly — a real crash guard added to `test/run.mjs`'s own import
+loop. Kept here, renumbered from a colliding `#22` at this merge (both
+lanes used the same next-free number independently), as the original
+discovery record — CLI's own `#24` entry above is the resolution, this one
+is the report.
 
 **What was found.** `test/run.mjs`'s own built-in `ℹ tests`/`ℹ pass`/
 `ℹ fail` summary block, running the FULL 142-file suite, appears exactly

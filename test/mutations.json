@@ -66,24 +66,6 @@
       "expect": "credits x.js's X with a real caller -- the src/index.ts/SpendCounterDO shape"
     },
     {
-      "id": "ground-edge-is-far-enough-out",
-      "guards": "the modelled ground extends far enough that its own outer edge is beyond the range where the sea bed still reads through the water -- the original tray was visible because the ground stopped at 19.5 km, not because it had an edge at all",
-      "note": "This entry SURVIVED once, and correctly. Its expect still named 'the ground reaches further than the water', a test renamed when the seabed-ring invariant was fixed. The mutation turned the suite red, but not on the named test, and the runner refused to score that as a pass. An expect is a reference to a test name, and renaming a test silently breaks it -- which is now checked at startup.",
-      "file": "public/city-plan.js",
-      "find": "GROUND_SPAN: 4.5,",
-      "replace": "GROUND_SPAN: 3.5,",
-      "expect": "the ground's own edge is far enough out"
-    },
-    {
-      "id": "apron-grid-alignment",
-      "guards": "the apron's coarse grid lands exactly on the fine mesh's edges, so the two abut instead of gapping or overlapping",
-      "note": "This mutation could not bite at all until APRON_STEP_MULTIPLE moved into WORLD. The test used to compute the step itself, so no change to the renderer could fail it. Writing this entry is what found that.",
-      "file": "public/city-plan.js",
-      "find": "APRON_STEP_MULTIPLE: 4,",
-      "replace": "APRON_STEP_MULTIPLE: 3,",
-      "expect": "the apron grid lands exactly on the modelled rectangle's edges"
-    },
-    {
       "id": "cloud-decks-independent-materials",
       "guards": "each cloud deck owns its material, so the low one can fade while the high one is still overhead",
       "file": "public/sky.js",
@@ -100,133 +82,12 @@
       "expect": "at the orbit Mark was flying"
     },
     {
-      "id": "beach-has-a-width",
-      "guards": "sand is bounded by distance from the coastline, not by height alone, so a slowly-rising shelf does not get painted as a 975 m sandbar",
-      "file": "public/terrain.js",
-      "find": "export const BEACH_FADE_M = 140;",
-      "replace": "export const BEACH_FADE_M = 140000;",
-      "expect": "the thresholds are BUILT metres"
-    },
-    {
-      "id": "bloom-is-shared-not-copied",
-      "guards": "both pages bloom the same world the same way, because the renderer uses the shared BLOOM object rather than a copy of its values",
-      "note": "Mutating to an equal-valued literal, not a different one: the point is that a COPY is the defect, even when the numbers happen to match today. That is precisely how the two pages drifted apart in the first place.",
-      "file": "public/world-render-3d.js",
-      "find": "  BLOOM: SHARED_BLOOM,",
-      "replace": "  BLOOM: { strength: 0.085, radius: 0.38, threshold: 2.20 },",
-      "expect": "the tuned render values are what they are meant to be"
-    },
-    {
       "id": "library-declares-the-prop-join",
       "guards": "props.js resolves every manifest id by its own name, so prop-models.js does not need a second table that must agree with it",
       "file": "public/props.js",
       "find": "MODELS[\"bench\"] = MODELS[\"bench-slat\"];",
       "replace": "",
       "expect": "the LIBRARY declares the join"
-    },
-    {
-      "id": "character-is-per-block-not-per-building",
-      "guards": "every building on a block shares one architectural era, so variety is BETWEEN streets rather than within them -- this is the single decision that stops a rules-driven city reading as clones on a grid",
-      "note": "The wrong version is one character shorter and passes any test that only checks 'a character was assigned'. Rolling per building makes every street an even mix of all four eras, so at the altitude you actually view the city from, every street looks like every other street: randomising per building produces UNIFORMITY. This mutation is the difference, and it is measured on the real 26 km world rather than on a fixture.",
-      "file": "public/layout.js",
-      "find": "character: characterFor(plot.blockId, plot.districtId),",
-      "replace": "character: characterFor(plot.id, plot.districtId),",
-      "expect": "not one block carries two architectural characters"
-    },
-    {
-      "id": "row-ends-are-ends",
-      "guards": "the first and last plot in a row are end units with one party wall, and everything between them is a middle unit with two -- without this a terrace is ten identical houses standing near each other",
-      "file": "public/layout.js",
-      "find": "  if (index === 0) return \"end-left\";",
-      "replace": "  if (index === -999) return \"end-left\";",
-      "expect": "the ends of a row are ends"
-    },
-    {
-      "id": "terrace-units-do-not-overhang-the-plot",
-      "guards": "a terrace is sized DOWN to whole 8 m units that fit the plot, so it never hangs over the boundary and gets refused after the work of building it",
-      "file": "public/layout.js",
-      "find": "  const units = Math.floor(buildableWidthM / 8);",
-      "replace": "  const units = Math.ceil(buildableWidthM / 8);",
-      "expect": "terrace units fill the plot without overhanging it"
-    },
-    {
-      "id": "frontage-gates-the-frontage-typologies",
-      "guards": "a shop or high-street terrace is only placed where it actually has street frontage, so a corner shop is on a corner rather than buried mid-row with its shopfront facing a party wall",
-      "file": "public/layout.js",
-      "find": "  let eligible = table.filter((o) => !o.prefersFrontage || onACorner);",
-      "replace": "  let eligible = table.slice();",
-      "expect": "a shop only appears where it has street frontage"
-    },
-    {
-      "id": "terrace-verdict-is-a-stepped-foundation",
-      "guards": "footprint.js's \"terrace\" VERDICT (ground that steps) is translated to the asset lane's \"stepped\" foundation, so it is never confused with the \"bld-terrace\" TYPOLOGY (a row of houses), which is an unrelated thing wearing the same word",
-      "file": "public/layout.js",
-      "find": "  terrace: \"stepped\",",
-      "replace": "  terrace: \"terrace\",",
-      "expect": "every foundation the table emits is one the asset lane builds"
-    },
-    {
-      "id": "large-footprints-cannot-step-over-water",
-      "guards": "a footprint's sample grid is capped at 56 m however wide the footprint is, so a 3.5 km runway cannot step over a river lying across it -- 56 m is the full width of the narrowest water in waterways.js, read from it rather than picked",
-      "note": "The comment on sampleGrid claimed 'never coarser than TARGET_SPACING'. Measured, it was 8 m at 200 m wide, 24 m at 600 m and 140 m at 3,500 m -- true below about 100 m and false everywhere it mattered. The ceiling costs nothing at any size except the single largest footprint in the world, where it is 6.1x.",
-      "file": "public/ground.js",
-      "find": "const MAX_SPACING = 56;",
-      "replace": "const MAX_SPACING = Infinity;",
-      "expect": "sees a 60 m trench that used to fall between its samples"
-    },
-    {
-      "id": "row-plots-are-whole-cells",
-      "guards": "a plot of a class that declares a module is a whole number of those 8 m cells wide, so a terrace actually tiles instead of standing as detached houses showing each other their blank party walls",
-      "note": "Measured before PLOT_CLASSES declared a module: 0 of 5,257 TERRACE plots could tile. Mean plot width 12 m against an 8 m unit left a 4.00 m gap between every adjacent pair. Every end-left/middle/end-right variant the asset lane built was defeated by the subdivision, and the result would have read as a rendering bug rather than a planning one.",
-      "file": "public/city-plan.js",
-      "find": "  if (cls.module) {",
-      "replace": "  if (false && cls.module) {",
-      "expect": "every row-class plot is a whole number of 8 m cells"
-    },
-    {
-      "id": "variant-seed-is-the-situation-not-the-plot",
-      "guards": "a variant group is seeded by its own key, so every member gets byte-identical geometry and the city can be drawn as a few hundred InstancedMeshes instead of one mesh per building",
-      "note": "Seeding each building from its plot id sounds like more variety and is what makes instancing impossible: 20,472 buildings would be 20,472 draw calls against the 14 instanced buckets the renderer uses today. Measured, grouping by SITUATION collapses the city to 244 variants at 1.48 M triangles.",
-      "file": "public/layout.js",
-      "find": "seed: key, placements: [] };",
-      "replace": "seed: p.plotId, placements: [] };",
-      "expect": "collapses to a few hundred instanceable variants"
-    },
-    {
-      "id": "fits-filter-is-applied",
-      "guards": "the layout asks buildings.js whether a typology fits the plot BEFORE choosing it, instead of picking by weight and discovering the overhang at placement time",
-      "note": "This entry exists because the first version of it SURVIVED. The predicate is optional (planCity defaults it to null), so every test in layout.test.ts ran the unfiltered path and disabling the filter changed nothing any test could see. A control only exercised by a script is not a control. The test now lives in layoutGeometry.test.ts, where buildings.js is available, and measures the difference: 3,552 overhangs without, 269 with.",
-      "file": "public/layout.js",
-      "find": "    if (affordable.length) eligible = affordable;",
-      "replace": "    if (false) eligible = affordable;",
-      "expect": "stops it overhanging"
-    },
-    {
-      "id": "sizer-and-renderer-share-one-seed",
-      "guards": "layout-fits.js measures a candidate with the SAME seed the renderer will build it with, via the shared seedFor, so the building that was checked for fit is the building that gets built",
-      "note": "Found by measurement, not by reasoning. The sizer briefly computed its own seed while planPlot used the variant key; since the seed drives the fallback size, the two disagreed and overhangs went 269 -> 556 with the whole suite green. The first version of THIS mutation also survived, because countOverhangs measured with the literal seed \"measure\" -- the same defect, committed by the test that was meant to catch it. Both are fixed; the mutation now reports 653 overhangs against a 409 ceiling. Find/replace and expect updated when askedFor was pulled out as its own function (H1's survivor fix): the overhang-count test alone could no longer catch this, because terrain tuning moved the measured figure (269 -> ~293) closer to the 409 ceiling, and 653 overhangs still sits under it. The new test asserts the CAUSE -- seed equality, exact over every placement -- rather than the consequence. (Merge note, Phase L: assets-lane independently edited this same entry against the pre-H1-refactor shape of layout-fits.js -- that target line no longer exists after the refactor, so main's version is kept; assets-lane's edit is superseded, not lost -- both were fixing the identical defect.)",
-      "file": "public/layout-fits.js",
-      "find": "  return { asked, askedSeed: seedFor(typology, asked) };",
-      "replace": "  return { asked, askedSeed: typology + \"|\" + asked.character };",
-      "expect": "the seed layout-fits.js measured a placement with is the seed the renderer builds it with"
-    },
-    {
-      "id": "row-origin-is-on-the-cell-grid",
-      "guards": "a row of module-class plots STARTS on an 8 m cell, so every building in the world has a whole-cell address rather than merely tiling against its own neighbours",
-      "note": "Snapping the plot WIDTH was not enough. Measured, only 3 of 2,291 blocks begin on an 8 m boundary (median offset 2.80 m), so a perfectly tiling row still sat at a fractional cell address. Nothing looked wrong because the streets hide it -- but WORLD-RULES 3.2 declares the 8 m CELL as the module the world is built on and grid.js hands out addresses on it. After the fix: 14,378 of 14,378 module-class plots start on a cell.",
-      "file": "public/city-plan.js",
-      "find": "    ? Math.ceil((block.xMin - 1e-9) / cls.module) * cls.module",
-      "replace": "    ? block.xMin",
-      "expect": "STARTS on an 8 m cell"
-    },
-    {
-      "id": "back-row-faces-its-own-street",
-      "guards": "the back row of a block is turned 180 degrees, so it addresses the street it fronts instead of showing it a back garden",
-      "note": "subdivideBlock lays two rows back to back fronting opposite streets, and models are built facing +z. Unrotated, 9,845 of 19,725 buildings -- half the city -- would present their front door, porch and shopfront to the rear boundary. Nothing would look broken from the air, which is what makes it worth a control.",
-      "file": "public/layout.js",
-      "find": "      r.facing = rowKey ? Math.PI : 0;",
-      "replace": "      r.facing = 0;",
-      "expect": "back row faces the other way"
     },
     {
       "id": "nav-rows-share-one-radius",
@@ -245,33 +106,6 @@
       "find": ".nav-bare > * { box-sizing: border-box; width: 100%; }",
       "replace": ".nav-bare > * { box-sizing: content-box; }",
       "expect": "edges line up"
-    },
-    {
-      "id": "ground-is-measured-only-when-needed",
-      "guards": "canPlace takes the footprint's heights through a getter, so a candidate refused by the terrain or by what is already built never pays for a measurement it does not use -- and nothing can read the heights before they are taken",
-      "note": "The measurement used to be eager, to close a real ordering hazard where a later step read `hi` as -Infinity and a 30 m tower was accepted onto a house lot. Eager fixed that and made every rejection pay 676 probes. MEASURED on findGround for an unplaceable spec: 12,142,980 heightAt calls in 11.0 s, over 17,910 candidates. After: 35,820 calls in 0.46 s -- 339x fewer probes, same answer. The getter closes both problems, where simply moving the loop later would have reopened the first.",
-      "file": "public/ground.js",
-      "find": "    // 1. DOES THE LAND ITSELF FORBID IT?",
-      "replace": "    groundRange();\n    // 1. DOES THE LAND ITSELF FORBID IT?",
-      "expect": "does not pay to measure the ground first"
-    },
-    {
-      "id": "waterway-depth-is-local-not-declared",
-      "guards": "waterAt reports the depth AT THE POINT, derived from the channel's own surface level, so a hull at the bank does not read the mid-channel figure",
-      "note": "MEASURED on river-mid before: bed 59.31 m at the centreline climbing to 66.34 m at 50 m out, and 5.85 m of declared depth reported at every one of them. The function even computed heightAt and discarded it, under a comment describing a surface at bed + depth that nothing calculated.",
-      "file": "public/ground.js",
-      "find": "      const depth = surfaceY - h;",
-      "replace": "      const depth = way.depth;",
-      "expect": "a level surface, a sloping bed, and dry banks"
-    },
-    {
-      "id": "a-waterway-has-banks",
-      "guards": "ground inside a channel's envelope but above its water line is dry land, so a river has banks rather than vertical walls and nothing floats up a shelving bed",
-      "note": "The first version of this control SURVIVED, and finding out why exposed a third defect: waterwayInfoAt reported the manifest's untapered halfWidth while membership was decided by the tapered one, so the test's walk was escaping the rectangle rather than reaching a waterline. It reports the deciding figure now.",
-      "file": "public/ground.js",
-      "find": "      if (depth <= 0) return null;",
-      "replace": "      if (depth <= -99999) return null;",
-      "expect": "a level surface, a sloping bed, and dry banks"
     },
     {
       "id": "line-endings-stay-lf",
@@ -362,51 +196,6 @@
       "expect": "different seed is a different world"
     },
     {
-      "id": "the-field-carries-its-seed",
-      "guards": "a LandField keeps the seed it was built with, so a named world is a genuinely different landmass rather than the same one relabelled",
-      "note": "The seed lives on the FIELD rather than being threaded through every height call: heightAt is asked tens of millions of times per world build, and a parameter that must be passed at every call site is one somebody eventually forgets, producing a world that is half one place and half another.",
-      "file": "public/terrain.js",
-      "find": "    this.seed = seedToInt(seed);",
-      "replace": "    this.seed = 0;",
-      "expect": "named seed is a genuinely different landmass"
-    },
-    {
-      "id": "the-height-function-reads-the-fields-seed",
-      "guards": "makeHeightAt reads the field's seed and passes it to every shaping function, so seeding reaches the actual ground rather than stopping at the field object",
-      "note": "An earlier version of this mutation neutered only edgeFalloff and SURVIVED -- cliffiness, shoreRampAt and reliefAt were still seeded, so the world still differed. A partial mutation proves nothing. KNOWN GAP: this pins that the seed reaches the shaping functions collectively, not that each one's seed is individually load-bearing.",
-      "file": "public/terrain.js",
-      "find": "  const seed = field && Number.isFinite(field.seed) ? field.seed : DEFAULT_SEED;",
-      "replace": "  const seed = DEFAULT_SEED;",
-      "expect": "named seed is a genuinely different landmass"
-    },
-    {
-      "id": "generateWorld-forwards-its-seed",
-      "guards": "generateWorld threads its seed into the plan (cityDemand, generateCityPlan, generateSettlement), not just the ground, so a named world gets a genuinely different street grid and zoning mix, not just different hills",
-      "note": "Reassigns the seed AT ITS FIRST USE inside generateWorld rather than at one of the three downstream call sites -- the seed fans out to cityDemand, generateCityPlan and generateSettlement independently, and settlement plots alone still differ by seed even if only the downtown path (generateCityPlan) is broken, so a mutation on that one call site alone would SURVIVE against a whole-world fingerprint. This targets the single point all three pass through.",
-      "file": "public/city-plan.js",
-      "find": "  const demandAt = heightAt ? cityDemand(heightAt, seed) : null;",
-      "replace": "  const demandAt = heightAt ? cityDemand(heightAt, seed = DEFAULT_SEED) : null;",
-      "expect": "a named seed lays out a genuinely different street grid"
-    },
-    {
-      "id": "districts-copy-clones-its-bounds",
-      "guards": "generateWorld's returned districts array deep-copies each district's nested bounds object, so mutating one world's district bounds cannot reach another world's copy or the frozen spec",
-      "note": "A shallow { ...d } copies the top-level fields but leaves bounds pointing at DISTRICTS[i]s own object -- every world built in the process shared one bounds object per district until this was fixed.",
-      "file": "public/city-plan.js",
-      "find": "districts: DISTRICTS.map((d) => ({ ...d, bounds: { ...d.bounds }, f: [...d.f], allow: [...d.allow] })),",
-      "replace": "districts: DISTRICTS.map((d) => ({ ...d, f: [...d.f], allow: [...d.allow] })),",
-      "expect": "mutating one world's district bounds does not reach another world's, or the spec"
-    },
-    {
-      "id": "world-toJSON-carries-its-layers",
-      "guards": "createWorlds toJSON includes the layer stack, not just the seed, so a stored world can rebuild with its edits intact",
-      "note": "The whole point of A4 is that a world round-trips -- a toJSON that dropped layers would serialise a world that forgets every edit on the next load, silently.",
-      "file": "public/world.js",
-      "find": "    toJSON: () => layerModel.toJSON(),",
-      "replace": "    toJSON: () => ({ seed }),",
-      "expect": "rebuilds to the same fingerprint"
-    },
-    {
       "id": "world-store-reports-corrupt-json",
       "guards": "load() reports a stored record that is not valid JSON, instead of swallowing the parse failure and quietly returning what looks like a valid, empty world",
       "note": "The mutation replaces the reported failure with a fabricated, VALID-shaped result (a real string seed, empty layers) rather than just deleting the return -- a mutation that left data malformed would still get caught by the very next validation check for an unrelated reason, which would prove nothing about this specific line.",
@@ -423,15 +212,6 @@
       "find": "  for (const address of touched) {",
       "replace": "  for (const p of placements) { const address = p.plotId;",
       "expect": "resolve is called exactly once per touched address"
-    },
-    {
-      "id": "override-leaves-its-instance-group",
-      "guards": "an overridden placement is pushed to overridden and EXCLUDED from instanced, so the shared InstancedMesh group never sees it -- otherwise it draws from the old shared geometry as well as its own override, twice",
-      "note": "Dropping the else keeps the if-branch's push but ALSO falls through to the instanced push, exactly the failure mode named in the ledger: apply the override without removing it from the group.",
-      "file": "public/instance-groups.js",
-      "find": "    if (p.override) overridden.push(p);\n    else instanced.push(p);",
-      "replace": "    if (p.override) overridden.push(p);\n    instanced.push(p);",
-      "expect": "an overridden plot is absent from its original variant's instance group"
     },
     {
       "id": "resolve-models-refuses-unknown-id",
@@ -506,15 +286,6 @@
       "expect": "setting a UI flag, with no real edit, does NOT complete the quest"
     },
     {
-      "id": "locked-region-refuses-with-a-reason-not-bare-false",
-      "guards": "a locked/unloaded region refuses placement with a reason and a detail string, never a bare false -- an empty result and a locked region must never look alike",
-      "note": "Ledger finding named directly in the plan: absence nobody can see. A bare false is indistinguishable from any other falsy 'nothing happened' signal; {ok:false, reason, detail} is not.",
-      "file": "public/grid.js",
-      "find": "      return { ok: false, reason: \"locked\", detail: `(${x.toFixed(0)}, ${z.toFixed(0)}) is in a part of the world that is not open yet` };",
-      "replace": "      return false;",
-      "expect": "loaded then unloaded, refuses again"
-    },
-    {
       "id": "checkInputGuard-reads-control-limits-not-a-literal",
       "guards": "checkInputGuard reads its length cap from CONTROL_LIMITS.FREE_FORM_MAX_LENGTH, never a hard-coded number at the call site -- a hard-coded copy stops tracking the one limits object silently",
       "note": "This is the exact mutation G1 names in the plan: hard-code one -> the test names it.",
@@ -540,105 +311,6 @@
       "find": "npm test            # 948 node tests + 12 worker tests",
       "replace": "npm test            # 949 node tests + 12 worker tests",
       "expect": "CLAUDE.md's verification line names the real test counts"
-    },
-    {
-      "id": "close-region-on-open-null-refuses-not-a-silent-success",
-      "guards": "closeRegion on a whole-world-open grid (open === null) genuinely refuses with a reason, rather than silently reporting success for a region that was never load-tracked in the first place",
-      "note": "Found untested by docs/audits/UMAA-phases-B-H.md (Finding 3): every prior closeRegion test used an explicit openRegions list; createWorld()'s own default (regions: null) -- the shape of every world built today -- reaches this branch and nothing exercised it.",
-      "file": "public/grid.js",
-      "find": "      return { ok: false, reason: `grid: cannot close \"${name}\" -- the whole world is open, not region-tracked` };",
-      "replace": "      return { ok: true };",
-      "expect": "closing a region on a whole-world-open grid (open === null) is refused"
-    },
-    {
-      "id": "createWorld-reuses-land-for-a-repeat-seed",
-      "guards": "a second createWorld() call for the same seed reuses the same LandField/heightAt object, not a fresh one -- the memoisation Finding 5 asked for, without which generateWorld's own heightAt-identity-keyed caches (cityDemand, placeFeatures) never hit on a repeat call",
-      "note": "Found by docs/audits/UMAA-phases-B-H.md (Finding 5): createWorld() cost 2.3-2.7s per call and a repeat call with the identical seed was not materially cheaper, because a fresh LandField/heightAt was built every time.",
-      "file": "public/world.js",
-      "find": "  let entry = landCache.get(seed);",
-      "replace": "  let entry = undefined;",
-      "expect": "a second createWorld() call for the same seed reuses the same land"
-    },
-    {
-      "id": "world-aliasing-districts-f-and-allow-stay-independent",
-      "guards": "the general aliasing test (test/worldAliasing.test.ts) subsumes the specific district-bounds test (test/worldSpec.test.ts) A3 wrote -- reintroducing A3's own shallow-copy bug (this time for the f/allow fields the original fix missed) must turn the GENERAL test red, not just be caught by luck",
-      "note": "Named before the test was written, per instruction: reintroducing A3's shallow district copy (removing the f/allow deep-copy this session added alongside it) should turn test/worldAliasing.test.ts red, proving it subsumes the specific case rather than duplicating it.",
-      "file": "public/city-plan.js",
-      "find": "districts: DISTRICTS.map((d) => ({ ...d, bounds: { ...d.bounds }, f: [...d.f], allow: [...d.allow] })),",
-      "replace": "districts: DISTRICTS.map((d) => ({ ...d, bounds: { ...d.bounds } })),",
-      "expect": "two worlds with the SAME seed share only the declared allow-list"
-    },
-    {
-      "id": "world-aliasing-plot-buildable-stays-independent",
-      "guards": "generateWorld copies each downtown plot's buildable rectangle, not just the plot itself -- generateCityPlan's own seed-keyed cache (A2b) means two same-seed worlds share the underlying city.plots array, so a shallow plot copy alone still aliases .buildable across both",
-      "note": "Found by test/worldAliasing.test.ts: this was a live gap from A2b's own caching, never exercised until the general aliasing test walked two same-seed worlds and compared them.",
-      "file": "public/city-plan.js",
-      "find": "const plots  = [...city.plots.map(p => ({ ...p, settlement:\"downtown\", buildable: { ...p.buildable } }))];",
-      "replace": "const plots  = [...city.plots.map(p => ({ ...p, settlement:\"downtown\" }))];",
-      "expect": "two worlds with the SAME seed share only the declared allow-list"
-    },
-    {
-      "id": "landfield-freezes-itself",
-      "guards": "LandField freezes itself once built -- decision A, made explicit: sharing land across two same-seed worlds (Finding 5) is safe only because nothing can write through it",
-      "note": "Verified empirically before this freeze was made permanent: the full 872-test suite was run once with it in place and passed unchanged, proving nothing in this codebase currently writes to a LandField after construction.",
-      "file": "public/terrain.js",
-      "find": "    this.MAX_D = cell * 3;\n    Object.freeze(this);\n  }",
-      "replace": "    this.MAX_D = cell * 3;\n  }",
-      "expect": "LandField cannot be written through"
-    },
-    {
-      "id": "world-freezes-itself",
-      "guards": "WORLD (world-extent constants) is frozen -- generateWorld() embeds it by reference in every plan, for every seed, so a caller writing through one world's plan.world would move every world in the process",
-      "note": "Found by test/worldAliasing.test.ts: WORLD was shared by reference (same object as terrain.js's TERRAIN.WORLD) but had never been frozen, unlike DISTRICTS/SETTLEMENTS/BRIDGES/GRID.",
-      "file": "public/city-plan.js",
-      "find": "Object.freeze(WORLD);",
-      "replace": "",
-      "expect": "WORLD cannot be written through"
-    },
-    {
-      "id": "landmasses-freezes-itself",
-      "guards": "LANDMASSES (raw authored coastline outlines) is deep-frozen -- landmassPolygonsDesign()'s {...lm, polygon} shallow-copies each entry but leaves .points shared by reference across every world",
-      "note": "Found by test/worldAliasing.test.ts.",
-      "file": "public/city-plan.js",
-      "find": "deepFreeze(LANDMASSES);",
-      "replace": "",
-      "expect": "LANDMASSES cannot be written through"
-    },
-    {
-      "id": "highways-freezes-itself",
-      "guards": "HIGHWAYS is deep-frozen -- generateWorld's roads array spreads ...HIGHWAYS directly (unlike the separately-copied highways: field), so an unclipped highway is the literal HIGHWAYS object shared across every world",
-      "note": "Found by test/worldAliasing.test.ts.",
-      "file": "public/city-plan.js",
-      "find": "deepFreeze(HIGHWAYS);",
-      "replace": "",
-      "expect": "HIGHWAYS cannot be written through"
-    },
-    {
-      "id": "buildWorldState-forwards-its-seed",
-      "guards": "I1: buildWorldState threads its seed argument through to createWorld() -- a caller asking for a named seed must not silently get DEFAULT_SEED back",
-      "note": "The default-seed identity test alone cannot catch this: a dropped seed still falls back to DEFAULT_SEED, so it would still match the old bare-calls path for the default case. Needs the separate non-default-seed divergence test.",
-      "file": "public/city-render.js",
-      "find": "export function buildWorldState(seed = DEFAULT_SEED, layers = []) {\n  const instance = createWorld({ seed, layers });",
-      "replace": "export function buildWorldState(seed = DEFAULT_SEED, layers = []) {\n  const instance = createWorld({ layers });",
-      "expect": "a named, non-default seed reaches createWorld()"
-    },
-    {
-      "id": "buildScenePlacements-partitions-overrides-out-of-instancing",
-      "guards": "I2: an overridden placement must leave its instance group entirely, not stay in it -- an InstancedMesh draws every instance from the same geometry, so a placement left in its group after being overridden is drawn there AND wherever the override draws it, doubled",
-      "note": "The ledger names this mutation directly: leave the override in its group -> the count test red (it would draw twice).",
-      "file": "public/city-render.js",
-      "find": "  const { instanced, overridden } = partitionForInstancing(withLayers);",
-      "replace": "  const { instanced, overridden } = { instanced: withLayers, overridden: [] };",
-      "expect": "an injected layer moves exactly one placement to overridden"
-    },
-    {
-      "id": "city-mode-pick-resolves-through-persisted-selection",
-      "guards": "I3: the real city-mode click handler resolves an address through the persisted selection (createSelection), not the spatial index directly -- a later describe/generate step reads the persisted selection and would find nothing if the handler stopped updating it",
-      "note": "Reverting this line to call this._index.addressAt() directly still labels every click, but nothing remembers what was picked a moment later.",
-      "file": "public/world-render-3d.js",
-      "find": "const addr = this._selection ? this._selection.pick(pt.x, pt.z) : null;",
-      "replace": "const addr = this._index ? this._index.addressAt(pt.x, pt.z) : null;",
-      "expect": "the real click handler resolves through the persisted selection"
     },
     {
       "id": "describe-result-uses-textContent-not-innerHTML",
@@ -745,24 +417,6 @@
       "expect": "the child process has no secret to steal"
     },
     {
-      "id": "claimSpansAreChecked-strips-comments-before-searching",
-      "guards": "J4's claim-span registry check (docs/audits/UMAA-I5-L-J4.md Finding 2) requires a claim id to be referenced by REAL CODE, not a dead comment -- stripComments() is what makes a `// TODO: claim-foo` comment insufficient",
-      "note": "Found by a blind audit: the original .includes() ran against the raw, uncommented source, so a developer's own half-finished TODO comment satisfied the guard with zero real verification present.",
-      "file": "test/claimSpansAreChecked.test.ts",
-      "find": "function stripComments(src: string): string {\n  return src\n    .replace(/\\/\\*[\\s\\S]*?\\*\\//g, \" \")\n    .replace(/\\/\\/.*$/gm, \" \");\n}",
-      "replace": "function stripComments(src: string): string {\n  return src;\n}",
-      "expect": "a claim span mentioned only in a dead comment is NOT considered checked"
-    },
-    {
-      "id": "findUncheckedClaimSpans-scans-every-given-html-source",
-      "guards": "J4's claim-span registry check (docs/audits/UMAA-I5-L-J4.md Finding 3) scans EVERY html source it is given, not just the first -- so a claim span on a second page is still found",
-      "note": "Found by a blind audit: the original check only ever read public/index.html, while publicClaims.test.ts's own city-stats test also reads public/city.html.",
-      "file": "test/claimSpansAreChecked.test.ts",
-      "find": "  const ids = new Set<string>();\n  for (const html of htmlSources) {",
-      "replace": "  const ids = new Set<string>();\n  for (const html of htmlSources.slice(0, 1)) {",
-      "expect": "a claim span present in a SECOND html source is still found"
-    },
-    {
       "id": "city-stat-buildings-is-pinned-by-equality-not-a-tolerance-band",
       "guards": "public/index.html's #city-stat-buildings span is checked against CITY_STATS.buildingsPlaced (src/citySummary.generated.ts) by EQUALITY -- replacing the old `buildings > plots * 0.8` tolerance band that let \"16,770\" pass for months at 84.4%, four points inside the 80% floor that band enforced",
       "note": "Changing the generated placement count without touching the page simulates the world's build changing under a page that was not regenerated -- exactly the staleness the old band was too wide to catch. The <= plots impossibility check (guarded separately, unaffected by this mutation) still exists alongside this one; the two catch different failures.",
@@ -797,15 +451,6 @@
       "find": "const { changeRequest: _rawVisitorRequest, ...changelogRecord } = full;",
       "replace": "const { changeRequest: _rawVisitorRequest, ledger: _droppedLedger, ...changelogRecord } = full as any;",
       "expect": "a stage cost's model and timestamp survive into the changelog record"
-    },
-    {
-      "id": "settlementsClaimMismatch-fails-when-the-regex-cannot-match",
-      "guards": "PART 7b/E8: settlementsClaimMismatch() returns a failure message, not null, when the summary text has no readable settlement count -- the fail-open shape J4's tolerance band had, closed here for the settlements check specifically",
-      "note": "Reintroducing a silent `return null` when the regex fails to match means a reworded summary makes the whole comparison vanish instead of failing loudly.",
-      "file": "test/publicClaims.test.ts",
-      "find": "  if (!settMatch) return \"could not read a settlement count out of citySummary.generated.ts -- has its wording changed?\";",
-      "replace": "  if (!settMatch) return null;",
-      "expect": "an unreadable settlement count fails loudly, it does not silently pass"
     },
     {
       "id": "hero-line-agrees-with-the-page-title",
@@ -934,51 +579,6 @@
       "expect": "a refusal offers something of the SAME KIND -- a location with room, or a demolition list -- never a substitute"
     },
     {
-      "id": "isolate-neighbour-self-exclusion",
-      "guards": "P4.3 neighboursOf() never reports the selected piece as its own neighbour.",
-      "note": "Verified by hand this session (host memory constraints made a full `node scripts/mutate.mjs --id ...` pass too risky to run alongside -- see docs/AUDIT-PROTOCOL.md's own 2026-09-03 scratch-copy fallback for the identical situation): edited, ran test/isolate.test.ts alone, watched exactly this test go red and no other, reverted, reconfirmed green. `npm run mutate --id isolate-neighbour-self-exclusion` still needs a real run once the full suite is safe to run again.",
-      "file": "public/isolate.js",
-      "find": "  const neighbours = hits.filter((p) => p.id !== selected.id);",
-      "replace": "  const neighbours = hits;",
-      "expect": "the selected piece is never reported as its own neighbour"
-    },
-    {
-      "id": "isolate-restore-visibility",
-      "guards": "P4.3 restoreIsolate() puts every hidden InstancedMesh batch's visibility back exactly as it was.",
-      "note": "Verified by hand this session, same reason as isolate-neighbour-self-exclusion above: watched exactly the restore-byte-identical test go red, reverted, reconfirmed green.",
-      "file": "public/isolate.js",
-      "find": "  for (const { mesh, wasVisible } of state.hiddenMeshes) mesh.visible = wasVisible;",
-      "replace": "  for (const { mesh, wasVisible } of state.hiddenMeshes) { /* removed */ }",
-      "expect": "restore is byte-identical -- every batch's visibility, material identity, and FULL instance-matrix array match exactly, not just a count"
-    },
-    {
-      "id": "isolate-new-pick-restores",
-      "guards": "a new pick always restores any active P4.3 isolate before showing the new selection -- an isolate cannot silently survive picking something else.",
-      "note": "Verified by hand this session, same reason as above. First attempt at this exact mutation (commenting out the call rather than deleting it) SURVIVED wrongly -- the wiring test's regex matched the call's own text still present inside the comment. Caught before landing; the wiring test now strips line comments before matching (test/isolate.test.ts's stripLineComments), and this mutation (a real deletion) correctly goes red.",
-      "file": "public/world-render-3d.js",
-      "find": "      this._restoreIsolateState();\n      if (this.onInspect) {",
-      "replace": "      if (this.onInspect) {",
-      "expect": "a new pick restores any active isolate -- an isolate does not silently survive picking something else"
-    },
-    {
-      "id": "move-refusal-reaches-onMoveRefused",
-      "guards": "P4.4 _moveSelected() surfaces a refused move to the player via onMoveRefused -- never only a console log.",
-      "note": "Verified by hand this session (same host-memory reason as the P4.3 entries above). First attempt at this mutation used too wide a source window and matched the SEPARATE onMoveRefused call in the could-not-persist branch further down, so removing only the refusal-path call SURVIVED wrongly -- caught before landing; the wiring test now anchors on `if (!result.ok)` itself with a narrow 200-char window, and this mutation correctly goes red.",
-      "file": "public/world-render-3d.js",
-      "find": "    if (!result.ok) {\n      if (this.onMoveRefused) this.onMoveRefused({ reason: result.reason, blockedBy: result.blockedBy || null, plotId });\n      return result;\n    }",
-      "replace": "    if (!result.ok) {\n      return result;\n    }",
-      "expect": "a refused move reaches a caller-visible callback, not console.log"
-    },
-    {
-      "id": "move-edit-shape-exact",
-      "guards": "moveEditFor() builds world-model.js's own move op shape exactly -- address/op/payload.x/payload.z, nothing renamed or added.",
-      "note": "Verified by hand this session, same reason as above.",
-      "file": "public/move-piece.js",
-      "find": "  return { address: moveResult.plotId, op: \"move\", payload: { x: moveResult.destWorld.x, z: moveResult.destWorld.z } };",
-      "replace": "  return { address: moveResult.plotId, op: \"move\", payload: { x: moveResult.destWorld.x, z: moveResult.destWorld.z, extra: 1 } };",
-      "expect": "moveEditFor() builds world-model.js's own move-op shape exactly -- address/op/payload.x/payload.z, nothing more, nothing renamed"
-    },
-    {
       "id": "generated-claims-buildings-mismatch-detected",
       "guards": "P4.6's buildingsClaimMismatch actually detects a mismatch between the page's claim and the generated building count, rather than always reporting clean.",
       "note": "Verified by hand this session (same host-memory reason as the other entries added alongside this one). A disabled-condition mutation (`if (false && ...)`) correctly turned the SYNTHETIC test red (which calls the function directly with a deliberately wrong value) while the real-data gate test stayed green, since the real page and the real generated file currently agree either way -- the synthetic test is the one this specific mutation is checkable against, and is the one recorded here.",
@@ -988,177 +588,6 @@
       "expect": "a deliberately staled building count is named, by claim, not silently absorbed"
     },
     {
-      "id": "isolate-neighbours-buildings-only",
-      "guards": "P4.3 neighboursOf() reports only buildings as neighbours -- roads and bridges from the same local board query are excluded, matching this pass's own stated buildings-only scope.",
-      "note": "Found by a blind audit (docs/AUDIT-PROTOCOL.md), not written in first: the original neighboursOf() had no piece-kind filter at all. Verified by hand this session (same host-memory reason as the other entries): removing the filter correctly turned exactly the buildings-only test red, reverted, reconfirmed green.",
-      "file": "public/isolate.js",
-      "find": "  const neighbours = hits.filter((p) => p.id !== selected.id && p.id.startsWith(\"bld-\"));",
-      "replace": "  const neighbours = hits.filter((p) => p.id !== selected.id);",
-      "expect": "every reported neighbour is a building -- roads and bridges from the same local query are excluded, matching the pass's own stated buildings-only scope"
-    },
-    {
-      "id": "move-self-collision-ignoreId",
-      "guards": "P4.4 tryMove() lets a piece move a short distance that overlaps its own current footprint (board.js's ignoreId), rather than refusing it as occupied against itself.",
-      "note": "Found by a blind audit: the original P4.4 test suite (8/8) still passed with ignoreId removed entirely, because no existing case tested a piece against its OWN old position. Verified by hand this session: removing ignoreId correctly turned exactly the self-collision test red, reverted, reconfirmed green. IMPORTANT for whoever re-verifies this one: mutating with `if (false && ...)`-style disabling leaves the code TEXT unchanged and can make a wiring/regex-based test SURVIVE wrongly (found directly, on the isolate-new-pick-restores and move-self-collision-adjacent checks in this same session) -- this mutation is a real value substitution (`{ ignoreId: selected.id }` -> `{}`), not a disabled condition, so it is safe against that trap, but the general lesson is worth restating here.",
-      "file": "public/move-piece.js",
-      "find": "    { ignoreId: selected.id },",
-      "replace": "    {},",
-      "expect": "a piece may move a short distance that overlaps its OWN current footprint -- board.js's ignoreId, not a self-refusal"
-    },
-    {
-      "id": "isolate-hides-moved-pieces",
-      "guards": "P4.3 isolate hides a P4.4-moved piece (a standalone Mesh applyIsolate cannot see, since it lives outside buildingInstanceIndex) when that piece is not in the kept set, and restores its visibility afterward.",
-      "note": "Found by a blind audit: a piece moved earlier in a session stayed visible through an unrelated isolate, because applyIsolate only ever reads buildingInstanceIndex. Fixed as a separate step in _isolate()/_restoreIsolateState(), deliberately outside the pure public/isolate.js module. Verified by hand this session: DELETING the added block (not disabling it with `if (false)`, which left the text intact and let the wiring test SURVIVE wrongly on the first attempt -- caught before landing) correctly turned exactly this wiring test red, reverted, reconfirmed green.",
-      "file": "public/world-render-3d.js",
-      "find": "    this._hiddenMovedPieces = [];\n    if (this._movedPieces) {\n      for (const [movedPlotId, entry] of this._movedPieces) {\n        if (keepIds.has(`bld-${movedPlotId}`)) continue;\n        this._hiddenMovedPieces.push(entry.standalone);\n        entry.standalone.visible = false;\n      }\n    }",
-      "replace": "    this._hiddenMovedPieces = [];",
-      "expect": "a P4.4-moved piece not in the kept set is hidden by isolate, and restored -- a blind audit found applyIsolate cannot see it at all"
-    },
-    {
-      "id": "b1-terrain-no-longer-imports-landmasses",
-      "guards": "terrain.js does not import landmassPolygonsDesign or LANDMASSES from city-plan.js -- the dependency B1 exists to break, since city-plan.js is slated for replacement in B2.",
-      "note": "Verified by hand this session (host memory constraints, per docs/BUILD-LOOP.md's own long-run discipline). First attempt at this mutation added an ALIASED import (`landmassPolygonsDesign as _reimported`); the test's original exact-name array check SURVIVED wrongly, because an aliased entry does not equal the bare name after a naive comma-split. Caught before landing: the test now does a substring/word-boundary match against the whole import clause, not an exact-membership check, and this mutation now correctly goes red.",
-      "file": "public/terrain.js",
-      "find": "import { WORLD } from \"./city-plan.js\";",
-      "replace": "import { WORLD, landmassPolygonsDesign as _reimported } from \"./city-plan.js\";",
-      "expect": "terrain.js no longer imports landmassPolygonsDesign or LANDMASSES from city-plan.js"
-    },
-    {
-      "id": "b1-terrain-exports-own-landmasses",
-      "guards": "terrain.js exports its own landmassPolygonsDesign rather than only using it internally or re-exporting city-plan.js's.",
-      "note": "Verified by hand this session. Removing `export` correctly turned both the export-presence test AND the identity test red (the identity test's own dynamic import reads undefined off the module namespace) -- both recorded as one mutation since they share a single root cause.",
-      "file": "public/terrain.js",
-      "find": "export function landmassPolygonsDesign(samplesPerSegment = 10) {",
-      "replace": "function landmassPolygonsDesign(samplesPerSegment = 10) {",
-      "expect": "terrain.js exports its own landmassPolygonsDesign, not a re-export of city-plan.js's"
-    },
-    {
-      "id": "b1-ownership-list-tracks-real-importers",
-      "guards": "test/terrainLandmassOwnership.test.ts's transformed third check (B1 step B: 'assert nothing reads city-plan.js's copy', not yet true, so tracked as an explicit named list instead -- Mark's own instruction) actually compares the list, rather than trivially passing.",
-      "note": "REPLACES the b1-terrain-landmass-data-identical-to-original entry this superseded (that mutation's own find target, a gull-isle coordinate, no longer exists -- the island is now procedurally generated). Verified by hand this session: removing one real entry from KNOWN_STATIC_IMPORTERS correctly turned exactly this test red, reverted, reconfirmed green.",
-      "file": "test/terrainLandmassOwnership.test.ts",
-      "find": "  const KNOWN_STATIC_IMPORTERS = [\n    \"public/road-network.js\",\n    \"scripts/_render-arterial-data.mjs\",",
-      "replace": "  const KNOWN_STATIC_IMPORTERS = [\n    \"scripts/_render-arterial-data.mjs\",",
-      "expect": "the exact, current set of files still reading city-plan.js's LANDMASSES/landmassPolygonsDesign directly is named and tracked"
-    },
-    {
-      "id": "b1-island-count-gate-real",
-      "guards": "the B1 gate's island-count assertion (>= 20) actually reacts to a real reduction in the archipelago, not a tautology.",
-      "note": "Verified by hand this session: setting SKERRY_COUNT to 0 correctly turned exactly the island-count test red (measured 10 islands, below the 20 floor), reverted, reconfirmed green (32 islands).",
-      "file": "public/terrain.js",
-      "find": "const SKERRY_COUNT = 22;",
-      "replace": "const SKERRY_COUNT = 0;",
-      "expect": "island count and variety -- an archipelago reads by count, not by area alone"
-    },
-    {
-      "id": "b1-mainland-settleable-fraction-capped",
-      "guards": "the B1 gate's mainland settleable-fraction cap (<= 0.2) actually catches a mainland that drifts toward settlement, per Mark's own correction 2.",
-      "note": "Verified by hand this session: raising coastal-strip's fraction from 0.12 to 0.45 (compensating farmland down to keep the three bands summing to 1) correctly turned exactly this test red, reverted, reconfirmed green.",
-      "file": "public/terrain.js",
-      "find": "  { id: \"coastal-strip\", identity: \"the mainland's own thin settled edge -- the only part of the mainland this plan settles\", fraction: 0.12, settleable: true },\n  { id: \"farmland\", identity: \"farmland behind the coast -- open, worked, not built on\", fraction: 0.55, settleable: false },",
-      "replace": "  { id: \"coastal-strip\", identity: \"the mainland's own thin settled edge -- the only part of the mainland this plan settles\", fraction: 0.45, settleable: true },\n  { id: \"farmland\", identity: \"farmland behind the coast -- open, worked, not built on\", fraction: 0.22, settleable: false },",
-      "expect": "the mainland's own settleable fraction is a stated, small number, not left to be inferred"
-    },
-    {
-      "id": "b2-0-worldaliasing-terrain-landmasses-on-allowlist",
-      "guards": "worldAliasing.test.ts's different-seed test genuinely checks terrain.js's own LANDMASSES[...].points for unreviewed sharing, rather than the allow-list entry being decorative.",
-      "note": "Verified by hand this session: replacing TERRAIN_LANDMASSES with [] in the allow-list's own filter/map (so none of terrain.js's landmass outlines are declared shared) correctly turned the different-seed test red (438 unexplained shared objects, first one array(22)), reverted, reconfirmed green.",
-      "file": "test/worldAliasing.test.ts",
-      "find": "    ...TERRAIN_LANDMASSES.filter((lm) => lm.points).map((lm) => ({",
-      "replace": "    ...[].filter((lm) => lm.points).map((lm) => ({",
-      "expect": "two worlds with DIFFERENT seeds share only the declared allow-list (WORLD -- never land)"
-    },
-    {
-      "id": "b2-0-worldaliasing-mainland-zones-on-allowlist",
-      "guards": "worldAliasing.test.ts's different-seed test separately catches MAINLAND_ZONES sharing, not just LANDMASSES.points -- `.zones` is a distinct reachable field on the mainland's own LANDMASSES entry.",
-      "note": "Verified by hand this session: removing the MAINLAND_ZONES allow-list entry alone (leaving the LANDMASSES.points entries in place) correctly turned the different-seed test red (4 unexplained shared objects, first one array(3) -- MAINLAND_ZONES' own three bands), reverted, reconfirmed green.",
-      "file": "test/worldAliasing.test.ts",
-      "find": "    {\n      label: \"MAINLAND_ZONES (public/terrain.js)\",\n      value: MAINLAND_ZONES,\n      reason: \"a flat, frozen spec of the mainland's own depth-band fractions (Object.freeze); the mainland's LANDMASSES entry embeds it as `.zones` by reference, for every seed -- one frozen table, not one per world, same category as WORLD.\",\n    },\n",
-      "replace": "",
-      "expect": "two worlds with DIFFERENT seeds share only the declared allow-list (WORLD -- never land)"
-    },
-    {
-      "id": "b2-settlement-table-wooded-exclusion-real",
-      "guards": "the B2 gate's 'wooded/sandbar/rock/skerry islands carry no settlement at all' assertion actually reacts to SETTLEMENT_TABLE, not a tautology.",
-      "note": "Originally verified by hand only, never recorded through a tool -- re-run 2026-09-11 (b1-land, autonomous run, item 3 of docs/briefs/CLI-2026-09-11-autonomous.md) via node scripts/_mutcheck.mjs test/boardGenerator.test.ts public/board-generator.js test/mutations.json: baseline GREEN, CAUGHT, source restored byte-identical. Decision #10's regex-truncation fix does NOT change this mutation's scoring, checked directly: this entry's own `expect` string has no parenthetical-with-a-digit shape at all, and _mutcheck.mjs's own extraction was already correct before that fix (the bug lived only in scripts/mutate.mjs and scripts/gen-test-count.mjs).",
-      "file": "public/board-generator.js",
-      "find": "  wooded:    { settled: false },",
-      "replace": "  wooded:    { settled: true, boundaryK: 0.3, blockAtoms: 65, plotAtoms: 28, levels: 2 },",
-      "expect": "wooded/sandbar/rock/skerry islands carry no settlement at all"
-    },
-    {
-      "id": "b2-mainland-boundary-inland-direction-real",
-      "guards": "the B2 gate's coverage-inside-boundary assertion catches a mainland settlement boundary built in the wrong direction (out to sea instead of onto land).",
-      "note": "Originally verified by hand only, never recorded through a tool -- re-run 2026-09-11 (b1-land, autonomous run, item 3 of docs/briefs/CLI-2026-09-11-autonomous.md) via node scripts/_mutcheck.mjs test/boardGenerator.test.ts public/board-generator.js test/mutations.json: baseline GREEN, CAUGHT, source restored byte-identical -- still true after Steps 2-3 of decision 5's ROAD_WIDTH retirement (SETTLEMENT_TABLE's blockAtoms values, cited implicitly by 'coverage is measured INSIDE...', changed since this mutation was written; the mutation still bites because it targets mainlandBoundary()'s own inland-direction sign, orthogonal to blockAtoms). Decision #10's regex-truncation fix does NOT change this mutation's scoring, checked directly: this entry's own `expect` string ('coverage is measured INSIDE each settlement boundary, 20-40%, not world-wide') has no parenthetical-with-a-digit shape, and _mutcheck.mjs's own extraction was already correct before that fix.",
-      "file": "public/board-generator.js",
-      "find": "  const inland = coastPolyline.map(([x, z]) => [x - stripDepth, z]);",
-      "replace": "  const inland = coastPolyline.map(([x, z]) => [x + stripDepth, z]);",
-      "expect": "coverage is measured INSIDE each settlement boundary, 20-40%, not world-wide"
-    },
-    {
-      "id": "b2-5-ground-verified-opt-in-is-load-bearing",
-      "guards": "board.js's groundVerified option actually skips the exhaustive per-cell ground loop -- the B2.5 performance fix is real, not decorative.",
-      "note": "RUN3 item 5: this was previously verified by hand only (a real timing measurement, no node:test assertion -- confirmed SURVIVED against the automated suite three separate times this run). Given a deterministic replacement control in test/board.test.ts that counts heightAt calls instead of wall-clock time: exhaustive canPlace makes >=4 calls (one per foot cell in the GROUND loop), groundVerified:true makes <=1 (only SPACE's own never-skipped groundYFor call). Removing the `!groundVerified &&` guard makes the GROUND loop run unconditionally, so the groundVerified path's call count rises to match the exhaustive path -- caught. Original hand-verified timing evidence (~167.6s vs ~40s) preserved below for history.",
-      "file": "public/board.js",
-      "find": "    if (!groundVerified && standsOn && standsOn.length) {",
-      "replace": "    if (standsOn && standsOn.length) {",
-      "expect": "RUN3 C1: canPlace's groundVerified opt-in genuinely skips the ground check's own heightAt calls -- a deterministic proxy for B2.5's timing claim, not a clock"
-    },
-    {
-      "id": "b2-5-sampled-ground-perimeter-is-load-bearing",
-      "guards": "sampledGroundOk's full-perimeter scan (not just the interior stride grid) actually catches ground the interior sampling alone would miss.",
-      "note": "RUN3 item 5: previously verified by hand only (a real-archipelago disagreement count, no node:test assertion). Given a deterministic replacement control in test/boardGenerator.test.ts: a synthetic heightAt places a single WATER atom exactly on the west edge, strictly between the footprint's own north/south rows and off the interior stride grid, so only the west/east perimeter scan can see it. sampledGroundOk is now exported from board-generator.js for this test. Removing the dj loop (the west/east scan) makes sampledGroundOk wrongly return true for this synthetic case -- caught. Original hand-verified real-archipelago evidence (1 of 39,118 candidates flipped dangerous) preserved below for history.",
-      "file": "public/board-generator.js",
-      "find": "  for (let dj = 0; dj < d; dj++) {\n    if (!standsSet.has(groundKindAt(heightAt, iMin, jMin + dj))) return false;\n    if (!standsSet.has(groundKindAt(heightAt, iMin + w - 1, jMin + dj))) return false;\n  }\n  for (let di = stride; di < w - 1; di += stride) {",
-      "replace": "  for (let di = stride; di < w - 1; di += stride) {",
-      "expect": "RUN3 C1: sampledGroundOk's west/east perimeter scan catches a boundary the north/south scan and the interior stride grid both miss"
-    },
-    {
-      "id": "b2-6-no-live-route-generates-the-board",
-      "guards": "the B2.6 static gate genuinely detects a live route (src/) importing generateBoard -- not a tautology that only ever finds zero because it never looks.",
-      "note": "Verified by hand this session: added a scratch file src/_scratch-violation.ts importing generateBoard from ../public/board-generator.js, confirmed the gate's own scan (re-run standalone against the real src/ directory) reported it by name, then deleted the scratch file (never committed) and reconfirmed zero. This is the control that stands in for the B2.5 timing gate once generation moves offline -- Mark's own words: 'a stronger gate than a time limit, and it cannot be satisfied by a faster machine.'",
-      "file": "test/boardGenerator.test.ts",
-      "find": "    const m = src.match(/import\\s*\\{([^}]*)\\}\\s*from\\s*[\"'][^\"']*board-generator(?:\\.js)?[\"']/);\n    if (m && /\\bgenerateBoard\\b/.test(m[1])) found.push(f);",
-      "replace": "    // disabled",
-      "expect": "no file in src/ imports generateBoard -- the request path must not generate"
-    },
-    {
-      "id": "decision-5-step-1-roadclass-default",
-      "guards": "every road piece placeRoadGraph() places carries a real, current ROAD_STANDARDS key as its roadClass -- decision 5's retirement of ROAD_WIDTH (docs/DECISIONS-FOR-MARK.md #5), step 1: metadata only, no footprint change yet.",
-      "note": "Verified this session (b1-land, 2026-09-11): ROAD_CLASS_DEFAULT set to an invalid ROAD_STANDARDS key makes every real road piece's roadClass unresolvable, caught by the dedicated test asserting ROAD_STANDARDS[p.roadClass] for every road piece, not a sample.",
-      "file": "public/board-generator.js",
-      "find": "const ROAD_CLASS_DEFAULT = \"STREET\";",
-      "replace": "const ROAD_CLASS_DEFAULT = \"NOT_A_REAL_CLASS\";",
-      "expect": "every road piece the generator places carries a real, current roadClass"
-    },
-    {
-      "id": "decision-5-step-2-block-carving-reads-road-standards",
-      "guards": "generateBoard()'s own block-carving loop sizes its margin from ROAD_STANDARDS via halfRoadFor(), not a value that merely happens to equal today's number -- decision 5's retirement of ROAD_WIDTH, step 2: geometry reads its own class's width.",
-      "note": "Verified this session (b1-land, 2026-09-11), after a blind review found the originally-planned road/building overlap test would never fire (public/board.js's own occupancy guard already refuses any candidate that would overlap a real reservation, so no two placed pieces can ever overlap regardless of whether the margin math is correct -- a static source scan is what actually distinguishes a site that reads ROAD_STANDARDS from one that merely reproduces today's number). Caught by the dedicated static-scan test, per-function (placeRoadGraph() and generateBoard()'s block-carving loop each checked to call halfRoadFor() independently), not by counting occurrences file-wide.",
-      "file": "public/board-generator.js",
-      "find": "const blockHalfRoad = halfRoadFor(ROAD_CLASS_DEFAULT);",
-      "replace": "const blockHalfRoad = 9;",
-      "expect": "board-generator.js sizes every road site from ROAD_STANDARDS"
-    },
-    {
-      "id": "decision-5-step-3-blockatoms-retuned-for-doubled-road-width",
-      "guards": "SETTLEMENT_TABLE's blockAtoms values are re-tuned for the doubled (STREET, 18m) road width, so coverage lands back in the 20-40% band -- decision 5's retirement of ROAD_WIDTH, step 3.",
-      "note": "Verified this session (b1-land, 2026-09-11): reverting city/suburb/resort's own retuned blockAtoms to their Step-2-red values reproduces the same coverage-band failure for the same reason (measured directly: downtown 55.4%, resort-isle 59.9%, suburb-isle 41.5% before this step; city 37.7%, suburb 37.6%, resort 38.2% after -- every settled tier in band). Not a new control in the sense of new code -- this proves the FIX is the retune, not an accidental, unrelated change, per docs/specs/PIECE-CATALOGUE-ROADS.md §9 Step 3's own mutation plan.",
-      "file": "public/board-generator.js",
-      "find": "  city:      { settled: true,  density: \"highest\",       era: \"contemporary+heritage\",    boundaryK: 0.55, blockAtoms: 114, plotAtoms: 18, levels: 9 },\n  suburb:    { settled: true,  density: \"medium-high\",   era: \"postwar+contemporary\",     boundaryK: 0.55, blockAtoms: 150, plotAtoms: 20, levels: 3 },\n  resort:    { settled: true,  density: \"medium\",        era: \"contemporary\",             boundaryK: 0.50, blockAtoms: 150, plotAtoms: 24, levels: 4 },",
-      "replace": "  city:      { settled: true,  density: \"highest\",       era: \"contemporary+heritage\",    boundaryK: 0.55, blockAtoms: 57, plotAtoms: 18, levels: 9 },\n  suburb:    { settled: true,  density: \"medium-high\",   era: \"postwar+contemporary\",     boundaryK: 0.55, blockAtoms: 69, plotAtoms: 20, levels: 3 },\n  resort:    { settled: true,  density: \"medium\",        era: \"contemporary\",             boundaryK: 0.50, blockAtoms: 57, plotAtoms: 24, levels: 4 },",
-      "expect": "coverage is measured INSIDE each settlement boundary"
-    },
-    {
-      "id": "decision-5-step-4-bridge-deck-reads-road-standards",
-      "guards": "the bridge deck's own width comes from ROAD_STANDARDS via roadWidthFor(BRIDGE_DECK_CLASS), agreeing with the roads it connects to (STREET), not a fixed constant of its own -- decision 5's retirement of ROAD_WIDTH, step 4.",
-      "note": "Verified this session (b1-land, 2026-09-11) by DIRECT mutation-and-revert, not scripts/_mutcheck.mjs -- that script's own baseline check refuses to run against test/bridgeGenerator.test.ts because docs/DECISIONS-FOR-MARK.md #7's own gate is already, and possibly permanently, red in that same file (an accepted starting-state gap per rule://generated-world-is-a-starting-state, not something this session has grounds to resolve, and not on scripts/expected-red.mjs's own narrow allowlist). Applied the mutation by hand, ran node test/run.mjs test/bridgeGenerator.test.ts, confirmed exactly one NEW failure (this test, named, for the stated reason) alongside the pre-existing #7 red and nothing else, reverted, confirmed back to the same 13/14 as before the mutation.",
-      "file": "public/bridge-generator.js",
-      "find": "const deckHalfWidth = halfRoadFor(BRIDGE_DECK_CLASS), deckWidth = roadWidthFor(BRIDGE_DECK_CLASS);",
-      "replace": "const deckHalfWidth = 4, deckWidth = 9;",
-      "expect": "every real bridge deck is the SAME width as the road pieces it connects to"
-    },
-    {
       "id": "decision-10-extract-test-titles-anchors-on-trailing-duration",
       "guards": "extractTestTitles() captures a test's own full title, including any early parenthetical-with-a-digit in the title itself, stopping only at the TRAILING duration node's test runner appends -- not the first digit-parenthetical found, which is the bug docs/DECISIONS-FOR-MARK.md #10 found shared across scripts/mutate.mjs, scripts/_mutcheck.mjs (already correct before this extraction), and scripts/gen-test-count.mjs.",
       "note": "Verified this session (b1-land, 2026-09-11) via node scripts/_mutcheck.mjs test/extractTestTitles.test.ts scripts/extract-test-titles.mjs test/mutations.json: baseline GREEN, mutation CAUGHT (4 of 6 tests correctly went red, each on the truncated-title assertion, not a crash), source restored byte-identical.",
@@ -1166,60 +595,6 @@
       "find": "const re = new RegExp(`^(?:${prefixes})(.+?)(?: \\\\([\\\\d.]+m?s\\\\))?$`, \"gm\");",
       "replace": "const re = new RegExp(`^(?:${prefixes})(.+?)(?: \\\\(\\\\d|$)`, \"gm\");",
       "expect": "a real test title with an EARLY parenthetical-digit is captured whole"
-    },
-    {
-      "id": "b2-7-classify-crossing-uses-real-ceiling",
-      "guards": "classifyCrossing genuinely splits bridge-vs-boat at roadkit.js's real 800 m buildable ceiling, not the old world's 9,000 m 'plausible' cutoff this plan's own blind review corrected.",
-      "note": "Verified this session: forcing every gap to classify as a bridge regardless of distance is exactly the defect the blind review found in the first B2.7 draft (reusing 9,000 m, which answers 'is this geographically plausible' not 'can roadkit.js build it') -- caught directly by the unit test asserting 801m/9000m both classify as boat.",
-      "file": "public/bridge-generator.js",
-      "find": "  return edge.d <= BRIDGE_MAX_SPAN_M ? \"bridge\" : \"boat\";",
-      "replace": "  return \"bridge\";",
-      "expect": "classifyCrossing splits at roadkit.js's own real 800 m buildable ceiling"
-    },
-    {
-      "id": "b2-7-anchor-walk-checks-correct-boundary",
-      "guards": "walkAnchor genuinely requires the found ground to be INSIDE the boundary the anchor is FOR, not merely dry ground belonging to any landmass -- mechanism 1's own historically real bug (gen-bridges.mjs: 'barrier-redcliff came back with both ends on the mainland').",
-      "note": "Verified this session: dropping the inPolygon check lets an anchor walk wander onto a neighbouring landmass (most anchors are close enough to their own boundary that this survives on many edges, but the dedicated gate test's own boundaryId cross-check catches it on the real archipelago).",
-      "file": "public/bridge-generator.js",
-      "find": "    if (!inPolygon(x, z, boundaryPolygon)) continue;",
-      "replace": "    // disabled",
-      "expect": "every bridge and every dock lands on dry, road-legal ground belonging to the boundary it serves"
-    },
-    {
-      "id": "b2-7-dock-ids-are-per-pair-not-per-boundary",
-      "guards": "a boundary with boat routes to two different partners gets two DISTINCT dock ids, not one shared dock reused across routes -- board.js's own place() refuses a duplicate id outright.",
-      "note": "Verified this session: dropping the partner-boundary suffix from a dock's own id makes every route touching the same boundary collide on the same id. Caught, but not by the dedicated 'no duplicate ids' test itself -- board.js's own place() silently absorbs the collision (refusing the second, colliding piece) before that assertion ever sees a duplicate, so the ids that DO survive into `built` are never duplicated. Caught instead by the two tests whose own dock count/pairing depends on BOTH ends of every route surviving: a boundary with 2+ routes loses one dock outright, breaking its partner's routeTo reference and the real-built-connectivity count. Recorded here as its own finding, the same shape as the 2026-09-09 worldAliasing entry (AUDIT-PROTOCOL.md SS7): the manifest's own `expect` must name a test that ACTUALLY goes red, not the test whose title best describes the property in prose.",
-      "file": "public/bridge-generator.js",
-      "find": "  const idA = `dock-${edge.aId}-${edge.bId}`;",
-      "replace": "  const idA = `dock-${edge.aId}`;",
-      "expect": "the REAL BUILT pieces -- not just the abstract graph -- connect all 12 boundaries, zero refused"
-    },
-    {
-      "id": "b2-7-bridge-refusal-falls-back-to-boat",
-      "guards": "a bridge candidate that bridgeSpan() or board.place() refuses becomes a boat route instead of silently dropping the connection -- this plan's own named fallback rule.",
-      "note": "Verified this session: skipping the dock fallback on a bridge refusal turns that edge into a real, reported refusal rather than a redirected boat route. SURVIVED on a first attempt scored only against the default archipelago's own connectivity gate -- the real data has exactly one bridge candidate and it never fails, so the fallback branch this mutation touches never executes against that data, and the mutation is invisible to any test that only calls buildCrossingPieces on the unmodified default boundaries. Caught for real once a dedicated test pre-occupied the one real bridge's own exact footprint on a fresh board (forcing board.place() to refuse it for a genuine reason) and asserted the occupied candidate still produces zero refused crossings and more dock pieces than before.",
-      "file": "public/bridge-generator.js",
-      "find": "    if (!tryDockFallback()) {\n      refused.push({ edgeKey, edge, reason: `bridge refused (${result.ok ? \"board placement\" : result.reason}) and no fallback dock anchor` });\n    }",
-      "replace": "    refused.push({ edgeKey, edge, reason: `bridge refused (${result.ok ? \"board placement\" : result.reason}) and no fallback dock anchor` });",
-      "expect": "a bridge candidate the BOARD refuses (occupied cell) redirects to a real boat route"
-    },
-    {
-      "id": "b3-mesh-height-from-real-levels",
-      "guards": "a building piece's own mesh height comes from grid.js's heightOf(levels), not a second, hardcoded storey height that could silently disagree with every other piece on the board.",
-      "note": "Verified this session: hardcoding a constant height instead of reading the piece's own levels field is caught directly by the dedicated position/size gate test, which asserts the mesh height equals heightOf(5) for a 5-level test fixture.",
-      "file": "public/board-render.js",
-      "find": "  if (piece.pieceType === \"building\") return heightOf(piece.levels);",
-      "replace": "  if (piece.pieceType === \"building\") return 12;",
-      "expect": "a mesh's own position and size come from its piece's real cell/foot/levels"
-    },
-    {
-      "id": "b3-import-scan-only-matches-real-imports",
-      "guards": "the B3 render-path gate's own import scan genuinely parses `import ... from \"path\"` statements -- not a stand-in that returns a fixed sentinel regardless of the file's real content.",
-      "note": "Verified this session: replacing the real regex with a fixed-sentinel stand-in (returns a made-up module name whenever the literal word \"import\" appears anywhere) breaks the dedicated real-import guardrail test -- the sentinel name never matches any real forbidden path via .endsWith(), so a file that genuinely imports the forbidden module would wrongly report clean. INCONCLUSIVE on a first attempt naming the comment-only guardrail test instead: that fixture's own prose (\"this module does not read city-plan.js...\") never contains the literal word \"import\", so the mutated stand-in returns [] for it regardless, same shape as the 2026-09-09 worldAliasing/dock-id lesson (AUDIT-PROTOCOL.md SS7) -- the manifest's own `expect` now names the test that actually goes red.",
-      "file": "test/boardRender.test.ts",
-      "find": "  return [...src.matchAll(/^\\s*import\\b[^;]*\\bfrom\\s*[\"']([^\"']+)[\"']/gm)].map((m) => m[1]);",
-      "replace": "  return src.includes(\"import\") ? [\"__any__\"] : [];",
-      "expect": "the check above actually fails on a real import of the forbidden path, not just passing by construction"
     },
     {
       "id": "expected-red-does-not-rubber-stamp-everything",
@@ -1240,24 +615,6 @@
       "expect": "a deliberately staled mutation-evidence sentence is named, by claim, not silently absorbed"
     },
     {
-      "id": "b4-scatter-trees-respects-max-trees",
-      "guards": "scatterTrees genuinely stops at maxTrees -- it does not scatter an unbounded number of meshes if a caller's own bound is ignored.",
-      "note": "Verified this session: removing the maxTrees break is caught directly by the dedicated bound-respecting test.",
-      "file": "public/board-render.js",
-      "find": "    if (group.children.length >= maxTrees) break;",
-      "replace": "    // disabled",
-      "expect": "scatterTrees respects maxTrees -- it does not scatter thousands of meshes unbounded"
-    },
-    {
-      "id": "b4-scatter-street-lamps-orients-by-piece-shape-not-a-single-axis",
-      "guards": "scatterStreetLamps genuinely branches on the road piece's own long axis (w vs d) rather than getting the orientation backwards -- the exact mistake (copying scatterTrees's single-axis offset unchanged) this file's own header comment names as the defect a naive port would produce.",
-      "note": "Verified this session: inverting the w>=d comparison makes the dedicated long-span positioning test fail -- a 320 m-long north/south-shaped span (foot.w=320, foot.d=9) would then be treated as long along d instead of w, offsetting the lamp hundreds of metres off the piece's own length rather than beside its own 9 m width, caught directly by that test's own position assertions.",
-      "file": "public/board-render.js",
-      "find": "    const longAlongW = w >= d;",
-      "replace": "    const longAlongW = w < d;",
-      "expect": "scatterStreetLamps positions the lamp beside the road's own narrow (width) edge, at the span's own midpoint along its length -- not off the end of a long span"
-    },
-    {
       "id": "mutation-claim-checks-the-remainder-not-just-two-of-three-states",
       "guards": "mutationClaimMismatch genuinely checks that caught+neverRun+survivedOrInconclusive sums to the total -- a SURVIVED or INCONCLUSIVE result cannot silently vanish from the claim the way the brief's own '1,141 tests' line let 15 skipped tests vanish.",
       "note": "Verified this session: disabling the otherCount comparison is caught directly by the dedicated synthetic test for exactly this arithmetic gap.",
@@ -1267,15 +624,6 @@
       "expect": "a SURVIVED or INCONCLUSIVE mutation result (neither caught nor never-run) cannot silently vanish from the claim's own arithmetic"
     },
     {
-      "id": "facade-handoff-city-render-passes-variant-seed",
-      "guards": "public/city-render.js's real getFacadeMaterial call genuinely passes g.seed as variantSeed -- the one-line cross-lane fix (docs/CROSS-LANE-REQUESTS.md #1) that makes BLD's 12 built variants reachable from a real placement at all.",
-      "note": "Verified this session: removing variantSeed from the real call SURVIVED against the dynamic GATE test -- that test recomputes pickVariant(char, group.seed) independently from groupByVariant's own output and never reads what city-render.js's real call actually received, so it cannot see this specific regression at all (a real gap found by mutation-testing it, not assumed). Caught instead by a new, dedicated static check added the same session, which greps city-render.js's own source for the literal variantSeed: g.seed text -- the same technique test/boardRender.test.ts's own B3 gate uses for a forbidden import, aimed here at a required one.",
-      "file": "public/city-render.js",
-      "find": "        variantSeed: g.seed,",
-      "replace": "        variantSeed: undefined,",
-      "expect": "public/city-render.js's real getFacadeMaterial call still passes variantSeed"
-    },
-    {
       "id": "facade-gate-counts-real-picked-variants-not-a-fixed-template",
       "guards": "the facade GATE's own counting logic genuinely measures distinct (character, picked-variant) pairs reached by real placements -- not a fixed string template that could never measure more than 4 regardless of what city-render.js actually passes, the real bug found and fixed this session in the file pulled from codex-lane.",
       "note": "Verified this session: reverting to the fixed `${char}-vc-day-` template (BLD's own original, unedited version) makes the gate wrongly report 4 even with variantSeed correctly wired -- caught directly by the dedicated gate test itself going red on its own count.",
@@ -1283,69 +631,6 @@
       "find": "    const variant = pickVariant(char, group.seed);\n    keys.add(`${char}-${variant.name}`);",
       "replace": "    keys.add(`${char}-vc-day-`);",
       "expect": "GATE: distinct facade materials reachable from real placements, well above four"
-    },
-    {
-      "id": "city-html-board-gate-defaults-off",
-      "guards": "public/city.html only draws the ~35,000 un-instanced board pieces when ?board=1 is explicitly requested -- removing the gate would ship the measured cullingRatio/regressionGate regression to every ordinary page load.",
-      "note": "Verified this session: making the board block unconditional (no `if` at all) is caught directly by the dedicated static gate test.",
-      "file": "public/city.html",
-      "find": "if (Q.get(\"board\") === \"1\") try {",
-      "replace": "if (true) try {",
-      "expect": "public/city.html only draws board pieces when ?board=1 is explicitly requested"
-    },
-    {
-      "id": "world-render-3d-board-gate-no-early-return",
-      "guards": "world-render-3d.js's own board-drawing gate uses `if (boardRequested) try {...}`, never an early `return` -- an early return would skip P4.1's board-record wiring, the spatial index, and selection for every city-mode load, not just when the gate is off.",
-      "note": "Verified this session: this is the exact mistake made and caught during implementation, before it was ever committed -- reintroducing `if (!boardRequested) return;` in place of the real gate is caught directly by the dedicated static test's own doesNotMatch assertion.",
-      "file": "public/world-render-3d.js",
-      "find": "    const boardRequested = typeof location !== \"undefined\" && new URLSearchParams(location.search).get(\"board\") === \"1\";\n    if (boardRequested) try {",
-      "replace": "    const boardRequested = typeof location !== \"undefined\" && new URLSearchParams(location.search).get(\"board\") === \"1\";\n    if (!boardRequested) return;\n    try {",
-      "expect": "public/world-render-3d.js only draws board pieces when ?board=1 is explicitly requested, and the gate does not short-circuit the rest of _buildCityBase"
-    },
-    {
-      "id": "piece-at-point-does-not-swap-i-j",
-      "guards": "pieceAtPoint (B3's own step toward picking reading the real board -- docs/specs/BOARD-REBUILD-PLAN.md's architecture rule) genuinely converts world x/z to atom i/j via atomOf and queries THAT cell, not a swapped one.",
-      "note": "Verified this session: a blind review of the plan (before this was implemented) flagged that a SQUARE test footprint would let an i/j swap go undetected at a symmetric point -- fixed before implementing by using an asymmetric footprint (w:20, d:8) and an offset with unequal i/j components. Swapping i/j inside pieceAtPoint (`const { i: j, j: i } = atomOf(x, z);`) is caught directly by the dedicated asymmetric-offset test.",
-      "file": "public/board-load.js",
-      "find": "  const { i, j } = atomOf(x, z);",
-      "replace": "  const { i: j, j: i } = atomOf(x, z);",
-      "expect": "pieceAtPoint: a world point anywhere inside a real piece's own multi-atom footprint resolves to that piece, at an asymmetric offset a swapped axis would miss"
-    },
-    {
-      "id": "scatter-street-furniture-does-not-alternate",
-      "guards": "scatterStreetFurniture genuinely alternates between propModel('bench', ...) and propModel('bin', ...) -- not stuck resolving one id regardless of how many items have already been placed.",
-      "note": "Verified this session: a blind review of the plan (before this was implemented) flagged that the plan's own single-call-with-a-variable-id design would fail the static reachability gate's literal-string regex -- fixed before implementing to use two literal propModel(\"bench\", ...) / propModel(\"bin\", ...) calls. Forcing isBench to always true is caught directly by the dedicated alternation test.",
-      "file": "public/board-render.js",
-      "find": "    const isBench = group.children.length % 2 === 0;",
-      "replace": "    const isBench = true;",
-      "expect": "B4 gate: scatterStreetFurniture alternates between the REAL propModel('bench', ...) and propModel('bin', ...) -- not one id repeated"
-    },
-    {
-      "id": "scatter-street-furniture-never-rotates",
-      "guards": "scatterStreetFurniture genuinely rotates a placed item 90 degrees on an east/west (long-along-d) road span -- the fix for the asymmetric-footprint defect a blind review found: scatterStreetLamps's own positioning technique, copied without this fix, would leave a bench pointing across the road (perpendicular, not parallel) on every east/west-oriented span, since a bench's own real footprint (1.8 x 0.55 m) is not roughly symmetric the way a lamp post's is.",
-      "note": "Verified this session: disabling the rotation (always 0) is caught directly by the dedicated east/west-orientation test's own rotation.y assertion -- the position-only assertions in that same test do NOT catch it (the offset math is unaffected by rotation), confirming rotation needed its own, separate assertion, not just a position check.",
-      "file": "public/board-render.js",
-      "find": "    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;",
-      "replace": "    itemGroup.rotation.y = 0;",
-      "expect": "B4 gate: scatterStreetFurniture positions and ROTATES an item correctly on an east/west (long-along-d) road span -- the orientation scatterStreetLamps's own technique never had to handle"
-    },
-    {
-      "id": "scatter-bus-shelters-does-not-resolve-real-id",
-      "guards": "scatterBusShelters genuinely resolves propModel('busShelter', ...) -- not a different manifest id.",
-      "note": "Verified this session: swapping to propModel(\"bin\", seed) is caught by the dedicated real-id test; a blind review predicted this would also trip the static reachability gate (the literal \"busShelter\" substring disappears too) -- confirmed, both fail together, and _mutcheck.mjs's own named-failure check (r.failed.some(n => n.includes(m.expect))) still correctly reports CAUGHT since the expected test is among the failures, not the sole one.",
-      "file": "public/board-render.js",
-      "find": "    const model = propModel(\"busShelter\", seed);",
-      "replace": "    const model = propModel(\"bin\", seed);",
-      "expect": "B4 gate: scatterBusShelters calls the REAL propModel('busShelter', ...) -- a real, non-VARIED manifest id, not a placeholder box"
-    },
-    {
-      "id": "scatter-bus-shelters-never-rotates",
-      "guards": "scatterBusShelters genuinely rotates a placed shelter 90 degrees on an east/west (long-along-d) road span -- carrying forward the fix scatterStreetFurniture's own blind review required for the bench, needed again here since a bus shelter's real footprint (3.6 x 1.4 m) is even more asymmetric.",
-      "note": "Verified this session: a first attempt at this mutation used a find string scoped by TRAILING context (the next function's own docblock comment) intending to disambiguate scatterBusShelters's own rotation line from scatterStreetFurniture's identical-looking one -- but since scatterBusShelters's docblock immediately follows scatterStreetFurniture in the file, that trailing context actually matched scatterStreetFurniture's own ending, and the mutation silently broke the WRONG function's test (INCONCLUSIVE, reported honestly by _mutcheck.mjs's own named-failure check, not a false CAUGHT). Fixed by scoping the find string with LEADING context unique to scatterBusShelters's own body (its own material colour constant, 0x557799) instead -- caught directly by the dedicated east/west-orientation test's own rotation.y assertion on the corrected attempt.",
-      "file": "public/board-render.js",
-      "find": "    const material = new THREE.MeshStandardMaterial({ color: 0x557799 });\n    const itemGroup = new THREE.Group();\n    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));\n    const origin = atomOrigin(piece.cell.i, piece.cell.j);\n    const { w, d } = piece.foot;\n    const longAlongW = w >= d;\n    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;\n    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;\n    itemGroup.position.set(x, 0, z);\n    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;",
-      "replace": "    const material = new THREE.MeshStandardMaterial({ color: 0x557799 });\n    const itemGroup = new THREE.Group();\n    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));\n    const origin = atomOrigin(piece.cell.i, piece.cell.j);\n    const { w, d } = piece.foot;\n    const longAlongW = w >= d;\n    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;\n    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;\n    itemGroup.position.set(x, 0, z);\n    itemGroup.rotation.y = 0;",
-      "expect": "B4 gate: scatterBusShelters positions and ROTATES a shelter correctly on an east/west (long-along-d) road span -- a position-only assertion cannot see a shelter facing the wrong way"
     },
     {
       "id": "look-proof-material-glsl3",
@@ -1908,6 +1193,38 @@
       "find": "<span id=\"deploy-commit\">",
       "replace": "<span id=\"deploy-commit-renamed\">",
       "expect": "GATE (SHIP-5): the page's own #deploy-version/#deploy-commit/#deploy-build-time are not stale against the last real generation"
+    },
+    {
+      "id": "ter1-sea-level-rise-must-actually-flood",
+      "guards": "TER-1 (RESEARCH.md T1): heightAt must subtract SEA_LEVEL_RISE_M from the pre-flood landform, or the whole 'generate one landmass, then flood it' method never floods anything. Removes the subtraction. The land-fraction sanity test alone did NOT catch this -- watched SURVIVE first (the base landform's own edges already dip negative from erosion/detail noise, so land fraction stays 'sane' even unflooded) -- so a direct relationship test (heightAt === preFloodHeightAt - SEA_LEVEL_RISE_M) was added specifically to catch it.",
+      "file": "public/terrain-field.js",
+      "find": "  function heightAt(x, z) {\n    return erodedHeight(x, z) - SEA_LEVEL_RISE_M;\n  }",
+      "replace": "  function heightAt(x, z) {\n    return erodedHeight(x, z);\n  }",
+      "expect": "GATE (TER-1): heightAt is EXACTLY preFloodHeightAt minus SEA_LEVEL_RISE_M -- the flood is a real subtraction, checked directly rather than inferred from the resulting land fraction"
+    },
+    {
+      "id": "ter1-isWater-must-derive-from-heightAt",
+      "guards": "CAT-1's own contract §2: isWater is DEFINED as heightAt(x,z) <= 0, never a second, independently-computed answer -- the two coastline-first order-of-operations tests both depend on this. Substitutes a version that is always false.",
+      "file": "public/terrain-field.js",
+      "find": "  function isWater(x, z) {\n    return heightAt(x, z) <= 0;\n  }",
+      "replace": "  function isWater(x, z) {\n    return false;\n  }",
+      "expect": "isWater is exactly heightAt(x,z) <= 0, never a second, separately-computed answer"
+    },
+    {
+      "id": "ter4-populate-must-write-water-surface",
+      "guards": "TER-4: populateTerrain must write SURFACE.WATER when the real field says a cell is underwater, or placement's own terrainMask check never actually refuses anything on real generated terrain. Forces every cell to LAND regardless of the field.",
+      "file": "public/terrain-populate.js",
+      "find": "board.setSurfaceType(x, y, field.isWater(centreX, centreZ) ? SURFACE.WATER : SURFACE.LAND);",
+      "replace": "board.setSurfaceType(x, y, SURFACE.LAND);",
+      "expect": "GATE (TER-4): a catalogue entry whose terrainMask excludes water is refused on a real generated water cell -- found by searching the real field, not asserted against a hand-set fixture"
+    },
+    {
+      "id": "ter5-water-adjacency-must-contribute",
+      "guards": "TER-5: terrainContribution's water-adjacency bonus must actually apply when a land cell is near real generated water. Disables the bonus. The main two-cells-score-differently gate did NOT catch this -- watched SURVIVE first (slope alone still produces a highest/lowest split on a real board) -- so a dedicated test isolating water adjacency from slope (comparing two equally-flat cells) was added specifically to catch it.",
+      "file": "public/scoring.js",
+      "find": "  return (nearWater ? TERRAIN_WATER_BONUS : 0) + maxRelief * TERRAIN_SLOPE_PENALTY_PER_M;",
+      "replace": "  return 0 + maxRelief * TERRAIN_SLOPE_PENALTY_PER_M;",
+      "expect": "GATE (TER-5): water adjacency alone raises a score -- isolated from slope with two DIRECTLY-CONTROLLED, perfectly flat cells (real terrainContribution(), board state authored to remove every other variable)"
     }
   ]
 }

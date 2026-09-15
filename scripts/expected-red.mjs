@@ -33,27 +33,32 @@
  * documented -- an allowlist with no reason attached is indistinguishable
  * from a suite someone gave up on, which is the exact failure this file
  * must not become.
- */
-export const EXPECTED_RED = new Map([
-  [
-    "B2.5 gate: generation time, against Cloudflare's own default Worker CPU-time ceiling (30,000 ms, wrangler.jsonc has no override)",
-    "docs/specs/BOARD-REBUILD-PLAN.md's B2.5 section: asserted honestly, "
-      + "and it is red on purpose until generation moves fully off the live "
-      + "request path (B2.6 already did this for src/, but the offline "
-      + "build step itself -- what this test measures -- is still slower "
-      + "than the ceiling it is compared against).",
-  ],
-]);
+ *
+ * EMPTY as of FIX-5 (PLAN.md §3.5, docs/briefs/CLI-2026-09-16.md). The one
+ * entry this list ever held named test/boardGenerator.test.ts's own B2.5
+ * CPU-time gate -- but public/board-generator.js, public/board.js and
+ * test/boardGenerator.test.ts itself were quarantined in the b1-board
+ * takedown (2026-09-13/14, _TO-DELETE/b1-board/), which is exactly the
+ * mutation-testing this list existed to unblock. The entry was already
+ * inert (nothing failing today matches its title) and the guardrail test
+ * that checks it against the real file was failing because that file no
+ * longer exists. The MECHANISM below stays -- a future named, documented,
+ * honestly-red gate can be added here the same way. */
+export const EXPECTED_RED = new Map([]);
 
 /** True if EVERY failing test title is on the allowlist -- a baseline with
- *  even one UNEXPECTED failure is still genuinely red, not exempted. */
-export function isBaselineAcceptable(failingTitles) {
-  return failingTitles.every((t) => EXPECTED_RED.has(t));
+ *  even one UNEXPECTED failure is still genuinely red, not exempted.
+ *  `allowlist` defaults to the real, current EXPECTED_RED -- callers never
+ *  need to pass it; a test exercising the mechanism against a synthetic
+ *  entry can, without EXPECTED_RED being non-empty just to make that
+ *  possible. */
+export function isBaselineAcceptable(failingTitles, allowlist = EXPECTED_RED) {
+  return failingTitles.every((t) => allowlist.has(t));
 }
 
 /** The subset of a failing-test list that is NOT expected -- what a caller
  *  should actually treat as "the suite is red", after the allowlist is
- *  applied. */
-export function unexpectedFailures(failingTitles) {
-  return failingTitles.filter((t) => !EXPECTED_RED.has(t));
+ *  applied. Same default-parameter reasoning as isBaselineAcceptable. */
+export function unexpectedFailures(failingTitles, allowlist = EXPECTED_RED) {
+  return failingTitles.filter((t) => !allowlist.has(t));
 }

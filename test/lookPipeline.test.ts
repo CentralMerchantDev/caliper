@@ -36,7 +36,9 @@ test("the grade exists and carries its tuned uniforms", () => {
   assert.match(g.fragmentShader, /contrast/);
 });
 
-test("the application actually adds the grade to its composer", () => {
+const WORLD_RENDER_3D_QUARANTINED = "BLOCKED: public/world-render-3d.js was quarantined 2026-09-15 to _TO-DELETE/decision-22-terrain-chain/ (docs/DECISIONS-FOR-MARK.md #22, Mark's ruling: rebuild terrain fresh from RESEARCH.md rather than wire the pre-rebuild system) -- confirmed zero product-reachable exports before the move, so this file's own composer/vignette wiring no longer reaches anything a visitor's browser runs. The live colour-grade path (wherever board-renderer.js/look-proof-* end up using makeGradeShader, if at all) has no equivalent regression test yet -- named here rather than silently dropped.";
+
+test("the application actually adds the grade to its composer", { skip: WORLD_RENDER_3D_QUARANTINED }, () => {
   // The mutation that survived was removing this line. Reading the source is a
   // weak test and it is still infinitely stronger than nothing, which is what
   // was there. It fails the moment someone deletes the pass.
@@ -45,7 +47,7 @@ test("the application actually adds the grade to its composer", () => {
     "world-render-3d.js no longer adds the colour grade to its composer");
 });
 
-test("the grade runs AFTER OutputPass, where its curve is meant to run", () => {
+test("the grade runs AFTER OutputPass, where its curve is meant to run", { skip: WORLD_RENDER_3D_QUARANTINED }, () => {
   // The S-curve about mid grey and the roll-off above 0.86 are written for
   // display-referred values. Run before OutputPass they operate on linear HDR
   // and do something else entirely — which is how it was first wired.
@@ -56,7 +58,7 @@ test("the grade runs AFTER OutputPass, where its curve is meant to run", () => {
   assert.ok(grade > out, "the colour grade must be added after OutputPass, not before");
 });
 
-test("the vignette darkens toward black, not toward grey", () => {
+test("the vignette darkens toward black, not toward grey", { skip: WORLD_RENDER_3D_QUARANTINED }, () => {
   // three.js mixes toward vec3(1.0 - darkness). At darkness 0.45 that target is
   // grey 0.55, so the corners washed out instead of darkening — which is the
   // "fog" Mark reported and which no test would have caught. Anything below 1.0

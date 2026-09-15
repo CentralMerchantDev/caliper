@@ -1,0 +1,61 @@
+TER-4 (PLAN.md §4): heights, water and slope as real fields on the board,
+replacing the zeroed defaults public/area-board.js carried since C2.2.
+
+WHAT WAS WRONG
+
+public/area-board.js's elevation/cornerOffsets/surfaceType arrays existed
+from C2.2 onward, defaulted to zero/flat, with the explicit note that a
+future terrain phase would be "a value change, not a schema rewrite." Only
+`SURFACE.LAND` existed in the enum -- there was no `setSurfaceType` at all,
+and no water surface to set it to.
+
+WHAT WAS DONE
+
+- public/area-board.js: `SURFACE.WATER` added. `setSurfaceType(x, y,
+  surface)` added -- the setter C2.2 anticipated but never built, refusing
+  an unknown surface string rather than silently indexing past the real
+  enum.
+- public/terrain-populate.js (new): `populateTerrain(board, field,
+  {originX, originZ, cellSizeM})` samples public/terrain-field.js
+  (TER-1/2/3) at each cell's real world position -- centre for
+  elevation/surface, all four corners for cornerOffsets (stored as an
+  offset FROM the cell's own elevation, matching area-board.js's own "metres
+  of offset from the flat plane" contract, not a second absolute height).
+  `CELL_SIZE_M = 4`, restated from public/board-renderer.js's own live
+  MODULE_SIZE_M (docs/specs/CAT-1-TERRAIN-MESH-CONTRACT.md §2) rather than
+  imported across the lane boundary PLAN.md §1 draws.
+
+GATE (CHECKLIST.md, verbatim): "placement's existing slope refusal fires on
+real generated terrain, not on a hand-built fixture." Proven by search, not
+assertion: a 200x200 board centred on the generated dome's own steepest
+edge was populated for real, then every possible 4x4 footprint was checked
+against evaluatePlacement until one was refused with reason "slope" --
+found on the first real attempt. A second gate, same method: searched the
+real field for a genuine water point, populated a board around it,
+confirmed a land-only catalogue entry is refused there with reason
+"terrain" while a water-only entry is accepted on the identical cell.
+
+GATE, WATCHED CAUGHT (scripts/_mutcheck.mjs test/terrainPopulate.test.ts
+public/terrain-populate.js test/mutations.json):
+  CAUGHT  ter4-populate-must-write-water-surface (forces every cell to
+          SURFACE.LAND regardless of the real field)
+Baseline GREEN before mutating; tree restored byte-identical after.
+
+5 tests in test/terrainPopulate.test.ts: spot-checked against the real
+field directly (elevation and surface, tolerant of the Float32Array
+rounding area-board.js's own arrays use), idempotence (two calls, same
+field and origin, identical output), corner-offset reconstruction (offset
+plus cell elevation equals the real corner height), and the two search-based
+gates above.
+
+VERIFIED: npx tsc --noEmit clean. node test/run.mjs test/terrainPopulate.test.ts:
+5/5 pass.
+
+WHAT IS STILL OPEN
+
+- TER-5 (public/scoring.js's terrainContribution reading these fields) is
+  the next commit -- nothing in scoring.js reads elevation/surfaceType yet
+  as of this one.
+- docs/specs/CHECKLIST.md's own TER-1 through TER-5 lines are all ticked in
+  this commit (one edit covering the whole terrain section) -- TER-5's own
+  code lands in the very next commit, immediately after.
