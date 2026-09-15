@@ -1575,11 +1575,19 @@
     },
     {
       "id": "scoring-s4-unit-quality-formula-must-be-inverse-sqrt-tiers",
-      "guards": "S4/DECISIONS-FOR-MARK.md #14: unitQuality's curve is 1/sqrt(tiers), chosen specifically so it does NOT cancel baseValue's own tiers factor (1/tiers would). Substitutes the rejected 1/tiers and confirms a test built from LITERAL numbers (not by calling unitQualityFor to build its own expectation) catches the change -- the inversion gate test alone does NOT catch this mutation, both curves happen to preserve the house/condo inversion's direction.",
+      "guards": "S4/DECISIONS-FOR-MARK.md #14: unitQuality's curve is 1/sqrt(storeys), chosen specifically so it does NOT cancel baseValue's own storeys factor (1/storeys would). FIX-2 (PLAN.md §3.2) changed the input from entry.massing.length to storeysFor(entry) but not this shape. Substitutes the rejected 1/storeys and confirms a test built from LITERAL numbers (not by calling unitQualityFor to build its own expectation) catches the change -- the inversion gate test alone does NOT catch this mutation, both curves happen to preserve the house/condo inversion's direction.",
       "file": "scripts/migrate-catalogue-s2-fields.mjs",
-      "find": "  return 1 / Math.sqrt(entry.massing.length);",
-      "replace": "  return 1 / entry.massing.length;",
-      "expect": "unitQualityFor is exactly 1/sqrt(tiers) -- DECISIONS-FOR-MARK.md #14's disclosed curve, checked against LITERAL numbers so a mutated formula (e.g. 1/tiers) cannot pass by calling the function under test to build its own expectation"
+      "find": "  return 1 / Math.sqrt(storeysFor(entry));",
+      "replace": "  return 1 / storeysFor(entry);",
+      "expect": "unitQualityFor is exactly 1/sqrt(storeysFor(entry)) -- DECISIONS-FOR-MARK.md #14's disclosed curve, checked against LITERAL numbers so a mutated formula (e.g. 1/tiers, or storeysFor ignoring proportion) cannot pass by calling the function under test to build its own expectation"
+    },
+    {
+      "id": "fix2-storeys-must-read-proportion-not-just-massing-length",
+      "guards": "FIX-2 (PLAN.md §3.2): the whole point of storeysFor is that `massing` (2-4 shape-segment entries) is not a storey count and two entries can share it while landing far apart in real proportions -- civic-6x6-a (proportion 1.3) and mega-tower-a-shaped input (proportion 3.5) share footprint width class and massing tier count in this test's own literal fixtures. Substitutes a version that silently drops the proportion term (defaults every entry to a square massing regardless of its own real proportion), confirming the LITERAL-number test that names this exact defect catches it -- the inversion gate alone would not, since dropping proportion still preserves house < condo ordering by tiers/width alone.",
+      "file": "scripts/migrate-catalogue-s2-fields.mjs",
+      "find": "  const proportion = typeof entry.proportion === \"number\" ? entry.proportion : 1;\n  const tiers = entry.massing.length;\n  const [width] = entry.footprint;\n  return Math.max(1, Math.round(proportion * tiers * width));",
+      "replace": "  const tiers = entry.massing.length;\n  const [width] = entry.footprint;\n  return Math.max(1, Math.round(tiers * width));",
+      "expect": "storeysFor is a real-proportions-derived scale, not massing.length -- FIX-2, PLAN.md §3.2. Checked against LITERAL numbers, including the exact case the checklist names: two to four massing entries is not a storey count"
     },
     {
       "id": "city-score-median-not-mean",

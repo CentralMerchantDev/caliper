@@ -301,8 +301,8 @@ export function perUnitWorth(valueNumber, unitQuality) {
 /** SCORING-MODEL §3.3: totalWorth(type, cell) = perUnitWorth(type, cell) x
  * units(type). Callers pass `catalogue[typeId].baseValue` as `units` --
  * `baseValue` was redefined in A1 to mean the unit count (footprint area x
- * massing tiers), not a worth number; this does not recompute that formula
- * a second time. */
+ * storeys, FIX-2/PLAN.md §3.2 -- massing.length before it), not a worth
+ * number; this does not recompute that formula a second time. */
 export function totalWorth(perUnitWorthNumber, units) {
   return perUnitWorthNumber * units;
 }

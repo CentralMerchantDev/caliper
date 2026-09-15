@@ -1,0 +1,106 @@
+FIX-2 (PLAN.md §3.2, docs/briefs/CLI-2026-09-16.md item 2): a real storey
+count, and baseValue/unitQuality point at it -- pushed the moment it is green
+because BLD's FIX-1 needs it.
+
+WHAT WAS WRONG
+
+`massing` is a shape-segment array ("base"/"middle"/"top", 2-4 entries) meant
+to describe a building's massing silhouette, not its height. But
+`baseValueFor`/`unitQualityFor` (scripts/migrate-catalogue-s2-fields.mjs) read
+`entry.massing.length` directly as if it were a storey count. At real
+proportions sqrt(100)=10 against sqrt(4)=2, the gap changes by five times --
+the scale fix and the value model are one fix, not two. Concretely: every
+"3-tier" entry in the shipped catalogue (apartment-block-a, mid-commercial-a,
+civic-6x6-a, tower-base-6x6-a, mega-tower-a) got the IDENTICAL height signal
+(3) despite spanning real building classes from a mid-rise apartment block to
+a landmark skyscraper.
+
+WHAT WAS DONE
+
+`storeysFor(entry)` (scripts/migrate-catalogue-s2-fields.mjs) replaces
+`massing.length` as the height signal both formulas read:
+
+  storeys = max(1, round(proportion * massing.length * footprintWidthModules))
+
+Three real, already-disclosed signals, multiplied:
+  - `proportion` (height:width ratio) -- RESEARCH.md R9's own sourced figure,
+    already curated per shipped entry (kiosk/shed/warehouse/stadium carry
+    `proportion: null`, and default to 1, a square massing, same as a freshly
+    authored piece that never collects one).
+  - `massing.length` (1-4) -- R9's own base/middle/top rule: more massing
+    tiers is a real, sourced signal of a taller building, not an invented
+    multiplier, just no longer read AS the storey count directly.
+  - footprint width in modules -- the grid's own real 4 m module (A12/T7).
+
+Deliberately does NOT compute a height in metres or divide by a floor-to-floor
+constant: RESEARCH.md R11 names that exact figure ("floor-to-floor height in a
+game context") as something research could not source, and inventing one to
+fill the gap is what `rule://` Zero forbids. Verified instead against Mark's
+own cited real-world anchor (PLAN.md §3.1: a Toronto view holding a 72-storey
+tower and three-storey semis, ratio ~24:1) -- mega-tower-a scores 84,
+small-house-a scores 4, a 21:1 ratio, close to that anchor without being
+tuned to hit it.
+
+`baseValueFor`/`unitQualityFor` now call `storeysFor(entry)` internally in
+place of `entry.massing.length`; the shape of both formulas (footprint area x
+height signal; 1/sqrt(height signal), chosen so it does not cancel
+baseValue's own factor) is unchanged -- only what the height signal IS.
+`migrateEntry` now also writes `storeys` onto every entry, and
+`public/catalogue-registry.js`'s `addAuthoredEntry` does the same for an
+authored piece, so `catalogue-validator.js`'s new rule 12 (storeys present,
+a positive integer, no exemption for road -- same treatment rule 7 already
+gives baseValue) passes on both paths.
+
+`node scripts/migrate-catalogue-s2-fields.mjs` re-run over data/catalogue.json:
+storeys now range 1 (kiosk/shed/substation/small-civic/small-house-class
+1-tier pieces) to 84 (mega-tower-a), against the old range of 1-3.
+
+THE GATE (CHECKLIST.md's own wording): "the house-beats-condo-per-unit /
+condo-beats-house-in-total inversion still holds at real proportions, both
+directions, same cell." It holds. test/scoring.test.ts's `house-s4`/`condo-s4`
+fixture now carries small-house-a's and apartment-block-a's REAL proportions
+(1 and 1.8), not just their shapes -- storeys 4 and 22 respectively.
+Measured: house wins per unit ~2.35x (0.5 vs 0.213), condo wins in total
+~9.38x (75.05 vs 8) -- both comfortable margins, not knife-edges. Mark's
+ruling stands without needing to be tuned to hold.
+
+MUTATIONS, WATCHED CAUGHT (scripts/_mutcheck.mjs test/catalogueValidator.test.ts
+scripts/migrate-catalogue-s2-fields.mjs test/mutations.json):
+  CAUGHT  scoring-s4-unit-quality-formula-must-be-inverse-sqrt-tiers
+          (updated for the new storeysFor(entry) input; same 1/tiers
+          substitution the old mutation used)
+  CAUGHT  fix2-storeys-must-read-proportion-not-just-massing-length (new --
+          drops the proportion term; the LITERAL-number test that names this
+          exact defect catches it, and the inversion gate alone would not,
+          since dropping proportion still preserves ordering by tiers/width)
+Baseline GREEN before mutating; tree restored byte-identical after.
+
+Eight new tests in test/catalogueValidator.test.ts (storeysFor's own literal
+numbers, baseValueFor's, rule 12's five cases, and a full-catalogue
+recompute check) plus updated fixtures in test/scoring.test.ts,
+test/catalogueRegistry.test.ts and test/catalogueValidator.test.ts's own
+goodBuilding()/goodRoad() baselines (both needed a `storeys` field to remain
+"otherwise fully valid" once rule 12 existed).
+
+VERIFIED: `npx tsc --noEmit` clean. `node test/run.mjs`: pass 742 (was 734,
++8 new, all passing), fail 11 -- the identical pre-existing 11, unchanged by
+this commit (deadExports allowlist drift, ground/road standing, mutation-
+manifest staleness -- FIX-5's territory, next). `npx vitest run`: 12 passed.
+
+WHAT IS STILL OPEN
+
+- `storeysFor`'s formula is disclosed as a real-proportions-derived SCALE,
+  not a literal architectural storey count -- large-warehouse-a and
+  stadium-a (8x8, `proportion: null`) score 8 under it, which overstates a
+  real single-storey industrial shed's actual floor count. Named rather than
+  silently smoothed over; nothing currently reads `storeys` as a literal
+  number anywhere a player would see it, so this is not yet a published
+  claim, but it would need revisiting before one exists.
+- Not this commit's job (BLD's FIX-1, PLAN.md §3.1): the RENDERED height of
+  any bound mesh. `storeysFor` is CLI's value-model field only; it does not
+  touch `public/board-renderer.js`, `look-proof-pieces.js`'s `fitToFootprint`,
+  or the 6x height cap FIX-1 removes.
+- FIX-5/FIX-6 next: the two new mutation entries above are proven CAUGHT via
+  `_mutcheck.mjs` (scoped), not yet recorded via `mutate.mjs`'s full-baseline
+  path -- that path currently refuses while the suite is red, and FIX-5/6
+  are precisely the items that unjam it.

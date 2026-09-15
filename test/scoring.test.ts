@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createAreaBoard, occupiedRect } from "../public/area-board.js";
 import { value, pieceIdsWithinR, terrainContribution, falloff, dirtyCellsForRect, recomputeDirtySet, valueAt, valueIfPlaced, perUnitWorth, totalWorth, R } from "../public/scoring.js";
-import { baseValueFor, unitQualityFor } from "../scripts/migrate-catalogue-s2-fields.mjs";
+import { baseValueFor, unitQualityFor, storeysFor } from "../scripts/migrate-catalogue-s2-fields.mjs";
 
 const CATALOGUE = {
   "house-a": { category: "residential", footprint: [1, 1], terrainMask: ["land"], adjacency: { residential: -2, commercial: 2 } },
@@ -359,21 +359,25 @@ test("recomputeDirtySet's values match calling value() directly for the same cel
 // ---------------------------------------------------------------- valueAt, valueIfPlaced, the two worths -- §S4
 
 // A dedicated fixture built from the REAL migration functions (baseValueFor/
-// unitQualityFor), not hand-typed literals -- shapes match the real
-// catalogue's small-house-a ([2,2], 2 tiers) and apartment-block-a
-// ([4,4], 3 tiers), verified against the real data by blind review before
-// this was written (perUnitWorth ratio ~1.22x house-favouring,
-// totalWorth ratio ~4.9x condo-favouring -- a comfortable margin, not a
-// knife-edge case).
-function residentialEntry(footprint, massingLength) {
-  const base = { category: "residential", footprint, massing: Array(massingLength).fill("tier"), terrainMask: ["land"], adjacency: { residential: -2, commercial: 2 } };
-  return { ...base, baseValue: baseValueFor(base), unitQuality: unitQualityFor(base) };
+// unitQualityFor/storeysFor), not hand-typed literals -- shape AND
+// proportion match the real catalogue's small-house-a ([2,2], 2 tiers,
+// proportion 1) and apartment-block-a ([4,4], 3 tiers, proportion 1.8),
+// per FIX-2 (PLAN.md §3.2): storeysFor derives a real storey count (4 and
+// 22, not the old massing.length of 2 and 3) from proportion x tiers x
+// footprint width. Verified against the real data by blind review before
+// this was written (perUnitWorth ratio ~2.35x house-favouring, totalWorth
+// ratio ~9.4x condo-favouring -- a comfortable margin at real proportions,
+// not a knife-edge case; the inversion holds, per PLAN.md §3.2's own
+// instruction not to tune until it does).
+function residentialEntry(footprint, massingLength, proportion) {
+  const base = { category: "residential", footprint, massing: Array(massingLength).fill("tier"), proportion, terrainMask: ["land"], adjacency: { residential: -2, commercial: 2 } };
+  return { ...base, storeys: storeysFor(base), baseValue: baseValueFor(base), unitQuality: unitQualityFor(base) };
 }
 
 const S4_CATALOGUE = {
   ...CATALOGUE,
-  "house-s4": residentialEntry([2, 2], 2), // small-house-a's real shape
-  "condo-s4": residentialEntry([4, 4], 3), // apartment-block-a's real shape
+  "house-s4": residentialEntry([2, 2], 2, 1), // small-house-a's real shape and proportion -- storeys 4
+  "condo-s4": residentialEntry([4, 4], 3, 1.8), // apartment-block-a's real shape and proportion -- storeys 22
 };
 
 function s4Board() {

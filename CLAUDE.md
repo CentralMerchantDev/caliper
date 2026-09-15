@@ -17,8 +17,12 @@ re-ground, plan the step, test first, implement, verify, mutate, measure, check
 the guards, tick the ledger, commit, and at every phase boundary audit blind and
 replan. Read it at the start of a session and again after any context clear.
 
-The current work and its step ledger are in
-[docs/WORLD-BUILD-PLAN.md](docs/WORLD-BUILD-PLAN.md) — PART 7 is the checklist.
+The current work is governed by [docs/specs/PLAN.md](docs/specs/PLAN.md),
+indexed by [docs/specs/CHECKLIST.md](docs/specs/CHECKLIST.md). The research
+behind it — sourced findings on look, layout, architecture and terrain — is
+[docs/specs/RESEARCH.md](docs/specs/RESEARCH.md), cited by section and never
+restated. `docs/WORLD-BUILD-PLAN.md` and `docs/specs/REBUILD-PLAN.md` /
+`REBUILD-CHECKLIST.md` are retired; nothing from them is current.
 
 ---
 
@@ -66,11 +70,16 @@ it goes here.
 
 ## The world
 
-[docs/WORLD-RULES.md](docs/WORLD-RULES.md) is the specification for the land,
-the ground types, the grid and the model contract. Both lanes build against it:
-the land lane implements it, the asset lane builds models to it. If the code and
-that document disagree, one of them is a defect — decide which and fix it, do
-not leave them disagreeing.
+`docs/WORLD-RULES.md` is retired — it assigned terrain to `land-lane`, dormant
+since before the rebuild, and that stale assignment cost a whole run of CLI's
+overflow when a lane correctly believed it. **CLI owns terrain generation; BLD
+owns the mesh and the look** — [docs/specs/PLAN.md](docs/specs/PLAN.md) §1 and
+§4. The sourced research (drowned-river-valley, coastline-first, erosion,
+street-network gates) is [docs/specs/RESEARCH.md](docs/specs/RESEARCH.md) §T
+and §L. The seam between the two lanes — resolution, extent, units of the
+height field BLD displaces a mesh off — is CAT-1's contract, published once
+written; until then treat any code comment citing `WORLD-RULES.md` as a
+historical citation to a retired document, not a live spec.
 
 ## How to verify
 
@@ -134,13 +143,25 @@ long messages do not survive being pasted into a shell.
 
 ## Lanes
 
-Three checkouts off one repo, each with its own git index:
+**Two active lanes**, per [docs/specs/PLAN.md](docs/specs/PLAN.md) §1 — the
+split exists so both can run at full speed without touching the same files:
 
-| folder | branch | owner |
+| folder | branch | owns |
 |---|---|---|
-| `sandbox-spike` | `main` | the live site; claims must stay true |
-| `sandbox-spike-land` | `land-lane` | the land, the rules, the layout engine |
-| `sandbox-spike-assets` | `assets-lane` | the model library |
+| `sandbox-spike` (CLI) | `main` | Data, logic, rules — the board, placement, scoring; terrain **generation**; the save format, Side B's model; the catalogue's game fields |
+| `sandbox-spike-codex` (BLD) | `codex-lane` | Everything rendered — materials, meshes, the board render; terrain **mesh** and its look; pointer interaction, the overview; the catalogue's mesh bindings |
+
+CLI never touches `public/look-proof-*`, `board-renderer.js`,
+`pointer-interaction.js`. BLD never touches `public/scoring.js`, the migration
+script, or the catalogue's game fields. **The seam is data**: CLI produces a
+height field and `valueAt`; BLD displaces a mesh off it and draws the number.
+Cross-lane needs go in `docs/CROSS-LANE-REQUESTS.md`; neither lane merges the
+other's branch on its own initiative.
+
+`sandbox-spike-land` (`land-lane`) and `sandbox-spike-assets` (`assets-lane`)
+are **dormant pre-rebuild worktrees carrying no copy of any current plan** —
+nobody is building against them. Terrain and the model library are owned by
+CLI and BLD above instead.
 
 Two agents in one working tree caused overwritten commits and git lock
 contention. Do not do it again.

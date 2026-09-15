@@ -43,15 +43,16 @@
 // =============================================================================
 
 import { validateEntry } from "./catalogue-validator.js";
-import { baseValueFor, unitQualityFor, adjacencyFor } from "../scripts/migrate-catalogue-s2-fields.mjs";
+import { baseValueFor, unitQualityFor, adjacencyFor, storeysFor } from "../scripts/migrate-catalogue-s2-fields.mjs";
 
 /** B3's own placeholder. A player-authored piece's baseValue counts double
  * -- "uniqueness is part of what raises a city's value" is Mark's own
  * framing (V4), and a flat, disclosed 2x is the simplest curve that is
  * ordinally correct (authored > shipped) without inventing a shape the
  * spec never asked for. Kept as an integer specifically so a doubled
- * baseValue (itself always an integer, footprint area x massing tiers)
- * stays an integer too -- catalogue-validator.js's own rule 7 requires it. */
+ * baseValue (itself always an integer, footprint area x storeys -- FIX-2,
+ * PLAN.md §3.2) stays an integer too -- catalogue-validator.js's own rule 7
+ * requires it. */
 export const UNIQUENESS_MULTIPLIER = 2;
 
 const KNOWN_CATEGORIES = ["residential", "commercial", "industrial", "civic", "landmark", "road"];
@@ -122,6 +123,13 @@ export function createCatalogueRegistry(baseCatalogue) {
     const entry = {
       id, footprint, category, rotatable, terrainMask, massing,
       pivot: "corner", // C-5: universal, not a caller-supplied field.
+      // FIX-2 (PLAN.md §3.2): storeysFor has no `proportion` to read on an
+      // authored entry (this registry never collects one) and defaults to a
+      // square massing (proportion 1) in that case -- see storeysFor's own
+      // header in migrate-catalogue-s2-fields.mjs. Stored so catalogue-
+      // validator.js's rule 12 (storeys present) passes on authored pieces
+      // exactly as it does on shipped ones.
+      storeys: storeysFor(forFormulas),
       baseValue: baseValueFor(forFormulas) * UNIQUENESS_MULTIPLIER, // B3: the multiplier lives here.
       unitQuality: unitQualityFor(forFormulas), // B3: multiplier does NOT apply here.
       adjacency: adjacencyFor(forFormulas), // composes the SAME function the shipped catalogue's own migration uses -- one source of truth.

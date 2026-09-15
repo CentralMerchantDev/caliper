@@ -21,8 +21,12 @@
 // number (that would swamp the location-driven ghost readout S4 depends on
 // moving as the cursor moves), but the UNIT COUNT a piece represents --
 // `totalWorth(type, cell) = perUnitWorth(type, cell) x units(type)`. The
-// FORMULA does not change (footprint area x massing tiers for non-road; a
-// flat 1 for road, one countable unit each) -- only what the number is FOR.
+// FORMULA SHAPE does not change (footprint area x a height signal for
+// non-road; a flat 1 for road, one countable unit each) -- only what the
+// number is FOR, and (FIX-2, PLAN.md §3.2) what the height signal IS:
+// `storeysFor(entry)`, not the raw `massing.length` S0/S2 originally read.
+// See storeysFor's own header below for why that was a defect and what
+// replaces it.
 //
 // THE ADJACENCY TABLE (SCORING-MODEL §4), DIRECTION PER CATEGORY:
 //   commercial (shops)   -> residential: +STRONG.  Was {}. The amenity engine.
@@ -129,14 +133,67 @@ export function adjacencyFor(entry) {
   }
 }
 
-/** SCORING-MODEL §3.3: "units" -- footprint area x massing tiers for
- * anything with massing (non-road); a flat 1 for road (one countable unit,
- * infrastructure rather than developed land). Same formula S0 used; only
- * its ROLE in the model changed (S1's readout no longer reads it as worth). */
+/** FIX-2 (PLAN.md §3.2, docs/briefs/CLI-2026-09-16.md item 2): `massing` is
+ * a shape-segment array -- `["base","top"]`, two to four entries -- not a
+ * storey count, but baseValue/unitQuality read `massing.length` as if it
+ * were one. At real proportions sqrt(100)=10 against sqrt(4)=2: the
+ * per-unit dilution and the total-worth inversion both change by five
+ * times. The scale fix and the value model are ONE fix.
+ *
+ * `storeysFor` replaces `massing.length` as the input both formulas below
+ * read. It is a pure function of an entry's own fields (category,
+ * footprint, massing, and `proportion` when present) so it works
+ * identically for the shipped catalogue AND a freshly-authored piece
+ * (public/catalogue-registry.js's addAuthoredEntry supplies only
+ * `{id, category, footprint, massing}` -- no `proportion` -- so its absence
+ * must degrade gracefully, not throw).
+ *
+ * THE FORMULA, AND WHY IT DOES NOT INVENT A FLOOR-TO-FLOOR HEIGHT:
+ * RESEARCH.md R11 explicitly names "floor-to-floor height in a game
+ * context" as something research could NOT source -- inventing a metres-
+ * per-storey constant to convert a real height in metres into a storey
+ * COUNT would be exactly the fabrication `rule://` Zero forbids. This
+ * formula never computes a height in metres at all. It composes three
+ * signals already real and disclosed in this catalogue, multiplicatively,
+ * into a real-proportions-derived SCALE used as a storey-count stand-in:
+ *   - `proportion` (height:width ratio) -- RESEARCH.md R9's own sourced
+ *     figure ("towers read best at 3.5:1"), already curated per shipped
+ *     entry. Defaults to 1 (a square massing) when absent -- an authored
+ *     piece with no curated proportion, or a utility/industrial entry the
+ *     shipped catalogue itself marks `proportion: null`.
+ *   - `massing.length` (1-4) -- RESEARCH.md R9's own base/middle/top rule:
+ *     more massing tiers is itself a real, sourced signal of a taller,
+ *     architecturally more prominent building, not an invented multiplier.
+ *   - footprint WIDTH in modules (`entry.footprint[0]`, stored width-first
+ *     per catalogue-validator.js) -- the grid's own real 4 m module
+ *     (RESEARCH.md A12/T7), so a bigger footprint pulls toward a bigger
+ *     number the same way real large buildings tend to.
+ * Verified against Mark's own cited real-world anchor (PLAN.md §3.1: a
+ * Toronto view holding a 72-storey tower and three-storey semis a
+ * kilometre apart, ratio ~24:1): mega-tower-a (proportion 3.5, 3 tiers,
+ * 8-module width) scores 84 against small-house-a (proportion 1, 2 tiers,
+ * 2-module width) scoring 4 -- a 21:1 ratio, matching Mark's own reference
+ * closely without being tuned to hit it. Disclosed as a real-proportions
+ * SCALE, not a literal architectural storey count -- `rule://published-
+ * claims` applies to any future page copy that calls it one. */
+export function storeysFor(entry) {
+  if (entry.category === "road") return 1;
+  const proportion = typeof entry.proportion === "number" ? entry.proportion : 1;
+  const tiers = entry.massing.length;
+  const [width] = entry.footprint;
+  return Math.max(1, Math.round(proportion * tiers * width));
+}
+
+/** SCORING-MODEL §3.3: "units" -- footprint area x storeys for anything
+ * with massing (non-road); a flat 1 for road (one countable unit,
+ * infrastructure rather than developed land). Same formula shape S0 used
+ * (footprint area x a height signal); only the height signal itself
+ * changed, from `massing.length` to `storeysFor()` -- see storeysFor's own
+ * header for why. */
 export function baseValueFor(entry) {
   if (entry.category === "road") return 1;
   const [w, d] = entry.footprint;
-  return w * d * entry.massing.length;
+  return w * d * storeysFor(entry);
 }
 
 /** SCORING-MODEL §3.2: a THIRD generated field, alongside baseValue/
@@ -161,16 +218,23 @@ export function baseValueFor(entry) {
  * PER-UNIT worth (the scarcity effect Mark asked for) more gently than
  * 1/tiers would.
  *
+ * FIX-2 (PLAN.md §3.2): "tiers" here is now `storeysFor(entry)`, not
+ * `entry.massing.length` -- the same cancellation argument applies
+ * unchanged (storeysFor is just a bigger, more real number in the same
+ * role), which is exactly why the scale fix and the value model are one
+ * fix and not two: nothing about unitQuality's own curve needed to change,
+ * only what "tiers" means.
+ *
  * Road gets a flat neutral 1 (no massing field exists on road entries at
  * all, and "scarcity of housing units" has no meaning for infrastructure)
  * -- the same treatment road already gets for baseValue. */
 export function unitQualityFor(entry) {
   if (entry.category === "road") return 1;
-  return 1 / Math.sqrt(entry.massing.length);
+  return 1 / Math.sqrt(storeysFor(entry));
 }
 
 export function migrateEntry(entry) {
-  return { ...entry, baseValue: baseValueFor(entry), adjacency: adjacencyFor(entry), unitQuality: unitQualityFor(entry) };
+  return { ...entry, storeys: storeysFor(entry), baseValue: baseValueFor(entry), adjacency: adjacencyFor(entry), unitQuality: unitQualityFor(entry) };
 }
 
 function main() {

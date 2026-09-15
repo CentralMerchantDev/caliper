@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { validateCatalogue, validateEntry, CATALOGUE_FOOTPRINTS, ROAD_CLASS_HIERARCHY } from "../public/catalogue-validator.js";
-import { AMENITY_CIVIC_TYPE_IDS, unitQualityFor } from "../scripts/migrate-catalogue-s2-fields.mjs";
+import { AMENITY_CIVIC_TYPE_IDS, unitQualityFor, baseValueFor, storeysFor } from "../scripts/migrate-catalogue-s2-fields.mjs";
 import { MESH_BINDINGS, VARIANT_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS } from "../scripts/link-catalogue-meshes.mjs";
 import { PIECES } from "../public/look-proof-pieces.js";
 import { createAreaBoard } from "../public/area-board.js";
@@ -45,6 +45,7 @@ function goodBuilding(overrides = {}) {
     massing: ["base", "top"],
     joinSpec: "ground-decal",
     proportion: 1.2,
+    storeys: 5, // FIX-2: storeysFor({footprint:[2,3], massing:2 tiers, proportion:1.2}) = round(1.2*2*2)
     baseValue: 12,
     adjacency: { residential: 3, commercial: 3, industrial: 3, civic: 3, landmark: 3, road: 3 },
     unitQuality: 1,
@@ -64,6 +65,7 @@ function goodRoad(overrides = {}) {
     roadClass: "street",
     tileType: "straight",
     junctionArms: ["street", "street"],
+    storeys: 1, // FIX-2: storeysFor's own flat 1 for road
     baseValue: 1,
     adjacency: { residential: 3, commercial: 3, industrial: 3, civic: 3, landmark: 3, road: 3 },
     unitQuality: 1,
@@ -461,7 +463,7 @@ test("RULE 9: a real unitQuality in (0, 1], including exactly 1, is NOT flagged"
   }
 });
 
-test("every real catalogue entry's unitQuality matches unitQualityFor() recomputed from its own massing -- the migration's own idempotence, not just the validator's range check", () => {
+test("every real catalogue entry's unitQuality matches unitQualityFor() recomputed from its own fields -- the migration's own idempotence, not just the validator's range check", () => {
   const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
   for (const entry of catalogue) {
     const expected = unitQualityFor(entry);
@@ -469,11 +471,79 @@ test("every real catalogue entry's unitQuality matches unitQualityFor() recomput
   }
 });
 
-test("unitQualityFor is exactly 1/sqrt(tiers) -- DECISIONS-FOR-MARK.md #14's disclosed curve, checked against LITERAL numbers so a mutated formula (e.g. 1/tiers) cannot pass by calling the function under test to build its own expectation", () => {
-  assert.equal(unitQualityFor({ category: "residential", massing: ["a"] }), 1);
-  assert.equal(unitQualityFor({ category: "residential", massing: ["a", "b"] }), 0.7071067811865475);
-  assert.equal(unitQualityFor({ category: "residential", massing: ["a", "b", "c"] }), 0.5773502691896258);
-  assert.equal(unitQualityFor({ category: "road", massing: ["a", "b", "c"] }), 1);
+test("unitQualityFor is exactly 1/sqrt(storeysFor(entry)) -- DECISIONS-FOR-MARK.md #14's disclosed curve, checked against LITERAL numbers so a mutated formula (e.g. 1/tiers, or storeysFor ignoring proportion) cannot pass by calling the function under test to build its own expectation", () => {
+  // proportion 1 (default, absent), footprint width 1, 1 tier -- storeys = 1.
+  assert.equal(unitQualityFor({ category: "residential", footprint: [1, 1], massing: ["a"] }), 1);
+  // proportion 1, width 2, 2 tiers -- storeys = round(1*2*2) = 4.
+  assert.equal(unitQualityFor({ category: "residential", footprint: [2, 2], massing: ["a", "b"] }), 0.5);
+  // proportion 1.8, width 4, 3 tiers -- storeys = round(1.8*4*3) = 22 (apartment-block-a's real shape).
+  assert.equal(unitQualityFor({ category: "residential", footprint: [4, 4], massing: ["a", "b", "c"], proportion: 1.8 }), 1 / Math.sqrt(22));
+  assert.equal(unitQualityFor({ category: "road", footprint: [4, 4], massing: ["a", "b", "c"] }), 1);
+});
+
+test("storeysFor is a real-proportions-derived scale, not massing.length -- FIX-2, PLAN.md §3.2. Checked against LITERAL numbers, including the exact case the checklist names: two to four massing entries is not a storey count", () => {
+  // A 3-tier massing entry does NOT mean 3 storeys once a real proportion is present.
+  assert.equal(storeysFor({ category: "residential", footprint: [4, 4], massing: ["a", "b", "c"], proportion: 1.8 }), 22);
+  // Absent proportion (an authored piece, or an entry the shipped catalogue marks null) defaults to a square massing (1), not a crash.
+  assert.equal(storeysFor({ category: "industrial", footprint: [8, 8], massing: ["a"], proportion: null }), 8);
+  // Two entries can share every field except proportion and land far apart -- this is the defect FIX-2 exists to fix: massing.length alone (3, for both) could not tell them apart.
+  const sharedShapeSmall = storeysFor({ category: "landmark", footprint: [6, 6], massing: ["a", "b", "c"], proportion: 1.3 });
+  const sharedShapeTower = storeysFor({ category: "landmark", footprint: [8, 8], massing: ["a", "b", "c"], proportion: 3.5 });
+  assert.equal(sharedShapeSmall, 23);
+  assert.equal(sharedShapeTower, 84);
+  assert.ok(sharedShapeTower / sharedShapeSmall > 3, `real proportions must produce a real scale gap, got ${sharedShapeTower} vs ${sharedShapeSmall}`);
+  // road is a flat 1, same convention baseValue/unitQuality already use.
+  assert.equal(storeysFor({ category: "road", footprint: [4, 4], massing: [] }), 1);
+  // Never zero, even for a degenerate near-zero product -- baseValue/unitQuality both divide or multiply by this.
+  assert.equal(storeysFor({ category: "residential", footprint: [1, 1], massing: ["a"], proportion: 0.1 }), 1);
+});
+
+test("baseValueFor is footprint area x storeysFor(entry), not footprint area x massing.length", () => {
+  // apartment-block-a's real shape: footprint 4x4=16, proportion 1.8, 3 tiers -- storeys=22, baseValue=16*22=352.
+  assert.equal(baseValueFor({ category: "residential", footprint: [4, 4], massing: ["a", "b", "c"], proportion: 1.8 }), 352);
+  assert.equal(baseValueFor({ category: "road", footprint: [4, 4], massing: [] }), 1);
+});
+
+// ---------------------------------------------------------------- rule 12 (FIX-2)
+test("RULE 12 (has storeys): a missing storeys is caught", () => {
+  const entry = goodBuilding();
+  delete (entry as any).storeys;
+  const errors = validateEntry(entry);
+  assert.ok(errors.some((e) => e.rule === "has-storeys"), JSON.stringify(errors));
+});
+
+test("RULE 12: a non-integer storeys is caught", () => {
+  const errors = validateEntry(goodBuilding({ storeys: 4.5 }));
+  assert.ok(errors.some((e) => e.rule === "has-storeys"), JSON.stringify(errors));
+});
+
+test("RULE 12: a zero or negative storeys is caught -- storeysFor's own floor is 1, never 0 or below", () => {
+  for (const v of [0, -1, -5]) {
+    const errors = validateEntry(goodBuilding({ storeys: v }));
+    assert.ok(errors.some((e) => e.rule === "has-storeys"), `${v}: ${JSON.stringify(errors)}`);
+  }
+});
+
+test("RULE 12: a real positive integer storeys, including exactly 1, is NOT flagged", () => {
+  for (const v of [1, 5, 100]) {
+    const errors = validateEntry(goodBuilding({ storeys: v }));
+    assert.ok(!errors.some((e) => e.rule === "has-storeys"), `${v}: ${JSON.stringify(errors)}`);
+  }
+});
+
+test("RULE 12 applies to road entries too -- no exemption, same as rule 7's baseValue", () => {
+  const entry = goodRoad();
+  delete (entry as any).storeys;
+  const errors = validateEntry(entry);
+  assert.ok(errors.some((e) => e.rule === "has-storeys"), JSON.stringify(errors));
+});
+
+test("every real catalogue entry's storeys matches storeysFor() recomputed from its own fields, and every real catalogue entry's baseValue matches baseValueFor()", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  for (const entry of catalogue) {
+    assert.equal(entry.storeys, storeysFor(entry), `${entry.id}: stored storeys ${entry.storeys}`);
+    assert.equal(entry.baseValue, baseValueFor(entry), `${entry.id}: stored baseValue ${entry.baseValue}`);
+  }
 });
 
 // ---------------------------------------------------------------- rule 10 (U4)

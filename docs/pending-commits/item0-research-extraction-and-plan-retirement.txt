@@ -1,0 +1,84 @@
+Item zero (docs/briefs/CLI-2026-09-16.md): PLAN.md cited docs/specs/RESEARCH.md,
+which did not exist -- a rule://-grade dangling reference in the governing plan,
+fatal by this project's own standard. Closed it before touching anything else.
+
+WHAT WAS WRONG
+
+docs/specs/PLAN.md (written 2026-09-15) says the research behind it "is
+preserved intact in docs/specs/RESEARCH.md and cited here by section" -- but
+that file was never created. Every PLAN.md citation to RESEARCH.md's §T, §L
+sections (terrain, layout) resolved to nothing. Separately, three documents
+were stale and actively harmful to read: docs/specs/REBUILD-PLAN.md and
+REBUILD-CHECKLIST.md (superseded by PLAN.md/CHECKLIST.md, but still the top
+hit for anyone grepping "the plan"), and docs/WORLD-RULES.md, which assigns
+terrain generation to land-lane -- dormant since before the rebuild -- and
+cost a whole CLI run's overflow when a lane correctly believed that
+assignment. CLAUDE.md's own "current work" pointer still named
+docs/WORLD-BUILD-PLAN.md (2026-09-04), three runs after BLD flagged it stale.
+
+WHAT WAS DONE
+
+1. docs/specs/RESEARCH.md created: the §R (RESEARCH FINDINGS), §A (ARCHITECTURE
+   DECISIONS), §L (CITY LAYOUT RULES) and §T (TERRAIN) sections lifted intact
+   from REBUILD-PLAN.md, byte-for-byte content, section numbering preserved
+   exactly so PLAN.md's existing citations (e.g. "RESEARCH.md T2", "RESEARCH.md
+   T1") now resolve. Not re-derived, not re-worded, not summarised, per the
+   brief's own instruction and rule://reference-not-copy. One disclosed gap
+   carried forward rather than silently fixed: CORRECTIONS C-8 (in the now-
+   retired REBUILD-PLAN.md) said to add a relief-ratio row to T8's by-eye
+   table; that row was never added before this extraction, and RESEARCH.md
+   says so in place rather than adding it now, which would have been
+   re-deriving during a verbatim lift.
+
+2. docs/specs/REBUILD-PLAN.md, REBUILD-CHECKLIST.md and docs/WORLD-RULES.md
+   quarantined via git mv to _TO-DELETE/item0-plan-retirement/, per
+   rule://quarantine. Verified before moving: no runtime reader anywhere in
+   public/, src/, scripts/, test/ opens any of the three by path (grep for
+   readFileSync/import found none); every hit is a code comment citation,
+   which cannot break when the file moves. After moving: `npx tsc --noEmit`
+   clean, and `node test/run.mjs`'s own summary line (ℹ pass 734, ℹ fail 11,
+   cancelled 0, skipped 22, todo 1) shows the same 11 pre-existing failures as
+   before the move (deadExports allowlist drift, ground/road standing,
+   mutation-manifest staleness -- FIX-5's territory, untouched here).
+
+   NOT deleted. The brief's own wording ("quarantine, ledger, then delete --
+   the same path Mark authorised for the last purge") was read as one
+   pre-authorised step, but CLAUDE.md's non-negotiable rule is that nothing is
+   deleted without Mark's explicit, in-session confirmation of the exact list
+   -- the same two-step precedent the last purge itself shows in
+   _TO-DELETE/LEDGER.jsonl (quarantined 2026-09-13/14, deleted only after a
+   live yes/no on 2026-09-15). Ledger entries for all three are recorded with
+   action:"retained", not "purged" -- the actual `git rm` is queued for that
+   confirmation, not taken here.
+
+3. CLAUDE.md corrected:
+   - "current work" pointer moved off docs/WORLD-BUILD-PLAN.md to
+     docs/specs/PLAN.md / CHECKLIST.md, with RESEARCH.md named as the sourced
+     backing.
+   - "The world" section rewritten: WORLD-RULES.md marked retired, terrain
+     ownership restated per PLAN.md §1/§4 (CLI generates, BLD meshes), and the
+     seam pointed at CAT-1's not-yet-published contract instead of a dead file.
+   - Lanes table replaced: it named `sandbox-spike-land`/`sandbox-spike-assets`
+     as active owners of land/rules and models. PLAN.md §1 shows the real
+     split is CLI (`sandbox-spike`, `main`) and BLD (`sandbox-spike-codex`,
+     `codex-lane`); `land-lane` and `assets-lane` are named dormant instead of
+     silently dropped.
+
+WHAT IS STILL OPEN
+
+- The three retired docs sit in _TO-DELETE/item0-plan-retirement/, ledgered as
+  retained. Deletion needs Mark's explicit in-session yes/no, per precedent --
+  queued, not blocking.
+- Hundreds of code comments across public/, scripts/, test/ still cite
+  REBUILD-PLAN.md/REBUILD-CHECKLIST.md/WORLD-RULES.md by section (e.g.
+  public/ground.js, public/scoring.js, test/mutations.json). These are
+  historical citations to documents that were current when the comment was
+  written, matching how this project already treats citations into
+  already-quarantined old-world source files -- left as-is, not rewritten;
+  rewriting them was not in the brief's scope for item zero.
+- docs/MODULE-MAP.md regenerated with different counts (87->99 modules) as a
+  side effect of running the suite during this item's own verification; the
+  drift predates this commit and is unrelated to it, so it is left uncommitted
+  here for whichever change actually caused it.
+
+Next: FIX-2, pushed the moment it is green.
