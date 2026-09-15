@@ -1772,6 +1772,14 @@
       "find": "  \"tower-base-6x6-a\": [\"tower-base-6x6-alt\"],",
       "replace": "",
       "expect": "GATE (BO7A/CAT-3): every real L12 mesh is accounted for exactly once -- bound, a disclosed variant, a disclosed finding, or a disclosed prop, never silently unclassified"
+    },
+    {
+      "id": "cat4-camera-must-stay-off-diagonal",
+      "guards": "CAT-4 (docs/briefs/BLD-2026-09-16.md): restores the rejected 45-degree diagonal isometric camera (equal X and Z offset) -- Mark's own verdict on this exact angle was 'a diagonal strip in a field of black'.",
+      "file": "public/catalogue-contact-sheet.html",
+      "find": "camera.position.set(centerX, dist * 0.55, centerZ - dist);",
+      "replace": "camera.position.set(centerX - dist, dist * 0.55, centerZ - dist);",
+      "expect": "GATE (CAT-4): the camera looks along ONE axis (front-on), not a 45-degree diagonal isometric offset -- CAT-2's own diagonal camera read as 'a diagonal strip in a field of black' (Mark, docs/briefs/BLD-2026-09-16.md), because an equal X/Z offset onto a rectangular grid photographs as a rotated diamond, not a grid"
     }
   ]
 }

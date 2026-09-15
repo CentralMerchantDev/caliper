@@ -171,8 +171,23 @@ async function main() {
   // in this scene at all; pushed well past the real camera-to-farthest-
   // piece distance rather than tuned to a specific look.
   material.uniforms.uFogFar.value = dist * 4;
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 1000);
-  camera.position.set(centerX - dist, dist * 1.1, centerZ - dist);
+  // CAT-4 (docs/briefs/BLD-2026-09-16.md) -- Mark on the previous camera
+  // (equal X AND Z offset from centre, a 45-degree isometric angle): "a
+  // diagonal strip in a field of black". A perspective camera at a 45-
+  // degree azimuth photographs a rectangular grid as a ROTATED DIAMOND --
+  // the grid math (col = i % COLS, row = Math.floor(i / COLS), unchanged
+  // by this item) was already real; what read wrong was the angle it was
+  // shot from. Offset on Z ONLY (x stays at centerX) so grid ROWS read as
+  // horizontal bands filling the frame's own width, the way a real
+  // contact sheet reads -- the diamond's four empty corners are gone.
+  // Elevation (dist * 0.55, lower than the old dist * 1.1) is a real
+  // trade, not free: MORE top-down would fill the frame even better but
+  // flattens height differences toward invisible (irrelevant to CAT-4's
+  // own grid ask, but height is exactly what this sheet needs to show
+  // once FIX-1 lands) -- kept steep enough that a piece's own vertical
+  // extent still reads, found by rendering and looking, not assumed.
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.5, 1000);
+  camera.position.set(centerX, dist * 0.55, centerZ - dist);
   camera.lookAt(centerX, 0, centerZ);
 
   renderer.render(scene, camera);
