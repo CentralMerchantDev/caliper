@@ -1,0 +1,129 @@
+SDB-1 (PLAN.md §6C) and SDB-3 (PLAN.md §6.5): Side B's registry survives a
+redeploy, and its module graph can finally reach a browser.
+
+SDB-1 -- D1 persistence, not a cache
+-------------------------------------
+Wrong before: public/catalogue-registry.js's overlay was an in-memory Map.
+On a Cloudflare Worker isolates are per-request -- an authored piece did not
+survive the request that created it. Mark's ruling: D1, surviving a full
+REDEPLOY, not just an isolate; an authored entry is a record with validated,
+queried fields, not a blob (D1 over KV).
+
+migrations/0001_create_authored_pieces.sql: one column per field
+addAuthoredEntry already builds. footprint/terrainMask/massing/adjacency
+stored as JSON text (nothing SQL-side ever queries their internal
+structure; a schema migration every time C1.1's footprint set or S2's
+adjacency categories change would be the wrong tradeoff for a value nothing
+filters on).
+
+wrangler.jsonc gains a d1_databases binding (CATALOGUE_DB). database_id is
+deliberately omitted -- automatic provisioning on a real deploy. No real
+cloud resource was created or touched by this work: local test runs use
+Miniflare's own SQLite simulation (Cloudflare's own vitest-pool-workers),
+which needs no id and no auth.
+
+createCatalogueRegistry(baseCatalogue, { db } = {}): omitting db is the
+EXACT prior synchronous, in-memory path, byte-for-byte -- every existing
+test (test/catalogueRegistry.test.ts) passes unchanged. Passing a D1
+binding makes get/all/addAuthoredEntry async and read/write
+authored_pieces directly, every call -- no cache layer, so nothing to go
+stale or drift from another isolate's writes. buildAuthoredEntry() is the
+one shared validation/derivation path both backings call, so the rules
+(provenance, category, id collision, storeysFor/baseValueFor/unitQualityFor/
+adjacencyFor) cannot drift between them.
+
+RED: skipped the INSERT in the D1-backed addAuthoredEntry (left validation,
+no write). test/catalogueRegistryD1.workers.test.ts, run under
+@cloudflare/vitest-pool-workers (real workerd + Miniflare D1): 3 of 6 tests
+failed -- a piece authored on one registry instance was invisible (get/all)
+and unplaceable on a SECOND, independent registry instance built against
+the same D1 binding.
+GREEN: mutation reverted. All 6 tests pass -- the literal CHECKLIST.md gate,
+"author a piece, redeploy, and it is still there and still places," proven
+by building a fresh registry instance against the same D1 binding with no
+shared in-memory state, the way a fresh isolate after a redeploy would.
+
+Along the way: scripts/migrate-catalogue-s2-fields.mjs's repoRoot() used to
+run at module-import time (top-level `const CATALOGUE_PATH =
+join(repoRoot(), ...)`), which crashed on import inside workerd -- no
+walkable CLAUDE.md on disk from there. Made lazy: computed only inside
+main(), the only place that ever reads it.
+
+SDB-3 -- the module graph reaches a browser
+--------------------------------------------
+That lazy fix only fixed the workerd symptom. PLAN.md §6.5 names the real
+defect: catalogue-registry.js transitively imported
+scripts/migrate-catalogue-s2-fields.mjs, a Node script pulling in node:fs/
+node:path/node:url -- unloadable by any real browser, not just unloadable
+before nodejs_compat shims it. Filed by BLD as
+docs/CROSS-LANE-REQUESTS.md #4, blocking SHIP-1's author clause.
+
+public/catalogue-formulas.js: storeysFor/baseValueFor/unitQualityFor/
+adjacencyFor/migrateEntry/AMENITY_CIVIC_TYPE_IDS moved here verbatim, zero
+imports. scripts/migrate-catalogue-s2-fields.mjs now imports from it and
+re-exports, so ITS OWN existing importers (test/catalogueValidator.test.ts)
+see no change in shape -- one source of truth, not a duplicate. public/
+catalogue-registry.js now imports the formulas from catalogue-formulas.js,
+not the Node script.
+
+RED (structural): test/catalogueRegistryBrowserSafe.test.ts -- reverting
+catalogue-registry.js's import to the old scripts/migrate-catalogue-s2-
+fields.mjs coupling makes an esbuild platform:"browser" bundle fail
+outright: "Could not resolve node:fs / node:url / node:path".
+GREEN: mutation reverted. Bundle succeeds clean, zero node:* built-ins in
+the graph.
+
+RED (dynamic, the literal gate -- "the page loads and an authored piece
+places, in a real browser"): test/catalogueRegistryBrowserRoundtrip.test.ts
+-- a REAL headless Chromium (Playwright), navigating to a page served over
+plain http from public/, importing the real ES modules, authoring a piece
+and placing it. With the same reverted coupling: the page 404s fetching
+/scripts/migrate-catalogue-s2-fields.mjs (outside public/, never served)
+and never sets its result.
+GREEN: mutation reverted. The real browser authors, doubles baseValue via
+the uniqueness multiplier, and places the piece -- 959ms, zero page errors.
+
+Verification
+------------
+npx tsc --noEmit: clean.
+node test/run.mjs (full suite): 1166 tests, 1109 pass, 12 fail -- all 12
+pre-existing and already disclosed (deadExports notProduct backlog,
+importsResolve checker bug, 3 timer/poll tests, mutationEvidence's own
+"every manifest id has a CAUGHT result" backlog, 4 navWheel remnants,
+rawSourceScan's 3 pre-existing violations, supervised-generate.mjs's
+already-disclosed world.js regression). +3 tests over the prior run, all
+new and all passing.
+npx vitest run (workers suite): 18/18 pass across 2 files (the pre-existing
+handlerRuntime.workers.test.ts, unchanged, plus the new 6-test D1 suite).
+docs/MODULE-MAP.md regenerated (node scripts/gen-module-map.mjs):
+"unchanged" against what's staged here. The 6 new catalogue-formulas.js
+exports land in the SAME pre-existing 187-entry deadExports backlog
+catalogue-registry.js's own exports were already sitting in, unlisted,
+before this commit -- not a new defect, and not allowlisted individually
+for the same reason catalogue-registry.js's own exports never were.
+
+What's still open
+------------------
+SDB-3's gate says "an authored piece places, in a real browser" -- proven
+against the real modules directly, not against an actual authoring page,
+because no such page exists yet (SDB-4/5/6, the guided form/loop/process-
+on-screen UI, are unbuilt). This is the strongest proof available today;
+re-run against the real page once SDB-4 exists.
+
+A stray "fetching auth token" / Cloudflare Access check appeared in exactly
+one workers-suite run during this work, then never again across several
+repeats (including the D1 test run in isolation and the pre-existing
+handlerRuntime test in isolation, neither of which triggered it). The
+stored wrangler OAuth token's own expiration_time was imminent at the time
+-- this reads as a routine background token refresh by an
+already-authenticated wrangler CLI (Mark's own login, pre-dating this
+session), not new API spend this work introduced. No real cloud resource
+was created; local test runs use Miniflare's local D1 simulation
+throughout.
+
+docs/GATE-LEDGER.jsonl carries a "commit": "PENDING" placeholder for SDB-1,
+written before this commit existed -- the established correction pattern
+in this same ledger (see the B6-touch-action and look-proof-4.1-shared-
+material entries) is a follow-up entry citing the real hash, not an edit to
+the placeholder. That follow-up, plus SDB-3's own gate record, land in the
+next commit.

@@ -78,6 +78,20 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, join } from "node:path";
+import { AMENITY_CIVIC_TYPE_IDS, adjacencyFor, storeysFor, baseValueFor, unitQualityFor, migrateEntry } from "../public/catalogue-formulas.js";
+
+// PLAN.md §6.5 ("two known defects, both CLI's", defect 1): the four
+// formulas and AMENITY_CIVIC_TYPE_IDS used to be DEFINED here, and
+// public/catalogue-registry.js imported them from this file -- which meant
+// catalogue-registry.js's import graph reached `node:fs` below, and could
+// not load anywhere without a Node-like filesystem (a real browser; and,
+// before the lazy-repoRoot fix alongside this one, not even inside a
+// Cloudflare Worker). They now live in public/catalogue-formulas.js, which
+// imports nothing. Re-exported here so this file's OWN existing importers
+// (test/catalogueValidator.test.ts, for AMENITY_CIVIC_TYPE_IDS and
+// migrateEntry) see no change in shape -- this script is one of two callers
+// of the real formulas now, not their owner.
+export { AMENITY_CIVIC_TYPE_IDS, adjacencyFor, storeysFor, baseValueFor, unitQualityFor, migrateEntry };
 
 // Walks up looking for CLAUDE.md, the same pattern
 // test/catalogueValidator.test.ts's own repoRoot() uses -- NOT a fixed
@@ -97,151 +111,12 @@ function repoRoot() {
   throw new Error("migrate-catalogue-s2-fields: could not locate the repo root");
 }
 
-export const CATALOGUE_PATH = join(repoRoot(), "data", "catalogue.json");
-
-const MAGNITUDE = { STRONG: 5, MODERATE: 2 };
-
-/** The civic entries treated as a genuine amenity (positive residential
- * adjacency). Everything in category "civic" NOT on this list gets an empty
- * adjacency for the civic->residential effect -- see the header for why each
- * one landed where it did. */
-export const AMENITY_CIVIC_TYPE_IDS = ["small-civic-a", "civic-6x6-a"];
-
-/** Exported (was private) for §U4: public/catalogue-registry.js composes
- * this directly rather than keeping a second, hand-copied magnitude table
- * -- one source of truth for "what does each category's adjacency look
- * like", shipped and authored entries alike. Still throws on an unknown
- * category, deliberately (see below) -- a caller with untrusted input
- * (an authored entry's own category) must check it is one of the six
- * known ones BEFORE calling this, exactly as catalogue-registry.js does. */
-export function adjacencyFor(entry) {
-  switch (entry.category) {
-    case "commercial":
-      return { residential: MAGNITUDE.STRONG };
-    case "civic":
-      return AMENITY_CIVIC_TYPE_IDS.includes(entry.id) ? { residential: MAGNITUDE.STRONG } : {};
-    case "landmark":
-      return { residential: MAGNITUDE.STRONG };
-    case "residential":
-      return { residential: -MAGNITUDE.MODERATE, commercial: MAGNITUDE.MODERATE };
-    case "industrial":
-      return { residential: -MAGNITUDE.STRONG };
-    case "road":
-      return { residential: MAGNITUDE.MODERATE, commercial: MAGNITUDE.MODERATE };
-    default:
-      throw new Error(`migrate-catalogue-s2-fields: unknown category "${entry.category}" on entry "${entry.id}" -- add it to adjacencyFor deliberately, do not guess`);
-  }
-}
-
-/** FIX-2 (PLAN.md §3.2, docs/briefs/CLI-2026-09-16.md item 2): `massing` is
- * a shape-segment array -- `["base","top"]`, two to four entries -- not a
- * storey count, but baseValue/unitQuality read `massing.length` as if it
- * were one. At real proportions sqrt(100)=10 against sqrt(4)=2: the
- * per-unit dilution and the total-worth inversion both change by five
- * times. The scale fix and the value model are ONE fix.
- *
- * `storeysFor` replaces `massing.length` as the input both formulas below
- * read. It is a pure function of an entry's own fields (category,
- * footprint, massing, and `proportion` when present) so it works
- * identically for the shipped catalogue AND a freshly-authored piece
- * (public/catalogue-registry.js's addAuthoredEntry supplies only
- * `{id, category, footprint, massing}` -- no `proportion` -- so its absence
- * must degrade gracefully, not throw).
- *
- * THE FORMULA, AND WHY IT DOES NOT INVENT A FLOOR-TO-FLOOR HEIGHT:
- * RESEARCH.md R11 explicitly names "floor-to-floor height in a game
- * context" as something research could NOT source -- inventing a metres-
- * per-storey constant to convert a real height in metres into a storey
- * COUNT would be exactly the fabrication `rule://` Zero forbids. This
- * formula never computes a height in metres at all. It composes three
- * signals already real and disclosed in this catalogue, multiplicatively,
- * into a real-proportions-derived SCALE used as a storey-count stand-in:
- *   - `proportion` (height:width ratio) -- RESEARCH.md R9's own sourced
- *     figure ("towers read best at 3.5:1"), already curated per shipped
- *     entry. Defaults to 1 (a square massing) when absent -- an authored
- *     piece with no curated proportion, or a utility/industrial entry the
- *     shipped catalogue itself marks `proportion: null`.
- *   - `massing.length` (1-4) -- RESEARCH.md R9's own base/middle/top rule:
- *     more massing tiers is itself a real, sourced signal of a taller,
- *     architecturally more prominent building, not an invented multiplier.
- *   - footprint WIDTH in modules (`entry.footprint[0]`, stored width-first
- *     per catalogue-validator.js) -- the grid's own real 4 m module
- *     (RESEARCH.md A12/T7), so a bigger footprint pulls toward a bigger
- *     number the same way real large buildings tend to.
- * Verified against Mark's own cited real-world anchor (PLAN.md §3.1: a
- * Toronto view holding a 72-storey tower and three-storey semis a
- * kilometre apart, ratio ~24:1): mega-tower-a (proportion 3.5, 3 tiers,
- * 8-module width) scores 84 against small-house-a (proportion 1, 2 tiers,
- * 2-module width) scoring 4 -- a 21:1 ratio, matching Mark's own reference
- * closely without being tuned to hit it. Disclosed as a real-proportions
- * SCALE, not a literal architectural storey count -- `rule://published-
- * claims` applies to any future page copy that calls it one. */
-export function storeysFor(entry) {
-  if (entry.category === "road") return 1;
-  const proportion = typeof entry.proportion === "number" ? entry.proportion : 1;
-  const tiers = entry.massing.length;
-  const [width] = entry.footprint;
-  return Math.max(1, Math.round(proportion * tiers * width));
-}
-
-/** SCORING-MODEL §3.3: "units" -- footprint area x storeys for anything
- * with massing (non-road); a flat 1 for road (one countable unit,
- * infrastructure rather than developed land). Same formula shape S0 used
- * (footprint area x a height signal); only the height signal itself
- * changed, from `massing.length` to `storeysFor()` -- see storeysFor's own
- * header for why. */
-export function baseValueFor(entry) {
-  if (entry.category === "road") return 1;
-  const [w, d] = entry.footprint;
-  return w * d * storeysFor(entry);
-}
-
-/** SCORING-MODEL §3.2: a THIRD generated field, alongside baseValue/
- * adjacency -- never hand-authored per entry, never folded into baseValue
- * (Mark's own instruction, item S4). "A calculating factor per housing
- * type, determined by its size and its niceness" -- §3.2 gives no formula.
- * Mark's own scarcity framing ("fewer units sharing the same amenity
- * access are worth more each") and "density is already in the catalogue
- * as massing tiers" together fix the INPUT (massing.length) and the
- * DIRECTION (decreasing); the exact CURVE is a disclosed judgement call,
- * docs/DECISIONS-FOR-MARK.md #14, same rigor as #13's EDGE_FRACTION for
- * S2's falloff.
- *
- * `1/sqrt(tiers)`, not the simpler `1/tiers` -- because `baseValue` IS
- * "units" (footprint x tiers, above), `1/tiers` would cancel the tiers
- * term EXACTLY inside totalWorth = (value x unitQuality) x baseValue =
- * value x footprint x (tiers/tiers) = value x footprint, making massing
- * irrelevant to total worth -- a condo BUILDING's height would count for
- * nothing beyond its footprint. `1/sqrt(tiers)` avoids the cancellation
- * (totalWorth = value x footprint x sqrt(tiers)): more tiers still
- * genuinely raises total worth, not just footprint, while still diluting
- * PER-UNIT worth (the scarcity effect Mark asked for) more gently than
- * 1/tiers would.
- *
- * FIX-2 (PLAN.md §3.2): "tiers" here is now `storeysFor(entry)`, not
- * `entry.massing.length` -- the same cancellation argument applies
- * unchanged (storeysFor is just a bigger, more real number in the same
- * role), which is exactly why the scale fix and the value model are one
- * fix and not two: nothing about unitQuality's own curve needed to change,
- * only what "tiers" means.
- *
- * Road gets a flat neutral 1 (no massing field exists on road entries at
- * all, and "scarcity of housing units" has no meaning for infrastructure)
- * -- the same treatment road already gets for baseValue. */
-export function unitQualityFor(entry) {
-  if (entry.category === "road") return 1;
-  return 1 / Math.sqrt(storeysFor(entry));
-}
-
-export function migrateEntry(entry) {
-  return { ...entry, storeys: storeysFor(entry), baseValue: baseValueFor(entry), adjacency: adjacencyFor(entry), unitQuality: unitQualityFor(entry) };
-}
-
 function main() {
-  const catalogue = JSON.parse(readFileSync(CATALOGUE_PATH, "utf8"));
+  const catalogueLogPath = join(repoRoot(), "data", "catalogue.json");
+  const catalogue = JSON.parse(readFileSync(catalogueLogPath, "utf8"));
   const migrated = catalogue.map(migrateEntry);
-  writeFileSync(CATALOGUE_PATH, JSON.stringify(migrated, null, 2) + "\n");
-  console.log(`migrated ${migrated.length} entries -> ${CATALOGUE_PATH}`);
+  writeFileSync(catalogueLogPath, JSON.stringify(migrated, null, 2) + "\n");
+  console.log(`migrated ${migrated.length} entries -> ${catalogueLogPath}`);
 }
 
 // Only run the migration when executed directly -- importing this module

@@ -50,6 +50,20 @@
 	"ai": {
 		"binding": "AI"
 	},
+	// SDB-1 (PLAN.md §6): Side B's authored-piece overlay, surviving a full
+	// redeploy. database_id omitted deliberately -- "automatic provisioning"
+	// (Wrangler auto-creates a real database on first `wrangler deploy` when
+	// no id is given). Nothing in this run has created or touched a real
+	// cloud D1 database or spent an API call to do so: local dev/test runs
+	// (this Worker's `.workers.test.ts` files, `wrangler dev`) use Miniflare's
+	// own local SQLite simulation, which needs no id and no auth.
+	"d1_databases": [
+		{
+			"binding": "CATALOGUE_DB",
+			"database_name": "caliper-catalogue",
+			"migrations_dir": "./migrations"
+		}
+	],
 	"vectorize": [
 		{
 			"binding": "VECTORIZE_MODELS",

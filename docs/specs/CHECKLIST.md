@@ -649,9 +649,148 @@ land somewhere permanent; until then this IS the record.
 
 ---
 
-## SIDE B — CLI OWNS IT. PLAN.md §6.
+## THE CAMERA AND THE HAZE — BLD OWNS THIS. Added 2026-09-15.
 
-[ ] SDB-1 (CLI) D1 persistence, surviving a full redeploy — PLAN.md 6
+CAM-1 was judged by Mark and **failed**. `36-board-cam1-real-range.png` fits
+376 m into frame and loses everything else: two flat slabs against a gradient,
+no texture, no windows, no detail. The gate asked for "both fully in frame with
+the relative height reading" — it got that, and it was the wrong gate. **One
+camera cannot serve a 4.5 m house and a 376 m tower.**
+
+[ ] CAM-2 (BLD) The eye-level camera — Mark's own design, 2026-09-15
+    His words: *"like an eye view — an expanded eye view, not exactly what you
+    would see but more — that allows you to look up so you can see the building
+    above you, just like in real life. Most of the time you're looking forward
+    and you can only see what's in your eye line. As you spin around you can
+    look up. And when you pan out, that's where you'll see the height."*
+    So: eye level by default, looking forward, free to look up. Height is
+    revealed by pulling back and up, NOT by fitting a tower into one frame.
+    **A building that leaves the top of frame reads as TALLER than one that
+    fits.** Real city photographs almost never contain a whole tower. Cropping
+    is the tool; this is why 36 felt wrong.
+    This also settles the height-compression question Mark raised and then
+    answered himself — no squashing, multiple cameras instead. Compressing would
+    break the value model, because `storeys` is what `baseValue` and
+    `unitQuality` read: a tower that looks 30 storeys and scores 100 is the
+    render-and-rule-disagreeing defect, by design.
+    Gate: two shots from the SAME scene — eye level with the tower leaving frame,
+    and pulled back with the skyline visible. Judged by Mark, with §5.5's five
+    lines. RED is a single camera trying to do both jobs.
+[ ] CAM-3 (BLD) The haze — the fog's NEAR PLANE, not its density or colour — PLAN.md 3.3
+    Mark, on `30-board-scene-pass-fix3.png`: *"the buildings are extremely hazy,
+    the details have been lost... the clarity in the image has disappeared
+    because of something overlaid... a gauze."*
+    **Three retunes have adjusted density and colour and none touched it, which
+    is the evidence the lever is elsewhere.** In `30` the mid-rise's window bands
+    are milky and the tower's edges are soft, while the GROUND texture at the
+    bottom of frame is sharp and grainy — objects over-hazed, ground
+    under-blended, the opposite of how distance haze behaves.
+    That points at the fog's near plane starting far too close: geometry twenty
+    metres away is being blended toward fog colour as if it were two hundred
+    metres out. Detail is not blurred, it is **washed** — contrast lost, not
+    focus.
+    **That is a hypothesis from reading one image, not a measurement.** Verify it
+    before changing anything; if the near plane is not the cause, say so and
+    report what is.
+    Gate: the pair, judged by Mark, §5.5's five lines. The question is clarity on
+    the buildings, not whether the ground looks like a city — that is GRD-1,
+    already landed and separately judged.
+[ ] CAM-4 (BLD) The contact sheet clips its two tallest pieces — PLAN.md 5.3
+    Pre-existing, confirmed still present after CAM-1, named in BLD's own
+    handover rather than left for Mark to find. Now that heights are real it will
+    only get worse.
+
+---
+
+## THE RULE-CONSULTATION AUDIT — PLAN.md §6B. Added 2026-09-15.
+
+**The project's central claim is that it checks its own work, and that check has
+a hole.** Nothing verifies a lane CONSULTED the rules — only that its output was
+right. The lanes had the process server connected for days without calling it and
+nobody knew until Mark asked and the source was read by hand.
+
+[ ] AUD-1 (MCP) Record rule consultation, and audit against it — PLAN.md 6B.1
+    **Repository: `C:\Code\process-mcp`, not this one.** Needs its own terminal.
+    `process_at` and `process_get_rule` already know which moment was asked about
+    and which rules were returned. They discard it. Record it the way gates are
+    recorded.
+    Then report, per run: which moments were consulted, which were not, and any
+    item ticked without its rules ever being read. Cross-check ticked /
+    gate-recorded / rules-consulted so a tick with two of three is visible.
+    Composes `process_at`, `process_record_gate`, `process_reconcile_plan` and
+    the event log. NOT a new system — `rule://reference-not-copy`.
+    Gate: a run that skips a moment is REPORTED as having skipped it. Prove it by
+    doing a run that deliberately skips one, not by asserting the report works.
+[ ] AUD-2 (BLD) Side B's grounding is recorded and shown — PLAN.md 6B.2 and 6.3
+    The loop grounds itself in the game's rules before planning. That grounding
+    is recorded and VISIBLE — the same discipline pointed at a player, and the
+    same thing as 6.3's visible-process requirement seen from the other end.
+
+---
+
+## SIDE B — PLAN.md §6. Rewritten 2026-09-15: two ways in, public, capped.
+
+[x] SDB-3 (CLI) Extract the three formulas to a browser-safe module — PLAN.md 6.5
+    **This unblocks SHIP-1's author clause, which is currently `[!]`.**
+    `catalogue-registry.js` transitively imports `scripts/migrate-catalogue-s2-fields.mjs`,
+    a Node script that reads the filesystem, so no browser can load it. Move
+    `storeysFor`, `baseValueFor` and `unitQualityFor` into a plain module both
+    the build script and the browser import.
+    One source of truth is the RIGHT design — the defect is the coupling to a
+    filesystem-reading file, not the sharing. Do not duplicate the formulas.
+    Roughly an hour. Filed by BLD as `docs/CROSS-LANE-REQUESTS.md` #4.
+    Gate: the page loads and an authored piece places, in a real browser.
+    Done: `public/catalogue-formulas.js` (storeysFor/baseValueFor/unitQualityFor/
+    adjacencyFor/migrateEntry/AMENITY_CIVIC_TYPE_IDS, zero imports).
+    `scripts/migrate-catalogue-s2-fields.mjs` now imports from it and
+    re-exports, so its own existing importers see no shape change.
+    `public/catalogue-registry.js` imports the formulas from the new module,
+    not the Node script — its import graph no longer reaches `node:fs`.
+    Gate proven two ways: `test/catalogueRegistryBrowserSafe.test.ts`
+    (esbuild `platform:"browser"` bundle succeeds, zero `node:*` built-ins) and
+    `test/catalogueRegistryBrowserRoundtrip.test.ts` (a REAL headless Chromium,
+    serving `public/` over http, imports the real modules, authors a piece and
+    places it — the literal gate). Both mutation-proven: reverting the import
+    to the old Node-script coupling breaks the browser bundle AND makes the
+    real Chromium page 404 on `scripts/migrate-catalogue-s2-fields.mjs` and
+    never set its result — reverted after confirming CAUGHT.
+[ ] SDB-4 (BLD) The guided form — PLAN.md 6.1
+    Pick a slot; it says what fits — footprint, category, what the rules allow.
+    You fill what it cannot infer. It produces a valid catalogue entry through
+    the EXISTING registry and validator. No agent, no spend, always available.
+    **It is also the control**: if form-authored and loop-authored pieces come
+    out comparable, the loop is doing real work.
+    Gate: a piece authored through the form places and scores identically to a
+    shipped one — the same proof the registry already makes, driven by a person.
+[ ] SDB-5 (CLI) The loop — Worker, agent, caps, rate limits, fallback — PLAN.md 6.2 and 6.4
+    Browser to Cloudflare Worker to agent to the game's own tools. The Worker is
+    the boundary that keeps the method private and where the guards live.
+    PUBLIC, not gated — Mark's ruling. A recorded session proves only that a
+    session can be recorded; the claim is about unanticipated input.
+    Three guards, all required:
+      - a hard spend cap per account;
+      - GRACEFUL DEGRADATION when the budget is gone — the visitor gets the form
+        and an honest message, never a broken page;
+      - rate limits per session and per IP. A spend cap protects the bill; it
+        does NOT stop one script burning the budget before anyone real arrives.
+    **No model is trained or built.** Orchestration is the skill on show.
+    Gate: the loop runs end to end for a real request; the budget-exhausted path
+    is exercised deliberately and lands on the form, not an error.
+[ ] SDB-6 (BLD) The process on screen — PLAN.md 6.3
+    **The highest-value item in Side B for what this project is for.**
+    A reviewer behind a Worker sees a game. What makes them see an engineer is
+    watching the loop work: the plan, the questions as they are asked, the
+    verification and its result, and an honest report when something could not
+    be done.
+    They do NOT see rule text, prompts, or tool calls.
+    Gate: a person who has never seen this project can watch one authoring run
+    and describe what the system did and why they should trust it.
+
+---
+
+## SIDE B — PERSISTENCE. CLI OWNS IT. PLAN.md §6C.
+
+[x] SDB-1 (CLI) D1 persistence, surviving a full redeploy — PLAN.md 6
     The registry is real and proven; its overlay is an in-memory `Map`, and on a
     Worker isolates are per-request — an authored piece does not survive the
     request that created it. §B2 calls persistence the day-one requirement.
@@ -660,6 +799,31 @@ land somewhere permanent; until then this IS the record.
     D1 over KV.
     The public shape — `get`/`all`/`addAuthoredEntry` — does not change.
     Gate: author a piece, redeploy, and it is still there and still places.
+    Done: `migrations/0001_create_authored_pieces.sql` (one column per field
+    addAuthoredEntry already builds — footprint/terrainMask/massing/adjacency
+    as JSON text, everything else a real column). `wrangler.jsonc` gains a
+    `d1_databases` binding (`database_id` deliberately omitted — automatic
+    provisioning on a real deploy; local test runs use Miniflare's own SQLite
+    simulation, no cloud resource touched, no auth required). `createCatalogueRegistry(baseCatalogue, { db } = {})`:
+    omitting `db` is the exact prior synchronous, in-memory path, byte-for-byte
+    (every existing test unchanged); passing a D1 binding makes
+    `get`/`all`/`addAuthoredEntry` async and read/write `authored_pieces`
+    directly on every call — no cache layer, so nothing to go stale.
+    Gate proven literally: `test/catalogueRegistryD1.workers.test.ts`, running
+    under `@cloudflare/vitest-pool-workers` (real workerd + Miniflare D1),
+    authors a piece on ONE registry instance, then builds a SECOND, wholly
+    independent instance against the SAME D1 binding — simulating a fresh
+    isolate after a redeploy — and confirms the piece is still there (`.get`,
+    `.all`) AND still places on a board built from it. Mutation-proven: skipped
+    the `INSERT` in `addAuthoredEntry` and watched 3 of 6 gate tests fail
+    (entry absent on the second instance, board refuses to place it, the
+    collision-refusal test finds nothing to collide with) — reverted after
+    confirming CAUGHT.
+    Along the way: `scripts/migrate-catalogue-s2-fields.mjs`'s `repoRoot()`
+    walk used to run at module-import time, which crashed on import inside
+    workerd (no walkable `CLAUDE.md`). Made lazy (computed only inside `main()`,
+    the only place that ever reads it) — see also SDB-3, which removes this
+    module from `catalogue-registry.js`'s import graph entirely.
 [ ] SDB-2 (CLI) Record the class of what each authoring run produced — PLAN.md 6
     Prop, house, condo. No mechanic attached. One field, cheap now, expensive to
     backfill — it makes V2's reward table a lookup rather than a retrofit

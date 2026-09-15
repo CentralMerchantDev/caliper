@@ -233,7 +233,140 @@ a pass is the failure this exists to prevent.
 
 ---
 
-## 6. SIDE B — PERSISTENCE (CLI)
+## 6. SIDE B — THE CODING LANE. Rewritten 2026-09-15.
+
+**Side B is the reason this is CALIPER and not a city builder, and it is the
+artifact this whole project exists to produce.** Mark is applying for AI roles.
+A game is a nice portfolio piece; a game whose core mechanic is a working,
+self-checking agent loop is a demonstration of the work itself.
+
+### 6.1 Two ways in, and the second is the control
+
+**The guided form.** Pick a slot; it tells you what fits there — footprint,
+category, what the rules allow. You fill in what it cannot infer. It produces a
+valid catalogue entry. No agent, no spend, always available.
+
+**The loop.** You describe what you want. It grounds itself in the rules, plans,
+asks the questions it genuinely needs answered, builds, checks its own work, and
+reports what it could not verify. The same shape as a lane run.
+
+Both ship. The form serves players who want a building; the loop serves players
+who want to see it think. **And the form is the control**: if form-authored and
+loop-authored pieces come out comparable, the loop is doing real work. If they do
+not, that is a finding worth having.
+
+### 6.2 It is public, and the caps make that safe
+
+**Not gated, not a recording.** Mark's ruling, and it is correct: a recorded
+session proves only that a session can be recorded. The claim being made is about
+what the system does with input nobody anticipated, and gating that removes the
+only interesting part.
+
+- **Hard spend cap per account.** Exceeding it is a good problem, not a failure.
+- **Graceful degradation is a requirement, not a nicety.** When the budget is
+  gone, the visitor gets the guided form and an honest message. A broken page in
+  front of someone evaluating you is worse than a capped one.
+- **Rate limits per session and per IP.** A spend cap protects the bill; it does
+  not stop one script burning the budget before anyone real arrives. Different
+  guard, different purpose, both needed.
+
+### 6.3 The process is visible; the method is not
+
+A reviewer behind a Worker boundary sees a game. **What makes them see an
+engineer is watching the loop work**: the plan on screen, the questions as they
+are asked, the verification step and its result, and an honest report when
+something could not be done.
+
+They do not see the rule text, the prompts, or the tool calls.
+
+**This is a UI requirement and it is the highest-value item in Side B for the
+purpose this project serves.**
+
+### 6.4 Architecture
+
+Browser → Cloudflare Worker → agent (Claude API) → the game's own tools.
+
+The Worker is the boundary that keeps the method private and the place caps and
+rate limits live. Authored pieces persist in **D1** — Mark's ruling: surviving a
+full redeploy, not just an isolate. Anything less is a cache. An authored entry
+is a record with validated, queried fields, so D1 over KV.
+
+**No model is trained or built.** Calling one well is the skill being
+demonstrated; training a worse one badly is not. Orchestration — the loop, the
+gates, the blind review, the honest reporting — is the portfolio.
+
+### 6.5 What already exists
+
+`public/catalogue-registry.js` validates an authored piece and proves the board
+cannot tell it from a shipped one — demonstrated by test, not asserted. That is
+the data floor and it is real.
+
+**Two known defects, both CLI's:**
+
+1. **It cannot load in a browser.** `catalogue-registry.js` transitively imports
+   `scripts/migrate-catalogue-s2-fields.mjs`, a Node script that reads the
+   filesystem. The three formulas — `storeysFor`, `baseValueFor`,
+   `unitQualityFor` — must move to a plain module both the build script and the
+   browser import. One source of truth is the right design; the coupling to a
+   filesystem-reading file is the defect.
+2. **Persistence is an in-memory `Map`.** See 6.2's D1 ruling.
+
+### 6.6 One field to add now
+
+Record the **class** of what each authoring run produced — prop, house, condo.
+No mechanic attached. Cheap now, expensive to backfill, and it makes the deferred
+reward table a lookup rather than a retrofit against entries that never recorded
+what they were.
+
+---
+
+## 6B. THE RULE-CONSULTATION AUDIT — one mechanism, two homes
+
+**The claim this project makes about itself is that it checks its own work. That
+check has a hole in it, and closing it is worth more than any feature.**
+
+Nothing currently verifies that a lane **consulted the rules**. There is a blind
+audit, mutation testing, and a gate ledger — all of which check the *output*.
+None of them can tell you whether the process was followed.
+
+We found this the hard way: the lanes had the process server connected for days
+and were not calling it, and the only reason anyone knew was that Mark asked and
+the source was read by hand. **An audit that cannot tell whether the rules were
+followed is a check that cannot fail** — the defect named more often than any
+other in this repository.
+
+### 6B.1 In the process server
+
+Record rule consultation the same way gates are recorded: which moment, which
+rules were returned, when. `process_at` and `process_get_rule` already have every
+piece of that information and currently discard it.
+
+Then an audit can report, for a run: **these moments were consulted, these were
+not, and this item was ticked without its rules ever being read.** Cross-checked
+against the plan — ticked, gate-recorded, rules-consulted — so a tick with two of
+three is visible rather than silent.
+
+This composes what exists: `process_at`, `process_record_gate`,
+`process_reconcile_plan`, `docs/EVENT-LOG.jsonl`. It is not a new system.
+
+### 6B.2 In the game
+
+Side B's loop grounds itself in the game's rules before planning — the same
+discipline, pointed at a player instead of a lane. **That grounding is recorded
+and shown**, which is 6.3's visible-process requirement and this audit being the
+same thing seen from two ends.
+
+### 6B.3 Why it matters more than it sounds
+
+It turns the project's central claim from an assertion into evidence. Right now
+"the lanes follow the process" is something we believe. Afterwards it is
+something the audit reports, per run, with the gaps named.
+
+That is the difference the rest of this build already insists on everywhere else.
+
+---
+
+## 6C. SIDE B — PERSISTENCE (CLI)
 
 The registry is real and proven. The overlay is an in-memory `Map`, and on a
 Cloudflare Worker isolates are per-request — **an authored piece does not survive
