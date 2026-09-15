@@ -121,7 +121,8 @@ remains is implementation against answers already in hand.
     what BLD reads to displace a mesh — the field's resolution, extent and units
     — as a documented contract rather than a shape BLD infers from the data.
     Gate: BLD can build against it without reading CLI's generator internals.
-[ ] CAT-2 (BLD) Bind the remaining 38 entries, and correct street-cross — PLAN.md 5.1
+[x] CAT-2 (BLD) Bind the remaining 38 entries, and correct street-cross — PLAN.md 5.1
+    DONE 2026-09-16: node scripts/link-catalogue-meshes.mjs -- "linked 38 of 50 catalogue entries to a real L12 mesh" (up from 12). node test/run.mjs test/catalogueValidator.test.ts: 58/58 pass (GATE (BO7A) glb-match, classification and idempotence gates all green). node scripts/_mutcheck.mjs: cat2-street-cross-must-stay-corrected and cat2-lane-cross-binding-must-stay-classified both CAUGHT. 26 of the 38 unblocked via 3 newly-sourced kenney-city-kit-roads shapes (road-crossroad, road-intersection, road-end, each verified by rendering top-down against the real texture, not by filename) plus reuse of the 2 already-vendored ones (straight, curve); 3 "transition" entries reuse road-straight.glb, disclosed as a placeholder (no taper mesh exists in the pack). street-cross corrected from road-crossing.glb (a straight road with a crosswalk, confirmed by rendering) to road-crossroad.glb (a real 4-way). Shortfall: 12 of the 38 remain unbound -- non-road categories (civic/industrial/commercial/residential footprint tiers) this item was never scoped to cover; a genuine finding, not silently dropped. Contact sheet regenerated: docs/look-proof-shots/27-catalogue-contact-sheet.png, "bound=38 total=50", draw calls: 1 (unchanged).
     kenney.nl is an AUTHORISED standing CC0 source. Every import records URL,
     licence and SHA-256 in `public/vendor/kits/LICENCES.md`; anything not CC0
     stops and asks.

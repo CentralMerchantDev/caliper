@@ -1724,6 +1724,30 @@
       "find": "  fs.writeFileSync(path.join(OUT_DIR, outName + \".console.txt\"), consoleLines.join(\"\\n\") + \"\\n\");",
       "replace": "  // MUTATED: companion console transcript no longer written.",
       "expect": "GATE (FIX-4): a successful render writes the captured console transcript to a companion file beside the PNG -- a screenshot alone is canvas pixels and cannot show a number; this is the durable half of the 'screenshot paired with the console line' pairing look-proof-scene.html's own design already relies on"
+    },
+    {
+      "id": "cat2-street-cross-must-stay-corrected",
+      "guards": "CAT-2 (docs/briefs/BLD-2026-09-16.md): reverts street-cross's own mesh binding back to road-crossing.glb -- a STRAIGHT road with a crosswalk painted on it, confirmed by rendering, not a junction at all -- undoing the correction to the real 4-way, road-crossroad.glb.",
+      "file": "public/look-proof-pieces.js",
+      "find": "{ id: \"street-crossing\", glb: \"vendor/kits/kenney-city-kit-roads/road-crossroad.glb\", footprint: [16, 16], layer: 1 },",
+      "replace": "{ id: \"street-crossing\", glb: \"vendor/kits/kenney-city-kit-roads/road-crossing.glb\", footprint: [16, 16], layer: 1 },",
+      "expect": "GATE (BO7A): the real catalogue's own glb fields exactly match link-catalogue-meshes.mjs's disclosed MESH_BINDINGS table -- no drift, nothing silently dropped or added"
+    },
+    {
+      "id": "cat2-lane-cross-binding-must-stay-classified",
+      "guards": "CAT-2: drops one of the 26 new MESH_BINDINGS entries -- BO7A's own classification gate must catch a real L12 mesh (lane-cross) silently falling out of {MESH_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS}, not just a glb-value mismatch.",
+      "file": "scripts/link-catalogue-meshes.mjs",
+      "find": "  \"lane-cross\": \"lane-cross\",",
+      "replace": "",
+      "expect": "GATE (BO7A): every real L12 mesh is accounted for exactly once -- bound, a disclosed finding, or a disclosed prop, never silently unclassified"
+    },
+    {
+      "id": "cat2-pieces-count-must-stay-46-not-drift",
+      "guards": "CAT-2: removes one of the 26 new PIECES entries (lane-straight) -- the total-count gate must catch PIECES silently drifting away from 46, not just individual id checks.",
+      "file": "public/look-proof-pieces.js",
+      "find": "{ id: \"lane-straight\", glb: \"vendor/kits/kenney-city-kit-roads/road-straight.glb\", footprint: [8, 8], layer: 1 },",
+      "replace": "",
+      "expect": "CAT-2 (docs/briefs/BLD-2026-09-16.md): PIECES is 46, not still 20 and not creeping toward 200 -- L12's original 20 plus 26 dedicated, per-tier catalogue road bindings, a real and checkable total"
     }
   ]
 }

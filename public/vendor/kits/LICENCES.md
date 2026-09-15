@@ -64,6 +64,56 @@ Imports" below.
     `dumpster.glb` -- sha256
     `c60ebecc23487c38b5e0750856a3b50744d2ea12b3c83ad03d537e5a4670777a`.
     Same pack, same zip, same colormap.png as above.
+  - **Added for CAT-2 (2026-09-16, docs/briefs/BLD-2026-09-16.md):**
+    licence re-verified on the same page at time of download (CC0, same
+    text as above), same zip re-fetched from the same URL already on file
+    above -- not re-guessed from site-wide reputation. Sourced to correct
+    `street-cross`'s own wrong binding and unbind 26 of the 38 remaining
+    catalogue entries, per `docs/specs/PLAN.md` §5.1. Each shape verified
+    by rendering it top-down against the pack's own real texture, not by
+    trusting the filename (`public/_scratch-road-verify.html`, a temporary
+    verification page, rendered then removed -- nothing from that step
+    persists except this record and the shapes' own real use in
+    `public/look-proof-pieces.js`):
+    `road-crossroad.glb` -- sha256
+    `2dc52a28cf89ec88025a047c0f6fff4c643f16b0f50f0e9a1140f16230c28b12`
+    (confirmed a genuine 4-way junction -- sidewalk border on all four
+    sides, lane markings crossing both axes -- unlike `road-crossing.glb`
+    above, which is a STRAIGHT road with a crosswalk painted on it, not a
+    junction at all: confirmed by rendering both side by side);
+    `road-intersection.glb` -- sha256
+    `fdf4f213abe41ddfe2a7e798a0ef1c3de5b7a68143e21c44f1893985ec6aae58`
+    (confirmed a genuine T-junction -- sidewalk border on three sides, the
+    fourth open where the branch continues);
+    `road-end.glb` -- sha256
+    `bdf62518cfcc2c1a1425a4c8bc845e8e344f9c8b34dfb364b6b7d442e6171f11`
+    (confirmed a flat dead-end cap);
+    `road-end-round.glb` -- sha256
+    `0ad2c0cd4fde52724a5fe277f0eba71df530a5b6c7570d0efe1686c7b456bc76`
+    (confirmed a rounded cul-de-sac cap -- imported alongside road-end.glb
+    since both were named as verified shapes and the cost of the extra
+    file is zero once the zip is already open, but NOT bound to any
+    catalogue entry this pass -- reserved as a second real "end" variant
+    for CAT-3's own diversity work, disclosed rather than left unexplained
+    as dead weight in this directory).
+    `road-split.glb` and `road-square.glb` were ALSO extracted and
+    rendered during this verification (to rule them in or out for the
+    catalogue's "transition" tileType, which has no dedicated taper/merge
+    piece anywhere in this pack -- confirmed by name-searching the full
+    zip listing for taper/narrow/wide/merge/funnel/slant, finding only
+    elevation ramps and unrelated wide-object variants) but neither is
+    committed here: `road-square.glb` is a plain paved tile with no
+    junction markings at all (not useful for any unbound entry), and
+    `road-split.glb` (a genuine lane-fork/diverge shape) was considered
+    for "transition" and set aside -- CAT-2's own brief names exactly four
+    pre-verified shapes and no fifth, and forcing a plausible-but-
+    unauthorised fifth asset onto three entries is closer to "a licence to
+    force a mesh that does not fit its footprint class" than a real match.
+    The three "transition" entries instead reuse the already-vendored
+    `road-straight.glb` (see MESH_BINDINGS's own disclosure in
+    `scripts/link-catalogue-meshes.mjs`) -- a straight segment, not a real
+    taper, flagged plainly rather than silently presented as a considered
+    choice.
 
 ### Kenney — City Kit (Commercial)
 

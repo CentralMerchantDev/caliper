@@ -21,7 +21,18 @@ export const PIECES = [
   { id: "tower-base-6x6-alt", glb: "vendor/kits/kenney-modular-buildings/building-sample-tower-c.glb", footprint: [24, 24], layer: 0 },
   { id: "street-tile-4wide", glb: "vendor/kits/kenney-city-kit-roads/road-straight.glb", footprint: [16, 16], layer: 1 },
   { id: "street-bend", glb: "vendor/kits/kenney-city-kit-roads/road-bend.glb", footprint: [16, 16], layer: 1 },
-  { id: "street-crossing", glb: "vendor/kits/kenney-city-kit-roads/road-crossing.glb", footprint: [16, 16], layer: 1 },
+  // CAT-2 CORRECTION (2026-09-16, docs/briefs/BLD-2026-09-16.md) -- this
+  // id ("street-crossing") kept unchanged so scripts/link-catalogue-
+  // meshes.mjs's own MESH_BINDINGS entry does not need restructuring, but
+  // the glb it points to is now road-crossroad.glb, not road-crossing.glb.
+  // Confirmed by rendering both top-down against the pack's own real
+  // texture (public/vendor/kits/LICENCES.md's own CAT-2 entry): road-
+  // crossing.glb is a STRAIGHT road with a crosswalk painted on it --
+  // continuous sidewalk on both long edges, no side branch -- not a
+  // junction at all, despite the name. road-crossroad.glb is the real
+  // 4-way (sidewalk border on all four sides, lane markings crossing both
+  // axes), which is what street-cross's own catalogue entry needs.
+  { id: "street-crossing", glb: "vendor/kits/kenney-city-kit-roads/road-crossroad.glb", footprint: [16, 16], layer: 1 },
   { id: "street-lamp-1x1", glb: "vendor/kits/kenney-city-kit-roads/light-square.glb", footprint: [4, 4], layer: 1 },
   { id: "utility-pole-1x1", glb: "vendor/kits/kenney-city-kit-roads/electricity-pole.glb", footprint: [4, 4], layer: 1 },
   { id: "dumpster-1x1", glb: "vendor/kits/kenney-city-kit-roads/dumpster.glb", footprint: [4, 4], layer: 1 },
@@ -32,6 +43,55 @@ export const PIECES = [
   { id: "mega-tower-8x8", glb: "vendor/kits/kenney-city-kit-commercial/building-skyscraper-b.glb", footprint: [32, 32], layer: 2 },
   { id: "awning-1x1", glb: "vendor/kits/kenney-city-kit-commercial/detail-awning.glb", footprint: [4, 4], layer: 2 },
   { id: "parasol-1x1", glb: "vendor/kits/kenney-city-kit-commercial/detail-parasol-a.glb", footprint: [4, 4], layer: 2 },
+
+  // CAT-2 (docs/briefs/BLD-2026-09-16.md, PLAN.md §5.1) -- 26 dedicated
+  // instances of the SAME four newly-verified kenney-city-kit-roads shapes
+  // (road-intersection, road-crossroad, road-end) plus the two ALREADY-
+  // vendored ones (road-straight, road-bend), one entry per catalogue
+  // footprint tier so fitToFootprint's own non-uniform scale matches that
+  // tier's real size rather than sharing one footprint across all four.
+  // Each shape verified by rendering it top-down against the pack's own
+  // real texture before use (public/vendor/kits/LICENCES.md's own CAT-2
+  // entry has the detail) -- not by trusting the filename, the same
+  // discipline BO7A's own street-crossing disclosure already established.
+  { id: "lane-straight", glb: "vendor/kits/kenney-city-kit-roads/road-straight.glb", footprint: [8, 8], layer: 1 },
+  { id: "lane-curve", glb: "vendor/kits/kenney-city-kit-roads/road-bend.glb", footprint: [8, 8], layer: 1 },
+  { id: "lane-t", glb: "vendor/kits/kenney-city-kit-roads/road-intersection.glb", footprint: [8, 8], layer: 1 },
+  { id: "lane-cross", glb: "vendor/kits/kenney-city-kit-roads/road-crossroad.glb", footprint: [8, 8], layer: 1 },
+  { id: "lane-end", glb: "vendor/kits/kenney-city-kit-roads/road-end.glb", footprint: [8, 8], layer: 1 },
+  { id: "street-t", glb: "vendor/kits/kenney-city-kit-roads/road-intersection.glb", footprint: [16, 16], layer: 1 },
+  { id: "street-end", glb: "vendor/kits/kenney-city-kit-roads/road-end.glb", footprint: [16, 16], layer: 1 },
+  { id: "avenue-straight", glb: "vendor/kits/kenney-city-kit-roads/road-straight.glb", footprint: [24, 24], layer: 1 },
+  { id: "avenue-curve", glb: "vendor/kits/kenney-city-kit-roads/road-bend.glb", footprint: [24, 24], layer: 1 },
+  { id: "avenue-t", glb: "vendor/kits/kenney-city-kit-roads/road-intersection.glb", footprint: [24, 24], layer: 1 },
+  { id: "avenue-cross", glb: "vendor/kits/kenney-city-kit-roads/road-crossroad.glb", footprint: [24, 24], layer: 1 },
+  { id: "avenue-end", glb: "vendor/kits/kenney-city-kit-roads/road-end.glb", footprint: [24, 24], layer: 1 },
+  { id: "highway-straight", glb: "vendor/kits/kenney-city-kit-roads/road-straight.glb", footprint: [32, 32], layer: 1 },
+  { id: "highway-curve", glb: "vendor/kits/kenney-city-kit-roads/road-bend.glb", footprint: [32, 32], layer: 1 },
+  { id: "highway-t", glb: "vendor/kits/kenney-city-kit-roads/road-intersection.glb", footprint: [32, 32], layer: 1 },
+  { id: "highway-cross", glb: "vendor/kits/kenney-city-kit-roads/road-crossroad.glb", footprint: [32, 32], layer: 1 },
+  { id: "highway-end", glb: "vendor/kits/kenney-city-kit-roads/road-end.glb", footprint: [32, 32], layer: 1 },
+  { id: "lane-street-t", glb: "vendor/kits/kenney-city-kit-roads/road-intersection.glb", footprint: [16, 16], layer: 1 },
+  { id: "lane-street-cross", glb: "vendor/kits/kenney-city-kit-roads/road-crossroad.glb", footprint: [16, 16], layer: 1 },
+  // "transition" tileType (a road WIDTH change, e.g. 2-lane to 4-lane) has
+  // no dedicated taper/merge mesh anywhere in kenney-city-kit-roads --
+  // confirmed by name-searching the pack's own full file listing
+  // (taper/narrow/wide/merge/funnel/slant all checked; only elevation
+  // ramps and unrelated "-wide" object variants exist). A genuine
+  // candidate (road-split.glb, a real lane-fork/diverge shape) was found,
+  // rendered, and set aside: CAT-2's own brief names exactly four
+  // pre-verified shapes, and road-split is a fifth, unauthorised one --
+  // see LICENCES.md's own CAT-2 entry for the full reasoning. These three
+  // reuse the already-vendored road-straight.glb instead -- a straight
+  // segment, not a real taper, disclosed plainly rather than presented as
+  // a considered visual match.
+  { id: "lane-street-transition", glb: "vendor/kits/kenney-city-kit-roads/road-straight.glb", footprint: [16, 16], layer: 1 },
+  { id: "street-avenue-t", glb: "vendor/kits/kenney-city-kit-roads/road-intersection.glb", footprint: [24, 24], layer: 1 },
+  { id: "street-avenue-cross", glb: "vendor/kits/kenney-city-kit-roads/road-crossroad.glb", footprint: [24, 24], layer: 1 },
+  { id: "street-avenue-transition", glb: "vendor/kits/kenney-city-kit-roads/road-straight.glb", footprint: [24, 24], layer: 1 },
+  { id: "avenue-highway-t", glb: "vendor/kits/kenney-city-kit-roads/road-intersection.glb", footprint: [32, 32], layer: 1 },
+  { id: "avenue-highway-cross", glb: "vendor/kits/kenney-city-kit-roads/road-crossroad.glb", footprint: [32, 32], layer: 1 },
+  { id: "avenue-highway-transition", glb: "vendor/kits/kenney-city-kit-roads/road-straight.glb", footprint: [32, 32], layer: 1 },
 ];
 
 // A shelf packer, not a hand-picked grid -- deterministic from PIECES'

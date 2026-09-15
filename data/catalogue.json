@@ -549,7 +549,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb"
   },
   {
     "id": "lane-curve",
@@ -575,7 +575,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-bend.glb"
   },
   {
     "id": "lane-t",
@@ -601,7 +601,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb"
   },
   {
     "id": "lane-cross",
@@ -627,7 +627,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb"
   },
   {
     "id": "lane-end",
@@ -653,7 +653,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-end.glb"
   },
   {
     "id": "street-straight",
@@ -731,7 +731,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb"
   },
   {
     "id": "street-cross",
@@ -757,7 +757,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": "vendor/kits/kenney-city-kit-roads/road-crossing.glb"
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb"
   },
   {
     "id": "street-end",
@@ -783,7 +783,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-end.glb"
   },
   {
     "id": "avenue-straight",
@@ -809,7 +809,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb"
   },
   {
     "id": "avenue-curve",
@@ -835,7 +835,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-bend.glb"
   },
   {
     "id": "avenue-t",
@@ -861,7 +861,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb"
   },
   {
     "id": "avenue-cross",
@@ -887,7 +887,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb"
   },
   {
     "id": "avenue-end",
@@ -913,7 +913,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-end.glb"
   },
   {
     "id": "highway-straight",
@@ -939,7 +939,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb"
   },
   {
     "id": "highway-curve",
@@ -965,7 +965,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-bend.glb"
   },
   {
     "id": "highway-t",
@@ -991,7 +991,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb"
   },
   {
     "id": "highway-cross",
@@ -1017,7 +1017,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb"
   },
   {
     "id": "highway-end",
@@ -1043,7 +1043,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-end.glb"
   },
   {
     "id": "lane-street-t",
@@ -1069,7 +1069,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb"
   },
   {
     "id": "lane-street-cross",
@@ -1095,7 +1095,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb"
   },
   {
     "id": "lane-street-transition",
@@ -1121,7 +1121,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb"
   },
   {
     "id": "street-avenue-t",
@@ -1147,7 +1147,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb"
   },
   {
     "id": "street-avenue-cross",
@@ -1173,7 +1173,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb"
   },
   {
     "id": "street-avenue-transition",
@@ -1199,7 +1199,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb"
   },
   {
     "id": "avenue-highway-t",
@@ -1225,7 +1225,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-intersection.glb"
   },
   {
     "id": "avenue-highway-cross",
@@ -1251,7 +1251,7 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-crossroad.glb"
   },
   {
     "id": "avenue-highway-transition",
@@ -1277,6 +1277,6 @@
       "commercial": 2
     },
     "unitQuality": 1,
-    "glb": null
+    "glb": "vendor/kits/kenney-city-kit-roads/road-straight.glb"
   }
 ]

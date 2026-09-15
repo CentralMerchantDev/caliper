@@ -158,10 +158,28 @@ test("look-proof-scene.html offers a way back to index.html -- reachability.test
   assert.match(SCENE_SRC, /href="\.\/index\.html"/, "no anchor back to index.html found");
 });
 
-test("L12: 20 pieces, not 200 -- R2/C1.5's own 'start far lower than instinct says', and the number is checkable", () => {
+// L12's own original 20 -- the demo/overview scene's own piece set, unchanged
+// by CAT-2. Named directly (not just counted) so a future edit that swaps one
+// L12 id for another of the same total count still fails loudly here.
+const L12_ORIGINAL_20 = [
+  "house-2x3", "house-2x2", "house-2x3-alt", "midrise-4x4", "midrise-4x4-alt",
+  "tower-base-6x6", "tower-base-6x6-alt", "street-tile-4wide", "street-bend",
+  "street-crossing", "street-lamp-1x1", "utility-pole-1x1", "dumpster-1x1",
+  "commercial-2x2", "commercial-2x2-alt", "commercial-3x3", "commercial-4x4",
+  "mega-tower-8x8", "awning-1x1", "parasol-1x1",
+];
+
+test("L12: the original 20 pieces (R2/C1.5's own 'start far lower than instinct says') are still exactly present, unshrunk and unrenamed by later work", () => {
   const pieceIds = [...PIECES_SRC.matchAll(/\{\s*id:\s*"([^"]+)"/g)].map((m) => m[1]);
-  assert.equal(pieceIds.length, 20, `expected 20 pieces (Firewatch's own 23 trees, Caravan SandWitch's own 39 total props -- same order of magnitude, not the 200-piece catalogue this run is not building), found ${pieceIds.length}`);
+  for (const id of L12_ORIGINAL_20) {
+    assert.ok(pieceIds.includes(id), `L12's own original id "${id}" is missing from PIECES`);
+  }
   assert.equal(new Set(pieceIds).size, pieceIds.length, "duplicate piece ids -- two pieces would silently overwrite one anchor slot in layoutPieces");
+});
+
+test("CAT-2 (docs/briefs/BLD-2026-09-16.md): PIECES is 46, not still 20 and not creeping toward 200 -- L12's original 20 plus 26 dedicated, per-tier catalogue road bindings, a real and checkable total", () => {
+  const pieceIds = [...PIECES_SRC.matchAll(/\{\s*id:\s*"([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(pieceIds.length, 46, `expected 46 (L12's original 20 + CAT-2's 26 catalogue-only road bindings), found ${pieceIds.length} -- if this grew again, name why in this test, do not just bump the number`);
 });
 
 test("L12: pieces span three real packs (three distinct layer indices among the pieces, a fourth for ground), not two packs merged repeatedly", () => {

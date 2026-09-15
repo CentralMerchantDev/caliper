@@ -77,11 +77,55 @@ export const MESH_BINDINGS = {
   // tileType read from the mesh's own descriptive name against the catalogue's own vocabulary.
   "street-tile-4wide": "street-straight",
   "street-bend": "street-curve", // "bend" and "curve" name the same real-world road shape
-  // LEAST CERTAIN OF THE THREE ROAD BINDINGS, disclosed: "crossing" reads as
-  // a 4-way intersection ("cross"), not a 3-way ("t") -- Kenney's own city
-  // kits conventionally ship a single "crossing" piece as the 4-way, but
-  // nothing sourced confirms this specific model's own arm count.
+  // CORRECTED, CAT-2 (2026-09-16, docs/briefs/BLD-2026-09-16.md): this
+  // mesh id's own glb (public/look-proof-pieces.js) was road-crossing.glb
+  // -- "LEAST CERTAIN OF THE THREE ROAD BINDINGS" per BO7A's own original
+  // disclosure here, and the doubt was correct. Rendered both candidates
+  // top-down against the pack's own real texture: road-crossing.glb is a
+  // STRAIGHT road with a crosswalk painted on it, not a junction at all.
+  // The id "street-crossing" is kept (so this table's own key does not
+  // need restructuring) but now points at road-crossroad.glb, a genuine
+  // 4-way -- see public/vendor/kits/LICENCES.md's own CAT-2 entry.
   "street-crossing": "street-cross",
+
+  // CAT-2 (2026-09-16, docs/briefs/BLD-2026-09-16.md, PLAN.md §5.1) -- 26
+  // dedicated instances (public/look-proof-pieces.js) of the two already-
+  // vendored road shapes (straight, curve) plus three newly-verified ones
+  // (intersection="t", crossroad="cross", end), one per catalogue
+  // footprint tier. tileType (the catalogue's own field) names the shape
+  // directly; each mesh id below is spelled identically to its target
+  // catalogue id since it is a dedicated, non-shared instance.
+  "lane-straight": "lane-straight",
+  "lane-curve": "lane-curve",
+  "lane-t": "lane-t",
+  "lane-cross": "lane-cross",
+  "lane-end": "lane-end",
+  "street-t": "street-t",
+  "street-end": "street-end",
+  "avenue-straight": "avenue-straight",
+  "avenue-curve": "avenue-curve",
+  "avenue-t": "avenue-t",
+  "avenue-cross": "avenue-cross",
+  "avenue-end": "avenue-end",
+  "highway-straight": "highway-straight",
+  "highway-curve": "highway-curve",
+  "highway-t": "highway-t",
+  "highway-cross": "highway-cross",
+  "highway-end": "highway-end",
+  "lane-street-t": "lane-street-t",
+  "lane-street-cross": "lane-street-cross",
+  // "transition" tileType has no dedicated taper/merge mesh in this pack
+  // -- reuses road-straight.glb (see look-proof-pieces.js's own comment
+  // on these three entries, and LICENCES.md's CAT-2 entry, for why a
+  // plausible fifth asset, road-split.glb, was found and set aside
+  // instead of used here).
+  "lane-street-transition": "lane-street-transition",
+  "street-avenue-t": "street-avenue-t",
+  "street-avenue-cross": "street-avenue-cross",
+  "street-avenue-transition": "street-avenue-transition",
+  "avenue-highway-t": "avenue-highway-t",
+  "avenue-highway-cross": "avenue-highway-cross",
+  "avenue-highway-transition": "avenue-highway-transition",
 };
 
 // L12 meshes with NO available catalogue slot -- both a same-footprint,
