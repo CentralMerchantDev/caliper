@@ -1,0 +1,72 @@
+SDB-2 (PLAN.md §6.6): record the class of what each authoring run
+produced.
+
+Wrong before: an authored piece carried no record of what KIND of thing it
+was (prop, house, condo) -- no mechanic reads this yet, but PLAN.md names
+it explicitly as cheap now and expensive to backfill against entries that
+never recorded what they were, ahead of V2's own deferred reward table.
+
+authoredClass, not `class`: `class` reads as the JS keyword and, more to
+the point, would collide in meaning with the catalogue's existing
+`category` field (residential/commercial/etc — the piece's game category,
+a different axis entirely from what kind of authoring run produced it).
+Both the field name and the closed set (["prop","house","condo"], not an
+open string) are disclosed judgement calls -- PLAN.md gives the three as
+an illustrative starting set, not a spec -- same rigor as B3's own
+UNIQUENESS_MULTIPLIER.
+
+KNOWN_AUTHORED_CLASSES lives in public/catalogue-validator.js, not
+catalogue-registry.js, so catalogue-registry.js can import it without a
+circular dependency (it already imports validateEntry from there).
+
+Required at two layers: addAuthoredEntry's own pre-check (matching
+known-category's pattern), and catalogue-validator.js's new rule 13
+(present -> must be a known value) plus an extended rule 10 (the existing
+four-field provenance "all-or-nothing" group now covers authoredClass too
+-- five fields, still zero-or-all, since every shipped entry has zero).
+
+D1: migrations/0002_add_authored_class.sql -- a SECOND migration, not an
+edit to 0001 (which already shipped in the SDB-1 commit; migrations apply
+in sequence against whatever state a real database is already in).
+NOT NULL requires a DEFAULT under SQLite's own ALTER TABLE rules for a
+possibly-non-empty table; 'prop' backfills any pre-existing row (none are
+expected yet -- SDB-1 is fresh), and every NEW row still goes through
+addAuthoredEntry's own required check regardless of the column default.
+entryToRow/rowToEntry (public/catalogue-registry.js) carry authored_class
+both directions.
+
+RED (1): removed addAuthoredEntry's own known-authored-class check. The
+"no authoredClass is refused" test still failed -- caught instead via
+catalogue-validator.js's extended rule 10 (four of five provenance fields
+present, authoredClass missing) -- genuine defense-in-depth, not a masked
+gap: the OVERALL refusal still holds even with one layer removed.
+RED (2): separately, disabled rule 13 itself in catalogue-validator.js.
+Its own dedicated "a value outside KNOWN_AUTHORED_CLASSES is caught" test
+failed, finding no known-authored-class error for an invalid value.
+GREEN: both mutations reverted, both confirmed CAUGHT.
+
+Verification
+------------
+npx tsc --noEmit: clean.
+node test/run.mjs (full suite): 1172 tests, 1115 pass, 12 fail -- the same
+12 pre-existing, already-disclosed failures from the SDB-1/SDB-3 commit
+(6136aae), unrelated to this change. +6 tests over that run, all new, all
+passing (3 in test/catalogueValidator.test.ts's rule 13 block, 3 in
+test/catalogueRegistry.test.ts's SDB-2 gates).
+npx vitest run (workers suite): 18/18 -- the D1 test now also asserts
+authoredClass round-trips through the real authored_pieces row on a
+SECOND, independent registry instance (the same redeploy-simulating
+pattern SDB-1's own gate proves), via migrations/0002 applied
+automatically alongside 0001.
+docs/MODULE-MAP.md regenerated: "unchanged" against what's staged here.
+
+What's still open
+------------------
+Per PLAN.md's own wording, "no mechanic attached" -- authoredClass is
+recorded and validated, nothing yet reads it for scoring, placement, or a
+reward table (V2 is explicitly deferred, PLAN.md §6.6's own framing).
+
+docs/GATE-LEDGER.jsonl carries a "commit": "PENDING" placeholder for SDB-2,
+same as SDB-1's own entry in the prior commit -- corrected in the next
+commit with the real hash, per this ledger's own established pattern (see
+the B6-touch-action and look-proof-4.1-shared-material entries).
