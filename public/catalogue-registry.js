@@ -58,7 +58,7 @@
 // even though nothing reads it today.
 // =============================================================================
 
-import { validateEntry } from "./catalogue-validator.js";
+import { validateEntry, KNOWN_AUTHORED_CLASSES } from "./catalogue-validator.js";
 import { baseValueFor, unitQualityFor, adjacencyFor, storeysFor } from "./catalogue-formulas.js";
 
 /** B3's own placeholder. A player-authored piece's baseValue counts double
@@ -75,6 +75,7 @@ const KNOWN_CATEGORIES = ["residential", "commercial", "industrial", "civic", "l
 
 const PROVENANCE_FIELDS = ["author", "verifiedBy", "createdAt", "sourceRef"];
 
+
 /**
  * Validates `fields` and builds the entry object addAuthoredEntry would
  * store -- everything BOTH backings need, shared so the rules (provenance,
@@ -85,20 +86,28 @@ const PROVENANCE_FIELDS = ["author", "verifiedBy", "createdAt", "sourceRef"];
  * and the other checks D1 with an awaited query.
  */
 function buildAuthoredEntry(fields, idExists) {
-  const { id, footprint, category, rotatable, terrainMask, massing } = fields;
+  const { id, footprint, category, rotatable, terrainMask, massing, authoredClass } = fields;
   const errors = [];
 
   // Provenance: addAuthoredEntry's OWN check, deliberately separate from
-  // catalogue-validator.js's own rule 10. Rule 10 enforces "all four or
+  // catalogue-validator.js's own rule 10. Rule 10 enforces "all five or
   // none" so it can keep accepting the shipped catalogue's every entry
-  // (zero of four, always) -- it CANNOT also mean "an authored entry
-  // must actually have provenance", since 0-of-4 legally satisfies it.
+  // (zero of five, always) -- it CANNOT also mean "an authored entry
+  // must actually have provenance", since 0-of-5 legally satisfies it.
   // This is that stricter check.
   for (const key of PROVENANCE_FIELDS) {
     const value = fields[key];
     if (typeof value !== "string" || value.trim() === "") {
       errors.push({ id: id ?? "<missing id>", rule: "authored-entry-requires-provenance", message: `${key} must be a non-empty string, got ${JSON.stringify(value)}` });
     }
+  }
+
+  // SDB-2: authoredClass is REQUIRED and a closed enum, not folded into the
+  // generic non-empty-string loop above -- "prop" is a non-empty string but
+  // not a valid class, and this must be a real, named refusal (matching
+  // known-category's own pattern below), not silently accepted.
+  if (!KNOWN_AUTHORED_CLASSES.includes(authoredClass)) {
+    errors.push({ id: id ?? "<missing id>", rule: "known-authored-class", message: `authoredClass ${JSON.stringify(authoredClass)} is not one of ${KNOWN_AUTHORED_CLASSES.join("/")}` });
   }
 
   // Category must be checked BEFORE adjacencyFor() is ever reached --
@@ -136,6 +145,7 @@ function buildAuthoredEntry(fields, idExists) {
     adjacency: adjacencyFor(forFormulas), // composes the SAME function the shipped catalogue's own migration uses -- one source of truth.
     author: fields.author, verifiedBy: fields.verifiedBy, createdAt: fields.createdAt, sourceRef: fields.sourceRef,
     uniquenessMultiplierApplied: UNIQUENESS_MULTIPLIER,
+    authoredClass, // SDB-2 (PLAN.md §6.6): no mechanic attached -- nothing in placement or scoring reads this.
   };
 
   const validationErrors = validateEntry(entry);
@@ -168,6 +178,7 @@ function entryToRow(entry) {
     created_at: entry.createdAt,
     source_ref: entry.sourceRef,
     uniqueness_multiplier_applied: entry.uniquenessMultiplierApplied,
+    authored_class: entry.authoredClass,
   };
 }
 
@@ -189,6 +200,7 @@ function rowToEntry(row) {
     createdAt: row.created_at,
     sourceRef: row.source_ref,
     uniquenessMultiplierApplied: row.uniqueness_multiplier_applied,
+    authoredClass: row.authored_class,
   };
 }
 

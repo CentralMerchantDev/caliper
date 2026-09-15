@@ -426,10 +426,27 @@ nobody knew until Mark asked and the source was read by hand.
     workerd (no walkable `CLAUDE.md`). Made lazy (computed only inside `main()`,
     the only place that ever reads it) — see also SDB-3, which removes this
     module from `catalogue-registry.js`'s import graph entirely.
-[ ] SDB-2 (CLI) Record the class of what each authoring run produced — PLAN.md 6
+[x] SDB-2 (CLI) Record the class of what each authoring run produced — PLAN.md 6
     Prop, house, condo. No mechanic attached. One field, cheap now, expensive to
     backfill — it makes V2's reward table a lookup rather than a retrofit
     against entries that never recorded what they were.
+    Done: `authoredClass` (disclosed naming choice — not `class`, the JS
+    keyword, and not confusable with the existing `category` field) added to
+    `public/catalogue-registry.js`'s `addAuthoredEntry`, required, closed enum
+    `KNOWN_AUTHORED_CLASSES = ["prop","house","condo"]` (owned by
+    `catalogue-validator.js` to avoid a circular import). Joined
+    catalogue-validator.js's rule 10 provenance group (now all-FIVE-or-
+    nothing) and gained its own rule 13 (present -> must be a known value).
+    Both D1 (`migrations/0002_add_authored_class.sql`, a second migration —
+    0001 already shipped, never edited) and in-memory backings carry it;
+    `entryToRow`/`rowToEntry` round-trip it through the real D1 row.
+    Mutation-proven twice: removing addAuthoredEntry's own check still
+    CAUGHT (rule 10's extended group catches the missing-field case via a
+    different path — genuine defense in depth, not a masked gap); removing
+    rule 13 itself CAUGHT on its own dedicated test. Both reverted.
+    node test/run.mjs (full suite): 1172 tests, 1115 pass, 12 fail
+    (all pre-existing, disclosed, unrelated). npx vitest run: 18/18.
+    npx tsc --noEmit: clean.
 
 ---
 

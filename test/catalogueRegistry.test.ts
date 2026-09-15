@@ -35,6 +35,7 @@ function goodAuthoredFields(overrides = {}) {
     verifiedBy: "build-pipeline-v1",
     createdAt: "2026-09-15T00:00:00Z",
     sourceRef: "req-abc123",
+    authoredClass: "house",
     ...overrides,
   };
 }
@@ -109,6 +110,29 @@ test("GATE (U4): a category the validator does not recognise is refused cleanly,
     assert.equal(result.ok, false);
     assert.ok(result.errors.some((e) => e.rule === "known-category"), JSON.stringify(result.errors));
   });
+});
+
+test("GATE (SDB-2): an authored entry with no authoredClass is refused -- 'No mechanic attached' does not mean 'optional'", () => {
+  const registry = createCatalogueRegistry(BASE_CATALOGUE);
+  const result = registry.addAuthoredEntry(goodAuthoredFields({ authoredClass: undefined }));
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((e) => e.rule === "known-authored-class"), JSON.stringify(result.errors));
+});
+
+test("GATE (SDB-2): an authoredClass outside prop/house/condo is refused cleanly, not silently accepted as free text", () => {
+  const registry = createCatalogueRegistry(BASE_CATALOGUE);
+  const result = registry.addAuthoredEntry(goodAuthoredFields({ authoredClass: "skyscraper" }));
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((e) => e.rule === "known-authored-class"), JSON.stringify(result.errors));
+});
+
+test("GATE (SDB-2): a valid authoredClass is stored and retrievable via both .get and .all, unmodified -- no mechanic reads or transforms it", () => {
+  const registry = createCatalogueRegistry(BASE_CATALOGUE);
+  const result = registry.addAuthoredEntry(goodAuthoredFields({ authoredClass: "condo" }));
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.equal(result.entry.authoredClass, "condo");
+  assert.equal(registry.get("authored-house-a").authoredClass, "condo");
+  assert.equal(registry.all()["authored-house-a"].authoredClass, "condo");
 });
 
 test("GATE (U4/B1): a schema-invalid entry (bad footprint) is refused, reusing the shared validator rather than reimplementing its checks", () => {

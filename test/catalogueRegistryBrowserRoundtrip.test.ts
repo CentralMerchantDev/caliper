@@ -44,6 +44,7 @@ const authored = registry.addAuthoredEntry({
   id: "browser-authored-house", footprint: [1, 1], category: "residential", rotatable: true,
   terrainMask: ["land"], massing: ["base"],
   author: "playwright", verifiedBy: "sdb-3-gate", createdAt: "2026-09-15T00:00:00Z", sourceRef: "roundtrip",
+  authoredClass: "house",
 });
 
 const catalogue = registry.all();

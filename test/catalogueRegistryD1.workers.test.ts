@@ -33,6 +33,7 @@ function goodAuthoredFields(overrides: Record<string, unknown> = {}) {
     verifiedBy: "build-pipeline-v1",
     createdAt: "2026-09-15T00:00:00Z",
     sourceRef: "req-abc123",
+    authoredClass: "house",
     ...overrides,
   };
 }
@@ -60,6 +61,10 @@ describe("D1-backed catalogue registry (SDB-1)", () => {
     expect(entry).toBeTruthy();
     expect((entry as { author: string }).author).toBe("player-42");
     expect((entry as { baseValue: number }).baseValue).toBe(1 * UNIQUENESS_MULTIPLIER);
+    // SDB-2: authoredClass round-trips through the real D1 row (entryToRow's
+    // authored_class column, rowToEntry's authoredClass field) -- not just
+    // held in a JS closure the in-memory path never had to prove either way.
+    expect((entry as { authoredClass: string }).authoredClass).toBe("house");
 
     const all = await second.all();
     expect(all["authored-house-d1"]).toEqual(entry);

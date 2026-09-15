@@ -23,6 +23,8 @@
 //   10. provenance (author/verifiedBy/createdAt/sourceRef) is all-or-nothing (U4)
 //   11. glb, if present, is a non-empty string (BO7A)
 //   12. storeys is present and a positive integer (FIX-2, PLAN.md §3.2)
+//   13. authoredClass, if present, is one of KNOWN_AUTHORED_CLASSES (SDB-2,
+//       PLAN.md §6.6) -- and rule 10's provenance group now covers it too
 //
 // Returns a list of errors rather than throwing, so a caller (a test, a
 // future LLM generation loop per A11) can report every problem in one pass
@@ -88,6 +90,23 @@ export const ROAD_CLASS_HIERARCHY = ["lane", "street", "avenue", "highway"];
  * its own list (not derived from ROAD_CLASS_HIERARCHY's own width table)
  * so rule 3 checks a real constant, not a tautology against itself. */
 export const ROAD_WIDTHS = [2, 4, 6, 8];
+
+/** SDB-2 (PLAN.md §6.6): "Record the class of what each authoring run
+ * produced — prop, house, condo. No mechanic attached." PLAN.md gives these
+ * three as the illustrative starting set, not a field name or an exhaustive
+ * spec -- both are disclosed judgement calls here, same rigor as B3's own
+ * UNIQUENESS_MULTIPLIER: `authoredClass` (not `class`, which would read as
+ * the JS keyword and collide in meaning with the existing `category` field
+ * -- a piece's CATALOGUE category, e.g. "residential", is a different axis
+ * entirely from what KIND of authoring run produced it). A closed set,
+ * extended deliberately later -- same "add it, do not guess" pattern
+ * adjacencyFor's category switch already uses -- not an open string, since
+ * nothing reads this yet and an unbounded free-text field is exactly what
+ * would make a future V2 reward-table LOOKUP impossible to build against.
+ * Owned here, not catalogue-registry.js, so catalogue-registry.js can
+ * import it without a circular dependency (catalogue-registry.js already
+ * imports validateEntry from this file). */
+export const KNOWN_AUTHORED_CLASSES = ["prop", "house", "condo"];
 
 function isPositiveInteger(n) {
   return typeof n === "number" && Number.isInteger(n) && n > 0;
@@ -200,22 +219,25 @@ export function validateEntry(entry) {
     push("has-unit-quality", `unitQuality is ${JSON.stringify(entry && entry.unitQuality)}, not a finite number in (0, 1] -- S4 requires one on every entry`);
   }
 
-  // Rule 10 — §U4/B1: provenance (author, verifiedBy, createdAt, sourceRef)
-  // is ALL-OR-NOTHING. Every SHIPPED entry has ZERO of these four -- that
-  // is legal, and must stay legal, or this rule would break the entire
-  // shipped catalogue. It is deliberately NOT the check that "an authored
-  // entry must actually have provenance" (catalogue-registry.js's own
-  // addAuthoredEntry() enforces that, separately and more strictly, before
-  // an entry ever reaches this shared validator) -- this rule catches only
-  // the narrower, structural case: a hand-corrupted or partially-filled-in
-  // entry with SOME but not all four present, which is never a valid state
-  // for either a shipped or a genuinely authored piece.
+  // Rule 10 — §U4/B1, extended by SDB-2: provenance (author, verifiedBy,
+  // createdAt, sourceRef, authoredClass) is ALL-OR-NOTHING. Every SHIPPED
+  // entry has ZERO of these five -- that is legal, and must stay legal, or
+  // this rule would break the entire shipped catalogue. It is deliberately
+  // NOT the check that "an authored entry must actually have provenance"
+  // (catalogue-registry.js's own addAuthoredEntry() enforces that,
+  // separately and more strictly, before an entry ever reaches this shared
+  // validator) -- this rule catches only the narrower, structural case: a
+  // hand-corrupted or partially-filled-in entry with SOME but not all five
+  // present, which is never a valid state for either a shipped or a
+  // genuinely authored piece. authoredClass joined this group rather than
+  // standing alone, matching the other four's own "no mechanic attached"
+  // treatment -- it is provenance about the authoring run, not a game field.
   {
-    const provenance = ["author", "verifiedBy", "createdAt", "sourceRef"];
+    const provenance = ["author", "verifiedBy", "createdAt", "sourceRef", "authoredClass"];
     const present = entry ? provenance.filter((k) => entry[k] !== undefined) : [];
     if (present.length > 0 && present.length < provenance.length) {
       const missing = provenance.filter((k) => !present.includes(k));
-      push("provenance-all-or-nothing", `has ${present.join("/")} but is missing ${missing.join("/")} -- provenance is all four fields or none, never some`);
+      push("provenance-all-or-nothing", `has ${present.join("/")} but is missing ${missing.join("/")} -- provenance is all five fields or none, never some`);
     }
   }
 
@@ -235,6 +257,16 @@ export function validateEntry(entry) {
   // field that replaced it as baseValue/unitQuality's own height signal.
   if (!entry || !isPositiveInteger(entry.storeys)) {
     push("has-storeys", `storeys is ${JSON.stringify(entry && entry.storeys)}, not a positive integer -- FIX-2 requires one on every entry`);
+  }
+
+  // Rule 13 — SDB-2: authoredClass, if present, is one of
+  // KNOWN_AUTHORED_CLASSES. Most (shipped) entries have no authoredClass at
+  // all, which is fine, same as glb's rule 11 -- this only catches a
+  // present-but-malformed value.
+  if (entry && "authoredClass" in entry && entry.authoredClass !== undefined) {
+    if (!KNOWN_AUTHORED_CLASSES.includes(entry.authoredClass)) {
+      push("known-authored-class", `authoredClass is ${JSON.stringify(entry.authoredClass)}, not one of ${KNOWN_AUTHORED_CLASSES.join("/")}`);
+    }
   }
 
   return errors;

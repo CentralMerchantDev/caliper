@@ -1,0 +1,16 @@
+-- SDB-2 (PLAN.md §6.6, docs/DECISIONS-FOR-MARK.md): "Record the class of
+-- what each authoring run produced — prop, house, condo. No mechanic
+-- attached." A second migration, not an edit to 0001 -- migrations are
+-- applied in sequence against whatever state a real deployed database is
+-- already in; editing an already-shipped migration file changes nothing
+-- for a database that already ran it.
+--
+-- SQLite requires a DEFAULT to add a NOT NULL column to a table that might
+-- already hold rows -- it cannot be omitted here. 'prop' is a real, valid
+-- value (not a sentinel like '' or 'unknown'), used ONLY to backfill any
+-- row written before this column existed; SDB-1 is fresh enough that no
+-- real production row is expected to exist yet. Every NEW row still goes
+-- through public/catalogue-registry.js's addAuthoredEntry, which requires
+-- a real authoredClass and refuses to write without one -- this default
+-- is never what a new INSERT relies on.
+ALTER TABLE authored_pieces ADD COLUMN authored_class TEXT NOT NULL DEFAULT 'prop';

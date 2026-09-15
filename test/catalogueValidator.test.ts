@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { validateCatalogue, validateEntry, CATALOGUE_FOOTPRINTS, ROAD_CLASS_HIERARCHY } from "../public/catalogue-validator.js";
+import { validateCatalogue, validateEntry, CATALOGUE_FOOTPRINTS, ROAD_CLASS_HIERARCHY, KNOWN_AUTHORED_CLASSES } from "../public/catalogue-validator.js";
 import { AMENITY_CIVIC_TYPE_IDS, unitQualityFor, baseValueFor, storeysFor } from "../scripts/migrate-catalogue-s2-fields.mjs";
 import { MESH_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS } from "../scripts/link-catalogue-meshes.mjs";
 import { PIECES } from "../public/look-proof-pieces.js";
@@ -520,8 +520,8 @@ test("RULE 10 (provenance all-or-nothing): zero provenance fields is NOT flagged
   assert.ok(!errors.some((e) => e.rule === "provenance-all-or-nothing"), JSON.stringify(errors));
 });
 
-test("RULE 10: all four provenance fields present is NOT flagged", () => {
-  const errors = validateEntry(goodBuilding({ author: "p", verifiedBy: "v", createdAt: "c", sourceRef: "s" }));
+test("RULE 10 (extended by SDB-2): all five provenance fields present is NOT flagged", () => {
+  const errors = validateEntry(goodBuilding({ author: "p", verifiedBy: "v", createdAt: "c", sourceRef: "s", authoredClass: "house" }));
   assert.ok(!errors.some((e) => e.rule === "provenance-all-or-nothing"), JSON.stringify(errors));
 });
 
@@ -532,14 +532,15 @@ test("RULE 10: exactly one provenance field present is caught, naming what is mi
   assert.match(err!.message, /verifiedBy/);
   assert.match(err!.message, /createdAt/);
   assert.match(err!.message, /sourceRef/);
+  assert.match(err!.message, /authoredClass/);
 });
 
-test("RULE 10: three of four provenance fields present is caught, naming the one missing", () => {
-  const errors = validateEntry(goodBuilding({ author: "p", verifiedBy: "v", createdAt: "c" }));
+test("RULE 10 (extended by SDB-2): four of five provenance fields present is caught, naming the one missing", () => {
+  const errors = validateEntry(goodBuilding({ author: "p", verifiedBy: "v", createdAt: "c", sourceRef: "s" }));
   const err = errors.find((e) => e.rule === "provenance-all-or-nothing");
   assert.ok(err, JSON.stringify(errors));
-  assert.match(err!.message, /sourceRef/);
-  assert.doesNotMatch(err!.message, /author\/verifiedBy\/createdAt\/sourceRef/);
+  assert.match(err!.message, /authoredClass/);
+  assert.doesNotMatch(err!.message, /author\/verifiedBy\/createdAt\/sourceRef\/authoredClass/);
 });
 
 // ------------------------------------------------------------ rule 11 (BO7A)
@@ -568,4 +569,26 @@ test("RULE 11: a non-string, non-null value is caught", () => {
 test("RULE 11: a real path string is NOT flagged", () => {
   const errors = validateEntry(goodBuilding({ glb: "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb" }));
   assert.ok(!errors.some((e) => e.rule === "glb-is-string-or-null"), JSON.stringify(errors));
+});
+
+// -------------------------------------------------------------- rule 13 (SDB-2)
+test("RULE 13 (authoredClass): absent entirely is NOT flagged -- every shipped entry has none", () => {
+  const errors = validateEntry(goodBuilding());
+  assert.ok(!errors.some((e) => e.rule === "known-authored-class"), JSON.stringify(errors));
+});
+
+test("RULE 13: every value in KNOWN_AUTHORED_CLASSES is NOT flagged", () => {
+  for (const authoredClass of KNOWN_AUTHORED_CLASSES) {
+    const errors = validateEntry(goodBuilding({ authoredClass }));
+    assert.ok(!errors.some((e) => e.rule === "known-authored-class"), `${authoredClass}: ${JSON.stringify(errors)}`);
+  }
+});
+
+test("RULE 13: a value outside KNOWN_AUTHORED_CLASSES is caught, naming the allowed set", () => {
+  const errors = validateEntry(goodBuilding({ authoredClass: "skyscraper" }));
+  const err = errors.find((e) => e.rule === "known-authored-class");
+  assert.ok(err, JSON.stringify(errors));
+  assert.match(err!.message, /prop/);
+  assert.match(err!.message, /house/);
+  assert.match(err!.message, /condo/);
 });
